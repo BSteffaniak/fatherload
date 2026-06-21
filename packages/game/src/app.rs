@@ -729,6 +729,9 @@ pub fn run() {
         }
         online_tasks.drain_and_execute(session.game_mut());
         let online_authority_mode = online_tasks.controller_mode_label();
+        if online_authority_mode == Some("descriptor-client-connected") {
+            let _identity = session.prepare_online_tick_identity(true);
+        }
         let immediate_client_actions = mapped_input
             .client_actions
             .iter()
@@ -764,12 +767,7 @@ pub fn run() {
         };
         let authority_update = if online_authority_mode == Some("descriptor-client-connected") {
             if session.game().run_mode == crate::game_state::RunMode::Playing {
-                crate::session::SessionAuthorityUpdateSummary {
-                    used_legacy_presentation_adapter: false,
-                    local_movement_authority: false,
-                    command_adapter_count: 0,
-                    current_tick: session.current_tick(),
-                }
+                session.update_frame_from_session_authority(authority_input, delta_seconds)
             } else {
                 session.update_shell_frame_from_session_authority(authority_input, delta_seconds)
             }
