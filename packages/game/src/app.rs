@@ -524,9 +524,13 @@ impl OnlineTaskDispatcher {
         }
         let result = match mode_label {
             "descriptor-host-accepted" => {
+                let current_tick = session.current_tick();
                 let command_summary =
                     match runtime.block_on(controller.descriptor_host_try_receive_command_packet(
+                        session.game_mut(),
                         std::time::Duration::from_millis(1),
+                        current_tick,
+                        &[],
                     )) {
                         Ok(summary) => summary,
                         Err(error) => {
@@ -538,7 +542,7 @@ impl OnlineTaskDispatcher {
                     };
                 if command_summary.is_some() {
                     let pre_replication_summary = crate::multiplayer::QuinnSessionTickSummary {
-                        command_summary: command_summary.clone(),
+                        command_summary,
                         snapshot_replicated: false,
                         delta_replicated: false,
                         terrain_chunk_response: None,
@@ -561,10 +565,26 @@ impl OnlineTaskDispatcher {
                 runtime.block_on(controller.drive_descriptor_host_replication_tick(
                     session.game_mut(),
                     input,
-                    command_summary,
+                    None,
                 ))
             }
             "descriptor-client-connected" => {
+                match runtime.block_on(controller.descriptor_client_try_receive_pending_messages(
+                    session.game_mut(),
+                    std::time::Duration::from_millis(1),
+                )) {
+                    Ok(_received) => {
+                        if let Some(tick) = controller.latest_authoritative_tick() {
+                            let _synced = session.sync_replicated_authoritative_tick(tick);
+                        }
+                    }
+                    Err(error) => {
+                        session.game_mut().apply_online_network_task_result(
+                            OnlineNetworkTaskResult::Failed(format!("{error:?}")),
+                        );
+                        return;
+                    }
+                }
                 let identity = session.prepare_online_tick_identity(true);
                 let sequence = self.live_tick_sequence;
                 self.live_tick_sequence = self.live_tick_sequence.wrapping_add(1);
@@ -622,6 +642,9 @@ impl OnlineTaskDispatcher {
                     for rejection in rejections {
                         session.apply_online_command_rejection(&rejection);
                     }
+                }
+                if let Some(tick) = controller.latest_authoritative_tick() {
+                    let _synced = session.sync_replicated_authoritative_tick(tick);
                 }
                 let application = session.apply_online_tick_summary(mode_label, &summary);
                 let diagnostic = GameSession::online_tick_diagnostic(&summary, application);
@@ -941,6 +964,7 @@ mod tests {
             }],
         };
 
+        let initial_remote_x = session.game().player.x + crate::game_state::TILE_SIZE;
         let applied = session.apply_accepted_online_remote_commands(&summary);
 
         assert_eq!(applied, 1);
@@ -952,7 +976,8 @@ mod tests {
             .into_iter()
             .find(|player| player.player_id == crate::multiplayer::PlayerId::new(2))
             .expect("remote player exists");
-        assert!(remote_player.velocity_x > 0.0 || remote_player.x > session.game().player.x);
+        assert!(remote_player.velocity_x > 0.0);
+        assert!(remote_player.x > initial_remote_x);
     }
 
     #[test]

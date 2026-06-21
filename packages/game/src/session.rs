@@ -6351,6 +6351,16 @@ impl GameSession {
         true
     }
 
+    pub fn sync_replicated_authoritative_tick(&mut self, tick: SimulationTick) -> bool {
+        if tick <= self.current_tick {
+            return false;
+        }
+        self.current_tick = tick;
+        self.world.set_simulation_tick(tick);
+        self.command_network_session.set_current_tick(tick);
+        true
+    }
+
     #[must_use]
     pub const fn current_tick(&self) -> SimulationTick {
         self.current_tick
@@ -6868,6 +6878,9 @@ impl GameSession {
         let Some(slot) = self.game.online_player_slot else {
             return false;
         };
+        if let Some(tick) = self.game.online_gameplay_entry_authoritative_tick {
+            let _synced = self.sync_replicated_authoritative_tick(tick);
+        }
         let player_id = online_identity_for_slot(slot).1;
         if let Some(player) = self.world.player_mut(player_id) {
             *player = self.game.player.clone();
@@ -7356,6 +7369,13 @@ impl GameSession {
             .map(|command| command.player_id)
             .find(|player_id| *player_id != self.local_client().controlled_player_id)
         else {
+            if summary.rejected > 0 {
+                let tick = summary.authoritative_tick.get();
+                self.game.apply_online_replication_status(format!(
+                    "host rejected {} remote command(s) at tick {tick}",
+                    summary.rejected
+                ));
+            }
             return 0;
         };
         if !self.has_client(remote_client_id) {
@@ -7368,6 +7388,13 @@ impl GameSession {
             .cloned()
             .collect();
         if accepted.is_empty() {
+            if summary.rejected > 0 {
+                let tick = summary.authoritative_tick.get();
+                self.game.apply_online_replication_status(format!(
+                    "host rejected {} remote command(s) at tick {tick}",
+                    summary.rejected
+                ));
+            }
             return 0;
         }
         let accepted_count = accepted.len();
@@ -7697,6 +7724,7 @@ impl GameSession {
     pub fn process_authoritative_commands_for_tick(&mut self, tick: SimulationTick) -> usize {
         let tick_commands = self.drain_commands_for_tick(tick);
         let command_count = tick_commands.len();
+        self.remember_latest_movement_intents(&tick_commands);
         self.push_event(WorldEvent::CommandsProcessed {
             tick,
             command_count,

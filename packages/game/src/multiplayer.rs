@@ -855,6 +855,11 @@ impl ClientSessionRuntime {
             {
                 self.latest_authoritative_tick = acknowledgement.authoritative_tick;
             }
+            ProtocolMessage::CommandRejection(rejection)
+                if rejection.client_id == self.config.client_id =>
+            {
+                self.latest_authoritative_tick = rejection.authoritative_tick;
+            }
             ProtocolMessage::WorldDelta { tick, payload } => {
                 self.latest_authoritative_tick = tick;
                 if matches!(payload, NetworkDeltaPayload::KeyframeRequired) {
@@ -3048,6 +3053,10 @@ impl HostSessionRuntime {
         self.command_session.apply_command_packet_exchange(packet)
     }
 
+    pub const fn set_current_tick(&mut self, current_tick: SimulationTick) {
+        self.command_session.set_current_tick(current_tick);
+    }
+
     #[must_use]
     pub fn runtime_status(&self) -> HostRuntimeStatus {
         HostRuntimeStatus {
@@ -3634,10 +3643,11 @@ impl ProtocolMessage {
     #[must_use]
     pub const fn reliability_class(&self) -> ReliabilityClass {
         match self {
-            Self::CommandPacket(_) | Self::SnapshotKeyframe { .. } | Self::WorldDelta { .. } => {
+            Self::SnapshotKeyframe { .. } | Self::WorldDelta { .. } => {
                 ReliabilityClass::UnreliableSequenced
             }
-            Self::JoinRequest { .. }
+            Self::CommandPacket(_)
+            | Self::JoinRequest { .. }
             | Self::JoinAccepted { .. }
             | Self::ReconnectRequest { .. }
             | Self::CommandAcknowledgement(_)

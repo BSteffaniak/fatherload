@@ -3791,7 +3791,17 @@ impl RealOnlineSessionController {
         crate::multiplayer::QuinnOnlineSessionError,
     > {
         let command_summary = self
-            .descriptor_host_try_receive_command_packet(Duration::from_millis(1))
+            .descriptor_host_try_receive_command_packet(
+                game,
+                Duration::from_millis(1),
+                input
+                    .snapshot
+                    .as_ref()
+                    .map_or(crate::multiplayer::SimulationTick::new(0), |snapshot| {
+                        snapshot.tick
+                    }),
+                &input.authoritative_terrain_chunks,
+            )
             .await?;
         self.drive_descriptor_host_replication_tick(game, input, command_summary)
             .await
@@ -3810,12 +3820,6 @@ impl RealOnlineSessionController {
             .await?;
         self.descriptor_host_send_ready_state(game.online_local_ready)
             .await?;
-        self.descriptor_host_try_receive_ready_state(
-            game,
-            Duration::from_millis(1),
-            &input.authoritative_terrain_chunks,
-        )
-        .await?;
         if game.run_mode == RunMode::Playing
             && game.online_local_ready
             && game.online_remote_player_ready
@@ -4155,9 +4159,13 @@ impl RealOnlineSessionController {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn descriptor_host_try_receive_command_packet(
         &mut self,
+        game: &mut GameState,
         timeout: Duration,
+        current_tick: crate::multiplayer::SimulationTick,
+        authoritative_terrain_chunks: &[crate::multiplayer::NetworkTerrainChunkSnapshot],
     ) -> Result<
         Option<crate::multiplayer::CommandPacketExchangeSummary>,
         crate::multiplayer::QuinnOnlineSessionError,
@@ -4174,30 +4182,100 @@ impl RealOnlineSessionController {
                 ),
             );
         };
-        let received = match tokio::time::timeout(timeout, host_io.receive_datagram_packet()).await
-        {
-            Ok(Ok(packet)) => packet,
-            Ok(Err(error)) => return Err(error.into()),
-            Err(_) => return Ok(None),
-        };
-        let packet = match received.decode_supported().map_err(|error| {
-            crate::multiplayer::QuinnOnlineSessionError::Connect(format!(
-                "unsupported protocol version: expected {}, actual {}",
-                error.expected, error.actual
-            ))
-        })? {
-            crate::multiplayer::ProtocolMessage::CommandPacket(packet) => packet,
-            other => {
-                return Err(crate::multiplayer::QuinnOnlineSessionError::UnexpectedMessage(other));
+        host_runtime.set_current_tick(current_tick);
+        let mut merged_summary: Option<crate::multiplayer::CommandPacketExchangeSummary> = None;
+        for _ in 0..32 {
+            let received =
+                match tokio::time::timeout(timeout, host_io.receive_reliable_packet()).await {
+                    Ok(Ok(packet)) => packet,
+                    Ok(Err(error)) => return Err(error.into()),
+                    Err(_) => break,
+                };
+            match received.decode_supported().map_err(|error| {
+                crate::multiplayer::QuinnOnlineSessionError::Connect(format!(
+                    "unsupported protocol version: expected {}, actual {}",
+                    error.expected, error.actual
+                ))
+            })? {
+                crate::multiplayer::ProtocolMessage::CommandPacket(packet) => {
+                    let (responses, summary) = host_runtime.apply_command_packet_exchange(&packet);
+                    for response in responses {
+                        host_io
+                            .send_packet(crate::multiplayer::VersionedProtocolPacket::new(response))
+                            .await?;
+                    }
+                    if let Some(merged) = &mut merged_summary {
+                        merged.acknowledged += summary.acknowledged;
+                        merged.rejected += summary.rejected;
+                        merged.authoritative_tick = current_tick;
+                        merged.accepted_commands.extend(summary.accepted_commands);
+                    } else {
+                        merged_summary = Some(summary);
+                    }
+                }
+                crate::multiplayer::ProtocolMessage::PlayerIdentity { player_id, name } => {
+                    game.apply_online_remote_identity(player_id, &name);
+                }
+                crate::multiplayer::ProtocolMessage::ReadyState { player_id, ready } => {
+                    game.apply_online_remote_ready_state(player_id, ready);
+                }
+                crate::multiplayer::ProtocolMessage::TerrainChunkRequest {
+                    chunk_x,
+                    chunk_y,
+                    known_revision,
+                } => {
+                    let chunk = authoritative_terrain_chunks
+                        .iter()
+                        .find(|chunk| chunk.chunk_x == chunk_x && chunk.chunk_y == chunk_y)
+                        .or_else(|| {
+                            authoritative_terrain_chunks
+                                .iter()
+                                .find(|chunk| chunk.revision > known_revision)
+                        })
+                        .or_else(|| authoritative_terrain_chunks.first());
+                    let (response_chunk_x, response_chunk_y, revision, tiles) = chunk.map_or_else(
+                        || {
+                            let revision = known_revision.saturating_add(1);
+                            let tiles =
+                                network_terrain_chunk_tiles(&game.terrain, chunk_x, chunk_y);
+                            (chunk_x, chunk_y, revision, tiles)
+                        },
+                        |chunk| {
+                            (
+                                chunk.chunk_x,
+                                chunk.chunk_y,
+                                chunk.revision.max(known_revision.saturating_add(1)),
+                                chunk.tiles.clone(),
+                            )
+                        },
+                    );
+                    host_io
+                        .send_packet(crate::multiplayer::VersionedProtocolPacket::new(
+                            crate::multiplayer::ProtocolMessage::TerrainChunkResponse {
+                                chunk_x: response_chunk_x,
+                                chunk_y: response_chunk_y,
+                                revision,
+                                tiles,
+                            },
+                        ))
+                        .await?;
+                    game.apply_online_terrain_status(format!(
+                        "answered chunk ({response_chunk_x},{response_chunk_y}) rev {revision}"
+                    ));
+                }
+                crate::multiplayer::ProtocolMessage::SessionEnded { reason } => {
+                    game.apply_online_session_boundary_status(
+                        &OnlineSessionBoundaryStatus::client_left(&reason),
+                    );
+                }
+                other => {
+                    return Err(
+                        crate::multiplayer::QuinnOnlineSessionError::UnexpectedMessage(other),
+                    );
+                }
             }
-        };
-        let (responses, summary) = host_runtime.apply_command_packet_exchange(&packet);
-        for response in responses {
-            host_io
-                .send_packet(crate::multiplayer::VersionedProtocolPacket::new(response))
-                .await?;
         }
-        Ok(Some(summary))
+        Ok(merged_summary)
     }
 
     pub async fn descriptor_client_send_session_ended(
@@ -4288,9 +4366,19 @@ impl RealOnlineSessionController {
                         crate::multiplayer::ProtocolMessage::CommandAcknowledgement(
                             acknowledgement,
                         ) => {
+                            client_runtime.handle_message(
+                                crate::multiplayer::ProtocolMessage::CommandAcknowledgement(
+                                    acknowledgement.clone(),
+                                ),
+                            );
                             self.pending_command_acknowledgements.push(acknowledgement);
                         }
                         crate::multiplayer::ProtocolMessage::CommandRejection(rejection) => {
+                            client_runtime.handle_message(
+                                crate::multiplayer::ProtocolMessage::CommandRejection(
+                                    rejection.clone(),
+                                ),
+                            );
                             self.pending_command_rejections.push(rejection);
                         }
                         crate::multiplayer::ProtocolMessage::SessionEnded { reason } => {
@@ -4338,6 +4426,7 @@ impl RealOnlineSessionController {
                                 game, &snapshot,
                             );
                             let tick = snapshot.tick.get();
+                            game.online_gameplay_entry_authoritative_tick = Some(snapshot.tick);
                             let applied_local_player =
                                 apply_network_snapshot_local_player_presentation_adapter(
                                     game, &snapshot,
@@ -4365,6 +4454,7 @@ impl RealOnlineSessionController {
                         }
                         crate::multiplayer::ProtocolMessage::WorldDelta { tick, payload } => {
                             let tick_value = tick.get();
+                            game.online_gameplay_entry_authoritative_tick = Some(tick);
                             let delta_status = match &payload {
                                 crate::multiplayer::NetworkDeltaPayload::Noop => {
                                     format!("tick {tick_value}: noop delta")
@@ -4709,6 +4799,19 @@ impl RealOnlineSessionController {
     #[must_use]
     pub const fn mode_label(&self) -> &'static str {
         self.mode.label()
+    }
+
+    #[must_use]
+    pub const fn latest_authoritative_tick(&self) -> Option<crate::multiplayer::SimulationTick> {
+        match &self.mode {
+            RealOnlineSessionMode::DescriptorClientConnected { client_runtime, .. } => {
+                Some(client_runtime.latest_authoritative_tick)
+            }
+            RealOnlineSessionMode::CombinedLocalhost(session) => {
+                Some(session.client_runtime.latest_authoritative_tick)
+            }
+            _ => None,
+        }
     }
 
     pub fn drain_command_responses(
