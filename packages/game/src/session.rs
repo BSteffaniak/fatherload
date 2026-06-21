@@ -2935,8 +2935,15 @@ impl WorldState {
     }
 }
 
+fn online_identity_for_slot(slot: u8) -> (ClientId, PlayerId) {
+    (
+        ClientId::new(u64::from(slot)),
+        PlayerId::new(u64::from(slot)),
+    )
+}
+
 fn client_id_for_online_slot(slot: u8) -> ClientId {
-    ClientId::new(u64::from(slot))
+    online_identity_for_slot(slot).0
 }
 
 fn apply_network_player_snapshot_to_player(player: &mut Player, snapshot: &NetworkPlayerSnapshot) {
@@ -6258,6 +6265,37 @@ impl GameSession {
             .find(|client_id| *client_id != self.local_client_id)
     }
 
+    pub fn set_primary_local_online_identity(&mut self, slot: u8) -> bool {
+        let (client_id, player_id) = online_identity_for_slot(slot);
+        if self.local_client_id == client_id
+            && self.local_client().controlled_player_id == player_id
+            && self.local_seat_client_ids.contains(&client_id)
+        {
+            return false;
+        }
+
+        let previous_local_client_id = self.local_client_id;
+        let mut client = self
+            .clients
+            .remove(&client_id)
+            .or_else(|| self.clients.remove(&previous_local_client_id))
+            .unwrap_or_else(|| ClientState::new(client_id, player_id));
+        client.client_id = client_id;
+        client.controlled_player_id = player_id;
+        client.view.client_id = client_id;
+        client.view.controlled_player_id = player_id;
+        self.clients.insert(client_id, client);
+        self.local_client_id = client_id;
+        self.local_seat_client_ids.clear();
+        self.local_seat_client_ids.insert(client_id);
+        if self.world.player(player_id).is_none() {
+            self.world
+                .insert_player(player_id, self.game.player.clone());
+        }
+        self.assign_local_split_screen_viewports();
+        true
+    }
+
     fn assign_local_split_screen_viewports(&mut self) {
         let viewports = split_screen_viewports(self.local_input_client_count());
         for (client_id, viewport) in self.local_seat_client_ids.iter().copied().zip(viewports) {
@@ -6297,7 +6335,20 @@ impl GameSession {
         client_id: ClientId,
         player_id: PlayerId,
     ) -> bool {
-        self.insert_client_player(client_id, player_id)
+        if self.clients.contains_key(&client_id) {
+            return false;
+        }
+        if self.world.player(player_id).is_none() {
+            let mut player = self.game.player.clone();
+            player.x += TILE_SIZE;
+            player.velocity_x = 0.0;
+            player.velocity_y = 0.0;
+            self.world.insert_player(player_id, player);
+        }
+        let mut client = ClientState::new(client_id, player_id);
+        client.sync_presentation_from_legacy_game(&self.game);
+        self.clients.insert(client_id, client);
+        true
     }
 
     #[must_use]
@@ -6687,21 +6738,20 @@ impl GameSession {
         &mut self,
         descriptor_client_connected: bool,
     ) -> OnlineTickIdentitySummary {
+        let online_player_slot = self.game.online_player_slot;
+        let identity_rebound =
+            online_player_slot.is_some_and(|slot| self.set_primary_local_online_identity(slot));
         let local_client_id = self.local_client().client_id;
         let local_player_id = self.local_client().controlled_player_id;
-        let online_player_slot = self.game.online_player_slot;
         let player_id =
-            online_player_slot.map_or(local_player_id, |slot| PlayerId::new(u64::from(slot)));
-        let client_id = if online_player_slot == Some(2) {
-            ClientId::new(1)
-        } else {
-            local_client_id
-        };
+            online_player_slot.map_or(local_player_id, |slot| online_identity_for_slot(slot).1);
+        let client_id =
+            online_player_slot.map_or(local_client_id, |slot| online_identity_for_slot(slot).0);
         let (roster_seeded, joined_local_synced) =
             if descriptor_client_connected || online_player_slot.is_some() {
                 let roster_seeded = self.ensure_local_online_player_presentation_from_roster();
                 self.refresh_online_roster_status_on_shell();
-                (roster_seeded, false)
+                (roster_seeded || identity_rebound, false)
             } else {
                 (false, false)
             };
@@ -6719,11 +6769,10 @@ impl GameSession {
     pub fn local_network_identity(&self) -> (ClientId, PlayerId) {
         let roster = self.online_session_roster();
         let player_id = roster.player_id_for_local_network_tick();
-        let client_id = if self.game.online_player_slot == Some(2) {
-            ClientId::new(1)
-        } else {
-            roster.client_id_for_local_network_tick()
-        };
+        let client_id = self.game.online_player_slot.map_or_else(
+            || roster.client_id_for_local_network_tick(),
+            |slot| online_identity_for_slot(slot).0,
+        );
         (client_id, player_id)
     }
 
@@ -6747,7 +6796,7 @@ impl GameSession {
             } else {
                 client_id_for_online_slot(local_slot)
             },
-            player_id: PlayerId::new(u64::from(local_slot)),
+            player_id: online_identity_for_slot(local_slot).1,
             slot: local_slot,
             name: self.game.online_player_name.clone(),
             ready: self.game.online_local_ready,
@@ -6782,7 +6831,7 @@ impl GameSession {
         };
         Some(OnlineRosterParticipant {
             client_id: client_id_for_online_slot(remote_slot),
-            player_id: PlayerId::new(u64::from(remote_slot)),
+            player_id: online_identity_for_slot(remote_slot).1,
             slot: remote_slot,
             name: self
                 .game
@@ -6819,7 +6868,7 @@ impl GameSession {
         let Some(slot) = self.game.online_player_slot else {
             return false;
         };
-        let player_id = PlayerId::new(u64::from(slot));
+        let player_id = online_identity_for_slot(slot).1;
         if let Some(player) = self.world.player_mut(player_id) {
             *player = self.game.player.clone();
             self.sync_legacy_player_from_world(player_id);
@@ -10115,7 +10164,7 @@ mod tests {
             .world()
             .player(PlayerId::new(2))
             .expect("joined player exists from roster/session seeding");
-        let expected_x = TILE_SIZE * 10.0;
+        let expected_x = TILE_SIZE * 9.0;
         assert!((player.x - expected_x).abs() < f32::EPSILON);
         assert_eq!(player.credits, 5);
         assert!(

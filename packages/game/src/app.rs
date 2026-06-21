@@ -917,7 +917,7 @@ mod tests {
 
         let packet = input.command_packet.expect("command packet is generated");
         let command = packet.commands.first().expect("sequenced command");
-        assert_eq!(packet.client_id, crate::multiplayer::ClientId::new(1));
+        assert_eq!(packet.client_id, crate::multiplayer::ClientId::new(2));
         assert_eq!(command.player_id, crate::multiplayer::PlayerId::new(2));
     }
 
@@ -925,7 +925,7 @@ mod tests {
     fn accepted_remote_commands_create_online_client_and_move_remote_player() {
         let mut session = GameSession::new();
         let summary = crate::multiplayer::CommandPacketExchangeSummary {
-            client_id: crate::multiplayer::ClientId::new(1),
+            client_id: crate::multiplayer::ClientId::new(2),
             acknowledged: 1,
             rejected: 0,
             authoritative_tick: session.current_tick(),
