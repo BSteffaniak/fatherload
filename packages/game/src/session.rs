@@ -3476,9 +3476,15 @@ impl RenderFramePlan {
         prediction_plan: &PredictionPresentationPlan,
     ) -> Option<RenderPlayerPresentation> {
         let player = self.player_for_view(view)?;
-        let Some(predicted) = prediction_plan
+        let corrected = prediction_plan
+            .corrected_local_presentation
+            .filter(|movement| movement.player_id == view.controlled_player_id);
+        let predicted = prediction_plan
             .local_movement
-            .filter(|movement| movement.player_id == view.controlled_player_id)
+            .filter(|movement| movement.player_id == view.controlled_player_id);
+        let Some((x, y)) = corrected
+            .map(|movement| (movement.x, movement.y))
+            .or_else(|| predicted.map(|movement| (movement.x, movement.y)))
         else {
             return Some(RenderPlayerPresentation {
                 player_id: player.player_id,
@@ -3489,9 +3495,9 @@ impl RenderFramePlan {
             });
         };
         Some(RenderPlayerPresentation {
-            player_id: predicted.player_id,
-            x: predicted.x,
-            y: predicted.y,
+            player_id: view.controlled_player_id,
+            x,
+            y,
             predicted: true,
             correction_plan: prediction_plan
                 .correction
@@ -3528,19 +3534,26 @@ impl RenderFramePlan {
             .iter()
             .map(|player| {
                 let local_to_view = player.player_id == view.controlled_player_id;
+                let corrected = local_to_view
+                    .then_some(prediction_plan.corrected_local_presentation)
+                    .flatten()
+                    .filter(|movement| movement.player_id == player.player_id);
                 let predicted = local_to_view
                     .then_some(prediction_plan.local_movement)
                     .flatten()
                     .filter(|movement| movement.player_id == player.player_id);
+                let prediction_position = corrected
+                    .map(|movement| (movement.x, movement.y))
+                    .or_else(|| predicted.map(|movement| (movement.x, movement.y)));
                 RenderWorldPlayerPresentation {
                     player_id: player.player_id,
                     display_name: None,
-                    x: predicted.map_or(player.x, |movement| movement.x),
-                    y: predicted.map_or(player.y, |movement| movement.y),
+                    x: prediction_position.map_or(player.x, |position| position.0),
+                    y: prediction_position.map_or(player.y, |position| position.1),
                     velocity_x: player.velocity_x,
                     velocity_y: player.velocity_y,
                     local_to_view,
-                    source: predicted
+                    source: prediction_position
                         .map_or(RenderPlayerPresentationSource::AuthoritativeWorld, |_| {
                             RenderPlayerPresentationSource::PredictedLocal
                         }),
@@ -4254,12 +4267,24 @@ impl ClientPredictionState {
                     horizontal, thrust, ..
                 } => {
                     replayed.replayed_command_count += 1;
-                    replayed.snapshot.velocity_x = horizontal;
-                    if thrust {
-                        replayed.snapshot.velocity_y -= 1.0;
+                    replayed.snapshot.velocity_x =
+                        horizontal.clamp(-1.0, 1.0) * AUTHORITATIVE_HORIZONTAL_SPEED;
+                    if thrust && replayed.snapshot.fuel > 0.0 {
+                        replayed.snapshot.velocity_y = -AUTHORITATIVE_THRUST_SPEED;
+                        replayed.snapshot.fuel =
+                            (replayed.snapshot.fuel - FIXED_DELTA_SECONDS).max(0.0);
+                    } else {
+                        replayed.snapshot.velocity_y = AUTHORITATIVE_GRAVITY
+                            .mul_add(FIXED_DELTA_SECONDS, replayed.snapshot.velocity_y);
                     }
-                    replayed.snapshot.x += replayed.snapshot.velocity_x;
-                    replayed.snapshot.y += replayed.snapshot.velocity_y;
+                    replayed.snapshot.x = replayed
+                        .snapshot
+                        .velocity_x
+                        .mul_add(FIXED_DELTA_SECONDS, replayed.snapshot.x);
+                    replayed.snapshot.y = replayed
+                        .snapshot
+                        .velocity_y
+                        .mul_add(FIXED_DELTA_SECONDS, replayed.snapshot.y);
                 }
                 PlayerCommand::UseScanner => {
                     replayed.replayed_command_count += 1;
@@ -9821,7 +9846,8 @@ mod tests {
             }],
         );
         assert_eq!(replayed.replayed_command_count, 1);
-        assert!((replayed.predicted.x - 13.0).abs() < f32::EPSILON);
+        assert!((replayed.predicted.x - 12.333_334).abs() < 0.001);
+        assert!((replayed.predicted.y - 18.0).abs() < f32::EPSILON);
         let replayed_full_state = super::ClientPredictionState::replay_unacknowledged_player_state(
             &previous,
             &[
