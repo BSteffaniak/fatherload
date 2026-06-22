@@ -781,12 +781,6 @@ pub fn run() {
         } else {
             session.update_frame_from_session_authority(authority_input, delta_seconds)
         };
-        if online_authority_mode == Some("descriptor-client-connected")
-            && session.game().run_mode == crate::game_state::RunMode::Playing
-        {
-            let _predicted = session.predict_online_render_input(authority_input, delta_seconds);
-            let _correction = session.advance_online_prediction_correction(delta_seconds);
-        }
         if session.game().request_exit
             && session
                 .game_mut()
@@ -803,6 +797,12 @@ pub fn run() {
             delta_seconds,
             mapped_input.player_commands.clone(),
         );
+        if online_authority_mode == Some("descriptor-client-connected")
+            && session.game().run_mode == crate::game_state::RunMode::Playing
+        {
+            let _predicted = session.predict_online_render_input(authority_input, delta_seconds);
+            let _correction = session.advance_online_prediction_correction(delta_seconds);
+        }
         let world_delta = session.drain_world_delta();
         let _world_delta_is_empty = world_delta.is_empty();
         if input.fullscreen {
