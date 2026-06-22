@@ -2866,13 +2866,14 @@ impl WorldState {
             .collect()
     }
 
-    pub fn sync_local_player_shell_effects_from_legacy_game(
+    pub fn sync_player_shell_effects_from_legacy_game(
         &mut self,
+        player_id: PlayerId,
         game: &GameState,
     ) -> Option<PlayerShellEffectSync> {
-        let player = self.players.get_mut(&LOCAL_PLAYER_ID)?;
+        let player = self.players.get_mut(&player_id)?;
         let sync = PlayerShellEffectSync {
-            player_id: LOCAL_PLAYER_ID,
+            player_id,
             fuel_before: player.fuel,
             fuel_after: game.player.fuel,
             hull_before: player.hull,
@@ -2882,8 +2883,15 @@ impl WorldState {
         player.fuel = game.player.fuel;
         player.hull = game.player.hull;
         self.scanner_cooldowns
-            .insert(LOCAL_PLAYER_ID, game.scanner_cooldown_seconds);
+            .insert(player_id, game.scanner_cooldown_seconds);
         Some(sync)
+    }
+
+    pub fn sync_local_player_shell_effects_from_legacy_game(
+        &mut self,
+        game: &GameState,
+    ) -> Option<PlayerShellEffectSync> {
+        self.sync_player_shell_effects_from_legacy_game(LOCAL_PLAYER_ID, game)
     }
 
     pub fn active_drills_snapshot(&self) -> BTreeMap<PlayerId, DrillState> {
@@ -6907,7 +6915,12 @@ impl GameSession {
             let _synced = self.sync_replicated_authoritative_tick(tick);
         }
         let player_id = online_identity_for_slot(slot).1;
-        if let Some(player) = self.world.player_mut(player_id) {
+        if self.game.run_mode == RunMode::Playing {
+            if self.world.player(player_id).is_none() {
+                self.world
+                    .insert_player(player_id, self.game.player.clone());
+            }
+        } else if let Some(player) = self.world.player_mut(player_id) {
             *player = self.game.player.clone();
             self.sync_legacy_player_from_world(player_id);
         } else {
@@ -7481,11 +7494,12 @@ impl GameSession {
         } else {
             input
         };
+        let controlled_player_id = self.local_client().controlled_player_id;
         let fixed_steps = self.accumulate_frame_delta(delta_seconds);
         let _advance = self.advance_authoritative_world_ticks(fixed_steps);
-        self.sync_legacy_player_from_world(LOCAL_PLAYER_ID);
-        let _revealed = self.reveal_legacy_exploration_from_world_player(LOCAL_PLAYER_ID);
-        self.sync_legacy_active_drill_from_world(LOCAL_PLAYER_ID);
+        self.sync_legacy_player_from_world(controlled_player_id);
+        let _revealed = self.reveal_legacy_exploration_from_world_player(controlled_player_id);
+        self.sync_legacy_active_drill_from_world(controlled_player_id);
         self.sync_legacy_terrain_from_world();
         let shell_update = self
             .game
@@ -7510,7 +7524,7 @@ impl GameSession {
         }
         if let Some(sync) = self
             .world
-            .sync_local_player_shell_effects_from_legacy_game(&self.game)
+            .sync_player_shell_effects_from_legacy_game(controlled_player_id, &self.game)
         {
             if sync.changed_survival() {
                 self.push_event(WorldEvent::PlayerSurvivalChanged {

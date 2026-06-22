@@ -12462,6 +12462,15 @@ pub fn session_gameplay_commands_from_input(input: PlayerInput) -> Vec<PlayerCom
     if let Some(index) = input.selected_upgrade {
         commands.push(PlayerCommand::SelectUpgrade { index });
     }
+    if input.interact {
+        commands.push(PlayerCommand::Interact);
+    }
+    if input.confirm {
+        commands.push(PlayerCommand::Confirm);
+    }
+    if input.cancel {
+        commands.push(PlayerCommand::Cancel);
+    }
     commands
 }
 
@@ -12512,9 +12521,9 @@ mod tests {
                 drill_down: true,
             } if (*horizontal - 1.0).abs() < f32::EPSILON
         )));
-        assert!(!commands.contains(&PlayerCommand::Interact));
-        assert!(!commands.contains(&PlayerCommand::Confirm));
-        assert!(!commands.contains(&PlayerCommand::Cancel));
+        assert!(commands.contains(&PlayerCommand::Interact));
+        assert!(commands.contains(&PlayerCommand::Confirm));
+        assert!(commands.contains(&PlayerCommand::Cancel));
         assert!(commands.contains(&PlayerCommand::UseScanner));
         assert!(commands.contains(&PlayerCommand::PlaceBomb));
         assert!(commands.contains(&PlayerCommand::PlaceInfrastructure { slot: 0 }));
