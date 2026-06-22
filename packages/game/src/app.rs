@@ -765,13 +765,9 @@ pub fn run() {
         } else {
             input
         };
-        let authority_update = if online_authority_mode == Some("descriptor-client-connected") {
-            if session.game().run_mode == crate::game_state::RunMode::Playing {
-                session.update_frame_from_session_authority(authority_input, delta_seconds)
-            } else {
-                session.update_shell_frame_from_session_authority(authority_input, delta_seconds)
-            }
-        } else if split_screen_active {
+        let authority_update = if online_authority_mode == Some("descriptor-client-connected")
+            || split_screen_active
+        {
             session.update_shell_frame_from_session_authority(authority_input, delta_seconds)
         } else {
             session.update_frame_from_session_authority(authority_input, delta_seconds)

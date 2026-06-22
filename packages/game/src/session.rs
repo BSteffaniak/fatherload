@@ -6915,12 +6915,7 @@ impl GameSession {
             let _synced = self.sync_replicated_authoritative_tick(tick);
         }
         let player_id = online_identity_for_slot(slot).1;
-        if self.game.run_mode == RunMode::Playing {
-            if self.world.player(player_id).is_none() {
-                self.world
-                    .insert_player(player_id, self.game.player.clone());
-            }
-        } else if let Some(player) = self.world.player_mut(player_id) {
+        if let Some(player) = self.world.player_mut(player_id) {
             *player = self.game.player.clone();
             self.sync_legacy_player_from_world(player_id);
         } else {
