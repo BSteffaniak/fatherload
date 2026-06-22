@@ -3350,6 +3350,7 @@ pub struct RenderViewportPlan {
     pub remote_players: Vec<RemotePlayerPresentation>,
     pub correction_frame: Option<CorrectionPresentationFrame>,
     pub feedback_outputs: Vec<TentativeFeedbackOutput>,
+    pub prediction_overlay: Option<OnlinePredictionRenderOverlay>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3619,6 +3620,7 @@ impl RenderFramePlan {
                     } else {
                         prediction_plan.feedback_outputs.clone()
                     },
+                    prediction_overlay: None,
                 }
             })
             .collect()
@@ -4231,6 +4233,13 @@ impl ClientPredictionState {
     #[must_use]
     pub fn terrain_overlays(&self) -> &[PredictedTerrainOverlay] {
         &self.terrain_overlays
+    }
+
+    #[must_use]
+    pub const fn is_render_overlay_empty(&self) -> bool {
+        self.terrain_overlays.is_empty()
+            && self.predicted_effects.is_empty()
+            && self.predicted_modal.is_none()
     }
 
     #[must_use]
@@ -5028,6 +5037,53 @@ pub struct PredictedModalState {
 pub enum OnlineRenderAuthorityPolicy {
     HostAuthoritative,
     ClientPredicted,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RenderPredictionOverlayPlan {
+    pub policy: OnlineRenderAuthorityPolicy,
+    pub terrain_outline_count: usize,
+    pub pending_terrain_count: usize,
+    pub confirmed_terrain_count: usize,
+    pub reverted_terrain_count: usize,
+    pub effect_count: usize,
+    pub modal_state: Option<PredictedModalResolution>,
+    pub show_status_badge: bool,
+    pub show_modal_overlay: bool,
+}
+
+impl RenderPredictionOverlayPlan {
+    #[must_use]
+    pub fn from_overlay(overlay: &OnlinePredictionRenderOverlay) -> Self {
+        let pending_terrain_count = overlay
+            .terrain
+            .iter()
+            .filter(|terrain| terrain.resolution == PredictedTerrainResolution::Pending)
+            .count();
+        let confirmed_terrain_count = overlay
+            .terrain
+            .iter()
+            .filter(|terrain| terrain.resolution == PredictedTerrainResolution::Confirmed)
+            .count();
+        let reverted_terrain_count = overlay
+            .terrain
+            .iter()
+            .filter(|terrain| terrain.resolution == PredictedTerrainResolution::Reverted)
+            .count();
+        Self {
+            policy: overlay.policy,
+            terrain_outline_count: overlay.terrain.len(),
+            pending_terrain_count,
+            confirmed_terrain_count,
+            reverted_terrain_count,
+            effect_count: overlay.effects.len(),
+            modal_state: overlay.modal.map(|modal| modal.resolution),
+            show_status_badge: overlay.policy == OnlineRenderAuthorityPolicy::ClientPredicted
+                && (!overlay.effects.is_empty() || !overlay.terrain.is_empty()),
+            show_modal_overlay: overlay.policy == OnlineRenderAuthorityPolicy::ClientPredicted
+                && overlay.modal.is_some(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -6460,7 +6516,21 @@ impl GameSession {
             })
             .collect();
         LiveRenderFrameOutput {
-            viewport_plans: frame_plan.viewport_plans(prediction_plan),
+            viewport_plans: frame_plan
+                .viewport_plans(prediction_plan)
+                .into_iter()
+                .map(|mut plan| {
+                    let policy = if plan.client_id == self.local_client_id
+                        && !self.local_client().prediction().is_render_overlay_empty()
+                    {
+                        OnlineRenderAuthorityPolicy::ClientPredicted
+                    } else {
+                        OnlineRenderAuthorityPolicy::HostAuthoritative
+                    };
+                    plan.prediction_overlay = Some(self.online_prediction_render_overlay(policy));
+                    plan
+                })
+                .collect(),
             hud_snapshots: frame_plan.hud_snapshots(),
             world_players_by_view,
             ui_snapshots,
@@ -10446,6 +10516,65 @@ mod tests {
             super::RenderFramePlan::online_authority_policy(true),
             super::OnlineRenderAuthorityPolicy::ClientPredicted
         );
+    }
+
+    #[test]
+    fn live_render_output_attaches_prediction_overlay_to_local_client_view() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let _predicted = session.predict_online_render_input(
+            PlayerInput {
+                horizontal: 1.0,
+                interact: true,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+        );
+        let prediction_plan = session.live_prediction_presentation_plan(0.0, 0.5, 0.0);
+
+        let output = session.live_render_frame_output(&prediction_plan);
+        let overlay = output.viewport_plans[0]
+            .prediction_overlay
+            .as_ref()
+            .expect("prediction overlay is attached");
+
+        assert_eq!(
+            overlay.policy,
+            super::OnlineRenderAuthorityPolicy::ClientPredicted
+        );
+        assert!(!overlay.terrain.is_empty());
+        assert!(overlay.modal.is_some());
+    }
+
+    #[test]
+    fn prediction_overlay_plan_marks_renderer_work_items() {
+        let overlay = super::OnlinePredictionRenderOverlay {
+            policy: super::OnlineRenderAuthorityPolicy::ClientPredicted,
+            terrain: vec![super::PredictedTerrainOverlay {
+                player_id: LOCAL_PLAYER_ID,
+                position: crate::terrain::TilePosition { x: 1, y: 2 },
+                chunk: super::TerrainChunkPosition { x: 0, y: 0 },
+                base_revision: 0,
+                resolution: super::PredictedTerrainResolution::Pending,
+            }],
+            effects: vec![super::PredictedEffect::Movement {
+                player_id: LOCAL_PLAYER_ID,
+            }],
+            modal: Some(super::PredictedModalState {
+                modal: super::PredictedModal::BuildingInteraction {
+                    player_id: LOCAL_PLAYER_ID,
+                },
+                resolution: super::PredictedModalResolution::Pending,
+            }),
+        };
+
+        let plan = super::RenderPredictionOverlayPlan::from_overlay(&overlay);
+
+        assert_eq!(plan.terrain_outline_count, 1);
+        assert_eq!(plan.pending_terrain_count, 1);
+        assert_eq!(plan.effect_count, 1);
+        assert!(plan.show_status_badge);
+        assert!(plan.show_modal_overlay);
     }
 
     #[test]

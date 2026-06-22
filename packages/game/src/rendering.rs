@@ -166,6 +166,72 @@ fn draw_local_player_override(
     }
 }
 
+fn draw_prediction_overlay_world(
+    draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
+    overlay: &crate::session::OnlinePredictionRenderOverlay,
+) {
+    if overlay.policy != crate::session::OnlineRenderAuthorityPolicy::ClientPredicted {
+        return;
+    }
+    for terrain in &overlay.terrain {
+        let tile_size = crate::game_state::TILE_SIZE;
+        let x = terrain.position.x as f32 * tile_size;
+        let y = terrain.position.y as f32 * tile_size;
+        let color = match terrain.resolution {
+            crate::session::PredictedTerrainResolution::Pending => Color::new(255, 230, 80, 150),
+            crate::session::PredictedTerrainResolution::Confirmed => Color::new(80, 255, 120, 120),
+            crate::session::PredictedTerrainResolution::Reverted => Color::new(255, 80, 80, 150),
+        };
+        draw.draw_rectangle_lines_ex(Rectangle::new(x, y, tile_size, tile_size), 3.0, color);
+        if terrain.resolution == crate::session::PredictedTerrainResolution::Pending {
+            draw.draw_circle_v(
+                Vector2::new(x + tile_size / 2.0, y + tile_size / 2.0),
+                4.0,
+                Color::new(255, 255, 180, 180),
+            );
+        }
+    }
+}
+
+fn draw_prediction_overlay_ui(
+    draw: &mut RaylibDrawHandle<'_>,
+    viewport: crate::session::Viewport,
+    overlay: &crate::session::OnlinePredictionRenderOverlay,
+) {
+    if overlay.policy != crate::session::OnlineRenderAuthorityPolicy::ClientPredicted {
+        return;
+    }
+    let x = viewport.x + 12;
+    let y = viewport.y + 12;
+    if !overlay.effects.is_empty() || !overlay.terrain.is_empty() {
+        draw.draw_rectangle(x - 4, y - 4, 250, 28, Color::new(20, 20, 20, 140));
+        draw.draw_text("predicting local action", x, y, 18, Color::YELLOW);
+    }
+    if let Some(modal) = overlay.modal {
+        let text = match modal.resolution {
+            crate::session::PredictedModalResolution::Pending => "opening building...",
+            crate::session::PredictedModalResolution::Confirmed => "building confirmed",
+            crate::session::PredictedModalResolution::Reverted => "building denied",
+        };
+        let modal_y = viewport.y + viewport.height / 2 - 24;
+        draw.draw_rectangle(
+            viewport.x + 24,
+            modal_y,
+            viewport.width - 48,
+            48,
+            Color::new(15, 15, 30, 210),
+        );
+        draw.draw_rectangle_lines(
+            viewport.x + 24,
+            modal_y,
+            viewport.width - 48,
+            48,
+            Color::SKYBLUE,
+        );
+        draw.draw_text(text, viewport.x + 42, modal_y + 14, 22, Color::WHITE);
+    }
+}
+
 fn ui_scroll_delta(input: PlayerInput, step: f32) -> f32 {
     -input.ui_scroll * step + if input.menu_down { step } else { 0.0 }
         - if input.menu_up { step } else { 0.0 }
@@ -281,7 +347,7 @@ impl GameRenderer {
             unsafe {
                 ffi::BeginScissorMode(viewport.x, viewport.y, viewport.width, viewport.height);
             }
-            self.render_client_view(draw, game, view, &[], None);
+            self.render_client_view(draw, game, view, &[], None, None);
             unsafe {
                 ffi::EndScissorMode();
             }
@@ -347,7 +413,17 @@ impl GameRenderer {
             viewport,
             run_mode: game.run_mode,
         };
-        self.render_client_view(draw, game, &view, world_players, hud);
+        self.render_client_view(
+            draw,
+            game,
+            &view,
+            world_players,
+            hud,
+            plan.prediction_overlay.as_ref(),
+        );
+        if let Some(overlay) = &plan.prediction_overlay {
+            draw_prediction_overlay_ui(draw, viewport, overlay);
+        }
         if plan.clip_enabled {
             unsafe {
                 ffi::EndScissorMode();
@@ -362,6 +438,7 @@ impl GameRenderer {
         view: &ClientView,
         world_players: &[crate::session::RenderWorldPlayerPresentation],
         hud: Option<crate::session::PerPlayerHudSnapshot>,
+        prediction_overlay: Option<&crate::session::OnlinePredictionRenderOverlay>,
     ) {
         layout::set_current_fonts(self.ui_font_assets.fonts());
         layout::set_current_ui_state(self.ui_state.borrow().clone());
@@ -377,6 +454,9 @@ impl GameRenderer {
             draw_particles(&mut world_draw, game);
             draw_placed_bombs(&mut world_draw, game);
             draw_scanner_marks(&mut world_draw, game);
+            if let Some(overlay) = prediction_overlay {
+                draw_prediction_overlay_world(&mut world_draw, overlay);
+            }
             for cloud in &game.hazard_clouds {
                 world_draw.draw_circle_v(
                     Vector2::new(cloud.x, cloud.y),
