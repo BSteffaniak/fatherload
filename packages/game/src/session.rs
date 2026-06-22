@@ -3516,6 +3516,27 @@ impl RenderFramePlan {
     }
 
     #[must_use]
+    pub const fn online_authority_policy(
+        is_descriptor_client: bool,
+    ) -> OnlineRenderAuthorityPolicy {
+        if is_descriptor_client {
+            OnlineRenderAuthorityPolicy::ClientPredicted
+        } else {
+            OnlineRenderAuthorityPolicy::HostAuthoritative
+        }
+    }
+
+    #[must_use]
+    pub fn online_prediction_overlay_for_policy(
+        &self,
+        prediction: &ClientPredictionState,
+        policy: OnlineRenderAuthorityPolicy,
+    ) -> OnlinePredictionRenderOverlay {
+        let _view_count = self.view_count();
+        prediction.render_overlay(policy)
+    }
+
+    #[must_use]
     pub fn remote_player_presentations(
         &self,
         view: &ClientView,
@@ -4165,8 +4186,9 @@ pub struct ClientPredictionState {
     predicted_local_snapshot: Option<PlayerSnapshot>,
     prediction_command_frames: Vec<PredictionCommandFrame>,
     predicted_effects: Vec<PredictedEffect>,
-    predicted_modal: Option<PredictedModal>,
+    predicted_modal: Option<PredictedModalState>,
     active_correction: Option<ActiveCorrection>,
+    terrain_overlays: Vec<PredictedTerrainOverlay>,
 }
 
 impl ClientPredictionState {
@@ -4176,6 +4198,7 @@ impl ClientPredictionState {
         self.predicted_local_snapshot = None;
         self.predicted_effects.clear();
         self.predicted_modal = None;
+        self.terrain_overlays.clear();
         for frame in self.prediction_command_frames.clone() {
             let _snapshot =
                 self.apply_prediction_command_frame(world, frame, FIXED_DELTA_SECONDS, false);
@@ -4196,13 +4219,76 @@ impl ClientPredictionState {
     }
 
     #[must_use]
-    pub const fn predicted_modal(&self) -> Option<PredictedModal> {
+    pub fn predicted_modal(&self) -> Option<PredictedModal> {
+        self.predicted_modal.map(|modal| modal.modal)
+    }
+
+    #[must_use]
+    pub const fn predicted_modal_state(&self) -> Option<PredictedModalState> {
         self.predicted_modal
+    }
+
+    #[must_use]
+    pub fn terrain_overlays(&self) -> &[PredictedTerrainOverlay] {
+        &self.terrain_overlays
+    }
+
+    #[must_use]
+    pub fn render_overlay(
+        &self,
+        policy: OnlineRenderAuthorityPolicy,
+    ) -> OnlinePredictionRenderOverlay {
+        OnlinePredictionRenderOverlay {
+            policy,
+            terrain: self.terrain_overlays.clone(),
+            effects: self.predicted_effects.clone(),
+            modal: self.predicted_modal,
+        }
     }
 
     #[must_use]
     pub const fn active_correction(&self) -> Option<ActiveCorrection> {
         self.active_correction
+    }
+
+    pub fn confirm_terrain_overlay(&mut self, revisions: &[TerrainChunkRevision]) -> usize {
+        let mut confirmed = 0;
+        for overlay in &mut self.terrain_overlays {
+            if revisions.iter().any(|revision| {
+                revision.position == overlay.chunk && revision.revision >= overlay.base_revision
+            }) {
+                overlay.resolution = PredictedTerrainResolution::Confirmed;
+                confirmed += 1;
+            }
+        }
+        confirmed
+    }
+
+    pub fn revert_unconfirmed_terrain_overlays(&mut self) -> usize {
+        let mut reverted = 0;
+        for overlay in &mut self.terrain_overlays {
+            if overlay.resolution == PredictedTerrainResolution::Pending {
+                overlay.resolution = PredictedTerrainResolution::Reverted;
+                reverted += 1;
+            }
+        }
+        reverted
+    }
+
+    pub const fn confirm_predicted_modal(&mut self) -> bool {
+        let Some(modal) = &mut self.predicted_modal else {
+            return false;
+        };
+        modal.resolution = PredictedModalResolution::Confirmed;
+        true
+    }
+
+    pub const fn revert_predicted_modal(&mut self) -> bool {
+        let Some(modal) = &mut self.predicted_modal else {
+            return false;
+        };
+        modal.resolution = PredictedModalResolution::Reverted;
+        true
     }
 
     pub fn predict_command_frame(
@@ -4237,6 +4323,7 @@ impl ClientPredictionState {
         let mut movement_intent = None;
         self.predicted_effects.clear();
         self.predicted_modal = None;
+        self.terrain_overlays.clear();
         for command in &frame.commands {
             match *command {
                 PlayerCommand::Movement {
@@ -4248,6 +4335,18 @@ impl ClientPredictionState {
                     self.predicted_effects.push(PredictedEffect::Movement {
                         player_id: frame.player_id,
                     });
+                    if let Some(player) = predicted.player(frame.player_id)
+                        && let Some((target, _direction)) =
+                            authoritative_mine_target(player, horizontal, drill_down)
+                    {
+                        self.terrain_overlays.push(PredictedTerrainOverlay {
+                            player_id: frame.player_id,
+                            position: target,
+                            chunk: TerrainChunkPosition::from_tile(target),
+                            base_revision: 0,
+                            resolution: PredictedTerrainResolution::Pending,
+                        });
+                    }
                     if drill_down || horizontal.abs() > f32::EPSILON {
                         self.predicted_effects
                             .push(PredictedEffect::TerrainInteraction {
@@ -4260,8 +4359,11 @@ impl ClientPredictionState {
                         .push(PredictedEffect::BuildingInteraction {
                             player_id: frame.player_id,
                         });
-                    self.predicted_modal = Some(PredictedModal::BuildingInteraction {
-                        player_id: frame.player_id,
+                    self.predicted_modal = Some(PredictedModalState {
+                        modal: PredictedModal::BuildingInteraction {
+                            player_id: frame.player_id,
+                        },
+                        resolution: PredictedModalResolution::Pending,
                     });
                 }
                 PlayerCommand::UseScanner
@@ -4891,6 +4993,49 @@ pub struct PredictionCommandFrame {
     pub start_sequence: InputSequence,
     pub target_tick: SimulationTick,
     pub commands: Vec<PlayerCommand>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PredictedTerrainResolution {
+    Pending,
+    Confirmed,
+    Reverted,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PredictedTerrainOverlay {
+    pub player_id: PlayerId,
+    pub position: TilePosition,
+    pub chunk: TerrainChunkPosition,
+    pub base_revision: u64,
+    pub resolution: PredictedTerrainResolution,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PredictedModalResolution {
+    Pending,
+    Confirmed,
+    Reverted,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PredictedModalState {
+    pub modal: PredictedModal,
+    pub resolution: PredictedModalResolution,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OnlineRenderAuthorityPolicy {
+    HostAuthoritative,
+    ClientPredicted,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OnlinePredictionRenderOverlay {
+    pub policy: OnlineRenderAuthorityPolicy,
+    pub terrain: Vec<PredictedTerrainOverlay>,
+    pub effects: Vec<PredictedEffect>,
+    pub modal: Option<PredictedModalState>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -7119,6 +7264,41 @@ impl GameSession {
         self.local_client_mut()
             .prediction_mut()
             .advance_active_correction(delta_seconds)
+    }
+
+    pub fn confirm_online_prediction_terrain(
+        &mut self,
+        revisions: &[TerrainChunkRevision],
+    ) -> usize {
+        self.local_client_mut()
+            .prediction_mut()
+            .confirm_terrain_overlay(revisions)
+    }
+
+    pub fn revert_unconfirmed_online_prediction_terrain(&mut self) -> usize {
+        self.local_client_mut()
+            .prediction_mut()
+            .revert_unconfirmed_terrain_overlays()
+    }
+
+    pub fn confirm_online_predicted_modal(&mut self) -> bool {
+        self.local_client_mut()
+            .prediction_mut()
+            .confirm_predicted_modal()
+    }
+
+    pub fn revert_online_predicted_modal(&mut self) -> bool {
+        self.local_client_mut()
+            .prediction_mut()
+            .revert_predicted_modal()
+    }
+
+    #[must_use]
+    pub fn online_prediction_render_overlay(
+        &self,
+        policy: OnlineRenderAuthorityPolicy,
+    ) -> OnlinePredictionRenderOverlay {
+        self.local_client().prediction().render_overlay(policy)
     }
 
     pub fn rebase_local_prediction_to_authority(&mut self) {
@@ -10176,6 +10356,121 @@ mod tests {
                 .prediction_failures()
                 .contains(&super::PredictionFailure::HazardOrRescueChangedState)
         );
+    }
+
+    #[test]
+    fn prediction_terrain_overlay_can_confirm_and_revert_against_revisions() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let _predicted = session.predict_online_render_input(
+            PlayerInput {
+                horizontal: 1.0,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+        );
+        let overlay = *session
+            .local_client()
+            .prediction()
+            .terrain_overlays()
+            .first()
+            .expect("terrain overlay exists");
+
+        assert_eq!(
+            session.confirm_online_prediction_terrain(&[super::TerrainChunkRevision {
+                position: overlay.chunk,
+                revision: overlay.base_revision,
+            }]),
+            1
+        );
+        assert_eq!(
+            session.local_client().prediction().terrain_overlays()[0].resolution,
+            super::PredictedTerrainResolution::Confirmed
+        );
+
+        let _predicted = session.predict_online_render_input(
+            PlayerInput {
+                drill_down: true,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+        );
+        assert_eq!(session.revert_unconfirmed_online_prediction_terrain(), 1);
+        assert_eq!(
+            session.local_client().prediction().terrain_overlays()[0].resolution,
+            super::PredictedTerrainResolution::Reverted
+        );
+    }
+
+    #[test]
+    fn prediction_modal_can_confirm_and_revert_with_metadata() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let _predicted = session.predict_online_render_input(
+            PlayerInput {
+                interact: true,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+        );
+
+        assert!(session.confirm_online_predicted_modal());
+        assert_eq!(
+            session
+                .local_client()
+                .prediction()
+                .predicted_modal_state()
+                .expect("modal exists")
+                .resolution,
+            super::PredictedModalResolution::Confirmed
+        );
+        assert!(session.revert_online_predicted_modal());
+        assert_eq!(
+            session
+                .local_client()
+                .prediction()
+                .predicted_modal_state()
+                .expect("modal exists")
+                .resolution,
+            super::PredictedModalResolution::Reverted
+        );
+    }
+
+    #[test]
+    fn render_policy_distinguishes_host_authority_from_client_prediction() {
+        assert_eq!(
+            super::RenderFramePlan::online_authority_policy(false),
+            super::OnlineRenderAuthorityPolicy::HostAuthoritative
+        );
+        assert_eq!(
+            super::RenderFramePlan::online_authority_policy(true),
+            super::OnlineRenderAuthorityPolicy::ClientPredicted
+        );
+    }
+
+    #[test]
+    fn prediction_render_overlay_exposes_effects_terrain_and_modal() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let _predicted = session.predict_online_render_input(
+            PlayerInput {
+                horizontal: 1.0,
+                interact: true,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+        );
+
+        let overlay = session
+            .online_prediction_render_overlay(super::OnlineRenderAuthorityPolicy::ClientPredicted);
+
+        assert_eq!(
+            overlay.policy,
+            super::OnlineRenderAuthorityPolicy::ClientPredicted
+        );
+        assert!(!overlay.effects.is_empty());
+        assert!(!overlay.terrain.is_empty());
+        assert!(overlay.modal.is_some());
     }
 
     #[test]
