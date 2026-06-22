@@ -4176,6 +4176,10 @@ impl ClientPredictionState {
         self.predicted_local_snapshot = None;
         self.predicted_effects.clear();
         self.predicted_modal = None;
+        for frame in self.prediction_command_frames.clone() {
+            let _snapshot =
+                self.apply_prediction_command_frame(world, frame, FIXED_DELTA_SECONDS, false);
+        }
     }
 
     #[must_use]
@@ -4206,6 +4210,25 @@ impl ClientPredictionState {
         authoritative_world: &WorldState,
         frame: PredictionCommandFrame,
         delta_seconds: f32,
+    ) -> Option<PlayerSnapshot> {
+        self.apply_prediction_command_frame(authoritative_world, frame, delta_seconds, true)
+    }
+
+    pub fn predict_transient_command_frame(
+        &mut self,
+        authoritative_world: &WorldState,
+        frame: PredictionCommandFrame,
+        delta_seconds: f32,
+    ) -> Option<PlayerSnapshot> {
+        self.apply_prediction_command_frame(authoritative_world, frame, delta_seconds, false)
+    }
+
+    fn apply_prediction_command_frame(
+        &mut self,
+        authoritative_world: &WorldState,
+        frame: PredictionCommandFrame,
+        delta_seconds: f32,
+        remember_frame: bool,
     ) -> Option<PlayerSnapshot> {
         let mut predicted = self
             .predicted_world
@@ -4250,6 +4273,10 @@ impl ClientPredictionState {
                 | PlayerCommand::PlaceBomb
                 | PlayerCommand::PlaceInfrastructure { .. } => {
                     let _outcome = predicted.apply_player_command(frame.player_id, command);
+                    self.predicted_effects
+                        .push(PredictedEffect::CargoMaterialChanged {
+                            player_id: frame.player_id,
+                        });
                 }
                 PlayerCommand::Cancel
                 | PlayerCommand::Confirm
@@ -4269,7 +4296,14 @@ impl ClientPredictionState {
             .map(|player| PlayerSnapshot::from_world_player(frame.player_id, player, &predicted));
         self.predicted_world = Some(predicted);
         self.predicted_local_snapshot.clone_from(&snapshot);
-        self.prediction_command_frames.push(frame);
+        if remember_frame {
+            self.prediction_command_frames.push(frame);
+            let max_pending = usize::try_from(SIMULATION_HZ).expect("simulation hz fits usize") * 3;
+            if self.prediction_command_frames.len() > max_pending {
+                let excess = self.prediction_command_frames.len() - max_pending;
+                self.prediction_command_frames.drain(0..excess);
+            }
+        }
         snapshot
     }
 
@@ -4295,6 +4329,41 @@ impl ClientPredictionState {
         });
         self.active_correction = correction;
         correction
+    }
+
+    #[must_use]
+    pub fn corrected_predicted_local_movement(&self) -> Option<PredictedMovement> {
+        let predicted = PredictedMovement::from_snapshot(self.predicted_local_snapshot.as_ref()?);
+        let correction = self.active_correction?;
+        Some(PredictedMovement {
+            player_id: predicted.player_id,
+            x: correction.to_x,
+            y: correction.to_y,
+            velocity_x: predicted.velocity_x,
+            velocity_y: predicted.velocity_y,
+        })
+    }
+
+    pub fn advance_active_correction(&mut self, delta_seconds: f32) -> Option<PredictedMovement> {
+        let correction = self.active_correction.as_mut()?;
+        correction.elapsed_seconds =
+            (correction.elapsed_seconds + delta_seconds).min(correction.duration_seconds);
+        let alpha = if correction.duration_seconds <= f32::EPSILON {
+            1.0
+        } else {
+            correction.elapsed_seconds / correction.duration_seconds
+        };
+        let movement = PredictedMovement {
+            player_id: correction.player_id,
+            x: (correction.to_x - correction.from_x).mul_add(alpha, correction.from_x),
+            y: (correction.to_y - correction.from_y).mul_add(alpha, correction.from_y),
+            velocity_x: 0.0,
+            velocity_y: 0.0,
+        };
+        if correction.elapsed_seconds >= correction.duration_seconds {
+            self.active_correction = None;
+        }
+        Some(movement)
     }
 
     pub fn track_sent_commands<I>(&mut self, commands: I)
@@ -4724,6 +4793,17 @@ impl ClientPredictionState {
     pub fn acknowledge_through(&mut self, sequence: InputSequence) {
         self.unacknowledged_commands
             .retain(|command| command.sequence > sequence);
+        self.prediction_command_frames.retain(|frame| {
+            frame.commands.iter().enumerate().any(|(index, _command)| {
+                let offset = u32::try_from(index).unwrap_or(u32::MAX);
+                frame.start_sequence.get().saturating_add(offset) > sequence.get()
+            })
+        });
+    }
+
+    #[must_use]
+    pub const fn pending_prediction_frame_count(&self) -> usize {
+        self.prediction_command_frames.len()
     }
 }
 
@@ -4808,6 +4888,7 @@ pub struct SequencedCommandBatch {
 pub struct PredictionCommandFrame {
     pub client_id: ClientId,
     pub player_id: PlayerId,
+    pub start_sequence: InputSequence,
     pub target_tick: SimulationTick,
     pub commands: Vec<PlayerCommand>,
 }
@@ -4822,6 +4903,9 @@ pub enum PredictedEffect {
         target: TilePosition,
     },
     TerrainInteraction {
+        player_id: PlayerId,
+    },
+    CargoMaterialChanged {
         player_id: PlayerId,
     },
     BuildingInteraction {
@@ -6347,10 +6431,13 @@ impl GameSession {
     ) -> PredictionPresentationPlan {
         let prediction = self.local_client().prediction();
         let local_movement = prediction
-            .predicted_local_movement(authoritative_snapshot.map_or_else(
-                || self.local_client().controlled_player_id,
-                |snapshot| snapshot.player_id,
-            ))
+            .corrected_predicted_local_movement()
+            .or_else(|| {
+                prediction.predicted_local_movement(authoritative_snapshot.map_or_else(
+                    || self.local_client().controlled_player_id,
+                    |snapshot| snapshot.player_id,
+                ))
+            })
             .or_else(|| {
                 authoritative_snapshot.map_or_else(
                     || self.predicted_local_movement(delta_seconds),
@@ -6967,7 +7054,7 @@ impl GameSession {
     }
 
     #[must_use]
-    pub const fn online_prediction_command_frame(
+    pub fn online_prediction_command_frame(
         &self,
         client_id: ClientId,
         player_id: PlayerId,
@@ -6976,9 +7063,22 @@ impl GameSession {
         PredictionCommandFrame {
             client_id,
             player_id,
+            start_sequence: self.local_client().next_input_sequence,
             target_tick: self.current_tick,
             commands,
         }
+    }
+
+    pub fn online_prediction_command_frame_from_input(
+        &self,
+        input: PlayerInput,
+    ) -> PredictionCommandFrame {
+        let (client_id, player_id) = self.local_network_identity();
+        self.online_prediction_command_frame(
+            client_id,
+            player_id,
+            crate::game_state::session_gameplay_commands_from_input(input),
+        )
     }
 
     pub fn predict_online_command_frame(
@@ -6990,6 +7090,35 @@ impl GameSession {
         self.local_client_mut()
             .prediction_mut()
             .predict_command_frame(&authoritative_world, frame, delta_seconds)
+    }
+
+    pub fn predict_online_render_command_frame(
+        &mut self,
+        frame: PredictionCommandFrame,
+        delta_seconds: f32,
+    ) -> Option<PlayerSnapshot> {
+        let authoritative_world = self.world.clone();
+        self.local_client_mut()
+            .prediction_mut()
+            .predict_transient_command_frame(&authoritative_world, frame, delta_seconds)
+    }
+
+    pub fn predict_online_render_input(
+        &mut self,
+        input: PlayerInput,
+        delta_seconds: f32,
+    ) -> Option<PlayerSnapshot> {
+        let frame = self.online_prediction_command_frame_from_input(input);
+        self.predict_online_render_command_frame(frame, delta_seconds)
+    }
+
+    pub fn advance_online_prediction_correction(
+        &mut self,
+        delta_seconds: f32,
+    ) -> Option<PredictedMovement> {
+        self.local_client_mut()
+            .prediction_mut()
+            .advance_active_correction(delta_seconds)
     }
 
     pub fn rebase_local_prediction_to_authority(&mut self) {
@@ -10047,6 +10176,134 @@ mod tests {
                 .prediction_failures()
                 .contains(&super::PredictionFailure::HazardOrRescueChangedState)
         );
+    }
+
+    #[test]
+    fn prediction_render_input_preserves_tiny_movement_without_authority_mutation() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let authoritative_before = session
+            .world
+            .player(LOCAL_PLAYER_ID)
+            .expect("local player exists")
+            .x;
+
+        let predicted = session
+            .predict_online_render_input(
+                PlayerInput {
+                    horizontal: 0.05,
+                    ..PlayerInput::default()
+                },
+                FIXED_DELTA_SECONDS,
+            )
+            .expect("prediction snapshot exists");
+
+        assert!(predicted.x > authoritative_before);
+        assert!(
+            (session
+                .world
+                .player(LOCAL_PLAYER_ID)
+                .expect("local player exists")
+                .x
+                - authoritative_before)
+                .abs()
+                < f32::EPSILON
+        );
+    }
+
+    #[test]
+    fn prediction_acknowledgement_prunes_remembered_prediction_frames() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let frame = session.online_prediction_command_frame(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            vec![PlayerCommand::Movement {
+                horizontal: 1.0,
+                thrust: false,
+                drill_down: false,
+            }],
+        );
+        let start_sequence = frame.start_sequence;
+        let _predicted = session.predict_online_command_frame(frame, FIXED_DELTA_SECONDS);
+        assert_eq!(
+            session
+                .local_client()
+                .prediction()
+                .pending_prediction_frame_count(),
+            1
+        );
+
+        session
+            .local_client_mut()
+            .prediction_mut()
+            .acknowledge_through(start_sequence);
+
+        assert_eq!(
+            session
+                .local_client()
+                .prediction()
+                .pending_prediction_frame_count(),
+            0
+        );
+    }
+
+    #[test]
+    fn prediction_records_cargo_material_effect_for_economy_commands() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let frame = session.online_prediction_command_frame(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            vec![PlayerCommand::SellCargo],
+        );
+
+        let _predicted = session.predict_online_command_frame(frame, FIXED_DELTA_SECONDS);
+
+        assert!(
+            session
+                .local_client()
+                .prediction()
+                .predicted_effects()
+                .contains(&super::PredictedEffect::CargoMaterialChanged {
+                    player_id: LOCAL_PLAYER_ID,
+                })
+        );
+    }
+
+    #[test]
+    fn prediction_correction_advances_over_multiple_frames() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let frame = session.online_prediction_command_frame(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            vec![PlayerCommand::Movement {
+                horizontal: 1.0,
+                thrust: false,
+                drill_down: false,
+            }],
+        );
+        let predicted = session
+            .predict_online_command_frame(frame, FIXED_DELTA_SECONDS)
+            .expect("prediction snapshot exists");
+        let authoritative = PlayerSnapshot {
+            x: predicted.x + 8.0,
+            ..predicted
+        };
+        let _correction = session
+            .local_client_mut()
+            .prediction_mut()
+            .note_authoritative_rebase_for_player(&authoritative);
+
+        let first = session
+            .advance_online_prediction_correction(0.04)
+            .expect("correction advances");
+        let second = session
+            .advance_online_prediction_correction(0.04)
+            .expect("correction advances");
+
+        assert!(second.x > first.x);
     }
 
     #[test]
