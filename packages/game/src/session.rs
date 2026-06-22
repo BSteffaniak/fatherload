@@ -4188,6 +4188,7 @@ pub struct ClientPredictionState {
     predicted_local_snapshot: Option<PlayerSnapshot>,
     prediction_command_frames: Vec<PredictionCommandFrame>,
     prediction_history: VecDeque<PredictionHistoryEntry>,
+    latest_input_intent: Option<PlayerMovementIntent>,
     predicted_effects: Vec<PredictedEffect>,
     predicted_modal: Option<PredictedModalState>,
     active_correction: Option<ActiveCorrection>,
@@ -4204,7 +4205,7 @@ impl ClientPredictionState {
         self.terrain_overlays.clear();
         for frame in self.prediction_command_frames.clone() {
             let _snapshot =
-                self.apply_prediction_command_frame(world, frame, FIXED_DELTA_SECONDS, false);
+                self.apply_prediction_command_frame(world, frame, FIXED_DELTA_SECONDS, false, true);
         }
     }
 
@@ -4250,6 +4251,7 @@ impl ClientPredictionState {
                 frame.clone(),
                 frame.delta_seconds,
                 false,
+                true,
             );
         }
 
@@ -4385,6 +4387,27 @@ impl ClientPredictionState {
         true
     }
 
+    #[must_use]
+    pub const fn latest_input_intent(&self) -> Option<PlayerMovementIntent> {
+        self.latest_input_intent
+    }
+
+    #[must_use]
+    pub fn deterministic_replay_frame_count(&self) -> usize {
+        self.prediction_command_frames
+            .iter()
+            .filter(|frame| frame.delta_seconds > 0.0)
+            .count()
+    }
+
+    #[must_use]
+    pub fn transient_render_history_count_for_tests(&self) -> usize {
+        self.prediction_history
+            .iter()
+            .filter(|entry| entry.last_sequence.is_none())
+            .count()
+    }
+
     pub fn predict_command_frame(
         &mut self,
         authoritative_world: &WorldState,
@@ -4392,7 +4415,7 @@ impl ClientPredictionState {
         delta_seconds: f32,
     ) -> Option<PlayerSnapshot> {
         frame.delta_seconds = delta_seconds;
-        self.apply_prediction_command_frame(authoritative_world, frame, delta_seconds, true)
+        self.apply_prediction_command_frame(authoritative_world, frame, delta_seconds, true, true)
     }
 
     pub fn predict_transient_command_frame(
@@ -4402,7 +4425,7 @@ impl ClientPredictionState {
         delta_seconds: f32,
     ) -> Option<PlayerSnapshot> {
         frame.delta_seconds = delta_seconds;
-        self.apply_prediction_command_frame(authoritative_world, frame, delta_seconds, false)
+        self.apply_prediction_command_frame(authoritative_world, frame, delta_seconds, false, false)
     }
 
     #[allow(
@@ -4415,6 +4438,7 @@ impl ClientPredictionState {
         frame: PredictionCommandFrame,
         delta_seconds: f32,
         remember_frame: bool,
+        record_history: bool,
     ) -> Option<PlayerSnapshot> {
         let mut predicted = self
             .predicted_world
@@ -4498,7 +4522,7 @@ impl ClientPredictionState {
             .map(|player| PlayerSnapshot::from_world_player(frame.player_id, player, &predicted));
         self.predicted_world = Some(predicted);
         self.predicted_local_snapshot.clone_from(&snapshot);
-        if let Some(snapshot) = &snapshot {
+        if record_history && let Some(snapshot) = &snapshot {
             self.record_prediction_history(
                 frame.target_tick,
                 frame.commands.len().checked_sub(1).map(|index| {
@@ -4508,6 +4532,11 @@ impl ClientPredictionState {
                 snapshot.clone(),
             );
         }
+        self.latest_input_intent = frame
+            .commands
+            .iter()
+            .rev()
+            .find_map(PlayerMovementIntent::from_command);
         if remember_frame {
             self.prediction_command_frames.push(frame);
             let max_pending = usize::try_from(SIMULATION_HZ).expect("simulation hz fits usize") * 3;
@@ -10617,6 +10646,189 @@ mod tests {
                 .prediction()
                 .prediction_failures()
                 .contains(&super::PredictionFailure::HazardOrRescueChangedState)
+        );
+    }
+
+    #[test]
+    fn render_transient_prediction_does_not_pollute_deterministic_history_or_replay() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let history_before = session
+            .local_client()
+            .prediction()
+            .prediction_history_count();
+
+        let _predicted = session.predict_online_render_input(
+            PlayerInput {
+                horizontal: 1.0,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS / 2.0,
+        );
+
+        let prediction = session.local_client().prediction();
+        assert_eq!(prediction.prediction_history_count(), history_before);
+        assert_eq!(prediction.transient_render_history_count_for_tests(), 0);
+        assert_eq!(prediction.deterministic_replay_frame_count(), 0);
+        assert_eq!(
+            prediction.latest_input_intent(),
+            Some(super::PlayerMovementIntent {
+                horizontal: 1.0,
+                thrust: false,
+                drill_down: false,
+            })
+        );
+    }
+
+    #[test]
+    fn fixed_prediction_frame_records_history_and_replay_state() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let frame = session.online_prediction_command_frame(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            vec![PlayerCommand::Movement {
+                horizontal: 1.0,
+                thrust: false,
+                drill_down: false,
+            }],
+        );
+        let tick = frame.target_tick;
+
+        let _predicted = session.predict_online_command_frame(frame, FIXED_DELTA_SECONDS);
+        let prediction = session.local_client().prediction();
+
+        assert_eq!(prediction.deterministic_replay_frame_count(), 1);
+        assert!(
+            prediction
+                .prediction_history_snapshot(tick, LOCAL_PLAYER_ID)
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn prediction_does_not_duplicate_outbound_network_commands() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        for _ in 0..3 {
+            let _predicted = session.predict_online_render_input(
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+                FIXED_DELTA_SECONDS / 3.0,
+            );
+        }
+
+        let input = session.live_session_tick_input_from_world(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            7,
+            vec![PlayerCommand::Movement {
+                horizontal: 1.0,
+                thrust: false,
+                drill_down: false,
+            }],
+        );
+        let packet = input.command_packet.expect("command packet exists");
+
+        assert_eq!(packet.commands.len(), 1);
+        assert_eq!(packet.commands[0].sequence, InputSequence::new(7));
+    }
+
+    #[test]
+    fn held_input_changes_prediction_every_render_frame() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let first = session
+            .predict_online_render_input(
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+                FIXED_DELTA_SECONDS / 2.0,
+            )
+            .expect("first prediction exists");
+        let second = session
+            .predict_online_render_input(
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+                FIXED_DELTA_SECONDS / 2.0,
+            )
+            .expect("second prediction exists");
+
+        assert!(second.x > first.x);
+    }
+
+    #[test]
+    fn descriptor_client_render_output_uses_predicted_local_and_authoritative_remote_sources() {
+        let mut session = GameSession::new();
+        let second_client = ClientId::new(2);
+        let second_player = PlayerId::new(2);
+        assert!(session.add_local_client_player(second_client, second_player));
+        session.rebase_local_prediction_to_authority();
+        let _predicted = session.predict_online_render_input(
+            PlayerInput {
+                horizontal: 1.0,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+        );
+        let prediction_plan = session.live_prediction_presentation_plan(0.0, 0.5, 0.0);
+        let frame_plan = session.render_frame_plan();
+        let view = &frame_plan.views[0];
+
+        let players = frame_plan.world_player_presentations_for_view(view, &prediction_plan);
+        let local = players
+            .iter()
+            .find(|player| player.local_to_view)
+            .expect("local presentation exists");
+        let remote = players
+            .iter()
+            .find(|player| player.player_id == second_player)
+            .expect("remote presentation exists");
+
+        assert_eq!(
+            local.source,
+            super::RenderPlayerPresentationSource::PredictedLocal
+        );
+        assert_eq!(
+            remote.source,
+            super::RenderPlayerPresentationSource::AuthoritativeWorld
+        );
+    }
+
+    #[test]
+    fn render_overlay_stays_presentation_only_for_command_delivery() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let _predicted = session.predict_online_render_input(
+            PlayerInput {
+                horizontal: 1.0,
+                interact: true,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+        );
+        let overlay = session
+            .online_prediction_render_overlay(super::OnlineRenderAuthorityPolicy::ClientPredicted);
+        let input = session.live_session_tick_input_from_world(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            11,
+            vec![PlayerCommand::Interact],
+        );
+
+        assert!(overlay.modal.is_some());
+        assert_eq!(
+            input
+                .command_packet
+                .expect("command packet exists")
+                .commands
+                .len(),
+            1
         );
     }
 
