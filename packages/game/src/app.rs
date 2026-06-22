@@ -576,6 +576,7 @@ impl OnlineTaskDispatcher {
                     Ok(_received) => {
                         if let Some(tick) = controller.latest_authoritative_tick() {
                             let _synced = session.sync_replicated_authoritative_tick(tick);
+                            session.rebase_local_prediction_to_authority();
                         }
                     }
                     Err(error) => {
@@ -588,6 +589,11 @@ impl OnlineTaskDispatcher {
                 let identity = session.prepare_online_tick_identity(true);
                 let sequence = self.live_tick_sequence;
                 self.live_tick_sequence = self.live_tick_sequence.wrapping_add(1);
+                let prediction_frame = session.online_prediction_command_frame(
+                    identity.client_id,
+                    identity.player_id,
+                    local_player_commands.clone(),
+                );
                 let input = session
                     .live_session_tick_input_with_provenance(
                         identity.client_id,
@@ -599,6 +605,8 @@ impl OnlineTaskDispatcher {
                 if let Some(packet) = &input.command_packet {
                     session.track_online_prediction_commands(packet);
                 }
+                let _predicted =
+                    session.predict_online_command_frame(prediction_frame, delta_seconds);
                 runtime.block_on(
                     controller.drive_descriptor_client_outbound_tick(session.game_mut(), input),
                 )
@@ -645,6 +653,7 @@ impl OnlineTaskDispatcher {
                 }
                 if let Some(tick) = controller.latest_authoritative_tick() {
                     let _synced = session.sync_replicated_authoritative_tick(tick);
+                    session.rebase_local_prediction_to_authority();
                 }
                 let application = session.apply_online_tick_summary(mode_label, &summary);
                 let diagnostic = GameSession::online_tick_diagnostic(&summary, application);

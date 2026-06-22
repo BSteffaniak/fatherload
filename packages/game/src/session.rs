@@ -4160,9 +4160,143 @@ pub struct ClientPredictionState {
     prediction_failures: Vec<PredictionFailure>,
     pending_feedback: Vec<LocalTentativeFeedback>,
     correction_offset: Option<CorrectionOffset>,
+    prediction_base_tick: Option<SimulationTick>,
+    predicted_world: Option<WorldState>,
+    predicted_local_snapshot: Option<PlayerSnapshot>,
+    prediction_command_frames: Vec<PredictionCommandFrame>,
+    predicted_effects: Vec<PredictedEffect>,
+    predicted_modal: Option<PredictedModal>,
+    active_correction: Option<ActiveCorrection>,
 }
 
 impl ClientPredictionState {
+    pub fn rebase_prediction_world(&mut self, tick: SimulationTick, world: &WorldState) {
+        self.prediction_base_tick = Some(tick);
+        self.predicted_world = Some(world.clone());
+        self.predicted_local_snapshot = None;
+        self.predicted_effects.clear();
+        self.predicted_modal = None;
+    }
+
+    #[must_use]
+    pub fn predicted_local_movement(&self, player_id: PlayerId) -> Option<PredictedMovement> {
+        self.predicted_local_snapshot
+            .as_ref()
+            .filter(|snapshot| snapshot.player_id == player_id)
+            .map(PredictedMovement::from_snapshot)
+    }
+
+    #[must_use]
+    pub fn predicted_effects(&self) -> &[PredictedEffect] {
+        &self.predicted_effects
+    }
+
+    #[must_use]
+    pub const fn predicted_modal(&self) -> Option<PredictedModal> {
+        self.predicted_modal
+    }
+
+    #[must_use]
+    pub const fn active_correction(&self) -> Option<ActiveCorrection> {
+        self.active_correction
+    }
+
+    pub fn predict_command_frame(
+        &mut self,
+        authoritative_world: &WorldState,
+        frame: PredictionCommandFrame,
+        delta_seconds: f32,
+    ) -> Option<PlayerSnapshot> {
+        let mut predicted = self
+            .predicted_world
+            .clone()
+            .unwrap_or_else(|| authoritative_world.clone());
+        let mut movement_intent = None;
+        self.predicted_effects.clear();
+        self.predicted_modal = None;
+        for command in &frame.commands {
+            match *command {
+                PlayerCommand::Movement {
+                    horizontal,
+                    thrust,
+                    drill_down,
+                } => {
+                    movement_intent = Some((horizontal, thrust));
+                    self.predicted_effects.push(PredictedEffect::Movement {
+                        player_id: frame.player_id,
+                    });
+                    if drill_down || horizontal.abs() > f32::EPSILON {
+                        self.predicted_effects
+                            .push(PredictedEffect::TerrainInteraction {
+                                player_id: frame.player_id,
+                            });
+                    }
+                }
+                PlayerCommand::Interact => {
+                    self.predicted_effects
+                        .push(PredictedEffect::BuildingInteraction {
+                            player_id: frame.player_id,
+                        });
+                    self.predicted_modal = Some(PredictedModal::BuildingInteraction {
+                        player_id: frame.player_id,
+                    });
+                }
+                PlayerCommand::UseScanner
+                | PlayerCommand::BuyUpgrade { .. }
+                | PlayerCommand::Refuel
+                | PlayerCommand::Repair
+                | PlayerCommand::SellCargo
+                | PlayerCommand::Rescue
+                | PlayerCommand::PlaceBomb
+                | PlayerCommand::PlaceInfrastructure { .. } => {
+                    let _outcome = predicted.apply_player_command(frame.player_id, command);
+                }
+                PlayerCommand::Cancel
+                | PlayerCommand::Confirm
+                | PlayerCommand::SelectUpgrade { .. } => {}
+            }
+        }
+        if let Some((horizontal, thrust)) = movement_intent {
+            let _step = predicted.step_authoritative_movement(
+                frame.player_id,
+                horizontal,
+                thrust,
+                delta_seconds,
+            );
+        }
+        let snapshot = predicted
+            .player(frame.player_id)
+            .map(|player| PlayerSnapshot::from_world_player(frame.player_id, player, &predicted));
+        self.predicted_world = Some(predicted);
+        self.predicted_local_snapshot.clone_from(&snapshot);
+        self.prediction_command_frames.push(frame);
+        snapshot
+    }
+
+    pub fn note_authoritative_rebase_for_player(
+        &mut self,
+        authoritative: &PlayerSnapshot,
+    ) -> Option<ActiveCorrection> {
+        let predicted = self.predicted_local_snapshot.as_ref()?;
+        if predicted.player_id != authoritative.player_id {
+            return None;
+        }
+        let reconciliation =
+            Self::reconcile_movement(PredictedMovement::from_snapshot(predicted), authoritative);
+        let correction = reconciliation.correction_offset.map(|_| {
+            ActiveCorrection::new(
+                authoritative.player_id,
+                predicted.x,
+                predicted.y,
+                authoritative.x,
+                authoritative.y,
+                0.12,
+            )
+        });
+        self.active_correction = correction;
+        correction
+    }
+
     pub fn track_sent_commands<I>(&mut self, commands: I)
     where
         I: IntoIterator<Item = SequencedPlayerCommand>,
@@ -4670,6 +4804,69 @@ pub struct SequencedCommandBatch {
     pub predicted_locally: bool,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct PredictionCommandFrame {
+    pub client_id: ClientId,
+    pub player_id: PlayerId,
+    pub target_tick: SimulationTick,
+    pub commands: Vec<PlayerCommand>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PredictedEffect {
+    Movement {
+        player_id: PlayerId,
+    },
+    DrillStarted {
+        player_id: PlayerId,
+        target: TilePosition,
+    },
+    TerrainInteraction {
+        player_id: PlayerId,
+    },
+    BuildingInteraction {
+        player_id: PlayerId,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PredictedModal {
+    BuildingInteraction { player_id: PlayerId },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ActiveCorrection {
+    pub player_id: PlayerId,
+    pub from_x: f32,
+    pub from_y: f32,
+    pub to_x: f32,
+    pub to_y: f32,
+    pub elapsed_seconds: f32,
+    pub duration_seconds: f32,
+}
+
+impl ActiveCorrection {
+    #[must_use]
+    pub const fn new(
+        player_id: PlayerId,
+        from_x: f32,
+        from_y: f32,
+        to_x: f32,
+        to_y: f32,
+        duration_seconds: f32,
+    ) -> Self {
+        Self {
+            player_id,
+            from_x,
+            from_y,
+            to_x,
+            to_y,
+            elapsed_seconds: 0.0,
+            duration_seconds,
+        }
+    }
+}
+
 /// Local client state that is intentionally separate from authoritative gameplay state.
 #[derive(Clone, Debug)]
 pub struct ClientState {
@@ -4716,6 +4913,10 @@ impl ClientState {
     #[must_use]
     pub const fn prediction(&self) -> &ClientPredictionState {
         &self.prediction
+    }
+
+    pub const fn prediction_mut(&mut self) -> &mut ClientPredictionState {
+        &mut self.prediction
     }
 
     #[must_use]
@@ -6145,18 +6346,25 @@ impl GameSession {
         remote_stall_seconds: f32,
     ) -> PredictionPresentationPlan {
         let prediction = self.local_client().prediction();
-        let local_movement = authoritative_snapshot.map_or_else(
-            || self.predicted_local_movement(delta_seconds),
-            |authoritative| {
-                Some(
-                    ClientPredictionState::replay_unacknowledged_movement(
-                        authoritative,
-                        prediction.unacknowledged_commands(),
-                    )
-                    .predicted,
+        let local_movement = prediction
+            .predicted_local_movement(authoritative_snapshot.map_or_else(
+                || self.local_client().controlled_player_id,
+                |snapshot| snapshot.player_id,
+            ))
+            .or_else(|| {
+                authoritative_snapshot.map_or_else(
+                    || self.predicted_local_movement(delta_seconds),
+                    |authoritative| {
+                        Some(
+                            ClientPredictionState::replay_unacknowledged_movement(
+                                authoritative,
+                                prediction.unacknowledged_commands(),
+                            )
+                            .predicted,
+                        )
+                    },
                 )
-            },
-        );
+            });
         let correction =
             local_movement
                 .zip(authoritative_snapshot)
@@ -6756,6 +6964,40 @@ impl GameSession {
         self.local_client_mut()
             .prediction
             .track_sent_commands(packet.commands.clone());
+    }
+
+    #[must_use]
+    pub const fn online_prediction_command_frame(
+        &self,
+        client_id: ClientId,
+        player_id: PlayerId,
+        commands: Vec<PlayerCommand>,
+    ) -> PredictionCommandFrame {
+        PredictionCommandFrame {
+            client_id,
+            player_id,
+            target_tick: self.current_tick,
+            commands,
+        }
+    }
+
+    pub fn predict_online_command_frame(
+        &mut self,
+        frame: PredictionCommandFrame,
+        delta_seconds: f32,
+    ) -> Option<PlayerSnapshot> {
+        let authoritative_world = self.world.clone();
+        self.local_client_mut()
+            .prediction_mut()
+            .predict_command_frame(&authoritative_world, frame, delta_seconds)
+    }
+
+    pub fn rebase_local_prediction_to_authority(&mut self) {
+        let tick = self.current_tick;
+        let world = self.world.clone();
+        self.local_client_mut()
+            .prediction_mut()
+            .rebase_prediction_world(tick, &world);
     }
 
     pub fn apply_online_command_acknowledgement(
@@ -9804,6 +10046,114 @@ mod tests {
                 .prediction()
                 .prediction_failures()
                 .contains(&super::PredictionFailure::HazardOrRescueChangedState)
+        );
+    }
+
+    #[test]
+    fn prediction_world_updates_local_player_without_mutating_authority() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let authoritative_before = session
+            .world
+            .player(LOCAL_PLAYER_ID)
+            .expect("local player exists")
+            .x;
+        let frame = session.online_prediction_command_frame(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            vec![PlayerCommand::Movement {
+                horizontal: 1.0,
+                thrust: false,
+                drill_down: true,
+            }],
+        );
+
+        let predicted = session
+            .predict_online_command_frame(frame, FIXED_DELTA_SECONDS)
+            .expect("prediction snapshot exists");
+
+        assert!(predicted.x > authoritative_before);
+        assert!(
+            (session
+                .world
+                .player(LOCAL_PLAYER_ID)
+                .expect("local player exists")
+                .x
+                - authoritative_before)
+                .abs()
+                < f32::EPSILON
+        );
+        assert!(
+            session
+                .local_client()
+                .prediction()
+                .predicted_effects()
+                .contains(&super::PredictedEffect::Movement {
+                    player_id: LOCAL_PLAYER_ID,
+                })
+        );
+        assert!(
+            session
+                .local_client()
+                .prediction()
+                .predicted_effects()
+                .contains(&super::PredictedEffect::TerrainInteraction {
+                    player_id: LOCAL_PLAYER_ID,
+                })
+        );
+    }
+
+    #[test]
+    fn prediction_world_records_tentative_building_interaction_modal() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let frame = session.online_prediction_command_frame(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            vec![PlayerCommand::Interact],
+        );
+
+        let _predicted = session.predict_online_command_frame(frame, FIXED_DELTA_SECONDS);
+
+        assert_eq!(
+            session.local_client().prediction().predicted_modal(),
+            Some(super::PredictedModal::BuildingInteraction {
+                player_id: LOCAL_PLAYER_ID,
+            })
+        );
+    }
+
+    #[test]
+    fn prediction_state_records_persistent_correction_on_authority_mismatch() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let frame = session.online_prediction_command_frame(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            vec![PlayerCommand::Movement {
+                horizontal: 1.0,
+                thrust: false,
+                drill_down: false,
+            }],
+        );
+        let predicted = session
+            .predict_online_command_frame(frame, FIXED_DELTA_SECONDS)
+            .expect("prediction snapshot exists");
+        let authoritative = PlayerSnapshot {
+            x: predicted.x + 8.0,
+            ..predicted
+        };
+
+        let correction = session
+            .local_client_mut()
+            .prediction_mut()
+            .note_authoritative_rebase_for_player(&authoritative)
+            .expect("correction is recorded");
+
+        assert_eq!(correction.player_id, LOCAL_PLAYER_ID);
+        assert_eq!(
+            session.local_client().prediction().active_correction(),
+            Some(correction)
         );
     }
 
