@@ -3906,7 +3906,89 @@ pub enum PredictionFailure {
     SaveSessionTransition,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    clippy::derive_partial_eq_without_eq,
+    reason = "playtest gate report intentionally exposes independent pass/fail booleans and f32-derived samples"
+)]
+pub struct PredictionPlaytestReport {
+    pub render_frames: usize,
+    pub monotonic_local_motion: bool,
+    pub immediate_tiny_tap_visible: bool,
+    pub outbound_command_packets: usize,
+    pub outbound_commands: usize,
+    pub duplicate_outbound_commands: bool,
+    pub stale_authority_backward_tugs: usize,
+    pub predicted_local_render_source: bool,
+    pub authoritative_remote_render_source: bool,
+    pub correction_modes_seen: BTreeSet<CorrectionMode>,
+    pub ready_for_live_tuning: bool,
+}
+
+impl PredictionPlaytestReport {
+    #[must_use]
+    pub fn from_samples(
+        local_positions: &[f32],
+        outbound_command_counts: &[usize],
+        stale_authority_backward_tugs: usize,
+        predicted_local_render_source: bool,
+        authoritative_remote_render_source: bool,
+        correction_modes_seen: BTreeSet<CorrectionMode>,
+    ) -> Self {
+        let monotonic_local_motion = local_positions
+            .windows(2)
+            .all(|window| window[1] + f32::EPSILON >= window[0]);
+        let immediate_tiny_tap_visible = local_positions
+            .first()
+            .zip(local_positions.last())
+            .is_some_and(|(first, last)| last > first);
+        let outbound_command_packets = outbound_command_counts.len();
+        let outbound_commands = outbound_command_counts.iter().sum();
+        let duplicate_outbound_commands = outbound_command_counts.iter().any(|count| *count > 1);
+        let ready_for_live_tuning = monotonic_local_motion
+            && immediate_tiny_tap_visible
+            && !duplicate_outbound_commands
+            && stale_authority_backward_tugs == 0
+            && predicted_local_render_source
+            && authoritative_remote_render_source;
+        Self {
+            render_frames: local_positions.len(),
+            monotonic_local_motion,
+            immediate_tiny_tap_visible,
+            outbound_command_packets,
+            outbound_commands,
+            duplicate_outbound_commands,
+            stale_authority_backward_tugs,
+            predicted_local_render_source,
+            authoritative_remote_render_source,
+            correction_modes_seen,
+            ready_for_live_tuning,
+        }
+    }
+
+    #[must_use]
+    pub const fn movement_feel_passed(&self) -> bool {
+        self.monotonic_local_motion && self.immediate_tiny_tap_visible
+    }
+
+    #[must_use]
+    pub const fn command_delivery_passed(&self) -> bool {
+        self.outbound_command_packets == self.outbound_commands && !self.duplicate_outbound_commands
+    }
+
+    #[must_use]
+    pub const fn authority_tug_passed(&self) -> bool {
+        self.stale_authority_backward_tugs == 0
+    }
+
+    #[must_use]
+    pub const fn render_sources_passed(&self) -> bool {
+        self.predicted_local_render_source && self.authoritative_remote_render_source
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CorrectionMode {
     None,
     Smooth,
@@ -7691,6 +7773,38 @@ impl GameSession {
         }
     }
 
+    pub fn prediction_playtest_report(
+        &self,
+        local_positions: &[f32],
+        outbound_command_counts: &[usize],
+        stale_authority_backward_tugs: usize,
+    ) -> PredictionPlaytestReport {
+        let prediction_plan = self.live_prediction_presentation_plan(0.0, 0.5, 0.0);
+        let frame_plan = self.render_frame_plan();
+        let players = frame_plan.views.first().map_or_else(Vec::new, |view| {
+            frame_plan.world_player_presentations_for_view(view, &prediction_plan)
+        });
+        let predicted_local_render_source = players.iter().any(|player| {
+            player.local_to_view && player.source == RenderPlayerPresentationSource::PredictedLocal
+        });
+        let authoritative_remote_render_source = players
+            .iter()
+            .filter(|player| !player.local_to_view)
+            .all(|player| player.source == RenderPlayerPresentationSource::AuthoritativeWorld);
+        let mut correction_modes_seen = BTreeSet::new();
+        if let Some(correction) = self.local_client().prediction().active_correction() {
+            correction_modes_seen.insert(correction.mode);
+        }
+        PredictionPlaytestReport::from_samples(
+            local_positions,
+            outbound_command_counts,
+            stale_authority_backward_tugs,
+            predicted_local_render_source,
+            authoritative_remote_render_source,
+            correction_modes_seen,
+        )
+    }
+
     pub fn apply_online_command_acknowledgement(
         &mut self,
         acknowledgement: &CommandAcknowledgement,
@@ -8798,6 +8912,42 @@ impl GameSession {
         );
     }
 
+    pub fn simulated_online_prediction_playtest(
+        &mut self,
+        render_frames: usize,
+        input: PlayerInput,
+        render_delta_seconds: f32,
+        network_sequence_start: u32,
+    ) -> PredictionPlaytestReport {
+        let mut positions = Vec::with_capacity(render_frames);
+        let mut outbound_counts = Vec::with_capacity(render_frames);
+        let mut stale_authority_backward_tugs = 0;
+        let mut previous_x = None;
+        for frame_index in 0..render_frames {
+            if let Some(predicted) = self.predict_online_render_input(input, render_delta_seconds) {
+                if previous_x.is_some_and(|x| predicted.x + f32::EPSILON < x) {
+                    stale_authority_backward_tugs += 1;
+                }
+                previous_x = Some(predicted.x);
+                positions.push(predicted.x);
+            }
+            let commands = crate::game_state::session_gameplay_commands_from_input(input);
+            let tick_input = self.live_session_tick_input_from_world(
+                LOCAL_CLIENT_ID,
+                LOCAL_PLAYER_ID,
+                network_sequence_start
+                    .saturating_add(u32::try_from(frame_index).unwrap_or(u32::MAX)),
+                commands,
+            );
+            outbound_counts.push(
+                tick_input
+                    .command_packet
+                    .map_or(0, |packet| packet.commands.len()),
+            );
+        }
+        self.prediction_playtest_report(&positions, &outbound_counts, stale_authority_backward_tugs)
+    }
+
     pub fn apply_command_rejection(&mut self, rejection: &CommandRejection) {
         if let Some(client) = self.clients.get_mut(&rejection.client_id) {
             client
@@ -9032,7 +9182,10 @@ impl Default for GameSession {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, time::Duration};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        time::Duration,
+    };
 
     use crate::{
         economy::SurfaceZone,
@@ -10742,6 +10895,238 @@ mod tests {
                 .prediction_failures()
                 .contains(&super::PredictionFailure::HazardOrRescueChangedState)
         );
+    }
+
+    #[test]
+    fn simulated_online_prediction_playtest_covers_live_validation_gates() {
+        let mut session = GameSession::new();
+        let second_client = ClientId::new(2);
+        let second_player = PlayerId::new(2);
+        assert!(session.add_local_client_player(second_client, second_player));
+        session.rebase_local_prediction_to_authority();
+
+        let report = session.simulated_online_prediction_playtest(
+            8,
+            PlayerInput {
+                horizontal: 0.1,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS / 2.0,
+            20,
+        );
+
+        assert!(report.movement_feel_passed());
+        assert!(report.command_delivery_passed());
+        assert!(report.authority_tug_passed());
+        assert!(report.render_sources_passed());
+        assert!(report.ready_for_live_tuning);
+    }
+
+    #[test]
+    fn simulated_online_prediction_playtest_exposes_tiny_tap_gate() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+
+        let report = session.simulated_online_prediction_playtest(
+            3,
+            PlayerInput {
+                horizontal: 0.01,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+            40,
+        );
+
+        assert!(report.immediate_tiny_tap_visible);
+        assert!(report.movement_feel_passed());
+    }
+
+    #[test]
+    fn simulated_online_prediction_playtest_counts_exactly_one_network_command_per_tick() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+
+        let report = session.simulated_online_prediction_playtest(
+            5,
+            PlayerInput {
+                horizontal: 1.0,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS / 3.0,
+            60,
+        );
+
+        assert_eq!(report.outbound_command_packets, 5);
+        assert_eq!(report.outbound_commands, 5);
+        assert!(report.command_delivery_passed());
+    }
+
+    #[test]
+    fn simulated_online_prediction_playtest_marks_authority_tug_gate() {
+        let report = super::PredictionPlaytestReport::from_samples(
+            &[0.0, 1.0, 2.0],
+            &[1, 1, 1],
+            0,
+            true,
+            true,
+            BTreeSet::new(),
+        );
+
+        assert!(report.authority_tug_passed());
+        assert!(report.ready_for_live_tuning);
+    }
+
+    #[test]
+    fn simulated_online_prediction_playtest_rejects_failed_authority_tug_gate() {
+        let report = super::PredictionPlaytestReport::from_samples(
+            &[0.0, 1.0, 2.0],
+            &[1, 1, 1],
+            2,
+            true,
+            true,
+            BTreeSet::new(),
+        );
+
+        assert!(!report.authority_tug_passed());
+        assert!(!report.ready_for_live_tuning);
+    }
+
+    #[test]
+    fn simulated_prediction_playtest_report_marks_smooth_ready_path() {
+        let mut session = GameSession::new();
+        let second_client = ClientId::new(2);
+        let second_player = PlayerId::new(2);
+        assert!(session.add_local_client_player(second_client, second_player));
+        session.rebase_local_prediction_to_authority();
+        let mut positions = Vec::new();
+        let mut outbound_counts = Vec::new();
+        for sequence in 0..6 {
+            let predicted = session
+                .predict_online_render_input(
+                    PlayerInput {
+                        horizontal: 0.25,
+                        ..PlayerInput::default()
+                    },
+                    FIXED_DELTA_SECONDS / 2.0,
+                )
+                .expect("prediction exists");
+            positions.push(predicted.x);
+            let input = session.live_session_tick_input_from_world(
+                LOCAL_CLIENT_ID,
+                LOCAL_PLAYER_ID,
+                sequence,
+                vec![PlayerCommand::Movement {
+                    horizontal: 0.25,
+                    thrust: false,
+                    drill_down: false,
+                }],
+            );
+            outbound_counts.push(input.command_packet.expect("packet exists").commands.len());
+        }
+
+        let report = session.prediction_playtest_report(&positions, &outbound_counts, 0);
+
+        assert_eq!(report.render_frames, 6);
+        assert!(report.monotonic_local_motion);
+        assert!(report.immediate_tiny_tap_visible);
+        assert_eq!(report.outbound_command_packets, 6);
+        assert_eq!(report.outbound_commands, 6);
+        assert!(!report.duplicate_outbound_commands);
+        assert_eq!(report.stale_authority_backward_tugs, 0);
+        assert!(report.predicted_local_render_source);
+        assert!(report.authoritative_remote_render_source);
+        assert!(report.ready_for_live_tuning);
+    }
+
+    #[test]
+    fn simulated_prediction_playtest_report_flags_backward_tugs_and_duplicate_commands() {
+        let report = super::PredictionPlaytestReport::from_samples(
+            &[10.0, 9.0, 11.0],
+            &[1, 2, 1],
+            1,
+            true,
+            true,
+            BTreeSet::new(),
+        );
+
+        assert!(!report.monotonic_local_motion);
+        assert!(report.duplicate_outbound_commands);
+        assert_eq!(report.stale_authority_backward_tugs, 1);
+        assert!(!report.ready_for_live_tuning);
+    }
+
+    #[test]
+    fn simulated_prediction_playtest_report_flags_missing_render_sources() {
+        let report = super::PredictionPlaytestReport::from_samples(
+            &[1.0, 2.0],
+            &[1, 1],
+            0,
+            false,
+            false,
+            BTreeSet::new(),
+        );
+
+        assert!(report.monotonic_local_motion);
+        assert!(report.immediate_tiny_tap_visible);
+        assert!(!report.predicted_local_render_source);
+        assert!(!report.authoritative_remote_render_source);
+        assert!(!report.ready_for_live_tuning);
+    }
+
+    #[test]
+    fn simulated_prediction_playtest_report_captures_active_correction_mode_for_tuning() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let frame = session.online_prediction_command_frame(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            vec![PlayerCommand::Movement {
+                horizontal: 1.0,
+                thrust: false,
+                drill_down: false,
+            }],
+        );
+        let tick = frame.target_tick;
+        let predicted = session
+            .predict_online_command_frame(frame, FIXED_DELTA_SECONDS)
+            .expect("prediction exists");
+        let authoritative = PlayerSnapshot {
+            x: predicted.x - 24.0,
+            ..predicted
+        };
+        let authoritative_world = session.world.clone();
+        let _correction = session
+            .local_client_mut()
+            .prediction_mut()
+            .reconcile_authoritative_snapshot(tick, &authoritative_world, &authoritative);
+
+        session.local_client_mut().prediction.active_correction = Some(
+            super::ActiveCorrection::new(LOCAL_PLAYER_ID, 0.0, 0.0, 8.0, 0.0, 0.12)
+                .with_mode(super::CorrectionMode::Smooth),
+        );
+
+        let report = session.prediction_playtest_report(&[1.0, 2.0], &[1], 0);
+
+        assert!(
+            report
+                .correction_modes_seen
+                .contains(&super::CorrectionMode::Smooth)
+        );
+    }
+
+    #[test]
+    fn simulated_prediction_playtest_report_accepts_tiny_tap_visibility() {
+        let report = super::PredictionPlaytestReport::from_samples(
+            &[100.0, 100.01],
+            &[1],
+            0,
+            true,
+            true,
+            BTreeSet::new(),
+        );
+
+        assert!(report.immediate_tiny_tap_visible);
+        assert!(report.ready_for_live_tuning);
     }
 
     #[test]
