@@ -183,6 +183,19 @@ fn draw_prediction_overlay_world(
             crate::session::PredictedTerrainResolution::Reverted => Color::new(255, 80, 80, 150),
         };
         draw.draw_rectangle_lines_ex(Rectangle::new(x, y, tile_size, tile_size), 3.0, color);
+        let inset = f32::from(terrain.predicted_damage_stage.min(4)) * 3.0;
+        if inset > 0.0 {
+            draw.draw_rectangle_lines_ex(
+                Rectangle::new(
+                    x + inset,
+                    y + inset,
+                    (tile_size - inset * 2.0).max(1.0),
+                    (tile_size - inset * 2.0).max(1.0),
+                ),
+                2.0,
+                Color::new(255, 255, 210, 160),
+            );
+        }
         if terrain.resolution == crate::session::PredictedTerrainResolution::Pending {
             draw.draw_circle_v(
                 Vector2::new(x + tile_size / 2.0, y + tile_size / 2.0),
@@ -203,9 +216,20 @@ fn draw_prediction_overlay_ui(
     }
     let x = viewport.x + 12;
     let y = viewport.y + 12;
+    let crack_count: u32 = overlay
+        .terrain
+        .iter()
+        .map(|terrain| u32::from(terrain.predicted_damage_stage))
+        .sum();
     if !overlay.effects.is_empty() || !overlay.terrain.is_empty() {
-        draw.draw_rectangle(x - 4, y - 4, 250, 28, Color::new(20, 20, 20, 140));
-        draw.draw_text("predicting local action", x, y, 18, Color::YELLOW);
+        draw.draw_rectangle(x - 4, y - 4, 300, 28, Color::new(20, 20, 20, 140));
+        draw.draw_text(
+            &format!("predicting local action cracks:{crack_count}"),
+            x,
+            y,
+            18,
+            Color::YELLOW,
+        );
     }
     if let Some(modal) = overlay.modal {
         let text = match modal.resolution {
