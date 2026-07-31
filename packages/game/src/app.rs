@@ -573,12 +573,7 @@ impl OnlineTaskDispatcher {
                     session.game_mut(),
                     std::time::Duration::from_millis(1),
                 )) {
-                    Ok(_received) => {
-                        if let Some(tick) = controller.latest_authoritative_tick() {
-                            let _synced = session.sync_replicated_authoritative_tick(tick);
-                            session.rebase_local_prediction_to_authority();
-                        }
-                    }
+                    Ok(_received) => {}
                     Err(error) => {
                         session.game_mut().apply_online_network_task_result(
                             OnlineNetworkTaskResult::Failed(format!("{error:?}")),
@@ -589,11 +584,6 @@ impl OnlineTaskDispatcher {
                 let identity = session.prepare_online_tick_identity(true);
                 let sequence = self.live_tick_sequence;
                 self.live_tick_sequence = self.live_tick_sequence.wrapping_add(1);
-                let prediction_frame = session.online_prediction_command_frame(
-                    identity.client_id,
-                    identity.player_id,
-                    local_player_commands.clone(),
-                );
                 let input = session
                     .live_session_tick_input_with_provenance(
                         identity.client_id,
@@ -604,9 +594,9 @@ impl OnlineTaskDispatcher {
                     .input;
                 if let Some(packet) = &input.command_packet {
                     session.track_online_prediction_commands(packet);
+                    let _predicted =
+                        session.predict_online_command_packet(packet, FIXED_DELTA_SECONDS);
                 }
-                let _predicted =
-                    session.predict_online_command_frame(prediction_frame, delta_seconds);
                 runtime.block_on(
                     controller.drive_descriptor_client_outbound_tick(session.game_mut(), input),
                 )
@@ -641,8 +631,23 @@ impl OnlineTaskDispatcher {
         } else {
             None
         };
+        let replicated_world_updates = if mode_label == "descriptor-client-connected" {
+            Some(controller.drain_replicated_world_updates())
+        } else {
+            None
+        };
         match result {
             Ok(summary) => {
+                if let Some((snapshots, player_deltas)) = replicated_world_updates {
+                    for snapshot in snapshots {
+                        let _applied =
+                            session.apply_replicated_snapshot_to_world_presentation(&snapshot);
+                    }
+                    for (tick, players) in player_deltas {
+                        let _applied = session
+                            .apply_replicated_player_delta_to_world_presentation(tick, &players);
+                    }
+                }
                 if let Some((acknowledgements, rejections)) = command_responses {
                     for acknowledgement in acknowledgements {
                         session.apply_online_command_acknowledgement(&acknowledgement);
@@ -651,11 +656,13 @@ impl OnlineTaskDispatcher {
                         session.apply_online_command_rejection(&rejection);
                     }
                 }
-                if let Some(tick) = controller.latest_authoritative_tick() {
-                    let _synced = session.sync_replicated_authoritative_tick(tick);
+                let synced_authoritative_tick = controller
+                    .latest_authoritative_tick()
+                    .is_some_and(|tick| session.sync_replicated_authoritative_tick(tick));
+                let application = session.apply_online_tick_summary(mode_label, &summary);
+                if synced_authoritative_tick {
                     session.rebase_local_prediction_to_authority();
                 }
-                let application = session.apply_online_tick_summary(mode_label, &summary);
                 let diagnostic = GameSession::online_tick_diagnostic(&summary, application);
                 session.game_mut().apply_online_runtime_tick_status(
                     crate::game_state::OnlineRuntimeTickPresentation::new(mode_label, diagnostic),
@@ -829,7 +836,14 @@ pub fn run() {
         let _remote_timing = session.remote_timing();
         let prediction_plan =
             session.live_prediction_presentation_plan(delta_seconds, 1.0, delta_seconds);
-        let live_render_output = session.live_render_frame_output(&prediction_plan);
+        let live_render_output = if online_authority_mode == Some("descriptor-client-connected") {
+            session
+                .online_client_render_frame_output()
+                .unwrap_or_else(|| session.live_render_frame_output(&prediction_plan))
+        } else {
+            session.live_render_frame_output(&prediction_plan)
+        };
+        live_render_output.apply_render_snapshot_to_shell(session.game_mut());
         renderer.render_live_frame_output(&mut draw, session.game(), &live_render_output);
     }
 }
@@ -1255,30 +1269,31 @@ mod tests {
     }
 
     #[test]
-    fn replicated_remote_presentations_sync_into_session_world() {
+    fn replicated_network_snapshot_updates_session_world_directly() {
         let mut session = GameSession::new();
-        session.game_mut().online_remote_player_snapshots.push(
-            crate::game_state::OnlineRemotePlayerPresentation {
-                player_id: crate::multiplayer::PlayerId::new(2),
-                x: 42.0,
-                y: 84.0,
-                velocity_x: 3.0,
-                velocity_y: -1.0,
-                fuel: 77.0,
-                hull: 66.0,
-                credits: 55,
-                cargo_used: 4,
-                cargo: std::collections::BTreeMap::new(),
-                artifacts: std::collections::BTreeMap::new(),
-                materials: std::collections::BTreeMap::new(),
+        let summary = session.apply_replicated_snapshot_to_world_presentation(
+            &crate::multiplayer::NetworkWorldSnapshot {
+                tick: crate::multiplayer::SimulationTick::new(4),
+                players: vec![crate::multiplayer::NetworkPlayerSnapshot {
+                    player_id: crate::multiplayer::PlayerId::new(2),
+                    x: 42.0,
+                    y: 84.0,
+                    velocity_x: 3.0,
+                    velocity_y: -1.0,
+                    fuel: 77.0,
+                    hull: 66.0,
+                    credits: 55,
+                    cargo_used: 4,
+                    cargo: std::collections::BTreeMap::new(),
+                    artifacts: std::collections::BTreeMap::new(),
+                    materials: std::collections::BTreeMap::new(),
+                    loadout: crate::multiplayer::NetworkPlayerLoadoutSnapshot::default(),
+                    scanner_cooldown_seconds: 0.0,
+                }],
             },
         );
 
-        let synced = session
-            .sync_legacy_remote_presentations_to_world()
-            .remote_players_updated;
-
-        assert_eq!(synced, 1);
+        assert_eq!(summary.remote_players_updated, 1);
         assert!(session.has_client(crate::multiplayer::ClientId::new(2)));
         let snapshot = session.world_snapshot().network_snapshot();
         let remote = snapshot
@@ -1569,13 +1584,14 @@ mod tests {
         );
         assert_eq!(join_session.game().player.cargo_used(), 5);
         assert!((join_session.game().scanner_cooldown_seconds - 3.5).abs() < f32::EPSILON);
-        assert_eq!(join_session.game().online_remote_player_snapshots.len(), 1);
-        let remote_player = &join_session.game().online_remote_player_snapshots[0];
-        assert_eq!(remote_player.player_id, crate::multiplayer::LOCAL_PLAYER_ID);
+        let remote_player = join_session
+            .world()
+            .player(crate::multiplayer::LOCAL_PLAYER_ID)
+            .expect("host player remains canonical remote state");
         assert!((remote_player.x - 123.0).abs() < f32::EPSILON);
         assert!((remote_player.y - 456.0).abs() < f32::EPSILON);
         assert_eq!(remote_player.credits, 999);
-        assert_eq!(remote_player.cargo_used, 5);
+        assert_eq!(remote_player.cargo_used(), 5);
         assert_eq!(
             remote_player
                 .cargo

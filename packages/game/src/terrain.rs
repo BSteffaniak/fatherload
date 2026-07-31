@@ -321,6 +321,11 @@ impl Terrain {
     }
 
     #[must_use]
+    pub fn tiles(&self) -> &[Tile] {
+        &self.tiles
+    }
+
+    #[must_use]
     pub const fn seed(&self) -> u64 {
         self.seed
     }

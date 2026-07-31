@@ -76,7 +76,7 @@ fn draw_view_hud_panel(
     hud: Option<PerPlayerHudSnapshot>,
 ) {
     let fps = draw.get_fps();
-    let (hull, max_hull, fuel, fuel_capacity, credits, cargo_used, cargo_capacity) = hud
+    let (hull, max_hull, fuel, fuel_capacity, credits, cargo_used, cargo_capacity, depth) = hud
         .map_or_else(
             || {
                 (
@@ -87,6 +87,7 @@ fn draw_view_hud_panel(
                     game.player.credits,
                     game.player.cargo_used(),
                     game.player.cargo_capacity,
+                    (game.player.y / TILE_SIZE).max(0.0) as i32,
                 )
             },
             |hud| {
@@ -97,7 +98,8 @@ fn draw_view_hud_panel(
                     hud.fuel_capacity,
                     hud.credits,
                     hud.cargo_used,
-                    game.player.cargo_capacity,
+                    hud.cargo_capacity,
+                    (view.camera.y / TILE_SIZE).max(0.0) as i32,
                 )
             },
         );
@@ -123,15 +125,7 @@ fn draw_view_hud_panel(
             Color::GOLD,
             Color::ORANGE,
         ),
-        HudCard::text(
-            "Run",
-            format!(
-                "{} cr | {}m",
-                credits,
-                (game.player.y / TILE_SIZE).max(0.0) as i32
-            ),
-            Color::GOLD,
-        ),
+        HudCard::text("Run", format!("{credits} cr | {depth}m"), Color::GOLD),
     ];
     let details = game.show_details.then(|| {
         vec![

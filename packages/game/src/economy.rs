@@ -182,6 +182,7 @@ pub fn repair(player: &mut Player) -> u32 {
     repair_amount(player, 1.0)
 }
 
+#[cfg(test)]
 pub fn sell_cargo(player: &mut Player) -> u32 {
     let mineral_payout: u32 = player
         .cargo

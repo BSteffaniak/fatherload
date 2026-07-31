@@ -22,11 +22,32 @@ use crate::{
     terrain::{ArtifactKind, MineralKind, StrategicResourceKind, Terrain},
 };
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SessionShellSave {
+    pub game: GameState,
+}
+
+impl SessionShellSave {
+    #[must_use]
+    pub fn from_game(game: &GameState) -> Self {
+        Self {
+            game: game.clone_for_save(),
+        }
+    }
+
+    #[must_use]
+    pub fn restore_game(&self) -> GameState {
+        let mut game = self.game.clone();
+        game.migrate_after_load();
+        game
+    }
+}
+
 const SETTINGS_FILE_NAME: &str = "settings.json";
 
 const SAVE_FILE_NAME: &str = "save.json";
 const SAVE_SLOTS: usize = 3;
-const SAVE_VERSION: u32 = 2;
+const SAVE_VERSION: u32 = 3;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct SettingsFile {
@@ -81,24 +102,27 @@ impl SaveSlotMetadata {
         save: &PersistentWorldSave,
         modified_unix_seconds: Option<u64>,
     ) -> Self {
-        let default_player = save.default_player_state();
-        let shell_player = &save.game.player;
+        let default_player = save.default_player();
+        let shell = &save.shell.game;
+        let shell_player = &shell.player;
         let depth_y = default_player.map_or(shell_player.y, |player| player.y);
         Self {
             depth: (depth_y / crate::game_state::TILE_SIZE).floor() as i32,
             credits: default_player.map_or(shell_player.credits, |player| player.credits),
-            cargo_used: default_player
-                .map_or_else(|| shell_player.cargo_used(), |player| player.cargo_used),
+            cargo_used: default_player.map_or_else(
+                || shell_player.cargo_used(),
+                crate::player::Player::cargo_used,
+            ),
             cargo_capacity: default_player
                 .map_or(shell_player.cargo_capacity, |player| player.cargo_capacity),
-            contracts_completed: save.game.contracts.completed,
-            play_seconds: save.game.play_seconds,
-            total_earnings: save.game.total_earnings,
-            mode: save_mode_label(&save.game).to_owned(),
-            deep_claim_unlocked: save.game.deep_claim_status
+            contracts_completed: shell.contracts.completed,
+            play_seconds: shell.play_seconds,
+            total_earnings: shell.total_earnings,
+            mode: save_mode_label(shell).to_owned(),
+            deep_claim_unlocked: shell.deep_claim_status
                 == crate::economy::DeepClaimStatus::Unlocked,
             modified_unix_seconds,
-            won_game: save.game.won_game,
+            won_game: shell.won_game,
         }
     }
 }
@@ -384,9 +408,9 @@ impl PersistentWorldRestoreSummary {
     #[must_use]
     pub fn from_save(save: &PersistentWorldSave) -> Self {
         Self {
-            simulation_tick: save.session.simulation_tick,
+            simulation_tick: save.canonical_world.simulation_tick(),
             roster_players: save.player_roster.len(),
-            persistent_players: save.session.players.len(),
+            persistent_players: save.restored_player_count(),
             default_player_present: save.player_roster.contains(&save.default_player_id),
         }
     }
@@ -520,29 +544,13 @@ pub struct PersistentWorldSave {
     #[serde(default = "default_player_roster")]
     pub player_roster: Vec<PlayerId>,
     pub default_player_id: PlayerId,
-    #[serde(default)]
-    pub session: PersistentSessionState,
-    #[serde(default = "PersistentWorldObjects::from_default_game")]
-    pub world: PersistentWorldObjects,
-    pub game: GameState,
+    pub canonical_world: WorldState,
+    pub shell: SessionShellSave,
 }
 
 impl PersistentWorldSave {
     #[must_use]
-    pub fn from_legacy_game(game: &GameState) -> Self {
-        Self {
-            save_authority: SaveAuthority::LocalSinglePlayer,
-            session_kind: SaveSessionKind::LocalOnly,
-            player_roster: default_player_roster(),
-            default_player_id: LOCAL_PLAYER_ID,
-            session: PersistentSessionState::local_from_game(game),
-            world: PersistentWorldObjects::from_legacy_game(game),
-            game: game.clone_for_save(),
-        }
-    }
-
-    #[must_use]
-    pub fn from_world_and_legacy_game(world: &WorldState, game: &GameState) -> Self {
+    pub fn from_session(world: &WorldState, shell: &GameState) -> Self {
         let mut player_roster = world.player_ids().collect::<Vec<_>>();
         if player_roster.is_empty() {
             player_roster = default_player_roster();
@@ -551,50 +559,93 @@ impl PersistentWorldSave {
             player_roster.dedup();
         }
         Self {
-            save_authority: SaveAuthority::HostOwnedSession,
-            session_kind: SaveSessionKind::HostOwned,
+            save_authority: if shell.online_host_owns_save {
+                SaveAuthority::HostOwnedSession
+            } else {
+                SaveAuthority::LocalSinglePlayer
+            },
+            session_kind: if shell.online_host_owns_save {
+                SaveSessionKind::HostOwned
+            } else {
+                SaveSessionKind::LocalOnly
+            },
             default_player_id: player_roster.first().copied().unwrap_or(LOCAL_PLAYER_ID),
             player_roster,
-            session: PersistentSessionState::from_world(world),
-            world: PersistentWorldObjects::from_world(world),
-            game: game.clone_for_save(),
+            canonical_world: world.clone(),
+            shell: SessionShellSave::from_game(shell),
         }
     }
 
     #[must_use]
-    pub fn default_player_state(&self) -> Option<&PersistentPlayerState> {
-        self.session
-            .players
-            .iter()
-            .find(|player| player.player_id == self.default_player_id)
-            .or_else(|| self.session.players.first())
+    fn migrate_legacy(legacy: LegacyPersistentWorldSave) -> Self {
+        let mut shell = legacy.game;
+        shell.migrate_after_load();
+        let mut canonical_world = WorldState::from_legacy_game(&shell);
+        legacy.world.restore_into_world(&mut canonical_world);
+        canonical_world.set_simulation_tick(legacy.session.simulation_tick);
+        for player_state in &legacy.session.players {
+            if let Some(player) = canonical_world.player_mut(player_state.player_id) {
+                player_state.apply_to_player(player);
+            } else {
+                let mut player = shell.player.clone();
+                player_state.apply_to_player(&mut player);
+                canonical_world.insert_player(player_state.player_id, player);
+            }
+        }
+        let mut player_roster = legacy.player_roster;
+        if player_roster.is_empty() {
+            player_roster.extend(canonical_world.player_ids());
+        }
+        player_roster.sort();
+        player_roster.dedup();
+        let default_player_id = if player_roster.contains(&legacy.default_player_id) {
+            legacy.default_player_id
+        } else {
+            player_roster.first().copied().unwrap_or(LOCAL_PLAYER_ID)
+        };
+        Self {
+            save_authority: legacy.save_authority,
+            session_kind: legacy.session_kind,
+            player_roster,
+            default_player_id,
+            canonical_world,
+            shell: SessionShellSave::from_game(&shell),
+        }
+    }
+
+    #[must_use]
+    pub fn default_player(&self) -> Option<&Player> {
+        self.canonical_world
+            .player(self.default_player_id)
+            .or_else(|| {
+                self.canonical_world
+                    .player_ids()
+                    .next()
+                    .and_then(|id| self.canonical_world.player(id))
+            })
     }
 
     #[must_use]
     pub fn default_player_roster_contains_state(&self) -> bool {
-        self.default_player_state()
-            .is_some_and(|player| self.player_roster.contains(&player.player_id))
+        self.canonical_world
+            .player(self.default_player_id)
+            .is_some()
+            && self.player_roster.contains(&self.default_player_id)
     }
 
     #[must_use]
     pub fn world_object_counts(&self) -> PersistentWorldObjectCounts {
-        self.world.object_counts()
+        PersistentWorldObjects::from_world(&self.canonical_world).object_counts()
     }
 
     #[must_use]
     pub fn restore_shell_game(&self) -> GameState {
-        let mut game = self.game.clone();
-        if let Some(player_state) = self.default_player_state() {
-            player_state.apply_to_player(&mut game.player);
-        }
-        self.world.restore_into_game(&mut game);
-        game.migrate_after_load();
-        game
+        self.shell.restore_game()
     }
 
     #[must_use]
-    pub const fn restored_player_count(&self) -> usize {
-        self.session.players.len()
+    pub fn restored_player_count(&self) -> usize {
+        self.canonical_world.player_ids().count()
     }
 
     #[must_use]
@@ -603,28 +654,36 @@ impl PersistentWorldSave {
     }
 
     #[must_use]
-    pub fn into_legacy_game(self) -> GameState {
-        self.game
-    }
-
-    pub fn restore_into_world(&self, world: &mut WorldState) {
-        self.world.restore_into_world(world);
-        world.set_simulation_tick(self.session.simulation_tick);
-        for player_state in &self.session.players {
-            if let Some(player) = world.player_mut(player_state.player_id) {
-                player_state.apply_to_player(player);
-            } else {
-                let mut player = self.game.player.clone();
-                player_state.apply_to_player(&mut player);
-                world.insert_player(player_state.player_id, player);
-            }
-        }
+    pub fn restore_world(&self) -> WorldState {
+        self.canonical_world.clone()
     }
 
     #[must_use]
     pub fn restore_summary(&self) -> PersistentWorldRestoreSummary {
         PersistentWorldRestoreSummary::from_save(self)
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct LegacyPersistentWorldSave {
+    #[serde(default)]
+    save_authority: SaveAuthority,
+    #[serde(default)]
+    session_kind: SaveSessionKind,
+    #[serde(default = "default_player_roster")]
+    player_roster: Vec<PlayerId>,
+    default_player_id: PlayerId,
+    #[serde(default)]
+    session: PersistentSessionState,
+    #[serde(default = "PersistentWorldObjects::from_default_game")]
+    world: PersistentWorldObjects,
+    game: GameState,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct LegacyWorldSaveFile {
+    version: u32,
+    world: LegacyPersistentWorldSave,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -672,7 +731,7 @@ pub fn save_world_session_to_path(
 ) -> Result<(), SaveError> {
     let save = SaveFile {
         version: SAVE_VERSION,
-        world: PersistentWorldSave::from_world_and_legacy_game(world, shell),
+        world: PersistentWorldSave::from_session(world, shell),
     };
     let json = serde_json::to_string_pretty(&save).map_err(SaveError::Serialize)?;
     write_state_file(path, json)
@@ -680,7 +739,7 @@ pub fn save_world_session_to_path(
 
 #[must_use]
 pub fn persistent_world_from_session(world: &WorldState, shell: &GameState) -> PersistentWorldSave {
-    PersistentWorldSave::from_world_and_legacy_game(world, shell)
+    PersistentWorldSave::from_session(world, shell)
 }
 
 pub fn load_persistent_world() -> Result<PersistentWorldSave, SaveError> {
@@ -707,29 +766,32 @@ pub fn load_persistent_world_from_path(
         return Ok(save.world);
     }
 
+    if let Ok(save) = serde_json::from_str::<LegacyWorldSaveFile>(&json) {
+        validate_save_version(save.version)?;
+        return Ok(PersistentWorldSave::migrate_legacy(save.world));
+    }
+
     let legacy_save: LegacySaveFile = serde_json::from_str(&json).map_err(SaveError::Serialize)?;
     validate_save_version(legacy_save.version)?;
-    Ok(PersistentWorldSave {
-        save_authority: SaveAuthority::LocalSinglePlayer,
-        session_kind: SaveSessionKind::LocalOnly,
-        player_roster: default_player_roster(),
-        default_player_id: LOCAL_PLAYER_ID,
-        session: PersistentSessionState::local_from_game(&legacy_save.game),
-        world: PersistentWorldObjects::from_legacy_game(&legacy_save.game),
-        game: legacy_save.game,
-    })
+    Ok(PersistentWorldSave::migrate_legacy(
+        LegacyPersistentWorldSave {
+            save_authority: SaveAuthority::LocalSinglePlayer,
+            session_kind: SaveSessionKind::LocalOnly,
+            player_roster: default_player_roster(),
+            default_player_id: LOCAL_PLAYER_ID,
+            session: PersistentSessionState::local_from_game(&legacy_save.game),
+            world: PersistentWorldObjects::from_legacy_game(&legacy_save.game),
+            game: legacy_save.game,
+        },
+    ))
 }
 
 fn save_legacy_shell_game_to_path(
     game: &GameState,
     path: impl AsRef<Path>,
 ) -> Result<(), SaveError> {
-    let save = SaveFile {
-        version: SAVE_VERSION,
-        world: PersistentWorldSave::from_legacy_game(game),
-    };
-    let json = serde_json::to_string_pretty(&save).map_err(SaveError::Serialize)?;
-    write_state_file(path, json)
+    let world = WorldState::from_legacy_game(game);
+    save_world_session_to_path(&world, game, path)
 }
 
 pub fn load_game_slot(slot: usize) -> Result<GameState, SaveError> {
@@ -753,7 +815,7 @@ fn load_game_from_path(path: impl AsRef<Path>) -> Result<GameState, SaveError> {
 }
 
 const fn validate_save_version(version: u32) -> Result<(), SaveError> {
-    if version != SAVE_VERSION && version != 1 {
+    if version > SAVE_VERSION || version == 0 {
         return Err(SaveError::UnsupportedVersion(version));
     }
     Ok(())
@@ -908,8 +970,9 @@ mod tests {
         game_state::GameState,
         multiplayer::{LOCAL_PLAYER_ID, PlayerId, SimulationTick},
         save::{
-            LegacySaveFile, PersistentWorldSave, SaveAuthority, SaveFile, SaveSessionKind,
-            save_game_slot,
+            LegacyPersistentWorldSave, LegacySaveFile, LegacyWorldSaveFile, PersistentSessionState,
+            PersistentWorldObjects, PersistentWorldSave, SaveAuthority, SaveFile, SaveSessionKind,
+            load_persistent_world_from_path, save_game_slot,
         },
         session::WorldState,
         terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TilePosition},
@@ -919,13 +982,13 @@ mod tests {
     fn game_state_round_trips_through_versioned_json() {
         let game = GameState::new();
         let save = SaveFile {
-            version: 2,
-            world: PersistentWorldSave::from_legacy_game(&game),
+            version: super::SAVE_VERSION,
+            world: PersistentWorldSave::from_session(&WorldState::from_legacy_game(&game), &game),
         };
         let json = serde_json::to_string(&save).expect("serialize game");
         let loaded: SaveFile = serde_json::from_str(&json).expect("deserialize game");
 
-        assert_eq!(loaded.version, 2);
+        assert_eq!(loaded.version, super::SAVE_VERSION);
         assert_eq!(
             loaded.world.save_authority,
             SaveAuthority::LocalSinglePlayer
@@ -934,15 +997,26 @@ mod tests {
         assert_eq!(loaded.world.default_player_id, LOCAL_PLAYER_ID);
         assert_eq!(loaded.world.player_roster, vec![LOCAL_PLAYER_ID]);
         assert_eq!(
-            loaded.world.session.simulation_tick,
+            loaded.world.canonical_world.simulation_tick(),
             SimulationTick::default()
         );
-        assert_eq!(loaded.world.session.players[0].player_id, LOCAL_PLAYER_ID);
         assert_eq!(
-            loaded.world.game.player.cargo_capacity,
+            loaded
+                .world
+                .canonical_world
+                .player_ids()
+                .next()
+                .expect("saved player"),
+            LOCAL_PLAYER_ID
+        );
+        assert_eq!(
+            loaded.world.shell.game.player.cargo_capacity,
             game.player.cargo_capacity
         );
-        assert_eq!(loaded.world.game.terrain.width(), game.terrain.width());
+        assert_eq!(
+            loaded.world.canonical_world.terrain().width(),
+            game.terrain.width()
+        );
     }
 
     #[test]
@@ -953,13 +1027,71 @@ mod tests {
             game: game.clone_for_save(),
         };
         let json = serde_json::to_string(&legacy).expect("serialize legacy game");
-        let loaded: LegacySaveFile = serde_json::from_str(&json).expect("deserialize legacy game");
+        let path = std::env::temp_dir().join(format!(
+            "drillgame-legacy-save-migration-{}.json",
+            std::process::id()
+        ));
+        std::fs::write(&path, json).expect("write legacy save");
 
-        assert_eq!(loaded.version, 2);
+        let loaded = load_persistent_world_from_path(&path).expect("migrate legacy save");
+        let _ignored = std::fs::remove_file(path);
+
+        assert_eq!(loaded.save_authority, SaveAuthority::LocalSinglePlayer);
+        assert_eq!(loaded.session_kind, SaveSessionKind::LocalOnly);
+        assert_eq!(loaded.default_player_id, LOCAL_PLAYER_ID);
         assert_eq!(
-            loaded.game.player.cargo_capacity,
+            loaded
+                .default_player()
+                .expect("migrated player")
+                .cargo_capacity,
             game.player.cargo_capacity
         );
+    }
+
+    #[test]
+    fn version_two_world_envelope_migrates_to_canonical_world() {
+        let mut game = GameState::new();
+        game.player.credits = 91;
+        let mut world = WorldState::from_legacy_game(&game);
+        world.set_simulation_tick(SimulationTick::new(27));
+        world
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("player exists")
+            .credits = 314;
+        let legacy = LegacyWorldSaveFile {
+            version: 2,
+            world: LegacyPersistentWorldSave {
+                save_authority: SaveAuthority::HostOwnedSession,
+                session_kind: SaveSessionKind::HostOwned,
+                player_roster: vec![LOCAL_PLAYER_ID],
+                default_player_id: LOCAL_PLAYER_ID,
+                session: PersistentSessionState::from_world(&world),
+                world: PersistentWorldObjects::from_world(&world),
+                game: game.clone_for_save(),
+            },
+        };
+        let path = std::env::temp_dir().join(format!(
+            "drillgame-world-save-migration-{}.json",
+            std::process::id()
+        ));
+        std::fs::write(
+            &path,
+            serde_json::to_string(&legacy).expect("serialize legacy world save"),
+        )
+        .expect("write legacy world save");
+
+        let loaded = load_persistent_world_from_path(&path).expect("migrate world envelope");
+        let _ignored = std::fs::remove_file(path);
+
+        assert_eq!(
+            loaded.canonical_world.simulation_tick(),
+            SimulationTick::new(27)
+        );
+        assert_eq!(
+            loaded.default_player().expect("migrated player").credits,
+            314
+        );
+        assert_eq!(loaded.shell.game.player.credits, 91);
     }
 
     #[test]
@@ -977,7 +1109,7 @@ mod tests {
     }
 
     #[test]
-    fn persistent_world_restore_shell_game_uses_session_world_state_without_consuming_save() {
+    fn persistent_world_restore_keeps_shell_and_canonical_world_separate() {
         let mut game = GameState::new();
         game.player.x = 5.0;
         game.player.credits = 10;
@@ -994,15 +1126,26 @@ mod tests {
             .set_kind(target, crate::terrain::TileKind::Air);
         world.set_scanner_cooldown_seconds(player_id, 7.5);
 
-        let save = PersistentWorldSave::from_world_and_legacy_game(&world, &game);
-        let restored = save.restore_shell_game();
+        let save = PersistentWorldSave::from_session(&world, &game);
+        let restored_shell = save.restore_shell_game();
+        let restored_world = save.restore_world();
+        let restored_player = restored_world.player(player_id).expect("player restored");
 
         assert!(save.restores_world_state_without_legacy_conversion());
-        assert!((restored.player.x - 123.0).abs() < f32::EPSILON);
-        assert_eq!(restored.player.credits, 456);
-        assert!((restored.scanner_cooldown_seconds - 7.5).abs() < f32::EPSILON);
+        assert!((restored_shell.player.x - 5.0).abs() < f32::EPSILON);
+        assert_eq!(restored_shell.player.credits, 10);
+        assert!((restored_player.x - 123.0).abs() < f32::EPSILON);
+        assert_eq!(restored_player.credits, 456);
         assert_eq!(
-            restored.terrain.tile(target).expect("tile exists").kind,
+            restored_world.scanner_cooldown_seconds(player_id),
+            Some(7.5)
+        );
+        assert_eq!(
+            restored_world
+                .terrain()
+                .tile(target)
+                .expect("tile exists")
+                .kind,
             crate::terrain::TileKind::Air
         );
         assert_eq!(save.restored_player_count(), 1);
@@ -1038,14 +1181,17 @@ mod tests {
             .expect("local player exists")
             .fuel = 12.0;
 
-        let save = PersistentWorldSave::from_world_and_legacy_game(&world, &game);
-
+        game.online_host_owns_save = true;
+        let save = PersistentWorldSave::from_session(&world, &game);
         assert_eq!(save.save_authority, SaveAuthority::HostOwnedSession);
         assert_eq!(save.session_kind, SaveSessionKind::HostOwned);
         assert_eq!(save.player_roster, vec![LOCAL_PLAYER_ID]);
-        assert_eq!(save.session.simulation_tick, SimulationTick::new(42));
-        assert_eq!(save.session.players[0].credits, 321);
-        assert!((save.session.players[0].fuel - 12.0).abs() < f32::EPSILON);
+        assert_eq!(
+            save.canonical_world.simulation_tick(),
+            SimulationTick::new(42)
+        );
+        assert_eq!(save.default_player().expect("saved player").credits, 321);
+        assert!((save.default_player().expect("saved player").fuel - 12.0).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -1088,10 +1234,8 @@ mod tests {
             player.pump_station_kits = 9;
             player.ore_processor_kits = 10;
         }
-        let save = PersistentWorldSave::from_world_and_legacy_game(&world, &game);
-        let mut restored_world = WorldState::from_legacy_game(&GameState::new());
-
-        save.restore_into_world(&mut restored_world);
+        let save = PersistentWorldSave::from_session(&world, &game);
+        let restored_world = save.restore_world();
 
         let restored_player = restored_world
             .player(LOCAL_PLAYER_ID)
@@ -1161,12 +1305,11 @@ mod tests {
             .expect("local player exists")
             .credits = 123;
 
-        let save = PersistentWorldSave::from_world_and_legacy_game(&world, &game);
+        let save = PersistentWorldSave::from_session(&world, &game);
         let json = serde_json::to_string(&save).expect("serialize multi-player save");
         let loaded: PersistentWorldSave =
             serde_json::from_str(&json).expect("deserialize multi-player save");
-        let mut restored_world = WorldState::from_legacy_game(&GameState::new());
-        loaded.restore_into_world(&mut restored_world);
+        let restored_world = loaded.restore_world();
 
         assert_eq!(
             loaded.player_roster,
@@ -1196,7 +1339,7 @@ mod tests {
         let mut world = WorldState::from_legacy_game(&game);
         world.set_simulation_tick(SimulationTick::new(77));
 
-        let save = PersistentWorldSave::from_world_and_legacy_game(&world, &game);
+        let save = PersistentWorldSave::from_session(&world, &game);
         let summary = save.restore_summary();
 
         assert_eq!(summary.simulation_tick, SimulationTick::new(77));
@@ -1207,21 +1350,60 @@ mod tests {
     }
 
     #[test]
+    fn canonical_world_save_round_trip_preserves_complete_simulation_hash() {
+        let mut game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        world.set_simulation_tick(SimulationTick::new(71));
+        world
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("player exists")
+            .credits = 808;
+        world.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 4.25);
+        game.message = "shell-only message".to_owned();
+        let expected_hash = world.simulation_state_hash();
+        let path = std::env::temp_dir().join(format!(
+            "drillgame-canonical-save-round-trip-{}.json",
+            std::process::id()
+        ));
+
+        super::save_world_session_to_path(&world, &game, &path).expect("save canonical world");
+        let loaded = load_persistent_world_from_path(&path).expect("load canonical world");
+        let _ignored = std::fs::remove_file(path);
+
+        assert_eq!(
+            loaded.canonical_world.simulation_state_hash(),
+            expected_hash
+        );
+        assert_eq!(
+            loaded.canonical_world.simulation_tick(),
+            SimulationTick::new(71)
+        );
+        assert_eq!(
+            loaded.default_player().expect("restored player").credits,
+            808
+        );
+        assert_eq!(loaded.shell.game.message, "shell-only message");
+    }
+
+    #[test]
     fn save_file_regression_round_trips_versioned_world_envelope() {
         let mut game = GameState::new();
         game.player.credits = 777;
         game.player.fuel = 42.0;
         let save = SaveFile {
-            version: 2,
-            world: PersistentWorldSave::from_legacy_game(&game),
+            version: super::SAVE_VERSION,
+            world: PersistentWorldSave::from_session(&WorldState::from_legacy_game(&game), &game),
         };
 
         let json = serde_json::to_string(&save).expect("serialize save");
         let loaded: SaveFile = serde_json::from_str(&json).expect("deserialize save");
 
-        assert_eq!(loaded.version, 2);
-        assert_eq!(loaded.world.session.players[0].credits, 777);
-        assert!((loaded.world.game.player.fuel - 42.0).abs() < f32::EPSILON);
+        assert_eq!(loaded.version, super::SAVE_VERSION);
+        assert_eq!(
+            loaded.world.default_player().expect("saved player").credits,
+            777
+        );
+        assert!((loaded.world.shell.game.player.fuel - 42.0).abs() < f32::EPSILON);
     }
 
     #[test]

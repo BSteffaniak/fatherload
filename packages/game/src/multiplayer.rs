@@ -7,7 +7,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-const PROTOCOL_VERSION: u16 = 1;
+const PROTOCOL_VERSION: u16 = 2;
 
 /// Stable identity for a player participating in an authoritative simulation.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -111,6 +111,44 @@ pub const SIMULATION_HZ: u32 = 60;
 
 /// Fixed-tick simulation delta in seconds.
 pub const FIXED_DELTA_SECONDS: f32 = 1.0 / 60.0;
+
+/// Identifies one authoritative gameplay lifetime. Loading or replacing the world creates a new
+/// epoch so delayed packets from an earlier lifetime cannot affect the current simulation.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct SessionEpoch(u64);
+
+impl SessionEpoch {
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    #[must_use]
+    pub const fn next(self) -> Self {
+        Self(self.0.wrapping_add(1))
+    }
+}
+
+/// Stable identity for an idempotent one-shot action carried by redundant input bundles.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct ActionId(u64);
+
+impl ActionId {
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
 
 /// Local/client-only actions that should not be treated as authoritative world commands.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -397,6 +435,218 @@ pub const fn default_local_client_runtime() -> ClientRuntimeConfig {
         client_id: LOCAL_CLIENT_ID,
         player_id: Some(LOCAL_PLAYER_ID),
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ServerTransportPacket {
+    pub reliability: ReliabilityClass,
+    pub packet: ServerPacket,
+}
+
+impl ServerTransportPacket {
+    #[must_use]
+    pub const fn from_message(message: ServerMessage) -> Self {
+        Self {
+            reliability: message.reliability_class(),
+            packet: ServerPacket::new(message),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ClientTransportPacket {
+    pub reliability: ReliabilityClass,
+    pub packet: ClientPacket,
+}
+
+impl ClientTransportPacket {
+    #[must_use]
+    pub const fn from_message(message: ClientMessage) -> Self {
+        Self {
+            reliability: message.reliability_class(),
+            packet: ClientPacket::new(message),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct DirectionalTransportStatus {
+    pub queued_client_messages: usize,
+    pub queued_server_messages: usize,
+    pub addressed_clients: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct DirectionalTransportQueues {
+    client_to_server: Vec<ClientTransportPacket>,
+    server_to_clients: BTreeMap<ClientId, Vec<ServerTransportPacket>>,
+}
+
+impl DirectionalTransportQueues {
+    pub fn send_to_server(&mut self, message: ClientMessage) {
+        self.client_to_server
+            .push(ClientTransportPacket::from_message(message));
+    }
+
+    pub fn send_to_client(&mut self, client_id: ClientId, message: ServerMessage) {
+        self.server_to_clients
+            .entry(client_id)
+            .or_default()
+            .push(ServerTransportPacket::from_message(message));
+    }
+
+    pub fn drain_client_to_server(&mut self) -> Vec<ClientTransportPacket> {
+        self.client_to_server.drain(..).collect()
+    }
+
+    pub fn drain_server_to_client(&mut self, client_id: ClientId) -> Vec<ServerTransportPacket> {
+        self.server_to_clients
+            .remove(&client_id)
+            .unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn status(&self) -> DirectionalTransportStatus {
+        DirectionalTransportStatus {
+            queued_client_messages: self.client_to_server.len(),
+            queued_server_messages: self.server_to_clients.values().map(Vec::len).sum(),
+            addressed_clients: self.server_to_clients.len(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct DirectionalFaultConfig {
+    pub latency_ticks: u64,
+    pub drop_every: Option<u64>,
+    pub duplicate_every: Option<u64>,
+    pub reorder_pairs: bool,
+}
+
+#[derive(Clone, Debug)]
+struct ScheduledDirectionalPacket<T> {
+    delivery_tick: u64,
+    order: u64,
+    packet: T,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct DirectionalFaultHarness {
+    config: DirectionalFaultConfig,
+    current_tick: u64,
+    sequence: u64,
+    client_packets: Vec<ScheduledDirectionalPacket<ClientTransportPacket>>,
+    server_packets: BTreeMap<ClientId, Vec<ScheduledDirectionalPacket<ServerTransportPacket>>>,
+}
+
+impl DirectionalFaultHarness {
+    #[must_use]
+    pub const fn new(config: DirectionalFaultConfig) -> Self {
+        Self {
+            config,
+            current_tick: 0,
+            sequence: 0,
+            client_packets: Vec::new(),
+            server_packets: BTreeMap::new(),
+        }
+    }
+
+    fn next_delivery(&mut self) -> Option<(u64, u64, bool)> {
+        self.sequence = self.sequence.saturating_add(1);
+        if self
+            .config
+            .drop_every
+            .is_some_and(|period| period > 0 && self.sequence.is_multiple_of(period))
+        {
+            return None;
+        }
+        let delivery_tick = self.current_tick.saturating_add(self.config.latency_ticks);
+        let order = if self.config.reorder_pairs && self.sequence.is_multiple_of(2) {
+            self.sequence.saturating_sub(1)
+        } else if self.config.reorder_pairs {
+            self.sequence.saturating_add(1)
+        } else {
+            self.sequence
+        };
+        let duplicate = self
+            .config
+            .duplicate_every
+            .is_some_and(|period| period > 0 && self.sequence.is_multiple_of(period));
+        Some((delivery_tick, order, duplicate))
+    }
+
+    pub fn send_to_server(&mut self, message: ClientMessage) {
+        let Some((delivery_tick, order, duplicate)) = self.next_delivery() else {
+            return;
+        };
+        let packet = ClientTransportPacket::from_message(message);
+        self.client_packets.push(ScheduledDirectionalPacket {
+            delivery_tick,
+            order,
+            packet: packet.clone(),
+        });
+        if duplicate {
+            self.client_packets.push(ScheduledDirectionalPacket {
+                delivery_tick,
+                order: order.saturating_add(1),
+                packet,
+            });
+        }
+    }
+
+    pub fn send_to_client(&mut self, client_id: ClientId, message: ServerMessage) {
+        let Some((delivery_tick, order, duplicate)) = self.next_delivery() else {
+            return;
+        };
+        let packet = ServerTransportPacket::from_message(message);
+        let scheduled = self.server_packets.entry(client_id).or_default();
+        scheduled.push(ScheduledDirectionalPacket {
+            delivery_tick,
+            order,
+            packet: packet.clone(),
+        });
+        if duplicate {
+            scheduled.push(ScheduledDirectionalPacket {
+                delivery_tick,
+                order: order.saturating_add(1),
+                packet,
+            });
+        }
+    }
+
+    pub const fn advance_tick(&mut self) {
+        self.current_tick = self.current_tick.saturating_add(1);
+    }
+
+    pub fn drain_server_inbound(&mut self) -> Vec<ClientTransportPacket> {
+        Self::drain_due(&mut self.client_packets, self.current_tick)
+    }
+
+    pub fn drain_client_inbound(&mut self, client_id: ClientId) -> Vec<ServerTransportPacket> {
+        self.server_packets
+            .get_mut(&client_id)
+            .map_or_else(Vec::new, |packets| {
+                Self::drain_due(packets, self.current_tick)
+            })
+    }
+
+    fn drain_due<T>(packets: &mut Vec<ScheduledDirectionalPacket<T>>, current_tick: u64) -> Vec<T> {
+        packets.sort_by_key(|packet| (packet.delivery_tick, packet.order));
+        let first_future = packets
+            .iter()
+            .position(|packet| packet.delivery_tick > current_tick)
+            .unwrap_or(packets.len());
+        packets
+            .drain(..first_future)
+            .map(|scheduled| scheduled.packet)
+            .collect()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TypedInboundMessage {
+    Client,
+    Server,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -995,6 +1245,54 @@ impl QuinnPacketIo {
         }
     }
 
+    async fn send_bytes(
+        &self,
+        bytes: Vec<u8>,
+        reliability: ReliabilityClass,
+    ) -> Result<(), QuinnPacketIoError> {
+        match transport_reliability_mapping().production_channel_for(reliability) {
+            ProductionPacketChannel::QuicBidirectionalStream => {
+                let mut stream = self
+                    .connection
+                    .open_uni()
+                    .await
+                    .map_err(|error| QuinnPacketIoError::OpenStream(error.to_string()))?;
+                stream
+                    .write_all(&bytes)
+                    .await
+                    .map_err(|error| QuinnPacketIoError::Write(error.to_string()))?;
+                stream
+                    .finish()
+                    .map_err(|error| QuinnPacketIoError::Write(error.to_string()))?;
+                Ok(())
+            }
+            ProductionPacketChannel::QuicDatagram => self
+                .connection
+                .send_datagram(bytes.into())
+                .map_err(|error| QuinnPacketIoError::Datagram(error.to_string())),
+        }
+    }
+
+    /// Send one typed client-to-server packet over Quinn.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when encoding or transport IO fails.
+    pub async fn send_client_packet(&self, packet: ClientPacket) -> Result<(), QuinnPacketIoError> {
+        let reliability = packet.message.reliability_class();
+        self.send_bytes(packet.encode_bytes()?, reliability).await
+    }
+
+    /// Send one typed server-to-client packet over Quinn.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when encoding or transport IO fails.
+    pub async fn send_server_packet(&self, packet: ServerPacket) -> Result<(), QuinnPacketIoError> {
+        let reliability = packet.message.reliability_class();
+        self.send_bytes(packet.encode_bytes()?, reliability).await
+    }
+
     pub fn close(&self, reason: &[u8]) {
         self.connection.close(0_u32.into(), reason);
     }
@@ -1033,6 +1331,63 @@ impl QuinnPacketIo {
             .await
             .map_err(|error| QuinnPacketIoError::Datagram(error.to_string()))?;
         VersionedProtocolPacket::decode_bytes(&bytes).map_err(Into::into)
+    }
+    async fn receive_reliable_bytes(&self) -> Result<Vec<u8>, QuinnPacketIoError> {
+        let mut stream = self
+            .connection
+            .accept_uni()
+            .await
+            .map_err(|error| QuinnPacketIoError::Read(error.to_string()))?;
+        stream
+            .read_to_end(usize::MAX)
+            .await
+            .map_err(|error| QuinnPacketIoError::Read(error.to_string()))
+    }
+
+    /// Receive one reliable typed client packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when stream IO or decoding fails.
+    pub async fn receive_reliable_client_packet(&self) -> Result<ClientPacket, QuinnPacketIoError> {
+        ClientPacket::decode_bytes(&self.receive_reliable_bytes().await?).map_err(Into::into)
+    }
+
+    /// Receive one reliable typed server packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when stream IO or decoding fails.
+    pub async fn receive_reliable_server_packet(&self) -> Result<ServerPacket, QuinnPacketIoError> {
+        ServerPacket::decode_bytes(&self.receive_reliable_bytes().await?).map_err(Into::into)
+    }
+
+    /// Receive one typed client datagram.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when datagram IO or decoding fails.
+    pub async fn receive_client_datagram(&self) -> Result<ClientPacket, QuinnPacketIoError> {
+        let bytes = self
+            .connection
+            .read_datagram()
+            .await
+            .map_err(|error| QuinnPacketIoError::Datagram(error.to_string()))?;
+        ClientPacket::decode_bytes(&bytes).map_err(Into::into)
+    }
+
+    /// Receive one typed server datagram.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when datagram IO or decoding fails.
+    pub async fn receive_server_datagram(&self) -> Result<ServerPacket, QuinnPacketIoError> {
+        let bytes = self
+            .connection
+            .read_datagram()
+            .await
+            .map_err(|error| QuinnPacketIoError::Datagram(error.to_string()))?;
+        ServerPacket::decode_bytes(&bytes).map_err(Into::into)
     }
 }
 
@@ -3032,6 +3387,41 @@ impl HostSessionRuntime {
         })
     }
 
+    pub fn reconnect_client_typed(
+        &mut self,
+        client_id: ClientId,
+        session_token: SessionToken,
+        epoch: SessionEpoch,
+        keyframe: AuthoritativeKeyframe,
+    ) -> Option<ServerMessage> {
+        if !self.config.allow_reconnect {
+            return None;
+        }
+        let (reserved_client, player_id) = self.reconnect_tokens.get(&session_token).copied()?;
+        if reserved_client != client_id || keyframe.epoch != epoch {
+            return None;
+        }
+        self.connected_clients.insert(client_id, player_id);
+        Some(ServerMessage::JoinAccepted {
+            client_id,
+            player_id,
+            epoch,
+            keyframe,
+        })
+    }
+
+    pub fn disconnect_client(&mut self, client_id: ClientId) -> Option<PlayerId> {
+        self.connected_clients.remove(&client_id)
+    }
+
+    pub fn end_session(&mut self, epoch: SessionEpoch, reason: impl Into<String>) -> ServerMessage {
+        self.connected_clients.clear();
+        ServerMessage::SessionEnded {
+            epoch,
+            reason: reason.into(),
+        }
+    }
+
     #[must_use]
     pub fn connected_player(&self, client_id: ClientId) -> Option<PlayerId> {
         self.connected_clients.get(&client_id).copied()
@@ -3557,6 +3947,473 @@ pub struct NetworkWorldSnapshot {
     pub players: Vec<NetworkPlayerSnapshot>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct InputControls {
+    pub horizontal_milli: i16,
+    pub thrust: bool,
+    pub drill_down: bool,
+}
+
+impl InputControls {
+    #[must_use]
+    pub fn from_horizontal(horizontal: f32, thrust: bool, drill_down: bool) -> Self {
+        let scaled = (horizontal.clamp(-1.0, 1.0) * 1_000.0).round();
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "clamped control input is always representable as i16"
+        )]
+        let horizontal_milli = scaled as i16;
+        Self {
+            horizontal_milli,
+            thrust,
+            drill_down,
+        }
+    }
+
+    #[must_use]
+    pub fn horizontal(self) -> f32 {
+        f32::from(self.horizontal_milli) / 1_000.0
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct SequencedAction {
+    pub id: ActionId,
+    pub command: PlayerCommand,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct InputFrame {
+    pub sequence: InputSequence,
+    pub target_tick: SimulationTick,
+    pub controls: InputControls,
+    pub actions: Vec<SequencedAction>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct InputBundle {
+    pub epoch: SessionEpoch,
+    pub client_id: ClientId,
+    pub player_id: PlayerId,
+    /// Newest frame first, followed by a bounded redundant history window.
+    pub frames: Vec<InputFrame>,
+}
+
+impl InputBundle {
+    pub const MAX_REDUNDANT_FRAMES: usize = 4;
+
+    #[must_use]
+    pub fn has_valid_redundancy_window(&self) -> bool {
+        !self.frames.is_empty()
+            && self.frames.len() <= Self::MAX_REDUNDANT_FRAMES
+            && self.frames.windows(2).all(|frames| {
+                frames[0].sequence > frames[1].sequence
+                    && frames[0].target_tick >= frames[1].target_tick
+            })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum InputStatusKind {
+    Received,
+    Accepted,
+    Rejected,
+    Applied,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct InputStatus {
+    pub sequence: InputSequence,
+    pub status: InputStatusKind,
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ActionRequest {
+    pub epoch: SessionEpoch,
+    pub client_id: ClientId,
+    pub player_id: PlayerId,
+    pub action: SequencedAction,
+    pub target_tick: SimulationTick,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ActionResult {
+    pub epoch: SessionEpoch,
+    pub action_id: ActionId,
+    pub applied_tick: Option<SimulationTick>,
+    pub accepted: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AuthoritativeFrame {
+    pub epoch: SessionEpoch,
+    pub base_tick: SimulationTick,
+    pub result_tick: SimulationTick,
+    pub applied_sequences: BTreeMap<PlayerId, InputSequence>,
+    pub changed_players: Vec<NetworkPlayerSnapshot>,
+    pub terrain_mutations: Vec<NetworkTerrainTile>,
+    pub terrain_revisions: Vec<NetworkTerrainChunkRevision>,
+    /// Complete post-tick canonical state. Reliable full-state frames are correctness-first until
+    /// the typed delta codec covers every deterministic domain.
+    pub canonical_state: Vec<u8>,
+    pub state_hash: Option<u64>,
+}
+
+impl AuthoritativeFrame {
+    #[must_use]
+    pub const fn advances_exactly_one_tick(&self) -> bool {
+        self.base_tick.next().get() == self.result_tick.get()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct AuthoritativeKeyframe {
+    pub epoch: SessionEpoch,
+    pub snapshot: NetworkWorldSnapshot,
+    /// Complete serialized canonical simulation state for join and recovery. The compact snapshot is
+    /// retained for roster/bootstrap inspection without decoding gameplay state.
+    pub canonical_state: Vec<u8>,
+    pub state_hash: Option<u64>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub enum ClientMessage {
+    JoinRequest {
+        client_id: ClientId,
+        session_token: Option<SessionToken>,
+    },
+    InputBundle(InputBundle),
+    ActionRequest(ActionRequest),
+    KeyframeRequest {
+        epoch: SessionEpoch,
+        expected_base_tick: SimulationTick,
+    },
+    TerrainChunkRequest {
+        epoch: SessionEpoch,
+        chunk_x: i32,
+        chunk_y: i32,
+        known_revision: u64,
+    },
+    Disconnect {
+        epoch: SessionEpoch,
+        client_id: ClientId,
+    },
+}
+
+impl ClientMessage {
+    #[must_use]
+    pub const fn reliability_class(&self) -> ReliabilityClass {
+        match self {
+            Self::InputBundle(_) => ReliabilityClass::UnreliableSequenced,
+            Self::JoinRequest { .. }
+            | Self::ActionRequest(_)
+            | Self::KeyframeRequest { .. }
+            | Self::TerrainChunkRequest { .. }
+            | Self::Disconnect { .. } => ReliabilityClass::Reliable,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub enum ServerMessage {
+    JoinAccepted {
+        client_id: ClientId,
+        player_id: PlayerId,
+        epoch: SessionEpoch,
+        keyframe: AuthoritativeKeyframe,
+    },
+    InputStatus {
+        epoch: SessionEpoch,
+        client_id: ClientId,
+        statuses: Vec<InputStatus>,
+    },
+    AuthoritativeFrame(AuthoritativeFrame),
+    ActionResult(ActionResult),
+    Keyframe(AuthoritativeKeyframe),
+    TerrainChunk {
+        epoch: SessionEpoch,
+        chunk_x: i32,
+        chunk_y: i32,
+        revision: u64,
+        tiles: Vec<NetworkTerrainTile>,
+    },
+    SessionEnded {
+        epoch: SessionEpoch,
+        reason: String,
+    },
+}
+
+impl ServerMessage {
+    #[must_use]
+    pub const fn reliability_class(&self) -> ReliabilityClass {
+        ReliabilityClass::Reliable
+    }
+
+    #[must_use]
+    pub const fn epoch(&self) -> SessionEpoch {
+        match self {
+            Self::JoinAccepted { epoch, .. }
+            | Self::InputStatus { epoch, .. }
+            | Self::TerrainChunk { epoch, .. }
+            | Self::SessionEnded { epoch, .. } => *epoch,
+            Self::AuthoritativeFrame(frame) => frame.epoch,
+            Self::ActionResult(result) => result.epoch,
+            Self::Keyframe(keyframe) => keyframe.epoch,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ClientPacket {
+    pub protocol_version: u16,
+    pub message: ClientMessage,
+}
+
+impl ClientPacket {
+    #[must_use]
+    pub const fn new(message: ClientMessage) -> Self {
+        Self {
+            protocol_version: PROTOCOL_VERSION,
+            message,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_supported(&self) -> bool {
+        self.protocol_version == PROTOCOL_VERSION
+    }
+
+    /// Encode one client-to-server packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PacketIoError::Encode`] when serialization fails.
+    pub fn encode_bytes(&self) -> Result<Vec<u8>, PacketIoError> {
+        serde_json::to_vec(self).map_err(|error| PacketIoError::Encode(error.to_string()))
+    }
+
+    /// Decode and version-check one client-to-server packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PacketIoError`] when decoding fails or the version is unsupported.
+    pub fn decode_bytes(bytes: &[u8]) -> Result<Self, PacketIoError> {
+        let packet: Self = serde_json::from_slice(bytes)
+            .map_err(|error| PacketIoError::Decode(error.to_string()))?;
+        if packet.is_supported() {
+            Ok(packet)
+        } else {
+            Err(PacketIoError::UnsupportedVersion {
+                expected: PROTOCOL_VERSION,
+                actual: packet.protocol_version,
+            })
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ServerPacket {
+    pub protocol_version: u16,
+    pub message: ServerMessage,
+}
+
+impl ServerPacket {
+    #[must_use]
+    pub const fn new(message: ServerMessage) -> Self {
+        Self {
+            protocol_version: PROTOCOL_VERSION,
+            message,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_supported(&self) -> bool {
+        self.protocol_version == PROTOCOL_VERSION
+    }
+
+    /// Encode one server-to-client packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PacketIoError::Encode`] when serialization fails.
+    pub fn encode_bytes(&self) -> Result<Vec<u8>, PacketIoError> {
+        serde_json::to_vec(self).map_err(|error| PacketIoError::Encode(error.to_string()))
+    }
+
+    /// Decode and version-check one server-to-client packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PacketIoError`] when decoding fails or the version is unsupported.
+    pub fn decode_bytes(bytes: &[u8]) -> Result<Self, PacketIoError> {
+        let packet: Self = serde_json::from_slice(bytes)
+            .map_err(|error| PacketIoError::Decode(error.to_string()))?;
+        if packet.is_supported() {
+            Ok(packet)
+        } else {
+            Err(PacketIoError::UnsupportedVersion {
+                expected: PROTOCOL_VERSION,
+                actual: packet.protocol_version,
+            })
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HostInputInbox {
+    epoch: SessionEpoch,
+    current_tick: SimulationTick,
+    max_future_ticks: u64,
+    owners: BTreeMap<ClientId, PlayerId>,
+    tracker: CommandSequenceTracker,
+    accepted_frames: BTreeMap<(ClientId, InputSequence), InputFrame>,
+    accepted_action_ids: BTreeSet<ActionId>,
+    last_applied_controls: BTreeMap<ClientId, (InputSequence, InputControls, SimulationTick)>,
+}
+
+impl HostInputInbox {
+    #[must_use]
+    pub const fn new(
+        epoch: SessionEpoch,
+        current_tick: SimulationTick,
+        max_future_ticks: u64,
+    ) -> Self {
+        Self {
+            epoch,
+            current_tick,
+            max_future_ticks,
+            owners: BTreeMap::new(),
+            tracker: CommandSequenceTracker::new(),
+            accepted_frames: BTreeMap::new(),
+            accepted_action_ids: BTreeSet::new(),
+            last_applied_controls: BTreeMap::new(),
+        }
+    }
+
+    pub const fn set_current_tick(&mut self, tick: SimulationTick) {
+        self.current_tick = tick;
+    }
+
+    pub fn assign_player(&mut self, client_id: ClientId, player_id: PlayerId) {
+        self.owners.insert(client_id, player_id);
+    }
+
+    #[must_use]
+    pub fn receive_bundle(&mut self, bundle: &InputBundle) -> Vec<InputStatus> {
+        let mut statuses = Vec::new();
+        for frame in &bundle.frames {
+            statuses.push(InputStatus {
+                sequence: frame.sequence,
+                status: InputStatusKind::Received,
+                reason: None,
+            });
+            let rejection = if bundle.epoch != self.epoch {
+                Some("stale session epoch")
+            } else if self.owners.get(&bundle.client_id) != Some(&bundle.player_id) {
+                Some("client does not own player")
+            } else if !bundle.has_valid_redundancy_window() {
+                Some("invalid redundant input window")
+            } else if frame.actions.iter().any(|action| {
+                self.accepted_action_ids.contains(&action.id)
+                    || !frame.actions.iter().all(|candidate| {
+                        candidate.id != action.id
+                            || std::ptr::eq::<SequencedAction>(candidate, action)
+                    })
+            }) {
+                Some("duplicate action id")
+            } else {
+                match self.tracker.accept_command(
+                    bundle.client_id,
+                    &SequencedPlayerCommand {
+                        player_id: bundle.player_id,
+                        sequence: frame.sequence,
+                        target_tick: frame.target_tick,
+                        command: PlayerCommand::Movement {
+                            horizontal: frame.controls.horizontal(),
+                            thrust: frame.controls.thrust,
+                            drill_down: frame.controls.drill_down,
+                        },
+                    },
+                    self.current_tick,
+                    self.max_future_ticks,
+                ) {
+                    CommandAcceptance::Accepted => None,
+                    CommandAcceptance::Duplicate => Some("duplicate input sequence"),
+                    CommandAcceptance::TooOld => Some("input target tick is too old"),
+                    CommandAcceptance::TooFarInFuture => {
+                        Some("input target tick is too far in the future")
+                    }
+                }
+            };
+            if let Some(reason) = rejection {
+                statuses.push(InputStatus {
+                    sequence: frame.sequence,
+                    status: InputStatusKind::Rejected,
+                    reason: Some(reason.to_owned()),
+                });
+            } else {
+                self.accepted_action_ids
+                    .extend(frame.actions.iter().map(|action| action.id));
+                self.accepted_frames
+                    .insert((bundle.client_id, frame.sequence), frame.clone());
+                statuses.push(InputStatus {
+                    sequence: frame.sequence,
+                    status: InputStatusKind::Accepted,
+                    reason: None,
+                });
+            }
+        }
+        statuses
+    }
+
+    pub fn take_accepted_frame(
+        &mut self,
+        client_id: ClientId,
+        sequence: InputSequence,
+    ) -> Option<InputFrame> {
+        self.accepted_frames.remove(&(client_id, sequence))
+    }
+
+    pub fn note_applied_frame(&mut self, client_id: ClientId, frame: &InputFrame) {
+        self.last_applied_controls.insert(
+            client_id,
+            (frame.sequence, frame.controls, frame.target_tick),
+        );
+    }
+
+    /// Repeats only continuous controls for a short loss window. One-shot actions are always
+    /// empty, so packet loss cannot duplicate transactions.
+    #[must_use]
+    pub fn held_controls_frame(
+        &self,
+        client_id: ClientId,
+        target_tick: SimulationTick,
+        hold_ticks: u64,
+    ) -> Option<InputFrame> {
+        let (sequence, controls, applied_tick) = self.last_applied_controls.get(&client_id)?;
+        if target_tick.get().saturating_sub(applied_tick.get()) > hold_ticks {
+            return None;
+        }
+        Some(InputFrame {
+            sequence: *sequence,
+            target_tick,
+            controls: *controls,
+            actions: Vec::new(),
+        })
+    }
+
+    #[must_use]
+    pub const fn applied_status(sequence: InputSequence) -> InputStatus {
+        InputStatus {
+            sequence,
+            status: InputStatusKind::Applied,
+            reason: None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProtocolExchangeKind {
     JoinHandshake,
@@ -4005,15 +4862,19 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        ClientId, ClientSessionRuntime, CommandAcceptance, CommandNetworkSession, CommandPacket,
-        CommandSequenceTracker, CommandSource, FaithfulPacketIoSimulator, HostSessionRuntime,
-        InMemoryTransportQueues, InputSequence, LOCAL_CLIENT_ID, NetworkDeltaPayload,
-        NetworkPlayerSnapshot, NetworkWorldSnapshot, PacketIo, PlayerCommand, PlayerId,
-        ProductionOnlineAcceptanceCoverage, ProductionPacketChannel, ProductionQuicPacketIo,
-        ProtocolMessage, QuinnClientConnector, QuinnEndpointConfig, QuinnHostListener,
-        QuinnLocalEndpointPair, QuinnPacketIo, QuinnSocketBackend, ReliabilityClass,
-        ScriptedLatencyLossCoverage, SequencedPlayerCommand, SessionToken, SimulationTick,
-        VersionedProtocolPacket, client_authority_allowed, command_conflicts,
+        ActionId, ActionRequest, AuthoritativeFrame, AuthoritativeKeyframe, ClientId,
+        ClientMessage, ClientPacket, ClientSessionRuntime, CommandAcceptance,
+        CommandNetworkSession, CommandPacket, CommandSequenceTracker, CommandSource,
+        DirectionalFaultConfig, DirectionalFaultHarness, DirectionalTransportQueues,
+        FaithfulPacketIoSimulator, HostInputInbox, HostSessionRuntime, InMemoryTransportQueues,
+        InputBundle, InputControls, InputFrame, InputSequence, InputStatus, InputStatusKind,
+        LOCAL_CLIENT_ID, NetworkDeltaPayload, NetworkPlayerSnapshot, NetworkWorldSnapshot,
+        PacketIo, PlayerCommand, PlayerId, ProductionOnlineAcceptanceCoverage,
+        ProductionPacketChannel, ProductionQuicPacketIo, ProtocolMessage, QuinnClientConnector,
+        QuinnEndpointConfig, QuinnHostListener, QuinnLocalEndpointPair, QuinnPacketIo,
+        QuinnSocketBackend, ReliabilityClass, ScriptedLatencyLossCoverage, SequencedAction,
+        SequencedPlayerCommand, ServerMessage, ServerPacket, SessionEpoch, SessionToken,
+        SimulationTick, VersionedProtocolPacket, client_authority_allowed, command_conflicts,
         connect_localhost_quinn_session, connect_split_localhost_quinn_session,
         connection_lifecycle_summary, default_local_client_runtime, disconnect_reservation_policy,
         high_latency_simulation_summary, host_save_decision, initial_collision_policy,
@@ -4029,6 +4890,324 @@ mod tests {
         transport_integration_status, transport_reliability_mapping,
         unsupported_production_networking_items,
     };
+
+    #[test]
+    fn directional_fault_harness_is_deterministic_for_latency_loss_duplication_and_reordering() {
+        fn run() -> Vec<InputSequence> {
+            let mut harness = DirectionalFaultHarness::new(DirectionalFaultConfig {
+                latency_ticks: 2,
+                drop_every: Some(3),
+                duplicate_every: Some(2),
+                reorder_pairs: true,
+            });
+            for sequence in 1..=5 {
+                harness.send_to_server(ClientMessage::InputBundle(InputBundle {
+                    epoch: SessionEpoch::new(1),
+                    client_id: LOCAL_CLIENT_ID,
+                    player_id: PlayerId::new(1),
+                    frames: vec![InputFrame {
+                        sequence: InputSequence::new(sequence),
+                        target_tick: SimulationTick::new(u64::from(sequence)),
+                        controls: InputControls::default(),
+                        actions: Vec::new(),
+                    }],
+                }));
+            }
+            assert!(harness.drain_server_inbound().is_empty());
+            harness.advance_tick();
+            assert!(harness.drain_server_inbound().is_empty());
+            harness.advance_tick();
+            harness
+                .drain_server_inbound()
+                .into_iter()
+                .filter_map(|packet| match packet.packet.message {
+                    ClientMessage::InputBundle(bundle) => {
+                        bundle.frames.first().map(|frame| frame.sequence)
+                    }
+                    _ => None,
+                })
+                .collect()
+        }
+
+        let first = run();
+        let second = run();
+
+        assert_eq!(first, second);
+        assert_eq!(first.len(), 6);
+        assert!(!first.contains(&InputSequence::new(3)));
+        assert_eq!(
+            first
+                .iter()
+                .filter(|sequence| **sequence == InputSequence::new(2))
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn typed_reconnect_preserves_reserved_player_and_session_end_clears_connections() {
+        let client_id = ClientId::new(4);
+        let player_id = PlayerId::new(8);
+        let token = SessionToken::new(88);
+        let epoch = SessionEpoch::new(3);
+        let mut host =
+            HostSessionRuntime::new(super::HostRuntimeConfig::default(), SimulationTick::new(10));
+        host.reserve_reconnect_token(token, client_id, player_id);
+        let keyframe = AuthoritativeKeyframe {
+            epoch,
+            snapshot: NetworkWorldSnapshot {
+                tick: SimulationTick::new(10),
+                players: Vec::new(),
+            },
+            canonical_state: Vec::new(),
+            state_hash: Some(1),
+        };
+
+        let reconnected = host
+            .reconnect_client_typed(client_id, token, epoch, keyframe)
+            .expect("reserved reconnect succeeds");
+
+        assert!(matches!(
+            reconnected,
+            ServerMessage::JoinAccepted {
+                player_id: assigned,
+                ..
+            } if assigned == player_id
+        ));
+        assert_eq!(host.connected_player(client_id), Some(player_id));
+        assert_eq!(host.disconnect_client(client_id), Some(player_id));
+        assert_eq!(host.connected_client_count(), 0);
+        let ended = host.end_session(epoch, "host ended session");
+        assert!(matches!(
+            ended,
+            ServerMessage::SessionEnded { epoch: ended_epoch, .. } if ended_epoch == epoch
+        ));
+    }
+
+    #[test]
+    fn directional_transport_queues_cannot_cross_message_directions() {
+        let epoch = SessionEpoch::new(2);
+        let mut queues = DirectionalTransportQueues::default();
+        queues.send_to_server(ClientMessage::KeyframeRequest {
+            epoch,
+            expected_base_tick: SimulationTick::new(9),
+        });
+        queues.send_to_client(
+            LOCAL_CLIENT_ID,
+            ServerMessage::SessionEnded {
+                epoch,
+                reason: "host closed".to_owned(),
+            },
+        );
+
+        let status = queues.status();
+        assert_eq!(status.queued_client_messages, 1);
+        assert_eq!(status.queued_server_messages, 1);
+        let client_packet = queues
+            .drain_client_to_server()
+            .pop()
+            .expect("client packet");
+        let server_packet = queues
+            .drain_server_to_client(LOCAL_CLIENT_ID)
+            .pop()
+            .expect("server packet");
+        assert_eq!(client_packet.reliability, ReliabilityClass::Reliable);
+        assert_eq!(server_packet.reliability, ReliabilityClass::Reliable);
+        assert!(matches!(
+            client_packet.packet.message,
+            ClientMessage::KeyframeRequest { .. }
+        ));
+        assert!(matches!(
+            server_packet.packet.message,
+            ServerMessage::SessionEnded { .. }
+        ));
+    }
+
+    #[test]
+    fn host_input_inbox_distinguishes_received_accepted_rejected_and_applied() {
+        let epoch = SessionEpoch::new(4);
+        let client_id = LOCAL_CLIENT_ID;
+        let player_id = PlayerId::new(1);
+        let mut inbox = HostInputInbox::new(epoch, SimulationTick::new(10), 3);
+        inbox.assign_player(client_id, player_id);
+        let frame = InputFrame {
+            sequence: InputSequence::new(6),
+            target_tick: SimulationTick::new(11),
+            controls: InputControls::from_horizontal(0.25, false, false),
+            actions: vec![SequencedAction {
+                id: ActionId::new(9),
+                command: PlayerCommand::UseScanner,
+            }],
+        };
+        let bundle = InputBundle {
+            epoch,
+            client_id,
+            player_id,
+            frames: vec![frame.clone()],
+        };
+
+        let accepted = inbox.receive_bundle(&bundle);
+        let duplicate = inbox.receive_bundle(&bundle);
+        let applied = HostInputInbox::applied_status(frame.sequence);
+
+        assert_eq!(accepted[0].status, InputStatusKind::Received);
+        assert_eq!(accepted[1].status, InputStatusKind::Accepted);
+        assert_eq!(duplicate[0].status, InputStatusKind::Received);
+        assert_eq!(duplicate[1].status, InputStatusKind::Rejected);
+        assert_eq!(applied.status, InputStatusKind::Applied);
+        assert_eq!(
+            inbox
+                .take_accepted_frame(client_id, frame.sequence)
+                .expect("accepted frame"),
+            frame
+        );
+    }
+
+    #[test]
+    fn directional_packets_round_trip_without_mixed_protocol_envelope() {
+        let epoch = SessionEpoch::new(5);
+        let client = ClientPacket::new(ClientMessage::Disconnect {
+            epoch,
+            client_id: LOCAL_CLIENT_ID,
+        });
+        let server = ServerPacket::new(ServerMessage::SessionEnded {
+            epoch,
+            reason: "done".to_owned(),
+        });
+
+        let decoded_client =
+            ClientPacket::decode_bytes(&client.encode_bytes().expect("client packet encodes"))
+                .expect("client packet decodes");
+        let decoded_server =
+            ServerPacket::decode_bytes(&server.encode_bytes().expect("server packet encodes"))
+                .expect("server packet decodes");
+
+        assert_eq!(decoded_client, client);
+        assert_eq!(decoded_server, server);
+    }
+
+    #[test]
+    fn directional_protocol_messages_encode_identity_epoch_and_reliability() {
+        let epoch = SessionEpoch::new(7);
+        let input = InputBundle {
+            epoch,
+            client_id: LOCAL_CLIENT_ID,
+            player_id: PlayerId::new(1),
+            frames: vec![InputFrame {
+                sequence: InputSequence::new(9),
+                target_tick: SimulationTick::new(21),
+                controls: InputControls::from_horizontal(0.5, true, false),
+                actions: vec![SequencedAction {
+                    id: ActionId::new(42),
+                    command: PlayerCommand::UseScanner,
+                }],
+            }],
+        };
+        let client = ClientMessage::InputBundle(input.clone());
+        let keyframe = AuthoritativeKeyframe {
+            epoch,
+            snapshot: NetworkWorldSnapshot {
+                tick: SimulationTick::new(20),
+                players: Vec::new(),
+            },
+            canonical_state: Vec::new(),
+            state_hash: Some(11),
+        };
+        let server = ServerMessage::JoinAccepted {
+            client_id: LOCAL_CLIENT_ID,
+            player_id: PlayerId::new(1),
+            epoch,
+            keyframe,
+        };
+
+        assert!(input.has_valid_redundancy_window());
+        assert_eq!(
+            client.reliability_class(),
+            ReliabilityClass::UnreliableSequenced
+        );
+        assert_eq!(server.reliability_class(), ReliabilityClass::Reliable);
+        assert_eq!(server.epoch(), epoch);
+        assert_eq!(
+            ClientPacket::new(client).protocol_version,
+            super::PROTOCOL_VERSION
+        );
+        assert_eq!(
+            ServerPacket::new(server).protocol_version,
+            super::PROTOCOL_VERSION
+        );
+    }
+
+    #[test]
+    fn input_bundle_redundancy_requires_newest_first_bounded_frames() {
+        let frame = |sequence, tick| InputFrame {
+            sequence: InputSequence::new(sequence),
+            target_tick: SimulationTick::new(tick),
+            controls: InputControls::default(),
+            actions: Vec::new(),
+        };
+        let valid = InputBundle {
+            epoch: SessionEpoch::new(1),
+            client_id: LOCAL_CLIENT_ID,
+            player_id: PlayerId::new(1),
+            frames: vec![frame(3, 12), frame(2, 11), frame(1, 10)],
+        };
+        let invalid_order = InputBundle {
+            epoch: valid.epoch,
+            client_id: valid.client_id,
+            player_id: valid.player_id,
+            frames: vec![frame(2, 11), frame(3, 12)],
+        };
+        let oversized = InputBundle {
+            epoch: valid.epoch,
+            client_id: valid.client_id,
+            player_id: valid.player_id,
+            frames: vec![
+                frame(5, 14),
+                frame(4, 13),
+                frame(3, 12),
+                frame(2, 11),
+                frame(1, 10),
+            ],
+        };
+
+        assert!(valid.has_valid_redundancy_window());
+        assert!(!invalid_order.has_valid_redundancy_window());
+        assert!(!oversized.has_valid_redundancy_window());
+    }
+
+    #[test]
+    fn authoritative_frame_has_explicit_base_and_result_tick() {
+        let frame = AuthoritativeFrame {
+            epoch: SessionEpoch::new(3),
+            base_tick: SimulationTick::new(40),
+            result_tick: SimulationTick::new(41),
+            applied_sequences: BTreeMap::from([(PlayerId::new(1), InputSequence::new(8))]),
+            changed_players: Vec::new(),
+            terrain_mutations: Vec::new(),
+            terrain_revisions: Vec::new(),
+            canonical_state: Vec::new(),
+            state_hash: Some(99),
+        };
+        let status = InputStatus {
+            sequence: InputSequence::new(8),
+            status: InputStatusKind::Applied,
+            reason: None,
+        };
+        let action = ActionRequest {
+            epoch: frame.epoch,
+            client_id: LOCAL_CLIENT_ID,
+            player_id: PlayerId::new(1),
+            action: SequencedAction {
+                id: ActionId::new(5),
+                command: PlayerCommand::PlaceBomb,
+            },
+            target_tick: frame.result_tick,
+        };
+
+        assert!(frame.advances_exactly_one_tick());
+        assert_eq!(status.status, InputStatusKind::Applied);
+        assert_eq!(action.epoch, frame.epoch);
+    }
 
     #[test]
     fn simulation_tick_advances_monotonically() {

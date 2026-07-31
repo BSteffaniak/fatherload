@@ -276,10 +276,7 @@ pub struct OnlineGameplayDomainStatus {
 impl OnlineGameplayDomainStatus {
     #[must_use]
     pub fn from_game(game: &GameState) -> Self {
-        let movement = domain_status(
-            !game.online_last_replicated_player_status.is_empty()
-                || !game.online_remote_player_snapshots.is_empty(),
-        );
+        let movement = domain_status(!game.online_last_replicated_player_status.is_empty());
         let terrain = domain_status(
             !game.online_last_terrain_status.is_empty()
                 || game.online_last_sync_loop_status.contains("terrain"),
@@ -379,8 +376,7 @@ impl OnlineGameplaySyncEvidenceMatrix {
     #[must_use]
     pub fn from_game(game: &GameState) -> Self {
         let movement = evidence_quality(
-            !game.online_last_replicated_player_status.is_empty()
-                || !game.online_remote_player_snapshots.is_empty(),
+            !game.online_last_replicated_player_status.is_empty(),
             game.online_last_live_verification_status
                 .contains("movement=visible")
                 || game
@@ -512,8 +508,7 @@ pub struct OnlineLiveVerificationStatus {
 impl OnlineLiveVerificationStatus {
     #[must_use]
     pub fn from_game(game: &GameState) -> Self {
-        let movement_visible = !game.online_last_replicated_player_status.is_empty()
-            || !game.online_remote_player_snapshots.is_empty();
+        let movement_visible = !game.online_last_replicated_player_status.is_empty();
         let terrain_visible = !game.online_last_terrain_status.is_empty()
             || game.online_last_sync_loop_status.contains("terrain");
         let cargo_economy_visible = game.online_last_replicated_player_status.contains("cargo=")
@@ -1219,30 +1214,11 @@ impl OnlineGameplayClarityPresentation {
             game.player.cargo_used(),
             game.player.cargo_capacity
         );
-        let remote_player_lines = if game.online_remote_player_snapshots.is_empty() {
-            vec![if game.online_remote_player_connected {
-                "Remote player connected; waiting for replicated snapshot.".to_owned()
-            } else {
-                "Remote player not connected yet.".to_owned()
-            }]
+        let remote_player_lines = vec![if game.online_remote_player_connected {
+            "Remote player connected; canonical session presentation active.".to_owned()
         } else {
-            game.online_remote_player_snapshots
-                .iter()
-                .take(2)
-                .map(|remote| {
-                    let depth = (remote.y / TILE_SIZE).floor() as i32;
-                    format!(
-                        "Remote p{} depth={} fuel={:.0} hull={:.0} credits={} cargo={}",
-                        remote.player_id.get(),
-                        depth,
-                        remote.fuel,
-                        remote.hull,
-                        remote.credits,
-                        remote.cargo_used
-                    )
-                })
-                .collect()
-        };
+            "Remote player not connected yet.".to_owned()
+        }];
         let save_policy = game.online_save_exit_policy();
         let session_state_line = format!(
             "Session {:?} | ready local={} remote={} | save_dirty={} local_save={} | {}",
@@ -1253,22 +1229,19 @@ impl OnlineGameplayClarityPresentation {
             yes_no(save_policy.local_save_allowed),
             game.online_gameplay_entry_source.label()
         );
-        let remote_state_clear = game.online_remote_player_connected
-            && (!game.online_remote_player_snapshots.is_empty()
-                || game.online_session_state != OnlineSessionUxState::Connected);
+        let remote_state_clear = game.online_remote_player_connected;
         let hud_clear_enough = visible
             && game.online_player_slot.is_some()
             && game.player.fuel.is_finite()
             && game.player.hull.is_finite()
             && remote_state_clear;
         let status = format!(
-            "Online gameplay HUD clarity: clear={} visible={} local_slot={} remote_connected={} remote_snapshots={} save_dirty={} local_save={} role={}",
+            "Online gameplay HUD clarity: clear={} visible={} local_slot={} remote_connected={} save_dirty={} local_save={} role={}",
             yes_no(hud_clear_enough),
             yes_no(visible),
             game.online_player_slot
                 .map_or_else(|| "unassigned".to_owned(), |slot| slot.to_string()),
             yes_no(game.online_remote_player_connected),
-            game.online_remote_player_snapshots.len(),
             yes_no(game.save_dirty),
             yes_no(save_policy.local_save_allowed),
             game.online_role_label()
@@ -1980,6 +1953,8 @@ pub enum SessionServiceRequest {
     AutoSortLowGradeCargo,
     CompleteDepotWork,
     StartSideContract,
+    AcceptExpedition { index: usize },
+    AbandonExpedition { index: usize },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -2681,9 +2656,7 @@ impl OnlineManualWorkingGameGateStatus {
         let ui_ready_start_ready = playable.both_entered_gameplay
             || (game.online_local_ready && game.online_remote_player_ready)
             || game.run_mode == RunMode::Playing;
-        let movement_observable = playable.movement_visible
-            || sustained.movement_visible
-            || !game.online_remote_player_snapshots.is_empty();
+        let movement_observable = playable.movement_visible || sustained.movement_visible;
         let mining_observable = sustained.terrain_visible
             && sustained.cargo_or_economy_visible
             && (game
@@ -2777,10 +2750,9 @@ impl OnlineSustainedMiningSessionStatus {
         let gameplay_active = game.run_mode == RunMode::Playing
             && game.online_session_state == OnlineSessionUxState::Connected;
         let movement_visible = game.online_remote_player_connected
-            && (!game.online_remote_player_snapshots.is_empty()
-                || game
-                    .online_last_replicated_player_status
-                    .contains("updated"));
+            && game
+                .online_last_replicated_player_status
+                .contains("updated");
         let terrain_visible = game.online_last_terrain_status.contains("chunk")
             || game.online_last_sync_loop_status.contains("terrain");
         let cargo_or_economy_visible = game.online_last_replication_status.contains("cargo")
@@ -2861,10 +2833,9 @@ impl OnlineDirectionalGameplaySyncStatus {
             || game.online_last_replicated_player_status.contains("local")
             || game.update_ticks > 0;
         let remote_moving = game.online_remote_player_connected
-            && (!game.online_remote_player_snapshots.is_empty()
-                || game
-                    .online_last_replicated_player_status
-                    .contains("updated")
+            && (game
+                .online_last_replicated_player_status
+                .contains("updated")
                 || game.online_last_sync_loop_status.contains("player_delta"));
         let terrain_changed = game.online_last_terrain_status.contains("applied chunk")
             || game.online_last_terrain_status.contains("visible tiles")
@@ -2972,8 +2943,7 @@ impl OnlinePlayableSessionStatus {
         let both_entered_gameplay = game.run_mode == RunMode::Playing
             && matches!(game.online_session_state, OnlineSessionUxState::Connected)
             && game.modal.is_none();
-        let movement_visible = !game.online_last_replicated_player_status.is_empty()
-            || !game.online_remote_player_snapshots.is_empty();
+        let movement_visible = !game.online_last_replicated_player_status.is_empty();
         let terrain_or_cargo_visible = !game.online_last_terrain_status.is_empty()
             || game.online_last_sync_loop_status.contains("terrain")
             || game.online_last_sync_loop_status.contains("cargo=yes")
@@ -3509,6 +3479,11 @@ pub struct RealOnlineSessionController {
     next_tick: u64,
     pending_command_acknowledgements: Vec<crate::multiplayer::CommandAcknowledgement>,
     pending_command_rejections: Vec<crate::multiplayer::CommandRejection>,
+    pending_world_snapshots: Vec<crate::multiplayer::NetworkWorldSnapshot>,
+    pending_player_deltas: Vec<(
+        crate::multiplayer::SimulationTick,
+        Vec<crate::multiplayer::NetworkPlayerSnapshot>,
+    )>,
 }
 
 #[allow(
@@ -3538,6 +3513,8 @@ impl RealOnlineSessionController {
             next_tick: 301,
             pending_command_acknowledgements: Vec::new(),
             pending_command_rejections: Vec::new(),
+            pending_world_snapshots: Vec::new(),
+            pending_player_deltas: Vec::new(),
         };
         game.apply_real_online_session_ux(RealOnlineSessionUxSnapshot::from_joined_session(
             controller.player_slot,
@@ -3628,6 +3605,8 @@ impl RealOnlineSessionController {
             next_tick: 301,
             pending_command_acknowledgements: Vec::new(),
             pending_command_rejections: Vec::new(),
+            pending_world_snapshots: Vec::new(),
+            pending_player_deltas: Vec::new(),
         };
         game.apply_real_online_session_ux(RealOnlineSessionUxSnapshot::from_host_descriptor_ready(
             Some(1),
@@ -3693,6 +3672,8 @@ impl RealOnlineSessionController {
             next_tick: 301,
             pending_command_acknowledgements: Vec::new(),
             pending_command_rejections: Vec::new(),
+            pending_world_snapshots: Vec::new(),
+            pending_player_deltas: Vec::new(),
         };
         game.apply_real_online_session_ux(
             RealOnlineSessionUxSnapshot::from_descriptor_client_connected(
@@ -4422,9 +4403,7 @@ impl RealOnlineSessionController {
                             if game.online_player_slot.is_none() {
                                 game.online_player_slot = self.player_slot;
                             }
-                            apply_network_snapshot_remote_players_presentation_adapter(
-                                game, &snapshot,
-                            );
+                            self.pending_world_snapshots.push(snapshot.clone());
                             let tick = snapshot.tick.get();
                             game.online_gameplay_entry_authoritative_tick = Some(snapshot.tick);
                             let applied_local_player =
@@ -4440,9 +4419,8 @@ impl RealOnlineSessionController {
                                 );
                                 let local_slot = game.online_player_slot.unwrap_or(1);
                                 game.apply_online_replicated_player_status(format!(
-                                "tick {tick}: applied local slot {local_slot} snapshot; remote_presentations={}",
-                                game.online_remote_player_snapshots.len()
-                            ));
+                                    "tick {tick}: applied local slot {local_slot} snapshot"
+                                ));
                             }
                             client_runtime.handle_message(
                                 crate::multiplayer::ProtocolMessage::SnapshotKeyframe { snapshot },
@@ -4468,12 +4446,9 @@ impl RealOnlineSessionController {
                                     )
                                 }
                                 crate::multiplayer::NetworkDeltaPayload::Players { players } => {
-                                    let visible_updates =
-                                    apply_network_player_snapshots_to_remote_presentations_adapter(
-                                        game, players,
-                                    );
+                                    self.pending_player_deltas.push((tick, players.clone()));
                                     format!(
-                                        "tick {tick_value}: {} authoritative player update(s), {visible_updates} visible remote update(s)",
+                                        "tick {tick_value}: {} authoritative player update(s)",
                                         players.len()
                                     )
                                 }
@@ -4826,6 +4801,21 @@ impl RealOnlineSessionController {
         )
     }
 
+    pub fn drain_replicated_world_updates(
+        &mut self,
+    ) -> (
+        Vec<crate::multiplayer::NetworkWorldSnapshot>,
+        Vec<(
+            crate::multiplayer::SimulationTick,
+            Vec<crate::multiplayer::NetworkPlayerSnapshot>,
+        )>,
+    ) {
+        (
+            std::mem::take(&mut self.pending_world_snapshots),
+            std::mem::take(&mut self.pending_player_deltas),
+        )
+    }
+
     #[must_use]
     pub fn lan_host_status_line(&self) -> Option<String> {
         match &self.mode {
@@ -5136,103 +5126,6 @@ fn apply_network_terrain_chunk_to_game(
         ));
         visible_tiles
     }
-}
-
-fn apply_network_snapshot_remote_players_presentation_adapter(
-    game: &mut GameState,
-    snapshot: &crate::multiplayer::NetworkWorldSnapshot,
-) {
-    let local_player_id = game
-        .online_player_slot
-        .map(|slot| crate::multiplayer::PlayerId::new(u64::from(slot)));
-    game.online_remote_player_snapshots = snapshot
-        .players
-        .iter()
-        .filter(|player| Some(player.player_id) != local_player_id)
-        .map(|player| OnlineRemotePlayerPresentation {
-            player_id: player.player_id,
-            x: player.x,
-            y: player.y,
-            velocity_x: player.velocity_x,
-            velocity_y: player.velocity_y,
-            fuel: player.fuel,
-            hull: player.hull,
-            credits: player.credits,
-            cargo_used: player.cargo_used,
-            cargo: player.cargo.clone(),
-            artifacts: player.artifacts.clone(),
-            materials: player.materials.clone(),
-        })
-        .collect();
-    game.online_remote_player_connected = !game.online_remote_player_snapshots.is_empty();
-    let cargo_applied = snapshot.players.iter().any(|player| {
-        player.cargo_used > 0
-            || !player.cargo.is_empty()
-            || !player.artifacts.is_empty()
-            || !player.materials.is_empty()
-    });
-    game.apply_online_sync_loop_status(OnlineSyncLoopStatus::snapshot(
-        snapshot.players.len(),
-        cargo_applied,
-    ));
-}
-
-fn apply_network_player_snapshots_to_remote_presentations_adapter(
-    game: &mut GameState,
-    players: &[crate::multiplayer::NetworkPlayerSnapshot],
-) -> usize {
-    let local_player_id = game
-        .online_player_slot
-        .map(|slot| crate::multiplayer::PlayerId::new(u64::from(slot)));
-    let mut visible_updates = 0;
-    for player in players {
-        if Some(player.player_id) == local_player_id {
-            apply_network_player_snapshot_to_game(game, player);
-            continue;
-        }
-        if let Some(remote) = game
-            .online_remote_player_snapshots
-            .iter_mut()
-            .find(|remote| remote.player_id == player.player_id)
-        {
-            remote.x = player.x;
-            remote.y = player.y;
-            remote.velocity_x = player.velocity_x;
-            remote.velocity_y = player.velocity_y;
-            remote.fuel = player.fuel;
-            remote.hull = player.hull;
-            remote.credits = player.credits;
-            remote.cargo_used = player.cargo_used;
-            remote.cargo.clone_from(&player.cargo);
-            remote.artifacts.clone_from(&player.artifacts);
-            remote.materials.clone_from(&player.materials);
-        } else {
-            game.online_remote_player_snapshots
-                .push(OnlineRemotePlayerPresentation {
-                    player_id: player.player_id,
-                    x: player.x,
-                    y: player.y,
-                    velocity_x: player.velocity_x,
-                    velocity_y: player.velocity_y,
-                    fuel: player.fuel,
-                    hull: player.hull,
-                    credits: player.credits,
-                    cargo_used: player.cargo_used,
-                    cargo: player.cargo.clone(),
-                    artifacts: player.artifacts.clone(),
-                    materials: player.materials.clone(),
-                });
-        }
-        visible_updates += 1;
-    }
-    if !players.is_empty() {
-        game.online_remote_player_connected = true;
-        game.apply_online_sync_loop_status(OnlineSyncLoopStatus::player_delta(
-            players.len(),
-            visible_updates,
-        ));
-    }
-    visible_updates
 }
 
 fn apply_network_snapshot_local_player_presentation_adapter(
@@ -5805,7 +5698,7 @@ impl CollectionLog {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum WorldEventKind {
     MarketCrash,
     MarketBoom,
@@ -5975,22 +5868,6 @@ pub enum SoundCue {
     Ui,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OnlineRemotePlayerPresentation {
-    pub player_id: crate::multiplayer::PlayerId,
-    pub x: f32,
-    pub y: f32,
-    pub velocity_x: f32,
-    pub velocity_y: f32,
-    pub fuel: f32,
-    pub hull: f32,
-    pub credits: u32,
-    pub cargo_used: u32,
-    pub cargo: std::collections::BTreeMap<crate::terrain::MineralKind, u32>,
-    pub artifacts: std::collections::BTreeMap<crate::terrain::ArtifactKind, u32>,
-    pub materials: std::collections::BTreeMap<crate::terrain::StrategicResourceKind, u32>,
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct VisualChanges {
     pub full_terrain_refresh: bool,
@@ -6028,8 +5905,6 @@ pub struct GameState {
     pub online_remote_player_ready: bool,
     #[serde(default)]
     pub online_remote_player_connected: bool,
-    #[serde(default)]
-    pub online_remote_player_snapshots: Vec<OnlineRemotePlayerPresentation>,
     #[serde(default)]
     pub online_descriptor_inspection_status: String,
     #[serde(default)]
@@ -6356,7 +6231,6 @@ impl GameState {
             online_remote_player_name: None,
             online_remote_player_ready: false,
             online_remote_player_connected: false,
-            online_remote_player_snapshots: Vec::new(),
             online_descriptor_inspection_status: String::new(),
             online_descriptor_inspection_can_join: false,
             online_descriptor_inspection_lines: Vec::new(),
@@ -6680,11 +6554,9 @@ impl GameState {
             return SessionShellUpdateSummary::ShellHandled;
         }
         if self.game_over {
-            self.handle_rescue(input);
             self.update_camera(delta_seconds);
             return SessionShellUpdateSummary::ShellHandled;
         }
-        self.current_zone = surface_zone_at(self.player.x, self.player.y);
         self.update_npc_story_records();
         if self.handle_modal(input) {
             self.update_camera(delta_seconds);
@@ -6695,16 +6567,8 @@ impl GameState {
             return SessionShellUpdateSummary::Paused;
         }
         self.handle_interaction(input);
-        self.apply_depth_pressure(delta_seconds);
-        self.apply_lava_damage(delta_seconds);
-        self.update_depth_milestones();
-        self.update_deep_run_pressure(delta_seconds);
-        self.update_escape_sequence(delta_seconds);
-        self.update_layer_band();
-        self.award_return_bonus();
         self.update_warning_messages();
         self.update_status_messages();
-        self.check_failure();
         self.update_camera(delta_seconds);
         SessionShellUpdateSummary::GameplayPresentationUpdated
     }
@@ -7202,7 +7066,6 @@ impl GameState {
         self.online_remote_player_connected = status.remote_connected;
         if !status.remote_connected {
             self.online_remote_player_ready = false;
-            self.online_remote_player_snapshots.clear();
         }
         self.online_session_status_message
             .clone_from(&status.player_message);
@@ -7647,31 +7510,6 @@ impl GameState {
             yes_no(write_boundary.online_save_boundary_enforced),
             yes_no(write_boundary.limited_to_compatibility())
         ));
-        if !self.online_remote_player_snapshots.is_empty() {
-            let summaries = self
-                .online_remote_player_snapshots
-                .iter()
-                .map(|player| {
-                    format!(
-                        "p{} ({:.0},{:.0}) fuel {:.0} hull {:.0} cr {} cargo {} [{}]",
-                        player.player_id.get(),
-                        player.x,
-                        player.y,
-                        player.fuel,
-                        player.hull,
-                        player.credits,
-                        player.cargo_used,
-                        online_cargo_manifest_summary(
-                            &player.cargo,
-                            &player.artifacts,
-                            &player.materials
-                        )
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("; ");
-            lines.push(format!("Remote snapshot players: {summaries}"));
-        }
         if self.online_descriptor_path_editing {
             lines.push(format!(
                 "Descriptor path edit: {}_",
@@ -8135,35 +7973,6 @@ impl GameState {
             primary_action,
             save_warning,
         }
-    }
-
-    #[must_use]
-    pub fn online_remote_world_presentations(
-        &self,
-    ) -> Vec<crate::session::OnlineRemoteWorldPresentation> {
-        self.online_remote_player_snapshots
-            .iter()
-            .map(|remote| crate::session::OnlineRemoteWorldPresentation {
-                player_id: remote.player_id,
-                display_name: if remote.player_id.get() == 1 {
-                    Some(
-                        self.online_remote_player_name
-                            .clone()
-                            .unwrap_or_else(|| "Host".to_owned()),
-                    )
-                } else {
-                    self.online_remote_player_name.clone()
-                },
-                x: remote.x,
-                y: remote.y,
-                velocity_x: remote.velocity_x,
-                velocity_y: remote.velocity_y,
-                fuel: remote.fuel,
-                hull: remote.hull,
-                credits: remote.credits,
-                cargo_used: remote.cargo_used,
-            })
-            .collect()
     }
 
     #[must_use]
@@ -10048,43 +9857,24 @@ impl GameState {
     }
 
     fn accept_expedition_offer(&mut self) {
-        if self.expedition_offers.is_empty() {
-            self.refresh_expedition_offers();
-        }
         if self.selected_menu_item >= self.expedition_offers.len() {
             self.abandon_selected_expedition();
             return;
         }
-        if self.active_expeditions.len() >= 3 {
-            "Expedition board limit reached: complete one before accepting more."
-                .clone_into(&mut self.message);
-            return;
-        }
-        let index = self
-            .selected_menu_item
-            .min(self.expedition_offers.len().saturating_sub(1));
-        let Some(expedition) = self.expedition_offers.get(index).copied() else {
-            "No expedition offer is available.".clone_into(&mut self.message);
-            return;
-        };
-        self.active_expeditions.push(expedition);
-        self.expedition_offers.remove(index);
-        self.message = format!("Accepted expedition: {}.", expedition.title());
-        self.sound_cues.push(SoundCue::Ui);
+        self.session_service_request = Some(SessionServiceRequest::AcceptExpedition {
+            index: self.selected_menu_item,
+        });
+        "Expedition acceptance queued for authoritative session.".clone_into(&mut self.message);
     }
 
     fn abandon_selected_expedition(&mut self) {
         let active_index = self
             .selected_menu_item
             .saturating_sub(self.expedition_offers.len());
-        let Some(expedition) = self.active_expeditions.get(active_index).copied() else {
-            "Select an expedition offer to accept or an active expedition to abandon."
-                .clone_into(&mut self.message);
-            return;
-        };
-        self.active_expeditions.remove(active_index);
-        self.message = format!("Abandoned expedition: {}.", expedition.title());
-        self.sound_cues.push(SoundCue::Ui);
+        self.session_service_request = Some(SessionServiceRequest::AbandonExpedition {
+            index: active_index,
+        });
+        "Expedition abandonment queued for authoritative session.".clone_into(&mut self.message);
     }
 
     fn confirm_bank_menu(&mut self) {
@@ -12465,12 +12255,6 @@ pub fn session_gameplay_commands_from_input(input: PlayerInput) -> Vec<PlayerCom
     if input.interact {
         commands.push(PlayerCommand::Interact);
     }
-    if input.confirm {
-        commands.push(PlayerCommand::Confirm);
-    }
-    if input.cancel {
-        commands.push(PlayerCommand::Cancel);
-    }
     commands
 }
 
@@ -12522,8 +12306,8 @@ mod tests {
             } if (*horizontal - 1.0).abs() < f32::EPSILON
         )));
         assert!(commands.contains(&PlayerCommand::Interact));
-        assert!(commands.contains(&PlayerCommand::Confirm));
-        assert!(commands.contains(&PlayerCommand::Cancel));
+        assert!(!commands.contains(&PlayerCommand::Confirm));
+        assert!(!commands.contains(&PlayerCommand::Cancel));
         assert!(commands.contains(&PlayerCommand::UseScanner));
         assert!(commands.contains(&PlayerCommand::PlaceBomb));
         assert!(commands.contains(&PlayerCommand::PlaceInfrastructure { slot: 0 }));
@@ -14680,7 +14464,8 @@ mod tests {
         game.modal = Some(ModalScreen::OnlineMultiplayer);
         game.online_session_state = OnlineSessionUxState::Connected;
         game.online_remote_player_connected = true;
-        game.selected_menu_item = 12;
+        game.online_multiplayer_view = OnlineMultiplayerView::HostLan;
+        game.selected_menu_item = 0;
 
         game.confirm_online_multiplayer();
         assert!(game.online_local_ready);
@@ -14960,7 +14745,6 @@ mod tests {
         assert!(client.save_dirty);
         assert!(!client.online_remote_player_connected);
         assert!(!client.online_remote_player_ready);
-        assert!(client.online_remote_player_snapshots.is_empty());
         assert!(client.message.contains("ended by host"));
         assert!(
             client
@@ -15178,21 +14962,6 @@ mod tests {
         game.online_local_ready = true;
         game.online_remote_player_ready = true;
         game.online_remote_player_connected = true;
-        game.online_remote_player_snapshots
-            .push(OnlineRemotePlayerPresentation {
-                player_id: crate::multiplayer::PlayerId::new(2),
-                x: 12.0,
-                y: 34.0,
-                velocity_x: 1.0,
-                velocity_y: -1.0,
-                fuel: 90.0,
-                hull: 80.0,
-                credits: 70,
-                cargo_used: 2,
-                cargo: BTreeMap::new(),
-                artifacts: BTreeMap::new(),
-                materials: BTreeMap::new(),
-            });
         game.online_last_replicated_player_status = "updated remote player 2".to_owned();
         game.player.velocity_x = 0.25;
         game.online_last_terrain_status = "applied chunk (0,0) rev 2: 4 visible tiles".to_owned();
@@ -15309,21 +15078,6 @@ mod tests {
         game.player.hull = 88.0;
         game.player.credits = 123;
         game.player.cargo.insert(MineralKind::Copper, 2);
-        game.online_remote_player_snapshots
-            .push(OnlineRemotePlayerPresentation {
-                player_id: crate::multiplayer::PlayerId::new(2),
-                x: 5.0,
-                y: TILE_SIZE * 18.0,
-                velocity_x: 0.0,
-                velocity_y: 0.0,
-                fuel: 66.0,
-                hull: 99.0,
-                credits: 44,
-                cargo_used: 3,
-                cargo: BTreeMap::new(),
-                artifacts: BTreeMap::new(),
-                materials: BTreeMap::new(),
-            });
 
         let clarity = OnlineGameplayClarityPresentation::from_game(&game);
         let hud_lines = game.online_gameplay_hud_presentation().lines();
@@ -15332,11 +15086,15 @@ mod tests {
         assert!(clarity.hud_clear_enough);
         assert!(clarity.local_player_line.contains("fuel=77"));
         assert!(clarity.local_player_line.contains("cargo=2"));
-        assert!(clarity.remote_player_lines[0].contains("Remote p2"));
+        assert!(clarity.remote_player_lines[0].contains("canonical session presentation"));
         assert!(clarity.session_state_line.contains("local_save=yes"));
         assert!(clarity.status.contains("clear=yes"));
         assert!(hud_lines.iter().any(|line| line.contains("Local host p1")));
-        assert!(hud_lines.iter().any(|line| line.contains("Remote p2")));
+        assert!(
+            hud_lines
+                .iter()
+                .any(|line| line.contains("canonical session presentation"))
+        );
         assert!(game.online_multiplayer_status_lines().iter().any(|line| {
             line.contains("Online gameplay HUD clarity") && line.contains("clear=yes")
         }));
@@ -15352,21 +15110,6 @@ mod tests {
         host.online_player_slot = Some(1);
         host.online_remote_player_connected = true;
         host.player.velocity_x = 1.0;
-        host.online_remote_player_snapshots
-            .push(OnlineRemotePlayerPresentation {
-                player_id: crate::multiplayer::PlayerId::new(2),
-                x: 12.0,
-                y: 18.0,
-                velocity_x: -0.25,
-                velocity_y: 0.0,
-                fuel: 80.0,
-                hull: 90.0,
-                credits: 10,
-                cargo_used: 2,
-                cargo: BTreeMap::new(),
-                artifacts: BTreeMap::new(),
-                materials: BTreeMap::new(),
-            });
         host.apply_online_replicated_player_status("updated remote player 2 from command packet");
         host.apply_online_terrain_status("applied chunk (0,0) rev 3: 6 visible tiles");
 
@@ -15389,7 +15132,6 @@ mod tests {
         let mut client = host.clone();
         client.online_host_owns_save = false;
         client.online_player_slot = Some(2);
-        client.online_remote_player_snapshots[0].player_id = crate::multiplayer::PlayerId::new(1);
         let client_status = OnlineDirectionalGameplaySyncStatus::from_game(&client);
         assert!(client_status.client_sees_host);
         assert!(client_status.host_movement_visible);
@@ -15437,22 +15179,6 @@ mod tests {
         client.player.velocity_x = -0.5;
         client.player.fuel = 55.0;
         client.player.hull = 66.0;
-        client
-            .online_remote_player_snapshots
-            .push(OnlineRemotePlayerPresentation {
-                player_id: crate::multiplayer::PlayerId::new(1),
-                x: 1.0,
-                y: 2.0,
-                velocity_x: 0.5,
-                velocity_y: 0.0,
-                fuel: 100.0,
-                hull: 100.0,
-                credits: 10,
-                cargo_used: 1,
-                cargo: BTreeMap::new(),
-                artifacts: BTreeMap::new(),
-                materials: BTreeMap::new(),
-            });
         client.online_last_replicated_player_status = "updated host player".to_owned();
         client.online_last_terrain_status = "applied chunk (0,0) rev 3: 5 visible tiles".to_owned();
         client.online_last_replication_status = "client received snapshot with cargo".to_owned();
@@ -15490,21 +15216,6 @@ mod tests {
         game.online_host_owns_save = true;
         game.online_player_slot = Some(1);
         game.online_remote_player_connected = true;
-        game.online_remote_player_snapshots
-            .push(OnlineRemotePlayerPresentation {
-                player_id: crate::multiplayer::PlayerId::new(2),
-                x: 3.0,
-                y: 4.0,
-                velocity_x: 1.0,
-                velocity_y: 0.0,
-                fuel: 99.0,
-                hull: 88.0,
-                credits: 77,
-                cargo_used: 1,
-                cargo: BTreeMap::new(),
-                artifacts: BTreeMap::new(),
-                materials: BTreeMap::new(),
-            });
         game.online_last_replicated_player_status = "updated remote player".to_owned();
         game.online_last_terrain_status = "answered chunk (0,0) rev 1".to_owned();
         game.online_last_replication_status = "host sent snapshot with cargo".to_owned();
@@ -15947,21 +15658,6 @@ mod tests {
         let mut game = GameState::new();
         game.online_remote_player_ready = true;
         game.online_remote_player_connected = true;
-        game.online_remote_player_snapshots
-            .push(OnlineRemotePlayerPresentation {
-                player_id: crate::multiplayer::PlayerId::new(2),
-                x: 1.0,
-                y: 2.0,
-                velocity_x: 0.0,
-                velocity_y: 0.0,
-                fuel: 3.0,
-                hull: 4.0,
-                credits: 5,
-                cargo_used: 0,
-                cargo: BTreeMap::new(),
-                artifacts: BTreeMap::new(),
-                materials: BTreeMap::new(),
-            });
 
         game.apply_online_session_boundary_status(&OnlineSessionBoundaryStatus::client_left(
             "test disconnect",
@@ -15969,7 +15665,6 @@ mod tests {
 
         assert!(!game.online_remote_player_ready);
         assert!(!game.online_remote_player_connected);
-        assert!(game.online_remote_player_snapshots.is_empty());
         assert!(game.message.contains("test disconnect"));
         assert!(
             game.online_last_session_boundary_status
@@ -16108,60 +15803,6 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_application_updates_sync_loop_for_visible_gameplay_and_cargo() {
-        let mut game = GameState::new();
-        game.online_player_slot = Some(2);
-        let mut cargo = BTreeMap::new();
-        cargo.insert(MineralKind::Iron, 3);
-        let snapshot = crate::multiplayer::NetworkWorldSnapshot {
-            tick: crate::multiplayer::SimulationTick::new(44),
-            players: vec![crate::multiplayer::NetworkPlayerSnapshot {
-                player_id: crate::multiplayer::PlayerId::new(1),
-                x: 12.0,
-                y: 34.0,
-                velocity_x: 1.5,
-                velocity_y: -0.5,
-                fuel: 90.0,
-                hull: 80.0,
-                credits: 77,
-                cargo_used: 3,
-                cargo,
-                artifacts: BTreeMap::new(),
-                materials: BTreeMap::new(),
-                loadout: crate::multiplayer::NetworkPlayerLoadoutSnapshot::default(),
-                scanner_cooldown_seconds: 0.25,
-            }],
-        };
-
-        apply_network_snapshot_remote_players_presentation_adapter(&mut game, &snapshot);
-
-        assert!(game.online_remote_player_connected);
-        assert_eq!(game.online_remote_player_snapshots.len(), 1);
-        assert_eq!(game.online_remote_player_snapshots[0].cargo_used, 3);
-        let world_players = game.online_remote_world_presentations();
-        assert_eq!(world_players.len(), 1);
-        assert_eq!(
-            world_players[0].player_id,
-            crate::multiplayer::PlayerId::new(1)
-        );
-        assert!((world_players[0].x - 12.0).abs() < f32::EPSILON);
-        assert!((world_players[0].y - 34.0).abs() < f32::EPSILON);
-        let render_player = world_players[0].as_render_player();
-        assert_eq!(
-            render_player.player_id,
-            crate::multiplayer::PlayerId::new(1)
-        );
-        assert!(!render_player.local_to_view);
-        assert_eq!(render_player.cargo_used, 3);
-        assert_eq!(render_player.display_name.as_deref(), Some("Host"));
-        assert!(
-            game.online_last_sync_loop_status
-                .contains("snapshot applied")
-        );
-        assert!(game.online_last_sync_loop_status.contains("cargo=yes"));
-    }
-
-    #[test]
     fn local_snapshot_application_uses_joined_player_slot_not_first_host_player() {
         let mut game = GameState::new();
         game.online_player_slot = Some(2);
@@ -16289,7 +15930,7 @@ mod tests {
     }
 
     #[test]
-    fn local_snapshot_presentation_adapter_falls_back_to_host_player_only_when_online() {
+    fn local_snapshot_presentation_adapter_never_falls_back_to_host_player() {
         let mut game = GameState::new();
         game.online_session_state = OnlineSessionUxState::Connected;
         game.online_player_slot = Some(2);
@@ -16313,65 +15954,14 @@ mod tests {
             }],
         };
 
-        assert!(apply_network_snapshot_local_player_presentation_adapter(
+        assert!(!apply_network_snapshot_local_player_presentation_adapter(
             &mut game, &snapshot
         ));
 
-        assert!((game.player.x - 333.0).abs() < f32::EPSILON);
-        assert_eq!(game.player.credits, 77);
-    }
-
-    #[test]
-    fn player_delta_updates_visible_remote_presentation_from_authoritative_snapshot() {
-        let mut game = GameState::new();
-        game.online_player_slot = Some(2);
-        game.online_remote_player_snapshots
-            .push(OnlineRemotePlayerPresentation {
-                player_id: crate::multiplayer::PlayerId::new(1),
-                x: 10.0,
-                y: 20.0,
-                velocity_x: 2.0,
-                velocity_y: -1.0,
-                fuel: 50.0,
-                hull: 60.0,
-                credits: 70,
-                cargo_used: 0,
-                cargo: BTreeMap::new(),
-                artifacts: BTreeMap::new(),
-                materials: BTreeMap::new(),
-            });
-
-        let updated = apply_network_player_snapshots_to_remote_presentations_adapter(
-            &mut game,
-            &[crate::multiplayer::NetworkPlayerSnapshot {
-                player_id: crate::multiplayer::PlayerId::new(1),
-                x: 42.0,
-                y: 84.0,
-                velocity_x: 3.0,
-                velocity_y: -4.0,
-                fuel: 45.0,
-                hull: 55.0,
-                credits: 65,
-                cargo_used: 0,
-                cargo: BTreeMap::new(),
-                artifacts: BTreeMap::new(),
-                materials: BTreeMap::new(),
-                loadout: crate::multiplayer::NetworkPlayerLoadoutSnapshot::default(),
-                scanner_cooldown_seconds: 0.0,
-            }],
-        );
-
-        assert_eq!(updated, 1);
-        assert!((game.online_remote_player_snapshots[0].x - 42.0).abs() < f32::EPSILON);
-        assert!((game.online_remote_player_snapshots[0].y - 84.0).abs() < f32::EPSILON);
-        assert!(game.online_remote_player_connected);
-        assert!(
-            game.online_last_sync_loop_status
-                .contains("player delta applied")
-        );
-        assert!(
-            game.online_last_sync_loop_status
-                .contains("visible_remote_updates=1")
+        assert!((game.player.x - PLAYER_SPAWN_X).abs() < f32::EPSILON);
+        assert_eq!(
+            game.player.credits,
+            Player::new(PLAYER_SPAWN_X, PLAYER_SPAWN_Y).credits
         );
     }
 
@@ -16649,7 +16239,6 @@ mod tests {
         ));
         assert!(!game.online_remote_player_connected);
         assert!(!game.online_remote_player_ready);
-        assert!(game.online_remote_player_snapshots.is_empty());
         assert!(game.message.contains("Joined client left"));
         assert!(
             game.online_lobby_participant_lines()

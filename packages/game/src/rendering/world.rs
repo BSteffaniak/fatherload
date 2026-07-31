@@ -508,14 +508,6 @@ fn draw_remote_player_bar(
     clippy::too_many_lines,
     reason = "player rendering includes upgrade visual variants"
 )]
-pub(super) fn draw_player(draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>, game: &GameState) {
-    draw_player_at(draw, game, game.player.x, game.player.y);
-}
-
-#[allow(
-    clippy::too_many_lines,
-    reason = "player rendering includes upgrade visual variants"
-)]
 pub(super) fn draw_player_at(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
     game: &GameState,

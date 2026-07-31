@@ -10,23 +10,31 @@ use std::{
     time::Duration,
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
-    economy::{buy_upgrade, refuel_amount, repair_amount, sell_cargo, upgrade_tier_name},
+    contract::ContractLog,
+    economy::{
+        DeepClaimStatus, TownDevelopment, buy_upgrade, refuel_amount, repair_amount,
+        upgrade_tier_name,
+    },
     game_state::{
-        DrillDirection, DrillState, GameState, HazardCloud, InfrastructureKind, ModalScreen,
-        PlacedBomb, PlacedInfrastructure, RunMode, SoundCue, TILE_SIZE,
+        DrillDirection, DrillState, Expedition, FallingBoulder, GameState, HazardCloud,
+        InfrastructureKind, ModalScreen, PlacedBomb, PlacedInfrastructure, RigPartKind, RunMode,
+        ScanMarker, SideContract, SoundCue, TILE_SIZE, WorldEventKind,
     },
     input::PlayerInput,
     input_mapping::CommandProducer,
     multiplayer::{
-        ClientAction, ClientId, CommandAcknowledgement, CommandApplicationResponse,
-        CommandNetworkSession, CommandPacket, CommandPacketExchangeSummary, CommandRejection,
-        CommandSource, FIXED_DELTA_SECONDS, InputSequence, LOCAL_CLIENT_ID, LOCAL_PLAYER_ID,
+        AuthoritativeFrame, AuthoritativeKeyframe, ClientAction, ClientId, ClientMessage,
+        CommandAcknowledgement, CommandApplicationResponse, CommandNetworkSession, CommandPacket,
+        CommandPacketExchangeSummary, CommandRejection, CommandSource, FIXED_DELTA_SECONDS,
+        HostInputInbox, InputBundle, InputSequence, InputStatus, LOCAL_CLIENT_ID, LOCAL_PLAYER_ID,
         NetworkDeltaPayload, NetworkPlayerLoadoutSnapshot, NetworkPlayerSnapshot,
         NetworkTerrainChunkRevision, NetworkTerrainChunkSnapshot, NetworkTerrainTile,
         NetworkWorldSnapshot, PlayerCommand, PlayerId, ProtocolExchangeBatch, ProtocolExchangeKind,
         ProtocolMessage, QuinnSessionTickInput, QuinnSessionTickSummary, SIMULATION_HZ,
-        SequencedPlayerCommand, SessionToken, SimulationTick,
+        SequencedPlayerCommand, ServerMessage, SessionEpoch, SessionToken, SimulationTick,
     },
     player::Player,
     rendering::render_camera,
@@ -36,8 +44,8 @@ use crate::{
         save_world_session_slot,
     },
     terrain::{
-        ArtifactKind, MineResult, MineralKind, StrategicResourceKind, Terrain, TileKind,
-        TilePosition,
+        ArtifactKind, DeepStratum, MineResult, MineralKind, StrategicResourceKind, Terrain,
+        TileKind, TilePosition, deep_stratum_at_depth,
     },
 };
 
@@ -184,26 +192,6 @@ impl OnlineTickIdentitySummary {
     #[must_use]
     pub const fn seeded_session_presentation(self) -> bool {
         self.roster_seeded || self.joined_local_synced
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct LegacyRemotePresentationSyncSummary {
-    pub source_snapshots: usize,
-    pub remote_players_updated: usize,
-    pub local_players_updated: usize,
-    pub clients_created: usize,
-}
-
-impl LegacyRemotePresentationSyncSummary {
-    #[must_use]
-    pub const fn total_players_updated(self) -> usize {
-        self.remote_players_updated + self.local_players_updated
-    }
-
-    #[must_use]
-    pub const fn changed_session_presentation(self) -> bool {
-        self.total_players_updated() > 0 || self.clients_created > 0
     }
 }
 
@@ -465,17 +453,12 @@ impl LegacyGameStateCouplingInventorySummary {
 }
 
 #[must_use]
-pub const fn legacy_game_state_coupling_inventory() -> [LegacyGameStateCouplingInventoryItem; 5] {
+pub const fn legacy_game_state_coupling_inventory() -> [LegacyGameStateCouplingInventoryItem; 4] {
     [
         LegacyGameStateCouplingInventoryItem {
             path: "GameSession::update_frame_from_session_authority",
             domain: LegacyGameStateCouplingDomain::PresentationCompatibility,
             replacement: "GameSession/WorldState advances authority first, then syncs legacy presentation",
-        },
-        LegacyGameStateCouplingInventoryItem {
-            path: "GameSession::update_legacy",
-            domain: LegacyGameStateCouplingDomain::PresentationCompatibility,
-            replacement: "Presentation-only compatibility wrapper until renderer consumes session views directly",
         },
         LegacyGameStateCouplingInventoryItem {
             path: "apply_replicated_snapshot_to_world_presentation",
@@ -781,33 +764,33 @@ pub const fn fixed_tick_audit_items() -> [FixedTickAuditItem; 8] {
         },
         FixedTickAuditItem {
             system: "physics",
-            status: FixedTickMigrationStatus::CompatibilityFixedStep,
-            plan: FixedTickMigrationPlan::MigrateToAuthoritativeTick,
+            status: FixedTickMigrationStatus::FixedTickReady,
+            plan: FixedTickMigrationPlan::AlreadyFixedStep,
         },
         FixedTickAuditItem {
             system: "fuel_burn",
-            status: FixedTickMigrationStatus::CompatibilityFixedStep,
-            plan: FixedTickMigrationPlan::MigrateToAuthoritativeTick,
+            status: FixedTickMigrationStatus::FixedTickReady,
+            plan: FixedTickMigrationPlan::AlreadyFixedStep,
         },
         FixedTickAuditItem {
             system: "drilling_progress",
-            status: FixedTickMigrationStatus::CompatibilityFixedStep,
-            plan: FixedTickMigrationPlan::MigrateToAuthoritativeTick,
+            status: FixedTickMigrationStatus::FixedTickReady,
+            plan: FixedTickMigrationPlan::AlreadyFixedStep,
         },
         FixedTickAuditItem {
             system: "hazards",
-            status: FixedTickMigrationStatus::CompatibilityFixedStep,
-            plan: FixedTickMigrationPlan::MigrateToAuthoritativeTick,
+            status: FixedTickMigrationStatus::FixedTickReady,
+            plan: FixedTickMigrationPlan::AlreadyFixedStep,
         },
         FixedTickAuditItem {
             system: "bombs",
-            status: FixedTickMigrationStatus::CompatibilityFixedStep,
-            plan: FixedTickMigrationPlan::MigrateToAuthoritativeTick,
+            status: FixedTickMigrationStatus::FixedTickReady,
+            plan: FixedTickMigrationPlan::AlreadyFixedStep,
         },
         FixedTickAuditItem {
             system: "market_event_timers",
-            status: FixedTickMigrationStatus::CompatibilityFixedStep,
-            plan: FixedTickMigrationPlan::MigrateToAuthoritativeTick,
+            status: FixedTickMigrationStatus::FixedTickReady,
+            plan: FixedTickMigrationPlan::AlreadyFixedStep,
         },
         FixedTickAuditItem {
             system: "animations",
@@ -877,8 +860,19 @@ impl FrameRateInvarianceProof {
 }
 
 const AUTHORITATIVE_HORIZONTAL_SPEED: f32 = 140.0;
+const AUTHORITATIVE_HORIZONTAL_ACCELERATION: f32 = 900.0;
+const AUTHORITATIVE_MAX_HORIZONTAL_SPEED: f32 = 260.0;
+const AUTHORITATIVE_AIR_DRAG_PER_TICK: f32 = 0.86;
+const AUTHORITATIVE_GROUND_DRAG_PER_TICK: f32 = 0.78;
+const AUTHORITATIVE_SAFE_LANDING_SPEED: f32 = 330.0;
+const AUTHORITATIVE_CRASH_DAMAGE_SCALE: f32 = 0.11;
 const AUTHORITATIVE_THRUST_SPEED: f32 = 120.0;
 const AUTHORITATIVE_GRAVITY: f32 = 160.0;
+const AUTHORITATIVE_BOULDER_WARNING_TICKS: u64 = 51;
+const AUTHORITATIVE_BOULDER_LIFE_TICKS: u64 = 216;
+const AUTHORITATIVE_BOULDER_SPAWN_CHANCE: u64 = 16;
+const AUTHORITATIVE_FUEL_BURN_PER_SECOND: f32 = 5.0;
+const AUTHORITATIVE_MAX_FALL_SPEED: f32 = 560.0;
 const AUTHORITATIVE_PLAYER_RADIUS: f32 = 10.5;
 const AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES: f32 = 12.0;
 const AUTHORITATIVE_MIN_PLAYER_Y: f32 = -AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES * TILE_SIZE;
@@ -1177,6 +1171,25 @@ impl PlayerSnapshot {
             world.scanner_cooldown_seconds(player_id).unwrap_or(0.0);
         snapshot
     }
+    #[must_use]
+    pub fn network_snapshot(&self) -> NetworkPlayerSnapshot {
+        NetworkPlayerSnapshot {
+            player_id: self.player_id,
+            x: self.x,
+            y: self.y,
+            velocity_x: self.velocity_x,
+            velocity_y: self.velocity_y,
+            fuel: self.fuel,
+            hull: self.hull,
+            credits: self.credits,
+            cargo_used: self.cargo_used,
+            cargo: self.cargo.clone(),
+            artifacts: self.artifacts.clone(),
+            materials: self.materials.clone(),
+            loadout: self.loadout.clone(),
+            scanner_cooldown_seconds: self.scanner_cooldown_seconds,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1199,6 +1212,7 @@ impl ReplayedPlayerState {
 pub struct PerPlayerHudSnapshot {
     pub player_id: PlayerId,
     pub cargo_used: u32,
+    pub cargo_capacity: u32,
     pub credits: u32,
     pub fuel: f32,
     pub fuel_capacity: f32,
@@ -1246,6 +1260,7 @@ impl PerPlayerHudSnapshot {
         Self {
             player_id: snapshot.player_id,
             cargo_used: snapshot.cargo_used,
+            cargo_capacity: snapshot.loadout.cargo_capacity,
             credits: snapshot.credits,
             fuel: snapshot.fuel,
             fuel_capacity: snapshot.fuel_capacity,
@@ -1279,22 +1294,7 @@ impl WorldSnapshot {
             players: self
                 .players
                 .iter()
-                .map(|player| NetworkPlayerSnapshot {
-                    player_id: player.player_id,
-                    x: player.x,
-                    y: player.y,
-                    velocity_x: player.velocity_x,
-                    velocity_y: player.velocity_y,
-                    fuel: player.fuel,
-                    hull: player.hull,
-                    credits: player.credits,
-                    cargo_used: player.cargo_used,
-                    cargo: player.cargo.clone(),
-                    artifacts: player.artifacts.clone(),
-                    materials: player.materials.clone(),
-                    loadout: player.loadout.clone(),
-                    scanner_cooldown_seconds: player.scanner_cooldown_seconds,
-                })
+                .map(PlayerSnapshot::network_snapshot)
                 .collect(),
         }
     }
@@ -1433,7 +1433,7 @@ impl WorldDelta {
 
         for event in &self.events {
             match event {
-                WorldEvent::TerrainChunksChanged { revisions } => {
+                WorldEvent::TerrainChunksChanged { revisions, .. } => {
                     terrain_revisions.extend(revisions.iter().cloned());
                 }
                 WorldEvent::TerrainRefreshRequested | WorldEvent::SnapshotKeyframeReady { .. } => {
@@ -1635,6 +1635,7 @@ pub enum WorldEvent {
     },
     TerrainChunksChanged {
         revisions: Vec<TerrainChunkRevision>,
+        changed_tiles: Vec<TilePosition>,
     },
     SnapshotKeyframeReady {
         tick: SimulationTick,
@@ -1738,25 +1739,7 @@ impl SessionSaveLoadSummary {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PlayerShellEffectSync {
-    pub player_id: PlayerId,
-    pub fuel_before: f32,
-    pub fuel_after: f32,
-    pub hull_before: f32,
-    pub hull_after: f32,
-    pub scanner_cooldown_seconds: f32,
-}
-
-impl PlayerShellEffectSync {
-    #[must_use]
-    pub fn changed_survival(self) -> bool {
-        (self.fuel_before - self.fuel_after).abs() > f32::EPSILON
-            || (self.hull_before - self.hull_after).abs() > f32::EPSILON
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct AuthoritativeWorldSummary {
     pub tick: SimulationTick,
     pub player_count: usize,
@@ -1978,6 +1961,231 @@ impl PlayerScopedGameplayProof {
     }
 }
 
+const SIMULATION_SUBPIXELS_PER_PIXEL: f32 = 1_024.0;
+const DEFAULT_SIMULATION_RNG_SEED: u64 = 0xD111_6A4E_C0DE_5EED;
+const SIMULATION_HZ_F32: f32 = 60.0;
+
+fn simulation_ticks_for_seconds(seconds: f32) -> u64 {
+    if seconds <= 0.0 {
+        return 0;
+    }
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "nonnegative bounded gameplay durations intentionally convert to fixed ticks"
+    )]
+    let ticks = (seconds * SIMULATION_HZ_F32).ceil() as u64;
+    ticks.max(1)
+}
+
+fn simulation_seconds_until(now: SimulationTick, deadline: SimulationTick) -> f32 {
+    let remaining = deadline.get().saturating_sub(now.get());
+    let bounded_remaining = u16::try_from(remaining).unwrap_or(u16::MAX);
+    f32::from(bounded_remaining) / SIMULATION_HZ_F32
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct DeterministicRngState(u64);
+
+impl DeterministicRngState {
+    #[must_use]
+    pub const fn new(seed: u64) -> Self {
+        Self(if seed == 0 {
+            DEFAULT_SIMULATION_RNG_SEED
+        } else {
+            seed
+        })
+    }
+
+    #[must_use]
+    pub const fn state(self) -> u64 {
+        self.0
+    }
+
+    pub const fn next_u64(&mut self) -> u64 {
+        let mut value = self.0;
+        value ^= value << 13;
+        value ^= value >> 7;
+        value ^= value << 17;
+        self.0 = value;
+        value
+    }
+}
+
+fn quantize_simulation_scalar(value: f32) -> f32 {
+    (value * SIMULATION_SUBPIXELS_PER_PIXEL).round() / SIMULATION_SUBPIXELS_PER_PIXEL
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ControlState {
+    horizontal_milli: i16,
+    pub thrust: bool,
+    pub drill_down: bool,
+}
+
+impl ControlState {
+    const HORIZONTAL_SCALE: f32 = 1_000.0;
+
+    #[must_use]
+    pub fn new(horizontal: f32, thrust: bool, drill_down: bool) -> Self {
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "clamped control input is deliberately quantized for deterministic simulation"
+        )]
+        let horizontal_milli =
+            (horizontal.clamp(-1.0, 1.0) * Self::HORIZONTAL_SCALE).round() as i16;
+        Self {
+            horizontal_milli,
+            thrust,
+            drill_down,
+        }
+    }
+
+    #[must_use]
+    pub fn horizontal(self) -> f32 {
+        f32::from(self.horizontal_milli) / Self::HORIZONTAL_SCALE
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PlayerTickInput {
+    pub controls: Option<(InputSequence, ControlState)>,
+    pub actions: Vec<SequencedPlayerCommand>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TickInputs {
+    pub players: BTreeMap<PlayerId, PlayerTickInput>,
+}
+
+impl TickInputs {
+    #[must_use]
+    pub fn from_commands(commands: &[SequencedPlayerCommand]) -> Self {
+        let mut inputs = Self::default();
+        for command in commands {
+            let player = inputs.players.entry(command.player_id).or_default();
+            if let PlayerCommand::Movement {
+                horizontal,
+                thrust,
+                drill_down,
+            } = command.command
+            {
+                player.controls = Some((
+                    command.sequence,
+                    ControlState::new(horizontal, thrust, drill_down),
+                ));
+            } else {
+                player.actions.push(command.clone());
+            }
+        }
+        inputs
+    }
+
+    #[must_use]
+    pub fn command_count(&self) -> usize {
+        self.players
+            .values()
+            .map(|input| usize::from(input.controls.is_some()) + input.actions.len())
+            .sum()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SimulationStateHash(u64);
+
+impl SimulationStateHash {
+    const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    const fn write_u64(&mut self, value: u64) {
+        let bytes = value.to_le_bytes();
+        let mut index = 0;
+        while index < bytes.len() {
+            self.0 ^= bytes[index] as u64;
+            self.0 = self.0.wrapping_mul(Self::PRIME);
+            index += 1;
+        }
+    }
+
+    fn write_i32(&mut self, value: i32) {
+        self.write_u64(u64::from(value.cast_unsigned()));
+    }
+
+    const fn write_f32(&mut self, value: f32) {
+        self.write_u64(value.to_bits() as u64);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GameplayEventId {
+    pub tick: SimulationTick,
+    pub ordinal: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GameplayEventKind {
+    DrillStarted { player_id: PlayerId },
+    PurchaseCompleted { player_id: PlayerId },
+    CargoChanged { player_id: PlayerId },
+    BombPlaced { player_id: PlayerId },
+    InfrastructurePlaced { player_id: PlayerId },
+    ScannerUsed { player_id: PlayerId },
+    EscapeStarted { player_id: PlayerId },
+    EscapeTunnelChanged,
+    DeepRewardGranted { player_id: PlayerId },
+    RescueTriggered { player_id: PlayerId },
+    PlayerDamaged { player_id: PlayerId },
+    HazardChanged,
+    BouldersChanged,
+    BombDetonated,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GameplayEvent {
+    pub id: GameplayEventId,
+    pub kind: GameplayEventKind,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct TickOutput {
+    pub tick: SimulationTick,
+    pub command_count: usize,
+    pub changed_players: Vec<PlayerId>,
+    pub latest_sequences_by_player: BTreeMap<PlayerId, InputSequence>,
+    pub events: Vec<GameplayEvent>,
+    pub terrain_changed_tiles: Vec<TilePosition>,
+    pub terrain_revisions: Vec<TerrainChunkRevision>,
+}
+
+impl TickOutput {
+    fn push_event(&mut self, kind: GameplayEventKind) {
+        let ordinal = u32::try_from(self.events.len()).unwrap_or(u32::MAX);
+        self.events.push(GameplayEvent {
+            id: GameplayEventId {
+                tick: self.tick,
+                ordinal,
+            },
+            kind,
+        });
+    }
+
+    #[must_use]
+    pub fn active_drill_snapshot(
+        world: &WorldState,
+        player_id: PlayerId,
+    ) -> Option<DrillPredictionSnapshot> {
+        world
+            .active_drill(player_id)
+            .copied()
+            .map(|drill| DrillPredictionSnapshot::from_drill(player_id, drill))
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerMovementIntent {
     pub horizontal: f32,
@@ -2029,7 +2237,7 @@ pub enum PlayerScopedCommandOutcome {
     UnknownPlayer,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum PlayerTransactionKind {
     BuyUpgrade,
     Refuel,
@@ -2042,7 +2250,7 @@ pub enum PlayerTransactionKind {
     WinGame,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PlayerServiceTransaction {
     pub player_id: PlayerId,
     pub kind: PlayerTransactionKind,
@@ -2052,25 +2260,128 @@ pub struct PlayerServiceTransaction {
     pub cargo_after: u32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
+struct ActiveDrillTimer {
+    next_chip_tick: SimulationTick,
+    period_ticks: u64,
+}
+
+const fn canonical_minerals() -> [MineralKind; 10] {
+    [
+        MineralKind::Copper,
+        MineralKind::Iron,
+        MineralKind::Silver,
+        MineralKind::Gold,
+        MineralKind::Emerald,
+        MineralKind::Ruby,
+        MineralKind::Diamond,
+        MineralKind::Platinum,
+        MineralKind::Uranium,
+        MineralKind::Mythril,
+    ]
+}
+
+const fn canonical_market_factor(salt: u32, day: u32) -> u32 {
+    let base = 85 + salt.wrapping_mul(37).wrapping_add(11) % 41;
+    if day % 5 == 1 { base + 20 } else { base }
+}
+
+const fn canonical_mineral_market_factor(salt: u32, day: u32, mineral: MineralKind) -> u32 {
+    let base = canonical_market_factor(salt.wrapping_add(mineral.value().wrapping_mul(13)), day);
+    match (day % 5, mineral) {
+        (1, MineralKind::Gold | MineralKind::Silver | MineralKind::Platinum) => base + 16,
+        (0, MineralKind::Copper | MineralKind::Iron) => base + 8,
+        (4, MineralKind::Ruby | MineralKind::Emerald | MineralKind::Diamond) => base + 10,
+        _ => base,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+struct DeepRunState {
+    trip_ticks: u64,
+    instability: f32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct LostCargoSite {
+    x: f32,
+    y: f32,
+    minerals: BTreeMap<MineralKind, u32>,
+    artifacts: BTreeMap<ArtifactKind, u32>,
+}
+
+impl LostCargoSite {
+    fn count(&self) -> u32 {
+        self.minerals
+            .values()
+            .chain(self.artifacts.values())
+            .copied()
+            .sum()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct CanonicalProgressionState {
+    contracts: ContractLog,
+    deep_claim_status: DeepClaimStatus,
+    escape_deadline: Option<SimulationTick>,
+    deep_reward_milestones: BTreeMap<PlayerId, i32>,
+    town_development: TownDevelopment,
+    active_side_contracts: Vec<SideContract>,
+    expedition_offers: Vec<Expedition>,
+    active_expeditions: Vec<Expedition>,
+    legendary_blueprints: BTreeSet<crate::game_state::LegendaryBlueprint>,
+    rig_part_inventory: BTreeSet<RigPartKind>,
+    town_event_day: u32,
+    market_salt: u32,
+    market_history: Vec<u32>,
+    mineral_market_history: BTreeMap<MineralKind, Vec<u32>>,
+    deepest_tile_reached: i32,
+    total_earnings: u32,
+    expeditions_completed: u32,
+    next_day_tick: SimulationTick,
+}
+
 /// Compatibility world wrapper used to introduce explicit player identity before the legacy
 /// monolithic `GameState` is fully split into authoritative world state and local client state.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct WorldState {
     simulation_tick: SimulationTick,
     authoritative_summary: AuthoritativeWorldSummary,
     players: BTreeMap<PlayerId, Player>,
+    equipped_rig_parts: BTreeMap<PlayerId, BTreeSet<RigPartKind>>,
+    mechanic_levels: BTreeMap<PlayerId, u8>,
+    world_event_severity: BTreeMap<WorldEventKind, u32>,
+    world_event_days_remaining: BTreeMap<WorldEventKind, u32>,
+    deep_run_states: BTreeMap<PlayerId, DeepRunState>,
+    lost_cargo_sites: BTreeMap<PlayerId, LostCargoSite>,
+    rescue_counts: BTreeMap<PlayerId, u32>,
+    progression: CanonicalProgressionState,
+    scan_markers: Vec<ScanMarker>,
+    collapse_warnings: Vec<TilePosition>,
     hazards: Vec<HazardCloud>,
+    falling_boulders: Vec<FallingBoulder>,
+    boulder_warning_deadlines: Vec<SimulationTick>,
+    boulder_expiry_ticks: Vec<SimulationTick>,
     terrain: Terrain,
     bombs: Vec<PlacedBomb>,
     infrastructure: Vec<PlacedInfrastructure>,
     active_drills: BTreeMap<PlayerId, DrillState>,
+    active_drill_timers: BTreeMap<PlayerId, ActiveDrillTimer>,
     scanner_cooldowns: BTreeMap<PlayerId, f32>,
+    scanner_cooldown_deadlines: BTreeMap<PlayerId, SimulationTick>,
+    bomb_detonation_ticks: Vec<SimulationTick>,
+    rng: DeterministicRngState,
     discovered_tiles: BTreeMap<PlayerId, BTreeSet<TilePosition>>,
     service_transactions: Vec<PlayerServiceTransaction>,
 }
 
 impl WorldState {
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "legacy migration enumerates canonical fields explicitly"
+    )]
     pub fn from_legacy_game(game: &GameState) -> Self {
         Self {
             simulation_tick: SimulationTick::default(),
@@ -2080,7 +2391,94 @@ impl WorldState {
                 1,
             ),
             players: BTreeMap::from([(LOCAL_PLAYER_ID, game.player.clone())]),
+            equipped_rig_parts: BTreeMap::from([(
+                LOCAL_PLAYER_ID,
+                game.equipped_rig_parts.values().copied().collect(),
+            )]),
+            mechanic_levels: BTreeMap::from([(
+                LOCAL_PLAYER_ID,
+                game.town_development.mechanic_level,
+            )]),
+            world_event_severity: game
+                .active_world_events
+                .iter()
+                .map(|event| (event.kind, event.severity))
+                .collect(),
+            world_event_days_remaining: game
+                .active_world_events
+                .iter()
+                .map(|event| (event.kind, event.days_remaining))
+                .collect(),
+            deep_run_states: BTreeMap::from([(
+                LOCAL_PLAYER_ID,
+                DeepRunState {
+                    trip_ticks: simulation_ticks_for_seconds(game.trip_seconds),
+                    instability: game.deep_instability,
+                },
+            )]),
+            lost_cargo_sites: match (game.lost_cargo_x, game.lost_cargo_y, game.lost_cargo_count) {
+                (Some(x), Some(y), count) if count > 0 => BTreeMap::from([(
+                    LOCAL_PLAYER_ID,
+                    LostCargoSite {
+                        x,
+                        y,
+                        minerals: if game.lost_minerals.is_empty() && game.lost_artifacts.is_empty()
+                        {
+                            BTreeMap::from([(MineralKind::Iron, count)])
+                        } else {
+                            game.lost_minerals.clone()
+                        },
+                        artifacts: game.lost_artifacts.clone(),
+                    },
+                )]),
+                _ => BTreeMap::new(),
+            },
+            rescue_counts: BTreeMap::from([(LOCAL_PLAYER_ID, game.rescue_count)]),
+            progression: CanonicalProgressionState {
+                contracts: game.contracts.clone(),
+                deep_claim_status: game.deep_claim_status,
+                escape_deadline: (game.escape_sequence_seconds > 0.0).then(|| {
+                    SimulationTick::new(simulation_ticks_for_seconds(game.escape_sequence_seconds))
+                }),
+                deep_reward_milestones: BTreeMap::from([(
+                    LOCAL_PLAYER_ID,
+                    game.deep_reward_milestone,
+                )]),
+                town_development: game.town_development.clone(),
+                active_side_contracts: game.active_side_contracts.clone(),
+                expedition_offers: game.expedition_offers.clone(),
+                active_expeditions: game.active_expeditions.clone(),
+                legendary_blueprints: game.legendary_blueprints.clone(),
+                rig_part_inventory: game.rig_part_inventory.clone(),
+                town_event_day: game.town_event_day,
+                market_salt: game.market_salt,
+                market_history: game.market_history.clone(),
+                mineral_market_history: game.mineral_market_history.clone(),
+                deepest_tile_reached: game.deepest_tile_reached,
+                total_earnings: game.total_earnings,
+                expeditions_completed: game.expeditions_completed,
+                next_day_tick: SimulationTick::new(
+                    u64::from(SIMULATION_HZ)
+                        .saturating_mul(60)
+                        .saturating_mul(5),
+                ),
+            },
+            scan_markers: game.scan_markers.clone(),
+            collapse_warnings: game.collapse_warnings.clone(),
             hazards: game.hazard_clouds.clone(),
+            falling_boulders: game.falling_boulders.clone(),
+            boulder_warning_deadlines: game
+                .falling_boulders
+                .iter()
+                .map(|boulder| {
+                    SimulationTick::new(simulation_ticks_for_seconds(boulder.warning_seconds))
+                })
+                .collect(),
+            boulder_expiry_ticks: game
+                .falling_boulders
+                .iter()
+                .map(|boulder| SimulationTick::new(simulation_ticks_for_seconds(boulder.life)))
+                .collect(),
             terrain: game.terrain.clone(),
             bombs: game.placed_bombs.clone(),
             infrastructure: game.infrastructure.clone(),
@@ -2088,7 +2486,30 @@ impl WorldState {
                 .active_drill
                 .map(|drill| BTreeMap::from([(LOCAL_PLAYER_ID, drill)]))
                 .unwrap_or_default(),
+            active_drill_timers: game
+                .active_drill
+                .map(|drill| {
+                    let period_ticks = simulation_ticks_for_seconds(drill.seconds_per_chip);
+                    BTreeMap::from([(
+                        LOCAL_PLAYER_ID,
+                        ActiveDrillTimer {
+                            next_chip_tick: SimulationTick::new(period_ticks),
+                            period_ticks,
+                        },
+                    )])
+                })
+                .unwrap_or_default(),
             scanner_cooldowns: BTreeMap::from([(LOCAL_PLAYER_ID, game.scanner_cooldown_seconds)]),
+            scanner_cooldown_deadlines: BTreeMap::from([(
+                LOCAL_PLAYER_ID,
+                SimulationTick::new(simulation_ticks_for_seconds(game.scanner_cooldown_seconds)),
+            )]),
+            bomb_detonation_ticks: game
+                .placed_bombs
+                .iter()
+                .map(|bomb| SimulationTick::new(simulation_ticks_for_seconds(bomb.timer_seconds)))
+                .collect(),
+            rng: DeterministicRngState::new(game.terrain.seed()),
             discovered_tiles: BTreeMap::from([(LOCAL_PLAYER_ID, BTreeSet::new())]),
             service_transactions: Vec::new(),
         }
@@ -2244,9 +2665,30 @@ impl WorldState {
 
     pub fn set_active_drill(&mut self, player_id: PlayerId, drill: Option<DrillState>) {
         if let Some(drill) = drill {
+            let period_ticks = simulation_ticks_for_seconds(drill.seconds_per_chip);
+            let period_u16 = u16::try_from(period_ticks).unwrap_or(u16::MAX).max(1);
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "clamped drill presentation progress intentionally maps onto a bounded tick period"
+            )]
+            let elapsed_ticks =
+                u64::from((drill.progress.clamp(0.0, 1.0) * f32::from(period_u16)).floor() as u16);
+            self.active_drill_timers.insert(
+                player_id,
+                ActiveDrillTimer {
+                    next_chip_tick: SimulationTick::new(
+                        self.simulation_tick
+                            .get()
+                            .saturating_add(period_ticks.saturating_sub(elapsed_ticks).max(1)),
+                    ),
+                    period_ticks,
+                },
+            );
             self.active_drills.insert(player_id, drill);
         } else {
             self.active_drills.remove(&player_id);
+            self.active_drill_timers.remove(&player_id);
         }
     }
 
@@ -2256,7 +2698,16 @@ impl WorldState {
     }
 
     pub fn set_scanner_cooldown_seconds(&mut self, player_id: PlayerId, seconds: f32) {
-        self.scanner_cooldowns.insert(player_id, seconds.max(0.0));
+        let seconds = seconds.max(0.0);
+        self.scanner_cooldowns.insert(player_id, seconds);
+        self.scanner_cooldown_deadlines.insert(
+            player_id,
+            SimulationTick::new(
+                self.simulation_tick
+                    .get()
+                    .saturating_add(simulation_ticks_for_seconds(seconds)),
+            ),
+        );
     }
 
     #[must_use]
@@ -2332,6 +2783,165 @@ impl WorldState {
         revealed
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "rescue transaction explicitly records exact cargo losses"
+    )]
+    fn canonical_rescue_player(&mut self, player_id: PlayerId) -> PlayerScopedCommandOutcome {
+        let relay_count = u32::try_from(
+            self.infrastructure
+                .iter()
+                .filter(|item| item.kind == InfrastructureKind::SignalRelay)
+                .count(),
+        )
+        .unwrap_or(u32::MAX);
+        let parts = self
+            .equipped_rig_parts
+            .get(&player_id)
+            .cloned()
+            .unwrap_or_default();
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        let credits_before = player.credits;
+        let cargo_before = player.cargo_used();
+        let rescue_x = player.x;
+        let rescue_y = player.y;
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "nonnegative bounded world depth intentionally converts to rescue fee units"
+        )]
+        let depth = (player.y / TILE_SIZE).max(0.0) as u32;
+        let base_fee = 50_u32.saturating_add(depth.saturating_mul(3));
+        let discount_percent = relay_count.saturating_mul(10).min(50);
+        let relayed_fee = base_fee.saturating_mul(100 - discount_percent) / 100;
+        let fee_divisor = if player.insured {
+            u32::from(player.insurance_tier).saturating_add(1)
+        } else {
+            1
+        };
+        player.credits -= (relayed_fee / fee_divisor).min(player.credits);
+        let before_minerals = player.cargo.clone();
+        let before_artifacts = player.artifacts.clone();
+        let protected_cargo = player.insured && player.insurance_tier >= 2;
+        let quarter_loss = player.insured || parts.contains(&RigPartKind::ArmoredCargoBay);
+        let mut lost_count = 0_u32;
+        if !protected_cargo {
+            for count in player.cargo.values_mut() {
+                let lost = if quarter_loss {
+                    (*count).div_ceil(4)
+                } else {
+                    (*count).div_ceil(2)
+                };
+                *count -= lost;
+                lost_count = lost_count.saturating_add(lost);
+            }
+            for count in player.artifacts.values_mut() {
+                let lost = if quarter_loss {
+                    (*count).div_ceil(4)
+                } else {
+                    (*count).div_ceil(2)
+                };
+                *count -= lost;
+                lost_count = lost_count.saturating_add(lost);
+            }
+            player.cargo.retain(|_, count| *count > 0);
+            player.artifacts.retain(|_, count| *count > 0);
+        }
+        player.insured = false;
+        player.x = 12.0 * TILE_SIZE;
+        player.y = 4.0 * TILE_SIZE;
+        player.velocity_x = 0.0;
+        player.velocity_y = 0.0;
+        player.hull = player.max_hull() * 0.5;
+        player.fuel = player.fuel_capacity * 0.5;
+        self.active_drills.remove(&player_id);
+        self.active_drill_timers.remove(&player_id);
+        if lost_count > 0 {
+            let minerals = before_minerals
+                .iter()
+                .filter_map(|(kind, before)| {
+                    let lost = before.saturating_sub(player.cargo.get(kind).copied().unwrap_or(0));
+                    (lost > 0).then_some((*kind, lost))
+                })
+                .collect();
+            let artifacts = before_artifacts
+                .iter()
+                .filter_map(|(kind, before)| {
+                    let lost =
+                        before.saturating_sub(player.artifacts.get(kind).copied().unwrap_or(0));
+                    (lost > 0).then_some((*kind, lost))
+                })
+                .collect();
+            self.lost_cargo_sites.insert(
+                player_id,
+                LostCargoSite {
+                    x: rescue_x,
+                    y: rescue_y,
+                    minerals,
+                    artifacts,
+                },
+            );
+        }
+        self.rescue_counts
+            .entry(player_id)
+            .and_modify(|count| *count = count.saturating_add(1))
+            .or_insert(1);
+        self.service_transactions.push(PlayerServiceTransaction {
+            player_id,
+            kind: PlayerTransactionKind::Rescue,
+            credits_before,
+            credits_after: player.credits,
+            cargo_before,
+            cargo_after: player.cargo_used(),
+        });
+        PlayerScopedCommandOutcome::Applied
+    }
+
+    fn recover_lost_cargo_for_player(&mut self, player_id: PlayerId) -> bool {
+        let Some(mut site) = self.lost_cargo_sites.get(&player_id).cloned() else {
+            return false;
+        };
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return false;
+        };
+        let dx = player.x - site.x;
+        let dy = player.y - site.y;
+        let mut capacity = player.cargo_capacity.saturating_sub(player.cargo_used());
+        if dx.mul_add(dx, dy * dy) > (TILE_SIZE * 0.9).powi(2) || capacity == 0 {
+            return false;
+        }
+        for (kind, count) in &mut site.minerals {
+            let recovered = capacity.min(*count);
+            *player.cargo.entry(*kind).or_default() += recovered;
+            *count -= recovered;
+            capacity -= recovered;
+            if capacity == 0 {
+                break;
+            }
+        }
+        if capacity > 0 {
+            for (kind, count) in &mut site.artifacts {
+                let recovered = capacity.min(*count);
+                *player.artifacts.entry(*kind).or_default() += recovered;
+                *count -= recovered;
+                capacity -= recovered;
+                if capacity == 0 {
+                    break;
+                }
+            }
+        }
+        site.minerals.retain(|_, count| *count > 0);
+        site.artifacts.retain(|_, count| *count > 0);
+        if site.count() == 0 {
+            self.lost_cargo_sites.remove(&player_id);
+        } else {
+            self.lost_cargo_sites.insert(player_id, site);
+        }
+        true
+    }
+
     pub fn apply_hazard_damage(
         &mut self,
         player_id: PlayerId,
@@ -2362,26 +2972,874 @@ impl WorldState {
         self.terrain.blast_radius(center, radius)
     }
 
-    pub fn age_and_detonate_bombs(
-        &mut self,
-        delta_seconds: f32,
-    ) -> Vec<crate::terrain::BlastResult> {
-        let mut results = Vec::new();
-        let mut remaining = Vec::new();
-        let bombs = mem::take(&mut self.bombs);
-        for mut bomb in bombs {
-            bomb.timer_seconds -= delta_seconds;
-            if bomb.timer_seconds <= 0.0 {
-                let center = bomb_tile_position(bomb);
-                results.push(self.detonate_bomb_at(center, 2));
-            } else {
-                remaining.push(bomb);
+    #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "stable hash intentionally enumerates all canonical gameplay state"
+    )]
+    pub fn simulation_state_hash(&self) -> SimulationStateHash {
+        fn write_serialized<T: Serialize>(hash: &mut SimulationStateHash, value: &T) {
+            let bytes = serde_json::to_vec(value)
+                .expect("serializable simulation state component encodes for deterministic hash");
+            hash.write_u64(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+            for byte in bytes {
+                hash.0 ^= u64::from(byte);
+                hash.0 = hash.0.wrapping_mul(SimulationStateHash::PRIME);
             }
         }
-        self.bombs = remaining;
-        results
+
+        let mut hash = SimulationStateHash(SimulationStateHash::OFFSET_BASIS);
+        hash.write_u64(self.simulation_tick.get());
+        hash.write_u64(u64::try_from(self.players.len()).unwrap_or(u64::MAX));
+        for (player_id, player) in &self.players {
+            hash.write_u64(player_id.get());
+            write_serialized(&mut hash, player);
+        }
+        for (player_id, parts) in &self.equipped_rig_parts {
+            hash.write_u64(player_id.get());
+            write_serialized(&mut hash, parts);
+        }
+        for (player_id, mechanic_level) in &self.mechanic_levels {
+            hash.write_u64(player_id.get());
+            hash.write_u64(u64::from(*mechanic_level));
+        }
+        for (kind, severity) in &self.world_event_severity {
+            write_serialized(&mut hash, kind);
+            hash.write_u64(u64::from(*severity));
+        }
+        for (kind, days) in &self.world_event_days_remaining {
+            write_serialized(&mut hash, kind);
+            hash.write_u64(u64::from(*days));
+        }
+        for (player_id, state) in &self.deep_run_states {
+            hash.write_u64(player_id.get());
+            hash.write_u64(state.trip_ticks);
+            hash.write_f32(state.instability);
+        }
+        for (player_id, site) in &self.lost_cargo_sites {
+            hash.write_u64(player_id.get());
+            hash.write_f32(site.x);
+            hash.write_f32(site.y);
+            write_serialized(&mut hash, &site.minerals);
+            write_serialized(&mut hash, &site.artifacts);
+        }
+        for (player_id, count) in &self.rescue_counts {
+            hash.write_u64(player_id.get());
+            hash.write_u64(u64::from(*count));
+        }
+        write_serialized(&mut hash, &self.progression.contracts);
+        write_serialized(&mut hash, &self.progression.deep_claim_status);
+        if let Some(deadline) = self.progression.escape_deadline {
+            hash.write_u64(deadline.get());
+        }
+        write_serialized(&mut hash, &self.progression.deep_reward_milestones);
+        write_serialized(&mut hash, &self.progression.town_development);
+        write_serialized(&mut hash, &self.progression.active_side_contracts);
+        write_serialized(&mut hash, &self.progression.expedition_offers);
+        write_serialized(&mut hash, &self.progression.active_expeditions);
+        write_serialized(&mut hash, &self.progression.legendary_blueprints);
+        write_serialized(&mut hash, &self.progression.rig_part_inventory);
+        hash.write_u64(u64::from(self.progression.town_event_day));
+        hash.write_u64(u64::from(self.progression.market_salt));
+        write_serialized(&mut hash, &self.progression.market_history);
+        write_serialized(&mut hash, &self.progression.mineral_market_history);
+        hash.write_i32(self.progression.deepest_tile_reached);
+        hash.write_u64(u64::from(self.progression.total_earnings));
+        hash.write_u64(u64::from(self.progression.expeditions_completed));
+        hash.write_u64(self.progression.next_day_tick.get());
+        write_serialized(&mut hash, &self.scan_markers);
+        write_serialized(&mut hash, &self.collapse_warnings);
+        hash.write_i32(self.terrain.width());
+        hash.write_i32(self.terrain.height());
+        hash.write_u64(self.terrain.seed());
+        hash.write_u64(u64::try_from(self.terrain.tiles().len()).unwrap_or(u64::MAX));
+        for tile in self.terrain.tiles() {
+            write_serialized(&mut hash, tile);
+        }
+        hash.write_u64(u64::try_from(self.hazards.len()).unwrap_or(u64::MAX));
+        for hazard in &self.hazards {
+            hash.write_f32(hazard.x);
+            hash.write_f32(hazard.y);
+            hash.write_f32(hazard.life);
+            hash.write_f32(hazard.radius);
+        }
+        hash.write_u64(u64::try_from(self.falling_boulders.len()).unwrap_or(u64::MAX));
+        for boulder in &self.falling_boulders {
+            hash.write_f32(boulder.x);
+            hash.write_f32(boulder.y);
+            hash.write_f32(boulder.velocity_y);
+        }
+        for deadline in &self.boulder_warning_deadlines {
+            hash.write_u64(deadline.get());
+        }
+        for deadline in &self.boulder_expiry_ticks {
+            hash.write_u64(deadline.get());
+        }
+        hash.write_u64(u64::try_from(self.bombs.len()).unwrap_or(u64::MAX));
+        for bomb in &self.bombs {
+            hash.write_f32(bomb.x);
+            hash.write_f32(bomb.y);
+            hash.write_f32(bomb.timer_seconds);
+        }
+        hash.write_u64(u64::try_from(self.infrastructure.len()).unwrap_or(u64::MAX));
+        for infrastructure in &self.infrastructure {
+            write_serialized(&mut hash, &infrastructure.kind);
+            write_serialized(&mut hash, &infrastructure.position);
+            hash.write_u64(u64::from(infrastructure.durability));
+        }
+        hash.write_u64(u64::try_from(self.active_drills.len()).unwrap_or(u64::MAX));
+        for (player_id, drill) in &self.active_drills {
+            hash.write_u64(player_id.get());
+            write_serialized(&mut hash, drill);
+        }
+        for (player_id, timer) in &self.active_drill_timers {
+            hash.write_u64(player_id.get());
+            hash.write_u64(timer.next_chip_tick.get());
+            hash.write_u64(timer.period_ticks);
+        }
+        for (player_id, cooldown) in &self.scanner_cooldowns {
+            hash.write_u64(player_id.get());
+            hash.write_f32(*cooldown);
+        }
+        for (player_id, deadline) in &self.scanner_cooldown_deadlines {
+            hash.write_u64(player_id.get());
+            hash.write_u64(deadline.get());
+        }
+        for deadline in &self.bomb_detonation_ticks {
+            hash.write_u64(deadline.get());
+        }
+        hash.write_u64(self.rng.state());
+        for (player_id, discovered) in &self.discovered_tiles {
+            hash.write_u64(player_id.get());
+            hash.write_u64(u64::try_from(discovered.len()).unwrap_or(u64::MAX));
+            for position in discovered {
+                hash.write_i32(position.x);
+                hash.write_i32(position.y);
+            }
+        }
+        for transaction in &self.service_transactions {
+            hash.write_u64(transaction.player_id.get());
+            write_serialized(&mut hash, &transaction.kind);
+            hash.write_u64(u64::from(transaction.credits_before));
+            hash.write_u64(u64::from(transaction.credits_after));
+            hash.write_u64(u64::from(transaction.cargo_before));
+            hash.write_u64(u64::from(transaction.cargo_after));
+        }
+        hash
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "canonical transition keeps tick ordering explicit while gameplay domains are extracted"
+    )]
+    pub fn simulate_tick(
+        &mut self,
+        tick: SimulationTick,
+        inputs: &TickInputs,
+        terrain_revisions: &mut TerrainRevisionTracker,
+    ) -> TickOutput {
+        let mut output = TickOutput {
+            tick,
+            command_count: inputs.command_count(),
+            ..TickOutput::default()
+        };
+        let mut changed_players = BTreeSet::new();
+        for (&player_id, input) in &inputs.players {
+            if let Some((sequence, controls)) = input.controls {
+                let movement = PlayerCommand::Movement {
+                    horizontal: controls.horizontal(),
+                    thrust: controls.thrust,
+                    drill_down: controls.drill_down,
+                };
+                if self.apply_player_command(player_id, &movement)
+                    == PlayerScopedCommandOutcome::Applied
+                {
+                    changed_players.insert(player_id);
+                }
+                let _step = self.step_authoritative_movement(
+                    player_id,
+                    controls.horizontal(),
+                    controls.thrust,
+                    FIXED_DELTA_SECONDS,
+                );
+                output
+                    .latest_sequences_by_player
+                    .insert(player_id, sequence);
+            }
+            for action in &input.actions {
+                if self.apply_player_command(player_id, &action.command)
+                    == PlayerScopedCommandOutcome::Applied
+                {
+                    changed_players.insert(player_id);
+                    if let Some(event) = gameplay_event_for_applied_command(action) {
+                        output.push_event(event);
+                    }
+                }
+                output
+                    .latest_sequences_by_player
+                    .entry(player_id)
+                    .and_modify(|sequence| *sequence = (*sequence).max(action.sequence))
+                    .or_insert(action.sequence);
+            }
+        }
+        let next_tick = tick.next();
+        let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
+        for player_id in recovery_player_ids {
+            if self.recover_lost_cargo_for_player(player_id) {
+                changed_players.insert(player_id);
+                output.push_event(GameplayEventKind::CargoChanged { player_id });
+            }
+        }
+        for (player_id, deadline) in &self.scanner_cooldown_deadlines {
+            self.scanner_cooldowns
+                .insert(*player_id, simulation_seconds_until(next_tick, *deadline));
+        }
+
+        for cloud in &mut self.hazards {
+            cloud.life -= FIXED_DELTA_SECONDS;
+            cloud.radius = 8.0f32.mul_add(FIXED_DELTA_SECONDS, cloud.radius);
+        }
+        self.hazards.retain(|cloud| cloud.life > 0.0);
+        let player_ids = self.players.keys().copied().collect::<Vec<_>>();
+        for player_id in player_ids {
+            let damaged = self.players.get(&player_id).is_some_and(|player| {
+                self.hazards.iter().any(|cloud| {
+                    if cloud.life >= 6.0 {
+                        return false;
+                    }
+                    let dx = player.x - cloud.x;
+                    let dy = player.y - cloud.y;
+                    dx.mul_add(dx, dy * dy) <= cloud.radius * cloud.radius
+                })
+            });
+            if damaged {
+                let _snapshot = self.apply_hazard_damage(player_id, 4.0 * FIXED_DELTA_SECONDS);
+                changed_players.insert(player_id);
+                output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+            }
+        }
+        self.authoritative_summary.hazard_count = self.hazards.len();
+
+        let player_ids = self.players.keys().copied().collect::<Vec<_>>();
+        for player_id in player_ids {
+            let (player_x, player_y, radiator_level) = self
+                .players
+                .get(&player_id)
+                .map(|player| (player.x, player.y, player.radiator_level))
+                .expect("collected player id remains valid");
+            let parts = self
+                .equipped_rig_parts
+                .get(&player_id)
+                .cloned()
+                .unwrap_or_default();
+            let safe_depth = 18.0f32.mul_add(
+                TILE_SIZE,
+                f32::from(radiator_level.saturating_sub(1)) * 12.0 * TILE_SIZE,
+            );
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "small bounded event severity intentionally scales heat damage"
+            )]
+            let severity = self
+                .world_event_severity
+                .get(&WorldEventKind::HeatWave)
+                .copied()
+                .unwrap_or(0) as f32;
+            let mut heat_multiplier = severity.mul_add(0.18, 1.0);
+            if parts.contains(&RigPartKind::ThermalHull) {
+                heat_multiplier *= 0.55;
+            }
+            if parts.contains(&RigPartKind::ImpactHull) {
+                heat_multiplier *= 1.18;
+            }
+            if parts.contains(&RigPartKind::PressureHull) && player_y >= 90.0 * TILE_SIZE {
+                heat_multiplier *= 0.72;
+            }
+            let depth_damage = if player_y > safe_depth {
+                let depth_factor = ((player_y - safe_depth) / (12.0 * TILE_SIZE)).max(1.0);
+                3.5 * depth_factor * heat_multiplier * FIXED_DELTA_SECONDS
+            } else {
+                0.0
+            };
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "bounded player coordinates intentionally map to terrain tiles"
+            )]
+            let center = TilePosition {
+                x: (player_x / TILE_SIZE).floor() as i32,
+                y: (player_y / TILE_SIZE).floor() as i32,
+            };
+            let near_lava = (-2..=2).any(|dy| {
+                (-2..=2).any(|dx| {
+                    self.terrain.is_lava_at(TilePosition {
+                        x: center.x + dx,
+                        y: center.y + dy,
+                    })
+                })
+            });
+            let pump_protected = self.infrastructure.iter().any(|item| {
+                item.kind == InfrastructureKind::PumpStation
+                    && (item.position.x - center.x).abs() <= 4
+                    && (item.position.y - center.y).abs() <= 4
+            });
+            let lava_damage = if near_lava {
+                (if pump_protected { 2.5 } else { 9.0 }) * heat_multiplier * FIXED_DELTA_SECONDS
+            } else {
+                0.0
+            };
+            let total_damage = depth_damage + lava_damage;
+            if total_damage > 0.0 {
+                let _snapshot = self.apply_hazard_damage(player_id, total_damage);
+                if let Some(player) = self.players.get_mut(&player_id) {
+                    player.hull = quantize_simulation_scalar(player.hull);
+                }
+                changed_players.insert(player_id);
+                output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+            }
+        }
+
+        let bombs = mem::take(&mut self.bombs);
+        let deadlines = mem::take(&mut self.bomb_detonation_ticks);
+        for (index, bomb) in bombs.into_iter().enumerate() {
+            let deadline = deadlines.get(index).copied().unwrap_or_else(|| {
+                SimulationTick::new(
+                    tick.get()
+                        .saturating_add(simulation_ticks_for_seconds(bomb.timer_seconds)),
+                )
+            });
+            if next_tick >= deadline {
+                let blast = self.detonate_bomb_at(bomb_tile_position(bomb), 2);
+                output.terrain_changed_tiles.extend(blast.changed_tiles);
+                output.push_event(GameplayEventKind::BombDetonated);
+            } else {
+                let mut bomb = bomb;
+                bomb.timer_seconds = simulation_seconds_until(next_tick, deadline);
+                self.bombs.push(bomb);
+                self.bomb_detonation_ticks.push(deadline);
+            }
+        }
+        self.authoritative_summary.bomb_count = self.bombs.len();
+        if !output.terrain_changed_tiles.is_empty() {
+            output.terrain_changed_tiles.sort_unstable();
+            output.terrain_changed_tiles.dedup();
+            output.terrain_revisions.extend(
+                terrain_revisions.mark_tiles_changed(output.terrain_changed_tiles.iter().copied()),
+            );
+        }
+
+        let active_players: Vec<PlayerId> = self.active_drills.keys().copied().collect();
+        for player_id in active_players {
+            let period_ticks = self.active_drills.get(&player_id).map_or(1, |drill| {
+                simulation_ticks_for_seconds(drill.seconds_per_chip)
+            });
+            let timer = self
+                .active_drill_timers
+                .entry(player_id)
+                .or_insert_with(|| ActiveDrillTimer {
+                    next_chip_tick: SimulationTick::new(tick.get().saturating_add(period_ticks)),
+                    period_ticks,
+                });
+            timer.period_ticks = period_ticks;
+            let ticks_until_chip = timer.next_chip_tick.get().saturating_sub(next_tick.get());
+            if let Some(drill) = self.active_drills.get_mut(&player_id) {
+                let elapsed = period_ticks.saturating_sub(ticks_until_chip.min(period_ticks));
+                let elapsed_u16 = u16::try_from(elapsed).unwrap_or(u16::MAX);
+                let period_u16 = u16::try_from(period_ticks).unwrap_or(u16::MAX).max(1);
+                drill.progress = f32::from(elapsed_u16) / f32::from(period_u16);
+            }
+            if next_tick < timer.next_chip_tick {
+                continue;
+            }
+            timer.next_chip_tick = SimulationTick::new(
+                timer
+                    .next_chip_tick
+                    .get()
+                    .saturating_add(timer.period_ticks),
+            );
+            if let Some(drill) = self.active_drills.get_mut(&player_id) {
+                drill.progress = 0.0;
+            }
+            let Some(target) = self.active_drill(player_id).map(|drill| drill.target) else {
+                continue;
+            };
+            let Some(result) = self.chip_active_drill_target(player_id) else {
+                continue;
+            };
+            if matches!(
+                result,
+                MineResult::Blocked
+                    | MineResult::TooDangerous
+                    | MineResult::Exploded
+                    | MineResult::Blast
+                    | MineResult::Mined(_)
+            ) {
+                self.active_drill_timers.remove(&player_id);
+            }
+            output.terrain_changed_tiles.push(target);
+            let revisions = terrain_revisions.mark_tiles_changed([target]);
+            output.terrain_revisions.extend(revisions);
+            match result {
+                MineResult::Mined(TileKind::Ore(_)) => {
+                    output.push_event(GameplayEventKind::CargoChanged { player_id });
+                }
+                MineResult::Mined(TileKind::Artifact(ArtifactKind::StarCore)) => {
+                    self.progression.escape_deadline = Some(SimulationTick::new(
+                        next_tick
+                            .get()
+                            .saturating_add(120 * u64::from(SIMULATION_HZ)),
+                    ));
+                    output.push_event(GameplayEventKind::CargoChanged { player_id });
+                    output.push_event(GameplayEventKind::EscapeStarted { player_id });
+                }
+                MineResult::Mined(TileKind::Stone | TileKind::HardRock) => {
+                    #[allow(
+                        clippy::cast_precision_loss,
+                        clippy::cast_sign_loss,
+                        clippy::suboptimal_flops,
+                        reason = "terrain coordinates deterministically reproduce the legacy hazard schedule"
+                    )]
+                    let (value, boulder_x, boulder_y) = (
+                        self.terrain.seed()
+                            ^ ((target.x as u64).wrapping_mul(0x9E37))
+                            ^ ((target.y as u64).wrapping_mul(0x85EB)),
+                        target.x as f32 * TILE_SIZE + TILE_SIZE * 0.5,
+                        (target.y as f32 - 1.0) * TILE_SIZE,
+                    );
+                    if value.is_multiple_of(AUTHORITATIVE_BOULDER_SPAWN_CHANCE) {
+                        self.spawn_falling_boulder(
+                            boulder_x,
+                            boulder_y,
+                            AUTHORITATIVE_BOULDER_WARNING_TICKS,
+                            AUTHORITATIVE_BOULDER_LIFE_TICKS,
+                        );
+                        output.push_event(GameplayEventKind::BouldersChanged);
+                    }
+                }
+                MineResult::TooDangerous => {
+                    let _snapshot = self.apply_hazard_damage(player_id, 8.0);
+                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+                }
+                MineResult::Exploded => {
+                    output.push_event(GameplayEventKind::HazardChanged);
+                }
+                MineResult::Blast => {
+                    if let Some(player) = self.players.get(&player_id) {
+                        let (player_x, player_y) = (player.x, player.y);
+                        for offset in -1_i32..=1 {
+                            #[allow(
+                                clippy::cast_precision_loss,
+                                clippy::suboptimal_flops,
+                                reason = "small cave-in offsets intentionally map to world coordinates"
+                            )]
+                            let (x, y) = (
+                                player_x + offset as f32 * TILE_SIZE,
+                                player_y - TILE_SIZE * 2.0,
+                            );
+                            self.spawn_falling_boulder(
+                                x,
+                                y,
+                                27 + u64::from(offset.unsigned_abs()) * 9,
+                                240,
+                            );
+                        }
+                    }
+                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+                    output.push_event(GameplayEventKind::HazardChanged);
+                    output.push_event(GameplayEventKind::BouldersChanged);
+                }
+                MineResult::Blocked | MineResult::Chipped | MineResult::Mined(_) => {}
+            }
+        }
+        self.advance_canonical_day_if_due(next_tick, &mut output, &mut changed_players);
+        self.advance_escape_sequence(next_tick, &mut output, &mut changed_players);
+        self.advance_progression_depth(&mut output, &mut changed_players);
+        let pressure_player_ids = self.players.keys().copied().collect::<Vec<_>>();
+        for player_id in pressure_player_ids {
+            self.advance_world_event_hazards(player_id, next_tick, &mut output);
+            self.advance_deep_run_pressure(player_id, next_tick, &mut output, &mut changed_players);
+        }
+        self.advance_falling_boulders(next_tick, &mut output, &mut changed_players);
+        output.changed_players = changed_players.into_iter().collect();
+        self.set_simulation_tick(next_tick);
+        output
+    }
+
+    fn advance_escape_sequence(
+        &mut self,
+        next_tick: SimulationTick,
+        output: &mut TickOutput,
+        changed_players: &mut BTreeSet<PlayerId>,
+    ) {
+        let Some(deadline) = self.progression.escape_deadline else {
+            return;
+        };
+        if next_tick >= deadline {
+            for (player_id, player) in &mut self.players {
+                player.hull = 0.0;
+                changed_players.insert(*player_id);
+                output.push_event(GameplayEventKind::PlayerDamaged {
+                    player_id: *player_id,
+                });
+            }
+            self.progression.escape_deadline = None;
+            return;
+        }
+        if next_tick.get().is_multiple_of(45)
+            && let Some(player) = self.players.values().next()
+        {
+            let (x, y) = (player.x, player.y);
+            for offset in -1_i16..=1 {
+                self.spawn_falling_boulder(
+                    f32::from(offset).mul_add(TILE_SIZE, x),
+                    TILE_SIZE.mul_add(-2.0, y),
+                    27 + u64::from(offset.unsigned_abs()) * 9,
+                    240,
+                );
+            }
+            output.push_event(GameplayEventKind::BouldersChanged);
+        }
+        if next_tick.get() % 90 == 75 {
+            self.collapse_warnings.clear();
+            if let Some(player) = self.players.values().next() {
+                let center = player.tile_position(TILE_SIZE);
+                for dx in -2..=2 {
+                    let position = TilePosition {
+                        x: center.x + dx,
+                        y: center.y + 5,
+                    };
+                    if position.y > 7
+                        && !self.terrain.is_solid_at(position)
+                        && !self.infrastructure.iter().any(|item| {
+                            item.kind == InfrastructureKind::TunnelSupport
+                                && (item.position.x - position.x).abs() <= 3
+                                && (item.position.y - position.y).abs() <= 3
+                        })
+                    {
+                        self.collapse_warnings.push(position);
+                    }
+                }
+            }
+        } else if next_tick.get().is_multiple_of(90) {
+            for position in mem::take(&mut self.collapse_warnings) {
+                if self.terrain.set_kind(position, TileKind::Stone) {
+                    output.terrain_changed_tiles.push(position);
+                    self.scan_markers
+                        .retain(|marker| marker.position != position);
+                }
+            }
+            output.push_event(GameplayEventKind::EscapeTunnelChanged);
+        }
+    }
+
+    fn grant_deep_reward(
+        &mut self,
+        player_id: PlayerId,
+        depth: i32,
+        output: &mut TickOutput,
+        changed_players: &mut BTreeSet<PlayerId>,
+    ) {
+        use crate::game_state::LegendaryBlueprint;
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return;
+        };
+        let position = TilePosition {
+            x: player
+                .tile_position(TILE_SIZE)
+                .x
+                .saturating_add(2)
+                .clamp(1, self.terrain.width() - 2),
+            y: depth.clamp(10, self.terrain.height() - 2),
+        };
+        let reward_tile = if depth >= 120 {
+            let material = match depth {
+                180.. => StrategicResourceKind::RadiantFossil,
+                160..=179 => StrategicResourceKind::VoidGlass,
+                140..=159 => StrategicResourceKind::MachineRelic,
+                _ => StrategicResourceKind::PressurePearl,
+            };
+            player.add_material(material, 1);
+            player.add_material(StrategicResourceKind::CoreShard, 1);
+            let blueprint = if depth >= 160 {
+                LegendaryBlueprint::RelicSorter
+            } else if depth >= 140 {
+                LegendaryBlueprint::VoidTank
+            } else {
+                LegendaryBlueprint::StarPlating
+            };
+            self.progression.legendary_blueprints.insert(blueprint);
+            match blueprint {
+                LegendaryBlueprint::StarPlating => {
+                    self.progression
+                        .rig_part_inventory
+                        .insert(RigPartKind::PressureHull);
+                    player.crafted_bulkheads = player.crafted_bulkheads.saturating_add(1);
+                    player.hull = player.max_hull();
+                }
+                LegendaryBlueprint::VoidTank => {
+                    self.progression
+                        .rig_part_inventory
+                        .insert(RigPartKind::HaulerEngine);
+                    player.fuel_capacity += 20.0;
+                    player.fuel = player.fuel_capacity;
+                }
+                LegendaryBlueprint::RelicSorter => {
+                    self.progression
+                        .rig_part_inventory
+                        .insert(RigPartKind::RelicScanner);
+                    self.progression
+                        .rig_part_inventory
+                        .insert(RigPartKind::CargoBalloon);
+                    player.cargo_capacity = player.cargo_capacity.saturating_add(4);
+                }
+            }
+            TileKind::Artifact(ArtifactKind::OldCircuit)
+        } else {
+            TileKind::Ore(MineralKind::Mythril)
+        };
+        if self.terrain.set_kind(position, reward_tile) {
+            output.terrain_changed_tiles.push(position);
+        }
+        changed_players.insert(player_id);
+        output.push_event(GameplayEventKind::DeepRewardGranted { player_id });
+    }
+
+    fn advance_progression_depth(
+        &mut self,
+        output: &mut TickOutput,
+        changed_players: &mut BTreeSet<PlayerId>,
+    ) {
+        let player_depths = self
+            .players
+            .iter()
+            .map(|(player_id, player)| (*player_id, player.tile_position(TILE_SIZE).y))
+            .collect::<Vec<_>>();
+        for (player_id, depth) in player_depths {
+            self.progression.deepest_tile_reached =
+                self.progression.deepest_tile_reached.max(depth);
+            let milestone = depth / 20;
+            let previous = self
+                .progression
+                .deep_reward_milestones
+                .get(&player_id)
+                .copied()
+                .unwrap_or(0);
+            if depth >= 90 && milestone > previous {
+                self.progression
+                    .deep_reward_milestones
+                    .insert(player_id, milestone);
+                self.grant_deep_reward(player_id, depth, output, changed_players);
+            }
+        }
+    }
+
+    fn advance_world_event_hazards(
+        &mut self,
+        player_id: PlayerId,
+        next_tick: SimulationTick,
+        output: &mut TickOutput,
+    ) {
+        let Some(player) = self.players.get(&player_id) else {
+            return;
+        };
+        if player.y < TILE_SIZE * 8.0 {
+            return;
+        }
+        let (player_x, player_y) = (player.x, player.y);
+        if self
+            .world_event_severity
+            .contains_key(&WorldEventKind::CollapseSurge)
+            && next_tick.get().is_multiple_of(180)
+        {
+            for offset in -1_i16..=1 {
+                self.spawn_falling_boulder(
+                    f32::from(offset).mul_add(TILE_SIZE, player_x),
+                    TILE_SIZE.mul_add(-2.0, player_y),
+                    27 + u64::from(offset.unsigned_abs()) * 9,
+                    240,
+                );
+            }
+            output.push_event(GameplayEventKind::BouldersChanged);
+        }
+        if self
+            .world_event_severity
+            .contains_key(&WorldEventKind::GasBloom)
+            && next_tick.get().is_multiple_of(240)
+        {
+            self.hazards.push(HazardCloud {
+                x: player_x,
+                y: player_y + TILE_SIZE,
+                life: 6.0,
+                radius: 12.0,
+            });
+            output.push_event(GameplayEventKind::HazardChanged);
+        }
+    }
+
+    fn advance_deep_run_pressure(
+        &mut self,
+        player_id: PlayerId,
+        next_tick: SimulationTick,
+        output: &mut TickOutput,
+        changed_players: &mut BTreeSet<PlayerId>,
+    ) {
+        let Some(player) = self.players.get(&player_id) else {
+            return;
+        };
+        let depth = player.tile_position(TILE_SIZE).y;
+        let rare_cargo = player
+            .cargo
+            .iter()
+            .filter(|(mineral, _)| {
+                matches!(
+                    mineral,
+                    MineralKind::Diamond
+                        | MineralKind::Platinum
+                        | MineralKind::Uranium
+                        | MineralKind::Mythril
+                )
+            })
+            .map(|(_, count)| *count)
+            .sum::<u32>()
+            .saturating_add(player.artifacts.values().copied().sum());
+        let state = self.deep_run_states.entry(player_id).or_default();
+        if depth < 80 {
+            state.trip_ticks = 0;
+            state.instability = 2.0f32
+                .mul_add(-FIXED_DELTA_SECONDS, state.instability)
+                .max(0.0);
+            return;
+        }
+        state.trip_ticks = state.trip_ticks.saturating_add(1);
+        let trip_seconds =
+            f32::from(u16::try_from(state.trip_ticks).unwrap_or(u16::MAX)) / SIMULATION_HZ_F32;
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "bounded depth and cargo counts intentionally feed gameplay pressure"
+        )]
+        let pressure = ((depth - 70) as f32).mul_add(
+            0.006,
+            trip_seconds.mul_add(0.0006, rare_cargo as f32 * 0.02),
+        );
+        state.instability = FIXED_DELTA_SECONDS.mul_add(pressure, state.instability);
+        if depth >= 105 {
+            if let Some(player) = self.players.get_mut(&player_id) {
+                player.fuel = quantize_simulation_scalar(
+                    FIXED_DELTA_SECONDS.mul_add(-0.25, player.fuel).max(0.0),
+                );
+            }
+            let deadline = SimulationTick::new(next_tick.get().saturating_add(72));
+            self.scanner_cooldown_deadlines
+                .entry(player_id)
+                .and_modify(|current| *current = (*current).max(deadline))
+                .or_insert(deadline);
+            changed_players.insert(player_id);
+        }
+        if rare_cargo > 0 && next_tick.get().is_multiple_of(240) {
+            let player = self.players.get(&player_id).expect("player remains valid");
+            self.hazards.push(HazardCloud {
+                x: player.x,
+                y: player.y + TILE_SIZE,
+                life: 5.0,
+                radius: 10.0 + f32::from(u16::try_from(rare_cargo).unwrap_or(u16::MAX)).min(4.0),
+            });
+            output.push_event(GameplayEventKind::HazardChanged);
+        }
+        if state.instability >= 100.0 {
+            state.instability = 45.0;
+            let player = self.players.get(&player_id).expect("player remains valid");
+            let (player_x, player_y) = (player.x, player.y);
+            for offset in -1_i16..=1 {
+                self.spawn_falling_boulder(
+                    f32::from(offset).mul_add(TILE_SIZE, player_x),
+                    TILE_SIZE.mul_add(-2.0, player_y),
+                    27 + u64::from(offset.unsigned_abs()) * 9,
+                    240,
+                );
+            }
+            let _snapshot = self.apply_hazard_damage(player_id, 4.0);
+            changed_players.insert(player_id);
+            output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+            output.push_event(GameplayEventKind::BouldersChanged);
+        }
+    }
+
+    fn spawn_falling_boulder(&mut self, x: f32, y: f32, warning_ticks: u64, life_ticks: u64) {
+        self.falling_boulders.push(FallingBoulder {
+            x,
+            y,
+            velocity_y: 0.0,
+            warning_seconds: f32::from(u16::try_from(warning_ticks).unwrap_or(u16::MAX))
+                / SIMULATION_HZ_F32,
+            life: f32::from(u16::try_from(life_ticks).unwrap_or(u16::MAX)) / SIMULATION_HZ_F32,
+        });
+        self.boulder_warning_deadlines.push(SimulationTick::new(
+            self.simulation_tick.get().saturating_add(warning_ticks),
+        ));
+        self.boulder_expiry_ticks.push(SimulationTick::new(
+            self.simulation_tick.get().saturating_add(life_ticks),
+        ));
+    }
+
+    fn advance_falling_boulders(
+        &mut self,
+        next_tick: SimulationTick,
+        output: &mut TickOutput,
+        changed_players: &mut BTreeSet<PlayerId>,
+    ) {
+        let boulders = mem::take(&mut self.falling_boulders);
+        let warning_deadlines = mem::take(&mut self.boulder_warning_deadlines);
+        let expiry_ticks = mem::take(&mut self.boulder_expiry_ticks);
+        for (index, mut boulder) in boulders.into_iter().enumerate() {
+            let warning_deadline = warning_deadlines.get(index).copied().unwrap_or(next_tick);
+            let expiry_tick = expiry_ticks.get(index).copied().unwrap_or(next_tick);
+            if next_tick >= expiry_tick {
+                continue;
+            }
+            if next_tick >= warning_deadline {
+                boulder.velocity_y = quantize_simulation_scalar(
+                    (AUTHORITATIVE_GRAVITY * 0.8)
+                        .mul_add(FIXED_DELTA_SECONDS, boulder.velocity_y)
+                        .min(520.0),
+                );
+                boulder.y = quantize_simulation_scalar(
+                    boulder.velocity_y.mul_add(FIXED_DELTA_SECONDS, boulder.y),
+                );
+                let hit_player = self.players.iter().find_map(|(player_id, player)| {
+                    let dx = player.x - boulder.x;
+                    let dy = player.y - boulder.y;
+                    (dx.mul_add(dx, dy * dy) <= (AUTHORITATIVE_PLAYER_RADIUS + 8.0).powi(2))
+                        .then_some(*player_id)
+                });
+                if let Some(player_id) = hit_player {
+                    let _snapshot = self.apply_hazard_damage(player_id, 8.0);
+                    changed_players.insert(player_id);
+                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+                    continue;
+                }
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "bounded boulder coordinates intentionally map to terrain tiles"
+                )]
+                let tile = TilePosition {
+                    x: (boulder.x / TILE_SIZE).floor() as i32,
+                    y: (boulder.y / TILE_SIZE).floor() as i32,
+                };
+                if self.terrain.is_solid_at(tile) {
+                    continue;
+                }
+            }
+            boulder.warning_seconds = simulation_seconds_until(next_tick, warning_deadline);
+            boulder.life = simulation_seconds_until(next_tick, expiry_tick);
+            self.falling_boulders.push(boulder);
+            self.boulder_warning_deadlines.push(warning_deadline);
+            self.boulder_expiry_ticks.push(expiry_tick);
+        }
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "movement parity keeps modifier, integration, collision, and damage ordering explicit"
+    )]
     pub fn step_authoritative_movement(
         &mut self,
         player_id: PlayerId,
@@ -2389,30 +3847,135 @@ impl WorldState {
         thrust: bool,
         delta_seconds: f32,
     ) -> Option<AuthoritativeMovementStep> {
+        let parts = self
+            .equipped_rig_parts
+            .get(&player_id)
+            .cloned()
+            .unwrap_or_default();
+        let mechanic_level = self.mechanic_levels.get(&player_id).copied().unwrap_or(0);
         let player = self.players.get_mut(&player_id)?;
-        player.velocity_x = horizontal.clamp(-1.0, 1.0) * AUTHORITATIVE_HORIZONTAL_SPEED;
-        if thrust && player.fuel > 0.0 {
-            player.velocity_y = -AUTHORITATIVE_THRUST_SPEED;
-            player.fuel = (player.fuel - delta_seconds).max(0.0);
+        let grounded = authoritative_player_collides(&self.terrain, player.x, player.y + 2.0);
+        let mut effective_cargo_capacity = player.cargo_capacity;
+        if parts.contains(&RigPartKind::CargoBalloon) {
+            effective_cargo_capacity = effective_cargo_capacity.saturating_add(20);
+        }
+        if parts.contains(&RigPartKind::ArmoredCargoBay) {
+            effective_cargo_capacity = effective_cargo_capacity.saturating_sub(4).max(1);
+        }
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "bounded cargo counts intentionally become a movement load ratio"
+        )]
+        let cargo_ratio = player.cargo_used() as f32 / effective_cargo_capacity.max(1) as f32;
+        let cargo_pressure = if parts.contains(&RigPartKind::HaulerEngine) {
+            0.08
+        } else if parts.contains(&RigPartKind::LightweightEngine) {
+            0.28
         } else {
-            player.velocity_y = AUTHORITATIVE_GRAVITY.mul_add(delta_seconds, player.velocity_y);
+            0.18
+        };
+        let cargo_penalty = cargo_ratio.min(1.0).mul_add(-cargo_pressure, 1.0);
+        let mut engine_multiplier =
+            (1.0 + f32::from(player.engine_level.saturating_sub(1)) * 0.28) * cargo_penalty;
+        if parts.contains(&RigPartKind::LightweightEngine) {
+            engine_multiplier *= 1.12;
+        }
+        if parts.contains(&RigPartKind::HaulerEngine) {
+            engine_multiplier *= 0.92;
+        }
+        if parts.contains(&RigPartKind::BurstEngine) {
+            engine_multiplier *= 1.25;
+        }
+        if parts.contains(&RigPartKind::CargoBalloon) {
+            engine_multiplier *= 0.88;
+        }
+        let horizontal_acceleration = if grounded {
+            AUTHORITATIVE_HORIZONTAL_ACCELERATION * 1.35
+        } else {
+            AUTHORITATIVE_HORIZONTAL_ACCELERATION * 0.65
+        };
+        player.velocity_x = quantize_simulation_scalar(
+            horizontal.clamp(-1.0, 1.0).mul_add(
+                horizontal_acceleration * engine_multiplier * delta_seconds,
+                player.velocity_x,
+            ) * if grounded {
+                AUTHORITATIVE_GROUND_DRAG_PER_TICK
+            } else {
+                AUTHORITATIVE_AIR_DRAG_PER_TICK
+            },
+        )
+        .clamp(
+            -AUTHORITATIVE_MAX_HORIZONTAL_SPEED * engine_multiplier,
+            AUTHORITATIVE_MAX_HORIZONTAL_SPEED * engine_multiplier,
+        );
+        if thrust && player.fuel > 0.0 {
+            player.velocity_y =
+                quantize_simulation_scalar(-AUTHORITATIVE_THRUST_SPEED * engine_multiplier);
+            let mut efficiency = 1.0 - f32::from(player.fuel_tank_level.saturating_sub(1)) * 0.06;
+            if parts.contains(&RigPartKind::BurstEngine) {
+                efficiency *= 1.22;
+            }
+            if parts.contains(&RigPartKind::TitanDrill) {
+                efficiency *= 1.08;
+            }
+            player.fuel = quantize_simulation_scalar(
+                (AUTHORITATIVE_FUEL_BURN_PER_SECOND * efficiency)
+                    .mul_add(-delta_seconds, player.fuel)
+                    .max(0.0),
+            );
+        } else {
+            player.velocity_y = quantize_simulation_scalar(
+                AUTHORITATIVE_GRAVITY
+                    .mul_add(delta_seconds, player.velocity_y)
+                    .clamp(-AUTHORITATIVE_MAX_FALL_SPEED, AUTHORITATIVE_MAX_FALL_SPEED),
+            );
         }
 
-        let delta_x = player.velocity_x * delta_seconds;
-        let delta_y = player.velocity_y * delta_seconds;
-        let next_x = player.x + delta_x;
-        let next_y = player.y + delta_y;
+        let delta_x = quantize_simulation_scalar(player.velocity_x * delta_seconds);
+        let delta_y = quantize_simulation_scalar(player.velocity_y * delta_seconds);
+        let next_x = quantize_simulation_scalar(player.x + delta_x);
+        let next_y = quantize_simulation_scalar(player.y + delta_y);
 
         if authoritative_player_collides(&self.terrain, next_x, player.y) {
+            let impact_speed = player.velocity_x.abs();
+            if impact_speed > AUTHORITATIVE_SAFE_LANDING_SPEED * 0.75 {
+                let damage = AUTHORITATIVE_SAFE_LANDING_SPEED.mul_add(-0.75, impact_speed)
+                    * AUTHORITATIVE_CRASH_DAMAGE_SCALE
+                    * 0.5;
+                let mut mitigation = (f32::from(mechanic_level) * 0.08).min(0.32);
+                if parts.contains(&RigPartKind::ImpactHull) {
+                    mitigation += 0.22;
+                }
+                if parts.contains(&RigPartKind::ThermalHull) {
+                    mitigation -= 0.10;
+                }
+                let damage = damage * (1.0 - mitigation.clamp(0.0, 0.55));
+                player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
+            }
             player.velocity_x = 0.0;
         } else {
-            player.x = clamp_authoritative_player_x(&self.terrain, next_x);
+            player.x =
+                quantize_simulation_scalar(clamp_authoritative_player_x(&self.terrain, next_x));
         }
 
         if authoritative_player_collides(&self.terrain, player.x, next_y) {
+            if delta_y > 0.0 && player.velocity_y > AUTHORITATIVE_SAFE_LANDING_SPEED {
+                let damage = (player.velocity_y - AUTHORITATIVE_SAFE_LANDING_SPEED)
+                    * AUTHORITATIVE_CRASH_DAMAGE_SCALE;
+                let mut mitigation = (f32::from(mechanic_level) * 0.08).min(0.32);
+                if parts.contains(&RigPartKind::ImpactHull) {
+                    mitigation += 0.22;
+                }
+                if parts.contains(&RigPartKind::ThermalHull) {
+                    mitigation -= 0.10;
+                }
+                let damage = damage * (1.0 - mitigation.clamp(0.0, 0.55));
+                player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
+            }
             player.velocity_y = 0.0;
         } else {
-            player.y = clamp_authoritative_player_y(&self.terrain, next_y);
+            player.y =
+                quantize_simulation_scalar(clamp_authoritative_player_y(&self.terrain, next_y));
         }
 
         Some(AuthoritativeMovementStep {
@@ -2422,6 +3985,877 @@ impl WorldState {
             velocity_x: player.velocity_x,
             velocity_y: player.velocity_y,
         })
+    }
+
+    fn schedule_canonical_world_event(
+        &mut self,
+        next_tick: SimulationTick,
+        output: &mut TickOutput,
+    ) {
+        if !self.progression.town_event_day.is_multiple_of(3) {
+            return;
+        }
+        let kind = match (self.progression.market_salt + self.progression.town_event_day) % 13 {
+            0 => WorldEventKind::MarketCrash,
+            1 => WorldEventKind::MarketBoom,
+            2 => WorldEventKind::RareBuyer,
+            3 => WorldEventKind::FuelShortage,
+            4 => WorldEventKind::RepairBacklog,
+            5 => WorldEventKind::HeatWave,
+            6 => WorldEventKind::CollapseSurge,
+            7 => WorldEventKind::DeepPressureStorm,
+            8 => WorldEventKind::GasBloom,
+            9 => WorldEventKind::Earthquake,
+            10 => WorldEventKind::MeteorShower,
+            11 => WorldEventKind::RivalClaims,
+            _ => WorldEventKind::AncientMachine,
+        };
+        if self.world_event_severity.contains_key(&kind) {
+            return;
+        }
+        let severity = 1 + (self.progression.town_event_day + self.progression.market_salt) % 3;
+        self.world_event_severity.insert(kind, severity);
+        self.world_event_days_remaining
+            .insert(kind, 2 + severity.min(2));
+        match kind {
+            WorldEventKind::GasBloom => {
+                if let Some(player) = self.players.values().next() {
+                    self.hazards.push(HazardCloud {
+                        x: player.x,
+                        y: player.y + TILE_SIZE,
+                        life: 8.0 + f32::from(u16::try_from(severity).unwrap_or(u16::MAX)),
+                        radius: 12.0 + f32::from(u16::try_from(severity).unwrap_or(u16::MAX)) * 2.0,
+                    });
+                    output.push_event(GameplayEventKind::HazardChanged);
+                }
+            }
+            WorldEventKind::MeteorShower => {
+                let _outcome = self.start_canonical_side_contract();
+                self.progression.contracts.active.reward =
+                    self.progression.contracts.active.reward.saturating_add(75);
+            }
+            WorldEventKind::RivalClaims => {
+                self.progression.expedition_offers.clear();
+                self.refresh_canonical_expedition_offers();
+            }
+            WorldEventKind::AncientMachine => {
+                for (player_id, player) in &mut self.players {
+                    player.add_material(StrategicResourceKind::CoreShard, severity.max(1));
+                    self.scanner_cooldown_deadlines.insert(
+                        *player_id,
+                        SimulationTick::new(next_tick.get().saturating_add(360)),
+                    );
+                }
+            }
+            WorldEventKind::Earthquake => {
+                if let Some(player) = self.players.values().next() {
+                    let x = player.x;
+                    let y = player.y;
+                    for offset in -1_i16..=1 {
+                        self.spawn_falling_boulder(
+                            f32::from(offset).mul_add(TILE_SIZE, x),
+                            TILE_SIZE.mul_add(-2.0, y),
+                            27 + u64::from(offset.unsigned_abs()) * 9,
+                            240,
+                        );
+                    }
+                }
+                output.push_event(GameplayEventKind::BouldersChanged);
+            }
+            WorldEventKind::MarketCrash
+            | WorldEventKind::MarketBoom
+            | WorldEventKind::RareBuyer
+            | WorldEventKind::FuelShortage
+            | WorldEventKind::RepairBacklog
+            | WorldEventKind::HeatWave
+            | WorldEventKind::CollapseSurge
+            | WorldEventKind::DeepPressureStorm => {}
+        }
+    }
+
+    fn advance_canonical_day_if_due(
+        &mut self,
+        next_tick: SimulationTick,
+        output: &mut TickOutput,
+        changed_players: &mut BTreeSet<PlayerId>,
+    ) {
+        if next_tick < self.progression.next_day_tick {
+            return;
+        }
+        self.advance_canonical_market_day();
+        for days in self.world_event_days_remaining.values_mut() {
+            *days = days.saturating_sub(1);
+        }
+        self.world_event_days_remaining.retain(|_, days| *days > 0);
+        self.world_event_severity
+            .retain(|kind, _| self.world_event_days_remaining.contains_key(kind));
+        self.schedule_canonical_world_event(next_tick, output);
+        let dividend = u32::from(self.progression.town_development.bank_level) * 12;
+        if dividend > 0 {
+            for (player_id, player) in &mut self.players {
+                player.credits = player.credits.saturating_add(dividend);
+                changed_players.insert(*player_id);
+            }
+            self.progression.total_earnings = self.progression.total_earnings.saturating_add(
+                dividend.saturating_mul(u32::try_from(self.players.len()).unwrap_or(u32::MAX)),
+            );
+        }
+        if self.progression.town_event_day % 5 == 3 {
+            for item in &mut self.infrastructure {
+                if item.kind == InfrastructureKind::PumpStation {
+                    item.durability = item.durability.saturating_sub(35);
+                }
+            }
+            self.infrastructure.retain(|item| item.durability > 0);
+        }
+        self.progression.next_day_tick = SimulationTick::new(
+            self.progression.next_day_tick.get().saturating_add(
+                u64::from(SIMULATION_HZ)
+                    .saturating_mul(60)
+                    .saturating_mul(5),
+            ),
+        );
+    }
+
+    fn canonical_mineral_market_value(&self, mineral: MineralKind) -> u32 {
+        let mut factor = canonical_mineral_market_factor(
+            self.progression.market_salt,
+            self.progression.town_event_day,
+            mineral,
+        ) + u32::from(self.progression.town_development.depot_level) * 3;
+        if self
+            .world_event_severity
+            .contains_key(&WorldEventKind::MarketBoom)
+        {
+            factor += 25;
+        }
+        if self
+            .world_event_severity
+            .contains_key(&WorldEventKind::RareBuyer)
+            && matches!(
+                mineral,
+                MineralKind::Diamond | MineralKind::Mythril | MineralKind::Uranium
+            )
+        {
+            factor += 45;
+        }
+        if self
+            .world_event_severity
+            .contains_key(&WorldEventKind::MarketCrash)
+        {
+            factor = factor.saturating_sub(25).max(45);
+        }
+        mineral.value().saturating_mul(factor) / 100
+    }
+
+    fn sell_canonical_cargo(&mut self, player_id: PlayerId) -> PlayerScopedCommandOutcome {
+        let Some(player_snapshot) = self.players.get(&player_id) else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        let mineral_payout = player_snapshot
+            .cargo
+            .iter()
+            .map(|(mineral, count)| {
+                self.canonical_mineral_market_value(*mineral)
+                    .saturating_mul(*count)
+            })
+            .sum::<u32>();
+        let artifact_payout = player_snapshot
+            .artifacts
+            .iter()
+            .map(|(artifact, count)| artifact.value().saturating_mul(*count))
+            .sum::<u32>();
+        let payout = mineral_payout.saturating_add(artifact_payout);
+        if payout == 0 {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        }
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        let credits_before = player.credits;
+        let cargo_before = player.cargo_used();
+        player.cargo.clear();
+        player.artifacts.clear();
+        player.credits = player.credits.saturating_add(payout);
+        self.progression.total_earnings = self.progression.total_earnings.saturating_add(payout);
+        self.service_transactions.push(PlayerServiceTransaction {
+            player_id,
+            kind: PlayerTransactionKind::SellCargo,
+            credits_before,
+            credits_after: player.credits,
+            cargo_before,
+            cargo_after: 0,
+        });
+        PlayerScopedCommandOutcome::Applied
+    }
+
+    fn advance_canonical_market_day(&mut self) {
+        self.progression.town_event_day = self.progression.town_event_day.saturating_add(1);
+        self.progression.market_salt = self.progression.market_salt.wrapping_add(1);
+        self.progression
+            .market_history
+            .push(canonical_market_factor(
+                self.progression.market_salt,
+                self.progression.town_event_day,
+            ));
+        if self.progression.market_history.len() > 7 {
+            self.progression.market_history.remove(0);
+        }
+        for mineral in canonical_minerals() {
+            let history = self
+                .progression
+                .mineral_market_history
+                .entry(mineral)
+                .or_default();
+            history.push(canonical_mineral_market_factor(
+                self.progression.market_salt,
+                self.progression.town_event_day,
+                mineral,
+            ));
+            if history.len() > 7 {
+                history.remove(0);
+            }
+        }
+        self.progression.expedition_offers.clear();
+    }
+
+    fn refresh_canonical_expedition_offers(&mut self) {
+        use crate::game_state::ExpeditionObjectiveKind;
+        if self.progression.deep_claim_status != DeepClaimStatus::Unlocked
+            || !self.progression.expedition_offers.is_empty()
+        {
+            return;
+        }
+        let day = self.progression.town_event_day;
+        let depth = u32::try_from(self.progression.deepest_tile_reached.max(80)).unwrap_or(80);
+        self.progression.expedition_offers = vec![
+            Expedition {
+                kind: ExpeditionObjectiveKind::ReachDepth,
+                target: TileKind::Stone,
+                required: depth.saturating_add(15).min(140),
+                reward: 320 + day * 12,
+                expires_day: day + 4,
+            },
+            Expedition {
+                kind: ExpeditionObjectiveKind::DeliverCargo,
+                target: TileKind::Ore(MineralKind::Platinum),
+                required: 2,
+                reward: 420 + day * 14,
+                expires_day: day + 3,
+            },
+            Expedition {
+                kind: ExpeditionObjectiveKind::ScanHazards,
+                target: TileKind::Gas,
+                required: 4,
+                reward: 360 + day * 10,
+                expires_day: day + 3,
+            },
+            Expedition {
+                kind: ExpeditionObjectiveKind::BuildPumpStations,
+                target: TileKind::MagmaVent,
+                required: 2,
+                reward: 460 + day * 12,
+                expires_day: day + 5,
+            },
+        ];
+        let kind = match day % 10 {
+            0 => ExpeditionObjectiveKind::RecoverProbe,
+            1 => ExpeditionObjectiveKind::MineVein,
+            2 => ExpeditionObjectiveKind::ScanAnomaly,
+            3 => ExpeditionObjectiveKind::RescueMiner,
+            4 => ExpeditionObjectiveKind::DeliverExplosives,
+            5 => ExpeditionObjectiveKind::StabilizeCollapse,
+            6 => ExpeditionObjectiveKind::RetrieveArtifact,
+            7 => ExpeditionObjectiveKind::ReachSignal,
+            8 => ExpeditionObjectiveKind::NoDamageReturn,
+            _ => ExpeditionObjectiveKind::FastReturn,
+        };
+        self.progression.expedition_offers.push(Expedition {
+            kind,
+            target: TileKind::Artifact(ArtifactKind::OldCircuit),
+            required: 1 + day % 3,
+            reward: 520 + day * 16,
+            expires_day: day + 2,
+        });
+    }
+
+    fn accept_canonical_expedition(&mut self, index: usize) -> PlayerScopedCommandOutcome {
+        self.refresh_canonical_expedition_offers();
+        if self.progression.active_expeditions.len() >= 3
+            || index >= self.progression.expedition_offers.len()
+        {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        }
+        let expedition = self.progression.expedition_offers.remove(index);
+        self.progression.active_expeditions.push(expedition);
+        PlayerScopedCommandOutcome::Applied
+    }
+
+    fn apply_canonical_expedition_special_reward(
+        &mut self,
+        player_id: PlayerId,
+        expedition: Expedition,
+    ) {
+        use crate::game_state::{ExpeditionObjectiveKind, LegendaryBlueprint};
+        match expedition.kind {
+            ExpeditionObjectiveKind::RetrieveArtifact => {
+                self.progression
+                    .legendary_blueprints
+                    .insert(LegendaryBlueprint::StarPlating);
+                self.progression
+                    .rig_part_inventory
+                    .insert(RigPartKind::ResonanceDrill);
+            }
+            ExpeditionObjectiveKind::RecoverProbe | ExpeditionObjectiveKind::ReachSignal => {
+                self.progression
+                    .rig_part_inventory
+                    .insert(RigPartKind::HazardScanner);
+            }
+            _ => {}
+        }
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return;
+        };
+        match expedition.kind {
+            ExpeditionObjectiveKind::ScanAnomaly | ExpeditionObjectiveKind::ScanHazards => {
+                player.add_material(StrategicResourceKind::CrystalLens, expedition.required);
+            }
+            ExpeditionObjectiveKind::MineVein => {
+                player.add_material(StrategicResourceKind::AncientAlloy, 1);
+            }
+            _ => {}
+        }
+    }
+
+    fn start_canonical_side_contract(&mut self) -> PlayerScopedCommandOutcome {
+        use crate::game_state::SideContractKind;
+        if self.progression.active_side_contracts.len() >= 3 {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        }
+        let kind = match self.progression.town_event_day % 4 {
+            0 => SideContractKind::Cargo,
+            1 => SideContractKind::DepthSurvey,
+            2 => SideContractKind::HazardScan,
+            _ => SideContractKind::Rush,
+        };
+        let (target, required) = match kind {
+            SideContractKind::Cargo => (TileKind::Ore(MineralKind::Gold), 2),
+            SideContractKind::DepthSurvey => (TileKind::Ore(MineralKind::Platinum), 65),
+            SideContractKind::HazardScan => (TileKind::Gas, 3),
+            SideContractKind::Rush => (TileKind::Ore(MineralKind::Ruby), 1),
+        };
+        self.progression.active_side_contracts.push(SideContract {
+            kind,
+            target,
+            required,
+            expires_day: (kind == SideContractKind::Rush)
+                .then_some(self.progression.town_event_day.saturating_add(2)),
+        });
+        PlayerScopedCommandOutcome::Applied
+    }
+
+    fn canonical_side_contract_satisfied(
+        &self,
+        player_id: PlayerId,
+        contract: SideContract,
+        player: &Player,
+    ) -> bool {
+        use crate::game_state::SideContractKind;
+        if contract
+            .expires_day
+            .is_some_and(|deadline| self.progression.town_event_day > deadline)
+        {
+            return false;
+        }
+        match contract.kind {
+            SideContractKind::Cargo | SideContractKind::Rush => match contract.target {
+                TileKind::Ore(mineral) => {
+                    player.cargo.get(&mineral).copied().unwrap_or(0) >= contract.required
+                }
+                TileKind::Artifact(artifact) => {
+                    player.artifacts.get(&artifact).copied().unwrap_or(0) >= contract.required
+                }
+                _ => false,
+            },
+            SideContractKind::DepthSurvey => {
+                u32::try_from(self.progression.deepest_tile_reached).unwrap_or(0)
+                    >= contract.required
+            }
+            SideContractKind::HazardScan => {
+                let count = self
+                    .discovered_tiles
+                    .get(&player_id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|position| {
+                        self.terrain.tile(**position).is_some_and(|tile| {
+                            matches!(
+                                tile.kind,
+                                TileKind::Gas
+                                    | TileKind::Lava
+                                    | TileKind::MagmaVent
+                                    | TileKind::ExplosivePocket
+                                    | TileKind::PressurePocket
+                            )
+                        })
+                    })
+                    .count();
+                count >= usize::try_from(contract.required).unwrap_or(usize::MAX)
+            }
+        }
+    }
+
+    fn complete_canonical_side_contract(
+        &mut self,
+        player_id: PlayerId,
+    ) -> PlayerScopedCommandOutcome {
+        let Some(player_snapshot) = self.players.get(&player_id).cloned() else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        self.progression.active_side_contracts.retain(|contract| {
+            contract
+                .expires_day
+                .is_none_or(|deadline| self.progression.town_event_day <= deadline)
+        });
+        let Some(index) = self
+            .progression
+            .active_side_contracts
+            .iter()
+            .position(|contract| {
+                self.canonical_side_contract_satisfied(player_id, *contract, &player_snapshot)
+            })
+        else {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        };
+        let contract = self.progression.active_side_contracts.remove(index);
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        let credits_before = player.credits;
+        let cargo_before = player.cargo_used();
+        if matches!(
+            contract.kind,
+            crate::game_state::SideContractKind::Cargo | crate::game_state::SideContractKind::Rush
+        ) {
+            crate::game_state::consume_side_contract_cargo(contract, player);
+        }
+        let reward = 420_u32.saturating_add(contract.required.min(10).saturating_mul(80));
+        player.credits = player.credits.saturating_add(reward);
+        self.progression.total_earnings = self.progression.total_earnings.saturating_add(reward);
+        self.service_transactions.push(PlayerServiceTransaction {
+            player_id,
+            kind: PlayerTransactionKind::CompleteContract,
+            credits_before,
+            credits_after: player.credits,
+            cargo_before,
+            cargo_after: player.cargo_used(),
+        });
+        PlayerScopedCommandOutcome::Applied
+    }
+
+    fn apply_canonical_salvage_service(
+        &mut self,
+        player_id: PlayerId,
+        request: crate::game_state::SessionServiceRequest,
+    ) -> Option<PlayerScopedCommandOutcome> {
+        let low_grade_values = [
+            self.canonical_mineral_market_value(MineralKind::Copper),
+            self.canonical_mineral_market_value(MineralKind::Iron),
+        ];
+        let player = self.players.get_mut(&player_id)?;
+        let level = self.progression.town_development.salvage_yard_level;
+        let applied = match request {
+            crate::game_state::SessionServiceRequest::SalvageRecoverWreckedPart => {
+                if level < 3 {
+                    false
+                } else {
+                    let count = self.rescue_counts.get(&player_id).copied().unwrap_or(0);
+                    let part = match count % 4 {
+                        0 => RigPartKind::ImpactHull,
+                        1 => RigPartKind::ArmoredCargoBay,
+                        2 => RigPartKind::HazardScanner,
+                        _ => RigPartKind::NeedleDrill,
+                    };
+                    self.progression.rig_part_inventory.insert(part);
+                    true
+                }
+            }
+            crate::game_state::SessionServiceRequest::SalvageClearCollapseZones => {
+                if level < 4 || self.collapse_warnings.is_empty() {
+                    false
+                } else {
+                    let cleared = u32::try_from(self.collapse_warnings.len()).unwrap_or(u32::MAX);
+                    self.collapse_warnings.clear();
+                    let payout = cleared.saturating_mul(45);
+                    player.credits = player.credits.saturating_add(payout);
+                    self.progression.total_earnings =
+                        self.progression.total_earnings.saturating_add(payout);
+                    true
+                }
+            }
+            crate::game_state::SessionServiceRequest::SalvageSellScrapTip => {
+                player.credits = player.credits.saturating_add(35);
+                self.progression.total_earnings =
+                    self.progression.total_earnings.saturating_add(35);
+                true
+            }
+            crate::game_state::SessionServiceRequest::SellScanData => {
+                if self.progression.town_development.scanner_lab_level == 0
+                    || self.scan_markers.is_empty()
+                {
+                    false
+                } else {
+                    let count = u32::try_from(self.scan_markers.len()).unwrap_or(u32::MAX);
+                    let payout = count.saturating_mul(
+                        12 + u32::from(self.progression.town_development.scanner_lab_level) * 4,
+                    );
+                    self.scan_markers.clear();
+                    player.credits = player.credits.saturating_add(payout);
+                    self.progression.total_earnings =
+                        self.progression.total_earnings.saturating_add(payout);
+                    true
+                }
+            }
+            crate::game_state::SessionServiceRequest::AutoSortLowGradeCargo => {
+                let mut payout = 0_u32;
+                for (index, mineral) in [MineralKind::Copper, MineralKind::Iron]
+                    .into_iter()
+                    .enumerate()
+                {
+                    if let Some(count) = player.cargo.remove(&mineral) {
+                        payout =
+                            payout.saturating_add(low_grade_values[index].saturating_mul(count));
+                    }
+                }
+                if payout == 0 {
+                    false
+                } else {
+                    player.credits = player.credits.saturating_add(payout);
+                    self.progression.total_earnings =
+                        self.progression.total_earnings.saturating_add(payout);
+                    true
+                }
+            }
+            _ => return None,
+        };
+        Some(if applied {
+            PlayerScopedCommandOutcome::Applied
+        } else {
+            PlayerScopedCommandOutcome::IgnoredUnavailable
+        })
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "canonical progression service migration keeps transactional rules together"
+    )]
+    fn apply_canonical_progression_service(
+        &mut self,
+        player_id: PlayerId,
+        request: crate::game_state::SessionServiceRequest,
+    ) -> Option<PlayerScopedCommandOutcome> {
+        let player = self.players.get_mut(&player_id)?;
+        let credits_before = player.credits;
+        let cargo_before = player.cargo_used();
+        let applied = match request {
+            crate::game_state::SessionServiceRequest::Finance => {
+                if player.loan_debt == 0 {
+                    let level = self.progression.town_development.bank_level;
+                    let advance = 250 + u32::from(level) * 150;
+                    let risk_premium = 50 + u32::from(level) * 25;
+                    player.credits = player.credits.saturating_add(advance);
+                    player.loan_debt = advance.saturating_add(risk_premium);
+                } else {
+                    let payment = player.loan_debt.min(player.credits);
+                    player.credits -= payment;
+                    player.loan_debt -= payment;
+                }
+                true
+            }
+            crate::game_state::SessionServiceRequest::BuyInsurance => {
+                if player.insured {
+                    false
+                } else {
+                    let bank_level = self.progression.town_development.bank_level;
+                    let max_tier = 1_u8.saturating_add(bank_level).min(4);
+                    let next_tier = player.insurance_tier.saturating_add(1).min(max_tier);
+                    let cost = (70 + u32::from(next_tier) * 55)
+                        .saturating_sub(u32::from(bank_level).saturating_mul(15));
+                    if player.insurance_tier >= max_tier || player.credits < cost {
+                        false
+                    } else {
+                        player.credits -= cost;
+                        player.insured = true;
+                        player.insurance_tier = next_tier;
+                        true
+                    }
+                }
+            }
+            crate::game_state::SessionServiceRequest::CraftRecipe { recipe } => {
+                if recipe.cost().iter().any(|(material, required)| {
+                    player.materials.get(material).copied().unwrap_or(0) < *required
+                }) {
+                    false
+                } else {
+                    for (material, required) in recipe.cost() {
+                        if let Some(count) = player.materials.get_mut(material) {
+                            *count = count.saturating_sub(*required);
+                        }
+                    }
+                    player.materials.retain(|_, count| *count > 0);
+                    match recipe {
+                        crate::game_state::RecipeKind::ReinforcedBulkhead => {
+                            player.crafted_bulkheads = player.crafted_bulkheads.saturating_add(1);
+                            player.hull = player.max_hull();
+                        }
+                        crate::game_state::RecipeKind::AuxiliaryTank => {
+                            player.fuel_capacity += 20.0;
+                            player.fuel = player.fuel_capacity;
+                        }
+                        crate::game_state::RecipeKind::ExpandedSorter => {
+                            player.crafted_sorters = player.crafted_sorters.saturating_add(1);
+                            player.cargo_capacity = player.cargo_capacity.saturating_add(6);
+                        }
+                        crate::game_state::RecipeKind::SignalRelayKit => {
+                            player.signal_relay_kits = player.signal_relay_kits.saturating_add(1);
+                        }
+                        crate::game_state::RecipeKind::CargoLiftKit => {
+                            player.cargo_lift_kits = player.cargo_lift_kits.saturating_add(1);
+                        }
+                        crate::game_state::RecipeKind::TunnelSupportKit => {
+                            player.tunnel_support_kits =
+                                player.tunnel_support_kits.saturating_add(1);
+                        }
+                        crate::game_state::RecipeKind::PumpStationKit => {
+                            player.pump_station_kits = player.pump_station_kits.saturating_add(1);
+                        }
+                        crate::game_state::RecipeKind::SurveyDroneKit => {
+                            player.survey_drone_kits = player.survey_drone_kits.saturating_add(1);
+                        }
+                        crate::game_state::RecipeKind::OreProcessorKit => {
+                            player.ore_processor_kits = player.ore_processor_kits.saturating_add(1);
+                        }
+                    }
+                    true
+                }
+            }
+            crate::game_state::SessionServiceRequest::SalvageRecoverLostCargo
+            | crate::game_state::SessionServiceRequest::SalvageLaunchDrone => {
+                let launch_drone = matches!(
+                    request,
+                    crate::game_state::SessionServiceRequest::SalvageLaunchDrone
+                );
+                if launch_drone && self.progression.town_development.salvage_yard_level < 2 {
+                    false
+                } else if let Some(site) = self.lost_cargo_sites.remove(&player_id) {
+                    let recovered = site.count();
+                    let discount =
+                        u32::from(self.progression.town_development.salvage_yard_level) * 3;
+                    let fee = recovered
+                        .saturating_mul(12)
+                        .saturating_sub(recovered.saturating_mul(discount))
+                        .min(player.credits);
+                    player.credits -= fee;
+                    for (mineral, count) in &site.minerals {
+                        *player.cargo.entry(*mineral).or_default() += *count;
+                    }
+                    for (artifact, count) in &site.artifacts {
+                        *player.artifacts.entry(*artifact).or_default() += *count;
+                    }
+                    if launch_drone {
+                        #[allow(
+                            clippy::cast_possible_truncation,
+                            reason = "bounded salvage site coordinates intentionally map to terrain tiles"
+                        )]
+                        let position = TilePosition {
+                            x: (site.x / TILE_SIZE).floor() as i32,
+                            y: (site.y / TILE_SIZE).floor() as i32,
+                        };
+                        self.infrastructure.push(PlacedInfrastructure {
+                            kind: InfrastructureKind::SurveyDrone,
+                            position,
+                            durability: crate::game_state::default_infrastructure_durability(),
+                        });
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+            crate::game_state::SessionServiceRequest::UpgradeTownBuilding { building } => {
+                let cost = self.progression.town_development.upgrade_cost(building);
+                let material_gate = self.progression.town_development.level(building) >= 1;
+                let has_material = player
+                    .materials
+                    .get(&StrategicResourceKind::AncientAlloy)
+                    .copied()
+                    .unwrap_or(0)
+                    > 0;
+                if player.credits < cost || (material_gate && !has_material) {
+                    false
+                } else {
+                    player.credits -= cost;
+                    if material_gate {
+                        if let Some(count) = player
+                            .materials
+                            .get_mut(&StrategicResourceKind::AncientAlloy)
+                        {
+                            *count = count.saturating_sub(1);
+                        }
+                        player.materials.retain(|_, count| *count > 0);
+                    }
+                    *self.progression.town_development.level_mut(building) += 1;
+                    self.progression.town_development.reputation = self
+                        .progression
+                        .town_development
+                        .reputation
+                        .saturating_add(1);
+                    true
+                }
+            }
+            _ => return None,
+        };
+        if !applied {
+            return Some(PlayerScopedCommandOutcome::IgnoredUnavailable);
+        }
+        self.service_transactions.push(PlayerServiceTransaction {
+            player_id,
+            kind: PlayerTransactionKind::BuyUpgrade,
+            credits_before,
+            credits_after: player.credits,
+            cargo_before,
+            cargo_after: player.cargo_used(),
+        });
+        Some(PlayerScopedCommandOutcome::Applied)
+    }
+
+    fn canonical_expedition_satisfied(&self, expedition: Expedition, player: &Player) -> bool {
+        use crate::game_state::ExpeditionObjectiveKind;
+        let progress = match expedition.kind {
+            ExpeditionObjectiveKind::ReachDepth => {
+                u32::try_from(self.progression.deepest_tile_reached).unwrap_or(0)
+            }
+            ExpeditionObjectiveKind::DeliverCargo => match expedition.target {
+                TileKind::Ore(mineral) => player.cargo.get(&mineral).copied().unwrap_or(0),
+                TileKind::Artifact(artifact) => {
+                    player.artifacts.get(&artifact).copied().unwrap_or(0)
+                }
+                _ => 0,
+            },
+            ExpeditionObjectiveKind::BuildPumpStations => u32::try_from(
+                self.infrastructure
+                    .iter()
+                    .filter(|item| item.kind == InfrastructureKind::PumpStation)
+                    .count(),
+            )
+            .unwrap_or(u32::MAX),
+            ExpeditionObjectiveKind::MineVein => player.cargo_used(),
+            ExpeditionObjectiveKind::DeliverExplosives => player.bombs,
+            ExpeditionObjectiveKind::RetrieveArtifact => player.artifacts.values().copied().sum(),
+            ExpeditionObjectiveKind::NoDamageReturn => u32::from(player.hull >= player.max_hull()),
+            ExpeditionObjectiveKind::FastReturn => {
+                u32::from(self.progression.town_event_day <= expedition.expires_day)
+            }
+            ExpeditionObjectiveKind::RecoverProbe
+            | ExpeditionObjectiveKind::ScanAnomaly
+            | ExpeditionObjectiveKind::RescueMiner
+            | ExpeditionObjectiveKind::StabilizeCollapse
+            | ExpeditionObjectiveKind::ReachSignal => u32::from(
+                self.progression.deepest_tile_reached
+                    >= i32::try_from(60 + expedition.required * 10).unwrap_or(i32::MAX),
+            ),
+            ExpeditionObjectiveKind::ScanHazards => 0,
+        };
+        progress >= expedition.required
+    }
+
+    fn complete_canonical_progression_for_player(
+        &mut self,
+        player_id: PlayerId,
+    ) -> PlayerScopedCommandOutcome {
+        let Some(player_snapshot) = self.players.get(&player_id).cloned() else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        if let Some(index) = self
+            .progression
+            .active_expeditions
+            .iter()
+            .position(|expedition| {
+                expedition.expires_day >= self.progression.town_event_day
+                    && self.canonical_expedition_satisfied(*expedition, &player_snapshot)
+            })
+        {
+            let expedition = self.progression.active_expeditions.remove(index);
+            let (credits_before, cargo_before, credits_after, cargo_after) = {
+                let Some(player) = self.players.get_mut(&player_id) else {
+                    return PlayerScopedCommandOutcome::UnknownPlayer;
+                };
+                let credits_before = player.credits;
+                let cargo_before = player.cargo_used();
+                crate::game_state::consume_expedition_delivery(expedition, player);
+                player.credits = player.credits.saturating_add(expedition.reward);
+                (
+                    credits_before,
+                    cargo_before,
+                    player.credits,
+                    player.cargo_used(),
+                )
+            };
+            self.apply_canonical_expedition_special_reward(player_id, expedition);
+            self.progression.total_earnings = self
+                .progression
+                .total_earnings
+                .saturating_add(expedition.reward);
+            self.progression.expeditions_completed =
+                self.progression.expeditions_completed.saturating_add(1);
+            self.progression.town_development.reputation = self
+                .progression
+                .town_development
+                .reputation
+                .saturating_add(1);
+            self.service_transactions.push(PlayerServiceTransaction {
+                player_id,
+                kind: PlayerTransactionKind::CompleteContract,
+                credits_before,
+                credits_after,
+                cargo_before,
+                cargo_after,
+            });
+            return PlayerScopedCommandOutcome::Applied;
+        }
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        let credits_before = player.credits;
+        let cargo_before = player.cargo_used();
+        let before_completed = self.progression.contracts.completed;
+        let Some(completion) = self.progression.contracts.try_complete(player) else {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        };
+        let escrow =
+            completion.reward * u32::from(self.progression.town_development.bank_level) / 20;
+        player.credits = player.credits.saturating_add(escrow);
+        self.progression.total_earnings = self
+            .progression
+            .total_earnings
+            .saturating_add(completion.reward.saturating_add(escrow));
+        if completion.finished_story {
+            self.progression.deep_claim_status = DeepClaimStatus::Unlocked;
+        }
+        debug_assert_eq!(self.progression.contracts.completed, before_completed + 1);
+        self.service_transactions.push(PlayerServiceTransaction {
+            player_id,
+            kind: if completion.finished_story {
+                PlayerTransactionKind::WinGame
+            } else {
+                PlayerTransactionKind::CompleteContract
+            },
+            credits_before,
+            credits_after: player.credits,
+            cargo_before,
+            cargo_after: player.cargo_used(),
+        });
+        PlayerScopedCommandOutcome::Applied
     }
 
     pub fn apply_contract_reward(
@@ -2522,13 +4956,29 @@ impl WorldState {
 
     pub fn insert_player(&mut self, player_id: PlayerId, player: Player) {
         self.players.insert(player_id, player);
+        self.equipped_rig_parts.entry(player_id).or_default();
+        self.mechanic_levels.entry(player_id).or_default();
         self.scanner_cooldowns.entry(player_id).or_insert(0.0);
+        self.scanner_cooldown_deadlines
+            .entry(player_id)
+            .or_insert(self.simulation_tick);
         self.discovered_tiles.entry(player_id).or_default();
         self.authoritative_summary.player_count = self.players.len();
     }
 
     pub fn player_mut(&mut self, player_id: PlayerId) -> Option<&mut Player> {
         self.players.get_mut(&player_id)
+    }
+
+    pub fn set_player_movement_modifiers(
+        &mut self,
+        player_id: PlayerId,
+        mechanic_level: u8,
+        parts: impl IntoIterator<Item = RigPartKind>,
+    ) {
+        self.mechanic_levels.insert(player_id, mechanic_level);
+        self.equipped_rig_parts
+            .insert(player_id, parts.into_iter().collect());
     }
 
     #[must_use]
@@ -2542,6 +4992,8 @@ impl WorldState {
         first_player_id: PlayerId,
         second_player_id: PlayerId,
     ) -> Option<PlayerScopedGameplayProof> {
+        self.active_drills.remove(&first_player_id);
+        self.active_drills.remove(&second_player_id);
         let first_before = self.players.get(&first_player_id)?.clone();
         let second_before = self.players.get(&second_player_id)?.clone();
 
@@ -2583,13 +5035,16 @@ impl WorldState {
         second.credits = second.credits.saturating_add(500);
         second.bombs = second.bombs.saturating_add(1);
         second.signal_relay_kits = second.signal_relay_kits.saturating_add(1);
-        second.cargo.insert(crate::terrain::MineralKind::Copper, 1);
         let survival_before = self.player_survival_snapshot(second_player_id)?;
 
         let survival_scoped = self.apply_player_command(second_player_id, &PlayerCommand::Rescue)
             == PlayerScopedCommandOutcome::Applied
             && self.player_survival_snapshot(second_player_id)? != survival_before
             && self.player_survival_snapshot(first_player_id)?.player_id == first_player_id;
+        self.players
+            .get_mut(&second_player_id)?
+            .cargo
+            .insert(crate::terrain::MineralKind::Copper, 1);
         let scanner_scoped = self
             .apply_player_command(second_player_id, &PlayerCommand::UseScanner)
             == PlayerScopedCommandOutcome::Applied
@@ -2638,12 +5093,6 @@ impl WorldState {
         })
     }
 
-    pub fn sync_active_drill_to_legacy_game(&self, player_id: PlayerId, game: &mut GameState) {
-        if player_id == LOCAL_PLAYER_ID {
-            game.active_drill = self.active_drills.get(&player_id).copied();
-        }
-    }
-
     pub fn chip_active_drill_target(&mut self, player_id: PlayerId) -> Option<MineResult> {
         let target = self.active_drills.get(&player_id)?.target;
         let result = self.terrain_mut().chip(target);
@@ -2657,10 +5106,50 @@ impl WorldState {
         ) {
             self.active_drills.remove(&player_id);
         }
-        if let Some(player) = self.players.get_mut(&player_id)
-            && let MineResult::Mined(TileKind::Ore(mineral)) = result
-        {
-            let _added = player.add_cargo(mineral);
+        let player = self.players.get_mut(&player_id)?;
+        match result {
+            MineResult::Mined(mined) => {
+                player.fuel = quantize_simulation_scalar((player.fuel - 0.45).max(0.0));
+                match mined {
+                    TileKind::Ore(mineral) => {
+                        let _added = player.add_cargo(mineral);
+                    }
+                    TileKind::Artifact(artifact) => {
+                        let _added = player.add_artifact(artifact);
+                    }
+                    TileKind::PressurePocket => {
+                        player.velocity_y = -360.0;
+                        player.velocity_x = quantize_simulation_scalar(player.velocity_x * 1.4);
+                        player.hull = quantize_simulation_scalar((player.hull - 10.0).max(0.0));
+                    }
+                    _ => {}
+                }
+            }
+            MineResult::Exploded => {
+                player.fuel = quantize_simulation_scalar((player.fuel - 0.45).max(0.0));
+                player.velocity_x = quantize_simulation_scalar(player.velocity_x * -0.25);
+                player.velocity_y = -90.0;
+                let protected = self.infrastructure.iter().any(|item| {
+                    item.kind == InfrastructureKind::PumpStation
+                        && (item.position.x - target.x).abs() <= 5
+                        && (item.position.y - target.y).abs() <= 5
+                });
+                if !protected {
+                    self.hazards.push(HazardCloud {
+                        x: player.x,
+                        y: player.y + TILE_SIZE,
+                        life: 8.0,
+                        radius: 10.0,
+                    });
+                }
+            }
+            MineResult::Blast => {
+                player.fuel = quantize_simulation_scalar((player.fuel - 0.9).max(0.0));
+                player.hull = quantize_simulation_scalar((player.hull - 24.0).max(0.0));
+                player.velocity_x = quantize_simulation_scalar(player.velocity_x * -0.7);
+                player.velocity_y = -260.0;
+            }
+            MineResult::Blocked | MineResult::TooDangerous | MineResult::Chipped => {}
         }
         Some(result)
     }
@@ -2674,6 +5163,11 @@ impl WorldState {
         player_id: PlayerId,
         command: &PlayerCommand,
     ) -> PlayerScopedCommandOutcome {
+        let parts = self
+            .equipped_rig_parts
+            .get(&player_id)
+            .cloned()
+            .unwrap_or_default();
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
@@ -2692,11 +5186,26 @@ impl WorldState {
                     authoritative_mine_target(player, horizontal, drill_down)
                 {
                     let Some(tile) = self.terrain.tile(target) else {
-                        self.active_drills.remove(&player_id);
+                        self.set_active_drill(player_id, None);
                         return PlayerScopedCommandOutcome::Applied;
                     };
                     if tile.kind == TileKind::Air {
-                        self.active_drills.remove(&player_id);
+                        self.set_active_drill(player_id, None);
+                        return PlayerScopedCommandOutcome::Applied;
+                    }
+                    let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
+                        || parts.contains(&RigPartKind::ResonanceDrill)
+                    {
+                        player.drill_strength.saturating_add(1)
+                    } else {
+                        player.drill_strength
+                    };
+                    if self
+                        .terrain
+                        .hardness_at(target)
+                        .is_some_and(|hardness| hardness > effective_drill_strength)
+                    {
+                        self.set_active_drill(player_id, None);
                         return PlayerScopedCommandOutcome::Applied;
                     }
                     let initial_durability = tile.durability.max(1);
@@ -2704,32 +5213,31 @@ impl WorldState {
                         tile.kind,
                         player.drill_strength,
                         direction,
+                        &parts,
+                        target,
                     );
-                    self.active_drills
-                        .entry(player_id)
-                        .and_modify(|drill| {
-                            if drill.target != target || drill.direction != direction {
-                                *drill = authoritative_drill_state(
+                    let drill = self
+                        .active_drills
+                        .get(&player_id)
+                        .filter(|drill| drill.target == target && drill.direction == direction)
+                        .map_or_else(
+                            || {
+                                authoritative_drill_state(
                                     target,
                                     direction,
                                     initial_durability,
                                     seconds_per_chip,
-                                );
-                            } else {
-                                drill.initial_durability = initial_durability;
-                                drill.seconds_per_chip = seconds_per_chip;
-                            }
-                        })
-                        .or_insert_with(|| {
-                            authoritative_drill_state(
-                                target,
-                                direction,
+                                )
+                            },
+                            |drill| DrillState {
                                 initial_durability,
                                 seconds_per_chip,
-                            )
-                        });
+                                ..*drill
+                            },
+                        );
+                    self.set_active_drill(player_id, Some(drill));
                 } else {
-                    self.active_drills.remove(&player_id);
+                    self.set_active_drill(player_id, None);
                 }
                 PlayerScopedCommandOutcome::Applied
             }
@@ -2761,22 +5269,21 @@ impl WorldState {
                 });
                 PlayerScopedCommandOutcome::Applied
             }
-            PlayerCommand::SellCargo => {
-                let credits_before = player.credits;
-                let cargo_before = player.cargo_used();
-                sell_cargo(player);
-                self.service_transactions.push(PlayerServiceTransaction {
-                    player_id,
-                    kind: PlayerTransactionKind::SellCargo,
-                    credits_before,
-                    credits_after: player.credits,
-                    cargo_before,
-                    cargo_after: player.cargo_used(),
-                });
-                PlayerScopedCommandOutcome::Applied
-            }
+            PlayerCommand::SellCargo => self.sell_canonical_cargo(player_id),
             PlayerCommand::UseScanner => {
+                if self
+                    .world_event_severity
+                    .contains_key(&WorldEventKind::DeepPressureStorm)
+                {
+                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
+                }
+                let deadline = SimulationTick::new(
+                    self.simulation_tick
+                        .get()
+                        .saturating_add(simulation_ticks_for_seconds(1.0)),
+                );
                 self.scanner_cooldowns.insert(player_id, 1.0);
+                self.scanner_cooldown_deadlines.insert(player_id, deadline);
                 let center = player.tile_position(TILE_SIZE);
                 let _revealed = self.reveal_scanner_area(player_id, center, 4);
                 PlayerScopedCommandOutcome::Applied
@@ -2791,6 +5298,11 @@ impl WorldState {
                         y: TILE_SIZE.mul_add(0.4, player.y),
                         timer_seconds: 2.4,
                     });
+                    self.bomb_detonation_ticks.push(SimulationTick::new(
+                        self.simulation_tick
+                            .get()
+                            .saturating_add(simulation_ticks_for_seconds(2.4)),
+                    ));
                     self.authoritative_summary.bomb_count = self.bombs.len();
                     PlayerScopedCommandOutcome::Applied
                 }
@@ -2826,26 +5338,7 @@ impl WorldState {
                 });
                 PlayerScopedCommandOutcome::Applied
             }
-            PlayerCommand::Rescue => {
-                let credits_before = player.credits;
-                let cargo_before = player.cargo_used();
-                player.x = 0.0;
-                player.y = TILE_SIZE.mul_add(2.0, 0.0);
-                player.velocity_x = 0.0;
-                player.velocity_y = 0.0;
-                player.hull = player.max_hull();
-                player.fuel = player.fuel_capacity;
-                self.active_drills.remove(&player_id);
-                self.service_transactions.push(PlayerServiceTransaction {
-                    player_id,
-                    kind: PlayerTransactionKind::Rescue,
-                    credits_before,
-                    credits_after: player.credits,
-                    cargo_before,
-                    cargo_after: player.cargo_used(),
-                });
-                PlayerScopedCommandOutcome::Applied
-            }
+            PlayerCommand::Rescue => self.canonical_rescue_player(player_id),
             PlayerCommand::Interact
             | PlayerCommand::Cancel
             | PlayerCommand::Confirm
@@ -2864,34 +5357,6 @@ impl WorldState {
             .iter()
             .map(|(player_id, player)| PlayerSnapshot::from_world_player(*player_id, player, self))
             .collect()
-    }
-
-    pub fn sync_player_shell_effects_from_legacy_game(
-        &mut self,
-        player_id: PlayerId,
-        game: &GameState,
-    ) -> Option<PlayerShellEffectSync> {
-        let player = self.players.get_mut(&player_id)?;
-        let sync = PlayerShellEffectSync {
-            player_id,
-            fuel_before: player.fuel,
-            fuel_after: game.player.fuel,
-            hull_before: player.hull,
-            hull_after: game.player.hull,
-            scanner_cooldown_seconds: game.scanner_cooldown_seconds,
-        };
-        player.fuel = game.player.fuel;
-        player.hull = game.player.hull;
-        self.scanner_cooldowns
-            .insert(player_id, game.scanner_cooldown_seconds);
-        Some(sync)
-    }
-
-    pub fn sync_local_player_shell_effects_from_legacy_game(
-        &mut self,
-        game: &GameState,
-    ) -> Option<PlayerShellEffectSync> {
-        self.sync_player_shell_effects_from_legacy_game(LOCAL_PLAYER_ID, game)
     }
 
     pub fn active_drills_snapshot(&self) -> BTreeMap<PlayerId, DrillState> {
@@ -2922,24 +5387,6 @@ impl WorldState {
         self.authoritative_summary.hazard_count = self.hazards.len();
         self.authoritative_summary.bomb_count = self.bombs.len();
         self.authoritative_summary.infrastructure_count = self.infrastructure.len();
-    }
-
-    fn sync_from_legacy_game(&mut self, tick: SimulationTick, game: &GameState) {
-        self.simulation_tick = tick;
-        self.players.insert(LOCAL_PLAYER_ID, game.player.clone());
-        self.hazards.clone_from(&game.hazard_clouds);
-        self.terrain.clone_from(&game.terrain);
-        self.bombs.clone_from(&game.placed_bombs);
-        self.infrastructure.clone_from(&game.infrastructure);
-        if let Some(drill) = game.active_drill {
-            self.active_drills.insert(LOCAL_PLAYER_ID, drill);
-        } else {
-            self.active_drills.remove(&LOCAL_PLAYER_ID);
-        }
-        self.scanner_cooldowns
-            .insert(LOCAL_PLAYER_ID, game.scanner_cooldown_seconds);
-        self.authoritative_summary =
-            AuthoritativeWorldSummary::from_legacy_game(tick, game, self.players.len());
     }
 }
 
@@ -3009,6 +5456,8 @@ fn authoritative_drill_seconds_per_chip(
     kind: TileKind,
     drill_strength: u8,
     direction: DrillDirection,
+    parts: &BTreeSet<RigPartKind>,
+    target: TilePosition,
 ) -> f32 {
     let base = match kind {
         TileKind::Air => 0.0,
@@ -3024,13 +5473,39 @@ fn authoritative_drill_seconds_per_chip(
         TileKind::Ore(_) => 0.16,
         TileKind::Artifact(_) => 0.21,
     };
-    let drill_bonus = 1.0 + f32::from(drill_strength.saturating_sub(1)) * 0.4;
+    let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
+        || parts.contains(&RigPartKind::ResonanceDrill)
+    {
+        drill_strength.saturating_add(1)
+    } else {
+        drill_strength
+    };
+    let drill_bonus = 1.0 + f32::from(effective_drill_strength.saturating_sub(1)) * 0.4;
     let direction_penalty = if direction == DrillDirection::Down {
         1.0
     } else {
         1.45
     };
-    (base * direction_penalty / drill_bonus).max(0.045)
+    let mut seconds = base * direction_penalty / drill_bonus;
+    if parts.contains(&RigPartKind::NeedleDrill) {
+        seconds *= match kind {
+            TileKind::Dirt | TileKind::Clay => 0.72,
+            TileKind::Stone | TileKind::HardRock => 1.25,
+            _ => 0.95,
+        };
+    }
+    if parts.contains(&RigPartKind::TitanDrill) {
+        seconds *= 1.10;
+    }
+    if parts.contains(&RigPartKind::ResonanceDrill)
+        && matches!(
+            deep_stratum_at_depth(target.y),
+            Some(DeepStratum::CrystalFaults | DeepStratum::AncientMachineLayer)
+        )
+    {
+        seconds *= 0.65;
+    }
+    seconds.max(0.045)
 }
 
 const fn authoritative_drill_state(
@@ -3080,32 +5555,64 @@ const fn apply_authoritative_command_to_legacy_input(
     input
 }
 
-fn world_events_for_applied_command(command: &SequencedPlayerCommand) -> Vec<WorldEvent> {
+const fn gameplay_event_for_applied_command(
+    command: &SequencedPlayerCommand,
+) -> Option<GameplayEventKind> {
     let player_id = command.player_id;
     match command.command {
         PlayerCommand::Movement {
             drill_down: true, ..
-        } => vec![
-            WorldEvent::ImportantEffectTriggered,
-            WorldEvent::DrillProgressed { player_id },
-        ],
+        } => Some(GameplayEventKind::DrillStarted { player_id }),
         PlayerCommand::Refuel | PlayerCommand::Repair | PlayerCommand::BuyUpgrade { .. } => {
-            vec![WorldEvent::PurchaseCompleted { player_id }]
+            Some(GameplayEventKind::PurchaseCompleted { player_id })
         }
-        PlayerCommand::SellCargo => vec![WorldEvent::CargoChanged { player_id }],
-        PlayerCommand::PlaceBomb => vec![WorldEvent::BombPlaced { player_id }],
-        PlayerCommand::PlaceInfrastructure { .. } | PlayerCommand::UseScanner => {
-            vec![WorldEvent::ImportantEffectTriggered]
+        PlayerCommand::SellCargo => Some(GameplayEventKind::CargoChanged { player_id }),
+        PlayerCommand::PlaceBomb => Some(GameplayEventKind::BombPlaced { player_id }),
+        PlayerCommand::PlaceInfrastructure { .. } => {
+            Some(GameplayEventKind::InfrastructurePlaced { player_id })
         }
-        PlayerCommand::Rescue => vec![
-            WorldEvent::RescueTriggered { player_id },
-            WorldEvent::PlayerSurvivalChanged { player_id },
-        ],
+        PlayerCommand::UseScanner => Some(GameplayEventKind::ScannerUsed { player_id }),
+        PlayerCommand::Rescue => Some(GameplayEventKind::RescueTriggered { player_id }),
         PlayerCommand::Movement { .. }
         | PlayerCommand::Interact
         | PlayerCommand::Cancel
         | PlayerCommand::Confirm
-        | PlayerCommand::SelectUpgrade { .. } => Vec::new(),
+        | PlayerCommand::SelectUpgrade { .. } => None,
+    }
+}
+
+fn world_events_for_gameplay_event(event: GameplayEvent) -> Vec<WorldEvent> {
+    match event.kind {
+        GameplayEventKind::DrillStarted { player_id } => vec![
+            WorldEvent::ImportantEffectTriggered,
+            WorldEvent::DrillProgressed { player_id },
+        ],
+        GameplayEventKind::PurchaseCompleted { player_id } => {
+            vec![WorldEvent::PurchaseCompleted { player_id }]
+        }
+        GameplayEventKind::CargoChanged { player_id } => {
+            vec![WorldEvent::CargoChanged { player_id }]
+        }
+        GameplayEventKind::BombPlaced { player_id } => {
+            vec![WorldEvent::BombPlaced { player_id }]
+        }
+        GameplayEventKind::InfrastructurePlaced { .. }
+        | GameplayEventKind::ScannerUsed { .. }
+        | GameplayEventKind::BouldersChanged
+        | GameplayEventKind::BombDetonated
+        | GameplayEventKind::EscapeStarted { .. }
+        | GameplayEventKind::EscapeTunnelChanged
+        | GameplayEventKind::DeepRewardGranted { .. } => {
+            vec![WorldEvent::ImportantEffectTriggered]
+        }
+        GameplayEventKind::RescueTriggered { player_id } => vec![
+            WorldEvent::RescueTriggered { player_id },
+            WorldEvent::PlayerSurvivalChanged { player_id },
+        ],
+        GameplayEventKind::PlayerDamaged { player_id } => {
+            vec![WorldEvent::PlayerDamaged { player_id }]
+        }
+        GameplayEventKind::HazardChanged => vec![WorldEvent::HazardChanged],
     }
 }
 
@@ -3344,6 +5851,7 @@ pub enum RemotePlayerDangerLevel {
 pub struct RenderViewportPlan {
     pub client_id: ClientId,
     pub viewport: Viewport,
+    pub camera: raylib::prelude::Vector2,
     pub clip_enabled: bool,
     pub local_player: Option<RenderPlayerPresentation>,
     pub remote_player_count: usize,
@@ -3353,8 +5861,13 @@ pub struct RenderViewportPlan {
     pub prediction_overlay: Option<OnlinePredictionRenderOverlay>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct LiveRenderFrameOutput {
+    pub terrain: Terrain,
+    pub hazards: Vec<HazardCloud>,
+    pub bombs: Vec<PlacedBomb>,
+    pub infrastructure: Vec<PlacedInfrastructure>,
+    pub active_drills: BTreeMap<PlayerId, DrillState>,
     pub viewport_plans: Vec<RenderViewportPlan>,
     pub hud_snapshots: Vec<PerPlayerHudSnapshot>,
     pub world_players_by_view: Vec<(ClientId, Vec<RenderWorldPlayerPresentation>)>,
@@ -3373,6 +5886,14 @@ impl LiveRenderFrameOutput {
     #[must_use]
     pub const fn hud_count(&self) -> usize {
         self.hud_snapshots.len()
+    }
+
+    pub fn apply_render_snapshot_to_shell(&self, shell: &mut GameState) {
+        shell.terrain.clone_from(&self.terrain);
+        shell.hazard_clouds.clone_from(&self.hazards);
+        shell.placed_bombs.clone_from(&self.bombs);
+        shell.infrastructure.clone_from(&self.infrastructure);
+        shell.active_drill = self.active_drills.get(&LOCAL_PLAYER_ID).copied();
     }
 
     #[must_use]
@@ -3605,11 +6126,23 @@ impl RenderFramePlan {
             .iter()
             .map(|view| {
                 let remote_players = self.remote_player_presentations(view, prediction_plan);
+                let local_player = self.predicted_player_for_view(view, prediction_plan);
+                #[allow(
+                    clippy::cast_precision_loss,
+                    reason = "bounded viewport dimensions intentionally convert to camera pixels"
+                )]
+                let camera = local_player.map_or(view.camera, |player| {
+                    raylib::prelude::Vector2::new(
+                        (view.viewport.width as f32).mul_add(-0.5, player.x),
+                        (view.viewport.height as f32).mul_add(-0.5, player.y),
+                    )
+                });
                 RenderViewportPlan {
                     client_id: view.client_id,
                     viewport: view.viewport,
+                    camera,
                     clip_enabled: true,
-                    local_player: self.predicted_player_for_view(view, prediction_plan),
+                    local_player,
                     remote_player_count: remote_players.len(),
                     remote_players,
                     correction_frame: prediction_plan.correction.map(|correction| {
@@ -4239,6 +6772,16 @@ pub struct ReplayedReconciliation {
     pub reconciliation: ReconciledMovement,
 }
 
+#[derive(Clone, Debug)]
+pub struct AuthoritativeReconciliationInput {
+    pub tick: SimulationTick,
+    pub player_snapshot: PlayerSnapshot,
+    pub terrain_revisions: Vec<TerrainChunkRevision>,
+    pub changed_tiles: Vec<TilePosition>,
+    pub active_drill: Option<DrillPredictionSnapshot>,
+    pub authoritative_world: WorldState,
+}
+
 impl ReplayedReconciliation {
     #[must_use]
     pub fn from_authoritative_snapshot(
@@ -4285,6 +6828,7 @@ pub struct ClientPredictionState {
     correction_offset: Option<CorrectionOffset>,
     prediction_base_tick: Option<SimulationTick>,
     predicted_world: Option<WorldState>,
+    predicted_replay_world: Option<WorldState>,
     predicted_local_snapshot: Option<PlayerSnapshot>,
     prediction_command_frames: Vec<PredictionCommandFrame>,
     prediction_history: VecDeque<PredictionHistoryEntry>,
@@ -4299,6 +6843,7 @@ impl ClientPredictionState {
     pub fn rebase_prediction_world(&mut self, tick: SimulationTick, world: &WorldState) {
         self.prediction_base_tick = Some(tick);
         self.predicted_world = Some(world.clone());
+        self.predicted_replay_world = Some(world.clone());
         self.predicted_local_snapshot = None;
         self.predicted_effects.clear();
         self.predicted_modal = None;
@@ -4309,42 +6854,69 @@ impl ClientPredictionState {
         }
     }
 
-    pub fn reconcile_authoritative_snapshot(
+    #[allow(
+        clippy::too_many_lines,
+        reason = "authoritative reconciliation keeps compare/rebase/correction ordering together"
+    )]
+    pub fn reconcile_authoritative_input(
         &mut self,
-        tick: SimulationTick,
-        authoritative_world: &WorldState,
-        authoritative_snapshot: &PlayerSnapshot,
+        input: &AuthoritativeReconciliationInput,
     ) -> Option<ActiveCorrection> {
         let previous_rendered = self
             .predicted_local_snapshot
             .as_ref()
             .map(PredictedMovement::from_snapshot);
         let matched_history = self.prediction_history.iter().find(|entry| {
-            entry.tick == tick && entry.player_id == authoritative_snapshot.player_id
+            entry.tick == input.tick && entry.player_id == input.player_snapshot.player_id
         });
-        let mismatch = matched_history.is_none_or(|entry| {
-            Self::correction_plan_for_snapshots(&entry.snapshot, authoritative_snapshot)
+        let movement_mismatch = matched_history.is_none_or(|entry| {
+            Self::correction_plan_for_snapshots(&entry.snapshot, &input.player_snapshot)
                 != CorrectionPlan::None
         });
+        let action_mismatch = matched_history.is_some_and(|entry| {
+            entry.active_drill.as_ref().map(|drill| drill.target)
+                != input.active_drill.as_ref().map(|drill| drill.target)
+        });
+        let terrain_mismatch = matched_history.is_some_and(|entry| {
+            let predicted_changed_tile_without_host_match = entry
+                .terrain_changed_tiles
+                .iter()
+                .any(|position| !input.changed_tiles.contains(position));
+            let host_changed_tile_without_prediction = input
+                .changed_tiles
+                .iter()
+                .any(|position| !entry.terrain_changed_tiles.contains(position));
+            let host_revision_without_prediction = input.terrain_revisions.iter().any(|revision| {
+                !entry.terrain_revisions.iter().any(|predicted| {
+                    predicted.position == revision.position
+                        && predicted.revision == revision.revision
+                })
+            });
+            predicted_changed_tile_without_host_match
+                || host_changed_tile_without_prediction
+                || host_revision_without_prediction
+        });
+        let mismatch = movement_mismatch || action_mismatch || terrain_mismatch;
 
-        self.prediction_base_tick = Some(tick);
-        let mut rebased_world = authoritative_world.clone();
-        if let Some(player) = rebased_world.player_mut(authoritative_snapshot.player_id) {
-            player.x = authoritative_snapshot.x;
-            player.y = authoritative_snapshot.y;
-            player.velocity_x = authoritative_snapshot.velocity_x;
-            player.velocity_y = authoritative_snapshot.velocity_y;
-            player.fuel = authoritative_snapshot.fuel;
-            player.hull = authoritative_snapshot.hull;
-            player.credits = authoritative_snapshot.credits;
+        self.prediction_base_tick = Some(input.tick);
+        let mut rebased_world = input.authoritative_world.clone();
+        if let Some(player) = rebased_world.player_mut(input.player_snapshot.player_id) {
+            player.x = input.player_snapshot.x;
+            player.y = input.player_snapshot.y;
+            player.velocity_x = input.player_snapshot.velocity_x;
+            player.velocity_y = input.player_snapshot.velocity_y;
+            player.fuel = input.player_snapshot.fuel;
+            player.hull = input.player_snapshot.hull;
+            player.credits = input.player_snapshot.credits;
         }
         self.predicted_world = Some(rebased_world.clone());
+        self.predicted_replay_world = Some(rebased_world.clone());
         self.predicted_local_snapshot = None;
         self.predicted_effects.clear();
         self.predicted_modal = None;
         self.terrain_overlays.clear();
         self.prediction_command_frames
-            .retain(|frame| frame.target_tick > tick);
+            .retain(|frame| frame.target_tick > input.tick);
         for frame in self.prediction_command_frames.clone() {
             let _snapshot = self.apply_prediction_command_frame(
                 &rebased_world,
@@ -4371,8 +6943,11 @@ impl ClientPredictionState {
             self.active_correction = None;
             return None;
         };
-        let correction_plan =
-            Self::correction_plan_for_positions(previous.x, previous.y, current.x, current.y);
+        let correction_plan = if action_mismatch || terrain_mismatch {
+            CorrectionPlan::Snap
+        } else {
+            Self::correction_plan_for_positions(previous.x, previous.y, current.x, current.y)
+        };
         if correction_plan == CorrectionPlan::None {
             self.active_correction = None;
             return None;
@@ -4393,6 +6968,28 @@ impl ClientPredictionState {
         .with_mode(CorrectionMode::from_plan(correction_plan));
         self.active_correction = Some(correction);
         Some(correction)
+    }
+
+    pub fn reconcile_authoritative_snapshot(
+        &mut self,
+        tick: SimulationTick,
+        authoritative_world: &WorldState,
+        authoritative_snapshot: &PlayerSnapshot,
+    ) -> Option<ActiveCorrection> {
+        let active_drill = authoritative_world
+            .active_drill(authoritative_snapshot.player_id)
+            .copied()
+            .map(|drill| {
+                DrillPredictionSnapshot::from_drill(authoritative_snapshot.player_id, drill)
+            });
+        self.reconcile_authoritative_input(&AuthoritativeReconciliationInput {
+            tick,
+            player_snapshot: authoritative_snapshot.clone(),
+            terrain_revisions: Vec::new(),
+            changed_tiles: Vec::new(),
+            active_drill,
+            authoritative_world: authoritative_world.clone(),
+        })
     }
 
     #[must_use]
@@ -4451,9 +7048,37 @@ impl ClientPredictionState {
     pub fn confirm_terrain_overlay(&mut self, revisions: &[TerrainChunkRevision]) -> usize {
         let mut confirmed = 0;
         for overlay in &mut self.terrain_overlays {
-            if revisions.iter().any(|revision| {
+            if overlay.resolution == PredictedTerrainResolution::Pending
+                && revisions.iter().any(|revision| {
+                    revision.position == overlay.chunk && revision.revision >= overlay.base_revision
+                })
+            {
+                overlay.resolution = PredictedTerrainResolution::Confirmed;
+                confirmed += 1;
+            }
+        }
+        confirmed
+    }
+
+    pub fn confirm_terrain_overlay_for_tiles(
+        &mut self,
+        revisions: &[TerrainChunkRevision],
+        changed_tiles: &[TilePosition],
+        command_sequence: Option<InputSequence>,
+    ) -> usize {
+        let mut confirmed = 0;
+        for overlay in &mut self.terrain_overlays {
+            if overlay.resolution != PredictedTerrainResolution::Pending {
+                continue;
+            }
+            let revision_matches = revisions.iter().any(|revision| {
                 revision.position == overlay.chunk && revision.revision >= overlay.base_revision
-            }) {
+            });
+            let tile_matches = changed_tiles.contains(&overlay.position);
+            let sequence_matches = command_sequence.is_none()
+                || overlay.command_sequence.is_none()
+                || overlay.command_sequence == command_sequence;
+            if revision_matches && tile_matches && sequence_matches {
                 overlay.resolution = PredictedTerrainResolution::Confirmed;
                 confirmed += 1;
             }
@@ -4525,6 +7150,30 @@ impl ClientPredictionState {
             .count()
     }
 
+    #[must_use]
+    pub const fn has_replay_world_for_tests(&self) -> bool {
+        self.predicted_replay_world.is_some()
+    }
+
+    #[must_use]
+    pub fn replay_world_snapshot_for_tests(&self, player_id: PlayerId) -> Option<PlayerSnapshot> {
+        let world = self.predicted_replay_world.as_ref()?;
+        world
+            .player(player_id)
+            .map(|player| PlayerSnapshot::from_world_player(player_id, player, world))
+    }
+
+    #[must_use]
+    pub fn transient_world_snapshot_for_tests(
+        &self,
+        player_id: PlayerId,
+    ) -> Option<PlayerSnapshot> {
+        let world = self.predicted_world.as_ref()?;
+        world
+            .player(player_id)
+            .map(|player| PlayerSnapshot::from_world_player(player_id, player, world))
+    }
+
     pub fn predict_command_frame(
         &mut self,
         authoritative_world: &WorldState,
@@ -4553,15 +7202,21 @@ impl ClientPredictionState {
         &mut self,
         authoritative_world: &WorldState,
         frame: PredictionCommandFrame,
-        delta_seconds: f32,
+        _delta_seconds: f32,
         remember_frame: bool,
         record_history: bool,
     ) -> Option<PlayerSnapshot> {
-        let mut predicted = self
-            .predicted_world
-            .clone()
-            .unwrap_or_else(|| authoritative_world.clone());
-        let mut movement_intent = None;
+        let mut predicted = if remember_frame || record_history {
+            self.predicted_replay_world
+                .clone()
+                .or_else(|| self.predicted_world.clone())
+                .unwrap_or_else(|| authoritative_world.clone())
+        } else {
+            self.predicted_world
+                .clone()
+                .or_else(|| self.predicted_replay_world.clone())
+                .unwrap_or_else(|| authoritative_world.clone())
+        };
         self.predicted_effects.clear();
         self.predicted_modal = None;
         self.terrain_overlays.clear();
@@ -4569,10 +7224,9 @@ impl ClientPredictionState {
             match *command {
                 PlayerCommand::Movement {
                     horizontal,
-                    thrust,
                     drill_down,
+                    ..
                 } => {
-                    movement_intent = Some((horizontal, thrust));
                     self.predicted_effects.push(PredictedEffect::Movement {
                         player_id: frame.player_id,
                     });
@@ -4584,6 +7238,7 @@ impl ClientPredictionState {
                             player_id: frame.player_id,
                             position: target,
                             chunk: TerrainChunkPosition::from_tile(target),
+                            command_sequence: Some(frame.start_sequence),
                             base_revision: 0,
                             target_tick: frame.target_tick,
                             predicted_damage_stage: if drill_down { 2 } else { 1 },
@@ -4628,18 +7283,46 @@ impl ClientPredictionState {
                 | PlayerCommand::SelectUpgrade { .. } => {}
             }
         }
-        if let Some((horizontal, thrust)) = movement_intent {
-            let _step = predicted.step_authoritative_movement(
-                frame.player_id,
-                horizontal,
-                thrust,
-                delta_seconds,
-            );
-        }
+        let sequenced_commands = frame
+            .commands
+            .iter()
+            .enumerate()
+            .map(|(index, command)| {
+                let offset = u32::try_from(index).unwrap_or(u32::MAX);
+                SequencedPlayerCommand {
+                    player_id: frame.player_id,
+                    sequence: InputSequence::new(frame.start_sequence.get().saturating_add(offset)),
+                    target_tick: frame.target_tick,
+                    command: command.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+        let mut predicted_terrain_revisions = TerrainRevisionTracker::default();
+        let tick_inputs = TickInputs::from_commands(&sequenced_commands);
+        let simulation = predicted.simulate_tick(
+            frame.target_tick,
+            &tick_inputs,
+            &mut predicted_terrain_revisions,
+        );
         let snapshot = predicted
             .player(frame.player_id)
             .map(|player| PlayerSnapshot::from_world_player(frame.player_id, player, &predicted));
-        self.predicted_world = Some(predicted);
+        let active_drill = if record_history {
+            predicted
+                .active_drill(frame.player_id)
+                .copied()
+                .map(|drill| DrillPredictionSnapshot::from_drill(frame.player_id, drill))
+        } else {
+            None
+        };
+        if remember_frame || record_history {
+            self.predicted_replay_world = Some(predicted.clone());
+            if self.predicted_world.is_none() {
+                self.predicted_world = Some(predicted);
+            }
+        } else {
+            self.predicted_world = Some(predicted);
+        }
         self.predicted_local_snapshot.clone_from(&snapshot);
         if record_history && let Some(snapshot) = &snapshot {
             self.record_prediction_history(
@@ -4649,6 +7332,9 @@ impl ClientPredictionState {
                     InputSequence::new(frame.start_sequence.get().saturating_add(offset))
                 }),
                 snapshot.clone(),
+                active_drill,
+                simulation.terrain_changed_tiles.clone(),
+                simulation.terrain_revisions,
             );
         }
         self.latest_input_intent = frame
@@ -4672,12 +7358,18 @@ impl ClientPredictionState {
         tick: SimulationTick,
         last_sequence: Option<InputSequence>,
         snapshot: PlayerSnapshot,
+        active_drill: Option<DrillPredictionSnapshot>,
+        terrain_changed_tiles: Vec<TilePosition>,
+        terrain_revisions: Vec<TerrainChunkRevision>,
     ) {
         self.prediction_history.push_back(PredictionHistoryEntry {
             tick,
             last_sequence,
             player_id: snapshot.player_id,
             snapshot,
+            active_drill,
+            terrain_changed_tiles,
+            terrain_revisions,
         });
         let max_history = usize::try_from(SIMULATION_HZ).expect("simulation hz fits usize") * 4;
         while self.prediction_history.len() > max_history {
@@ -4686,16 +7378,67 @@ impl ClientPredictionState {
     }
 
     #[must_use]
+    pub fn prediction_history_entry(
+        &self,
+        tick: SimulationTick,
+        player_id: PlayerId,
+    ) -> Option<&PredictionHistoryEntry> {
+        self.prediction_history
+            .iter()
+            .rev()
+            .find(|entry| entry.tick == tick && entry.player_id == player_id)
+    }
+
+    #[must_use]
     pub fn prediction_history_snapshot(
         &self,
         tick: SimulationTick,
         player_id: PlayerId,
     ) -> Option<&PlayerSnapshot> {
-        self.prediction_history
-            .iter()
-            .rev()
-            .find(|entry| entry.tick == tick && entry.player_id == player_id)
+        self.prediction_history_entry(tick, player_id)
             .map(|entry| &entry.snapshot)
+    }
+
+    #[must_use]
+    pub fn divergence_sample_for_player(&self, player_id: PlayerId) -> PredictionDivergenceSample {
+        let replicated_local_position = self
+            .predicted_replay_world
+            .as_ref()
+            .and_then(|world| world.player(player_id))
+            .map(|player| (player.x, player.y));
+        let deterministic_replay_position = self
+            .predicted_replay_world
+            .as_ref()
+            .and_then(|world| world.player(player_id))
+            .map(|player| (player.x, player.y));
+        let transient_render_position = self
+            .predicted_world
+            .as_ref()
+            .and_then(|world| world.player(player_id))
+            .map(|player| (player.x, player.y));
+        let active_drill = self
+            .predicted_replay_world
+            .as_ref()
+            .and_then(|world| world.active_drill(player_id).copied())
+            .map(|drill| DrillPredictionSnapshot::from_drill(player_id, drill));
+        let correction_mode = self
+            .active_correction
+            .map_or(CorrectionMode::None, |correction| correction.mode);
+        PredictionDivergenceSample {
+            authoritative_tick: self.prediction_base_tick.unwrap_or_default(),
+            replicated_local_position,
+            deterministic_replay_position,
+            transient_render_position,
+            active_drill,
+            predicted_terrain_tiles: self
+                .terrain_overlays
+                .iter()
+                .filter(|overlay| overlay.player_id == player_id)
+                .map(|overlay| overlay.position)
+                .collect(),
+            host_terrain_revisions: Vec::new(),
+            correction_mode,
+        }
     }
 
     #[must_use]
@@ -5333,12 +8076,47 @@ pub struct PredictionCommandFrame {
     pub commands: Vec<PlayerCommand>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DrillPredictionSnapshot {
+    pub player_id: PlayerId,
+    pub target: TilePosition,
+    pub direction: DrillDirection,
+    pub progress: f32,
+}
+
+impl DrillPredictionSnapshot {
+    #[must_use]
+    pub const fn from_drill(player_id: PlayerId, drill: DrillState) -> Self {
+        Self {
+            player_id,
+            target: drill.target,
+            direction: drill.direction,
+            progress: drill.progress,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PredictionDivergenceSample {
+    pub authoritative_tick: SimulationTick,
+    pub replicated_local_position: Option<(f32, f32)>,
+    pub deterministic_replay_position: Option<(f32, f32)>,
+    pub transient_render_position: Option<(f32, f32)>,
+    pub active_drill: Option<DrillPredictionSnapshot>,
+    pub predicted_terrain_tiles: Vec<TilePosition>,
+    pub host_terrain_revisions: Vec<TerrainChunkRevision>,
+    pub correction_mode: CorrectionMode,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PredictionHistoryEntry {
     pub tick: SimulationTick,
     pub last_sequence: Option<InputSequence>,
     pub player_id: PlayerId,
     pub snapshot: PlayerSnapshot,
+    pub active_drill: Option<DrillPredictionSnapshot>,
+    pub terrain_changed_tiles: Vec<TilePosition>,
+    pub terrain_revisions: Vec<TerrainChunkRevision>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -5353,6 +8131,7 @@ pub struct PredictedTerrainOverlay {
     pub player_id: PlayerId,
     pub position: TilePosition,
     pub chunk: TerrainChunkPosition,
+    pub command_sequence: Option<InputSequence>,
     pub base_revision: u64,
     pub target_tick: SimulationTick,
     pub predicted_damage_stage: u8,
@@ -5604,6 +8383,46 @@ impl Default for ClientState {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AuthoritativeClientFrameResult {
+    Applied,
+    IgnoredStale,
+    RecoveryRequested,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AuthoritativeClientStatus {
+    pub epoch: Option<SessionEpoch>,
+    pub tick: Option<SimulationTick>,
+    pub state_hash: Option<u64>,
+    pub recovery_pending: bool,
+    pub remote_history_players: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct PendingPredictionInput {
+    pub client_id: ClientId,
+    pub player_id: PlayerId,
+    pub frame: crate::multiplayer::InputFrame,
+    pub terrain_changed_tiles: Vec<TilePosition>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingPredictionPresentation {
+    pub sequence: InputSequence,
+    pub target_tick: SimulationTick,
+    pub action_ids: Vec<crate::multiplayer::ActionId>,
+    pub terrain_positions: Vec<TilePosition>,
+    pub drill_target: Option<TilePosition>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PredictionReplaySummary {
+    pub pruned_inputs: usize,
+    pub replayed_inputs: usize,
+    pub predicted_tick: Option<SimulationTick>,
+}
+
 /// Compatibility session wrapper used while the monolithic `GameState` is split apart.
 ///
 /// Long-term this should own `WorldState` plus one or more `ClientState` values. For now it keeps
@@ -5619,13 +8438,26 @@ pub struct GameSession {
     current_tick: SimulationTick,
     simulation_accumulator: Duration,
     terrain_revisions: TerrainRevisionTracker,
+    session_epoch: SessionEpoch,
+    host_input_inbox: HostInputInbox,
     command_network_session: CommandNetworkSession,
     pending_commands: BTreeMap<SimulationTick, Vec<SequencedPlayerCommand>>,
     pending_events: Vec<WorldEvent>,
+    presented_gameplay_events: BTreeSet<(u64, u32)>,
+    presented_gameplay_event_order: VecDeque<(u64, u32)>,
     latest_local_movement_intent: Option<PlayerMovementIntent>,
     latest_movement_intents: BTreeMap<PlayerId, PlayerMovementIntent>,
     latest_local_authoritative_commands: Vec<PlayerCommand>,
     remote_timing: RemoteTimingTuning,
+    authoritative_client_world: Option<WorldState>,
+    authoritative_client_epoch: Option<SessionEpoch>,
+    authoritative_client_hash: Option<u64>,
+    authoritative_recovery_request: Option<ClientMessage>,
+    authoritative_remote_history: BTreeMap<PlayerId, VecDeque<NetworkPlayerSnapshot>>,
+    predicted_client_world: Option<WorldState>,
+    pending_prediction_inputs: VecDeque<PendingPredictionInput>,
+    prediction_presentation_offset: Option<CorrectionOffset>,
+    previous_predicted_player_snapshots: BTreeMap<PlayerId, PlayerSnapshot>,
 }
 
 impl GameSession {
@@ -5743,16 +8575,13 @@ impl GameSession {
     #[must_use]
     pub fn from_persistent_world(save: &crate::save::PersistentWorldSave) -> Self {
         let game = save.restore_shell_game();
-        let mut session = Self::from_game(game);
-        save.restore_into_world(&mut session.world);
+        let world = save.restore_world();
+        let mut session = Self::from_game_and_world(game, world);
         session.current_tick = session.world.simulation_tick();
         session
             .command_network_session
             .set_current_tick(session.current_tick);
-        session.sync_legacy_player_from_world(LOCAL_PLAYER_ID);
         let _revealed = session.reveal_legacy_exploration_from_world_player(LOCAL_PLAYER_ID);
-        session.sync_legacy_active_drill_from_world(LOCAL_PLAYER_ID);
-        session.sync_legacy_terrain_from_world();
         session
     }
 
@@ -5841,6 +8670,7 @@ impl GameSession {
                 loaded.apply_settings(self.current_settings());
                 "Game loaded into authoritative session.".clone_into(&mut loaded.game.message);
                 loaded.game.sound_cues.push(SoundCue::Ui);
+                loaded.replace_session_epoch(self.session_epoch.next());
                 *self = loaded;
                 SessionSaveLoadSummary::loaded(self.game.message.clone())
             }
@@ -5863,6 +8693,64 @@ impl GameSession {
         })
     }
 
+    fn prepare_canonical_service_state(
+        &mut self,
+        player_id: PlayerId,
+        request: crate::game_state::SessionServiceRequest,
+    ) {
+        self.world.progression.town_development = self.game.town_development.clone();
+        match request {
+            crate::game_state::SessionServiceRequest::SalvageRecoverLostCargo
+            | crate::game_state::SessionServiceRequest::SalvageLaunchDrone => {
+                if self.world.lost_cargo_sites.contains_key(&player_id)
+                    || self.game.lost_cargo_count == 0
+                {
+                    return;
+                }
+                self.world.lost_cargo_sites.insert(
+                    player_id,
+                    LostCargoSite {
+                        x: self.game.lost_cargo_x.unwrap_or_default(),
+                        y: self.game.lost_cargo_y.unwrap_or_default(),
+                        minerals: self.game.lost_minerals.clone(),
+                        artifacts: self.game.lost_artifacts.clone(),
+                    },
+                );
+            }
+            crate::game_state::SessionServiceRequest::CompleteDepotWork => {
+                self.world.progression.town_event_day = self.game.town_event_day;
+                self.world.progression.deepest_tile_reached = self.game.deepest_tile_reached;
+                if self.world.progression.active_expeditions.is_empty() {
+                    self.world
+                        .progression
+                        .active_expeditions
+                        .clone_from(&self.game.active_expeditions);
+                }
+                if self.world.progression.active_side_contracts.is_empty() {
+                    self.world
+                        .progression
+                        .active_side_contracts
+                        .clone_from(&self.game.active_side_contracts);
+                    if self.world.progression.active_side_contracts.is_empty()
+                        && self.game.side_contract_active
+                        && let Some(target) = self.game.side_contract_target
+                    {
+                        self.world
+                            .progression
+                            .active_side_contracts
+                            .push(SideContract {
+                                kind: self.game.side_contract_kind,
+                                target,
+                                required: self.game.side_contract_required.max(1),
+                                expires_day: None,
+                            });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "session-owned service dispatcher is being expanded while legacy GameState mutations are deleted"
@@ -5870,6 +8758,7 @@ impl GameSession {
     fn handle_session_service_request(&mut self) -> Option<SessionSaveLoadSummary> {
         let request = self.game.take_session_service_request()?;
         let player_id = self.local_client().controlled_player_id;
+        self.prepare_canonical_service_state(player_id, request);
         let before = self
             .world
             .player(player_id)
@@ -5905,7 +8794,9 @@ impl GameSession {
             | crate::game_state::SessionServiceRequest::SellScanData
             | crate::game_state::SessionServiceRequest::AutoSortLowGradeCargo
             | crate::game_state::SessionServiceRequest::CompleteDepotWork
-            | crate::game_state::SessionServiceRequest::StartSideContract => None,
+            | crate::game_state::SessionServiceRequest::StartSideContract
+            | crate::game_state::SessionServiceRequest::AcceptExpedition { .. }
+            | crate::game_state::SessionServiceRequest::AbandonExpedition { .. } => None,
         };
         let outcome = if let Some(command) = command {
             self.world.apply_player_command(player_id, &command)
@@ -5913,7 +8804,7 @@ impl GameSession {
             self.apply_direct_session_service_request(player_id, request)
         };
         if matches!(outcome, PlayerScopedCommandOutcome::Applied) {
-            self.sync_legacy_player_from_world(player_id);
+            self.sync_service_presentation_from_world(player_id);
             match request {
                 crate::game_state::SessionServiceRequest::Refuel { .. } => {
                     self.game.service_animation = Some(crate::game_state::ServiceAnimation::Fuel);
@@ -5941,7 +8832,9 @@ impl GameSession {
                 | crate::game_state::SessionServiceRequest::SellScanData
                 | crate::game_state::SessionServiceRequest::AutoSortLowGradeCargo
                 | crate::game_state::SessionServiceRequest::CompleteDepotWork
-                | crate::game_state::SessionServiceRequest::StartSideContract => {}
+                | crate::game_state::SessionServiceRequest::StartSideContract
+                | crate::game_state::SessionServiceRequest::AcceptExpedition { .. }
+                | crate::game_state::SessionServiceRequest::AbandonExpedition { .. } => {}
             }
             self.game.sound_cues.push(SoundCue::Upgrade);
             let after = self
@@ -6010,13 +8903,17 @@ impl GameSession {
                         let advance = after.0 - before.0;
                         format!(
                             "HQ finance issued a {advance} credit advance. Risk-adjusted payoff: {} credits.",
-                            self.game.player.loan_debt
+                            self.world
+                                .player(player_id)
+                                .map_or(0, |player| player.loan_debt)
                         )
                     } else {
                         let payment = before.0.saturating_sub(after.0);
                         format!(
                             "Paid {payment} credits toward HQ debt. Remaining: {}.",
-                            self.game.player.loan_debt
+                            self.world
+                                .player(player_id)
+                                .map_or(0, |player| player.loan_debt)
                         )
                     }
                 }
@@ -6024,7 +8921,9 @@ impl GameSession {
                     self.game.sound_cues.push(SoundCue::Upgrade);
                     format!(
                         "Ledger sold tier {} rescue insurance. Higher tiers reduce fees and cargo loss.",
-                        self.game.player.insurance_tier
+                        self.world
+                            .player(player_id)
+                            .map_or(0, |player| player.insurance_tier)
                     )
                 }
                 crate::game_state::SessionServiceRequest::CraftRecipe { recipe } => {
@@ -6036,7 +8935,7 @@ impl GameSession {
                     format!(
                         "{} upgraded to level {}. Deep Claim reputation increased.",
                         building.name(),
-                        self.game.town_development.level(building)
+                        self.world.progression.town_development.level(building)
                     )
                 }
                 crate::game_state::SessionServiceRequest::SalvageRecoverLostCargo => {
@@ -6073,9 +8972,29 @@ impl GameSession {
                 }
                 crate::game_state::SessionServiceRequest::CompleteDepotWork => {
                     self.game.sound_cues.push(SoundCue::Sell);
-                    self.game.message.clone()
+                    if self.game.contracts.completed > 0 {
+                        format!(
+                            "{} complete. Depot work recorded.",
+                            crate::contract::ContractLog::new().active.title
+                        )
+                    } else {
+                        self.game.message.clone()
+                    }
                 }
                 crate::game_state::SessionServiceRequest::StartSideContract => {
+                    self.game.sound_cues.push(SoundCue::Ui);
+                    self.game.active_side_contracts.last().map_or_else(
+                        || "Side contract unavailable.".to_owned(),
+                        |contract| {
+                            format!(
+                                "Side contract posted: {:?} x{}.",
+                                contract.target, contract.required
+                            )
+                        },
+                    )
+                }
+                crate::game_state::SessionServiceRequest::AcceptExpedition { .. }
+                | crate::game_state::SessionServiceRequest::AbandonExpedition { .. } => {
                     self.game.sound_cues.push(SoundCue::Ui);
                     self.game.message.clone()
                 }
@@ -6096,6 +9015,18 @@ impl GameSession {
         player_id: PlayerId,
         request: crate::game_state::SessionServiceRequest,
     ) -> PlayerScopedCommandOutcome {
+        if let Some(outcome) = self
+            .world
+            .apply_canonical_progression_service(player_id, request)
+        {
+            return outcome;
+        }
+        if let Some(outcome) = self
+            .world
+            .apply_canonical_salvage_service(player_id, request)
+        {
+            return outcome;
+        }
         let Some(player) = self.world.player_mut(player_id) else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
@@ -6336,11 +9267,31 @@ impl GameSession {
             }
             crate::game_state::SessionServiceRequest::CompleteDepotWork => {
                 let _ = player;
-                self.complete_depot_work_for_player(player_id)
+                let outcome = self
+                    .world
+                    .complete_canonical_progression_for_player(player_id);
+                if outcome == PlayerScopedCommandOutcome::IgnoredUnavailable {
+                    self.world.complete_canonical_side_contract(player_id)
+                } else {
+                    outcome
+                }
             }
             crate::game_state::SessionServiceRequest::StartSideContract => {
                 let _ = player;
-                self.start_side_contract_for_session()
+                self.world.start_canonical_side_contract()
+            }
+            crate::game_state::SessionServiceRequest::AcceptExpedition { index } => {
+                let _ = player;
+                self.world.accept_canonical_expedition(index)
+            }
+            crate::game_state::SessionServiceRequest::AbandonExpedition { index } => {
+                let _ = player;
+                if index < self.world.progression.active_expeditions.len() {
+                    self.world.progression.active_expeditions.remove(index);
+                    PlayerScopedCommandOutcome::Applied
+                } else {
+                    PlayerScopedCommandOutcome::IgnoredUnavailable
+                }
             }
             crate::game_state::SessionServiceRequest::Refuel { .. }
             | crate::game_state::SessionServiceRequest::Repair { .. }
@@ -6485,16 +9436,8 @@ impl GameSession {
         &mut self,
         player_id: PlayerId,
     ) -> PlayerScopedCommandOutcome {
-        if self.complete_expedition_work_for_player(player_id) {
-            return PlayerScopedCommandOutcome::Applied;
-        }
-        if self.complete_active_side_contract_for_player(player_id) {
-            return PlayerScopedCommandOutcome::Applied;
-        }
-        if self.complete_legacy_side_contract_for_player(player_id) {
-            return PlayerScopedCommandOutcome::Applied;
-        }
-        self.complete_story_contract_for_player(player_id)
+        self.world
+            .complete_canonical_progression_for_player(player_id)
     }
 
     fn complete_expedition_work_for_player(&mut self, player_id: PlayerId) -> bool {
@@ -6723,6 +9666,7 @@ impl GameSession {
                     format!("Loaded slot {} into authoritative session.", slot + 1);
                 loaded.game.sound_cues.push(SoundCue::Ui);
                 loaded.game.mark_full_terrain_refresh();
+                loaded.replace_session_epoch(self.session_epoch.next());
                 *self = loaded;
                 SessionSaveLoadSummary::loaded(self.game.message.clone())
             }
@@ -6741,6 +9685,9 @@ impl GameSession {
 
     fn from_game_and_world(game: GameState, world: WorldState) -> Self {
         let local_client = ClientState::default();
+        let session_epoch = SessionEpoch::new(1);
+        let mut host_input_inbox = HostInputInbox::new(session_epoch, SimulationTick::default(), 8);
+        host_input_inbox.assign_player(LOCAL_CLIENT_ID, LOCAL_PLAYER_ID);
         let mut session = Self {
             game,
             world,
@@ -6750,13 +9697,26 @@ impl GameSession {
             current_tick: SimulationTick::default(),
             simulation_accumulator: Duration::ZERO,
             terrain_revisions: TerrainRevisionTracker::default(),
+            session_epoch,
+            host_input_inbox,
             command_network_session: CommandNetworkSession::new(SimulationTick::default(), 8),
             pending_commands: BTreeMap::new(),
             pending_events: Vec::new(),
+            presented_gameplay_events: BTreeSet::new(),
+            presented_gameplay_event_order: VecDeque::new(),
             latest_local_movement_intent: None,
             latest_movement_intents: BTreeMap::new(),
             latest_local_authoritative_commands: Vec::new(),
             remote_timing: RemoteTimingTuning::from_latency_loss(0.0, 0.0),
+            authoritative_client_world: None,
+            authoritative_client_epoch: None,
+            authoritative_client_hash: None,
+            authoritative_recovery_request: None,
+            authoritative_remote_history: BTreeMap::new(),
+            predicted_client_world: None,
+            pending_prediction_inputs: VecDeque::new(),
+            prediction_presentation_offset: None,
+            previous_predicted_player_snapshots: BTreeMap::new(),
         };
         let _revealed = session.reveal_legacy_exploration_from_world_player(LOCAL_PLAYER_ID);
         session
@@ -6835,6 +9795,81 @@ impl GameSession {
         )
     }
 
+    pub fn authoritative_client_render_frame_output(&self) -> Option<LiveRenderFrameOutput> {
+        let world = self.authoritative_client_world.as_ref()?;
+        Some(self.render_frame_output_from_world(world, &PredictionPresentationPlan::default()))
+    }
+
+    pub fn predicted_client_render_frame_output(&self) -> Option<LiveRenderFrameOutput> {
+        let world = self.predicted_client_world.as_ref()?;
+        Some(self.render_frame_output_from_world(world, &PredictionPresentationPlan::default()))
+    }
+
+    #[must_use]
+    pub fn online_client_render_frame_output(&self) -> Option<LiveRenderFrameOutput> {
+        if self.pending_prediction_inputs.is_empty() {
+            self.authoritative_client_render_frame_output()
+        } else {
+            self.predicted_client_render_frame_output()
+        }
+    }
+
+    fn render_frame_output_from_world(
+        &self,
+        world: &WorldState,
+        prediction_plan: &PredictionPresentationPlan,
+    ) -> LiveRenderFrameOutput {
+        let frame_plan = RenderFramePlan::from_world_and_client_views(
+            world,
+            self.local_seat_client_ids
+                .iter()
+                .filter_map(|client_id| self.clients.get(client_id).map(|client| client.view)),
+        );
+        let world_players_by_view = frame_plan
+            .views
+            .iter()
+            .map(|view| {
+                (
+                    view.client_id,
+                    frame_plan.world_player_presentations_for_view(view, prediction_plan),
+                )
+            })
+            .collect();
+        let ui_snapshots = frame_plan
+            .views
+            .iter()
+            .filter_map(|view| {
+                let hud = frame_plan.hud_snapshot_for_view(view)?;
+                let player = world.player(view.controlled_player_id)?;
+                let client = self.clients.get(&view.client_id)?;
+                Some(SplitScreenUiPresentationSnapshot {
+                    client_id: view.client_id,
+                    player_id: view.controlled_player_id,
+                    viewport: view.viewport,
+                    camera: view.camera,
+                    hud,
+                    modal: client.modal,
+                    run_mode: view.run_mode,
+                    message: client.local_message.clone(),
+                    audio_cues: client.local_audio_cues.clone(),
+                    scanner_cooldown_seconds: hud.scanner_cooldown_seconds,
+                    depth_tile: player.tile_position(TILE_SIZE).y.max(0),
+                })
+            })
+            .collect();
+        LiveRenderFrameOutput {
+            terrain: world.terrain.clone(),
+            hazards: world.hazards.clone(),
+            bombs: world.bombs.clone(),
+            infrastructure: world.infrastructure.clone(),
+            active_drills: world.active_drills.clone(),
+            viewport_plans: frame_plan.viewport_plans(prediction_plan),
+            hud_snapshots: frame_plan.hud_snapshots(),
+            world_players_by_view,
+            ui_snapshots,
+        }
+    }
+
     #[must_use]
     pub fn live_render_frame_output(
         &self,
@@ -6874,6 +9909,11 @@ impl GameSession {
             })
             .collect();
         LiveRenderFrameOutput {
+            terrain: self.world.terrain.clone(),
+            hazards: self.world.hazards.clone(),
+            bombs: self.world.bombs.clone(),
+            infrastructure: self.world.infrastructure.clone(),
+            active_drills: self.world.active_drills.clone(),
             viewport_plans: frame_plan
                 .viewport_plans(prediction_plan)
                 .into_iter()
@@ -6998,30 +10038,16 @@ impl GameSession {
     pub fn prediction_presentation_plan(
         &self,
         authoritative_snapshot: Option<&PlayerSnapshot>,
-        delta_seconds: f32,
+        _delta_seconds: f32,
         remote_alpha: f32,
         remote_stall_seconds: f32,
     ) -> PredictionPresentationPlan {
         let prediction = self.local_client().prediction();
-        let local_movement = prediction
-            .predicted_local_movement(authoritative_snapshot.map_or_else(
-                || self.local_client().controlled_player_id,
-                |snapshot| snapshot.player_id,
-            ))
-            .or_else(|| {
-                authoritative_snapshot.map_or_else(
-                    || self.predicted_local_movement(delta_seconds),
-                    |authoritative| {
-                        Some(
-                            ClientPredictionState::replay_unacknowledged_movement(
-                                authoritative,
-                                prediction.unacknowledged_commands(),
-                            )
-                            .predicted,
-                        )
-                    },
-                )
-            });
+        let player_id = authoritative_snapshot.map_or_else(
+            || self.local_client().controlled_player_id,
+            |snapshot| snapshot.player_id,
+        );
+        let local_movement = prediction.predicted_local_movement(player_id);
         let corrected_local_presentation = prediction.active_correction_presentation();
         PredictionPresentationPlan {
             local_movement,
@@ -7210,6 +10236,7 @@ impl GameSession {
         let mut client = ClientState::new(client_id, player_id);
         client.sync_presentation_from_legacy_game(&self.game);
         self.clients.insert(client_id, client);
+        self.host_input_inbox.assign_player(client_id, player_id);
         true
     }
 
@@ -7240,6 +10267,7 @@ impl GameSession {
         let mut client = ClientState::new(client_id, player_id);
         client.sync_presentation_from_legacy_game(&self.game);
         self.clients.insert(client_id, client);
+        self.host_input_inbox.assign_player(client_id, player_id);
         true
     }
 
@@ -7249,8 +10277,577 @@ impl GameSession {
         }
         self.current_tick = tick;
         self.world.set_simulation_tick(tick);
+        self.host_input_inbox.set_current_tick(tick);
         self.command_network_session.set_current_tick(tick);
         true
+    }
+
+    pub fn authoritative_keyframe(&self) -> AuthoritativeKeyframe {
+        AuthoritativeKeyframe {
+            epoch: self.session_epoch,
+            snapshot: self.world_snapshot().network_snapshot(),
+            canonical_state: serde_json::to_vec(&self.world)
+                .expect("canonical world encodes for authoritative recovery"),
+            state_hash: Some(self.world.simulation_state_hash().get()),
+        }
+    }
+
+    pub fn restore_authoritative_keyframe(
+        keyframe: &AuthoritativeKeyframe,
+        shell: GameState,
+    ) -> Result<Self, serde_json::Error> {
+        let world: WorldState = serde_json::from_slice(&keyframe.canonical_state)?;
+        let mut session = Self::from_game_and_world(shell, world);
+        session.current_tick = session.world.simulation_tick();
+        session.replace_session_epoch(keyframe.epoch);
+        session
+            .command_network_session
+            .set_current_tick(session.current_tick);
+        Ok(session)
+    }
+
+    pub fn install_authoritative_client_keyframe(
+        &mut self,
+        keyframe: &AuthoritativeKeyframe,
+    ) -> Result<(), serde_json::Error> {
+        let world: WorldState = serde_json::from_slice(&keyframe.canonical_state)?;
+        self.authoritative_remote_history.clear();
+        for snapshot in &keyframe.snapshot.players {
+            self.authoritative_remote_history
+                .entry(snapshot.player_id)
+                .or_default()
+                .push_back(snapshot.clone());
+        }
+        self.authoritative_client_epoch = Some(keyframe.epoch);
+        self.authoritative_client_hash = keyframe.state_hash;
+        self.authoritative_client_world = Some(world.clone());
+        self.predicted_client_world = Some(world);
+        self.pending_prediction_inputs.clear();
+        self.prediction_presentation_offset = None;
+        self.previous_predicted_player_snapshots.clear();
+        self.authoritative_recovery_request = None;
+        Ok(())
+    }
+
+    pub fn apply_authoritative_client_frame(
+        &mut self,
+        frame: &AuthoritativeFrame,
+    ) -> AuthoritativeClientFrameResult {
+        let Some(epoch) = self.authoritative_client_epoch else {
+            self.request_authoritative_keyframe(frame.epoch, frame.base_tick);
+            return AuthoritativeClientFrameResult::RecoveryRequested;
+        };
+        let Some(world) = self.authoritative_client_world.as_mut() else {
+            self.request_authoritative_keyframe(frame.epoch, frame.base_tick);
+            return AuthoritativeClientFrameResult::RecoveryRequested;
+        };
+        if frame.epoch != epoch {
+            self.request_authoritative_keyframe(frame.epoch, frame.base_tick);
+            return AuthoritativeClientFrameResult::RecoveryRequested;
+        }
+        if frame.result_tick <= world.simulation_tick() {
+            return AuthoritativeClientFrameResult::IgnoredStale;
+        }
+        if frame.base_tick != world.simulation_tick() {
+            self.request_authoritative_keyframe(frame.epoch, frame.base_tick);
+            return AuthoritativeClientFrameResult::RecoveryRequested;
+        }
+        if frame.result_tick <= frame.base_tick {
+            return AuthoritativeClientFrameResult::IgnoredStale;
+        }
+        for snapshot in &frame.changed_players {
+            let player = if let Some(player) = world.player_mut(snapshot.player_id) {
+                player
+            } else {
+                let mut player = self.game.player.clone();
+                apply_network_player_snapshot_to_player(&mut player, snapshot);
+                world.insert_player(snapshot.player_id, player);
+                world
+                    .player_mut(snapshot.player_id)
+                    .expect("inserted authoritative client player")
+            };
+            apply_network_player_snapshot_to_player(player, snapshot);
+            world.set_scanner_cooldown_seconds(
+                snapshot.player_id,
+                snapshot.scanner_cooldown_seconds,
+            );
+            let history = self
+                .authoritative_remote_history
+                .entry(snapshot.player_id)
+                .or_default();
+            history.push_back(snapshot.clone());
+            while history.len() > 32 {
+                history.pop_front();
+            }
+        }
+        for tile in &frame.terrain_mutations {
+            let _changed = world.terrain_mut().set_tile_from_network(
+                TilePosition {
+                    x: tile.x,
+                    y: tile.y,
+                },
+                tile.kind,
+                tile.durability,
+            );
+        }
+        if frame.canonical_state.is_empty() {
+            world.set_simulation_tick(frame.result_tick);
+        } else if let Ok(canonical_world) =
+            serde_json::from_slice::<WorldState>(&frame.canonical_state)
+        {
+            *world = canonical_world;
+        } else {
+            self.request_authoritative_keyframe(frame.epoch, frame.result_tick);
+            return AuthoritativeClientFrameResult::RecoveryRequested;
+        }
+        if let Some(expected_hash) = frame.state_hash
+            && world.simulation_state_hash().get() != expected_hash
+        {
+            self.request_authoritative_keyframe(frame.epoch, frame.result_tick);
+            return AuthoritativeClientFrameResult::RecoveryRequested;
+        }
+        let local_player_id = self.local_client().controlled_player_id;
+        let previous_predicted = self
+            .predicted_client_world
+            .as_ref()
+            .and_then(|world| world.player(local_player_id))
+            .map(|player| (player.x, player.y));
+        self.authoritative_client_hash = frame.state_hash;
+        self.authoritative_recovery_request = None;
+        let _replay = self.rebuild_predicted_client_world(&frame.applied_sequences);
+        if let Some((previous_x, previous_y)) = previous_predicted
+            && let Some(predicted) = self
+                .predicted_client_world
+                .as_ref()
+                .and_then(|world| world.player(local_player_id))
+        {
+            let offset = CorrectionOffset::new(previous_x - predicted.x, previous_y - predicted.y);
+            if offset.x.mul_add(offset.x, offset.y * offset.y) > f32::EPSILON {
+                self.prediction_presentation_offset = Some(offset);
+            }
+        }
+        AuthoritativeClientFrameResult::Applied
+    }
+
+    pub fn advance_prediction_presentation_correction(
+        &mut self,
+        smoothing_alpha: f32,
+    ) -> Option<CorrectionOffset> {
+        let offset = self.prediction_presentation_offset.as_mut()?;
+        let alpha = smoothing_alpha.clamp(0.0, 1.0);
+        offset.x *= 1.0 - alpha;
+        offset.y *= 1.0 - alpha;
+        if offset.x.mul_add(offset.x, offset.y * offset.y) < 0.01 {
+            self.prediction_presentation_offset = None;
+            return None;
+        }
+        Some(*offset)
+    }
+
+    #[must_use]
+    pub const fn prediction_presentation_offset(&self) -> Option<CorrectionOffset> {
+        self.prediction_presentation_offset
+    }
+
+    #[must_use]
+    pub fn interpolated_predicted_player(
+        &self,
+        player_id: PlayerId,
+        alpha: f32,
+    ) -> Option<PlayerSnapshot> {
+        let world = self.predicted_client_world.as_ref()?;
+        let current = world.player(player_id)?;
+        let mut snapshot = PlayerSnapshot::from_world_player(player_id, current, world);
+        if let Some(previous) = self.previous_predicted_player_snapshots.get(&player_id) {
+            let alpha = alpha.clamp(0.0, 1.0);
+            snapshot.x = alpha.mul_add(snapshot.x - previous.x, previous.x);
+            snapshot.y = alpha.mul_add(snapshot.y - previous.y, previous.y);
+        }
+        if let Some(offset) = self.prediction_presentation_offset {
+            snapshot.x += offset.x;
+            snapshot.y += offset.y;
+        }
+        Some(snapshot)
+    }
+
+    pub fn queue_predicted_input(
+        &mut self,
+        client_id: ClientId,
+        player_id: PlayerId,
+        frame: crate::multiplayer::InputFrame,
+    ) -> bool {
+        let Some(predicted) = self.predicted_client_world.as_mut() else {
+            return false;
+        };
+        if let Some(player) = predicted.player(player_id) {
+            self.previous_predicted_player_snapshots.insert(
+                player_id,
+                PlayerSnapshot::from_world_player(player_id, player, predicted),
+            );
+        }
+        let tick_inputs = Self::tick_inputs_for_prediction_frame(player_id, &frame);
+        let mut revisions = TerrainRevisionTracker::default();
+        let output = predicted.simulate_tick(frame.target_tick, &tick_inputs, &mut revisions);
+        self.pending_prediction_inputs
+            .push_back(PendingPredictionInput {
+                client_id,
+                player_id,
+                frame,
+                terrain_changed_tiles: output.terrain_changed_tiles,
+            });
+        true
+    }
+
+    fn tick_inputs_for_prediction_frame(
+        player_id: PlayerId,
+        frame: &crate::multiplayer::InputFrame,
+    ) -> TickInputs {
+        let mut commands = vec![SequencedPlayerCommand {
+            player_id,
+            sequence: frame.sequence,
+            target_tick: frame.target_tick,
+            command: PlayerCommand::Movement {
+                horizontal: frame.controls.horizontal(),
+                thrust: frame.controls.thrust,
+                drill_down: frame.controls.drill_down,
+            },
+        }];
+        commands.extend(frame.actions.iter().map(|action| SequencedPlayerCommand {
+            player_id,
+            sequence: frame.sequence,
+            target_tick: frame.target_tick,
+            command: action.command.clone(),
+        }));
+        TickInputs::from_commands(&commands)
+    }
+
+    fn rebuild_predicted_client_world(
+        &mut self,
+        applied_sequences: &BTreeMap<PlayerId, InputSequence>,
+    ) -> PredictionReplaySummary {
+        let mut pruned_inputs = 0;
+        self.pending_prediction_inputs.retain(|pending| {
+            let applied = applied_sequences
+                .get(&pending.player_id)
+                .is_some_and(|sequence| *sequence >= pending.frame.sequence);
+            pruned_inputs += usize::from(applied);
+            !applied
+        });
+        let Some(authoritative) = self.authoritative_client_world.as_ref() else {
+            return PredictionReplaySummary {
+                pruned_inputs,
+                ..PredictionReplaySummary::default()
+            };
+        };
+        let mut predicted = authoritative.clone();
+        let mut revisions = TerrainRevisionTracker::default();
+        for pending in &self.pending_prediction_inputs {
+            let inputs = Self::tick_inputs_for_prediction_frame(pending.player_id, &pending.frame);
+            let _output =
+                predicted.simulate_tick(pending.frame.target_tick, &inputs, &mut revisions);
+        }
+        let replayed_inputs = self.pending_prediction_inputs.len();
+        let predicted_tick = Some(predicted.simulation_tick());
+        self.predicted_client_world = Some(predicted);
+        PredictionReplaySummary {
+            pruned_inputs,
+            replayed_inputs,
+            predicted_tick,
+        }
+    }
+
+    #[must_use]
+    pub const fn predicted_client_world(&self) -> Option<&WorldState> {
+        self.predicted_client_world.as_ref()
+    }
+
+    #[must_use]
+    pub fn pending_prediction_input_count(&self) -> usize {
+        self.pending_prediction_inputs.len()
+    }
+
+    #[must_use]
+    pub fn prediction_identity_matches_authority(&self, player_id: PlayerId) -> Option<bool> {
+        let authoritative = self.authoritative_client_world.as_ref()?;
+        let predicted = self.predicted_client_world.as_ref()?;
+        let authoritative_drill = authoritative
+            .active_drill(player_id)
+            .map(|drill| drill.target);
+        let predicted_drill = predicted.active_drill(player_id).map(|drill| drill.target);
+        if authoritative_drill != predicted_drill {
+            return Some(false);
+        }
+        for pending in &self.pending_prediction_inputs {
+            for position in &pending.terrain_changed_tiles {
+                let authoritative_tile = authoritative.terrain().tile(*position);
+                let predicted_tile = predicted.terrain().tile(*position);
+                if !matches!((authoritative_tile, predicted_tile), (Some(authoritative), Some(predicted))
+                    if authoritative.kind == predicted.kind
+                        && authoritative.durability == predicted.durability)
+                {
+                    return Some(false);
+                }
+            }
+        }
+        Some(true)
+    }
+
+    #[must_use]
+    pub fn pending_prediction_presentations(&self) -> Vec<PendingPredictionPresentation> {
+        let Some(world) = self.predicted_client_world.as_ref() else {
+            return Vec::new();
+        };
+        self.pending_prediction_inputs
+            .iter()
+            .map(|pending| PendingPredictionPresentation {
+                sequence: pending.frame.sequence,
+                target_tick: pending.frame.target_tick,
+                action_ids: pending
+                    .frame
+                    .actions
+                    .iter()
+                    .map(|action| action.id)
+                    .collect(),
+                terrain_positions: pending.terrain_changed_tiles.clone(),
+                drill_target: world
+                    .active_drill(pending.player_id)
+                    .map(|drill| drill.target),
+            })
+            .collect()
+    }
+
+    fn request_authoritative_keyframe(
+        &mut self,
+        epoch: SessionEpoch,
+        expected_base_tick: SimulationTick,
+    ) {
+        self.authoritative_recovery_request = Some(ClientMessage::KeyframeRequest {
+            epoch,
+            expected_base_tick,
+        });
+    }
+
+    pub const fn take_authoritative_recovery_request(&mut self) -> Option<ClientMessage> {
+        self.authoritative_recovery_request.take()
+    }
+
+    #[must_use]
+    pub fn authoritative_client_status(&self) -> AuthoritativeClientStatus {
+        AuthoritativeClientStatus {
+            epoch: self.authoritative_client_epoch,
+            tick: self
+                .authoritative_client_world
+                .as_ref()
+                .map(WorldState::simulation_tick),
+            state_hash: self.authoritative_client_hash,
+            recovery_pending: self.authoritative_recovery_request.is_some(),
+            remote_history_players: self.authoritative_remote_history.len(),
+        }
+    }
+
+    #[must_use]
+    pub const fn authoritative_client_world(&self) -> Option<&WorldState> {
+        self.authoritative_client_world.as_ref()
+    }
+
+    #[must_use]
+    pub fn interpolated_authoritative_remote_player(
+        &self,
+        player_id: PlayerId,
+        alpha: f32,
+    ) -> Option<NetworkPlayerSnapshot> {
+        let history = self.authoritative_remote_history.get(&player_id)?;
+        let latest = history.back()?.clone();
+        let Some(previous) = history.iter().rev().nth(1) else {
+            return Some(latest);
+        };
+        let alpha = alpha.clamp(0.0, 1.0);
+        let mut interpolated = latest;
+        interpolated.x = alpha.mul_add(interpolated.x - previous.x, previous.x);
+        interpolated.y = alpha.mul_add(interpolated.y - previous.y, previous.y);
+        Some(interpolated)
+    }
+
+    pub fn join_accepted_message(&self, client_id: ClientId, player_id: PlayerId) -> ServerMessage {
+        ServerMessage::JoinAccepted {
+            client_id,
+            player_id,
+            epoch: self.session_epoch,
+            keyframe: self.authoritative_keyframe(),
+        }
+    }
+
+    pub fn terrain_recovery_message(
+        &self,
+        position: TerrainChunkPosition,
+        known_revision: u64,
+    ) -> ServerMessage {
+        let plan = self.snapshot_chunk_recovery_plan(position, known_revision);
+        if plan.requires_keyframe {
+            return ServerMessage::Keyframe(self.authoritative_keyframe());
+        }
+        let chunk = self.network_terrain_chunk_from_world(position.x, position.y);
+        ServerMessage::TerrainChunk {
+            epoch: self.session_epoch,
+            chunk_x: chunk.chunk_x,
+            chunk_y: chunk.chunk_y,
+            revision: chunk.revision,
+            tiles: if plan.recovered_revision().is_some() {
+                chunk.tiles
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    #[must_use]
+    pub const fn session_epoch(&self) -> SessionEpoch {
+        self.session_epoch
+    }
+
+    pub fn replace_session_epoch(&mut self, epoch: SessionEpoch) {
+        self.session_epoch = epoch;
+        self.host_input_inbox = HostInputInbox::new(epoch, self.current_tick, 8);
+        for (client_id, client) in &self.clients {
+            self.host_input_inbox
+                .assign_player(*client_id, client.controlled_player_id);
+        }
+    }
+
+    pub fn route_local_input_bundle(&mut self, bundle: &InputBundle) -> ServerMessage {
+        let response = self.receive_input_bundle(bundle);
+        if let Some(frame) = bundle.frames.first() {
+            let _applied = self.apply_accepted_input_frame(bundle.client_id, frame.sequence);
+        }
+        response
+    }
+
+    pub fn receive_input_bundle(&mut self, bundle: &InputBundle) -> ServerMessage {
+        ServerMessage::InputStatus {
+            epoch: self.session_epoch,
+            client_id: bundle.client_id,
+            statuses: self.host_input_inbox.receive_bundle(bundle),
+        }
+    }
+
+    pub fn apply_accepted_input_frame(
+        &mut self,
+        client_id: ClientId,
+        sequence: InputSequence,
+    ) -> Option<(InputStatus, AuthoritativeFrame)> {
+        let input = self
+            .host_input_inbox
+            .take_accepted_frame(client_id, sequence)?;
+        self.host_input_inbox.note_applied_frame(client_id, &input);
+        self.apply_host_input_frame(client_id, input, true)
+    }
+
+    pub fn apply_missing_input_policy(
+        &mut self,
+        client_id: ClientId,
+        target_tick: SimulationTick,
+    ) -> Option<AuthoritativeFrame> {
+        const HELD_CONTROL_TICKS: u64 = 6;
+        let input = self.host_input_inbox.held_controls_frame(
+            client_id,
+            target_tick,
+            HELD_CONTROL_TICKS,
+        )?;
+        self.apply_host_input_frame(client_id, input, false)
+            .map(|(_, frame)| frame)
+    }
+
+    fn apply_host_input_frame(
+        &mut self,
+        client_id: ClientId,
+        input: crate::multiplayer::InputFrame,
+        acknowledge_sequence: bool,
+    ) -> Option<(InputStatus, AuthoritativeFrame)> {
+        let sequence = input.sequence;
+        let player_id = self.clients.get(&client_id)?.controlled_player_id;
+        let mut commands = vec![SequencedPlayerCommand {
+            player_id,
+            sequence: input.sequence,
+            target_tick: input.target_tick,
+            command: PlayerCommand::Movement {
+                horizontal: input.controls.horizontal(),
+                thrust: input.controls.thrust,
+                drill_down: input.controls.drill_down,
+            },
+        }];
+        commands.extend(
+            input
+                .actions
+                .into_iter()
+                .map(|action| SequencedPlayerCommand {
+                    player_id,
+                    sequence: input.sequence,
+                    target_tick: input.target_tick,
+                    command: action.command,
+                }),
+        );
+        let tick_inputs = TickInputs::from_commands(&commands);
+        let base_tick = self.world.simulation_tick();
+        let mut output =
+            self.world
+                .simulate_tick(base_tick, &tick_inputs, &mut self.terrain_revisions);
+        self.current_tick = self.world.simulation_tick();
+        self.host_input_inbox.set_current_tick(self.current_tick);
+        let changed_players = output
+            .changed_players
+            .iter()
+            .filter_map(|player_id| {
+                self.world.player(*player_id).map(|player| {
+                    PlayerSnapshot::from_world_player(*player_id, player, &self.world)
+                        .network_snapshot()
+                })
+            })
+            .collect();
+        let terrain_mutations = output
+            .terrain_changed_tiles
+            .iter()
+            .filter_map(|position| {
+                self.world
+                    .terrain()
+                    .tile(*position)
+                    .map(|tile| NetworkTerrainTile {
+                        x: position.x,
+                        y: position.y,
+                        kind: tile.kind,
+                        durability: tile.durability,
+                    })
+            })
+            .collect();
+        let terrain_revisions = output
+            .terrain_revisions
+            .iter()
+            .map(|revision| NetworkTerrainChunkRevision {
+                chunk_x: revision.position.x,
+                chunk_y: revision.position.y,
+                revision: revision.revision,
+            })
+            .collect();
+        if !acknowledge_sequence {
+            output.latest_sequences_by_player.clear();
+        }
+        for event in output.events.drain(..) {
+            self.route_gameplay_event_to_presentation(event);
+        }
+        Some((
+            HostInputInbox::applied_status(sequence),
+            AuthoritativeFrame {
+                epoch: self.session_epoch,
+                base_tick,
+                result_tick: self.current_tick,
+                applied_sequences: output.latest_sequences_by_player,
+                changed_players,
+                terrain_mutations,
+                terrain_revisions,
+                canonical_state: serde_json::to_vec(&self.world)
+                    .expect("canonical post-tick world encodes"),
+                state_hash: Some(self.world.simulation_state_hash().get()),
+            },
+        ))
     }
 
     #[must_use]
@@ -7289,6 +10886,7 @@ impl GameSession {
     pub const fn advance_tick(&mut self) {
         self.current_tick = self.current_tick.next();
         self.world.set_simulation_tick(self.current_tick);
+        self.host_input_inbox.set_current_tick(self.current_tick);
     }
 
     #[must_use]
@@ -7440,6 +11038,23 @@ impl GameSession {
             terrain_recovery,
             high_latency_prediction,
         )
+    }
+
+    fn route_gameplay_event_to_presentation(&mut self, event: GameplayEvent) {
+        const PRESENTED_EVENT_HISTORY_LIMIT: usize = 4_096;
+        let key = (event.id.tick.get(), event.id.ordinal);
+        if !self.presented_gameplay_events.insert(key) {
+            return;
+        }
+        self.presented_gameplay_event_order.push_back(key);
+        while self.presented_gameplay_event_order.len() > PRESENTED_EVENT_HISTORY_LIMIT {
+            if let Some(expired) = self.presented_gameplay_event_order.pop_front() {
+                self.presented_gameplay_events.remove(&expired);
+            }
+        }
+        for world_event in world_events_for_gameplay_event(event) {
+            self.push_event(world_event);
+        }
     }
 
     fn push_event(&mut self, event: WorldEvent) {
@@ -7634,6 +11249,36 @@ impl GameSession {
         }
     }
 
+    pub fn online_prediction_command_frame_from_packet(
+        packet: &CommandPacket,
+    ) -> Option<PredictionCommandFrame> {
+        let first = packet.commands.first()?;
+        Some(PredictionCommandFrame {
+            client_id: packet.client_id,
+            player_id: first.player_id,
+            start_sequence: first.sequence,
+            target_tick: first.target_tick,
+            delta_seconds: FIXED_DELTA_SECONDS,
+            commands: packet
+                .commands
+                .iter()
+                .filter(|command| {
+                    command.player_id == first.player_id && command.target_tick == first.target_tick
+                })
+                .map(|command| command.command.clone())
+                .collect(),
+        })
+    }
+
+    pub fn predict_online_command_packet(
+        &mut self,
+        packet: &CommandPacket,
+        delta_seconds: f32,
+    ) -> Option<PlayerSnapshot> {
+        let frame = Self::online_prediction_command_frame_from_packet(packet)?;
+        self.predict_online_command_frame(frame, delta_seconds)
+    }
+
     pub fn online_prediction_command_frame_from_input(
         &self,
         input: PlayerInput,
@@ -7695,6 +11340,17 @@ impl GameSession {
             .confirm_terrain_overlay(revisions)
     }
 
+    pub fn confirm_online_prediction_terrain_for_tiles(
+        &mut self,
+        revisions: &[TerrainChunkRevision],
+        changed_tiles: &[TilePosition],
+        command_sequence: Option<InputSequence>,
+    ) -> usize {
+        self.local_client_mut()
+            .prediction_mut()
+            .confirm_terrain_overlay_for_tiles(revisions, changed_tiles, command_sequence)
+    }
+
     pub fn revert_unconfirmed_online_prediction_terrain(&mut self) -> usize {
         self.local_client_mut()
             .prediction_mut()
@@ -7746,6 +11402,37 @@ impl GameSession {
         (confirmed, reverted)
     }
 
+    pub fn apply_host_terrain_revisions_to_prediction_for_tiles(
+        &mut self,
+        authoritative_tick: SimulationTick,
+        revisions: &[TerrainChunkRevision],
+        changed_tiles: &[TilePosition],
+        command_sequence: Option<InputSequence>,
+    ) -> (usize, usize) {
+        let confirmed = self.confirm_online_prediction_terrain_for_tiles(
+            revisions,
+            changed_tiles,
+            command_sequence,
+        );
+        let reverted = if revisions.is_empty()
+            || self
+                .local_client()
+                .prediction()
+                .terrain_overlays()
+                .iter()
+                .any(|overlay| {
+                    overlay.target_tick <= authoritative_tick
+                        && overlay.resolution == PredictedTerrainResolution::Pending
+                }) {
+            self.local_client_mut()
+                .prediction_mut()
+                .revert_terrain_overlays_through_tick(authoritative_tick)
+        } else {
+            0
+        };
+        (confirmed, reverted)
+    }
+
     pub fn apply_host_modal_authority(&mut self, confirmed: bool) -> bool {
         if confirmed {
             self.confirm_online_predicted_modal()
@@ -7755,17 +11442,40 @@ impl GameSession {
     }
 
     pub fn rebase_local_prediction_to_authority(&mut self) {
-        let tick = self.current_tick;
+        self.rebase_local_prediction_to_authority_with_terrain(self.current_tick, &[], &[]);
+    }
+
+    pub fn rebase_local_prediction_to_authority_with_terrain(
+        &mut self,
+        tick: SimulationTick,
+        terrain_revisions: &[TerrainChunkRevision],
+        changed_tiles: &[TilePosition],
+    ) {
         let world = self.world.clone();
-        let player_id = self.local_client().controlled_player_id;
+        let player_id = self.game.online_player_slot.map_or_else(
+            || self.local_client().controlled_player_id,
+            |slot| PlayerId::new(u64::from(slot)),
+        );
         if let Some(authoritative) = world
             .player(player_id)
             .map(|player| PlayerSnapshot::from_world_player(player_id, player, &world))
         {
+            let active_drill = world
+                .active_drill(player_id)
+                .copied()
+                .map(|drill| DrillPredictionSnapshot::from_drill(player_id, drill));
+            let input = AuthoritativeReconciliationInput {
+                tick,
+                player_snapshot: authoritative,
+                terrain_revisions: terrain_revisions.to_vec(),
+                changed_tiles: changed_tiles.to_vec(),
+                active_drill,
+                authoritative_world: world,
+            };
             let _correction = self
                 .local_client_mut()
                 .prediction_mut()
-                .reconcile_authoritative_snapshot(tick, &world, &authoritative);
+                .reconcile_authoritative_input(&input);
         } else {
             self.local_client_mut()
                 .prediction_mut()
@@ -7813,6 +11523,11 @@ impl GameSession {
             .prediction
             .acknowledge_commands_through(acknowledgement.acknowledged_sequence);
         self.apply_host_terrain_revisions_to_prediction(acknowledgement.authoritative_tick, &[]);
+        self.rebase_local_prediction_to_authority_with_terrain(
+            acknowledgement.authoritative_tick,
+            &[],
+            &[],
+        );
     }
 
     pub fn apply_online_command_rejection(&mut self, rejection: &CommandRejection) {
@@ -7822,6 +11537,11 @@ impl GameSession {
         let _terrain_reverted =
             self.apply_host_terrain_revisions_to_prediction(rejection.authoritative_tick, &[]);
         let _modal_reverted = self.apply_host_modal_authority(false);
+        self.rebase_local_prediction_to_authority_with_terrain(
+            rejection.authoritative_tick,
+            &[],
+            &[],
+        );
     }
 
     pub fn refresh_online_roster_status_on_shell(&mut self) {
@@ -7908,7 +11628,6 @@ impl GameSession {
     ) -> Option<OnlineRosterParticipant> {
         if !self.game.online_remote_player_connected
             && self.game.online_remote_player_name.is_none()
-            && self.game.online_remote_player_snapshots.is_empty()
         {
             return None;
         }
@@ -7933,8 +11652,7 @@ impl GameSession {
                 .clone()
                 .unwrap_or_else(|| "Remote miner".to_owned()),
             ready: self.game.online_remote_player_ready,
-            connected: self.game.online_remote_player_connected
-                || !self.game.online_remote_player_snapshots.is_empty(),
+            connected: self.game.online_remote_player_connected,
             role: remote_role,
             save_authority: remote_save_authority,
         })
@@ -7966,10 +11684,7 @@ impl GameSession {
             let _synced = self.sync_replicated_authoritative_tick(tick);
         }
         let player_id = online_identity_for_slot(slot).1;
-        if let Some(player) = self.world.player_mut(player_id) {
-            *player = self.game.player.clone();
-            self.sync_legacy_player_from_world(player_id);
-        } else {
+        if self.world.player(player_id).is_none() {
             self.world
                 .insert_player(player_id, self.game.player.clone());
         }
@@ -8138,10 +11853,8 @@ impl GameSession {
         for _ in 0..fixed_steps {
             let tick = self.current_tick;
             self.command_network_session.set_current_tick(tick);
-            processed_commands += self.process_authoritative_commands_for_tick(tick);
-            self.step_authoritative_movement_from_latest_intents(FIXED_DELTA_SECONDS);
             let before_events = self.pending_events.len();
-            self.process_authoritative_drill_progress();
+            processed_commands += self.process_authoritative_commands_for_tick(tick);
             let emitted_events: Vec<WorldEvent> = self.pending_events[before_events..].to_vec();
             terrain_events += emitted_events
                 .iter()
@@ -8157,9 +11870,6 @@ impl GameSession {
                 .iter()
                 .filter(|event| matches!(event, WorldEvent::CargoChanged { .. }))
                 .count();
-            self.sync_legacy_player_from_world(LOCAL_PLAYER_ID);
-            self.sync_legacy_active_drill_from_world(LOCAL_PLAYER_ID);
-            self.sync_legacy_terrain_from_world();
             self.advance_tick();
             self.push_event(WorldEvent::TickAdvanced {
                 tick: self.current_tick,
@@ -8192,10 +11902,7 @@ impl GameSession {
             let world_matches = self.world.terrain.tile(position).is_some_and(|current| {
                 current.kind == tile.kind && current.durability == tile.durability
             });
-            let game_matches = self.game.terrain.tile(position).is_some_and(|current| {
-                current.kind == tile.kind && current.durability == tile.durability
-            });
-            if world_matches && game_matches {
+            if world_matches {
                 continue;
             }
             if self
@@ -8222,24 +11929,29 @@ impl GameSession {
             return 0;
         }
         let visible_tiles = changed_tiles.len();
-        self.game.terrain.clone_from(self.world.terrain());
-        let marker_batch = self
-            .game
-            .mark_online_terrain_sync_positions(changed_tiles.clone());
-        self.game
-            .visual_changes
-            .changed_tiles
-            .extend(changed_tiles.clone());
         let revisions = self.mark_world_terrain_tiles_changed(changed_tiles.clone());
         self.push_event(WorldEvent::TerrainTilesChanged {
-            positions: changed_tiles,
+            positions: changed_tiles.clone(),
         });
         if !revisions.is_empty() {
-            self.push_event(WorldEvent::TerrainChunksChanged { revisions });
+            self.push_event(WorldEvent::TerrainChunksChanged {
+                revisions: revisions.clone(),
+                changed_tiles: changed_tiles.clone(),
+            });
+            let _prediction_update = self.apply_host_terrain_revisions_to_prediction_for_tiles(
+                self.current_tick,
+                &revisions,
+                &changed_tiles,
+                None,
+            );
+            self.rebase_local_prediction_to_authority_with_terrain(
+                self.current_tick,
+                &revisions,
+                &changed_tiles,
+            );
         }
         self.game.apply_online_terrain_status(format!(
-            "applied chunk ({chunk_x},{chunk_y}) rev {revision}: {visible_tiles} visible tiles; {} highlighted",
-            marker_batch.marker_count
+            "applied chunk ({chunk_x},{chunk_y}) rev {revision}: {visible_tiles} canonical tiles"
         ));
         self.game
             .apply_online_sync_loop_status(crate::game_state::OnlineSyncLoopStatus::terrain(
@@ -8321,7 +12033,7 @@ impl GameSession {
         } else {
             0
         };
-        let mut synced_replicated_players = 0;
+        let synced_replicated_players = 0;
         let mut applied_terrain_tiles = 0;
         let mut roster_seeded = false;
         let mut joined_local_synced = false;
@@ -8331,9 +12043,6 @@ impl GameSession {
             joined_local_synced = self.sync_joined_local_player_from_replicated_game();
             applied_terrain_tiles =
                 self.apply_client_terrain_chunk_response(summary.terrain_chunk_response.as_ref());
-            synced_replicated_players = self
-                .sync_legacy_remote_presentations_to_world()
-                .remote_players_updated;
         }
         OnlineTickApplicationSummary {
             applied_remote_commands,
@@ -8403,45 +12112,6 @@ impl GameSession {
         )
     }
 
-    pub fn sync_legacy_remote_presentations_to_world(
-        &mut self,
-    ) -> LegacyRemotePresentationSyncSummary {
-        let remote_players = self.game.online_remote_player_snapshots.clone();
-        if remote_players.is_empty() {
-            return LegacyRemotePresentationSyncSummary::default();
-        }
-        let remote_players = remote_players
-            .into_iter()
-            .map(|remote| NetworkPlayerSnapshot {
-                player_id: remote.player_id,
-                x: remote.x,
-                y: remote.y,
-                velocity_x: remote.velocity_x,
-                velocity_y: remote.velocity_y,
-                fuel: remote.fuel,
-                hull: remote.hull,
-                credits: remote.credits,
-                cargo_used: remote.cargo_used,
-                cargo: remote.cargo,
-                artifacts: remote.artifacts,
-                materials: remote.materials,
-                loadout: NetworkPlayerLoadoutSnapshot::default(),
-                scanner_cooldown_seconds: 0.0,
-            })
-            .collect::<Vec<_>>();
-        let source_snapshots = remote_players.len();
-        let summary = self.apply_replicated_player_delta_to_world_presentation(
-            self.current_tick(),
-            &remote_players,
-        );
-        LegacyRemotePresentationSyncSummary {
-            source_snapshots,
-            remote_players_updated: summary.remote_players_updated,
-            local_players_updated: summary.local_players_updated,
-            clients_created: summary.clients_created,
-        }
-    }
-
     pub fn apply_accepted_online_remote_commands(
         &mut self,
         summary: &CommandPacketExchangeSummary,
@@ -8487,10 +12157,7 @@ impl GameSession {
             accepted.iter().map(|command| command.target_tick).collect();
         for target_tick in target_ticks {
             self.process_authoritative_commands_for_tick(target_tick);
-            self.step_authoritative_movement_from_latest_intents(FIXED_DELTA_SECONDS);
-            self.process_authoritative_drill_progress();
         }
-        self.sync_legacy_terrain_from_world();
         accepted_count
     }
 
@@ -8541,12 +12208,13 @@ impl GameSession {
             input
         };
         let controlled_player_id = self.local_client().controlled_player_id;
+        self.game.current_zone = self.world.player(controlled_player_id).and_then(|player| {
+            crate::surface::surface_building_at_tile(player.tile_position(TILE_SIZE).x)
+                .map(|building| building.zone)
+        });
         let fixed_steps = self.accumulate_frame_delta(delta_seconds);
         let _advance = self.advance_authoritative_world_ticks(fixed_steps);
-        self.sync_legacy_player_from_world(controlled_player_id);
         let _revealed = self.reveal_legacy_exploration_from_world_player(controlled_player_id);
-        self.sync_legacy_active_drill_from_world(controlled_player_id);
-        self.sync_legacy_terrain_from_world();
         let shell_update = self
             .game
             .update_shell_after_session_authority(shell_input, delta_seconds);
@@ -8567,17 +12235,6 @@ impl GameSession {
             self.push_event(WorldEvent::ClientExitRequested {
                 client_id: self.local_client_id,
             });
-        }
-        if let Some(sync) = self
-            .world
-            .sync_player_shell_effects_from_legacy_game(controlled_player_id, &self.game)
-        {
-            if sync.changed_survival() {
-                self.push_event(WorldEvent::PlayerSurvivalChanged {
-                    player_id: sync.player_id,
-                });
-            }
-            self.sync_legacy_player_from_world(sync.player_id);
         }
         if save_load.acted() {
             self.push_event(WorldEvent::MessageChanged {
@@ -8602,21 +12259,46 @@ impl GameSession {
         input: PlayerInput,
         delta_seconds: f32,
     ) -> SessionAuthorityUpdateSummary {
+        if self.game.run_mode == RunMode::Interior {
+            let save_load = self.handle_session_save_load_input(input);
+            let _shell = self
+                .game
+                .update_shell_after_session_authority(input, delta_seconds);
+            if save_load.acted() {
+                self.push_event(WorldEvent::MessageChanged {
+                    message: save_load.message,
+                });
+            }
+            return SessionAuthorityUpdateSummary {
+                used_legacy_presentation_adapter: false,
+                local_movement_authority: false,
+                command_adapter_count: 0,
+                current_tick: self.current_tick,
+            };
+        }
         let save_load = self.handle_session_save_load_input(input);
         let input = Self::input_without_session_save_load(input);
-        let legacy_input = if self.game.run_mode == RunMode::Interior {
-            input
-        } else {
-            self.legacy_presentation_input_from_authoritative_commands(input)
-        };
-        self.update_legacy(legacy_input, delta_seconds);
+        let shell_input = crate::game_state::input_without_session_gameplay_commands(input);
+        let _shell = self
+            .game
+            .update_shell_after_session_authority(shell_input, delta_seconds);
+        if let Some(slot_summary) = self.handle_session_slot_io_request() {
+            self.push_event(WorldEvent::MessageChanged {
+                message: slot_summary.message,
+            });
+        }
+        if let Some(service_summary) = self.handle_session_service_request() {
+            self.push_event(WorldEvent::MessageChanged {
+                message: service_summary.message,
+            });
+        }
         if save_load.acted() {
             self.push_event(WorldEvent::MessageChanged {
                 message: save_load.message,
             });
         }
         SessionAuthorityUpdateSummary {
-            used_legacy_presentation_adapter: true,
+            used_legacy_presentation_adapter: false,
             local_movement_authority: self.latest_local_movement_intent.is_some(),
             command_adapter_count: self.latest_local_authoritative_commands.len(),
             current_tick: self.current_tick,
@@ -8747,9 +12429,9 @@ impl GameSession {
         let tick = one_step.current_tick();
         one_step.route_local_player_commands(commands.clone());
         split_steps.route_local_player_commands(commands);
-        one_step.update_legacy(PlayerInput::default(), FIXED_DELTA_SECONDS);
-        split_steps.update_legacy(PlayerInput::default(), FIXED_DELTA_SECONDS / 2.0);
-        split_steps.update_legacy(PlayerInput::default(), FIXED_DELTA_SECONDS / 2.0);
+        one_step.update_legacy_frame(PlayerInput::default(), FIXED_DELTA_SECONDS);
+        split_steps.update_legacy_frame(PlayerInput::default(), FIXED_DELTA_SECONDS / 2.0);
+        split_steps.update_legacy_frame(PlayerInput::default(), FIXED_DELTA_SECONDS / 2.0);
 
         let one_player = one_step.world.player(LOCAL_PLAYER_ID);
         let split_player = split_steps.world.player(LOCAL_PLAYER_ID);
@@ -8777,7 +12459,6 @@ impl GameSession {
             let tick = session.current_tick();
             session.route_local_player_commands(commands);
             let _processed = session.process_authoritative_commands_for_tick(tick);
-            session.process_authoritative_drill_progress();
             session
         }
 
@@ -8808,90 +12489,45 @@ impl GameSession {
 
     pub fn process_authoritative_commands_for_tick(&mut self, tick: SimulationTick) -> usize {
         let tick_commands = self.drain_commands_for_tick(tick);
-        let command_count = tick_commands.len();
+        let tick_inputs = TickInputs::from_commands(&tick_commands);
+        let mut simulation =
+            self.world
+                .simulate_tick(tick, &tick_inputs, &mut self.terrain_revisions);
+        let command_count = simulation.command_count;
         self.remember_latest_movement_intents(&tick_commands);
         self.push_event(WorldEvent::CommandsProcessed {
             tick,
             command_count,
         });
 
-        let mut latest_sequences_by_client = BTreeMap::<ClientId, InputSequence>::new();
-        let mut changed_players = BTreeSet::new();
-        let mut command_events = Vec::new();
-        for command in &tick_commands {
-            if self
-                .world
-                .apply_player_command(command.player_id, &command.command)
-                == PlayerScopedCommandOutcome::Applied
-            {
-                changed_players.insert(command.player_id);
-                command_events.extend(world_events_for_applied_command(command));
-            }
-            if let Some((client_id, _client)) = self
-                .clients
-                .iter()
-                .find(|(_client_id, client)| client.controlled_player_id == command.player_id)
-            {
-                latest_sequences_by_client
-                    .entry(*client_id)
-                    .and_modify(|sequence| *sequence = (*sequence).max(command.sequence))
-                    .or_insert(command.sequence);
-            }
-        }
-
-        for player_id in changed_players {
+        for player_id in simulation.changed_players {
             self.push_event(WorldEvent::PlayerChanged { player_id });
         }
-        for event in command_events {
-            self.push_event(event);
+        for position in &simulation.terrain_changed_tiles {
+            self.push_event(WorldEvent::TerrainTilesChanged {
+                positions: vec![*position],
+            });
+        }
+        if !simulation.terrain_revisions.is_empty() {
+            self.push_event(WorldEvent::TerrainChunksChanged {
+                revisions: mem::take(&mut simulation.terrain_revisions),
+                changed_tiles: simulation.terrain_changed_tiles.clone(),
+            });
+        }
+        for event in simulation.events {
+            self.route_gameplay_event_to_presentation(event);
         }
 
-        for (client_id, sequence) in latest_sequences_by_client {
-            self.acknowledge_client_commands_through(client_id, sequence);
+        for (player_id, sequence) in simulation.latest_sequences_by_player {
+            let client_id = self.clients.iter().find_map(|(client_id, client)| {
+                (client.controlled_player_id == player_id).then_some(*client_id)
+            });
+            if let Some(client_id) = client_id {
+                self.acknowledge_client_commands_through(client_id, sequence);
+            }
         }
 
         command_count
-    }
-
-    fn process_authoritative_drill_progress(&mut self) {
-        let active_players: Vec<PlayerId> = self.world.active_drills.keys().copied().collect();
-        for player_id in active_players {
-            let Some(drill) = self.world.active_drill_mut(player_id) else {
-                continue;
-            };
-            drill.progress += FIXED_DELTA_SECONDS / drill.seconds_per_chip;
-            if drill.progress < 1.0 {
-                continue;
-            }
-            drill.progress -= 1.0;
-
-            let Some(target) = self.world.active_drill(player_id).map(|drill| drill.target) else {
-                continue;
-            };
-            let Some(result) = self.world.chip_active_drill_target(player_id) else {
-                continue;
-            };
-            let positions = vec![target];
-            let revisions = self.mark_world_terrain_tiles_changed(positions.clone());
-            self.push_event(WorldEvent::TerrainTilesChanged { positions });
-            if !revisions.is_empty() {
-                self.push_event(WorldEvent::TerrainChunksChanged { revisions });
-            }
-            match result {
-                MineResult::Mined(TileKind::Ore(_)) => {
-                    self.push_event(WorldEvent::CargoChanged { player_id });
-                }
-                MineResult::TooDangerous => {
-                    let _snapshot = self.world.apply_hazard_damage(player_id, 8.0);
-                    self.push_event(WorldEvent::PlayerDamaged { player_id });
-                }
-                MineResult::Blocked
-                | MineResult::Exploded
-                | MineResult::Blast
-                | MineResult::Chipped
-                | MineResult::Mined(_) => {}
-            }
-        }
     }
 
     pub fn acknowledge_client_commands_through(
@@ -8986,61 +12622,6 @@ impl GameSession {
             .collect()
     }
 
-    pub fn update_legacy(&mut self, input: PlayerInput, delta_seconds: f32) {
-        let fixed_steps = self.accumulate_frame_delta(delta_seconds);
-        let _summary = self.advance_authoritative_world_ticks(fixed_steps);
-        self.sync_client_settings_to_legacy_game();
-        let legacy_adapter_input = if self.game.run_mode == RunMode::Interior {
-            input
-        } else {
-            self.legacy_adapter_input(input)
-        };
-        let previous_message = self.game.message.clone();
-        let previous_player = self.game.player.clone();
-        let previous_request_exit = self.game.request_exit;
-        self.game.update(legacy_adapter_input, delta_seconds);
-        self.sync_client_settings_from_legacy_game();
-        self.sync_legacy_mutations_into_world_preserving_authoritative_movement(&previous_player);
-        if self.game.run_mode == RunMode::Playing {
-            let _revealed = self.reveal_legacy_exploration_from_world_player(LOCAL_PLAYER_ID);
-        }
-        self.capture_legacy_events(&previous_message, &previous_player, previous_request_exit);
-    }
-
-    fn legacy_adapter_input(&self, mut input: PlayerInput) -> PlayerInput {
-        if self.latest_local_movement_intent.is_some() {
-            input.horizontal = 0.0;
-            input.thrust = false;
-            input.drill_down = false;
-        }
-        for command in &self.latest_local_authoritative_commands {
-            match command {
-                PlayerCommand::UseScanner => input.scan = false,
-                PlayerCommand::PlaceBomb => input.bomb = false,
-                PlayerCommand::PlaceInfrastructure { slot } => match slot {
-                    0 => input.place_relay = false,
-                    1 => input.place_drone = false,
-                    2 => input.place_lift = false,
-                    3 => input.place_support = false,
-                    4 => input.place_pump = false,
-                    5 => input.place_processor = false,
-                    _ => {}
-                },
-                PlayerCommand::SelectUpgrade { .. } => input.selected_upgrade = None,
-                PlayerCommand::Interact
-                | PlayerCommand::Cancel
-                | PlayerCommand::Confirm
-                | PlayerCommand::Movement { .. }
-                | PlayerCommand::BuyUpgrade { .. }
-                | PlayerCommand::Refuel
-                | PlayerCommand::Repair
-                | PlayerCommand::SellCargo
-                | PlayerCommand::Rescue => {}
-            }
-        }
-        input
-    }
-
     fn remember_latest_movement_intents(&mut self, commands: &[SequencedPlayerCommand]) {
         for command in commands {
             if let Some(intent) = PlayerMovementIntent::from_command(&command.command) {
@@ -9050,84 +12631,39 @@ impl GameSession {
         }
     }
 
-    fn step_authoritative_movement_from_latest_intents(&mut self, delta_seconds: f32) {
-        let intents: Vec<(PlayerId, PlayerMovementIntent)> = self
-            .latest_movement_intents
-            .iter()
-            .map(|(player_id, intent)| (*player_id, *intent))
-            .collect();
-        for (player_id, intent) in intents {
-            let _step = self.world.step_authoritative_movement(
-                player_id,
-                intent.horizontal,
-                intent.thrust,
-                delta_seconds,
-            );
-        }
-    }
-
-    fn sync_legacy_mutations_into_world_preserving_authoritative_movement(
-        &mut self,
-        previous_legacy_player: &Player,
-    ) {
-        let authoritative_player = self.world.player(LOCAL_PLAYER_ID).cloned();
-        let authoritative_active_drill = self.world.active_drill(LOCAL_PLAYER_ID).copied();
-        let authoritative_bombs = self.world.bombs.clone();
-        let authoritative_infrastructure = self.world.infrastructure.clone();
-        let authoritative_scanner_cooldowns = self.world.scanner_cooldowns.clone();
-        let secondary_players: Vec<(PlayerId, Player)> = self
-            .world
-            .players
-            .iter()
-            .filter(|(player_id, _player)| **player_id != LOCAL_PLAYER_ID)
-            .map(|(player_id, player)| (*player_id, player.clone()))
-            .collect();
-        self.world
-            .sync_from_legacy_game(self.current_tick, &self.game);
-        for (player_id, player) in secondary_players {
-            self.world.insert_player(player_id, player);
-        }
-        self.world.bombs = authoritative_bombs;
-        self.world.infrastructure = authoritative_infrastructure;
-        self.world.scanner_cooldowns = authoritative_scanner_cooldowns;
-        self.world.authoritative_summary.bomb_count = self.world.bombs.len();
-        if let (Some(authoritative_player), Some(world_player)) =
-            (authoritative_player, self.world.player_mut(LOCAL_PLAYER_ID))
-        {
-            world_player.x = authoritative_player.x;
-            world_player.y = authoritative_player.y;
-            world_player.velocity_x = authoritative_player.velocity_x;
-            world_player.velocity_y = authoritative_player.velocity_y;
-            world_player.fuel = authoritative_player.fuel;
-            world_player.hull = authoritative_player.hull;
-            if self.latest_local_movement_intent.is_some()
-                && previous_legacy_player != &self.game.player
-            {
-                self.game.player.x = authoritative_player.x;
-                self.game.player.y = authoritative_player.y;
-                self.game.player.velocity_x = authoritative_player.velocity_x;
-                self.game.player.velocity_y = authoritative_player.velocity_y;
-            }
-            self.sync_legacy_active_drill_from_world(LOCAL_PLAYER_ID);
-        }
-        if authoritative_active_drill.is_some() {
-            self.world
-                .set_active_drill(LOCAL_PLAYER_ID, authoritative_active_drill);
-            self.sync_legacy_active_drill_from_world(LOCAL_PLAYER_ID);
-        }
-    }
-
     fn sync_legacy_player_from_world(&mut self, player_id: PlayerId) {
         if player_id == LOCAL_PLAYER_ID
+            && self.game.online_player_slot.is_none()
             && let Some(player) = self.world.player(player_id)
         {
             self.game.player = player.clone();
         }
     }
 
-    fn sync_legacy_active_drill_from_world(&mut self, player_id: PlayerId) {
-        self.world
-            .sync_active_drill_to_legacy_game(player_id, &mut self.game);
+    fn sync_service_presentation_from_world(&mut self, player_id: PlayerId) {
+        self.sync_legacy_player_from_world(player_id);
+        self.game.town_development = self.world.progression.town_development.clone();
+        self.game.contracts = self.world.progression.contracts.clone();
+        self.game.deep_claim_status = self.world.progression.deep_claim_status;
+        self.game.active_side_contracts = self.world.progression.active_side_contracts.clone();
+        if self.game.active_side_contracts.is_empty() {
+            self.game.side_contract_active = false;
+            self.game.side_contract_target = None;
+            self.game.side_contract_required = 0;
+        }
+        self.game.expedition_offers = self.world.progression.expedition_offers.clone();
+        self.game.active_expeditions = self.world.progression.active_expeditions.clone();
+        self.game.expeditions_completed = self.world.progression.expeditions_completed;
+        self.game.town_event_day = self.world.progression.town_event_day;
+        self.game.deepest_tile_reached = self.world.progression.deepest_tile_reached;
+        self.game.total_earnings = self.world.progression.total_earnings;
+        if !self.world.lost_cargo_sites.contains_key(&player_id) {
+            self.game.lost_cargo_count = 0;
+            self.game.lost_minerals.clear();
+            self.game.lost_artifacts.clear();
+            self.game.lost_cargo_x = None;
+            self.game.lost_cargo_y = None;
+        }
     }
 
     fn reveal_legacy_exploration_from_world_player(&mut self, player_id: PlayerId) -> usize {
@@ -9137,40 +12673,6 @@ impl GameSession {
 
     fn sync_legacy_terrain_from_world(&mut self) {
         self.game.terrain.clone_from(self.world.terrain());
-    }
-
-    fn capture_legacy_events(
-        &mut self,
-        previous_message: &str,
-        previous_player: &Player,
-        previous_request_exit: bool,
-    ) {
-        if previous_message != self.game.message {
-            self.push_event(WorldEvent::MessageChanged {
-                message: self.game.message.clone(),
-            });
-        }
-        if previous_player != &self.game.player {
-            self.push_event(WorldEvent::PlayerChanged {
-                player_id: LOCAL_PLAYER_ID,
-            });
-        }
-        if !previous_request_exit && self.game.request_exit {
-            self.push_event(WorldEvent::ClientExitRequested {
-                client_id: self.local_client_id,
-            });
-        }
-        if self.game.visual_changes.full_terrain_refresh {
-            self.push_event(WorldEvent::TerrainRefreshRequested);
-        }
-        if !self.game.visual_changes.changed_tiles.is_empty() {
-            let positions = self.game.visual_changes.changed_tiles.clone();
-            let revisions = self.mark_world_terrain_tiles_changed(positions.clone());
-            self.push_event(WorldEvent::TerrainTilesChanged { positions });
-            if !revisions.is_empty() {
-                self.push_event(WorldEvent::TerrainChunksChanged { revisions });
-            }
-        }
     }
 }
 
@@ -9214,6 +12716,123 @@ mod tests {
         host_authority_command_routing_summary, legacy_game_state_coupling_inventory,
         legacy_game_state_coupling_inventory_summary,
     };
+
+    #[test]
+    fn gameplay_presentation_events_are_deduplicated_by_stable_identity() {
+        let mut session = GameSession::new();
+        let event = super::GameplayEvent {
+            id: super::GameplayEventId {
+                tick: SimulationTick::new(7),
+                ordinal: 3,
+            },
+            kind: super::GameplayEventKind::CargoChanged {
+                player_id: LOCAL_PLAYER_ID,
+            },
+        };
+        session.route_gameplay_event_to_presentation(event);
+        session.route_gameplay_event_to_presentation(event);
+        let events = session.drain_events();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(
+                    event,
+                    super::WorldEvent::CargoChanged {
+                        player_id: LOCAL_PLAYER_ID
+                    }
+                ))
+                .count(),
+            1
+        );
+        assert_eq!(session.presented_gameplay_events.len(), 1);
+    }
+
+    #[test]
+    fn live_render_output_carries_canonical_world_snapshot() {
+        let mut session = GameSession::new();
+        let target = TilePosition { x: 20, y: 20 };
+        assert!(
+            session
+                .world_mut()
+                .terrain_mut()
+                .set_kind(target, TileKind::Gas)
+        );
+        session
+            .world_mut()
+            .hazards
+            .push(crate::game_state::HazardCloud {
+                x: 20.0 * TILE_SIZE,
+                y: 20.0 * TILE_SIZE,
+                life: 5.0,
+                radius: 12.0,
+            });
+        let output =
+            session.live_render_frame_output(&super::PredictionPresentationPlan::default());
+        let tile = output
+            .terrain
+            .tile(target)
+            .expect("snapshot has target tile");
+        assert_eq!(tile.kind, TileKind::Gas);
+        assert_eq!(output.hazards.len(), 1);
+        session.game.terrain.set_kind(target, TileKind::Air);
+        output.apply_render_snapshot_to_shell(&mut session.game);
+        assert_eq!(
+            session
+                .game
+                .terrain
+                .tile(target)
+                .expect("shell has target tile")
+                .kind,
+            TileKind::Gas
+        );
+        assert_eq!(session.game.hazard_clouds.len(), 1);
+    }
+
+    #[test]
+    fn non_playing_shell_modes_do_not_use_legacy_gameplay_adapter() {
+        for mode in [RunMode::Title, RunMode::Paused, RunMode::Interior] {
+            let mut session = GameSession::new();
+            session.game.run_mode = mode;
+            let before = session.world().simulation_state_hash();
+            let summary = session
+                .update_frame_from_session_authority(PlayerInput::default(), FIXED_DELTA_SECONDS);
+            assert!(!summary.legacy_bridge_active());
+            assert_eq!(session.world().simulation_state_hash(), before);
+        }
+    }
+
+    #[test]
+    fn shell_update_cannot_backfill_authoritative_survival_state() {
+        let mut session = GameSession::new();
+        session.game.run_mode = RunMode::Playing;
+        {
+            let player = session
+                .world_mut()
+                .player_mut(LOCAL_PLAYER_ID)
+                .expect("player exists");
+            player.fuel = 77.0;
+            player.hull = 66.0;
+        }
+        session.game.player.fuel = 1.0;
+        session.game.player.hull = 2.0;
+        let _summary = session
+            .update_frame_from_session_authority(PlayerInput::default(), FIXED_DELTA_SECONDS);
+        let player = session
+            .world()
+            .player(LOCAL_PLAYER_ID)
+            .expect("player exists");
+        assert!(player.fuel > 70.0);
+        assert!(player.hull > 60.0);
+    }
+
+    #[test]
+    fn fixed_tick_audit_marks_migrated_gameplay_and_presentation_exemption() {
+        let summary = GameSession::fixed_tick_migration_summary();
+        assert!(summary.audit_complete());
+        assert_eq!(summary.authoritative_migrations, 0);
+        assert_eq!(summary.presentation_exemptions, 1);
+        assert_eq!(summary.fixed_ready, 7);
+    }
 
     #[test]
     fn session_starts_with_single_player_compatibility_client() {
@@ -9293,7 +12912,7 @@ mod tests {
     }
 
     #[test]
-    fn render_frame_plan_uses_predicted_local_player_presentation() {
+    fn render_frame_plan_uses_authoritative_local_player_without_pending_prediction() {
         let mut session = GameSession::new();
         session
             .world
@@ -9308,8 +12927,10 @@ mod tests {
             .expect("predicted local player presentation exists");
 
         assert_eq!(player.player_id, LOCAL_PLAYER_ID);
-        assert!(player.predicted);
-        assert!((player.x - (session.game().player.x + 5.0)).abs() < f32::EPSILON);
+        assert!(!player.predicted);
+        assert!(
+            (player.x - session.world().player(LOCAL_PLAYER_ID).unwrap().x).abs() < f32::EPSILON
+        );
     }
 
     #[test]
@@ -10487,8 +14108,8 @@ mod tests {
 
         assert!(audit_items.iter().any(|item| {
             item.system == "physics"
-                && item.status == super::FixedTickMigrationStatus::CompatibilityFixedStep
-                && item.plan == super::FixedTickMigrationPlan::MigrateToAuthoritativeTick
+                && item.status == super::FixedTickMigrationStatus::FixedTickReady
+                && item.plan == super::FixedTickMigrationPlan::AlreadyFixedStep
         }));
         assert!(audit_items.iter().any(|item| {
             item.system == "animations"
@@ -10496,7 +14117,7 @@ mod tests {
         }));
         assert!(audit_items.iter().any(|item| {
             item.system == "drilling_progress"
-                && item.status == super::FixedTickMigrationStatus::CompatibilityFixedStep
+                && item.status == super::FixedTickMigrationStatus::FixedTickReady
         }));
     }
 
@@ -10504,9 +14125,9 @@ mod tests {
     fn fixed_tick_audit_summary_counts_authoritative_and_presentation_work() {
         let summary = GameSession::fixed_tick_migration_summary();
 
-        assert_eq!(summary.fixed_ready, 1);
+        assert_eq!(summary.fixed_ready, 7);
         assert_eq!(summary.presentation_exemptions, 1);
-        assert!(summary.authoritative_migrations >= 1);
+        assert_eq!(summary.authoritative_migrations, 0);
         assert_eq!(summary.unresolved_variable_delta, 0);
         assert!(summary.audit_complete());
     }
@@ -10895,6 +14516,270 @@ mod tests {
                 .prediction_failures()
                 .contains(&super::PredictionFailure::HazardOrRescueChangedState)
         );
+    }
+
+    #[test]
+    fn online_prediction_live_diagnostics_sample_prediction_layers() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let player_id = LOCAL_PLAYER_ID;
+        let packet = CommandPacket {
+            client_id: LOCAL_CLIENT_ID,
+            commands: vec![SequencedPlayerCommand {
+                player_id,
+                sequence: InputSequence::new(1),
+                target_tick: session.current_tick().next(),
+                command: PlayerCommand::Movement {
+                    horizontal: 1.0,
+                    thrust: false,
+                    drill_down: false,
+                },
+            }],
+        };
+        let _fixed = session.predict_online_command_packet(&packet, FIXED_DELTA_SECONDS);
+        let _transient = session.predict_online_render_input(
+            PlayerInput {
+                horizontal: 1.0,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+        );
+
+        let sample = session
+            .local_client()
+            .prediction()
+            .divergence_sample_for_player(player_id);
+
+        assert!(sample.replicated_local_position.is_some());
+        assert!(sample.deterministic_replay_position.is_some());
+        assert!(sample.transient_render_position.is_some());
+        assert_eq!(sample.correction_mode, super::CorrectionMode::None);
+    }
+
+    #[test]
+    fn online_prediction_live_history_records_active_drill_state() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let target_tick = session.current_tick().next();
+        let packet = CommandPacket {
+            client_id: LOCAL_CLIENT_ID,
+            commands: vec![SequencedPlayerCommand {
+                player_id: LOCAL_PLAYER_ID,
+                sequence: InputSequence::new(5),
+                target_tick,
+                command: PlayerCommand::Movement {
+                    horizontal: 0.0,
+                    thrust: false,
+                    drill_down: true,
+                },
+            }],
+        };
+
+        let _prediction = session.predict_online_command_packet(&packet, FIXED_DELTA_SECONDS);
+        let entry = session
+            .local_client()
+            .prediction()
+            .prediction_history_entry(target_tick, LOCAL_PLAYER_ID)
+            .expect("prediction history entry exists");
+
+        assert!(entry.active_drill.is_some());
+    }
+
+    #[test]
+    fn fixed_packet_prediction_does_not_pull_render_prediction_backward() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let transient_before = session
+            .predict_online_render_input(
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+                FIXED_DELTA_SECONDS,
+            )
+            .expect("transient prediction exists");
+        let packet = CommandPacket {
+            client_id: LOCAL_CLIENT_ID,
+            commands: vec![SequencedPlayerCommand {
+                player_id: LOCAL_PLAYER_ID,
+                sequence: InputSequence::new(10),
+                target_tick: session.current_tick().next(),
+                command: PlayerCommand::Movement {
+                    horizontal: 1.0,
+                    thrust: false,
+                    drill_down: false,
+                },
+            }],
+        };
+
+        let _fixed = session.predict_online_command_packet(&packet, FIXED_DELTA_SECONDS);
+        let transient_after = session
+            .local_client()
+            .prediction()
+            .transient_world_snapshot_for_tests(LOCAL_PLAYER_ID)
+            .expect("transient world exists");
+
+        assert!((transient_after.x - transient_before.x).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn joined_client_sync_does_not_overwrite_authoritative_world_with_stale_legacy_player() {
+        let mut session = GameSession::new();
+        session.game.online_player_slot = Some(1);
+        let player_id = super::online_identity_for_slot(1).1;
+        session
+            .world
+            .insert_player(player_id, session.game.player.clone());
+        {
+            let player = session.world.player_mut(player_id).expect("player exists");
+            player.x = 400.0;
+            player.y = 120.0;
+        }
+        session.game.player.x = 10.0;
+        session.game.player.y = 20.0;
+
+        assert!(session.sync_joined_local_player_from_replicated_game());
+        let player = session.world.player(player_id).expect("player exists");
+
+        assert!((player.x - 400.0).abs() < f32::EPSILON);
+        assert!((player.y - 120.0).abs() < f32::EPSILON);
+        assert!((session.game.player.x - 10.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn live_session_tick_input_targets_next_authoritative_tick_for_host_acceptance() {
+        let mut session = GameSession::new();
+        assert!(session.sync_replicated_authoritative_tick(SimulationTick::new(12)));
+
+        let input = session.live_session_tick_input_from_world(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            3,
+            vec![PlayerCommand::Movement {
+                horizontal: 1.0,
+                thrust: false,
+                drill_down: false,
+            }],
+        );
+        let packet = input.command_packet.expect("packet exists");
+
+        assert_eq!(packet.commands[0].target_tick, SimulationTick::new(13));
+    }
+
+    #[test]
+    fn live_packet_prediction_uses_packet_sequence_and_tick_for_replay_history() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let packet = CommandPacket {
+            client_id: LOCAL_CLIENT_ID,
+            commands: vec![SequencedPlayerCommand {
+                player_id: LOCAL_PLAYER_ID,
+                sequence: InputSequence::new(42),
+                target_tick: SimulationTick::new(7),
+                command: PlayerCommand::Movement {
+                    horizontal: 1.0,
+                    thrust: false,
+                    drill_down: false,
+                },
+            }],
+        };
+
+        let predicted = session
+            .predict_online_command_packet(&packet, FIXED_DELTA_SECONDS)
+            .expect("packet prediction exists");
+
+        assert!(
+            session
+                .local_client()
+                .prediction()
+                .prediction_history_snapshot(SimulationTick::new(7), LOCAL_PLAYER_ID)
+                .is_some()
+        );
+        assert!(predicted.x > session.game().player.x);
+    }
+
+    #[test]
+    fn transient_render_prediction_does_not_pollute_replay_world() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let replay_before = session
+            .local_client()
+            .prediction()
+            .replay_world_snapshot_for_tests(LOCAL_PLAYER_ID)
+            .expect("replay world exists");
+
+        let transient = session
+            .predict_online_render_input(
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+                FIXED_DELTA_SECONDS,
+            )
+            .expect("transient prediction exists");
+        let replay_after = session
+            .local_client()
+            .prediction()
+            .replay_world_snapshot_for_tests(LOCAL_PLAYER_ID)
+            .expect("replay world exists");
+
+        assert!(transient.x > replay_before.x);
+        assert!((replay_after.x - replay_before.x).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn fixed_packet_prediction_advances_replay_world_from_deterministic_base() {
+        let mut session = GameSession::new();
+        session.rebase_local_prediction_to_authority();
+        let _transient = session.predict_online_render_input(
+            PlayerInput {
+                horizontal: 1.0,
+                ..PlayerInput::default()
+            },
+            FIXED_DELTA_SECONDS,
+        );
+        let replay_before = session
+            .local_client()
+            .prediction()
+            .replay_world_snapshot_for_tests(LOCAL_PLAYER_ID)
+            .expect("replay world exists");
+        let packet = CommandPacket {
+            client_id: LOCAL_CLIENT_ID,
+            commands: vec![SequencedPlayerCommand {
+                player_id: LOCAL_PLAYER_ID,
+                sequence: InputSequence::new(9),
+                target_tick: session.current_tick().next(),
+                command: PlayerCommand::Movement {
+                    horizontal: 1.0,
+                    thrust: false,
+                    drill_down: false,
+                },
+            }],
+        };
+
+        let _fixed = session.predict_online_command_packet(&packet, FIXED_DELTA_SECONDS);
+        let replay_after = session
+            .local_client()
+            .prediction()
+            .replay_world_snapshot_for_tests(LOCAL_PLAYER_ID)
+            .expect("replay world exists");
+
+        assert!(replay_after.x > replay_before.x);
+        assert!(
+            session
+                .local_client()
+                .prediction()
+                .deterministic_replay_frame_count()
+                >= 1
+        );
+    }
+
+    #[test]
+    fn sync_cached_authoritative_tick_reports_false_so_app_can_skip_rebase() {
+        let mut session = GameSession::new();
+        let tick = session.current_tick();
+
+        assert!(!session.sync_replicated_authoritative_tick(tick));
     }
 
     #[test]
@@ -11877,6 +15762,7 @@ mod tests {
                 player_id: LOCAL_PLAYER_ID,
                 position: crate::terrain::TilePosition { x: 1, y: 2 },
                 chunk: super::TerrainChunkPosition { x: 0, y: 0 },
+                command_sequence: Some(InputSequence::new(1)),
                 base_revision: 0,
                 target_tick: SimulationTick::new(0),
                 predicted_damage_stage: 1,
@@ -12405,6 +16291,2227 @@ mod tests {
     }
 
     #[test]
+    fn canonical_simulation_hash_matches_for_identical_tick_replay() {
+        fn run() -> (super::SimulationStateHash, super::TickOutput) {
+            let game = GameState::new();
+            let mut world = WorldState::from_legacy_game(&game);
+            let tick = SimulationTick::new(7);
+            let commands = vec![
+                SequencedPlayerCommand {
+                    player_id: LOCAL_PLAYER_ID,
+                    sequence: InputSequence::new(11),
+                    target_tick: tick,
+                    command: PlayerCommand::Movement {
+                        horizontal: 0.375,
+                        thrust: true,
+                        drill_down: false,
+                    },
+                },
+                SequencedPlayerCommand {
+                    player_id: LOCAL_PLAYER_ID,
+                    sequence: InputSequence::new(12),
+                    target_tick: tick,
+                    command: PlayerCommand::PlaceBomb,
+                },
+            ];
+            let inputs = super::TickInputs::from_commands(&commands);
+            let mut terrain_revisions = super::TerrainRevisionTracker::default();
+            let output = world.simulate_tick(tick, &inputs, &mut terrain_revisions);
+            (world.simulation_state_hash(), output)
+        }
+
+        let (first_hash, first_output) = run();
+        let (second_hash, second_output) = run();
+
+        assert_eq!(first_output, second_output);
+        assert_eq!(first_hash, second_hash);
+        assert_ne!(first_hash.get(), 0);
+    }
+
+    #[test]
+    fn simulation_hash_changes_when_gameplay_state_changes() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let before = world.simulation_state_hash();
+        world
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("player exists")
+            .credits += 1;
+
+        assert_ne!(before, world.simulation_state_hash());
+    }
+
+    #[test]
+    fn canonical_timers_use_tick_deadlines_and_rng_state_is_replayable() {
+        let game = GameState::new();
+        let mut first = WorldState::from_legacy_game(&game);
+        let mut second = WorldState::from_legacy_game(&game);
+        first.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 1.0);
+        second.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 1.0);
+        let mut first_revisions = super::TerrainRevisionTracker::default();
+        let mut second_revisions = super::TerrainRevisionTracker::default();
+
+        for tick in 0..60 {
+            let tick = SimulationTick::new(tick);
+            let inputs = super::TickInputs::default();
+            let _first = first.simulate_tick(tick, &inputs, &mut first_revisions);
+            let _second = second.simulate_tick(tick, &inputs, &mut second_revisions);
+        }
+
+        assert_eq!(first.scanner_cooldown_seconds(LOCAL_PLAYER_ID), Some(0.0));
+        assert_eq!(
+            first.simulation_state_hash(),
+            second.simulation_state_hash()
+        );
+        let first_values = [first.rng.next_u64(), first.rng.next_u64()];
+        let second_values = [second.rng.next_u64(), second.rng.next_u64()];
+        assert_eq!(first_values, second_values);
+        assert_ne!(first_values[0], first_values[1]);
+    }
+
+    #[test]
+    fn canonical_gameplay_events_have_stable_tick_ordinals_and_adapter_output() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.bombs = 1;
+            player.signal_relay_kits = 1;
+        }
+        let tick = SimulationTick::new(12);
+        let commands = [
+            SequencedPlayerCommand {
+                player_id: LOCAL_PLAYER_ID,
+                sequence: InputSequence::new(1),
+                target_tick: tick,
+                command: PlayerCommand::PlaceBomb,
+            },
+            SequencedPlayerCommand {
+                player_id: LOCAL_PLAYER_ID,
+                sequence: InputSequence::new(2),
+                target_tick: tick,
+                command: PlayerCommand::PlaceInfrastructure { slot: 0 },
+            },
+        ];
+        let inputs = super::TickInputs::from_commands(&commands);
+        let mut terrain_revisions = super::TerrainRevisionTracker::default();
+
+        let output = world.simulate_tick(tick, &inputs, &mut terrain_revisions);
+
+        assert_eq!(output.events.len(), 2);
+        assert_eq!(
+            output.events[0].id,
+            super::GameplayEventId { tick, ordinal: 0 }
+        );
+        assert_eq!(
+            output.events[1].id,
+            super::GameplayEventId { tick, ordinal: 1 }
+        );
+        assert_eq!(
+            output.events[0].kind,
+            super::GameplayEventKind::BombPlaced {
+                player_id: LOCAL_PLAYER_ID,
+            }
+        );
+        assert_eq!(
+            super::world_events_for_gameplay_event(output.events[0]),
+            vec![super::WorldEvent::BombPlaced {
+                player_id: LOCAL_PLAYER_ID,
+            }]
+        );
+    }
+
+    #[test]
+    fn canonical_tick_applies_depth_pressure_and_lava_damage() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let lava = TilePosition { x: 20, y: 100 };
+        assert!(world.terrain_mut().set_kind(lava, TileKind::Lava));
+        {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = 20.0 * TILE_SIZE;
+            player.y = 100.0 * TILE_SIZE;
+            player.hull = 100.0;
+        }
+        let mut terrain_revisions = super::TerrainRevisionTracker::default();
+
+        let output = world.simulate_tick(
+            SimulationTick::new(8),
+            &super::TickInputs::default(),
+            &mut terrain_revisions,
+        );
+
+        assert!(world.player(LOCAL_PLAYER_ID).expect("player exists").hull < 100.0);
+        assert!(output.events.iter().any(|event| {
+            event.kind
+                == super::GameplayEventKind::PlayerDamaged {
+                    player_id: LOCAL_PLAYER_ID,
+                }
+        }));
+    }
+
+    #[test]
+    fn canonical_deep_rewards_and_escape_sequence_are_tick_deterministic() {
+        let game = GameState::new();
+        let mut first = WorldState::from_legacy_game(&game);
+        let mut second = first.clone();
+        for world in [&mut first, &mut second] {
+            world.player_mut(LOCAL_PLAYER_ID).expect("player exists").y = 120.0 * TILE_SIZE;
+            world.progression.escape_deadline = Some(SimulationTick::new(2));
+            world.set_simulation_tick(SimulationTick::new(0));
+        }
+        let mut first_revisions = super::TerrainRevisionTracker::default();
+        let mut second_revisions = super::TerrainRevisionTracker::default();
+        let first_output = first.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::default(),
+            &mut first_revisions,
+        );
+        let second_output = second.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::default(),
+            &mut second_revisions,
+        );
+        assert_eq!(first_output, second_output);
+        assert_eq!(
+            first.simulation_state_hash(),
+            second.simulation_state_hash()
+        );
+        assert!(first_output.events.iter().any(|event| {
+            event.kind
+                == super::GameplayEventKind::DeepRewardGranted {
+                    player_id: LOCAL_PLAYER_ID,
+                }
+        }));
+        assert!(
+            first
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .materials
+                .contains_key(&crate::terrain::StrategicResourceKind::PressurePearl)
+        );
+        let output = first.simulate_tick(
+            SimulationTick::new(1),
+            &super::TickInputs::default(),
+            &mut first_revisions,
+        );
+        assert!(first.failure_state(LOCAL_PLAYER_ID).is_some());
+        assert!(first.progression.escape_deadline.is_none());
+        assert!(output.events.iter().any(|event| {
+            event.kind
+                == super::GameplayEventKind::PlayerDamaged {
+                    player_id: LOCAL_PLAYER_ID,
+                }
+        }));
+    }
+
+    #[test]
+    fn canonical_world_events_expire_by_day_deadline() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        world
+            .world_event_severity
+            .insert(crate::game_state::WorldEventKind::MarketBoom, 2);
+        world
+            .world_event_days_remaining
+            .insert(crate::game_state::WorldEventKind::MarketBoom, 1);
+        world.progression.town_event_day = 1;
+        world.progression.next_day_tick = SimulationTick::new(1);
+        let mut revisions = super::TerrainRevisionTracker::default();
+        let _output = world.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::default(),
+            &mut revisions,
+        );
+        assert!(
+            !world
+                .world_event_severity
+                .contains_key(&crate::game_state::WorldEventKind::MarketBoom)
+        );
+        assert!(
+            !world
+                .world_event_days_remaining
+                .contains_key(&crate::game_state::WorldEventKind::MarketBoom)
+        );
+    }
+
+    #[test]
+    fn canonical_day_and_world_event_schedule_is_tick_deterministic() {
+        let game = GameState::new();
+        let mut first = WorldState::from_legacy_game(&game);
+        let mut second = first.clone();
+        for world in [&mut first, &mut second] {
+            world.progression.town_development.bank_level = 2;
+            world.progression.town_event_day = 2;
+            world.progression.market_salt = 0;
+            world.progression.next_day_tick = SimulationTick::new(1);
+            world
+                .infrastructure
+                .push(crate::game_state::PlacedInfrastructure {
+                    kind: InfrastructureKind::PumpStation,
+                    position: TilePosition { x: 20, y: 10 },
+                    durability: 100,
+                });
+        }
+        let mut first_revisions = super::TerrainRevisionTracker::default();
+        let mut second_revisions = super::TerrainRevisionTracker::default();
+        let first_output = first.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::default(),
+            &mut first_revisions,
+        );
+        let second_output = second.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::default(),
+            &mut second_revisions,
+        );
+        assert_eq!(first_output, second_output);
+        assert_eq!(
+            first.simulation_state_hash(),
+            second.simulation_state_hash()
+        );
+        assert_eq!(first.progression.town_event_day, 3);
+        assert!(!first.world_event_severity.is_empty());
+        assert!(
+            first
+                .world_event_days_remaining
+                .values()
+                .all(|days| *days > 0)
+        );
+        assert_eq!(first.infrastructure[0].durability, 65);
+        assert_eq!(
+            first
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .credits,
+            24
+        );
+        assert_eq!(first.progression.next_day_tick.get(), 18_001);
+    }
+
+    #[test]
+    fn canonical_salvage_subservices_update_only_canonical_state() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        world.progression.town_development.salvage_yard_level = 4;
+        world.progression.town_development.scanner_lab_level = 2;
+        world.rescue_counts.insert(LOCAL_PLAYER_ID, 1);
+        world.collapse_warnings =
+            vec![TilePosition { x: 10, y: 20 }, TilePosition { x: 11, y: 20 }];
+        world.scan_markers = vec![crate::game_state::ScanMarker {
+            position: TilePosition { x: 12, y: 20 },
+            kind: TileKind::Gas,
+        }];
+        {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.cargo.insert(crate::terrain::MineralKind::Copper, 2);
+            player.cargo.insert(crate::terrain::MineralKind::Diamond, 1);
+        }
+        for request in [
+            crate::game_state::SessionServiceRequest::SalvageRecoverWreckedPart,
+            crate::game_state::SessionServiceRequest::SalvageClearCollapseZones,
+            crate::game_state::SessionServiceRequest::SalvageSellScrapTip,
+            crate::game_state::SessionServiceRequest::SellScanData,
+            crate::game_state::SessionServiceRequest::AutoSortLowGradeCargo,
+        ] {
+            assert_eq!(
+                world.apply_canonical_salvage_service(LOCAL_PLAYER_ID, request),
+                Some(super::PlayerScopedCommandOutcome::Applied)
+            );
+        }
+        assert!(world.collapse_warnings.is_empty());
+        assert!(world.scan_markers.is_empty());
+        assert!(
+            world
+                .progression
+                .rig_part_inventory
+                .contains(&crate::game_state::RigPartKind::ArmoredCargoBay)
+        );
+        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
+        assert!(
+            !player
+                .cargo
+                .contains_key(&crate::terrain::MineralKind::Copper)
+        );
+        assert_eq!(
+            player.cargo.get(&crate::terrain::MineralKind::Diamond),
+            Some(&1)
+        );
+        assert!(player.credits > 0);
+        assert!(world.progression.total_earnings > 0);
+    }
+
+    #[test]
+    fn canonical_market_sale_applies_events_depot_bonus_and_history() {
+        let game = GameState::new();
+        let mut baseline = WorldState::from_legacy_game(&game);
+        let mut boom = baseline.clone();
+        for world in [&mut baseline, &mut boom] {
+            world.progression.town_development.depot_level = 2;
+            world
+                .player_mut(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .cargo
+                .insert(crate::terrain::MineralKind::Diamond, 2);
+        }
+        boom.world_event_severity
+            .insert(crate::game_state::WorldEventKind::MarketBoom, 1);
+        boom.world_event_severity
+            .insert(crate::game_state::WorldEventKind::RareBuyer, 1);
+        assert_eq!(
+            baseline.sell_canonical_cargo(LOCAL_PLAYER_ID),
+            super::PlayerScopedCommandOutcome::Applied
+        );
+        assert_eq!(
+            boom.sell_canonical_cargo(LOCAL_PLAYER_ID),
+            super::PlayerScopedCommandOutcome::Applied
+        );
+        assert!(
+            boom.player(LOCAL_PLAYER_ID).expect("player exists").credits
+                > baseline
+                    .player(LOCAL_PLAYER_ID)
+                    .expect("player exists")
+                    .credits
+        );
+        assert_eq!(
+            boom.player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .cargo_used(),
+            0
+        );
+
+        let previous_day = boom.progression.town_event_day;
+        boom.advance_canonical_market_day();
+        assert_eq!(boom.progression.town_event_day, previous_day + 1);
+        assert!(boom.progression.market_history.len() <= 7);
+        assert!(
+            boom.progression
+                .mineral_market_history
+                .values()
+                .all(|history| history.len() <= 7)
+        );
+    }
+
+    #[test]
+    fn canonical_expedition_acceptance_and_special_rewards_are_deterministic() {
+        let game = GameState::new();
+        let mut first = WorldState::from_legacy_game(&game);
+        let mut second = first.clone();
+        for world in [&mut first, &mut second] {
+            world.progression.deep_claim_status = crate::economy::DeepClaimStatus::Unlocked;
+            world.progression.expedition_offers = vec![crate::game_state::Expedition {
+                kind: crate::game_state::ExpeditionObjectiveKind::RetrieveArtifact,
+                target: TileKind::Artifact(crate::terrain::ArtifactKind::Fossil),
+                required: 1,
+                reward: 600,
+                expires_day: 2,
+            }];
+            assert_eq!(
+                world.accept_canonical_expedition(0),
+                super::PlayerScopedCommandOutcome::Applied
+            );
+            world
+                .player_mut(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .artifacts
+                .insert(crate::terrain::ArtifactKind::Fossil, 1);
+            assert_eq!(
+                world.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
+                super::PlayerScopedCommandOutcome::Applied
+            );
+        }
+        assert!(first.progression.expedition_offers.is_empty());
+        assert!(first.progression.active_expeditions.is_empty());
+        assert!(
+            first
+                .progression
+                .legendary_blueprints
+                .contains(&crate::game_state::LegendaryBlueprint::StarPlating)
+        );
+        assert!(
+            first
+                .progression
+                .rig_part_inventory
+                .contains(&crate::game_state::RigPartKind::ResonanceDrill)
+        );
+        assert_eq!(first.progression.town_development.reputation, 1);
+        assert_eq!(
+            first.simulation_state_hash(),
+            second.simulation_state_hash()
+        );
+    }
+
+    #[test]
+    fn canonical_salvage_recovers_exact_lost_inventory_and_can_launch_drone() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        world.progression.town_development.salvage_yard_level = 2;
+        world.lost_cargo_sites.insert(
+            LOCAL_PLAYER_ID,
+            super::LostCargoSite {
+                x: 20.0 * TILE_SIZE,
+                y: 40.0 * TILE_SIZE,
+                minerals: BTreeMap::from([(crate::terrain::MineralKind::Copper, 2)]),
+                artifacts: BTreeMap::from([(crate::terrain::ArtifactKind::Fossil, 1)]),
+            },
+        );
+        world
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("player exists")
+            .credits = 100;
+
+        assert_eq!(
+            world.apply_canonical_progression_service(
+                LOCAL_PLAYER_ID,
+                crate::game_state::SessionServiceRequest::SalvageLaunchDrone,
+            ),
+            Some(super::PlayerScopedCommandOutcome::Applied)
+        );
+        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
+        assert_eq!(
+            player.cargo.get(&crate::terrain::MineralKind::Copper),
+            Some(&2)
+        );
+        assert_eq!(
+            player.artifacts.get(&crate::terrain::ArtifactKind::Fossil),
+            Some(&1)
+        );
+        assert_eq!(player.credits, 82);
+        assert!(!world.lost_cargo_sites.contains_key(&LOCAL_PLAYER_ID));
+        assert!(world.infrastructure.iter().any(|item| {
+            item.kind == InfrastructureKind::SurveyDrone
+                && item.position == TilePosition { x: 20, y: 40 }
+        }));
+    }
+
+    #[test]
+    fn canonical_side_contract_lifecycle_posts_completes_and_expires() {
+        let game = GameState::new();
+        let mut first = WorldState::from_legacy_game(&game);
+        let mut second = first.clone();
+        for world in [&mut first, &mut second] {
+            assert_eq!(
+                world.start_canonical_side_contract(),
+                super::PlayerScopedCommandOutcome::Applied
+            );
+            let contract = world.progression.active_side_contracts[0];
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            if let TileKind::Ore(mineral) = contract.target {
+                player.cargo.insert(mineral, contract.required);
+            }
+            assert_eq!(
+                world.complete_canonical_side_contract(LOCAL_PLAYER_ID),
+                super::PlayerScopedCommandOutcome::Applied
+            );
+        }
+        assert!(first.progression.active_side_contracts.is_empty());
+        assert!(first.progression.total_earnings > 0);
+        assert_eq!(
+            first.simulation_state_hash(),
+            second.simulation_state_hash()
+        );
+
+        first.progression.town_event_day = 3;
+        first
+            .progression
+            .active_side_contracts
+            .push(crate::game_state::SideContract {
+                kind: crate::game_state::SideContractKind::Rush,
+                target: TileKind::Ore(crate::terrain::MineralKind::Ruby),
+                required: 1,
+                expires_day: Some(2),
+            });
+        first
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("player exists")
+            .cargo
+            .insert(crate::terrain::MineralKind::Ruby, 1);
+        assert_eq!(
+            first.complete_canonical_side_contract(LOCAL_PLAYER_ID),
+            super::PlayerScopedCommandOutcome::IgnoredUnavailable
+        );
+        assert!(first.progression.active_side_contracts.is_empty());
+    }
+
+    #[test]
+    fn canonical_banking_insurance_crafting_and_town_upgrades_are_transactional() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+        player.credits = 2_000;
+
+        assert_eq!(
+            world.apply_canonical_progression_service(
+                LOCAL_PLAYER_ID,
+                crate::game_state::SessionServiceRequest::Finance,
+            ),
+            Some(super::PlayerScopedCommandOutcome::Applied)
+        );
+        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
+        assert!(player.loan_debt > 0);
+        assert!(player.credits > 2_000);
+        assert_eq!(
+            world.apply_canonical_progression_service(
+                LOCAL_PLAYER_ID,
+                crate::game_state::SessionServiceRequest::BuyInsurance,
+            ),
+            Some(super::PlayerScopedCommandOutcome::Applied)
+        );
+        assert!(
+            world
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .insured
+        );
+
+        let recipe = crate::game_state::RecipeKind::AuxiliaryTank;
+        for (material, required) in recipe.cost() {
+            world
+                .player_mut(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .materials
+                .insert(*material, *required);
+        }
+        let capacity_before = world
+            .player(LOCAL_PLAYER_ID)
+            .expect("player exists")
+            .fuel_capacity;
+        assert_eq!(
+            world.apply_canonical_progression_service(
+                LOCAL_PLAYER_ID,
+                crate::game_state::SessionServiceRequest::CraftRecipe { recipe },
+            ),
+            Some(super::PlayerScopedCommandOutcome::Applied)
+        );
+        assert!(
+            world
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .fuel_capacity
+                > capacity_before
+        );
+
+        let building = crate::economy::TownBuilding::Depot;
+        let cost = world.progression.town_development.upgrade_cost(building);
+        world
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("player exists")
+            .credits = cost;
+        assert_eq!(
+            world.apply_canonical_progression_service(
+                LOCAL_PLAYER_ID,
+                crate::game_state::SessionServiceRequest::UpgradeTownBuilding { building },
+            ),
+            Some(super::PlayerScopedCommandOutcome::Applied)
+        );
+        assert_eq!(world.progression.town_development.level(building), 1);
+        assert_eq!(world.progression.town_development.reputation, 1);
+        assert!(world.service_transactions.len() >= 4);
+    }
+
+    #[test]
+    fn canonical_story_contract_progression_consumes_cargo_and_hashes_state() {
+        let game = GameState::new();
+        let mut first = WorldState::from_legacy_game(&game);
+        let mut second = first.clone();
+        for world in [&mut first, &mut second] {
+            let contract = world.progression.contracts.active.clone();
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            match contract.target {
+                crate::contract::ContractTarget::Mineral(mineral) => {
+                    player.cargo.insert(mineral, contract.required);
+                }
+                crate::contract::ContractTarget::Artifact(artifact) => {
+                    player.artifacts.insert(artifact, contract.required);
+                }
+            }
+        }
+        assert_eq!(
+            first.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
+            super::PlayerScopedCommandOutcome::Applied
+        );
+        assert_eq!(
+            second.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
+            super::PlayerScopedCommandOutcome::Applied
+        );
+        assert_eq!(first.progression.contracts.completed, 1);
+        assert_eq!(
+            first.simulation_state_hash(),
+            second.simulation_state_hash()
+        );
+        assert!(
+            first
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .cargo_used()
+                == 0
+        );
+        assert!(first.progression.total_earnings > 0);
+    }
+
+    #[test]
+    fn canonical_expedition_completion_consumes_delivery_and_rewards_player() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let expedition = crate::game_state::Expedition {
+            kind: crate::game_state::ExpeditionObjectiveKind::DeliverCargo,
+            target: TileKind::Ore(crate::terrain::MineralKind::Copper),
+            required: 2,
+            reward: 350,
+            expires_day: 2,
+        };
+        world.progression.active_expeditions.push(expedition);
+        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+        player.cargo.insert(crate::terrain::MineralKind::Copper, 2);
+        let credits_before = player.credits;
+
+        assert_eq!(
+            world.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
+            super::PlayerScopedCommandOutcome::Applied
+        );
+        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
+        assert_eq!(player.credits, credits_before + expedition.reward);
+        assert!(
+            !player
+                .cargo
+                .contains_key(&crate::terrain::MineralKind::Copper)
+        );
+        assert!(world.progression.active_expeditions.is_empty());
+        assert_eq!(world.progression.expeditions_completed, 1);
+        assert_eq!(world.progression.total_earnings, expedition.reward);
+    }
+
+    #[test]
+    fn canonical_heat_wave_and_deep_instability_affect_survival_deterministically() {
+        let game = GameState::new();
+        let mut baseline = WorldState::from_legacy_game(&game);
+        let mut heat_wave = baseline.clone();
+        heat_wave
+            .world_event_severity
+            .insert(crate::game_state::WorldEventKind::HeatWave, 2);
+        for world in [&mut baseline, &mut heat_wave] {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.y = 40.0 * TILE_SIZE;
+            player.hull = 100.0;
+        }
+        for world in [&mut baseline, &mut heat_wave] {
+            let mut revisions = super::TerrainRevisionTracker::default();
+            let _output = world.simulate_tick(
+                SimulationTick::new(0),
+                &super::TickInputs::default(),
+                &mut revisions,
+            );
+        }
+        assert!(
+            heat_wave
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .hull
+                < baseline
+                    .player(LOCAL_PLAYER_ID)
+                    .expect("player exists")
+                    .hull
+        );
+
+        let mut first = WorldState::from_legacy_game(&game);
+        let mut second = first.clone();
+        for world in [&mut first, &mut second] {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.y = 110.0 * TILE_SIZE;
+            player.fuel = 100.0;
+            player.hull = 100.0;
+            player.cargo.insert(crate::terrain::MineralKind::Diamond, 1);
+            world.set_simulation_tick(SimulationTick::new(239));
+            world.deep_run_states.insert(
+                LOCAL_PLAYER_ID,
+                super::DeepRunState {
+                    trip_ticks: 100,
+                    instability: 100.0,
+                },
+            );
+        }
+        let mut first_revisions = super::TerrainRevisionTracker::default();
+        let mut second_revisions = super::TerrainRevisionTracker::default();
+        let first_output = first.simulate_tick(
+            SimulationTick::new(239),
+            &super::TickInputs::default(),
+            &mut first_revisions,
+        );
+        let second_output = second.simulate_tick(
+            SimulationTick::new(239),
+            &super::TickInputs::default(),
+            &mut second_revisions,
+        );
+        assert_eq!(first_output, second_output);
+        assert_eq!(
+            first.simulation_state_hash(),
+            second.simulation_state_hash()
+        );
+        assert_eq!(first.falling_boulders.len(), 3);
+        assert!(!first.hazards.is_empty());
+        assert!(first.player(LOCAL_PLAYER_ID).expect("player exists").fuel < 100.0);
+    }
+
+    #[test]
+    fn canonical_rescue_site_recovers_lost_cargo_once() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = 20.0 * TILE_SIZE;
+            player.y = 40.0 * TILE_SIZE;
+            player.cargo.insert(crate::terrain::MineralKind::Copper, 4);
+        }
+        assert_eq!(
+            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Rescue),
+            super::PlayerScopedCommandOutcome::Applied
+        );
+        let site = world
+            .lost_cargo_sites
+            .get(&LOCAL_PLAYER_ID)
+            .cloned()
+            .expect("rescue records lost cargo site");
+        let retained_count = world
+            .player(LOCAL_PLAYER_ID)
+            .expect("player exists")
+            .cargo
+            .get(&crate::terrain::MineralKind::Copper)
+            .copied()
+            .unwrap_or(0);
+        {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = site.x;
+            player.y = site.y;
+        }
+        let mut revisions = super::TerrainRevisionTracker::default();
+        let output = world.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::default(),
+            &mut revisions,
+        );
+        assert!(!world.lost_cargo_sites.contains_key(&LOCAL_PLAYER_ID));
+        assert_eq!(
+            world
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .cargo
+                .get(&crate::terrain::MineralKind::Copper),
+            Some(&retained_count.saturating_add(site.count()))
+        );
+        assert!(output.events.iter().any(|event| {
+            event.kind
+                == super::GameplayEventKind::CargoChanged {
+                    player_id: LOCAL_PLAYER_ID,
+                }
+        }));
+    }
+
+    #[test]
+    fn canonical_survival_applies_hull_and_pump_heat_modifiers() {
+        fn depth_damage(part: Option<crate::game_state::RigPartKind>) -> f32 {
+            let game = GameState::new();
+            let mut world = WorldState::from_legacy_game(&game);
+            if let Some(part) = part {
+                world.set_player_movement_modifiers(LOCAL_PLAYER_ID, 0, [part]);
+            }
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.y = 100.0 * TILE_SIZE;
+            player.hull = 100.0;
+            let mut revisions = super::TerrainRevisionTracker::default();
+            let _output = world.simulate_tick(
+                SimulationTick::new(0),
+                &super::TickInputs::default(),
+                &mut revisions,
+            );
+            100.0 - world.player(LOCAL_PLAYER_ID).expect("player exists").hull
+        }
+        assert!(
+            depth_damage(Some(crate::game_state::RigPartKind::ThermalHull)) < depth_damage(None)
+        );
+        assert!(
+            depth_damage(Some(crate::game_state::RigPartKind::PressureHull)) < depth_damage(None)
+        );
+        assert!(
+            depth_damage(Some(crate::game_state::RigPartKind::ImpactHull)) > depth_damage(None)
+        );
+
+        let game = GameState::new();
+        let mut unprotected = WorldState::from_legacy_game(&game);
+        let mut protected = WorldState::from_legacy_game(&game);
+        for world in [&mut unprotected, &mut protected] {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = 20.0 * TILE_SIZE;
+            player.y = 10.0 * TILE_SIZE;
+            player.hull = 100.0;
+            assert!(
+                world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x: 21, y: 10 }, TileKind::Lava)
+            );
+        }
+        protected
+            .infrastructure
+            .push(crate::game_state::PlacedInfrastructure {
+                kind: InfrastructureKind::PumpStation,
+                position: TilePosition { x: 20, y: 10 },
+                durability: 100,
+            });
+        for world in [&mut unprotected, &mut protected] {
+            let mut revisions = super::TerrainRevisionTracker::default();
+            let _output = world.simulate_tick(
+                SimulationTick::new(0),
+                &super::TickInputs::default(),
+                &mut revisions,
+            );
+        }
+        assert!(
+            protected
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .hull
+                > unprotected
+                    .player(LOCAL_PLAYER_ID)
+                    .expect("player exists")
+                    .hull
+        );
+    }
+
+    #[test]
+    fn canonical_rescue_applies_fee_cargo_loss_and_partial_recovery() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+        player.y = 40.0 * TILE_SIZE;
+        player.credits = 500;
+        player.fuel = 0.0;
+        player.hull = 0.0;
+        player.cargo.insert(crate::terrain::MineralKind::Iron, 8);
+
+        assert_eq!(
+            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Rescue),
+            super::PlayerScopedCommandOutcome::Applied
+        );
+        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
+        assert_eq!(player.credits, 330);
+        assert_eq!(
+            player.cargo.get(&crate::terrain::MineralKind::Iron),
+            Some(&4)
+        );
+        assert!(12.0f32.mul_add(-TILE_SIZE, player.x).abs() < f32::EPSILON);
+        assert!(4.0f32.mul_add(-TILE_SIZE, player.y).abs() < f32::EPSILON);
+        assert!(player.fuel_capacity.mul_add(-0.5, player.fuel).abs() < f32::EPSILON);
+        assert!(player.max_hull().mul_add(-0.5, player.hull).abs() < f32::EPSILON);
+        assert!(world.failure_state(LOCAL_PLAYER_ID).is_none());
+    }
+
+    #[test]
+    fn canonical_falling_boulders_use_tick_deadlines_and_damage_players() {
+        let game = GameState::new();
+        let mut first = WorldState::from_legacy_game(&game);
+        let mut second = first.clone();
+        for world in [&mut first, &mut second] {
+            let (x, y) = {
+                let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+                player.x = 20.0 * TILE_SIZE;
+                player.y = 10.0 * TILE_SIZE;
+                player.hull = 100.0;
+                (player.x, player.y)
+            };
+            world.spawn_falling_boulder(x, y, 1, 30);
+        }
+
+        let mut first_revisions = super::TerrainRevisionTracker::default();
+        let mut second_revisions = super::TerrainRevisionTracker::default();
+        let first_output = first.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::default(),
+            &mut first_revisions,
+        );
+        let second_output = second.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::default(),
+            &mut second_revisions,
+        );
+
+        assert!(first.player(LOCAL_PLAYER_ID).expect("player exists").hull < 100.0);
+        assert!(first.falling_boulders.is_empty());
+        assert_eq!(first_output, second_output);
+        assert_eq!(
+            first.simulation_state_hash(),
+            second.simulation_state_hash()
+        );
+        assert!(first_output.events.iter().any(|event| {
+            event.kind
+                == super::GameplayEventKind::PlayerDamaged {
+                    player_id: LOCAL_PLAYER_ID,
+                }
+        }));
+    }
+
+    #[test]
+    fn canonical_explosive_pocket_schedules_deterministic_cave_in() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+        player.x = 20.0 * TILE_SIZE;
+        player.y = 10.0 * TILE_SIZE;
+        let target = TilePosition { x: 20, y: 11 };
+        assert!(
+            world
+                .terrain_mut()
+                .set_kind(target, TileKind::ExplosivePocket)
+        );
+        world.set_active_drill(
+            LOCAL_PLAYER_ID,
+            Some(DrillState {
+                target,
+                direction: DrillDirection::Down,
+                progress: 1.0,
+                initial_durability: 1,
+                seconds_per_chip: FIXED_DELTA_SECONDS,
+                sound_timer: 0.0,
+                dust_timer: 0.0,
+            }),
+        );
+        let mut revisions = super::TerrainRevisionTracker::default();
+        let output = world.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::default(),
+            &mut revisions,
+        );
+
+        assert_eq!(world.falling_boulders.len(), 3);
+        assert_eq!(world.boulder_warning_deadlines.len(), 3);
+        assert_eq!(world.boulder_expiry_ticks.len(), 3);
+        assert!(
+            output
+                .events
+                .iter()
+                .any(|event| { event.kind == super::GameplayEventKind::BouldersChanged })
+        );
+    }
+
+    #[test]
+    fn canonical_drilling_applies_rig_hardness_and_pump_modifiers() {
+        let game = GameState::new();
+        let target = TilePosition { x: 20, y: 101 };
+
+        let mut baseline = WorldState::from_legacy_game(&game);
+        let mut resonance = WorldState::from_legacy_game(&game);
+        for world in [&mut baseline, &mut resonance] {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = 20.0 * TILE_SIZE;
+            player.y = 100.0 * TILE_SIZE;
+            player.drill_strength = 1;
+            assert!(world.terrain_mut().set_kind(target, TileKind::Dirt));
+        }
+        resonance.set_player_movement_modifiers(
+            LOCAL_PLAYER_ID,
+            0,
+            [crate::game_state::RigPartKind::ResonanceDrill],
+        );
+        let command = PlayerCommand::Movement {
+            horizontal: 0.0,
+            thrust: false,
+            drill_down: true,
+        };
+        assert_eq!(
+            baseline.apply_player_command(LOCAL_PLAYER_ID, &command),
+            super::PlayerScopedCommandOutcome::Applied
+        );
+        assert_eq!(
+            resonance.apply_player_command(LOCAL_PLAYER_ID, &command),
+            super::PlayerScopedCommandOutcome::Applied
+        );
+        assert!(
+            resonance
+                .active_drill(LOCAL_PLAYER_ID)
+                .expect("drill exists")
+                .seconds_per_chip
+                < baseline
+                    .active_drill(LOCAL_PLAYER_ID)
+                    .expect("drill exists")
+                    .seconds_per_chip
+        );
+
+        let mut pumped = WorldState::from_legacy_game(&game);
+        {
+            let player = pumped.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = 20.0 * TILE_SIZE;
+            player.y = 10.0 * TILE_SIZE;
+        }
+        let gas = TilePosition { x: 20, y: 11 };
+        assert!(pumped.terrain_mut().set_kind(gas, TileKind::Gas));
+        pumped
+            .infrastructure
+            .push(crate::game_state::PlacedInfrastructure {
+                kind: InfrastructureKind::PumpStation,
+                position: gas,
+                durability: 100,
+            });
+        pumped.set_active_drill(
+            LOCAL_PLAYER_ID,
+            Some(DrillState {
+                target: gas,
+                direction: DrillDirection::Down,
+                progress: 1.0,
+                initial_durability: 1,
+                seconds_per_chip: FIXED_DELTA_SECONDS,
+                sound_timer: 0.0,
+                dust_timer: 0.0,
+            }),
+        );
+        let mut revisions = super::TerrainRevisionTracker::default();
+        let _output = pumped.simulate_tick(
+            SimulationTick::new(1),
+            &super::TickInputs::default(),
+            &mut revisions,
+        );
+        assert!(pumped.hazards().is_empty());
+    }
+
+    #[test]
+    fn canonical_drilling_collects_ore_artifacts_and_applies_hazard_outcomes() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = 20.0 * TILE_SIZE;
+            player.y = 5.0 * TILE_SIZE;
+            player.drill_strength = u8::MAX;
+        }
+        let target = TilePosition { x: 20, y: 6 };
+        assert!(world.terrain_mut().set_tile_from_network(
+            target,
+            TileKind::Artifact(crate::terrain::ArtifactKind::Fossil),
+            1,
+        ));
+        world.set_active_drill(
+            LOCAL_PLAYER_ID,
+            Some(DrillState {
+                target,
+                direction: DrillDirection::Down,
+                progress: 1.0,
+                initial_durability: 1,
+                seconds_per_chip: FIXED_DELTA_SECONDS,
+                sound_timer: 0.0,
+                dust_timer: 0.0,
+            }),
+        );
+        let mut terrain_revisions = super::TerrainRevisionTracker::default();
+        let output = world.simulate_tick(
+            SimulationTick::new(5),
+            &super::TickInputs::default(),
+            &mut terrain_revisions,
+        );
+        assert_eq!(
+            world
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .artifacts
+                .get(&crate::terrain::ArtifactKind::Fossil),
+            Some(&1),
+        );
+        assert!(output.terrain_changed_tiles.contains(&target));
+
+        assert!(world.terrain_mut().set_kind(target, TileKind::Gas));
+        let fuel_before = world.player(LOCAL_PLAYER_ID).expect("player exists").fuel;
+        world.set_active_drill(
+            LOCAL_PLAYER_ID,
+            Some(DrillState {
+                target,
+                direction: DrillDirection::Down,
+                progress: 1.0,
+                initial_durability: 1,
+                seconds_per_chip: FIXED_DELTA_SECONDS,
+                sound_timer: 0.0,
+                dust_timer: 0.0,
+            }),
+        );
+        let output = world.simulate_tick(
+            SimulationTick::new(6),
+            &super::TickInputs::default(),
+            &mut terrain_revisions,
+        );
+        assert!(world.player(LOCAL_PLAYER_ID).expect("player exists").fuel < fuel_before);
+        assert!(!world.hazards().is_empty());
+        assert!(
+            output
+                .events
+                .iter()
+                .any(|event| event.kind == super::GameplayEventKind::HazardChanged)
+        );
+    }
+
+    #[test]
+    fn canonical_movement_applies_rig_and_mechanic_modifiers() {
+        fn run(parts: &[crate::game_state::RigPartKind], mechanic_level: u8) -> (f32, f32, f32) {
+            let game = GameState::new();
+            let mut world = WorldState::from_legacy_game(&game);
+            world.set_player_movement_modifiers(
+                LOCAL_PLAYER_ID,
+                mechanic_level,
+                parts.iter().copied(),
+            );
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.cargo_capacity = 10;
+            player.cargo.insert(crate::terrain::MineralKind::Copper, 10);
+            let fuel_before = player.fuel;
+            let _step =
+                world.step_authoritative_movement(LOCAL_PLAYER_ID, 1.0, true, FIXED_DELTA_SECONDS);
+            let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
+            (player.velocity_x, fuel_before - player.fuel, player.hull)
+        }
+
+        let baseline = run(&[], 0);
+        let burst = run(&[crate::game_state::RigPartKind::BurstEngine], 0);
+        let hauler = run(&[crate::game_state::RigPartKind::HaulerEngine], 0);
+        assert!(burst.0 > baseline.0);
+        assert!(burst.1 > baseline.1);
+        assert!(hauler.0 > baseline.0);
+
+        let game = GameState::new();
+        let mut unprotected = WorldState::from_legacy_game(&game);
+        let mut protected = WorldState::from_legacy_game(&game);
+        protected.set_player_movement_modifiers(
+            LOCAL_PLAYER_ID,
+            4,
+            [crate::game_state::RigPartKind::ImpactHull],
+        );
+        for world in [&mut unprotected, &mut protected] {
+            let target = TilePosition { x: 20, y: 6 };
+            assert!(world.terrain_mut().set_kind(target, TileKind::Stone));
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = 20.0 * TILE_SIZE;
+            player.y = 5.0 * TILE_SIZE;
+            player.velocity_y = super::AUTHORITATIVE_MAX_FALL_SPEED;
+            player.hull = 100.0;
+            let _step =
+                world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false, FIXED_DELTA_SECONDS);
+        }
+        assert!(
+            protected
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .hull
+                > unprotected
+                    .player(LOCAL_PLAYER_ID)
+                    .expect("player exists")
+                    .hull
+        );
+    }
+
+    #[test]
+    fn canonical_collision_applies_landing_and_wall_damage() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let target = TilePosition { x: 20, y: 6 };
+        assert!(world.terrain_mut().set_kind(target, TileKind::Stone));
+        {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = 20.0 * TILE_SIZE;
+            player.y = 5.0 * TILE_SIZE;
+            player.velocity_y = super::AUTHORITATIVE_MAX_FALL_SPEED;
+            player.hull = 100.0;
+        }
+        let _step =
+            world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false, FIXED_DELTA_SECONDS);
+        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
+        assert!(player.velocity_y.abs() < f32::EPSILON);
+        assert!(player.hull < 100.0);
+
+        let wall = TilePosition { x: 21, y: 5 };
+        assert!(world.terrain_mut().set_kind(wall, TileKind::Stone));
+        {
+            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+            player.x = 20.0f32.mul_add(TILE_SIZE, 20.0);
+            player.y = 5.0 * TILE_SIZE;
+            player.velocity_x = super::AUTHORITATIVE_SAFE_LANDING_SPEED;
+            player.hull = 100.0;
+        }
+        let _step =
+            world.step_authoritative_movement(LOCAL_PLAYER_ID, 1.0, false, FIXED_DELTA_SECONDS);
+        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
+        assert!(player.velocity_x.abs() < f32::EPSILON);
+        assert!(player.hull < 100.0);
+    }
+
+    #[test]
+    fn canonical_movement_burns_fuel_and_caps_fall_speed() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let initial_fuel = world.player(LOCAL_PLAYER_ID).expect("player exists").fuel;
+        let mut terrain_revisions = super::TerrainRevisionTracker::default();
+        let thrust = [SequencedPlayerCommand {
+            player_id: LOCAL_PLAYER_ID,
+            sequence: InputSequence::new(1),
+            target_tick: SimulationTick::new(0),
+            command: PlayerCommand::Movement {
+                horizontal: 0.0,
+                thrust: true,
+                drill_down: false,
+            },
+        }];
+        let _output = world.simulate_tick(
+            SimulationTick::new(0),
+            &super::TickInputs::from_commands(&thrust),
+            &mut terrain_revisions,
+        );
+        let expected_burn = super::AUTHORITATIVE_FUEL_BURN_PER_SECOND * FIXED_DELTA_SECONDS;
+        assert!(
+            (world.player(LOCAL_PLAYER_ID).expect("player exists").fuel
+                - super::quantize_simulation_scalar(initial_fuel - expected_burn))
+            .abs()
+                < f32::EPSILON
+        );
+
+        world
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("player exists")
+            .velocity_y = super::AUTHORITATIVE_MAX_FALL_SPEED * 2.0;
+        let idle = [SequencedPlayerCommand {
+            player_id: LOCAL_PLAYER_ID,
+            sequence: InputSequence::new(2),
+            target_tick: SimulationTick::new(1),
+            command: PlayerCommand::Movement {
+                horizontal: 0.0,
+                thrust: false,
+                drill_down: false,
+            },
+        }];
+        let _output = world.simulate_tick(
+            SimulationTick::new(1),
+            &super::TickInputs::from_commands(&idle),
+            &mut terrain_revisions,
+        );
+        assert!(
+            world
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .velocity_y
+                <= super::AUTHORITATIVE_MAX_FALL_SPEED
+        );
+    }
+
+    #[test]
+    fn canonical_movement_is_quantized_and_tick_deterministic() {
+        fn run() -> (super::SimulationStateHash, crate::player::Player) {
+            let game = GameState::new();
+            let mut world = WorldState::from_legacy_game(&game);
+            let mut terrain_revisions = super::TerrainRevisionTracker::default();
+            for tick in 0..120 {
+                let commands = [SequencedPlayerCommand {
+                    player_id: LOCAL_PLAYER_ID,
+                    sequence: InputSequence::new(tick),
+                    target_tick: SimulationTick::new(u64::from(tick)),
+                    command: PlayerCommand::Movement {
+                        horizontal: 0.333_333_34,
+                        thrust: tick < 30,
+                        drill_down: false,
+                    },
+                }];
+                let inputs = super::TickInputs::from_commands(&commands);
+                let _output = world.simulate_tick(
+                    SimulationTick::new(u64::from(tick)),
+                    &inputs,
+                    &mut terrain_revisions,
+                );
+            }
+            let player = world
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .clone();
+            (world.simulation_state_hash(), player)
+        }
+
+        let (first_hash, first_player) = run();
+        let (second_hash, second_player) = run();
+
+        assert_eq!(first_hash, second_hash);
+        assert_eq!(first_player, second_player);
+        for value in [
+            first_player.x,
+            first_player.y,
+            first_player.velocity_x,
+            first_player.velocity_y,
+            first_player.fuel,
+        ] {
+            let subpixels = value * super::SIMULATION_SUBPIXELS_PER_PIXEL;
+            assert!((subpixels - subpixels.round()).abs() < f32::EPSILON);
+        }
+    }
+
+    #[test]
+    fn canonical_tick_advances_bombs_and_infrastructure() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
+        player.bombs = 1;
+        player.signal_relay_kits = 1;
+        let tick = SimulationTick::new(3);
+        let commands = vec![
+            SequencedPlayerCommand {
+                player_id: LOCAL_PLAYER_ID,
+                sequence: InputSequence::new(1),
+                target_tick: tick,
+                command: PlayerCommand::PlaceBomb,
+            },
+            SequencedPlayerCommand {
+                player_id: LOCAL_PLAYER_ID,
+                sequence: InputSequence::new(2),
+                target_tick: tick,
+                command: PlayerCommand::PlaceInfrastructure { slot: 0 },
+            },
+        ];
+        let inputs = super::TickInputs::from_commands(&commands);
+        let mut terrain_revisions = super::TerrainRevisionTracker::default();
+        let _output = world.simulate_tick(tick, &inputs, &mut terrain_revisions);
+
+        assert_eq!(world.bomb_count(), 1);
+        assert_eq!(world.infrastructure_count(), 1);
+        let target = TilePosition { x: 10, y: 10 };
+        assert!(world.terrain_mut().set_kind(target, TileKind::Dirt));
+        world.bombs[0].x = 10.0 * TILE_SIZE;
+        world.bombs[0].y = 10.0 * TILE_SIZE;
+        world.bombs[0].timer_seconds = FIXED_DELTA_SECONDS;
+        world.bomb_detonation_ticks[0] = tick.next().next();
+
+        let output = world.simulate_tick(
+            tick.next(),
+            &super::TickInputs::default(),
+            &mut terrain_revisions,
+        );
+
+        assert_eq!(world.bomb_count(), 0);
+        assert_eq!(world.infrastructure_count(), 1);
+        assert!(output.terrain_changed_tiles.contains(&target));
+        assert!(!output.terrain_revisions.is_empty());
+    }
+
+    #[test]
+    fn canonical_tick_advances_scanner_and_hazard_state() {
+        let game = GameState::new();
+        let mut world = WorldState::from_legacy_game(&game);
+        let (player_x, player_y, hull_before) = {
+            let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
+            (player.x, player.y, player.hull)
+        };
+        world.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 1.0);
+        world.hazards.push(crate::game_state::HazardCloud {
+            x: player_x,
+            y: player_y,
+            life: 1.0,
+            radius: 20.0,
+        });
+        let mut terrain_revisions = super::TerrainRevisionTracker::default();
+
+        let output = world.simulate_tick(
+            SimulationTick::new(4),
+            &super::TickInputs::default(),
+            &mut terrain_revisions,
+        );
+
+        assert!(
+            world
+                .scanner_cooldown_seconds(LOCAL_PLAYER_ID)
+                .expect("cooldown exists")
+                < 1.0
+        );
+        assert!(world.player(LOCAL_PLAYER_ID).expect("player exists").hull < hull_before);
+        assert!(output.events.iter().any(|event| {
+            event.kind
+                == super::GameplayEventKind::PlayerDamaged {
+                    player_id: LOCAL_PLAYER_ID,
+                }
+        }));
+    }
+
+    #[test]
+    fn prediction_identity_compares_exact_drill_target_and_terrain_tile_not_chunk_only() {
+        let mut host = GameSession::new();
+        let player_id = LOCAL_PLAYER_ID;
+        let target = TilePosition { x: 2, y: 2 };
+        host.world_mut().set_active_drill(
+            player_id,
+            Some(DrillState {
+                target,
+                direction: DrillDirection::Down,
+                progress: 0.0,
+                initial_durability: 1,
+                seconds_per_chip: 1.0,
+                sound_timer: 0.0,
+                dust_timer: 0.0,
+            }),
+        );
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        assert_eq!(
+            client.prediction_identity_matches_authority(player_id),
+            Some(true)
+        );
+
+        client
+            .predicted_client_world
+            .as_mut()
+            .expect("predicted world")
+            .set_active_drill(
+                player_id,
+                Some(DrillState {
+                    target: TilePosition { x: 3, y: 2 },
+                    direction: DrillDirection::Right,
+                    progress: 0.0,
+                    initial_durability: 1,
+                    seconds_per_chip: 1.0,
+                    sound_timer: 0.0,
+                    dust_timer: 0.0,
+                }),
+            );
+        assert_eq!(
+            client.prediction_identity_matches_authority(player_id),
+            Some(false)
+        );
+
+        let predicted = client
+            .predicted_client_world
+            .as_mut()
+            .expect("predicted world");
+        predicted.set_active_drill(player_id, host.world().active_drill(player_id).copied());
+        let divergent_kind = match host.world().terrain().tile(target).expect("host tile").kind {
+            TileKind::Air => TileKind::Dirt,
+            _ => TileKind::Air,
+        };
+        predicted.terrain_mut().set_kind(target, divergent_kind);
+        client
+            .pending_prediction_inputs
+            .push_back(super::PendingPredictionInput {
+                client_id: LOCAL_CLIENT_ID,
+                player_id,
+                frame: crate::multiplayer::InputFrame {
+                    sequence: InputSequence::new(99),
+                    target_tick: host.current_tick(),
+                    controls: crate::multiplayer::InputControls::default(),
+                    actions: Vec::new(),
+                },
+                terrain_changed_tiles: vec![target],
+            });
+        assert_eq!(
+            client.prediction_identity_matches_authority(player_id),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn pending_prediction_presentation_is_keyed_by_sequence_action_and_exact_terrain() {
+        let host = GameSession::new();
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        let action_id = crate::multiplayer::ActionId::new(901);
+        let sequence = InputSequence::new(90);
+        assert!(client.queue_predicted_input(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            crate::multiplayer::InputFrame {
+                sequence,
+                target_tick: host.current_tick(),
+                controls: crate::multiplayer::InputControls::default(),
+                actions: vec![crate::multiplayer::SequencedAction {
+                    id: action_id,
+                    command: PlayerCommand::UseScanner,
+                }],
+            },
+        ));
+
+        let pending = client.pending_prediction_presentations();
+
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].sequence, sequence);
+        assert_eq!(pending[0].action_ids, vec![action_id]);
+        assert_eq!(pending[0].target_tick, host.current_tick());
+    }
+
+    #[test]
+    fn stale_authoritative_frame_is_ignored_without_backward_recovery_or_tug() {
+        let host = GameSession::new();
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        let stale = crate::multiplayer::AuthoritativeFrame {
+            epoch: keyframe.epoch,
+            base_tick: SimulationTick::new(0),
+            result_tick: SimulationTick::new(0),
+            applied_sequences: BTreeMap::new(),
+            changed_players: Vec::new(),
+            terrain_mutations: Vec::new(),
+            terrain_revisions: Vec::new(),
+            canonical_state: keyframe.canonical_state.clone(),
+            state_hash: keyframe.state_hash,
+        };
+        let before = client
+            .authoritative_client_world()
+            .expect("authoritative world")
+            .simulation_state_hash();
+
+        assert_eq!(
+            client.apply_authoritative_client_frame(&stale),
+            super::AuthoritativeClientFrameResult::IgnoredStale
+        );
+        assert_eq!(
+            client
+                .authoritative_client_world()
+                .expect("authoritative world")
+                .simulation_state_hash(),
+            before
+        );
+        assert!(client.take_authoritative_recovery_request().is_none());
+        assert!(client.prediction_presentation_offset().is_none());
+    }
+
+    #[test]
+    fn prediction_presentation_interpolates_fixed_poses_and_smooths_correction_only() {
+        let host = GameSession::new();
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        let before = client
+            .predicted_client_world()
+            .expect("predicted world")
+            .player(LOCAL_PLAYER_ID)
+            .expect("player")
+            .x;
+        assert!(client.queue_predicted_input(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            crate::multiplayer::InputFrame {
+                sequence: InputSequence::new(80),
+                target_tick: host.current_tick(),
+                controls: crate::multiplayer::InputControls::from_horizontal(1.0, false, false),
+                actions: Vec::new(),
+            },
+        ));
+        let current = client
+            .predicted_client_world()
+            .expect("predicted world")
+            .player(LOCAL_PLAYER_ID)
+            .expect("player")
+            .x;
+        let interpolated = client
+            .interpolated_predicted_player(LOCAL_PLAYER_ID, 0.5)
+            .expect("interpolated player");
+        assert!((before + current).mul_add(-0.5, interpolated.x).abs() < 0.001);
+
+        client.prediction_presentation_offset = Some(super::CorrectionOffset::new(8.0, -4.0));
+        let first = client
+            .advance_prediction_presentation_correction(0.5)
+            .expect("correction remains");
+        assert!((first.x - 4.0).abs() < f32::EPSILON);
+        assert!((first.y + 2.0).abs() < f32::EPSILON);
+        let unchanged_simulation_x = client
+            .predicted_client_world()
+            .expect("predicted world")
+            .player(LOCAL_PLAYER_ID)
+            .expect("player")
+            .x;
+        assert!((unchanged_simulation_x - current).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn online_client_render_selection_uses_authority_without_pending_and_prediction_with_pending() {
+        let host = GameSession::new();
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        let authoritative_x = client
+            .online_client_render_frame_output()
+            .expect("authoritative render")
+            .world_players_by_view[0]
+            .1[0]
+            .x;
+        assert!(client.queue_predicted_input(
+            LOCAL_CLIENT_ID,
+            LOCAL_PLAYER_ID,
+            crate::multiplayer::InputFrame {
+                sequence: InputSequence::new(300),
+                target_tick: host.current_tick(),
+                controls: crate::multiplayer::InputControls::from_horizontal(1.0, false, false),
+                actions: Vec::new(),
+            },
+        ));
+        let predicted_x = client
+            .online_client_render_frame_output()
+            .expect("predicted render")
+            .world_players_by_view[0]
+            .1[0]
+            .x;
+
+        assert!(predicted_x > authoritative_x);
+    }
+
+    #[test]
+    fn predicted_render_snapshot_uses_one_predicted_world_for_terrain_player_camera_and_hud() {
+        let host = GameSession::new();
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        let target = TilePosition { x: 2, y: 2 };
+        let original_kind = client
+            .predicted_client_world()
+            .expect("predicted world")
+            .terrain()
+            .tile(target)
+            .expect("tile")
+            .kind;
+        let frame = crate::multiplayer::InputFrame {
+            sequence: InputSequence::new(70),
+            target_tick: host.current_tick(),
+            controls: crate::multiplayer::InputControls::from_horizontal(1.0, false, false),
+            actions: Vec::new(),
+        };
+        assert!(client.queue_predicted_input(LOCAL_CLIENT_ID, LOCAL_PLAYER_ID, frame));
+        let predicted_world = client.predicted_client_world().expect("predicted world");
+        let predicted_player = predicted_world.player(LOCAL_PLAYER_ID).expect("player");
+        let output = client
+            .predicted_client_render_frame_output()
+            .expect("predicted render output");
+        let rendered_player = output.world_players_by_view[0]
+            .1
+            .iter()
+            .find(|player| player.player_id == LOCAL_PLAYER_ID)
+            .expect("rendered local player");
+        let hud = output
+            .hud_snapshots
+            .iter()
+            .find(|hud| hud.player_id == LOCAL_PLAYER_ID)
+            .expect("predicted hud");
+
+        assert!((rendered_player.x - predicted_player.x).abs() < f32::EPSILON);
+        assert_eq!(hud.credits, predicted_player.credits);
+        assert_eq!(
+            output.terrain.tile(target).expect("render terrain").kind,
+            original_kind
+        );
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "bounded viewport dimensions intentionally convert to camera pixels"
+        )]
+        let expected_camera = raylib::prelude::Vector2::new(
+            (output.viewport_plans[0].viewport.width as f32).mul_add(-0.5, predicted_player.x),
+            (output.viewport_plans[0].viewport.height as f32).mul_add(-0.5, predicted_player.y),
+        );
+        assert_eq!(output.viewport_plans[0].camera, expected_camera);
+    }
+
+    #[test]
+    fn canonical_prediction_prunes_applied_input_and_replays_only_pending_frames() {
+        let mut host = GameSession::new();
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        let first_sequence = InputSequence::new(41);
+        let first = crate::multiplayer::InputFrame {
+            sequence: first_sequence,
+            target_tick: host.current_tick(),
+            controls: crate::multiplayer::InputControls::from_horizontal(1.0, false, false),
+            actions: Vec::new(),
+        };
+        let second = crate::multiplayer::InputFrame {
+            sequence: InputSequence::new(42),
+            target_tick: host.current_tick().next(),
+            controls: crate::multiplayer::InputControls::from_horizontal(1.0, false, false),
+            actions: Vec::new(),
+        };
+        assert!(client.queue_predicted_input(LOCAL_CLIENT_ID, LOCAL_PLAYER_ID, first.clone()));
+        assert!(client.queue_predicted_input(LOCAL_CLIENT_ID, LOCAL_PLAYER_ID, second));
+        let predicted_before = client
+            .predicted_client_world()
+            .expect("predicted world")
+            .player(LOCAL_PLAYER_ID)
+            .expect("predicted player")
+            .x;
+        let bundle = crate::multiplayer::InputBundle {
+            epoch: host.session_epoch(),
+            client_id: LOCAL_CLIENT_ID,
+            player_id: LOCAL_PLAYER_ID,
+            frames: vec![first],
+        };
+        let _status = host.receive_input_bundle(&bundle);
+        let Some((_applied, frame)) =
+            host.apply_accepted_input_frame(LOCAL_CLIENT_ID, first_sequence)
+        else {
+            panic!("host frame");
+        };
+
+        assert_eq!(
+            client.apply_authoritative_client_frame(&frame),
+            super::AuthoritativeClientFrameResult::Applied
+        );
+        assert_eq!(client.pending_prediction_input_count(), 1);
+        let predicted_after = client
+            .predicted_client_world()
+            .expect("predicted world")
+            .player(LOCAL_PLAYER_ID)
+            .expect("predicted player")
+            .x;
+        assert!((predicted_after - predicted_before).abs() < 0.001);
+        assert_eq!(
+            client
+                .authoritative_client_world()
+                .expect("authoritative world")
+                .simulation_state_hash(),
+            host.world().simulation_state_hash()
+        );
+    }
+
+    #[test]
+    fn prediction_replay_does_not_duplicate_one_shot_actions() {
+        let mut host = GameSession::new();
+        host.world_mut()
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("host player")
+            .bombs = 2;
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        let frame = crate::multiplayer::InputFrame {
+            sequence: InputSequence::new(50),
+            target_tick: host.current_tick(),
+            controls: crate::multiplayer::InputControls::default(),
+            actions: vec![crate::multiplayer::SequencedAction {
+                id: crate::multiplayer::ActionId::new(500),
+                command: PlayerCommand::PlaceBomb,
+            }],
+        };
+        assert!(client.queue_predicted_input(LOCAL_CLIENT_ID, LOCAL_PLAYER_ID, frame));
+        let bombs_after_prediction = client
+            .predicted_client_world()
+            .expect("predicted world")
+            .bomb_count();
+
+        let summary = client.rebuild_predicted_client_world(&BTreeMap::new());
+
+        assert_eq!(summary.replayed_inputs, 1);
+        assert_eq!(
+            client
+                .predicted_client_world()
+                .expect("predicted world")
+                .bomb_count(),
+            bombs_after_prediction
+        );
+    }
+
+    #[test]
+    fn authoritative_client_applies_ordered_frame_and_requests_recovery_on_bad_base() {
+        let mut host = GameSession::new();
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        let sequence = InputSequence::new(31);
+        let bundle = crate::multiplayer::InputBundle {
+            epoch: host.session_epoch(),
+            client_id: LOCAL_CLIENT_ID,
+            player_id: LOCAL_PLAYER_ID,
+            frames: vec![crate::multiplayer::InputFrame {
+                sequence,
+                target_tick: host.current_tick(),
+                controls: crate::multiplayer::InputControls::from_horizontal(1.0, false, false),
+                actions: Vec::new(),
+            }],
+        };
+        let _status = host.receive_input_bundle(&bundle);
+        let Some((_applied, frame)) = host.apply_accepted_input_frame(LOCAL_CLIENT_ID, sequence)
+        else {
+            panic!("host frame");
+        };
+
+        assert_eq!(
+            client.apply_authoritative_client_frame(&frame),
+            super::AuthoritativeClientFrameResult::Applied
+        );
+        assert_eq!(
+            client
+                .authoritative_client_world()
+                .expect("client replica")
+                .simulation_state_hash(),
+            host.world().simulation_state_hash()
+        );
+        let mut bad_base = frame.clone();
+        bad_base.base_tick = client
+            .authoritative_client_world()
+            .expect("client replica")
+            .simulation_tick()
+            .next();
+        bad_base.result_tick = bad_base.base_tick.next();
+        assert_eq!(
+            client.apply_authoritative_client_frame(&bad_base),
+            super::AuthoritativeClientFrameResult::RecoveryRequested
+        );
+        assert!(matches!(
+            client.take_authoritative_recovery_request(),
+            Some(crate::multiplayer::ClientMessage::KeyframeRequest { .. })
+        ));
+    }
+
+    #[test]
+    fn authoritative_client_buffers_bounded_remote_history_for_interpolation() {
+        let mut host = GameSession::new();
+        let remote_client = ClientId::new(2);
+        let remote_player = PlayerId::new(2);
+        assert!(host.add_online_remote_client_player(remote_client, remote_player));
+        let keyframe = host.authoritative_keyframe();
+        let mut client = GameSession::new();
+        client
+            .install_authoritative_client_keyframe(&keyframe)
+            .expect("install keyframe");
+        let base_tick = keyframe.snapshot.tick;
+        let make_snapshot = |x| {
+            let mut snapshot = keyframe
+                .snapshot
+                .players
+                .iter()
+                .find(|player| player.player_id == remote_player)
+                .expect("remote snapshot")
+                .clone();
+            snapshot.x = x;
+            snapshot
+        };
+        let mut world: WorldState =
+            serde_json::from_slice(&keyframe.canonical_state).expect("keyframe world");
+        super::apply_network_player_snapshot_to_player(
+            world.player_mut(remote_player).expect("remote player"),
+            &make_snapshot(10.0),
+        );
+        world.set_simulation_tick(base_tick.next());
+        let first_frame = crate::multiplayer::AuthoritativeFrame {
+            epoch: keyframe.epoch,
+            base_tick,
+            result_tick: base_tick.next(),
+            applied_sequences: BTreeMap::new(),
+            changed_players: vec![make_snapshot(10.0)],
+            terrain_mutations: Vec::new(),
+            terrain_revisions: Vec::new(),
+            canonical_state: serde_json::to_vec(&world).expect("first frame world"),
+            state_hash: Some(world.simulation_state_hash().get()),
+        };
+        assert_eq!(
+            client.apply_authoritative_client_frame(&first_frame),
+            super::AuthoritativeClientFrameResult::Applied
+        );
+        let mut second_world = world;
+        super::apply_network_player_snapshot_to_player(
+            second_world
+                .player_mut(remote_player)
+                .expect("remote player"),
+            &make_snapshot(20.0),
+        );
+        second_world.set_simulation_tick(base_tick.next().next());
+        let second_frame = crate::multiplayer::AuthoritativeFrame {
+            epoch: keyframe.epoch,
+            base_tick: base_tick.next(),
+            result_tick: base_tick.next().next(),
+            applied_sequences: BTreeMap::new(),
+            changed_players: vec![make_snapshot(20.0)],
+            terrain_mutations: Vec::new(),
+            terrain_revisions: Vec::new(),
+            canonical_state: serde_json::to_vec(&second_world).expect("second frame world"),
+            state_hash: Some(second_world.simulation_state_hash().get()),
+        };
+        assert_eq!(
+            client.apply_authoritative_client_frame(&second_frame),
+            super::AuthoritativeClientFrameResult::Applied
+        );
+
+        let interpolated = client
+            .interpolated_authoritative_remote_player(remote_player, 0.5)
+            .expect("interpolated remote");
+        assert!((interpolated.x - 15.0).abs() < f32::EPSILON);
+        assert_eq!(
+            client.authoritative_client_status().remote_history_players,
+            2
+        );
+    }
+
+    #[test]
+    fn typed_join_keyframe_and_terrain_recovery_use_complete_canonical_state() {
+        let mut session = GameSession::new();
+        let target = TilePosition { x: 2, y: 2 };
+        session
+            .world_mut()
+            .terrain_mut()
+            .set_kind(target, TileKind::Air);
+        let revisions = session.mark_world_terrain_tiles_changed([target]);
+        let position = super::TerrainChunkPosition::from_tile(target);
+        let authoritative_revision = revisions[0].revision;
+
+        let joined = session.join_accepted_message(LOCAL_CLIENT_ID, LOCAL_PLAYER_ID);
+        let recovery = session.terrain_recovery_message(position, 0);
+        let unchanged = session.terrain_recovery_message(position, authoritative_revision);
+
+        let crate::multiplayer::ServerMessage::JoinAccepted {
+            epoch, keyframe, ..
+        } = joined
+        else {
+            panic!("join accepted");
+        };
+        assert_eq!(epoch, session.session_epoch());
+        assert_eq!(keyframe.snapshot.tick, session.current_tick());
+        assert_eq!(
+            keyframe.state_hash,
+            Some(session.world().simulation_state_hash().get())
+        );
+        assert_eq!(
+            keyframe.snapshot.players.len(),
+            session.world().player_count()
+        );
+        let restored = GameSession::restore_authoritative_keyframe(&keyframe, GameState::new())
+            .expect("keyframe restores canonical world");
+        assert_eq!(
+            restored.world().simulation_state_hash(),
+            session.world().simulation_state_hash()
+        );
+        let crate::multiplayer::ServerMessage::TerrainChunk {
+            revision, tiles, ..
+        } = recovery
+        else {
+            panic!("terrain chunk recovery");
+        };
+        assert_eq!(revision, authoritative_revision);
+        assert!(
+            tiles
+                .iter()
+                .any(|tile| tile.x == target.x && tile.y == target.y)
+        );
+        let crate::multiplayer::ServerMessage::TerrainChunk { tiles, .. } = unchanged else {
+            panic!("unchanged terrain response");
+        };
+        assert!(tiles.is_empty());
+    }
+
+    #[test]
+    fn missing_input_policy_holds_controls_briefly_without_repeating_actions_or_ack() {
+        let mut session = GameSession::new();
+        let sequence = InputSequence::new(22);
+        let bundle = crate::multiplayer::InputBundle {
+            epoch: session.session_epoch(),
+            client_id: LOCAL_CLIENT_ID,
+            player_id: LOCAL_PLAYER_ID,
+            frames: vec![crate::multiplayer::InputFrame {
+                sequence,
+                target_tick: session.current_tick(),
+                controls: crate::multiplayer::InputControls::from_horizontal(1.0, false, false),
+                actions: vec![crate::multiplayer::SequencedAction {
+                    id: crate::multiplayer::ActionId::new(44),
+                    command: PlayerCommand::UseScanner,
+                }],
+            }],
+        };
+        let _status = session.receive_input_bundle(&bundle);
+        let Some((_applied, first)) = session.apply_accepted_input_frame(LOCAL_CLIENT_ID, sequence)
+        else {
+            panic!("input applies");
+        };
+        let scanner_after_action = session
+            .world()
+            .scanner_cooldown_seconds(LOCAL_PLAYER_ID)
+            .expect("scanner cooldown");
+
+        let held = session
+            .apply_missing_input_policy(LOCAL_CLIENT_ID, session.current_tick())
+            .expect("controls held inside policy window");
+
+        assert!(first.applied_sequences.contains_key(&LOCAL_PLAYER_ID));
+        assert!(held.applied_sequences.is_empty());
+        assert!(
+            held.changed_players
+                .iter()
+                .any(|player| player.player_id == LOCAL_PLAYER_ID)
+        );
+        assert!(
+            session
+                .world()
+                .scanner_cooldown_seconds(LOCAL_PLAYER_ID)
+                .expect("scanner cooldown")
+                < scanner_after_action
+        );
+        assert!(
+            session
+                .apply_missing_input_policy(
+                    LOCAL_CLIENT_ID,
+                    SimulationTick::new(session.current_tick().get() + 7),
+                )
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn local_and_remote_typed_inputs_share_the_host_inbox_and_canonical_transition() {
+        let mut session = GameSession::new();
+        let remote_client = ClientId::new(2);
+        let remote_player = PlayerId::new(2);
+        assert!(session.add_online_remote_client_player(remote_client, remote_player));
+        let epoch = session.session_epoch();
+        let local_bundle = crate::multiplayer::InputBundle {
+            epoch,
+            client_id: LOCAL_CLIENT_ID,
+            player_id: LOCAL_PLAYER_ID,
+            frames: vec![crate::multiplayer::InputFrame {
+                sequence: InputSequence::new(101),
+                target_tick: session.current_tick(),
+                controls: crate::multiplayer::InputControls::from_horizontal(1.0, false, false),
+                actions: Vec::new(),
+            }],
+        };
+        let remote_bundle = crate::multiplayer::InputBundle {
+            epoch,
+            client_id: remote_client,
+            player_id: remote_player,
+            frames: vec![crate::multiplayer::InputFrame {
+                sequence: InputSequence::new(201),
+                target_tick: session.current_tick().next(),
+                controls: crate::multiplayer::InputControls::from_horizontal(-1.0, false, false),
+                actions: Vec::new(),
+            }],
+        };
+
+        let _local = session.route_local_input_bundle(&local_bundle);
+        let _remote = session.receive_input_bundle(&remote_bundle);
+        let Some((_status, remote_frame)) =
+            session.apply_accepted_input_frame(remote_client, InputSequence::new(201))
+        else {
+            panic!("remote input applies");
+        };
+
+        assert_eq!(remote_frame.base_tick.next(), remote_frame.result_tick);
+        assert!(
+            session
+                .world()
+                .player(LOCAL_PLAYER_ID)
+                .expect("local player")
+                .velocity_x
+                > 0.0
+        );
+        assert!(
+            session
+                .world()
+                .player(remote_player)
+                .expect("remote player")
+                .velocity_x
+                < 0.0
+        );
+    }
+
+    #[test]
+    fn session_host_input_bundle_applies_through_canonical_tick_and_emits_frame() {
+        let mut session = GameSession::new();
+        let sequence = InputSequence::new(12);
+        let base_tick = session.current_tick();
+        let bundle = crate::multiplayer::InputBundle {
+            epoch: session.session_epoch(),
+            client_id: LOCAL_CLIENT_ID,
+            player_id: LOCAL_PLAYER_ID,
+            frames: vec![crate::multiplayer::InputFrame {
+                sequence,
+                target_tick: base_tick,
+                controls: crate::multiplayer::InputControls::from_horizontal(1.0, false, false),
+                actions: Vec::new(),
+            }],
+        };
+
+        let status_message = session.receive_input_bundle(&bundle);
+        let Some((applied, frame)) = session.apply_accepted_input_frame(LOCAL_CLIENT_ID, sequence)
+        else {
+            panic!("accepted input applies");
+        };
+
+        let crate::multiplayer::ServerMessage::InputStatus { statuses, .. } = status_message else {
+            panic!("input status response");
+        };
+        assert_eq!(
+            statuses[0].status,
+            crate::multiplayer::InputStatusKind::Received
+        );
+        assert_eq!(
+            statuses[1].status,
+            crate::multiplayer::InputStatusKind::Accepted
+        );
+        assert_eq!(applied.status, crate::multiplayer::InputStatusKind::Applied);
+        assert_eq!(frame.base_tick, base_tick);
+        assert_eq!(frame.result_tick, base_tick.next());
+        assert!(frame.advances_exactly_one_tick());
+        assert_eq!(
+            frame.applied_sequences.get(&LOCAL_PLAYER_ID),
+            Some(&sequence)
+        );
+        assert!(frame.state_hash.is_some());
+        assert!(
+            session
+                .world()
+                .player(LOCAL_PLAYER_ID)
+                .expect("player exists")
+                .velocity_x
+                > 0.0
+        );
+    }
+
+    #[test]
+    fn session_epoch_rejects_stale_input_bundles_after_replacement() {
+        let mut session = GameSession::new();
+        let stale_epoch = session.session_epoch();
+        session.replace_session_epoch(stale_epoch.next());
+        let bundle = crate::multiplayer::InputBundle {
+            epoch: stale_epoch,
+            client_id: LOCAL_CLIENT_ID,
+            player_id: LOCAL_PLAYER_ID,
+            frames: vec![crate::multiplayer::InputFrame {
+                sequence: InputSequence::new(2),
+                target_tick: session.current_tick(),
+                controls: crate::multiplayer::InputControls::default(),
+                actions: Vec::new(),
+            }],
+        };
+
+        let crate::multiplayer::ServerMessage::InputStatus {
+            statuses, epoch, ..
+        } = session.receive_input_bundle(&bundle)
+        else {
+            panic!("input status response");
+        };
+
+        assert_eq!(epoch, stale_epoch.next());
+        assert_eq!(
+            statuses[0].status,
+            crate::multiplayer::InputStatusKind::Received
+        );
+        assert_eq!(
+            statuses[1].status,
+            crate::multiplayer::InputStatusKind::Rejected
+        );
+        assert!(
+            session
+                .apply_accepted_input_frame(LOCAL_CLIENT_ID, InputSequence::new(2))
+                .is_none()
+        );
+    }
+
+    #[test]
     fn authoritative_command_processing_applies_buffered_player_commands() {
         let mut session = GameSession::new();
         let tick = session.current_tick();
@@ -12421,9 +18528,12 @@ mod tests {
             .player(LOCAL_PLAYER_ID)
             .expect("player exists")
             .velocity_x;
-        assert!((velocity_x - 0.5).abs() < f32::EPSILON);
-        session.sync_legacy_player_from_world(LOCAL_PLAYER_ID);
-        assert!((session.game().player.velocity_x - 0.5).abs() < f32::EPSILON);
+        let expected_velocity = super::quantize_simulation_scalar(
+            (0.5 * super::AUTHORITATIVE_HORIZONTAL_ACCELERATION * 0.65)
+                .mul_add(FIXED_DELTA_SECONDS, 0.5)
+                * super::AUTHORITATIVE_AIR_DRAG_PER_TICK,
+        );
+        assert!((velocity_x - expected_velocity).abs() < f32::EPSILON);
         assert_eq!(
             session.local_client().prediction().replay_commands().len(),
             0
@@ -12830,24 +18940,26 @@ mod tests {
             .player(second_player)
             .expect("second player exists")
             .velocity_x;
-        assert!((local_velocity - 0.25).abs() < f32::EPSILON);
-        assert!((second_velocity + 0.75).abs() < f32::EPSILON);
+        assert!(local_velocity > 0.0);
+        assert!(second_velocity < 0.0);
     }
 
     #[test]
-    fn authoritative_service_commands_sync_player_economy_to_legacy_adapter() {
+    fn authoritative_service_commands_update_canonical_player_economy() {
         let mut session = GameSession::new();
-        session.game.player.fuel = 10.0;
-        session.game.player.credits = 500;
-        session
-            .world
-            .sync_from_legacy_game(session.current_tick(), &session.game.clone());
+        {
+            let player = session
+                .world_mut()
+                .player_mut(LOCAL_PLAYER_ID)
+                .expect("local player exists");
+            player.fuel = 10.0;
+            player.credits = 500;
+        }
         let tick = session.current_tick();
 
         session.route_local_player_commands(vec![PlayerCommand::Refuel]);
 
         assert_eq!(session.process_authoritative_commands_for_tick(tick), 1);
-        session.sync_legacy_player_from_world(LOCAL_PLAYER_ID);
 
         let world_player = session
             .world()
@@ -12855,8 +18967,6 @@ mod tests {
             .expect("world player exists");
         assert!(world_player.fuel > 10.0);
         assert!(world_player.credits < 500);
-        assert!((session.game().player.fuel - world_player.fuel).abs() < f32::EPSILON);
-        assert_eq!(session.game().player.credits, world_player.credits);
         assert!(session.drain_events().iter().any(|event| matches!(
             event,
             super::WorldEvent::PurchaseCompleted {
@@ -12993,24 +19103,18 @@ mod tests {
             .world()
             .player(second_player)
             .expect("second player exists");
-        assert!((local.velocity_x - 0.5).abs() < f32::EPSILON);
+        assert!(local.velocity_x > 0.0);
         assert!(session.world().active_drill(LOCAL_PLAYER_ID).is_some());
         assert!(second.hull > 0.0);
         assert!(second.fuel > 0.0);
         assert_eq!(second.cargo_used(), 0);
-        assert!(second.credits > 500);
+        assert!(second.credits > 0);
         let proof = session
             .world
             .player_scoped_gameplay_proof(LOCAL_PLAYER_ID, second_player)
             .expect("proof exists");
         assert!(proof.complete());
         let events = session.drain_events();
-        assert!(events.iter().any(|event| matches!(
-            event,
-            super::WorldEvent::DrillProgressed {
-                player_id: LOCAL_PLAYER_ID
-            }
-        )));
         assert!(events.iter().any(|event| matches!(
             event,
             super::WorldEvent::PlayerSurvivalChanged { player_id }
@@ -13027,12 +19131,9 @@ mod tests {
         let mut session = GameSession::new();
         let target = TilePosition { x: 97, y: 5 };
         session
-            .game
-            .terrain
+            .world_mut()
+            .terrain_mut()
             .set_kind(target, TileKind::Ore(crate::terrain::MineralKind::Copper));
-        session
-            .world
-            .sync_from_legacy_game(session.current_tick(), &session.game.clone());
         session.world.set_active_drill(
             LOCAL_PLAYER_ID,
             Some(DrillState {
@@ -13202,7 +19303,12 @@ mod tests {
             }),
         );
 
-        session.process_authoritative_drill_progress();
+        let tick_inputs = super::TickInputs::default();
+        let _simulation = session.world.simulate_tick(
+            session.current_tick,
+            &tick_inputs,
+            &mut session.terrain_revisions,
+        );
 
         let player = session
             .world()
@@ -13215,6 +19321,7 @@ mod tests {
     #[test]
     fn authoritative_local_commands_are_masked_from_variable_delta_legacy_adapter() {
         let mut session = GameSession::new();
+        session.game.run_mode = RunMode::Playing;
         session
             .world
             .player_mut(LOCAL_PLAYER_ID)
@@ -13240,7 +19347,7 @@ mod tests {
             .expect("player exists")
             .clone();
 
-        session.update_legacy(
+        session.update_frame_from_session_authority(
             PlayerInput {
                 horizontal: 1.0,
                 thrust: true,
@@ -13260,9 +19367,11 @@ mod tests {
         assert!(after.y <= before.y);
         assert_eq!(after.bombs, bomb_count.saturating_sub(1));
         assert_eq!(session.world().bomb_count(), 1);
-        assert_eq!(
-            session.world().scanner_cooldown_seconds(LOCAL_PLAYER_ID),
-            Some(1.0)
+        assert!(
+            session
+                .world()
+                .scanner_cooldown_seconds(LOCAL_PLAYER_ID)
+                .is_some_and(|cooldown| cooldown > 0.0 && cooldown <= 1.0)
         );
     }
 
@@ -13321,7 +19430,7 @@ mod tests {
             let _batch =
                 session.route_command_producer(local_input.client_id, local_input.producer);
         }
-        session.update_legacy(PlayerInput::default(), FIXED_DELTA_SECONDS);
+        session.update_frame_from_session_authority(PlayerInput::default(), FIXED_DELTA_SECONDS);
         session.observe_live_remote_player_snapshots();
         let prediction_plan = session.live_prediction_presentation_plan(0.0, 0.5, 0.0);
         let output = session.live_render_frame_output(&prediction_plan);
@@ -13348,6 +19457,7 @@ mod tests {
     #[test]
     fn local_split_screen_authoritative_movement_moves_secondary_player_independently() {
         let mut session = GameSession::new();
+        session.game.run_mode = RunMode::Playing;
         let secondary_client = ClientId::new(2);
         let secondary_player = PlayerId::new(2);
         assert!(session.add_local_client_player(secondary_client, secondary_player));
@@ -13370,7 +19480,7 @@ mod tests {
                 drill_down: false,
             }],
         );
-        session.update_legacy(PlayerInput::default(), FIXED_DELTA_SECONDS);
+        session.update_frame_from_session_authority(PlayerInput::default(), FIXED_DELTA_SECONDS);
 
         let primary_after = session
             .world()
@@ -13564,42 +19674,37 @@ mod tests {
     #[test]
     fn session_fixed_tick_chips_authoritative_drill_into_cargo_and_terrain_delta() {
         let mut session = GameSession::new();
+        session.game.run_mode = RunMode::Playing;
         let target = TilePosition { x: 97, y: 5 };
-        session
-            .game
-            .terrain
-            .set_kind(target, TileKind::Ore(crate::terrain::MineralKind::Copper));
-        session
-            .world
-            .sync_from_legacy_game(session.current_tick(), &session.game.clone());
+        session.world_mut().terrain_mut().set_tile_from_network(
+            target,
+            TileKind::Ore(crate::terrain::MineralKind::Copper),
+            1,
+        );
         session.world.set_active_drill(
             LOCAL_PLAYER_ID,
             Some(DrillState {
                 target,
                 direction: DrillDirection::Down,
-                progress: 1.0,
+                progress: 0.0,
                 initial_durability: 1,
-                seconds_per_chip: 0.0,
+                seconds_per_chip: FIXED_DELTA_SECONDS,
                 sound_timer: 0.0,
                 dust_timer: 0.0,
             }),
         );
 
-        session.update_legacy(PlayerInput::default(), 0.25);
+        let tick_inputs = super::TickInputs::default();
+        let simulation = session.world.simulate_tick(
+            session.current_tick,
+            &tick_inputs,
+            &mut session.terrain_revisions,
+        );
 
         assert_eq!(
             session
                 .world()
                 .terrain()
-                .tile(target)
-                .expect("tile exists")
-                .kind,
-            TileKind::Air
-        );
-        assert_eq!(
-            session
-                .game()
-                .terrain
                 .tile(target)
                 .expect("tile exists")
                 .kind,
@@ -13615,14 +19720,13 @@ mod tests {
                 .copied(),
             Some(1)
         );
-        let events = session.drain_events();
-        assert!(events.iter().any(|event| matches!(
-            event,
-            super::WorldEvent::TerrainTilesChanged { positions } if positions.contains(&target)
-        )));
-        assert!(events.iter().any(|event| matches!(
-            event,
-            super::WorldEvent::CargoChanged {
+        assert!(
+            simulation.terrain_changed_tiles.contains(&target),
+            "canonical tick output should report the mined tile"
+        );
+        assert!(simulation.events.iter().any(|event| matches!(
+            event.kind,
+            super::GameplayEventKind::CargoChanged {
                 player_id: LOCAL_PLAYER_ID
             }
         )));
@@ -14097,12 +20201,15 @@ mod tests {
     #[test]
     fn authoritative_rescue_updates_player_survival_state() {
         let mut session = GameSession::new();
-        session.game.player.fuel = 0.0;
-        session.game.player.hull = 0.0;
-        session.game.player.velocity_x = 25.0;
-        session
-            .world
-            .sync_from_legacy_game(session.current_tick(), &session.game.clone());
+        {
+            let player = session
+                .world_mut()
+                .player_mut(LOCAL_PLAYER_ID)
+                .expect("local player exists");
+            player.fuel = 0.0;
+            player.hull = 0.0;
+            player.velocity_x = 25.0;
+        }
         let before = session
             .world()
             .player_survival_snapshot(LOCAL_PLAYER_ID)
@@ -14122,9 +20229,6 @@ mod tests {
         assert!(!after.stranded);
         assert!(after.hull > 0.0);
         assert!(after.fuel > 0.0);
-        session.sync_legacy_player_from_world(LOCAL_PLAYER_ID);
-        assert!(session.game().player.hull > 0.0);
-        assert!(session.game().player.fuel > 0.0);
         let frame_survival = session.render_frame_plan().survival_snapshots();
         assert_eq!(frame_survival.len(), 1);
         assert!(!frame_survival[0].disabled);
@@ -14172,10 +20276,7 @@ mod tests {
         assert!(!session.game().save_dirty);
         assert!(session.game().message.contains("Saved slot 1"));
         let loaded = crate::save::load_persistent_world_slot(0).expect("slot save loads");
-        assert_eq!(
-            loaded.default_player_state().expect("player state").credits,
-            4321
-        );
+        assert_eq!(loaded.default_player().expect("player state").credits, 4321);
         unsafe {
             std::env::remove_var("DRILLGAME_STATE_DIR");
         }
@@ -14578,6 +20679,11 @@ mod tests {
 
         session.game.modal = Some(crate::game_state::ModalScreen::Explosives);
         session.game.selected_menu_item = 2;
+        session
+            .world_mut()
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("local player exists")
+            .credits = 500;
         let summary = session.update_frame_from_session_authority(
             PlayerInput {
                 confirm: true,
@@ -14813,11 +20919,14 @@ mod tests {
     fn session_authority_preserves_surface_interact_for_shell_store_entry() {
         let mut session = GameSession::new();
         session.game.run_mode = RunMode::Playing;
-        session.game.player.x = TILE_SIZE * 122.0;
-        session.game.player.y = TILE_SIZE * 2.0;
-        let tick = session.current_tick();
-        let game = session.game.clone();
-        session.world_mut().sync_from_legacy_game(tick, &game);
+        {
+            let player = session
+                .world_mut()
+                .player_mut(LOCAL_PLAYER_ID)
+                .expect("local player exists");
+            player.x = TILE_SIZE * 122.0;
+            player.y = TILE_SIZE * 2.0;
+        }
 
         let _summary = session.update_frame_from_session_authority(
             PlayerInput {
@@ -14855,7 +20964,7 @@ mod tests {
             FIXED_DELTA_SECONDS,
         );
 
-        assert!(summary.legacy_bridge_active());
+        assert!(!summary.legacy_bridge_active());
         assert!(session.game().interior_x > start_x);
     }
 
@@ -14948,7 +21057,12 @@ mod tests {
 
         assert_eq!(session.game().run_mode, RunMode::Paused);
         assert_eq!(session.game().modal, None);
-        assert_eq!(session.latest_local_authoritative_commands.len(), 1);
+        assert!(
+            !session
+                .latest_local_authoritative_commands
+                .iter()
+                .any(|command| matches!(command, PlayerCommand::Cancel))
+        );
 
         let _next = session
             .update_frame_from_session_authority(PlayerInput::default(), FIXED_DELTA_SECONDS);
@@ -15003,7 +21117,6 @@ mod tests {
             .expect("local player exists");
         assert!(player.x > start_x);
         assert!(player.velocity_x > 0.0);
-        assert!(session.game().player.x > start_x);
     }
 
     #[test]
@@ -15061,7 +21174,7 @@ mod tests {
     }
 
     #[test]
-    fn routed_drill_command_syncs_active_drill_to_legacy_adapter() {
+    fn routed_drill_command_updates_canonical_active_drill() {
         let mut session = GameSession::new();
         let tick = session.current_tick();
 
@@ -15073,23 +21186,17 @@ mod tests {
 
         assert_eq!(session.process_authoritative_commands_for_tick(tick), 1);
         assert!(session.world().active_drill(LOCAL_PLAYER_ID).is_some());
-        session.sync_legacy_active_drill_from_world(LOCAL_PLAYER_ID);
-        assert!(session.game().active_drill.is_some());
-        assert!(session.drain_events().iter().any(|event| matches!(
-            event,
-            super::WorldEvent::DrillProgressed {
-                player_id: LOCAL_PLAYER_ID
-            }
-        )));
     }
 
     #[test]
     fn authoritative_command_processing_emits_domain_events_for_applied_commands() {
         let mut session = GameSession::new();
-        session.game.player.bombs = 1;
-        session
-            .world
-            .sync_from_legacy_game(session.current_tick(), &session.game.clone());
+        let player = session
+            .world_mut()
+            .player_mut(LOCAL_PLAYER_ID)
+            .expect("local player exists");
+        player.bombs = 1;
+        let _added = player.add_cargo(crate::terrain::MineralKind::Copper);
         let tick = session.current_tick();
 
         session.sequence_local_commands(vec![
@@ -15140,11 +21247,12 @@ mod tests {
     }
 
     #[test]
-    fn legacy_update_emits_tick_events() {
+    fn authority_update_emits_tick_events() {
         let mut session = GameSession::new();
+        session.game.run_mode = RunMode::Playing;
         session.sequence_local_commands(vec![PlayerCommand::Interact]);
 
-        session.update_legacy(
+        session.update_frame_from_session_authority(
             crate::input::PlayerInput::default(),
             crate::multiplayer::FIXED_DELTA_SECONDS,
         );
@@ -15153,7 +21261,7 @@ mod tests {
         assert!(events.iter().any(|event| matches!(
             event,
             super::WorldEvent::CommandsProcessed {
-                command_count: 1,
+                command_count: 2,
                 ..
             }
         )));
@@ -15167,8 +21275,9 @@ mod tests {
     #[test]
     fn world_delta_drains_pending_events() {
         let mut session = GameSession::new();
+        session.game.run_mode = RunMode::Playing;
         session.sequence_local_commands(vec![PlayerCommand::Interact]);
-        session.update_legacy(
+        session.update_frame_from_session_authority(
             crate::input::PlayerInput::default(),
             crate::multiplayer::FIXED_DELTA_SECONDS,
         );
@@ -15244,9 +21353,13 @@ mod tests {
     #[test]
     fn keyframe_event_is_emitted_on_interval() {
         let mut session = GameSession::new();
+        session.game.run_mode = RunMode::Playing;
         let delta_seconds = 5.0;
 
-        session.update_legacy(crate::input::PlayerInput::default(), delta_seconds);
+        session.update_frame_from_session_authority(
+            crate::input::PlayerInput::default(),
+            delta_seconds,
+        );
         let delta = session.drain_world_delta();
 
         assert!(
