@@ -1973,7 +1973,7 @@ impl QuinnOnlineSession {
                 ProtocolMessage::CommandPacket(packet.clone()),
             ))
             .await?;
-        let received = self.host_io.receive_datagram_packet().await?;
+        let received = self.host_io.receive_reliable_packet().await?;
         let received_packet = match received.decode_supported().map_err(|error| {
             QuinnOnlineSessionError::Connect(format!(
                 "unsupported protocol version: expected {}, actual {}",
@@ -4085,6 +4085,10 @@ pub enum ClientMessage {
         session_token: Option<SessionToken>,
     },
     InputBundle(InputBundle),
+    CommandPacket {
+        epoch: SessionEpoch,
+        packet: CommandPacket,
+    },
     ActionRequest(ActionRequest),
     KeyframeRequest {
         epoch: SessionEpoch,
@@ -4095,6 +4099,16 @@ pub enum ClientMessage {
         chunk_x: i32,
         chunk_y: i32,
         known_revision: u64,
+    },
+    PlayerIdentity {
+        epoch: SessionEpoch,
+        player_id: PlayerId,
+        name: String,
+    },
+    ReadyState {
+        epoch: SessionEpoch,
+        player_id: PlayerId,
+        ready: bool,
     },
     Disconnect {
         epoch: SessionEpoch,
@@ -4108,9 +4122,12 @@ impl ClientMessage {
         match self {
             Self::InputBundle(_) => ReliabilityClass::UnreliableSequenced,
             Self::JoinRequest { .. }
+            | Self::CommandPacket { .. }
             | Self::ActionRequest(_)
             | Self::KeyframeRequest { .. }
             | Self::TerrainChunkRequest { .. }
+            | Self::PlayerIdentity { .. }
+            | Self::ReadyState { .. }
             | Self::Disconnect { .. } => ReliabilityClass::Reliable,
         }
     }
@@ -4129,7 +4146,24 @@ pub enum ServerMessage {
         client_id: ClientId,
         statuses: Vec<InputStatus>,
     },
+    CommandAcknowledgement {
+        epoch: SessionEpoch,
+        acknowledgement: CommandAcknowledgement,
+    },
+    CommandRejection {
+        epoch: SessionEpoch,
+        rejection: CommandRejection,
+    },
     AuthoritativeFrame(AuthoritativeFrame),
+    SnapshotKeyframe {
+        epoch: SessionEpoch,
+        snapshot: NetworkWorldSnapshot,
+    },
+    WorldDelta {
+        epoch: SessionEpoch,
+        tick: SimulationTick,
+        payload: NetworkDeltaPayload,
+    },
     ActionResult(ActionResult),
     Keyframe(AuthoritativeKeyframe),
     TerrainChunk {
@@ -4138,6 +4172,20 @@ pub enum ServerMessage {
         chunk_y: i32,
         revision: u64,
         tiles: Vec<NetworkTerrainTile>,
+    },
+    PlayerIdentity {
+        epoch: SessionEpoch,
+        player_id: PlayerId,
+        name: String,
+    },
+    ReadyState {
+        epoch: SessionEpoch,
+        player_id: PlayerId,
+        ready: bool,
+    },
+    StartSession {
+        epoch: SessionEpoch,
+        authoritative_tick: SimulationTick,
     },
     SessionEnded {
         epoch: SessionEpoch,
@@ -4156,7 +4204,14 @@ impl ServerMessage {
         match self {
             Self::JoinAccepted { epoch, .. }
             | Self::InputStatus { epoch, .. }
+            | Self::CommandAcknowledgement { epoch, .. }
+            | Self::CommandRejection { epoch, .. }
+            | Self::SnapshotKeyframe { epoch, .. }
+            | Self::WorldDelta { epoch, .. }
             | Self::TerrainChunk { epoch, .. }
+            | Self::PlayerIdentity { epoch, .. }
+            | Self::ReadyState { epoch, .. }
+            | Self::StartSession { epoch, .. }
             | Self::SessionEnded { epoch, .. } => *epoch,
             Self::AuthoritativeFrame(frame) => frame.epoch,
             Self::ActionResult(result) => result.epoch,
@@ -6085,7 +6140,7 @@ mod tests {
         };
         let packet = VersionedProtocolPacket::new(message.clone());
 
-        assert_eq!(packet.protocol_version(), 1);
+        assert_eq!(packet.protocol_version(), super::PROTOCOL_VERSION);
         assert_eq!(packet.decode_supported(), Ok(message));
         assert_eq!(
             VersionedProtocolPacket {
@@ -6098,7 +6153,7 @@ mod tests {
             .decode_supported()
             .expect_err("old protocol version rejected"),
             super::ProtocolVersionError {
-                expected: 1,
+                expected: super::PROTOCOL_VERSION,
                 actual: 0,
             }
         );
@@ -6504,10 +6559,7 @@ mod tests {
         );
 
         let host_packets = queues.drain_client_to_host();
-        assert_eq!(
-            host_packets[0].reliability,
-            ReliabilityClass::UnreliableSequenced
-        );
+        assert_eq!(host_packets[0].reliability, ReliabilityClass::Reliable);
         let client_packets = queues.drain_host_to_client(client_id);
         assert_eq!(client_packets[0].reliability, ReliabilityClass::Reliable);
         assert!(queues.drain_host_to_client(client_id).is_empty());

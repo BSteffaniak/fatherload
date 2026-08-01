@@ -23,7 +23,6 @@ use screen::{
     draw_title,
 };
 use terrain::TerrainRenderer;
-pub use world::render_camera;
 use world::{draw_particles, draw_placed_bombs, draw_scanner_marks, draw_world, world_camera};
 
 use crate::{
@@ -125,9 +124,16 @@ fn draw_local_player_override(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
     game: &GameState,
     world_players: &[crate::session::RenderWorldPlayerPresentation],
+    active_drill: Option<crate::game_state::DrillState>,
 ) {
     if let Some(player) = world_players.iter().find(|player| player.local_to_view) {
-        world::draw_player_at(draw, game, player.x, player.y);
+        world::draw_player_at(
+            draw,
+            player,
+            active_drill,
+            game.update_ticks,
+            game.drill_flash_seconds,
+        );
     }
     for player in world_players.iter().filter(|player| !player.local_to_view) {
         world::draw_remote_player(draw, player);
@@ -239,10 +245,14 @@ impl GameRenderer {
         split_screen_layout(client_count)
     }
 
-    pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, game: &GameState) -> Self {
+    pub fn new(
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        terrain: &crate::terrain::Terrain,
+    ) -> Self {
         let ui_font_assets = UiFontAssets::load(raylib, thread);
         Self {
-            terrain: TerrainRenderer::new(raylib, thread, game),
+            terrain: TerrainRenderer::new(raylib, thread, terrain),
             ui_font_assets,
             ui_state: RefCell::new(layout::widgets::UiState::default()),
         }
@@ -253,6 +263,7 @@ impl GameRenderer {
         raylib: &mut RaylibHandle,
         thread: &RaylibThread,
         game: &mut GameState,
+        output: &LiveRenderFrameOutput,
         delta: &WorldDelta,
     ) {
         for event in &delta.events {
@@ -294,7 +305,22 @@ impl GameRenderer {
         for tile in visual_changes.changed_tiles {
             self.terrain.mark_tile_dirty(tile);
         }
-        self.terrain.sync(raylib, thread, game);
+        let explored = output
+            .viewport_plans
+            .first()
+            .and_then(|plan| {
+                output.discovered_tiles_by_player.get(
+                    &plan
+                        .local_player
+                        .map_or(crate::multiplayer::LOCAL_PLAYER_ID, |player| {
+                            player.player_id
+                        }),
+                )
+            })
+            .cloned()
+            .unwrap_or_default();
+        self.terrain
+            .sync(raylib, thread, &output.terrain, &explored);
     }
 
     #[allow(
@@ -346,7 +372,7 @@ impl GameRenderer {
                         .is_some_and(|player| player.player_id == hud.player_id)
                 })
                 .copied();
-            self.render_viewport_plan(draw, game, plan, world_players, hud);
+            self.render_viewport_plan(draw, game, output, plan, world_players, hud);
         }
     }
 
@@ -354,6 +380,7 @@ impl GameRenderer {
         &self,
         draw: &mut RaylibDrawHandle<'_>,
         game: &GameState,
+        output: &LiveRenderFrameOutput,
         plan: &RenderViewportPlan,
         world_players: &[crate::session::RenderWorldPlayerPresentation],
         hud: Option<crate::session::PerPlayerHudSnapshot>,
@@ -388,6 +415,7 @@ impl GameRenderer {
             draw,
             game,
             &view,
+            output,
             world_players,
             hud,
             plan.prediction_overlay.as_ref(),
@@ -402,11 +430,16 @@ impl GameRenderer {
         }
     }
 
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "client rendering keeps canonical frame output separate from shell/UI presentation"
+    )]
     pub fn render_client_view(
         &self,
         draw: &mut RaylibDrawHandle<'_>,
         game: &GameState,
         view: &ClientView,
+        output: &LiveRenderFrameOutput,
         world_players: &[crate::session::RenderWorldPlayerPresentation],
         hud: Option<crate::session::PerPlayerHudSnapshot>,
         prediction_overlay: Option<&crate::session::OnlinePredictionRenderOverlay>,
@@ -421,14 +454,28 @@ impl GameRenderer {
             draw_interior(draw, game);
         } else {
             let mut world_draw = draw.begin_mode2D(world_camera(camera, world_zoom));
-            draw_world(&mut world_draw, game, camera, &self.terrain);
-            draw_particles(&mut world_draw, game);
-            draw_placed_bombs(&mut world_draw, game);
-            draw_scanner_marks(&mut world_draw, game);
+            draw_world(
+                &mut world_draw,
+                camera,
+                &self.terrain,
+                &output.terrain,
+                &output.infrastructure,
+                output
+                    .active_drills
+                    .get(&view.controlled_player_id)
+                    .copied(),
+                &game.online_terrain_sync_markers,
+                game.update_ticks,
+            );
+            draw_particles(&mut world_draw, &output.particles);
+            draw_placed_bombs(&mut world_draw, &output.bombs);
+            if let Some(local_player) = world_players.iter().find(|player| player.local_to_view) {
+                draw_scanner_marks(&mut world_draw, &output.terrain, local_player);
+            }
             if let Some(overlay) = prediction_overlay {
                 draw_prediction_overlay_world(&mut world_draw, overlay);
             }
-            for cloud in &game.hazard_clouds {
+            for cloud in &output.hazards {
                 world_draw.draw_circle_v(
                     Vector2::new(cloud.x, cloud.y),
                     cloud.radius,
@@ -436,7 +483,15 @@ impl GameRenderer {
                 );
             }
 
-            draw_local_player_override(&mut world_draw, game, world_players);
+            draw_local_player_override(
+                &mut world_draw,
+                game,
+                world_players,
+                output
+                    .active_drills
+                    .get(&view.controlled_player_id)
+                    .copied(),
+            );
         }
         if game.screen_flash_seconds > 0.0 {
             let alpha = (game.screen_flash_seconds * 500.0).clamp(0.0, 180.0) as u8;

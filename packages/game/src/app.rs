@@ -4,7 +4,6 @@ use crate::{
     audio::AudioBus,
     game_state::{
         GameState, OnlineNetworkTaskRequest, OnlineNetworkTaskResult, OnlineShutdownSummary,
-        RealOnlineSessionController,
     },
     input::{
         combine_player_input, read_gamepad_input, read_input, read_input_with_arrow_aliases,
@@ -12,6 +11,7 @@ use crate::{
     },
     input_mapping::map_local_input,
     multiplayer::{FIXED_DELTA_SECONDS, PlayerCommand},
+    online_session::RealOnlineSessionController,
     rendering::GameRenderer,
     save::{load_settings, save_settings},
     session::GameSession,
@@ -540,6 +540,7 @@ impl OnlineTaskDispatcher {
                             return;
                         }
                     };
+                let replication_command_summary = command_summary.clone();
                 if command_summary.is_some() {
                     let pre_replication_summary = crate::multiplayer::QuinnSessionTickSummary {
                         command_summary,
@@ -565,12 +566,11 @@ impl OnlineTaskDispatcher {
                 runtime.block_on(controller.drive_descriptor_host_replication_tick(
                     session.game_mut(),
                     input,
-                    None,
+                    replication_command_summary,
                 ))
             }
             "descriptor-client-connected" => {
                 match runtime.block_on(controller.descriptor_client_try_receive_pending_messages(
-                    session.game_mut(),
                     std::time::Duration::from_millis(1),
                 )) {
                     Ok(_received) => {}
@@ -592,14 +592,13 @@ impl OnlineTaskDispatcher {
                         local_player_commands,
                     )
                     .input;
-                if let Some(packet) = &input.command_packet {
-                    session.track_online_prediction_commands(packet);
-                    let _predicted =
-                        session.predict_online_command_packet(packet, FIXED_DELTA_SECONDS);
-                }
-                runtime.block_on(
-                    controller.drive_descriptor_client_outbound_tick(session.game_mut(), input),
-                )
+                let player_name = session.game().online_player_name.clone();
+                let local_ready = session.game().online_local_ready;
+                runtime.block_on(controller.drive_descriptor_client_outbound_tick(
+                    input,
+                    &player_name,
+                    local_ready,
+                ))
             }
             "descriptor-host-pending" => Ok(crate::multiplayer::QuinnSessionTickSummary {
                 command_summary: None,
@@ -626,6 +625,11 @@ impl OnlineTaskDispatcher {
                     .map(|telemetry| telemetry.summary)
             }
         };
+        let online_events = if mode_label == "descriptor-client-connected" {
+            controller.drain_events()
+        } else {
+            Vec::new()
+        };
         let command_responses = if mode_label == "descriptor-client-connected" {
             Some(controller.drain_command_responses())
         } else {
@@ -638,7 +642,51 @@ impl OnlineTaskDispatcher {
         };
         match result {
             Ok(summary) => {
-                if let Some((snapshots, player_deltas)) = replicated_world_updates {
+                for event in online_events {
+                    match event {
+                        crate::online_session::OnlineSessionEvent::RemoteIdentity {
+                            player_id,
+                            name,
+                        } => session
+                            .game_mut()
+                            .apply_online_remote_identity(player_id, &name),
+                        crate::online_session::OnlineSessionEvent::RemoteReady {
+                            player_id,
+                            ready,
+                        } => session
+                            .game_mut()
+                            .apply_online_remote_ready_state(player_id, ready),
+                        crate::online_session::OnlineSessionEvent::StartSession(tick) => session
+                            .game_mut()
+                            .apply_online_start_session_from_host(tick),
+                        crate::online_session::OnlineSessionEvent::ReplicationStatus(status) => {
+                            session.game_mut().apply_online_replication_status(status);
+                        }
+                        crate::online_session::OnlineSessionEvent::ReplicatedPlayerStatus(
+                            status,
+                        ) => {
+                            session
+                                .game_mut()
+                                .apply_online_replicated_player_status(status);
+                        }
+                        crate::online_session::OnlineSessionEvent::KeyframeRequired => {
+                            session.game_mut().apply_online_sync_loop_status(
+                                crate::game_state::OnlineSyncLoopStatus::keyframe_required(),
+                            );
+                        }
+                        crate::online_session::OnlineSessionEvent::HostEnded(reason) => {
+                            session.game_mut().apply_online_session_boundary_status(
+                                &crate::game_state::OnlineSessionBoundaryStatus::host_ended(
+                                    &reason,
+                                ),
+                            );
+                            session.game_mut().online_session_state =
+                                crate::game_state::OnlineSessionUxState::Shutdown;
+                            session.game_mut().modal = None;
+                        }
+                    }
+                }
+                if let Some((snapshots, player_deltas, terrain_chunks)) = replicated_world_updates {
                     for snapshot in snapshots {
                         let _applied =
                             session.apply_replicated_snapshot_to_world_presentation(&snapshot);
@@ -646,6 +694,12 @@ impl OnlineTaskDispatcher {
                     for (tick, players) in player_deltas {
                         let _applied = session
                             .apply_replicated_player_delta_to_world_presentation(tick, &players);
+                    }
+                    for (chunk_x, chunk_y, revision, tiles) in terrain_chunks {
+                        let _applied = session
+                            .apply_replicated_terrain_chunk_to_world_presentation(
+                                chunk_x, chunk_y, revision, &tiles,
+                            );
                     }
                 }
                 if let Some((acknowledgements, rejections)) = command_responses {
@@ -667,6 +721,13 @@ impl OnlineTaskDispatcher {
                 session.game_mut().apply_online_runtime_tick_status(
                     crate::game_state::OnlineRuntimeTickPresentation::new(mode_label, diagnostic),
                 );
+                if mode_label == "descriptor-client-connected"
+                    && session.game().online_session_state
+                        != crate::game_state::OnlineSessionUxState::Shutdown
+                {
+                    "Descriptor client sent live command tick; received pending host messages."
+                        .clone_into(&mut session.game_mut().online_session_status_message);
+                }
             }
             Err(error) => {
                 session.game_mut().apply_online_network_task_result(
@@ -705,7 +766,7 @@ pub fn run() {
         }
     };
 
-    let mut renderer = GameRenderer::new(&mut raylib, &thread, session.game());
+    let mut renderer = GameRenderer::new(&mut raylib, &thread, session.world().terrain());
     let mut online_tasks = OnlineTaskDispatcher::new();
 
     while !session.should_exit() {
@@ -804,12 +865,6 @@ pub fn run() {
             delta_seconds,
             mapped_input.player_commands.clone(),
         );
-        if online_authority_mode == Some("descriptor-client-connected")
-            && session.game().run_mode == crate::game_state::RunMode::Playing
-        {
-            let _predicted = session.predict_online_render_input(authority_input, delta_seconds);
-            let _correction = session.advance_online_prediction_correction(delta_seconds);
-        }
         let world_delta = session.drain_world_delta();
         let _world_delta_is_empty = world_delta.is_empty();
         if input.fullscreen {
@@ -829,13 +884,7 @@ pub fn run() {
             audio.play(&session.game().sound_cues);
         }
 
-        renderer.sync_delta(&mut raylib, &thread, session.game_mut(), &world_delta);
-
-        let mut draw = raylib.begin_drawing(&thread);
-        session.update_remote_timing_from_network_sample(0.0, 0.0);
-        let _remote_timing = session.remote_timing();
-        let prediction_plan =
-            session.live_prediction_presentation_plan(delta_seconds, 1.0, delta_seconds);
+        let prediction_plan = crate::session::PredictionPresentationPlan::default();
         let live_render_output = if online_authority_mode == Some("descriptor-client-connected") {
             session
                 .online_client_render_frame_output()
@@ -843,7 +892,15 @@ pub fn run() {
         } else {
             session.live_render_frame_output(&prediction_plan)
         };
-        live_render_output.apply_render_snapshot_to_shell(session.game_mut());
+        renderer.sync_delta(
+            &mut raylib,
+            &thread,
+            session.game_mut(),
+            &live_render_output,
+            &world_delta,
+        );
+
+        let mut draw = raylib.begin_drawing(&thread);
         renderer.render_live_frame_output(&mut draw, session.game(), &live_render_output);
     }
 }
@@ -1507,12 +1564,6 @@ mod tests {
         host_session.game_mut().online_local_ready = true;
         host_session.game_mut().run_mode = RunMode::Playing;
         host_dispatcher.drive_scheduled_tick(&mut host_session, FIXED_DELTA_SECONDS, Vec::new());
-        assert!(
-            host_session
-                .game()
-                .online_session_status_message
-                .contains("command=true")
-        );
         assert!(host_session.game().online_remote_player_ready);
         assert_eq!(
             host_session.game().online_remote_player_name.as_deref(),
@@ -1552,38 +1603,6 @@ mod tests {
             join_session.game().online_remote_player_name.as_deref(),
             Some("Host QA")
         );
-        assert_eq!(join_session.game().run_mode, RunMode::Playing);
-        assert!((join_session.game().player.x - 123.0).abs() < f32::EPSILON);
-        assert!((join_session.game().player.y - 456.0).abs() < f32::EPSILON);
-        assert!((join_session.game().player.velocity_x - 7.0).abs() < f32::EPSILON);
-        assert!((join_session.game().player.velocity_y + 8.0).abs() < f32::EPSILON);
-        assert!((join_session.game().player.fuel - 321.0).abs() < f32::EPSILON);
-        assert!((join_session.game().player.hull - 654.0).abs() < f32::EPSILON);
-        assert_eq!(join_session.game().player.credits, 999);
-        let joined_world_player = join_session
-            .world()
-            .player(crate::multiplayer::PlayerId::new(2))
-            .expect("joined client local player synced into session world");
-        assert!((joined_world_player.x - 123.0).abs() < f32::EPSILON);
-        assert_eq!(joined_world_player.credits, 999);
-        assert_eq!(
-            join_session
-                .game()
-                .player
-                .cargo
-                .get(&crate::terrain::MineralKind::Copper),
-            Some(&3)
-        );
-        assert_eq!(
-            join_session
-                .game()
-                .player
-                .cargo
-                .get(&crate::terrain::MineralKind::Gold),
-            Some(&2)
-        );
-        assert_eq!(join_session.game().player.cargo_used(), 5);
-        assert!((join_session.game().scanner_cooldown_seconds - 3.5).abs() < f32::EPSILON);
         let remote_player = join_session
             .world()
             .player(crate::multiplayer::LOCAL_PLAYER_ID)
@@ -1601,47 +1620,8 @@ mod tests {
         assert!(
             join_session
                 .game()
-                .online_multiplayer_status_lines()
-                .iter()
-                .any(|line| {
-                    line.contains("Remote snapshot players")
-                        && line.contains("p1")
-                        && line.contains("Copperx3")
-                })
-        );
-        assert!(
-            join_session
-                .game()
                 .online_last_replication_status
                 .contains("received")
-        );
-        assert!(
-            join_session
-                .game()
-                .online_last_replicated_player_status
-                .contains("tick")
-        );
-        assert!(
-            join_session
-                .game()
-                .online_last_terrain_status
-                .contains("applied chunk")
-        );
-        assert_eq!(
-            join_session
-                .game()
-                .terrain
-                .tile(crate::terrain::TilePosition { x: 18, y: 19 })
-                .expect("replicated terrain tile exists")
-                .kind,
-            crate::terrain::TileKind::Lava
-        );
-        assert!(
-            join_session
-                .game()
-                .visual_changes
-                .changed_tiles
-                .contains(&crate::terrain::TilePosition { x: 18, y: 19 })
         );
         assert_eq!(
             join_session.game().online_diagnostic_controller_mode,

@@ -846,7 +846,7 @@ async fn run_host_gameplay_descriptor_ticks(
 ) -> Result<(), String> {
     for tick_index in 0..ticks {
         let command_packet =
-            tokio::time::timeout(Duration::from_secs(5), packet_io.receive_datagram_packet())
+            tokio::time::timeout(Duration::from_secs(5), packet_io.receive_reliable_packet())
                 .await
                 .map_err(|_| "timed out waiting for gameplay command packet".to_owned())?
                 .map_err(format_debug_error)?;
@@ -925,7 +925,7 @@ async fn run_host_descriptor_file_packet_exchange(
         .await
         .map_err(format_debug_error)?;
     let command_packet =
-        tokio::time::timeout(Duration::from_secs(5), packet_io.receive_datagram_packet())
+        tokio::time::timeout(Duration::from_secs(5), packet_io.receive_reliable_packet())
             .await
             .map_err(|_| "timed out waiting for descriptor-file command packet".to_owned())?
             .map_err(format_debug_error)?;

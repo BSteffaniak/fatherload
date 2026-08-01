@@ -1,24 +1,19 @@
 use raylib::prelude::*;
 
-use crate::session::{RemotePlayerDangerLevel, RenderWorldPlayerPresentation};
+use crate::session::{
+    RemotePlayerDangerLevel, RenderParticleSnapshot, RenderWorldPlayerPresentation,
+};
 
 use super::terrain::TerrainRenderer;
 use crate::{
     economy::SurfaceZone,
-    game_state::{DrillDirection, GameState, TILE_SIZE},
+    game_state::{
+        DrillDirection, DrillState, InfrastructureKind, OnlineTerrainSyncMarker, PlacedBomb,
+        PlacedInfrastructure, TILE_SIZE,
+    },
     surface::SURFACE_BUILDINGS,
-    terrain::{TileKind, TilePosition},
+    terrain::{Terrain, TileKind, TilePosition},
 };
-
-pub fn render_camera(game: &GameState) -> Vector2 {
-    let mut camera = Vector2::new(game.camera_x, game.camera_y);
-    if game.camera_shake_seconds > 0.0 {
-        let pulse = (game.camera_shake_seconds * 70.0).sin();
-        camera.x += pulse * game.camera_shake_strength;
-        camera.y += (game.camera_shake_seconds * 53.0).cos() * game.camera_shake_strength * 0.7;
-    }
-    camera
-}
 
 pub(super) fn world_camera(camera: Vector2, zoom: f32) -> Camera2D {
     let snapped_camera = Vector2::new(camera.x.round(), camera.y.round());
@@ -30,22 +25,29 @@ pub(super) fn world_camera(camera: Vector2, zoom: f32) -> Camera2D {
     }
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "world rendering receives canonical snapshot domains separately from shell presentation"
+)]
 pub(super) fn draw_world(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    game: &GameState,
     camera: Vector2,
-    terrain: &TerrainRenderer,
+    terrain_renderer: &TerrainRenderer,
+    terrain: &Terrain,
+    infrastructure: &[PlacedInfrastructure],
+    active_drill: Option<DrillState>,
+    terrain_sync_markers: &[OnlineTerrainSyncMarker],
+    update_ticks: u64,
 ) {
     draw_surface_buildings(draw);
-    terrain.draw(draw, camera);
-    draw_infrastructure(draw, game);
-    draw_online_terrain_sync_markers(draw, game);
+    terrain_renderer.draw(draw, camera);
+    draw_infrastructure(draw, infrastructure, update_ticks);
+    draw_online_terrain_sync_markers(draw, terrain_sync_markers);
 
-    if let Some(drill) = game.active_drill {
+    if let Some(drill) = active_drill {
         let x = (drill.target.x as f32 * TILE_SIZE) as i32;
         let y = (drill.target.y as f32 * TILE_SIZE) as i32;
-        let current_durability = game
-            .terrain
+        let current_durability = terrain
             .tile(drill.target)
             .map_or(drill.initial_durability, |tile| tile.durability);
         let chipped = drill.initial_durability.saturating_sub(current_durability);
@@ -60,7 +62,7 @@ pub(super) fn draw_world(
             Color::YELLOW,
         );
         if drill.direction == DrillDirection::Down {
-            let pulse = (game.update_ticks as f32 * 0.4).sin().abs();
+            let pulse = (update_ticks as f32 * 0.4).sin().abs();
             draw.draw_circle(
                 x + TILE_SIZE as i32 / 2,
                 y + TILE_SIZE as i32 / 2,
@@ -68,8 +70,8 @@ pub(super) fn draw_world(
                 Color::new(255, 180, 70, 85),
             );
         }
-        if matches!(game.terrain.tile(drill.target), Some(tile) if tile.kind == TileKind::Gas) {
-            let pulse = (game.update_ticks as f32 * 0.22).sin().abs();
+        if matches!(terrain.tile(drill.target), Some(tile) if tile.kind == TileKind::Gas) {
+            let pulse = (update_ticks as f32 * 0.22).sin().abs();
             draw.draw_circle(
                 x + TILE_SIZE as i32 / 2,
                 y + TILE_SIZE as i32 / 2,
@@ -101,9 +103,9 @@ pub(super) fn draw_world(
 
 fn draw_online_terrain_sync_markers(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    game: &GameState,
+    markers: &[OnlineTerrainSyncMarker],
 ) {
-    for marker in &game.online_terrain_sync_markers {
+    for marker in markers {
         let intensity = marker.intensity();
         let center_x = (marker.position.x as f32 * TILE_SIZE + TILE_SIZE * 0.5) as i32;
         let center_y = (marker.position.y as f32 * TILE_SIZE + TILE_SIZE * 0.5) as i32;
@@ -121,18 +123,22 @@ fn draw_online_terrain_sync_markers(
     }
 }
 
-fn draw_infrastructure(draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>, game: &GameState) {
-    for item in &game.infrastructure {
+fn draw_infrastructure(
+    draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
+    infrastructure: &[PlacedInfrastructure],
+    update_ticks: u64,
+) {
+    for item in infrastructure {
         let x = (item.position.x as f32 * TILE_SIZE + TILE_SIZE * 0.5) as i32;
         let y = (item.position.y as f32 * TILE_SIZE + TILE_SIZE * 0.5) as i32;
-        let pulse = (game.update_ticks as f32 * 0.12).sin().abs();
+        let pulse = (update_ticks as f32 * 0.12).sin().abs();
         let color = match item.kind {
-            crate::game_state::InfrastructureKind::SignalRelay => Color::SKYBLUE,
-            crate::game_state::InfrastructureKind::SurveyDrone => Color::GREEN,
-            crate::game_state::InfrastructureKind::CargoLift => Color::GOLD,
-            crate::game_state::InfrastructureKind::TunnelSupport => Color::ORANGE,
-            crate::game_state::InfrastructureKind::PumpStation => Color::BLUE,
-            crate::game_state::InfrastructureKind::OreProcessor => Color::PURPLE,
+            InfrastructureKind::SignalRelay => Color::SKYBLUE,
+            InfrastructureKind::SurveyDrone => Color::GREEN,
+            InfrastructureKind::CargoLift => Color::GOLD,
+            InfrastructureKind::TunnelSupport => Color::ORANGE,
+            InfrastructureKind::PumpStation => Color::BLUE,
+            InfrastructureKind::OreProcessor => Color::PURPLE,
         };
         draw.draw_circle_lines(x, y, 11.0 + pulse * 3.0, color);
         draw.draw_rectangle(x - 4, y - 10, 8, 20, Color::DARKBLUE);
@@ -236,8 +242,11 @@ fn draw_building(
     }
 }
 
-pub(super) fn draw_particles(draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>, game: &GameState) {
-    if let (Some(x), Some(y)) = (game.lost_cargo_x, game.lost_cargo_y) {
+pub(super) fn draw_particles(
+    draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
+    particles: &RenderParticleSnapshot,
+) {
+    if let Some((x, y)) = particles.lost_cargo {
         draw.draw_rectangle((x - 8.0) as i32, (y - 7.0) as i32, 16, 14, Color::GOLD);
         draw.draw_rectangle_lines((x - 8.0) as i32, (y - 7.0) as i32, 16, 14, Color::BROWN);
         draw.draw_line(
@@ -249,7 +258,7 @@ pub(super) fn draw_particles(draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>, 
         );
     }
 
-    for particle in &game.dust_particles {
+    for particle in &particles.dust {
         let alpha = (particle.life / 0.35).clamp(0.0, 1.0);
         draw.draw_circle_v(
             Vector2::new(particle.x, particle.y),
@@ -257,7 +266,7 @@ pub(super) fn draw_particles(draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>, 
             Color::new(190, 150, 105, (180.0 * alpha) as u8),
         );
     }
-    for boulder in &game.falling_boulders {
+    for boulder in &particles.boulders {
         let wobble = if boulder.warning_seconds > 0.0 {
             (boulder.warning_seconds * 60.0).sin() * 3.0
         } else {
@@ -271,7 +280,7 @@ pub(super) fn draw_particles(draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>, 
         draw.draw_circle_v(Vector2::new(boulder.x + wobble, boulder.y), 8.0, color);
         draw.draw_circle_lines(boulder.x as i32, boulder.y as i32, 8.0, Color::DARKGRAY);
     }
-    for spark in &game.spark_particles {
+    for spark in &particles.sparks {
         let alpha = (spark.life / 0.45).clamp(0.0, 1.0);
         draw.draw_circle_v(
             Vector2::new(spark.x, spark.y),
@@ -281,8 +290,8 @@ pub(super) fn draw_particles(draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>, 
     }
 }
 
-fn drill_visual_offset(game: &GameState) -> (f32, f32) {
-    let Some(drill) = game.active_drill else {
+fn drill_visual_offset(active_drill: Option<DrillState>) -> (f32, f32) {
+    let Some(drill) = active_drill else {
         return (0.0, 0.0);
     };
     let pulse = (drill.progress * std::f32::consts::TAU * 3.0).sin() * 1.8;
@@ -295,9 +304,9 @@ fn drill_visual_offset(game: &GameState) -> (f32, f32) {
 
 pub(super) fn draw_placed_bombs(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    game: &GameState,
+    bombs: &[PlacedBomb],
 ) {
-    for bomb in &game.placed_bombs {
+    for bomb in bombs {
         let x = bomb.x as i32;
         let y = bomb.y as i32;
         draw.draw_circle(x, y, 7.0, Color::BLACK);
@@ -307,30 +316,34 @@ pub(super) fn draw_placed_bombs(
 
 pub(super) fn draw_scanner_marks(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    game: &GameState,
+    terrain: &Terrain,
+    player: &RenderWorldPlayerPresentation,
 ) {
-    if game.player.scanner_level == 0 {
+    if player.scanner_level == 0 {
         return;
     }
-    let center = game.player.tile_position(TILE_SIZE);
-    let radius = 3 + i32::from(game.player.scanner_level) * 2;
+    let center = TilePosition {
+        x: (player.x / TILE_SIZE).floor() as i32,
+        y: (player.y / TILE_SIZE).floor() as i32,
+    };
+    let radius = 3 + i32::from(player.scanner_level) * 2;
     for y in center.y - radius..=center.y + radius {
         for x in center.x - radius..=center.x + radius {
             if (x - center.x).abs() + (y - center.y).abs() > radius {
                 continue;
             }
-            let Some(tile) = game.terrain.tile(TilePosition { x, y }) else {
+            let Some(tile) = terrain.tile(TilePosition { x, y }) else {
                 continue;
             };
             let color = match tile.kind {
                 TileKind::Ore(_) => Color::GOLD,
-                TileKind::Artifact(_) if game.player.scanner_level >= 3 => Color::MAGENTA,
+                TileKind::Artifact(_) if player.scanner_level >= 3 => Color::MAGENTA,
                 TileKind::Gas
                 | TileKind::Lava
                 | TileKind::MagmaVent
                 | TileKind::ExplosivePocket
                 | TileKind::PressurePocket
-                    if game.player.scanner_level >= 2 =>
+                    if player.scanner_level >= 2 =>
                 {
                     Color::RED
                 }
@@ -510,15 +523,16 @@ fn draw_remote_player_bar(
 )]
 pub(super) fn draw_player_at(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    game: &GameState,
-    player_x: f32,
-    player_y: f32,
+    player: &RenderWorldPlayerPresentation,
+    active_drill: Option<DrillState>,
+    _update_ticks: u64,
+    drill_flash_seconds: f32,
 ) {
-    let (offset_x, offset_y) = drill_visual_offset(game);
-    let screen_x = player_x + offset_x;
-    let screen_y = player_y + offset_y;
+    let (offset_x, offset_y) = drill_visual_offset(active_drill);
+    let screen_x = player.x + offset_x;
+    let screen_y = player.y + offset_y;
 
-    let hull_color = if game.player.hull < game.player.max_hull() * 0.3 {
+    let hull_color = if player.hull < player.max_hull * 0.3 {
         Color::new(210, 95, 60, 255)
     } else {
         Color::new(235, 190, 45, 255)
@@ -557,9 +571,7 @@ pub(super) fn draw_player_at(
         Color::DARKGRAY,
     );
 
-    let direction = game
-        .active_drill
-        .map_or(DrillDirection::Down, |drill| drill.direction);
+    let direction = active_drill.map_or(DrillDirection::Down, |drill| drill.direction);
     match direction {
         DrillDirection::Down => draw.draw_triangle(
             Vector2::new(screen_x - 6.0, screen_y + 13.0),
@@ -580,7 +592,7 @@ pub(super) fn draw_player_at(
             Color::ORANGE,
         ),
     }
-    if game.player.velocity_y < -40.0 {
+    if player.velocity_y < -40.0 {
         draw.draw_triangle(
             Vector2::new(screen_x - 8.0, screen_y + 16.0),
             Vector2::new(screen_x + 8.0, screen_y + 16.0),
@@ -588,8 +600,8 @@ pub(super) fn draw_player_at(
             Color::new(255, 95, 20, 220),
         );
     }
-    if game.player.hull < game.player.max_hull() * 0.35 {
-        let smoke_alpha = 90 + ((game.player.hull as i32).rem_euclid(40) as u8);
+    if player.hull < player.max_hull * 0.35 {
+        let smoke_alpha = 90 + ((player.hull as i32).rem_euclid(40) as u8);
         draw.draw_circle(
             (screen_x - 16.0) as i32,
             (screen_y - 18.0) as i32,
@@ -603,11 +615,11 @@ pub(super) fn draw_player_at(
             Color::new(45, 45, 45, smoke_alpha.saturating_sub(25)),
         );
     }
-    if game.player.scanner_level > 0 {
+    if player.scanner_level > 0 {
         draw.draw_circle_lines(
             screen_x as i32,
             (screen_y - 24.0) as i32,
-            8.0 + f32::from(game.player.scanner_level) * 2.0,
+            8.0 + f32::from(player.scanner_level) * 2.0,
             Color::SKYBLUE,
         );
         draw.draw_line(
@@ -618,8 +630,8 @@ pub(super) fn draw_player_at(
             Color::SKYBLUE,
         );
     }
-    if game.player.radiator_level > 1 {
-        for fin in 0..game.player.radiator_level {
+    if player.radiator_level > 1 {
+        for fin in 0..player.radiator_level {
             draw.draw_rectangle(
                 (screen_x + 16.0) as i32,
                 (screen_y - 14.0 + f32::from(fin) * 5.0) as i32,
@@ -629,7 +641,7 @@ pub(super) fn draw_player_at(
             );
         }
     }
-    if game.player.hull_level > 2 {
+    if player.hull_level > 2 {
         draw.draw_rectangle_lines(
             (screen_x - 19.0) as i32,
             (screen_y - 18.0) as i32,
@@ -638,7 +650,7 @@ pub(super) fn draw_player_at(
             Color::GOLD,
         );
     }
-    if game.drill_flash_seconds > 0.0 {
+    if drill_flash_seconds > 0.0 {
         draw.draw_circle_v(
             Vector2::new(screen_x, screen_y + 20.0),
             7.0,

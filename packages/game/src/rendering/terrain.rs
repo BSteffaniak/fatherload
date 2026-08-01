@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use raylib::prelude::*;
 
 use crate::{
-    game_state::{GameState, TILE_SIZE},
-    terrain::{ArtifactKind, MineralKind, TileKind, TilePosition, deep_stratum_at_depth},
+    game_state::TILE_SIZE,
+    terrain::{ArtifactKind, MineralKind, Terrain, TileKind, TilePosition, deep_stratum_at_depth},
 };
 
 pub(super) const TERRAIN_CHUNK_SIZE_TILES: i32 = 32;
@@ -42,14 +42,14 @@ struct TerrainChunk {
 }
 
 impl TerrainRenderer {
-    pub(super) fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, game: &GameState) -> Self {
+    pub(super) fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, terrain: &Terrain) -> Self {
         let mut renderer = Self {
             chunks: BTreeMap::new(),
             dirty_chunks: BTreeSet::new(),
-            terrain_width: game.terrain.width(),
-            terrain_height: game.terrain.height(),
+            terrain_width: terrain.width(),
+            terrain_height: terrain.height(),
         };
-        renderer.recreate_chunks(raylib, thread, game);
+        renderer.recreate_chunks(raylib, thread, terrain);
         renderer
     }
 
@@ -87,18 +87,17 @@ impl TerrainRenderer {
         &mut self,
         raylib: &mut RaylibHandle,
         thread: &RaylibThread,
-        game: &GameState,
+        terrain: &Terrain,
+        explored: &BTreeSet<TilePosition>,
     ) {
-        if self.terrain_width != game.terrain.width()
-            || self.terrain_height != game.terrain.height()
-        {
-            self.recreate_chunks(raylib, thread, game);
+        if self.terrain_width != terrain.width() || self.terrain_height != terrain.height() {
+            self.recreate_chunks(raylib, thread, terrain);
         }
 
         let dirty_chunks = std::mem::take(&mut self.dirty_chunks);
         for position in dirty_chunks {
             if let Some(chunk) = self.chunks.get_mut(&position) {
-                chunk.rebuild(raylib, thread, game);
+                chunk.rebuild(raylib, thread, terrain, explored);
             }
         }
     }
@@ -115,19 +114,19 @@ impl TerrainRenderer {
         &mut self,
         raylib: &mut RaylibHandle,
         thread: &RaylibThread,
-        game: &GameState,
+        terrain: &Terrain,
     ) {
         self.chunks.clear();
         self.dirty_chunks.clear();
-        self.terrain_width = game.terrain.width();
-        self.terrain_height = game.terrain.height();
+        self.terrain_width = terrain.width();
+        self.terrain_height = terrain.height();
 
         let chunk_columns = chunk_count(self.terrain_width);
         let chunk_rows = chunk_count(self.terrain_height);
         for y in 0..chunk_rows {
             for x in 0..chunk_columns {
                 let position = ChunkPosition { x, y };
-                let chunk = TerrainChunk::new(raylib, thread, position, game);
+                let chunk = TerrainChunk::new(raylib, thread, position, terrain);
                 self.chunks.insert(position, chunk);
                 self.dirty_chunks.insert(position);
             }
@@ -140,12 +139,12 @@ impl TerrainChunk {
         raylib: &mut RaylibHandle,
         thread: &RaylibThread,
         position: ChunkPosition,
-        game: &GameState,
+        terrain: &Terrain,
     ) -> Self {
         let tile_min_x = position.x * TERRAIN_CHUNK_SIZE_TILES;
         let tile_min_y = position.y * TERRAIN_CHUNK_SIZE_TILES;
-        let tile_max_x = (tile_min_x + TERRAIN_CHUNK_SIZE_TILES).min(game.terrain.width());
-        let tile_max_y = (tile_min_y + TERRAIN_CHUNK_SIZE_TILES).min(game.terrain.height());
+        let tile_max_x = (tile_min_x + TERRAIN_CHUNK_SIZE_TILES).min(terrain.width());
+        let tile_max_y = (tile_min_y + TERRAIN_CHUNK_SIZE_TILES).min(terrain.height());
         let pixel_width = (tile_max_x - tile_min_x) * TILE_SIZE_PIXELS;
         let pixel_height = (tile_max_y - tile_min_y) * TILE_SIZE_PIXELS;
         let texture = raylib
@@ -166,7 +165,13 @@ impl TerrainChunk {
         }
     }
 
-    fn rebuild(&mut self, raylib: &mut RaylibHandle, thread: &RaylibThread, game: &GameState) {
+    fn rebuild(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        terrain: &Terrain,
+        explored: &BTreeSet<TilePosition>,
+    ) {
         let mut texture_draw = raylib.begin_texture_mode(thread, &mut self.texture);
         texture_draw.clear_background(Color::BLANK);
         for tile_y in self.tile_min_y..self.tile_max_y {
@@ -175,12 +180,12 @@ impl TerrainChunk {
                     x: tile_x,
                     y: tile_y,
                 };
-                let Some(tile) = game.terrain.tile(position) else {
+                let Some(tile) = terrain.tile(position) else {
                     continue;
                 };
 
-                let explored = game.is_explored(position);
-                if (explored || tile_y <= SKY_CLEAR_MAX_TILE_Y) && tile.kind == TileKind::Air {
+                let is_explored = explored.contains(&position);
+                if (is_explored || tile_y <= SKY_CLEAR_MAX_TILE_Y) && tile.kind == TileKind::Air {
                     continue;
                 }
 
@@ -194,9 +199,9 @@ impl TerrainChunk {
                     layer_tile_color(tile.kind, tile_y),
                 );
 
-                if !explored {
+                if !is_explored {
                     let darkness_alpha = unexplored_depth_darkness_alpha(tile_y)
-                        .max(unexplored_distance_darkness_alpha(game, position));
+                        .max(unexplored_distance_darkness_alpha(explored, position));
                     if darkness_alpha > 0 {
                         texture_draw.draw_rectangle(
                             local_x,
@@ -416,7 +421,10 @@ const fn unexplored_depth_darkness_alpha(tile_y: i32) -> u8 {
     (UNEXPLORED_MIN_DARK_ALPHA + (alpha_range * distance) / gradient_span) as u8
 }
 
-fn unexplored_distance_darkness_alpha(game: &GameState, position: TilePosition) -> u8 {
+fn unexplored_distance_darkness_alpha(
+    explored: &BTreeSet<TilePosition>,
+    position: TilePosition,
+) -> u8 {
     if position.y <= SKY_CLEAR_MAX_TILE_Y {
         return 0;
     }
@@ -432,7 +440,7 @@ fn unexplored_distance_darkness_alpha(game: &GameState, position: TilePosition) 
             if distance >= closest_explored_distance {
                 continue;
             }
-            if game.is_explored(TilePosition { x, y }) {
+            if explored.contains(&TilePosition { x, y }) {
                 closest_explored_distance = distance;
             }
         }
@@ -538,19 +546,16 @@ mod tests {
 
     #[test]
     fn unexplored_distance_darkness_reaches_full_darkness_far_from_exploration() {
-        let game = GameState::new();
-        let alpha = unexplored_distance_darkness_alpha(&game, TilePosition { x: 30, y: 20 });
+        let explored = BTreeSet::new();
+        let alpha = unexplored_distance_darkness_alpha(&explored, TilePosition { x: 30, y: 20 });
         assert_eq!(alpha, 255);
     }
 
     #[test]
     fn unexplored_distance_darkness_is_low_near_exploration() {
-        let mut game = GameState::new();
-        let explored = TilePosition { x: 10, y: 10 };
-        let index = (explored.y * game.terrain.width() + explored.x) as usize;
-        game.explored_tiles[index] = true;
+        let explored = BTreeSet::from([TilePosition { x: 10, y: 10 }]);
 
-        let alpha = unexplored_distance_darkness_alpha(&game, TilePosition { x: 11, y: 10 });
+        let alpha = unexplored_distance_darkness_alpha(&explored, TilePosition { x: 11, y: 10 });
         assert_eq!(alpha, 0);
     }
 }

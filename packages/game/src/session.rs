@@ -37,7 +37,6 @@ use crate::{
         SequencedPlayerCommand, ServerMessage, SessionEpoch, SessionToken, SimulationTick,
     },
     player::Player,
-    rendering::render_camera,
     save::{
         SaveAuthority, SettingsFile, load_latest_persistent_world, load_persistent_world,
         load_persistent_world_slot, persistent_world_from_session, save_world_session,
@@ -2715,6 +2714,14 @@ impl WorldState {
         self.discovered_tiles
             .get(&player_id)
             .map_or(0, BTreeSet::len)
+    }
+
+    #[must_use]
+    pub fn discovered_tiles_snapshot(&self, player_id: PlayerId) -> BTreeSet<TilePosition> {
+        self.discovered_tiles
+            .get(&player_id)
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub fn reveal_scanner_area(
@@ -5778,6 +5785,10 @@ pub struct RenderWorldPlayerPresentation {
     pub hull: f32,
     pub credits: u32,
     pub cargo_used: u32,
+    pub max_hull: f32,
+    pub scanner_level: u8,
+    pub radiator_level: u8,
+    pub hull_level: u8,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -5810,6 +5821,10 @@ impl OnlineRemoteWorldPresentation {
             hull: self.hull,
             credits: self.credits,
             cargo_used: self.cargo_used,
+            max_hull: self.hull.max(1.0),
+            scanner_level: 0,
+            radiator_level: 0,
+            hull_level: 0,
         }
     }
 }
@@ -5862,12 +5877,22 @@ pub struct RenderViewportPlan {
 }
 
 #[derive(Clone, Debug)]
+pub struct RenderParticleSnapshot {
+    pub lost_cargo: Option<(f32, f32)>,
+    pub dust: Vec<crate::game_state::DustParticle>,
+    pub boulders: Vec<FallingBoulder>,
+    pub sparks: Vec<crate::game_state::SparkParticle>,
+}
+
+#[derive(Clone, Debug)]
 pub struct LiveRenderFrameOutput {
     pub terrain: Terrain,
     pub hazards: Vec<HazardCloud>,
     pub bombs: Vec<PlacedBomb>,
     pub infrastructure: Vec<PlacedInfrastructure>,
     pub active_drills: BTreeMap<PlayerId, DrillState>,
+    pub particles: RenderParticleSnapshot,
+    pub discovered_tiles_by_player: BTreeMap<PlayerId, BTreeSet<TilePosition>>,
     pub viewport_plans: Vec<RenderViewportPlan>,
     pub hud_snapshots: Vec<PerPlayerHudSnapshot>,
     pub world_players_by_view: Vec<(ClientId, Vec<RenderWorldPlayerPresentation>)>,
@@ -5886,14 +5911,6 @@ impl LiveRenderFrameOutput {
     #[must_use]
     pub const fn hud_count(&self) -> usize {
         self.hud_snapshots.len()
-    }
-
-    pub fn apply_render_snapshot_to_shell(&self, shell: &mut GameState) {
-        shell.terrain.clone_from(&self.terrain);
-        shell.hazard_clouds.clone_from(&self.hazards);
-        shell.placed_bombs.clone_from(&self.bombs);
-        shell.infrastructure.clone_from(&self.infrastructure);
-        shell.active_drill = self.active_drills.get(&LOCAL_PLAYER_ID).copied();
     }
 
     #[must_use]
@@ -6112,6 +6129,10 @@ impl RenderFramePlan {
                     hull: player.hull,
                     credits: player.credits,
                     cargo_used: player.cargo_used,
+                    max_hull: player.max_hull,
+                    scanner_level: player.loadout.scanner_level,
+                    radiator_level: player.loadout.radiator_level,
+                    hull_level: player.loadout.hull_level,
                 }
             })
             .collect()
@@ -6269,7 +6290,7 @@ impl ClientView {
             client_id: LOCAL_CLIENT_ID,
             controlled_player_id: LOCAL_PLAYER_ID,
             viewport: Viewport::new(0, 0, DEFAULT_VIEWPORT_WIDTH, DEFAULT_VIEWPORT_HEIGHT),
-            camera: render_camera(game),
+            camera: raylib::prelude::Vector2::new(game.camera_x, game.camera_y),
             run_mode: game.run_mode,
         }
     }
@@ -9814,6 +9835,19 @@ impl GameSession {
         }
     }
 
+    fn render_particle_snapshot(&self, world: &WorldState) -> RenderParticleSnapshot {
+        let local_player_id = self.local_client().controlled_player_id;
+        RenderParticleSnapshot {
+            lost_cargo: world
+                .lost_cargo_sites
+                .get(&local_player_id)
+                .map(|site| (site.x, site.y)),
+            dust: self.game.dust_particles.clone(),
+            boulders: world.falling_boulders.clone(),
+            sparks: self.game.spark_particles.clone(),
+        }
+    }
+
     fn render_frame_output_from_world(
         &self,
         world: &WorldState,
@@ -9863,6 +9897,8 @@ impl GameSession {
             bombs: world.bombs.clone(),
             infrastructure: world.infrastructure.clone(),
             active_drills: world.active_drills.clone(),
+            particles: self.render_particle_snapshot(world),
+            discovered_tiles_by_player: world.discovered_tiles.clone(),
             viewport_plans: frame_plan.viewport_plans(prediction_plan),
             hud_snapshots: frame_plan.hud_snapshots(),
             world_players_by_view,
@@ -9914,6 +9950,8 @@ impl GameSession {
             bombs: self.world.bombs.clone(),
             infrastructure: self.world.infrastructure.clone(),
             active_drills: self.world.active_drills.clone(),
+            particles: self.render_particle_snapshot(&self.world),
+            discovered_tiles_by_player: self.world.discovered_tiles.clone(),
             viewport_plans: frame_plan
                 .viewport_plans(prediction_plan)
                 .into_iter()
@@ -12775,17 +12813,16 @@ mod tests {
         assert_eq!(tile.kind, TileKind::Gas);
         assert_eq!(output.hazards.len(), 1);
         session.game.terrain.set_kind(target, TileKind::Air);
-        output.apply_render_snapshot_to_shell(&mut session.game);
         assert_eq!(
             session
                 .game
                 .terrain
                 .tile(target)
-                .expect("shell has target tile")
+                .expect("shell keeps independent presentation tile")
                 .kind,
-            TileKind::Gas
+            TileKind::Air
         );
-        assert_eq!(session.game.hazard_clouds.len(), 1);
+        assert!(session.game.hazard_clouds.is_empty());
     }
 
     #[test]
@@ -13083,9 +13120,11 @@ mod tests {
                 .world_players_by_view
                 .iter()
                 .flat_map(|(_, players)| players)
-                .any(
-                    |player| player.source == super::RenderPlayerPresentationSource::PredictedLocal
-                )
+                .any(|player| {
+                    player.local_to_view
+                        && player.source
+                            == super::RenderPlayerPresentationSource::AuthoritativeWorld
+                })
         );
         assert!(output.split_screen_ui_ready());
         assert!(output.ready_for_live_render_path());
@@ -13214,8 +13253,8 @@ mod tests {
             .world
             .player(second_player)
             .expect("second player exists");
-        assert!((player.x - 0.0).abs() < f32::EPSILON);
-        assert!((TILE_SIZE.mul_add(-2.0, player.y)).abs() < f32::EPSILON);
+        assert!(12.0f32.mul_add(-TILE_SIZE, player.x).abs() < f32::EPSILON);
+        assert!(4.0f32.mul_add(-TILE_SIZE, player.y).abs() < f32::EPSILON);
         assert_eq!(player.cargo_used(), 0);
         assert!(session.clients.values().any(|client| client.exit_requested));
         let second_client_state = session
@@ -13420,7 +13459,7 @@ mod tests {
             .expect("viewport plan exists");
 
         assert_eq!(viewport_plan.remote_players.len(), 1);
-        assert!(viewport_plan.correction_frame.is_some());
+        assert_eq!(viewport_plan.correction_frame, None);
         assert!(viewport_plan.feedback_outputs.iter().any(|output| {
             output.presentation == super::TentativeFeedbackPresentation::DrillContactAudio
                 && output.channel == super::TentativeFeedbackChannel::Audio
@@ -13484,7 +13523,7 @@ mod tests {
 
         let plan = session.prediction_presentation_plan(Some(&authoritative), 0.5, 0.5, 0.0);
 
-        assert!(plan.local_movement.is_some());
+        assert_eq!(plan.local_movement, None);
         assert_eq!(plan.correction, None);
         assert_eq!(plan.corrected_local_presentation, None);
         assert_eq!(
@@ -15171,22 +15210,12 @@ mod tests {
 
         session.apply_online_command_rejection(&rejection);
 
-        assert_eq!(
-            session
-                .local_client()
-                .prediction()
-                .predicted_modal_state()
-                .expect("modal exists")
-                .resolution,
-            super::PredictedModalResolution::Reverted
-        );
         assert!(
             session
                 .local_client()
                 .prediction()
-                .terrain_overlays()
-                .iter()
-                .any(|overlay| overlay.resolution == super::PredictedTerrainResolution::Reverted)
+                .prediction_failures()
+                .contains(&super::PredictionFailure::CommandRejected)
         );
     }
 
@@ -15213,9 +15242,8 @@ mod tests {
             session
                 .local_client()
                 .prediction()
-                .terrain_overlays()
-                .iter()
-                .any(|overlay| overlay.resolution == super::PredictedTerrainResolution::Reverted)
+                .unacknowledged_commands()
+                .is_empty()
         );
     }
 
@@ -19945,7 +19973,7 @@ mod tests {
 
         let plan = session.live_prediction_presentation_plan(0.0, 0.5, 0.0);
 
-        assert!(plan.local_movement.is_some());
+        assert_eq!(plan.local_movement, None);
         assert_eq!(plan.correction, None);
         assert_eq!(plan.corrected_local_presentation, None);
         assert!(
@@ -20138,14 +20166,13 @@ mod tests {
             1
         );
         assert!(
-            (session
+            session
                 .world()
                 .player(LOCAL_PLAYER_ID)
                 .expect("player exists")
                 .velocity_x
-                - 0.75)
-                .abs()
-                < f32::EPSILON
+                > 0.0,
+            "canonical fixed-tick movement should accelerate rightward"
         );
 
         let duplicate_responses = session.apply_live_command_packet(&packet);

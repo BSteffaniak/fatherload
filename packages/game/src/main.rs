@@ -12,6 +12,7 @@ mod input_mapping;
 mod lan_discovery;
 pub mod multiplayer;
 mod online_cli;
+mod online_session;
 mod player;
 mod rendering;
 mod save;
