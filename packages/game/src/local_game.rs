@@ -1909,6 +1909,53 @@ mod tests {
         assert_eq!(game.shell.run_mode, RunMode::Playing);
     }
 
+    #[test]
+    fn an_online_host_with_local_seats_never_pauses_for_its_interiors() {
+        let mut world = split_world(&[Some(SurfaceZone::Depot), Some(SurfaceZone::Shop)]);
+        let second = PlayerId::new(2);
+        world.player_mut(second).expect("rig").credits = 10_000;
+        let mut game = playing(world, 2, "online-split");
+        game.set_host_bind("127.0.0.1:0".parse().expect("addr"));
+        game.handle_request(
+            ShellRequest::OpenOnline,
+            &mut Vec::new(),
+            &mut FrameReport::default(),
+        );
+        assert_eq!(game.runtime.online_role(), Some(OnlineRole::Host));
+        assert_eq!(
+            game.seats().len(),
+            2,
+            "opening online keeps the local seats"
+        );
+        idle(&mut game, 5);
+
+        // Both local players walk in: offline that would rest the world, online it never does.
+        let _report = step_seats(&mut game, &[interact(), interact()]);
+        idle(&mut game, 1);
+        assert!(game.shell.seat(0).inside() && game.shell.seat(1).inside());
+        assert!(!game.shell.world_should_tick());
+        for _ in 0..10 {
+            assert!(step(&mut game, PlayerInput::default()).ticks_run > 0);
+        }
+
+        // Player 2 still buys as themselves.
+        walk_seats_to_counters(&mut game, &[1]);
+        assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Shop));
+        let before = player(&game, second);
+        press_seat(&mut game, 1, confirm_input());
+        press_seat(&mut game, 1, confirm_input());
+        idle(&mut game, 3);
+        assert_eq!(
+            player(&game, second).drill_strength,
+            before.drill_strength + 1
+        );
+        assert!(game.shell.seat(1).message.starts_with("Bought"));
+        end_runtime(std::mem::replace(
+            &mut game.runtime,
+            Runtime::local(new_world(), 1),
+        ));
+    }
+
     /// Two whole apps (shell + runtime + net bridge) driven frame by frame in real time.
     struct Pair {
         host: LocalGame,
