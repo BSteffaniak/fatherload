@@ -276,6 +276,18 @@ pub struct TilePosition {
     pub y: i32,
 }
 
+/// The in-bounds tile positions of `chunk` in a `width` x `height` terrain, row-major.
+fn chunk_positions(
+    width: i32,
+    height: i32,
+    chunk: ChunkPosition,
+) -> impl Iterator<Item = TilePosition> {
+    let origin = chunk.origin();
+    let xs = origin.x.max(0)..(origin.x + CHUNK_SIZE_TILES).min(width);
+    (origin.y.max(0)..(origin.y + CHUNK_SIZE_TILES).min(height))
+        .flat_map(move |y| xs.clone().map(move |x| TilePosition { x, y }))
+}
+
 /// Width and height, in tiles, of one terrain chunk (the unit of discovery storage and of
 /// terrain relevance refreshes).
 pub const CHUNK_SIZE_TILES: i32 = 16;
@@ -471,6 +483,22 @@ impl Terrain {
     /// Applies one replicated tile write.
     pub fn apply_tile_change(&mut self, change: &TileChange) -> bool {
         self.set_tile_from_network(change.position, change.tile.kind, change.tile.durability)
+    }
+
+    /// The in-bounds tiles of `chunk`, row-major (a terrain relevance refresh).
+    #[must_use]
+    pub fn chunk_tiles(&self, chunk: ChunkPosition) -> Vec<Tile> {
+        chunk_positions(self.width, self.height, chunk)
+            .filter_map(|position| self.tile(position))
+            .collect()
+    }
+
+    /// Overwrites `chunk` with tiles from [`Self::chunk_tiles`] of a terrain with the same
+    /// dimensions. Extra or missing tiles are ignored.
+    pub fn set_chunk_tiles(&mut self, chunk: ChunkPosition, tiles: &[Tile]) {
+        for (position, tile) in chunk_positions(self.width, self.height, chunk).zip(tiles) {
+            let _ = self.set_tile_from_network(position, tile.kind, tile.durability);
+        }
     }
 
     #[must_use]

@@ -13,7 +13,7 @@
 //! | Kind | Trait surface | Netcode behaviour |
 //! |---|---|---|
 //! | Per-tick | [`NetSimulation::player_state`], [`NetSimulation::entities`] | Full copy in every frame, relevance-filtered (§15) |
-//! | Op log | [`TickOutput::ops`], [`NetSimulation::apply_op`] | Exact ops since the client's previous frame, in order |
+//! | Op log | [`TickOutput::ops`], [`NetSimulation::apply_op`] | Exact ops since the client's previous frame, in order; ops in chunks outside the client's relevance are skipped and the chunk is refreshed whole ([`NetSimulation::chunk_snapshot`]) once it is relevant again |
 //! | On-change | [`NetSimulation::section_keys`] / [`NetSimulation::section_hash`] | Whole section resent when its hash changes (per client baseline) |
 //!
 //! The player roster (which players exist) is replicated by netcode itself
@@ -195,6 +195,20 @@ impl Relevance {
         self.radius.is_none()
     }
 
+    /// Whether any point of the axis-aligned box `[left, right] x [top,
+    /// bottom]` is inside the interest radius.
+    #[must_use]
+    pub fn touches_box(&self, left: f32, top: f32, right: f32, bottom: f32) -> bool {
+        match (self.radius, self.center) {
+            (None, _) | (Some(_), None) => true,
+            (Some(radius), Some((cx, cy))) => {
+                let dx = (left - cx).max(cx - right).max(0.0);
+                let dy = (top - cy).max(cy - bottom).max(0.0);
+                dx.hypot(dy) <= radius
+            }
+        }
+    }
+
     /// Whether a world position is inside the interest radius.
     #[must_use]
     pub fn contains(&self, x: f32, y: f32) -> bool {
@@ -229,6 +243,11 @@ pub trait NetSimulation: Clone + Debug {
     type Entities: Clone + Debug + Serialize + DeserializeOwned;
     /// One op-log change (normally a terrain tile change).
     type Op: Clone + Debug + Serialize + DeserializeOwned;
+    /// A spatial block of op-log state (a terrain chunk): the unit of op
+    /// relevance filtering and of on-approach refreshes.
+    type Chunk: Clone + Debug + Ord + Serialize + DeserializeOwned;
+    /// The full current contents of one [`NetSimulation::Chunk`].
+    type ChunkSnapshot: Clone + Debug + Serialize + DeserializeOwned;
     /// Key of an on-change section (e.g. `Market`, `Wallet(PlayerId)`).
     type SectionKey: Clone + Debug + Ord + Serialize + DeserializeOwned;
     /// Payload of an on-change section.
@@ -287,6 +306,15 @@ pub trait NetSimulation: Clone + Debug {
     }
     /// Applies one op-log entry.
     fn apply_op(&mut self, op: &Self::Op);
+    /// The chunk an op writes to, if its relevance is spatial. Ops without a
+    /// chunk are never filtered by distance.
+    fn op_chunk(&self, op: &Self::Op) -> Option<Self::Chunk>;
+    /// Whether any part of `chunk` lies inside `relevance`.
+    fn chunk_relevant(&self, chunk: &Self::Chunk, relevance: &Relevance) -> bool;
+    /// The current contents of `chunk`, if it exists.
+    fn chunk_snapshot(&self, chunk: &Self::Chunk) -> Option<Self::ChunkSnapshot>;
+    /// Overwrites `chunk` with a received snapshot.
+    fn apply_chunk_snapshot(&mut self, chunk: &Self::Chunk, snapshot: Self::ChunkSnapshot);
 
     /// Keys of all on-change sections that currently exist.
     fn section_keys(&self) -> Vec<Self::SectionKey>;

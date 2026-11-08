@@ -5,7 +5,7 @@
 //! | Kind | Contents | API |
 //! |---|---|---|
 //! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); live entities: gas clouds, falling boulders, bombs ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
-//! | Op log | terrain tiles (shared); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
+//! | Op log | terrain tiles (shared; a client outside a chunk's relevance skips its ops and gets [`WorldState::terrain_chunk`] when it approaches); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
 //! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants | [`WorldState::section`], [`WorldState::apply_section`] |
 //!
 //! Private state (a player's [`PlayerLoadout`] and discovery) is replicated only to its owner;
@@ -34,7 +34,7 @@ use crate::{
     rig::{DrillState, RigPartKind},
     rng::DeterministicRngState,
     service::PlayerServiceTransaction,
-    terrain::{MineralKind, TileChange, TilePosition},
+    terrain::{ChunkPosition, MineralKind, Tile, TileChange, TilePosition},
 };
 
 use super::{
@@ -332,6 +332,17 @@ impl WorldState {
     /// Applies one op-log entry.
     pub fn apply_tile_change(&mut self, change: &TileChange) -> bool {
         self.terrain.apply_tile_change(change)
+    }
+
+    /// Every tile of one terrain chunk (refreshing a client that skipped its op log).
+    #[must_use]
+    pub fn terrain_chunk(&self, chunk: ChunkPosition) -> Vec<Tile> {
+        self.terrain.chunk_tiles(chunk)
+    }
+
+    /// Overwrites one terrain chunk with a [`Self::terrain_chunk`] copy.
+    pub fn apply_terrain_chunk(&mut self, chunk: ChunkPosition, tiles: &[Tile]) {
+        self.terrain.set_chunk_tiles(chunk, tiles);
     }
 
     /// Keys of every on-change section that currently exists.

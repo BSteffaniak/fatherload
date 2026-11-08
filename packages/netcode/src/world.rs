@@ -21,6 +21,7 @@ use drillgame_simulation::{
     ControlState, Discovery, GameplayEvent, GameplayEventKind, InputSequence, LiveEntities,
     PlayerCommand, PlayerScopedCommandOutcome, PlayerTickState, SectionKey, SectionPayload,
     SimulationTick, TILE_SIZE, TickAction, TileChange, WorldState, input,
+    terrain::{CHUNK_SIZE_TILES, ChunkPosition, Tile},
 };
 use serde::{Deserialize, Serialize};
 
@@ -118,6 +119,8 @@ impl NetSimulation for WorldState {
     type PlayerState = PlayerTickState;
     type Entities = LiveEntities;
     type Op = WorldOp;
+    type Chunk = ChunkPosition;
+    type ChunkSnapshot = Vec<Tile>;
     type SectionKey = SectionKey;
     type Section = SectionPayload;
     type Keyframe = Self;
@@ -294,6 +297,28 @@ impl NetSimulation for WorldState {
 
     fn apply_entities(&mut self, entities: LiveEntities) {
         self.apply_live_entities(entities);
+    }
+
+    fn op_chunk(&self, op: &WorldOp) -> Option<ChunkPosition> {
+        match op {
+            WorldOp::Tile(change) => Some(ChunkPosition::of(change.position)),
+            WorldOp::Discovery(_) => None,
+        }
+    }
+
+    fn chunk_relevant(&self, chunk: &ChunkPosition, relevance: &Relevance) -> bool {
+        let origin = chunk.origin();
+        #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
+        let (left, top, size) = (origin.x as f32, origin.y as f32, CHUNK_SIZE_TILES as f32);
+        relevance.touches_box(left, top, left + size, top + size)
+    }
+
+    fn chunk_snapshot(&self, chunk: &ChunkPosition) -> Option<Vec<Tile>> {
+        Some(self.terrain_chunk(*chunk))
+    }
+
+    fn apply_chunk_snapshot(&mut self, chunk: &ChunkPosition, snapshot: Vec<Tile>) {
+        self.apply_terrain_chunk(*chunk, &snapshot);
     }
 
     fn apply_op(&mut self, op: &WorldOp) {

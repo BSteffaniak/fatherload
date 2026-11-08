@@ -188,6 +188,9 @@ struct RemoteClient<S: NetSimulation> {
     section_hashes: BTreeMap<S::SectionKey, u64>,
     roster_sent: Vec<PlayerId>,
     pending_ops: Vec<(Tick, S::Op)>,
+    /// Chunks whose ops were skipped while out of relevance (refreshed whole
+    /// once relevant again).
+    stale_chunks: BTreeSet<S::Chunk>,
     pending_events: Vec<NetEvent<S::Event>>,
     stats: HostClientStats,
 }
@@ -210,6 +213,7 @@ impl<S: NetSimulation> RemoteClient<S> {
             section_hashes: BTreeMap::new(),
             roster_sent: Vec::new(),
             pending_ops: Vec::new(),
+            stale_chunks: BTreeSet::new(),
             pending_events: Vec::new(),
             stats: HostClientStats {
                 input_datagrams: 0,
@@ -237,6 +241,7 @@ impl<S: NetSimulation> RemoteClient<S> {
             .collect();
         self.roster_sent = world.player_ids();
         self.pending_ops.clear();
+        self.stale_chunks.clear();
         self.frame_acc = 0;
         self.far_acc = 0;
         self.far_due = true;
@@ -1237,10 +1242,7 @@ fn build_frame<S: NetSimulation>(
         Some(roster)
     };
 
-    let ops = std::mem::take(&mut remote.pending_ops)
-        .into_iter()
-        .filter(|(_, op)| world.op_relevant(op, &relevance))
-        .collect();
+    let (ops, chunk_refreshes) = relevant_ops(world, &relevance, remote);
     let events = std::mem::take(&mut remote.pending_events)
         .into_iter()
         .filter(|event| {
@@ -1267,11 +1269,53 @@ fn build_frame<S: NetSimulation>(
         far_players,
         entities: world.entities(&relevance),
         ops,
+        chunk_refreshes,
         sections,
         removed_sections,
         events,
         debug_hash: None,
     }
+}
+
+/// Takes a client's pending ops: drops ops it may not see, skips ops in
+/// chunks outside its relevance (marking those chunks stale) and refreshes
+/// stale chunks that are relevant again.
+#[allow(clippy::type_complexity)]
+fn relevant_ops<S: NetSimulation>(
+    world: &S,
+    relevance: &Relevance,
+    remote: &mut RemoteClient<S>,
+) -> (Vec<(Tick, S::Op)>, Vec<(S::Chunk, S::ChunkSnapshot)>) {
+    let mut ops = Vec::new();
+    for (tick, op) in std::mem::take(&mut remote.pending_ops) {
+        if !world.op_relevant(&op, relevance) {
+            continue;
+        }
+        if !relevance.is_infinite()
+            && let Some(chunk) = world.op_chunk(&op)
+            && !world.chunk_relevant(&chunk, relevance)
+        {
+            remote.stale_chunks.insert(chunk);
+            continue;
+        }
+        ops.push((tick, op));
+    }
+    let mut refreshes = Vec::new();
+    if !remote.stale_chunks.is_empty() {
+        let due: Vec<S::Chunk> = remote
+            .stale_chunks
+            .iter()
+            .filter(|chunk| relevance.is_infinite() || world.chunk_relevant(chunk, relevance))
+            .cloned()
+            .collect();
+        for chunk in due {
+            remote.stale_chunks.remove(&chunk);
+            if let Some(snapshot) = world.chunk_snapshot(&chunk) {
+                refreshes.push((chunk, snapshot));
+            }
+        }
+    }
+    (ops, refreshes)
 }
 
 fn assert_world_rate<S: NetSimulation>(world: &S, params: SessionParams) {

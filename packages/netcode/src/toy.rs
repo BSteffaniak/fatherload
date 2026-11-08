@@ -30,6 +30,8 @@ pub const TILE_DIRT: u8 = 1;
 /// Undiggable bedrock.
 pub const TILE_BEDROCK: u8 = 2;
 const SURFACE_ROWS: i32 = 4;
+/// Width and height, in tiles, of a terrain relevance chunk.
+pub const TOY_CHUNK_TILES: i32 = 8;
 
 /// Event kind discriminants.
 pub mod event_kind {
@@ -530,6 +532,8 @@ impl NetSimulation for ToySim {
     type PlayerState = ToyPlayer;
     type Entities = ToyEntities;
     type Op = ToyTileOp;
+    type Chunk = (i32, i32);
+    type ChunkSnapshot = Vec<u8>;
     type SectionKey = ToySectionKey;
     type Section = ToySection;
     type Keyframe = Self;
@@ -633,6 +637,42 @@ impl NetSimulation for ToySim {
 
     fn apply_op(&mut self, op: &ToyTileOp) {
         self.set_tile(op.x, op.y, op.tile);
+    }
+
+    fn op_chunk(&self, op: &ToyTileOp) -> Option<(i32, i32)> {
+        Some((
+            op.x.div_euclid(TOY_CHUNK_TILES),
+            op.y.div_euclid(TOY_CHUNK_TILES),
+        ))
+    }
+
+    fn chunk_relevant(&self, chunk: &(i32, i32), relevance: &Relevance) -> bool {
+        #[allow(clippy::cast_precision_loss)]
+        let (left, top, size) = (
+            (chunk.0 * TOY_CHUNK_TILES) as f32,
+            (chunk.1 * TOY_CHUNK_TILES) as f32,
+            TOY_CHUNK_TILES as f32,
+        );
+        relevance.touches_box(left, top, left + size, top + size)
+    }
+
+    fn chunk_snapshot(&self, chunk: &(i32, i32)) -> Option<Vec<u8>> {
+        let (left, top) = (chunk.0 * TOY_CHUNK_TILES, chunk.1 * TOY_CHUNK_TILES);
+        Some(
+            (top..top + TOY_CHUNK_TILES)
+                .flat_map(|y| (left..left + TOY_CHUNK_TILES).map(move |x| (x, y)))
+                .map(|(x, y)| self.tile(x, y))
+                .collect(),
+        )
+    }
+
+    fn apply_chunk_snapshot(&mut self, chunk: &(i32, i32), snapshot: Vec<u8>) {
+        let (left, top) = (chunk.0 * TOY_CHUNK_TILES, chunk.1 * TOY_CHUNK_TILES);
+        let positions = (top..top + TOY_CHUNK_TILES)
+            .flat_map(|y| (left..left + TOY_CHUNK_TILES).map(move |x| (x, y)));
+        for ((x, y), tile) in positions.zip(snapshot) {
+            self.set_tile(x, y, tile);
+        }
     }
 
     fn section_keys(&self) -> Vec<ToySectionKey> {

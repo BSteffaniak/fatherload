@@ -492,6 +492,7 @@ impl<S: NetSimulation> ClientSession<S> {
             far_players,
             entities,
             ops,
+            chunk_refreshes,
             sections,
             removed_sections,
             events,
@@ -507,6 +508,7 @@ impl<S: NetSimulation> ClientSession<S> {
             players,
             entities,
             &ops,
+            chunk_refreshes,
             sections,
             &removed_sections,
         );
@@ -894,6 +896,7 @@ fn apply_replication<S: NetSimulation>(
     players: Vec<(PlayerId, S::PlayerState)>,
     entities: S::Entities,
     ops: &[(Tick, S::Op)],
+    chunk_refreshes: Vec<(S::Chunk, S::ChunkSnapshot)>,
     sections: Vec<(S::SectionKey, S::Section)>,
     removed_sections: &[S::SectionKey],
 ) -> Vec<PlayerId> {
@@ -916,6 +919,9 @@ fn apply_replication<S: NetSimulation>(
     authority.apply_entities(entities);
     for (_, op) in ops {
         authority.apply_op(op);
+    }
+    for (chunk, snapshot) in chunk_refreshes {
+        authority.apply_chunk_snapshot(&chunk, snapshot);
     }
     for (key, section) in sections {
         authority.apply_section(&key, section);
