@@ -7,7 +7,6 @@ use crate::ids::{
     ActionId, ClientId, InputSeq, PlayerId, ReconnectToken, SeatId, SessionEpoch, Tick,
 };
 use crate::ledger::ActionLedger;
-use crate::link::DetRng;
 use crate::params::{NetTuning, SessionParams};
 use crate::protocol::{
     self, ClientMessage, CodecError, EndReason, InputFrame, LobbyEntry, NetEvent, PROTOCOL_VERSION,
@@ -265,7 +264,7 @@ pub struct HostSession<S: NetSimulation> {
     seats: BTreeMap<SeatId, PlayerId>,
     clients: BTreeMap<ClientId, RemoteClient<S>>,
     next_player: u32,
-    token_rng: DetRng,
+    token_mint: TokenMint,
     outbox: Vec<(ClientId, ServerMessage<S>)>,
     stats: HostStats,
 }
@@ -291,7 +290,7 @@ impl<S: NetSimulation> HostSession<S> {
         } else {
             HostPhase::InGame
         };
-        let token_rng = DetRng::new(config.token_seed);
+        let token_mint = TokenMint::new(config.token_seed);
         Self {
             config,
             world,
@@ -303,7 +302,7 @@ impl<S: NetSimulation> HostSession<S> {
             seats: BTreeMap::new(),
             clients: BTreeMap::new(),
             next_player,
-            token_rng,
+            token_mint,
             outbox: Vec::new(),
             stats: HostStats::default(),
         }
@@ -1084,8 +1083,34 @@ impl<S: NetSimulation> HostSession<S> {
         player
     }
 
-    const fn new_token(&mut self) -> ReconnectToken {
-        ReconnectToken(self.token_rng.next_u64() | 1)
+    fn new_token(&mut self) -> ReconnectToken {
+        self.token_mint.next()
+    }
+}
+
+/// Reconnect token generator: a keyed hash of a counter under the secret seed.
+///
+/// Unlike an invertible PRNG (whose output reveals its state), seeing one's own token tells a
+/// client nothing about the seed, so it cannot derive the tokens other players hold.
+#[derive(Clone, Debug)]
+struct TokenMint {
+    secret: u64,
+    counter: u64,
+}
+
+impl TokenMint {
+    const fn new(secret: u64) -> Self {
+        Self { secret, counter: 0 }
+    }
+
+    fn next(&mut self) -> ReconnectToken {
+        use std::hash::{Hash, Hasher};
+        self.counter = self.counter.wrapping_add(1);
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.secret.hash(&mut hasher);
+        self.counter.hash(&mut hasher);
+        self.secret.rotate_left(29).hash(&mut hasher);
+        ReconnectToken(hasher.finish() | 1)
     }
 }
 
@@ -1249,6 +1274,25 @@ fn assert_world_rate<S: NetSimulation>(world: &S, params: SessionParams) {
         assert_eq!(
             hz, params.tick_rate_hz,
             "world tick rate must match the session tick rate"
+        );
+    }
+}
+
+#[cfg(test)]
+mod token_tests {
+    use super::TokenMint;
+
+    #[test]
+    fn tokens_are_distinct_odd_and_depend_on_the_secret() {
+        let mut mint = TokenMint::new(42);
+        let tokens: std::collections::BTreeSet<u64> = (0..64).map(|_| mint.next().0).collect();
+        assert_eq!(tokens.len(), 64, "no repeats");
+        assert!(tokens.iter().all(|token| token & 1 == 1), "never zero");
+        assert_ne!(TokenMint::new(42).next(), TokenMint::new(43).next());
+        assert_eq!(
+            TokenMint::new(7).next(),
+            TokenMint::new(7).next(),
+            "deterministic"
         );
     }
 }
