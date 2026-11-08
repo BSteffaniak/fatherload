@@ -361,8 +361,6 @@ pub struct LocalHost {
     session: HostSession<WorldState>,
     seats: Vec<LocalSeat>,
     net: Option<HostNet>,
-    tuning: NetTuning,
-    tuned_clients: Vec<drillgame_netcode::ClientId>,
 }
 
 impl LocalHost {
@@ -413,8 +411,6 @@ impl LocalHost {
             session: HostSession::new(world, config),
             seats: Vec::new(),
             net: None,
-            tuning,
-            tuned_clients: Vec::new(),
         };
         host.bind_seats(existing, seats);
         host
@@ -525,7 +521,6 @@ impl LocalHost {
         if let Some(net) = self.net.as_mut() {
             net.pump(&mut self.session, delta_seconds);
         }
-        self.apply_tuning_to_new_clients();
     }
 
     /// Runs the fixed ticks due for `dt` and sends the outbound messages.
@@ -585,30 +580,14 @@ impl LocalHost {
         true
     }
 
-    /// Changes one live tuning value for every client (dev F3 keys). Returns a description.
+    /// Changes one live tuning value session-wide (dev F3 keys): host-side knobs such as the held
+    /// input window take effect immediately, every connected client is told, and clients that
+    /// join later start with it. Returns a description.
     pub fn adjust_tuning(&mut self, parameter: usize, step: i32) -> String {
-        let description = tweak_tuning(&mut self.tuning, parameter, step);
-        let clients: Vec<_> = self.session.clients().collect();
-        for client in clients {
-            self.session.set_client_tuning(client, self.tuning);
-        }
+        let mut tuning = self.session.config().tuning;
+        let description = tweak_tuning(&mut tuning, parameter, step);
+        self.session.set_tuning(tuning);
         description
-    }
-
-    fn apply_tuning_to_new_clients(&mut self) {
-        let clients: Vec<_> = self.session.clients().collect();
-        if clients == self.tuned_clients {
-            return;
-        }
-        if self.tuning != self.session.config().tuning {
-            for client in clients
-                .iter()
-                .filter(|client| !self.tuned_clients.contains(client))
-            {
-                self.session.set_client_tuning(*client, self.tuning);
-            }
-        }
-        self.tuned_clients = clients;
     }
 
     fn lobby_info(&self) -> Option<LobbyInfo> {
@@ -674,7 +653,7 @@ impl LocalHost {
                 self.session.buffered_inputs(*client),
             ));
         }
-        lines.push(tuning_summary(&self.tuning));
+        lines.push(tuning_summary(&self.session.config().tuning));
         lines
     }
 

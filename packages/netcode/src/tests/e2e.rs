@@ -334,6 +334,23 @@ fn per_client_snapshot_rates_differ() {
 }
 
 #[test]
+fn session_tuning_reaches_every_client_and_the_host_config() {
+    let link = LinkConditions::new(20, 2, 0.0);
+    let mut harness = ToyHarness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
+    harness.run_for(Duration::from_millis(500));
+    let mut tuning = harness.config.tuning;
+    tuning.held_input_ms = tuning.held_input_ms.saturating_add(40);
+    tuning.input_redundancy = tuning.input_redundancy.saturating_add(1);
+    harness.host.set_tuning(tuning);
+    assert_eq!(harness.host.config().tuning, tuning, "host-side knobs");
+    harness.run_for(Duration::from_millis(500));
+    for client in &harness.clients {
+        assert_eq!(*client.session.tuning(), tuning);
+    }
+    assert_converged(&harness);
+}
+
+#[test]
 fn remote_players_interpolate_smoothly() {
     let link = LinkConditions::new(50, 10, 1.0);
     let mut harness = ToyHarness::new(HarnessConfig::new(SessionParams::new(60), 2, link));

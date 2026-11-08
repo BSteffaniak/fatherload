@@ -511,6 +511,16 @@ impl<S: NetSimulation> HostSession<S> {
         self.remove_client(client, false);
     }
 
+    /// Changes the session-wide tuning: the host-side knobs (held input, catch-up and lead
+    /// clamps), the default for clients that connect later, and every connected client's tuning.
+    pub fn set_tuning(&mut self, tuning: NetTuning) {
+        self.config.tuning = tuning;
+        let clients: Vec<ClientId> = self.clients.keys().copied().collect();
+        for client in clients {
+            self.set_client_tuning(client, tuning);
+        }
+    }
+
     /// Changes one client's tuning (snapshot rate, relevance, ...).
     pub fn set_client_tuning(&mut self, client: ClientId, tuning: NetTuning) {
         if let Some(remote) = self.clients.get_mut(&client) {
