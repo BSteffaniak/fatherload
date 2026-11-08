@@ -1002,7 +1002,10 @@ impl ShellState {
     }
 
     const fn request_exit_or_prompt(&mut self) {
-        if self.save_dirty {
+        // A joined client cannot save (the host owns the session save), so it is never offered
+        // "save and exit".
+        let can_save = !matches!(self.online.role, Some(OnlineRole::Client));
+        if self.save_dirty && can_save {
             self.open_modal(ModalScreen::UnsavedExitConfirm);
         } else {
             self.modal = Some(ModalScreen::ExitConfirm);
@@ -1601,5 +1604,25 @@ pub const fn interior_service_x(zone: SurfaceZone) -> f32 {
         SurfaceZone::Bank => 380.0,
         SurfaceZone::Explosives => 431.0,
         SurfaceZone::Salvage => 410.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn joined_clients_are_never_offered_save_and_exit() {
+        let mut shell = ShellState::new(crate::save::SettingsFile::default());
+        shell.enter_world("test", 0.0);
+        shell.save_dirty = true;
+
+        shell.request_exit_or_prompt();
+        assert_eq!(shell.modal, Some(ModalScreen::UnsavedExitConfirm));
+
+        shell.modal = None;
+        shell.online.role = Some(OnlineRole::Client);
+        shell.request_exit_or_prompt();
+        assert_eq!(shell.modal, Some(ModalScreen::ExitConfirm));
     }
 }

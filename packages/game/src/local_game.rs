@@ -586,8 +586,12 @@ impl LocalGame {
                     // From the title, a load starts a fresh single-seat session.
                     self.runtime = Runtime::local(save.world, 1);
                 } else if !self.runtime.load_world(save.world) {
-                    "Joined clients cannot load over the host's session."
-                        .clone_into(&mut self.shell.message);
+                    let refusal = if self.runtime.can_save() {
+                        "That save runs at another tick rate than this online session."
+                    } else {
+                        "Joined clients cannot load over the host's session."
+                    };
+                    refusal.clone_into(&mut self.shell.message);
                     return;
                 }
                 self.reset_presentation(report);
