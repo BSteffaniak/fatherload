@@ -31,6 +31,11 @@ pub struct HostConfig {
     /// Report the world hash after every tick in [`HostOutput::tick_hashes`].
     pub record_tick_hashes: bool,
     /// Seed for reconnect token generation.
+    ///
+    /// Reconnect tokens are the only credential for reclaiming a reserved
+    /// player, and this crate has no entropy source of its own. Production
+    /// callers must fill this from OS randomness; the default is fixed so
+    /// tests stay deterministic, which makes tokens guessable.
     pub token_seed: u64,
     /// Cap on late actions queued per client.
     pub max_late_actions: usize,
@@ -561,7 +566,16 @@ impl<S: NetSimulation> HostSession<S> {
     /// inputs from the previous epoch are rejected; every client gets a
     /// keyframe of the new world.
     pub fn new_epoch(&mut self, world: S) {
+        let old_tick = self.world.tick();
         self.world = world;
+        let new_tick = self.world.tick();
+        // Reservation deadlines are world ticks; keep the remaining grace
+        // when the new world's tick differs (e.g. a save loaded at tick 0).
+        for slot in self.players.values_mut() {
+            if let Owner::Reserved { expires } = &mut slot.owner {
+                *expires = new_tick.plus(expires.0.saturating_sub(old_tick.0));
+            }
+        }
         self.epoch = self.epoch.next();
         let max_world = self
             .world
