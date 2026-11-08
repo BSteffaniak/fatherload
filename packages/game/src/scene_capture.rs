@@ -20,7 +20,10 @@ use drillgame_simulation::{
 use raylib::ffi;
 
 use crate::{
-    input::PlayerInput,
+    input::{
+        PlayerInput,
+        devices::{InputDevice, KeyboardLayout, PadFamily},
+    },
     local_game::{FrameInput, FrameReport, LocalGame, SaveTarget},
     rendering::GameRenderer,
     runtime::{LobbyInfo, LocalSeat, OnlineRole},
@@ -153,9 +156,15 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             },
             gallery: false,
             ui_sheet: false,
+            prompt_sheet: false,
         };
         (scene.setup)(&mut stage);
-        let (report, gallery, ui_sheet) = (stage.report, stage.gallery, stage.ui_sheet);
+        let (report, gallery, ui_sheet, prompt_sheet) = (
+            stage.report,
+            stage.gallery,
+            stage.ui_sheet,
+            stage.prompt_sheet,
+        );
         let renderer = renderer
             .get_or_insert_with(|| GameRenderer::new(&mut raylib, &thread, game.world().terrain()));
         let path = options.dir.join(format!("{}.png", scene.name));
@@ -173,6 +182,8 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 renderer.render_art_gallery(&mut draw);
             } else if ui_sheet {
                 renderer.render_ui_sheet(&mut draw);
+            } else if prompt_sheet {
+                renderer.render_prompt_sheet(&mut draw);
             } else {
                 renderer.render(&mut draw, &game.shell, &snapshot);
             }
@@ -222,6 +233,8 @@ pub struct SceneStage<'g> {
     gallery: bool,
     /// Draw the UI icon and interior prop sheet instead of the game.
     ui_sheet: bool,
+    /// Draw the button-prompt sheet instead of the game.
+    prompt_sheet: bool,
 }
 
 impl SceneStage<'_> {
@@ -246,6 +259,11 @@ impl SceneStage<'_> {
 
     const fn shell(&mut self) -> &mut ShellState {
         &mut self.game.shell
+    }
+
+    /// Shows every seat's prompts for `devices` (in seat order).
+    fn use_devices(&mut self, devices: &[InputDevice]) {
+        self.game.shell.seat_devices = devices.to_vec();
     }
 
     fn absorb(&mut self, report: FrameReport) {
@@ -281,6 +299,22 @@ macro_rules! room_scene {
         }
     };
 }
+
+/// An Xbox controller (the default glyph family).
+const XBOX: InputDevice = InputDevice::Gamepad {
+    index: 0,
+    family: PadFamily::Xbox,
+};
+/// A `PlayStation` controller.
+const PLAYSTATION: InputDevice = InputDevice::Gamepad {
+    index: 1,
+    family: PadFamily::PlayStation,
+};
+/// A Nintendo controller.
+const NINTENDO: InputDevice = InputDevice::Gamepad {
+    index: 2,
+    family: PadFamily::Nintendo,
+};
 
 /// Every scene, in capture order.
 pub const SCENES: &[Scene] = &[
@@ -959,6 +993,130 @@ pub const SCENES: &[Scene] = &[
             stage.settle(10);
         },
     },
+    Scene {
+        name: "prompt_sheet",
+        summary: "Button-prompt reference: every action on keyboard, Xbox, PlayStation, Nintendo",
+        setup: |stage| stage.prompt_sheet = true,
+    },
+    Scene {
+        name: "pad_title",
+        summary: "Title menu with Xbox controller prompts",
+        setup: |stage| stage.use_devices(&[XBOX]),
+    },
+    Scene {
+        name: "pad_interior_shop",
+        summary: "Upgrade shop counter with Xbox controller prompts",
+        setup: |stage| {
+            enter_interior(stage, SurfaceZone::Shop, Some(ModalScreen::Shop));
+            stage.use_devices(&[XBOX]);
+        },
+    },
+    Scene {
+        name: "pad_room",
+        summary: "Walking up to a counter with Xbox controller prompts",
+        setup: |stage| {
+            enter_interior(stage, SurfaceZone::Repair, None);
+            stage.use_devices(&[XBOX]);
+        },
+    },
+    Scene {
+        name: "pad_pause",
+        summary: "Pause menu with Xbox controller prompts",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                sink_rig(world, seats[0].player, 97, 12);
+            });
+            stage.settle(20);
+            stage.use_devices(&[XBOX]);
+            stage.shell().run_mode = RunMode::Paused;
+        },
+    },
+    Scene {
+        name: "pad_hud",
+        summary: "Rig at the HQ door with the Xbox enter prompt on the HUD",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                park_rig(world, seats[0].player, 106, 4);
+            });
+            stage.settle(20);
+            stage.use_devices(&[XBOX]);
+        },
+    },
+    Scene {
+        name: "keyboard_hud",
+        summary: "Rig at the HQ door with the keyboard enter prompt on the HUD",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                park_rig(world, seats[0].player, 106, 4);
+            });
+            stage.settle(20);
+        },
+    },
+    Scene {
+        name: "pad_help",
+        summary: "Controls reference for an Xbox controller",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                park_rig(world, seats[0].player, 97, 4);
+            });
+            stage.settle(10);
+            stage.use_devices(&[XBOX]);
+            stage.shell().modal = Some(ModalScreen::Help);
+        },
+    },
+    Scene {
+        name: "pad_split_screen",
+        summary: "Split-screen: player 1 on the WASD keyboard, player 2 on an Xbox controller",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_rig(world, seats[0].player, 88, 4);
+                if let Some(second) = seats.get(1) {
+                    park_rig(world, second.player, 124, 4);
+                }
+            });
+            stage.settle(20);
+            stage.use_devices(&[InputDevice::Keyboard(KeyboardLayout::Wasd), XBOX]);
+        },
+    },
+    Scene {
+        name: "pad_split_join",
+        summary: "Three seats: keyboard, controller, and a seat waiting for a controller",
+        setup: |stage| {
+            stage.play(3, |world, seats| {
+                for (seat, x) in seats.iter().zip([52, 106, 130]) {
+                    park_rig(world, seat.player, x, 4);
+                }
+            });
+            stage.settle(20);
+            stage.use_devices(&[
+                InputDevice::Keyboard(KeyboardLayout::Wasd),
+                XBOX,
+                InputDevice::Unassigned,
+            ]);
+        },
+    },
+    Scene {
+        name: "pad_playstation_counter",
+        summary: "Ore depot counter with PlayStation glyphs",
+        setup: |stage| {
+            enter_interior(stage, SurfaceZone::Depot, Some(ModalScreen::Depot));
+            stage.use_devices(&[PLAYSTATION]);
+        },
+    },
+    Scene {
+        name: "pad_nintendo_options",
+        summary: "Options over the pause menu with Nintendo glyphs",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                park_rig(world, seats[0].player, 97, 4);
+            });
+            stage.settle(10);
+            stage.use_devices(&[NINTENDO]);
+            let shell = stage.shell();
+            shell.run_mode = RunMode::Paused;
+            shell.modal = Some(ModalScreen::Options);
+        },
+    },
 ];
 
 /// Enters `zone`'s interior standing at its counter, optionally with a counter panel open.
@@ -1134,6 +1292,7 @@ mod tests {
                 report: FrameReport::default(),
                 gallery: false,
                 ui_sheet: false,
+                prompt_sheet: false,
             };
             (scene.setup)(&mut stage);
             let snapshot = game.snapshot(DEFAULT_SIZE);
