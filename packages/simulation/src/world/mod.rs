@@ -178,8 +178,11 @@ pub struct CanonicalProgressionState {
     pub next_day_tick: SimulationTick,
 }
 
-/// Compatibility world wrapper used to introduce explicit player identity before the legacy
-/// monolithic `GameState` is fully split into authoritative world state and local client state.
+/// The canonical gameplay world.
+///
+/// [`Self::simulate_tick`] is the only gameplay transition. Everything else either reads the
+/// world, replicates it (`replication`, `discovery`, `visibility`), manages the roster
+/// (`roster`) or builds a world before play (import, save migration, test scenarios).
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct WorldState {
     timing: TickTiming,
@@ -268,13 +271,9 @@ impl WorldState {
         self.simulation_tick
     }
 
+    /// Overwrites the tick counter (replicas following the authority, save migration).
     pub const fn set_simulation_tick(&mut self, tick: SimulationTick) {
         self.simulation_tick = tick;
-    }
-
-    #[must_use]
-    pub const fn hazard_count(&self) -> usize {
-        self.hazards.len()
     }
 
     #[must_use]
@@ -297,6 +296,8 @@ impl WorldState {
         &self.terrain
     }
 
+    /// Mutable terrain for building a scenario world before play starts (test harnesses);
+    /// gameplay only changes terrain inside [`Self::simulate_tick`].
     pub const fn terrain_mut(&mut self) -> &mut Terrain {
         &mut self.terrain
     }
@@ -465,6 +466,8 @@ impl WorldState {
         self.players.keys().copied()
     }
 
+    /// Mutable rig for building a scenario world or migrating a save; gameplay only changes
+    /// rigs inside [`Self::simulate_tick`].
     pub fn player_mut(&mut self, player_id: PlayerId) -> Option<&mut Player> {
         self.players.get_mut(&player_id)
     }
@@ -497,6 +500,7 @@ impl WorldState {
         self.players.len()
     }
 
+    /// Replaces terrain and world objects wholesale (migrating a v2 save).
     pub fn restore_static_world_state(
         &mut self,
         terrain: Terrain,

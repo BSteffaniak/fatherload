@@ -336,21 +336,6 @@ pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
     }
 }
 
-#[allow(dead_code, reason = "retained for upcoming richer upgrade UI details")]
-#[must_use]
-pub const fn upgrade_effect(kind: UpgradeKind) -> &'static str {
-    match kind {
-        UpgradeKind::Drill => "+1 drill tier; unlocks harder strata",
-        UpgradeKind::FuelTank => "+50 fuel and full refill",
-        UpgradeKind::CargoBay => "+8 cargo slots",
-        UpgradeKind::Engine => "+28% thrust/handling",
-        UpgradeKind::Hull => "+40 max hull and full repair",
-        UpgradeKind::Radiator => "reduces deep heat damage",
-        UpgradeKind::Scanner => "reveals nearby ore, artifacts, and hazards",
-        UpgradeKind::BombPack => "+3 bombs for clearing rock",
-    }
-}
-
 fn upgrade_cost(kind: UpgradeKind, next_level: u8) -> u32 {
     let base = match kind {
         UpgradeKind::Drill => 105,

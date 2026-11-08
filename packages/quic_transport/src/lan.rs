@@ -26,9 +26,6 @@ use crate::tls::HostDescriptor;
 pub const SERVICE_TYPE: &str = "_drillgame._udp.local.";
 pub const PROTOCOL_VERSION: &str = "1";
 pub const DEFAULT_GAME_PORT: u16 = 4_242;
-pub const RECOMMENDED_DESCRIPTOR_PORT: u16 = 4_243;
-pub const MDNS_PORT: u16 = 5_353;
-pub const RECOMMENDED_BROADCAST_PORT: u16 = 34_242;
 const DESCRIPTOR_READ_LIMIT_BYTES: u64 = 128 * 1024;
 const DEFAULT_DESCRIPTOR_FETCH_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -358,11 +355,6 @@ fn dns_label(name: &str) -> String {
         })
         .collect();
     label.trim_matches('-').to_owned()
-}
-
-#[must_use]
-pub const fn localhost_descriptor_bind_addr() -> SocketAddr {
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)
 }
 
 #[cfg(test)]

@@ -145,24 +145,6 @@ impl Expedition {
             ExpeditionObjectiveKind::FastReturn => "Return before deadline".to_owned(),
         }
     }
-    #[must_use]
-    pub const fn risk_label(self) -> &'static str {
-        match self.kind {
-            ExpeditionObjectiveKind::ReachDepth if self.required >= 120 => "extreme",
-            ExpeditionObjectiveKind::ReachDepth if self.required >= 90 => "high",
-            ExpeditionObjectiveKind::DeliverCargo if self.required >= 3 => "medium",
-            ExpeditionObjectiveKind::ScanHazards
-            | ExpeditionObjectiveKind::BuildPumpStations
-            | ExpeditionObjectiveKind::RecoverProbe
-            | ExpeditionObjectiveKind::DeliverExplosives
-            | ExpeditionObjectiveKind::StabilizeCollapse
-            | ExpeditionObjectiveKind::RescueMiner => "medium",
-            ExpeditionObjectiveKind::ReachSignal
-            | ExpeditionObjectiveKind::NoDamageReturn
-            | ExpeditionObjectiveKind::FastReturn => "high",
-            _ => "low",
-        }
-    }
 }
 
 pub fn consume_expedition_delivery(expedition: Expedition, player: &mut Player) {

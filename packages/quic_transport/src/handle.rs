@@ -153,14 +153,6 @@ impl NetHandle {
         self.events.recv_timeout(timeout).ok()
     }
 
-    /// Whether the network thread is still running.
-    #[must_use]
-    pub fn is_running(&self) -> bool {
-        self.thread
-            .as_ref()
-            .is_some_and(|thread| !thread.is_finished())
-    }
-
     /// Disconnect every connection cleanly (bounded by `close_timeout`), stop the thread and
     /// return any events that were still pending, ending with [`NetEvent::ShutdownComplete`].
     #[must_use]

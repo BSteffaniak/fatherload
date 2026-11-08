@@ -152,11 +152,6 @@ impl<T: Clone> LinkSim<T> {
         }
     }
 
-    /// Changes the impairments for packets sent from now on.
-    pub const fn set_conditions(&mut self, conditions: LinkConditions) {
-        self.conditions = conditions;
-    }
-
     /// Current impairments.
     #[must_use]
     pub const fn conditions(&self) -> LinkConditions {

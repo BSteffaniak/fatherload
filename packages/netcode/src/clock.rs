@@ -70,12 +70,6 @@ impl ClientClock {
         };
     }
 
-    /// Whether [`ClientClock::start`] was called.
-    #[must_use]
-    pub const fn is_started(&self) -> bool {
-        self.started
-    }
-
     /// The last tick the client produced.
     #[must_use]
     pub const fn tick(&self) -> Tick {
@@ -92,12 +86,6 @@ impl ClientClock {
     #[must_use]
     pub const fn pending_jump(&self) -> u64 {
         self.pending_jump
-    }
-
-    /// Ticks still to skip from a backward resync.
-    #[must_use]
-    pub const fn pending_stall(&self) -> u64 {
-        self.stall
     }
 
     /// Fraction of the next tick already accumulated, in `[0, 1)`.

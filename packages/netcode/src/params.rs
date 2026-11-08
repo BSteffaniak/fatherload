@@ -68,13 +68,6 @@ impl SessionParams {
         duration.as_secs_f64() * self.rate() as f64
     }
 
-    /// Converts a tick count to a duration.
-    #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
-    pub const fn ticks_to_duration(&self, ticks: u64) -> Duration {
-        Duration::from_nanos((ticks as u128 * NANOS_PER_SEC / self.rate() as u128) as u64)
-    }
-
     /// Accumulator units per tick: the fixed-step accumulators count
     /// `nanoseconds * tick_rate`, so one tick is exactly one second of nanos.
     #[must_use]

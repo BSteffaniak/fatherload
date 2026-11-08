@@ -105,36 +105,4 @@ impl RigPartKind {
             }
         }
     }
-
-    #[must_use]
-    pub const fn rarity(self) -> &'static str {
-        match self {
-            Self::ResonanceDrill | Self::PressureHull | Self::RelicScanner => "legendary",
-            Self::TitanDrill | Self::BurstEngine | Self::ArmoredCargoBay => "rare",
-            _ => "standard",
-        }
-    }
-
-    #[must_use]
-    pub const fn tradeoff(self) -> &'static str {
-        match self {
-            Self::TitanDrill => "slow, high power, high fuel burn",
-            Self::NeedleDrill => "fast through soft material, poor hard-rock performance",
-            Self::ResonanceDrill => {
-                "strong against crystal/ancient material, unstable near hazards"
-            }
-            Self::LightweightEngine => "agile, low cargo tolerance",
-            Self::HaulerEngine => "slow, handles heavy cargo well",
-            Self::BurstEngine => "strong thrust, inefficient fuel use",
-            Self::ThermalHull => "heat resistant, weak crash protection",
-            Self::ImpactHull => "crash resistant, poor heat resistance",
-            Self::PressureHull => "deep-zone specialist",
-            Self::ProspectorScanner => "finds ore veins, misses hazards",
-            Self::HazardScanner => "finds danger, limited ore detection",
-            Self::RelicScanner => "finds artifacts and anomalies",
-            Self::CargoBalloon => "huge capacity, bad handling",
-            Self::ArmoredCargoBay => "protects cargo, lower capacity",
-            Self::SortedCargoRack => "bonuses for diverse loads",
-        }
-    }
 }

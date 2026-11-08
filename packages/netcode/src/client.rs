@@ -317,12 +317,6 @@ impl<S: NetSimulation> ClientSession<S> {
         &self.remote
     }
 
-    /// Remote interpolation timeline.
-    #[must_use]
-    pub const fn interp_timeline(&self) -> &InterpTimeline {
-        &self.interp
-    }
-
     /// Size of the prediction-event dedup set.
     #[must_use]
     pub fn predicted_event_keys(&self) -> usize {

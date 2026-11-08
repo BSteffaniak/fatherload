@@ -760,12 +760,6 @@ impl<S: HarnessSim> Harness<S> {
         self.host.world()
     }
 
-    /// The host world's hash as visible to `player`'s client at a recorded tick.
-    #[must_use]
-    pub fn host_hash(&self, tick: Tick, player: PlayerId) -> Option<u64> {
-        self.host_hashes.get(&(tick, player)).copied()
-    }
-
     /// Current host tick.
     #[must_use]
     pub fn host_tick(&self) -> Tick {

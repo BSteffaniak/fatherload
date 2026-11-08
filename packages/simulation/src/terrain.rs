@@ -1,5 +1,4 @@
 #![allow(
-    dead_code,
     clippy::cast_sign_loss,
     reason = "terrain bounds are validated before indexing"
 )]
@@ -111,19 +110,6 @@ impl DeepStratum {
     }
 
     #[must_use]
-    pub const fn primary_resource(self) -> StrategicResourceKind {
-        match self {
-            Self::CrystalFaults => StrategicResourceKind::CrystalLens,
-            Self::FossilOceans => StrategicResourceKind::RadiantFossil,
-            Self::PressureCathedrals => StrategicResourceKind::PressurePearl,
-            Self::RadioactiveHollow => StrategicResourceKind::CoreShard,
-            Self::AncientMachineLayer => StrategicResourceKind::MachineRelic,
-            Self::VoidGeodeFields => StrategicResourceKind::VoidGlass,
-            Self::MantleStormZone => StrategicResourceKind::AncientAlloy,
-        }
-    }
-
-    #[must_use]
     pub const fn primary_hazard(self) -> TileKind {
         match self {
             Self::CrystalFaults | Self::AncientMachineLayer => TileKind::ExplosivePocket,
@@ -131,32 +117,6 @@ impl DeepStratum {
             Self::PressureCathedrals | Self::VoidGeodeFields => TileKind::PressurePocket,
             Self::RadioactiveHollow => TileKind::MagmaVent,
             Self::MantleStormZone => TileKind::Lava,
-        }
-    }
-
-    #[must_use]
-    pub const fn scanner_twist(self) -> &'static str {
-        match self {
-            Self::CrystalFaults => "crystal echoes duplicate ore pings",
-            Self::FossilOceans => "fossil pockets hide artifacts inside soft seams",
-            Self::PressureCathedrals => "pressure pockets mask nearby valuables",
-            Self::RadioactiveHollow => "radiation ghosts mimic rare ore",
-            Self::AncientMachineLayer => "machine relics reveal straight-line patterns",
-            Self::VoidGeodeFields => "void glass bends distance estimates",
-            Self::MantleStormZone => "storm heat scrambles hazard warnings",
-        }
-    }
-
-    #[must_use]
-    pub const fn unique_objective(self) -> &'static str {
-        match self {
-            Self::CrystalFaults => "stabilize a crystal fault survey beacon",
-            Self::FossilOceans => "recover a radiant fossil slab",
-            Self::PressureCathedrals => "seal a pressure cathedral pocket",
-            Self::RadioactiveHollow => "scan a radioactive hollow anomaly",
-            Self::AncientMachineLayer => "retrieve a machine relic component",
-            Self::VoidGeodeFields => "reach a temporary void signal",
-            Self::MantleStormZone => "return before a mantle storm surge",
         }
     }
 }

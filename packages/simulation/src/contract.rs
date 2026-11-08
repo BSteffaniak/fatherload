@@ -45,23 +45,6 @@ impl ContractLog {
             finished_story,
         })
     }
-    #[must_use]
-    pub const fn story_for_completed(completed: u32) -> &'static str {
-        match completed {
-            1 => "HQ: Copper confirms the claim. Push toward silver-bearing clay.",
-            2 => "HQ: Silver assay approved. Fossils imply old tunnels below.",
-            3 => "HQ: Relic recovered. Corporate wants gold calibration samples.",
-            4 => "HQ: Gold readings are stable. Heat shielding tests begin.",
-            5 => "HQ: Ruby survived high heat. Seek idol chambers deeper down.",
-            6 => "HQ: Idol telemetry points to emerald conductors.",
-            7 => "HQ: Emerald circuitry is live. A diamond lens can focus the scan.",
-            8 => "HQ: Diamond lens aligned. Platinum resonance should stabilize the receiver.",
-            9 => "HQ: Platinum receiver is clean. Uranium traces mark the hot path.",
-            10 => "HQ: Uranium signature confirmed. Mythril lattice should survive the core field.",
-            11 => "HQ: Mythril lattice locked. Recover the old circuit to triangulate the core.",
-            _ => "HQ: Star Core coordinates locked. This is the final descent.",
-        }
-    }
 
     pub fn migrate_after_load(&mut self) {
         let canonical = contract_for_index(self.completed);
