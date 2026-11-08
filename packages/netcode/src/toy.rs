@@ -3,8 +3,9 @@
 //! It exists only to exercise netcode end to end: players fly, fall and drill
 //! through a tile grid (op-log terrain), drop bombs (per-tick entities), and
 //! sell/buy through a per-player wallet and a shared market (on-change
-//! sections). Wallets are private: only their owner's client receives them. All gameplay math is integer fixed point, and every constant is
-//! authored per second and converted with the session tick rate.
+//! sections). Wallets are private: only their owner's client receives them.
+//! All gameplay math is integer fixed point, and every constant is authored
+//! per second and converted with the session tick rate.
 
 use std::collections::BTreeMap;
 use std::hash::Hash;
