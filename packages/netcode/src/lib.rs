@@ -26,6 +26,7 @@
 //! No sockets, threads, async runtimes or wall clock are used here: callers
 //! pass elapsed time in as a [`std::time::Duration`].
 
+mod client;
 mod clock;
 mod hashing;
 mod host;
@@ -39,6 +40,9 @@ mod simulation;
 
 
 
+pub use client::{
+    ClientConfig, ClientPhase, ClientSession, ClientStats, ClientView, EventSource, PresentedEvent,
+};
 pub use clock::{ClientClock, ClockSpeed, MarginResponse};
 pub use hashing::{StableHasher, stable_hash};
 pub use host::{HostClientStats, HostConfig, HostOutput, HostPhase, HostSession, HostStats};
