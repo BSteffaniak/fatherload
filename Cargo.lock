@@ -121,15 +121,11 @@ checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 name = "drillgame_game"
 version = "0.0.1-alpha.0"
 dependencies = [
+ "drillgame_netcode",
  "drillgame_simulation",
- "hostname",
- "mdns-sd",
- "quinn",
  "raylib",
- "rcgen",
  "serde",
  "serde_json",
- "tokio",
 ]
 
 [[package]]

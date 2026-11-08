@@ -9,7 +9,7 @@ use std::{fs, path::PathBuf};
 
 use raylib::prelude::*;
 
-use crate::game_state::SoundCue;
+use crate::shell::SoundCue;
 
 pub struct AudioBus {
     audio: &'static RaylibAudio,

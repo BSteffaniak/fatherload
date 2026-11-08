@@ -1,0 +1,447 @@
+//! The immutable per-frame view of the game that rendering, HUD and audio consume (plan §10).
+//!
+//! A [`RenderSnapshot`] is built from the runtime's world after the frame's ticks ran. Each local
+//! seat gets a [`ViewSnapshot`] whose camera follows the same player transform the view draws, so
+//! the camera can never disagree with the rig. The renderer reads only this snapshot plus the
+//! shell state; it never touches the simulation directly.
+
+use std::collections::BTreeSet;
+
+use drillgame_simulation::{
+    CanonicalProgressionState, DrillState, FallingBoulder, HazardCloud, InfrastructureKind,
+    PlacedBomb, PlacedInfrastructure, Player, PlayerId, PlayerSurvivalSnapshot, WorldEventKind,
+    WorldState,
+    terrain::{MineralKind, TILE_SIZE, Terrain, TilePosition},
+};
+
+use crate::{effects::SparkParticle, runtime::LocalSeat, runtime::RuntimeEvent};
+
+/// Logical screen width the views are laid out in.
+pub const SCREEN_WIDTH: i32 = 1280;
+/// Logical screen height the views are laid out in.
+pub const SCREEN_HEIGHT: i32 = 720;
+
+/// Every mineral, in market display order.
+pub const MINERALS: [MineralKind; 10] = [
+    MineralKind::Copper,
+    MineralKind::Iron,
+    MineralKind::Silver,
+    MineralKind::Gold,
+    MineralKind::Emerald,
+    MineralKind::Ruby,
+    MineralKind::Diamond,
+    MineralKind::Platinum,
+    MineralKind::Uranium,
+    MineralKind::Mythril,
+];
+
+/// A screen rectangle in logical pixels.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Viewport {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+impl Viewport {
+    #[must_use]
+    pub const fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+}
+
+/// Lays out `count` views in a near-square grid over the screen. Works for any count: one view
+/// fills the screen, two sit side by side, three and four share a 2x2 grid, and so on.
+#[must_use]
+pub fn split_screen_viewports(
+    count: usize,
+    screen_width: i32,
+    screen_height: i32,
+) -> Vec<Viewport> {
+    let count = count.max(1);
+    let mut columns = 1;
+    while columns * columns < count {
+        columns += 1;
+    }
+    let rows = count.div_ceil(columns);
+    let columns_i32 = i32::try_from(columns).unwrap_or(i32::MAX);
+    let rows_i32 = i32::try_from(rows).unwrap_or(i32::MAX);
+    (0..count)
+        .map(|index| {
+            let column = i32::try_from(index % columns).unwrap_or(0);
+            let row = i32::try_from(index / columns).unwrap_or(0);
+            let x0 = screen_width * column / columns_i32;
+            let x1 = screen_width * (column + 1) / columns_i32;
+            let y0 = screen_height * row / rows_i32;
+            let y1 = screen_height * (row + 1) / rows_i32;
+            Viewport::new(x0, y0, x1 - x0, y1 - y0)
+        })
+        .collect()
+}
+
+/// How endangered a rig looks to other players.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DangerLevel {
+    Nominal,
+    Warning,
+    Critical,
+}
+
+/// One rig as drawn in the world.
+#[derive(Clone, Debug)]
+pub struct PlayerPresentation {
+    pub player_id: PlayerId,
+    pub x: f32,
+    pub y: f32,
+    pub velocity_x: f32,
+    pub velocity_y: f32,
+    pub fuel: f32,
+    pub hull: f32,
+    pub max_hull: f32,
+    pub scanner_level: u8,
+    pub radiator_level: u8,
+    pub hull_level: u8,
+    pub active_drill: Option<DrillState>,
+}
+
+impl PlayerPresentation {
+    fn from_player(player_id: PlayerId, player: &Player, world: &WorldState) -> Self {
+        Self {
+            player_id,
+            x: player.x,
+            y: player.y,
+            velocity_x: player.velocity_x,
+            velocity_y: player.velocity_y,
+            fuel: player.fuel,
+            hull: player.hull,
+            max_hull: player.max_hull(),
+            scanner_level: player.scanner_level,
+            radiator_level: player.radiator_level,
+            hull_level: player.hull_level,
+            active_drill: world.active_drill(player_id).copied(),
+        }
+    }
+
+    /// Danger shown on the rig for other players.
+    #[must_use]
+    pub fn danger_level(&self) -> DangerLevel {
+        if self.hull <= 0.0 || self.fuel <= 0.0 {
+            DangerLevel::Critical
+        } else if self.hull < 30.0 || self.fuel < 30.0 {
+            DangerLevel::Warning
+        } else {
+            DangerLevel::Nominal
+        }
+    }
+}
+
+/// HUD numbers for one view.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HudValues {
+    pub hull: f32,
+    pub max_hull: f32,
+    pub fuel: f32,
+    pub fuel_capacity: f32,
+    pub credits: u32,
+    pub cargo_used: u32,
+    pub cargo_capacity: u32,
+    pub depth: i32,
+    pub scanner_cooldown_seconds: f32,
+}
+
+/// Camera position (top-left of the view, world pixels).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CameraPosition {
+    pub x: f32,
+    pub y: f32,
+}
+
+/// One local seat's view.
+#[derive(Clone, Debug)]
+pub struct ViewSnapshot<'w> {
+    /// Seat order index (0 = primary).
+    pub seat_index: usize,
+    pub player_id: PlayerId,
+    pub viewport: Viewport,
+    /// Follows `player` exactly.
+    pub camera: CameraPosition,
+    /// The seat's rig (inventory, upgrades, loan, kits...).
+    pub player: &'w Player,
+    pub hud: HudValues,
+    pub active_drill: Option<DrillState>,
+    /// Tiles this player has discovered.
+    pub explored: Option<&'w BTreeSet<TilePosition>>,
+    pub lost_cargo: Option<(f32, f32)>,
+    /// `Some` while the rig is disabled or stranded (rescue prompt).
+    pub failure: Option<PlayerSurvivalSnapshot>,
+    pub rescue_count: u32,
+    pub deep_instability: f32,
+}
+
+impl ViewSnapshot<'_> {
+    /// Whether a tile is discovered for this view.
+    #[must_use]
+    pub fn is_explored(&self, position: TilePosition) -> bool {
+        self.explored.is_some_and(|tiles| tiles.contains(&position))
+    }
+}
+
+/// One mineral's market quote.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MarketQuote {
+    pub mineral: MineralKind,
+    pub value: u32,
+    pub factor: u32,
+    pub previous_factor: Option<u32>,
+}
+
+/// An active world event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WorldEventView {
+    pub kind: WorldEventKind,
+    pub severity: u32,
+    pub days_remaining: u32,
+}
+
+/// Everything rendering needs for one frame.
+#[derive(Clone, Debug)]
+pub struct RenderSnapshot<'w> {
+    pub tick: u64,
+    pub terrain: &'w Terrain,
+    pub hazards: &'w [HazardCloud],
+    pub bombs: &'w [PlacedBomb],
+    pub infrastructure: &'w [PlacedInfrastructure],
+    pub boulders: &'w [FallingBoulder],
+    pub sparks: &'w [SparkParticle],
+    /// Every rig in the world.
+    pub players: Vec<PlayerPresentation>,
+    /// One view per local seat, in seat order.
+    pub views: Vec<ViewSnapshot<'w>>,
+    pub progression: &'w CanonicalProgressionState,
+    pub market: Vec<MarketQuote>,
+    pub world_events: Vec<WorldEventView>,
+    pub signal_relay_count: usize,
+    pub won_game: bool,
+    /// Gameplay events presented for the first time this frame (audio/particles).
+    pub events: &'w [RuntimeEvent],
+}
+
+impl<'w> RenderSnapshot<'w> {
+    /// Builds the snapshot for `seats` laid out over a `screen_width` x `screen_height` screen.
+    #[must_use]
+    pub fn build(
+        world: &'w WorldState,
+        seats: &[LocalSeat],
+        screen: (i32, i32),
+        sparks: &'w [SparkParticle],
+        events: &'w [RuntimeEvent],
+    ) -> Self {
+        let viewports = split_screen_viewports(seats.len(), screen.0, screen.1);
+        let views = seats
+            .iter()
+            .zip(viewports)
+            .enumerate()
+            .filter_map(|(seat_index, (seat, viewport))| {
+                view_snapshot(world, seat_index, seat.player, viewport)
+            })
+            .collect();
+        Self {
+            tick: world.simulation_tick().get(),
+            terrain: world.terrain(),
+            hazards: world.hazards(),
+            bombs: world.bombs(),
+            infrastructure: world.infrastructure(),
+            boulders: world.falling_boulders(),
+            sparks,
+            players: world
+                .players()
+                .iter()
+                .map(|(id, player)| PlayerPresentation::from_player(*id, player, world))
+                .collect(),
+            views,
+            progression: world.progression(),
+            market: MINERALS
+                .into_iter()
+                .map(|mineral| MarketQuote {
+                    mineral,
+                    value: world.mineral_market_value(mineral),
+                    factor: world.mineral_market_factor(mineral),
+                    previous_factor: world.previous_mineral_market_factor(mineral),
+                })
+                .collect(),
+            world_events: world
+                .active_world_events()
+                .into_iter()
+                .map(|(kind, severity, days_remaining)| WorldEventView {
+                    kind,
+                    severity,
+                    days_remaining,
+                })
+                .collect(),
+            signal_relay_count: world
+                .infrastructure()
+                .iter()
+                .filter(|item| item.kind == InfrastructureKind::SignalRelay)
+                .count(),
+            won_game: world.won_game(),
+            events,
+        }
+    }
+
+    /// The primary seat's view, if any.
+    #[must_use]
+    pub fn primary_view(&self) -> Option<&ViewSnapshot<'w>> {
+        self.views.first()
+    }
+
+    /// Sale value of one unit of `mineral` today.
+    #[must_use]
+    pub fn market_value(&self, mineral: MineralKind) -> u32 {
+        self.market
+            .iter()
+            .find(|quote| quote.mineral == mineral)
+            .map_or(0, |quote| quote.value)
+    }
+
+    /// One-line summary of active world events.
+    #[must_use]
+    pub fn world_event_summary(&self) -> String {
+        if self.world_events.is_empty() {
+            return "No active world events.".to_owned();
+        }
+        self.world_events
+            .iter()
+            .map(|event| {
+                format!(
+                    "{} S{} ({}d)",
+                    event.kind.label(),
+                    event.severity,
+                    event.days_remaining
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" | ")
+    }
+
+    /// Warning line for a view's rig.
+    #[must_use]
+    pub fn warning_summary(&self, view: &ViewSnapshot<'_>) -> String {
+        let player = view.player;
+        let depth = player.tile_position(TILE_SIZE).y;
+        let mut warnings = Vec::new();
+        if player.fuel <= player.fuel_capacity * 0.2 {
+            warnings.push("fuel");
+        }
+        if player.hull <= player.max_hull() * 0.35 {
+            warnings.push("hull");
+        }
+        if depth >= 60 {
+            warnings.push("heat");
+        }
+        if view.deep_instability >= 60.0 {
+            warnings.push("instability");
+        }
+        if depth >= 80 && self.signal_relay_count == 0 {
+            warnings.push("signal");
+        }
+        if warnings.is_empty() {
+            "Warnings: nominal".to_owned()
+        } else {
+            format!("Warnings: {}", warnings.join(", "))
+        }
+    }
+}
+
+fn view_snapshot(
+    world: &WorldState,
+    seat_index: usize,
+    player_id: PlayerId,
+    viewport: Viewport,
+) -> Option<ViewSnapshot<'_>> {
+    let player = world.player(player_id)?;
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "bounded viewport dimensions convert to camera pixels"
+    )]
+    let camera = CameraPosition {
+        x: (viewport.width as f32).mul_add(-0.5, player.x),
+        y: (viewport.height as f32).mul_add(-0.5, player.y),
+    };
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "bounded world depth is displayed in whole tiles"
+    )]
+    let depth = (player.y / TILE_SIZE).max(0.0) as i32;
+    Some(ViewSnapshot {
+        seat_index,
+        player_id,
+        viewport,
+        camera,
+        player,
+        hud: HudValues {
+            hull: player.hull,
+            max_hull: player.max_hull(),
+            fuel: player.fuel,
+            fuel_capacity: player.fuel_capacity,
+            credits: player.credits,
+            cargo_used: player.cargo_used(),
+            cargo_capacity: player.cargo_capacity,
+            depth,
+            scanner_cooldown_seconds: world.scanner_cooldown_seconds(player_id).unwrap_or(0.0),
+        },
+        active_drill: world.active_drill(player_id).copied(),
+        explored: world.discovered_tiles_by_player().get(&player_id),
+        lost_cargo: world
+            .lost_cargo_sites()
+            .get(&player_id)
+            .map(|site| (site.x, site.y)),
+        failure: world.failure_state(player_id),
+        rescue_count: world.rescue_count(player_id),
+        deep_instability: world
+            .deep_run_state(player_id)
+            .map_or(0.0, |state| state.instability),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn layout_handles_any_view_count_without_overlap() {
+        for count in 1..=8 {
+            let views = split_screen_viewports(count, SCREEN_WIDTH, SCREEN_HEIGHT);
+            assert_eq!(views.len(), count);
+            let area: i32 = views.iter().map(|view| view.width * view.height).sum();
+            assert!(area <= SCREEN_WIDTH * SCREEN_HEIGHT);
+            for (index, a) in views.iter().enumerate() {
+                assert!(a.width > 0 && a.height > 0);
+                assert!(a.x + a.width <= SCREEN_WIDTH && a.y + a.height <= SCREEN_HEIGHT);
+                for b in &views[index + 1..] {
+                    let disjoint = a.x + a.width <= b.x
+                        || b.x + b.width <= a.x
+                        || a.y + a.height <= b.y
+                        || b.y + b.height <= a.y;
+                    assert!(disjoint, "{a:?} overlaps {b:?}");
+                }
+            }
+        }
+        assert_eq!(
+            split_screen_viewports(1, SCREEN_WIDTH, SCREEN_HEIGHT),
+            vec![Viewport::new(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)]
+        );
+        assert_eq!(
+            split_screen_viewports(2, SCREEN_WIDTH, SCREEN_HEIGHT),
+            vec![
+                Viewport::new(0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT),
+                Viewport::new(SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT),
+            ]
+        );
+    }
+}

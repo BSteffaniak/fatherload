@@ -2,9 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use raylib::prelude::*;
 
-use crate::{
-    game_state::TILE_SIZE,
-    terrain::{ArtifactKind, MineralKind, Terrain, TileKind, TilePosition, deep_stratum_at_depth},
+use drillgame_simulation::terrain::{
+    ArtifactKind, MineralKind, TILE_SIZE, Terrain, TileKind, TilePosition, deep_stratum_at_depth,
 };
 
 pub(super) const TERRAIN_CHUNK_SIZE_TILES: i32 = 32;
@@ -66,21 +65,6 @@ impl TerrainRenderer {
             return;
         }
         self.dirty_chunks.insert(chunk_position_for_tile(position));
-    }
-
-    pub(super) fn mark_chunk_dirty(&mut self, x: i32, y: i32) {
-        let tile_position = TilePosition {
-            x: x * TERRAIN_CHUNK_SIZE_TILES,
-            y: y * TERRAIN_CHUNK_SIZE_TILES,
-        };
-        if tile_position.x < 0
-            || tile_position.y < 0
-            || tile_position.x >= self.terrain_width
-            || tile_position.y >= self.terrain_height
-        {
-            return;
-        }
-        self.dirty_chunks.insert(ChunkPosition { x, y });
     }
 
     pub(super) fn sync(
@@ -384,13 +368,19 @@ const fn stratum_tint(y: i32) -> Option<Color> {
         return None;
     };
     Some(match stratum {
-        crate::terrain::DeepStratum::CrystalFaults => Color::new(70, 130, 170, 255),
-        crate::terrain::DeepStratum::FossilOceans => Color::new(135, 105, 75, 255),
-        crate::terrain::DeepStratum::PressureCathedrals => Color::new(55, 85, 125, 255),
-        crate::terrain::DeepStratum::RadioactiveHollow => Color::new(85, 135, 55, 255),
-        crate::terrain::DeepStratum::AncientMachineLayer => Color::new(115, 95, 65, 255),
-        crate::terrain::DeepStratum::VoidGeodeFields => Color::new(85, 55, 125, 255),
-        crate::terrain::DeepStratum::MantleStormZone => Color::new(145, 65, 45, 255),
+        drillgame_simulation::terrain::DeepStratum::CrystalFaults => Color::new(70, 130, 170, 255),
+        drillgame_simulation::terrain::DeepStratum::FossilOceans => Color::new(135, 105, 75, 255),
+        drillgame_simulation::terrain::DeepStratum::PressureCathedrals => {
+            Color::new(55, 85, 125, 255)
+        }
+        drillgame_simulation::terrain::DeepStratum::RadioactiveHollow => {
+            Color::new(85, 135, 55, 255)
+        }
+        drillgame_simulation::terrain::DeepStratum::AncientMachineLayer => {
+            Color::new(115, 95, 65, 255)
+        }
+        drillgame_simulation::terrain::DeepStratum::VoidGeodeFields => Color::new(85, 55, 125, 255),
+        drillgame_simulation::terrain::DeepStratum::MantleStormZone => Color::new(145, 65, 45, 255),
     })
 }
 

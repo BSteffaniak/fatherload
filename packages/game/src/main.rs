@@ -4,31 +4,16 @@
 
 mod app;
 mod audio;
-mod game_state;
+mod effects;
 mod input;
 mod input_mapping;
-mod lan_discovery;
-pub mod multiplayer;
-mod online_cli;
-mod online_session;
+mod local_game;
+mod render_snapshot;
 mod rendering;
+mod runtime;
 mod save;
-mod session;
-
-use app::run;
-use drillgame_simulation::{contract, economy, player, surface, terrain};
+mod shell;
 
 fn main() {
-    if let Some(action) = online_cli::parse_online_cli_action(std::env::args().skip(1)) {
-        match online_cli::run_online_cli_action(action) {
-            Ok(message) => println!("{message}"),
-            Err(error) => {
-                eprintln!("online CLI action failed: {error}");
-                std::process::exit(1);
-            }
-        }
-        return;
-    }
-
-    run();
+    app::run();
 }

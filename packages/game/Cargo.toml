@@ -12,19 +12,18 @@ version.workspace    = true
 
 [features]
 default          = []
-fail-on-warnings = ["drillgame_simulation/fail-on-warnings"]
+fail-on-warnings = [
+    "drillgame_netcode/fail-on-warnings",
+    "drillgame_simulation/fail-on-warnings",
+]
 
 [[bin]]
 name = "drillgame"
 path = "src/main.rs"
 
 [dependencies]
+drillgame_netcode    = { workspace = true }
 drillgame_simulation = { workspace = true }
-hostname             = { workspace = true }
-mdns-sd              = { workspace = true }
-quinn                = { workspace = true }
 raylib               = { workspace = true }
-rcgen                = { workspace = true }
 serde                = { workspace = true }
 serde_json           = { workspace = true }
-tokio                = { workspace = true }

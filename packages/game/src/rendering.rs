@@ -6,9 +6,13 @@
     reason = "rendering APIs use integer pixels while camera math uses floats"
 )]
 
-use std::cell::RefCell;
+//! Draws a [`RenderSnapshot`] plus [`ShellState`]. The renderer never reads the simulation.
+
+use std::{cell::RefCell, collections::BTreeSet};
 
 use raylib::{ffi, prelude::*};
+
+use drillgame_simulation::terrain::{Terrain, TilePosition};
 
 mod interior;
 mod layout;
@@ -18,28 +22,23 @@ mod world;
 
 use interior::draw_interior;
 use screen::{
-    draw_depth_ruler_for_view, draw_ending, draw_game_over, draw_heat_warning_for_view,
-    draw_hud_for_view, draw_hud_snapshot_for_view, draw_minimap_for_view, draw_modal, draw_pause,
-    draw_title,
+    UiFrame, draw_depth_ruler_for_view, draw_game_over, draw_heat_warning_for_view,
+    draw_minimap_for_view, draw_modal, draw_pause, draw_title, draw_view_hud,
 };
 use terrain::TerrainRenderer;
 use world::{draw_particles, draw_placed_bombs, draw_scanner_marks, draw_world, world_camera};
 
 use crate::{
-    game_state::{GameState, RunMode},
     input::PlayerInput,
-    session::{
-        ClientView, LiveRenderFrameOutput, RenderViewportPlan, SplitScreenLayout, WorldDelta,
-        WorldEvent, split_screen_layout,
-    },
+    local_game::FrameReport,
+    render_snapshot::{RenderSnapshot, ViewSnapshot},
+    shell::{RunMode, ShellState},
 };
 
-const SCREEN_WIDTH: i32 = 1280;
-const SCREEN_HEIGHT: i32 = 720;
+pub use crate::render_snapshot::{SCREEN_HEIGHT, SCREEN_WIDTH};
 
-fn render_viewport_for_draw(draw: &RaylibDrawHandle<'_>) -> crate::session::Viewport {
-    crate::session::Viewport::new(0, 0, draw.get_screen_width(), draw.get_screen_height())
-}
+/// Radius (tiles) around a newly explored tile whose darkness gradient changes.
+const EXPLORATION_REDRAW_RADIUS_TILES: i32 = 12;
 
 fn render_scale_for_draw(draw: &RaylibDrawHandle<'_>) -> f32 {
     let scale_x = draw.get_render_width() as f32 / draw.get_screen_width().max(1) as f32;
@@ -51,6 +50,8 @@ pub struct GameRenderer {
     terrain: TerrainRenderer,
     ui_font_assets: UiFontAssets,
     ui_state: RefCell<layout::widgets::UiState>,
+    /// Discovered tiles already drawn by the terrain renderer (primary view).
+    explored_drawn: BTreeSet<TilePosition>,
 }
 
 struct UiFontAssets {
@@ -120,213 +121,64 @@ fn load_ui_font(
     }
 }
 
-fn draw_local_player_override(
-    draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    game: &GameState,
-    world_players: &[crate::session::RenderWorldPlayerPresentation],
-    active_drill: Option<crate::game_state::DrillState>,
-) {
-    if let Some(player) = world_players.iter().find(|player| player.local_to_view) {
-        world::draw_player_at(
-            draw,
-            player,
-            active_drill,
-            game.update_ticks,
-            game.drill_flash_seconds,
-        );
-    }
-    for player in world_players.iter().filter(|player| !player.local_to_view) {
-        world::draw_remote_player(draw, player);
-    }
-}
-
-fn draw_prediction_overlay_world(
-    draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    overlay: &crate::session::OnlinePredictionRenderOverlay,
-) {
-    if overlay.policy != crate::session::OnlineRenderAuthorityPolicy::ClientPredicted {
-        return;
-    }
-    for terrain in &overlay.terrain {
-        let tile_size = crate::game_state::TILE_SIZE;
-        let x = terrain.position.x as f32 * tile_size;
-        let y = terrain.position.y as f32 * tile_size;
-        let color = match terrain.resolution {
-            crate::session::PredictedTerrainResolution::Pending => Color::new(255, 230, 80, 150),
-            crate::session::PredictedTerrainResolution::Confirmed => Color::new(80, 255, 120, 120),
-            crate::session::PredictedTerrainResolution::Reverted => Color::new(255, 80, 80, 150),
-        };
-        draw.draw_rectangle_lines_ex(Rectangle::new(x, y, tile_size, tile_size), 3.0, color);
-        let inset = f32::from(terrain.predicted_damage_stage.min(4)) * 3.0;
-        if inset > 0.0 {
-            draw.draw_rectangle_lines_ex(
-                Rectangle::new(
-                    x + inset,
-                    y + inset,
-                    (tile_size - inset * 2.0).max(1.0),
-                    (tile_size - inset * 2.0).max(1.0),
-                ),
-                2.0,
-                Color::new(255, 255, 210, 160),
-            );
-        }
-        if terrain.resolution == crate::session::PredictedTerrainResolution::Pending {
-            draw.draw_circle_v(
-                Vector2::new(x + tile_size / 2.0, y + tile_size / 2.0),
-                4.0,
-                Color::new(255, 255, 180, 180),
-            );
-        }
-    }
-}
-
-fn draw_prediction_overlay_ui(
-    draw: &mut RaylibDrawHandle<'_>,
-    viewport: crate::session::Viewport,
-    overlay: &crate::session::OnlinePredictionRenderOverlay,
-) {
-    if overlay.policy != crate::session::OnlineRenderAuthorityPolicy::ClientPredicted {
-        return;
-    }
-    let x = viewport.x + 12;
-    let y = viewport.y + 12;
-    let crack_count: u32 = overlay
-        .terrain
-        .iter()
-        .map(|terrain| u32::from(terrain.predicted_damage_stage))
-        .sum();
-    if !overlay.effects.is_empty() || !overlay.terrain.is_empty() {
-        draw.draw_rectangle(x - 4, y - 4, 300, 28, Color::new(20, 20, 20, 140));
-        draw.draw_text(
-            &format!("predicting local action cracks:{crack_count}"),
-            x,
-            y,
-            18,
-            Color::YELLOW,
-        );
-    }
-    if let Some(modal) = overlay.modal {
-        let text = match modal.resolution {
-            crate::session::PredictedModalResolution::Pending => "opening building...",
-            crate::session::PredictedModalResolution::Confirmed => "building confirmed",
-            crate::session::PredictedModalResolution::Reverted => "building denied",
-        };
-        let modal_y = viewport.y + viewport.height / 2 - 24;
-        draw.draw_rectangle(
-            viewport.x + 24,
-            modal_y,
-            viewport.width - 48,
-            48,
-            Color::new(15, 15, 30, 210),
-        );
-        draw.draw_rectangle_lines(
-            viewport.x + 24,
-            modal_y,
-            viewport.width - 48,
-            48,
-            Color::SKYBLUE,
-        );
-        draw.draw_text(text, viewport.x + 42, modal_y + 14, 22, Color::WHITE);
-    }
-}
-
 fn ui_scroll_delta(input: PlayerInput, step: f32) -> f32 {
     -input.ui_scroll * step + if input.menu_down { step } else { 0.0 }
         - if input.menu_up { step } else { 0.0 }
 }
 
 impl GameRenderer {
-    #[must_use]
-    #[allow(
-        dead_code,
-        reason = "legacy compatibility renderer path kept during live render output migration"
-    )]
-    pub const fn split_screen_layout(client_count: usize) -> SplitScreenLayout {
-        split_screen_layout(client_count)
-    }
-
-    pub fn new(
-        raylib: &mut RaylibHandle,
-        thread: &RaylibThread,
-        terrain: &crate::terrain::Terrain,
-    ) -> Self {
+    pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, terrain: &Terrain) -> Self {
         let ui_font_assets = UiFontAssets::load(raylib, thread);
         Self {
             terrain: TerrainRenderer::new(raylib, thread, terrain),
             ui_font_assets,
             ui_state: RefCell::new(layout::widgets::UiState::default()),
+            explored_drawn: BTreeSet::new(),
         }
     }
 
-    pub fn sync_delta(
+    /// Brings terrain textures up to date with this frame's snapshot.
+    pub fn sync(
         &mut self,
         raylib: &mut RaylibHandle,
         thread: &RaylibThread,
-        game: &mut GameState,
-        output: &LiveRenderFrameOutput,
-        delta: &WorldDelta,
+        snapshot: &RenderSnapshot<'_>,
+        report: &FrameReport,
     ) {
-        for event in &delta.events {
-            match event {
-                WorldEvent::TerrainRefreshRequested => self.terrain.mark_all_dirty(),
-                WorldEvent::TerrainTilesChanged { positions } => {
-                    for tile in positions {
-                        self.terrain.mark_tile_dirty(*tile);
-                    }
-                }
-                WorldEvent::TerrainChunksChanged { revisions, .. } => {
-                    for revision in revisions {
-                        self.terrain
-                            .mark_chunk_dirty(revision.position.x, revision.position.y);
-                    }
-                }
-                WorldEvent::TickAdvanced { .. }
-                | WorldEvent::CommandsProcessed { .. }
-                | WorldEvent::SnapshotKeyframeReady { .. }
-                | WorldEvent::MessageChanged { .. }
-                | WorldEvent::PlayerChanged { .. }
-                | WorldEvent::CargoChanged { .. }
-                | WorldEvent::PlayerDamaged { .. }
-                | WorldEvent::DrillProgressed { .. }
-                | WorldEvent::PurchaseCompleted { .. }
-                | WorldEvent::RescueTriggered { .. }
-                | WorldEvent::PlayerSurvivalChanged { .. }
-                | WorldEvent::BombPlaced { .. }
-                | WorldEvent::HazardChanged
-                | WorldEvent::ImportantEffectTriggered
-                | WorldEvent::ClientExitRequested { .. }
-                | WorldEvent::ClientSettingsChanged { .. } => {}
-            }
-        }
-        let visual_changes = game.drain_visual_changes();
-        if visual_changes.full_terrain_refresh {
+        if report.world_replaced {
             self.terrain.mark_all_dirty();
+            self.explored_drawn.clear();
         }
-        for tile in visual_changes.changed_tiles {
-            self.terrain.mark_tile_dirty(tile);
+        for tile in &report.changed_tiles {
+            self.terrain.mark_tile_dirty(*tile);
         }
-        let explored = output
-            .viewport_plans
-            .first()
-            .and_then(|plan| {
-                output.discovered_tiles_by_player.get(
-                    &plan
-                        .local_player
-                        .map_or(crate::multiplayer::LOCAL_PLAYER_ID, |player| {
-                            player.player_id
-                        }),
-                )
-            })
-            .cloned()
-            .unwrap_or_default();
+        let empty = BTreeSet::new();
+        let explored = snapshot
+            .primary_view()
+            .and_then(|view| view.explored)
+            .unwrap_or(&empty);
+        if explored.len() != self.explored_drawn.len() {
+            let radius = EXPLORATION_REDRAW_RADIUS_TILES;
+            for tile in explored.difference(&self.explored_drawn) {
+                for (dx, dy) in [
+                    (0, 0),
+                    (-radius, -radius),
+                    (radius, -radius),
+                    (-radius, radius),
+                    (radius, radius),
+                ] {
+                    self.terrain.mark_tile_dirty(TilePosition {
+                        x: tile.x + dx,
+                        y: tile.y + dy,
+                    });
+                }
+            }
+            self.explored_drawn.clone_from(explored);
+        }
         self.terrain
-            .sync(raylib, thread, &output.terrain, &explored);
+            .sync(raylib, thread, snapshot.terrain, explored);
     }
 
-    #[allow(
-        dead_code,
-        reason = "legacy compatibility renderer path kept during live render output migration"
-    )]
     pub fn apply_ui_input(&self, input: PlayerInput) {
         const MODAL_SCROLL_STEP: f32 = 48.0;
         const MODAL_SCROLL_LIMIT: f32 = 10_000.0;
@@ -349,201 +201,136 @@ impl GameRenderer {
         }
     }
 
-    pub fn render_live_frame_output(
+    /// Draws one frame: every local view, then the shell overlays once.
+    pub fn render(
         &self,
         draw: &mut RaylibDrawHandle<'_>,
-        game: &GameState,
-        output: &LiveRenderFrameOutput,
-    ) {
-        draw.clear_background(Color::new(105, 190, 235, 255));
-        for plan in &output.viewport_plans {
-            let world_players = output
-                .world_players_by_view
-                .iter()
-                .find_map(|(client_id, players)| {
-                    (*client_id == plan.client_id).then_some(players.as_slice())
-                })
-                .unwrap_or(&[]);
-            let hud = output
-                .hud_snapshots
-                .iter()
-                .find(|hud| {
-                    plan.local_player
-                        .is_some_and(|player| player.player_id == hud.player_id)
-                })
-                .copied();
-            self.render_viewport_plan(draw, game, output, plan, world_players, hud);
-        }
-    }
-
-    pub fn render_viewport_plan(
-        &self,
-        draw: &mut RaylibDrawHandle<'_>,
-        game: &GameState,
-        output: &LiveRenderFrameOutput,
-        plan: &RenderViewportPlan,
-        world_players: &[crate::session::RenderWorldPlayerPresentation],
-        hud: Option<crate::session::PerPlayerHudSnapshot>,
-    ) {
-        let viewport = if plan.clip_enabled {
-            plan.viewport
-        } else {
-            render_viewport_for_draw(draw)
-        };
-        if plan.clip_enabled {
-            unsafe {
-                ffi::BeginScissorMode(viewport.x, viewport.y, viewport.width, viewport.height);
-            }
-        }
-        let local_world_player = world_players
-            .iter()
-            .find(|player| player.local_to_view)
-            .map(|player| (player.player_id, player.x, player.y));
-        let local_player = local_world_player.or_else(|| {
-            plan.local_player
-                .map(|player| (player.player_id, player.x, player.y))
-        });
-        let view = ClientView {
-            client_id: plan.client_id,
-            controlled_player_id: local_player
-                .map_or(crate::multiplayer::LOCAL_PLAYER_ID, |player| player.0),
-            camera: plan.camera,
-            viewport,
-            run_mode: game.run_mode,
-        };
-        self.render_client_view(
-            draw,
-            game,
-            &view,
-            output,
-            world_players,
-            hud,
-            plan.prediction_overlay.as_ref(),
-        );
-        if let Some(overlay) = &plan.prediction_overlay {
-            draw_prediction_overlay_ui(draw, viewport, overlay);
-        }
-        if plan.clip_enabled {
-            unsafe {
-                ffi::EndScissorMode();
-            }
-        }
-    }
-
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "client rendering keeps canonical frame output separate from shell/UI presentation"
-    )]
-    pub fn render_client_view(
-        &self,
-        draw: &mut RaylibDrawHandle<'_>,
-        game: &GameState,
-        view: &ClientView,
-        output: &LiveRenderFrameOutput,
-        world_players: &[crate::session::RenderWorldPlayerPresentation],
-        hud: Option<crate::session::PerPlayerHudSnapshot>,
-        prediction_overlay: Option<&crate::session::OnlinePredictionRenderOverlay>,
+        shell: &ShellState,
+        snapshot: &RenderSnapshot<'_>,
     ) {
         layout::set_current_fonts(self.ui_font_assets.fonts());
         layout::set_current_ui_state(self.ui_state.borrow().clone());
+        draw.clear_background(Color::new(105, 190, 235, 255));
 
-        let camera = view.camera;
-        let world_zoom = render_scale_for_draw(draw);
-
-        if view.run_mode == RunMode::Interior {
-            draw_interior(draw, game);
+        if shell.run_mode == RunMode::Interior {
+            if let Some(view) = snapshot.primary_view() {
+                draw_interior(draw, shell, view);
+            }
         } else {
-            let mut world_draw = draw.begin_mode2D(world_camera(camera, world_zoom));
+            for view in &snapshot.views {
+                self.render_view(draw, shell, snapshot, view);
+            }
+        }
+
+        if let Some(view) = snapshot.primary_view() {
+            let ui = UiFrame {
+                shell,
+                snapshot,
+                view,
+                player: view.player,
+            };
+            match shell.run_mode {
+                RunMode::Title => draw_title(draw, &ui),
+                RunMode::Paused => draw_pause(draw, &ui),
+                RunMode::Playing | RunMode::Interior => {}
+            }
+            if let Some(modal) = shell.modal {
+                draw_modal(draw, &ui, modal);
+            } else if shell.run_mode == RunMode::Playing && view.failure.is_some() {
+                draw_game_over(draw, &ui);
+            }
+        }
+
+        draw.draw_text(
+            &format!("Vol {:.0}% (+/-)", shell.master_volume * 100.0),
+            1030,
+            20,
+            18,
+            Color::LIGHTGRAY,
+        );
+        if let Some(ui_state) = layout::take_current_ui_state() {
+            *self.ui_state.borrow_mut() = ui_state;
+        }
+    }
+
+    fn render_view(
+        &self,
+        draw: &mut RaylibDrawHandle<'_>,
+        shell: &ShellState,
+        snapshot: &RenderSnapshot<'_>,
+        view: &ViewSnapshot<'_>,
+    ) {
+        let viewport = view.viewport;
+        let clip = snapshot.views.len() > 1;
+        if clip {
+            begin_view_clip(viewport);
+        }
+        let camera = Vector2::new(view.camera.x, view.camera.y);
+        let world_zoom = render_scale_for_draw(draw);
+        {
+            let mut view_camera = world_camera(camera, world_zoom);
+            view_camera.offset = Vector2::new(viewport.x as f32, viewport.y as f32);
+            let mut world_draw = draw.begin_mode2D(view_camera);
             draw_world(
                 &mut world_draw,
                 camera,
                 &self.terrain,
-                &output.terrain,
-                &output.infrastructure,
-                output
-                    .active_drills
-                    .get(&view.controlled_player_id)
-                    .copied(),
-                &game.online_terrain_sync_markers,
-                game.update_ticks,
+                snapshot.terrain,
+                snapshot.infrastructure,
+                view.active_drill,
+                shell.update_ticks,
             );
-            draw_particles(&mut world_draw, &output.particles);
-            draw_placed_bombs(&mut world_draw, &output.bombs);
-            if let Some(local_player) = world_players.iter().find(|player| player.local_to_view) {
-                draw_scanner_marks(&mut world_draw, &output.terrain, local_player);
+            draw_particles(
+                &mut world_draw,
+                view.lost_cargo,
+                snapshot.boulders,
+                snapshot.sparks,
+            );
+            draw_placed_bombs(&mut world_draw, snapshot.bombs);
+            if let Some(local) = snapshot
+                .players
+                .iter()
+                .find(|player| player.player_id == view.player_id)
+            {
+                draw_scanner_marks(&mut world_draw, snapshot.terrain, local);
             }
-            if let Some(overlay) = prediction_overlay {
-                draw_prediction_overlay_world(&mut world_draw, overlay);
-            }
-            for cloud in &output.hazards {
+            for cloud in snapshot.hazards {
                 world_draw.draw_circle_v(
                     Vector2::new(cloud.x, cloud.y),
                     cloud.radius,
                     Color::new(90, 190, 80, 70),
                 );
             }
+            for player in &snapshot.players {
+                if player.player_id == view.player_id {
+                    world::draw_player_at(&mut world_draw, player);
+                } else {
+                    world::draw_remote_player(&mut world_draw, player);
+                }
+            }
+        }
+        draw_heat_warning_for_view(draw, snapshot.terrain, view);
+        draw_view_hud(draw, shell, snapshot, view);
+        draw_depth_ruler_for_view(draw, snapshot.terrain, view);
+        draw_minimap_for_view(draw, snapshot.terrain, view, &snapshot.players);
+        if clip {
+            end_view_clip();
+        }
+    }
+}
 
-            draw_local_player_override(
-                &mut world_draw,
-                game,
-                world_players,
-                output
-                    .active_drills
-                    .get(&view.controlled_player_id)
-                    .copied(),
-            );
-        }
-        if game.screen_flash_seconds > 0.0 {
-            let alpha = (game.screen_flash_seconds * 500.0).clamp(0.0, 180.0) as u8;
-            draw.draw_rectangle(
-                0,
-                0,
-                SCREEN_WIDTH,
-                SCREEN_HEIGHT,
-                Color::new(255, 70, 30, alpha),
-            );
-        }
-        if view.run_mode != RunMode::Interior {
-            draw_heat_warning_for_view(draw, game, view);
-        }
-        if let Some(hud) = hud {
-            draw_hud_snapshot_for_view(draw, game, view, hud);
-        } else {
-            draw_hud_for_view(draw, game, view);
-        }
-        if view.run_mode != RunMode::Interior {
-            draw_depth_ruler_for_view(draw, game, view);
-            draw_minimap_for_view(draw, game, view, world_players);
-        }
+fn begin_view_clip(viewport: crate::render_snapshot::Viewport) {
+    // SAFETY: raylib scissor calls only set GPU state; they are balanced by `end_view_clip`
+    // within the same drawing pass.
+    unsafe {
+        ffi::BeginScissorMode(viewport.x, viewport.y, viewport.width, viewport.height);
+    }
+}
 
-        if view.run_mode == RunMode::Title {
-            draw_title(draw, game);
-        } else if view.run_mode == RunMode::Paused {
-            draw_pause(draw, game);
-        }
-
-        if let Some(modal) = game.modal {
-            draw_modal(draw, game, modal, hud);
-        }
-
-        if game.game_over {
-            draw_game_over(draw, game);
-        }
-
-        draw.draw_text(
-            &format!("Vol {:.0}% (+/-)", game.master_volume * 100.0),
-            1030,
-            20,
-            18,
-            Color::LIGHTGRAY,
-        );
-
-        if game.won_game {
-            draw_ending(draw, game);
-        }
-        if let Some(ui_state) = layout::take_current_ui_state() {
-            *self.ui_state.borrow_mut() = ui_state;
-        }
+fn end_view_clip() {
+    // SAFETY: closes the scissor region opened by `begin_view_clip`.
+    unsafe {
+        ffi::EndScissorMode();
     }
 }
 

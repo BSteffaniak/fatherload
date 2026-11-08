@@ -1,13 +1,19 @@
 use raylib::prelude::*;
 
 use super::{SCREEN_WIDTH, layout::UiLayout};
+use drillgame_simulation::economy::SurfaceZone;
+
 use crate::{
-    economy::SurfaceZone,
-    game_state::{GameState, ServiceAnimation},
+    render_snapshot::ViewSnapshot,
+    shell::{ServiceAnimation, ShellState},
 };
 
-pub(super) fn draw_interior(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
-    let zone = game.interior_zone.unwrap_or(SurfaceZone::Depot);
+pub(super) fn draw_interior(
+    draw: &mut RaylibDrawHandle<'_>,
+    shell: &ShellState,
+    view: &ViewSnapshot<'_>,
+) {
+    let zone = shell.interior_zone.unwrap_or(SurfaceZone::Depot);
     let (wall, trim, title) = interior_theme(zone);
     draw.clear_background(wall);
     draw.draw_rectangle(0, 455, SCREEN_WIDTH, 265, Color::new(38, 32, 28, 255));
@@ -18,13 +24,13 @@ pub(super) fn draw_interior(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
     draw.draw_rectangle_lines(58, 338, 48, 118, Color::GOLD);
 
     draw_interior_props(draw, zone);
-    draw_service_animation(draw, game, zone);
+    draw_service_animation(draw, shell, zone);
     let service_x = interior_screen_x(interior_service_x_render(zone));
 
-    let player_x = interior_screen_x(game.interior_x);
+    let player_x = interior_screen_x(shell.interior_x);
     draw.draw_rectangle((player_x - 11.0) as i32, 402, 22, 38, Color::GOLD);
     draw.draw_circle(player_x as i32, 392, 10.0, Color::SKYBLUE);
-    let visor_offset = if game.interior_facing >= 0.0 { 5 } else { -13 };
+    let visor_offset = if shell.interior_facing >= 0.0 { 5 } else { -13 };
     draw.draw_rectangle(player_x as i32 + visor_offset, 389, 8, 5, Color::DARKBLUE);
 
     let mut ui = UiLayout::screen(draw);
@@ -36,7 +42,7 @@ pub(super) fn draw_interior(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
             height: 100.0,
         },
         title,
-        Some(npc_line(zone, game)),
+        Some(npc_line(zone, view)),
         trim,
     );
 
@@ -65,20 +71,20 @@ pub(super) fn draw_interior(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
     );
 }
 
-fn npc_line(zone: SurfaceZone, game: &GameState) -> &'static str {
+fn npc_line(zone: SurfaceZone, view: &ViewSnapshot<'_>) -> &'static str {
     match zone {
-        SurfaceZone::Fuel if game.player.fuel < game.player.fuel_capacity * 0.25 => {
+        SurfaceZone::Fuel if view.player.fuel < view.player.fuel_capacity * 0.25 => {
             "Pip: You came in on fumes. Try leaving with more than courage."
         }
         SurfaceZone::Fuel => "Pip: Fuel sale rumors start as soon as miners stop exploding.",
-        SurfaceZone::Repair if game.rescue_count > 0 => {
+        SurfaceZone::Repair if view.rescue_count > 0 => {
             "Iona: I patched your rescue dents. The drill keeps receipts."
         }
         SurfaceZone::Repair => "Iona: Slow landings are cheaper than heroic ones.",
         SurfaceZone::Depot => "Kade: Market's twitchy. Sell jackpots before the buyers blink.",
         SurfaceZone::Headquarters => "Director Vale: Bring contracts, not ghost stories.",
         SurfaceZone::Shop => "Bolt: If it still rattles, upgrade the part making the noise.",
-        SurfaceZone::Bank if game.player.loan_debt > 0 => {
+        SurfaceZone::Bank if view.player.loan_debt > 0 => {
             "Ledger: Debt compounds faster than tunnels collapse."
         }
         SurfaceZone::Bank => "Ledger: Credit is just fuel with paperwork.",
@@ -87,11 +93,11 @@ fn npc_line(zone: SurfaceZone, game: &GameState) -> &'static str {
     }
 }
 
-fn draw_service_animation(draw: &mut RaylibDrawHandle<'_>, game: &GameState, zone: SurfaceZone) {
-    let Some(animation) = game.service_animation else {
+fn draw_service_animation(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState, zone: SurfaceZone) {
+    let Some(animation) = shell.service_animation else {
         return;
     };
-    let pulse = (game.service_animation_seconds * 18.0) as i32;
+    let pulse = (shell.service_animation_seconds * 18.0) as i32;
     match animation {
         ServiceAnimation::Fuel if zone == SurfaceZone::Fuel => {
             draw.draw_line_ex(

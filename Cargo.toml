@@ -12,6 +12,7 @@ version    = "0.0.1-alpha.0"
 
 [workspace.dependencies]
 bytes = "1.11.1"
+drillgame_netcode = { version = "0.0.1-alpha.0", path = "packages/netcode" }
 drillgame_simulation = { version = "0.0.1-alpha.0", path = "packages/simulation" }
 hostname = "0.4.2"
 mdns-sd = "0.18.2"

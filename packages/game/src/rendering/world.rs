@@ -1,18 +1,17 @@
 use raylib::prelude::*;
 
-use crate::session::{
-    RemotePlayerDangerLevel, RenderParticleSnapshot, RenderWorldPlayerPresentation,
+use drillgame_simulation::{
+    DrillDirection, DrillState, FallingBoulder, InfrastructureKind, PlacedBomb,
+    PlacedInfrastructure,
+    economy::SurfaceZone,
+    surface::SURFACE_BUILDINGS,
+    terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
 use super::terrain::TerrainRenderer;
 use crate::{
-    economy::SurfaceZone,
-    game_state::{
-        DrillDirection, DrillState, InfrastructureKind, OnlineTerrainSyncMarker, PlacedBomb,
-        PlacedInfrastructure, TILE_SIZE,
-    },
-    surface::SURFACE_BUILDINGS,
-    terrain::{Terrain, TileKind, TilePosition},
+    effects::SparkParticle,
+    render_snapshot::{DangerLevel, PlayerPresentation},
 };
 
 pub(super) fn world_camera(camera: Vector2, zoom: f32) -> Camera2D {
@@ -25,10 +24,6 @@ pub(super) fn world_camera(camera: Vector2, zoom: f32) -> Camera2D {
     }
 }
 
-#[allow(
-    clippy::too_many_arguments,
-    reason = "world rendering receives canonical snapshot domains separately from shell presentation"
-)]
 pub(super) fn draw_world(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
     camera: Vector2,
@@ -36,13 +31,11 @@ pub(super) fn draw_world(
     terrain: &Terrain,
     infrastructure: &[PlacedInfrastructure],
     active_drill: Option<DrillState>,
-    terrain_sync_markers: &[OnlineTerrainSyncMarker],
     update_ticks: u64,
 ) {
     draw_surface_buildings(draw);
     terrain_renderer.draw(draw, camera);
     draw_infrastructure(draw, infrastructure, update_ticks);
-    draw_online_terrain_sync_markers(draw, terrain_sync_markers);
 
     if let Some(drill) = active_drill {
         let x = (drill.target.x as f32 * TILE_SIZE) as i32;
@@ -98,28 +91,6 @@ pub(super) fn draw_world(
         if progress > 0.45 {
             draw.draw_circle(x + 21, y + 18, 2.0, Color::new(255, 235, 150, 150));
         }
-    }
-}
-
-fn draw_online_terrain_sync_markers(
-    draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    markers: &[OnlineTerrainSyncMarker],
-) {
-    for marker in markers {
-        let intensity = marker.intensity();
-        let center_x = (marker.position.x as f32 * TILE_SIZE + TILE_SIZE * 0.5) as i32;
-        let center_y = (marker.position.y as f32 * TILE_SIZE + TILE_SIZE * 0.5) as i32;
-        let radius = 7.0 + (1.0 - intensity) * 10.0;
-        let alpha = (70.0 + 150.0 * intensity) as u8;
-        draw.draw_rectangle_lines(
-            (marker.position.x as f32 * TILE_SIZE) as i32,
-            (marker.position.y as f32 * TILE_SIZE) as i32,
-            TILE_SIZE as i32,
-            TILE_SIZE as i32,
-            Color::new(85, 220, 255, alpha),
-        );
-        draw.draw_circle_lines(center_x, center_y, radius, Color::new(120, 240, 255, alpha));
-        if intensity > 0.55 {}
     }
 }
 
@@ -244,9 +215,11 @@ fn draw_building(
 
 pub(super) fn draw_particles(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    particles: &RenderParticleSnapshot,
+    lost_cargo: Option<(f32, f32)>,
+    boulders: &[FallingBoulder],
+    sparks: &[SparkParticle],
 ) {
-    if let Some((x, y)) = particles.lost_cargo {
+    if let Some((x, y)) = lost_cargo {
         draw.draw_rectangle((x - 8.0) as i32, (y - 7.0) as i32, 16, 14, Color::GOLD);
         draw.draw_rectangle_lines((x - 8.0) as i32, (y - 7.0) as i32, 16, 14, Color::BROWN);
         draw.draw_line(
@@ -258,15 +231,7 @@ pub(super) fn draw_particles(
         );
     }
 
-    for particle in &particles.dust {
-        let alpha = (particle.life / 0.35).clamp(0.0, 1.0);
-        draw.draw_circle_v(
-            Vector2::new(particle.x, particle.y),
-            4.0,
-            Color::new(190, 150, 105, (180.0 * alpha) as u8),
-        );
-    }
-    for boulder in &particles.boulders {
+    for boulder in boulders {
         let wobble = if boulder.warning_seconds > 0.0 {
             (boulder.warning_seconds * 60.0).sin() * 3.0
         } else {
@@ -280,7 +245,7 @@ pub(super) fn draw_particles(
         draw.draw_circle_v(Vector2::new(boulder.x + wobble, boulder.y), 8.0, color);
         draw.draw_circle_lines(boulder.x as i32, boulder.y as i32, 8.0, Color::DARKGRAY);
     }
-    for spark in &particles.sparks {
+    for spark in sparks {
         let alpha = (spark.life / 0.45).clamp(0.0, 1.0);
         draw.draw_circle_v(
             Vector2::new(spark.x, spark.y),
@@ -317,7 +282,7 @@ pub(super) fn draw_placed_bombs(
 pub(super) fn draw_scanner_marks(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
     terrain: &Terrain,
-    player: &RenderWorldPlayerPresentation,
+    player: &PlayerPresentation,
 ) {
     if player.scanner_level == 0 {
         return;
@@ -363,7 +328,7 @@ pub(super) fn draw_scanner_marks(
 
 pub(super) fn draw_remote_player(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    player: &RenderWorldPlayerPresentation,
+    player: &PlayerPresentation,
 ) {
     draw_remote_player_at(draw, player.x, player.y, player.danger_level());
     draw_remote_player_motion_indicator(
@@ -385,17 +350,17 @@ pub(super) fn draw_remote_player_at(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
     player_x: f32,
     player_y: f32,
-    danger_level: RemotePlayerDangerLevel,
+    danger_level: DangerLevel,
 ) {
     let body_color = match danger_level {
-        RemotePlayerDangerLevel::Nominal => Color::new(80, 170, 245, 180),
-        RemotePlayerDangerLevel::Warning => Color::new(230, 185, 40, 210),
-        RemotePlayerDangerLevel::Critical => Color::new(230, 70, 55, 220),
+        DangerLevel::Nominal => Color::new(80, 170, 245, 180),
+        DangerLevel::Warning => Color::new(230, 185, 40, 210),
+        DangerLevel::Critical => Color::new(230, 70, 55, 220),
     };
     let outline_color = match danger_level {
-        RemotePlayerDangerLevel::Nominal => Color::BLUE,
-        RemotePlayerDangerLevel::Warning => Color::ORANGE,
-        RemotePlayerDangerLevel::Critical => Color::RED,
+        DangerLevel::Nominal => Color::BLUE,
+        DangerLevel::Warning => Color::ORANGE,
+        DangerLevel::Critical => Color::RED,
     };
     draw.draw_rectangle(
         (player_x - 12.0) as i32,
@@ -437,7 +402,7 @@ pub(super) fn draw_remote_player_motion_indicator(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
     player_x: f32,
     player_y: f32,
-    danger_level: RemotePlayerDangerLevel,
+    danger_level: DangerLevel,
     velocity_x: f32,
     velocity_y: f32,
 ) {
@@ -448,9 +413,9 @@ pub(super) fn draw_remote_player_motion_indicator(
     let direction_x = velocity_x / speed;
     let direction_y = velocity_y / speed;
     let trail_color = match danger_level {
-        RemotePlayerDangerLevel::Nominal => Color::new(120, 220, 255, 150),
-        RemotePlayerDangerLevel::Warning => Color::new(255, 190, 40, 170),
-        RemotePlayerDangerLevel::Critical => Color::new(255, 70, 70, 190),
+        DangerLevel::Nominal => Color::new(120, 220, 255, 150),
+        DangerLevel::Warning => Color::new(255, 190, 40, 170),
+        DangerLevel::Critical => Color::new(255, 70, 70, 190),
     };
     let trail_length = (speed * 0.12).clamp(12.0, 34.0);
     let start = Vector2::new(player_x - direction_x * 18.0, player_y - direction_y * 18.0);
@@ -464,7 +429,7 @@ pub(super) fn draw_remote_player_motion_indicator(
 
 fn draw_remote_player_status(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    player: &RenderWorldPlayerPresentation,
+    player: &PlayerPresentation,
 ) {
     let label_x = (player.x - 42.0) as i32;
     let label_y = (player.y - 48.0) as i32;
@@ -523,11 +488,9 @@ fn draw_remote_player_bar(
 )]
 pub(super) fn draw_player_at(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    player: &RenderWorldPlayerPresentation,
-    active_drill: Option<DrillState>,
-    _update_ticks: u64,
-    drill_flash_seconds: f32,
+    player: &PlayerPresentation,
 ) {
+    let active_drill = player.active_drill;
     let (offset_x, offset_y) = drill_visual_offset(active_drill);
     let screen_x = player.x + offset_x;
     let screen_y = player.y + offset_y;
@@ -648,13 +611,6 @@ pub(super) fn draw_player_at(
             38,
             36,
             Color::GOLD,
-        );
-    }
-    if drill_flash_seconds > 0.0 {
-        draw.draw_circle_v(
-            Vector2::new(screen_x, screen_y + 20.0),
-            7.0,
-            Color::new(255, 230, 80, 210),
         );
     }
 }

@@ -1,15 +1,26 @@
 use raylib::prelude::*;
 
+use drillgame_simulation::{
+    Player,
+    economy::{upgrade_offers, upgrade_tier_name},
+    terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
+};
+
 use super::layout::{HudCard, ModalContent, Section, SectionItem, StatItem, UiLayout};
 use crate::{
-    economy::{upgrade_offers, upgrade_tier_name},
-    game_state::{
-        GameState, ModalScreen, OnlineMultiplayerView, PauseOption, TILE_SIZE, TitleOption,
-    },
-    save::{latest_save_summary, save_slot_count, save_slot_metadata},
-    session::{ClientView, PerPlayerHudSnapshot},
-    terrain::{MineralKind, TileKind, TilePosition},
+    render_snapshot::{PlayerPresentation, RenderSnapshot, ViewSnapshot},
+    save::{latest_save_summary, save_slot_count, save_slot_metadata, saves_exist},
+    shell::{ModalScreen, PauseOption, ShellState, TitleOption},
 };
+
+/// What screen-space UI (HUD, menus, modals) reads: shell state plus the snapshot and the view
+/// the UI acts for.
+pub(super) struct UiFrame<'a, 'w> {
+    pub shell: &'a ShellState,
+    pub snapshot: &'a RenderSnapshot<'w>,
+    pub view: &'a ViewSnapshot<'w>,
+    pub player: &'w Player,
+}
 
 struct MinimapProjection {
     x: i32,
@@ -23,18 +34,17 @@ struct MinimapProjection {
 
 pub(super) fn draw_heat_warning_for_view(
     draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-    view: &ClientView,
+    terrain: &Terrain,
+    view: &ViewSnapshot<'_>,
 ) {
-    let depth_heat = view.camera.y > 18.0 * TILE_SIZE;
-    let tile_x = (view.camera.x / TILE_SIZE) as i32;
-    let tile_y = (view.camera.y / TILE_SIZE) as i32;
+    let depth_heat = view.player.y > 18.0 * TILE_SIZE;
+    let tile = view.player.tile_position(TILE_SIZE);
     let near_lava = (-2..=2).any(|dy| {
         (-2..=2).any(|dx| {
             matches!(
-                game.terrain.tile(TilePosition {
-                    x: tile_x + dx,
-                    y: tile_y + dy,
+                terrain.tile(TilePosition {
+                    x: tile.x + dx,
+                    y: tile.y + dy,
                 }),
                 Some(tile) if tile.kind == TileKind::Lava
             )
@@ -52,57 +62,14 @@ pub(super) fn draw_heat_warning_for_view(
     }
 }
 
-pub(super) fn draw_hud_for_view(
+pub(super) fn draw_view_hud(
     draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-    view: &ClientView,
-) {
-    draw_view_hud_panel(draw, game, view, None);
-}
-
-pub(super) fn draw_hud_snapshot_for_view(
-    draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-    view: &ClientView,
-    hud: PerPlayerHudSnapshot,
-) {
-    draw_view_hud_panel(draw, game, view, Some(hud));
-}
-
-fn draw_view_hud_panel(
-    draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-    view: &ClientView,
-    hud: Option<PerPlayerHudSnapshot>,
+    shell: &ShellState,
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
 ) {
     let fps = draw.get_fps();
-    let (hull, max_hull, fuel, fuel_capacity, credits, cargo_used, cargo_capacity, depth) = hud
-        .map_or_else(
-            || {
-                (
-                    game.player.hull,
-                    game.player.max_hull(),
-                    game.player.fuel,
-                    game.player.fuel_capacity,
-                    game.player.credits,
-                    game.player.cargo_used(),
-                    game.player.cargo_capacity,
-                    (game.player.y / TILE_SIZE).max(0.0) as i32,
-                )
-            },
-            |hud| {
-                (
-                    hud.hull,
-                    hud.max_hull,
-                    hud.fuel,
-                    hud.fuel_capacity,
-                    hud.credits,
-                    hud.cargo_used,
-                    hud.cargo_capacity,
-                    (view.camera.y / TILE_SIZE).max(0.0) as i32,
-                )
-            },
-        );
+    let hud = view.hud;
     let viewport = Rectangle {
         x: view.viewport.x as f32,
         y: view.viewport.y as f32,
@@ -111,26 +78,40 @@ fn draw_view_hud_panel(
     };
     let cards = vec![
         HudCard::meter(
-            format!("P{} Hull", view.controlled_player_id.get()),
-            hull,
-            max_hull,
+            format!("P{} Hull", view.seat_index + 1),
+            hud.hull,
+            hud.max_hull,
             Color::SKYBLUE,
             Color::RED,
         ),
-        HudCard::meter("Fuel", fuel, fuel_capacity, Color::LIME, Color::ORANGE),
+        HudCard::meter(
+            "Fuel",
+            hud.fuel,
+            hud.fuel_capacity,
+            Color::LIME,
+            Color::ORANGE,
+        ),
         HudCard::meter(
             "Cargo",
-            cargo_used as f32,
-            cargo_capacity as f32,
+            hud.cargo_used as f32,
+            hud.cargo_capacity as f32,
             Color::GOLD,
             Color::ORANGE,
         ),
-        HudCard::text("Run", format!("{credits} cr | {depth}m"), Color::GOLD),
+        HudCard::text(
+            "Run",
+            format!("{} cr | {}m", hud.credits, hud.depth),
+            Color::GOLD,
+        ),
     ];
-    let details = game.show_details.then(|| {
+    let details = shell.show_details.then(|| {
         vec![
             StatItem::new("FPS", fps.to_string(), Color::LIME),
-            StatItem::new("Tick", game.update_ticks.to_string(), Color::LIGHTGRAY),
+            StatItem::new(
+                "Tick",
+                format!("{} ({} new events)", snapshot.tick, snapshot.events.len()),
+                Color::LIGHTGRAY,
+            ),
             StatItem::new(
                 "Camera",
                 format!(
@@ -140,7 +121,7 @@ fn draw_view_hud_panel(
                 ),
                 Color::LIGHTGRAY,
             ),
-            StatItem::new("Message", game.message.clone(), Color::LIGHTGRAY),
+            StatItem::new("Message", shell.message.clone(), Color::LIGHTGRAY),
         ]
     });
     let mut layout = UiLayout::new(draw, viewport);
@@ -149,9 +130,9 @@ fn draw_view_hud_panel(
 
 pub(super) fn draw_minimap_for_view(
     draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-    view: &ClientView,
-    remote_players: &[crate::session::RenderWorldPlayerPresentation],
+    terrain: &Terrain,
+    view: &ViewSnapshot<'_>,
+    players: &[PlayerPresentation],
 ) {
     let width = (view.viewport.width / 6).clamp(86, 130);
     let height = (view.viewport.height / 8).clamp(64, 96);
@@ -165,12 +146,12 @@ pub(super) fn draw_minimap_for_view(
         Color::new(0, 0, 0, 150),
     );
 
-    let terrain_width = game.terrain.width().max(1);
-    let terrain_height = game.terrain.height().max(1);
-    let player_tile_y = (view.camera.y / TILE_SIZE) as i32;
+    let terrain_width = terrain.width().max(1);
+    let terrain_height = terrain.height().max(1);
+    let player_tile = view.player.tile_position(TILE_SIZE);
     let visible_height = terrain_height.min(80);
     let origin_y = if terrain_height > visible_height {
-        (player_tile_y - visible_height / 2).clamp(0, terrain_height - visible_height)
+        (player_tile.y - visible_height / 2).clamp(0, terrain_height - visible_height)
     } else {
         0
     };
@@ -185,7 +166,7 @@ pub(super) fn draw_minimap_for_view(
     };
     for ty in origin_y..origin_y + visible_height {
         for tx in 0..terrain_width {
-            let Some(tile) = game.terrain.tile(TilePosition { x: tx, y: ty }) else {
+            let Some(tile) = terrain.tile(TilePosition { x: tx, y: ty }) else {
                 continue;
             };
             let color = marker_color(tile.kind);
@@ -194,10 +175,13 @@ pub(super) fn draw_minimap_for_view(
             }
         }
     }
-    let player_x = x + ((view.camera.x / TILE_SIZE) as i32) * width / terrain_width;
-    let player_y = y + (((view.camera.y / TILE_SIZE) as i32) - origin_y) * height / visible_height;
+    let player_x = x + player_tile.x * width / terrain_width;
+    let player_y = y + (player_tile.y - origin_y) * height / visible_height;
     draw.draw_circle(player_x, player_y, 3.0, Color::SKYBLUE);
-    for remote in remote_players {
+    for remote in players
+        .iter()
+        .filter(|other| other.player_id != view.player_id)
+    {
         let remote_tile_x = (remote.x / TILE_SIZE) as i32;
         let remote_tile_y = (remote.y / TILE_SIZE) as i32;
         if remote_tile_y < origin_y || remote_tile_y >= origin_y + visible_height {
@@ -226,8 +210,8 @@ pub(super) fn draw_minimap_for_view(
 
 pub(super) fn draw_depth_ruler_for_view(
     draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-    view: &ClientView,
+    terrain: &Terrain,
+    view: &ViewSnapshot<'_>,
 ) {
     let x = view.viewport.x + view.viewport.width - 20;
     let top = view.viewport.y + 72;
@@ -235,14 +219,14 @@ pub(super) fn draw_depth_ruler_for_view(
     draw.draw_rectangle(x, top, 10, height, Color::new(0, 0, 0, 120));
     draw.draw_rectangle_lines(x, top, 10, height, Color::new(255, 255, 255, 120));
 
-    let max_depth = game.terrain.height().max(80);
+    let max_depth = terrain.height().max(80);
     let step = if max_depth > 180 { 50 } else { 20 };
     for marker in (0..=max_depth).step_by(step as usize) {
         let y = top + (marker * height / max_depth);
         draw.draw_line(x - 8, y, x + 18, y, Color::LIGHTGRAY);
     }
 
-    let depth = (view.camera.y / TILE_SIZE - 5.0).max(0.0);
+    let depth = (view.player.y / TILE_SIZE).max(0.0);
     let marker_y = top + ((depth / max_depth as f32).clamp(0.0, 1.0) * height as f32) as i32;
     draw.draw_circle(x + 5, marker_y, 6.0, Color::GOLD);
 }
@@ -278,33 +262,27 @@ fn draw_map_marker(
 
 pub(super) fn draw_modal(
     draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
+    ui: &UiFrame<'_, '_>,
     modal: ModalScreen,
-    hud: Option<PerPlayerHudSnapshot>,
 ) {
-    draw_modal_ui(draw, game, modal, hud);
+    draw_modal_ui(draw, ui, modal);
 }
 
 #[allow(
     clippy::too_many_lines,
     reason = "exhaustive modal dispatch is intentionally centralized during UI migration"
 )]
-fn draw_modal_ui(
-    draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-    modal: ModalScreen,
-    hud: Option<PerPlayerHudSnapshot>,
-) {
+fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: ModalScreen) {
     match modal {
-        ModalScreen::Depot => draw_modal_depot_ui(draw, game),
-        ModalScreen::DepotReceiptHistory => draw_depot_receipt_history_ui(draw, game),
+        ModalScreen::Depot => draw_modal_depot_ui(draw, ui),
+        ModalScreen::DepotReceiptHistory => draw_depot_receipt_history_ui(draw, ui),
         ModalScreen::ShopConfirm => draw_confirm_modal_ui(
             draw,
             "Confirm Upgrade Purchase",
             "Enter/E buys the selected upgrade. Esc returns to the shop.",
         ),
-        ModalScreen::Fuel => draw_service_modal_ui(draw, game, hud, "Fuel Station", "fuel"),
-        ModalScreen::Repair => draw_service_modal_ui(draw, game, hud, "Repair Garage", "hull"),
+        ModalScreen::Fuel => draw_service_modal_ui(draw, ui, "Fuel Station", "fuel"),
+        ModalScreen::Repair => draw_service_modal_ui(draw, ui, "Repair Garage", "hull"),
         ModalScreen::FuelConfirm => draw_confirm_modal_ui(
             draw,
             "Confirm Fuel Purchase",
@@ -320,21 +298,21 @@ fn draw_modal_ui(
             "Exit to Desktop?",
             "Enter/E exits. Esc returns to the game.",
         ),
-        ModalScreen::UnsavedExitConfirm => draw_unsaved_exit_confirm_ui(draw, game),
-        ModalScreen::Shop => draw_shop_ui(draw, game),
-        ModalScreen::Options => draw_options_ui(draw, game),
-        ModalScreen::SaveSlots => draw_slots_ui(draw, game, true),
-        ModalScreen::LoadSlots => draw_slots_ui(draw, game, false),
+        ModalScreen::UnsavedExitConfirm => draw_unsaved_exit_confirm_ui(draw, ui),
+        ModalScreen::Shop => draw_shop_ui(draw, ui),
+        ModalScreen::Options => draw_options_ui(draw, ui),
+        ModalScreen::SaveSlots => draw_slots_ui(draw, ui, true),
+        ModalScreen::LoadSlots => draw_slots_ui(draw, ui, false),
         ModalScreen::Bank => draw_generic_options_ui(
             draw,
-            game,
+            ui,
             "Bank",
             "Manage deposits and debt. Esc closes.",
             &["Deposit credits", "Withdraw credits", "Pay debt"],
         ),
         ModalScreen::Explosives => draw_generic_options_ui(
             draw,
-            game,
+            ui,
             "Explosives Shack",
             "Purchase mining explosives and blast tools. Esc closes.",
             &[
@@ -346,7 +324,7 @@ fn draw_modal_ui(
         ),
         ModalScreen::Salvage => draw_generic_options_ui(
             draw,
-            game,
+            ui,
             "Salvage Yard",
             "Buy and deploy field infrastructure. Esc closes.",
             &[
@@ -360,7 +338,7 @@ fn draw_modal_ui(
         ),
         ModalScreen::Headquarters => draw_generic_options_ui(
             draw,
-            game,
+            ui,
             "Headquarters",
             "Contracts, story briefings, finance, and expedition planning.",
             &[
@@ -375,7 +353,7 @@ fn draw_modal_ui(
         ),
         ModalScreen::Crafting => draw_generic_options_ui(
             draw,
-            game,
+            ui,
             "Crafting Bench",
             "Turn recovered materials into support equipment.",
             &[
@@ -389,7 +367,7 @@ fn draw_modal_ui(
         ),
         ModalScreen::TownDevelopment => draw_generic_options_ui(
             draw,
-            game,
+            ui,
             "Town Development",
             "Invest in settlement upgrades and local services.",
             &[
@@ -403,7 +381,7 @@ fn draw_modal_ui(
         ),
         ModalScreen::ExpeditionBoard => draw_generic_options_ui(
             draw,
-            game,
+            ui,
             "Expedition Board",
             "Review active expeditions and available claims.",
             &[
@@ -413,43 +391,38 @@ fn draw_modal_ui(
                 "Collect completed expedition",
             ],
         ),
-        ModalScreen::ResearchLog => draw_research_log_ui(draw, game),
-        ModalScreen::Inventory => draw_inventory_ui(draw, game),
-        ModalScreen::OnlineMultiplayer => draw_online_multiplayer_ui(draw, game),
-        ModalScreen::Map => draw_map_ui(draw, game),
+        ModalScreen::ResearchLog => draw_research_log_ui(draw, ui),
+        ModalScreen::Inventory => draw_inventory_ui(draw, ui),
+        ModalScreen::Map => draw_map_ui(draw, ui),
         ModalScreen::Help => draw_help_ui(draw),
     }
 }
 
 fn draw_service_modal_ui(
     draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-    hud: Option<PerPlayerHudSnapshot>,
+    ui: &UiFrame<'_, '_>,
     title: &str,
     service: &str,
 ) {
     let mut items = Vec::new();
+    let hud = ui.view.hud;
     if service == "fuel" {
-        let fuel = hud.map_or(game.player.fuel, |hud| hud.fuel);
-        let capacity = hud.map_or(game.player.fuel_capacity, |hud| hud.fuel_capacity);
-        let credits = hud.map_or(game.player.credits, |hud| hud.credits);
+        let (fuel, capacity, credits) = (hud.fuel, hud.fuel_capacity, hud.credits);
         let missing = (capacity - fuel).ceil().max(0.0) as u32;
         items.push(SectionItem::text(format!(
             "Tank: {fuel:.0}/{capacity:.0}. Fill cost: {missing} cr. Credits: {credits}."
         )));
     } else {
-        let hull = hud.map_or(game.player.hull, |hud| hud.hull);
-        let capacity = hud.map_or_else(|| game.player.max_hull(), |hud| hud.max_hull);
-        let credits = hud.map_or(game.player.credits, |hud| hud.credits);
+        let (hull, capacity, credits) = (hud.hull, hud.max_hull, hud.credits);
         items.push(SectionItem::text(format!(
             "Hull: {hull:.0}/{capacity:.0}. Credits available: {credits}."
         )));
     }
     for (index, option) in ["Small 25%", "Half 50%", "Full 100%"].iter().enumerate() {
         items.push(SectionItem::stat(
-            selected_label(index == game.selected_menu_item, option),
+            selected_label(index == ui.shell.selected_menu_item, option),
             "",
-            if index == game.selected_menu_item {
+            if index == ui.shell.selected_menu_item {
                 Color::GOLD
             } else {
                 Color::RAYWHITE
@@ -475,24 +448,24 @@ fn draw_confirm_modal_ui(draw: &mut RaylibDrawHandle<'_>, title: &str, body: &st
     );
 }
 
-fn draw_unsaved_exit_confirm_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
+fn draw_unsaved_exit_confirm_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     draw_option_modal(
         draw,
-        game,
+        ui,
         "Unsaved Progress",
         "Choose what to do before leaving the game.",
         &["Save and exit", "Exit without saving", "Cancel"],
     );
 }
 
-fn draw_shop_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
-    let items = upgrade_offers(&game.player)
+fn draw_shop_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let items = upgrade_offers(ui.player)
         .iter()
         .enumerate()
         .map(|(index, offer)| {
             SectionItem::stat(
                 selected_label(
-                    index == game.selected_menu_item,
+                    index == ui.shell.selected_menu_item,
                     &format!("{} — {} cr", offer.name, offer.cost),
                 ),
                 format!(
@@ -500,7 +473,7 @@ fn draw_shop_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
                     offer.level + 1,
                     upgrade_tier_name(offer.kind, offer.level)
                 ),
-                if index == game.selected_menu_item {
+                if index == ui.shell.selected_menu_item {
                     Color::GOLD
                 } else {
                     Color::RAYWHITE
@@ -519,36 +492,43 @@ fn draw_shop_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
     );
 }
 
-fn draw_options_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
+fn draw_options_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let options = [
-        format!("Master volume: {:.0}%", game.master_volume * 100.0),
-        format!("Fullscreen: {}", if game.fullscreen { "on" } else { "off" }),
+        format!("Master volume: {:.0}%", ui.shell.master_volume * 100.0),
+        format!(
+            "Fullscreen: {}",
+            if ui.shell.fullscreen { "on" } else { "off" }
+        ),
         "Back".to_owned(),
     ];
     draw_owned_option_modal(
         draw,
-        game,
+        ui,
         "Options",
         "Up/Down select | Left/Right adjust | Esc close",
         &options,
     );
 }
 
-fn draw_slots_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState, saving: bool) {
+fn draw_slots_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, saving: bool) {
     let options = (0..save_slot_count())
-        .map(|slot| match save_slot_metadata(slot) {
-            Some(metadata) => format!(
-                "Slot {} — depth {}m, {} credits",
-                slot + 1,
-                metadata.depth,
-                metadata.credits
-            ),
-            None => format!("Slot {} — empty", slot + 1),
+        .map(|slot| {
+            save_slot_metadata(slot).map_or_else(
+                || format!("Slot {} — empty", slot + 1),
+                |metadata| {
+                    format!(
+                        "Slot {} — depth {}m, {} credits",
+                        slot + 1,
+                        metadata.depth,
+                        metadata.credits
+                    )
+                },
+            )
         })
         .collect::<Vec<_>>();
     draw_owned_option_modal(
         draw,
-        game,
+        ui,
         if saving { "Save Game" } else { "Load Game" },
         "Up/Down select | Enter/E confirm | Esc close",
         &options,
@@ -557,17 +537,17 @@ fn draw_slots_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState, saving: bool
 
 fn draw_generic_options_ui(
     draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
+    ui: &UiFrame<'_, '_>,
     title: &str,
     help: &str,
     options: &[&str],
 ) {
-    draw_option_modal(draw, game, title, help, options);
+    draw_option_modal(draw, ui, title, help, options);
 }
 
 fn draw_option_modal(
     draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
+    ui: &UiFrame<'_, '_>,
     title: &str,
     help: &str,
     options: &[&str],
@@ -576,12 +556,12 @@ fn draw_option_modal(
         .iter()
         .map(|option| (*option).to_owned())
         .collect::<Vec<_>>();
-    draw_owned_option_modal(draw, game, title, help, &owned);
+    draw_owned_option_modal(draw, ui, title, help, &owned);
 }
 
 fn draw_owned_option_modal(
     draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
+    ui: &UiFrame<'_, '_>,
     title: &str,
     help: &str,
     options: &[String],
@@ -591,9 +571,9 @@ fn draw_owned_option_modal(
         .enumerate()
         .map(|(index, option)| {
             SectionItem::stat(
-                selected_label(index == game.selected_menu_item, option),
+                selected_label(index == ui.shell.selected_menu_item, option),
                 "",
-                if index == game.selected_menu_item {
+                if index == ui.shell.selected_menu_item {
                     Color::GOLD
                 } else {
                     Color::RAYWHITE
@@ -616,14 +596,12 @@ fn selected_label(selected: bool, label: &str) -> String {
     }
 }
 
-fn online_peer_summary<T: std::fmt::Debug>(label: &str, peer: &T) -> String {
-    format!("{label}: {peer:?}")
-}
-fn draw_depot_receipt_history_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
-    let items = if game.depot_receipts.is_empty() {
+fn draw_depot_receipt_history_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let items = if ui.shell.depot_receipts.is_empty() {
         vec![SectionItem::text("No depot receipts yet.")]
     } else {
-        game.depot_receipts
+        ui.shell
+            .depot_receipts
             .iter()
             .rev()
             .take(10)
@@ -651,7 +629,7 @@ fn draw_depot_receipt_history_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameSta
     );
 }
 
-fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
+fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     UiLayout::screen(draw).modal_with_render_plan(
         "Research Log",
         "Collected discoveries and mining intelligence. Esc closes.",
@@ -663,8 +641,8 @@ fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
                     "Warnings",
                     format!(
                         "{} | World events: {}",
-                        game.warning_summary(),
-                        game.active_world_event_summary()
+                        ui.snapshot.warning_summary(ui.view),
+                        ui.snapshot.world_event_summary()
                     ),
                     Color::LIGHTGRAY,
                 ),
@@ -672,8 +650,8 @@ fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
                     "Deep instability",
                     format!(
                         "{:.0}% | deepest reached: {}m",
-                        game.deep_instability.min(100.0),
-                        game.deepest_tile_reached
+                        ui.view.deep_instability.min(100.0),
+                        ui.snapshot.progression.deepest_tile_reached
                     ),
                     Color::LIGHTGRAY,
                 ),
@@ -687,7 +665,7 @@ fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
     clippy::too_many_lines,
     reason = "inventory content model builds several dynamic sections"
 )]
-fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
+fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let mut sections = Vec::new();
     sections.push(Section::new(
         "Cargo",
@@ -695,29 +673,23 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
         vec![
             SectionItem::meter(
                 "Hold",
-                game.player.cargo_used() as f32,
-                game.player.cargo_capacity as f32,
+                ui.player.cargo_used() as f32,
+                ui.player.cargo_capacity as f32,
                 Color::GOLD,
                 Color::ORANGE,
             ),
-            SectionItem::stat(
-                "Credits",
-                format!("{} cr", game.player.credits),
-                Color::GOLD,
-            ),
-            SectionItem::stat("Bombs", game.player.bombs.to_string(), Color::ORANGE),
+            SectionItem::stat("Credits", format!("{} cr", ui.player.credits), Color::GOLD),
+            SectionItem::stat("Bombs", ui.player.bombs.to_string(), Color::ORANGE),
         ],
     ));
-    let mineral_items = if game.player.cargo.is_empty() {
+    let mineral_items = if ui.player.cargo.is_empty() {
         vec![SectionItem::text("No minerals onboard.")]
     } else {
-        game.player
+        ui.player
             .cargo
             .iter()
             .map(|(mineral, quantity)| {
-                let value = game
-                    .mineral_market_value(*mineral)
-                    .saturating_mul(*quantity);
+                let value = ui.snapshot.market_value(*mineral).saturating_mul(*quantity);
                 SectionItem::stat(
                     mineral.name(),
                     format!("x{quantity} | est. {value} cr"),
@@ -727,10 +699,10 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
             .collect()
     };
     sections.push(Section::new("Minerals", Color::RAYWHITE, mineral_items));
-    let artifact_items = if game.player.artifacts.is_empty() {
+    let artifact_items = if ui.player.artifacts.is_empty() {
         vec![SectionItem::text("No artifacts onboard.")]
     } else {
-        game.player
+        ui.player
             .artifacts
             .iter()
             .map(|(artifact, quantity)| {
@@ -750,12 +722,12 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
         "Field Kits",
         Color::LIME,
         [
-            ("Signal relays", game.player.signal_relay_kits),
-            ("Survey drones", game.player.survey_drone_kits),
-            ("Cargo lifts", game.player.cargo_lift_kits),
-            ("Tunnel supports", game.player.tunnel_support_kits),
-            ("Pump stations", game.player.pump_station_kits),
-            ("Ore processors", game.player.ore_processor_kits),
+            ("Signal relays", ui.player.signal_relay_kits),
+            ("Survey drones", ui.player.survey_drone_kits),
+            ("Cargo lifts", ui.player.cargo_lift_kits),
+            ("Tunnel supports", ui.player.tunnel_support_kits),
+            ("Pump stations", ui.player.pump_station_kits),
+            ("Ore processors", ui.player.ore_processor_kits),
         ]
         .into_iter()
         .map(|(label, count)| {
@@ -771,13 +743,13 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
         "Rig",
         Color::SKYBLUE,
         [
-            ("Drill", game.player.drill_strength),
-            ("Engine", game.player.engine_level),
-            ("Fuel Tank", game.player.fuel_tank_level),
-            ("Cargo Bay", game.player.cargo_bay_level),
-            ("Hull", game.player.hull_level),
-            ("Radiator", game.player.radiator_level),
-            ("Scanner", game.player.scanner_level),
+            ("Drill", ui.player.drill_strength),
+            ("Engine", ui.player.engine_level),
+            ("Fuel Tank", ui.player.fuel_tank_level),
+            ("Cargo Bay", ui.player.cargo_bay_level),
+            ("Hull", ui.player.hull_level),
+            ("Radiator", ui.player.radiator_level),
+            ("Scanner", ui.player.scanner_level),
         ]
         .into_iter()
         .map(|(label, tier)| SectionItem::stat(label, format!("tier {tier}"), Color::LIGHTGRAY))
@@ -790,165 +762,15 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
     );
 }
 
-fn draw_online_multiplayer_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
-    match game.online_multiplayer_view {
-        OnlineMultiplayerView::MainMenu => draw_online_multiplayer_main_menu(draw, game),
-        OnlineMultiplayerView::HostLan => draw_online_multiplayer_host_lan(draw, game),
-        OnlineMultiplayerView::JoinLan => draw_online_multiplayer_join_lan(draw, game),
-        OnlineMultiplayerView::AdvancedDirectConnect => {
-            draw_online_multiplayer_advanced_direct_connect(draw, game);
-        }
-    }
-}
-
-fn draw_online_multiplayer_main_menu(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
-    let options = [
-        "Host LAN Game",
-        "Join LAN Game",
-        "Advanced Direct Connect",
-        "Back",
-    ];
-    let option_items = options
-        .iter()
-        .enumerate()
-        .map(|(index, option)| {
-            SectionItem::stat(
-                selected_label(index == game.selected_menu_item, option),
-                match index {
-                    0 => "Start a LAN host and show live hosting status.",
-                    1 => "Scan LAN for games and show join status.",
-                    2 => "Descriptor files, bind addresses, reconnect, and diagnostics.",
-                    _ => "Return to the previous screen.",
-                },
-                if index == game.selected_menu_item {
-                    Color::GOLD
-                } else {
-                    Color::RAYWHITE
-                },
-            )
-        })
-        .collect();
-    UiLayout::screen(draw).modal_with_render_plan(
-        "Online Multiplayer",
-        "Choose a LAN flow. Hosting and joining open dedicated status screens.",
-        &ModalContent::new(vec![
-            Section::new("Actions", Color::SKYBLUE, option_items),
-            Section::new(
-                "Current Status",
-                Color::ORANGE,
-                vec![SectionItem::text(
-                    game.online_session_status_message.clone(),
-                )],
-            ),
-        ]),
-    );
-}
-
-fn draw_online_multiplayer_host_lan(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
-    let options = ["Toggle Ready", "Start Game", "Stop Hosting", "Back"];
-    draw_online_flow_screen(
-        draw,
-        game,
-        "Hosting LAN Game",
-        "Live LAN host status. Leave this screen open while the other player joins.",
-        &options,
-    );
-}
-
-fn draw_online_multiplayer_join_lan(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
-    let options = ["Refresh Scan", "Toggle Ready", "Leave", "Back"];
-    draw_online_flow_screen(
-        draw,
-        game,
-        "Join LAN Game",
-        "Live LAN join status. The game scans mDNS and connects automatically.",
-        &options,
-    );
-}
-
-fn draw_online_multiplayer_advanced_direct_connect(
-    draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-) {
-    let options = [
-        "Host descriptor session",
-        "Join descriptor session",
-        "Descriptor path",
-        "Inspect descriptor file",
-        "Host bind addr",
-        "Host advertise addr",
-        "Client bind addr",
-        "Cycle gameplay tick count",
-        "Reconnect",
-        "Back",
-    ];
-    draw_online_flow_screen(
-        draw,
-        game,
-        "Advanced Direct Connect",
-        "Manual descriptor-file and address tools for debugging/direct connection.",
-        &options,
-    );
-}
-
-fn draw_online_flow_screen(
-    draw: &mut RaylibDrawHandle<'_>,
-    game: &GameState,
-    title: &str,
-    subtitle: &str,
-    options: &[&str],
-) {
-    let option_items = options
-        .iter()
-        .enumerate()
-        .map(|(index, option)| {
-            SectionItem::stat(
-                selected_label(index == game.selected_menu_item, option),
-                "",
-                if index == game.selected_menu_item {
-                    Color::GOLD
-                } else {
-                    Color::RAYWHITE
-                },
-            )
-        })
-        .collect();
-    let lobby = game.online_lobby_presentation();
-    UiLayout::screen(draw).modal_with_render_plan(
-        title,
-        subtitle,
-        &ModalContent::new(vec![
-            Section::new(
-                "LAN State",
-                Color::ORANGE,
-                game.online_lan_troubleshooting_lines()
-                    .into_iter()
-                    .map(SectionItem::text)
-                    .collect(),
-            ),
-            Section::new(
-                "Lobby",
-                Color::GOLD,
-                vec![
-                    SectionItem::text(online_peer_summary("Local", &lobby.local)),
-                    SectionItem::text(online_peer_summary("Remote", &lobby.remote)),
-                    SectionItem::text(lobby.guidance),
-                ],
-            ),
-            Section::new("Actions", Color::SKYBLUE, option_items),
-        ]),
-    );
-}
-
-fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
+fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let map_rect = UiLayout::screen(draw).canvas_modal(
         "Mine Map",
         "M/Esc/Backspace closes | discovered terrain only",
         &format!(
             "Position: {:.0}m lateral, depth {}m | Deepest reached: {}m",
-            game.player.x / TILE_SIZE,
-            (game.player.y / TILE_SIZE).max(0.0) as i32,
-            game.deepest_tile_reached
+            ui.player.x / TILE_SIZE,
+            (ui.player.y / TILE_SIZE).max(0.0) as i32,
+            ui.snapshot.progression.deepest_tile_reached
         ),
     );
     let map_x = map_rect.x as i32;
@@ -957,15 +779,15 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
     let map_h = map_rect.height as i32;
     draw.draw_rectangle(map_x, map_y, map_w, map_h, Color::new(12, 10, 14, 255));
     draw.draw_rectangle_lines(map_x, map_y, map_w, map_h, Color::new(190, 205, 220, 230));
-    let terrain_width = game.terrain.width().max(1);
-    let terrain_height = game.terrain.height().max(1);
+    let terrain_width = ui.snapshot.terrain.width().max(1);
+    let terrain_height = ui.snapshot.terrain.height().max(1);
     for ty in 0..terrain_height {
         for tx in 0..terrain_width {
             let position = TilePosition { x: tx, y: ty };
-            if !game.is_explored(position) {
+            if !ui.view.is_explored(position) {
                 continue;
             }
-            let Some(tile) = game.terrain.tile(position) else {
+            let Some(tile) = ui.snapshot.terrain.tile(position) else {
                 continue;
             };
             let color = match tile.kind {
@@ -986,8 +808,8 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
             draw.draw_rectangle(px, py, pw, ph, color);
         }
     }
-    let player_map_x = map_x + ((game.player.x / TILE_SIZE) as i32) * map_w / terrain_width;
-    let player_map_y = map_y + ((game.player.y / TILE_SIZE) as i32) * map_h / terrain_height;
+    let player_map_x = map_x + ((ui.player.x / TILE_SIZE) as i32) * map_w / terrain_width;
+    let player_map_y = map_y + ((ui.player.y / TILE_SIZE) as i32) * map_h / terrain_height;
     draw.draw_circle(player_map_x, player_map_y, 5.0, Color::SKYBLUE);
     draw.draw_circle_lines(player_map_x, player_map_y, 8.0, Color::RAYWHITE);
 }
@@ -1035,25 +857,25 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
     clippy::too_many_lines,
     reason = "depot modal builds several dynamic semantic sections"
 )]
-fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
+fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let option_data = [
         (
             "Complete active contract".to_owned(),
             format!(
                 "{}: {}/{} {} for {} credits",
-                game.contracts.active.title,
-                game.contracts.active.progress(&game.player),
-                game.contracts.active.required,
-                game.contracts.active.target.name(),
-                game.contracts.active.reward
+                ui.snapshot.progression.contracts.active.title,
+                ui.snapshot.progression.contracts.active.progress(ui.player),
+                ui.snapshot.progression.contracts.active.required,
+                ui.snapshot.progression.contracts.active.target.name(),
+                ui.snapshot.progression.contracts.active.reward
             ),
         ),
         (
             "Sell loose cargo".to_owned(),
             format!(
                 "Cargo manifest: {}/{} slots",
-                game.player.cargo_used(),
-                game.player.cargo_capacity
+                ui.player.cargo_used(),
+                ui.player.cargo_capacity
             ),
         ),
         (
@@ -1062,11 +884,11 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
         ),
         (
             "Sell scan data".to_owned(),
-            format!("Market: {}", game.active_world_event_summary()),
+            format!("Market: {}", ui.snapshot.world_event_summary()),
         ),
         (
             "Receipt history".to_owned(),
-            format!("{} saved receipts", game.depot_receipts.len()),
+            format!("{} saved receipts", ui.shell.depot_receipts.len()),
         ),
     ];
     let options = option_data
@@ -1074,9 +896,9 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
         .enumerate()
         .map(|(index, (label, detail))| {
             SectionItem::stat(
-                selected_label(index == game.selected_menu_item, label),
+                selected_label(index == ui.shell.selected_menu_item, label),
                 detail,
-                if index == game.selected_menu_item {
+                if index == ui.shell.selected_menu_item {
                     Color::GOLD
                 } else {
                     Color::RAYWHITE
@@ -1084,10 +906,10 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
             )
         })
         .collect();
-    let cargo_items = if game.player.cargo_used() == 0 {
+    let cargo_items = if ui.player.cargo_used() == 0 {
         vec![SectionItem::text("Cargo hold empty")]
     } else {
-        game.player
+        ui.player
             .cargo
             .iter()
             .map(|(mineral, count)| {
@@ -1097,7 +919,7 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
                     Color::RAYWHITE,
                 )
             })
-            .chain(game.player.artifacts.iter().map(|(artifact, count)| {
+            .chain(ui.player.artifacts.iter().map(|(artifact, count)| {
                 SectionItem::stat(
                     artifact.name(),
                     format!("x{count} = {} cr", artifact.value() * count),
@@ -1106,24 +928,19 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
             }))
             .collect()
     };
-    let minerals = [
-        MineralKind::Copper,
-        MineralKind::Iron,
-        MineralKind::Silver,
-        MineralKind::Gold,
-        MineralKind::Emerald,
-        MineralKind::Ruby,
-        MineralKind::Diamond,
-        MineralKind::Platinum,
-        MineralKind::Uranium,
-        MineralKind::Mythril,
-    ];
+    let minerals = crate::render_snapshot::MINERALS;
     let market_items = minerals
         .into_iter()
         .map(|mineral| {
-            let current = game.mineral_market_factor(mineral);
-            let previous = game
-                .previous_mineral_market_factor(mineral)
+            let quote = ui
+                .snapshot
+                .market
+                .iter()
+                .find(|quote| quote.mineral == mineral)
+                .copied();
+            let current = quote.map_or(100, |quote| quote.factor);
+            let previous = quote
+                .and_then(|quote| quote.previous_factor)
                 .unwrap_or(current);
             let trend = match current.cmp(&previous) {
                 std::cmp::Ordering::Greater => "↑",
@@ -1139,7 +956,7 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
             };
             SectionItem::stat(
                 mineral.name(),
-                format!("{} cr {trend} {label}", game.mineral_market_value(mineral)),
+                format!("{} cr {trend} {label}", ui.snapshot.market_value(mineral)),
                 Color::LIGHTGRAY,
             )
         })
@@ -1155,15 +972,15 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
     );
 }
 
-pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
-    let mut items = GameState::title_options()
+pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let mut items = TitleOption::all(saves_exist())
         .iter()
         .enumerate()
         .map(|(index, option)| {
             SectionItem::stat(
-                selected_label(index == game.selected_title_item, option.label()),
+                selected_label(index == ui.shell.selected_title_item, option.label()),
                 "",
-                if index == game.selected_title_item {
+                if index == ui.shell.selected_title_item {
                     Color::GOLD
                 } else {
                     Color::RAYWHITE
@@ -1171,7 +988,7 @@ pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
             )
         })
         .collect::<Vec<_>>();
-    if GameState::title_options().contains(&TitleOption::Resume)
+    if TitleOption::all(saves_exist()).contains(&TitleOption::Resume)
         && let Some(meta) = latest_save_summary()
     {
         items.push(SectionItem::text(format!(
@@ -1188,15 +1005,15 @@ pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
     );
 }
 
-pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
+pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let mut items = PauseOption::ALL
         .iter()
         .enumerate()
         .map(|(index, option)| {
             SectionItem::stat(
-                selected_label(index == game.selected_pause_item, option.label()),
+                selected_label(index == ui.shell.selected_pause_item, option.label()),
                 "",
-                if index == game.selected_pause_item {
+                if index == ui.shell.selected_pause_item {
                     Color::GOLD
                 } else {
                     Color::RAYWHITE
@@ -1206,13 +1023,18 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
         .collect::<Vec<_>>();
     items.push(SectionItem::text(format!(
         "Depth {}m | {} credits | hull {:.0}/{:.0} | fuel {:.0}/{:.0}",
-        (game.player.y / TILE_SIZE).max(0.0) as i32,
-        game.player.credits,
-        game.player.hull,
-        game.player.max_hull(),
-        game.player.fuel,
-        game.player.fuel_capacity
+        (ui.player.y / TILE_SIZE).max(0.0) as i32,
+        ui.player.credits,
+        ui.player.hull,
+        ui.player.max_hull(),
+        ui.player.fuel,
+        ui.player.fuel_capacity
     )));
+    if ui.snapshot.won_game {
+        items.push(SectionItem::text(
+            "Star Core secured. Deep Claim operations are open.",
+        ));
+    }
     UiLayout::screen(draw).modal_with_render_plan(
         "Paused",
         "Up/Down select | Enter/E confirm | Esc resume",
@@ -1220,48 +1042,27 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
     );
 }
 
-pub(super) fn draw_ending(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
-    UiLayout::screen(draw).modal_with_render_plan(
-        "Star Core Secured",
-        "Run summary",
-        &ModalContent::new(vec![Section::new(
-            "Summary",
-            Color::GOLD,
-            vec![
-                SectionItem::stat(
-                    "Deepest depth",
-                    format!("{}m", game.deepest_tile_reached),
-                    Color::LIGHTGRAY,
-                ),
-                SectionItem::stat(
-                    "Total earnings",
-                    format!("{} cr", game.total_earnings),
-                    Color::GOLD,
-                ),
-                SectionItem::stat(
-                    "Rescues called",
-                    game.rescue_count.to_string(),
-                    Color::LIGHTGRAY,
-                ),
-                SectionItem::stat(
-                    "Contracts completed",
-                    game.contracts.completed.to_string(),
-                    Color::LIGHTGRAY,
-                ),
-                SectionItem::text("You can keep mining this save after closing the summary."),
-            ],
-        )]),
-    );
-}
-
-pub(super) fn draw_game_over(draw: &mut RaylibDrawHandle<'_>, game: &GameState) {
+pub(super) fn draw_game_over(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     UiLayout::screen(draw).modal_with_render_plan(
         "Emergency",
         "Press E to pay the rescue fee and return to base.",
         &ModalContent::new(vec![Section::new(
             "Status",
             Color::RED,
-            vec![SectionItem::text(game.message.clone())],
+            vec![
+                SectionItem::text(match ui.view.failure {
+                    Some(failure) if failure.disabled => {
+                        "Your rig's hull gave out. Call the rescue crew.".to_owned()
+                    }
+                    Some(_) => "Your rig is out of fuel. Call the rescue crew.".to_owned(),
+                    None => ui.shell.message.clone(),
+                }),
+                SectionItem::stat(
+                    "Rescues called",
+                    ui.view.rescue_count.to_string(),
+                    Color::LIGHTGRAY,
+                ),
+            ],
         )]),
     );
 }
