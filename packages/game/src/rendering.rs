@@ -433,12 +433,16 @@ fn draw_net_debug(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
         TextStyle::Bold,
         palette::GOLD,
     );
-    ui_kit::text_right(
+    // The overlay's toggle key (a keyboard hotkey whatever device is active).
+    let toggle = prompts::hint(crate::input::prompts::Prompt::NetOverlay, "");
+    let keyboard = crate::input::devices::InputDevice::KEYBOARD;
+    let key_width = prompts::prompt_width(toggle, keyboard).unwrap_or(0);
+    prompts::draw_prompt(
         draw,
-        "F3",
-        left + width - 8,
-        top + 6,
-        TextStyle::Bold,
+        left + width - 7 - key_width,
+        top + 4,
+        toggle,
+        keyboard,
         palette::FOG,
     );
     ui_kit::divider(draw, left + 6, top + 16, width - 12);

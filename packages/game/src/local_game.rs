@@ -29,6 +29,32 @@ use crate::{
     shell::{OnlineScreen, RunMode, ShellContext, ShellRequest, ShellState, SoundCue},
 };
 
+/// The toast for a new split-screen game: which keys each keyboard seat uses and how a spare
+/// controller joins, named by the prompt system (see `input::seats` for the policy).
+fn split_screen_message(seats: usize) -> String {
+    use crate::input::{
+        devices::{KeyboardLayout, PadFamily},
+        prompts::{Prompt, inline_text},
+    };
+    let keys =
+        |layout| inline_text(Prompt::Walk, InputDevice::Keyboard(layout)).unwrap_or_default();
+    let pad = InputDevice::Gamepad {
+        index: 0,
+        family: PadFamily::Xbox,
+    };
+    let join = [Prompt::Join, Prompt::Pause]
+        .into_iter()
+        .filter_map(|prompt| inline_text(prompt, pad))
+        .collect::<Vec<_>>()
+        .join(" or ");
+    format!(
+        "Local split-screen with {seats} players: Player 1 drives with {}, Player 2 with {}. \
+         Controllers fill free seats; press {join} on a spare one to join.",
+        keys(KeyboardLayout::Wasd),
+        keys(KeyboardLayout::Arrows),
+    )
+}
+
 /// How often an online host autosaves the session (clients never save).
 const AUTOSAVE_SECONDS: f32 = 300.0;
 
@@ -399,10 +425,7 @@ impl LocalGame {
             0.0,
         );
         if seats > 1 {
-            self.shell.message = format!(
-                "Local split-screen with {seats} players: Player 1 WASD, Player 2 arrow keys. \
-                 Controllers fill free seats; press A or Start on another to join."
-            );
+            self.shell.message = split_screen_message(seats);
         }
         self.shell.sound_cues.push(SoundCue::Milestone);
     }
@@ -772,7 +795,11 @@ mod tests {
         );
         assert_eq!(game.shell.prompt_device(0), pad);
         idle(&mut game, 1);
-        assert_eq!(game.shell.prompt_device(0), pad, "scripted frames keep the device");
+        assert_eq!(
+            game.shell.prompt_device(0),
+            pad,
+            "scripted frames keep the device"
+        );
     }
 
     #[test]

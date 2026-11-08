@@ -1699,12 +1699,19 @@ mod tests {
         let world = WorldState::new_game(PlayerId::new(1));
         let mut shell = ShellState::default();
         let requests = shell.update(back(), 0.016, ctx(&world));
-        assert!(requests.is_empty() && !shell.request_exit, "B on the title does nothing");
+        assert!(
+            requests.is_empty() && !shell.request_exit,
+            "B on the title does nothing"
+        );
         assert_eq!(shell.run_mode, RunMode::Title);
 
         shell.enter_world("test", 0.0);
         shell.update(back(), 0.016, ctx(&world));
-        assert_eq!(shell.run_mode, RunMode::Playing, "B while playing does not pause");
+        assert_eq!(
+            shell.run_mode,
+            RunMode::Playing,
+            "B while playing does not pause"
+        );
 
         shell.modal = Some(ModalScreen::Inventory);
         shell.update(back(), 0.016, ctx(&world));
@@ -1712,7 +1719,11 @@ mod tests {
 
         shell.run_mode = RunMode::Paused;
         shell.update(back(), 0.016, ctx(&world));
-        assert_eq!(shell.run_mode, RunMode::Playing, "B resumes from the pause menu");
+        assert_eq!(
+            shell.run_mode,
+            RunMode::Playing,
+            "B resumes from the pause menu"
+        );
 
         shell.run_mode = RunMode::Interior;
         shell.interior_zone = Some(SurfaceZone::Fuel);
@@ -1730,9 +1741,11 @@ mod tests {
     #[test]
     fn options_adjust_volume_with_left_right_and_confirm_matches_the_rows() {
         let world = WorldState::new_game(PlayerId::new(1));
-        let mut shell = ShellState::default();
-        shell.master_volume = 0.5;
-        shell.modal = Some(ModalScreen::Options);
+        let mut shell = ShellState {
+            master_volume: 0.5,
+            modal: Some(ModalScreen::Options),
+            ..ShellState::default()
+        };
         shell.update(
             PlayerInput {
                 tab_next: true,
@@ -1762,7 +1775,10 @@ mod tests {
             ctx(&world),
         );
         assert_ne!(shell.fullscreen, fullscreen, "row 1 toggles fullscreen");
-        assert!((shell.master_volume - 0.5).abs() < 1e-5, "and leaves the volume");
+        assert!(
+            (shell.master_volume - 0.5).abs() < 1e-5,
+            "and leaves the volume"
+        );
         shell.selected_menu_item = 2;
         shell.update(
             PlayerInput {
