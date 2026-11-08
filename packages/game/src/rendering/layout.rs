@@ -131,19 +131,20 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
     ) -> Rectangle {
         let rect = self.dialog_rect(false);
         let (_, body) = self.modal_frame(title, subtitle, hints, rect, None, false);
-        ui_kit::text(
-            self.draw,
-            summary,
-            body.x as i32,
-            body.y as i32,
-            TextStyle::Body,
-            MIST,
-        );
+        // The summary wraps onto a second line in narrow (split-screen) dialogs.
+        let mut lines = ui_kit::wrap(summary, body.width as i32, TextStyle::Body);
+        lines.truncate(2);
+        let mut y = body.y as i32;
+        for line in &lines {
+            ui_kit::text(self.draw, line, body.x as i32, y, TextStyle::Body, MIST);
+            y += TextStyle::Body.line_height();
+        }
+        let used = (y - body.y as i32 + 14 - TextStyle::Body.line_height()) as f32;
         Rectangle {
             x: body.x,
-            y: body.y + 14.0,
+            y: body.y + used,
             width: body.width,
-            height: (body.height - 14.0).max(0.0),
+            height: (body.height - used).max(0.0),
         }
     }
 

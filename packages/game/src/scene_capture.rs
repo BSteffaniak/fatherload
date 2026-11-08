@@ -939,6 +939,27 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "split_rescue_help",
+        summary: "Split-screen: player 1 reading the controls (arrow keys), player 2 stranded with the rescue prompt",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_rig(world, seats[0].player, 97, 4);
+                if let Some(second) = seats.get(1) {
+                    sink_rig(world, second.player, 112, 20);
+                    reveal(world, seats[0].player, 104..121, 4..26);
+                    if let Some(rig) = world.player_mut(second.player) {
+                        rig.fuel = 0.0;
+                    }
+                }
+            });
+            stage.settle(20);
+            stage.seat(0).modal = Some(ModalScreen::Help);
+            stage.use_devices(&[ARROWS, XBOX]);
+            "Game saved.".clone_into(&mut stage.shell().message);
+            stage.settle(10);
+        },
+    },
+    Scene {
         name: "rescue_prompt",
         summary: "Stranded rig with the rescue prompt",
         setup: |stage| {

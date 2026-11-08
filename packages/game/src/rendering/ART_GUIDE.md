@@ -109,10 +109,24 @@ One art pixel always covers a whole number of physical framebuffer pixels (`pixe
   by the integer `ui_pixel_size`. Everything under that scope uses canvas coordinates; convert
   a world viewport with `ui_kit::canvas().viewport_rect(view.viewport)`. Clip with
   `ui_kit::begin_clip`/`end_clip` (canvas rects).
+- **Split-screen seats**: each seat's HUD, interior UI, dialogs, rescue prompt and toasts are
+  drawn on a canvas covering only its view (`UiCanvas::for_viewport`, made current with
+  `ui_kit::use_canvas`), so layout code places everything at `(0, 0)`..`canvas.width/height`
+  as usual and it lands inside that view. A seat canvas keeps the screen's UI scale, steps a
+  scale above 2 down while the view is shorter than `COMFORTABLE_SEAT_HEIGHT` (225) at it, and
+  steps down to 1 if needed so it is at least `MIN_SEAT_CANVAS` (232x160): 320x360 per seat at
+  1280x720 and 1920x1080 with two seats, 320x180 (720p) or 480x270 (1080p, 960x540) with
+  four. Design dialogs to work from 232 art pixels wide and 160 tall: on canvases under 240
+  rows they get a compact header (1x title, one subtitle and footer line), and counter panels
+  dock along the bottom at full width below 460 columns (`layout::counter_panel_is_sheet`).
+  Only global screens (title, pause, options, slots, exit prompts, lobby) use the
+  whole-window canvas.
 - **Interiors**: a room is a fixed 320x180 art-pixel canvas drawn at
   `fit_pixel_size(framebuffer, (320, 180))` (4 px at 720p, 6 px at 1080p) and centred; walls and
   floor extend past it on wide screens. Room art is therefore chunkier than UI art (2x), which
-  reads as a close-up. UI drawn over a room uses the normal UI canvas.
+  reads as a close-up. UI drawn over a room uses the normal UI canvas. In split-screen the room
+  fits the seat's view (`interior::RoomArea`) and lifts to the top of a tall view while a
+  counter panel is docked along its bottom, with a `P<n>` tag on the name plate.
 
 Text: the pixel font is 9 art pixels tall (cap height 7). `TextStyle::Body` (regular, 1x),
 `Bold` (1x) and `Title` (bold, 2x) are the only sizes. Text always gets a 1-pixel `INK` drop
@@ -168,7 +182,8 @@ device the player is using:
 use super::prompts::{hint, Hint};
 use crate::input::prompts::Prompt;
 
-// Dialogs: prompts sit under the title, drawn for seat 0's device (the menu device).
+// Dialogs: prompts sit under the title, drawn for the menu device: the device of the seat
+// whose view is being drawn (global screens: the seat driving them).
 ModalContent::new(sections).prompts(&[
     hint(Prompt::Navigate, "select"),
     hint(Prompt::Confirm, "buy"),
@@ -206,9 +221,11 @@ complete the set. The
 - Check changes with the `prompt_sheet` scene (every prompt on every device, glyphs at 3x) and
   the `pad_*` scenes.
 
-Shell messages appear as a toast (`screen::draw_toast`) for four seconds after they change
-(`ShellState::message_tick`), beside the counter dialog inside buildings; refusals get the red
-frame.
+Shell messages appear as a toast (`screen::draw_toast`) for four seconds after they change.
+Each view shows the newer of the global message (`ShellState::message`: saves, volume,
+controllers) and its seat's own (`SeatUi::message`: service results, door hints, rescue), beside
+a docked counter panel, or at the top of the view when the panel spans its width; over a global
+screen one toast is drawn above it. Refusals get the red frame.
 
 Screen colour roles: titles `GOLD` (warnings `ORANGE`), section headings `SKY_LIGHT` (or a role
 colour), labels `MIST`, values `BONE`/`GOLD`, hints `FOG`, selection `AMBER` face with `INK`
@@ -314,7 +331,10 @@ Scenes (see `--list`): `art_gallery`, `ui_sheet`, `title`, world scenes (`surfac
 no panel open, `toast_receipt`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
 `modal_exit_confirm`, `modal_inventory`, `modal_options`, `modal_save_slots`, `map`,
 `online_lobby_host`, `online_lobby_client`, `online_join_address`, `online_lan_browser`,
-`net_overlay`, `split_screen`, `rescue_prompt`, `prompt_sheet`, controller prompts
+`net_overlay`, `split_screen`, split-screen seat UI (`split_shop_mining`,
+`split_two_interiors`, `split_four_mixed`, `split_pad_counters`, `split_personal_dialogs`,
+`split_room_prompts`, `split_rescue_help`, `split_pause`), `rescue_prompt`, `prompt_sheet`,
+controller prompts
 (`pad_title`, `pad_interior_shop`, `pad_room`, `pad_pause`, `pad_hud`, `pad_help`,
 `pad_split_screen`, `pad_split_join`, `pad_playstation_counter`, `pad_nintendo_options`) and
 `keyboard_hud`. Scenes choose prompt devices with `SceneStage::use_devices`. Check UI changes at 1280x720, 1920x1080 and the
@@ -322,6 +342,8 @@ no panel open, `toast_receipt`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
 
 Adding a scene: append a `Scene { name, summary, setup }` to `scene_capture::SCENES`. `setup`
 gets a `SceneStage`: `play(seats, |world, seats| ..)` enters a staged world (helpers
-`park_rig`, `sink_rig`, `carve`, `reveal`, `find_tile`, `load_cargo`), `hold(frames, input)` /
-`settle(frames)` run frames, and `shell()` opens menus directly. A unit test builds every scene
+`park_rig`, `park_at`, `sink_rig`, `carve`, `reveal`, `find_tile`, `load_cargo`),
+`hold(frames, input)` / `hold_seats(frames, inputs)` / `settle(frames)` run frames, `shell()`
+opens global menus directly and `seat(n)` / `put_seat_inside` set up one seat's interior and
+dialogs. A unit test builds every scene
 headlessly.

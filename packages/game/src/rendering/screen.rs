@@ -1072,8 +1072,10 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
         ui_kit::text(draw, &title.to_uppercase(), *x, *y, TextStyle::Bold, *color);
         *y += 12;
         for (prompt, label) in rows {
-            ui_kit::text(draw, label, *x + 2, *y + 2, TextStyle::Body, MIST);
             let width = prompts::prompt_width(hint(*prompt, ""), device).unwrap_or(0);
+            // Narrow (split-screen) columns shorten the label rather than run into the keys.
+            let label = ui_kit::truncate(label, column_width - width - 10, TextStyle::Body);
+            ui_kit::text(draw, &label, *x + 2, *y + 2, TextStyle::Body, MIST);
             prompts::draw_prompt(
                 draw,
                 *x + column_width - width - 4,
