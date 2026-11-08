@@ -1301,6 +1301,61 @@ mod tests {
         assert_near(panel.child.rect().y, 25.0);
     }
 
+    /// Selects each row of a long list in turn (as Down presses would) and returns the dialog's
+    /// scroll offset after each frame.
+    fn scroll_offsets_while_stepping_down(rows: usize, body: Rectangle) -> Vec<f32> {
+        let scroll_id = widgets::WidgetId::new("modal-content");
+        set_current_ui_state(widgets::UiState::default());
+        let mut offsets = Vec::new();
+        for selected in 0..rows {
+            let items = (0..rows)
+                .map(|row| {
+                    let marker = if row == selected { "> " } else { "  " };
+                    SectionItem::stat(format!("{marker}Row {row}"), "", BONE)
+                })
+                .collect();
+            let content = ModalContent::new(vec![Section::new("List", BONE, items)]);
+            CURRENT_UI_STATE.with(|current| {
+                if let Some(state) = current.borrow_mut().as_mut() {
+                    state.enter_modal("List", &scroll_id);
+                }
+            });
+            let mut node = modal_content_node(&content, body.width);
+            node.layout(body);
+            if let widgets::UiNode::Scroll(scroll) = &node {
+                set_current_scroll_limit(
+                    scroll_id.clone(),
+                    (scroll.content_height - body.height).max(0.0),
+                );
+            }
+            let _ = follow_focused_row(&node, body);
+            offsets.push(current_scroll_offset(&scroll_id));
+        }
+        let _ = take_current_ui_state();
+        offsets
+    }
+
+    #[test]
+    fn keyboard_selection_scrolls_only_when_the_row_leaves_the_view() {
+        let body = Rectangle::new(0.0, 0.0, 200.0, 120.0);
+        let offsets = scroll_offsets_while_stepping_down(20, body);
+        let first_scroll = offsets
+            .iter()
+            .position(|offset| *offset > 0.0)
+            .expect("a 20-row list taller than the body scrolls eventually");
+        assert!(
+            first_scroll >= 3,
+            "rows already visible must not scroll the list: {offsets:?}"
+        );
+        assert!(
+            offsets.windows(2).all(|pair| pair[1] >= pair[0]),
+            "stepping down never scrolls back up: {offsets:?}"
+        );
+        // Once following, each step scrolls by about one row, never a fixed jump past it.
+        let step = offsets[first_scroll + 1] - offsets[first_scroll];
+        assert!(step > 0.0 && step <= MENU_ROW_HEIGHT + 4.0, "{offsets:?}");
+    }
+
     #[test]
     fn scroll_node_clamps_content_offset() {
         use widgets::{LayoutConstraints, ScrollNode, SpacerNode, UiNode};

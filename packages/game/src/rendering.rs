@@ -97,9 +97,10 @@ pub struct GameRenderer {
     explored_drawn: DiscoveredTiles,
 }
 
+/// Mouse-wheel scrolling only: keyboard navigation moves the selection, and the dialog follows
+/// it (`layout::follow_focused_row`) only when the selected row would leave the visible area.
 fn ui_scroll_delta(input: PlayerInput, step: f32) -> f32 {
-    -input.ui_scroll * step + if input.menu_down { step } else { 0.0 }
-        - if input.menu_up { step } else { 0.0 }
+    -input.ui_scroll * step
 }
 
 impl GameRenderer {
@@ -543,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn ui_scroll_delta_combines_mouse_wheel_and_keyboard_navigation() {
+    fn ui_scroll_delta_scrolls_with_the_wheel_but_not_menu_navigation() {
         assert_near(
             ui_scroll_delta(
                 PlayerInput {
@@ -554,25 +555,17 @@ mod tests {
             ),
             -48.0,
         );
-        assert_near(
-            ui_scroll_delta(
-                PlayerInput {
-                    menu_down: true,
-                    ..PlayerInput::default()
-                },
-                48.0,
-            ),
-            48.0,
-        );
-        assert_near(
-            ui_scroll_delta(
-                PlayerInput {
-                    menu_up: true,
-                    ..PlayerInput::default()
-                },
-                48.0,
-            ),
-            -48.0,
-        );
+        for input in [
+            PlayerInput {
+                menu_down: true,
+                ..PlayerInput::default()
+            },
+            PlayerInput {
+                menu_up: true,
+                ..PlayerInput::default()
+            },
+        ] {
+            assert_near(ui_scroll_delta(input, 48.0), 0.0);
+        }
     }
 }
