@@ -232,8 +232,15 @@ impl LocalGame {
             shell_context(&self.runtime, &self.save_target, &players, on_title),
         );
         let mut seat_actions = vec![Vec::new(); inputs.len()];
+        let replaced_before = report.world_replaced;
         for request in requests {
             self.handle_request(request, &mut seat_actions, &mut report);
+        }
+        if report.world_replaced && !replaced_before {
+            // A load or new game this frame reset every seat's menus: actions picked in the
+            // menus of the world that was just replaced (a purchase confirmed on the frame
+            // someone quick-loads) must not run in the new one.
+            seat_actions.iter_mut().for_each(Vec::clear);
         }
 
         let seats = self.seats().to_vec();

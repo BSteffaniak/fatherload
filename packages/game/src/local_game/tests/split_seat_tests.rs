@@ -574,3 +574,49 @@ fn a_rig_driven_into_a_door_at_speed_still_shops_from_inside() {
         "the rig (entered at {speed} px/s) coasted out of the shop while its player was inside"
     );
 }
+
+#[test]
+fn a_purchase_confirmed_on_the_frame_of_a_quick_load_does_not_leak_into_the_loaded_world() {
+    let path = temp_save("qa-load-race");
+    let mut world = split_world(&[None, Some(SurfaceZone::Shop)]);
+    let second = PlayerId::new(2);
+    world.player_mut(second).expect("rig").credits = 10_000;
+    let mut game = LocalGame::new(SettingsFile::default(), SaveTarget::File(path.clone()));
+    game.runtime = Runtime::local(world, 2);
+    game.shell.enter_world("test", 0.0);
+    idle(&mut game, 5);
+    let _report = press(
+        &mut game,
+        PlayerInput {
+            save: true,
+            ..PlayerInput::default()
+        },
+    );
+    let saved = player(&game, second);
+    press_seat(&mut game, 1, interact());
+    walk_seats_to_counters(&mut game, &[1]);
+    press_seat(&mut game, 1, confirm_input());
+    assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::ShopConfirm));
+
+    // Player 1 quick-loads on the frame player 2 confirms the purchase.
+    let report = step_seats(
+        &mut game,
+        &[
+            PlayerInput {
+                load: true,
+                ..PlayerInput::default()
+            },
+            confirm_input(),
+        ],
+    );
+    idle(&mut game, 5);
+    let _ignored = std::fs::remove_file(&path);
+    assert!(report.world_replaced);
+    let loaded = player(&game, second);
+    assert_eq!(loaded.drill_strength, saved.drill_strength);
+    assert_eq!(
+        loaded.credits, saved.credits,
+        "nothing was bought behind the load"
+    );
+    assert!(!game.shell.seat(1).inside());
+}
