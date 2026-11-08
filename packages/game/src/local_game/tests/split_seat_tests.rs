@@ -209,6 +209,7 @@ fn the_pause_menu_passes_to_player_one_when_its_controller_is_unplugged() {
     // The controller is unplugged: player 1 takes over and can resume.
     let _report = game.frame(&pad_frame(&[], false), DT);
     assert_eq!(game.shell.menu_seat, 0, "player 1 drives the menu now");
+    assert_eq!(game.shell.paused_by, 1, "the menu still says who paused");
     let _report = game.frame(&pad_frame(&[back_input()], false), DT);
     assert_eq!(game.shell.run_mode, RunMode::Playing);
     assert!(game.frame(&pad_frame(&[], false), DT).ticks_run > 0);
@@ -473,4 +474,31 @@ fn an_online_host_with_two_local_seats_keeps_serving_a_remote_client() {
     );
     assert_eq!(pair.host.shell.seats.len(), 1);
     assert!(!pair.host.shell.seat(0).inside());
+}
+
+#[test]
+fn a_stranded_seat_can_close_its_dialog_to_reach_the_rescue_prompt() {
+    let mut world = split_world(&[None, None]);
+    let second = PlayerId::new(2);
+    world.player_mut(second).expect("rig").fuel = 0.0;
+    let mut game = playing(world, 2, "qa-stranded-dialog");
+    idle(&mut game, 3);
+    assert!(game.world().failure_state(second).is_some());
+    press_seat(
+        &mut game,
+        1,
+        PlayerInput {
+            inventory: true,
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Inventory));
+    // A controller's Back closes the dialog (it used to be swallowed while stranded, leaving
+    // the dialog up and the rescue prompt hidden behind it).
+    press_seat(&mut game, 1, back_input());
+    assert_eq!(game.shell.seat(1).modal, None);
+    assert_eq!(game.shell.run_mode, RunMode::Playing, "Back never pauses");
+    press_seat(&mut game, 1, interact());
+    idle(&mut game, 3);
+    assert_eq!(game.world().rescue_count(second), 1);
 }

@@ -623,6 +623,15 @@ impl SeatUi {
             return self.handle_interior(input, delta_seconds, ctx, cues, requests);
         }
         if ctx.failed() {
+            if self.modal.is_some() {
+                // A dialog opened before (or while) the rig was stranded hides the rescue
+                // prompt: Back closes it first, and nothing else reaches the hidden prompt.
+                if input.backs_out() {
+                    self.modal = None;
+                    return false;
+                }
+                return input.pause;
+            }
             if input.interact || input.confirm {
                 requests.push(ShellRequest::Action {
                     seat: ctx.seat,
