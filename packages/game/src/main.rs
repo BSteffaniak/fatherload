@@ -14,6 +14,7 @@ mod rendering;
 mod runtime;
 mod save;
 mod shell;
+mod window;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

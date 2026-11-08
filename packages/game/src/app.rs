@@ -7,9 +7,9 @@ use crate::{
         read_input_with_arrow_aliases, read_secondary_keyboard_input,
     },
     local_game::{FrameInput, LocalGame, SaveTarget},
-    render_snapshot::{SCREEN_HEIGHT, SCREEN_WIDTH},
     rendering::GameRenderer,
     save::{load_settings, save_settings},
+    window::DesktopWindow,
 };
 
 const TARGET_FPS: u32 = 60;
@@ -51,18 +51,14 @@ fn sample_frame_input(
 }
 
 pub fn run() {
-    let (mut raylib, thread) = raylib::init()
-        .size(SCREEN_WIDTH, SCREEN_HEIGHT)
-        .highdpi()
-        .title("Drillgame")
-        .build();
+    let settings = load_settings();
+    let (mut raylib, thread, mut window) = DesktopWindow::open(settings.window);
     raylib.set_target_fps(TARGET_FPS);
     raylib.set_exit_key(None);
 
-    let mut game = LocalGame::new(load_settings(), SaveTarget::UserFiles);
-    if game.shell.fullscreen {
-        raylib.toggle_fullscreen();
-    }
+    let mut saved_window = settings.window;
+    let mut game = LocalGame::new(settings, SaveTarget::UserFiles);
+    window.set_fullscreen(&mut raylib, game.shell.fullscreen);
     let audio = match AudioBus::new() {
         Ok(audio) => Some(audio),
         Err(error) => {
@@ -80,32 +76,41 @@ pub fn run() {
             input.clipboard = raylib.get_clipboard_text().ok();
         }
         renderer.apply_ui_input(input.primary);
-        let fullscreen_before = game.shell.fullscreen;
+        window.track(&raylib);
+        game.shell.window = window.settings();
 
         let report = game.frame(&input, delta_seconds);
 
-        if game.shell.fullscreen != fullscreen_before {
-            raylib.toggle_fullscreen();
-        }
+        window.set_fullscreen(&mut raylib, game.shell.fullscreen);
         if let Some(text) = &report.clipboard
             && let Err(error) = raylib.set_clipboard_text(text)
         {
             eprintln!("Clipboard copy failed: {error}");
         }
-        if report.settings_changed
-            && let Err(error) = save_settings(game.shell.settings())
-        {
-            eprintln!("Settings save failed: {error}");
+        if report.settings_changed {
+            saved_window = game.shell.window;
+            if let Err(error) = save_settings(game.shell.settings()) {
+                eprintln!("Settings save failed: {error}");
+            }
         }
         if let Some(audio) = &audio {
             audio.set_volume(game.shell.master_volume);
             audio.play(&report.sound_cues);
         }
 
-        let snapshot = game.snapshot((SCREEN_WIDTH, SCREEN_HEIGHT));
+        // Laid out against this frame's real size: the window may have been resized,
+        // maximized or switched to fullscreen since the last frame.
+        let snapshot = game.snapshot(DesktopWindow::screen_size(&raylib));
         renderer.sync(&mut raylib, &thread, &snapshot, &report);
         let mut draw = raylib.begin_drawing(&thread);
         renderer.render(&mut draw, &game.shell, &snapshot);
+    }
+    // Remember a resized or (un)maximized window for the next run.
+    game.shell.window = window.settings();
+    if game.shell.window != saved_window
+        && let Err(error) = save_settings(game.shell.settings())
+    {
+        eprintln!("Settings save failed: {error}");
     }
     // Tell remote players the session is over (host) or leave it (client) before exiting.
     game.shutdown();
