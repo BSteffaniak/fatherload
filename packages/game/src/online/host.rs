@@ -253,13 +253,15 @@ impl HostNet {
 
 impl Drop for HostNet {
     fn drop(&mut self) {
-        self.lan = None;
-        if let Some(net) = self.net.take() {
+        let lan = self.lan.take();
+        let net = self.net.take();
+        if lan.is_some() || net.is_some() {
             // Stopping flushes queued reliable messages and waits for peers (bounded by the
-            // transport's close timeout), so it never runs on the game thread.
+            // transport's close timeout), and the descriptor server joins its thread, so neither
+            // runs on the game thread.
             let spawned = std::thread::Builder::new()
                 .name("drillgame-net-stop".to_owned())
-                .spawn(move || drop(net));
+                .spawn(move || drop((lan, net)));
             if let Err(error) = spawned {
                 eprintln!("Could not stop the network thread in the background: {error}");
             }
