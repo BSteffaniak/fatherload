@@ -113,6 +113,20 @@ fn world_private_state_reaches_only_its_owner() {
         }
     }
     assert!(other_rich, "some rig's credits changed on the host");
+
+    // Action results (which name purchases and whether they were affordable) reach only the
+    // player who submitted the action.
+    for client in &mut harness.clients {
+        let me = client.session.player().expect("joined");
+        let mut own = 0;
+        for presented in client.session.drain_events() {
+            if let crate::world::WorldEvent::ActionResolved { .. } = presented.event.payload {
+                assert_eq!(presented.event.player, Some(me), "another player's action");
+                own += 1;
+            }
+        }
+        assert!(own > 0, "the client saw its own action results");
+    }
 }
 
 #[test]

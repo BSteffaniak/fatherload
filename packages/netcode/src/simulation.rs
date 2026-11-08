@@ -23,8 +23,9 @@
 //! # Per-client visibility
 //!
 //! A simulation may keep state private to one player (an inventory, a map).
-//! [`NetSimulation::section_visible`] and [`NetSimulation::op_relevant`] (via
-//! [`Relevance::viewer`]) keep it off other clients' wires, and
+//! [`NetSimulation::section_visible`], [`NetSimulation::op_relevant`] (via
+//! [`Relevance::viewer`]) and [`NetSimulation::event_visible`] keep it off
+//! other clients' wires, and
 //! [`NetSimulation::keyframe_for`] redacts it from their keyframes. A client
 //! then holds only defaults for other players' private state, so replica
 //! checks use [`NetSimulation::visible_state_hash`]: the host computes it for
@@ -329,6 +330,18 @@ pub trait NetSimulation: Clone + Debug {
     /// Whether a client playing `viewer` may receive a section. Defaults to
     /// every section being visible to everyone.
     fn section_visible(&self, _key: &Self::SectionKey, _viewer: Option<PlayerId>) -> bool {
+        true
+    }
+    /// Whether a client playing `viewer` may receive an event attributed to
+    /// `player` (for example an action result only its owner needs). Events
+    /// of players outside the client's relevance are dropped regardless.
+    /// Defaults to always.
+    fn event_visible(
+        &self,
+        _event: &Self::Event,
+        _player: Option<PlayerId>,
+        _viewer: Option<PlayerId>,
+    ) -> bool {
         true
     }
 

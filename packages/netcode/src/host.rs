@@ -1249,6 +1249,7 @@ fn build_frame<S: NetSimulation>(
             event
                 .player
                 .is_none_or(|player| relevant_players.contains(&player))
+                && world.event_visible(&event.payload, event.player, remote.player)
         })
         .collect();
 

@@ -35,6 +35,8 @@ Each frame is built for one client from its `Relevance` (its player, position an
   skipped are sent whole (`chunk_snapshot`) in `chunk_refreshes` once relevant again;
 - on-change sections whose hash changed since that client's baseline, limited to sections it
   may see (`section_visible`), so another player's loadout never reaches it;
+- events of relevant players that the client may see (`event_visible`, e.g. only its own action
+  results);
 - keyframes (`Welcome`, `Keyframe`) from `keyframe_for(viewer)`, redacted the same way.
 
 Replica checks use `visible_state_hash(viewer)`: the host puts it in `debug_hash` every

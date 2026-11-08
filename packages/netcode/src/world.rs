@@ -11,7 +11,8 @@
 //!   [`PlayerTickState`] / [`LiveEntities`], the op log ([`WorldOp`]: terrain [`TileChange`]s
 //!   and per-player [`Discovery`] reveals) and on-change [`SectionKey`] / [`SectionPayload`]
 //!   sections. The keyframe is the world itself.
-//! * A player's loadout section and discovery ops go only to that player's client; other
+//! * A player's loadout section, discovery ops and action results go only to that player's
+//!   client; other
 //!   clients get the redacted keyframe and compare the client-visible state hash
 //!   ([`WorldState::visible_state_hash`]).
 //! * Poses are in tiles, so the netcode's distance tunables (snap threshold, correction epsilon,
@@ -352,6 +353,20 @@ impl NetSimulation for WorldState {
 
     fn section_visible(&self, key: &SectionKey, viewer: Option<PlayerId>) -> bool {
         key.visible_to(viewer.map(to_sim_player))
+    }
+
+    fn event_visible(
+        &self,
+        event: &WorldEvent,
+        player: Option<PlayerId>,
+        viewer: Option<PlayerId>,
+    ) -> bool {
+        match event {
+            WorldEvent::Gameplay(_) => true,
+            // An action result names the command (a purchase, a loan, ...) and whether the
+            // player could afford it: private to the player who submitted it.
+            WorldEvent::ActionResolved { .. } => player.is_some() && player == viewer,
+        }
     }
 
     fn keyframe(&self) -> Self {
