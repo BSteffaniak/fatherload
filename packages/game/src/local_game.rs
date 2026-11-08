@@ -29,15 +29,16 @@ use crate::{
     shell::{OnlineScreen, RunMode, ShellContext, ShellRequest, ShellState, SoundCue},
 };
 
-/// The toast for a new split-screen game: which keys each keyboard seat uses and how a spare
-/// controller joins, named by the prompt system (see `input::seats` for the policy).
+/// The toast for a new split-screen game: which keys each keyboard seat drives and uses doors
+/// with, and how a spare controller joins, named by the prompt system (see `input::seats` for
+/// the policy). Kept short: it shows in every view.
 fn split_screen_message(seats: usize) -> String {
     use crate::input::{
         devices::{KeyboardLayout, PadFamily},
         prompts::{Prompt, inline_text},
     };
     let keys =
-        |layout| inline_text(Prompt::Walk, InputDevice::Keyboard(layout)).unwrap_or_default();
+        |prompt, layout| inline_text(prompt, InputDevice::Keyboard(layout)).unwrap_or_default();
     let pad = InputDevice::Gamepad {
         index: 0,
         family: PadFamily::Xbox,
@@ -46,12 +47,14 @@ fn split_screen_message(seats: usize) -> String {
         .into_iter()
         .filter_map(|prompt| inline_text(prompt, pad))
         .collect::<Vec<_>>()
-        .join(" or ");
+        .join("/");
     format!(
-        "Local split-screen with {seats} players: Player 1 drives with {}, Player 2 with {}. \
-         Controllers fill free seats; press {join} on a spare one to join.",
-        keys(KeyboardLayout::Wasd),
-        keys(KeyboardLayout::Arrows),
+        "{seats}-player split-screen. P1: {} drive, {} use. P2: {} drive, {} use. \
+         Spare controllers join with {join}.",
+        keys(Prompt::Walk, KeyboardLayout::Wasd),
+        keys(Prompt::Use, KeyboardLayout::Wasd),
+        keys(Prompt::Walk, KeyboardLayout::Arrows),
+        keys(Prompt::Use, KeyboardLayout::Arrows),
     )
 }
 

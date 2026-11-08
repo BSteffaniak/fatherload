@@ -303,13 +303,14 @@ fn read_primary_keyboard_input_with_options(
         tab_previous: false,
         tab_next: false,
         pause: raylib.is_key_pressed(KeyboardKey::KEY_P),
-        menu_up: raylib.is_key_pressed(KeyboardKey::KEY_UP)
+        // In split-screen the arrow keys belong to the second seat, menus included.
+        menu_up: (include_arrow_aliases && raylib.is_key_pressed(KeyboardKey::KEY_UP))
             || raylib.is_key_pressed(KeyboardKey::KEY_W),
-        menu_down: raylib.is_key_pressed(KeyboardKey::KEY_DOWN)
+        menu_down: (include_arrow_aliases && raylib.is_key_pressed(KeyboardKey::KEY_DOWN))
             || raylib.is_key_pressed(KeyboardKey::KEY_S),
-        menu_left: raylib.is_key_pressed(KeyboardKey::KEY_LEFT)
+        menu_left: (include_arrow_aliases && raylib.is_key_pressed(KeyboardKey::KEY_LEFT))
             || raylib.is_key_pressed(KeyboardKey::KEY_A),
-        menu_right: raylib.is_key_pressed(KeyboardKey::KEY_RIGHT)
+        menu_right: (include_arrow_aliases && raylib.is_key_pressed(KeyboardKey::KEY_RIGHT))
             || raylib.is_key_pressed(KeyboardKey::KEY_D),
         details: ctrl_down && raylib.is_key_down(KeyboardKey::KEY_TAB),
         inventory: tab_pressed && !ctrl_down,
@@ -348,20 +349,44 @@ fn read_primary_keyboard_input_with_options(
     }
 }
 
+/// The split-screen arrow-keys seat (seat 2), clustered around the arrow keys and the number
+/// pad so it never shares a key with the WASD seat:
+///
+/// | Action | Keys |
+/// | --- | --- |
+/// | Drive / walk, thrust, drill | Left/Right, Up, Down |
+/// | Menus: select / adjust | Up/Down, Left/Right |
+/// | Use a door or counter, confirm | Right Ctrl or Numpad Enter |
+/// | Back out / close / leave | Right Shift |
+/// | Pause (the shared pause menu) | Right Alt (Right Option) |
+/// | Inventory, map | Numpad 1, Numpad 2 |
+/// | Bomb, scanner | Numpad 0, Numpad . |
+///
+/// Right Shift is a gamepad-style Back: it closes dialogs and leaves buildings but never
+/// pauses. The mouse wheel and Page Up/Down stay with the main keyboard (seat 1).
 #[must_use]
 pub fn read_secondary_keyboard_input(raylib: &RaylibHandle) -> PlayerInput {
     let left = raylib.is_key_down(KeyboardKey::KEY_LEFT);
     let right = raylib.is_key_down(KeyboardKey::KEY_RIGHT);
     let up = raylib.is_key_down(KeyboardKey::KEY_UP);
     let down = raylib.is_key_down(KeyboardKey::KEY_DOWN);
+    let use_pressed = raylib.is_key_pressed(KeyboardKey::KEY_RIGHT_CONTROL)
+        || raylib.is_key_pressed(KeyboardKey::KEY_KP_ENTER);
 
     PlayerInput {
         horizontal: horizontal_axis(left, right),
         thrust: up,
         drill_down: down,
-        interact: raylib.is_key_pressed(KeyboardKey::KEY_RIGHT_CONTROL),
-        confirm: raylib.is_key_pressed(KeyboardKey::KEY_RIGHT_CONTROL),
-        cancel: raylib.is_key_pressed(KeyboardKey::KEY_RIGHT_SHIFT),
+        interact: use_pressed,
+        confirm: use_pressed,
+        back: raylib.is_key_pressed(KeyboardKey::KEY_RIGHT_SHIFT),
+        pause: raylib.is_key_pressed(KeyboardKey::KEY_RIGHT_ALT),
+        menu_up: raylib.is_key_pressed(KeyboardKey::KEY_UP),
+        menu_down: raylib.is_key_pressed(KeyboardKey::KEY_DOWN),
+        menu_left: raylib.is_key_pressed(KeyboardKey::KEY_LEFT),
+        menu_right: raylib.is_key_pressed(KeyboardKey::KEY_RIGHT),
+        inventory: raylib.is_key_pressed(KeyboardKey::KEY_KP_1),
+        map: raylib.is_key_pressed(KeyboardKey::KEY_KP_2),
         bomb: raylib.is_key_pressed(KeyboardKey::KEY_KP_0),
         scan: raylib.is_key_pressed(KeyboardKey::KEY_KP_DECIMAL),
         ..PlayerInput::default()

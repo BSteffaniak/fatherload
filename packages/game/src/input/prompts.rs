@@ -138,6 +138,9 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::Confirm | Prompt::Use, Arrows) => &["RCtrl"],
         (Prompt::Back | Prompt::Pause, Full | Wasd) => &["Esc"],
         (Prompt::Back, Arrows) => &["RShift"],
+        (Prompt::Pause, Arrows) => &["RAlt"],
+        (Prompt::Inventory, Arrows) => &["Num1"],
+        (Prompt::Map, Arrows) => &["Num2"],
         (Prompt::Use, Full | Wasd) => &["E"],
         (Prompt::Thrust, Full | Wasd) => &["W"],
         (Prompt::Thrust, Arrows) => &["\u{2191}"],
@@ -160,12 +163,10 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::Details, Full | Wasd) => &["Ctrl+Tab"],
         (Prompt::NetOverlay, Full | Wasd) => &["F3"],
         (Prompt::Scroll, Full | Wasd) => &["PgUp", "PgDn"],
-        // The arrow-keys seat has no menu hotkeys, and keyboards never "join".
+        // The arrow-keys seat leaves the global hotkeys and scrolling to the main keyboard,
+        // and keyboards never "join".
         (
-            Prompt::Pause
-            | Prompt::Map
-            | Prompt::Inventory
-            | Prompt::Help
+            Prompt::Help
             | Prompt::Fullscreen
             | Prompt::Volume
             | Prompt::QuickSave
@@ -290,10 +291,20 @@ mod tests {
             glyphs(Prompt::Use, InputDevice::KEYBOARD),
             vec![Glyph::Key("E")]
         );
+        let arrows = InputDevice::Keyboard(KeyboardLayout::Arrows);
+        assert_eq!(glyphs(Prompt::Use, arrows), vec![Glyph::Key("RCtrl")]);
+        assert_eq!(glyphs(Prompt::Confirm, arrows), vec![Glyph::Key("RCtrl")]);
+        assert_eq!(inline_text(Prompt::Back, arrows).as_deref(), Some("RShift"));
+        assert_eq!(inline_text(Prompt::Pause, arrows).as_deref(), Some("RAlt"));
         assert_eq!(
-            glyphs(Prompt::Use, InputDevice::Keyboard(KeyboardLayout::Arrows)),
-            vec![Glyph::Key("RCtrl")]
+            inline_text(Prompt::Navigate, arrows).as_deref(),
+            Some("\u{2191}/\u{2193}")
         );
+        assert_eq!(
+            inline_text(Prompt::Inventory, arrows).as_deref(),
+            Some("Num1")
+        );
+        assert_eq!(inline_text(Prompt::Map, arrows).as_deref(), Some("Num2"));
         assert_eq!(
             inline_text(Prompt::Walk, InputDevice::KEYBOARD).as_deref(),
             Some("A/D")
