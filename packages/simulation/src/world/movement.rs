@@ -22,8 +22,20 @@ pub const AUTHORITATIVE_AIR_DRAG_RATE_PER_SECOND: f32 = 9.767_442;
 pub const AUTHORITATIVE_GROUND_DRAG_RATE_PER_SECOND: f32 = 16.923_077;
 pub const AUTHORITATIVE_SAFE_LANDING_SPEED: f32 = 330.0;
 pub const AUTHORITATIVE_CRASH_DAMAGE_SCALE: f32 = 0.11;
-pub const AUTHORITATIVE_THRUST_SPEED: f32 = 120.0;
+/// Gravity applied to falling boulders and debris (not the rig; see
+/// [`AUTHORITATIVE_RIG_GRAVITY`]).
 pub const AUTHORITATIVE_GRAVITY: f32 = 160.0;
+/// Downward acceleration on the rig in flight (px/s²).
+pub const AUTHORITATIVE_RIG_GRAVITY: f32 = 440.0;
+/// Upward acceleration from the thruster at engine level 1 (px/s²). Thrust is a force, not a
+/// set speed: net climb acceleration is `thrust - gravity`, so short taps feather and hover.
+pub const AUTHORITATIVE_THRUST_ACCELERATION: f32 = 1_000.0;
+/// Thrust multiplier while the rig is still moving downward, so catching a fall feels responsive.
+pub const AUTHORITATIVE_DESCENT_BRAKE_MULTIPLIER: f32 = 1.25;
+/// Maximum climb speed at engine level 1 (px/s); scales with the engine multiplier.
+pub const AUTHORITATIVE_MAX_CLIMB_SPEED: f32 = 190.0;
+/// Vertical air resistance (per second): velocity relaxes toward `acceleration / rate`.
+pub const AUTHORITATIVE_VERTICAL_DRAG_RATE_PER_SECOND: f32 = 0.7;
 /// Warning time before a boulder loosened by mining starts to fall.
 pub const AUTHORITATIVE_BOULDER_WARNING_MILLIS: u64 = 850;
 /// Lifetime of a boulder loosened by mining.
@@ -125,9 +137,30 @@ impl WorldState {
             -AUTHORITATIVE_MAX_HORIZONTAL_SPEED * engine_multiplier,
             AUTHORITATIVE_MAX_HORIZONTAL_SPEED * engine_multiplier,
         );
-        if thrust && player.fuel > 0.0 {
-            player.velocity_y =
-                quantize_simulation_scalar(-AUTHORITATIVE_THRUST_SPEED * engine_multiplier);
+        let thrusting = thrust && player.fuel > 0.0;
+        // Exact integration of dv/dt = a - k v over the tick (positive y is down).
+        let lift = if thrusting {
+            let brake = if player.velocity_y > 0.0 {
+                AUTHORITATIVE_DESCENT_BRAKE_MULTIPLIER
+            } else {
+                1.0
+            };
+            AUTHORITATIVE_THRUST_ACCELERATION * engine_multiplier * brake
+        } else {
+            0.0
+        };
+        player.velocity_y = quantize_simulation_scalar(
+            (AUTHORITATIVE_RIG_GRAVITY - lift)
+                .mul_add(
+                    timing.vertical_acceleration_gain,
+                    player.velocity_y * timing.vertical_drag_per_tick,
+                )
+                .clamp(
+                    -AUTHORITATIVE_MAX_CLIMB_SPEED * engine_multiplier,
+                    AUTHORITATIVE_MAX_FALL_SPEED,
+                ),
+        );
+        if thrusting {
             let mut efficiency = 1.0 - f32::from(player.fuel_tank_level.saturating_sub(1)) * 0.06;
             if parts.contains(&RigPartKind::BurstEngine) {
                 efficiency *= 1.22;
@@ -139,12 +172,6 @@ impl WorldState {
                 (AUTHORITATIVE_FUEL_BURN_PER_SECOND * efficiency)
                     .mul_add(-delta_seconds, player.fuel)
                     .max(0.0),
-            );
-        } else {
-            player.velocity_y = quantize_simulation_scalar(
-                AUTHORITATIVE_GRAVITY
-                    .mul_add(delta_seconds, player.velocity_y)
-                    .clamp(-AUTHORITATIVE_MAX_FALL_SPEED, AUTHORITATIVE_MAX_FALL_SPEED),
             );
         }
 
