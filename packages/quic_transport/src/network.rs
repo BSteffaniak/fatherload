@@ -17,11 +17,7 @@
 use std::{
     collections::BTreeMap,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-        mpsc,
-    },
+    sync::{Arc, Mutex, PoisonError, mpsc},
     time::Duration,
 };
 
@@ -103,9 +99,39 @@ enum WriterMsg {
     },
 }
 
+/// Per-connection state shared between the main loop and the connection's tasks.
+///
+/// `closed` is a mutex rather than an atomic so that a task can check it and emit an event
+/// atomically: once [`close_entry`] has set it (just before `Disconnected` is emitted), no
+/// task can emit a `Message` or `Stats` for that connection any more, even on another
+/// worker thread.
 #[derive(Default)]
 struct ConnShared {
-    closed: AtomicBool,
+    closed: Mutex<bool>,
+}
+
+impl ConnShared {
+    fn is_closed(&self) -> bool {
+        *self.closed.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn close(&self) {
+        *self.closed.lock().unwrap_or_else(PoisonError::into_inner) = true;
+    }
+
+    /// Emit `event` unless the connection has been closed. Returns `false` once closed.
+    #[allow(
+        clippy::significant_drop_tightening,
+        reason = "the lock must be held across emit so close() cannot interleave"
+    )]
+    fn emit_if_open(&self, events: &EventTx, event: NetEvent) -> bool {
+        let closed = self.closed.lock().unwrap_or_else(PoisonError::into_inner);
+        if *closed {
+            return false;
+        }
+        emit(events, event);
+        true
+    }
 }
 
 struct ConnEntry {
@@ -322,6 +348,16 @@ impl Network {
         };
         if entry.local_reason.is_none() {
             entry.local_reason = Some(reason.clone());
+            // Bound the whole clean close: a peer that stops reading would otherwise stall
+            // the writer on flow control forever (keep-alives prevent the idle timeout).
+            let deadline =
+                entry.last_reliable_ready.max(Instant::now()) + self.config.close_timeout * 2;
+            let connection = entry.connection.clone();
+            let watchdog_reason = reason.clone();
+            entry.background.push(tokio::spawn(async move {
+                sleep_until(deadline).await;
+                connection.close(VarInt::from_u32(CODE_CLOSE), watchdog_reason.as_bytes());
+            }));
             if entry.writer.send(WriterMsg::Goodbye { reason }).is_err() {
                 // Writer already gone (connection failing); close directly.
                 entry
@@ -421,6 +457,7 @@ impl Network {
             recv,
             self.config.max_frame_bytes,
             self.events.clone(),
+            Arc::clone(&shared),
             self.internal_tx.clone(),
         ));
         let mut background = vec![tokio::spawn(datagram_task(
@@ -455,7 +492,7 @@ impl Network {
 }
 
 fn close_entry(entry: &ConnEntry) {
-    entry.shared.closed.store(true, Ordering::Release);
+    entry.shared.close();
     for task in &entry.background {
         task.abort();
     }
@@ -687,6 +724,7 @@ async fn reader_task(
     mut recv: RecvStream,
     max_frame_bytes: usize,
     events: EventTx,
+    shared: Arc<ConnShared>,
     internal_tx: UnboundedSender<Internal>,
 ) {
     let protocol_violation = |message: String| {
@@ -719,7 +757,9 @@ async fn reader_task(
             }
             tag => break protocol_violation(format!("unknown frame tag {tag}")),
         };
-        emit(
+        // Gated so a force-closed connection (shutdown deadline) emits nothing after its
+        // `Disconnected`; the normal path ends this loop before the main loop closes it.
+        shared.emit_if_open(
             &events,
             NetEvent::Message {
                 conn,
@@ -738,10 +778,7 @@ async fn datagram_task(
     shared: Arc<ConnShared>,
 ) {
     while let Ok(datagram) = connection.read_datagram().await {
-        if shared.closed.load(Ordering::Acquire) {
-            break;
-        }
-        emit(
+        let open = shared.emit_if_open(
             &events,
             NetEvent::Message {
                 conn,
@@ -749,6 +786,9 @@ async fn datagram_task(
                 bytes: datagram.to_vec(),
             },
         );
+        if !open {
+            break;
+        }
     }
 }
 
@@ -762,7 +802,7 @@ async fn stats_task(
     let mut ticker = tokio::time::interval_at(Instant::now() + interval, interval);
     loop {
         ticker.tick().await;
-        if shared.closed.load(Ordering::Acquire) {
+        if shared.is_closed() {
             break;
         }
         let stats = connection.stats();
@@ -775,7 +815,7 @@ async fn stats_task(
         } else {
             stats.path.lost_packets as f64 / stats.path.sent_packets as f64
         };
-        emit(
+        let open = shared.emit_if_open(
             &events,
             NetEvent::Stats {
                 conn,
@@ -790,5 +830,8 @@ async fn stats_task(
                 },
             },
         );
+        if !open {
+            break;
+        }
     }
 }

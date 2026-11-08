@@ -20,6 +20,9 @@ pub struct NetConfig {
     /// How often [`crate::NetEvent::Stats`] is emitted per connection (`None` disables).
     pub stats_interval: Option<Duration>,
     /// How long a clean disconnect waits for the peer to acknowledge before force-closing.
+    /// The whole close (flushing queued reliable messages included) is additionally bounded
+    /// by twice this value after the last queued message is due, so a peer that stops
+    /// reading cannot stall a `Disconnect` forever.
     pub close_timeout: Duration,
     /// Time allowed for an inbound connection to open its control stream.
     pub handshake_timeout: Duration,
