@@ -10,7 +10,8 @@ use super::layout::{HudCard, ModalContent, Section, SectionItem, StatItem, UiLay
 use crate::{
     render_snapshot::{PlayerPresentation, RenderSnapshot, ViewSnapshot},
     save::{latest_save_summary, save_slot_count, save_slot_metadata, saves_exist},
-    shell::{ModalScreen, PauseOption, ShellState, TitleOption},
+    runtime::OnlineRole,
+    shell::{JOIN_MENU, ModalScreen, OnlineScreen, PauseOption, ShellState, TitleOption},
 };
 
 /// What screen-space UI (HUD, menus, modals) reads: shell state plus the snapshot and the view
@@ -1006,7 +1007,7 @@ pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
 }
 
 pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let mut items = PauseOption::ALL
+    let mut items = PauseOption::for_role(ui.shell.online.role)
         .iter()
         .enumerate()
         .map(|(index, option)| {
@@ -1065,4 +1066,187 @@ pub(super) fn draw_game_over(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
             ],
         )]),
     );
+}
+
+fn option_items(options: &[String], selected: usize) -> Vec<SectionItem> {
+    options
+        .iter()
+        .enumerate()
+        .map(|(index, option)| {
+            SectionItem::stat(
+                selected_label(index == selected, option),
+                "",
+                if index == selected {
+                    Color::GOLD
+                } else {
+                    Color::RAYWHITE
+                },
+            )
+        })
+        .collect()
+}
+
+/// Online screens: join forms, LAN list, lobby roster and session notices. Drawn without a
+/// world view (a joining client has no rig until the host's welcome arrives).
+#[allow(
+    clippy::too_many_lines,
+    reason = "one screen per online state keeps the online UI in one place"
+)]
+pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
+    let online = &shell.online;
+    let host = online.role == Some(OnlineRole::Host);
+    let (title, help, sections) = match online.screen {
+        OnlineScreen::JoinMenu => (
+            "Join Online Game".to_owned(),
+            "Up/Down select | Enter/E confirm | Esc back",
+            vec![Section::new(
+                "Join",
+                Color::SKYBLUE,
+                option_items(
+                    &JOIN_MENU.iter().map(|label| (*label).to_owned()).collect::<Vec<_>>(),
+                    online.selected,
+                ),
+            )],
+        ),
+        OnlineScreen::JoinAddress => (
+            "Join by Address".to_owned(),
+            "Type the host's ip:port | Enter join | Backspace delete | Esc back",
+            vec![Section::new(
+                "Host address",
+                Color::SKYBLUE,
+                vec![
+                    SectionItem::stat(format!("{}_", online.text), "", Color::GOLD),
+                    SectionItem::text(
+                        "Direct-IP joins are encrypted but do not authenticate the host; use a descriptor to pin its certificate.",
+                    ),
+                ],
+            )],
+        ),
+        OnlineScreen::JoinDescriptor => {
+            let preview: String = online.text.chars().take(64).collect();
+            (
+                "Join by Descriptor".to_owned(),
+                "Ctrl+V paste the host's descriptor | Enter join | Backspace delete | Esc back",
+                vec![Section::new(
+                    "Descriptor",
+                    Color::SKYBLUE,
+                    vec![if online.text.is_empty() {
+                        SectionItem::text(
+                            "The host copies it from its lobby (\"Copy descriptor to clipboard\").",
+                        )
+                    } else {
+                        SectionItem::stat(
+                            format!("{preview}..."),
+                            format!("{} characters", online.text.len()),
+                            Color::GOLD,
+                        )
+                    }],
+                )],
+            )
+        }
+        OnlineScreen::LanBrowser => {
+            let mut items = vec![SectionItem::text(online.lan_status.clone())];
+            items.extend(option_items(&online.lan_options(), online.selected));
+            (
+                "LAN Games".to_owned(),
+                "Up/Down select | Enter/E join | Esc back",
+                vec![Section::new("Discovered sessions", Color::SKYBLUE, items)],
+            )
+        }
+        OnlineScreen::Lobby => {
+            let lobby = online.lobby.clone().unwrap_or_default();
+            let mut session = vec![SectionItem::text(lobby.status.clone())];
+            if let Some(addr) = lobby.addr {
+                session.push(SectionItem::stat("Address", addr.to_string(), Color::GOLD));
+            }
+            if host {
+                session.push(SectionItem::stat(
+                    "LAN discovery",
+                    if lobby.lan_published {
+                        "advertised"
+                    } else {
+                        "not advertised"
+                    },
+                    Color::LIGHTGRAY,
+                ));
+                session.push(SectionItem::stat(
+                    "Descriptor",
+                    if lobby.descriptor.is_some() {
+                        "ready to copy"
+                    } else {
+                        "pending"
+                    },
+                    Color::LIGHTGRAY,
+                ));
+            }
+            if !shell.message.is_empty() {
+                session.push(SectionItem::text(shell.message.clone()));
+            }
+            let players = if lobby.roster.is_empty() {
+                vec![SectionItem::text("Waiting for the roster...")]
+            } else {
+                lobby
+                    .roster
+                    .iter()
+                    .map(|entry| {
+                        let mut name = entry.name.clone();
+                        if lobby.local_player == Some(entry.player) {
+                            name.push_str(" (you)");
+                        } else if entry.local {
+                            name.push_str(" (host)");
+                        }
+                        let (state, color) = if !entry.connected {
+                            ("disconnected", Color::ORANGE)
+                        } else if entry.local || entry.ready {
+                            ("ready", Color::LIME)
+                        } else {
+                            ("not ready", Color::LIGHTGRAY)
+                        };
+                        SectionItem::stat(name, state, color)
+                    })
+                    .collect()
+            };
+            let options: Vec<String> = online
+                .lobby_options()
+                .iter()
+                .map(|action| action.label(host).to_owned())
+                .collect();
+            (
+                if host {
+                    "Hosting Online Game".to_owned()
+                } else {
+                    "Online Lobby".to_owned()
+                },
+                if lobby.started {
+                    "Up/Down select | Enter/E confirm | Esc back to the game"
+                } else {
+                    "Up/Down select | Enter/E confirm"
+                },
+                vec![
+                    Section::new("Session", Color::SKYBLUE, session),
+                    Section::new(
+                        format!("Players ({})", lobby.roster.len()),
+                        Color::GOLD,
+                        players,
+                    ),
+                    Section::new("Menu", Color::SKYBLUE, option_items(&options, online.selected)),
+                ],
+            )
+        }
+        OnlineScreen::Notice => {
+            let options: Vec<String> = online
+                .notice_options()
+                .iter()
+                .map(|action| action.label().to_owned())
+                .collect();
+            let mut items = vec![SectionItem::text(online.notice.clone())];
+            items.extend(option_items(&options, online.selected));
+            (
+                "Online Session".to_owned(),
+                "Up/Down select | Enter/E confirm | Esc title",
+                vec![Section::new("Session over", Color::ORANGE, items)],
+            )
+        }
+    };
+    UiLayout::screen(draw).modal_with_render_plan(&title, help, &ModalContent::new(sections));
 }

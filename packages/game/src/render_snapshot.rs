@@ -5,7 +5,7 @@
 //! the camera can never disagree with the rig. The renderer reads only this snapshot plus the
 //! shell state; it never touches the simulation directly.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use drillgame_simulation::{
     CanonicalProgressionState, DrillState, FallingBoulder, HazardCloud, InfrastructureKind,
@@ -294,6 +294,26 @@ impl<'w> RenderSnapshot<'w> {
         }
     }
 
+    /// Moves rigs to presentation poses (world pixels) and re-centres the cameras of views that
+    /// follow a moved rig, so a camera always follows exactly the transform its rig is drawn at.
+    /// A joined client passes its predicted + smoothed local rig and interpolated remote rigs.
+    pub fn apply_pose_overrides(&mut self, poses: &BTreeMap<PlayerId, (f32, f32)>) {
+        if poses.is_empty() {
+            return;
+        }
+        for player in &mut self.players {
+            if let Some(&(x, y)) = poses.get(&player.player_id) {
+                player.x = x;
+                player.y = y;
+            }
+        }
+        for view in &mut self.views {
+            if let Some(&(x, y)) = poses.get(&view.player_id) {
+                view.camera = camera_for(view.viewport, x, y);
+            }
+        }
+    }
+
     /// The primary seat's view, if any.
     #[must_use]
     pub fn primary_view(&self) -> Option<&ViewSnapshot<'w>> {
@@ -358,6 +378,18 @@ impl<'w> RenderSnapshot<'w> {
     }
 }
 
+/// The camera that centres world pixel `(x, y)` in `viewport`.
+fn camera_for(viewport: Viewport, x: f32, y: f32) -> CameraPosition {
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "bounded viewport dimensions convert to camera pixels"
+    )]
+    CameraPosition {
+        x: (viewport.width as f32).mul_add(-0.5, x),
+        y: (viewport.height as f32).mul_add(-0.5, y),
+    }
+}
+
 fn view_snapshot(
     world: &WorldState,
     seat_index: usize,
@@ -365,14 +397,7 @@ fn view_snapshot(
     viewport: Viewport,
 ) -> Option<ViewSnapshot<'_>> {
     let player = world.player(player_id)?;
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "bounded viewport dimensions convert to camera pixels"
-    )]
-    let camera = CameraPosition {
-        x: (viewport.width as f32).mul_add(-0.5, player.x),
-        y: (viewport.height as f32).mul_add(-0.5, player.y),
-    };
+    let camera = camera_for(viewport, player.x, player.y);
     #[allow(
         clippy::cast_possible_truncation,
         reason = "bounded world depth is displayed in whole tiles"
@@ -412,6 +437,29 @@ fn view_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pose_overrides_move_the_rig_and_its_camera_together() {
+        let rig = PlayerId::new(1);
+        let world = WorldState::new_game(rig);
+        let seats = [LocalSeat {
+            seat: drillgame_netcode::SeatId(0),
+            player: rig,
+        }];
+        let mut snapshot =
+            RenderSnapshot::build(&world, &seats, (SCREEN_WIDTH, SCREEN_HEIGHT), &[], &[]);
+        let (x, y) = (1_000.0, 450.0);
+        snapshot.apply_pose_overrides(&BTreeMap::from([(rig, (x, y))]));
+        let drawn = snapshot
+            .players
+            .iter()
+            .find(|player| player.player_id == rig)
+            .expect("rig drawn");
+        assert!((drawn.x - x).abs() < f32::EPSILON && (drawn.y - y).abs() < f32::EPSILON);
+        let view = snapshot.primary_view().expect("view");
+        assert!((view.camera.x - (x - 640.0)).abs() < f32::EPSILON);
+        assert!((view.camera.y - (y - 360.0)).abs() < f32::EPSILON);
+    }
 
     #[test]
     fn layout_handles_any_view_count_without_overlap() {

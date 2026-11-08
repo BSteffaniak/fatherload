@@ -23,7 +23,7 @@ mod world;
 use interior::draw_interior;
 use screen::{
     UiFrame, draw_depth_ruler_for_view, draw_game_over, draw_heat_warning_for_view,
-    draw_minimap_for_view, draw_modal, draw_pause, draw_title, draw_view_hud,
+    draw_minimap_for_view, draw_modal, draw_online, draw_pause, draw_title, draw_view_hud,
 };
 use terrain::TerrainRenderer;
 use world::{draw_particles, draw_placed_bombs, draw_scanner_marks, draw_world, world_camera};
@@ -232,13 +232,20 @@ impl GameRenderer {
             match shell.run_mode {
                 RunMode::Title => draw_title(draw, &ui),
                 RunMode::Paused => draw_pause(draw, &ui),
-                RunMode::Playing | RunMode::Interior => {}
+                RunMode::Playing | RunMode::Interior | RunMode::Lobby => {}
             }
             if let Some(modal) = shell.modal {
                 draw_modal(draw, &ui, modal);
             } else if shell.run_mode == RunMode::Playing && view.failure.is_some() {
                 draw_game_over(draw, &ui);
             }
+        }
+
+        if shell.run_mode == RunMode::Lobby && shell.modal.is_none() {
+            draw_online(draw, shell);
+        }
+        if shell.online.show_net_debug {
+            draw_net_debug(draw, shell);
         }
 
         draw.draw_text(
@@ -316,6 +323,40 @@ impl GameRenderer {
         if clip {
             end_view_clip();
         }
+    }
+}
+
+/// F3 network overlay: client/server ticks, input margin, RTT, loss, corrections, snapshot buffer
+/// depth and hash status (or the host's per-client view), plus the dev tuning keys.
+fn draw_net_debug(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
+    const LINE_HEIGHT: i32 = 18;
+    let mut lines = if shell.online.net_debug.is_empty() {
+        vec!["Network overlay: no session data yet.".to_owned()]
+    } else {
+        shell.online.net_debug.clone()
+    };
+    if cfg!(debug_assertions) {
+        lines.push(format!(
+            "dev: F4 select ({}) | PgUp/PgDn adjust (host)",
+            crate::runtime::TUNABLE_PARAMETERS[shell.online.tune_parameter]
+        ));
+    }
+    let width = lines
+        .iter()
+        .map(|line| draw.measure_text(line, 16))
+        .max()
+        .unwrap_or(0)
+        + 20;
+    let height = LINE_HEIGHT * i32::try_from(lines.len()).unwrap_or(0) + 12;
+    draw.draw_rectangle(8, 90, width, height, Color::new(0, 0, 0, 190));
+    for (index, line) in lines.iter().enumerate() {
+        let color = if line.contains("MISMATCH") {
+            Color::RED
+        } else {
+            Color::LIME
+        };
+        let row = i32::try_from(index).unwrap_or(0);
+        draw.draw_text(line, 18, 96 + LINE_HEIGHT * row, 16, color);
     }
 }
 

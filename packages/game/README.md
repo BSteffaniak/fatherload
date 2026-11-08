@@ -26,4 +26,22 @@ Modules:
 - `save` — format v4 (`WorldState` + play time); `save::legacy` migrates v1-v3.
 - `input`, `input_mapping` — device sampling and seat input to controls/actions.
 
-Online hosting/joining is temporarily hidden; it returns on the same runtime in the next step.
+- `online` — online play on the same runtime:
+  - `bridge` maps netcode `ClientMessage`/`ServerMessage` to `quic_transport` bytes (client
+    inputs as datagrams, everything else on the reliable control stream);
+  - `host::HostNet` feeds a `HostSession` from the network thread (non-blocking drain each frame)
+    and publishes the session on the LAN;
+  - `client::OnlineClient` wraps a `ClientSession` (`Runtime::Client`): predicted world for
+    terrain/HUD, predicted + smoothed local rig, interpolated remote rigs;
+  - `lan` runs mDNS browsing and descriptor fetches on helper threads;
+  - `bots` + `headless`: `drillgame --headless-host [addr] [--lan] [--duration S]` and
+    `drillgame --bot-client <addr> [--count N] [--duration S]` (no window, periodic stats lines).
+
+Online flow: Title > Host Online Game (lobby with address, descriptor copy, roster, Start) or
+Join Online Game (address, pasted descriptor, or LAN list), lobby ready toggle, Leave/End,
+reconnect with the token after a dropped connection, and notices when the host ends the session,
+rejects the join, or the connection is lost. A running single-player game can be opened from the
+pause menu. Online pause is a local overlay (the world keeps running). Only the host saves (manual
+and a periodic autosave); joined clients cannot save or load. F3 toggles the network overlay; in
+dev builds F4 / Page Up / Page Down tune live `NetTuning` values on the host. The
+`DRILLGAME_NET_SIM` link conditioner applies to every online session.

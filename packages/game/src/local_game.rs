@@ -5,19 +5,32 @@
 //! [`LocalGame::frame`] and draws [`LocalGame::snapshot`], so tests drive the exact same path with
 //! scripted inputs.
 
-use std::time::Duration;
+use std::{net::SocketAddr, time::Duration};
 
+use drillgame_netcode::ReconnectToken;
+use drillgame_quic_transport::{HostDescriptor, JoinTarget, lan::LanDiscoveredGame};
 use drillgame_simulation::{PlayerCommand, PlayerId, WorldState};
 
 use crate::{
     effects::{Effects, EventFeed},
     input::PlayerInput,
     input_mapping::seat_input,
+    online::{
+        self, DEFAULT_PORT,
+        client::OnlineClient,
+        lan::{self, Background},
+    },
     render_snapshot::RenderSnapshot,
-    runtime::{LocalSeat, Runtime, RuntimeEvent, RuntimeEventKind, SeatInput},
+    runtime::{
+        ClientState, LocalHost, LocalSeat, OnlineRole, Runtime, RuntimeEvent, RuntimeEventKind,
+        SeatInput,
+    },
     save::{self, SaveError, SettingsFile, WorldSave},
-    shell::{ShellContext, ShellRequest, ShellState, SoundCue},
+    shell::{OnlineScreen, RunMode, ShellContext, ShellRequest, ShellState, SoundCue},
 };
+
+/// How often an online host autosaves the session (clients never save).
+const AUTOSAVE_SECONDS: f32 = 300.0;
 
 /// Where saves go. The app uses the real save directory; tests use a temp path.
 #[derive(Clone, Debug)]
@@ -38,6 +51,8 @@ pub enum SaveTarget {
 pub struct FrameInput {
     pub primary: PlayerInput,
     pub other_seats: Vec<PlayerInput>,
+    /// Clipboard text, sampled when the primary seat pressed paste.
+    pub clipboard: Option<String>,
 }
 
 impl FrameInput {
@@ -46,6 +61,7 @@ impl FrameInput {
         Self {
             primary,
             other_seats: Vec::new(),
+            clipboard: None,
         }
     }
 }
@@ -63,6 +79,8 @@ pub struct FrameReport {
     pub sound_cues: Vec<SoundCue>,
     /// Settings changed and should be persisted.
     pub settings_changed: bool,
+    /// Text to put on the system clipboard.
+    pub clipboard: Option<String>,
 }
 
 /// Shell + runtime + presentation effects for local play.
@@ -74,6 +92,13 @@ pub struct LocalGame {
     effects: Effects,
     frame_events: Vec<RuntimeEvent>,
     save_target: SaveTarget,
+    /// Where the last join went and the token to reclaim the player there.
+    last_join: Option<(JoinTarget, Option<ReconnectToken>)>,
+    lan_browse: Option<Background<Vec<LanDiscoveredGame>>>,
+    lan_fetch: Option<Background<HostDescriptor>>,
+    client_entered: bool,
+    autosave_seconds: f32,
+    host_bind: SocketAddr,
 }
 
 impl LocalGame {
@@ -87,6 +112,32 @@ impl LocalGame {
             effects: Effects::default(),
             frame_events: Vec::new(),
             save_target,
+            last_join: None,
+            lan_browse: None,
+            lan_fetch: None,
+            client_entered: false,
+            autosave_seconds: 0.0,
+            host_bind: SocketAddr::new(std::net::Ipv4Addr::UNSPECIFIED.into(), DEFAULT_PORT),
+        }
+    }
+
+    /// Uses `bind` for hosting instead of the default port (tests bind an ephemeral port).
+    #[cfg(test)]
+    pub const fn set_host_bind(&mut self, bind: SocketAddr) {
+        self.host_bind = bind;
+    }
+
+    /// Ends any online session cleanly before the app closes (the host tells its clients, a
+    /// client leaves), waiting for the network thread to flush.
+    pub fn shutdown(self) {
+        match self.runtime {
+            Runtime::Host(mut host) => {
+                host.end_session();
+                if let Some(net) = host.take_net() {
+                    net.shutdown_blocking();
+                }
+            }
+            Runtime::Client(client) => client.leave_blocking(),
         }
     }
 
@@ -118,8 +169,12 @@ impl LocalGame {
     /// Runs one frame.
     pub fn frame(&mut self, input: &FrameInput, delta_seconds: f32) -> FrameReport {
         let mut report = FrameReport::default();
+        self.runtime.pump_network(delta_seconds);
+        self.sync_online(&mut report);
+        self.poll_lan(&mut report);
+        self.shell.pasted.clone_from(&input.clipboard);
         let primary_player = self.seats().first().map(|seat| seat.player);
-        let on_title = self.shell.run_mode == crate::shell::RunMode::Title;
+        let on_title = self.shell.run_mode == RunMode::Title;
         let requests = self.shell.update(
             input.primary,
             delta_seconds,
@@ -159,6 +214,7 @@ impl LocalGame {
             .runtime
             .advance(Duration::try_from_secs_f32(delta_seconds).unwrap_or_default());
         report.ticks_run = frame.ticks_run;
+        report.world_replaced |= frame.world_replaced;
         report.changed_tiles.extend(frame.changed_tiles);
         self.frame_events = self.events.present(frame.events);
         self.observe_events(primary_player);
@@ -172,19 +228,24 @@ impl LocalGame {
             .extend(self.shell.sound_cues.iter().copied());
         report.sound_cues.extend(effect_cues);
         report.settings_changed = self.shell.take_settings_dirty();
+        self.autosave(delta_seconds);
         report
     }
 
     /// The immutable view of this frame for rendering.
     #[must_use]
     pub fn snapshot(&self, screen: (i32, i32)) -> RenderSnapshot<'_> {
-        RenderSnapshot::build(
+        let mut snapshot = RenderSnapshot::build(
             self.runtime.world(),
             self.runtime.local_seats(),
             screen,
             self.effects.sparks(),
             &self.frame_events,
-        )
+        );
+        // A client draws its rig where prediction + smoothing put it (the camera follows that
+        // same transform) and remote rigs where interpolation puts them.
+        snapshot.apply_pose_overrides(&self.runtime.pose_overrides());
+        snapshot
     }
 
     /// The current world as a save.
@@ -287,7 +348,199 @@ impl LocalGame {
                     );
                 }
             }
+            ShellRequest::HostOnline => self.host_online(report),
+            ShellRequest::OpenOnline => self.open_online(),
+            ShellRequest::JoinAddress(text) => match parse_join_addr(&text) {
+                Some(addr) => self.start_join(JoinTarget::Addr(addr), None, report),
+                None => self.shell.message = format!("Not an address: {text}"),
+            },
+            ShellRequest::JoinDescriptor(text) => match HostDescriptor::from_json(&text) {
+                Ok(descriptor) => self.start_join(JoinTarget::Descriptor(descriptor), None, report),
+                Err(error) => self.shell.message = format!("Not a host descriptor: {error}"),
+            },
+            ShellRequest::BrowseLan => self.lan_browse = Some(lan::browse()),
+            ShellRequest::JoinLan(index) => {
+                if let Some(game) = self.shell.online.lan_games.get(index) {
+                    self.shell.online.lan_status = format!("Contacting {}...", game.instance_name);
+                    self.lan_fetch = Some(lan::fetch(game));
+                }
+            }
+            ShellRequest::SetReady(ready) => self.runtime.set_ready(ready),
+            ShellRequest::StartOnline => {
+                self.runtime.start_online_game();
+                self.shell
+                    .enter_world("The session started. Good digging!", 0.0);
+                self.shell.sound_cues.push(SoundCue::Milestone);
+            }
+            ShellRequest::LeaveOnline => {
+                let message = match self.runtime.online_role() {
+                    Some(OnlineRole::Host) => "You ended the online session.",
+                    Some(OnlineRole::Client) => "You left the online session.",
+                    None => "",
+                };
+                self.go_local(report);
+                self.shell.return_to_title(message);
+            }
+            ShellRequest::Reconnect => {
+                if let Some((target, token)) = self.last_join.clone() {
+                    self.start_join(target, token, report);
+                }
+            }
+            ShellRequest::CopyToClipboard(text) => report.clipboard = Some(text),
+            ShellRequest::AdjustTuning { parameter, step } => {
+                self.shell.message = self.runtime.adjust_tuning(parameter, step);
+            }
             ShellRequest::Exit => self.shell.request_exit = true,
+        }
+    }
+
+    /// Mirrors the runtime's online facts into the shell and reacts to a client's session
+    /// ending (host ended it, rejected us, connection lost).
+    fn sync_online(&mut self, report: &mut FrameReport) {
+        self.shell.online.role = self.runtime.online_role();
+        self.shell.online.lobby = self.runtime.lobby_info();
+        for notice in self.runtime.take_notices() {
+            self.shell.message = notice;
+        }
+        if self.shell.online.show_net_debug {
+            self.shell.online.net_debug = self.runtime.net_debug_lines();
+        }
+        if let Some(error) = self.runtime.host_failure() {
+            self.go_local(report);
+            self.shell
+                .online_notice(format!("Could not host: {error}"), false);
+            return;
+        }
+        match self.runtime.client_state() {
+            Some(ClientState::InGame) if !self.client_entered => {
+                self.client_entered = true;
+                if self.shell.run_mode == RunMode::Lobby
+                    && self.shell.online.screen == OnlineScreen::Lobby
+                {
+                    self.shell.enter_world("Joined the session.", 0.0);
+                    self.shell.sound_cues.push(SoundCue::Milestone);
+                }
+            }
+            Some(ClientState::Finished {
+                message,
+                can_reconnect,
+            }) => {
+                if let Runtime::Client(client) = &self.runtime {
+                    self.last_join = Some((client.target().clone(), client.reconnect_token()));
+                }
+                self.go_local(report);
+                self.shell.online_notice(message, can_reconnect);
+            }
+            _ => {}
+        }
+    }
+
+    fn poll_lan(&mut self, report: &mut FrameReport) {
+        if let Some(result) = self.lan_browse.as_ref().and_then(Background::poll) {
+            self.lan_browse = None;
+            match result {
+                Ok(games) => {
+                    self.shell.online.lan_status = if games.is_empty() {
+                        "No LAN games found. Refresh to search again.".to_owned()
+                    } else {
+                        format!("Found {} LAN game(s).", games.len())
+                    };
+                    self.shell.online.lan_games = games;
+                }
+                Err(error) => {
+                    self.shell.online.lan_status = format!("LAN discovery failed: {error}");
+                }
+            }
+        }
+        if let Some(result) = self.lan_fetch.as_ref().and_then(Background::poll) {
+            self.lan_fetch = None;
+            match result {
+                Ok(descriptor) => {
+                    self.start_join(JoinTarget::Descriptor(descriptor), None, report);
+                }
+                Err(error) => {
+                    self.shell.online.lan_status = format!("Could not reach that game: {error}");
+                }
+            }
+        }
+    }
+
+    fn host_online(&mut self, report: &mut FrameReport) {
+        match LocalHost::online(new_world(), 1, self.host_bind, true) {
+            Ok(mut host) => {
+                host.set_host_name(&online::player_name());
+                self.runtime = Runtime::Host(Box::new(host));
+                self.reset_presentation(report);
+                self.shell.online.ready = false;
+                self.shell.show_online(OnlineScreen::Lobby);
+                "Hosting: share the address or descriptor, then start the game."
+                    .clone_into(&mut self.shell.message);
+            }
+            Err(error) => self.shell.message = format!("Could not host: {error}"),
+        }
+    }
+
+    fn open_online(&mut self) {
+        let bind = self.host_bind;
+        let Runtime::Host(host) = &mut self.runtime else {
+            return;
+        };
+        match host.open_online(bind, true) {
+            Ok(()) => {
+                host.set_host_name(&online::player_name());
+                "Opened to LAN/online. Pause > Online Session shows the address."
+                    .clone_into(&mut self.shell.message);
+            }
+            Err(error) => self.shell.message = format!("Could not open the game: {error}"),
+        }
+    }
+
+    fn start_join(
+        &mut self,
+        target: JoinTarget,
+        token: Option<ReconnectToken>,
+        report: &mut FrameReport,
+    ) {
+        let fallback = self.runtime.world().clone();
+        match OnlineClient::join(target.clone(), online::player_name(), token, fallback) {
+            Ok(client) => {
+                self.last_join = Some((target, token));
+                self.go_online(Runtime::Client(Box::new(client)), report);
+                self.shell.online.ready = false;
+                self.shell.show_online(OnlineScreen::Lobby);
+                "Connecting...".clone_into(&mut self.shell.message);
+            }
+            Err(error) => self.shell.message = format!("Could not join: {error}"),
+        }
+    }
+
+    /// Replaces the runtime with an online one, ending any previous session.
+    fn go_online(&mut self, runtime: Runtime, report: &mut FrameReport) {
+        let previous = std::mem::replace(&mut self.runtime, runtime);
+        end_runtime(previous);
+        self.client_entered = false;
+        self.autosave_seconds = 0.0;
+        self.reset_presentation(report);
+    }
+
+    /// Ends the online session (host: tell clients; client: leave) and idles a fresh local world.
+    fn go_local(&mut self, report: &mut FrameReport) {
+        self.go_online(Runtime::local(new_world(), 1), report);
+    }
+
+    fn autosave(&mut self, delta_seconds: f32) {
+        let hosting = self.runtime.online_role() == Some(OnlineRole::Host)
+            && self.shell.online.started()
+            && !matches!(self.shell.run_mode, RunMode::Title);
+        if !hosting {
+            self.autosave_seconds = 0.0;
+            return;
+        }
+        self.autosave_seconds += delta_seconds;
+        if self.autosave_seconds >= AUTOSAVE_SECONDS {
+            self.autosave_seconds = 0.0;
+            let result = self.write_save(None);
+            self.report_save(result, "Autosaved the session.");
         }
     }
 
@@ -324,7 +577,7 @@ impl LocalGame {
     ) {
         match loaded {
             Ok(save) => {
-                if self.shell.run_mode == crate::shell::RunMode::Title {
+                if self.shell.run_mode == RunMode::Title {
                     // From the title, a load starts a fresh single-seat session.
                     self.runtime = Runtime::local(save.world, 1);
                 } else if !self.runtime.load_world(save.world) {
@@ -346,6 +599,25 @@ impl LocalGame {
         self.frame_events.clear();
         report.world_replaced = true;
     }
+}
+
+/// Ends a runtime that is being replaced: a host ends its online session for its clients, a
+/// client leaves (the network threads stop in the background).
+fn end_runtime(runtime: Runtime) {
+    match runtime {
+        Runtime::Host(mut host) => host.end_session(),
+        Runtime::Client(client) => client.leave(),
+    }
+}
+
+/// Parses `ip:port`, or a bare IP with the default port.
+fn parse_join_addr(text: &str) -> Option<SocketAddr> {
+    let text = text.trim();
+    text.parse().ok().or_else(|| {
+        text.parse::<std::net::IpAddr>()
+            .ok()
+            .map(|ip| SocketAddr::new(ip, DEFAULT_PORT))
+    })
 }
 
 /// The shell's read-only view of the world. `probe_saves` controls whether save files are looked
@@ -389,7 +661,7 @@ mod tests {
     use crate::{
         render_snapshot::{SCREEN_HEIGHT, SCREEN_WIDTH},
         runtime::MAX_LOCAL_SEATS,
-        shell::{ModalScreen, RunMode, interior_service_x},
+        shell::{ModalScreen, PauseOption, TitleOption, interior_service_x},
     };
 
     const DT: f32 = 1.0 / 60.0;
@@ -772,6 +1044,7 @@ mod tests {
         for _ in 0..45 {
             let _report = game.frame(
                 &FrameInput {
+                    clipboard: None,
                     primary: PlayerInput::default(),
                     other_seats: vec![PlayerInput {
                         horizontal: -1.0,
@@ -830,6 +1103,7 @@ mod tests {
         for _ in 0..45 {
             let _report = game.frame(
                 &FrameInput {
+                    clipboard: None,
                     primary: PlayerInput::default(),
                     other_seats: vec![
                         PlayerInput::default(),
@@ -924,6 +1198,7 @@ mod tests {
         let seat_two_interact = |game: &mut LocalGame| {
             let _report = game.frame(
                 &FrameInput {
+                    clipboard: None,
                     primary: PlayerInput::default(),
                     other_seats: vec![PlayerInput {
                         interact: true,
@@ -958,5 +1233,196 @@ mod tests {
         idle(&mut game, 3);
         assert_eq!(game.world().rescue_count(second), 1);
         assert!(game.world().failure_state(second).is_none(), "rescued");
+    }
+
+    #[test]
+    fn title_menu_offers_host_and_join() {
+        let options = TitleOption::all(false);
+        assert!(options.contains(&TitleOption::HostOnline));
+        assert!(options.contains(&TitleOption::JoinOnline));
+        let mut game = title_game("join-menu");
+        let join_index = options
+            .iter()
+            .position(|option| *option == TitleOption::JoinOnline)
+            .expect("join entry");
+        for _ in 0..join_index {
+            let _report = press(
+                &mut game,
+                PlayerInput {
+                    menu_down: true,
+                    ..PlayerInput::default()
+                },
+            );
+        }
+        let _report = press(
+            &mut game,
+            PlayerInput {
+                confirm: true,
+                ..PlayerInput::default()
+            },
+        );
+        assert_eq!(game.shell.run_mode, RunMode::Lobby);
+        assert_eq!(game.shell.online.screen, OnlineScreen::JoinMenu);
+    }
+
+    /// Two whole apps (shell + runtime + net bridge) on real QUIC: host, join by address, ready,
+    /// start, play, local-only pause, client save refusal, and the host ending the session.
+    #[test]
+    fn two_apps_host_join_play_and_end_over_real_quic() {
+        struct Pair {
+            host: LocalGame,
+            client: LocalGame,
+            last: std::time::Instant,
+        }
+        impl Pair {
+            fn frame(&mut self, host_input: PlayerInput, client_input: PlayerInput) {
+                let now = std::time::Instant::now();
+                let dt = (now - self.last).as_secs_f32();
+                self.last = now;
+                let _host = self.host.frame(&FrameInput::primary(host_input), dt);
+                let _client = self.client.frame(&FrameInput::primary(client_input), dt);
+                std::thread::sleep(Duration::from_millis(4));
+            }
+            fn until(&mut self, what: &str, done: impl Fn(&Self) -> bool) {
+                let deadline = std::time::Instant::now() + Duration::from_secs(8);
+                while !done(self) {
+                    assert!(std::time::Instant::now() < deadline, "timed out: {what}");
+                    self.frame(PlayerInput::default(), PlayerInput::default());
+                }
+            }
+        }
+        let confirm = PlayerInput {
+            confirm: true,
+            ..PlayerInput::default()
+        };
+
+        let mut host = title_game("online-host");
+        host.set_host_bind("127.0.0.1:0".parse().expect("addr"));
+        let mut requests = Vec::new();
+        host.handle_request(ShellRequest::HostOnline, &mut requests, &mut FrameReport::default());
+        assert_eq!(host.shell.run_mode, RunMode::Lobby);
+        let mut pair = Pair {
+            host,
+            client: title_game("online-client"),
+            last: std::time::Instant::now(),
+        };
+        pair.until("the host endpoint", |pair| {
+            pair.host
+                .shell
+                .online
+                .lobby
+                .as_ref()
+                .is_some_and(|lobby| lobby.addr.is_some())
+        });
+        let addr = pair.host.shell.online.lobby.as_ref().and_then(|lobby| lobby.addr);
+        let port = addr.expect("bound").port();
+
+        // Join by typing the address into the form.
+        pair.client.shell.show_online(OnlineScreen::JoinAddress);
+        pair.client.shell.online.text.clear();
+        for character in format!("127.0.0.1:{port}").chars() {
+            pair.frame(
+                PlayerInput::default(),
+                PlayerInput {
+                    text_input: Some(character),
+                    ..PlayerInput::default()
+                },
+            );
+        }
+        pair.frame(PlayerInput::default(), confirm);
+        pair.until("the client in the lobby", |pair| {
+            pair.host
+                .shell
+                .online
+                .lobby
+                .as_ref()
+                .is_some_and(|lobby| lobby.roster.len() == 2)
+                && pair.client.runtime().client_state() == Some(ClientState::Lobby)
+        });
+        assert_eq!(pair.client.shell.run_mode, RunMode::Lobby);
+        assert_eq!(pair.client.shell.online.role, Some(OnlineRole::Client));
+
+        // Ready up (first lobby entry), then the host starts (first lobby entry).
+        pair.frame(PlayerInput::default(), confirm);
+        pair.until("the ready flag on the host", |pair| {
+            pair.host.shell.online.lobby.as_ref().is_some_and(|lobby| {
+                lobby
+                    .roster
+                    .iter()
+                    .any(|entry| !entry.local && entry.ready)
+            })
+        });
+        pair.frame(confirm, PlayerInput::default());
+        assert_eq!(pair.host.shell.run_mode, RunMode::Playing);
+        pair.until("the client in game", |pair| {
+            pair.client.shell.run_mode == RunMode::Playing
+        });
+        let client_player = pair.client.seats()[0].player;
+        assert!(pair.host.world().player(client_player).is_some());
+
+        // The client's rig moves on the host.
+        let start_x = pair.host.world().player(client_player).expect("rig").x;
+        for _ in 0..80 {
+            pair.frame(
+                PlayerInput::default(),
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+            );
+        }
+        pair.until("the client's movement on the host", |pair| {
+            pair.host.world().player(client_player).expect("rig").x > start_x + TILE_SIZE
+        });
+
+        // Pausing online is a local overlay: the world keeps running.
+        pair.frame(
+            PlayerInput::default(),
+            PlayerInput {
+                pause: true,
+                ..PlayerInput::default()
+            },
+        );
+        assert_eq!(pair.client.shell.run_mode, RunMode::Paused);
+        let tick = pair.host.world().simulation_tick();
+        pair.until("host ticks during the client's pause", |pair| {
+            pair.host.world().simulation_tick().get() > tick.get() + 10
+        });
+        assert!(
+            !PauseOption::for_role(Some(OnlineRole::Client)).contains(&PauseOption::Save),
+            "joined clients have no save entry"
+        );
+        pair.frame(
+            PlayerInput::default(),
+            PlayerInput {
+                save: true,
+                ..PlayerInput::default()
+            },
+        );
+        assert!(
+            pair.client.shell.message.contains("only the host"),
+            "{}",
+            pair.client.shell.message
+        );
+
+        // The host ends the session: the client is told and returns to a local runtime.
+        let mut requests = Vec::new();
+        pair.host.handle_request(
+            ShellRequest::LeaveOnline,
+            &mut requests,
+            &mut FrameReport::default(),
+        );
+        assert_eq!(pair.host.shell.run_mode, RunMode::Title);
+        assert_eq!(pair.host.runtime().online_role(), None);
+        pair.until("the client's notice", |pair| {
+            pair.client.shell.run_mode == RunMode::Lobby
+                && pair.client.shell.online.screen == OnlineScreen::Notice
+        });
+        assert!(
+            pair.client.shell.online.notice.contains("host ended"),
+            "{}",
+            pair.client.shell.online.notice
+        );
+        assert_eq!(pair.client.runtime().online_role(), None);
     }
 }

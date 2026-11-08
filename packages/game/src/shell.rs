@@ -9,7 +9,13 @@ use drillgame_simulation::{
     economy::{DeepClaimStatus, SurfaceZone, TownBuilding, upgrade_offers, upgrade_tier_name},
 };
 
-use crate::{input::PlayerInput, save};
+use drillgame_quic_transport::lan::LanDiscoveredGame;
+
+use crate::{
+    input::PlayerInput,
+    runtime::{LobbyInfo, OnlineRole},
+    save,
+};
 
 /// Top-level app mode.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -22,6 +28,8 @@ pub enum RunMode {
     Paused,
     /// Inside a surface building.
     Interior,
+    /// Online screens: join forms, LAN list, lobby roster, session notices.
+    Lobby,
 }
 
 /// Modal screens layered over the current mode.
@@ -53,24 +61,56 @@ pub enum ModalScreen {
     Inventory,
 }
 
-/// Pause menu entries. (Online session entries return with the online runtime.)
+/// Pause menu entries.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PauseOption {
     Resume,
     Save,
     Load,
+    /// Open a local game to LAN / direct-IP players.
+    OpenOnline,
+    /// Show the online session (address, roster).
+    SessionInfo,
+    /// Host: end the online session for everyone.
+    EndSession,
+    /// Client: leave the host's session.
+    LeaveSession,
     Options,
     ExitToDesktop,
 }
 
 impl PauseOption {
-    pub const ALL: [Self; 5] = [
-        Self::Resume,
-        Self::Save,
-        Self::Load,
-        Self::Options,
-        Self::ExitToDesktop,
-    ];
+    /// Pause entries for the current kind of session: joined clients cannot save or load (the
+    /// host owns the session save).
+    #[must_use]
+    pub fn for_role(role: Option<OnlineRole>) -> Vec<Self> {
+        match role {
+            None => vec![
+                Self::Resume,
+                Self::Save,
+                Self::Load,
+                Self::OpenOnline,
+                Self::Options,
+                Self::ExitToDesktop,
+            ],
+            Some(OnlineRole::Host) => vec![
+                Self::Resume,
+                Self::SessionInfo,
+                Self::Save,
+                Self::Load,
+                Self::EndSession,
+                Self::Options,
+                Self::ExitToDesktop,
+            ],
+            Some(OnlineRole::Client) => vec![
+                Self::Resume,
+                Self::SessionInfo,
+                Self::LeaveSession,
+                Self::Options,
+                Self::ExitToDesktop,
+            ],
+        }
+    }
 
     #[must_use]
     pub const fn label(self) -> &'static str {
@@ -78,18 +118,24 @@ impl PauseOption {
             Self::Resume => "Resume",
             Self::Save => "Save Game",
             Self::Load => "Load Game",
+            Self::OpenOnline => "Open to LAN / Online",
+            Self::SessionInfo => "Online Session",
+            Self::EndSession => "End Online Session",
+            Self::LeaveSession => "Leave Session",
             Self::Options => "Options",
             Self::ExitToDesktop => "Exit to Desktop",
         }
     }
 }
 
-/// Title menu entries. (Host/Join return with the online runtime.)
+/// Title menu entries.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TitleOption {
     Resume,
     NewGame,
     LocalMultiplayer,
+    HostOnline,
+    JoinOnline,
     LoadSlot,
     Options,
     Exit,
@@ -102,6 +148,8 @@ impl TitleOption {
             Self::Resume => "Resume Saved Session",
             Self::NewGame => "New Game",
             Self::LocalMultiplayer => "Local Split-Screen",
+            Self::HostOnline => "Host Online Game",
+            Self::JoinOnline => "Join Online Game",
             Self::LoadSlot => "Load Slot",
             Self::Options => "Options",
             Self::Exit => "Exit",
@@ -111,11 +159,16 @@ impl TitleOption {
     /// Title entries, with "Resume" first when a save exists.
     #[must_use]
     pub fn all(saves_exist: bool) -> Vec<Self> {
-        let mut options = Vec::with_capacity(6);
+        let mut options = Vec::with_capacity(8);
         if saves_exist {
             options.push(Self::Resume);
         }
-        options.extend([Self::NewGame, Self::LocalMultiplayer]);
+        options.extend([
+            Self::NewGame,
+            Self::LocalMultiplayer,
+            Self::HostOnline,
+            Self::JoinOnline,
+        ]);
         if saves_exist {
             options.push(Self::LoadSlot);
         }
@@ -165,9 +218,213 @@ pub enum ShellRequest {
     Action(PlayerCommand),
     /// Add another local split-screen seat.
     AddLocalSeat,
+    /// Host a new online game (lobby first).
+    HostOnline,
+    /// Open the running local game to remote players.
+    OpenOnline,
+    /// Join a host by `ip:port` (or bare ip with the default port).
+    JoinAddress(String),
+    /// Join a host by its descriptor JSON (pinned certificate).
+    JoinDescriptor(String),
+    /// Browse the LAN for advertised sessions.
+    BrowseLan,
+    /// Join the n-th discovered LAN session.
+    JoinLan(usize),
+    /// Client: set the lobby ready flag.
+    SetReady(bool),
+    /// Host: start the game from the lobby.
+    StartOnline,
+    /// Host: end the session; client: leave it.
+    LeaveOnline,
+    /// Rejoin the last host with the reconnect token.
+    Reconnect,
+    /// Put text on the system clipboard.
+    CopyToClipboard(String),
+    /// Dev: step the selected live network tuning value.
+    AdjustTuning { parameter: usize, step: i32 },
     /// Close the app.
     Exit,
 }
+
+/// Which online screen [`RunMode::Lobby`] shows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OnlineScreen {
+    /// Choose how to join.
+    JoinMenu,
+    /// Type an address.
+    JoinAddress,
+    /// Paste a descriptor.
+    JoinDescriptor,
+    /// Pick a discovered LAN session.
+    LanBrowser,
+    /// Session roster (host or client), before or during the game.
+    Lobby,
+    /// A session-ended / rejected / disconnected message.
+    Notice,
+}
+
+/// Lobby menu entries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LobbyAction {
+    /// Host: start the game.
+    Start,
+    /// Return to the running game.
+    BackToGame,
+    /// Host: copy the descriptor to the clipboard.
+    CopyDescriptor,
+    /// Client: toggle ready.
+    ToggleReady,
+    /// Host: end the session; client: leave it.
+    Leave,
+}
+
+impl LobbyAction {
+    /// Menu label (`host` picks the host wording of `Leave`).
+    #[must_use]
+    pub const fn label(self, host: bool) -> &'static str {
+        match self {
+            Self::Start => "Start game",
+            Self::BackToGame => "Back to game",
+            Self::CopyDescriptor => "Copy descriptor to clipboard",
+            Self::ToggleReady => "Toggle ready",
+            Self::Leave => {
+                if host {
+                    "End session"
+                } else {
+                    "Leave session"
+                }
+            }
+        }
+    }
+}
+
+/// Session notice menu entries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NoticeAction {
+    /// Rejoin with the reconnect token.
+    Reconnect,
+    /// Back to the title menu.
+    BackToTitle,
+}
+
+impl NoticeAction {
+    /// Menu label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Reconnect => "Reconnect",
+            Self::BackToTitle => "Back to title",
+        }
+    }
+}
+
+/// Longest address / descriptor text accepted.
+const MAX_ONLINE_TEXT: usize = 16 * 1024;
+
+/// Entries of the join menu.
+pub const JOIN_MENU: [&str; 4] = [
+    "Join by address (ip:port)",
+    "Join by descriptor (paste with Ctrl+V)",
+    "Find LAN games",
+    "Back",
+];
+
+/// Online shell state: which screen, form text, LAN results and the latest lobby facts.
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "independent online UI toggles"
+)]
+#[derive(Clone, Debug)]
+pub struct OnlineShell {
+    pub screen: OnlineScreen,
+    pub selected: usize,
+    /// Text being typed (address / descriptor).
+    pub text: String,
+    pub lan_games: Vec<LanDiscoveredGame>,
+    pub lan_status: String,
+    /// Refreshed every frame from the runtime while online.
+    pub lobby: Option<LobbyInfo>,
+    /// Refreshed every frame from the runtime.
+    pub role: Option<OnlineRole>,
+    pub ready: bool,
+    pub notice: String,
+    pub can_reconnect: bool,
+    /// F3 network overlay.
+    pub show_net_debug: bool,
+    /// Refreshed every frame while the overlay is shown.
+    pub net_debug: Vec<String>,
+    /// Live tuning parameter the dev keys adjust.
+    pub tune_parameter: usize,
+    /// Last address typed into the join form.
+    pub last_address: String,
+}
+
+impl Default for OnlineShell {
+    fn default() -> Self {
+        Self {
+            screen: OnlineScreen::JoinMenu,
+            selected: 0,
+            text: String::new(),
+            lan_games: Vec::new(),
+            lan_status: String::new(),
+            lobby: None,
+            role: None,
+            ready: false,
+            notice: String::new(),
+            can_reconnect: false,
+            show_net_debug: false,
+            net_debug: Vec::new(),
+            tune_parameter: 0,
+            last_address: format!("127.0.0.1:{}", crate::online::DEFAULT_PORT),
+        }
+    }
+}
+
+impl OnlineShell {
+    /// Whether the game of the current online session has started.
+    #[must_use]
+    pub fn started(&self) -> bool {
+        self.lobby.as_ref().is_some_and(|lobby| lobby.started)
+    }
+
+    /// Lobby menu entries for the current role and game state.
+    #[must_use]
+    pub fn lobby_options(&self) -> Vec<LobbyAction> {
+        let first = if self.started() {
+            LobbyAction::BackToGame
+        } else if self.role == Some(OnlineRole::Host) {
+            LobbyAction::Start
+        } else {
+            LobbyAction::ToggleReady
+        };
+        if self.role == Some(OnlineRole::Host) {
+            vec![first, LobbyAction::CopyDescriptor, LobbyAction::Leave]
+        } else {
+            vec![first, LobbyAction::Leave]
+        }
+    }
+
+    /// Notice menu entries.
+    #[must_use]
+    pub fn notice_options(&self) -> Vec<NoticeAction> {
+        if self.can_reconnect {
+            vec![NoticeAction::Reconnect, NoticeAction::BackToTitle]
+        } else {
+            vec![NoticeAction::BackToTitle]
+        }
+    }
+
+    /// LAN browser entries: discovered sessions, then refresh and back.
+    #[must_use]
+    pub fn lan_options(&self) -> Vec<String> {
+        self.lan_games
+            .iter()
+            .map(|game| format!("{} ({})", game.instance_name, game.game_addr))
+            .chain(["Refresh".to_owned(), "Back".to_owned()])
+            .collect()
+    }
+}
+
 
 /// Read-only gameplay facts the shell needs, taken from the runtime's world.
 #[derive(Clone, Copy, Debug)]
@@ -237,6 +494,9 @@ pub struct ShellState {
     pub service_animation_seconds: f32,
     pub sound_cues: Vec<SoundCue>,
     pub depot_receipts: Vec<String>,
+    pub online: OnlineShell,
+    /// Clipboard text pasted this frame (Ctrl+V), for the descriptor form.
+    pub pasted: Option<String>,
     pending_services: Vec<PendingService>,
 }
 
@@ -273,6 +533,8 @@ impl ShellState {
             service_animation_seconds: 0.0,
             sound_cues: Vec::new(),
             depot_receipts: Vec::new(),
+            online: OnlineShell::default(),
+            pasted: None,
             pending_services: Vec::new(),
         }
     }
@@ -333,10 +595,29 @@ impl ShellState {
         if self.service_animation_seconds <= 0.0 {
             self.service_animation = None;
         }
-        if input.save && self.run_mode != RunMode::Title {
+        let text_entry = self.text_entry();
+        let in_game = !matches!(self.run_mode, RunMode::Title | RunMode::Lobby);
+        if input.net_debug {
+            self.online.show_net_debug = !self.online.show_net_debug;
+        }
+        if self.online.show_net_debug && cfg!(debug_assertions) && !text_entry {
+            if input.tune_next {
+                self.online.tune_parameter =
+                    (self.online.tune_parameter + 1) % crate::runtime::TUNABLE_PARAMETERS.len();
+            }
+            for (pressed, step) in [(input.tune_up, 1), (input.tune_down, -1)] {
+                if pressed {
+                    requests.push(ShellRequest::AdjustTuning {
+                        parameter: self.online.tune_parameter,
+                        step,
+                    });
+                }
+            }
+        }
+        if input.save && in_game {
             requests.push(ShellRequest::QuickSave);
         }
-        if input.load {
+        if input.load && self.run_mode != RunMode::Lobby {
             requests.push(ShellRequest::QuickLoad);
         }
         if self.handle_exit_modal(input, &mut requests) {
@@ -346,21 +627,21 @@ impl ShellState {
             self.request_exit_or_prompt();
             return requests;
         }
-        if self.run_mode != RunMode::Title && input_changes_game(input) {
+        if in_game && input_changes_game(input) {
             self.save_dirty = true;
         }
-        if input.local_multiplayer_toggle && self.run_mode != RunMode::Title {
+        if input.local_multiplayer_toggle && in_game {
             requests.push(ShellRequest::AddLocalSeat);
         }
-        if self.run_mode != RunMode::Title {
+        if in_game {
             toggle_modal(&mut self.modal, input.inventory, ModalScreen::Inventory);
             toggle_modal(&mut self.modal, input.map, ModalScreen::Map);
             toggle_modal(&mut self.modal, input.help, ModalScreen::Help);
         }
-        if input.volume_up {
+        if input.volume_up && !text_entry {
             self.adjust_volume(0.1);
         }
-        if input.volume_down {
+        if input.volume_down && !text_entry {
             self.adjust_volume(-0.1);
         }
         if input.fullscreen {
@@ -378,6 +659,7 @@ impl ShellState {
                 }
             }
             RunMode::Paused => self.handle_pause_menu(input, &mut requests),
+            RunMode::Lobby => self.handle_online(input, &mut requests),
             RunMode::Interior => self.handle_interior(input, delta_seconds, ctx, &mut requests),
             RunMode::Playing => {
                 if ctx.failed() {
@@ -410,6 +692,190 @@ impl ShellState {
         }
         requests
     }
+
+    /// Whether an online text field has focus (typing must not trigger hotkeys).
+    #[must_use]
+    pub const fn text_entry(&self) -> bool {
+        matches!(self.run_mode, RunMode::Lobby)
+            && matches!(
+                self.online.screen,
+                OnlineScreen::JoinAddress | OnlineScreen::JoinDescriptor
+            )
+    }
+
+    /// Shows an online screen.
+    pub fn show_online(&mut self, screen: OnlineScreen) {
+        self.run_mode = RunMode::Lobby;
+        self.modal = None;
+        self.online.screen = screen;
+        self.online.selected = 0;
+        match screen {
+            OnlineScreen::JoinAddress => self.online.text.clone_from(&self.online.last_address),
+            OnlineScreen::JoinDescriptor => self.online.text.clear(),
+            OnlineScreen::JoinMenu
+            | OnlineScreen::LanBrowser
+            | OnlineScreen::Lobby
+            | OnlineScreen::Notice => {}
+        }
+    }
+
+    /// Shows a session notice (host ended the session, rejected, disconnected).
+    pub fn online_notice(&mut self, notice: impl Into<String>, can_reconnect: bool) {
+        self.online.notice = notice.into();
+        self.online.can_reconnect = can_reconnect;
+        self.online.ready = false;
+        self.show_online(OnlineScreen::Notice);
+    }
+
+    /// Returns to the title menu (after leaving an online session).
+    pub fn return_to_title(&mut self, message: impl Into<String>) {
+        self.run_mode = RunMode::Title;
+        self.modal = None;
+        self.interior_zone = None;
+        self.selected_title_item = 0;
+        self.online.ready = false;
+        self.pending_services.clear();
+        self.message = message.into();
+    }
+
+    fn handle_online(&mut self, input: PlayerInput, requests: &mut Vec<ShellRequest>) {
+        let pasted = self.pasted.take();
+        match self.online.screen {
+            OnlineScreen::JoinMenu => {
+                if input.cancel {
+                    self.return_to_title("Mine ore, sell cargo, and buy upgrades.");
+                    return;
+                }
+                match self.online_menu_choice(input, JOIN_MENU.len()) {
+                    Some(0) => self.show_online(OnlineScreen::JoinAddress),
+                    Some(1) => self.show_online(OnlineScreen::JoinDescriptor),
+                    Some(2) => {
+                        self.show_online(OnlineScreen::LanBrowser);
+                        "Searching the LAN...".clone_into(&mut self.online.lan_status);
+                        requests.push(ShellRequest::BrowseLan);
+                    }
+                    Some(_) => self.return_to_title("Mine ore, sell cargo, and buy upgrades."),
+                    None => {}
+                }
+            }
+            OnlineScreen::JoinAddress | OnlineScreen::JoinDescriptor => {
+                self.handle_text_form(input, pasted, requests);
+            }
+            OnlineScreen::LanBrowser => {
+                if input.cancel {
+                    self.show_online(OnlineScreen::JoinMenu);
+                    return;
+                }
+                let found = self.online.lan_games.len();
+                match self.online_menu_choice(input, found + 2) {
+                    Some(index) if index < found => requests.push(ShellRequest::JoinLan(index)),
+                    Some(index) if index == found => {
+                        "Searching the LAN...".clone_into(&mut self.online.lan_status);
+                        requests.push(ShellRequest::BrowseLan);
+                    }
+                    Some(_) => self.show_online(OnlineScreen::JoinMenu),
+                    None => {}
+                }
+            }
+            OnlineScreen::Lobby => {
+                if input.cancel && self.online.started() {
+                    self.run_mode = RunMode::Playing;
+                    return;
+                }
+                let options = self.online.lobby_options();
+                let Some(choice) = self.online_menu_choice(input, options.len()) else {
+                    return;
+                };
+                match options[choice] {
+                    LobbyAction::Start => requests.push(ShellRequest::StartOnline),
+                    LobbyAction::BackToGame => self.run_mode = RunMode::Playing,
+                    LobbyAction::CopyDescriptor => {
+                        if let Some(descriptor) = self
+                            .online
+                            .lobby
+                            .as_ref()
+                            .and_then(|lobby| lobby.descriptor.clone())
+                        {
+                            requests.push(ShellRequest::CopyToClipboard(descriptor));
+                            "Descriptor copied: joiners paste it with Ctrl+V."
+                                .clone_into(&mut self.message);
+                        } else {
+                            "The host endpoint is not ready yet.".clone_into(&mut self.message);
+                        }
+                    }
+                    LobbyAction::ToggleReady => {
+                        self.online.ready = !self.online.ready;
+                        requests.push(ShellRequest::SetReady(self.online.ready));
+                    }
+                    LobbyAction::Leave => requests.push(ShellRequest::LeaveOnline),
+                }
+            }
+            OnlineScreen::Notice => {
+                if input.cancel {
+                    self.return_to_title("Mine ore, sell cargo, and buy upgrades.");
+                    return;
+                }
+                let options = self.online.notice_options();
+                match self
+                    .online_menu_choice(input, options.len())
+                    .map(|choice| options[choice])
+                {
+                    Some(NoticeAction::Reconnect) => requests.push(ShellRequest::Reconnect),
+                    Some(NoticeAction::BackToTitle) => {
+                        self.return_to_title("Mine ore, sell cargo, and buy upgrades.");
+                    }
+                    None => {}
+                }
+            }
+        }
+    }
+
+    /// Address / descriptor entry: typing, Backspace, Ctrl+V paste, Enter to join, Esc back.
+    fn handle_text_form(
+        &mut self,
+        input: PlayerInput,
+        pasted: Option<String>,
+        requests: &mut Vec<ShellRequest>,
+    ) {
+        // `E` also counts as "confirm" in menus; while typing it is just a letter.
+        let typed_confirm_key = matches!(input.text_input, Some('e' | 'E'));
+        if let Some(text) = pasted {
+            self.online.text.push_str(text.trim());
+        }
+        if input.text_backspace {
+            self.online.text.pop();
+        } else if input.cancel {
+            self.show_online(OnlineScreen::JoinMenu);
+            return;
+        }
+        if let Some(character) = input.text_input
+            && !character.is_control()
+            && self.online.text.len() < MAX_ONLINE_TEXT
+        {
+            self.online.text.push(character);
+        }
+        let text = self.online.text.trim().to_owned();
+        if input.confirm && !typed_confirm_key && !text.is_empty() {
+            if self.online.screen == OnlineScreen::JoinAddress {
+                self.online.last_address.clone_from(&text);
+                requests.push(ShellRequest::JoinAddress(text));
+            } else {
+                requests.push(ShellRequest::JoinDescriptor(text));
+            }
+        }
+    }
+
+    fn online_menu_choice(&mut self, input: PlayerInput, count: usize) -> Option<usize> {
+        if input.menu_up {
+            self.online.selected = self.online.selected.saturating_sub(1);
+        }
+        if input.menu_down {
+            self.online.selected += 1;
+        }
+        self.online.selected = self.online.selected.min(count.saturating_sub(1));
+        input.confirm.then_some(self.online.selected)
+    }
+
 
     fn adjust_volume(&mut self, delta: f32) {
         self.master_volume = (self.master_volume + delta).clamp(0.0, 1.0);
@@ -444,6 +910,8 @@ impl ShellState {
             TitleOption::Resume => requests.push(ShellRequest::ResumeLatest),
             TitleOption::NewGame => requests.push(ShellRequest::NewGame { seats: 1 }),
             TitleOption::LocalMultiplayer => requests.push(ShellRequest::NewGame { seats: 2 }),
+            TitleOption::HostOnline => requests.push(ShellRequest::HostOnline),
+            TitleOption::JoinOnline => self.show_online(OnlineScreen::JoinMenu),
             TitleOption::LoadSlot => self.open_modal(ModalScreen::LoadSlots),
             TitleOption::Options => self.open_modal(ModalScreen::Options),
             TitleOption::Exit => {
@@ -459,13 +927,14 @@ impl ShellState {
             let _handled = self.handle_menu_modal(input, requests);
             return;
         }
+        let options = PauseOption::for_role(self.online.role);
         if input.menu_up {
             self.selected_pause_item = self.selected_pause_item.saturating_sub(1);
         }
         if input.menu_down {
-            self.selected_pause_item =
-                (self.selected_pause_item + 1).min(PauseOption::ALL.len() - 1);
+            self.selected_pause_item += 1;
         }
+        self.selected_pause_item = self.selected_pause_item.min(options.len() - 1);
         if input.pause || input.cancel {
             self.run_mode = RunMode::Playing;
             return;
@@ -473,10 +942,18 @@ impl ShellState {
         if !input.confirm {
             return;
         }
-        match PauseOption::ALL[self.selected_pause_item] {
+        match options[self.selected_pause_item] {
             PauseOption::Resume => self.run_mode = RunMode::Playing,
             PauseOption::Save => self.open_modal(ModalScreen::SaveSlots),
             PauseOption::Load => self.open_modal(ModalScreen::LoadSlots),
+            PauseOption::OpenOnline => {
+                self.run_mode = RunMode::Playing;
+                requests.push(ShellRequest::OpenOnline);
+            }
+            PauseOption::SessionInfo => self.show_online(OnlineScreen::Lobby),
+            PauseOption::EndSession | PauseOption::LeaveSession => {
+                requests.push(ShellRequest::LeaveOnline);
+            }
             PauseOption::Options => self.open_modal(ModalScreen::Options),
             PauseOption::ExitToDesktop => self.request_exit_or_prompt(),
         }

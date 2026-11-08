@@ -46,6 +46,7 @@ fn sample_frame_input(
     FrameInput {
         primary,
         other_seats,
+        clipboard: None,
     }
 }
 
@@ -74,7 +75,10 @@ pub fn run() {
     while !game.should_exit() {
         let delta_seconds = raylib.get_frame_time();
         let exit_requested = raylib.window_should_close();
-        let input = sample_frame_input(&mut raylib, game.seats().len(), exit_requested);
+        let mut input = sample_frame_input(&mut raylib, game.seats().len(), exit_requested);
+        if input.primary.paste {
+            input.clipboard = raylib.get_clipboard_text().ok();
+        }
         renderer.apply_ui_input(input.primary);
         let fullscreen_before = game.shell.fullscreen;
 
@@ -82,6 +86,11 @@ pub fn run() {
 
         if game.shell.fullscreen != fullscreen_before {
             raylib.toggle_fullscreen();
+        }
+        if let Some(text) = &report.clipboard
+            && let Err(error) = raylib.set_clipboard_text(text)
+        {
+            eprintln!("Clipboard copy failed: {error}");
         }
         if report.settings_changed
             && let Err(error) = save_settings(game.shell.settings())
@@ -98,4 +107,6 @@ pub fn run() {
         let mut draw = raylib.begin_drawing(&thread);
         renderer.render(&mut draw, &game.shell, &snapshot);
     }
+    // Tell remote players the session is over (host) or leave it (client) before exiting.
+    game.shutdown();
 }
