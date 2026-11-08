@@ -14,11 +14,14 @@ The quickest way to see the whole kit is the `art_gallery` capture scene (see
 | `crate::pixel_scale` | The scaling policy (pure math, unit tested). |
 | `rendering/pixel_art/palette.rs` | The palette constants and `PALETTE` list. |
 | `rendering/pixel_art/sprite.rs` | `SpriteDef`, `NineSlice`, atlas packing/rasterizing, draw helpers. |
-| `rendering/pixel_art/sprites/*.rs` | All sprite data: `ui` (frames), `icons`, `rig`, `interior`. |
+| `rendering/pixel_art/shade.rs` | Palette indices, the one-step-darker ramp walk (`darker`) and the 4x4 Bayer dither. |
+| `rendering/pixel_art/sprites/*.rs` | All sprite data: `ui` (frames), `icons`, `rig`, `interior`, `terrain` (ore/artifact stamps, cracks), `world` (props, infrastructure). |
 | `rendering/pixel_art/font.rs` | The bitmap UI font (regular + derived bold). |
 | `rendering/ui_kit.rs` | UI canvas + widgets (panels, buttons, bars, rows, tabs, tooltips...). |
 | `rendering/layout.rs` | Menu/modal content model drawn with the UI kit. |
 | `rendering/screen.rs` | HUD, minimap, depth ruler and every menu/modal screen. |
+| `rendering/terrain.rs` + `terrain/{tile_art,fog}.rs` | Terrain chunks, the procedural tile art and the exploration fog. |
+| `rendering/world.rs` + `world/{sky,buildings,rig,fx}.rs` | Everything in world space: sky and parallax, the town, rigs, props and effects. |
 | `rendering/interior.rs` | The walk-in building rooms. |
 | `rendering/gallery.rs` | The art reference sheet. |
 
@@ -89,7 +92,7 @@ The atlas (`sprite::load_atlas`) is rasterized once at startup into a point-filt
 One art pixel always covers a whole number of physical framebuffer pixels (`pixel_scale`):
 
 - **World**: one art pixel = `WORLD_PIXELS_PER_ART_PIXEL` (2) world pixels, so a 32-world-pixel
-  tile is 16 art pixels and the rig is 14x11. The zoom is
+  tile is 16 art pixels and the rig is 16x13. The zoom is
   `round(framebuffer height / 360)` physical pixels per art pixel, which keeps
   `WORLD_VIEW_HEIGHT` (720 world pixels) exactly at 720/1080/1440/2160 px and within one rounding
   step elsewhere. High-DPI density is included (the framebuffer is what counts). The camera
@@ -150,9 +153,63 @@ text, unaffordable prices `RED` on a disabled row.
   others like the shop. The rig walks in the shell's room units (`interior_x / 2` = art x), so
   door and counter positions must keep following `shell::interior_service_x`.
 
-Still placeholder (next steps): terrain tiles and fog (`terrain.rs`), surface buildings and sky
-(`world.rs`), remote rigs, bombs/infrastructure/particles, the map modal, the title screen
-backdrop, and dressing for the seven non-shop interiors.
+- **World** (`world.rs`): see [World art](#world-art).
+
+Still placeholder (next steps): the map modal, the title screen backdrop, and dressing for the
+seven non-shop interiors.
+
+## World art
+
+Draw order (`world::draw_world_scene`): sky, sun, clouds and hills; the town; bedrock beyond the
+world's edges; terrain; lava glow; infrastructure; drill cracks; lost cargo; bombs; boulders;
+scanner pings; rigs; drill debris; gas clouds; sparks; explosions; remote name tags. Everything
+snaps to the art grid (`world::Pen` draws art-pixel rectangles, `draw_world_sprite` sprites).
+Animation is driven by shell ticks (`WorldScene::ticks`), never wall-clock time.
+
+**Terrain** (`terrain/tile_art.rs`). A tile is 16x16 art pixels painted into palette indices:
+
+- Materials are patterns sampled in *global* art coordinates so they flow across tiles: dirt
+  (noise clumps, grains, pebbles), clay (dark body with broken wavy strata), stone (Worley
+  cobbles lit top-left), hard rock (Manhattan-Worley angular slabs), foundation (offset blocks).
+- Each depth band recolours them through 4-step ramps (`Strata`): topsoil 5-13, clay 14-27, grey
+  stone 28-45, slate 46-64, basalt 65-89, then one palette per deep stratum (Crystal Faults
+  blues, Fossil Oceans sand, Pressure Cathedrals steel, Radioactive Hollow greens, Ancient
+  Machine steel/copper, Void Geode purples, Mantle Storm maroon), each with rare accent specks.
+- Ores are 3-4 cluster stamps (`sprites::terrain::ore_stamp`: nugget/gem/chunk/flake shapes in
+  the mineral's ramp) on the host rock of that depth; artifacts are one centred stamp each;
+  gas/pressure pockets are bubbled cavities, explosive pockets volatile red crystals, magma vents
+  a glowing seam, lava molten noise (plus an animated glow and glints in `world/fx.rs`, only on
+  explored tiles).
+- Faces meeting dug air get an `INK` outline, a lit lip (top/left) or shade (bottom/right) and
+  rounded outer corners; ground under open sky gets grass. Dug air shows the band's back wall
+  (`Strata::back`) with contact shadows under ceilings and along walls.
+- `material_color(kind, y)` is a tile's representative colour (debris, dust; usable by the minimap
+  if it wants to match the terrain).
+
+**Fog** (`terrain/fog.rs`). Per-tile darkness (deeper and farther from explored tiles is darker;
+the top three ground rows are capped so the surface stays readable) is interpolated between tile
+centres and applied per art pixel as a Bayer-dithered walk down each colour's ramp
+(`shade::darker`) ending in `INK`. Chunks cache their art; exploration only recomposites.
+
+**Rig** (`sprites/rig.rs`, `world/rig.rs`). 16x13 body facing right (flipped for left, and a
+stopped rig keeps its last facing); tracks roll while driving; a nose drill at the front, the
+spinning bit below while drilling down, a side bit while drilling sideways, one-pixel drilling
+shake; a long climb flame or short hover flame; exhaust puffs, thick smoke and sparks under 35%
+hull, scorched paint under 30%, a fast red beacon under 15%. Other players' rigs use another hull
+paint by player id (`REMOTE_BODIES`) and carry a name tag with fuel/hull pips whose border turns
+amber (warning) or blinks red (critical).
+
+**Surface** (`world/sky.rs`, `world/buildings.rs`). The sky is a startup texture of flat bands
+with 5-row dithered steps; far snowy mountains (parallax 0.18), near pine hills (0.42) and
+drifting clouds (0.3) are tiled textures; the sun is nearly screen-fixed. Each building is drawn
+on a 128x64 art-pixel lot with its own silhouette, a sign carrying its simulation label and a
+door that lights up while the local rig stands at it.
+
+**Effects** (`world/fx.rs`). Sparks are square embers cooling cream to red; drilling throws chips
+of the target's material (plus sparks on rock); `effects::Explosion`s (spawned where a detonated
+bomb was) flash, burn as a stepped fireball and roll smoke; bombs blink faster as the fuse runs
+down; boulders tremble under a blinking "!" before falling; gas clouds are drifting dithered
+puffs; scanner pings are pulsing corner brackets (gold ore, pink artifact, red hazard).
 
 ## Screenshot workflow
 
@@ -174,7 +231,9 @@ Scenes: `art_gallery`, `title`, `surface_town`, `surface_flying`, `shallow_dig`,
 `mid_depth_ores`, `deep_lava`, `interior_fuel`, `interior_repair`, `interior_depot`,
 `interior_hq`, `interior_shop`, `interior_bank`, `interior_explosives`, `interior_salvage`,
 `interior_shop_walk`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`, `modal_exit_confirm`,
-`modal_inventory`, `map`, `online_lobby_host`, `split_screen`, `rescue_prompt`.
+`modal_inventory`, `map`, `online_lobby_host`, `split_screen`, `rescue_prompt`, `world_props`,
+`drill_side`, `remote_rigs`, `bomb_blast`, `gas_leak`, `cave_in`, `deep_crystal_faults`,
+`deep_void_geodes`.
 
 Adding a scene: append a `Scene { name, summary, setup }` to `scene_capture::SCENES`. `setup`
 gets a `SceneStage`: `play(seats, |world, seats| ..)` enters a staged world (helpers

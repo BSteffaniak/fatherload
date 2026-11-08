@@ -29,8 +29,10 @@ Modules:
   integer UI canvas scale.
 - `window` — the resizable, maximizable high-DPI window, borderless fullscreen and the
   remembered window size.
-- `effects` — exactly-once event delivery, sound cues and presentation particles.
-- `rendering` — `GameRenderer`: `terrain` (chunked textures + fog), `world` (rigs, entities),
+- `effects` — exactly-once event delivery, sound cues and presentation particles (sparks, bomb
+  blasts).
+- `rendering` — `GameRenderer`: `terrain` (chunked art-resolution textures of procedural pixel
+  tiles + dithered fog), `world` (sky and parallax, the town, rigs, props and effects),
   `screen` (HUD, menus, map), `interior` (walk-in pixel-art rooms), `layout` (menu/modal
   layout), `layout::widgets` (widget tree), `ui_kit` (pixel UI canvas and widgets),
   `pixel_art` (palette, char-grid sprites + atlas, pixel font) and `gallery` (art reference
