@@ -171,18 +171,6 @@ impl Default for TickRate {
     }
 }
 
-/// Converts `seconds` to ticks at the default rate. Legacy shell use only.
-#[must_use]
-pub fn simulation_ticks_for_seconds(seconds: f32) -> u64 {
-    TickRate::default().ticks_for_seconds(seconds)
-}
-
-/// Seconds until `deadline` at the default rate. Legacy shell use only.
-#[must_use]
-pub fn simulation_seconds_until(now: SimulationTick, deadline: SimulationTick) -> f32 {
-    TickRate::default().seconds_until(now, deadline)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{FIXED_DELTA_SECONDS, SIMULATION_HZ_F32, TickRate};
