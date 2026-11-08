@@ -56,6 +56,16 @@ fn lines(child: &mut Child) -> mpsc::Receiver<String> {
     rx
 }
 
+/// Every remaining line of an exited child: waits for the reader thread to reach end of file
+/// instead of taking only what it has forwarded so far.
+fn remaining_lines(rx: &mpsc::Receiver<String>, deadline: Instant) -> Vec<String> {
+    let mut lines = Vec::new();
+    while let Ok(line) = rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+        lines.push(line);
+    }
+    lines
+}
+
 #[test]
 fn headless_host_and_bot_client_play_and_exit_cleanly() {
     let deadline = Instant::now() + DEADLINE;
@@ -86,7 +96,7 @@ fn headless_host_and_bot_client_play_and_exit_cleanly() {
     let bot_lines = lines(bot.0.as_mut().expect("bot"));
 
     let bot_status = bot.wait(deadline);
-    let bot_output: Vec<String> = bot_lines.try_iter().collect();
+    let bot_output = remaining_lines(&bot_lines, deadline);
     assert!(bot_status.success(), "bot exited cleanly: {bot_output:?}");
     assert!(
         bot_output
@@ -100,7 +110,7 @@ fn headless_host_and_bot_client_play_and_exit_cleanly() {
     );
 
     let host_status = host.wait(deadline);
-    let host_output: Vec<String> = host_lines.try_iter().collect();
+    let host_output = remaining_lines(&host_lines, deadline);
     assert!(
         host_status.success(),
         "host exited cleanly: {host_output:?}"
