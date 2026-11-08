@@ -157,7 +157,7 @@ impl LocalGame {
         self.runtime.set_paused(!self.shell.world_should_tick());
         let frame = self
             .runtime
-            .advance(Duration::from_secs_f32(delta_seconds.max(0.0)));
+            .advance(Duration::try_from_secs_f32(delta_seconds).unwrap_or_default());
         report.ticks_run = frame.ticks_run;
         report.changed_tiles.extend(frame.changed_tiles);
         self.frame_events = self.events.present(frame.events);
