@@ -227,13 +227,13 @@ resolution, then the app exits. Use the release build (terrain rebuilds are slow
 Keep captures under `target/` (never commit them). macOS `sips` can crop and enlarge a PNG for a
 close look at individual pixels.
 
-Scenes: `art_gallery`, `title`, `surface_town`, `surface_flying`, `shallow_dig`,
-`mid_depth_ores`, `deep_lava`, `interior_fuel`, `interior_repair`, `interior_depot`,
-`interior_hq`, `interior_shop`, `interior_bank`, `interior_explosives`, `interior_salvage`,
-`interior_shop_walk`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`, `modal_exit_confirm`,
-`modal_inventory`, `map`, `online_lobby_host`, `split_screen`, `rescue_prompt`, `world_props`,
-`drill_side`, `remote_rigs`, `bomb_blast`, `gas_leak`, `cave_in`, `deep_crystal_faults`,
-`deep_void_geodes`.
+Scenes: `art_gallery`, `title`, `surface_town`, `town_west`, `town_market`, `town_east`,
+`surface_flying`, `shallow_dig`, `mid_depth_ores`, `deep_lava`, `interior_fuel`, `interior_repair`,
+`interior_depot`, `interior_hq`, `interior_shop`, `interior_bank`, `interior_explosives`,
+`interior_salvage`, `interior_shop_walk`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
+`modal_exit_confirm`, `modal_inventory`, `map`, `online_lobby_host`, `split_screen`,
+`rescue_prompt`, `world_props`, `drill_side`, `remote_rigs`, `bomb_blast`, `gas_leak`, `cave_in`,
+`deep_crystal_faults`, `deep_void_geodes`.
 
 Adding a scene: append a `Scene { name, summary, setup }` to `scene_capture::SCENES`. `setup`
 gets a `SceneStage`: `play(seats, |world, seats| ..)` enters a staged world (helpers

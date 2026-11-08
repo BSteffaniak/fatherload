@@ -285,6 +285,36 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "town_west",
+        summary: "Rig parked between the fuel station and the repair garage",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                park_rig(world, seats[0].player, 60, 4);
+            });
+            stage.settle(30);
+        },
+    },
+    Scene {
+        name: "town_market",
+        summary: "Rig parked between the upgrade shop and the bank",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                park_rig(world, seats[0].player, 134, 4);
+            });
+            stage.settle(30);
+        },
+    },
+    Scene {
+        name: "town_east",
+        summary: "Rig parked between the explosives bunker and the salvage yard",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                park_rig(world, seats[0].player, 170, 4);
+            });
+            stage.settle(30);
+        },
+    },
+    Scene {
         name: "surface_flying",
         summary: "Rig thrusting up through the sky above town",
         setup: |stage| {
