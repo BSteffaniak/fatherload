@@ -21,6 +21,8 @@ use crate::{
 };
 
 mod commands;
+#[cfg(test)]
+mod determinism_tests;
 mod discovery;
 mod hazards;
 mod import;
