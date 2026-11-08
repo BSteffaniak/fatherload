@@ -488,13 +488,19 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         .explosives_shack_level;
     let bonus = u32::from(shack / 2);
     let [(small_count, small_cost), (big_count, big_cost)] = BOMB_BUNDLES;
+    // Named for the seat's own device (B, Num0, RB...), never a hard-coded key.
+    let bomb_key = crate::input::prompts::inline_text(Prompt::Bomb, super::prompts::menu_device())
+        .unwrap_or_else(|| "the bomb button".to_owned());
     let bundle = |label: &str, count: u32, cost: u32| {
         Offer::new(&icons::BOMB, label, format!("+{} bombs", count + bonus))
             .price(cost, credits)
             .about(if bonus > 0 {
-                format!("{count} bombs plus {bonus} extra from the shack's upgrades. Press B underground to drop one.")
+                format!(
+                    "{count} bombs plus {bonus} extra from the shack's upgrades. Press {bomb_key} \
+                     underground to drop one."
+                )
             } else {
-                format!("{count} bombs. Press B underground to drop one.")
+                format!("{count} bombs. Press {bomb_key} underground to drop one.")
             })
     };
     let rockets_locked = shack < MINING_ROCKETS_SHACK_LEVEL;
