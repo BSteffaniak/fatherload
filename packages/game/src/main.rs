@@ -13,11 +13,26 @@ mod render_snapshot;
 mod rendering;
 mod runtime;
 mod save;
+mod scene_capture;
 mod shell;
 mod window;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    match scene_capture::parse_args(&args) {
+        Ok(Some(options)) => {
+            if let Err(error) = scene_capture::run(&options) {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+            return;
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    }
     match online::headless::parse_args(&args) {
         Ok(None) => app::run(),
         Ok(Some(mode)) => {

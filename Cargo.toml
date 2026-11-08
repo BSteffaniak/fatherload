@@ -33,6 +33,8 @@ raylib = { version = "6.0.0", default-features = false, features = [
     "SUPPORT_MODULE_RAUDIO",
     "SUPPORT_FILEFORMAT_WAV",
     "SUPPORT_FILEFORMAT_TTF",
+    "SUPPORT_FILEFORMAT_PNG",
+    "SUPPORT_IMAGE_EXPORT",
 ] }
 rcgen = { version = "0.13.2", default-features = false, features = [
     "crypto",

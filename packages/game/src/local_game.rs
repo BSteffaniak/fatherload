@@ -248,6 +248,26 @@ impl LocalGame {
         snapshot
     }
 
+    /// Replaces the session with a fresh local world of `seats` seats, lets `arrange` set up that
+    /// world (rig positions, terrain, cargo...) and enters it. Scene capture uses this to build
+    /// scripted states; gameplay never calls it.
+    pub fn stage_local_world(
+        &mut self,
+        seats: usize,
+        arrange: impl FnOnce(&mut WorldState, &[LocalSeat]),
+    ) -> FrameReport {
+        let mut runtime = Runtime::local(new_world(), seats);
+        let staged_seats = runtime.local_seats().to_vec();
+        let mut world = runtime.world().clone();
+        arrange(&mut world, &staged_seats);
+        runtime.load_world(world);
+        end_runtime(std::mem::replace(&mut self.runtime, runtime));
+        let mut report = FrameReport::default();
+        self.reset_presentation(&mut report);
+        self.shell.enter_world(String::new(), 0.0);
+        report
+    }
+
     /// The current world as a save.
     #[must_use]
     pub fn world_save(&self) -> WorldSave {
