@@ -516,7 +516,7 @@ impl Harness {
             summary.debug_hash_mismatches +=
                 stats.hash_mismatches - client.baseline.hash_mismatches;
             summary.max_pending = summary.max_pending.max(stats.max_pending);
-            summary.clock_resyncs += stats.clock_resyncs;
+            summary.clock_resyncs += stats.clock_resyncs - client.baseline.clock_resyncs;
             replayed += stats.replayed_ticks - client.baseline.replayed_ticks;
             frames += stats.frames_received - client.baseline.frames_received;
         }

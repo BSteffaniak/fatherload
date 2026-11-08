@@ -403,3 +403,31 @@ fn parameter_sweep_report() {
     let rows = parameter_sweep(&[30, 60, 120], &[10, 20, 30, 60], &sweep_links(), 3, 15);
     println!("{}", format_sweep(&rows));
 }
+
+#[test]
+fn shared_column_contention_converges() {
+    // All bots share one column, so they dig each other's tiles and the
+    // client's prediction (others on neutral input) is genuinely wrong at
+    // times. Authority must still match the host exactly, corrections must
+    // stay small and actions must still be applied exactly once.
+    let link = LinkConditions::new(150, 20, 3.0).with_chaos(2.0, 5.0);
+    let mut config = HarnessConfig::new(SessionParams::new(60), 4, link);
+    config.columns = 1;
+    let mut harness = Harness::new(config);
+    harness.run_for(Duration::from_secs(3));
+    harness.reset_client_counters();
+    harness.run_ticks(3_000);
+    harness.settle(Duration::from_secs(3));
+    let summary = harness.summary();
+    assert!(
+        summary.corrections_per_client_sec < 1.0,
+        "corrections stay rare under contention: {summary:?}"
+    );
+    assert!(
+        summary.mean_correction < 1.0,
+        "corrections stay small under contention: {summary:?}"
+    );
+    assert_converged(&harness);
+    assert_bounded(&harness);
+    harness.assert_actions_exactly_once();
+}
