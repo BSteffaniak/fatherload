@@ -16,12 +16,16 @@ use crate::{
     terrain::{
         ArtifactKind, MineralKind, StrategicResourceKind, TILE_SIZE, TileKind, TilePosition,
     },
-    tick::SIMULATION_HZ,
 };
 
 use super::{
     WorldState, canonical_market_factor, canonical_mineral_market_factor, canonical_minerals,
 };
+
+/// Length of one market day.
+pub(super) const MARKET_DAY_MILLIS: u64 = 5 * 60 * 1_000;
+/// Scanner lockout caused by an ancient machine event.
+const ANCIENT_MACHINE_SCANNER_LOCKOUT_MILLIS: u64 = 6_000;
 
 impl WorldState {
     pub(super) fn schedule_canonical_world_event(
@@ -80,7 +84,12 @@ impl WorldState {
                     player.add_material(StrategicResourceKind::CoreShard, severity.max(1));
                     self.scanner_cooldown_deadlines.insert(
                         *player_id,
-                        SimulationTick::new(next_tick.get().saturating_add(360)),
+                        SimulationTick::new(
+                            next_tick.get().saturating_add(
+                                self.timing
+                                    .ticks_for_millis(ANCIENT_MACHINE_SCANNER_LOCKOUT_MILLIS),
+                            ),
+                        ),
                     );
                 }
             }
@@ -88,14 +97,7 @@ impl WorldState {
                 if let Some(player) = self.players.values().next() {
                     let x = player.x;
                     let y = player.y;
-                    for offset in -1_i16..=1 {
-                        self.spawn_falling_boulder(
-                            f32::from(offset).mul_add(TILE_SIZE, x),
-                            TILE_SIZE.mul_add(-2.0, y),
-                            27 + u64::from(offset.unsigned_abs()) * 9,
-                            240,
-                        );
-                    }
+                    self.spawn_cave_in(x, y);
                 }
                 output.push_event(GameplayEventKind::BouldersChanged);
             }
@@ -146,11 +148,10 @@ impl WorldState {
             self.infrastructure.retain(|item| item.durability > 0);
         }
         self.progression.next_day_tick = SimulationTick::new(
-            self.progression.next_day_tick.get().saturating_add(
-                u64::from(SIMULATION_HZ)
-                    .saturating_mul(60)
-                    .saturating_mul(5),
-            ),
+            self.progression
+                .next_day_tick
+                .get()
+                .saturating_add(self.timing.ticks_for_millis(MARKET_DAY_MILLIS)),
         );
     }
 

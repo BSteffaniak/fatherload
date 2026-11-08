@@ -32,7 +32,7 @@ pub mod tick;
 pub mod world;
 
 pub use command::{PlayerCommand, SequencedPlayerCommand};
-pub use event::{GameplayEvent, GameplayEventId, GameplayEventKind, TickOutput};
+pub use event::{ActionOutcome, GameplayEvent, GameplayEventId, GameplayEventKind, TickOutput};
 pub use hash::SimulationStateHash;
 pub use hazard::{FallingBoulder, HazardCloud, PlacedBomb, ScanMarker};
 pub use ids::{InputSequence, PlayerId, SimulationTick};
@@ -54,9 +54,12 @@ pub use summary::{
     AuthoritativeWorldSummary, PlayerInventorySummary, PlayerScopedCommandOutcome,
     PlayerScopedGameplayProof, PlayerSurvivalSnapshot,
 };
-pub use terrain::TILE_SIZE;
+pub use terrain::{TILE_SIZE, TileChange};
 pub use terrain_revision::{TerrainChunkPosition, TerrainChunkRevision, TerrainRevisionTracker};
-pub use tick::{FIXED_DELTA_SECONDS, SIMULATION_HZ};
+pub use tick::{
+    DEFAULT_TICK_RATE_HZ, FIXED_DELTA_SECONDS, SIMULATION_HZ, SimulationParams, TickRate,
+};
 pub use world::{
-    AuthoritativeMovementStep, CanonicalProgressionState, LostCargoSite, WorldImport, WorldState,
+    AuthoritativeMovementStep, CanonicalProgressionState, LostCargoSite, TickTiming, WorldImport,
+    WorldState,
 };

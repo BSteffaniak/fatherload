@@ -1359,8 +1359,7 @@ fn canonical_movement_applies_rig_and_mechanic_modifiers() {
         player.cargo_capacity = 10;
         player.cargo.insert(crate::terrain::MineralKind::Copper, 10);
         let fuel_before = player.fuel;
-        let _step =
-            world.step_authoritative_movement(LOCAL_PLAYER_ID, 1.0, true, FIXED_DELTA_SECONDS);
+        let _step = world.step_authoritative_movement(LOCAL_PLAYER_ID, 1.0, true);
         let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
         (player.velocity_x, fuel_before - player.fuel, player.hull)
     }
@@ -1384,8 +1383,7 @@ fn canonical_movement_applies_rig_and_mechanic_modifiers() {
         player.y = 5.0 * TILE_SIZE;
         player.velocity_y = super::AUTHORITATIVE_MAX_FALL_SPEED;
         player.hull = 100.0;
-        let _step =
-            world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false, FIXED_DELTA_SECONDS);
+        let _step = world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false);
     }
     assert!(
         protected
@@ -1412,7 +1410,7 @@ fn canonical_collision_applies_landing_and_wall_damage() {
         player.velocity_y = super::AUTHORITATIVE_MAX_FALL_SPEED;
         player.hull = 100.0;
     }
-    let _step = world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false, FIXED_DELTA_SECONDS);
+    let _step = world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false);
     let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
     assert!(player.velocity_y.abs() < f32::EPSILON);
     assert!(player.hull < 100.0);
@@ -1426,7 +1424,7 @@ fn canonical_collision_applies_landing_and_wall_damage() {
         player.velocity_x = super::AUTHORITATIVE_SAFE_LANDING_SPEED;
         player.hull = 100.0;
     }
-    let _step = world.step_authoritative_movement(LOCAL_PLAYER_ID, 1.0, false, FIXED_DELTA_SECONDS);
+    let _step = world.step_authoritative_movement(LOCAL_PLAYER_ID, 1.0, false);
     let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
     assert!(player.velocity_x.abs() < f32::EPSILON);
     assert!(player.hull < 100.0);

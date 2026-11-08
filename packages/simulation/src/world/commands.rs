@@ -15,10 +15,16 @@ use crate::{
     service::{PlayerServiceTransaction, PlayerTransactionKind},
     summary::{PlayerScopedCommandOutcome, PlayerScopedGameplayProof},
     terrain::{DeepStratum, MineResult, TILE_SIZE, TileKind, TilePosition, deep_stratum_at_depth},
-    tick::simulation_ticks_for_seconds,
 };
 
 use super::WorldState;
+
+/// Scanner cooldown after a scan.
+const SCANNER_COOLDOWN_MILLIS: u64 = 1_000;
+/// Fuse of a placed bomb.
+const BOMB_FUSE_MILLIS: u64 = 2_400;
+/// [`BOMB_FUSE_MILLIS`] in seconds, for the bomb's presentation timer.
+const BOMB_FUSE_SECONDS: f32 = 2.4;
 
 impl WorldState {
     pub fn player_scoped_gameplay_proof(
@@ -177,6 +183,80 @@ impl WorldState {
         Some(result)
     }
 
+    /// Updates a player's drill target from held controls (no velocity change).
+    pub fn apply_drill_intent(
+        &mut self,
+        player_id: PlayerId,
+        horizontal: f32,
+        drill_down: bool,
+    ) -> PlayerScopedCommandOutcome {
+        let parts = self
+            .equipped_rig_parts
+            .get(&player_id)
+            .cloned()
+            .unwrap_or_default();
+        let Some(player) = self.players.get(&player_id) else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        if let Some((target, direction)) = authoritative_mine_target(player, horizontal, drill_down)
+        {
+            let Some(tile) = self.terrain.tile(target) else {
+                self.set_active_drill(player_id, None);
+                return PlayerScopedCommandOutcome::Applied;
+            };
+            if tile.kind == TileKind::Air {
+                self.set_active_drill(player_id, None);
+                return PlayerScopedCommandOutcome::Applied;
+            }
+            let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
+                || parts.contains(&RigPartKind::ResonanceDrill)
+            {
+                player.drill_strength.saturating_add(1)
+            } else {
+                player.drill_strength
+            };
+            if self
+                .terrain
+                .hardness_at(target)
+                .is_some_and(|hardness| hardness > effective_drill_strength)
+            {
+                self.set_active_drill(player_id, None);
+                return PlayerScopedCommandOutcome::Applied;
+            }
+            let initial_durability = tile.durability.max(1);
+            let seconds_per_chip = authoritative_drill_seconds_per_chip(
+                tile.kind,
+                player.drill_strength,
+                direction,
+                &parts,
+                target,
+            );
+            let drill = self
+                .active_drills
+                .get(&player_id)
+                .filter(|drill| drill.target == target && drill.direction == direction)
+                .map_or_else(
+                    || {
+                        authoritative_drill_state(
+                            target,
+                            direction,
+                            initial_durability,
+                            seconds_per_chip,
+                        )
+                    },
+                    |drill| DrillState {
+                        initial_durability,
+                        seconds_per_chip,
+                        ..*drill
+                    },
+                );
+            self.set_active_drill(player_id, Some(drill));
+        } else {
+            self.set_active_drill(player_id, None);
+        }
+        PlayerScopedCommandOutcome::Applied
+    }
+
     #[allow(
         clippy::too_many_lines,
         reason = "compatibility command bridge covers all player-scoped intents until real systems split out"
@@ -186,11 +266,6 @@ impl WorldState {
         player_id: PlayerId,
         command: &PlayerCommand,
     ) -> PlayerScopedCommandOutcome {
-        let parts = self
-            .equipped_rig_parts
-            .get(&player_id)
-            .cloned()
-            .unwrap_or_default();
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
@@ -201,68 +276,13 @@ impl WorldState {
                 thrust,
                 drill_down,
             } => {
+                // Legacy direct-command bridge: `simulate_tick` integrates held controls with
+                // momentum instead (see `apply_drill_intent` and `step_authoritative_movement`).
                 player.velocity_x = horizontal;
                 if thrust {
                     player.velocity_y = -1.0;
                 }
-                if let Some((target, direction)) =
-                    authoritative_mine_target(player, horizontal, drill_down)
-                {
-                    let Some(tile) = self.terrain.tile(target) else {
-                        self.set_active_drill(player_id, None);
-                        return PlayerScopedCommandOutcome::Applied;
-                    };
-                    if tile.kind == TileKind::Air {
-                        self.set_active_drill(player_id, None);
-                        return PlayerScopedCommandOutcome::Applied;
-                    }
-                    let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
-                        || parts.contains(&RigPartKind::ResonanceDrill)
-                    {
-                        player.drill_strength.saturating_add(1)
-                    } else {
-                        player.drill_strength
-                    };
-                    if self
-                        .terrain
-                        .hardness_at(target)
-                        .is_some_and(|hardness| hardness > effective_drill_strength)
-                    {
-                        self.set_active_drill(player_id, None);
-                        return PlayerScopedCommandOutcome::Applied;
-                    }
-                    let initial_durability = tile.durability.max(1);
-                    let seconds_per_chip = authoritative_drill_seconds_per_chip(
-                        tile.kind,
-                        player.drill_strength,
-                        direction,
-                        &parts,
-                        target,
-                    );
-                    let drill = self
-                        .active_drills
-                        .get(&player_id)
-                        .filter(|drill| drill.target == target && drill.direction == direction)
-                        .map_or_else(
-                            || {
-                                authoritative_drill_state(
-                                    target,
-                                    direction,
-                                    initial_durability,
-                                    seconds_per_chip,
-                                )
-                            },
-                            |drill| DrillState {
-                                initial_durability,
-                                seconds_per_chip,
-                                ..*drill
-                            },
-                        );
-                    self.set_active_drill(player_id, Some(drill));
-                } else {
-                    self.set_active_drill(player_id, None);
-                }
-                PlayerScopedCommandOutcome::Applied
+                self.apply_drill_intent(player_id, horizontal, drill_down)
             }
             PlayerCommand::Refuel => {
                 let credits_before = player.credits;
@@ -303,7 +323,7 @@ impl WorldState {
                 let deadline = SimulationTick::new(
                     self.simulation_tick
                         .get()
-                        .saturating_add(simulation_ticks_for_seconds(1.0)),
+                        .saturating_add(self.timing.ticks_for_millis(SCANNER_COOLDOWN_MILLIS)),
                 );
                 self.scanner_cooldowns.insert(player_id, 1.0);
                 self.scanner_cooldown_deadlines.insert(player_id, deadline);
@@ -319,12 +339,12 @@ impl WorldState {
                     self.bombs.push(PlacedBomb {
                         x: player.x,
                         y: TILE_SIZE.mul_add(0.4, player.y),
-                        timer_seconds: 2.4,
+                        timer_seconds: BOMB_FUSE_SECONDS,
                     });
                     self.bomb_detonation_ticks.push(SimulationTick::new(
                         self.simulation_tick
                             .get()
-                            .saturating_add(simulation_ticks_for_seconds(2.4)),
+                            .saturating_add(self.timing.ticks_for_millis(BOMB_FUSE_MILLIS)),
                     ));
                     self.authoritative_summary.bomb_count = self.bombs.len();
                     PlayerScopedCommandOutcome::Applied

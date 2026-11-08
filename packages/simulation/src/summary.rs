@@ -91,7 +91,7 @@ pub struct PlayerSurvivalSnapshot {
     pub stranded: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum PlayerScopedCommandOutcome {
     Applied,
     IgnoredUnavailable,

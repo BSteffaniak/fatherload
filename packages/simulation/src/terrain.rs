@@ -264,7 +264,7 @@ impl TileKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Tile {
     pub kind: TileKind,
     pub durability: u8,
@@ -276,12 +276,22 @@ pub struct TilePosition {
     pub y: i32,
 }
 
+/// One terrain tile write: the op-log replication unit.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct TileChange {
+    pub position: TilePosition,
+    pub tile: Tile,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Terrain {
     width: i32,
     height: i32,
     seed: u64,
     tiles: Vec<Tile>,
+    /// Tile writes recorded while a simulation tick runs (never serialized or hashed).
+    #[serde(skip)]
+    journal: Option<Vec<TileChange>>,
 }
 
 impl Terrain {
@@ -310,7 +320,32 @@ impl Terrain {
             height,
             seed,
             tiles,
+            journal: None,
         }
+    }
+
+    /// Starts recording every tile write (see [`Self::finish_journal`]).
+    pub(crate) fn start_journal(&mut self) {
+        self.journal = Some(Vec::new());
+    }
+
+    /// Stops recording and returns the tile writes since [`Self::start_journal`], in order.
+    pub(crate) fn finish_journal(&mut self) -> Vec<TileChange> {
+        self.journal.take().unwrap_or_default()
+    }
+
+    fn record(&mut self, index: usize, position: TilePosition) {
+        if let Some(journal) = self.journal.as_mut() {
+            journal.push(TileChange {
+                position,
+                tile: self.tiles[index],
+            });
+        }
+    }
+
+    /// Applies one replicated tile write.
+    pub fn apply_tile_change(&mut self, change: &TileChange) -> bool {
+        self.set_tile_from_network(change.position, change.tile.kind, change.tile.durability)
     }
 
     #[must_use]
@@ -387,6 +422,7 @@ impl Terrain {
             return false;
         };
         self.tiles[index] = Tile { kind, durability };
+        self.record(index, position);
         true
     }
 
@@ -398,6 +434,7 @@ impl Terrain {
             kind,
             durability: tile_durability(kind),
         };
+        self.record(index, position);
         true
     }
 
@@ -405,6 +442,16 @@ impl Terrain {
         let Some(index) = self.index(position) else {
             return MineResult::Blocked;
         };
+        let before = self.tiles[index];
+        let result = self.chip_index(index);
+        let after = self.tiles[index];
+        if before.kind != after.kind || before.durability != after.durability {
+            self.record(index, position);
+        }
+        result
+    }
+
+    fn chip_index(&mut self, index: usize) -> MineResult {
         let tile = &mut self.tiles[index];
 
         if tile.kind == TileKind::Air {
@@ -460,6 +507,7 @@ impl Terrain {
                     tile.durability = 0;
                     result.cleared += 1;
                     result.changed_tiles.push(position);
+                    self.record(index, position);
                 }
             }
         }

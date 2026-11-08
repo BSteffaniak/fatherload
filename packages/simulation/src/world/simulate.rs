@@ -4,7 +4,7 @@ use std::{collections::BTreeSet, mem};
 
 use crate::{
     command::PlayerCommand,
-    event::{GameplayEventKind, TickOutput, gameplay_event_for_applied_command},
+    event::{ActionOutcome, GameplayEventKind, TickOutput, gameplay_event_for_applied_command},
     ids::{PlayerId, SimulationTick},
     infrastructure::InfrastructureKind,
     input::TickInputs,
@@ -17,19 +17,25 @@ use crate::{
         TilePosition,
     },
     terrain_revision::TerrainRevisionTracker,
-    tick::{
-        FIXED_DELTA_SECONDS, SIMULATION_HZ, simulation_seconds_until, simulation_ticks_for_seconds,
-    },
 };
 
 use super::{
     ActiveDrillTimer, WorldState,
     commands::bomb_tile_position,
     movement::{
-        AUTHORITATIVE_BOULDER_LIFE_TICKS, AUTHORITATIVE_BOULDER_SPAWN_CHANCE,
-        AUTHORITATIVE_BOULDER_WARNING_TICKS,
+        AUTHORITATIVE_BOULDER_LIFE_MILLIS, AUTHORITATIVE_BOULDER_SPAWN_CHANCE,
+        AUTHORITATIVE_BOULDER_WARNING_MILLIS,
     },
 };
+
+/// Time the rigs have to escape after the star core is mined.
+const ESCAPE_DURATION_MILLIS: u64 = 120_000;
+/// Period of the cave-ins chasing the rigs during the escape.
+const ESCAPE_CAVE_IN_PERIOD_MILLIS: u64 = 750;
+/// Period of the escape-tunnel collapse cycle.
+const ESCAPE_COLLAPSE_PERIOD_MILLIS: u64 = 1_500;
+/// Point in each collapse cycle at which the next collapse is announced.
+const ESCAPE_COLLAPSE_WARNING_PHASE_MILLIS: u64 = 1_250;
 
 impl WorldState {
     /// Advances the canonical world exactly one fixed tick.
@@ -53,15 +59,13 @@ impl WorldState {
             command_count: inputs.command_count(),
             ..TickOutput::default()
         };
+        let timing = self.timing;
+        let delta_seconds = timing.delta_seconds;
+        self.terrain.start_journal();
         let mut changed_players = BTreeSet::new();
         for (&player_id, input) in &inputs.players {
             if let Some((sequence, controls)) = input.controls {
-                let movement = PlayerCommand::Movement {
-                    horizontal: controls.horizontal(),
-                    thrust: controls.thrust,
-                    drill_down: controls.drill_down,
-                };
-                if self.apply_player_command(player_id, &movement)
+                if self.apply_drill_intent(player_id, controls.horizontal(), controls.drill_down)
                     == PlayerScopedCommandOutcome::Applied
                 {
                     changed_players.insert(player_id);
@@ -70,16 +74,24 @@ impl WorldState {
                     player_id,
                     controls.horizontal(),
                     controls.thrust,
-                    FIXED_DELTA_SECONDS,
                 );
                 output
                     .latest_sequences_by_player
                     .insert(player_id, sequence);
             }
             for action in &input.actions {
-                if self.apply_player_command(player_id, &action.command)
-                    == PlayerScopedCommandOutcome::Applied
-                {
+                let outcome = if matches!(action.command, PlayerCommand::Movement { .. }) {
+                    // Held movement travels in `controls`; a movement action is not a one-shot.
+                    PlayerScopedCommandOutcome::IgnoredUnavailable
+                } else {
+                    self.apply_player_command(player_id, &action.command)
+                };
+                output.action_outcomes.push(ActionOutcome {
+                    player_id,
+                    sequence: action.sequence,
+                    outcome,
+                });
+                if outcome == PlayerScopedCommandOutcome::Applied {
                     changed_players.insert(player_id);
                     if let Some(event) = gameplay_event_for_applied_command(action) {
                         output.push_event(event);
@@ -102,12 +114,12 @@ impl WorldState {
         }
         for (player_id, deadline) in &self.scanner_cooldown_deadlines {
             self.scanner_cooldowns
-                .insert(*player_id, simulation_seconds_until(next_tick, *deadline));
+                .insert(*player_id, timing.rate.seconds_until(next_tick, *deadline));
         }
 
         for cloud in &mut self.hazards {
-            cloud.life -= FIXED_DELTA_SECONDS;
-            cloud.radius = 8.0f32.mul_add(FIXED_DELTA_SECONDS, cloud.radius);
+            cloud.life -= delta_seconds;
+            cloud.radius = 8.0f32.mul_add(delta_seconds, cloud.radius);
         }
         self.hazards.retain(|cloud| cloud.life > 0.0);
         let player_ids = self.players.keys().copied().collect::<Vec<_>>();
@@ -123,7 +135,7 @@ impl WorldState {
                 })
             });
             if damaged {
-                let _snapshot = self.apply_hazard_damage(player_id, 4.0 * FIXED_DELTA_SECONDS);
+                let _snapshot = self.apply_hazard_damage(player_id, 4.0 * delta_seconds);
                 changed_players.insert(player_id);
                 output.push_event(GameplayEventKind::PlayerDamaged { player_id });
             }
@@ -167,7 +179,7 @@ impl WorldState {
             }
             let depth_damage = if player_y > safe_depth {
                 let depth_factor = ((player_y - safe_depth) / (12.0 * TILE_SIZE)).max(1.0);
-                3.5 * depth_factor * heat_multiplier * FIXED_DELTA_SECONDS
+                3.5 * depth_factor * heat_multiplier * delta_seconds
             } else {
                 0.0
             };
@@ -193,7 +205,7 @@ impl WorldState {
                     && (item.position.y - center.y).abs() <= 4
             });
             let lava_damage = if near_lava {
-                (if pump_protected { 2.5 } else { 9.0 }) * heat_multiplier * FIXED_DELTA_SECONDS
+                (if pump_protected { 2.5 } else { 9.0 }) * heat_multiplier * delta_seconds
             } else {
                 0.0
             };
@@ -214,7 +226,7 @@ impl WorldState {
             let deadline = deadlines.get(index).copied().unwrap_or_else(|| {
                 SimulationTick::new(
                     tick.get()
-                        .saturating_add(simulation_ticks_for_seconds(bomb.timer_seconds)),
+                        .saturating_add(timing.rate.ticks_for_seconds(bomb.timer_seconds)),
                 )
             });
             if next_tick >= deadline {
@@ -223,7 +235,7 @@ impl WorldState {
                 output.push_event(GameplayEventKind::BombDetonated);
             } else {
                 let mut bomb = bomb;
-                bomb.timer_seconds = simulation_seconds_until(next_tick, deadline);
+                bomb.timer_seconds = timing.rate.seconds_until(next_tick, deadline);
                 self.bombs.push(bomb);
                 self.bomb_detonation_ticks.push(deadline);
             }
@@ -240,7 +252,7 @@ impl WorldState {
         let active_players: Vec<PlayerId> = self.active_drills.keys().copied().collect();
         for player_id in active_players {
             let period_ticks = self.active_drills.get(&player_id).map_or(1, |drill| {
-                simulation_ticks_for_seconds(drill.seconds_per_chip)
+                timing.rate.ticks_for_seconds(drill.seconds_per_chip)
             });
             let timer = self
                 .active_drill_timers
@@ -293,11 +305,10 @@ impl WorldState {
                     output.push_event(GameplayEventKind::CargoChanged { player_id });
                 }
                 MineResult::Mined(TileKind::Artifact(ArtifactKind::StarCore)) => {
-                    self.progression.escape_deadline = Some(SimulationTick::new(
-                        next_tick
-                            .get()
-                            .saturating_add(120 * u64::from(SIMULATION_HZ)),
-                    ));
+                    self.progression.escape_deadline =
+                        Some(SimulationTick::new(next_tick.get().saturating_add(
+                            timing.ticks_for_millis(ESCAPE_DURATION_MILLIS),
+                        )));
                     output.push_event(GameplayEventKind::CargoChanged { player_id });
                     output.push_event(GameplayEventKind::EscapeStarted { player_id });
                 }
@@ -319,8 +330,8 @@ impl WorldState {
                         self.spawn_falling_boulder(
                             boulder_x,
                             boulder_y,
-                            AUTHORITATIVE_BOULDER_WARNING_TICKS,
-                            AUTHORITATIVE_BOULDER_LIFE_TICKS,
+                            AUTHORITATIVE_BOULDER_WARNING_MILLIS,
+                            AUTHORITATIVE_BOULDER_LIFE_MILLIS,
                         );
                         output.push_event(GameplayEventKind::BouldersChanged);
                     }
@@ -335,23 +346,7 @@ impl WorldState {
                 MineResult::Blast => {
                     if let Some(player) = self.players.get(&player_id) {
                         let (player_x, player_y) = (player.x, player.y);
-                        for offset in -1_i32..=1 {
-                            #[allow(
-                                clippy::cast_precision_loss,
-                                clippy::suboptimal_flops,
-                                reason = "small cave-in offsets intentionally map to world coordinates"
-                            )]
-                            let (x, y) = (
-                                player_x + offset as f32 * TILE_SIZE,
-                                player_y - TILE_SIZE * 2.0,
-                            );
-                            self.spawn_falling_boulder(
-                                x,
-                                y,
-                                27 + u64::from(offset.unsigned_abs()) * 9,
-                                240,
-                            );
-                        }
+                        self.spawn_cave_in(player_x, player_y);
                     }
                     output.push_event(GameplayEventKind::PlayerDamaged { player_id });
                     output.push_event(GameplayEventKind::HazardChanged);
@@ -370,6 +365,7 @@ impl WorldState {
         }
         self.advance_falling_boulders(next_tick, &mut output, &mut changed_players);
         output.changed_players = changed_players.into_iter().collect();
+        output.terrain_ops = self.terrain.finish_journal();
         self.set_simulation_tick(next_tick);
         output
     }
@@ -394,21 +390,19 @@ impl WorldState {
             self.progression.escape_deadline = None;
             return;
         }
-        if next_tick.get().is_multiple_of(45)
+        let rate = self.timing.rate;
+        if rate.schedule_fires(next_tick, ESCAPE_CAVE_IN_PERIOD_MILLIS, 0)
             && let Some(player) = self.players.values().next()
         {
             let (x, y) = (player.x, player.y);
-            for offset in -1_i16..=1 {
-                self.spawn_falling_boulder(
-                    f32::from(offset).mul_add(TILE_SIZE, x),
-                    TILE_SIZE.mul_add(-2.0, y),
-                    27 + u64::from(offset.unsigned_abs()) * 9,
-                    240,
-                );
-            }
+            self.spawn_cave_in(x, y);
             output.push_event(GameplayEventKind::BouldersChanged);
         }
-        if next_tick.get() % 90 == 75 {
+        if rate.schedule_fires(
+            next_tick,
+            ESCAPE_COLLAPSE_PERIOD_MILLIS,
+            ESCAPE_COLLAPSE_WARNING_PHASE_MILLIS,
+        ) {
             self.collapse_warnings.clear();
             if let Some(player) = self.players.values().next() {
                 let center = player.tile_position(TILE_SIZE);
@@ -429,7 +423,7 @@ impl WorldState {
                     }
                 }
             }
-        } else if next_tick.get().is_multiple_of(90) {
+        } else if rate.schedule_fires(next_tick, ESCAPE_COLLAPSE_PERIOD_MILLIS, 0) {
             for position in mem::take(&mut self.collapse_warnings) {
                 if self.terrain.set_kind(position, TileKind::Stone) {
                     output.terrain_changed_tiles.push(position);

@@ -9,13 +9,25 @@ use crate::{
     progression::WorldEventKind,
     quantize::quantize_simulation_scalar,
     terrain::{MineralKind, TILE_SIZE, TilePosition},
-    tick::{FIXED_DELTA_SECONDS, SIMULATION_HZ_F32, simulation_seconds_until},
 };
 
 use super::{
     WorldState,
-    movement::{AUTHORITATIVE_GRAVITY, AUTHORITATIVE_PLAYER_RADIUS},
+    movement::{
+        AUTHORITATIVE_CAVE_IN_LIFE_MILLIS, AUTHORITATIVE_CAVE_IN_WARNING_MILLIS,
+        AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS, AUTHORITATIVE_GRAVITY,
+        AUTHORITATIVE_PLAYER_RADIUS,
+    },
 };
+
+/// Period of collapse-surge cave-ins near a deep rig.
+const COLLAPSE_SURGE_PERIOD_MILLIS: u64 = 3_000;
+/// Period of gas-bloom clouds near a deep rig.
+const GAS_BLOOM_PERIOD_MILLIS: u64 = 4_000;
+/// Period of gas clouds released by rare cargo on a deep run.
+const RARE_CARGO_GAS_PERIOD_MILLIS: u64 = 4_000;
+/// Scanner lockout refreshed every tick while below the pressure depth.
+const DEEP_PRESSURE_SCANNER_LOCKOUT_MILLIS: u64 = 1_200;
 
 impl WorldState {
     pub(super) fn advance_world_event_hazards(
@@ -34,22 +46,21 @@ impl WorldState {
         if self
             .world_event_severity
             .contains_key(&WorldEventKind::CollapseSurge)
-            && next_tick.get().is_multiple_of(180)
+            && self
+                .timing
+                .rate
+                .schedule_fires(next_tick, COLLAPSE_SURGE_PERIOD_MILLIS, 0)
         {
-            for offset in -1_i16..=1 {
-                self.spawn_falling_boulder(
-                    f32::from(offset).mul_add(TILE_SIZE, player_x),
-                    TILE_SIZE.mul_add(-2.0, player_y),
-                    27 + u64::from(offset.unsigned_abs()) * 9,
-                    240,
-                );
-            }
+            self.spawn_cave_in(player_x, player_y);
             output.push_event(GameplayEventKind::BouldersChanged);
         }
         if self
             .world_event_severity
             .contains_key(&WorldEventKind::GasBloom)
-            && next_tick.get().is_multiple_of(240)
+            && self
+                .timing
+                .rate
+                .schedule_fires(next_tick, GAS_BLOOM_PERIOD_MILLIS, 0)
         {
             self.hazards.push(HazardCloud {
                 x: player_x,
@@ -87,17 +98,16 @@ impl WorldState {
             .map(|(_, count)| *count)
             .sum::<u32>()
             .saturating_add(player.artifacts.values().copied().sum());
+        let timing = self.timing;
+        let delta_seconds = timing.delta_seconds;
         let state = self.deep_run_states.entry(player_id).or_default();
         if depth < 80 {
             state.trip_ticks = 0;
-            state.instability = 2.0f32
-                .mul_add(-FIXED_DELTA_SECONDS, state.instability)
-                .max(0.0);
+            state.instability = 2.0f32.mul_add(-delta_seconds, state.instability).max(0.0);
             return;
         }
         state.trip_ticks = state.trip_ticks.saturating_add(1);
-        let trip_seconds =
-            f32::from(u16::try_from(state.trip_ticks).unwrap_or(u16::MAX)) / SIMULATION_HZ_F32;
+        let trip_seconds = timing.rate.seconds_for_ticks(state.trip_ticks);
         #[allow(
             clippy::cast_precision_loss,
             reason = "bounded depth and cargo counts intentionally feed gameplay pressure"
@@ -106,21 +116,28 @@ impl WorldState {
             0.006,
             trip_seconds.mul_add(0.0006, rare_cargo as f32 * 0.02),
         );
-        state.instability = FIXED_DELTA_SECONDS.mul_add(pressure, state.instability);
+        state.instability = delta_seconds.mul_add(pressure, state.instability);
         if depth >= 105 {
             if let Some(player) = self.players.get_mut(&player_id) {
-                player.fuel = quantize_simulation_scalar(
-                    FIXED_DELTA_SECONDS.mul_add(-0.25, player.fuel).max(0.0),
-                );
+                player.fuel =
+                    quantize_simulation_scalar(delta_seconds.mul_add(-0.25, player.fuel).max(0.0));
             }
-            let deadline = SimulationTick::new(next_tick.get().saturating_add(72));
+            let deadline = SimulationTick::new(
+                next_tick
+                    .get()
+                    .saturating_add(timing.ticks_for_millis(DEEP_PRESSURE_SCANNER_LOCKOUT_MILLIS)),
+            );
             self.scanner_cooldown_deadlines
                 .entry(player_id)
                 .and_modify(|current| *current = (*current).max(deadline))
                 .or_insert(deadline);
             changed_players.insert(player_id);
         }
-        if rare_cargo > 0 && next_tick.get().is_multiple_of(240) {
+        if rare_cargo > 0
+            && timing
+                .rate
+                .schedule_fires(next_tick, RARE_CARGO_GAS_PERIOD_MILLIS, 0)
+        {
             let player = self.players.get(&player_id).expect("player remains valid");
             self.hazards.push(HazardCloud {
                 x: player.x,
@@ -134,14 +151,7 @@ impl WorldState {
             state.instability = 45.0;
             let player = self.players.get(&player_id).expect("player remains valid");
             let (player_x, player_y) = (player.x, player.y);
-            for offset in -1_i16..=1 {
-                self.spawn_falling_boulder(
-                    f32::from(offset).mul_add(TILE_SIZE, player_x),
-                    TILE_SIZE.mul_add(-2.0, player_y),
-                    27 + u64::from(offset.unsigned_abs()) * 9,
-                    240,
-                );
-            }
+            self.spawn_cave_in(player_x, player_y);
             let _snapshot = self.apply_hazard_damage(player_id, 4.0);
             changed_players.insert(player_id);
             output.push_event(GameplayEventKind::PlayerDamaged { player_id });
@@ -149,20 +159,35 @@ impl WorldState {
         }
     }
 
+    /// Spawns three boulders above `(x, y)`: the centre one first, the outer ones a little later.
+    pub(super) fn spawn_cave_in(&mut self, x: f32, y: f32) {
+        for offset in -1_i16..=1 {
+            self.spawn_falling_boulder(
+                f32::from(offset).mul_add(TILE_SIZE, x),
+                TILE_SIZE.mul_add(-2.0, y),
+                AUTHORITATIVE_CAVE_IN_WARNING_MILLIS
+                    + u64::from(offset.unsigned_abs()) * AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS,
+                AUTHORITATIVE_CAVE_IN_LIFE_MILLIS,
+            );
+        }
+    }
+
     pub(super) fn spawn_falling_boulder(
         &mut self,
         x: f32,
         y: f32,
-        warning_ticks: u64,
-        life_ticks: u64,
+        warning_millis: u64,
+        life_millis: u64,
     ) {
+        let rate = self.timing.rate;
+        let warning_ticks = rate.ticks_for_millis(warning_millis);
+        let life_ticks = rate.ticks_for_millis(life_millis);
         self.falling_boulders.push(FallingBoulder {
             x,
             y,
             velocity_y: 0.0,
-            warning_seconds: f32::from(u16::try_from(warning_ticks).unwrap_or(u16::MAX))
-                / SIMULATION_HZ_F32,
-            life: f32::from(u16::try_from(life_ticks).unwrap_or(u16::MAX)) / SIMULATION_HZ_F32,
+            warning_seconds: rate.seconds_for_ticks(warning_ticks),
+            life: rate.seconds_for_ticks(life_ticks),
         });
         self.boulder_warning_deadlines.push(SimulationTick::new(
             self.simulation_tick.get().saturating_add(warning_ticks),
@@ -178,6 +203,7 @@ impl WorldState {
         output: &mut TickOutput,
         changed_players: &mut BTreeSet<PlayerId>,
     ) {
+        let timing = self.timing;
         let boulders = mem::take(&mut self.falling_boulders);
         let warning_deadlines = mem::take(&mut self.boulder_warning_deadlines);
         let expiry_ticks = mem::take(&mut self.boulder_expiry_ticks);
@@ -190,11 +216,11 @@ impl WorldState {
             if next_tick >= warning_deadline {
                 boulder.velocity_y = quantize_simulation_scalar(
                     (AUTHORITATIVE_GRAVITY * 0.8)
-                        .mul_add(FIXED_DELTA_SECONDS, boulder.velocity_y)
+                        .mul_add(timing.delta_seconds, boulder.velocity_y)
                         .min(520.0),
                 );
                 boulder.y = quantize_simulation_scalar(
-                    boulder.velocity_y.mul_add(FIXED_DELTA_SECONDS, boulder.y),
+                    boulder.velocity_y.mul_add(timing.delta_seconds, boulder.y),
                 );
                 let hit_player = self.players.iter().find_map(|(player_id, player)| {
                     let dx = player.x - boulder.x;
@@ -220,8 +246,8 @@ impl WorldState {
                     continue;
                 }
             }
-            boulder.warning_seconds = simulation_seconds_until(next_tick, warning_deadline);
-            boulder.life = simulation_seconds_until(next_tick, expiry_tick);
+            boulder.warning_seconds = timing.rate.seconds_until(next_tick, warning_deadline);
+            boulder.life = timing.rate.seconds_until(next_tick, expiry_tick);
             self.falling_boulders.push(boulder);
             self.boulder_warning_deadlines.push(warning_deadline);
             self.boulder_expiry_ticks.push(expiry_tick);

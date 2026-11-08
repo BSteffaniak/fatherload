@@ -14,12 +14,13 @@ use crate::{
     rng::DeterministicRngState,
     summary::AuthoritativeWorldSummary,
     terrain::{ArtifactKind, MineralKind, TILE_SIZE, Terrain, TilePosition},
-    tick::{SIMULATION_HZ, simulation_ticks_for_seconds},
+    tick::SimulationParams,
 };
 
 use super::{
-    ActiveDrillTimer, CanonicalProgressionState, DeepRunState, LostCargoSite, WorldState,
-    canonical_market_factor, canonical_mineral_market_factor, canonical_minerals,
+    ActiveDrillTimer, CanonicalProgressionState, DeepRunState, LostCargoSite, TickTiming,
+    WorldState, canonical_market_factor, canonical_mineral_market_factor, canonical_minerals,
+    progression::MARKET_DAY_MILLIS,
 };
 
 /// Seconds-based description of a single-rig world used to construct a canonical [`WorldState`].
@@ -75,15 +76,26 @@ pub struct WorldImport {
 }
 
 impl WorldState {
-    /// Builds a canonical world from a seconds-based single-rig import.
+    /// Builds a canonical world from a seconds-based single-rig import at the default tick rate.
+    #[must_use]
+    pub fn from_import(import: &WorldImport) -> Self {
+        Self::from_import_with_params(import, SimulationParams::default())
+    }
+
+    /// Builds a canonical world from a seconds-based single-rig import for a session's
+    /// parameters. Every per-tick constant and tick deadline is derived from `params` here.
     #[must_use]
     #[allow(
         clippy::too_many_lines,
         reason = "import enumerates canonical fields explicitly"
     )]
-    pub fn from_import(import: &WorldImport) -> Self {
+    pub fn from_import_with_params(import: &WorldImport, params: SimulationParams) -> Self {
         let player_id = import.player_id;
+        let timing = TickTiming::new(params);
+        let ticks = |seconds: f32| timing.rate.ticks_for_seconds(seconds);
         Self {
+            timing,
+            player_template: Player::new(NEW_WORLD_SPAWN.0, NEW_WORLD_SPAWN.1),
             simulation_tick: SimulationTick::default(),
             authoritative_summary: import.summary.clone(),
             players: BTreeMap::from([(player_id, import.player.clone())]),
@@ -102,7 +114,7 @@ impl WorldState {
             deep_run_states: BTreeMap::from([(
                 player_id,
                 DeepRunState {
-                    trip_ticks: simulation_ticks_for_seconds(import.trip_seconds),
+                    trip_ticks: ticks(import.trip_seconds),
                     instability: import.deep_instability,
                 },
             )]),
@@ -132,11 +144,8 @@ impl WorldState {
             progression: CanonicalProgressionState {
                 contracts: import.contracts.clone(),
                 deep_claim_status: import.deep_claim_status,
-                escape_deadline: (import.escape_sequence_seconds > 0.0).then(|| {
-                    SimulationTick::new(simulation_ticks_for_seconds(
-                        import.escape_sequence_seconds,
-                    ))
-                }),
+                escape_deadline: (import.escape_sequence_seconds > 0.0)
+                    .then(|| SimulationTick::new(ticks(import.escape_sequence_seconds))),
                 deep_reward_milestones: BTreeMap::from([(player_id, import.deep_reward_milestone)]),
                 town_development: import.town_development.clone(),
                 active_side_contracts: import.active_side_contracts.clone(),
@@ -151,11 +160,7 @@ impl WorldState {
                 deepest_tile_reached: import.deepest_tile_reached,
                 total_earnings: import.total_earnings,
                 expeditions_completed: import.expeditions_completed,
-                next_day_tick: SimulationTick::new(
-                    u64::from(SIMULATION_HZ)
-                        .saturating_mul(60)
-                        .saturating_mul(5),
-                ),
+                next_day_tick: SimulationTick::new(timing.ticks_for_millis(MARKET_DAY_MILLIS)),
             },
             scan_markers: import.scan_markers.clone(),
             collapse_warnings: import.collapse_warnings.clone(),
@@ -164,14 +169,12 @@ impl WorldState {
             boulder_warning_deadlines: import
                 .falling_boulders
                 .iter()
-                .map(|boulder| {
-                    SimulationTick::new(simulation_ticks_for_seconds(boulder.warning_seconds))
-                })
+                .map(|boulder| SimulationTick::new(ticks(boulder.warning_seconds)))
                 .collect(),
             boulder_expiry_ticks: import
                 .falling_boulders
                 .iter()
-                .map(|boulder| SimulationTick::new(simulation_ticks_for_seconds(boulder.life)))
+                .map(|boulder| SimulationTick::new(ticks(boulder.life)))
                 .collect(),
             terrain: import.terrain.clone(),
             bombs: import.placed_bombs.clone(),
@@ -183,7 +186,7 @@ impl WorldState {
             active_drill_timers: import
                 .active_drill
                 .map(|drill| {
-                    let period_ticks = simulation_ticks_for_seconds(drill.seconds_per_chip);
+                    let period_ticks = ticks(drill.seconds_per_chip);
                     BTreeMap::from([(
                         player_id,
                         ActiveDrillTimer {
@@ -196,14 +199,12 @@ impl WorldState {
             scanner_cooldowns: BTreeMap::from([(player_id, import.scanner_cooldown_seconds)]),
             scanner_cooldown_deadlines: BTreeMap::from([(
                 player_id,
-                SimulationTick::new(simulation_ticks_for_seconds(
-                    import.scanner_cooldown_seconds,
-                )),
+                SimulationTick::new(ticks(import.scanner_cooldown_seconds)),
             )]),
             bomb_detonation_ticks: import
                 .placed_bombs
                 .iter()
-                .map(|bomb| SimulationTick::new(simulation_ticks_for_seconds(bomb.timer_seconds)))
+                .map(|bomb| SimulationTick::new(ticks(bomb.timer_seconds)))
                 .collect(),
             rng: DeterministicRngState::new(import.terrain.seed()),
             discovered_tiles: BTreeMap::from([(player_id, BTreeSet::new())]),
@@ -316,5 +317,11 @@ impl WorldState {
     #[must_use]
     pub fn new_game(player_id: PlayerId) -> Self {
         Self::from_import(&WorldImport::new_game(player_id))
+    }
+
+    /// Builds a brand-new single-rig world for a session's parameters.
+    #[must_use]
+    pub fn new_game_with_params(player_id: PlayerId, params: SimulationParams) -> Self {
+        Self::from_import_with_params(&WorldImport::new_game(player_id), params)
     }
 }

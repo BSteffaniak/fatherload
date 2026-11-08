@@ -2,20 +2,23 @@
 
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     command::{PlayerCommand, SequencedPlayerCommand},
     ids::{InputSequence, PlayerId, SimulationTick},
+    summary::PlayerScopedCommandOutcome,
     terrain::TilePosition,
     terrain_revision::TerrainChunkRevision,
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct GameplayEventId {
     pub tick: SimulationTick,
     pub ordinal: u32,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum GameplayEventKind {
     DrillStarted { player_id: PlayerId },
     PurchaseCompleted { player_id: PlayerId },
@@ -33,10 +36,18 @@ pub enum GameplayEventKind {
     BombDetonated,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct GameplayEvent {
     pub id: GameplayEventId,
     pub kind: GameplayEventKind,
+}
+
+/// How one one-shot action submitted for a tick was resolved.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ActionOutcome {
+    pub player_id: PlayerId,
+    pub sequence: InputSequence,
+    pub outcome: PlayerScopedCommandOutcome,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -48,6 +59,10 @@ pub struct TickOutput {
     pub events: Vec<GameplayEvent>,
     pub terrain_changed_tiles: Vec<TilePosition>,
     pub terrain_revisions: Vec<TerrainChunkRevision>,
+    /// Every action in the tick's inputs, in input order, with its outcome.
+    pub action_outcomes: Vec<ActionOutcome>,
+    /// Every terrain tile write this tick, in order (the op-log replication section).
+    pub terrain_ops: Vec<crate::terrain::TileChange>,
 }
 
 impl TickOutput {

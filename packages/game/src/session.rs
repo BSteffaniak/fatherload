@@ -10022,8 +10022,7 @@ mod tests {
         let mut world = WorldState::from_legacy_game(&game);
 
         for _ in 0..80 {
-            let _step =
-                world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false, FIXED_DELTA_SECONDS);
+            let _step = world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false);
         }
 
         let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
@@ -13306,10 +13305,11 @@ mod tests {
             .player(LOCAL_PLAYER_ID)
             .expect("player exists")
             .velocity_x;
+        // Held controls integrate with momentum from rest (airborne acceleration over one tick).
         let expected_velocity = drillgame_simulation::quantize::quantize_simulation_scalar(
-            (0.5 * drillgame_simulation::world::AUTHORITATIVE_HORIZONTAL_ACCELERATION * 0.65)
-                .mul_add(FIXED_DELTA_SECONDS, 0.5)
-                * drillgame_simulation::world::AUTHORITATIVE_AIR_DRAG_PER_TICK,
+            0.5 * drillgame_simulation::world::AUTHORITATIVE_HORIZONTAL_ACCELERATION
+                * 0.65
+                * session.world().timing().air_acceleration_gain,
         );
         assert!((velocity_x - expected_velocity).abs() < f32::EPSILON);
         assert_eq!(

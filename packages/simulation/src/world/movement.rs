@@ -12,15 +12,31 @@ use super::WorldState;
 pub const AUTHORITATIVE_HORIZONTAL_SPEED: f32 = 140.0;
 pub const AUTHORITATIVE_HORIZONTAL_ACCELERATION: f32 = 900.0;
 pub const AUTHORITATIVE_MAX_HORIZONTAL_SPEED: f32 = 260.0;
-pub const AUTHORITATIVE_AIR_DRAG_PER_TICK: f32 = 0.86;
-pub const AUTHORITATIVE_GROUND_DRAG_PER_TICK: f32 = 0.78;
+/// Airborne horizontal velocity halves every this many seconds without input.
+pub const AUTHORITATIVE_AIR_DRAG_HALF_LIFE_SECONDS: f32 = 0.076_596_15;
+/// Grounded horizontal velocity halves every this many seconds without input.
+pub const AUTHORITATIVE_GROUND_DRAG_HALF_LIFE_SECONDS: f32 = 0.046_495_97;
+/// Airborne drag rate: terminal horizontal speed is `acceleration / rate`.
+pub const AUTHORITATIVE_AIR_DRAG_RATE_PER_SECOND: f32 = 9.767_442;
+/// Grounded drag rate: terminal horizontal speed is `acceleration / rate`.
+pub const AUTHORITATIVE_GROUND_DRAG_RATE_PER_SECOND: f32 = 16.923_077;
 pub const AUTHORITATIVE_SAFE_LANDING_SPEED: f32 = 330.0;
 pub const AUTHORITATIVE_CRASH_DAMAGE_SCALE: f32 = 0.11;
 pub const AUTHORITATIVE_THRUST_SPEED: f32 = 120.0;
 pub const AUTHORITATIVE_GRAVITY: f32 = 160.0;
-pub const AUTHORITATIVE_BOULDER_WARNING_TICKS: u64 = 51;
-pub const AUTHORITATIVE_BOULDER_LIFE_TICKS: u64 = 216;
+/// Warning time before a boulder loosened by mining starts to fall.
+pub const AUTHORITATIVE_BOULDER_WARNING_MILLIS: u64 = 850;
+/// Lifetime of a boulder loosened by mining.
+pub const AUTHORITATIVE_BOULDER_LIFE_MILLIS: u64 = 3_600;
+/// One in this many mined stone tiles loosens a boulder (per mined tile, not per tick, so it is
+/// independent of the tick rate).
 pub const AUTHORITATIVE_BOULDER_SPAWN_CHANCE: u64 = 16;
+/// Warning time of the centre boulder of a cave-in.
+pub const AUTHORITATIVE_CAVE_IN_WARNING_MILLIS: u64 = 450;
+/// Extra warning time per tile away from the centre of a cave-in.
+pub const AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS: u64 = 150;
+/// Lifetime of cave-in boulders.
+pub const AUTHORITATIVE_CAVE_IN_LIFE_MILLIS: u64 = 4_000;
 pub const AUTHORITATIVE_FUEL_BURN_PER_SECOND: f32 = 5.0;
 pub const AUTHORITATIVE_MAX_FALL_SPEED: f32 = 560.0;
 pub const AUTHORITATIVE_PLAYER_RADIUS: f32 = 10.5;
@@ -46,8 +62,9 @@ impl WorldState {
         player_id: PlayerId,
         horizontal: f32,
         thrust: bool,
-        delta_seconds: f32,
     ) -> Option<AuthoritativeMovementStep> {
+        let timing = self.timing;
+        let delta_seconds = timing.delta_seconds;
         let parts = self
             .equipped_rig_parts
             .get(&player_id)
@@ -95,15 +112,14 @@ impl WorldState {
         } else {
             AUTHORITATIVE_HORIZONTAL_ACCELERATION * 0.65
         };
+        let (drag, gain) = if grounded {
+            (timing.ground_drag_per_tick, timing.ground_acceleration_gain)
+        } else {
+            (timing.air_drag_per_tick, timing.air_acceleration_gain)
+        };
         player.velocity_x = quantize_simulation_scalar(
-            horizontal.clamp(-1.0, 1.0).mul_add(
-                horizontal_acceleration * engine_multiplier * delta_seconds,
-                player.velocity_x,
-            ) * if grounded {
-                AUTHORITATIVE_GROUND_DRAG_PER_TICK
-            } else {
-                AUTHORITATIVE_AIR_DRAG_PER_TICK
-            },
+            (horizontal.clamp(-1.0, 1.0) * horizontal_acceleration * engine_multiplier)
+                .mul_add(gain, player.velocity_x * drag),
         )
         .clamp(
             -AUTHORITATIVE_MAX_HORIZONTAL_SPEED * engine_multiplier,

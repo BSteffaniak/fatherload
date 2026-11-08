@@ -12,6 +12,8 @@ impl WorldState {
     )]
     pub fn simulation_state_hash(&self) -> SimulationStateHash {
         let mut hash = StateHasher::new();
+        hash.write_serialized(&self.timing);
+        hash.write_serialized(&self.player_template);
         hash.write_u64(self.simulation_tick.get());
         hash.write_u64(u64::try_from(self.players.len()).unwrap_or(u64::MAX));
         for (player_id, player) in &self.players {

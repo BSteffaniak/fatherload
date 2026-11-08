@@ -17,7 +17,6 @@ use crate::{
     service::PlayerServiceTransaction,
     summary::{AuthoritativeWorldSummary, PlayerInventorySummary, PlayerSurvivalSnapshot},
     terrain::{ArtifactKind, MineralKind, Terrain, TilePosition},
-    tick::simulation_ticks_for_seconds,
 };
 
 mod commands;
@@ -33,20 +32,27 @@ mod simulate;
 mod state_hash;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tick_rate_tests;
+mod timing;
+
+pub use timing::TickTiming;
 
 pub use commands::authoritative_mine_target;
 pub use import::{
     NEW_WORLD_HEIGHT_TILES, NEW_WORLD_SEED, NEW_WORLD_SPAWN, NEW_WORLD_WIDTH_TILES, WorldImport,
 };
 pub use movement::{
-    AUTHORITATIVE_AIR_DRAG_PER_TICK, AUTHORITATIVE_BOULDER_LIFE_TICKS,
-    AUTHORITATIVE_BOULDER_SPAWN_CHANCE, AUTHORITATIVE_BOULDER_WARNING_TICKS,
+    AUTHORITATIVE_AIR_DRAG_HALF_LIFE_SECONDS, AUTHORITATIVE_AIR_DRAG_RATE_PER_SECOND,
+    AUTHORITATIVE_BOULDER_LIFE_MILLIS, AUTHORITATIVE_BOULDER_SPAWN_CHANCE,
+    AUTHORITATIVE_BOULDER_WARNING_MILLIS, AUTHORITATIVE_CAVE_IN_LIFE_MILLIS,
+    AUTHORITATIVE_CAVE_IN_WARNING_MILLIS, AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS,
     AUTHORITATIVE_CRASH_DAMAGE_SCALE, AUTHORITATIVE_FUEL_BURN_PER_SECOND, AUTHORITATIVE_GRAVITY,
-    AUTHORITATIVE_GROUND_DRAG_PER_TICK, AUTHORITATIVE_HORIZONTAL_ACCELERATION,
-    AUTHORITATIVE_HORIZONTAL_SPEED, AUTHORITATIVE_MAX_FALL_SPEED,
-    AUTHORITATIVE_MAX_HORIZONTAL_SPEED, AUTHORITATIVE_MIN_PLAYER_Y, AUTHORITATIVE_PLAYER_RADIUS,
-    AUTHORITATIVE_SAFE_LANDING_SPEED, AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES,
-    AUTHORITATIVE_THRUST_SPEED, AuthoritativeMovementStep,
+    AUTHORITATIVE_GROUND_DRAG_HALF_LIFE_SECONDS, AUTHORITATIVE_GROUND_DRAG_RATE_PER_SECOND,
+    AUTHORITATIVE_HORIZONTAL_ACCELERATION, AUTHORITATIVE_HORIZONTAL_SPEED,
+    AUTHORITATIVE_MAX_FALL_SPEED, AUTHORITATIVE_MAX_HORIZONTAL_SPEED, AUTHORITATIVE_MIN_PLAYER_Y,
+    AUTHORITATIVE_PLAYER_RADIUS, AUTHORITATIVE_SAFE_LANDING_SPEED,
+    AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES, AUTHORITATIVE_THRUST_SPEED, AuthoritativeMovementStep,
 };
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 struct ActiveDrillTimer {
@@ -137,6 +143,8 @@ pub struct CanonicalProgressionState {
 /// monolithic `GameState` is fully split into authoritative world state and local client state.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct WorldState {
+    timing: TickTiming,
+    player_template: Player,
     simulation_tick: SimulationTick,
     authoritative_summary: AuthoritativeWorldSummary,
     players: BTreeMap<PlayerId, Player>,
@@ -168,6 +176,29 @@ pub struct WorldState {
 }
 
 impl WorldState {
+    /// Per-tick constants derived from the session tick rate.
+    #[must_use]
+    pub const fn timing(&self) -> &TickTiming {
+        &self.timing
+    }
+
+    /// The session tick rate in Hz.
+    #[must_use]
+    pub const fn tick_rate_hz(&self) -> u32 {
+        self.timing.rate.hz()
+    }
+
+    /// Template for players added with [`Self::add_player`].
+    #[must_use]
+    pub const fn player_template(&self) -> &Player {
+        &self.player_template
+    }
+
+    /// Replaces the template for players added with [`Self::add_player`].
+    pub fn set_player_template(&mut self, template: Player) {
+        self.player_template = template;
+    }
+
     #[must_use]
     pub const fn progression(&self) -> &CanonicalProgressionState {
         &self.progression
@@ -290,7 +321,15 @@ impl WorldState {
 
     pub fn set_active_drill(&mut self, player_id: PlayerId, drill: Option<DrillState>) {
         if let Some(drill) = drill {
-            let period_ticks = simulation_ticks_for_seconds(drill.seconds_per_chip);
+            let continuing = self.active_drills.get(&player_id).is_some_and(|current| {
+                current.target == drill.target && current.direction == drill.direction
+            }) && self.active_drill_timers.contains_key(&player_id);
+            if continuing {
+                // Keep the tick deadline; only presentation fields and the period change.
+                self.active_drills.insert(player_id, drill);
+                return;
+            }
+            let period_ticks = self.timing.rate.ticks_for_seconds(drill.seconds_per_chip);
             let period_u16 = u16::try_from(period_ticks).unwrap_or(u16::MAX).max(1);
             #[allow(
                 clippy::cast_possible_truncation,
@@ -330,7 +369,7 @@ impl WorldState {
             SimulationTick::new(
                 self.simulation_tick
                     .get()
-                    .saturating_add(simulation_ticks_for_seconds(seconds)),
+                    .saturating_add(self.timing.rate.ticks_for_seconds(seconds)),
             ),
         );
     }
