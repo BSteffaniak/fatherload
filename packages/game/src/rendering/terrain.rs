@@ -27,7 +27,7 @@ use fog::DarknessGrid;
 use tile_art::TILE_ART;
 
 pub(super) const TERRAIN_CHUNK_SIZE_TILES: i32 = 32;
-/// Chunks within this many world pixels of a view are painted ahead of time.
+/// Chunks within this many world pixels of a view are painted ahead of time (one per frame).
 const PAINT_MARGIN_WORLD: f32 = 512.0;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -151,9 +151,25 @@ impl TerrainRenderer {
                 )
             })
             .collect();
+        // Chunks on screen are always brought up to date; a full paint of an off-screen chunk
+        // near a view costs a few milliseconds, so only one is painted ahead per frame.
+        let mut ahead_budget = 1;
         for chunk in self.chunks.values_mut() {
-            if chunk.work.is_empty() || !near.iter().any(|view| chunk.overlaps(*view)) {
+            if chunk.work.is_empty() {
                 continue;
+            }
+            let on_screen = views.iter().any(|view| chunk.overlaps(*view));
+            let cheap = chunk.painted && !chunk.work.full_paint;
+            if !on_screen {
+                if !near.iter().any(|view| chunk.overlaps(*view)) {
+                    continue;
+                }
+                if !cheap {
+                    if ahead_budget == 0 {
+                        continue;
+                    }
+                    ahead_budget -= 1;
+                }
             }
             chunk.update(raylib, thread, terrain, explored);
         }
