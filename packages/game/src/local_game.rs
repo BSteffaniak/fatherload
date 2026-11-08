@@ -757,6 +757,8 @@ mod tests {
         shell::{ModalScreen, PauseOption, TitleOption, interior_service_x},
     };
 
+    mod split_seat_tests;
+
     const DT: f32 = 1.0 / 60.0;
     const PLAYER: PlayerId = save::LEGACY_PLAYER_ID;
 
