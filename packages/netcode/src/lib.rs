@@ -28,6 +28,7 @@
 
 mod clock;
 mod hashing;
+mod host;
 mod ids;
 mod interpolation;
 mod ledger;
@@ -40,6 +41,7 @@ mod simulation;
 
 pub use clock::{ClientClock, ClockSpeed, MarginResponse};
 pub use hashing::{StableHasher, stable_hash};
+pub use host::{HostClientStats, HostConfig, HostOutput, HostPhase, HostSession, HostStats};
 pub use ids::{ActionId, ClientId, InputSeq, PlayerId, ReconnectToken, SeatId, SessionEpoch, Tick};
 pub use interpolation::{InterpTimeline, SnapshotBuffer, VisualOffset};
 pub use ledger::ActionLedger;
