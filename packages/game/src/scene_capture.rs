@@ -571,6 +571,30 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "lost_cargo",
+        summary: "Rig back on the surface after a rescue, with its lost-cargo crate marked below",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                // Strand the rig close to the rescue drop-off so the crate stays on screen.
+                sink_rig(world, player, 17, 10);
+                if let Some(rig) = world.player_mut(player) {
+                    load_cargo(rig);
+                    rig.fuel = 0.0;
+                }
+            });
+            stage.settle(10);
+            stage.hold(
+                2,
+                PlayerInput {
+                    confirm: true,
+                    ..PlayerInput::default()
+                },
+            );
+            stage.settle(30);
+        },
+    },
+    Scene {
         name: "world_props",
         summary: "Tunnel with infrastructure, a ticking bomb, scanner pings and another player's rig",
         setup: |stage| {

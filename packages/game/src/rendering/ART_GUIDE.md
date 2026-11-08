@@ -232,8 +232,8 @@ Scenes: `art_gallery`, `title`, `surface_town`, `town_west`, `town_market`, `tow
 `interior_depot`, `interior_hq`, `interior_shop`, `interior_bank`, `interior_explosives`,
 `interior_salvage`, `interior_shop_walk`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
 `modal_exit_confirm`, `modal_inventory`, `map`, `online_lobby_host`, `split_screen`,
-`rescue_prompt`, `world_props`, `drill_side`, `remote_rigs`, `bomb_blast`, `gas_leak`, `cave_in`,
-`deep_crystal_faults`, `deep_void_geodes`.
+`rescue_prompt`, `lost_cargo`, `world_props`, `drill_side`, `remote_rigs`, `bomb_blast`,
+`gas_leak`, `cave_in`, `deep_crystal_faults`, `deep_void_geodes`.
 
 Adding a scene: append a `Scene { name, summary, setup }` to `scene_capture::SCENES`. `setup`
 gets a `SceneStage`: `play(seats, |world, seats| ..)` enters a staged world (helpers
