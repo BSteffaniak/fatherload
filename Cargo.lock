@@ -124,6 +124,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "drillgame_quic_transport"
+version = "0.0.1-alpha.0"
+dependencies = [
+ "bytes",
+ "hostname",
+ "mdns-sd",
+ "quinn",
+ "rcgen",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "drillgame_simulation"
 version = "0.0.1-alpha.0"
 dependencies = [

@@ -1,0 +1,25 @@
+[package]
+authors.workspace    = true
+categories           = ["network-programming", "games"]
+description          = "QUIC byte transport (network thread, framing, datagrams, LAN discovery) for Drillgame"
+edition.workspace    = true
+keywords             = ["game", "quic", "networking", "transport"]
+license.workspace    = true
+name                 = "drillgame_quic_transport"
+readme               = "README.md"
+repository.workspace = true
+version.workspace    = true
+
+[features]
+default          = []
+fail-on-warnings = []
+
+[dependencies]
+bytes      = { workspace = true }
+hostname   = { workspace = true }
+mdns-sd    = { workspace = true }
+quinn      = { workspace = true }
+rcgen      = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+tokio      = { workspace = true }
