@@ -1176,6 +1176,9 @@ pub struct ShellState {
     /// The seat whose input drives the global menus: the one that opened the pause menu (seat
     /// 0 for the title, the lobby and the window-close prompt).
     pub menu_seat: usize,
+    /// The seat that opened the pause menu (the menu says so; it drives the menu unless its
+    /// controller was unplugged, see `menu_seat`).
+    pub paused_by: usize,
 }
 
 impl Default for ShellState {
@@ -1213,6 +1216,7 @@ impl ShellState {
             gamepads: BTreeMap::new(),
             seats: vec![SeatUi::new()],
             menu_seat: 0,
+            paused_by: 0,
         }
     }
 
@@ -1434,6 +1438,7 @@ impl ShellState {
                     // Any seat opens the shared pause menu and drives it until it closes.
                     self.run_mode = RunMode::Paused;
                     self.menu_seat = seat;
+                    self.paused_by = seat;
                 }
             }
         }

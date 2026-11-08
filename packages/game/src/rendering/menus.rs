@@ -211,7 +211,7 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     }
     // In split-screen the seat that paused drives this menu (and the rig shown is theirs).
     let subtitle = if ui.snapshot.views.len() > 1 {
-        format!("Player {} paused the game.", ui.view.seat_index + 1)
+        format!("Player {} paused the game.", ui.shell.paused_by + 1)
     } else {
         String::new()
     };

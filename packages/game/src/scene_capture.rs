@@ -954,6 +954,7 @@ pub const SCENES: &[Scene] = &[
             let shell = stage.shell();
             shell.run_mode = RunMode::Paused;
             shell.menu_seat = 1;
+            shell.paused_by = 1;
         },
     },
     Scene {
@@ -974,6 +975,110 @@ pub const SCENES: &[Scene] = &[
             stage.seat(0).modal = Some(ModalScreen::Help);
             stage.use_devices(&[XBOX, ARROWS]);
             "Game saved.".clone_into(&mut stage.shell().message);
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "split_four_rooms",
+        summary: "Four seats, each at a different counter: fuel, repair, shop and headquarters",
+        setup: |stage| {
+            let zones = [
+                SurfaceZone::Fuel,
+                SurfaceZone::Repair,
+                SurfaceZone::Shop,
+                SurfaceZone::Headquarters,
+            ];
+            stage.play(4, |world, seats| {
+                for (seat, zone) in seats.iter().zip(zones) {
+                    park_at(world, seat.player, zone);
+                    if let Some(rig) = world.player_mut(seat.player) {
+                        rig.credits = 1_800;
+                        rig.fuel = rig.fuel_capacity * 0.4;
+                        rig.hull = rig.max_hull() * 0.6;
+                    }
+                }
+            });
+            stage.settle(5);
+            for (seat, zone) in zones.into_iter().enumerate() {
+                let modal = match zone {
+                    SurfaceZone::Fuel => ModalScreen::Fuel,
+                    SurfaceZone::Repair => ModalScreen::Repair,
+                    SurfaceZone::Shop => ModalScreen::Shop,
+                    _ => ModalScreen::Headquarters,
+                };
+                put_seat_inside(stage, seat, zone, Some(modal));
+            }
+            stage.use_devices(&[WASD, ARROWS, XBOX, PLAYSTATION]);
+        },
+    },
+    Scene {
+        name: "split_room_dialogs",
+        summary: "Split-screen: personal dialogs opened inside rooms (inventory at the depot, map in the shop)",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_at(world, seats[0].player, SurfaceZone::Depot);
+                if let Some(rig) = world.player_mut(seats[0].player) {
+                    load_cargo(rig);
+                }
+                if let Some(second) = seats.get(1) {
+                    park_at(world, second.player, SurfaceZone::Shop);
+                }
+            });
+            stage.settle(5);
+            put_seat_inside(stage, 0, SurfaceZone::Depot, Some(ModalScreen::Inventory));
+            put_seat_inside(stage, 1, SurfaceZone::Shop, Some(ModalScreen::Map));
+            stage.use_devices(&[WASD, XBOX]);
+        },
+    },
+    Scene {
+        name: "split_exit_prompt",
+        summary: "Split-screen: the window-close prompt over two seats inside buildings",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_at(world, seats[0].player, SurfaceZone::Bank);
+                if let Some(second) = seats.get(1) {
+                    park_at(world, second.player, SurfaceZone::Shop);
+                }
+            });
+            stage.settle(5);
+            put_seat_inside(stage, 0, SurfaceZone::Bank, None);
+            put_seat_inside(stage, 1, SurfaceZone::Shop, Some(ModalScreen::Shop));
+            stage.use_devices(&[WASD, ARROWS]);
+            stage.shell().save_dirty = true;
+            stage.hold(
+                1,
+                PlayerInput {
+                    exit_requested: true,
+                    ..PlayerInput::default()
+                },
+            );
+        },
+    },
+    Scene {
+        name: "split_pause_handoff",
+        summary: "Split-screen: player 2 paused, then unplugged their controller; player 1 has the menu",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_rig(world, seats[0].player, 97, 4);
+                if let Some(second) = seats.get(1) {
+                    park_at(world, second.player, SurfaceZone::Fuel);
+                }
+            });
+            stage.settle(5);
+            put_seat_inside(stage, 1, SurfaceZone::Fuel, None);
+            let shell = stage.shell();
+            shell.run_mode = RunMode::Paused;
+            shell.menu_seat = 1;
+            shell.paused_by = 1;
+            // Player 2's controller is gone: no gamepads are connected this frame.
+            let report = stage.game.frame(
+                &FrameInput {
+                    devices: vec![WASD, XBOX],
+                    ..FrameInput::default()
+                },
+                FRAME_SECONDS,
+            );
+            stage.absorb(report);
             stage.settle(10);
         },
     },
