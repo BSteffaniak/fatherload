@@ -238,40 +238,18 @@ menu_icon!(
 );
 
 menu_icon!(
-    PART,
-    "menu_part",
-    [('m', STEEL_LIGHT), ('d', STEEL), ('k', STEEL_DARK)],
-    [
-        "...ooo...",
-        ".o.omo.o.",
-        "oomdmdmoo",
-        ".omdoodo.",
-        "omdo.odko",
-        ".omdookd.",
-        "oomkkkkoo",
-        ".o.oko.o.",
-        "...ooo...",
-    ]
-);
-
-menu_icon!(
     COLLAPSE,
     "menu_collapse",
+    [('l', MIST), ('m', STONE_LIGHT), ('d', STONE),],
     [
-        ('l', STONE_LIGHT),
-        ('m', STONE),
-        ('d', STONE_DARK),
-        ('g', GOLD)
-    ],
-    [
-        "..ooo....",
-        ".olmmo...",
-        ".ommdo.o.",
-        "..ooo.olo",
-        "....o.oo.",
-        ".oooolo..",
-        "olmmoooo.",
-        "ommddmdo.",
+        ".....ooo.",
+        "....olmdo",
+        "....ommdo",
+        ".ooo.ooo.",
+        "olmdo....",
+        "ommdooooo",
+        ".oooolmdo",
+        "olmmommdo",
         "ooooooooo",
     ]
 );

@@ -152,7 +152,6 @@ pub const ALL: &[&SpriteDef] = &[
     &menu_icons::GIFT,
     &menu_icons::DRONE,
     &menu_icons::SCRAP,
-    &menu_icons::PART,
     &menu_icons::COLLAPSE,
     &menu_icons::HOUSE,
     &menu_icons::FLAG,
