@@ -31,6 +31,7 @@ mod replication;
 #[cfg(test)]
 mod replication_tests;
 mod rescue;
+mod roster;
 mod services;
 mod simulate;
 mod state_hash;
@@ -45,6 +46,7 @@ pub use replication::{
     PlayerRig, PlayerTickState, ProgressionSection, SectionKey, SectionPayload, SessionSection,
     TimersSection, WorldEventsSection, hash_serialized, join_player, split_player,
 };
+pub use roster::SPAWN_SPACING;
 pub use services::{
     BOMB_BUNDLES, MINING_ROCKETS_COST, MINING_ROCKETS_COUNT, MINING_ROCKETS_SHACK_LEVEL,
 };
@@ -471,17 +473,6 @@ impl WorldState {
 
     pub fn player_ids(&self) -> impl Iterator<Item = PlayerId> + '_ {
         self.players.keys().copied()
-    }
-
-    pub fn insert_player(&mut self, player_id: PlayerId, player: Player) {
-        self.players.insert(player_id, player);
-        self.equipped_rig_parts.entry(player_id).or_default();
-        self.mechanic_levels.entry(player_id).or_default();
-        self.scanner_cooldowns.entry(player_id).or_insert(0.0);
-        self.scanner_cooldown_deadlines
-            .entry(player_id)
-            .or_insert(self.simulation_tick);
-        self.discovered_tiles.entry(player_id).or_default();
     }
 
     pub fn player_mut(&mut self, player_id: PlayerId) -> Option<&mut Player> {

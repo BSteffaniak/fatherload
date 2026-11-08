@@ -12,7 +12,7 @@
 //! [`WorldState`] itself).
 //!
 //! Coverage is enforced by the compiler: [`WorldState::section`] and
-//! [`WorldState::remove_player`] destructure the whole world, and [`split_player`] destructures
+//! `WorldState::remove_player` (in `roster`) destructure the whole world, and [`split_player`] destructures
 //! the whole [`Player`], without `..`. Adding a field fails to compile until it is assigned to a
 //! section here.
 
@@ -32,17 +32,10 @@ use crate::{
     rig::{DrillState, RigPartKind},
     rng::DeterministicRngState,
     service::PlayerServiceTransaction,
-    terrain::{
-        ArtifactKind, MineralKind, StrategicResourceKind, TILE_SIZE, TileChange, TilePosition,
-    },
+    terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TileChange, TilePosition},
 };
 
 use super::{ActiveDrillTimer, DeepRunState, LostCargoSite, TickTiming, WorldState};
-
-/// Number of spawn columns new players are spread over.
-const SPAWN_COLUMNS: u64 = 16;
-/// Tiles between neighbouring spawn columns.
-const SPAWN_COLUMN_SPACING_TILES: f32 = 2.0;
 
 /// Per-tick replicated state of one rig.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -393,71 +386,6 @@ pub fn hash_serialized<T: Serialize + ?Sized>(value: &T) -> u64 {
 }
 
 impl WorldState {
-    /// Adds a player built from the player template, spread over spawn columns by id. Does
-    /// nothing if the player exists.
-    pub fn add_player(&mut self, player_id: PlayerId) {
-        if self.players.contains_key(&player_id) {
-            return;
-        }
-        let mut player = self.player_template.clone();
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "small spawn column index becomes a world offset"
-        )]
-        let column = (player_id.get() % SPAWN_COLUMNS) as f32;
-        player.x = (column * SPAWN_COLUMN_SPACING_TILES).mul_add(TILE_SIZE, player.x);
-        player.x = super::movement::clamp_authoritative_player_x(&self.terrain, player.x);
-        self.insert_player(player_id, player);
-    }
-
-    /// Removes a player and every piece of per-player state.
-    pub fn remove_player(&mut self, player_id: PlayerId) {
-        let Self {
-            timing: _,
-            player_template: _,
-            simulation_tick: _,
-            won_game: _,
-            players,
-            equipped_rig_parts,
-            mechanic_levels,
-            world_event_severity: _,
-            world_event_days_remaining: _,
-            deep_run_states,
-            lost_cargo_sites,
-            rescue_counts,
-            progression,
-            scan_markers: _,
-            collapse_warnings: _,
-            hazards: _,
-            falling_boulders: _,
-            boulder_warning_deadlines: _,
-            boulder_expiry_ticks: _,
-            terrain: _,
-            bombs: _,
-            infrastructure: _,
-            active_drills,
-            active_drill_timers,
-            scanner_cooldowns,
-            scanner_cooldown_deadlines,
-            bomb_detonation_ticks: _,
-            rng: _,
-            discovered_tiles,
-            service_transactions: _,
-        } = self;
-        players.remove(&player_id);
-        equipped_rig_parts.remove(&player_id);
-        mechanic_levels.remove(&player_id);
-        deep_run_states.remove(&player_id);
-        lost_cargo_sites.remove(&player_id);
-        rescue_counts.remove(&player_id);
-        progression.deep_reward_milestones.remove(&player_id);
-        active_drills.remove(&player_id);
-        active_drill_timers.remove(&player_id);
-        scanner_cooldowns.remove(&player_id);
-        scanner_cooldown_deadlines.remove(&player_id);
-        discovered_tiles.remove(&player_id);
-    }
-
     /// Per-tick replicated state of one rig.
     #[must_use]
     pub fn player_tick_state(&self, player_id: PlayerId) -> Option<PlayerTickState> {
