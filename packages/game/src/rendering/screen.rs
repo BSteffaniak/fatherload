@@ -19,11 +19,13 @@ use super::{
         sprite::SpriteDef,
         sprites::{icons, menu_icons, rig},
     },
+    prompts::{self, hint},
     ui_kit::{self, BarColors, PanelStyle, TextStyle},
 };
 use crate::{
+    input::{devices::InputDevice, prompts::Prompt},
     render_snapshot::{PlayerPresentation, RenderSnapshot, ViewSnapshot},
-    shell::{ModalScreen, ShellState},
+    shell::{ModalScreen, RunMode, ShellState, surface_zone_label},
 };
 
 /// What screen-space UI (HUD, menus, modals) reads: shell state plus the snapshot and the view
@@ -166,6 +168,7 @@ pub(super) fn draw_view_hud(
     );
 
     draw_wallet_panel(draw, view, rect, left + width + 4, top);
+    draw_view_prompt(draw, shell, view, rect);
 
     // Warning badges.
     let mut badge_x = left;
@@ -226,6 +229,64 @@ pub(super) fn draw_view_hud(
             );
         }
     }
+}
+
+/// The view's context prompt under the rig, for its seat's device: how to enter the building
+/// the rig stands at, or how a controller joins a seat nobody drives yet.
+fn draw_view_prompt(
+    draw: &mut RaylibDrawHandle<'_>,
+    shell: &ShellState,
+    view: &ViewSnapshot<'_>,
+    rect: Rectangle,
+) {
+    let device = shell.prompt_device(view.seat_index);
+    let (prompt, label, accent) = if device == InputDevice::Unassigned {
+        (
+            Prompt::Join,
+            format!("to join as Player {}", view.seat_index + 1),
+            false,
+        )
+    } else if shell.run_mode == RunMode::Playing
+        && shell.modal.is_none()
+        && view.failure.is_none()
+        && let Some(zone) = view.surface_zone
+    {
+        (
+            Prompt::Use,
+            format!("Enter {}", surface_zone_label(zone)),
+            true,
+        )
+    } else {
+        return;
+    };
+    let action = hint(prompt, "");
+    let Some(glyphs) = prompts::prompt_width(action, device) else {
+        return;
+    };
+    let label = ui_kit::truncate(&label, rect.width as i32 - glyphs - 40, TextStyle::Bold);
+    let width = glyphs + 4 + ui_kit::text_width(&label, TextStyle::Bold) + 12;
+    let x = (rect.x + rect.width * 0.5) as i32 - width / 2;
+    // Just under the rig (views centre their rig); a waiting seat's prompt sits above it.
+    let centre_y = (rect.y + rect.height * 0.5) as i32;
+    let y = if accent { centre_y + 16 } else { centre_y - 38 };
+    ui_kit::panel(
+        draw,
+        Rectangle::new(x as f32, y as f32, width as f32, 19.0),
+        if accent {
+            PanelStyle::Accent
+        } else {
+            PanelStyle::Standard
+        },
+    );
+    let drawn = prompts::draw_prompt(draw, x + 6, y + 4, action, device, BONE);
+    ui_kit::text(
+        draw,
+        &label,
+        x + 6 + drawn + 4,
+        y + 6,
+        TextStyle::Bold,
+        if accent { GOLD } else { BONE },
+    );
 }
 
 /// Credits and depth (top-right, clear of the depth ruler), plus the scanner and bomb chips.
@@ -586,7 +647,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
 fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     UiLayout::screen(draw).modal_with_render_plan(
         "Research Log",
-        "Collected discoveries and mining intelligence. Esc closes.",
+        "Collected discoveries and mining intelligence.",
         &ModalContent::new(vec![Section::new(
             "Discoveries",
             PINK,
@@ -611,7 +672,8 @@ fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 ),
                 SectionItem::text("Use the collection log and expedition board for detailed objectives while the UI migration continues to consolidate data models."),
             ],
-        )]),
+        )])
+        .prompts(&[hint(Prompt::Back, "close")]),
     );
 }
 
@@ -740,8 +802,9 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     ));
     UiLayout::screen(draw).modal_with_render_plan(
         "Inventory",
-        "Tab/Esc/Backspace closes | cargo, artifacts, consumables, and field kits",
-        &ModalContent::new(sections),
+        "Cargo, artifacts, consumables and field kits.",
+        &ModalContent::new(sections)
+            .prompts(&[hint(Prompt::Inventory, ""), hint(Prompt::Back, "close")]),
     );
 }
 
@@ -775,7 +838,8 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let depth = (ui.player.y / TILE_SIZE).max(0.0) as i32;
     let map_rect = UiLayout::screen(draw).canvas_modal(
         "Mine Map",
-        "M/Esc/Backspace closes | discovered terrain only",
+        "Discovered terrain only.",
+        &[hint(Prompt::Map, ""), hint(Prompt::Back, "close")],
         &format!(
             "Depth {depth} m | deepest {} m | {:.0} m from the west edge",
             ui.snapshot.progression.deepest_tile_reached,
@@ -871,42 +935,94 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     draw_map_legend(draw, well.x as i32 + 2, (well.y + well.height) as i32 + 4);
 }
 
+/// The controls reference: every action with its keys or buttons for the menu device, in two
+/// columns (actions without a binding on that device are left out).
 fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
-    let rows = |entries: &[(&str, &str)]| {
-        entries
-            .iter()
-            .map(|(action, keys)| SectionItem::stat(*action, *keys, BONE))
-            .collect::<Vec<_>>()
-    };
-    UiLayout::screen(draw).modal_with_render_plan(
+    type Rows = &'static [(Prompt, &'static str)];
+    const GROUPS: [(&str, Color, Rows); 3] = [
+        (
+            "Movement",
+            SKY_LIGHT,
+            &[
+                (Prompt::Walk, "Move"),
+                (Prompt::Thrust, "Thrust"),
+                (Prompt::Drill, "Drill down"),
+                (Prompt::Use, "Use building"),
+                (Prompt::Pause, "Pause"),
+            ],
+        ),
+        (
+            "Tools",
+            GOLD,
+            &[
+                (Prompt::Scan, "Scanner"),
+                (Prompt::Bomb, "Bomb"),
+                (Prompt::Map, "Map"),
+                (Prompt::Inventory, "Inventory"),
+                (Prompt::Infrastructure, "Field kits"),
+            ],
+        ),
+        (
+            "Menus",
+            LIME,
+            &[
+                (Prompt::Navigate, "Select"),
+                (Prompt::Confirm, "Confirm"),
+                (Prompt::Back, "Back / close"),
+                (Prompt::Tab, "Shop columns"),
+                (Prompt::QuickSave, "Quick save"),
+                (Prompt::QuickLoad, "Quick load"),
+                (Prompt::Fullscreen, "Fullscreen"),
+                (Prompt::Help, "Controls"),
+                (Prompt::Details, "Diagnostics"),
+                (Prompt::NetOverlay, "Network overlay"),
+            ],
+        ),
+    ];
+    let device = prompts::menu_device();
+    let body = UiLayout::screen(draw).canvas_modal(
         "Controls",
-        "Esc/Backspace closes | controls are context-sensitive",
-        &ModalContent::new(vec![
-            Section::new(
-                "Movement",
-                SKY_LIGHT,
-                rows(&[
-                    ("Move", "A / D  or  Left / Right"),
-                    ("Thrust", "W  or  Up"),
-                    ("Drill down", "S  or  Down"),
-                    ("Interact", "E  or  Enter"),
-                    ("Pause", "P  or  Esc"),
-                ]),
-            ),
-            Section::new(
-                "Tools",
-                GOLD,
-                rows(&[
-                    ("Map", "M"),
-                    ("Inventory", "Tab"),
-                    ("Scanner", "C"),
-                    ("Bomb", "B"),
-                    ("Infrastructure", "R T L U O P"),
-                    ("Quick save / load", "F5 / F9"),
-                    ("Diagnostics", "Ctrl+Tab"),
-                    ("Network overlay", "F3"),
-                ]),
-            ),
-        ]),
+        "",
+        &[hint(Prompt::Back, "close")],
+        if device.is_gamepad() {
+            "Controller layout (keyboard keys show after any key press)."
+        } else {
+            "Keyboard layout (controller buttons show after any button press)."
+        },
     );
+    let column_width = (body.width as i32 - 8) / 2;
+    let row_height = prompts::PROMPT_HEIGHT + 3;
+    let top = body.y as i32 + 4;
+    let mut columns = [
+        (body.x as i32, top),
+        (body.x as i32 + column_width + 8, top),
+    ];
+    for (index, (title, color, rows)) in GROUPS.iter().enumerate() {
+        let rows: Vec<_> = rows
+            .iter()
+            .filter(|(prompt, _)| !crate::input::prompts::glyphs(*prompt, device).is_empty())
+            .collect();
+        if rows.is_empty() {
+            continue;
+        }
+        // Movement and tools stack on the left; menus fill the right.
+        let column = usize::from(index == 2);
+        let (x, y) = &mut columns[column];
+        ui_kit::text(draw, &title.to_uppercase(), *x, *y, TextStyle::Bold, *color);
+        *y += 12;
+        for (prompt, label) in rows {
+            ui_kit::text(draw, label, *x + 2, *y + 2, TextStyle::Body, MIST);
+            let width = prompts::prompt_width(hint(*prompt, ""), device).unwrap_or(0);
+            prompts::draw_prompt(
+                draw,
+                *x + column_width - width - 4,
+                *y,
+                hint(*prompt, ""),
+                device,
+                MIST,
+            );
+            *y += row_height;
+        }
+        *y += 6;
+    }
 }

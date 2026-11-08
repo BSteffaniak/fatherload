@@ -13,6 +13,7 @@ use raylib::prelude::*;
 use super::pixel_art::palette::*;
 use super::{
     pixel_art::sprite::SpriteDef,
+    prompts::{self, Hint},
     ui_kit::{self, ButtonState, PanelStyle, TextStyle},
 };
 
@@ -85,10 +86,17 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         }
     }
 
-    /// A dialog frame with a title and subtitle; returns the body rect for custom drawing.
-    pub(super) fn canvas_modal(&mut self, title: &str, subtitle: &str, summary: &str) -> Rectangle {
+    /// A dialog frame with a title, subtitle and button prompts; returns the body rect for
+    /// custom drawing.
+    pub(super) fn canvas_modal(
+        &mut self,
+        title: &str,
+        subtitle: &str,
+        hints: &[Hint],
+        summary: &str,
+    ) -> Rectangle {
         let rect = self.dialog_rect(false);
-        let body = self.modal_frame(title, subtitle, rect, None, false);
+        let body = self.modal_frame(title, subtitle, hints, rect, None, false);
         ui_kit::text(
             self.draw,
             summary,
@@ -140,6 +148,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         let body = self.modal_frame(
             title,
             subtitle,
+            &content.hints,
             full,
             Some(content_height + footer_height),
             content.warning,
@@ -222,12 +231,14 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         }
     }
 
-    /// Dims the screen, draws the dialog panel, title, subtitle and divider; returns the body.
-    /// With `content_height` the panel shrinks to fit that much body.
+    /// Dims the screen, draws the dialog panel, title, subtitle, button prompts (for the menu
+    /// device) and divider; returns the body. With `content_height` the panel shrinks to fit
+    /// that much body.
     fn modal_frame(
         &mut self,
         title: &str,
         subtitle: &str,
+        hints: &[Hint],
         mut rect: Rectangle,
         content_height: Option<f32>,
         warning: bool,
@@ -237,10 +248,25 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
             ui_kit::dim(self.draw, self.viewport);
         }
         let width = rect.width as i32 - 24;
-        let lines = ui_kit::wrap(subtitle, width, TextStyle::Body);
+        let lines = if subtitle.is_empty() {
+            Vec::new()
+        } else {
+            ui_kit::wrap(subtitle, width, TextStyle::Body)
+        };
         let subtitle_lines = i32::try_from(lines.len().min(2)).unwrap_or(1);
-        let header =
-            10 + TextStyle::Title.height() + 3 + subtitle_lines * TextStyle::Body.line_height() + 8;
+        let device = prompts::menu_device();
+        let prompt_rows = prompts::wrap_bar(hints, device, width);
+        let prompt_height = if prompt_rows.is_empty() {
+            0
+        } else {
+            prompts::wrapped_height(prompt_rows.len()) + 3
+        };
+        let header = 10
+            + TextStyle::Title.height()
+            + 3
+            + subtitle_lines * TextStyle::Body.line_height()
+            + prompt_height
+            + 8;
         if let Some(content) = content_height {
             let wanted = (header as f32 + content + 14.0).ceil().max(72.0);
             if wanted < rect.height {
@@ -264,6 +290,13 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         for line in lines.iter().take(2) {
             ui_kit::text(self.draw, line, x, y, TextStyle::Body, FOG);
             y += TextStyle::Body.line_height();
+        }
+        if !prompt_rows.is_empty() {
+            y += 1;
+            for row in &prompt_rows {
+                prompts::draw_bar(self.draw, x, y, row, device, MIST);
+                y += prompts::PROMPT_HEIGHT + 2;
+            }
         }
         y += 2;
         ui_kit::divider(self.draw, x, y, width);
@@ -483,6 +516,8 @@ pub(super) struct ModalContent {
     warning: bool,
     /// Text pinned under the scrolling content (e.g. the selected item's description).
     footer: Option<String>,
+    /// Button prompts under the title, drawn for the menu device.
+    hints: Vec<Hint>,
 }
 
 impl ModalContent {
@@ -492,7 +527,14 @@ impl ModalContent {
             compact: false,
             warning: false,
             footer: None,
+            hints: Vec::new(),
         }
+    }
+
+    /// Button prompts under the title (actions the menu device has no binding for are hidden).
+    pub(super) fn prompts(mut self, hints: &[Hint]) -> Self {
+        self.hints = hints.to_vec();
+        self
     }
 
     /// Pins `text` under the content, outside the scroll area.

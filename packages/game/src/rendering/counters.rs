@@ -27,8 +27,10 @@ use super::{
         sprite::SpriteDef,
         sprites::{icons, menu_icons, rig},
     },
+    prompts::{Hint, hint},
     screen::UiFrame,
 };
+use crate::input::prompts::Prompt;
 
 /// One counter row before it becomes a [`SectionItem`]: what it is, what it costs and why it
 /// may be unavailable.
@@ -133,7 +135,7 @@ fn draw_counter(
     ui: &UiFrame<'_, '_>,
     draw: &mut RaylibDrawHandle<'_>,
     title: &str,
-    help: &str,
+    hints: &[Hint],
     status: Vec<SectionItem>,
     heading: &str,
     offers: Vec<Offer>,
@@ -146,12 +148,16 @@ fn draw_counter(
     sections.push(Section::new(heading, GOLD, items));
     UiLayout::screen(draw).modal_with_render_plan(
         title,
-        help,
-        &ModalContent::new(sections).footer(about),
+        "",
+        &ModalContent::new(sections).footer(about).prompts(hints),
     );
 }
 
-const COUNTER_HELP: &str = "Up/Down select | Enter/E confirm | Esc close";
+const COUNTER_HELP: &[Hint] = &[
+    hint(Prompt::Navigate, "select"),
+    hint(Prompt::Confirm, "confirm"),
+    hint(Prompt::Back, "close"),
+];
 
 /// What a fuel or repair counter bills: the whole missing amount, capped by the player's
 /// credits, as `(units delivered, credits charged, units missing, full price)`.
@@ -293,7 +299,12 @@ pub(super) fn draw_shop(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         ui,
         draw,
         "Upgrade Shop",
-        "Up/Down select | Enter/E buy | Esc close",
+        &[
+            hint(Prompt::Navigate, "select"),
+            hint(Prompt::Tab, "browse"),
+            hint(Prompt::Confirm, "buy"),
+            hint(Prompt::Back, "close"),
+        ],
         status,
         "Upgrades",
         shop_offers(ui),
@@ -336,11 +347,12 @@ fn draw_purchase_confirm(
     }
     UiLayout::screen(draw).modal_with_render_plan(
         title,
-        "Enter/E confirms | Esc goes back",
+        "",
         &ModalContent::new(vec![
             Section::new("Order", GOLD, items),
             Section::new("Receipt", SKY_LIGHT, ledger),
-        ]),
+        ])
+        .prompts(&[hint(Prompt::Confirm, "confirm"), hint(Prompt::Back, "back")]),
     );
 }
 
@@ -715,8 +727,10 @@ pub(super) fn draw_headquarters(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
     }
     UiLayout::screen(draw).modal_with_render_plan(
         "Borealis HQ",
-        COUNTER_HELP,
-        &ModalContent::new(sections).footer(about),
+        "",
+        &ModalContent::new(sections)
+            .footer(about)
+            .prompts(COUNTER_HELP),
     );
 }
 
@@ -839,14 +853,15 @@ pub(super) fn draw_expedition_board(draw: &mut RaylibDrawHandle<'_>, ui: &UiFram
     if offers.is_empty() {
         UiLayout::screen(draw).modal_with_render_plan(
             "Expedition Board",
-            "Esc closes",
+            "",
             &ModalContent::new(vec![Section::new(
                 "Board",
                 GOLD,
                 vec![SectionItem::text(
                     "No expeditions posted. Check back tomorrow.",
                 )],
-            )]),
+            )])
+            .prompts(&[hint(Prompt::Back, "close")]),
         );
         return;
     }
@@ -944,8 +959,10 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     ];
     UiLayout::screen(draw).modal_with_render_plan(
         "Ore Depot",
-        COUNTER_HELP,
-        &ModalContent::new(sections).footer(about),
+        "",
+        &ModalContent::new(sections)
+            .footer(about)
+            .prompts(COUNTER_HELP),
     );
 }
 
@@ -1051,8 +1068,9 @@ pub(super) fn draw_receipts(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_
     };
     UiLayout::screen(draw).modal_with_render_plan(
         "Depot Receipts",
-        "Recent sales and payouts | Enter/E or Esc returns",
-        &ModalContent::new(sections),
+        "Recent sales and payouts.",
+        &ModalContent::new(sections)
+            .prompts(&[hint(Prompt::Confirm, ""), hint(Prompt::Back, "return")]),
     );
 }
 

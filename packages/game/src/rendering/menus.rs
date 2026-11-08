@@ -16,13 +16,86 @@ use super::{
         sprite::SpriteDef,
         sprites::{icons, menu_icons},
     },
+    prompts::{self, Hint, hint},
     screen::UiFrame,
 };
 use crate::{
+    input::{
+        devices::InputDevice,
+        prompts::{Prompt, inline_text},
+    },
     runtime::OnlineRole,
     save::{save_slot_count, save_slot_metadata},
     shell::{JOIN_MENU, LobbyAction, NoticeAction, OnlineScreen, PauseOption, ShellState},
 };
+
+/// Select / confirm / back to the previous screen.
+const NAVIGATE_BACK: &[Hint] = &[
+    hint(Prompt::Navigate, "select"),
+    hint(Prompt::Confirm, "confirm"),
+    hint(Prompt::Back, "back"),
+];
+/// Select / confirm / back to the title.
+const NAVIGATE_TITLE: &[Hint] = &[
+    hint(Prompt::Navigate, "select"),
+    hint(Prompt::Confirm, "confirm"),
+    hint(Prompt::Back, "title"),
+];
+/// Select / confirm / close.
+const NAVIGATE_CLOSE: &[Hint] = &[
+    hint(Prompt::Navigate, "select"),
+    hint(Prompt::Confirm, "confirm"),
+    hint(Prompt::Back, "close"),
+];
+/// The LAN browser.
+const LAN_PROMPTS: &[Hint] = &[
+    hint(Prompt::Navigate, "select"),
+    hint(Prompt::Confirm, "join"),
+    hint(Prompt::Back, "back"),
+];
+/// The lobby of a session already playing.
+const LOBBY_IN_GAME: &[Hint] = &[
+    hint(Prompt::Navigate, "select"),
+    hint(Prompt::Confirm, "confirm"),
+    hint(Prompt::Back, "back to the game"),
+];
+/// The address form (typed on a keyboard).
+const TYPE_FORM: &[Hint] = &[
+    hint(Prompt::Confirm, "join"),
+    hint(Prompt::Delete, "delete"),
+    hint(Prompt::Back, "back"),
+];
+/// The descriptor form (pasted on a keyboard).
+const PASTE_FORM: &[Hint] = &[
+    hint(Prompt::Paste, "paste"),
+    hint(Prompt::Confirm, "join"),
+    hint(Prompt::Delete, "delete"),
+    hint(Prompt::Back, "back"),
+];
+
+/// The options volume row's detail: how to adjust it on the menu device.
+fn adjust_detail() -> String {
+    let device = prompts::menu_device();
+    let adjust = inline_text(Prompt::Adjust, device).unwrap_or_default();
+    inline_text(Prompt::Volume, device).map_or_else(
+        || format!("{adjust} adjust"),
+        |volume| format!("{adjust} or {volume} adjust"),
+    )
+}
+
+/// The options fullscreen row's detail: the hotkey when the menu device has one.
+fn fullscreen_detail() -> String {
+    inline_text(Prompt::Fullscreen, prompts::menu_device()).map_or_else(
+        || "Borderless window".to_owned(),
+        |key| format!("Borderless, {key} anywhere"),
+    )
+}
+
+/// The descriptor field's placeholder (pasting needs a keyboard).
+fn paste_placeholder() -> String {
+    let key = inline_text(Prompt::Paste, InputDevice::KEYBOARD).unwrap_or_default();
+    format!("Paste the host's descriptor with {key}")
+}
 
 /// A menu row: icon, label, optional detail and right-aligned value.
 struct Entry {
@@ -138,7 +211,7 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     }
     UiLayout::screen(draw).modal_with_render_plan(
         "Paused",
-        "Up/Down select | Enter/E confirm | Esc resume",
+        "",
         &ModalContent::new(vec![
             Section::new(
                 "Menu",
@@ -147,7 +220,12 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
             ),
             Section::new("Rig", GOLD, rig),
         ])
-        .compact(),
+        .compact()
+        .prompts(&[
+            hint(Prompt::Navigate, "select"),
+            hint(Prompt::Confirm, "confirm"),
+            hint(Prompt::Back, "resume"),
+        ]),
     );
 }
 
@@ -155,10 +233,10 @@ pub(super) fn draw_options(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>
     let volume = (ui.shell.master_volume * 100.0).round() as i32;
     let entries = vec![
         Entry::new(&menu_icons::SPEAKER, "Master volume")
-            .detail("Left/Right or +/- adjust")
+            .detail(adjust_detail())
             .value(format!("\u{2190} {volume}% \u{2192}"), GOLD),
         Entry::new(&menu_icons::SCREEN, "Fullscreen")
-            .detail("Borderless, F11 anywhere")
+            .detail(fullscreen_detail())
             .value(
                 if ui.shell.fullscreen { "ON" } else { "OFF" },
                 if ui.shell.fullscreen { LIME } else { FOG },
@@ -167,7 +245,7 @@ pub(super) fn draw_options(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>
     ];
     UiLayout::screen(draw).modal_with_render_plan(
         "Options",
-        "Up/Down select | Left/Right adjust | Esc close",
+        "",
         &ModalContent::new(vec![
             Section::new(
                 "Settings",
@@ -186,7 +264,12 @@ pub(super) fn draw_options(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>
                 )],
             ),
         ])
-        .compact(),
+        .compact()
+        .prompts(&[
+            hint(Prompt::Navigate, "select"),
+            hint(Prompt::Adjust, "adjust"),
+            hint(Prompt::Back, "close"),
+        ]),
     );
 }
 
@@ -222,19 +305,20 @@ pub(super) fn draw_slots(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, 
         .collect();
     UiLayout::screen(draw).modal_with_render_plan(
         if saving { "Save Game" } else { "Load Game" },
-        "Up/Down select | Enter/E confirm | Esc close",
+        "",
         &ModalContent::new(vec![Section::new(
             "Slots",
             SKY_LIGHT,
             menu_items(entries, ui.shell.selected_menu_item),
-        )]),
+        )])
+        .prompts(NAVIGATE_CLOSE),
     );
 }
 
 pub(super) fn draw_exit_confirm(draw: &mut RaylibDrawHandle<'_>) {
     UiLayout::screen(draw).modal_with_render_plan(
         "Exit to Desktop?",
-        "Enter/E exits | Esc returns to the game",
+        "",
         &ModalContent::new(vec![Section::new(
             "Confirm",
             GOLD,
@@ -245,7 +329,11 @@ pub(super) fn draw_exit_confirm(draw: &mut RaylibDrawHandle<'_>) {
                 BONE,
             )],
         )])
-        .compact(),
+        .compact()
+        .prompts(&[
+            hint(Prompt::Confirm, "exit"),
+            hint(Prompt::Back, "return to the game"),
+        ]),
     );
 }
 
@@ -259,13 +347,18 @@ pub(super) fn draw_unsaved_exit_confirm(draw: &mut RaylibDrawHandle<'_>, ui: &Ui
     ];
     UiLayout::screen(draw).modal_with_render_plan(
         "Unsaved Progress",
-        "Up/Down select | Enter/E confirm | Esc cancel",
+        "",
         &ModalContent::new(vec![Section::new(
             "Before you go",
             ORANGE,
             menu_items(entries, ui.shell.selected_menu_item),
         )])
-        .compact(),
+        .compact()
+        .prompts(&[
+            hint(Prompt::Navigate, "select"),
+            hint(Prompt::Confirm, "confirm"),
+            hint(Prompt::Back, "cancel"),
+        ]),
     );
 }
 
@@ -287,7 +380,8 @@ pub(super) fn draw_rescue(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>)
     let action = SectionItem::item(ItemEntry {
         icon: Some(&menu_icons::FLAG),
         label: "Call the rescue crew".to_owned(),
-        detail: "Press E or Enter".to_owned(),
+        detail: crate::input::prompts::inline_text(Prompt::Confirm, prompts::menu_device())
+            .map_or_else(String::new, |key| format!("Press {key}")),
         value: "FEE".to_owned(),
         value_color: GOLD,
         coin: false,
@@ -296,7 +390,7 @@ pub(super) fn draw_rescue(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>)
     });
     UiLayout::screen(draw).modal_with_render_plan(
         "Emergency",
-        "E/Enter call rescue | Esc pause menu",
+        "",
         &ModalContent::new(vec![
             Section::new(
                 headline,
@@ -314,7 +408,11 @@ pub(super) fn draw_rescue(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>)
             Section::new("Action", GOLD, vec![action]),
         ])
         .warning()
-        .compact(),
+        .compact()
+        .prompts(&[
+            hint(Prompt::Confirm, "call rescue"),
+            hint(Prompt::Pause, "pause menu"),
+        ]),
     );
 }
 
@@ -364,7 +462,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                 .collect();
             (
                 "Join Online Game".to_owned(),
-                "Up/Down select | Enter/E confirm | Esc back",
+                NAVIGATE_BACK,
                 vec![Section::new(
                     "Join",
                     SKY_LIGHT,
@@ -374,7 +472,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
         }
         OnlineScreen::JoinAddress => (
             "Join by Address".to_owned(),
-            "Type the host's ip:port | Enter join | Backspace delete | Esc back",
+            TYPE_FORM,
             vec![Section::new(
                 "Host address",
                 SKY_LIGHT,
@@ -388,14 +486,14 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
         ),
         OnlineScreen::JoinDescriptor => (
             "Join by Descriptor".to_owned(),
-            "Ctrl+V paste | Enter join | Backspace delete | Esc back",
+            PASTE_FORM,
             vec![Section::new(
                 "Descriptor",
                 SKY_LIGHT,
                 vec![
                     SectionItem::field(
                         online.text.chars().take(96).collect::<String>(),
-                        "Paste the host's descriptor with Ctrl+V",
+                        paste_placeholder(),
                     ),
                     SectionItem::text(if online.text.is_empty() {
                         "The host copies it from its lobby (\"Copy descriptor to clipboard\")."
@@ -416,7 +514,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                 .collect();
             (
                 "Online Session".to_owned(),
-                "Up/Down select | Enter/E confirm | Esc title",
+                NAVIGATE_TITLE,
                 vec![
                     Section::new(
                         "Session over",
@@ -428,11 +526,20 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             )
         }
     };
-    UiLayout::screen(draw).modal_with_render_plan(&title, help, &ModalContent::new(sections));
+    let subtitle = if online.screen == OnlineScreen::JoinAddress {
+        "Type the host's ip:port."
+    } else {
+        ""
+    };
+    UiLayout::screen(draw).modal_with_render_plan(
+        &title,
+        subtitle,
+        &ModalContent::new(sections).prompts(help),
+    );
 }
 
 /// The LAN browser: discovered sessions, then refresh and back.
-fn lan_screen(online: &crate::shell::OnlineShell) -> (String, &'static str, Vec<Section>) {
+fn lan_screen(online: &crate::shell::OnlineShell) -> (String, &'static [Hint], Vec<Section>) {
     let mut entries: Vec<Entry> = online
         .lan_games
         .iter()
@@ -451,7 +558,7 @@ fn lan_screen(online: &crate::shell::OnlineShell) -> (String, &'static str, Vec<
     items.extend(menu_items(entries, online.selected));
     (
         "LAN Games".to_owned(),
-        "Up/Down select | Enter/E join | Esc back",
+        LAN_PROMPTS,
         vec![Section::new(
             format!("Discovered sessions ({})", online.lan_games.len()),
             SKY_LIGHT,
@@ -495,7 +602,7 @@ fn roster_items(lobby: &crate::runtime::LobbyInfo) -> Vec<SectionItem> {
 }
 
 /// The lobby: session facts, the roster with ready states, and the lobby actions.
-fn lobby_screen(shell: &ShellState) -> (String, &'static str, Vec<Section>) {
+fn lobby_screen(shell: &ShellState) -> (String, &'static [Hint], Vec<Section>) {
     let online = &shell.online;
     let host = online.role == Some(OnlineRole::Host);
     let lobby = online.lobby.clone().unwrap_or_default();
@@ -567,9 +674,9 @@ fn lobby_screen(shell: &ShellState) -> (String, &'static str, Vec<Section>) {
             "Online Lobby".to_owned()
         },
         if lobby.started {
-            "Up/Down select | Enter/E confirm | Esc back to the game"
+            LOBBY_IN_GAME
         } else {
-            "Up/Down select | Enter/E confirm"
+            &NAVIGATE_CLOSE[..2]
         },
         vec![
             Section::new("Session", SKY_LIGHT, session),

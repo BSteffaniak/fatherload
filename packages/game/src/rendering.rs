@@ -23,6 +23,7 @@ mod interior;
 mod layout;
 mod menus;
 mod pixel_art;
+mod prompts;
 mod screen;
 mod terrain;
 mod title;
@@ -206,6 +207,7 @@ impl GameRenderer {
         snapshot: &RenderSnapshot<'_>,
     ) {
         layout::set_current_ui_state(self.ui_state.borrow().clone());
+        prompts::set_menu_device(shell.prompt_device(0));
         sprite::set_current_atlas(self.atlas.as_ref());
         // The UI clock follows shell updates so scripted captures are deterministic.
         let seconds = shell.update_ticks as f32 / 60.0;
@@ -268,12 +270,15 @@ impl GameRenderer {
             RunMode::Title | RunMode::Paused | RunMode::Lobby
         ) {
             let canvas = ui_kit::canvas();
-            ui_kit::text(
+            let volume = format!("VOL {:.0}%", shell.master_volume * 100.0);
+            let y = canvas.height - 15;
+            ui_kit::text(draw, &volume, 6, y + 2, TextStyle::Body, palette::FOG);
+            prompts::draw_prompt(
                 draw,
-                &format!("VOL {:.0}%  (+/-)", shell.master_volume * 100.0),
-                6,
-                canvas.height - 13,
-                TextStyle::Body,
+                6 + ui_kit::text_width(&volume, TextStyle::Body) + 5,
+                y,
+                prompts::hint(crate::input::prompts::Prompt::Volume, ""),
+                prompts::menu_device(),
                 palette::FOG,
             );
         }
@@ -289,6 +294,15 @@ impl GameRenderer {
         draw.clear_background(palette::NIGHT);
         let _canvas = UiCanvasScope::begin(draw);
         gallery::draw_art_gallery(draw);
+    }
+
+    /// Draws the button-prompt reference sheet instead of the game.
+    pub fn render_prompt_sheet(&self, draw: &mut RaylibDrawHandle<'_>) {
+        sprite::set_current_atlas(self.atlas.as_ref());
+        ui_kit::begin_frame(UiCanvas::from_draw(draw), self.font_faces(), 0.0);
+        draw.clear_background(palette::NIGHT);
+        let _canvas = UiCanvasScope::begin(draw);
+        prompts::draw_prompt_sheet(draw);
     }
 
     /// Draws the UI reference sheet (menu icons and interior props) instead of the game.
@@ -367,6 +381,7 @@ fn draw_net_debug(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
     } else {
         shell.online.net_debug.clone()
     };
+    lines.extend(input_debug_lines(shell));
     if cfg!(debug_assertions) {
         lines.push(format!(
             "dev: F4 select ({}) | PgUp/PgDn adjust (host)",
@@ -438,6 +453,31 @@ fn draw_net_debug(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             *color,
         );
     }
+}
+
+/// The F3 overlay's input section: each seat's active device and the connected controllers.
+fn input_debug_lines(shell: &ShellState) -> Vec<String> {
+    let seats = shell.seat_devices.len().max(1);
+    let mut lines: Vec<String> = (0..seats)
+        .map(|seat| {
+            format!(
+                "input: player {} uses {}",
+                seat + 1,
+                shell.prompt_device(seat).label()
+            )
+        })
+        .collect();
+    if shell.gamepads.is_empty() {
+        lines.push("input: no controllers connected".to_owned());
+    }
+    for (index, name) in &shell.gamepads {
+        lines.push(format!(
+            "input: controller {} \"{name}\" ({} glyphs)",
+            u32::from(*index) + 1,
+            crate::input::devices::PadFamily::from_name(name).label()
+        ));
+    }
+    lines
 }
 
 /// Ink seams between split-screen views, so each player's view reads as its own frame.

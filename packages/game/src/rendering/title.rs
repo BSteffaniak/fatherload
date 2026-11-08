@@ -23,10 +23,12 @@ use super::{
         sprite::{self, SpriteDef},
         sprites::{menu_icons, rig},
     },
+    prompts::{self, Hint, hint},
     screen::UiFrame,
     ui_kit::{self, ButtonState, ItemRow, PanelStyle, TextStyle},
 };
 use crate::{
+    input::prompts::Prompt,
     save::{latest_save_summary, saves_exist},
     shell::TitleOption,
 };
@@ -378,6 +380,13 @@ fn draw_logo(draw: &mut impl RaylibDraw, width: i32, top: i32) -> i32 {
     tagline_y + TextStyle::Bold.height()
 }
 
+/// The title screen's footer prompts.
+const TITLE_HINTS: [Hint; 3] = [
+    hint(Prompt::Navigate, "select"),
+    hint(Prompt::Confirm, "confirm"),
+    hint(Prompt::Fullscreen, "fullscreen"),
+];
+
 fn draw_menu(draw: &mut impl RaylibDraw, ui: &UiFrame<'_, '_>, width: i32, height: i32, top: i32) {
     let options = TitleOption::all(saves_exist());
     let count = i32::try_from(options.len()).unwrap_or(0);
@@ -439,13 +448,14 @@ fn draw_menu(draw: &mut impl RaylibDraw, ui: &UiFrame<'_, '_>, width: i32, heigh
         ui_kit::text_centred(draw, &line, width / 2, footer_y, TextStyle::Body, CREAM);
         footer_y += TextStyle::Body.line_height();
     }
-    let hint = "Up/Down select   Enter/E confirm   F11 fullscreen";
-    ui_kit::text_centred(
+    let device = prompts::menu_device();
+    let bar = prompts::bar_width(&TITLE_HINTS, device);
+    prompts::draw_bar(
         draw,
-        hint,
-        width / 2,
-        footer_y.max(height - 24),
-        TextStyle::Body,
+        width / 2 - bar / 2,
+        footer_y.max(height - 26),
+        &TITLE_HINTS,
+        device,
         MIST,
     );
 }

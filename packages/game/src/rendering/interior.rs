@@ -26,6 +26,7 @@ use super::{
             rig,
         },
     },
+    prompts::{self, Hint, hint},
     ui_kit::{self, PanelStyle, TextStyle, UiCanvasScope},
 };
 use drillgame_simulation::economy::SurfaceZone;
@@ -33,6 +34,7 @@ use drillgame_simulation::economy::SurfaceZone;
 mod props;
 
 use crate::{
+    input::prompts::Prompt,
     pixel_scale,
     render_snapshot::{MarketQuote, ViewSnapshot},
     shell::{ServiceAnimation, ShellState, interior_service_x, surface_zone_label},
@@ -196,10 +198,10 @@ pub(super) fn draw_interior(
         );
         ui_kit::text(draw, title, 16, 13, TextStyle::Bold, GOLD);
     }
-    draw_controls_hint(draw, canvas);
     if shell.modal.is_some() {
         return;
     }
+    draw_controls_hint(draw, canvas);
     let near_counter = (shell.interior_x - interior_service_x(zone)).abs() <= COUNTER_REACH;
     let at_door = shell.interior_x < DOOR_REACH;
     let keeper_x = counter_x + COUNTER_WIDTH / 2;
@@ -215,51 +217,46 @@ pub(super) fn draw_interior(
     if near_counter || at_door {
         let target_x = if at_door { 28 } else { keeper_x };
         let (prompt_x, prompt_y) = placement.to_canvas(canvas, target_x, FLOOR_Y - 4);
-        let label = if at_door {
-            "E  Leave"
-        } else {
-            "E  Use counter"
-        };
-        draw_key_prompt(draw, prompt_x, prompt_y, label);
+        let label = if at_door { "Leave" } else { "Use counter" };
+        draw_key_prompt(draw, prompt_x, prompt_y, hint(Prompt::Use, label));
     }
 }
 
-/// A small "key + action" prompt centred on `x`, bobbing above `y`.
-fn draw_key_prompt(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32, label: &str) {
+/// A small "button + action" prompt centred on `x`, bobbing above `y`.
+fn draw_key_prompt(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32, action: Hint) {
+    let device = prompts::menu_device();
+    let Some(content) = prompts::prompt_width(action, device) else {
+        return;
+    };
     let bob = (ui_kit::seconds() * 2.5) as i32 % 2;
-    let width = ui_kit::text_width(label, TextStyle::Bold) + 12;
+    let width = content + 8;
     let left = x - width / 2;
-    let top = y - 16 - bob;
+    let top = y - 17 - bob;
     ui_kit::panel(
         draw,
-        Rectangle::new(left as f32, top as f32, width as f32, 15.0),
+        Rectangle::new(left as f32, top as f32, width as f32, 17.0),
         PanelStyle::Accent,
     );
-    // Key cap behind the "E".
-    draw.draw_rectangle(left + 4, top + 3, 9, 9, INK);
-    draw.draw_rectangle(left + 5, top + 3, 7, 8, CREAM);
-    ui_kit::text_shadowed(draw, "E", left + 6, top + 3, TextStyle::Bold, INK, None);
-    ui_kit::text(
-        draw,
-        label.trim_start_matches('E').trim_start(),
-        left + 16,
-        top + 4,
-        TextStyle::Bold,
-        BONE,
-    );
+    prompts::draw_prompt(draw, left + 4, top + 3, action, device, BONE);
 }
 
+/// The room's controls, bottom-right.
 fn draw_controls_hint(draw: &mut RaylibDrawHandle<'_>, canvas: ui_kit::UiCanvas) {
-    let hint = "A/D walk   E use   Esc leave";
-    let width = ui_kit::text_width(hint, TextStyle::Body) + 14;
+    const HINTS: [Hint; 3] = [
+        hint(Prompt::Walk, "walk"),
+        hint(Prompt::Use, "use"),
+        hint(Prompt::Back, "leave"),
+    ];
+    let device = prompts::menu_device();
+    let width = prompts::bar_width(&HINTS, device) + 12;
     let x = canvas.width - width - 8;
-    let y = canvas.height - 21;
+    let y = canvas.height - 23;
     ui_kit::panel(
         draw,
-        Rectangle::new(x as f32, y as f32, width as f32, 15.0),
+        Rectangle::new(x as f32, y as f32, width as f32, 17.0),
         PanelStyle::Standard,
     );
-    ui_kit::text(draw, hint, x + 7, y + 4, TextStyle::Body, MIST);
+    prompts::draw_bar(draw, x + 6, y + 3, &HINTS, device, MIST);
 }
 
 /// Ceiling, brick wall, wainscot and floor across everything visible.

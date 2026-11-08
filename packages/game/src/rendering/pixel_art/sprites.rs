@@ -5,6 +5,7 @@
 pub mod icons;
 pub mod interior;
 pub mod menu_icons;
+pub mod prompts;
 pub mod rig;
 pub mod terrain;
 pub mod ui;
@@ -173,6 +174,27 @@ pub const ALL: &[&SpriteDef] = &[
     &menu_icons::GLOBE,
     &menu_icons::SPLIT,
     &menu_icons::GEAR,
+    &prompts::KEYCAP_SPRITE,
+    &prompts::XBOX_A,
+    &prompts::XBOX_B,
+    &prompts::XBOX_X,
+    &prompts::XBOX_Y,
+    &prompts::NINTENDO_A,
+    &prompts::NINTENDO_B,
+    &prompts::NINTENDO_X,
+    &prompts::NINTENDO_Y,
+    &prompts::PS_CROSS,
+    &prompts::PS_CIRCLE,
+    &prompts::PS_SQUARE,
+    &prompts::PS_TRIANGLE,
+    &prompts::BUMPER,
+    &prompts::TRIGGER,
+    &prompts::MENU,
+    &prompts::VIEW,
+    &prompts::DPAD_VERTICAL,
+    &prompts::DPAD_HORIZONTAL,
+    &prompts::DPAD_DOWN,
+    &prompts::LEFT_STICK,
 ];
 
 #[cfg(test)]
@@ -242,6 +264,7 @@ mod tests {
             &ui::TOOLTIP,
             &interior::DOOR_FRAME,
             &interior::shop::COUNTER,
+            &prompts::KEYCAP,
         ] {
             assert!(
                 slice.sprite.width() > slice.border * 2,
@@ -254,6 +277,18 @@ mod tests {
                 slice.sprite.name
             );
             assert!(ALL.iter().any(|sprite| sprite.name == slice.sprite.name));
+        }
+    }
+
+    #[test]
+    fn every_prompt_glyph_is_registered_and_prompt_height() {
+        for glyph in prompts::ALL {
+            assert!(
+                ALL.iter().any(|sprite| sprite.name == glyph.name),
+                "{}",
+                glyph.name
+            );
+            assert_eq!(glyph.height(), prompts::GLYPH_HEIGHT, "{}", glyph.name);
         }
     }
 
