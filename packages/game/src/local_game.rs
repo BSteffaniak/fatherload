@@ -286,20 +286,7 @@ impl LocalGame {
         report: &mut FrameReport,
     ) {
         match request {
-            ShellRequest::NewGame { seats } => {
-                self.runtime = Runtime::local(new_world(), seats);
-                self.reset_presentation(report);
-                self.shell.enter_world(
-                    "Welcome to the dig site. Visit the depot for contracts.",
-                    0.0,
-                );
-                if seats > 1 {
-                    self.shell.message = format!(
-                        "Local split-screen with {seats} players: Player 1 WASD, Player 2 arrow keys / gamepad."
-                    );
-                }
-                self.shell.sound_cues.push(SoundCue::Milestone);
-            }
+            ShellRequest::NewGame { seats } => self.new_game(seats, report),
             ShellRequest::ResumeLatest => {
                 let loaded = match &self.save_target {
                     SaveTarget::UserFiles => save::load_latest_world(),
@@ -334,20 +321,7 @@ impl LocalGame {
                 Err(error) => self.shell.message = format!("Save before exit failed: {error}"),
             },
             ShellRequest::Action(command) => primary_actions.push(command),
-            ShellRequest::AddLocalSeat => {
-                if let Some(seat) = self.runtime.add_local_seat() {
-                    self.shell.message = format!(
-                        "Player {} joined local split-screen ({} seats).",
-                        seat.seat.0 + 1,
-                        self.seats().len()
-                    );
-                } else {
-                    self.shell.message = format!(
-                        "Local split-screen is limited to {} seats.",
-                        crate::runtime::MAX_LOCAL_SEATS
-                    );
-                }
-            }
+            ShellRequest::AddLocalSeat => self.add_local_seat(),
             ShellRequest::HostOnline => self.host_online(report),
             ShellRequest::OpenOnline => self.open_online(),
             ShellRequest::JoinAddress(text) => match parse_join_addr(&text) {
@@ -372,15 +346,7 @@ impl LocalGame {
                     .enter_world("The session started. Good digging!", 0.0);
                 self.shell.sound_cues.push(SoundCue::Milestone);
             }
-            ShellRequest::LeaveOnline => {
-                let message = match self.runtime.online_role() {
-                    Some(OnlineRole::Host) => "You ended the online session.",
-                    Some(OnlineRole::Client) => "You left the online session.",
-                    None => "",
-                };
-                self.go_local(report);
-                self.shell.return_to_title(message);
-            }
+            ShellRequest::LeaveOnline => self.leave_online(report),
             ShellRequest::Reconnect => {
                 if let Some((target, token)) = self.last_join.clone() {
                     self.start_join(target, token, report);
@@ -392,6 +358,46 @@ impl LocalGame {
             }
             ShellRequest::Exit => self.shell.request_exit = true,
         }
+    }
+
+    fn new_game(&mut self, seats: usize, report: &mut FrameReport) {
+        self.runtime = Runtime::local(new_world(), seats);
+        self.reset_presentation(report);
+        self.shell.enter_world(
+            "Welcome to the dig site. Visit the depot for contracts.",
+            0.0,
+        );
+        if seats > 1 {
+            self.shell.message = format!(
+                "Local split-screen with {seats} players: Player 1 WASD, Player 2 arrow keys / gamepad."
+            );
+        }
+        self.shell.sound_cues.push(SoundCue::Milestone);
+    }
+
+    fn add_local_seat(&mut self) {
+        if let Some(seat) = self.runtime.add_local_seat() {
+            self.shell.message = format!(
+                "Player {} joined local split-screen ({} seats).",
+                seat.seat.0 + 1,
+                self.seats().len()
+            );
+        } else {
+            self.shell.message = format!(
+                "Local split-screen is limited to {} seats.",
+                crate::runtime::MAX_LOCAL_SEATS
+            );
+        }
+    }
+
+    fn leave_online(&mut self, report: &mut FrameReport) {
+        let message = match self.runtime.online_role() {
+            Some(OnlineRole::Host) => "You ended the online session.",
+            Some(OnlineRole::Client) => "You left the online session.",
+            None => "",
+        };
+        self.go_local(report);
+        self.shell.return_to_title(message);
     }
 
     /// Mirrors the runtime's online facts into the shell and reacts to a client's session
@@ -1264,43 +1270,44 @@ mod tests {
         assert_eq!(game.shell.online.screen, OnlineScreen::JoinMenu);
     }
 
-    /// Two whole apps (shell + runtime + net bridge) on real QUIC: host, join by address, ready,
-    /// start, play, local-only pause, client save refusal, and the host ending the session.
-    #[test]
-    fn two_apps_host_join_play_and_end_over_real_quic() {
-        struct Pair {
-            host: LocalGame,
-            client: LocalGame,
-            last: std::time::Instant,
+    /// Two whole apps (shell + runtime + net bridge) driven frame by frame in real time.
+    struct Pair {
+        host: LocalGame,
+        client: LocalGame,
+        last: std::time::Instant,
+    }
+    impl Pair {
+        fn frame(&mut self, host_input: PlayerInput, client_input: PlayerInput) {
+            let now = std::time::Instant::now();
+            let dt = (now - self.last).as_secs_f32();
+            self.last = now;
+            let _host = self.host.frame(&FrameInput::primary(host_input), dt);
+            let _client = self.client.frame(&FrameInput::primary(client_input), dt);
+            std::thread::sleep(Duration::from_millis(4));
         }
-        impl Pair {
-            fn frame(&mut self, host_input: PlayerInput, client_input: PlayerInput) {
-                let now = std::time::Instant::now();
-                let dt = (now - self.last).as_secs_f32();
-                self.last = now;
-                let _host = self.host.frame(&FrameInput::primary(host_input), dt);
-                let _client = self.client.frame(&FrameInput::primary(client_input), dt);
-                std::thread::sleep(Duration::from_millis(4));
-            }
-            fn until(&mut self, what: &str, done: impl Fn(&Self) -> bool) {
-                self.holding_until(what, PlayerInput::default(), done);
-            }
-            /// Frames with the client holding `client_input` until `done`. The runtimes tick
-            /// from real time, so holding for a fixed frame count would cover a
-            /// machine-dependent number of ticks.
-            fn holding_until(
-                &mut self,
-                what: &str,
-                client_input: PlayerInput,
-                done: impl Fn(&Self) -> bool,
-            ) {
-                let deadline = std::time::Instant::now() + Duration::from_secs(8);
-                while !done(self) {
-                    assert!(std::time::Instant::now() < deadline, "timed out: {what}");
-                    self.frame(PlayerInput::default(), client_input);
-                }
+        fn until(&mut self, what: &str, done: impl Fn(&Self) -> bool) {
+            self.holding_until(what, PlayerInput::default(), done);
+        }
+        /// Frames with the client holding `client_input` until `done`. The runtimes tick
+        /// from real time, so holding for a fixed frame count would cover a
+        /// machine-dependent number of ticks.
+        fn holding_until(
+            &mut self,
+            what: &str,
+            client_input: PlayerInput,
+            done: impl Fn(&Self) -> bool,
+        ) {
+            let deadline = std::time::Instant::now() + Duration::from_secs(8);
+            while !done(self) {
+                assert!(std::time::Instant::now() < deadline, "timed out: {what}");
+                self.frame(PlayerInput::default(), client_input);
             }
         }
+    }
+
+    /// Hosts from the title, joins a second app by typing the address, readies up and starts:
+    /// both apps end up playing. Returns the pair and the client's player.
+    fn host_and_join_over_real_quic() -> (Pair, PlayerId) {
         let confirm = PlayerInput {
             confirm: true,
             ..PlayerInput::default()
@@ -1379,6 +1386,14 @@ mod tests {
         });
         let client_player = pair.client.seats()[0].player;
         assert!(pair.host.world().player(client_player).is_some());
+        (pair, client_player)
+    }
+
+    /// Two whole apps (shell + runtime + net bridge) on real QUIC: host, join by address, ready,
+    /// start, play, local-only pause, client save refusal, and the host ending the session.
+    #[test]
+    fn two_apps_host_join_play_and_end_over_real_quic() {
+        let (mut pair, client_player) = host_and_join_over_real_quic();
 
         // The client's rig moves on the host.
         let start_x = pair.host.world().player(client_player).expect("rig").x;

@@ -237,27 +237,7 @@ fn host_and_two_clients_play_over_real_quic_rejoin_and_end_cleanly() {
     );
 
     for peer in [&alice, &bob] {
-        let player = peer.player().expect("joined");
-        let issued = peer.client.session().actions_issued();
-        assert!(issued >= 2, "the script issued actions: {issued}");
-        let resolved = host.resolved.get(&player).cloned().unwrap_or_default();
-        let unique: BTreeSet<ActionId> = resolved.iter().copied().collect();
-        assert_eq!(
-            unique.len(),
-            resolved.len(),
-            "no action of player {player} resolved twice"
-        );
-        assert_eq!(
-            u64::try_from(resolved.len()).expect("small"),
-            issued,
-            "every action of player {player} resolved exactly once"
-        );
-        assert!(
-            peer.hash_matches > 10,
-            "authority hashes were compared against the host: {}",
-            peer.hash_matches
-        );
-        assert_eq!(peer.client.session().stats().hash_mismatches, 0);
+        assert_actions_resolved_once(&host, peer);
     }
     assert!(
         host.session
@@ -310,29 +290,61 @@ fn host_and_two_clients_play_over_real_quic_rejoin_and_end_cleanly() {
     assert!(bob_again.hash_matches > 0);
 
     // The host ends the session: both clients learn why, then their connections close.
+    end_session_and_await_clients(host, [alice, bob_again]);
+    bob.client.shutdown_blocking();
+}
+
+/// Every action `peer` issued resolved exactly once on the host, and its authority hashes
+/// were compared (and matched) against the host's.
+fn assert_actions_resolved_once(host: &Host, peer: &Peer) {
+    let player = peer.player().expect("joined");
+    let issued = peer.client.session().actions_issued();
+    assert!(issued >= 2, "the script issued actions: {issued}");
+    let resolved = host.resolved.get(&player).cloned().unwrap_or_default();
+    let unique: BTreeSet<ActionId> = resolved.iter().copied().collect();
+    assert_eq!(
+        unique.len(),
+        resolved.len(),
+        "no action of player {player} resolved twice"
+    );
+    assert_eq!(
+        u64::try_from(resolved.len()).expect("small"),
+        issued,
+        "every action of player {player} resolved exactly once"
+    );
+    assert!(
+        peer.hash_matches > 10,
+        "authority hashes were compared against the host: {}",
+        peer.hash_matches
+    );
+    assert_eq!(peer.client.session().stats().hash_mismatches, 0);
+}
+
+/// Ends the session on the host, shuts its transport down and waits until every peer saw
+/// `SessionEnded` and its connection closed.
+fn end_session_and_await_clients<const N: usize>(mut host: Host, mut peers: [Peer; N]) {
     host.session.end_session(EndReason::HostClosed);
     let outbound = host.session.take_outbound();
     host.net.send(outbound);
     let Host { net, .. } = host;
     net.shutdown_blocking();
     let deadline = Instant::now() + WAIT;
-    while !(alice.client.finished() && bob_again.client.finished()) {
+    while !peers.iter().all(|peer| peer.client.finished()) {
         assert!(
             Instant::now() < deadline,
             "clients never saw the session end"
         );
-        alice.client.pump(0.005);
-        bob_again.client.pump(0.005);
+        for peer in &mut peers {
+            peer.client.pump(0.005);
+        }
         std::thread::sleep(FRAME);
     }
-    for peer in [&alice, &bob_again] {
+    for peer in peers {
         assert_eq!(
             peer.client.session().phase(),
             ClientPhase::Ended(EndReason::HostClosed),
             "the client was told the host ended the session"
         );
+        peer.client.shutdown_blocking();
     }
-    alice.client.shutdown_blocking();
-    bob_again.client.shutdown_blocking();
-    bob.client.shutdown_blocking();
 }
