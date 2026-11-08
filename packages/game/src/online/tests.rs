@@ -129,7 +129,7 @@ impl Peer {
                     _ => {}
                 }
             }
-            let horizontal = if (self.frame / 200) % 2 == 0 {
+            let horizontal = if (self.frame / 200).is_multiple_of(2) {
                 0.0
             } else {
                 0.6

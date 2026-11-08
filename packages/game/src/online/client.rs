@@ -325,7 +325,7 @@ impl OnlineClient {
     /// Drops the transport connection without leaving, as a crash or network loss would: the
     /// host keeps the player reserved for the reconnect token.
     #[cfg(test)]
-    pub fn drop_connection(&mut self) {
+    pub fn drop_connection(&self) {
         if let (Some(net), ClientLink::Connected(conn)) = (self.net.as_ref(), &self.link) {
             let _ignored = net.disconnect(*conn, "connection dropped");
         }

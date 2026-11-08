@@ -379,7 +379,7 @@ impl<'w> RenderSnapshot<'w> {
 }
 
 /// The camera that centres world pixel `(x, y)` in `viewport`.
-fn camera_for(viewport: Viewport, x: f32, y: f32) -> CameraPosition {
+const fn camera_for(viewport: Viewport, x: f32, y: f32) -> CameraPosition {
     #[allow(
         clippy::cast_precision_loss,
         reason = "bounded viewport dimensions convert to camera pixels"

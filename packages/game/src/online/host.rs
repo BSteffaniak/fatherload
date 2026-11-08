@@ -21,7 +21,7 @@ use super::{
 };
 
 /// Where the host endpoint is in its lifecycle.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostNetStatus {
     /// Binding the endpoint.
     Starting,

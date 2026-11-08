@@ -105,7 +105,7 @@ impl BotBrain {
             }
             return (ControlState::default(), actions);
         }
-        let surface_y = world.player_template().y + TILE_SIZE * 0.5;
+        let surface_y = TILE_SIZE.mul_add(0.5, world.player_template().y);
         let controls = match self.phase {
             BotPhase::Dig => {
                 if !self.acted && self.phase_seconds > 0.5 {
@@ -165,12 +165,9 @@ impl BotBrain {
             BotPhase::ToDigSite => {
                 let target = self.dig_site_x();
                 // Centre over the column so the rig fits down the shaft it digs.
-                if (rig.x - target).abs() < TILE_SIZE * 0.1
-                    && rig.velocity_x.abs() < TILE_SIZE * 0.2
-                {
-                    self.enter(BotPhase::Dig);
-                    ControlState::default()
-                } else if self.phase_seconds > TRAVEL_SECONDS {
+                let settled = (rig.x - target).abs() < TILE_SIZE * 0.1
+                    && rig.velocity_x.abs() < TILE_SIZE * 0.2;
+                if settled || self.phase_seconds > TRAVEL_SECONDS {
                     self.enter(BotPhase::Dig);
                     ControlState::default()
                 } else {
@@ -189,7 +186,7 @@ impl BotBrain {
             .mul_add(TILE_SIZE, TILE_SIZE * 0.5)
     }
 
-    fn enter(&mut self, phase: BotPhase) {
+    const fn enter(&mut self, phase: BotPhase) {
         self.phase = phase;
         self.phase_seconds = 0.0;
         self.acted = false;
@@ -269,7 +266,7 @@ mod tests {
             if let Some(rig) = runtime.world().player(seat.player) {
                 deepest = deepest.max(rig.y);
                 if std::env::var("BOT_TRACE").is_ok()
-                    && runtime.world().simulation_tick().get() % 30 == 0
+                    && runtime.world().simulation_tick().get().is_multiple_of(30)
                 {
                     eprintln!(
                         "{:?} x={:.1} y={:.1} vx={:.1} fuel={:.0} cargo={}",
@@ -288,7 +285,7 @@ mod tests {
         }
         let surface = runtime.world().player_template().y;
         assert!(
-            deepest > surface + 2.0 * TILE_SIZE,
+            deepest > TILE_SIZE.mul_add(2.0, surface),
             "bot dug: {deepest} vs {surface}"
         );
         assert!(bombs_applied > 0, "bot bombed: {:?}", bot.counters());
