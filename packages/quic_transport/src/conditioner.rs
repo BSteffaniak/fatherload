@@ -8,6 +8,10 @@ use std::{fmt, str::FromStr, time::Duration};
 /// Format: `latency=80,jitter=15,loss=2,dup=0[,seed=7]` (milliseconds and percentages).
 pub const NET_SIM_ENV_VAR: &str = "DRILLGAME_NET_SIM";
 
+/// Upper bound for any single conditioner delay; larger specs are rejected when parsed and
+/// clamped when sampled, so a typo cannot overflow timer arithmetic.
+const MAX_DELAY: Duration = Duration::from_hours(1);
+
 /// Link conditioner settings. The default applies no conditioning.
 ///
 /// - Reliable messages are only **delayed** (`latency` ± `jitter`), never dropped,
@@ -84,9 +88,17 @@ impl FromStr for LinkConditionerConfig {
                     .filter(|number| number.is_finite() && *number >= 0.0)
                     .ok_or_else(|| ParseLinkConditionerError(format!("bad number: {part}")))
             };
+            let millis = |value: &str| {
+                Duration::try_from_secs_f64(number(value)? / 1000.0)
+                    .ok()
+                    .filter(|duration| *duration <= MAX_DELAY)
+                    .ok_or_else(|| {
+                        ParseLinkConditionerError(format!("duration out of range: {part}"))
+                    })
+            };
             match key.trim() {
-                "latency" => config.latency = Duration::from_secs_f64(number(value)? / 1000.0),
-                "jitter" => config.jitter = Duration::from_secs_f64(number(value)? / 1000.0),
+                "latency" => config.latency = millis(value)?,
+                "jitter" => config.jitter = millis(value)?,
                 "loss" => config.loss_percent = number(value)?.min(100.0),
                 "dup" | "duplicate" => config.duplicate_percent = number(value)?.min(100.0),
                 "seed" => {
@@ -136,7 +148,9 @@ impl LinkConditioner {
         } else {
             0.0
         };
-        Duration::from_secs_f64((latency + offset).max(0.0))
+        Duration::try_from_secs_f64((latency + offset).max(0.0))
+            .unwrap_or(MAX_DELAY)
+            .min(MAX_DELAY)
     }
 
     /// Delivery plan for one unreliable message: one delay per copy to send (empty = dropped).
@@ -203,6 +217,8 @@ mod tests {
         assert!("latency".parse::<LinkConditionerConfig>().is_err());
         assert!("latency=-3".parse::<LinkConditionerConfig>().is_err());
         assert!("speed=3".parse::<LinkConditionerConfig>().is_err());
+        assert!("latency=1e30".parse::<LinkConditionerConfig>().is_err());
+        assert!("jitter=1e300".parse::<LinkConditionerConfig>().is_err());
     }
 
     #[test]
