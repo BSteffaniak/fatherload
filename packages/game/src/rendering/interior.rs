@@ -198,6 +198,13 @@ const fn sign_text(zone: SurfaceZone) -> &'static str {
     }
 }
 
+/// The canvas row just under the room's floor when it is drawn into `area` (where a counter
+/// panel docked along the bottom of a split-screen view should start).
+pub(super) fn floor_canvas_y(area: RoomArea) -> i32 {
+    let placement = RoomPlacement::fit_area(area);
+    placement.to_canvas(ui_kit::canvas(), 0, FLOOR_Y).1 + 4
+}
+
 /// Draws `seat`'s building interior into `area`, then (on the current UI canvas, which covers
 /// the same area) its name plate, controls, keeper's line and door/counter prompts. In
 /// split-screen the plate names the seat's player (`player`).

@@ -419,6 +419,10 @@ impl GameRenderer {
             } else {
                 RoomArea::window(draw.get_render_width(), draw.get_render_height())
             };
+            layout::set_counter_sheet_top(
+                area.align_top
+                    .then(|| interior::floor_canvas_y(area) as f32),
+            );
             draw_interior(
                 draw,
                 seat,
@@ -464,6 +468,7 @@ impl GameRenderer {
         if split {
             end_view_clip();
         }
+        layout::set_counter_sheet_top(None);
         self.end_ui(owner);
     }
 

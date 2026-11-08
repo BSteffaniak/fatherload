@@ -100,6 +100,12 @@ pub(super) fn counter_panel_is_sheet(viewport: Rectangle) -> bool {
     viewport.width < COUNTER_SIDE_DOCK_MIN_WIDTH
 }
 
+/// Where a bottom-docked counter panel starts on this frame's canvas (just under the room's
+/// floor, set by the interior), or `None` for the default share of the view.
+pub(super) fn set_counter_sheet_top(top: Option<f32>) {
+    COUNTER_SHEET_TOP.with(|current| current.set(top));
+}
+
 /// Whether a bottom-docked counter panel on `viewport` leaves the room's upper part in view, so
 /// the room should be drawn against the top of the view.
 pub(super) fn counter_sheet_leaves_room(viewport: Rectangle) -> bool {
@@ -169,8 +175,11 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
             widgets::UiNode::Scroll(scroll) => scroll.content_height,
             other => other.rect().height,
         };
+        // Short split-screen views keep the footer to fewer lines so rows stay in view.
         let footer_room = if self.viewport.height < SHORT_CANVAS_HEIGHT {
             1
+        } else if self.viewport.height < 300.0 {
+            2
         } else {
             3
         };
@@ -1160,6 +1169,7 @@ thread_local! {
     static CURRENT_UI_STATE: RefCell<Option<widgets::UiState>> = const { RefCell::new(None) };
     static CURRENT_MODAL_PLACEMENT: std::cell::Cell<ModalPlacement> = const { std::cell::Cell::new(ModalPlacement::Centred) };
     static LAST_DIALOG_RECT: std::cell::Cell<Option<Rectangle>> = const { std::cell::Cell::new(None) };
+    static COUNTER_SHEET_TOP: std::cell::Cell<Option<f32>> = const { std::cell::Cell::new(None) };
 }
 
 /// The panel of the last dialog drawn since the previous call, if any (a toast keeps clear of
@@ -1244,7 +1254,13 @@ fn modal_rect(viewport: Rectangle, placement: ModalPlacement) -> Rectangle {
             // when the view is tall enough to show it.
             let margin = 6.0;
             let top = if viewport.height >= COUNTER_SHEET_ROOM_MIN_HEIGHT {
-                (viewport.height * 0.4).floor()
+                // Just under the room's floor when the interior says where it is, keeping at
+                // least 60% of the view for the panel.
+                COUNTER_SHEET_TOP
+                    .with(std::cell::Cell::get)
+                    .unwrap_or(viewport.height * 0.4)
+                    .clamp(margin, viewport.height * 0.4)
+                    .floor()
             } else {
                 margin
             };
