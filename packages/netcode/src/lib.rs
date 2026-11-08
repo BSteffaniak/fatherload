@@ -30,6 +30,7 @@ mod hashing;
 mod ids;
 mod ledger;
 mod params;
+pub mod protocol;
 mod simulation;
 
 
@@ -38,6 +39,10 @@ pub use hashing::{StableHasher, stable_hash};
 pub use ids::{ActionId, ClientId, InputSeq, PlayerId, ReconnectToken, SeatId, SessionEpoch, Tick};
 pub use ledger::ActionLedger;
 pub use params::{InterpDelay, NetTuning, SessionParams};
+pub use protocol::{
+    ClientMessage, CodecError, EndReason, InputFrame, LobbyEntry, NetEvent, PROTOCOL_VERSION,
+    PlayerMarker, RejectReason, ServerFrame, ServerMessage, TaggedAction, Welcome,
+};
 pub use simulation::{
     ActionEnvelope, NetSimulation, PlayerTickInput, Pose, Relevance, TickEvent, TickInputs,
     TickOutput,
