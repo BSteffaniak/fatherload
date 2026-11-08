@@ -36,6 +36,7 @@ mod fx;
 mod rig;
 mod sky;
 
+pub use rig::RigFacings;
 pub use sky::SkyArt;
 
 /// World pixels per art pixel.
@@ -73,6 +74,8 @@ pub(super) struct WorldScene<'a> {
     pub sparks: &'a [SparkParticle],
     pub explosions: &'a [Explosion],
     pub players: &'a [PlayerPresentation],
+    /// Each rig's last facing.
+    pub facings: &'a RigFacings,
     /// The rig this view follows.
     pub local: Option<&'a PlayerPresentation>,
     pub active_drill: Option<DrillState>,
@@ -117,7 +120,14 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         let is_local = scene
             .local
             .is_some_and(|local| local.player_id == player.player_id);
-        rig::draw_rig(draw, scene.terrain, player, is_local, scene.ticks);
+        rig::draw_rig(
+            draw,
+            scene.terrain,
+            player,
+            scene.facings,
+            is_local,
+            scene.ticks,
+        );
     }
     if let Some(drill) = scene.active_drill {
         fx::draw_drill_debris(draw, scene.terrain, drill, scene.ticks);

@@ -2,7 +2,7 @@
 //! bit when drilling down or sideways), the thruster flame, exhaust and damage smoke, and a name
 //! tag with fuel/hull pips over other players' rigs.
 
-use std::{cell::RefCell, collections::BTreeMap};
+use std::collections::BTreeMap;
 
 use raylib::prelude::*;
 
@@ -24,28 +24,46 @@ use super::{ART, Pen, draw_world_sprite, snap, text_art_width};
 /// World pixels from the rig's centre down to the bottom of its tracks.
 const FOOT_OFFSET: f32 = 12.0;
 
-thread_local! {
-    /// The way each rig last faced, so a stopped rig keeps facing where it was going.
-    static FACING_LEFT: RefCell<BTreeMap<PlayerId, bool>> = const { RefCell::new(BTreeMap::new()) };
+/// The way each rig last faced, so a stopped rig keeps facing where it was going. Updated once
+/// per frame from the snapshot, before any view draws.
+#[derive(Clone, Debug, Default)]
+pub struct RigFacings {
+    left: BTreeMap<PlayerId, bool>,
 }
 
-fn facing_left(player: &PlayerPresentation) -> bool {
-    let wanted = match player.active_drill.map(|drill| drill.direction) {
+impl RigFacings {
+    /// Records the facing of every rig that is drilling sideways or moving horizontally.
+    pub fn update(&mut self, players: &[PlayerPresentation]) {
+        self.left
+            .retain(|id, _| players.iter().any(|player| player.player_id == *id));
+        for player in players {
+            if let Some(left) = wanted_facing_left(player) {
+                self.left.insert(player.player_id, left);
+            }
+        }
+    }
+
+    /// Forgets every rig (new world).
+    pub fn clear(&mut self) {
+        self.left.clear();
+    }
+
+    fn facing_left(&self, player: &PlayerPresentation) -> bool {
+        wanted_facing_left(player)
+            .or_else(|| self.left.get(&player.player_id).copied())
+            .unwrap_or(false)
+    }
+}
+
+/// The facing a rig's drill or motion asks for, if any.
+fn wanted_facing_left(player: &PlayerPresentation) -> Option<bool> {
+    match player.active_drill.map(|drill| drill.direction) {
         Some(DrillDirection::Left) => Some(true),
         Some(DrillDirection::Right) => Some(false),
         _ if player.velocity_x < -8.0 => Some(true),
         _ if player.velocity_x > 8.0 => Some(false),
         _ => None,
-    };
-    FACING_LEFT.with(|facing| {
-        let mut facing = facing.borrow_mut();
-        if let Some(left) = wanted {
-            facing.insert(player.player_id, left);
-            left
-        } else {
-            facing.get(&player.player_id).copied().unwrap_or(false)
-        }
-    })
+    }
 }
 
 /// The hull paint of a rig.
@@ -95,6 +113,7 @@ pub fn draw_rig(
     draw: &mut impl RaylibDraw,
     terrain: &Terrain,
     player: &PlayerPresentation,
+    facings: &RigFacings,
     is_local: bool,
     ticks: u64,
 ) {
@@ -106,7 +125,7 @@ pub fn draw_rig(
         top: snap(player.y + FOOT_OFFSET - height),
         width,
         height,
-        facing_left: facing_left(player),
+        facing_left: facings.facing_left(player),
         // Drilling shakes the rig by one art pixel.
         shake: if drilling.is_some() && (ticks / 2).is_multiple_of(2) {
             ART
@@ -332,4 +351,40 @@ pub fn draw_remote_tag(draw: &mut impl RaylibDraw, player: &PlayerPresentation, 
     // Pointer down to the rig.
     pen.rect(draw, width / 2 - 1, 15, 3, 1, border);
     pen.px(draw, width / 2, 16, border);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rig(id: PlayerId, velocity_x: f32) -> PlayerPresentation {
+        PlayerPresentation {
+            player_id: id,
+            x: 0.0,
+            y: 0.0,
+            velocity_x,
+            velocity_y: 0.0,
+            fuel: 1.0,
+            hull: 1.0,
+            max_hull: 1.0,
+            scanner_level: 0,
+            radiator_level: 0,
+            hull_level: 0,
+            active_drill: None,
+        }
+    }
+
+    #[test]
+    fn a_stopped_rig_keeps_its_last_facing_until_it_leaves() {
+        let id = PlayerId::new(3);
+        let mut facings = RigFacings::default();
+        assert!(!facings.facing_left(&rig(id, 0.0)));
+        facings.update(&[rig(id, -40.0)]);
+        assert!(facings.facing_left(&rig(id, 0.0)));
+        facings.update(&[rig(id, 0.0)]);
+        assert!(facings.facing_left(&rig(id, 0.0)));
+        assert!(!facings.facing_left(&rig(id, 40.0)));
+        facings.update(&[]);
+        assert!(!facings.facing_left(&rig(id, 0.0)));
+    }
 }

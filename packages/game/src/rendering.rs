@@ -34,7 +34,7 @@ use screen::{
 };
 use terrain::TerrainRenderer;
 use ui_kit::{TextStyle, UiCanvas, UiCanvasScope, UiFontFaces};
-use world::{SkyArt, WorldScene, draw_world_scene, world_camera};
+use world::{RigFacings, SkyArt, WorldScene, draw_world_scene, world_camera};
 
 use crate::{
     input::PlayerInput,
@@ -81,6 +81,8 @@ pub struct GameRenderer {
     terrain: TerrainRenderer,
     /// Sky gradient, hills and clouds, rasterized at startup.
     sky: SkyArt,
+    /// Which way each rig last faced.
+    rig_facings: RigFacings,
     /// Every sprite, rasterized at startup (see `pixel_art::sprite`).
     atlas: Option<Texture2D>,
     font_regular: Option<Font>,
@@ -100,6 +102,7 @@ impl GameRenderer {
         Self {
             terrain: TerrainRenderer::new(raylib, thread, terrain),
             sky: SkyArt::load(raylib, thread),
+            rig_facings: RigFacings::default(),
             atlas: sprite::load_atlas(raylib, thread),
             font_regular: load_pixel_font(raylib, thread, false),
             font_bold: load_pixel_font(raylib, thread, true),
@@ -115,7 +118,7 @@ impl GameRenderer {
         })
     }
 
-    /// Brings terrain textures up to date with this frame's snapshot.
+    /// Brings terrain textures and rig facings up to date with this frame's snapshot.
     pub fn sync(
         &mut self,
         raylib: &mut RaylibHandle,
@@ -126,7 +129,9 @@ impl GameRenderer {
         if report.world_replaced {
             self.terrain.mark_all_dirty();
             self.explored_drawn = DiscoveredTiles::default();
+            self.rig_facings.clear();
         }
+        self.rig_facings.update(&snapshot.players);
         for tile in &report.changed_tiles {
             self.terrain.mark_tile_dirty(*tile);
         }
@@ -304,6 +309,7 @@ impl GameRenderer {
                     sparks: snapshot.sparks,
                     explosions: snapshot.explosions,
                     players: &snapshot.players,
+                    facings: &self.rig_facings,
                     local: snapshot
                         .players
                         .iter()
