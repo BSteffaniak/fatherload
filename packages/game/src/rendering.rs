@@ -149,6 +149,39 @@ fn apply_modal_scroll(
     }
 }
 
+/// Routes one frame of menu input to the dialog states it belongs to (see
+/// [`GameRenderer::apply_ui_input`]).
+fn route_ui_input(
+    states: &mut BTreeMap<UiOwner, layout::widgets::UiState>,
+    inputs: &[PlayerInput],
+    shell: &ShellState,
+) {
+    let page_keys_tune = shell.tuning_keys_active();
+    let mut apply = |owner: UiOwner, input: PlayerInput| {
+        let state = states.entry(owner).or_default();
+        apply_modal_scroll(state, input, page_keys_tune);
+        if input.menu_up {
+            state.focus_previous();
+        } else if input.menu_down {
+            state.focus_next();
+        } else if input.confirm {
+            state.set_focused(layout::widgets::WidgetId::new("modal-content"));
+        }
+    };
+    if shell.global_overlay() {
+        let input = inputs
+            .get(shell.menu_seat)
+            .or_else(|| inputs.first())
+            .copied()
+            .unwrap_or_default();
+        apply(UiOwner::Global, input);
+    } else {
+        for (seat, input) in inputs.iter().enumerate() {
+            apply(UiOwner::Seat(seat), *input);
+        }
+    }
+}
+
 impl GameRenderer {
     pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, terrain: &Terrain) -> Self {
         Self {
@@ -227,32 +260,7 @@ impl GameRenderer {
     /// order. While a global screen is up only the seat driving it scrolls it; otherwise each
     /// seat's input moves only that seat's own dialog.
     pub fn apply_ui_input(&self, inputs: &[PlayerInput], shell: &ShellState) {
-        let page_keys_tune = shell.tuning_keys_active();
-        if shell.global_overlay() {
-            let input = inputs
-                .get(shell.menu_seat)
-                .or_else(|| inputs.first())
-                .copied()
-                .unwrap_or_default();
-            self.apply_owner_input(UiOwner::Global, input, page_keys_tune);
-        } else {
-            for (seat, input) in inputs.iter().enumerate() {
-                self.apply_owner_input(UiOwner::Seat(seat), *input, page_keys_tune);
-            }
-        }
-    }
-
-    fn apply_owner_input(&self, owner: UiOwner, input: PlayerInput, page_keys_tune: bool) {
-        let mut states = self.ui_states.borrow_mut();
-        let state = states.entry(owner).or_default();
-        apply_modal_scroll(state, input, page_keys_tune);
-        if input.menu_up {
-            state.focus_previous();
-        } else if input.menu_down {
-            state.focus_next();
-        } else if input.confirm {
-            state.set_focused(layout::widgets::WidgetId::new("modal-content"));
-        }
+        route_ui_input(&mut self.ui_states.borrow_mut(), inputs, shell);
     }
 
     /// Forgets dialog focus and scroll (scene captures start each scene fresh).
@@ -746,6 +754,107 @@ mod tests {
                     assert!((corner.x - (x + view_width) as f32 * density).abs() < 0.01);
                     assert!((corner.y - (y + view_height) as f32 * density).abs() < 0.01);
                 }
+            }
+        }
+    }
+
+    /// A dialog state with an open, scrollable dialog (as drawing one leaves it).
+    fn open_dialog() -> layout::widgets::UiState {
+        let id = layout::widgets::WidgetId::new("modal-content");
+        let mut state = layout::widgets::UiState::default();
+        state.enter_modal("Upgrade Shop", &id);
+        state.set_scroll_limit(id, 400.0);
+        state
+    }
+
+    fn offset(states: &BTreeMap<UiOwner, layout::widgets::UiState>, owner: UiOwner) -> f32 {
+        states.get(&owner).map_or(0.0, |state| {
+            state.scroll_offset(&layout::widgets::WidgetId::new("modal-content"))
+        })
+    }
+
+    #[test]
+    fn each_seat_scrolls_only_its_own_dialog_and_global_screens_take_the_menu_seat() {
+        let mut shell = ShellState::default();
+        shell.enter_world("test", 0.0);
+        shell.set_seat_count(2);
+        let mut states = BTreeMap::from([
+            (UiOwner::Seat(0), open_dialog()),
+            (UiOwner::Seat(1), open_dialog()),
+            (UiOwner::Global, open_dialog()),
+        ]);
+        let scroll = PlayerInput {
+            ui_scroll: -1.0,
+            ..PlayerInput::default()
+        };
+        // Seat 2's right stick scrolls seat 2's dialog only.
+        route_ui_input(&mut states, &[PlayerInput::default(), scroll], &shell);
+        assert_near(offset(&states, UiOwner::Seat(0)), 0.0);
+        assert!(offset(&states, UiOwner::Seat(1)) > 0.0);
+        assert_near(offset(&states, UiOwner::Global), 0.0);
+
+        // Page Down on seat 1's keyboard pages seat 1's dialog.
+        let page_down = PlayerInput {
+            page_down: true,
+            ..PlayerInput::default()
+        };
+        states
+            .get_mut(&UiOwner::Seat(0))
+            .expect("seat state")
+            .set_page_step(layout::widgets::WidgetId::new("modal-content"), 100.0);
+        route_ui_input(&mut states, &[page_down, PlayerInput::default()], &shell);
+        assert_near(offset(&states, UiOwner::Seat(0)), 100.0);
+
+        // With the pause menu up, only the seat that paused scrolls, and only the global state.
+        shell.run_mode = crate::shell::RunMode::Paused;
+        shell.menu_seat = 1;
+        let before = (
+            offset(&states, UiOwner::Seat(0)),
+            offset(&states, UiOwner::Seat(1)),
+        );
+        route_ui_input(&mut states, &[scroll, PlayerInput::default()], &shell);
+        assert_near(offset(&states, UiOwner::Global), 0.0);
+        route_ui_input(&mut states, &[PlayerInput::default(), scroll], &shell);
+        assert!(offset(&states, UiOwner::Global) > 0.0);
+        assert_eq!(
+            (
+                offset(&states, UiOwner::Seat(0)),
+                offset(&states, UiOwner::Seat(1))
+            ),
+            before
+        );
+    }
+
+    #[test]
+    fn seat_canvases_cover_their_viewport_at_a_readable_scale() {
+        use crate::render_snapshot::split_screen_viewports;
+        for (width, height, seats, pixel, canvas) in [
+            (1280, 720, 2, 2, (320, 360)),
+            (1280, 720, 4, 2, (320, 180)),
+            (1920, 1080, 2, 3, (320, 360)),
+            (1920, 1080, 4, 2, (480, 270)),
+            (960, 540, 2, 2, (240, 270)),
+            (960, 540, 4, 1, (480, 270)),
+            (2560, 1440, 4, 3, (426, 240)),
+        ] {
+            let screen = UiCanvas::for_framebuffer(width, height, 1.0);
+            for viewport in split_screen_viewports(seats, width, height) {
+                let seat = UiCanvas::for_viewport(screen, viewport);
+                assert_eq!(
+                    (seat.pixel, (seat.width, seat.height)),
+                    (pixel, canvas),
+                    "{width}x{height}, {seats} seats"
+                );
+                assert_eq!((seat.origin_x, seat.origin_y), (viewport.x, viewport.y));
+                // The seat's own view maps onto its whole canvas.
+                let rect = seat.viewport_rect(viewport);
+                assert_near(rect.x, 0.0);
+                assert_near(rect.y, 0.0);
+                assert!(rect.width <= seat.width as f32 && rect.height <= seat.height as f32);
+                // And its canvas maps back inside the viewport (scissor clipping).
+                let points = seat.to_points(seat.rect());
+                assert!(points.x >= viewport.x as f32 - 0.01);
+                assert!(points.x + points.width <= (viewport.x + viewport.width) as f32 + 0.01);
             }
         }
     }

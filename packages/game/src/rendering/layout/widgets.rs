@@ -33,7 +33,7 @@ pub(in crate::rendering) struct UiState {
 impl UiState {
     /// Starts tracking the dialog titled `title`: a different dialog than last frame (or one
     /// reopened after a frame without it) starts scrolled to the top with nothing followed yet.
-    pub(super) fn enter_modal(&mut self, title: &str, scroll_id: &WidgetId) {
+    pub(in crate::rendering) fn enter_modal(&mut self, title: &str, scroll_id: &WidgetId) {
         self.modal_seen = true;
         if self.modal.as_deref() == Some(title) {
             return;
@@ -114,7 +114,7 @@ impl UiState {
         self.focused = Some(self.focus_order[next].clone());
     }
 
-    pub(super) fn scroll_offset(&self, id: &WidgetId) -> f32 {
+    pub(in crate::rendering) fn scroll_offset(&self, id: &WidgetId) -> f32 {
         self.scroll_offsets.get(id).copied().unwrap_or(0.0)
     }
 
@@ -143,7 +143,7 @@ impl UiState {
         self.scroll_offsets.insert(id, next);
     }
 
-    pub(super) fn set_page_step(&mut self, id: WidgetId, step: f32) {
+    pub(in crate::rendering) fn set_page_step(&mut self, id: WidgetId, step: f32) {
         self.page_steps.insert(id, step.max(0.0));
     }
 

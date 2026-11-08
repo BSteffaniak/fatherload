@@ -1471,6 +1471,444 @@ mod tests {
         assert_eq!(game.shell.online.screen, OnlineScreen::JoinMenu);
     }
 
+    /// A fresh world with one rig per entry of `spots`: rig `n` (player `n + 1`) parked at that
+    /// building's door, or in open ground east of town for `None`.
+    fn split_world(spots: &[Option<SurfaceZone>]) -> WorldState {
+        let mut world = new_world();
+        for (index, spot) in spots.iter().enumerate() {
+            let player = PlayerId::new(u64::try_from(index + 1).expect("few seats"));
+            if world.player(player).is_none() {
+                world.add_player(player);
+            }
+            let tile_x = spot.map_or(196, |zone| {
+                SURFACE_BUILDINGS
+                    .iter()
+                    .find(|building| building.zone == zone)
+                    .expect("building exists")
+                    .tile_x
+                    + 2
+            });
+            let rig = world.player_mut(player).expect("rig");
+            #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
+            let x = (tile_x as f32 + 0.5) * TILE_SIZE;
+            rig.x = x;
+        }
+        world
+    }
+
+    /// One frame with `inputs[n]` held by seat `n` (missing seats idle).
+    fn step_seats(game: &mut LocalGame, inputs: &[PlayerInput]) -> FrameReport {
+        game.frame(
+            &FrameInput {
+                primary: inputs.first().copied().unwrap_or_default(),
+                other_seats: inputs.iter().skip(1).copied().collect(),
+                ..FrameInput::default()
+            },
+            DT,
+        )
+    }
+
+    /// Seat `seat` presses `input` for one frame (everyone else idle), then one idle frame.
+    fn press_seat(game: &mut LocalGame, seat: usize, input: PlayerInput) {
+        let mut inputs = vec![PlayerInput::default(); game.seats().len()];
+        inputs[seat] = input;
+        let _report = step_seats(game, &inputs);
+        idle(game, 1);
+    }
+
+    fn interact() -> PlayerInput {
+        PlayerInput {
+            interact: true,
+            ..PlayerInput::default()
+        }
+    }
+
+    fn back_input() -> PlayerInput {
+        PlayerInput {
+            back: true,
+            ..PlayerInput::default()
+        }
+    }
+
+    /// Walks every seat in `seats` (0-based, already inside) to its counter at once, then opens
+    /// it with the use button, all seats in the same frames.
+    fn walk_seats_to_counters(game: &mut LocalGame, seats: &[usize]) {
+        for _ in 0..600 {
+            let mut inputs = vec![PlayerInput::default(); game.seats().len()];
+            let mut walking = false;
+            for &seat in seats {
+                let state = game.shell.seat(seat);
+                let zone = state.interior_zone.expect("seat is inside");
+                let delta = interior_service_x(zone) - state.interior_x;
+                if delta.abs() >= 10.0 {
+                    inputs[seat].horizontal = delta.signum();
+                    walking = true;
+                }
+            }
+            if !walking {
+                break;
+            }
+            let _report = step_seats(game, &inputs);
+        }
+        let mut inputs = vec![PlayerInput::default(); game.seats().len()];
+        for &seat in seats {
+            inputs[seat] = interact();
+        }
+        let _report = step_seats(game, &inputs);
+        idle(game, 1);
+    }
+
+    #[test]
+    fn two_seats_enter_use_and_leave_buildings_independently() {
+        let mut world = split_world(&[Some(SurfaceZone::Depot), Some(SurfaceZone::Shop)]);
+        let second = PlayerId::new(2);
+        world
+            .player_mut(PLAYER)
+            .expect("rig")
+            .cargo
+            .insert(MineralKind::Gold, 3);
+        world.player_mut(PLAYER).expect("rig").credits = 0;
+        world.player_mut(second).expect("rig").credits = 10_000;
+        let mut game = playing(world, 2, "split-counters");
+        assert_eq!(game.seats()[1].player, second);
+        idle(&mut game, 5);
+
+        // Both walk in on the same frame, each into the building at their own rig.
+        let _report = step_seats(&mut game, &[interact(), interact()]);
+        idle(&mut game, 1);
+        assert_eq!(game.shell.seat(0).interior_zone, Some(SurfaceZone::Depot));
+        assert_eq!(game.shell.seat(1).interior_zone, Some(SurfaceZone::Shop));
+        assert_eq!(game.shell.run_mode, RunMode::Playing);
+
+        walk_seats_to_counters(&mut game, &[0, 1]);
+        assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Depot));
+        assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Shop));
+
+        // Selections are per seat.
+        press_seat(&mut game, 1, down());
+        press_seat(&mut game, 1, down());
+        assert_eq!(game.shell.seat(1).selected_menu_item, 2);
+        assert_eq!(
+            game.shell.seat(0).selected_menu_item,
+            1,
+            "player 1's depot still opens on 'sell'"
+        );
+
+        // Player 1 sells their cargo: only they are paid and only their view reports it.
+        let credits_two = player(&game, second).credits;
+        press_seat(&mut game, 0, confirm_input());
+        idle(&mut game, 3);
+        assert!(player(&game, PLAYER).cargo.is_empty());
+        assert!(player(&game, PLAYER).credits > 0);
+        assert_eq!(player(&game, second).credits, credits_two);
+        assert!(
+            game.shell.seat(0).message.starts_with("Sold cargo for"),
+            "{}",
+            game.shell.seat(0).message
+        );
+        assert!(!game.shell.seat(1).message.starts_with("Sold"));
+        assert_eq!(game.shell.seat(0).depot_receipts.len(), 1);
+        assert!(game.shell.seat(1).depot_receipts.is_empty());
+
+        // Player 2 buys the cargo bay they selected, as their own player.
+        let before = player(&game, second);
+        press_seat(&mut game, 1, confirm_input());
+        assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::ShopConfirm));
+        press_seat(&mut game, 1, confirm_input());
+        idle(&mut game, 3);
+        let after = player(&game, second);
+        assert_eq!(after.cargo_bay_level, before.cargo_bay_level + 1);
+        assert!(after.credits < before.credits);
+        assert_eq!(
+            player(&game, PLAYER).cargo_bay_level,
+            before.cargo_bay_level,
+            "player 1's rig is untouched"
+        );
+        assert!(
+            game.shell.seat(1).message.starts_with("Bought"),
+            "{}",
+            game.shell.seat(1).message
+        );
+        assert!(
+            !game.shell.world_should_tick(),
+            "both seats inside: the world rests"
+        );
+
+        // Player 1 leaves; player 2 stays at the counter and the world runs again.
+        press_seat(&mut game, 0, back_input());
+        press_seat(&mut game, 0, back_input());
+        assert!(!game.shell.seat(0).inside());
+        assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Shop));
+        assert!(game.shell.world_should_tick());
+        let tick = game.world().simulation_tick();
+        idle(&mut game, 5);
+        assert!(game.world().simulation_tick() > tick);
+    }
+
+    #[test]
+    fn seat_two_shops_while_seat_one_mines_and_the_world_keeps_ticking() {
+        let mut world = split_world(&[None, Some(SurfaceZone::Shop)]);
+        // Centre player 1's rig over a column so it fits down the shaft it digs.
+        let rig = world.player_mut(PLAYER).expect("rig");
+        rig.x = (rig.x / TILE_SIZE)
+            .floor()
+            .mul_add(TILE_SIZE, TILE_SIZE / 2.0);
+        world.player_mut(PlayerId::new(2)).expect("rig").credits = 10_000;
+        let mut game = playing(world, 2, "split-mine-shop");
+        idle(&mut game, 20);
+        let start = player(&game, PLAYER);
+        let shopper_before = player(&game, PlayerId::new(2));
+
+        press_seat(&mut game, 1, interact());
+        walk_seats_to_counters(&mut game, &[1]);
+        assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Shop));
+
+        let drill = PlayerInput {
+            drill_down: true,
+            ..PlayerInput::default()
+        };
+        let mut ticks = 0;
+        let mut changed = 0;
+        for frame in 0..400 {
+            let shopper = match frame {
+                10 | 20 => confirm_input(),
+                _ => PlayerInput::default(),
+            };
+            let report = step_seats(&mut game, &[drill, shopper]);
+            assert!(
+                report.ticks_run > 0,
+                "the world never pauses for the shopper"
+            );
+            ticks += report.ticks_run;
+            changed += report.changed_tiles.len();
+        }
+        assert!(ticks >= 380, "{ticks}");
+        assert!(changed > 0, "player 1 kept digging");
+        assert!(player(&game, PLAYER).y > start.y + TILE_SIZE);
+        assert_eq!(
+            player(&game, PlayerId::new(2)).drill_strength,
+            shopper_before.drill_strength + 1,
+            "player 2 bought the drill"
+        );
+        assert!(
+            game.shell.seat(1).inside(),
+            "the shopper is still at the counter"
+        );
+    }
+
+    #[test]
+    fn alone_a_building_still_pauses_the_world() {
+        let world = rig_at_building(SurfaceZone::Shop, |rig| rig.credits = 10_000);
+        let mut game = playing(world, 1, "solo-pause");
+        idle(&mut game, 5);
+        press_seat(&mut game, 0, interact());
+        assert!(game.shell.seat(0).inside());
+        for _ in 0..20 {
+            assert_eq!(step(&mut game, PlayerInput::default()).ticks_run, 0);
+        }
+        // A purchase runs just the ticks it needs, then the world rests again.
+        walk_to_counter_inside(&mut game);
+        confirm(&mut game);
+        confirm(&mut game);
+        assert!(game.shell.seat(0).message.starts_with("Bought"));
+        assert_eq!(step(&mut game, PlayerInput::default()).ticks_run, 0);
+        // An outdoor dialog does not pause, as before.
+        press_seat(&mut game, 0, back_input());
+        press_seat(&mut game, 0, back_input());
+        press_seat(
+            &mut game,
+            0,
+            PlayerInput {
+                inventory: true,
+                ..PlayerInput::default()
+            },
+        );
+        assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Inventory));
+        idle(&mut game, 2);
+        assert!(step(&mut game, PlayerInput::default()).ticks_run > 0);
+    }
+
+    /// Walks the only seat (already inside) to its counter and opens it.
+    fn walk_to_counter_inside(game: &mut LocalGame) {
+        walk_seats_to_counters(game, &[0]);
+        assert!(game.shell.seat(0).modal.is_some());
+    }
+
+    #[test]
+    fn any_seat_opens_the_shared_pause_menu_and_drives_it() {
+        let mut game = playing(split_world(&[None, None]), 2, "split-pause");
+        idle(&mut game, 5);
+        press_seat(
+            &mut game,
+            1,
+            PlayerInput {
+                pause: true,
+                ..PlayerInput::default()
+            },
+        );
+        assert_eq!(game.shell.run_mode, RunMode::Paused);
+        assert_eq!(game.shell.menu_seat, 1);
+        for _ in 0..10 {
+            assert_eq!(
+                step_seats(
+                    &mut game,
+                    &[
+                        PlayerInput {
+                            horizontal: 1.0,
+                            ..PlayerInput::default()
+                        },
+                        PlayerInput::default()
+                    ]
+                )
+                .ticks_run,
+                0,
+                "the pause menu pauses everyone"
+            );
+        }
+        press_seat(&mut game, 0, down());
+        assert_eq!(
+            game.shell.selected_pause_item, 0,
+            "player 1 does not drive it"
+        );
+        press_seat(&mut game, 1, down());
+        assert_eq!(game.shell.selected_pause_item, 1, "player 2 does");
+        press_seat(&mut game, 0, back_input());
+        assert_eq!(game.shell.run_mode, RunMode::Paused);
+        press_seat(&mut game, 1, back_input());
+        assert_eq!(game.shell.run_mode, RunMode::Playing);
+        assert!(step(&mut game, PlayerInput::default()).ticks_run > 0);
+    }
+
+    #[test]
+    fn each_seats_input_reaches_only_its_own_menus_and_rig() {
+        let mut game = playing(split_world(&[None, None]), 2, "split-isolation");
+        let second = PlayerId::new(2);
+        idle(&mut game, 20);
+        press_seat(
+            &mut game,
+            1,
+            PlayerInput {
+                inventory: true,
+                ..PlayerInput::default()
+            },
+        );
+        assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Inventory));
+        assert_eq!(game.shell.seat(0).modal, None);
+        assert!(game.shell.gameplay_input_enabled(0));
+        assert!(!game.shell.gameplay_input_enabled(1));
+
+        let (a0, b0) = (player(&game, PLAYER).x, player(&game, second).x);
+        let right = PlayerInput {
+            horizontal: 1.0,
+            ..PlayerInput::default()
+        };
+        for _ in 0..45 {
+            let _report = step_seats(&mut game, &[right, right]);
+        }
+        assert!(player(&game, PLAYER).x > a0 + TILE_SIZE, "player 1 drives");
+        assert!(
+            (player(&game, second).x - b0).abs() < 1.0,
+            "player 2's dialog holds their rig"
+        );
+        // Player 1's Back closes nothing of player 2's.
+        press_seat(&mut game, 0, back_input());
+        assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Inventory));
+        press_seat(&mut game, 1, back_input());
+        assert_eq!(game.shell.seat(1).modal, None);
+    }
+
+    #[test]
+    fn four_seats_each_use_a_different_building() {
+        let zones = [
+            SurfaceZone::Fuel,
+            SurfaceZone::Repair,
+            SurfaceZone::Depot,
+            SurfaceZone::Shop,
+        ];
+        let mut world = split_world(&zones.map(Some));
+        for index in 1..=4 {
+            let rig = world.player_mut(PlayerId::new(index)).expect("rig");
+            rig.fuel = rig.fuel_capacity * 0.5;
+            rig.credits = 5_000;
+        }
+        let mut game = playing(world, 4, "split-four-buildings");
+        idle(&mut game, 5);
+        let _report = step_seats(&mut game, &[interact(); 4]);
+        idle(&mut game, 1);
+        for (seat, zone) in zones.iter().enumerate() {
+            assert_eq!(
+                game.shell.seat(seat).interior_zone,
+                Some(*zone),
+                "seat {seat}"
+            );
+        }
+        assert!(!game.shell.world_should_tick(), "everyone is inside");
+        walk_seats_to_counters(&mut game, &[0, 1, 2, 3]);
+        assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Fuel));
+        assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Repair));
+        assert_eq!(game.shell.seat(2).modal, Some(ModalScreen::Depot));
+        assert_eq!(game.shell.seat(3).modal, Some(ModalScreen::Shop));
+
+        // Player 1 fills up (counter, then confirm): only their rig is refuelled.
+        press_seat(&mut game, 0, confirm_input());
+        press_seat(&mut game, 0, confirm_input());
+        idle(&mut game, 3);
+        let full = |game: &LocalGame, index| {
+            let rig = player(game, PlayerId::new(index));
+            rig.fuel >= rig.fuel_capacity - 0.5
+        };
+        assert!(full(&game, 1));
+        assert!(!full(&game, 4), "player 4's rig is still half empty");
+
+        press_seat(&mut game, 3, back_input());
+        press_seat(&mut game, 3, back_input());
+        assert!(!game.shell.seat(3).inside());
+        assert!(game.shell.world_should_tick(), "player 4 is outside again");
+    }
+
+    #[test]
+    fn loading_puts_every_seat_back_outdoors() {
+        let path = temp_save("split-load");
+        let mut game = LocalGame::new(SettingsFile::default(), SaveTarget::File(path.clone()));
+        game.runtime = Runtime::local(split_world(&[None, Some(SurfaceZone::Shop)]), 2);
+        game.shell.enter_world("test", 0.0);
+        idle(&mut game, 5);
+        let _report = press(
+            &mut game,
+            PlayerInput {
+                save: true,
+                ..PlayerInput::default()
+            },
+        );
+        press_seat(&mut game, 1, interact());
+        walk_seats_to_counters(&mut game, &[1]);
+        press_seat(
+            &mut game,
+            0,
+            PlayerInput {
+                map: true,
+                ..PlayerInput::default()
+            },
+        );
+        assert!(game.shell.seat(1).inside() && game.shell.seat(0).modal.is_some());
+
+        let report = step(
+            &mut game,
+            PlayerInput {
+                load: true,
+                ..PlayerInput::default()
+            },
+        );
+        let _ignored = std::fs::remove_file(&path);
+        assert!(report.world_replaced);
+        assert_eq!(game.seats().len(), 2);
+        for seat in 0..2 {
+            let state = game.shell.seat(seat);
+            assert!(!state.inside() && state.modal.is_none(), "seat {seat}");
+        }
+        assert_eq!(game.shell.run_mode, RunMode::Playing);
+    }
+
     /// Two whole apps (shell + runtime + net bridge) driven frame by frame in real time.
     struct Pair {
         host: LocalGame,
