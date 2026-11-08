@@ -329,6 +329,12 @@ fn default_state_dir() -> PathBuf {
     if let Ok(state_home) = env::var("XDG_STATE_HOME") {
         return PathBuf::from(state_home).join("drillgame");
     }
+    // Windows: %LOCALAPPDATA%\drillgame (HOME is usually unset, and temp gets cleaned).
+    if cfg!(windows)
+        && let Ok(local_app_data) = env::var("LOCALAPPDATA")
+    {
+        return PathBuf::from(local_app_data).join("drillgame");
+    }
     if let Ok(home) = env::var("HOME") {
         return PathBuf::from(home)
             .join(".local")

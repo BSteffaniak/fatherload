@@ -19,6 +19,23 @@ With Nix:
 nix develop -c cargo run --bin drillgame
 ```
 
+### Windows
+
+Builds natively with the MSVC toolchain (`x86_64-pc-windows-msvc`). raylib is compiled from C
+source, so it needs:
+
+- Visual Studio 2022 Build Tools with the C++ workload (provides `cl` and a bundled CMake under
+  `Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin`; put that or any CMake on `PATH`).
+- `libclang.dll` for raylib's bindgen step: install LLVM, or unpack the `libclang` wheel from
+  PyPI, and set `LIBCLANG_PATH` to the folder containing the DLL.
+
+```powershell
+$env:LIBCLANG_PATH = "C:\path\to\folder\with\libclang"
+cargo build --release -p drillgame_game   # target\release\drillgame.exe
+```
+
+Saves and settings go to `%LOCALAPPDATA%\drillgame`.
+
 ## Current Gameplay
 
 Drill below the surface, gather minerals and artifacts, manage fuel/hull/cargo/debt, complete HQ contracts, buy upgrades, use scanners and bombs, and push deeper toward the Star Core. Deeper layers add harder rock, richer ore, artifacts, gas, lava, magma vents, pressure pockets, explosive pockets, falling boulders, cave-ins, and stronger heat pressure.
@@ -105,7 +122,7 @@ Online host/join is hidden in the menus until it is wired onto the same runtime.
 ## Saves and Settings
 
 Files live in `$DRILLGAME_STATE_DIR`, else `$XDG_STATE_HOME/drillgame`, else
-`~/.local/state/drillgame`.
+`%LOCALAPPDATA%\drillgame` on Windows, else `~/.local/state/drillgame`.
 
 - Quick save: `save.json`; save slots: `save-slot-1.json` through `save-slot-3.json`
 - A save (format v4) is the host's `WorldState` plus play time; v1-v3 saves are migrated on load,

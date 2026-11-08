@@ -11,7 +11,7 @@ repository.workspace = true
 version.workspace    = true
 
 [features]
-default          = []
+default = []
 fail-on-warnings = [
     "drillgame_netcode/fail-on-warnings",
     "drillgame_quic_transport/fail-on-warnings",
@@ -30,3 +30,8 @@ getrandom                = { workspace = true }
 raylib                   = { workspace = true }
 serde                    = { workspace = true }
 serde_json               = { workspace = true }
+
+# MSVC's linker rejects the raylib wrapper's references to the models module even though the
+# game never calls them (macOS/Linux linkers drop them), so compile that module in on Windows.
+[target.'cfg(windows)'.dependencies]
+raylib = { workspace = true, features = ["SUPPORT_MODULE_RMODELS"] }

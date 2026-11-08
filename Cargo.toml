@@ -1,5 +1,10 @@
 [workspace]
-members  = ["packages/game", "packages/netcode", "packages/quic_transport", "packages/simulation"]
+members = [
+    "packages/game",
+    "packages/netcode",
+    "packages/quic_transport",
+    "packages/simulation",
+]
 resolver = "2"
 
 [workspace.package]
