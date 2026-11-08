@@ -68,4 +68,4 @@ pub use simulation::{
     ActionEnvelope, NetSimulation, PlayerTickInput, Pose, Relevance, TickEvent, TickInputs,
     TickOutput,
 };
-pub use world::{ActionResolution, WorldEvent};
+pub use world::{ActionResolution, WorldEvent, WorldOp};

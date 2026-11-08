@@ -430,9 +430,9 @@ impl WorldState {
                     .discovered_tiles
                     .get(&player_id)
                     .into_iter()
-                    .flatten()
+                    .flat_map(super::DiscoveredTiles::iter)
                     .filter(|position| {
-                        self.terrain.tile(**position).is_some_and(|tile| {
+                        self.terrain.tile(*position).is_some_and(|tile| {
                             matches!(
                                 tile.kind,
                                 TileKind::Gas

@@ -159,6 +159,7 @@ version = "0.0.1-alpha.0"
 dependencies = [
  "postcard",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

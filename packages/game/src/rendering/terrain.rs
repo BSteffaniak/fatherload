@@ -2,8 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use raylib::prelude::*;
 
-use drillgame_simulation::terrain::{
-    ArtifactKind, MineralKind, TILE_SIZE, Terrain, TileKind, TilePosition, deep_stratum_at_depth,
+use drillgame_simulation::{
+    DiscoveredTiles,
+    terrain::{
+        ArtifactKind, MineralKind, TILE_SIZE, Terrain, TileKind, TilePosition,
+        deep_stratum_at_depth,
+    },
 };
 
 pub(super) const TERRAIN_CHUNK_SIZE_TILES: i32 = 32;
@@ -72,7 +76,7 @@ impl TerrainRenderer {
         raylib: &mut RaylibHandle,
         thread: &RaylibThread,
         terrain: &Terrain,
-        explored: &BTreeSet<TilePosition>,
+        explored: &DiscoveredTiles,
     ) {
         if self.terrain_width != terrain.width() || self.terrain_height != terrain.height() {
             self.recreate_chunks(raylib, thread, terrain);
@@ -154,7 +158,7 @@ impl TerrainChunk {
         raylib: &mut RaylibHandle,
         thread: &RaylibThread,
         terrain: &Terrain,
-        explored: &BTreeSet<TilePosition>,
+        explored: &DiscoveredTiles,
     ) {
         let mut texture_draw = raylib.begin_texture_mode(thread, &mut self.texture);
         texture_draw.clear_background(Color::BLANK);
@@ -168,7 +172,7 @@ impl TerrainChunk {
                     continue;
                 };
 
-                let is_explored = explored.contains(&position);
+                let is_explored = explored.contains(position);
                 if (is_explored || tile_y <= SKY_CLEAR_MAX_TILE_Y) && tile.kind == TileKind::Air {
                     continue;
                 }
@@ -411,10 +415,7 @@ const fn unexplored_depth_darkness_alpha(tile_y: i32) -> u8 {
     (UNEXPLORED_MIN_DARK_ALPHA + (alpha_range * distance) / gradient_span) as u8
 }
 
-fn unexplored_distance_darkness_alpha(
-    explored: &BTreeSet<TilePosition>,
-    position: TilePosition,
-) -> u8 {
+fn unexplored_distance_darkness_alpha(explored: &DiscoveredTiles, position: TilePosition) -> u8 {
     if position.y <= SKY_CLEAR_MAX_TILE_Y {
         return 0;
     }
@@ -430,7 +431,7 @@ fn unexplored_distance_darkness_alpha(
             if distance >= closest_explored_distance {
                 continue;
             }
-            if explored.contains(&TilePosition { x, y }) {
+            if explored.contains(TilePosition { x, y }) {
                 closest_explored_distance = distance;
             }
         }
@@ -536,14 +537,14 @@ mod tests {
 
     #[test]
     fn unexplored_distance_darkness_reaches_full_darkness_far_from_exploration() {
-        let explored = BTreeSet::new();
+        let explored = DiscoveredTiles::default();
         let alpha = unexplored_distance_darkness_alpha(&explored, TilePosition { x: 30, y: 20 });
         assert_eq!(alpha, 255);
     }
 
     #[test]
     fn unexplored_distance_darkness_is_low_near_exploration() {
-        let explored = BTreeSet::from([TilePosition { x: 10, y: 10 }]);
+        let explored = DiscoveredTiles::from_iter([TilePosition { x: 10, y: 10 }]);
 
         let alpha = unexplored_distance_darkness_alpha(&explored, TilePosition { x: 11, y: 10 });
         assert_eq!(alpha, 0);

@@ -491,7 +491,7 @@ impl<S: NetSimulation> ClientSession<S> {
             players,
             far_players,
             entities,
-            terrain_ops,
+            ops,
             sections,
             removed_sections,
             events,
@@ -506,7 +506,7 @@ impl<S: NetSimulation> ClientSession<S> {
             roster,
             players,
             entities,
-            &terrain_ops,
+            &ops,
             sections,
             &removed_sections,
         );
@@ -893,7 +893,7 @@ fn apply_replication<S: NetSimulation>(
     roster: Option<Vec<PlayerId>>,
     players: Vec<(PlayerId, S::PlayerState)>,
     entities: S::Entities,
-    terrain_ops: &[(Tick, S::TerrainOp)],
+    ops: &[(Tick, S::Op)],
     sections: Vec<(S::SectionKey, S::Section)>,
     removed_sections: &[S::SectionKey],
 ) -> Vec<PlayerId> {
@@ -914,8 +914,8 @@ fn apply_replication<S: NetSimulation>(
         authority.apply_player_state(player, state);
     }
     authority.apply_entities(entities);
-    for (_, op) in terrain_ops {
-        authority.apply_terrain_op(op);
+    for (_, op) in ops {
+        authority.apply_op(op);
     }
     for (key, section) in sections {
         authority.apply_section(&key, section);

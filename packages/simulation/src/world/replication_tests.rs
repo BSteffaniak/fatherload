@@ -9,7 +9,7 @@ use super::{
     SectionKey, SectionPayload, WorldState,
     determinism_tests::{scripted_inputs, scripted_world},
 };
-use crate::{LiveEntities, PlayerId, PlayerTickState, SimulationTick, TileChange};
+use crate::{LiveEntities, PlayerId, PlayerTickState, SimulationTick, TickOutput};
 
 /// Round-trips a value through the binary wire codec, as the network would.
 fn wire<T: Serialize + DeserializeOwned>(value: &T) -> T {
@@ -42,7 +42,7 @@ impl Baseline {
 fn replicate_tick(
     replica: &mut WorldState,
     authority: &WorldState,
-    ops: &[TileChange],
+    output: &TickOutput,
     baseline: &mut Baseline,
 ) {
     replica.set_simulation_tick(authority.simulation_tick());
@@ -55,8 +55,11 @@ fn replicate_tick(
     }
     let entities: LiveEntities = wire(&authority.live_entities());
     replica.apply_live_entities(entities);
-    for op in wire(&ops.to_vec()) {
+    for op in wire(&output.terrain_ops) {
         replica.apply_tile_change(&op);
+    }
+    for discovery in wire(&output.discoveries) {
+        replica.apply_discovery(&discovery);
     }
     for (key, payload) in wire(&baseline.changed_sections(authority)) {
         replica.apply_section(key, payload);
@@ -81,7 +84,7 @@ fn keyframe_plus_section_updates_reach_identical_hashes() {
         let inputs = scripted_inputs(tick);
         let output = authority.simulate_tick(SimulationTick::new(tick), &inputs);
         ops_seen += output.terrain_ops.len();
-        replicate_tick(&mut replica, &authority, &output.terrain_ops, &mut baseline);
+        replicate_tick(&mut replica, &authority, &output, &mut baseline);
         assert_eq!(
             replica.simulation_state_hash(),
             authority.simulation_state_hash(),
@@ -133,7 +136,7 @@ fn replica_follows_roster_changes() {
         for id in &roster {
             replica.add_player(*id);
         }
-        replicate_tick(&mut replica, &authority, &output.terrain_ops, &mut baseline);
+        replicate_tick(&mut replica, &authority, &output, &mut baseline);
         assert_eq!(
             replica.simulation_state_hash(),
             authority.simulation_state_hash(),

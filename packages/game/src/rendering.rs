@@ -8,11 +8,14 @@
 
 //! Draws a [`RenderSnapshot`] plus [`ShellState`]. The renderer never reads the simulation.
 
-use std::{cell::RefCell, collections::BTreeSet};
+use std::cell::RefCell;
 
 use raylib::{ffi, prelude::*};
 
-use drillgame_simulation::terrain::{Terrain, TilePosition};
+use drillgame_simulation::{
+    DiscoveredTiles,
+    terrain::{Terrain, TilePosition},
+};
 
 mod interior;
 mod layout;
@@ -51,7 +54,7 @@ pub struct GameRenderer {
     ui_font_assets: UiFontAssets,
     ui_state: RefCell<layout::widgets::UiState>,
     /// Discovered tiles already drawn by the terrain renderer (primary view).
-    explored_drawn: BTreeSet<TilePosition>,
+    explored_drawn: DiscoveredTiles,
 }
 
 struct UiFontAssets {
@@ -133,7 +136,7 @@ impl GameRenderer {
             terrain: TerrainRenderer::new(raylib, thread, terrain),
             ui_font_assets,
             ui_state: RefCell::new(layout::widgets::UiState::default()),
-            explored_drawn: BTreeSet::new(),
+            explored_drawn: DiscoveredTiles::default(),
         }
     }
 
@@ -147,19 +150,19 @@ impl GameRenderer {
     ) {
         if report.world_replaced {
             self.terrain.mark_all_dirty();
-            self.explored_drawn.clear();
+            self.explored_drawn = DiscoveredTiles::default();
         }
         for tile in &report.changed_tiles {
             self.terrain.mark_tile_dirty(*tile);
         }
-        let empty = BTreeSet::new();
+        let empty = DiscoveredTiles::default();
         let explored = snapshot
             .primary_view()
             .and_then(|view| view.explored)
             .unwrap_or(&empty);
         if explored.len() != self.explored_drawn.len() {
             let radius = EXPLORATION_REDRAW_RADIUS_TILES;
-            for tile in explored.difference(&self.explored_drawn) {
+            for tile in explored.newly_discovered_since(&self.explored_drawn) {
                 for (dx, dy) in [
                     (0, 0),
                     (-radius, -radius),

@@ -490,13 +490,8 @@ fn host_output_reports_terrain_ops_for_local_presentation() {
             Vec::new(),
         );
         let output = host.advance(params.tick_duration());
-        assert!(
-            output
-                .terrain_ops
-                .iter()
-                .all(|(tick, _)| *tick <= host.tick())
-        );
-        ops += output.terrain_ops.len();
+        assert!(output.ops.iter().all(|(tick, _)| *tick <= host.tick()));
+        ops += output.ops.len();
     }
     assert!(ops > 0, "drilling produced terrain ops");
 }
@@ -650,7 +645,7 @@ fn toy_sim_replicates_through_trait_surface() {
     for tick in 1..200 {
         inputs.tick = Tick(tick);
         let out = host_world.simulate_tick(&inputs);
-        ops.extend(out.terrain_ops);
+        ops.extend(out.ops);
         inputs
             .players
             .get_mut(&PlayerId(0))
@@ -663,7 +658,7 @@ fn toy_sim_replicates_through_trait_surface() {
     copy.apply_player_state(PlayerId(0), host_world.player_state(PlayerId(0)).unwrap());
     copy.apply_entities(host_world.entities(&crate::Relevance::everything()));
     for op in &ops {
-        copy.apply_terrain_op(op);
+        copy.apply_op(op);
     }
     for key in host_world.section_keys() {
         copy.apply_section(&key, host_world.section(&key).unwrap());

@@ -265,7 +265,6 @@ pub struct PlayerLoadout {
     pub mechanic_level: Option<u8>,
     pub lost_cargo_site: Option<LostCargoSite>,
     pub rescue_count: Option<u32>,
-    pub discovered_tiles: Option<BTreeSet<TilePosition>>,
     pub deep_reward_milestone: Option<i32>,
 }
 
@@ -552,7 +551,7 @@ impl WorldState {
             scanner_cooldown_deadlines: _,
             bomb_detonation_ticks: _,
             rng,
-            discovered_tiles,
+            discovered_tiles: _,
             service_transactions,
         } = self;
         let super::CanonicalProgressionState {
@@ -584,7 +583,6 @@ impl WorldState {
                     mechanic_level: mechanic_levels.get(&player_id).copied(),
                     lost_cargo_site: lost_cargo_sites.get(&player_id).cloned(),
                     rescue_count: rescue_counts.get(&player_id).copied(),
-                    discovered_tiles: discovered_tiles.get(&player_id).cloned(),
                     deep_reward_milestone: deep_reward_milestones.get(&player_id).copied(),
                 }))
             }
@@ -654,7 +652,6 @@ impl WorldState {
                     mechanic_level,
                     lost_cargo_site,
                     rescue_count,
-                    discovered_tiles,
                     deep_reward_milestone,
                 } = *loadout;
                 if let Some(player) = self.players.get_mut(&player_id) {
@@ -665,7 +662,6 @@ impl WorldState {
                 set_or_remove(&mut self.mechanic_levels, player_id, mechanic_level);
                 set_or_remove(&mut self.lost_cargo_sites, player_id, lost_cargo_site);
                 set_or_remove(&mut self.rescue_counts, player_id, rescue_count);
-                set_or_remove(&mut self.discovered_tiles, player_id, discovered_tiles);
                 set_or_remove(
                     &mut self.progression.deep_reward_milestones,
                     player_id,

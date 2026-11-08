@@ -8,15 +8,16 @@
 //!   per submitted action so every action's fate is observable exactly once (an ignored action,
 //!   e.g. a purchase without credits, produces no gameplay event).
 //! * Replication maps one-to-one onto the world's replication sections: per-tick
-//!   [`PlayerTickState`] / [`LiveEntities`], op-log [`TileChange`]s and on-change
-//!   [`SectionKey`] / [`SectionPayload`] sections. The keyframe is the world itself.
+//!   [`PlayerTickState`] / [`LiveEntities`], the op log ([`WorldOp`]: terrain [`TileChange`]s
+//!   and per-player [`Discovery`] reveals) and on-change [`SectionKey`] / [`SectionPayload`]
+//!   sections. The keyframe is the world itself.
 //! * Poses are in tiles, so the netcode's distance tunables (snap threshold, correction epsilon,
 //!   relevance radius) are expressed in tiles.
 
 use drillgame_simulation::{
-    ControlState, GameplayEvent, GameplayEventKind, InputSequence, LiveEntities, PlayerCommand,
-    PlayerScopedCommandOutcome, PlayerTickState, SectionKey, SectionPayload, SimulationTick,
-    TILE_SIZE, TickAction, TileChange, WorldState, input,
+    ControlState, Discovery, GameplayEvent, GameplayEventKind, InputSequence, LiveEntities,
+    PlayerCommand, PlayerScopedCommandOutcome, PlayerTickState, SectionKey, SectionPayload,
+    SimulationTick, TILE_SIZE, TickAction, TileChange, WorldState, input,
 };
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +55,15 @@ pub enum WorldEvent {
         /// What happened.
         resolution: ActionResolution,
     },
+}
+
+/// One op-log entry of the real world.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WorldOp {
+    /// A terrain tile write (shared).
+    Tile(TileChange),
+    /// Tiles one player newly discovered (only that player's map).
+    Discovery(Discovery),
 }
 
 /// Converts a netcode player id to the simulation's.
@@ -104,7 +114,7 @@ impl NetSimulation for WorldState {
     type Event = WorldEvent;
     type PlayerState = PlayerTickState;
     type Entities = LiveEntities;
-    type TerrainOp = TileChange;
+    type Op = WorldOp;
     type SectionKey = SectionKey;
     type Section = SectionPayload;
     type Keyframe = Self;
@@ -136,7 +146,7 @@ impl NetSimulation for WorldState {
     fn simulate_tick(
         &mut self,
         inputs: &TickInputs<ControlState, PlayerCommand>,
-    ) -> TickOutput<WorldEvent, TileChange> {
+    ) -> TickOutput<WorldEvent, WorldOp> {
         debug_assert_eq!(
             self.simulation_tick().get().saturating_add(1),
             inputs.tick.0,
@@ -231,10 +241,9 @@ impl NetSimulation for WorldState {
                 payload: WorldEvent::Gameplay(event),
             });
         }
-        TickOutput {
-            events,
-            terrain_ops: output.terrain_ops,
-        }
+        let mut ops: Vec<WorldOp> = output.terrain_ops.into_iter().map(WorldOp::Tile).collect();
+        ops.extend(output.discoveries.into_iter().map(WorldOp::Discovery));
+        TickOutput { events, ops }
     }
 
     fn predicts_action(action: &PlayerCommand) -> bool {
@@ -274,8 +283,13 @@ impl NetSimulation for WorldState {
         self.apply_live_entities(entities);
     }
 
-    fn apply_terrain_op(&mut self, op: &TileChange) {
-        let _applied = self.apply_tile_change(op);
+    fn apply_op(&mut self, op: &WorldOp) {
+        match op {
+            WorldOp::Tile(change) => {
+                let _applied = self.apply_tile_change(change);
+            }
+            WorldOp::Discovery(discovery) => self.apply_discovery(discovery),
+        }
     }
 
     fn section_keys(&self) -> Vec<SectionKey> {

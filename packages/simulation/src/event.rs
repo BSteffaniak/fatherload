@@ -55,6 +55,8 @@ pub struct TickOutput {
     pub action_outcomes: Vec<ActionOutcome>,
     /// Every terrain tile write this tick, in order (the op-log replication section).
     pub terrain_ops: Vec<crate::terrain::TileChange>,
+    /// Tiles each player newly discovered this tick (op log, private to that player).
+    pub discoveries: Vec<crate::world::Discovery>,
 }
 
 impl TickOutput {

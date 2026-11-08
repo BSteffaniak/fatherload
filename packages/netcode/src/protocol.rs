@@ -14,7 +14,7 @@ use crate::params::{NetTuning, SessionParams};
 use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 
 /// Version byte prefixed to every encoded message.
-pub const PROTOCOL_VERSION: u8 = 1;
+pub const PROTOCOL_VERSION: u8 = 2;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///
@@ -209,7 +209,7 @@ pub struct ServerFrame<S: NetSimulation> {
     /// Relevance-filtered per-tick entities.
     pub entities: S::Entities,
     /// Op-log entries since the previous frame, in order.
-    pub terrain_ops: Vec<(Tick, S::TerrainOp)>,
+    pub ops: Vec<(Tick, S::Op)>,
     /// On-change sections whose hash changed.
     pub sections: Vec<(S::SectionKey, S::Section)>,
     /// On-change sections that no longer exist.

@@ -11,11 +11,10 @@ use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 use drillgame_netcode::{
     ClientPhase, EndReason, HostConfig, HostPhase, HostSession, InterpDelay, LobbyEntry, NetEvent,
     NetTuning, SeatId, SessionParams,
-    world::{ActionResolution, WorldEvent, from_sim_player, to_sim_player},
+    world::{ActionResolution, WorldEvent, WorldOp, from_sim_player, to_sim_player},
 };
 use drillgame_simulation::{
-    ControlState, GameplayEvent, PlayerCommand, PlayerId, TileChange, WorldState,
-    terrain::TilePosition,
+    ControlState, GameplayEvent, PlayerCommand, PlayerId, WorldState, terrain::TilePosition,
 };
 
 use crate::online::{
@@ -532,9 +531,12 @@ impl LocalHost {
                 .map(|event| runtime_event(epoch, event))
                 .collect(),
             changed_tiles: output
-                .terrain_ops
+                .ops
                 .iter()
-                .map(|(_, change): &(_, TileChange)| change.position)
+                .filter_map(|(_, op)| match op {
+                    WorldOp::Tile(change) => Some(change.position),
+                    WorldOp::Discovery(_) => None,
+                })
                 .collect(),
             world_replaced: false,
         }

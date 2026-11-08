@@ -13,7 +13,7 @@
 //! | Kind | Trait surface | Netcode behaviour |
 //! |---|---|---|
 //! | Per-tick | [`NetSimulation::player_state`], [`NetSimulation::entities`] | Full copy in every frame, relevance-filtered (§15) |
-//! | Op log | [`TickOutput::terrain_ops`], [`NetSimulation::apply_terrain_op`] | Exact ops since the client's previous frame, in order |
+//! | Op log | [`TickOutput::ops`], [`NetSimulation::apply_op`] | Exact ops since the client's previous frame, in order |
 //! | On-change | [`NetSimulation::section_keys`] / [`NetSimulation::section_hash`] | Whole section resent when its hash changes (per client baseline) |
 //!
 //! The player roster (which players exist) is replicated by netcode itself
@@ -145,14 +145,14 @@ pub struct TickOutput<E, O> {
     /// Gameplay events, in deterministic order.
     pub events: Vec<TickEvent<E>>,
     /// Terrain (op-log section) changes made this tick, in order.
-    pub terrain_ops: Vec<O>,
+    pub ops: Vec<O>,
 }
 
 impl<E, O> Default for TickOutput<E, O> {
     fn default() -> Self {
         Self {
             events: Vec::new(),
-            terrain_ops: Vec::new(),
+            ops: Vec::new(),
         }
     }
 }
@@ -218,7 +218,7 @@ pub trait NetSimulation: Clone + Debug {
     /// Per-tick replicated live entities (bombs, falling rocks, ...).
     type Entities: Clone + Debug + Serialize + DeserializeOwned;
     /// One op-log change (normally a terrain tile change).
-    type TerrainOp: Clone + Debug + Serialize + DeserializeOwned;
+    type Op: Clone + Debug + Serialize + DeserializeOwned;
     /// Key of an on-change section (e.g. `Market`, `Wallet(PlayerId)`).
     type SectionKey: Clone + Debug + Ord + Serialize + DeserializeOwned;
     /// Payload of an on-change section.
@@ -247,7 +247,7 @@ pub trait NetSimulation: Clone + Debug {
     fn simulate_tick(
         &mut self,
         inputs: &TickInputs<Self::Controls, Self::Action>,
-    ) -> TickOutput<Self::Event, Self::TerrainOp>;
+    ) -> TickOutput<Self::Event, Self::Op>;
 
     /// Whether the client should predict this action locally. Economy
     /// transactions typically return `false` and wait for the server result
@@ -271,11 +271,11 @@ pub trait NetSimulation: Clone + Debug {
 
     /// Whether an op-log entry should be sent to a client with `relevance`.
     /// Defaults to always (filtering requires a far-chunk refresh mechanism).
-    fn terrain_op_relevant(&self, _op: &Self::TerrainOp, _relevance: &Relevance) -> bool {
+    fn op_relevant(&self, _op: &Self::Op, _relevance: &Relevance) -> bool {
         true
     }
     /// Applies one op-log entry.
-    fn apply_terrain_op(&mut self, op: &Self::TerrainOp);
+    fn apply_op(&mut self, op: &Self::Op);
 
     /// Keys of all on-change sections that currently exist.
     fn section_keys(&self) -> Vec<Self::SectionKey>;

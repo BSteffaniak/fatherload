@@ -276,6 +276,44 @@ pub struct TilePosition {
     pub y: i32,
 }
 
+/// Width and height, in tiles, of one terrain chunk (the unit of discovery storage and of
+/// terrain relevance refreshes).
+pub const CHUNK_SIZE_TILES: i32 = 16;
+
+/// A square block of [`CHUNK_SIZE_TILES`] x [`CHUNK_SIZE_TILES`] tiles.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+pub struct ChunkPosition {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl ChunkPosition {
+    /// The chunk containing `tile`.
+    #[must_use]
+    pub const fn of(tile: TilePosition) -> Self {
+        Self {
+            x: tile.x.div_euclid(CHUNK_SIZE_TILES),
+            y: tile.y.div_euclid(CHUNK_SIZE_TILES),
+        }
+    }
+
+    /// The chunk's top-left tile.
+    #[must_use]
+    pub const fn origin(self) -> TilePosition {
+        TilePosition {
+            x: self.x * CHUNK_SIZE_TILES,
+            y: self.y * CHUNK_SIZE_TILES,
+        }
+    }
+
+    /// Index of `tile` inside its chunk, `0..CHUNK_SIZE_TILES^2`, row-major.
+    #[must_use]
+    pub const fn local_index(tile: TilePosition) -> usize {
+        (tile.y.rem_euclid(CHUNK_SIZE_TILES) * CHUNK_SIZE_TILES
+            + tile.x.rem_euclid(CHUNK_SIZE_TILES)) as usize
+    }
+}
+
 /// One terrain tile write: the op-log replication unit.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct TileChange {

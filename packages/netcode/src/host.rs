@@ -74,7 +74,7 @@ pub struct HostOutput<S: NetSimulation> {
     pub events: Vec<NetEvent<S::Event>>,
     /// Every op-log (terrain) change from the ticks run, in order (host presentation, e.g.
     /// marking changed terrain for redraw).
-    pub terrain_ops: Vec<(Tick, S::TerrainOp)>,
+    pub ops: Vec<(Tick, S::Op)>,
     /// Fixed ticks run.
     pub ticks_run: u32,
     /// `(tick, world hash)` after each tick, if enabled.
@@ -86,7 +86,7 @@ impl<S: NetSimulation> Default for HostOutput<S> {
         Self {
             outbound: Vec::new(),
             events: Vec::new(),
-            terrain_ops: Vec::new(),
+            ops: Vec::new(),
             ticks_run: 0,
             tick_hashes: Vec::new(),
         }
@@ -185,7 +185,7 @@ struct RemoteClient<S: NetSimulation> {
     far_due: bool,
     section_hashes: BTreeMap<S::SectionKey, u64>,
     roster_sent: Vec<PlayerId>,
-    pending_ops: Vec<(Tick, S::TerrainOp)>,
+    pending_ops: Vec<(Tick, S::Op)>,
     pending_events: Vec<NetEvent<S::Event>>,
     stats: HostClientStats,
 }
@@ -790,13 +790,13 @@ impl<S: NetSimulation> HostSession<S> {
             }
             remote
                 .pending_ops
-                .extend(result.terrain_ops.iter().map(|op| (tick, op.clone())));
+                .extend(result.ops.iter().map(|op| (tick, op.clone())));
             remote.pending_events.extend(events.iter().cloned());
         }
         output.events.extend(events);
         output
-            .terrain_ops
-            .extend(result.terrain_ops.into_iter().map(|op| (tick, op)));
+            .ops
+            .extend(result.ops.into_iter().map(|op| (tick, op)));
         self.emit_due_frames();
     }
 
@@ -1232,9 +1232,9 @@ fn build_frame<S: NetSimulation>(
         Some(roster)
     };
 
-    let terrain_ops = std::mem::take(&mut remote.pending_ops)
+    let ops = std::mem::take(&mut remote.pending_ops)
         .into_iter()
-        .filter(|(_, op)| world.terrain_op_relevant(op, &relevance))
+        .filter(|(_, op)| world.op_relevant(op, &relevance))
         .collect();
     let events = std::mem::take(&mut remote.pending_events)
         .into_iter()
@@ -1261,7 +1261,7 @@ fn build_frame<S: NetSimulation>(
         players,
         far_players,
         entities: world.entities(&relevance),
-        terrain_ops,
+        ops,
         sections,
         removed_sections,
         events,

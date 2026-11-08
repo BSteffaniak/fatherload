@@ -133,13 +133,8 @@ impl WorldState {
             hash.write_u64(deadline.get());
         }
         hash.write_u64(self.rng.state());
-        for (player_id, discovered) in &self.discovered_tiles {
-            hash.write_u64(player_id.get());
-            hash.write_u64(u64::try_from(discovered.len()).unwrap_or(u64::MAX));
-            for position in discovered {
-                hash.write_i32(position.x);
-                hash.write_i32(position.y);
-            }
+        for player_id in self.discovered_tiles.keys() {
+            self.hash_discovery(*player_id, &mut hash);
         }
         for transaction in &self.service_transactions {
             hash.write_u64(transaction.player_id.get());

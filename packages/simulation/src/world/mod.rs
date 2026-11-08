@@ -41,6 +41,7 @@ mod tests;
 mod tick_rate_tests;
 mod timing;
 
+pub use discovery::{DiscoveredTiles, Discovery};
 pub use replication::{
     ContractsSection, EconomySection, LiveEntities, MarkersSection, PlayerInventory, PlayerLoadout,
     PlayerRig, PlayerTickState, ProgressionSection, SectionKey, SectionPayload, SessionSection,
@@ -206,7 +207,7 @@ pub struct WorldState {
     scanner_cooldown_deadlines: BTreeMap<PlayerId, SimulationTick>,
     bomb_detonation_ticks: Vec<SimulationTick>,
     rng: DeterministicRngState,
-    discovered_tiles: BTreeMap<PlayerId, BTreeSet<TilePosition>>,
+    discovered_tiles: BTreeMap<PlayerId, DiscoveredTiles>,
     service_transactions: Vec<PlayerServiceTransaction>,
 }
 
@@ -257,11 +258,6 @@ impl WorldState {
     #[must_use]
     pub const fn active_drills(&self) -> &BTreeMap<PlayerId, DrillState> {
         &self.active_drills
-    }
-
-    #[must_use]
-    pub const fn discovered_tiles_by_player(&self) -> &BTreeMap<PlayerId, BTreeSet<TilePosition>> {
-        &self.discovered_tiles
     }
 
     #[must_use]
@@ -382,16 +378,7 @@ impl WorldState {
     pub fn discovered_tile_count(&self, player_id: PlayerId) -> usize {
         self.discovered_tiles
             .get(&player_id)
-            .map_or(0, BTreeSet::len)
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) fn discovered_tiles_snapshot(&self, player_id: PlayerId) -> BTreeSet<TilePosition> {
-        self.discovered_tiles
-            .get(&player_id)
-            .cloned()
-            .unwrap_or_default()
+            .map_or(0, DiscoveredTiles::len)
     }
 
     /// Current sale value of one unit of `mineral` (market factor, depot level and world events).

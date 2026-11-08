@@ -19,7 +19,7 @@ use crate::{
 use super::{
     ActiveDrillTimer, CanonicalProgressionState, DeepRunState, LostCargoSite, TickTiming,
     WorldState, canonical_market_factor, canonical_mineral_market_factor, canonical_minerals,
-    progression::MARKET_DAY_MILLIS,
+    discovery::DiscoveredTiles, progression::MARKET_DAY_MILLIS,
 };
 
 /// Seconds-based description of a single-rig world used to construct a canonical [`WorldState`].
@@ -206,7 +206,7 @@ impl WorldState {
                 .map(|bomb| SimulationTick::new(ticks(bomb.timer_seconds)))
                 .collect(),
             rng: DeterministicRngState::new(import.terrain.seed()),
-            discovered_tiles: BTreeMap::from([(player_id, BTreeSet::new())]),
+            discovered_tiles: BTreeMap::from([(player_id, DiscoveredTiles::default())]),
             service_transactions: Vec::new(),
         }
     }

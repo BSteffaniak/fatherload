@@ -447,6 +447,10 @@ mod tests {
         let tick = world.simulation_tick();
         let _output = world.simulate_tick(tick, &TickInputs::default());
         assert!(world.discovered_tile_count(PLAYER) > 0);
-        assert!(world.discovered_tiles_snapshot(PLAYER).contains(&tile));
+        assert!(
+            world
+                .discovered_tiles(PLAYER)
+                .is_some_and(|tiles| tiles.contains(tile))
+        );
     }
 }

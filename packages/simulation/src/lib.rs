@@ -56,6 +56,6 @@ pub use tick::{
 };
 pub use world::{
     ActiveDrillTimer, AuthoritativeMovementStep, CanonicalProgressionState, DeepRunState,
-    LiveEntities, LostCargoSite, PlayerLoadout, PlayerTickState, SectionKey, SectionPayload,
-    TickTiming, WorldImport, WorldState,
+    DiscoveredTiles, Discovery, LiveEntities, LostCargoSite, PlayerLoadout, PlayerTickState,
+    SectionKey, SectionPayload, TickTiming, WorldImport, WorldState,
 };

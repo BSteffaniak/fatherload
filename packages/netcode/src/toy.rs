@@ -529,7 +529,7 @@ impl NetSimulation for ToySim {
     type Event = ToyEvent;
     type PlayerState = ToyPlayer;
     type Entities = ToyEntities;
-    type TerrainOp = ToyTileOp;
+    type Op = ToyTileOp;
     type SectionKey = ToySectionKey;
     type Section = ToySection;
     type Keyframe = Self;
@@ -583,10 +583,7 @@ impl NetSimulation for ToySim {
         }
         self.step_bombs(&mut events, &mut ops);
         self.tick = inputs.tick;
-        TickOutput {
-            events,
-            terrain_ops: ops,
-        }
+        TickOutput { events, ops }
     }
 
     fn predicts_action(action: &ToyAction) -> bool {
@@ -634,7 +631,7 @@ impl NetSimulation for ToySim {
         self.bombs = entities.bombs.into_iter().collect();
     }
 
-    fn apply_terrain_op(&mut self, op: &ToyTileOp) {
+    fn apply_op(&mut self, op: &ToyTileOp) {
         self.set_tile(op.x, op.y, op.tile);
     }
 

@@ -5,12 +5,12 @@
 //! the camera can never disagree with the rig. The renderer reads only this snapshot plus the
 //! shell state; it never touches the simulation directly.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use drillgame_simulation::{
-    CanonicalProgressionState, DrillState, FallingBoulder, HazardCloud, InfrastructureKind,
-    PlacedBomb, PlacedInfrastructure, Player, PlayerId, PlayerSurvivalSnapshot, WorldEventKind,
-    WorldState,
+    CanonicalProgressionState, DiscoveredTiles, DrillState, FallingBoulder, HazardCloud,
+    InfrastructureKind, PlacedBomb, PlacedInfrastructure, Player, PlayerId, PlayerSurvivalSnapshot,
+    WorldEventKind, WorldState,
     terrain::{MineralKind, TILE_SIZE, Terrain, TilePosition},
 };
 
@@ -176,7 +176,7 @@ pub struct ViewSnapshot<'w> {
     pub hud: HudValues,
     pub active_drill: Option<DrillState>,
     /// Tiles this player has discovered.
-    pub explored: Option<&'w BTreeSet<TilePosition>>,
+    pub explored: Option<&'w DiscoveredTiles>,
     pub lost_cargo: Option<(f32, f32)>,
     /// `Some` while the rig is disabled or stranded (rescue prompt).
     pub failure: Option<PlayerSurvivalSnapshot>,
@@ -188,7 +188,7 @@ impl ViewSnapshot<'_> {
     /// Whether a tile is discovered for this view.
     #[must_use]
     pub fn is_explored(&self, position: TilePosition) -> bool {
-        self.explored.is_some_and(|tiles| tiles.contains(&position))
+        self.explored.is_some_and(|tiles| tiles.contains(position))
     }
 }
 
@@ -421,7 +421,7 @@ fn view_snapshot(
             scanner_cooldown_seconds: world.scanner_cooldown_seconds(player_id).unwrap_or(0.0),
         },
         active_drill: world.active_drill(player_id).copied(),
-        explored: world.discovered_tiles_by_player().get(&player_id),
+        explored: world.discovered_tiles(player_id),
         lost_cargo: world
             .lost_cargo_sites()
             .get(&player_id)
