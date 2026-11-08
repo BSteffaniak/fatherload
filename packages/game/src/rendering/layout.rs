@@ -88,7 +88,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
     /// A dialog frame with a title and subtitle; returns the body rect for custom drawing.
     pub(super) fn canvas_modal(&mut self, title: &str, subtitle: &str, summary: &str) -> Rectangle {
         let rect = self.dialog_rect(false);
-        let body = self.modal_frame(title, subtitle, rect, None);
+        let body = self.modal_frame(title, subtitle, rect, None, false);
         ui_kit::text(
             self.draw,
             summary,
@@ -121,7 +121,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
             widgets::UiNode::Scroll(scroll) => scroll.content_height,
             other => other.rect().height,
         };
-        let body = self.modal_frame(title, subtitle, full, Some(content_height));
+        let body = self.modal_frame(title, subtitle, full, Some(content_height), content.warning);
         // Room on the left for the selection cursor.
         let body = Rectangle {
             x: body.x + 8.0,
@@ -156,13 +156,14 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
     }
 
     /// Dims the screen, draws the dialog panel, title, subtitle and divider; returns the body.
-    /// With `content_height` the panel shrinks to fit that much body (centred dialogs only).
+    /// With `content_height` the panel shrinks to fit that much body.
     fn modal_frame(
         &mut self,
         title: &str,
         subtitle: &str,
         mut rect: Rectangle,
         content_height: Option<f32>,
+        warning: bool,
     ) -> Rectangle {
         let placement = current_modal_placement();
         if placement == ModalPlacement::Centred {
@@ -173,17 +174,25 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         let subtitle_lines = i32::try_from(lines.len().min(2)).unwrap_or(1);
         let header =
             10 + TextStyle::Title.height() + 3 + subtitle_lines * TextStyle::Body.line_height() + 8;
-        if let (Some(content), ModalPlacement::Centred) = (content_height, placement) {
-            let wanted = (header as f32 + content + 14.0).ceil().max(120.0);
+        if let Some(content) = content_height {
+            let wanted = (header as f32 + content + 14.0).ceil().max(72.0);
             if wanted < rect.height {
-                rect.y = (rect.y + (rect.height - wanted) * 0.5).floor();
+                // Centred dialogs stay centred; counter panels keep their top edge.
+                if placement == ModalPlacement::Centred {
+                    rect.y = (rect.y + (rect.height - wanted) * 0.5).floor();
+                }
                 rect.height = wanted;
             }
         }
-        ui_kit::panel(self.draw, rect, PanelStyle::Accent);
+        let (style, title_color) = if warning {
+            (PanelStyle::Warning, ORANGE)
+        } else {
+            (PanelStyle::Accent, GOLD)
+        };
+        ui_kit::panel(self.draw, rect, style);
         let x = rect.x as i32 + 12;
         let mut y = rect.y as i32 + 10;
-        ui_kit::text(self.draw, title, x, y, TextStyle::Title, GOLD);
+        ui_kit::text(self.draw, title, x, y, TextStyle::Title, title_color);
         y += TextStyle::Title.height() + 3;
         for line in lines.iter().take(2) {
             ui_kit::text(self.draw, line, x, y, TextStyle::Body, FOG);
@@ -372,6 +381,7 @@ impl StatItem {
 pub(super) struct ModalContent {
     sections: Vec<Section>,
     compact: bool,
+    warning: bool,
 }
 
 impl ModalContent {
@@ -379,7 +389,14 @@ impl ModalContent {
         Self {
             sections,
             compact: false,
+            warning: false,
         }
+    }
+
+    /// A warning dialog (red frame and title): failures and emergencies.
+    pub(super) const fn warning(mut self) -> Self {
+        self.warning = true;
+        self
     }
 
     /// A narrow dialog for short menus (title, pause, confirmations).

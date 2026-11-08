@@ -534,20 +534,28 @@ fn draw_service_modal_ui(
     title: &str,
     service: &str,
 ) {
-    let mut items = Vec::new();
     let hud = ui.view.hud;
-    if service == "fuel" {
-        let (fuel, capacity, credits) = (hud.fuel, hud.fuel_capacity, hud.credits);
-        let missing = (capacity - fuel).ceil().max(0.0) as u32;
-        items.push(SectionItem::text(format!(
-            "Tank: {fuel:.0}/{capacity:.0}. Fill cost: {missing} cr. Credits: {credits}."
-        )));
+    let mut items = if service == "fuel" {
+        let missing = (hud.fuel_capacity - hud.fuel).ceil().max(0.0) as u32;
+        vec![
+            SectionItem::meter("Fuel tank", hud.fuel, hud.fuel_capacity, AMBER, RED),
+            SectionItem::icon_stat(&icons::FUEL, "Fill cost", format!("{missing} cr"), GOLD),
+        ]
     } else {
-        let (hull, capacity, credits) = (hud.hull, hud.max_hull, hud.credits);
-        items.push(SectionItem::text(format!(
-            "Hull: {hull:.0}/{capacity:.0}. Credits available: {credits}."
-        )));
-    }
+        vec![SectionItem::meter(
+            "Hull integrity",
+            hud.hull,
+            hud.max_hull,
+            LEAF,
+            RED,
+        )]
+    };
+    items.push(SectionItem::icon_stat(
+        &icons::CREDITS,
+        "Credits",
+        hud.credits.to_string(),
+        GOLD,
+    ));
     for (index, option) in ["Small 25%", "Half 50%", "Full 100%"].iter().enumerate() {
         items.push(SectionItem::stat(
             selected_label(index == ui.shell.selected_menu_item, option),
@@ -1213,7 +1221,9 @@ pub(super) fn draw_game_over(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
                 }),
                 SectionItem::stat("Rescues called", ui.view.rescue_count.to_string(), MIST),
             ],
-        )]),
+        )])
+        .warning()
+        .compact(),
     );
 }
 
