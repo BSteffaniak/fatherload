@@ -15,15 +15,20 @@ The quickest way to see the whole kit is the `art_gallery` capture scene (see
 | `rendering/pixel_art/palette.rs` | The palette constants and `PALETTE` list. |
 | `rendering/pixel_art/sprite.rs` | `SpriteDef`, `NineSlice`, atlas packing/rasterizing, draw helpers. |
 | `rendering/pixel_art/shade.rs` | Palette indices, the one-step-darker ramp walk (`darker`) and the 4x4 Bayer dither. |
-| `rendering/pixel_art/sprites/*.rs` | All sprite data: `ui` (frames), `icons`, `rig`, `interior`, `terrain` (ore/artifact stamps, cracks), `world` (props, infrastructure). |
+| `rendering/pixel_art/sprites/*.rs` | All sprite data: `ui` (frames), `icons` (rig stats, minerals), `menu_icons` (menu rows, counters, roster), `rig`, `interior`. |
 | `rendering/pixel_art/font.rs` | The bitmap UI font (regular + derived bold). |
 | `rendering/ui_kit.rs` | UI canvas + widgets (panels, buttons, bars, rows, tabs, tooltips...). |
 | `rendering/layout.rs` | Menu/modal content model drawn with the UI kit. |
-| `rendering/screen.rs` | HUD, minimap, depth ruler and every menu/modal screen. |
+| `rendering/screen.rs` | HUD (stats, wallet + tool chips, warning badges), toasts, minimap, depth ruler, inventory, map, help. |
 | `rendering/terrain.rs` + `terrain/{tile_art,fog}.rs` | Terrain chunks, the procedural tile art and the exploration fog. |
 | `rendering/world.rs` + `world/{sky,buildings,rig,fx}.rs` | Everything in world space: sky and parallax, the town, rigs, props and effects. |
-| `rendering/interior.rs` | The walk-in building rooms. |
+| `rendering/interior.rs` | The walk-in building rooms (shell, door, lamps, sign, counter, keeper, shop dressing). |
+| `rendering/counters.rs` | Every building's counter panel and the receipt-style purchase confirmations. |
+| `rendering/menus.rs` | Pause, options, save/load slots, exit confirmations, rescue prompt, online screens and lobby. |
+| `rendering/title.rs` | The title screen: claim cross-section backdrop (shared by online screens), logo, menu. |
+| `rendering/interior/props.rs` | Each non-shop room's furniture and counter-top details. |
 | `rendering/gallery.rs` | The art reference sheet. |
+| `rendering/ui_sheet.rs` | The UI reference sheet: menu icons and props at 1x and 3x. |
 
 ## Palette
 
@@ -133,10 +138,23 @@ ui_kit::text(draw, "label", x, y, TextStyle::Bold, GOLD);
 Menus and dialogs should go through `layout::UiLayout::modal_with_render_plan` with a
 `ModalContent` of `Section`s: `SectionItem::stat` (label/value row; selectable when the label is
 prefixed `"> "`/`"  "`), `icon_stat`, `item` (icon + label + detail + price rows, the shop
-style), `meter` and `text`. `ModalContent::compact()` narrows short menus, `.warning()` gives
-the red frame. Dialogs shrink to their content; inside a building they dock on the left
-(`ModalPlacement::Counter`) so the counter, keeper and rig stay visible. Content taller than
-the panel scrolls, and a thin amber scroll bar in the right margin shows that more rows exist.
+style; prefer it for every selectable row so each choice carries an icon), `meter`, `text` and
+`field` (text entry well with caret). `ModalContent::compact()` narrows short menus,
+`.warning()` gives the red frame, `.footer(text)` pins a description (the selected row's
+details) under the scrolling content. Dialogs shrink to their content; inside a building they
+dock on the left (`ModalPlacement::Counter`) so the counter, keeper and rig stay visible.
+Content taller than the panel scrolls, a thin amber scroll bar shows that more rows exist, and
+a newly selected row is scrolled into view (a different dialog title starts at the top).
+
+Counter rows (`counters.rs`) must mirror, index for index, the request the shell submits for
+that menu item, so a label always says what Enter does. Show prices with the coin, payouts as
+`+N` in `LIME`, tags (`FREE`, `READY`, `MAX`) for non-price values, and grey out (disabled)
+rows that cannot be used, keeping the price `RED` when credits are the reason. Selected rows
+draw every value in `INK` on the amber face; disabled rows grey every tag except red prices.
+
+Shell messages appear as a toast (`screen::draw_toast`) for four seconds after they change
+(`ShellState::message_tick`), beside the counter dialog inside buildings; refusals get the red
+frame.
 
 Screen colour roles: titles `GOLD` (warnings `ORANGE`), section headings `SKY_LIGHT` (or a role
 colour), labels `MIST`, values `BONE`/`GOLD`, hints `FOG`, selection `AMBER` face with `INK`
@@ -147,16 +165,23 @@ text, unaffordable prices `RED` on a disabled row.
 - **HUD** (`screen::draw_view_hud`): stats panel with hull/fuel/cargo stat bars top-left,
   credits + depth panel top-right, blinking warning badges below the stats, framed minimap
   bottom-right, depth gauge down the right edge.
-- **Upgrade Shop interior** (`interior.rs`, `draw_shop_props`): the fully dressed room. Every
-  building is a walk-in room with the same structure (ceiling, brick wall, wainscot, floor,
-  exit door, sign, lamp, counter + keeper) in its own colours via `interior_set!`; dress the
-  others like the shop. The rig walks in the shell's room units (`interior_x / 2` = art x), so
-  door and counter positions must keep following `shell::interior_service_x`.
+- **Interiors** (`interior.rs` + `interior/props.rs`): every building is a walk-in room with the
+  same structure (ceiling, wall, wainscot, floor, exit door, sign, lamps, counter + keeper) in
+  its own wall pattern and colours via `interior_set!` (brick, glazed tiles, dressed stone,
+  wood panelling, marble, boards, corrugated sheet), dressed with its own furniture between
+  the door and the counter and right of it, and counter-top details (register, scale,
+  monitor, teller bars, goods). Room props are drawn from rectangles and sprites in room art
+  pixels only (no raylib circles: use `props::disc`). The rig walks in the shell's room units
+  (`interior_x / 2` = art x), so door and counter positions must keep following
+  `shell::interior_service_x`.
+- **Counters** (`counters.rs`): the Upgrade Shop and Salvage Yard panels show the full row
+  vocabulary (prices, payouts, tags, locked rows, details footer).
+- **Title** (`title.rs`): the logo uses `ui_kit::display_text` at 4x (3x below 340 canvas rows)
+  with an ink outline, maroon drop shadow and gold/amber/cream bands.
 
 - **World** (`world.rs`): see [World art](#world-art).
 
-Still placeholder (next steps): the map modal, the title screen backdrop, and dressing for the
-seven non-shop interiors.
+Still placeholder (next steps): the map modal's drawing.
 
 ## World art
 
@@ -227,13 +252,16 @@ resolution, then the app exits. Use the release build (terrain rebuilds are slow
 Keep captures under `target/` (never commit them). macOS `sips` can crop and enlarge a PNG for a
 close look at individual pixels.
 
-Scenes: `art_gallery`, `title`, `surface_town`, `town_west`, `town_market`, `town_east`,
-`surface_flying`, `shallow_dig`, `mid_depth_ores`, `deep_lava`, `interior_fuel`, `interior_repair`,
-`interior_depot`, `interior_hq`, `interior_shop`, `interior_bank`, `interior_explosives`,
-`interior_salvage`, `interior_shop_walk`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
-`modal_exit_confirm`, `modal_inventory`, `map`, `online_lobby_host`, `split_screen`,
-`rescue_prompt`, `lost_cargo`, `world_props`, `drill_side`, `remote_rigs`, `bomb_blast`,
-`gas_leak`, `cave_in`, `deep_crystal_faults`, `deep_void_geodes`.
+Scenes (see `--list`): `art_gallery`, `ui_sheet`, `title`, world scenes (`surface_town`, `town_west`, `town_market`, `town_east`,
+`surface_flying`, `shallow_dig`, `mid_depth_ores`, `deep_lava`, `lost_cargo`, `world_props`,
+`drill_side`, `remote_rigs`, `bomb_blast`, `gas_leak`, `cave_in`, `deep_crystal_faults`,
+`deep_void_geodes`), every
+`interior_<building>` with its counter open, `interior_shop_walk`, every `room_<building>` with
+no panel open, `toast_receipt`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
+`modal_exit_confirm`, `modal_inventory`, `modal_options`, `modal_save_slots`, `map`,
+`online_lobby_host`, `online_lobby_client`, `online_join_address`, `online_lan_browser`,
+`net_overlay`, `split_screen`, `rescue_prompt`. Check UI changes at 1280x720, 1920x1080 and the
+960x540 minimum.
 
 Adding a scene: append a `Scene { name, summary, setup }` to `scene_capture::SCENES`. `setup`
 gets a `SceneStage`: `play(seats, |world, seats| ..)` enters a staged world (helpers
