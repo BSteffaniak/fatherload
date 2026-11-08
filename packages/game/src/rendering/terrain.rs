@@ -90,9 +90,14 @@ impl TerrainRenderer {
         }
     }
 
-    pub(super) fn draw(&self, draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>, camera: Vector2) {
+    /// Draws the chunks overlapping `visible_world` (world pixels).
+    pub(super) fn draw(
+        &self,
+        draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
+        visible_world: Rectangle,
+    ) {
         for chunk in self.chunks.values() {
-            if chunk.is_visible(camera) {
+            if chunk.is_visible(visible_world) {
                 chunk.draw(draw);
             }
         }
@@ -252,16 +257,22 @@ impl TerrainChunk {
         );
     }
 
-    fn is_visible(&self, camera: Vector2) -> bool {
-        let world_x = self.tile_min_x as f32 * TILE_SIZE;
-        let world_y = self.tile_min_y as f32 * TILE_SIZE;
-        let width = self.pixel_width as f32;
-        let height = self.pixel_height as f32;
-        world_x + width >= camera.x
-            && world_x <= camera.x + super::SCREEN_WIDTH as f32
-            && world_y + height >= camera.y
-            && world_y <= camera.y + super::SCREEN_HEIGHT as f32
+    fn is_visible(&self, visible_world: Rectangle) -> bool {
+        rects_overlap(
+            Rectangle::new(
+                self.tile_min_x as f32 * TILE_SIZE,
+                self.tile_min_y as f32 * TILE_SIZE,
+                self.pixel_width as f32,
+                self.pixel_height as f32,
+            ),
+            visible_world,
+        )
     }
+}
+
+/// Whether two rectangles touch or overlap (edges count, so a chunk on the border still draws).
+fn rects_overlap(a: Rectangle, b: Rectangle) -> bool {
+    a.x + a.width >= b.x && a.x <= b.x + b.width && a.y + a.height >= b.y && a.y <= b.y + b.height
 }
 
 fn draw_tile_texture<D: RaylibDraw>(
@@ -518,6 +529,28 @@ const fn chunk_position_for_tile(position: TilePosition) -> ChunkPosition {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chunk_culling_uses_the_visible_world_rectangle() {
+        let chunk = Rectangle::new(1_000.0, 500.0, 256.0, 256.0);
+        // 1920x1080 at 1.5x shows 1280x720 world pixels; a 2560x1080 ultrawide shows ~1707.
+        assert!(!rects_overlap(
+            chunk,
+            Rectangle::new(-400.0, 0.0, 1280.0, 720.0)
+        ));
+        assert!(rects_overlap(
+            chunk,
+            Rectangle::new(-400.0, 0.0, 1706.7, 720.0)
+        ));
+        assert!(rects_overlap(
+            chunk,
+            Rectangle::new(1_256.0, 756.0, 10.0, 10.0)
+        ));
+        assert!(!rects_overlap(
+            chunk,
+            Rectangle::new(1_000.0, 757.0, 10.0, 10.0)
+        ));
+    }
 
     #[test]
     fn unexplored_depth_darkness_keeps_sky_clear() {

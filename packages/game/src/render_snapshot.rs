@@ -16,10 +16,32 @@ use drillgame_simulation::{
 
 use crate::{effects::SparkParticle, runtime::LocalSeat, runtime::RuntimeEvent};
 
-/// Logical screen width the views are laid out in.
+/// Default (and reference) logical window width, in screen points.
 pub const SCREEN_WIDTH: i32 = 1280;
-/// Logical screen height the views are laid out in.
+/// Default (and reference) logical window height, in screen points.
 pub const SCREEN_HEIGHT: i32 = 720;
+
+/// World pixels that fit vertically on the screen, whatever the window height. The world zoom is
+/// `screen height / WORLD_VIEW_HEIGHT`, so a taller window draws the same slice of the mine
+/// larger and crisper instead of revealing more of it. Wider windows still see more horizontally.
+/// Tune this to zoom the whole game in (smaller) or out (larger).
+pub const WORLD_VIEW_HEIGHT: f32 = 720.0;
+/// Smallest world zoom (world pixel -> screen point) the window height can produce.
+pub const MIN_WORLD_SCALE: f32 = 0.5;
+/// Largest world zoom (world pixel -> screen point) the window height can produce.
+pub const MAX_WORLD_SCALE: f32 = 4.0;
+
+/// Screen points per world pixel for a screen `screen_height` points tall. Based on the whole
+/// screen, not one split-screen view, so every local view draws the world at the same scale.
+#[must_use]
+pub fn world_scale_for_screen(screen_height: i32) -> f32 {
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "window heights are far below f32's exact integer range"
+    )]
+    let height = screen_height.max(1) as f32;
+    (height / WORLD_VIEW_HEIGHT).clamp(MIN_WORLD_SCALE, MAX_WORLD_SCALE)
+}
 
 /// Every mineral, in market display order.
 pub const MINERALS: [MineralKind; 10] = [
@@ -168,8 +190,11 @@ pub struct ViewSnapshot<'w> {
     /// Seat order index (0 = primary).
     pub seat_index: usize,
     pub player_id: PlayerId,
+    /// Where the view sits on screen, in logical screen points.
     pub viewport: Viewport,
-    /// Follows `player` exactly.
+    /// Screen points per world pixel (see [`world_scale_for_screen`]).
+    pub world_scale: f32,
+    /// Top-left of the visible world (world pixels); centres `player` in the viewport.
     pub camera: CameraPosition,
     /// The seat's rig (inventory, upgrades, loan, kits...).
     pub player: &'w Player,
@@ -185,6 +210,12 @@ pub struct ViewSnapshot<'w> {
 }
 
 impl ViewSnapshot<'_> {
+    /// Size of the world area this view shows, in world pixels.
+    #[must_use]
+    pub fn visible_world_size(&self) -> (f32, f32) {
+        visible_world_size(self.viewport, self.world_scale)
+    }
+
     /// Whether a tile is discovered for this view.
     #[must_use]
     pub fn is_explored(&self, position: TilePosition) -> bool {
@@ -243,12 +274,13 @@ impl<'w> RenderSnapshot<'w> {
         events: &'w [RuntimeEvent],
     ) -> Self {
         let viewports = split_screen_viewports(seats.len(), screen.0, screen.1);
+        let world_scale = world_scale_for_screen(screen.1);
         let views = seats
             .iter()
             .zip(viewports)
             .enumerate()
             .filter_map(|(seat_index, (seat, viewport))| {
-                view_snapshot(world, seat_index, seat.player, viewport)
+                view_snapshot(world, seat_index, seat.player, viewport, world_scale)
             })
             .collect();
         Self {
@@ -309,7 +341,7 @@ impl<'w> RenderSnapshot<'w> {
         }
         for view in &mut self.views {
             if let Some(&(x, y)) = poses.get(&view.player_id) {
-                view.camera = camera_for(view.viewport, x, y);
+                view.camera = camera_for(view.viewport, view.world_scale, x, y);
             }
         }
     }
@@ -378,15 +410,24 @@ impl<'w> RenderSnapshot<'w> {
     }
 }
 
-/// The camera that centres world pixel `(x, y)` in `viewport`.
-const fn camera_for(viewport: Viewport, x: f32, y: f32) -> CameraPosition {
+/// World pixels a `viewport` (screen points) shows at `world_scale` screen points per world pixel.
+#[must_use]
+pub fn visible_world_size(viewport: Viewport, world_scale: f32) -> (f32, f32) {
     #[allow(
         clippy::cast_precision_loss,
-        reason = "bounded viewport dimensions convert to camera pixels"
+        reason = "bounded viewport dimensions convert to world pixels"
     )]
+    let (width, height) = (viewport.width as f32, viewport.height as f32);
+    let scale = world_scale.max(f32::EPSILON);
+    (width / scale, height / scale)
+}
+
+/// The camera (top-left, world pixels) that centres world pixel `(x, y)` in `viewport`.
+fn camera_for(viewport: Viewport, world_scale: f32, x: f32, y: f32) -> CameraPosition {
+    let (width, height) = visible_world_size(viewport, world_scale);
     CameraPosition {
-        x: (viewport.width as f32).mul_add(-0.5, x),
-        y: (viewport.height as f32).mul_add(-0.5, y),
+        x: width.mul_add(-0.5, x),
+        y: height.mul_add(-0.5, y),
     }
 }
 
@@ -395,9 +436,10 @@ fn view_snapshot(
     seat_index: usize,
     player_id: PlayerId,
     viewport: Viewport,
+    world_scale: f32,
 ) -> Option<ViewSnapshot<'_>> {
     let player = world.player(player_id)?;
-    let camera = camera_for(viewport, player.x, player.y);
+    let camera = camera_for(viewport, world_scale, player.x, player.y);
     #[allow(
         clippy::cast_possible_truncation,
         reason = "bounded world depth is displayed in whole tiles"
@@ -407,6 +449,7 @@ fn view_snapshot(
         seat_index,
         player_id,
         viewport,
+        world_scale,
         camera,
         player,
         hud: HudValues {
@@ -459,6 +502,106 @@ mod tests {
         let view = snapshot.primary_view().expect("view");
         assert!((view.camera.x - (x - 640.0)).abs() < f32::EPSILON);
         assert!((view.camera.y - (y - 360.0)).abs() < f32::EPSILON);
+    }
+
+    const SCREEN_SIZES: [(i32, i32); 6] = [
+        (960, 540),
+        (1280, 720),
+        (1920, 1080),
+        (2560, 1080),
+        (2560, 1440),
+        (1100, 900),
+    ];
+
+    fn assert_near(actual: f32, expected: f32) {
+        assert!((actual - expected).abs() < 1e-3, "{actual} != {expected}");
+    }
+
+    #[test]
+    fn world_scale_keeps_the_vertical_world_span_constant() {
+        assert_near(world_scale_for_screen(720), 1.0);
+        assert_near(world_scale_for_screen(1080), 1.5);
+        assert_near(world_scale_for_screen(540), 0.75);
+        assert_near(world_scale_for_screen(1440), 2.0);
+        assert_near(world_scale_for_screen(0), MIN_WORLD_SCALE);
+        assert_near(world_scale_for_screen(100_000), MAX_WORLD_SCALE);
+        for (width, height) in SCREEN_SIZES {
+            let scale = world_scale_for_screen(height);
+            let (_, visible_height) = visible_world_size(Viewport::new(0, 0, width, height), scale);
+            assert_near(visible_height, WORLD_VIEW_HEIGHT);
+        }
+    }
+
+    #[test]
+    fn wider_screens_see_more_world_horizontally() {
+        let (ultrawide, _) = visible_world_size(
+            Viewport::new(0, 0, 2560, 1080),
+            world_scale_for_screen(1080),
+        );
+        let (standard, _) = visible_world_size(
+            Viewport::new(0, 0, 1920, 1080),
+            world_scale_for_screen(1080),
+        );
+        assert_near(standard, 1280.0);
+        assert_near(ultrawide, 2560.0 / 1.5);
+    }
+
+    #[test]
+    fn viewports_tile_the_screen_at_any_size() {
+        for (width, height) in SCREEN_SIZES {
+            for count in 1..=4 {
+                let views = split_screen_viewports(count, width, height);
+                let area: i32 = views.iter().map(|view| view.width * view.height).sum();
+                if count == 3 {
+                    // Three views leave the fourth grid cell empty.
+                    assert!(area < width * height);
+                } else {
+                    assert_eq!(area, width * height, "{count} views at {width}x{height}");
+                }
+                for view in &views {
+                    assert!(view.x >= 0 && view.y >= 0);
+                    assert!(view.x + view.width <= width && view.y + view.height <= height);
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, reason = "test viewports are small")]
+    fn each_split_view_centres_its_own_rig_at_any_size() {
+        let rigs = [(1_000.0, 450.0), (3_000.0, 2_000.0)];
+        for (width, height) in SCREEN_SIZES {
+            let scale = world_scale_for_screen(height);
+            for (viewport, (x, y)) in split_screen_viewports(2, width, height)
+                .into_iter()
+                .zip(rigs)
+            {
+                let camera = camera_for(viewport, scale, x, y);
+                let (visible_width, visible_height) = visible_world_size(viewport, scale);
+                assert_near(visible_width.mul_add(0.5, camera.x), x);
+                assert_near(visible_height.mul_add(0.5, camera.y), y);
+                // The rig lands at the viewport's centre in screen points.
+                assert_near((x - camera.x) * scale, viewport.width as f32 * 0.5);
+                assert_near((y - camera.y) * scale, viewport.height as f32 * 0.5);
+            }
+        }
+    }
+
+    #[test]
+    fn snapshot_cameras_use_the_screen_world_scale() {
+        let rig = PlayerId::new(1);
+        let world = WorldState::new_game(rig);
+        let seats = [LocalSeat {
+            seat: drillgame_netcode::SeatId(0),
+            player: rig,
+        }];
+        let mut snapshot = RenderSnapshot::build(&world, &seats, (1920, 1080), &[], &[]);
+        let (x, y) = (1_000.0, 450.0);
+        snapshot.apply_pose_overrides(&BTreeMap::from([(rig, (x, y))]));
+        let view = snapshot.primary_view().expect("view");
+        assert_near(view.world_scale, 1.5);
+        assert_near(view.camera.x, x - 640.0);
+        assert_near(view.camera.y, y - 360.0);
     }
 
     #[test]

@@ -38,15 +38,38 @@ use crate::{
     shell::{RunMode, ShellState},
 };
 
-pub use crate::render_snapshot::{SCREEN_HEIGHT, SCREEN_WIDTH};
-
 /// Radius (tiles) around a newly explored tile whose darkness gradient changes.
 const EXPLORATION_REDRAW_RADIUS_TILES: i32 = 12;
 
+/// Physical framebuffer pixels per logical screen point (2.0 on Retina, 1.0 otherwise).
+///
+/// Outside a camera raylib scales logical points to the framebuffer itself, but `BeginMode2D`
+/// replaces that transform, so a `Camera2D`'s offset and zoom are in physical pixels and must be
+/// multiplied by this factor.
 fn render_scale_for_draw(draw: &RaylibDrawHandle<'_>) -> f32 {
-    let scale_x = draw.get_render_width() as f32 / draw.get_screen_width().max(1) as f32;
-    let scale_y = draw.get_render_height() as f32 / draw.get_screen_height().max(1) as f32;
+    pixel_density(
+        (draw.get_render_width(), draw.get_render_height()),
+        (draw.get_screen_width(), draw.get_screen_height()),
+    )
+}
+
+fn pixel_density(render: (i32, i32), screen: (i32, i32)) -> f32 {
+    let scale_x = render.0 as f32 / screen.0.max(1) as f32;
+    let scale_y = render.1 as f32 / screen.1.max(1) as f32;
     scale_x.min(scale_y).max(1.0)
+}
+
+/// The physical-pixel `Camera2D` that draws world pixel `camera` (top-left) at the viewport's
+/// top-left corner, `world_scale` screen points per world pixel on a `density` display.
+fn view_camera_2d(
+    viewport: crate::render_snapshot::Viewport,
+    camera: Vector2,
+    world_scale: f32,
+    density: f32,
+) -> Camera2D {
+    let mut view_camera = world_camera(camera, world_scale * density);
+    view_camera.offset = Vector2::new(viewport.x as f32 * density, viewport.y as f32 * density);
+    view_camera
 }
 
 pub struct GameRenderer {
@@ -278,14 +301,14 @@ impl GameRenderer {
             begin_view_clip(viewport);
         }
         let camera = Vector2::new(view.camera.x, view.camera.y);
-        let world_zoom = render_scale_for_draw(draw);
+        let (visible_width, visible_height) = view.visible_world_size();
+        let density = render_scale_for_draw(draw);
         {
-            let mut view_camera = world_camera(camera, world_zoom);
-            view_camera.offset = Vector2::new(viewport.x as f32, viewport.y as f32);
+            let view_camera = view_camera_2d(viewport, camera, view.world_scale, density);
             let mut world_draw = draw.begin_mode2D(view_camera);
             draw_world(
                 &mut world_draw,
-                camera,
+                Rectangle::new(camera.x, camera.y, visible_width, visible_height),
                 &self.terrain,
                 snapshot.terrain,
                 snapshot.infrastructure,
@@ -389,6 +412,60 @@ mod tests {
             (actual - expected).abs() < f32::EPSILON,
             "{actual} != {expected}"
         );
+    }
+
+    #[test]
+    fn pixel_density_is_render_pixels_per_screen_point() {
+        assert_near(pixel_density((2560, 1440), (1280, 720)), 2.0);
+        assert_near(pixel_density((1920, 1080), (1920, 1080)), 1.0);
+        assert_near(pixel_density((0, 0), (0, 0)), 1.0);
+    }
+
+    /// Where a `Camera2D` puts world point `point`, in physical framebuffer pixels.
+    fn project(camera: Camera2D, point: Vector2) -> Vector2 {
+        Vector2::new(
+            (point.x - camera.target.x).mul_add(camera.zoom, camera.offset.x),
+            (point.y - camera.target.y).mul_add(camera.zoom, camera.offset.y),
+        )
+    }
+
+    #[test]
+    fn view_camera_centres_the_rig_in_its_viewport_on_any_display() {
+        use crate::render_snapshot::{
+            Viewport, split_screen_viewports, visible_world_size, world_scale_for_screen,
+        };
+        for (width, height) in [(960, 540), (1280, 720), (1920, 1080), (2560, 1080)] {
+            let world_scale = world_scale_for_screen(height);
+            for density in [1.0, 2.0] {
+                for viewport in split_screen_viewports(2, width, height) {
+                    let camera = Vector2::new(400.0, 1_200.0);
+                    let (visible_width, visible_height) = visible_world_size(viewport, world_scale);
+                    let rig = Vector2::new(
+                        visible_width.mul_add(0.5, camera.x),
+                        visible_height.mul_add(0.5, camera.y),
+                    );
+                    let camera_2d = view_camera_2d(viewport, camera, world_scale, density);
+                    let on_screen = project(camera_2d, rig);
+                    let Viewport {
+                        x,
+                        y,
+                        width: view_width,
+                        height: view_height,
+                    } = viewport;
+                    let expected_x = (x as f32 + view_width as f32 * 0.5) * density;
+                    let expected_y = (y as f32 + view_height as f32 * 0.5) * density;
+                    assert!((on_screen.x - expected_x).abs() < 0.01, "{on_screen:?}");
+                    assert!((on_screen.y - expected_y).abs() < 0.01, "{on_screen:?}");
+                    // The visible world's far corner lands on the viewport's far corner.
+                    let corner = project(
+                        camera_2d,
+                        Vector2::new(camera.x + visible_width, camera.y + visible_height),
+                    );
+                    assert!((corner.x - (x + view_width) as f32 * density).abs() < 0.01);
+                    assert!((corner.y - (y + view_height) as f32 * density).abs() < 0.01);
+                }
+            }
+        }
     }
 
     #[test]

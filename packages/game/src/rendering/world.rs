@@ -26,7 +26,7 @@ pub(super) fn world_camera(camera: Vector2, zoom: f32) -> Camera2D {
 
 pub(super) fn draw_world(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
-    camera: Vector2,
+    visible_world: Rectangle,
     terrain_renderer: &TerrainRenderer,
     terrain: &Terrain,
     infrastructure: &[PlacedInfrastructure],
@@ -34,7 +34,7 @@ pub(super) fn draw_world(
     update_ticks: u64,
 ) {
     draw_surface_buildings(draw);
-    terrain_renderer.draw(draw, camera);
+    terrain_renderer.draw(draw, visible_world);
     draw_infrastructure(draw, infrastructure, update_ticks);
 
     if let Some(drill) = active_drill {
