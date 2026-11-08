@@ -390,7 +390,8 @@ pub(super) fn toast_message<'a>(shell: &'a ShellState, seat: &'a SeatUi) -> Opti
 
 /// A message as a toast near the bottom of the current canvas (receipts, saves, refusals), for
 /// a few seconds after it changes. `avoid` is a docked counter panel to keep clear of: the toast
-/// sits beside it when there is room, otherwise above it, otherwise over its lower edge.
+/// sits beside it when there is room, otherwise at the top of the view (over the room's ceiling)
+/// when the panel leaves the top free, otherwise over the panel's lower edge.
 pub(super) fn draw_toast(
     draw: &mut RaylibDrawHandle<'_>,
     message: &str,
@@ -400,13 +401,14 @@ pub(super) fn draw_toast(
     let canvas = ui_kit::canvas();
     // The free horizontal band the toast is centred in, and the bottom it rests on.
     let (mut left, mut area, mut bottom) = (0, canvas.width, canvas.height - 28);
+    let mut top_anchored = false;
     if let Some(panel) = avoid {
         let beside = (panel.x + panel.width) as i32 + 8;
         if canvas.width - beside - 24 >= 120 {
             left = beside;
             area = canvas.width - beside;
-        } else if panel.y as i32 >= 44 {
-            bottom = panel.y as i32 - 6;
+        } else if panel.y as i32 >= 60 {
+            top_anchored = true;
         } else {
             bottom = canvas.height - 10;
         }
@@ -450,7 +452,12 @@ pub(super) fn draw_toast(
     // Slides up into place over its first few frames.
     let rise = i32::try_from(8_u64.saturating_sub(age)).unwrap_or(0);
     let x = left + (area - width) / 2;
-    let y = bottom - height + rise;
+    // Under the room's name plate (top-left) when anchored at the top of the view.
+    let y = if top_anchored {
+        32 + rise
+    } else {
+        bottom - height + rise
+    };
     ui_kit::panel(
         draw,
         Rectangle::new(x as f32, y as f32, width as f32, height as f32),
@@ -835,18 +842,48 @@ const MAP_LEGEND: [(Color, &str); 6] = [
     (SLATE_DARK, "Tunnel"),
 ];
 
-/// The map legend row starting at `(x, y)`.
-fn draw_map_legend(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32) {
-    let mut lx = x;
-    let ly = y;
-    for (color, label) in MAP_LEGEND {
-        draw.draw_rectangle(lx, ly + 1, 7, 7, INK);
-        draw.draw_rectangle(lx + 1, ly + 2, 5, 5, color);
-        ui_kit::text(draw, label, lx + 10, ly, TextStyle::Body, MIST);
-        lx += ui_kit::text_width(label, TextStyle::Body) + 22;
+/// Height of one map legend row.
+const MAP_LEGEND_ROW: i32 = 11;
+
+/// Where each map legend entry (the colours, then "You") goes in a legend `width` wide that
+/// starts at `(x, y)`, wrapping onto further rows in narrow dialogs. Returns the positions and
+/// the number of rows.
+fn map_legend_layout(x: i32, y: i32, width: i32) -> (Vec<(i32, i32)>, i32) {
+    let widths = MAP_LEGEND
+        .iter()
+        .map(|(_, label)| ui_kit::text_width(label, TextStyle::Body) + 10)
+        .chain([ui_kit::text_width("You", TextStyle::Body) + 12]);
+    let (mut lx, mut ly, mut rows) = (x, y, 1);
+    let mut positions = Vec::new();
+    for item in widths {
+        if lx > x && lx + item > x + width {
+            lx = x;
+            ly += MAP_LEGEND_ROW;
+            rows += 1;
+        }
+        positions.push((lx, ly));
+        lx += item + 12;
     }
-    ui_kit::icon(draw, &super::pixel_art::sprites::menu_icons::PERSON, lx, ly);
-    ui_kit::text(draw, "You", lx + 12, ly, TextStyle::Body, MIST);
+    (positions, rows)
+}
+
+/// The map legend in `width` starting at `(x, y)` (see [`map_legend_layout`]).
+fn draw_map_legend(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32, width: i32) {
+    let (positions, _) = map_legend_layout(x, y, width);
+    for ((color, label), (lx, ly)) in MAP_LEGEND.iter().zip(&positions) {
+        draw.draw_rectangle(*lx, ly + 1, 7, 7, INK);
+        draw.draw_rectangle(lx + 1, ly + 2, 5, 5, *color);
+        ui_kit::text(draw, label, lx + 10, *ly, TextStyle::Body, MIST);
+    }
+    if let Some((lx, ly)) = positions.get(MAP_LEGEND.len()) {
+        ui_kit::icon(
+            draw,
+            &super::pixel_art::sprites::menu_icons::PERSON,
+            *lx,
+            *ly,
+        );
+        ui_kit::text(draw, "You", lx + 12, *ly, TextStyle::Body, MIST);
+    }
 }
 
 /// The mine map: discovered terrain at two art pixels per tile around the rig, with depth
@@ -863,7 +900,8 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             ui.player.x / TILE_SIZE
         ),
     );
-    let legend_height = 14;
+    let (_, legend_rows) = map_legend_layout(0, 0, map_rect.width as i32 - 4);
+    let legend_height = legend_rows * MAP_LEGEND_ROW + 3;
     let well = Rectangle {
         height: (map_rect.height - legend_height as f32).max(0.0),
         ..map_rect
@@ -949,7 +987,12 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             draw.draw_rectangle(rx - 1, ry - 1, 4, 4, ORANGE);
         }
     }
-    draw_map_legend(draw, well.x as i32 + 2, (well.y + well.height) as i32 + 4);
+    draw_map_legend(
+        draw,
+        well.x as i32 + 2,
+        (well.y + well.height) as i32 + 4,
+        well.width as i32 - 4,
+    );
 }
 
 /// The controls reference: every action with its keys or buttons for the menu device, in two

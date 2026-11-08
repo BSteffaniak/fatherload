@@ -250,6 +250,11 @@ pub(super) fn draw_interior(
     let _canvas = UiCanvasScope::begin(draw);
     let canvas = ui_kit::canvas();
     if seat.modal.is_some() {
+        // A counter panel docked along the bottom of a split-screen view leaves the room's
+        // top in view: keep the plate there so the view still says whose it is.
+        if area.align_top && player.is_some() {
+            draw_name_plate(draw, surface_zone_label(zone), player);
+        }
         return;
     }
     draw_name_plate(draw, surface_zone_label(zone), player);
@@ -268,7 +273,9 @@ pub(super) fn draw_interior(
     );
     if near_counter || at_door {
         let target_x = if at_door { 28 } else { keeper_x };
-        let (prompt_x, prompt_y) = placement.to_canvas(canvas, target_x, FLOOR_Y - 4);
+        // Just above the rig's roof, so the prompt never hides the rig.
+        let (prompt_x, prompt_y) =
+            placement.to_canvas(canvas, target_x, FLOOR_Y - rig::RIG.height() - 1);
         let label = if at_door { "Leave" } else { "Use counter" };
         draw_key_prompt(draw, prompt_x, prompt_y, hint(Prompt::Use, label));
     }

@@ -26,10 +26,16 @@ use super::pixel_art::{
 };
 use crate::{pixel_scale, render_snapshot::Viewport};
 
-/// Smallest split-screen seat canvas (art pixels) laid out at the screen's UI scale: a seat
-/// view smaller than this at that scale gets a smaller whole-number scale instead, so its HUD,
-/// counter panels and dialogs always have room (see [`UiCanvas::for_viewport`]).
+/// Smallest split-screen seat canvas (art pixels): a seat view smaller than this at the
+/// screen's UI scale gets a smaller whole-number scale, so its HUD, counter panels and dialogs
+/// always have room (see [`UiCanvas::for_viewport`]).
 pub const MIN_SEAT_CANVAS: (i32, i32) = (232, 160);
+
+/// Seat canvas height (art pixels) worth stepping a large UI scale down for: on big screens a
+/// quarter view at the screen's scale would show 3x+ text in a cramped panel, while one step
+/// smaller still reads comfortably and fits the full counter layout. Scales of 2 or less are
+/// never lowered for this (small windows keep the bigger, compact layout instead).
+pub const COMFORTABLE_SEAT_HEIGHT: i32 = 225;
 
 /// The frame's UI canvas: its size in art pixels and how it maps to the framebuffer.
 ///
@@ -68,13 +74,17 @@ impl UiCanvas {
     }
 
     /// A canvas covering just `viewport` (logical points) of the `screen` canvas, for one
-    /// split-screen seat. It keeps the screen's UI scale unless the view would be smaller than
-    /// [`MIN_SEAT_CANVAS`] at it, then uses the largest smaller whole scale that fits (at least
-    /// 1), so every seat lays out the same UI at a readable size.
+    /// split-screen seat. It starts from the screen's UI scale, steps a scale above 2 down while
+    /// the view is shorter than [`COMFORTABLE_SEAT_HEIGHT`] at it, then keeps stepping down
+    /// (to 1 at the least) while the view is smaller than [`MIN_SEAT_CANVAS`], so every seat
+    /// lays out the same UI at a readable size.
     #[must_use]
     pub fn for_viewport(screen: Self, viewport: Viewport) -> Self {
         let (x, y, width, height) = screen.physical_rect(viewport);
         let mut pixel = screen.pixel.max(1);
+        while pixel > 2 && height / pixel < COMFORTABLE_SEAT_HEIGHT {
+            pixel -= 1;
+        }
         while pixel > 1 && (width / pixel < MIN_SEAT_CANVAS.0 || height / pixel < MIN_SEAT_CANVAS.1)
         {
             pixel -= 1;

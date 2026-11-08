@@ -209,9 +209,15 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
             "Star Core secured. Deep Claim operations are open.",
         ));
     }
+    // In split-screen the seat that paused drives this menu (and the rig shown is theirs).
+    let subtitle = if ui.snapshot.views.len() > 1 {
+        format!("Player {} paused the game.", ui.view.seat_index + 1)
+    } else {
+        String::new()
+    };
     UiLayout::screen(draw).modal_with_render_plan(
         "Paused",
-        "",
+        &subtitle,
         &ModalContent::new(vec![
             Section::new(
                 "Menu",

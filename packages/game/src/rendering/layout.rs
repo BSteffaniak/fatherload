@@ -74,6 +74,19 @@ pub(super) enum ModalPlacement {
     Counter,
 }
 
+/// Canvases shorter than this (four-way split-screen views) draw dialogs with a compact
+/// header: a 1x title, one subtitle line and one footer line, leaving room for the rows.
+const SHORT_CANVAS_HEIGHT: f32 = 240.0;
+
+/// The dialog title face for a canvas `viewport`: 2x, or 1x bold on short canvases.
+fn title_style(viewport: Rectangle) -> TextStyle {
+    if viewport.height < SHORT_CANVAS_HEIGHT {
+        TextStyle::Bold
+    } else {
+        TextStyle::Title
+    }
+}
+
 /// Narrowest canvas (art pixels) with room for a counter panel beside the counter.
 const COUNTER_SIDE_DOCK_MIN_WIDTH: f32 = 460.0;
 
@@ -155,9 +168,23 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
             widgets::UiNode::Scroll(scroll) => scroll.content_height,
             other => other.rect().height,
         };
+        let footer_room = if self.viewport.height < SHORT_CANVAS_HEIGHT {
+            1
+        } else {
+            3
+        };
         let footer_lines = content.footer.as_ref().map_or_else(Vec::new, |footer| {
             let mut lines = ui_kit::wrap(footer, content_width as i32, TextStyle::Body);
-            lines.truncate(3);
+            if lines.len() > footer_room {
+                lines.truncate(footer_room);
+                if let Some(last) = lines.last_mut() {
+                    *last = ui_kit::truncate(
+                        &format!("{last}..."),
+                        content_width as i32,
+                        TextStyle::Body,
+                    );
+                }
+            }
             lines
         });
         let footer_height = if footer_lines.is_empty() {
@@ -269,8 +296,9 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
     fn scroll_prompt(&mut self, panel: Rectangle, title: &str) {
         let device = prompts::menu_device();
         let right = (panel.x + panel.width) as i32 - 12;
-        let title_end = panel.x as i32 + 12 + ui_kit::text_width(title, TextStyle::Title) + 8;
-        let y = panel.y as i32 + 10 + (TextStyle::Title.height() - prompts::PROMPT_HEIGHT) / 2;
+        let style = title_style(self.viewport);
+        let title_end = panel.x as i32 + 12 + ui_kit::text_width(title, style) + 8;
+        let y = panel.y as i32 + 10 + (style.height() - prompts::PROMPT_HEIGHT) / 2;
         for label in ["scroll", ""] {
             let hint = prompts::hint(crate::input::prompts::Prompt::Scroll, label);
             let Some(width) = prompts::prompt_width(hint, device) else {
@@ -320,7 +348,13 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         } else {
             ui_kit::wrap(subtitle, width, TextStyle::Body)
         };
-        let subtitle_lines = i32::try_from(lines.len().min(2)).unwrap_or(1);
+        let title_style = title_style(self.viewport);
+        let subtitle_room = if title_style == TextStyle::Title {
+            2
+        } else {
+            1
+        };
+        let subtitle_lines = i32::try_from(lines.len().min(subtitle_room)).unwrap_or(1);
         let device = prompts::menu_device();
         let prompt_rows = prompts::wrap_bar(hints, device, width);
         let prompt_height = if prompt_rows.is_empty() {
@@ -329,7 +363,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
             prompts::wrapped_height(prompt_rows.len()) + 3
         };
         let header = 10
-            + TextStyle::Title.height()
+            + title_style.height()
             + 3
             + subtitle_lines * TextStyle::Body.line_height()
             + prompt_height
@@ -356,9 +390,9 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         LAST_DIALOG_RECT.with(|last| last.set(Some(rect)));
         let x = rect.x as i32 + 12;
         let mut y = rect.y as i32 + 10;
-        ui_kit::text(self.draw, title, x, y, TextStyle::Title, title_color);
-        y += TextStyle::Title.height() + 3;
-        for line in lines.iter().take(2) {
+        ui_kit::text(self.draw, title, x, y, title_style, title_color);
+        y += title_style.height() + 3;
+        for line in lines.iter().take(subtitle_room) {
             ui_kit::text(self.draw, line, x, y, TextStyle::Body, FOG);
             y += TextStyle::Body.line_height();
         }
