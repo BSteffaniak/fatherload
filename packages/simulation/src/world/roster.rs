@@ -4,13 +4,18 @@
 //!
 //! A new rig spawns at the first free slot of an unbounded spawn grid around the player
 //! template's position: slots run right of the spawn point (then left of it) across the whole map
-//! width, one row at a time, and further rows stack upward into the sky. A slot is free when no
-//! existing rig is within [`SPAWN_SPACING`] of it, so rigs never spawn overlapping each other
+//! width, one row at a time, and further rows stack upward into the sky. Slots inside solid
+//! terrain are skipped. A slot is free when no existing rig is within [`SPAWN_SPACING`] of it, so
+//! rigs never spawn overlapping each other
 //! however many join (a 240-tile-wide map holds well over a thousand spawn slots), and slots
 //! vacated by rigs that moved away are reused. Only when every slot is occupied does a rig spawn
 //! on the least crowded slot. Placement is O(slots tried x players) at join time, never per tick.
 
-use crate::{ids::PlayerId, player::Player, terrain::TILE_SIZE};
+use crate::{
+    ids::PlayerId,
+    player::Player,
+    terrain::{TILE_SIZE, TileKind, TilePosition},
+};
 
 use super::{
     WorldState,
@@ -118,6 +123,9 @@ impl WorldState {
                 } else {
                     row_offset(column - right + 1).mul_add(-SPAWN_SPACING, base_x)
                 };
+                if self.spawn_slot_buried(x, y) {
+                    continue;
+                }
                 let clearance = self.spawn_clearance(x, y);
                 if clearance >= SPAWN_SPACING * SPAWN_SPACING {
                     return (x, y);
@@ -129,6 +137,22 @@ impl WorldState {
             }
         }
         best
+    }
+
+    /// Whether the slot at `(x, y)` lies inside a non-air tile (a rig spawned there would be
+    /// stuck in the ground).
+    fn spawn_slot_buried(&self, x: f32, y: f32) -> bool {
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "world positions are converted to terrain tile coordinates"
+        )]
+        let tile = TilePosition {
+            x: (x / TILE_SIZE).floor() as i32,
+            y: (y / TILE_SIZE).floor() as i32,
+        };
+        self.terrain
+            .tile(tile)
+            .is_some_and(|tile| tile.kind != TileKind::Air)
     }
 
     /// Squared distance from `(x, y)` to the nearest rig (infinite with no rigs).
@@ -169,13 +193,23 @@ const fn row_offset(index: u32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::SPAWN_SPACING;
-    use crate::{PlayerId, WorldState, terrain::TILE_SIZE};
+    use crate::{
+        PlayerId, WorldState,
+        terrain::{TILE_SIZE, TileKind},
+    };
 
     fn assert_spread(world: &WorldState) {
         let rigs: Vec<_> = world.players().values().collect();
         for (index, first) in rigs.iter().enumerate() {
             let width = f64::from(world.terrain().width()) * f64::from(TILE_SIZE);
             assert!(first.x >= 0.0 && f64::from(first.x) <= width);
+            let tile = world.terrain().tile(first.tile_position(TILE_SIZE));
+            assert!(
+                tile.is_none_or(|tile| tile.kind == TileKind::Air),
+                "rig at ({}, {}) spawned inside {tile:?}",
+                first.x,
+                first.y
+            );
             for second in &rigs[index + 1..] {
                 let distance = (first.x - second.x).hypot(first.y - second.y);
                 assert!(
@@ -211,6 +245,24 @@ mod tests {
             world.add_player(PlayerId::new(id));
         }
         assert_eq!(world.player_count(), 40);
+        assert_spread(&world);
+    }
+
+    #[test]
+    fn slots_inside_solid_terrain_are_skipped() {
+        let mut world = WorldState::new_game(PlayerId::new(0));
+        let spawn = world.player_template().tile_position(TILE_SIZE);
+        // Bury the first two slots right of the spawn point.
+        for offset in [2, 4] {
+            let tile = crate::terrain::TilePosition {
+                x: spawn.x + offset,
+                y: spawn.y,
+            };
+            assert!(world.terrain_mut().set_kind(tile, TileKind::Stone));
+        }
+        for id in 1..12 {
+            world.add_player(PlayerId::new(id));
+        }
         assert_spread(&world);
     }
 
