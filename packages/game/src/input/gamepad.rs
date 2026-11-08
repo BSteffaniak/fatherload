@@ -18,6 +18,22 @@ pub const STICK_DEADZONE: f32 = 0.25;
 pub const DIRECTION_THRESHOLD: f32 = 0.5;
 /// Trigger travel (0..1) that counts as pressing it.
 pub const TRIGGER_THRESHOLD: f32 = 0.5;
+/// Dialog scroll speed with the scroll stick fully deflected, in mouse-wheel notches per
+/// second (one notch scrolls a dialog 48 art pixels, so about 576 pixels a second).
+pub const STICK_SCROLL_NOTCHES_PER_SECOND: f32 = 12.0;
+
+/// An analog stick axis.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PadAxis {
+    LeftX,
+    LeftY,
+    RightX,
+    RightY,
+}
+
+/// The axis that scrolls dialogs (the left stick and d-pad move the selection). Prompts show
+/// its stick, so changing it here changes both.
+pub const SCROLL_AXIS: PadAxis = PadAxis::RightY;
 
 /// A gamepad button, named for its position on an Xbox controller.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -114,6 +130,10 @@ pub struct PadState {
     pub left_x: f32,
     /// Left stick, -1 (up) to 1 (down).
     pub left_y: f32,
+    /// Right stick, -1 (left) to 1 (right).
+    pub right_x: f32,
+    /// Right stick, -1 (up) to 1 (down).
+    pub right_y: f32,
 }
 
 impl PadState {
@@ -126,7 +146,7 @@ impl PadState {
     #[must_use]
     pub fn horizontal(&self) -> f32 {
         match self.dpad_horizontal() {
-            0 => stick_axis(self.left_x),
+            0 => stick_axis(self.axis(PadAxis::LeftX)),
             direction => f32::from(direction),
         }
     }
@@ -135,7 +155,7 @@ impl PadState {
     #[must_use]
     pub fn horizontal_direction(&self) -> i8 {
         match self.dpad_horizontal() {
-            0 => stick_direction(self.left_x),
+            0 => stick_direction(self.axis(PadAxis::LeftX)),
             direction => direction,
         }
     }
@@ -147,9 +167,32 @@ impl PadState {
             self.is_down(PadButton::DPadUp),
             self.is_down(PadButton::DPadDown),
         ) {
-            0 => stick_direction(self.left_y),
+            0 => stick_direction(self.axis(PadAxis::LeftY)),
             direction => direction,
         }
+    }
+
+    /// Raw deflection of `axis`.
+    #[must_use]
+    pub const fn axis(&self, axis: PadAxis) -> f32 {
+        match axis {
+            PadAxis::LeftX => self.left_x,
+            PadAxis::LeftY => self.left_y,
+            PadAxis::RightX => self.right_x,
+            PadAxis::RightY => self.right_y,
+        }
+    }
+
+    /// Dialog scrolling from [`SCROLL_AXIS`] for one frame, in wheel notches (positive scrolls
+    /// up, like the wheel): proportional to the deflection past the deadzone, so a light push
+    /// creeps and a full push pages quickly, and scaled by `delta_seconds` so the speed does
+    /// not depend on the frame rate.
+    #[must_use]
+    pub fn scroll_notches(&self, delta_seconds: f32) -> f32 {
+        let value = self.axis(SCROLL_AXIS).clamp(-1.0, 1.0);
+        let travel = ((value.abs() - STICK_DEADZONE) / (1.0 - STICK_DEADZONE)).max(0.0);
+        // Stick down (positive) scrolls down, which is a negative wheel movement.
+        -value.signum() * travel * STICK_SCROLL_NOTCHES_PER_SECOND * delta_seconds.max(0.0)
     }
 
     fn dpad_horizontal(&self) -> i8 {
@@ -159,9 +202,16 @@ impl PadState {
         )
     }
 
-    /// Whether the stick is outside the deadzone.
+    /// Whether either stick is outside the deadzone.
     fn stick_engaged(&self) -> bool {
-        self.left_x.abs() >= STICK_DEADZONE || self.left_y.abs() >= STICK_DEADZONE
+        [
+            PadAxis::LeftX,
+            PadAxis::LeftY,
+            PadAxis::RightX,
+            PadAxis::RightY,
+        ]
+        .into_iter()
+        .any(|axis| self.axis(axis).abs() >= STICK_DEADZONE)
     }
 
     /// Whether `button` went down since `previous`.
@@ -237,6 +287,7 @@ impl PadMapper {
             menu_down: vertical_step > 0,
             menu_left: horizontal_step < 0,
             menu_right: horizontal_step > 0,
+            ui_scroll: state.scroll_notches(delta_seconds),
             ..PlayerInput::default()
         };
         self.previous.clone_from(state);
@@ -416,6 +467,45 @@ mod tests {
         assert!(mapper.map(&pad(&[PadButton::DPadRight]), DT).menu_right);
     }
 
+    fn right_stick(right_y: f32) -> PadState {
+        PadState {
+            right_y,
+            ..PadState::default()
+        }
+    }
+
+    #[test]
+    fn right_stick_scrolls_dialogs_in_proportion_past_the_deadzone() {
+        let mut mapper = PadMapper::default();
+        assert!(
+            mapper.map(&right_stick(0.2), DT).ui_scroll.abs() < f32::EPSILON,
+            "drift inside the deadzone never scrolls"
+        );
+        let full_down = mapper.map(&right_stick(1.0), DT).ui_scroll;
+        assert!(
+            STICK_SCROLL_NOTCHES_PER_SECOND.mul_add(DT, full_down).abs() < 1e-6,
+            "full down scrolls down (negative, like the wheel) at full speed: {full_down}"
+        );
+        let half_up = mapper
+            .map(&right_stick(-(STICK_DEADZONE + 1.0) / 2.0), DT)
+            .ui_scroll;
+        assert!(
+            (STICK_SCROLL_NOTCHES_PER_SECOND * DT)
+                .mul_add(-0.5, half_up)
+                .abs()
+                < 1e-6,
+            "halfway past the deadzone scrolls up at half speed: {half_up}"
+        );
+        // Frame-time based: two half frames scroll as far as one whole frame.
+        let halves = right_stick(0.8).scroll_notches(DT / 2.0) * 2.0;
+        assert!((halves - right_stick(0.8).scroll_notches(DT)).abs() < 1e-6);
+        // The right stick neither walks, thrusts, drills nor steps the menu.
+        let input = mapper.map(&right_stick(1.0), DT);
+        assert!(input.horizontal.abs() < f32::EPSILON);
+        assert!(!input.thrust && !input.drill_down && !input.menu_down && !input.menu_up);
+        assert_eq!(SCROLL_AXIS, PadAxis::RightY);
+    }
+
     #[test]
     fn activity_needs_a_new_press_or_the_stick_leaving_the_deadzone() {
         let idle = PadState::default();
@@ -425,6 +515,7 @@ mod tests {
             !stick(0.6, 0.0).new_activity_since(&stick(0.5, 0.0)),
             "held"
         );
+        assert!(right_stick(-0.7).new_activity_since(&idle), "right stick");
         assert!(pad(&[PadButton::B]).new_activity_since(&idle));
         assert!(!pad(&[PadButton::B]).new_activity_since(&pad(&[PadButton::B])));
     }

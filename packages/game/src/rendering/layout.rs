@@ -96,7 +96,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         summary: &str,
     ) -> Rectangle {
         let rect = self.dialog_rect(false);
-        let body = self.modal_frame(title, subtitle, hints, rect, None, false);
+        let (_, body) = self.modal_frame(title, subtitle, hints, rect, None, false);
         ui_kit::text(
             self.draw,
             summary,
@@ -145,7 +145,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
             (i32::try_from(footer_lines.len()).unwrap_or(3) * TextStyle::Body.line_height() + 7)
                 as f32
         };
-        let body = self.modal_frame(
+        let (panel, body) = self.modal_frame(
             title,
             subtitle,
             &content.hints,
@@ -165,6 +165,10 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         if let widgets::UiNode::Scroll(scroll) = &node {
             let limit = (scroll.content_height - body.height).max(0.0);
             set_current_scroll_limit(widgets::WidgetId::new("modal-content"), limit);
+            set_current_page_step(
+                widgets::WidgetId::new("modal-content"),
+                (body.height - MENU_ROW_HEIGHT).max(MENU_ROW_HEIGHT),
+            );
         }
         if follow_focused_row(&node, body) {
             node = modal_content_node(content, body.width);
@@ -181,6 +185,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         self.render_plan(&plan);
         if let Some((offset, content_height)) = overflow {
             self.scroll_bar(body, offset, content_height);
+            self.scroll_prompt(panel, title);
         }
         if !footer_lines.is_empty() {
             let x = body.x as i32 - 8;
@@ -195,25 +200,66 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
     }
 
     /// A thin scroll bar in the dialog's right margin, so lists taller than the panel show
-    /// that more rows exist below (or above) the visible ones.
+    /// that more rows exist below (or above) the visible ones, with a small arrow at each end
+    /// that has more content past it.
     #[allow(
         clippy::cast_possible_truncation,
         reason = "canvas coordinates are small"
     )]
     fn scroll_bar(&mut self, body: Rectangle, offset: f32, content_height: f32) {
+        // Room for an arrow (3 rows) and a gap at each end of the track.
+        const ARROW_ROOM: i32 = 5;
         let x = (body.x + body.width) as i32 + 4;
-        let top = body.y as i32;
-        let height = body.height as i32;
+        let top = body.y as i32 + ARROW_ROOM;
+        let height = body.height as i32 - ARROW_ROOM * 2;
         if height < 8 || content_height <= 0.0 {
             return;
         }
-        self.draw.draw_rectangle(x, top, 3, height, INK);
-        let thumb = ((body.height / content_height) * body.height).max(6.0) as i32;
-        let travel = (height - thumb).max(0);
         let max_offset = (content_height - body.height).max(1.0);
+        self.draw.draw_rectangle(x, top, 3, height, INK);
+        let thumb = ((body.height / content_height) * height as f32).max(6.0) as i32;
+        let travel = (height - thumb).max(0);
         let thumb_top = top + ((offset / max_offset) * travel as f32).round() as i32;
         self.draw.draw_rectangle(x, thumb_top, 3, thumb, AMBER);
         self.draw.draw_rectangle(x, thumb_top, 1, thumb, GOLD);
+        let more_above = offset > 0.5;
+        let more_below = offset < max_offset - 0.5;
+        // 5-pixel-wide arrows centred on the 3-pixel track.
+        for (row, width) in [(0, 1), (1, 3), (2, 5)] {
+            let left = x + 1 - width / 2;
+            if more_above {
+                self.draw
+                    .draw_rectangle(left, top - ARROW_ROOM + row, width, 1, GOLD);
+            }
+            if more_below {
+                let y = top + height + ARROW_ROOM - 1 - row;
+                self.draw.draw_rectangle(left, y, width, 1, GOLD);
+            }
+        }
+    }
+
+    /// The scroll prompt (wheel + Page Up/Down, or the right stick) right-aligned on the title
+    /// line of an overflowing dialog, above its scroll bar. Drops its label, then itself, when
+    /// the title leaves no room.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "canvas coordinates are small"
+    )]
+    fn scroll_prompt(&mut self, panel: Rectangle, title: &str) {
+        let device = prompts::menu_device();
+        let right = (panel.x + panel.width) as i32 - 12;
+        let title_end = panel.x as i32 + 12 + ui_kit::text_width(title, TextStyle::Title) + 8;
+        let y = panel.y as i32 + 10 + (TextStyle::Title.height() - prompts::PROMPT_HEIGHT) / 2;
+        for label in ["scroll", ""] {
+            let hint = prompts::hint(crate::input::prompts::Prompt::Scroll, label);
+            let Some(width) = prompts::prompt_width(hint, device) else {
+                return;
+            };
+            if right - width >= title_end {
+                prompts::draw_prompt(self.draw, right - width, y, hint, device, MIST);
+                return;
+            }
+        }
     }
 
     /// The dialog rect for this frame's placement (`compact` narrows centred dialogs).
@@ -232,7 +278,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
     }
 
     /// Dims the screen, draws the dialog panel, title, subtitle, button prompts (for the menu
-    /// device) and divider; returns the body. With `content_height` the panel shrinks to fit
+    /// device) and divider; returns the panel and its body. With `content_height` the panel shrinks to fit
     /// that much body.
     fn modal_frame(
         &mut self,
@@ -242,7 +288,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         mut rect: Rectangle,
         content_height: Option<f32>,
         warning: bool,
-    ) -> Rectangle {
+    ) -> (Rectangle, Rectangle) {
         let placement = current_modal_placement();
         if placement == ModalPlacement::Centred {
             ui_kit::dim(self.draw, self.viewport);
@@ -301,12 +347,13 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         y += 2;
         ui_kit::divider(self.draw, x, y, width);
         y += 6;
-        Rectangle {
+        let body = Rectangle {
             x: x as f32,
             y: y as f32,
             width: width as f32,
             height: (rect.y + rect.height - 10.0 - y as f32).max(0.0),
-        }
+        };
+        (rect, body)
     }
 
     fn render_plan(&mut self, plan: &widgets::RenderPlan) {
@@ -668,7 +715,20 @@ const PLAIN_ROW_HEIGHT: f32 = 11.0;
 )]
 fn modal_content_node(content: &ModalContent, width: f32) -> widgets::UiNode {
     let mut sections = Vec::new();
-    let focused_id = current_focused_id();
+    // The shell's selection ("> " rows, selected items) wins; the remembered focus is only a
+    // fallback for lists that mark nothing, so a stale focus never highlights a second row.
+    let marks_selection = content.sections.iter().any(|section| {
+        section.items.iter().any(|item| match item {
+            SectionItem::Stat(stat) => stat.label.starts_with("> "),
+            SectionItem::Item(entry) => entry.selected,
+            _ => false,
+        })
+    });
+    let focused_id = if marks_selection {
+        None
+    } else {
+        current_focused_id()
+    };
     let mut selectable_index = 0_usize;
     let mut focus_order = Vec::new();
     for (section_index, section) in content.sections.iter().enumerate() {
@@ -812,46 +872,85 @@ fn modal_content_node(content: &ModalContent, width: f32) -> widgets::UiNode {
     ))
 }
 
-/// Scrolls the modal so a newly focused row is fully visible; returns whether the offset
-/// changed (the content must then be laid out again).
+/// Scrolls the modal when the focused row changes (or the dialog opens); returns whether the
+/// offset changed (the content must then be laid out again).
+///
+/// The first selectable row reveals everything above it (as far up as keeps the row in view)
+/// and the last reveals everything below it, so headings, stats and notes before the first
+/// or after the last button are reachable with the selection alone. Any other row scrolls just
+/// enough to stay fully visible, and not at all while it already is. Nothing happens until
+/// the focus moves again, so wheel / Page / stick scrolling in between is never undone.
 fn follow_focused_row(node: &widgets::UiNode, body: Rectangle) -> bool {
     let plan = node.render_plan();
-    let Some((id, rect)) = plan.commands().iter().find_map(|command| match command {
-        widgets::RenderCommand::Button {
-            rect,
-            focused: true,
-            id: Some(id),
-            ..
-        } => Some((id.clone(), *rect)),
-        _ => None,
-    }) else {
+    let rows: Vec<(&widgets::WidgetId, Rectangle, bool)> = plan
+        .commands()
+        .iter()
+        .filter_map(|command| match command {
+            widgets::RenderCommand::Button {
+                rect,
+                focused,
+                id: Some(id),
+                ..
+            } => Some((id, *rect, *focused)),
+            _ => None,
+        })
+        .collect();
+    let Some(index) = rows.iter().position(|(_, _, focused)| *focused) else {
         return false;
     };
+    let (id, rect, _) = rows[index];
     let scroll_id = widgets::WidgetId::new("modal-content");
     CURRENT_UI_STATE.with(|current| {
         let mut current = current.borrow_mut();
         let Some(state) = current.as_mut() else {
             return false;
         };
-        if !state.follow(&id) {
+        if !state.follow(id) {
             return false;
         }
         let offset = state.scroll_offset(&scroll_id);
-        // Keep a little context above and below the row.
-        let margin = 4.0;
-        let delta = if rect.y - margin < body.y {
-            rect.y - margin - body.y
-        } else if rect.y + rect.height + margin > body.y + body.height {
-            rect.y + rect.height + margin - (body.y + body.height)
+        let limit = state.scroll_limit(&scroll_id);
+        let edge = if index == 0 {
+            Some(false)
+        } else if index + 1 == rows.len() {
+            Some(true)
         } else {
-            0.0
+            None
         };
-        if delta.abs() < 0.5 {
+        let target = follow_target(rect, body, offset, limit, edge);
+        if (target - offset).abs() < 0.5 {
             return false;
         }
-        state.set_scroll_offset(scroll_id, offset + delta);
+        state.set_scroll_offset(scroll_id, target);
         true
     })
+}
+
+/// The scroll offset that shows focused row `rect` (laid out at `offset`) inside `body`.
+/// `edge` is `Some(false)` for the first selectable row (scroll toward the top), `Some(true)`
+/// for the last (toward the bottom, up to `limit`) and `None` for a middle row (the smallest
+/// change that keeps it fully visible).
+fn follow_target(
+    rect: Rectangle,
+    body: Rectangle,
+    offset: f32,
+    limit: f32,
+    edge: Option<bool>,
+) -> f32 {
+    // Keep a little context above and below the row.
+    const MARGIN: f32 = 4.0;
+    // The row's top and bottom in content coordinates (independent of the current offset).
+    let top = rect.y - body.y + offset;
+    let bottom = top + rect.height;
+    // Offsets that keep the row fully visible with its margin: [lowest, highest].
+    let lowest = (bottom + MARGIN - body.height).max(0.0);
+    let highest = (top - MARGIN).max(lowest);
+    let target = match edge {
+        Some(false) => lowest,
+        Some(true) => highest.min(limit.max(lowest)),
+        None => offset.clamp(lowest, highest),
+    };
+    target.clamp(0.0, limit.max(0.0))
 }
 
 fn is_selectable_stat(stat: &StatItem) -> bool {
@@ -1023,6 +1122,14 @@ fn set_current_scroll_limit(id: widgets::WidgetId, max_offset: f32) {
     CURRENT_UI_STATE.with(|current| {
         if let Some(state) = current.borrow_mut().as_mut() {
             state.set_scroll_limit(id, max_offset);
+        }
+    });
+}
+
+fn set_current_page_step(id: widgets::WidgetId, step: f32) {
+    CURRENT_UI_STATE.with(|current| {
+        if let Some(state) = current.borrow_mut().as_mut() {
+            state.set_page_step(id, step);
         }
     });
 }
@@ -1396,6 +1503,188 @@ mod tests {
         // Once following, each step scrolls by about one row, never a fixed jump past it.
         let step = offsets[first_scroll + 1] - offsets[first_scroll];
         assert!(step > 0.0 && step <= MENU_ROW_HEIGHT + 4.0, "{offsets:?}");
+    }
+
+    /// A dialog with a status block above `rows` buttons (row `selected` marked) and notes
+    /// below them: the trailing-information layout the scroll fixes are about.
+    fn framed_list(rows: usize, selected: usize) -> ModalContent {
+        let status = (0..4)
+            .map(|line| SectionItem::stat(format!("Status {line}"), "1", BONE))
+            .collect();
+        let items = (0..rows)
+            .map(|row| {
+                let marker = if row == selected { "> " } else { "  " };
+                SectionItem::stat(format!("{marker}Row {row}"), "", BONE)
+            })
+            .collect();
+        let notes = (0..4)
+            .map(|line| SectionItem::stat(format!("Note {line}"), "2", BONE))
+            .collect();
+        ModalContent::new(vec![
+            Section::new("Status", BONE, status),
+            Section::new("Rows", BONE, items),
+            Section::new("Notes", BONE, notes),
+        ])
+    }
+
+    const LIST_BODY: Rectangle = Rectangle {
+        x: 0.0,
+        y: 0.0,
+        width: 200.0,
+        height: 120.0,
+    };
+
+    /// Lays out one frame of the "List" dialog the way `modal_with_render_plan` does (state
+    /// bookkeeping only, no drawing) and returns the state afterwards.
+    fn lay_out_frame(state: widgets::UiState, content: &ModalContent) -> widgets::UiState {
+        let scroll_id = widgets::WidgetId::new("modal-content");
+        let mut state = state;
+        state.begin_frame();
+        set_current_ui_state(state);
+        CURRENT_UI_STATE.with(|current| {
+            if let Some(state) = current.borrow_mut().as_mut() {
+                state.enter_modal("List", &scroll_id);
+            }
+        });
+        let mut node = modal_content_node(content, LIST_BODY.width);
+        node.layout(LIST_BODY);
+        if let widgets::UiNode::Scroll(scroll) = &node {
+            set_current_scroll_limit(
+                scroll_id.clone(),
+                (scroll.content_height - LIST_BODY.height).max(0.0),
+            );
+            set_current_page_step(
+                scroll_id,
+                (LIST_BODY.height - MENU_ROW_HEIGHT).max(MENU_ROW_HEIGHT),
+            );
+        }
+        let _ = follow_focused_row(&node, LIST_BODY);
+        let mut state = take_current_ui_state().expect("state was set");
+        state.end_frame();
+        state
+    }
+
+    fn offset_of(state: &widgets::UiState) -> f32 {
+        state.scroll_offset(&widgets::WidgetId::new("modal-content"))
+    }
+
+    fn limit_of(state: &widgets::UiState) -> f32 {
+        state.scroll_limit(&widgets::WidgetId::new("modal-content"))
+    }
+
+    #[test]
+    fn first_and_last_rows_reveal_the_content_before_and_after_them() {
+        let rows = 8;
+        let mut state = lay_out_frame(widgets::UiState::default(), &framed_list(rows, 0));
+        assert!(limit_of(&state) > 0.0, "the list overflows the body");
+        assert_near(offset_of(&state), 0.0);
+        for selected in 1..rows {
+            state = lay_out_frame(state, &framed_list(rows, selected));
+        }
+        assert_near(offset_of(&state), limit_of(&state));
+        // Wrapping round to the first row goes back to the very top (the status block).
+        state = lay_out_frame(state, &framed_list(rows, 0));
+        assert_near(offset_of(&state), 0.0);
+        // A dialog that opens on its last row starts scrolled to the bottom.
+        let reopened = lay_out_frame(widgets::UiState::default(), &framed_list(rows, rows - 1));
+        assert_near(offset_of(&reopened), limit_of(&reopened));
+    }
+
+    #[test]
+    fn edge_reveal_keeps_a_row_taller_than_the_gap_in_view() {
+        let body = Rectangle::new(0.0, 10.0, 100.0, 50.0);
+        // First row sits 60px down the content: scrolling to 0 would hide it, so stop where
+        // its bottom (plus margin) is just visible.
+        let first = Rectangle::new(0.0, 10.0 + 60.0, 100.0, 16.0);
+        assert_near(follow_target(first, body, 0.0, 200.0, Some(false)), 30.0);
+        // Last row near the top of 300px of content: the bottom would hide it, so stop where
+        // its top (less margin) is at the top of the body.
+        let last = Rectangle::new(0.0, 10.0 + 40.0, 100.0, 16.0);
+        assert_near(follow_target(last, body, 0.0, 250.0, Some(true)), 36.0);
+        // Middle rows that are visible do not move.
+        let middle = Rectangle::new(0.0, 10.0 + 20.0, 100.0, 16.0);
+        assert_near(follow_target(middle, body, 0.0, 250.0, None), 0.0);
+    }
+
+    #[test]
+    fn manual_scrolling_persists_until_the_focus_moves() {
+        use super::super::apply_modal_scroll;
+        let rows = 8;
+        let mut state = lay_out_frame(widgets::UiState::default(), &framed_list(rows, 2));
+        let opened = offset_of(&state);
+        // Wheel notches down reach the scroll offset and survive the next frames.
+        let wheel_down = crate::input::PlayerInput {
+            ui_scroll: -3.0,
+            ..crate::input::PlayerInput::default()
+        };
+        apply_modal_scroll(&mut state, wheel_down, false);
+        let scrolled = offset_of(&state);
+        assert_near(scrolled, (opened + 144.0).min(limit_of(&state)));
+        assert!(scrolled > opened);
+        for _ in 0..3 {
+            state = lay_out_frame(state, &framed_list(rows, 2));
+        }
+        assert_near(offset_of(&state), scrolled);
+        // Moving the selection follows it again (row 3 is scrolled out of view above).
+        state = lay_out_frame(state, &framed_list(rows, 3));
+        assert!(offset_of(&state) < scrolled, "{}", offset_of(&state));
+    }
+
+    #[test]
+    fn page_keys_home_and_end_scroll_unless_the_overlay_owns_them() {
+        use super::super::apply_modal_scroll;
+        use crate::input::PlayerInput;
+        let rows = 20;
+        let mut state = lay_out_frame(widgets::UiState::default(), &framed_list(rows, 0));
+        let page = LIST_BODY.height - MENU_ROW_HEIGHT;
+        let page_down = PlayerInput {
+            page_down: true,
+            ..PlayerInput::default()
+        };
+        apply_modal_scroll(&mut state, page_down, true);
+        assert_near(offset_of(&state), 0.0);
+        apply_modal_scroll(&mut state, page_down, false);
+        assert_near(offset_of(&state), page);
+        state = lay_out_frame(state, &framed_list(rows, 0));
+        assert_near(offset_of(&state), page);
+        let page_up = PlayerInput {
+            page_up: true,
+            ..PlayerInput::default()
+        };
+        apply_modal_scroll(&mut state, page_up, false);
+        assert_near(offset_of(&state), 0.0);
+        let end = PlayerInput {
+            scroll_end: true,
+            ..PlayerInput::default()
+        };
+        apply_modal_scroll(&mut state, end, false);
+        assert_near(offset_of(&state), limit_of(&state));
+        let home = PlayerInput {
+            scroll_home: true,
+            ..PlayerInput::default()
+        };
+        apply_modal_scroll(&mut state, home, false);
+        assert_near(offset_of(&state), 0.0);
+    }
+
+    #[test]
+    fn scrolling_without_an_open_dialog_does_nothing_and_reopening_starts_fresh() {
+        use super::super::apply_modal_scroll;
+        let rows = 8;
+        let mut state = lay_out_frame(widgets::UiState::default(), &framed_list(rows, 0));
+        // A frame without the dialog closes it.
+        state.begin_frame();
+        state.end_frame();
+        assert!(!state.has_modal());
+        let wheel_down = crate::input::PlayerInput {
+            ui_scroll: -3.0,
+            ..crate::input::PlayerInput::default()
+        };
+        apply_modal_scroll(&mut state, wheel_down, false);
+        assert_near(offset_of(&state), 0.0);
+        let reopened = lay_out_frame(state, &framed_list(rows, 0));
+        assert!(reopened.has_modal());
+        assert_near(offset_of(&reopened), 0.0);
     }
 
     #[test]

@@ -98,10 +98,46 @@ pub struct GameRenderer {
     explored_drawn: DiscoveredTiles,
 }
 
-/// Mouse-wheel scrolling only: keyboard navigation moves the selection, and the dialog follows
-/// it (`layout::follow_focused_row`) only when the selected row would leave the visible area.
+/// Wheel (and right-stick) scrolling in art pixels: positive scrolls down. Keyboard navigation
+/// moves the selection instead, and the dialog follows it (`layout::follow_focused_row`) only
+/// when the selected row would leave the visible area or is the first or last row.
 fn ui_scroll_delta(input: PlayerInput, step: f32) -> f32 {
     -input.ui_scroll * step
+}
+
+/// Applies one frame of explicit dialog scrolling to `state`: the wheel / right stick, Page
+/// Up/Down (unless `page_keys_tune`: the F3 overlay owns them then) and Home/End. Does nothing
+/// while no dialog is open. Never touches focus, so follow logic leaves the result alone until
+/// the selection moves.
+fn apply_modal_scroll(
+    state: &mut layout::widgets::UiState,
+    input: PlayerInput,
+    page_keys_tune: bool,
+) {
+    const MODAL_SCROLL_STEP: f32 = 48.0;
+    const MODAL_SCROLL_LIMIT: f32 = 10_000.0;
+    if !state.has_modal() {
+        return;
+    }
+    let id = || layout::widgets::WidgetId::new("modal-content");
+    let scroll_delta = ui_scroll_delta(input, MODAL_SCROLL_STEP);
+    if scroll_delta.abs() > f32::EPSILON {
+        state.scroll_by(id(), scroll_delta, MODAL_SCROLL_LIMIT);
+    }
+    if !page_keys_tune {
+        if input.page_up {
+            state.scroll_pages(id(), -1.0);
+        }
+        if input.page_down {
+            state.scroll_pages(id(), 1.0);
+        }
+    }
+    if input.scroll_home {
+        state.scroll_to_edge(id(), false);
+    }
+    if input.scroll_end {
+        state.scroll_to_edge(id(), true);
+    }
 }
 
 impl GameRenderer {
@@ -177,17 +213,11 @@ impl GameRenderer {
             .sync(raylib, thread, snapshot.terrain, explored, &views);
     }
 
-    pub fn apply_ui_input(&self, input: PlayerInput) {
-        const MODAL_SCROLL_STEP: f32 = 48.0;
-        const MODAL_SCROLL_LIMIT: f32 = 10_000.0;
-        let scroll_delta = ui_scroll_delta(input, MODAL_SCROLL_STEP);
-        if scroll_delta.abs() > f32::EPSILON {
-            self.ui_state.borrow_mut().scroll_by(
-                layout::widgets::WidgetId::new("modal-content"),
-                scroll_delta,
-                MODAL_SCROLL_LIMIT,
-            );
-        }
+    /// Applies seat 0's menu input to the dialog UI state before the frame is drawn:
+    /// scrolling (see [`apply_modal_scroll`]) and focus steps. `page_keys_tune` is
+    /// `ShellState::tuning_keys_active`.
+    pub fn apply_ui_input(&self, input: PlayerInput, page_keys_tune: bool) {
+        apply_modal_scroll(&mut self.ui_state.borrow_mut(), input, page_keys_tune);
         if input.menu_up {
             self.ui_state.borrow_mut().focus_previous();
         } else if input.menu_down {
@@ -199,6 +229,11 @@ impl GameRenderer {
         }
     }
 
+    /// Forgets dialog focus and scroll (scene captures start each scene fresh).
+    pub fn reset_ui_state(&self) {
+        *self.ui_state.borrow_mut() = layout::widgets::UiState::default();
+    }
+
     /// Draws one frame: every local view, then the shell overlays once on the UI canvas.
     pub fn render(
         &self,
@@ -206,7 +241,9 @@ impl GameRenderer {
         shell: &ShellState,
         snapshot: &RenderSnapshot<'_>,
     ) {
-        layout::set_current_ui_state(self.ui_state.borrow().clone());
+        let mut ui_state = self.ui_state.borrow().clone();
+        ui_state.begin_frame();
+        layout::set_current_ui_state(ui_state);
         prompts::set_menu_device(shell.prompt_device(0));
         sprite::set_current_atlas(self.atlas.as_ref());
         // The UI clock follows shell updates so scripted captures are deterministic.
@@ -282,7 +319,8 @@ impl GameRenderer {
                 palette::FOG,
             );
         }
-        if let Some(ui_state) = layout::take_current_ui_state() {
+        if let Some(mut ui_state) = layout::take_current_ui_state() {
+            ui_state.end_frame();
             *self.ui_state.borrow_mut() = ui_state;
         }
     }

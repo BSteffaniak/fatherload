@@ -195,6 +195,8 @@ pub const ALL: &[&SpriteDef] = &[
     &prompts::DPAD_HORIZONTAL,
     &prompts::DPAD_DOWN,
     &prompts::LEFT_STICK,
+    &prompts::RIGHT_STICK,
+    &prompts::MOUSE_WHEEL,
 ];
 
 #[cfg(test)]

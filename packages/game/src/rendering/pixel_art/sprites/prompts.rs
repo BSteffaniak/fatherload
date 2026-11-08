@@ -525,9 +525,62 @@ pub const LEFT_STICK: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+/// The right stick: a stick cap printed "R", so it reads apart from the left stick.
+pub const RIGHT_STICK: SpriteDef = SpriteDef {
+    name: "pad_right_stick",
+    legend: &[
+        ('o', INK),
+        ('f', SLATE),
+        ('h', BONE),
+        ('m', STEEL_LIGHT),
+        ('s', STEEL),
+        ('r', INK),
+    ],
+    frames: &[&[
+        "...ooooo...", //
+        "..offfffo..", //
+        ".ofhhhhmfo.", //
+        "ofhhrrmmmfo", //
+        "ofhmrmrmsfo", //
+        "ofmmrrmmsfo", //
+        "ofmmrmrmsfo", //
+        "ofmsrsrssfo", //
+        ".ofsssssfo.", //
+        "..offfffo..", //
+        "...ooooo...", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A mouse with its wheel lit (scrolling; a trackpad's two-finger scroll reads the same).
+pub const MOUSE_WHEEL: SpriteDef = SpriteDef {
+    name: "prompt_mouse_wheel",
+    legend: &[
+        ('o', INK),
+        ('h', BONE),
+        ('m', MIST),
+        ('s', FOG),
+        ('w', GOLD),
+    ],
+    frames: &[&[
+        ".ooooo.", //
+        "ohhwmmo", //
+        "ohhwmmo", //
+        "ohhwmmo", //
+        "ooooooo", //
+        "ohmmmso", //
+        "ohmmmso", //
+        "ommmmso", //
+        "ommmsso", //
+        ".ossso.", //
+        "..ooo..", //
+    ]],
+    frame_seconds: 0.0,
+};
+
 /// Every prompt sprite (each must be registered in `sprites::ALL`).
 #[cfg(test)]
-pub const ALL: [&SpriteDef; 21] = [
+pub const ALL: [&SpriteDef; 23] = [
     &KEYCAP_SPRITE,
     &XBOX_A,
     &XBOX_B,
@@ -549,4 +602,6 @@ pub const ALL: [&SpriteDef; 21] = [
     &DPAD_HORIZONTAL,
     &DPAD_DOWN,
     &LEFT_STICK,
+    &RIGHT_STICK,
+    &MOUSE_WHEEL,
 ];

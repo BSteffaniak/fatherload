@@ -970,6 +970,7 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 (Prompt::Confirm, "Confirm"),
                 (Prompt::Back, "Back / close"),
                 (Prompt::Tab, "Shop columns"),
+                (Prompt::Scroll, "Scroll"),
                 (Prompt::QuickSave, "Quick save"),
                 (Prompt::QuickLoad, "Quick load"),
                 (Prompt::Fullscreen, "Fullscreen"),

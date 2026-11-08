@@ -106,10 +106,8 @@ const fn pad_sprite(
             _,
         ) => &art::DPAD_HORIZONTAL,
         (PadGlyph::DPadDown, _) => &art::DPAD_DOWN,
-        (
-            PadGlyph::Button(PadButton::LeftStick | PadButton::RightStick) | PadGlyph::LeftStick,
-            _,
-        ) => &art::LEFT_STICK,
+        (PadGlyph::Button(PadButton::LeftStick) | PadGlyph::LeftStick, _) => &art::LEFT_STICK,
+        (PadGlyph::Button(PadButton::RightStick) | PadGlyph::RightStick, _) => &art::RIGHT_STICK,
     };
     (sprite, None)
 }
@@ -120,6 +118,7 @@ pub fn glyph_width(glyph: Glyph) -> i32 {
     match glyph {
         Glyph::Key(label) => keycap_width(label),
         Glyph::Pad(glyph, family) => pad_sprite(glyph, family).0.width(),
+        Glyph::MouseWheel => art::MOUSE_WHEEL.width(),
     }
 }
 
@@ -155,6 +154,10 @@ pub fn draw_glyph(draw: &mut impl RaylibDraw, glyph: Glyph, x: i32, y: i32) -> i
                 );
             }
             sprite.width()
+        }
+        Glyph::MouseWheel => {
+            ui_kit::icon(draw, &art::MOUSE_WHEEL, x, y);
+            art::MOUSE_WHEEL.width()
         }
     }
 }
@@ -303,7 +306,7 @@ pub fn wrapped_height(rows: usize) -> i32 {
 pub fn draw_prompt_sheet(draw: &mut impl RaylibDraw) {
     use super::pixel_art::sprite::draw_sprite;
     use crate::input::devices::KeyboardLayout;
-    const ALL: [Prompt; 21] = [
+    const ALL: [Prompt; 22] = [
         Prompt::Navigate,
         Prompt::Adjust,
         Prompt::Confirm,
@@ -324,6 +327,7 @@ pub fn draw_prompt_sheet(draw: &mut impl RaylibDraw) {
         Prompt::QuickSave,
         Prompt::Paste,
         Prompt::Delete,
+        Prompt::Scroll,
         Prompt::Join,
     ];
     let canvas = ui_kit::canvas();
@@ -414,6 +418,8 @@ pub fn draw_prompt_sheet(draw: &mut impl RaylibDraw) {
         &art::VIEW,
         &art::DPAD_VERTICAL,
         &art::LEFT_STICK,
+        &art::RIGHT_STICK,
+        &art::MOUSE_WHEEL,
         &art::BUMPER,
         &art::TRIGGER,
     ] {
@@ -460,5 +466,6 @@ const fn prompt_name(prompt: Prompt) -> &'static str {
         Prompt::Details => "diagnostics",
         Prompt::NetOverlay => "network",
         Prompt::Join => "join",
+        Prompt::Scroll => "scroll",
     }
 }

@@ -82,6 +82,8 @@ fn sample_pad(raylib: &RaylibHandle, index: i32) -> PadState {
     let mut state = PadState {
         left_x: raylib.get_gamepad_axis_movement(index, GamepadAxis::GAMEPAD_AXIS_LEFT_X),
         left_y: raylib.get_gamepad_axis_movement(index, GamepadAxis::GAMEPAD_AXIS_LEFT_Y),
+        right_x: raylib.get_gamepad_axis_movement(index, GamepadAxis::GAMEPAD_AXIS_RIGHT_X),
+        right_y: raylib.get_gamepad_axis_movement(index, GamepadAxis::GAMEPAD_AXIS_RIGHT_Y),
         ..PadState::default()
     };
     for (button, raylib_button) in RAYLIB_BUTTONS {

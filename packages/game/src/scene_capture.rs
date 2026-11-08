@@ -167,6 +167,8 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
         );
         let renderer = renderer
             .get_or_insert_with(|| GameRenderer::new(&mut raylib, &thread, game.world().terrain()));
+        // Each scene starts with fresh dialog focus and scroll, whatever the last one showed.
+        renderer.reset_ui_state();
         let path = options.dir.join(format!("{}.png", scene.name));
         for frame in 0..RENDER_FRAMES {
             let screen = crate::window::DesktopWindow::screen(&raylib);
@@ -1101,6 +1103,34 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             enter_interior(stage, SurfaceZone::Depot, Some(ModalScreen::Depot));
             stage.use_devices(&[PLAYSTATION]);
+        },
+    },
+    Scene {
+        name: "interior_depot_last_row",
+        summary: "Ore depot counter on its last row, scrolled to the hold and prices below",
+        setup: |stage| {
+            enter_interior(stage, SurfaceZone::Depot, Some(ModalScreen::Depot));
+            stage.shell().selected_menu_item = 4;
+        },
+    },
+    Scene {
+        name: "pad_interior_depot_last_row",
+        summary: "Ore depot counter on its last row with Xbox controller prompts",
+        setup: |stage| {
+            enter_interior(stage, SurfaceZone::Depot, Some(ModalScreen::Depot));
+            stage.shell().selected_menu_item = 4;
+            stage.use_devices(&[XBOX]);
+        },
+    },
+    Scene {
+        name: "modal_help",
+        summary: "Controls reference for the keyboard",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                park_rig(world, seats[0].player, 97, 4);
+            });
+            stage.settle(10);
+            stage.shell().modal = Some(ModalScreen::Help);
         },
     },
     Scene {

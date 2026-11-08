@@ -19,23 +19,47 @@ pub(in crate::rendering) struct UiState {
     focused: Option<WidgetId>,
     scroll_offsets: BTreeMap<WidgetId, f32>,
     scroll_limits: BTreeMap<WidgetId, f32>,
+    /// How far one Page Up / Page Down scrolls each scroll area (its height less a row).
+    page_steps: BTreeMap<WidgetId, f32>,
     focus_order: Vec<WidgetId>,
     /// The focused row the modal scroll last brought into view.
     followed: Option<WidgetId>,
     /// Title of the dialog the scroll and follow state belong to.
     modal: Option<String>,
+    /// Whether a dialog was laid out during the frame being drawn.
+    modal_seen: bool,
 }
 
 impl UiState {
-    /// Starts tracking the dialog titled `title`: a different dialog than last frame starts
-    /// scrolled to the top with nothing followed yet.
+    /// Starts tracking the dialog titled `title`: a different dialog than last frame (or one
+    /// reopened after a frame without it) starts scrolled to the top with nothing followed yet.
     pub(super) fn enter_modal(&mut self, title: &str, scroll_id: &WidgetId) {
+        self.modal_seen = true;
         if self.modal.as_deref() == Some(title) {
             return;
         }
         self.modal = Some(title.to_owned());
         self.followed = None;
         self.scroll_offsets.insert(scroll_id.clone(), 0.0);
+    }
+
+    /// Call before drawing a frame's UI.
+    pub(in crate::rendering) const fn begin_frame(&mut self) {
+        self.modal_seen = false;
+    }
+
+    /// Call after drawing a frame's UI: a dialog that was not drawn this frame is closed, so
+    /// opening it again starts fresh and scroll input meanwhile has nothing to move.
+    pub(in crate::rendering) fn end_frame(&mut self) {
+        if !self.modal_seen {
+            self.modal = None;
+            self.followed = None;
+        }
+    }
+
+    /// Whether a dialog is open (it was drawn last frame).
+    pub(in crate::rendering) const fn has_modal(&self) -> bool {
+        self.modal.is_some()
     }
 
     /// Records `id` as followed; returns whether it differs from the last followed row.
@@ -117,6 +141,23 @@ impl UiState {
         let limit = self.scroll_limit(&id).min(max_offset.max(0.0));
         let next = (self.scroll_offset(&id) + delta).clamp(0.0, limit);
         self.scroll_offsets.insert(id, next);
+    }
+
+    pub(super) fn set_page_step(&mut self, id: WidgetId, step: f32) {
+        self.page_steps.insert(id, step.max(0.0));
+    }
+
+    /// Scrolls `id` by `pages` pages (negative scrolls up), within its limit.
+    pub(in crate::rendering) fn scroll_pages(&mut self, id: WidgetId, pages: f32) {
+        let step = self.page_steps.get(&id).copied().unwrap_or(0.0);
+        let next = self.scroll_offset(&id) + step * pages;
+        self.set_scroll_offset(id, next);
+    }
+
+    /// Scrolls `id` to its top or (`end`) its bottom.
+    pub(in crate::rendering) fn scroll_to_edge(&mut self, id: WidgetId, end: bool) {
+        let offset = if end { self.scroll_limit(&id) } else { 0.0 };
+        self.set_scroll_offset(id, offset);
     }
 }
 

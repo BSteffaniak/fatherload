@@ -7,7 +7,7 @@
 
 use super::{
     devices::{InputDevice, KeyboardLayout, PadFamily},
-    gamepad::{PadAction, PadButton, primary_button},
+    gamepad::{PadAction, PadAxis, PadButton, SCROLL_AXIS, primary_button},
 };
 
 /// Something the player can do, as shown in a prompt.
@@ -51,6 +51,8 @@ pub enum Prompt {
     NetOverlay,
     /// A controller claiming a split-screen seat.
     Join,
+    /// Scroll a dialog whose content is taller than it (wheel, Page Up/Down, right stick).
+    Scroll,
 }
 
 /// A controller glyph: a button or a direction cluster.
@@ -65,6 +67,8 @@ pub enum PadGlyph {
     DPadDown,
     /// The left stick.
     LeftStick,
+    /// The right stick (dialog scrolling).
+    RightStick,
 }
 
 /// One drawable piece of a prompt.
@@ -74,6 +78,8 @@ pub enum Glyph {
     Key(&'static str),
     /// A controller glyph in a pad family's style.
     Pad(PadGlyph, PadFamily),
+    /// The mouse wheel (or a trackpad's two-finger scroll).
+    MouseWheel,
 }
 
 /// The glyphs to draw for `prompt` on `device`; empty when the device has no binding for it
@@ -81,10 +87,15 @@ pub enum Glyph {
 #[must_use]
 pub fn glyphs(prompt: Prompt, device: InputDevice) -> Vec<Glyph> {
     match device {
-        InputDevice::Keyboard(layout) => keyboard_keys(prompt, layout)
-            .iter()
-            .map(|key| Glyph::Key(key))
-            .collect(),
+        InputDevice::Keyboard(layout) => {
+            let keys = keyboard_keys(prompt, layout);
+            // The mouse belongs to the main keyboard: its wheel scrolls before the keys do.
+            let wheel = (prompt == Prompt::Scroll && !keys.is_empty()).then_some(Glyph::MouseWheel);
+            wheel
+                .into_iter()
+                .chain(keys.iter().map(|key| Glyph::Key(key)))
+                .collect()
+        }
         InputDevice::Gamepad { family, .. } => pad_glyphs(prompt)
             .into_iter()
             .map(|glyph| Glyph::Pad(glyph, family))
@@ -106,6 +117,7 @@ pub fn inline_text(prompt: Prompt, device: InputDevice) -> Option<String> {
         .map(|glyph| match glyph {
             Glyph::Key(label) => label,
             Glyph::Pad(glyph, family) => pad_glyph_name(glyph, family),
+            Glyph::MouseWheel => "Wheel",
         })
         .collect();
     (!parts.is_empty()).then(|| parts.join("/"))
@@ -147,6 +159,7 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::Infrastructure, Full | Wasd) => &["R", "T", "L", "U", "O", "P"],
         (Prompt::Details, Full | Wasd) => &["Ctrl+Tab"],
         (Prompt::NetOverlay, Full | Wasd) => &["F3"],
+        (Prompt::Scroll, Full | Wasd) => &["PgUp", "PgDn"],
         // The arrow-keys seat has no menu hotkeys, and keyboards never "join".
         (
             Prompt::Pause
@@ -161,7 +174,8 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
             | Prompt::Delete
             | Prompt::Infrastructure
             | Prompt::Details
-            | Prompt::NetOverlay,
+            | Prompt::NetOverlay
+            | Prompt::Scroll,
             Arrows,
         )
         | (Prompt::Join, _) => &[],
@@ -177,6 +191,10 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
         Prompt::Navigate => vec![PadGlyph::DPadVertical],
         Prompt::Adjust => vec![PadGlyph::DPadHorizontal],
         Prompt::Walk => vec![PadGlyph::LeftStick],
+        Prompt::Scroll => vec![match SCROLL_AXIS {
+            PadAxis::LeftX | PadAxis::LeftY => PadGlyph::LeftStick,
+            PadAxis::RightX | PadAxis::RightY => PadGlyph::RightStick,
+        }],
         Prompt::Drill => vec![PadGlyph::DPadDown],
         Prompt::Confirm | Prompt::Join => button(PadAction::Confirm).into_iter().collect(),
         Prompt::Back => button(PadAction::Back).into_iter().collect(),
@@ -253,6 +271,7 @@ pub const fn pad_glyph_name(glyph: PadGlyph, family: PadFamily) -> &'static str 
         PadGlyph::DPadHorizontal => "D-pad left/right",
         PadGlyph::DPadDown => "D-pad down",
         PadGlyph::LeftStick => "Left stick",
+        PadGlyph::RightStick => "Right stick",
     }
 }
 
@@ -328,6 +347,33 @@ mod tests {
         // Nintendo prints B at the bottom (Xbox A) position.
         assert_eq!(inline_text(Prompt::Confirm, nintendo).as_deref(), Some("B"));
         assert_eq!(inline_text(Prompt::Tab, nintendo).as_deref(), Some("L/R"));
+    }
+
+    #[test]
+    fn scroll_prompts_show_the_wheel_and_page_keys_or_the_right_stick() {
+        assert_eq!(
+            glyphs(Prompt::Scroll, InputDevice::KEYBOARD),
+            vec![Glyph::MouseWheel, Glyph::Key("PgUp"), Glyph::Key("PgDn")]
+        );
+        assert!(
+            glyphs(
+                Prompt::Scroll,
+                InputDevice::Keyboard(KeyboardLayout::Arrows)
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            glyphs(Prompt::Scroll, XBOX),
+            vec![Glyph::Pad(PadGlyph::RightStick, PadFamily::Xbox)]
+        );
+        assert_eq!(
+            inline_text(Prompt::Scroll, InputDevice::KEYBOARD).as_deref(),
+            Some("Wheel/PgUp/PgDn")
+        );
+        assert_eq!(
+            inline_text(Prompt::Scroll, XBOX).as_deref(),
+            Some("Right stick")
+        );
     }
 
     #[test]

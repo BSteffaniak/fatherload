@@ -63,15 +63,22 @@ pub struct PlayerInput {
     pub exit_requested: bool,
     pub text_input: Option<char>,
     pub text_backspace: bool,
+    /// Dialog scrolling in mouse-wheel notches (positive scrolls up): the wheel or trackpad,
+    /// plus the controller's right stick (already scaled by frame time).
     pub ui_scroll: f32,
     /// F3: toggle the network debug overlay.
     pub net_debug: bool,
     /// F4 (dev, overlay open): select the next live tuning value.
     pub tune_next: bool,
-    /// Page Up (dev, overlay open): raise the selected tuning value.
-    pub tune_up: bool,
-    /// Page Down (dev, overlay open): lower the selected tuning value.
-    pub tune_down: bool,
+    /// Page Up: scrolls a dialog up a page. With the F3 overlay open in a dev build it raises
+    /// the selected tuning value instead (see `ShellState::tuning_keys_active`).
+    pub page_up: bool,
+    /// Page Down: scrolls a dialog down a page, or lowers the tuning value (as `page_up`).
+    pub page_down: bool,
+    /// Home: scrolls a dialog to the top.
+    pub scroll_home: bool,
+    /// End: scrolls a dialog to the bottom.
+    pub scroll_end: bool,
     /// Ctrl+V: paste the clipboard into the focused text field.
     pub paste: bool,
 }
@@ -127,8 +134,10 @@ impl PlayerInput {
             ui_scroll,
             net_debug,
             tune_next,
-            tune_up,
-            tune_down,
+            page_up,
+            page_down,
+            scroll_home,
+            scroll_end,
             paste,
         } = *self;
         horizontal.abs() > f32::EPSILON
@@ -170,8 +179,10 @@ impl PlayerInput {
                 text_backspace,
                 net_debug,
                 tune_next,
-                tune_up,
-                tune_down,
+                page_up,
+                page_down,
+                scroll_home,
+                scroll_end,
                 paste,
             ]
             .into_iter()
@@ -243,8 +254,10 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         ui_scroll: primary.ui_scroll + secondary.ui_scroll,
         net_debug: primary.net_debug || secondary.net_debug,
         tune_next: primary.tune_next || secondary.tune_next,
-        tune_up: primary.tune_up || secondary.tune_up,
-        tune_down: primary.tune_down || secondary.tune_down,
+        page_up: primary.page_up || secondary.page_up,
+        page_down: primary.page_down || secondary.page_down,
+        scroll_home: primary.scroll_home || secondary.scroll_home,
+        scroll_end: primary.scroll_end || secondary.scroll_end,
         paste: primary.paste || secondary.paste,
     }
 }
@@ -325,8 +338,12 @@ fn read_primary_keyboard_input_with_options(
         ui_scroll: raylib.get_mouse_wheel_move(),
         net_debug: raylib.is_key_pressed(KeyboardKey::KEY_F3),
         tune_next: raylib.is_key_pressed(KeyboardKey::KEY_F4),
-        tune_up: raylib.is_key_pressed(KeyboardKey::KEY_PAGE_UP),
-        tune_down: raylib.is_key_pressed(KeyboardKey::KEY_PAGE_DOWN),
+        page_up: raylib.is_key_pressed(KeyboardKey::KEY_PAGE_UP)
+            || raylib.is_key_pressed_repeat(KeyboardKey::KEY_PAGE_UP),
+        page_down: raylib.is_key_pressed(KeyboardKey::KEY_PAGE_DOWN)
+            || raylib.is_key_pressed_repeat(KeyboardKey::KEY_PAGE_DOWN),
+        scroll_home: raylib.is_key_pressed(KeyboardKey::KEY_HOME),
+        scroll_end: raylib.is_key_pressed(KeyboardKey::KEY_END),
         paste: ctrl_down && raylib.is_key_pressed(KeyboardKey::KEY_V),
     }
 }

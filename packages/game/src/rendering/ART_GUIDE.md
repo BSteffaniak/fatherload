@@ -144,8 +144,14 @@ style; prefer it for every selectable row so each choice carries an icon), `mete
 `.warning()` gives the red frame, `.footer(text)` pins a description (the selected row's
 details) under the scrolling content. Dialogs shrink to their content; inside a building they
 dock on the left (`ModalPlacement::Counter`) so the counter, keeper and rig stay visible.
-Content taller than the panel scrolls, a thin amber scroll bar shows that more rows exist, and
-a newly selected row is scrolled into view (a different dialog title starts at the top).
+Content taller than the panel scrolls: a thin amber scroll bar with small `GOLD` arrows at the
+ends that have more content past them, and the scroll prompt (`Prompt::Scroll`: mouse wheel +
+PgUp/PgDn keycaps, or the right stick) right-aligned on the title line. Selecting a row scrolls
+only when it would leave the view, except that the first selectable row scrolls to the top and
+the last to the bottom, so text before the first or after the last button is reachable with the
+selection alone. Explicit scrolling (wheel/trackpad, Page Up/Down, Home/End, right stick) is
+never undone until the selection moves. A different dialog title, or a dialog reopened after a
+frame without it, starts at the top.
 
 Counter rows (`counters.rs`) must mirror, index for index, the request the shell submits for
 that menu item, so a label always says what Enter does. Show prices with the coin, payouts as
@@ -193,7 +199,9 @@ crate::input::prompts::inline_text(Prompt::Use, device);
   printed at their own positions (B bottom, A right, Y left, X top). Bumpers (15 wide) and
   triggers (13 wide) are blank `STEEL_DARK` shoulder shapes labelled with the font (LB/L1/L,
   LT/L2/ZL). `MENU` (three lines), `VIEW` (two windows), the d-pad (one cross grid with
-  vertical / horizontal / down arms lit in `BONE`) and the left stick complete the set. The
+  vertical / horizontal / down arms lit in `BONE`), the left stick, the right stick (a light cap
+printed `R` in `INK`) and the keyboard's mouse wheel (`MOUSE_WHEEL`, 7 wide, wheel lit `GOLD`)
+complete the set. The
   family comes from the controller name (`PadFamily::from_name`); unknown pads use Xbox glyphs.
 - Check changes with the `prompt_sheet` scene (every prompt on every device, glyphs at 3x) and
   the `pad_*` scenes.

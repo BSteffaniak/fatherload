@@ -557,6 +557,13 @@ impl ShellState {
             .unwrap_or(InputDevice::KEYBOARD)
     }
 
+    /// Whether Page Up / Page Down tune live network values (the F3 overlay is open in a dev
+    /// build) instead of scrolling dialogs. Exactly one of the two ever handles the keys.
+    #[must_use]
+    pub const fn tuning_keys_active(&self) -> bool {
+        self.online.show_net_debug && cfg!(debug_assertions)
+    }
+
     /// `prompt`'s key or button for seat 0, for messages ("press E" / "press X").
     fn key_for(&self, prompt: Prompt) -> String {
         inline_text(prompt, self.prompt_device(0)).unwrap_or_else(|| "the use button".to_owned())
@@ -634,12 +641,12 @@ impl ShellState {
         if input.net_debug {
             self.online.show_net_debug = !self.online.show_net_debug;
         }
-        if self.online.show_net_debug && cfg!(debug_assertions) && !text_entry {
+        if self.tuning_keys_active() && !text_entry {
             if input.tune_next {
                 self.online.tune_parameter =
                     (self.online.tune_parameter + 1) % crate::runtime::TUNABLE_PARAMETERS.len();
             }
-            for (pressed, step) in [(input.tune_up, 1), (input.tune_down, -1)] {
+            for (pressed, step) in [(input.page_up, 1), (input.page_down, -1)] {
                 if pressed {
                     requests.push(ShellRequest::AdjustTuning {
                         parameter: self.online.tune_parameter,
@@ -1692,6 +1699,35 @@ mod tests {
             back: true,
             ..PlayerInput::default()
         }
+    }
+
+    #[test]
+    fn page_keys_tune_only_while_the_dev_overlay_is_open() {
+        let world = WorldState::new_game(PlayerId::new(1));
+        let mut shell = ShellState::default();
+        shell.enter_world("test", 0.0);
+        let page_up = PlayerInput {
+            page_up: true,
+            ..PlayerInput::default()
+        };
+        let tunes = |requests: &[ShellRequest]| {
+            requests
+                .iter()
+                .any(|request| matches!(request, ShellRequest::AdjustTuning { step: 1, .. }))
+        };
+        assert!(
+            !shell.tuning_keys_active(),
+            "closed overlay: the keys scroll"
+        );
+        assert!(!tunes(&shell.update(page_up, 0.016, ctx(&world))));
+
+        shell.online.show_net_debug = true;
+        assert_eq!(shell.tuning_keys_active(), cfg!(debug_assertions));
+        assert_eq!(
+            tunes(&shell.update(page_up, 0.016, ctx(&world))),
+            cfg!(debug_assertions),
+            "open overlay in a dev build: the keys tune (and the renderer leaves them alone)"
+        );
     }
 
     #[test]
