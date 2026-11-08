@@ -778,6 +778,79 @@ mod tests {
         report
     }
 
+    fn down() -> PlayerInput {
+        PlayerInput {
+            menu_down: true,
+            ..PlayerInput::default()
+        }
+    }
+
+    fn confirm_input() -> PlayerInput {
+        PlayerInput {
+            confirm: true,
+            ..PlayerInput::default()
+        }
+    }
+
+    /// Navigating the options rows with Down and confirming acts on the highlighted row.
+    fn assert_options_rows_follow_navigation(game: &mut LocalGame) {
+        assert_eq!(game.shell.modal, Some(ModalScreen::Options));
+        assert_eq!(game.shell.selected_menu_item, 0, "opens on the volume row");
+        let _ = press(game, down());
+        assert_eq!(
+            game.shell.selected_menu_item, 1,
+            "Down highlights Fullscreen"
+        );
+        let _ = press(game, down());
+        assert_eq!(game.shell.selected_menu_item, 2, "Down highlights Back");
+        let fullscreen = game.shell.fullscreen;
+        let _ = press(game, confirm_input());
+        assert_eq!(game.shell.modal, None, "confirming Back closes Options");
+        assert_eq!(
+            game.shell.fullscreen, fullscreen,
+            "and leaves fullscreen alone"
+        );
+    }
+
+    #[test]
+    fn options_from_the_title_confirm_the_highlighted_row() {
+        let mut game = title_game("options-title");
+        idle(&mut game, 2);
+        let options = TitleOption::all(save::saves_exist());
+        let target = options
+            .iter()
+            .position(|option| *option == TitleOption::Options)
+            .expect("title lists Options");
+        for _ in 0..target {
+            let _ = press(&mut game, down());
+        }
+        let _ = press(&mut game, confirm_input());
+        assert_options_rows_follow_navigation(&mut game);
+    }
+
+    #[test]
+    fn options_from_the_pause_menu_confirm_the_highlighted_row() {
+        let mut game = playing(WorldState::new_game(PLAYER), 1, "options-pause");
+        idle(&mut game, 2);
+        let _ = press(
+            &mut game,
+            PlayerInput {
+                pause: true,
+                ..PlayerInput::default()
+            },
+        );
+        let options = PauseOption::for_role(None);
+        let target = options
+            .iter()
+            .position(|option| *option == PauseOption::Options)
+            .expect("pause lists Options");
+        for _ in 0..target {
+            let _ = press(&mut game, down());
+        }
+        let _ = press(&mut game, confirm_input());
+        assert_options_rows_follow_navigation(&mut game);
+    }
+
     #[test]
     fn frame_devices_reach_the_shell_and_empty_keeps_them() {
         let mut game = title_game("devices");
