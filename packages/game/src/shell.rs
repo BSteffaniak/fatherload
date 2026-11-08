@@ -1814,11 +1814,20 @@ impl ShellState {
         }
     }
 
+    /// Closes an exit prompt. Over the pause menu the seat that paused gets the menu back (the
+    /// window-close prompt is always answered by player 1).
+    fn close_exit_prompt(&mut self) {
+        self.modal = None;
+        if self.run_mode == RunMode::Paused {
+            self.menu_seat = self.paused_by.min(self.seats.len().saturating_sub(1));
+        }
+    }
+
     fn handle_exit_modal(&mut self, input: PlayerInput, requests: &mut Vec<ShellRequest>) -> bool {
         match self.modal {
             Some(ModalScreen::ExitConfirm) => {
                 if input.backs_out() {
-                    self.modal = None;
+                    self.close_exit_prompt();
                 } else if input.confirm {
                     self.request_exit = true;
                     requests.push(ShellRequest::Exit);
@@ -1827,7 +1836,7 @@ impl ShellState {
             }
             Some(ModalScreen::UnsavedExitConfirm) => {
                 if input.backs_out() {
-                    self.modal = None;
+                    self.close_exit_prompt();
                     return true;
                 }
                 self.move_selection(input, 2);
@@ -1838,7 +1847,7 @@ impl ShellState {
                             self.request_exit = true;
                             requests.push(ShellRequest::Exit);
                         }
-                        _ => self.modal = None,
+                        _ => self.close_exit_prompt(),
                     }
                 }
                 true

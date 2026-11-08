@@ -502,3 +502,75 @@ fn a_stranded_seat_can_close_its_dialog_to_reach_the_rescue_prompt() {
     idle(&mut game, 3);
     assert_eq!(game.world().rescue_count(second), 1);
 }
+
+#[test]
+fn the_window_close_prompt_hands_the_pause_menu_back_to_whoever_paused() {
+    let mut game = playing(split_world(&[None, None]), 2, "qa-close-over-pause");
+    idle(&mut game, 3);
+    press_seat(&mut game, 1, pause_input());
+    assert_eq!(game.shell.menu_seat, 1);
+    // The window's close button: player 1 answers the prompt.
+    let _report = step(
+        &mut game,
+        PlayerInput {
+            exit_requested: true,
+            ..PlayerInput::default()
+        },
+    );
+    assert!(matches!(
+        game.shell.modal,
+        Some(ModalScreen::ExitConfirm | ModalScreen::UnsavedExitConfirm)
+    ));
+    assert_eq!(game.shell.menu_seat, 0);
+    press_seat(&mut game, 1, back_input());
+    assert!(game.shell.modal.is_some(), "player 2 cannot answer it");
+    press_seat(&mut game, 0, back_input());
+    assert_eq!(game.shell.modal, None);
+    assert_eq!(game.shell.run_mode, RunMode::Paused);
+    assert_eq!(
+        game.shell.menu_seat, 1,
+        "player 2 has their pause menu back"
+    );
+    press_seat(&mut game, 1, back_input());
+    assert_eq!(game.shell.run_mode, RunMode::Playing);
+    assert!(!game.should_exit());
+}
+
+#[test]
+fn a_rig_driven_into_a_door_at_speed_still_shops_from_inside() {
+    let shop = SURFACE_BUILDINGS
+        .iter()
+        .find(|building| building.zone == SurfaceZone::Shop)
+        .expect("shop");
+    let mut world = split_world(&[None, None]);
+    let second = PlayerId::new(2);
+    let rig = world.player_mut(second).expect("rig");
+    #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
+    let x = (shop.tile_x as f32 - 6.0) * TILE_SIZE;
+    rig.x = x;
+    rig.credits = 10_000;
+    let mut game = playing(world, 2, "qa-door-speed");
+    idle(&mut game, 5);
+    // Full speed towards the shop; press use on the first frame the rig is at it.
+    let mut entered = false;
+    for _ in 0..600 {
+        let at_shop = game.world().player_surface_zone(second) == Some(SurfaceZone::Shop);
+        let input = PlayerInput {
+            interact: at_shop,
+            ..right()
+        };
+        let _report = step_seats(&mut game, &[PlayerInput::default(), input]);
+        if game.shell.seat(1).inside() {
+            entered = true;
+            break;
+        }
+    }
+    assert!(entered);
+    let speed = player(&game, second).velocity_x;
+    idle(&mut game, 180);
+    assert_eq!(
+        game.world().player_surface_zone(second),
+        Some(SurfaceZone::Shop),
+        "the rig (entered at {speed} px/s) coasted out of the shop while its player was inside"
+    );
+}
