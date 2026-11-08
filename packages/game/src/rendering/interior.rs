@@ -1,82 +1,144 @@
+//! Walk-in building interiors, drawn as pixel-art rooms.
+//!
+//! A room is a fixed [`ROOM_WIDTH`] x [`ROOM_HEIGHT`] art-pixel canvas shown at the largest whole
+//! pixel size that fits the window (see [`crate::pixel_scale::fit_pixel_size`]) and centred; the
+//! walls and floor continue past its edges on wider screens. The rig walks along the floor in the
+//! shell's room units (`interior_x`, 0..640), which map to art pixels at half scale, so the door,
+//! counter and walking rules stay exactly those of [`crate::shell`].
+//!
+//! The Upgrade Shop is the fully dressed style reference; the other buildings share the room
+//! structure in their own colours with simpler props.
+
 use raylib::prelude::*;
 
-use super::{layout::UiLayout, render_scale_for_draw};
+#[allow(
+    clippy::wildcard_imports,
+    reason = "art code names colours from the whole palette"
+)]
+use super::pixel_art::palette::*;
+use super::{
+    pixel_art::{
+        palette,
+        sprite::{self, SpriteDef},
+        sprites::{
+            interior::{self as art, InteriorSet},
+            rig,
+        },
+    },
+    ui_kit::{self, PanelStyle, TextStyle, UiCanvasScope},
+};
 use drillgame_simulation::economy::SurfaceZone;
 
 use crate::{
+    pixel_scale,
     render_snapshot::ViewSnapshot,
-    shell::{ServiceAnimation, ShellState},
+    shell::{ServiceAnimation, ShellState, interior_service_x, surface_zone_label},
 };
 
-/// The room is authored on a fixed canvas (logical points) and scaled uniformly to fit the screen.
-const CANVAS_WIDTH: f32 = 1280.0;
-const CANVAS_HEIGHT: f32 = 720.0;
-/// Canvas y where the floor starts; the floor colour extends to the screen edges below it.
-const FLOOR_Y: f32 = 455.0;
-/// Gap kept between UI panels and the screen edge.
-const PANEL_MARGIN: f32 = 8.0;
+/// Room canvas size in art pixels.
+pub const ROOM_WIDTH: i32 = 320;
+pub const ROOM_HEIGHT: i32 = 180;
+/// Bottom of the ceiling band.
+const CEILING_Y: i32 = 16;
+/// Top of the wainscot (lower wall).
+const WAINSCOT_Y: i32 = 104;
+/// Top of the floor; the rig and counter stand on it.
+const FLOOR_Y: i32 = 140;
+/// Shell room units per art pixel.
+const ROOM_UNITS_PER_PIXEL: f32 = 2.0;
+/// How close (room units) the rig must be to the counter for `E` to work (mirrors the shell).
+const COUNTER_REACH: f32 = 70.0;
+/// Room units left of which `E` uses the door (mirrors the shell).
+const DOOR_REACH: f32 = 74.0;
+/// Counter width in art pixels.
+const COUNTER_WIDTH: i32 = 76;
+const COUNTER_HEIGHT: i32 = 24;
 
-/// Maps the fixed interior canvas onto a screen of any size: uniformly scaled to fit and centred,
-/// so the room never stretches or spills off screen.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct InteriorCanvas {
-    /// Screen points per canvas point.
-    scale: f32,
-    offset_x: f32,
-    offset_y: f32,
-    screen_width: f32,
-    screen_height: f32,
+/// Where the room canvas sits in the framebuffer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RoomPlacement {
+    /// Physical pixels per room art pixel.
+    pixel: i32,
+    /// Framebuffer position of the room's top-left corner.
+    offset_x: i32,
+    offset_y: i32,
+    render_width: i32,
+    render_height: i32,
 }
 
-impl InteriorCanvas {
-    fn fit(screen_width: i32, screen_height: i32) -> Self {
-        let screen_width = screen_width.max(1) as f32;
-        let screen_height = screen_height.max(1) as f32;
-        let scale = (screen_width / CANVAS_WIDTH).min(screen_height / CANVAS_HEIGHT);
+impl RoomPlacement {
+    fn fit(render_width: i32, render_height: i32) -> Self {
+        let pixel =
+            pixel_scale::fit_pixel_size((render_width, render_height), (ROOM_WIDTH, ROOM_HEIGHT));
         Self {
-            scale,
-            offset_x: CANVAS_WIDTH.mul_add(-scale, screen_width) * 0.5,
-            offset_y: CANVAS_HEIGHT.mul_add(-scale, screen_height) * 0.5,
-            screen_width,
-            screen_height,
+            pixel,
+            offset_x: (render_width - ROOM_WIDTH * pixel) / 2,
+            offset_y: (render_height - ROOM_HEIGHT * pixel) / 2,
+            render_width,
+            render_height,
         }
     }
 
-    fn to_screen(self, x: f32, y: f32) -> Vector2 {
-        Vector2::new(
-            x.mul_add(self.scale, self.offset_x),
-            y.mul_add(self.scale, self.offset_y),
-        )
-    }
-
-    /// The physical-pixel camera that draws canvas coordinates (see `render_scale_for_draw`).
-    fn camera(self, density: f32) -> Camera2D {
+    fn camera(self) -> Camera2D {
         Camera2D {
-            offset: Vector2::new(self.offset_x * density, self.offset_y * density),
+            offset: Vector2::new(self.offset_x as f32, self.offset_y as f32),
             target: Vector2::zero(),
             rotation: 0.0,
-            zoom: self.scale * density,
+            zoom: self.pixel as f32,
         }
     }
 
-    /// A UI panel authored at `rect` on the canvas: same size in screen points (so text stays
-    /// readable), centred where the canvas rect's centre lands, and kept on screen.
-    fn panel(self, rect: Rectangle) -> Rectangle {
-        let centre = self.to_screen(rect.x + rect.width * 0.5, rect.y + rect.height * 0.5);
-        let max_x = (self.screen_width - rect.width - PANEL_MARGIN).max(PANEL_MARGIN);
-        let max_y = (self.screen_height - rect.height - PANEL_MARGIN).max(PANEL_MARGIN);
-        Rectangle {
-            x: rect
-                .width
-                .mul_add(-0.5, centre.x)
-                .clamp(PANEL_MARGIN, max_x),
-            y: rect
-                .height
-                .mul_add(-0.5, centre.y)
-                .clamp(PANEL_MARGIN, max_y),
-            width: rect.width,
-            height: rect.height,
-        }
+    /// Room x range visible on screen (wider than the room on wide windows).
+    const fn visible_x(self) -> (i32, i32) {
+        let left = -(self.offset_x + self.pixel - 1) / self.pixel;
+        let right = (self.render_width - self.offset_x + self.pixel - 1) / self.pixel;
+        (left, right)
+    }
+
+    /// Room y range visible on screen.
+    const fn visible_y(self) -> (i32, i32) {
+        let top = -(self.offset_y + self.pixel - 1) / self.pixel;
+        let bottom = (self.render_height - self.offset_y + self.pixel - 1) / self.pixel;
+        (top, bottom)
+    }
+
+    /// A room point in UI canvas art pixels.
+    const fn to_canvas(self, canvas: ui_kit::UiCanvas, x: i32, y: i32) -> (i32, i32) {
+        (
+            (self.offset_x + x * self.pixel) / canvas.pixel,
+            (self.offset_y + y * self.pixel) / canvas.pixel,
+        )
+    }
+}
+
+/// Room art x of a shell room-unit position.
+fn room_pixel_x(room_units: f32) -> i32 {
+    (room_units / ROOM_UNITS_PER_PIXEL).round() as i32
+}
+
+const fn interior_set(zone: SurfaceZone) -> &'static InteriorSet {
+    match zone {
+        SurfaceZone::Fuel => &art::fuel::SET,
+        SurfaceZone::Repair => &art::repair::SET,
+        SurfaceZone::Depot => &art::depot::SET,
+        SurfaceZone::Headquarters => &art::hq::SET,
+        SurfaceZone::Shop => &art::shop::SET,
+        SurfaceZone::Bank => &art::bank::SET,
+        SurfaceZone::Explosives => &art::explosives::SET,
+        SurfaceZone::Salvage => &art::salvage::SET,
+    }
+}
+
+const fn sign_text(zone: SurfaceZone) -> &'static str {
+    match zone {
+        SurfaceZone::Fuel => "FUEL",
+        SurfaceZone::Repair => "REPAIRS",
+        SurfaceZone::Depot => "ORE DEPOT",
+        SurfaceZone::Headquarters => "BOREALIS HQ",
+        SurfaceZone::Shop => "UPGRADES",
+        SurfaceZone::Bank => "IRON LEDGER",
+        SurfaceZone::Explosives => "BOOM!",
+        SurfaceZone::Salvage => "SALVAGE",
     }
 }
 
@@ -86,75 +148,579 @@ pub(super) fn draw_interior(
     view: &ViewSnapshot<'_>,
 ) {
     let zone = shell.interior_zone.unwrap_or(SurfaceZone::Depot);
-    let (wall, trim, title) = interior_theme(zone);
-    let (screen_width, screen_height) = (draw.get_screen_width(), draw.get_screen_height());
-    let canvas = InteriorCanvas::fit(screen_width, screen_height);
-    draw.clear_background(wall);
-    let floor_y = canvas.to_screen(0.0, FLOOR_Y).y as i32;
-    draw.draw_rectangle(
-        0,
-        floor_y,
-        screen_width,
-        screen_height - floor_y,
-        Color::new(38, 32, 28, 255),
-    );
-
-    let service_x = interior_screen_x(interior_service_x_render(zone));
-    let player_x = interior_screen_x(shell.interior_x);
+    let set = interior_set(zone);
+    let placement = RoomPlacement::fit(draw.get_render_width(), draw.get_render_height());
+    let seconds = ui_kit::seconds();
+    draw.clear_background(set.shadow);
+    let counter_x = room_pixel_x(interior_service_x(zone)) - COUNTER_WIDTH / 2;
     {
-        let density = render_scale_for_draw(draw);
-        let mut scene = draw.begin_mode2D(canvas.camera(density));
-        scene.draw_rectangle(35, 130, 1210, 380, Color::new(18, 18, 24, 220));
-        scene.draw_rectangle_lines(35, 130, 1210, 380, trim);
-
-        scene.draw_rectangle(58, 338, 48, 118, Color::new(55, 32, 20, 255));
-        scene.draw_rectangle_lines(58, 338, 48, 118, Color::GOLD);
-
-        draw_interior_props(&mut scene, zone);
-        draw_service_animation(&mut scene, shell, zone);
-
-        scene.draw_rectangle((player_x - 11.0) as i32, 402, 22, 38, Color::GOLD);
-        scene.draw_circle(player_x as i32, 392, 10.0, Color::SKYBLUE);
-        let visor_offset = if shell.interior_facing >= 0.0 { 5 } else { -13 };
-        scene.draw_rectangle(player_x as i32 + visor_offset, 389, 8, 5, Color::DARKBLUE);
+        let mut room = draw.begin_mode2D(placement.camera());
+        draw_room_shell(&mut room, set, placement);
+        draw_door(&mut room);
+        draw_lamps(&mut room, zone, counter_x);
+        match zone {
+            SurfaceZone::Shop => draw_shop_props(&mut room, counter_x, seconds),
+            _ => draw_generic_props(&mut room, zone, counter_x, seconds),
+        }
+        draw_sign(&mut room, zone, set, counter_x);
+        draw_counter(&mut room, set, counter_x, seconds);
+        draw_service_animation(&mut room, shell, zone, counter_x);
+        draw_rig(&mut room, shell, seconds);
     }
 
-    let mut ui = UiLayout::screen(draw);
-    ui.anchored_panel(
-        canvas.panel(Rectangle {
-            x: 55.0,
-            y: 145.0,
-            width: 610.0,
-            height: 100.0,
-        }),
-        title,
-        Some(npc_line(zone, view)),
-        trim,
+    let _canvas = UiCanvasScope::begin(draw);
+    let canvas = ui_kit::canvas();
+    // Building name plate.
+    let title = surface_zone_label(zone);
+    let plate_width = ui_kit::text_width(title, TextStyle::Bold) + 16;
+    if shell.modal.is_none() {
+        ui_kit::panel(
+            draw,
+            Rectangle::new(8.0, 8.0, plate_width as f32, 19.0),
+            PanelStyle::Accent,
+        );
+        ui_kit::text(draw, title, 16, 13, TextStyle::Bold, GOLD);
+    }
+    draw_controls_hint(draw, canvas);
+    if shell.modal.is_some() {
+        return;
+    }
+    let near_counter = (shell.interior_x - interior_service_x(zone)).abs() <= COUNTER_REACH;
+    let at_door = shell.interior_x < DOOR_REACH;
+    let keeper_x = counter_x + COUNTER_WIDTH / 2;
+    let (bubble_x, bubble_y) = placement.to_canvas(canvas, keeper_x, FLOOR_Y - COUNTER_HEIGHT - 17);
+    ui_kit::tooltip(
+        draw,
+        npc_line(zone, view),
+        bubble_x,
+        bubble_y,
+        180,
+        canvas.rect(),
     );
+    if near_counter || at_door {
+        let target_x = if at_door { 28 } else { keeper_x };
+        let (prompt_x, prompt_y) = placement.to_canvas(canvas, target_x, FLOOR_Y - 4);
+        let label = if at_door {
+            "E  Leave"
+        } else {
+            "E  Use counter"
+        };
+        draw_key_prompt(draw, prompt_x, prompt_y, label);
+    }
+}
 
-    ui.anchored_panel(
-        canvas.panel(Rectangle {
-            x: 350.0,
-            y: 620.0,
-            width: 580.0,
-            height: 74.0,
-        }),
-        "Controls",
-        Some("A/D walk | E use counter/door | Esc exits"),
-        Color::LIGHTGRAY,
+/// A small "key + action" prompt centred on `x`, bobbing above `y`.
+fn draw_key_prompt(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32, label: &str) {
+    let bob = (ui_kit::seconds() * 2.5) as i32 % 2;
+    let width = ui_kit::text_width(label, TextStyle::Bold) + 12;
+    let left = x - width / 2;
+    let top = y - 16 - bob;
+    ui_kit::panel(
+        draw,
+        Rectangle::new(left as f32, top as f32, width as f32, 15.0),
+        PanelStyle::Accent,
     );
+    // Key cap behind the "E".
+    draw.draw_rectangle(left + 4, top + 3, 9, 9, INK);
+    draw.draw_rectangle(left + 5, top + 3, 7, 8, CREAM);
+    ui_kit::text_shadowed(draw, "E", left + 6, top + 3, TextStyle::Bold, INK, None);
+    ui_kit::text(
+        draw,
+        label.trim_start_matches('E').trim_start(),
+        left + 16,
+        top + 4,
+        TextStyle::Bold,
+        BONE,
+    );
+}
 
-    ui.anchored_panel(
-        canvas.panel(Rectangle {
-            x: service_x - 78.0,
-            y: 258.0,
-            width: 156.0,
-            height: 64.0,
-        }),
-        "Press E",
-        None,
-        Color::GOLD,
+fn draw_controls_hint(draw: &mut RaylibDrawHandle<'_>, canvas: ui_kit::UiCanvas) {
+    let hint = "A/D walk   E use   Esc leave";
+    let width = ui_kit::text_width(hint, TextStyle::Body) + 14;
+    let x = canvas.width - width - 8;
+    let y = canvas.height - 21;
+    ui_kit::panel(
+        draw,
+        Rectangle::new(x as f32, y as f32, width as f32, 15.0),
+        PanelStyle::Standard,
     );
+    ui_kit::text(draw, hint, x + 7, y + 4, TextStyle::Body, MIST);
+}
+
+/// Ceiling, brick wall, wainscot and floor across everything visible.
+fn draw_room_shell(draw: &mut impl RaylibDraw, set: &InteriorSet, placement: RoomPlacement) {
+    let (left, right) = placement.visible_x();
+    let (top, bottom) = placement.visible_y();
+    // Tile from a 16-pixel grid line left of the screen so tiles line up with the room.
+    let tile_left = left.div_euclid(16) * 16;
+    let width = right - tile_left;
+    draw.draw_rectangle(tile_left, top, width, CEILING_Y - top, set.shadow);
+    // Ceiling beams.
+    for beam_x in (tile_left..right).step_by(48) {
+        draw.draw_rectangle(beam_x, top, 6, CEILING_Y - top, INK);
+    }
+    draw.draw_rectangle(tile_left, CEILING_Y - 2, width, 2, INK);
+    sprite::draw_tiled(
+        draw,
+        set.wall,
+        0,
+        Rectangle::new(
+            tile_left as f32,
+            CEILING_Y as f32,
+            width as f32,
+            (WAINSCOT_Y - CEILING_Y) as f32,
+        ),
+        1.0,
+        Color::WHITE,
+    );
+    // Shadow under the ceiling.
+    draw.draw_rectangle(
+        tile_left,
+        CEILING_Y,
+        width,
+        3,
+        palette::with_alpha(INK, 110),
+    );
+    sprite::draw_tiled(
+        draw,
+        set.plank,
+        0,
+        Rectangle::new(
+            tile_left as f32,
+            WAINSCOT_Y as f32,
+            width as f32,
+            (FLOOR_Y - WAINSCOT_Y) as f32,
+        ),
+        1.0,
+        Color::WHITE,
+    );
+    sprite::draw_tiled(
+        draw,
+        set.floor,
+        0,
+        Rectangle::new(
+            tile_left as f32,
+            FLOOR_Y as f32,
+            width as f32,
+            (bottom - FLOOR_Y).max(0) as f32,
+        ),
+        1.0,
+        Color::WHITE,
+    );
+    draw.draw_rectangle(tile_left, FLOOR_Y, width, 1, INK);
+    // Fade the floor towards the bottom of the screen.
+    for (index, alpha) in [40_u8, 80, 120].into_iter().enumerate() {
+        let band = i32::try_from(index).unwrap_or(0);
+        draw.draw_rectangle(
+            tile_left,
+            FLOOR_Y + 16 + band * 8,
+            width,
+            8,
+            palette::with_alpha(INK, alpha),
+        );
+    }
+    draw.draw_rectangle(
+        tile_left,
+        FLOOR_Y + 40,
+        width,
+        (bottom - FLOOR_Y - 40).max(0),
+        palette::with_alpha(INK, 160),
+    );
+}
+
+/// The exit door on the left wall with its sign.
+fn draw_door(draw: &mut impl RaylibDraw) {
+    let (x, y, width, height) = (14, FLOOR_Y - 46, 28, 46);
+    sprite::draw_nine_slice(
+        draw,
+        &art::DOOR_FRAME,
+        Rectangle::new(x as f32, y as f32, width as f32, height as f32),
+        1.0,
+        Color::WHITE,
+    );
+    // Door panel, window and handle.
+    draw.draw_rectangle(x + 3, y + 3, width - 6, height - 3, LOAM);
+    draw.draw_rectangle(x + 3, y + 3, 1, height - 3, CLAY);
+    draw.draw_rectangle(x + width - 4, y + 3, 1, height - 3, SOIL);
+    draw.draw_rectangle(x + 7, y + 8, width - 14, 12, INK);
+    draw.draw_rectangle(x + 8, y + 9, width - 16, 10, SKY);
+    draw.draw_rectangle(x + 8, y + 9, 3, 10, SKY_LIGHT);
+    draw.draw_rectangle(x + 8, y + 13, width - 16, 1, INK);
+    draw.draw_rectangle(x + width - 9, y + 26, 3, 3, INK);
+    draw.draw_rectangle(x + width - 9, y + 26, 2, 2, GOLD);
+    let sign = &art::EXIT_SIGN;
+    ui_icon(
+        draw,
+        sign,
+        x + (width - sign.width()) / 2,
+        y - sign.height() - 3,
+    );
+}
+
+/// Hanging lamps with soft light cones.
+fn draw_lamps(draw: &mut impl RaylibDraw, zone: SurfaceZone, counter_x: i32) {
+    let lamp = &art::LAMP;
+    let mut positions = vec![counter_x + COUNTER_WIDTH / 2 - lamp.width() / 2];
+    if zone == SurfaceZone::Shop {
+        positions.push(96);
+    }
+    for x in positions {
+        // Cord from the ceiling.
+        draw.draw_rectangle(x + 3, CEILING_Y, 1, 8, INK);
+        ui_icon(draw, lamp, x, CEILING_Y + 6);
+        let tip = Vector2::new(x as f32 + 3.5, (CEILING_Y + 15) as f32);
+        draw.draw_triangle(
+            tip,
+            Vector2::new(tip.x - 34.0, FLOOR_Y as f32),
+            Vector2::new(tip.x + 34.0, FLOOR_Y as f32),
+            palette::with_alpha(CREAM, 22),
+        );
+        draw.draw_triangle(
+            tip,
+            Vector2::new(tip.x - 18.0, FLOOR_Y as f32),
+            Vector2::new(tip.x + 18.0, FLOOR_Y as f32),
+            palette::with_alpha(CREAM, 18),
+        );
+    }
+}
+
+/// Draws `sprite` frame 0 at room pixel `(x, y)`.
+fn ui_icon(draw: &mut impl RaylibDraw, sprite: &SpriteDef, x: i32, y: i32) {
+    room_sprite(draw, sprite, 0, x, y, false);
+}
+
+fn room_sprite(
+    draw: &mut impl RaylibDraw,
+    sprite: &SpriteDef,
+    frame: usize,
+    x: i32,
+    y: i32,
+    flip: bool,
+) {
+    sprite::draw_sprite_flipped(
+        draw,
+        sprite,
+        frame,
+        Vector2::new(x as f32, y as f32),
+        1.0,
+        flip,
+        Color::WHITE,
+    );
+}
+
+/// The building's sign board on the wall above the counter.
+fn draw_sign(draw: &mut impl RaylibDraw, zone: SurfaceZone, set: &InteriorSet, counter_x: i32) {
+    let label = sign_text(zone);
+    let width = ui_kit::text_width(label, TextStyle::Bold) + 14;
+    let x = counter_x + COUNTER_WIDTH / 2 - width / 2;
+    let y = CEILING_Y + 32;
+    // Hanging chains.
+    draw.draw_rectangle(x + 4, CEILING_Y, 1, y - CEILING_Y, INK);
+    draw.draw_rectangle(x + width - 5, CEILING_Y, 1, y - CEILING_Y, INK);
+    ui_kit::panel(
+        draw,
+        Rectangle::new(x as f32, y as f32, width as f32, 17.0),
+        PanelStyle::Standard,
+    );
+    ui_kit::text(draw, label, x + 7, y + 4, TextStyle::Bold, set.accent);
+}
+
+/// The counter with the keeper standing behind it.
+fn draw_counter(draw: &mut impl RaylibDraw, set: &InteriorSet, counter_x: i32, seconds: f32) {
+    let keeper = set.keeper;
+    let keeper_x = counter_x + COUNTER_WIDTH / 2 - keeper.width() / 2;
+    let keeper_y = FLOOR_Y - COUNTER_HEIGHT - keeper.height() + 4;
+    room_sprite(
+        draw,
+        keeper,
+        keeper.frame_at(seconds),
+        keeper_x,
+        keeper_y,
+        false,
+    );
+    // Shadow on the wall behind the counter.
+    draw.draw_rectangle(
+        counter_x + 2,
+        FLOOR_Y - COUNTER_HEIGHT - 2,
+        COUNTER_WIDTH,
+        2,
+        palette::with_alpha(INK, 90),
+    );
+    sprite::draw_nine_slice(
+        draw,
+        set.counter,
+        Rectangle::new(
+            counter_x as f32,
+            (FLOOR_Y - COUNTER_HEIGHT) as f32,
+            COUNTER_WIDTH as f32,
+            COUNTER_HEIGHT as f32,
+        ),
+        1.0,
+        Color::WHITE,
+    );
+    // Floor shadow in front of the counter.
+    draw.draw_rectangle(
+        counter_x + 2,
+        FLOOR_Y,
+        COUNTER_WIDTH - 2,
+        2,
+        palette::with_alpha(INK, 100),
+    );
+}
+
+/// The Upgrade Shop's dressing: parts shelves, a tool board, crates and the cash register.
+fn draw_shop_props(draw: &mut impl RaylibDraw, counter_x: i32, seconds: f32) {
+    // Parts shelves on the left wall.
+    let shelf_x = 54;
+    for (row, shelf_y) in [58, 80, 102].into_iter().enumerate() {
+        draw.draw_rectangle(shelf_x, shelf_y, 84, 3, LOAM);
+        draw.draw_rectangle(shelf_x, shelf_y, 84, 1, SAND);
+        draw.draw_rectangle(shelf_x, shelf_y + 3, 84, 1, INK);
+        for bracket in [shelf_x + 4, shelf_x + 76] {
+            draw.draw_rectangle(bracket, shelf_y + 3, 2, 4, INK);
+        }
+        let items: [(&SpriteDef, i32); 4] = match row {
+            0 => [
+                (&art::PART_BOX, 2),
+                (&art::GEAR, 18),
+                (&art::GEAR, 27),
+                (&art::PART_BOX, 40),
+            ],
+            1 => [
+                (&art::CAN, 4),
+                (&art::CAN, 11),
+                (&rig::DRILL_DOWN, 24),
+                (&art::PART_BOX, 52),
+            ],
+            _ => [
+                (&art::GEAR, 6),
+                (&art::CAN, 20),
+                (&art::PART_BOX, 34),
+                (&art::GEAR, 62),
+            ],
+        };
+        for (sprite, offset) in items {
+            ui_icon(draw, sprite, shelf_x + offset, shelf_y - sprite.height());
+        }
+        // A spare drill head spinning on its display stand.
+        if row == 1 {
+            let drill = &rig::DRILL_DOWN;
+            room_sprite(
+                draw,
+                drill,
+                drill.frame_at(seconds * 0.5),
+                shelf_x + 64,
+                shelf_y - drill.height(),
+                false,
+            );
+        }
+    }
+    // Tool board right of the counter.
+    let board_x = counter_x + COUNTER_WIDTH + 14;
+    ui_kit::well(draw, Rectangle::new(board_x as f32, 50.0, 44.0, 40.0));
+    for (index, (dx, dy)) in [(6, 6), (18, 8), (30, 6), (8, 22), (24, 24)]
+        .into_iter()
+        .enumerate()
+    {
+        let (tool_x, tool_y) = (board_x + dx, 50 + dy);
+        draw.draw_rectangle(tool_x + 2, tool_y - 2, 1, 2, FOG);
+        if index % 2 == 0 {
+            // Wrench.
+            draw.draw_rectangle(tool_x + 1, tool_y, 3, 10, STEEL_LIGHT);
+            draw.draw_rectangle(tool_x, tool_y, 5, 3, STEEL);
+            draw.draw_rectangle(tool_x + 2, tool_y, 1, 2, INK);
+        } else {
+            // Hammer.
+            draw.draw_rectangle(tool_x + 2, tool_y + 2, 2, 9, LOAM);
+            draw.draw_rectangle(tool_x, tool_y, 6, 3, STEEL_DARK);
+        }
+    }
+    // Crates stacked by the right wall and a barrel.
+    let crate_sprite = &art::CRATE;
+    let crates_x = board_x + 2;
+    ui_icon(
+        draw,
+        crate_sprite,
+        crates_x,
+        FLOOR_Y - crate_sprite.height(),
+    );
+    ui_icon(
+        draw,
+        crate_sprite,
+        crates_x + crate_sprite.width() - 1,
+        FLOOR_Y - crate_sprite.height(),
+    );
+    ui_icon(
+        draw,
+        crate_sprite,
+        crates_x + 6,
+        FLOOR_Y - crate_sprite.height() * 2 + 1,
+    );
+    ui_icon(
+        draw,
+        &art::BARREL,
+        crates_x + 30,
+        FLOOR_Y - art::BARREL.height(),
+    );
+    // Cash register on the counter.
+    let register_x = counter_x + COUNTER_WIDTH - 22;
+    let register_y = FLOOR_Y - COUNTER_HEIGHT - 9;
+    draw.draw_rectangle(register_x, register_y, 16, 10, INK);
+    draw.draw_rectangle(register_x + 1, register_y + 1, 14, 8, STEEL);
+    draw.draw_rectangle(register_x + 1, register_y + 1, 14, 1, STEEL_LIGHT);
+    draw.draw_rectangle(register_x + 3, register_y + 3, 8, 3, INK);
+    draw.draw_rectangle(register_x + 4, register_y + 4, 6, 1, LIME);
+}
+
+/// Simpler dressing for the other buildings: a signature prop and a few crates.
+fn draw_generic_props(draw: &mut impl RaylibDraw, zone: SurfaceZone, counter_x: i32, seconds: f32) {
+    let right_x = counter_x + COUNTER_WIDTH + 16;
+    match zone {
+        SurfaceZone::Fuel => {
+            let pump = &art::FUEL_PUMP;
+            for (index, x) in [70, 104].into_iter().enumerate() {
+                let frame = pump.frame_at(seconds + index as f32 * 0.25);
+                room_sprite(draw, pump, frame, x, FLOOR_Y - pump.height(), false);
+            }
+            ui_icon(draw, &art::BARREL, right_x, FLOOR_Y - art::BARREL.height());
+            ui_icon(
+                draw,
+                &art::BARREL,
+                right_x + 11,
+                FLOOR_Y - art::BARREL.height(),
+            );
+        }
+        SurfaceZone::Repair => {
+            // Hydraulic lift.
+            draw.draw_rectangle(60, FLOOR_Y - 6, 84, 6, INK);
+            draw.draw_rectangle(61, FLOOR_Y - 5, 82, 4, RUST);
+            for post in [72, 128] {
+                draw.draw_rectangle(post, FLOOR_Y - 36, 5, 30, INK);
+                draw.draw_rectangle(post + 1, FLOOR_Y - 35, 3, 29, STEEL);
+            }
+            draw.draw_rectangle(66, FLOOR_Y - 38, 72, 4, INK);
+            draw.draw_rectangle(67, FLOOR_Y - 37, 70, 2, AMBER);
+            ui_icon(draw, &art::GEAR, right_x, FLOOR_Y - 20);
+            ui_icon(
+                draw,
+                &art::CRATE,
+                right_x + 10,
+                FLOOR_Y - art::CRATE.height(),
+            );
+        }
+        SurfaceZone::Depot => {
+            for (index, x) in [60, 74, 88].into_iter().enumerate() {
+                let y = FLOOR_Y - art::CRATE.height() * (1 + i32::from(index == 1));
+                ui_icon(draw, &art::CRATE, x, y);
+            }
+            ui_icon(draw, &art::CRATE, 74, FLOOR_Y - art::CRATE.height());
+            ui_icon(draw, &art::BARREL, right_x, FLOOR_Y - art::BARREL.height());
+        }
+        SurfaceZone::Headquarters => {
+            // Wall screen with a mine map.
+            ui_kit::well(draw, Rectangle::new(58.0, 46.0, 72.0, 44.0));
+            for row in 0..6 {
+                let width = 20 + (row * 9) % 40;
+                draw.draw_rectangle(64, 52 + row * 6, width, 3, TEAL);
+            }
+            draw.draw_rectangle(64 + 30, 64, 3, 3, GOLD);
+        }
+        SurfaceZone::Bank => {
+            // Vault door.
+            draw.draw_rectangle(62, FLOOR_Y - 56, 50, 56, INK);
+            draw.draw_rectangle(64, FLOOR_Y - 54, 46, 54, STEEL);
+            draw.draw_rectangle(64, FLOOR_Y - 54, 46, 2, STEEL_LIGHT);
+            draw.draw_rectangle(80, FLOOR_Y - 36, 14, 14, INK);
+            draw.draw_rectangle(82, FLOOR_Y - 34, 10, 10, GOLD);
+            draw.draw_rectangle(86, FLOOR_Y - 34, 2, 10, AMBER);
+        }
+        SurfaceZone::Explosives => {
+            for x in [62, 76, 90] {
+                draw.draw_rectangle(x, FLOOR_Y - 14, 12, 14, INK);
+                draw.draw_rectangle(x + 1, FLOOR_Y - 13, 10, 13, RED);
+                draw.draw_rectangle(x + 1, FLOOR_Y - 9, 10, 2, BONE);
+            }
+            ui_icon(draw, &art::CRATE, right_x, FLOOR_Y - art::CRATE.height());
+        }
+        SurfaceZone::Salvage | SurfaceZone::Shop => {
+            // Scrap pile.
+            for (dx, dy, color) in [
+                (0, 0, RUST),
+                (10, 3, STEEL_DARK),
+                (20, 0, COPPER),
+                (6, 9, STEEL),
+                (16, 11, RUST),
+            ] {
+                draw.draw_rectangle(62 + dx, FLOOR_Y - 14 - dy, 16, 14, INK);
+                draw.draw_rectangle(63 + dx, FLOOR_Y - 13 - dy, 14, 12, color);
+            }
+            ui_icon(draw, &art::GEAR, right_x, FLOOR_Y - 9);
+            ui_icon(
+                draw,
+                &art::BARREL,
+                right_x + 10,
+                FLOOR_Y - art::BARREL.height(),
+            );
+        }
+    }
+}
+
+fn draw_service_animation(
+    draw: &mut impl RaylibDraw,
+    shell: &ShellState,
+    zone: SurfaceZone,
+    counter_x: i32,
+) {
+    let Some(animation) = shell.service_animation else {
+        return;
+    };
+    let step = (shell.service_animation_seconds * 18.0) as i32;
+    let rig_x = room_pixel_x(shell.interior_x);
+    match animation {
+        ServiceAnimation::Fuel if zone == SurfaceZone::Fuel => {
+            // Hose from the counter to the rig, with fuel pulses running along it.
+            let start = counter_x;
+            let y = FLOOR_Y - 10;
+            let (from, to) = if rig_x < start {
+                (rig_x + 7, start)
+            } else {
+                (start + COUNTER_WIDTH, rig_x - 7)
+            };
+            draw.draw_rectangle(from.min(to), y, (to - from).abs(), 2, INK);
+            for pulse in (0..(to - from).abs()).step_by(6) {
+                if (pulse / 6 + step) % 3 == 0 {
+                    draw.draw_rectangle(from.min(to) + pulse, y, 2, 2, GOLD);
+                }
+            }
+        }
+        ServiceAnimation::Repair if zone == SurfaceZone::Repair => {
+            for spark in 0..4 {
+                let dx = (step * 7 + spark * 5).rem_euclid(14) - 7;
+                let dy = (step * 3 + spark * 4).rem_euclid(10);
+                draw.draw_rectangle(rig_x + dx, FLOOR_Y - 14 - dy, 1, 1, GOLD);
+                draw.draw_rectangle(rig_x - dx, FLOOR_Y - 10 - dy / 2, 1, 1, ORANGE);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The player's rig standing on the floor at the shell's `interior_x`.
+fn draw_rig(draw: &mut impl RaylibDraw, shell: &ShellState, seconds: f32) {
+    let body = &rig::RIG;
+    let x = room_pixel_x(shell.interior_x) - body.width() / 2;
+    let y = FLOOR_Y - body.height();
+    draw.draw_rectangle(
+        x + 1,
+        FLOOR_Y,
+        body.width() - 2,
+        1,
+        palette::with_alpha(INK, 120),
+    );
+    let flip = shell.interior_facing < 0.0;
+    // Tracks roll only while the rig is walking (approximated by the animation clock).
+    let frame = body.frame_at(seconds);
+    room_sprite(draw, body, frame, x, y, flip);
 }
 
 fn npc_line(zone: SurfaceZone, view: &ViewSnapshot<'_>) -> &'static str {
@@ -179,182 +745,64 @@ fn npc_line(zone: SurfaceZone, view: &ViewSnapshot<'_>) -> &'static str {
     }
 }
 
-fn draw_service_animation(draw: &mut impl RaylibDraw, shell: &ShellState, zone: SurfaceZone) {
-    let Some(animation) = shell.service_animation else {
-        return;
-    };
-    let pulse = (shell.service_animation_seconds * 18.0) as i32;
-    match animation {
-        ServiceAnimation::Fuel if zone == SurfaceZone::Fuel => {
-            draw.draw_line_ex(
-                Vector2::new(820.0, 372.0),
-                Vector2::new(620.0, 420.0),
-                5.0,
-                Color::YELLOW,
-            );
-            draw.draw_circle(620, 420, 10.0 + (pulse.rem_euclid(6)) as f32, Color::GOLD);
-        }
-        ServiceAnimation::Repair if zone == SurfaceZone::Repair => {
-            draw.draw_rectangle(672, 392 - pulse.rem_euclid(12), 235, 8, Color::ORANGE);
-        }
-        _ => {}
-    }
-}
-
-fn draw_interior_props(draw: &mut impl RaylibDraw, zone: SurfaceZone) {
-    match zone {
-        SurfaceZone::Fuel => {
-            draw.draw_rectangle(760, 330, 70, 120, Color::DARKBLUE);
-            draw.draw_circle(795, 350, 18.0, Color::GOLD);
-            draw.draw_line(830, 370, 900, 420, Color::BLACK);
-        }
-        SurfaceZone::Repair => {
-            draw.draw_rectangle(690, 418, 190, 18, Color::MAROON);
-            draw.draw_rectangle(725, 350, 18, 82, Color::GRAY);
-            draw.draw_rectangle(825, 350, 18, 82, Color::GRAY);
-        }
-        SurfaceZone::Depot => {
-            draw.draw_rectangle(800, 385, 125, 55, Color::BROWN);
-            draw.draw_rectangle_lines(800, 385, 125, 55, Color::GOLD);
-            draw.draw_rectangle(690, 345, 95, 95, Color::DARKGREEN);
-        }
-        SurfaceZone::Headquarters => {
-            draw.draw_rectangle(690, 310, 300, 90, Color::new(18, 24, 42, 255));
-            draw.draw_rectangle_lines(690, 310, 300, 90, Color::SKYBLUE);
-            draw.draw_circle(735, 355, 26.0, Color::DARKBLUE);
-        }
-        SurfaceZone::Shop => {
-            draw.draw_rectangle(675, 300, 320, 35, Color::PURPLE);
-            for index in 0..6 {
-                draw.draw_rectangle(695 + index * 48, 352, 28, 70, Color::DARKPURPLE);
-            }
-        }
-        SurfaceZone::Bank => {
-            draw.draw_rectangle(690, 315, 260, 95, Color::new(20, 70, 45, 255));
-            draw.draw_rectangle_lines(690, 315, 260, 95, Color::GOLD);
-        }
-        SurfaceZone::Explosives => {
-            draw.draw_rectangle(690, 330, 280, 85, Color::MAROON);
-            for index in 0..4 {
-                draw.draw_circle(725 + index * 55, 372, 16.0, Color::BLACK);
-            }
-        }
-        SurfaceZone::Salvage => {
-            draw.draw_rectangle(675, 390, 320, 25, Color::GRAY);
-            draw.draw_rectangle(735, 325, 120, 70, Color::BROWN);
-        }
-    }
-}
-
-const fn interior_screen_x(room_x: f32) -> f32 {
-    55.0 + room_x * 1.85
-}
-
-const fn interior_service_x_render(zone: SurfaceZone) -> f32 {
-    match zone {
-        SurfaceZone::Fuel => 430.0,
-        SurfaceZone::Repair => 405.0,
-        SurfaceZone::Depot => 455.0,
-        SurfaceZone::Headquarters => 390.0,
-        SurfaceZone::Shop => 450.0,
-        SurfaceZone::Bank => 380.0,
-        SurfaceZone::Explosives => 431.0,
-        SurfaceZone::Salvage => 410.0,
-    }
-}
-
-const fn interior_theme(zone: SurfaceZone) -> (Color, Color, &'static str) {
-    match zone {
-        SurfaceZone::Fuel => (
-            Color::new(18, 30, 48, 255),
-            Color::GOLD,
-            "Fuel Station Interior",
-        ),
-        SurfaceZone::Repair => (
-            Color::new(42, 22, 22, 255),
-            Color::ORANGE,
-            "Repair Garage Interior",
-        ),
-        SurfaceZone::Depot => (
-            Color::new(18, 36, 25, 255),
-            Color::GREEN,
-            "Ore Depot Interior",
-        ),
-        SurfaceZone::Headquarters => (
-            Color::new(22, 20, 44, 255),
-            Color::SKYBLUE,
-            "Borealis HQ Interior",
-        ),
-        SurfaceZone::Shop => (
-            Color::new(34, 20, 42, 255),
-            Color::MAGENTA,
-            "Upgrade Shop Interior",
-        ),
-        SurfaceZone::Bank => (Color::new(16, 38, 29, 255), Color::GOLD, "Iron Ledger Bank"),
-        SurfaceZone::Explosives => (
-            Color::new(48, 22, 18, 255),
-            Color::RED,
-            "Nix's Explosive Shack",
-        ),
-        SurfaceZone::Salvage => (
-            Color::new(25, 32, 28, 255),
-            Color::LIME,
-            "Mara's Salvage Yard",
-        ),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn assert_near(actual: f32, expected: f32) {
-        assert!((actual - expected).abs() < 1e-3, "{actual} != {expected}");
-    }
-
-    fn assert_inside(canvas: InteriorCanvas, rect: Rectangle) {
-        assert!(rect.x >= 0.0 && rect.y >= 0.0, "{rect:?}");
-        assert!(rect.x + rect.width <= canvas.screen_width, "{rect:?}");
-        assert!(rect.y + rect.height <= canvas.screen_height, "{rect:?}");
+    #[test]
+    fn room_fits_and_centres_in_whole_pixels() {
+        let reference = RoomPlacement::fit(1280, 720);
+        assert_eq!(
+            (reference.pixel, reference.offset_x, reference.offset_y),
+            (4, 0, 0)
+        );
+        let ultrawide = RoomPlacement::fit(2560, 1080);
+        assert_eq!(ultrawide.pixel, 6);
+        assert_eq!(ultrawide.offset_x, (2560 - 1920) / 2);
+        let small = RoomPlacement::fit(960, 540);
+        assert_eq!((small.pixel, small.offset_x, small.offset_y), (3, 0, 0));
+        let tall = RoomPlacement::fit(1000, 1000);
+        assert_eq!(tall.pixel, 3);
+        assert_eq!(tall.offset_y, (1000 - 540) / 2);
     }
 
     #[test]
-    fn canvas_fits_and_centres_at_any_size() {
-        let reference = InteriorCanvas::fit(1280, 720);
-        assert_near(reference.scale, 1.0);
-        assert_near(reference.offset_x, 0.0);
-        assert_near(reference.offset_y, 0.0);
-
-        let ultrawide = InteriorCanvas::fit(2560, 1080);
-        assert_near(ultrawide.scale, 1.5);
-        assert_near(ultrawide.offset_x, (2560.0 - 1920.0) * 0.5);
-        assert_near(ultrawide.offset_y, 0.0);
-
-        let tall = InteriorCanvas::fit(1000, 1000);
-        assert_near(tall.scale, 1000.0 / 1280.0);
-        assert_near(tall.offset_x, 0.0);
-        assert_near(tall.to_screen(0.0, 360.0).y, 500.0);
+    fn visible_range_covers_the_screen_beyond_the_room() {
+        let ultrawide = RoomPlacement::fit(2560, 1080);
+        let (left, right) = ultrawide.visible_x();
+        assert!(left * ultrawide.pixel + ultrawide.offset_x <= 0);
+        assert!(right * ultrawide.pixel + ultrawide.offset_x >= 2560);
+        let (top, bottom) = RoomPlacement::fit(1000, 1000).visible_y();
+        assert!(top < 0 && bottom > ROOM_HEIGHT);
     }
 
     #[test]
-    fn panels_keep_their_size_and_stay_on_screen() {
-        let panels = [
-            Rectangle::new(55.0, 145.0, 610.0, 100.0),
-            Rectangle::new(350.0, 620.0, 580.0, 74.0),
-            Rectangle::new(interior_screen_x(0.0) - 78.0, 258.0, 156.0, 64.0),
-            Rectangle::new(interior_screen_x(640.0) - 78.0, 258.0, 156.0, 64.0),
-        ];
-        for (width, height) in [(960, 540), (1280, 720), (1920, 1080), (2560, 1080)] {
-            let canvas = InteriorCanvas::fit(width, height);
-            for authored in panels {
-                let placed = canvas.panel(authored);
-                assert_near(placed.width, authored.width);
-                assert_near(placed.height, authored.height);
-                assert_inside(canvas, placed);
-            }
+    fn walkable_room_and_counters_fit_inside_the_room() {
+        // The shell clamps the rig to 42..598 room units.
+        assert!(room_pixel_x(42.0) - rig::RIG.width() / 2 >= 0);
+        assert!(room_pixel_x(598.0) + rig::RIG.width() / 2 <= ROOM_WIDTH);
+        for zone in [
+            SurfaceZone::Fuel,
+            SurfaceZone::Repair,
+            SurfaceZone::Depot,
+            SurfaceZone::Headquarters,
+            SurfaceZone::Shop,
+            SurfaceZone::Bank,
+            SurfaceZone::Explosives,
+            SurfaceZone::Salvage,
+        ] {
+            let counter_x = room_pixel_x(interior_service_x(zone)) - COUNTER_WIDTH / 2;
+            assert!(
+                counter_x > 60 && counter_x + COUNTER_WIDTH < ROOM_WIDTH,
+                "{zone:?}"
+            );
         }
-        let reference = InteriorCanvas::fit(1280, 720).panel(panels[0]);
-        assert_near(reference.x, panels[0].x);
-        assert_near(reference.y, panels[0].y);
+    }
+
+    #[test]
+    fn room_points_map_onto_the_ui_canvas() {
+        let placement = RoomPlacement::fit(1280, 720);
+        let canvas = ui_kit::UiCanvas::for_framebuffer(1280, 720, 1.0);
+        assert_eq!(placement.to_canvas(canvas, 160, 90), (320, 180));
     }
 }

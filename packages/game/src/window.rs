@@ -7,7 +7,7 @@
 
 use raylib::{RaylibHandle, RaylibThread, core::window};
 
-use crate::save::WindowSettings;
+use crate::{render_snapshot::ScreenSize, save::WindowSettings};
 
 /// Smallest window the UI is laid out for, in logical points.
 pub const MIN_WINDOW_WIDTH: i32 = 960;
@@ -112,6 +112,24 @@ impl DesktopWindow {
             raylib.get_screen_width().max(1),
             raylib.get_screen_height().max(1),
         )
+    }
+
+    /// The current screen for laying out a frame: logical size plus the display density
+    /// (framebuffer pixels per point, 2.0 on Retina).
+    #[must_use]
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "screen sizes are small integers"
+    )]
+    pub fn screen(raylib: &RaylibHandle) -> ScreenSize {
+        let (width, height) = Self::screen_size(raylib);
+        let density_x = raylib.get_render_width().max(1) as f32 / width as f32;
+        let density_y = raylib.get_render_height().max(1) as f32 / height as f32;
+        ScreenSize {
+            width,
+            height,
+            density: density_x.min(density_y).max(1.0),
+        }
     }
 
     /// Enters or leaves borderless fullscreen. Borderless windowed mode covers the monitor

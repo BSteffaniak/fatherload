@@ -2,11 +2,24 @@ use raylib::prelude::*;
 
 use drillgame_simulation::{
     Player,
-    economy::{upgrade_offers, upgrade_tier_name},
+    economy::{UpgradeKind, upgrade_offers, upgrade_tier_name},
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
-use super::layout::{HudCard, ModalContent, Section, SectionItem, StatItem, UiLayout};
+#[allow(
+    clippy::wildcard_imports,
+    reason = "art code names colours from the whole palette"
+)]
+use super::pixel_art::palette::*;
+use super::{
+    layout::{ItemEntry, ModalContent, Section, SectionItem, UiLayout},
+    pixel_art::{
+        palette,
+        sprite::SpriteDef,
+        sprites::{icons, interior as interior_sprites, rig},
+    },
+    ui_kit::{self, BarColors, PanelStyle, TextStyle},
+};
 use crate::{
     render_snapshot::{PlayerPresentation, RenderSnapshot, ViewSnapshot},
     runtime::OnlineRole,
@@ -23,16 +36,12 @@ pub(super) struct UiFrame<'a, 'w> {
     pub player: &'w Player,
 }
 
-struct MinimapProjection {
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
-    terrain_width: i32,
-    origin_y: i32,
-    visible_height: i32,
+/// A view's rect in UI canvas art pixels.
+fn view_rect(view: &ViewSnapshot<'_>) -> Rectangle {
+    ui_kit::canvas().viewport_rect(view.viewport)
 }
 
+/// Tints the view orange near lava or deep down (heat), pulsing when lava is close.
 pub(super) fn draw_heat_warning_for_view(
     draw: &mut RaylibDrawHandle<'_>,
     terrain: &Terrain,
@@ -51,18 +60,40 @@ pub(super) fn draw_heat_warning_for_view(
             )
         })
     });
-    if depth_heat || near_lava {
-        let alpha = if near_lava { 70 } else { 35 };
-        draw.draw_rectangle(
-            view.viewport.x,
-            view.viewport.y,
-            view.viewport.width,
-            view.viewport.height,
-            Color::new(255, 70, 20, alpha),
+    if !(depth_heat || near_lava) {
+        return;
+    }
+    let rect = view_rect(view);
+    let alpha = if near_lava { 60 } else { 28 };
+    draw.draw_rectangle_rec(rect, palette::with_alpha(ORANGE, alpha));
+    if near_lava {
+        // A pulsing heat border inside the view edge.
+        let on = (ui_kit::seconds() * 3.0) as i32 % 2 == 0;
+        let color = palette::with_alpha(if on { RED } else { ORANGE }, 150);
+        let (x, y, width, height) = (
+            rect.x as i32,
+            rect.y as i32,
+            rect.width as i32,
+            rect.height as i32,
         );
+        draw.draw_rectangle(x, y, width, 2, color);
+        draw.draw_rectangle(x, y + height - 2, width, 2, color);
+        draw.draw_rectangle(x, y, 2, height, color);
+        draw.draw_rectangle(x + width - 2, y, 2, height, color);
     }
 }
 
+/// Width of the HUD stats panel for a view `view_width` art pixels wide.
+fn stats_panel_width(view_width: f32) -> i32 {
+    ((view_width * 0.42) as i32).clamp(132, 176)
+}
+
+/// The view's HUD: hull / fuel / cargo bars (top-left), credits and depth (top-right), warning
+/// badges under the bars, and the diagnostics panel when held.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the HUD draws its panels in reading order in one place"
+)]
 pub(super) fn draw_view_hud(
     draw: &mut RaylibDrawHandle<'_>,
     shell: &ShellState,
@@ -71,82 +102,213 @@ pub(super) fn draw_view_hud(
 ) {
     let fps = draw.get_fps();
     let hud = view.hud;
-    let viewport = Rectangle {
-        x: view.viewport.x as f32,
-        y: view.viewport.y as f32,
-        width: view.viewport.width as f32,
-        height: view.viewport.height as f32,
-    };
-    let cards = vec![
-        HudCard::meter(
-            format!("P{} Hull", view.seat_index + 1),
-            hud.hull,
-            hud.max_hull,
-            Color::SKYBLUE,
-            Color::RED,
-        ),
-        HudCard::meter(
-            "Fuel",
-            hud.fuel,
-            hud.fuel_capacity,
-            Color::LIME,
-            Color::ORANGE,
-        ),
-        HudCard::meter(
-            "Cargo",
-            hud.cargo_used as f32,
-            hud.cargo_capacity as f32,
-            Color::GOLD,
-            Color::ORANGE,
-        ),
-        HudCard::text(
-            "Run",
-            format!("{} cr | {}m", hud.credits, hud.depth),
-            Color::GOLD,
-        ),
-    ];
-    let details = shell.show_details.then(|| {
-        vec![
-            StatItem::new("FPS", fps.to_string(), Color::LIME),
-            StatItem::new(
-                "Tick",
-                format!("{} ({} new events)", snapshot.tick, snapshot.events.len()),
-                Color::LIGHTGRAY,
+    let rect = view_rect(view);
+    let (left, top) = (rect.x as i32 + 4, rect.y as i32 + 4);
+    let split = snapshot.views.len() > 1;
+
+    // Stats: hull, fuel, cargo.
+    let width = stats_panel_width(rect.width);
+    let header = if split { 11 } else { 0 };
+    let panel_height = 6 + header + 3 * 12 + 3;
+    ui_kit::panel(
+        draw,
+        Rectangle::new(left as f32, top as f32, width as f32, panel_height as f32),
+        PanelStyle::Standard,
+    );
+    let inner_x = left + ui_kit::PANEL_PADDING;
+    let inner_width = width - ui_kit::PANEL_PADDING * 2;
+    let mut y = top + 6;
+    if split {
+        ui_kit::text(
+            draw,
+            &format!("PLAYER {}", view.seat_index + 1),
+            inner_x,
+            y,
+            TextStyle::Bold,
+            GOLD,
+        );
+        y += header;
+    }
+    y += ui_kit::stat_bar(
+        draw,
+        inner_x,
+        y,
+        inner_width,
+        &icons::HULL,
+        "HULL",
+        hud.hull,
+        hud.max_hull,
+        BarColors::HULL,
+        0.35,
+    );
+    y += ui_kit::stat_bar(
+        draw,
+        inner_x,
+        y,
+        inner_width,
+        &icons::FUEL,
+        "FUEL",
+        hud.fuel,
+        hud.fuel_capacity,
+        BarColors::FUEL,
+        0.2,
+    );
+    ui_kit::stat_bar(
+        draw,
+        inner_x,
+        y,
+        inner_width,
+        &icons::CARGO,
+        "CARGO",
+        hud.cargo_used as f32,
+        hud.cargo_capacity as f32,
+        BarColors::CARGO,
+        0.0,
+    );
+
+    // Credits and depth, clear of the depth ruler on the right edge.
+    let money = format!("{}", hud.credits);
+    let depth = format!("{} m", hud.depth);
+    let value_width = ui_kit::text_width(&money, TextStyle::Bold)
+        .max(ui_kit::text_width(&depth, TextStyle::Bold));
+    let money_width = (value_width + icons::ICON_SIZE + 18).max(64);
+    let money_x = (rect.x + rect.width) as i32 - 16 - money_width;
+    if money_x > left + width + 4 {
+        ui_kit::panel(
+            draw,
+            Rectangle::new(money_x as f32, top as f32, money_width as f32, 32.0),
+            PanelStyle::Standard,
+        );
+        let right = money_x + money_width - ui_kit::PANEL_PADDING;
+        ui_kit::icon(draw, &icons::CREDITS, money_x + 6, top + 6);
+        ui_kit::text_right(draw, &money, right, top + 7, TextStyle::Bold, GOLD);
+        ui_kit::icon(draw, &icons::DEPTH, money_x + 6, top + 17);
+        ui_kit::text_right(draw, &depth, right, top + 18, TextStyle::Bold, SKY_LIGHT);
+    }
+
+    // Warning badges.
+    let mut badge_x = left;
+    let badge_y = top + panel_height + 3;
+    for (warning, sprite) in hud_warnings(snapshot, view) {
+        badge_x += ui_kit::badge(draw, badge_x, badge_y, sprite, warning) + 2;
+    }
+
+    if shell.show_details {
+        let lines = [
+            format!("FPS {fps}"),
+            format!(
+                "Tick {} ({} new events)",
+                snapshot.tick,
+                snapshot.events.len()
             ),
-            StatItem::new(
-                "Camera",
-                format!(
-                    "{:.0},{:.0}",
-                    view.camera.x / TILE_SIZE,
-                    view.camera.y / TILE_SIZE
-                ),
-                Color::LIGHTGRAY,
+            format!(
+                "Camera {:.0},{:.0}",
+                view.camera.x / TILE_SIZE,
+                view.camera.y / TILE_SIZE
             ),
-            StatItem::new("Message", shell.message.clone(), Color::LIGHTGRAY),
-        ]
-    });
-    let mut layout = UiLayout::new(draw, viewport);
-    layout.top_hud(&cards, details.as_deref());
+            shell.message.clone(),
+        ];
+        let details_y = badge_y + 20;
+        let details_width = (rect.width as i32 - 8).min(280);
+        let wrapped: Vec<String> = lines
+            .iter()
+            .flat_map(|line| ui_kit::wrap(line, details_width - 12, TextStyle::Body))
+            .collect();
+        let height = i32::try_from(wrapped.len()).unwrap_or(0) * TextStyle::Body.line_height() + 22;
+        ui_kit::panel(
+            draw,
+            Rectangle::new(
+                left as f32,
+                details_y as f32,
+                details_width as f32,
+                height as f32,
+            ),
+            PanelStyle::Standard,
+        );
+        ui_kit::text(
+            draw,
+            "DIAGNOSTICS",
+            left + 6,
+            details_y + 6,
+            TextStyle::Bold,
+            LIME,
+        );
+        for (index, line) in wrapped.iter().enumerate() {
+            let row = i32::try_from(index).unwrap_or(0);
+            ui_kit::text(
+                draw,
+                line,
+                left + 6,
+                details_y + 17 + row * TextStyle::Body.line_height(),
+                TextStyle::Body,
+                MIST,
+            );
+        }
+    }
 }
 
+/// Active rig warnings for the HUD badges (same thresholds as the research log's summary).
+fn hud_warnings(
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
+) -> Vec<(&'static str, &'static SpriteDef)> {
+    let player = view.player;
+    let mut warnings = Vec::new();
+    if player.fuel <= player.fuel_capacity * 0.2 {
+        warnings.push(("LOW FUEL", &icons::FUEL));
+    }
+    if player.hull <= player.max_hull() * 0.35 {
+        warnings.push(("HULL", &icons::WARNING));
+    }
+    if view.hud.depth >= 60 {
+        warnings.push(("HEAT", &icons::HEAT));
+    }
+    if view.deep_instability >= 60.0 {
+        warnings.push(("UNSTABLE", &icons::WARNING));
+    }
+    if view.hud.depth >= 80 && snapshot.signal_relay_count == 0 {
+        warnings.push(("NO SIGNAL", &icons::WARNING));
+    }
+    warnings
+}
+
+/// Colour of an explored tile on the minimap.
+const fn minimap_color(kind: TileKind) -> Color {
+    match kind {
+        TileKind::Air => SLATE_DARK,
+        TileKind::Ore(_) => GOLD,
+        TileKind::Artifact(_) => PINK,
+        TileKind::Gas => LIME,
+        TileKind::Lava | TileKind::MagmaVent => ORANGE,
+        TileKind::ExplosivePocket | TileKind::PressurePocket => RED,
+        TileKind::Stone | TileKind::HardRock | TileKind::Foundation => STONE,
+        TileKind::Dirt | TileKind::Clay => LOAM,
+    }
+}
+
+/// Bottom-right minimap of the explored mine around the rig (left of the depth ruler).
 pub(super) fn draw_minimap_for_view(
     draw: &mut RaylibDrawHandle<'_>,
     terrain: &Terrain,
     view: &ViewSnapshot<'_>,
     players: &[PlayerPresentation],
 ) {
-    let width = (view.viewport.width / 6).clamp(86, 130);
-    let height = (view.viewport.height / 8).clamp(64, 96);
-    // Left of the depth ruler, which runs down the viewport's right edge.
-    let x = view.viewport.x + view.viewport.width - width - 40;
-    let y = view.viewport.y + view.viewport.height - height - 38;
-    draw.draw_rectangle(
-        x - 8,
-        y - 8,
-        width + 16,
-        height + 16,
-        Color::new(0, 0, 0, 150),
+    let rect = view_rect(view);
+    let width = ((rect.width / 6.0) as i32).clamp(48, 80);
+    let height = ((rect.height / 5.0) as i32).clamp(36, 56);
+    let x = (rect.x + rect.width) as i32 - width - 22;
+    let y = (rect.y + rect.height) as i32 - height - 10;
+    ui_kit::panel(
+        draw,
+        Rectangle::new(
+            (x - 4) as f32,
+            (y - 4) as f32,
+            (width + 8) as f32,
+            (height + 8) as f32,
+        ),
+        PanelStyle::Standard,
     );
+    draw.draw_rectangle(x, y, width, height, NIGHT);
 
     let terrain_width = terrain.width().max(1);
     let terrain_height = terrain.height().max(1);
@@ -157,109 +319,75 @@ pub(super) fn draw_minimap_for_view(
     } else {
         0
     };
-    let projection = MinimapProjection {
-        x,
-        y,
-        width,
-        height,
-        terrain_width,
-        origin_y,
-        visible_height,
-    };
-    for ty in origin_y..origin_y + visible_height {
-        for tx in 0..terrain_width {
-            let Some(tile) = terrain.tile(TilePosition { x: tx, y: ty }) else {
-                continue;
+    for py in 0..height {
+        let tile_y = origin_y + py * visible_height / height;
+        for px in 0..width {
+            let position = TilePosition {
+                x: px * terrain_width / width,
+                y: tile_y,
             };
-            let color = marker_color(tile.kind);
-            if color.a > 0 {
-                draw_map_marker(draw, &projection, tx, ty, color);
+            let sky = tile_y <= 4;
+            if !sky && !view.is_explored(position) {
+                continue;
             }
+            let color = match terrain.tile(position) {
+                Some(tile) if tile.kind == TileKind::Air && sky => DEEP_BLUE,
+                Some(tile) => minimap_color(tile.kind),
+                None => continue,
+            };
+            draw.draw_rectangle(x + px, y + py, 1, 1, color);
         }
     }
-    let player_x = x + player_tile.x * width / terrain_width;
-    let player_y = y + (player_tile.y - origin_y) * height / visible_height;
-    draw.draw_circle(player_x, player_y, 3.0, Color::SKYBLUE);
+    let to_map = |tile_x: i32, tile_y: i32| {
+        (
+            x + tile_x * width / terrain_width,
+            y + (tile_y - origin_y) * height / visible_height,
+        )
+    };
     for remote in players
         .iter()
         .filter(|other| other.player_id != view.player_id)
     {
-        let remote_tile_x = (remote.x / TILE_SIZE) as i32;
-        let remote_tile_y = (remote.y / TILE_SIZE) as i32;
-        if remote_tile_y < origin_y || remote_tile_y >= origin_y + visible_height {
+        let tile_x = (remote.x / TILE_SIZE) as i32;
+        let tile_y = (remote.y / TILE_SIZE) as i32;
+        if tile_y < origin_y || tile_y >= origin_y + visible_height {
             continue;
         }
-        let remote_x = x + remote_tile_x * width / terrain_width;
-        let remote_y = y + (remote_tile_y - origin_y) * height / visible_height;
-        draw.draw_circle(remote_x, remote_y, 3.0, Color::ORANGE);
-        if remote.velocity_x.abs() > f32::EPSILON || remote.velocity_y.abs() > f32::EPSILON {
-            let speed = (remote
-                .velocity_x
-                .mul_add(remote.velocity_x, remote.velocity_y * remote.velocity_y))
-            .sqrt();
-            let direction_x = remote.velocity_x / speed;
-            let direction_y = remote.velocity_y / speed;
-            draw.draw_line(
-                remote_x,
-                remote_y,
-                remote_x + (direction_x * 8.0) as i32,
-                remote_y + (direction_y * 8.0) as i32,
-                Color::GOLD,
-            );
-        }
+        let (map_x, map_y) = to_map(tile_x, tile_y);
+        draw.draw_rectangle(map_x - 1, map_y - 1, 2, 2, ORANGE);
     }
+    let (map_x, map_y) = to_map(player_tile.x, player_tile.y);
+    let blink = (ui_kit::seconds() * 2.0) as i32 % 2 == 0;
+    draw.draw_rectangle(map_x - 1, map_y - 1, 3, 3, INK);
+    draw.draw_rectangle(map_x, map_y, 1, 1, if blink { BONE } else { SKY_LIGHT });
 }
 
+/// Depth gauge down the view's right edge with a marker at the rig's depth.
 pub(super) fn draw_depth_ruler_for_view(
     draw: &mut RaylibDrawHandle<'_>,
     terrain: &Terrain,
     view: &ViewSnapshot<'_>,
 ) {
-    let x = view.viewport.x + view.viewport.width - 20;
-    let top = view.viewport.y + 72;
-    let height = (view.viewport.height - 130).max(80);
-    draw.draw_rectangle(x, top, 10, height, Color::new(0, 0, 0, 120));
-    draw.draw_rectangle_lines(x, top, 10, height, Color::new(255, 255, 255, 120));
-
+    let rect = view_rect(view);
+    let x = (rect.x + rect.width) as i32 - 12;
+    let top = rect.y as i32 + 42;
+    let height = ((rect.y + rect.height) as i32 - 16 - top).max(40);
+    ui_kit::well(
+        draw,
+        Rectangle::new(x as f32, top as f32, 6.0, height as f32),
+    );
     let max_depth = terrain.height().max(80);
     let step = if max_depth > 180 { 50 } else { 20 };
-    for marker in (0..=max_depth).step_by(step as usize) {
-        let y = top + (marker * height / max_depth);
-        draw.draw_line(x - 8, y, x + 18, y, Color::LIGHTGRAY);
+    for marker in (0..=max_depth).step_by(usize::try_from(step).unwrap_or(20)) {
+        let y = top + marker * (height - 1) / max_depth;
+        draw.draw_rectangle(x - 3, y, 3, 1, FOG);
     }
-
     let depth = (view.player.y / TILE_SIZE).max(0.0);
-    let marker_y = top + ((depth / max_depth as f32).clamp(0.0, 1.0) * height as f32) as i32;
-    draw.draw_circle(x + 5, marker_y, 6.0, Color::GOLD);
-}
-
-const fn marker_color(kind: TileKind) -> Color {
-    match kind {
-        TileKind::Ore(_) => Color::GOLD,
-        TileKind::Artifact(_) => Color::MAGENTA,
-        TileKind::Gas
-        | TileKind::Lava
-        | TileKind::MagmaVent
-        | TileKind::ExplosivePocket
-        | TileKind::PressurePocket => Color::RED,
-        _ => Color::WHITE,
-    }
-}
-
-fn draw_map_marker(
-    draw: &mut RaylibDrawHandle<'_>,
-    projection: &MinimapProjection,
-    tile_x: i32,
-    tile_y: i32,
-    color: Color,
-) {
-    if tile_y < projection.origin_y || tile_y >= projection.origin_y + projection.visible_height {
-        return;
-    }
-    let x = projection.x + tile_x * projection.width / projection.terrain_width;
-    let y = projection.y
-        + (tile_y - projection.origin_y) * projection.height / projection.visible_height;
-    draw.draw_rectangle(x - 1, y - 1, 3, 3, color);
+    let marker_y = top + ((depth / max_depth as f32).clamp(0.0, 1.0) * (height - 1) as f32) as i32;
+    // A left-pointing marker: ink outline around a gold arrow.
+    draw.draw_rectangle(x - 4, marker_y - 3, 11, 7, INK);
+    draw.draw_rectangle(x - 3, marker_y - 2, 9, 5, GOLD);
+    draw.draw_rectangle(x - 3, marker_y + 1, 9, 1, AMBER);
 }
 
 pub(super) fn draw_modal(
@@ -425,16 +553,16 @@ fn draw_service_modal_ui(
             selected_label(index == ui.shell.selected_menu_item, option),
             "",
             if index == ui.shell.selected_menu_item {
-                Color::GOLD
+                GOLD
             } else {
-                Color::RAYWHITE
+                BONE
             },
         ));
     }
     UiLayout::screen(draw).modal_with_render_plan(
         title,
         "Up/Down: small/half/full | Enter/E buy selected | Esc close",
-        &ModalContent::new(vec![Section::new("Service", Color::SKYBLUE, items)]),
+        &ModalContent::new(vec![Section::new("Service", SKY_LIGHT, items)]),
     );
 }
 
@@ -444,9 +572,10 @@ fn draw_confirm_modal_ui(draw: &mut RaylibDrawHandle<'_>, title: &str, body: &st
         "Enter/E confirms | Esc closes",
         &ModalContent::new(vec![Section::new(
             "Confirm",
-            Color::GOLD,
+            GOLD,
             vec![SectionItem::text(body)],
-        )]),
+        )])
+        .compact(),
     );
 }
 
@@ -460,37 +589,56 @@ fn draw_unsaved_exit_confirm_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
     );
 }
 
+/// The icon for an upgrade line in the shop.
+const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
+    match kind {
+        UpgradeKind::Drill => &rig::DRILL_DOWN,
+        UpgradeKind::FuelTank => &icons::FUEL,
+        UpgradeKind::CargoBay => &icons::CARGO,
+        UpgradeKind::Engine => &interior_sprites::GEAR,
+        UpgradeKind::Hull => &icons::HULL,
+        UpgradeKind::Radiator => &icons::HEAT,
+        UpgradeKind::Scanner => &icons::SCANNER,
+        UpgradeKind::BombPack => &icons::BOMB,
+    }
+}
+
+/// The upgrade shop counter: one item row per upgrade with its icon, next tier and price
+/// (red and greyed out while unaffordable).
 fn draw_shop_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let items = upgrade_offers(ui.player)
-        .iter()
-        .enumerate()
-        .map(|(index, offer)| {
-            SectionItem::stat(
-                selected_label(
-                    index == ui.shell.selected_menu_item,
-                    &format!("{} — {} cr", offer.name, offer.cost),
-                ),
-                format!(
-                    "Tier {} {}",
-                    offer.level + 1,
-                    upgrade_tier_name(offer.kind, offer.level)
-                ),
-                if index == ui.shell.selected_menu_item {
-                    Color::GOLD
-                } else {
-                    Color::RAYWHITE
-                },
-            )
-        })
-        .collect();
+    let credits = ui.player.credits;
+    let mut items = vec![SectionItem::icon_stat(
+        &icons::CREDITS,
+        "Your credits",
+        credits.to_string(),
+        GOLD,
+    )];
+    items.extend(
+        upgrade_offers(ui.player)
+            .iter()
+            .enumerate()
+            .map(|(index, offer)| {
+                let affordable = credits >= offer.cost;
+                SectionItem::item(ItemEntry {
+                    icon: Some(upgrade_icon(offer.kind)),
+                    label: offer.name.to_owned(),
+                    detail: format!(
+                        "Tier {} {}",
+                        offer.level + 1,
+                        upgrade_tier_name(offer.kind, offer.level)
+                    ),
+                    value: offer.cost.to_string(),
+                    value_color: if affordable { BONE } else { RED },
+                    coin: true,
+                    selected: index == ui.shell.selected_menu_item,
+                    disabled: !affordable,
+                })
+            }),
+    );
     UiLayout::screen(draw).modal_with_render_plan(
         "Upgrade Shop",
         "Up/Down select | Enter/E buy | Esc close",
-        &ModalContent::new(vec![Section::new(
-            "Available Upgrades",
-            Color::SKYBLUE,
-            items,
-        )]),
+        &ModalContent::new(vec![Section::new("Upgrades", SKY_LIGHT, items)]),
     );
 }
 
@@ -576,9 +724,9 @@ fn draw_owned_option_modal(
                 selected_label(index == ui.shell.selected_menu_item, option),
                 "",
                 if index == ui.shell.selected_menu_item {
-                    Color::GOLD
+                    GOLD
                 } else {
-                    Color::RAYWHITE
+                    BONE
                 },
             )
         })
@@ -586,7 +734,7 @@ fn draw_owned_option_modal(
     UiLayout::screen(draw).modal_with_render_plan(
         title,
         help,
-        &ModalContent::new(vec![Section::new("Options", Color::SKYBLUE, items)]),
+        &ModalContent::new(vec![Section::new("Options", SKY_LIGHT, items)]).compact(),
     );
 }
 
@@ -612,7 +760,7 @@ fn draw_depot_receipt_history_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'
                 let mut items = vec![SectionItem::stat(
                     format!("Receipt {}", index + 1),
                     "",
-                    Color::GOLD,
+                    GOLD,
                 )];
                 items.extend(
                     receipt
@@ -627,7 +775,7 @@ fn draw_depot_receipt_history_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'
     UiLayout::screen(draw).modal_with_render_plan(
         "Depot Receipts",
         "Recent sales and contract payouts. Esc closes.",
-        &ModalContent::new(vec![Section::new("History", Color::GOLD, items)]),
+        &ModalContent::new(vec![Section::new("History", GOLD, items)]),
     );
 }
 
@@ -637,7 +785,7 @@ fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         "Collected discoveries and mining intelligence. Esc closes.",
         &ModalContent::new(vec![Section::new(
             "Discoveries",
-            Color::MAGENTA,
+            PINK,
             vec![
                 SectionItem::stat(
                     "Warnings",
@@ -646,7 +794,7 @@ fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                         ui.snapshot.warning_summary(ui.view),
                         ui.snapshot.world_event_summary()
                     ),
-                    Color::LIGHTGRAY,
+                    MIST,
                 ),
                 SectionItem::stat(
                     "Deep instability",
@@ -655,7 +803,7 @@ fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                         ui.view.deep_instability.min(100.0),
                         ui.snapshot.progression.deepest_tile_reached
                     ),
-                    Color::LIGHTGRAY,
+                    MIST,
                 ),
                 SectionItem::text("Use the collection log and expedition board for detailed objectives while the UI migration continues to consolidate data models."),
             ],
@@ -671,17 +819,17 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let mut sections = Vec::new();
     sections.push(Section::new(
         "Cargo",
-        Color::GOLD,
+        GOLD,
         vec![
             SectionItem::meter(
                 "Hold",
                 ui.player.cargo_used() as f32,
                 ui.player.cargo_capacity as f32,
-                Color::GOLD,
-                Color::ORANGE,
+                GOLD,
+                ORANGE,
             ),
-            SectionItem::stat("Credits", format!("{} cr", ui.player.credits), Color::GOLD),
-            SectionItem::stat("Bombs", ui.player.bombs.to_string(), Color::ORANGE),
+            SectionItem::stat("Credits", format!("{} cr", ui.player.credits), GOLD),
+            SectionItem::stat("Bombs", ui.player.bombs.to_string(), ORANGE),
         ],
     ));
     let mineral_items = if ui.player.cargo.is_empty() {
@@ -692,15 +840,16 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             .iter()
             .map(|(mineral, quantity)| {
                 let value = ui.snapshot.market_value(*mineral).saturating_mul(*quantity);
-                SectionItem::stat(
-                    mineral.name(),
-                    format!("x{quantity} | est. {value} cr"),
-                    Color::RAYWHITE,
+                SectionItem::icon_stat(
+                    icons::mineral(*mineral),
+                    format!("{} x{quantity}", mineral.name()),
+                    format!("est. {value} cr"),
+                    GOLD,
                 )
             })
             .collect()
     };
-    sections.push(Section::new("Minerals", Color::RAYWHITE, mineral_items));
+    sections.push(Section::new("Minerals", BONE, mineral_items));
     let artifact_items = if ui.player.artifacts.is_empty() {
         vec![SectionItem::text("No artifacts onboard.")]
     } else {
@@ -714,15 +863,15 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                         "x{quantity} | base {} cr",
                         artifact.value().saturating_mul(*quantity)
                     ),
-                    Color::MAGENTA,
+                    PINK,
                 )
             })
             .collect()
     };
-    sections.push(Section::new("Artifacts", Color::MAGENTA, artifact_items));
+    sections.push(Section::new("Artifacts", PINK, artifact_items));
     sections.push(Section::new(
         "Field Kits",
-        Color::LIME,
+        LIME,
         [
             ("Signal relays", ui.player.signal_relay_kits),
             ("Survey drones", ui.player.survey_drone_kits),
@@ -733,17 +882,13 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         ]
         .into_iter()
         .map(|(label, count)| {
-            SectionItem::stat(
-                label,
-                count.to_string(),
-                if count > 0 { Color::LIME } else { Color::GRAY },
-            )
+            SectionItem::stat(label, count.to_string(), if count > 0 { LIME } else { FOG })
         })
         .collect(),
     ));
     sections.push(Section::new(
         "Rig",
-        Color::SKYBLUE,
+        SKY_LIGHT,
         [
             ("Drill", ui.player.drill_strength),
             ("Engine", ui.player.engine_level),
@@ -754,7 +899,7 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             ("Scanner", ui.player.scanner_level),
         ]
         .into_iter()
-        .map(|(label, tier)| SectionItem::stat(label, format!("tier {tier}"), Color::LIGHTGRAY))
+        .map(|(label, tier)| SectionItem::stat(label, format!("tier {tier}"), MIST))
         .collect(),
     ));
     UiLayout::screen(draw).modal_with_render_plan(
@@ -795,12 +940,12 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             let color = match tile.kind {
                 TileKind::Air => Color::new(40, 42, 55, 255),
                 TileKind::Foundation => Color::new(135, 125, 105, 255),
-                TileKind::Lava | TileKind::MagmaVent => Color::RED,
+                TileKind::Lava | TileKind::MagmaVent => RED,
                 TileKind::Gas => Color::GREEN,
-                TileKind::ExplosivePocket => Color::ORANGE,
-                TileKind::PressurePocket => Color::SKYBLUE,
-                TileKind::Ore(_) => Color::GOLD,
-                TileKind::Artifact(_) => Color::MAGENTA,
+                TileKind::ExplosivePocket => ORANGE,
+                TileKind::PressurePocket => SKY_LIGHT,
+                TileKind::Ore(_) => GOLD,
+                TileKind::Artifact(_) => PINK,
                 _ => Color::new(115, 82, 58, 255),
             };
             let px = map_x + tx * map_w / terrain_width;
@@ -812,8 +957,8 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     }
     let player_map_x = map_x + ((ui.player.x / TILE_SIZE) as i32) * map_w / terrain_width;
     let player_map_y = map_y + ((ui.player.y / TILE_SIZE) as i32) * map_h / terrain_height;
-    draw.draw_circle(player_map_x, player_map_y, 5.0, Color::SKYBLUE);
-    draw.draw_circle_lines(player_map_x, player_map_y, 8.0, Color::RAYWHITE);
+    draw.draw_circle(player_map_x, player_map_y, 5.0, SKY_LIGHT);
+    draw.draw_circle_lines(player_map_x, player_map_y, 8.0, BONE);
 }
 
 fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
@@ -823,7 +968,7 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
         &ModalContent::new(vec![
             Section::new(
                 "Movement",
-                Color::SKYBLUE,
+                SKY_LIGHT,
                 [
                     "Move: A/D or Left/Right",
                     "Thrust: W or Up",
@@ -837,7 +982,7 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
             ),
             Section::new(
                 "Tools",
-                Color::GOLD,
+                GOLD,
                 [
                     "Map: M",
                     "Inventory: Tab",
@@ -897,15 +1042,16 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         .iter()
         .enumerate()
         .map(|(index, (label, detail))| {
-            SectionItem::stat(
-                selected_label(index == ui.shell.selected_menu_item, label),
-                detail,
-                if index == ui.shell.selected_menu_item {
-                    Color::GOLD
-                } else {
-                    Color::RAYWHITE
-                },
-            )
+            SectionItem::item(ItemEntry {
+                icon: None,
+                label: label.clone(),
+                detail: detail.clone(),
+                value: String::new(),
+                value_color: BONE,
+                coin: false,
+                selected: index == ui.shell.selected_menu_item,
+                disabled: false,
+            })
         })
         .collect();
     let cargo_items = if ui.player.cargo_used() == 0 {
@@ -915,17 +1061,18 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             .cargo
             .iter()
             .map(|(mineral, count)| {
-                SectionItem::stat(
-                    mineral.name(),
-                    format!("x{count} = {} cr", mineral.value() * count),
-                    Color::RAYWHITE,
+                SectionItem::icon_stat(
+                    icons::mineral(*mineral),
+                    format!("{} x{count}", mineral.name()),
+                    format!("{} cr", mineral.value() * count),
+                    GOLD,
                 )
             })
             .chain(ui.player.artifacts.iter().map(|(artifact, count)| {
                 SectionItem::stat(
                     artifact.name(),
                     format!("x{count} = {} cr", artifact.value() * count),
-                    Color::MAGENTA,
+                    PINK,
                 )
             }))
             .collect()
@@ -956,10 +1103,15 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             } else {
                 "avg"
             };
-            SectionItem::stat(
+            SectionItem::icon_stat(
+                icons::mineral(mineral),
                 mineral.name(),
                 format!("{} cr {trend} {label}", ui.snapshot.market_value(mineral)),
-                Color::LIGHTGRAY,
+                match label {
+                    "high" => LIME,
+                    "low" => ORANGE,
+                    _ => MIST,
+                },
             )
         })
         .collect();
@@ -967,9 +1119,9 @@ fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         "Ore Depot",
         "Up/Down select | Enter/E confirm | Esc/Backspace close",
         &ModalContent::new(vec![
-            Section::new("Depot Actions", Color::SKYBLUE, options),
-            Section::new("Current Cargo", Color::GOLD, cargo_items),
-            Section::new("Market Snapshot", Color::LIME, market_items),
+            Section::new("Depot Actions", SKY_LIGHT, options),
+            Section::new("Current Cargo", GOLD, cargo_items),
+            Section::new("Market Snapshot", LIME, market_items),
         ]),
     );
 }
@@ -983,9 +1135,9 @@ pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
                 selected_label(index == ui.shell.selected_title_item, option.label()),
                 "",
                 if index == ui.shell.selected_title_item {
-                    Color::GOLD
+                    GOLD
                 } else {
-                    Color::RAYWHITE
+                    BONE
                 },
             )
         })
@@ -1003,7 +1155,7 @@ pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     UiLayout::screen(draw).modal_with_render_plan(
         "DRILLGAME",
         "A frontier mining run awaits below. Up/Down select | Enter/E confirm | Esc exits | F11 fullscreen",
-        &ModalContent::new(vec![Section::new("Menu", Color::SKYBLUE, items)]),
+        &ModalContent::new(vec![Section::new("Menu", SKY_LIGHT, items)]).compact(),
     );
 }
 
@@ -1016,9 +1168,9 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
                 selected_label(index == ui.shell.selected_pause_item, option.label()),
                 "",
                 if index == ui.shell.selected_pause_item {
-                    Color::GOLD
+                    GOLD
                 } else {
-                    Color::RAYWHITE
+                    BONE
                 },
             )
         })
@@ -1040,7 +1192,7 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     UiLayout::screen(draw).modal_with_render_plan(
         "Paused",
         "Up/Down select | Enter/E confirm | Esc resume",
-        &ModalContent::new(vec![Section::new("Menu", Color::SKYBLUE, items)]),
+        &ModalContent::new(vec![Section::new("Menu", SKY_LIGHT, items)]).compact(),
     );
 }
 
@@ -1050,7 +1202,7 @@ pub(super) fn draw_game_over(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
         "Press E to pay the rescue fee and return to base.",
         &ModalContent::new(vec![Section::new(
             "Status",
-            Color::RED,
+            RED,
             vec![
                 SectionItem::text(match ui.view.failure {
                     Some(failure) if failure.disabled => {
@@ -1059,11 +1211,7 @@ pub(super) fn draw_game_over(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
                     Some(_) => "Your rig is out of fuel. Call the rescue crew.".to_owned(),
                     None => ui.shell.message.clone(),
                 }),
-                SectionItem::stat(
-                    "Rescues called",
-                    ui.view.rescue_count.to_string(),
-                    Color::LIGHTGRAY,
-                ),
+                SectionItem::stat("Rescues called", ui.view.rescue_count.to_string(), MIST),
             ],
         )]),
     );
@@ -1077,11 +1225,7 @@ fn option_items(options: &[String], selected: usize) -> Vec<SectionItem> {
             SectionItem::stat(
                 selected_label(index == selected, option),
                 "",
-                if index == selected {
-                    Color::GOLD
-                } else {
-                    Color::RAYWHITE
-                },
+                if index == selected { GOLD } else { BONE },
             )
         })
         .collect()
@@ -1106,7 +1250,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             "Up/Down select | Enter/E confirm | Esc back",
             vec![Section::new(
                 "Join",
-                Color::SKYBLUE,
+                SKY_LIGHT,
                 option_items(
                     &JOIN_MENU
                         .iter()
@@ -1121,9 +1265,9 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             "Type the host's ip:port | Enter join | Backspace delete | Esc back",
             vec![Section::new(
                 "Host address",
-                Color::SKYBLUE,
+                SKY_LIGHT,
                 vec![
-                    SectionItem::stat(format!("{}_", online.text), "", Color::GOLD),
+                    SectionItem::stat(format!("{}_", online.text), "", GOLD),
                     SectionItem::text(
                         "Direct-IP joins are encrypted but do not authenticate the host; use a descriptor to pin its certificate.",
                     ),
@@ -1137,7 +1281,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                 "Ctrl+V paste the host's descriptor | Enter join | Backspace delete | Esc back",
                 vec![Section::new(
                     "Descriptor",
-                    Color::SKYBLUE,
+                    SKY_LIGHT,
                     vec![if online.text.is_empty() {
                         SectionItem::text(
                             "The host copies it from its lobby (\"Copy descriptor to clipboard\").",
@@ -1146,7 +1290,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                         SectionItem::stat(
                             format!("{preview}..."),
                             format!("{} characters", online.text.len()),
-                            Color::GOLD,
+                            GOLD,
                         )
                     }],
                 )],
@@ -1158,14 +1302,14 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             (
                 "LAN Games".to_owned(),
                 "Up/Down select | Enter/E join | Esc back",
-                vec![Section::new("Discovered sessions", Color::SKYBLUE, items)],
+                vec![Section::new("Discovered sessions", SKY_LIGHT, items)],
             )
         }
         OnlineScreen::Lobby => {
             let lobby = online.lobby.clone().unwrap_or_default();
             let mut session = vec![SectionItem::text(lobby.status.clone())];
             if let Some(addr) = lobby.addr {
-                session.push(SectionItem::stat("Address", addr.to_string(), Color::GOLD));
+                session.push(SectionItem::stat("Address", addr.to_string(), GOLD));
             }
             if host {
                 session.push(SectionItem::stat(
@@ -1175,7 +1319,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                     } else {
                         "not advertised"
                     },
-                    Color::LIGHTGRAY,
+                    MIST,
                 ));
                 session.push(SectionItem::stat(
                     "Descriptor",
@@ -1184,7 +1328,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                     } else {
                         "pending"
                     },
-                    Color::LIGHTGRAY,
+                    MIST,
                 ));
             }
             if !shell.message.is_empty() {
@@ -1206,11 +1350,11 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                             name.push_str(" (host)");
                         }
                         let (state, color) = if !entry.connected {
-                            ("disconnected", Color::ORANGE)
+                            ("disconnected", ORANGE)
                         } else if entry.local || entry.ready {
-                            ("ready", Color::LIME)
+                            ("ready", LIME)
                         } else {
-                            ("not ready", Color::LIGHTGRAY)
+                            ("not ready", MIST)
                         };
                         SectionItem::stat(name, state, color)
                     })
@@ -1237,17 +1381,9 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                     "Up/Down select | Enter/E confirm"
                 },
                 vec![
-                    Section::new("Session", Color::SKYBLUE, session),
-                    Section::new(
-                        format!("Players ({})", lobby.roster.len()),
-                        Color::GOLD,
-                        players,
-                    ),
-                    Section::new(
-                        "Menu",
-                        Color::SKYBLUE,
-                        option_items(&options, online.selected),
-                    ),
+                    Section::new("Session", SKY_LIGHT, session),
+                    Section::new(format!("Players ({})", lobby.roster.len()), GOLD, players),
+                    Section::new("Menu", SKY_LIGHT, option_items(&options, online.selected)),
                 ],
             )
         }
@@ -1262,7 +1398,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             (
                 "Online Session".to_owned(),
                 "Up/Down select | Enter/E confirm | Esc title",
-                vec![Section::new("Session over", Color::ORANGE, items)],
+                vec![Section::new("Session over", ORANGE, items)],
             )
         }
     };

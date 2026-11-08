@@ -1,6 +1,20 @@
-use std::{cell::RefCell, collections::BTreeMap, ffi::CString};
+//! Screen layout for menus and modals: a content model (sections of rows, meters and text) laid
+//! out by the widget tree and drawn with the pixel UI kit. All coordinates are UI canvas art
+//! pixels (see [`super::ui_kit`]).
 
-use raylib::{ffi, prelude::*};
+use std::{cell::RefCell, collections::BTreeMap};
+
+use raylib::prelude::*;
+
+#[allow(
+    clippy::wildcard_imports,
+    reason = "art code names colours from the whole palette"
+)]
+use super::pixel_art::palette::*;
+use super::{
+    pixel_art::sprite::SpriteDef,
+    ui_kit::{self, ButtonState, PanelStyle, TextStyle},
+};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct Size {
@@ -17,6 +31,7 @@ pub(super) struct Insets {
 }
 
 impl Insets {
+    #[cfg(test)]
     const fn all(value: f32) -> Self {
         Self {
             left: value,
@@ -25,36 +40,35 @@ impl Insets {
             bottom: value,
         }
     }
-
-    const fn symmetric(horizontal: f32, vertical: f32) -> Self {
-        Self {
-            left: horizontal,
-            top: vertical,
-            right: horizontal,
-            bottom: vertical,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub(super) enum FontRole {
-    Title,
-    Heading,
-    Small,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 enum TextKind {
-    Title,
     Heading,
     Small,
 }
 
+impl TextKind {
+    const fn style(self) -> TextStyle {
+        match self {
+            Self::Heading => TextStyle::Bold,
+            Self::Small => TextStyle::Body,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum PanelKind {
-    Hud,
-    Modal,
     Overlay,
+}
+
+/// Where dialogs sit: centred, or beside a building's counter so the room stays visible.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum ModalPlacement {
+    #[default]
+    Centred,
+    /// Left-hand side of the screen, leaving the interior's counter, keeper and rig in view.
+    Counter,
 }
 
 pub(super) struct UiLayout<'draw, 'handle> {
@@ -63,308 +77,56 @@ pub(super) struct UiLayout<'draw, 'handle> {
 }
 
 impl<'draw, 'handle> UiLayout<'draw, 'handle> {
-    pub(super) const fn new(
-        draw: &'draw mut RaylibDrawHandle<'handle>,
-        viewport: Rectangle,
-    ) -> Self {
-        Self { draw, viewport }
-    }
-
+    /// Lays out over the whole UI canvas. Call inside a [`ui_kit::UiCanvasScope`].
     pub(super) fn screen(draw: &'draw mut RaylibDrawHandle<'handle>) -> Self {
-        let viewport = Rectangle {
-            x: 0.0,
-            y: 0.0,
-            width: draw.get_screen_width() as f32,
-            height: draw.get_screen_height() as f32,
-        };
-        Self { draw, viewport }
-    }
-
-    pub(super) fn top_hud(&mut self, cards: &[HudCard], details: Option<&[StatItem]>) {
-        let margin = 8.0;
-        let gap = 6.0;
-        let width = (self.viewport.width - margin * 2.0).max(260.0);
-        let card_count = cards.len().max(1) as f32;
-        let card_width = ((width - gap * (card_count - 1.0)) / card_count).max(96.0);
-        let y = self.viewport.y + margin;
-        for (index, card) in cards.iter().enumerate() {
-            let x = self.viewport.x + margin + index as f32 * (card_width + gap);
-            let rect = Rectangle {
-                x,
-                y,
-                width: card_width,
-                height: 64.0,
-            };
-            let mut children = vec![widgets::UiNode::Text(widgets::TextNode::colored(
-                &card.title,
-                TextKind::Small,
-                (card_width - 12.0).max(0.0),
-                card.color,
-            ))];
-            match &card.value {
-                HudCardValue::Meter {
-                    value,
-                    max,
-                    fill,
-                    danger,
-                } => {
-                    children.push(widgets::UiNode::Text(widgets::TextNode::colored(
-                        format!("{value:.0}/{max:.0}"),
-                        TextKind::Small,
-                        (card_width - 12.0).max(0.0),
-                        Color::LIGHTGRAY,
-                    )));
-                    children.push(widgets::UiNode::Meter(widgets::MeterNode::colored(
-                        ratio(*value, *max),
-                        (card_width - 12.0).max(0.0),
-                        8.0,
-                        *fill,
-                        *danger,
-                    )));
-                }
-                HudCardValue::Text { value } => {
-                    children.push(widgets::UiNode::Text(widgets::TextNode::colored(
-                        value,
-                        TextKind::Small,
-                        (card_width - 12.0).max(0.0),
-                        Color::RAYWHITE,
-                    )));
-                }
-            }
-            let mut node = widgets::UiNode::Panel(widgets::PanelNode::with_kind(
-                Insets::symmetric(6.0, 5.0),
-                PanelKind::Hud,
-                widgets::UiNode::Stack(widgets::StackNode::vertical(3.0, children)),
-            ));
-            node.layout(rect);
-            let plan = node.render_plan();
-            self.render_plan(&plan);
-        }
-
-        if let Some(stats) = details {
-            let rect = Rectangle {
-                x: self.viewport.x + margin,
-                y: y + 70.0,
-                width: width.min(560.0),
-                height: 96.0,
-            };
-            let mut children = vec![widgets::UiNode::Text(widgets::TextNode::colored(
-                "Diagnostics",
-                TextKind::Heading,
-                (rect.width - 16.0).max(0.0),
-                Color::LIME,
-            ))];
-            for stat in stats.iter().take(4) {
-                children.push(widgets::UiNode::Text(widgets::TextNode::colored(
-                    format!("{}: {}", stat.label, stat.value),
-                    TextKind::Small,
-                    (rect.width - 16.0).max(0.0),
-                    stat.color,
-                )));
-            }
-            let mut node = widgets::UiNode::Panel(widgets::PanelNode::with_kind(
-                Insets::symmetric(8.0, 7.0),
-                PanelKind::Overlay,
-                widgets::UiNode::Stack(widgets::StackNode::vertical(5.0, children)),
-            ));
-            node.layout(rect);
-            let plan = node.render_plan();
-            self.render_plan(&plan);
+        Self {
+            draw,
+            viewport: ui_kit::canvas().rect(),
         }
     }
 
-    pub(super) fn anchored_panel(
-        &mut self,
-        rect: Rectangle,
-        heading: &str,
-        body: Option<&str>,
-        accent: Color,
-    ) {
-        let mut children = vec![widgets::UiNode::Text(widgets::TextNode::colored(
-            heading,
-            TextKind::Heading,
-            (rect.width - 20.0).max(0.0),
-            accent,
-        ))];
-        if let Some(body) = body {
-            children.push(widgets::UiNode::Text(widgets::TextNode::colored(
-                body,
-                TextKind::Small,
-                (rect.width - 20.0).max(0.0),
-                Color::LIGHTGRAY,
-            )));
-        }
-        let mut node = widgets::UiNode::Panel(widgets::PanelNode::new(
-            Insets::symmetric(10.0, 8.0),
-            widgets::UiNode::Stack(widgets::StackNode::vertical(8.0, children)),
-        ));
-        node.layout(rect);
-        let plan = node.render_plan();
-        self.render_plan(&plan);
-    }
-
+    /// A dialog frame with a title and subtitle; returns the body rect for custom drawing.
     pub(super) fn canvas_modal(&mut self, title: &str, subtitle: &str, summary: &str) -> Rectangle {
-        self.draw.draw_rectangle(
-            self.viewport.x as i32,
-            self.viewport.y as i32,
-            self.viewport.width as i32,
-            self.viewport.height as i32,
-            Color::new(0, 0, 0, 120),
-        );
-        let rect = modal_rect_for_viewport(self.viewport);
-        self.draw_panel(rect, PanelKind::Modal);
-        let content_rect = inset(rect, Insets::all(18.0));
-        Self::draw_text(
-            title,
-            content_rect.x,
-            content_rect.y,
-            TextKind::Title,
-            Color::GOLD,
-        );
-        Self::draw_text(
-            subtitle,
-            content_rect.x,
-            content_rect.y + 35.0,
-            TextKind::Small,
-            Color::LIGHTGRAY,
-        );
-        Self::draw_text(
+        let rect = self.dialog_rect(false);
+        let body = self.modal_frame(title, subtitle, rect, None);
+        ui_kit::text(
+            self.draw,
             summary,
-            content_rect.x,
-            content_rect.y + 58.0,
-            TextKind::Small,
-            Color::RAYWHITE,
-        );
-        self.draw.draw_line(
-            content_rect.x as i32,
-            (content_rect.y + 84.0) as i32,
-            (content_rect.x + content_rect.width) as i32,
-            (content_rect.y + 84.0) as i32,
-            Color::new(110, 120, 130, 180),
+            body.x as i32,
+            body.y as i32,
+            TextStyle::Body,
+            MIST,
         );
         Rectangle {
-            x: content_rect.x,
-            y: content_rect.y + 98.0,
-            width: content_rect.width,
-            height: (content_rect.height - 98.0).max(0.0),
+            x: body.x,
+            y: body.y + 14.0,
+            width: body.width,
+            height: (body.height - 14.0).max(0.0),
         }
     }
 
-    #[allow(
-        dead_code,
-        reason = "render-plan execution is available for upcoming live widget tree migration"
-    )]
-    fn render_plan(&mut self, plan: &widgets::RenderPlan) {
-        for command in plan.commands() {
-            match command {
-                widgets::RenderCommand::Panel { rect, kind } => {
-                    self.draw_panel(*rect, *kind);
-                }
-                widgets::RenderCommand::Text {
-                    rect,
-                    text,
-                    kind,
-                    color,
-                } => {
-                    Self::draw_text_wrapped(text, *rect, *kind, *color);
-                }
-                widgets::RenderCommand::Meter {
-                    rect,
-                    ratio,
-                    fill,
-                    danger,
-                } => {
-                    let color = if *ratio < 0.25 { *danger } else { *fill };
-                    self.draw_bar(rect.x, rect.y, rect.width, rect.height, *ratio, color);
-                }
-                widgets::RenderCommand::Button {
-                    rect,
-                    focused,
-                    id: _,
-                    text,
-                    color,
-                } => {
-                    self.draw_panel(*rect, PanelKind::Overlay);
-                    if !text.is_empty() {
-                        let text_rect = inset(*rect, Insets::symmetric(8.0, 5.0));
-                        Self::draw_text_wrapped(text, text_rect, TextKind::Small, *color);
-                    }
-                    if *focused {
-                        self.draw.draw_rectangle_lines(
-                            rect.x as i32,
-                            rect.y as i32,
-                            rect.width as i32,
-                            rect.height as i32,
-                            Color::GOLD,
-                        );
-                    }
-                }
-                widgets::RenderCommand::Canvas { rect } => {
-                    self.draw.draw_rectangle_lines(
-                        rect.x as i32,
-                        rect.y as i32,
-                        rect.width as i32,
-                        rect.height as i32,
-                        Color::new(190, 205, 220, 230),
-                    );
-                }
-                widgets::RenderCommand::Clip { rect } => unsafe {
-                    ffi::BeginScissorMode(
-                        rect.x as i32,
-                        rect.y as i32,
-                        rect.width as i32,
-                        rect.height as i32,
-                    );
-                },
-                widgets::RenderCommand::EndClip => unsafe {
-                    ffi::EndScissorMode();
-                },
-            }
-        }
-    }
-
+    /// A dialog with `content` laid out as scrollable sections.
     pub(super) fn modal_with_render_plan(
         &mut self,
         title: &str,
         subtitle: &str,
         content: &ModalContent,
     ) {
-        self.draw.draw_rectangle(
-            self.viewport.x as i32,
-            self.viewport.y as i32,
-            self.viewport.width as i32,
-            self.viewport.height as i32,
-            Color::new(0, 0, 0, 120),
-        );
-        let rect = modal_rect_for_viewport(self.viewport);
-        self.draw_panel(rect, PanelKind::Modal);
-        let content_rect = inset(rect, Insets::all(18.0));
-        Self::draw_text(
-            title,
-            content_rect.x,
-            content_rect.y,
-            TextKind::Title,
-            Color::GOLD,
-        );
-        Self::draw_text(
-            subtitle,
-            content_rect.x,
-            content_rect.y + 35.0,
-            TextKind::Small,
-            Color::LIGHTGRAY,
-        );
-        self.draw.draw_line(
-            content_rect.x as i32,
-            (content_rect.y + 60.0) as i32,
-            (content_rect.x + content_rect.width) as i32,
-            (content_rect.y + 60.0) as i32,
-            Color::new(110, 120, 130, 180),
-        );
+        // Measure the content first so short dialogs shrink to fit it.
+        let full = self.dialog_rect(content.compact);
+        let content_width = (full.width - 24.0 - 8.0).max(0.0);
+        let mut node = modal_content_node(content, content_width);
+        node.layout(Rectangle::new(0.0, 0.0, content_width, 100_000.0));
+        let content_height = match &node {
+            widgets::UiNode::Scroll(scroll) => scroll.content_height,
+            other => other.rect().height,
+        };
+        let body = self.modal_frame(title, subtitle, full, Some(content_height));
+        // Room on the left for the selection cursor.
         let body = Rectangle {
-            x: content_rect.x,
-            y: content_rect.y + 72.0,
-            width: content_rect.width,
-            height: (content_rect.height - 72.0).max(0.0),
+            x: body.x + 8.0,
+            width: (body.width - 8.0).max(0.0),
+            ..body
         };
         let mut node = modal_content_node(content, body.width);
         node.layout(body);
@@ -378,143 +140,222 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         self.render_plan(&plan);
     }
 
-    fn draw_panel(&mut self, rect: Rectangle, kind: PanelKind) {
-        let (background, border) = match kind {
-            PanelKind::Hud => (Color::new(8, 10, 14, 205), Color::new(180, 205, 225, 190)),
-            PanelKind::Modal => (Color::new(8, 10, 14, 245), Color::new(210, 220, 235, 235)),
-            PanelKind::Overlay => (Color::new(14, 18, 26, 225), Color::new(120, 145, 170, 190)),
-        };
-        self.draw.draw_rectangle(
-            rect.x as i32,
-            rect.y as i32,
-            rect.width as i32,
-            rect.height as i32,
-            background,
-        );
-        self.draw.draw_rectangle_lines(
-            rect.x as i32,
-            rect.y as i32,
-            rect.width as i32,
-            rect.height as i32,
-            border,
-        );
-    }
-
-    fn draw_bar(&mut self, x: f32, y: f32, width: f32, height: f32, ratio: f32, fill: Color) {
-        self.draw.draw_rectangle(
-            x as i32,
-            y as i32,
-            width as i32,
-            height as i32,
-            Color::new(24, 28, 36, 240),
-        );
-        self.draw.draw_rectangle(
-            x as i32,
-            y as i32,
-            (width * ratio) as i32,
-            height as i32,
-            fill,
-        );
-        self.draw.draw_rectangle_lines(
-            x as i32,
-            y as i32,
-            width as i32,
-            height as i32,
-            Color::new(220, 225, 230, 180),
-        );
-    }
-
-    fn draw_text_wrapped(text: &str, rect: Rectangle, kind: TextKind, color: Color) {
-        let layout = layout_text(text, rect.width.max(0.0), kind);
-        for line in layout.lines {
-            Self::draw_text(&line.text, rect.x + line.x, rect.y + line.y, kind, color);
+    /// The dialog rect for this frame's placement (`compact` narrows centred dialogs).
+    fn dialog_rect(&self, compact: bool) -> Rectangle {
+        let placement = current_modal_placement();
+        let rect = modal_rect(self.viewport, placement);
+        if compact && placement == ModalPlacement::Centred && rect.width > COMPACT_MODAL_WIDTH {
+            Rectangle {
+                x: (rect.x + (rect.width - COMPACT_MODAL_WIDTH) * 0.5).floor(),
+                width: COMPACT_MODAL_WIDTH,
+                ..rect
+            }
+        } else {
+            rect
         }
     }
 
-    fn draw_text(text: &str, x: f32, y: f32, kind: TextKind, color: Color) {
-        let Ok(cstring) = CString::new(text) else {
+    /// Dims the screen, draws the dialog panel, title, subtitle and divider; returns the body.
+    /// With `content_height` the panel shrinks to fit that much body (centred dialogs only).
+    fn modal_frame(
+        &mut self,
+        title: &str,
+        subtitle: &str,
+        mut rect: Rectangle,
+        content_height: Option<f32>,
+    ) -> Rectangle {
+        let placement = current_modal_placement();
+        if placement == ModalPlacement::Centred {
+            ui_kit::dim(self.draw, self.viewport);
+        }
+        let width = rect.width as i32 - 24;
+        let lines = ui_kit::wrap(subtitle, width, TextStyle::Body);
+        let subtitle_lines = i32::try_from(lines.len().min(2)).unwrap_or(1);
+        let header =
+            10 + TextStyle::Title.height() + 3 + subtitle_lines * TextStyle::Body.line_height() + 8;
+        if let (Some(content), ModalPlacement::Centred) = (content_height, placement) {
+            let wanted = (header as f32 + content + 14.0).ceil().max(120.0);
+            if wanted < rect.height {
+                rect.y = (rect.y + (rect.height - wanted) * 0.5).floor();
+                rect.height = wanted;
+            }
+        }
+        ui_kit::panel(self.draw, rect, PanelStyle::Accent);
+        let x = rect.x as i32 + 12;
+        let mut y = rect.y as i32 + 10;
+        ui_kit::text(self.draw, title, x, y, TextStyle::Title, GOLD);
+        y += TextStyle::Title.height() + 3;
+        for line in lines.iter().take(2) {
+            ui_kit::text(self.draw, line, x, y, TextStyle::Body, FOG);
+            y += TextStyle::Body.line_height();
+        }
+        y += 2;
+        ui_kit::divider(self.draw, x, y, width);
+        y += 6;
+        Rectangle {
+            x: x as f32,
+            y: y as f32,
+            width: width as f32,
+            height: (rect.y + rect.height - 10.0 - y as f32).max(0.0),
+        }
+    }
+
+    fn render_plan(&mut self, plan: &widgets::RenderPlan) {
+        for command in plan.commands() {
+            match command {
+                widgets::RenderCommand::Panel {
+                    rect,
+                    kind: PanelKind::Overlay,
+                } => ui_kit::panel(self.draw, *rect, PanelStyle::Standard),
+                widgets::RenderCommand::Text {
+                    rect,
+                    text,
+                    kind,
+                    color,
+                } => {
+                    Self::draw_text_wrapped(self.draw, text, *rect, *kind, *color);
+                }
+                widgets::RenderCommand::Meter {
+                    rect,
+                    ratio,
+                    fill,
+                    danger: _,
+                } => {
+                    ui_kit::bar(self.draw, *rect, *ratio, bar_colors(*fill), 0.25);
+                }
+                widgets::RenderCommand::Button {
+                    rect,
+                    focused,
+                    id: _,
+                    text,
+                    color,
+                    row,
+                } => self.draw_row(*rect, *focused, text, *color, row),
+                widgets::RenderCommand::Canvas { rect } => ui_kit::well(self.draw, *rect),
+                // The clip extends left over the selection cursor's gutter.
+                widgets::RenderCommand::Clip { rect } => ui_kit::begin_clip(Rectangle {
+                    x: rect.x - 8.0,
+                    width: rect.width + 8.0,
+                    ..*rect
+                }),
+                widgets::RenderCommand::EndClip => ui_kit::end_clip(),
+            }
+        }
+    }
+
+    fn draw_row(
+        &mut self,
+        rect: Rectangle,
+        focused: bool,
+        label: &str,
+        color: Color,
+        row: &widgets::RowContent,
+    ) {
+        if row.face == widgets::RowFace::Plain {
+            let y = rect.y as i32 + 1;
+            let mut x = rect.x as i32;
+            if let Some(icon) = row.icon {
+                ui_kit::icon(self.draw, icon, x, y);
+                x += icon.width() + 4;
+            }
+            ui_kit::text(self.draw, label, x, y, TextStyle::Body, MIST);
+            if !row.value.is_empty() {
+                let right = (rect.x + rect.width) as i32 - 2;
+                ui_kit::text_right(
+                    self.draw,
+                    &row.value,
+                    right,
+                    y,
+                    TextStyle::Bold,
+                    row.value_color.unwrap_or(color),
+                );
+            }
             return;
+        }
+        let state = if focused {
+            ButtonState::Selected
+        } else if row.face == widgets::RowFace::Disabled {
+            ButtonState::Disabled
+        } else {
+            ButtonState::Idle
         };
-        let metrics = font_metrics(kind);
-        let x = x.round();
-        let y = y.round();
-        let size = metrics.font_size;
-        let spacing = metrics.spacing;
-        unsafe {
-            let font = font_for_role(font_role(kind));
-            ffi::DrawTextEx(
-                font,
-                cstring.as_ptr(),
-                Vector2::new(x + TEXT_SHADOW_OFFSET, y + TEXT_SHADOW_OFFSET),
-                size,
-                spacing,
-                Color::new(0, 0, 0, 180),
+        let idle_value = row.value_color.unwrap_or(BONE);
+        if row.icon.is_some() || !row.detail.is_empty() {
+            ui_kit::item_row(
+                self.draw,
+                rect,
+                &ui_kit::ItemRow {
+                    icon: row.icon,
+                    label,
+                    detail: &row.detail,
+                    price: &row.value,
+                    price_color: idle_value,
+                    coin: row.coin,
+                    state,
+                },
             );
-            ffi::DrawTextEx(
-                font,
-                cstring.as_ptr(),
-                Vector2::new(x, y),
-                size,
-                spacing,
+        } else {
+            ui_kit::button(self.draw, rect, label, state);
+            if !row.value.is_empty() {
+                let value_color = if state == ButtonState::Selected {
+                    INK
+                } else {
+                    idle_value
+                };
+                ui_kit::text_right(
+                    self.draw,
+                    &row.value,
+                    (rect.x + rect.width) as i32 - 7,
+                    rect.y as i32 + (rect.height as i32 - 9) / 2,
+                    TextStyle::Body,
+                    value_color,
+                );
+            }
+        }
+    }
+
+    fn draw_text_wrapped(
+        draw: &mut RaylibDrawHandle<'_>,
+        text: &str,
+        rect: Rectangle,
+        kind: TextKind,
+        color: Color,
+    ) {
+        let layout = layout_text(text, rect.width.max(0.0), kind);
+        for line in layout.lines {
+            ui_kit::text(
+                draw,
+                &line.text,
+                (rect.x + line.x).round() as i32,
+                (rect.y + line.y).round() as i32,
+                kind.style(),
                 color,
             );
         }
     }
 }
 
-pub(super) struct HudCard {
-    title: String,
-    value: HudCardValue,
-    color: Color,
-}
-
-impl HudCard {
-    pub(super) fn meter(
-        title: impl Into<String>,
-        value: f32,
-        max: f32,
-        fill: Color,
-        danger: Color,
-    ) -> Self {
-        Self {
-            title: title.into(),
-            value: HudCardValue::Meter {
-                value,
-                max,
-                fill,
-                danger,
-            },
-            color: fill,
-        }
-    }
-
-    pub(super) fn text(title: impl Into<String>, value: impl Into<String>, color: Color) -> Self {
-        Self {
-            title: title.into(),
-            value: HudCardValue::Text {
-                value: value.into(),
-            },
-            color,
-        }
+/// Bar colours for a meter tinted `fill` (legacy colour hints map onto palette ramps).
+fn bar_colors(fill: Color) -> ui_kit::BarColors {
+    if fill == FUEL_HINT || fill == GOLD {
+        ui_kit::BarColors::FUEL
+    } else if fill == LEAF || fill == LIME {
+        ui_kit::BarColors::HULL
+    } else if fill == CLAY {
+        ui_kit::BarColors::CARGO
+    } else {
+        ui_kit::BarColors::COOL
     }
 }
 
-enum HudCardValue {
-    Meter {
-        value: f32,
-        max: f32,
-        fill: Color,
-        danger: Color,
-    },
-    Text {
-        value: String,
-    },
-}
+/// Fuel meters pass the fuel colour; kept as a named hint for [`bar_colors`].
+const FUEL_HINT: Color = AMBER;
 
 pub(super) struct StatItem {
     label: String,
     value: String,
     color: Color,
+    icon: Option<&'static SpriteDef>,
 }
 
 impl StatItem {
@@ -523,19 +364,33 @@ impl StatItem {
             label: label.into(),
             value: value.into(),
             color,
+            icon: None,
         }
     }
 }
 
 pub(super) struct ModalContent {
     sections: Vec<Section>,
+    compact: bool,
 }
 
 impl ModalContent {
     pub(super) const fn new(sections: Vec<Section>) -> Self {
-        Self { sections }
+        Self {
+            sections,
+            compact: false,
+        }
+    }
+
+    /// A narrow dialog for short menus (title, pause, confirmations).
+    pub(super) const fn compact(mut self) -> Self {
+        self.compact = true;
+        self
     }
 }
+
+/// Width of a compact centred dialog in art pixels.
+const COMPACT_MODAL_WIDTH: f32 = 300.0;
 
 pub(super) struct Section {
     title: String,
@@ -553,6 +408,20 @@ impl Section {
     }
 }
 
+/// A shop / list row: icon, label, detail line and a right-aligned value.
+pub(super) struct ItemEntry {
+    pub icon: Option<&'static SpriteDef>,
+    pub label: String,
+    pub detail: String,
+    pub value: String,
+    pub value_color: Color,
+    /// Show a coin before the value.
+    pub coin: bool,
+    pub selected: bool,
+    /// Greyed out (e.g. unaffordable), still selectable.
+    pub disabled: bool,
+}
+
 pub(super) enum SectionItem {
     Meter {
         label: String,
@@ -562,6 +431,7 @@ pub(super) enum SectionItem {
         danger: Color,
     },
     Stat(StatItem),
+    Item(ItemEntry),
     Text(String),
 }
 
@@ -586,19 +456,50 @@ impl SectionItem {
         Self::Stat(StatItem::new(label, value, color))
     }
 
+    /// A label/value row with an icon.
+    pub(super) fn icon_stat(
+        icon: &'static SpriteDef,
+        label: impl Into<String>,
+        value: impl Into<String>,
+        color: Color,
+    ) -> Self {
+        Self::Stat(StatItem {
+            icon: Some(icon),
+            ..StatItem::new(label, value, color)
+        })
+    }
+
+    pub(super) const fn item(entry: ItemEntry) -> Self {
+        Self::Item(entry)
+    }
+
     pub(super) fn text(text: impl Into<String>) -> Self {
         Self::Text(text.into())
     }
 }
 
+/// Height of a selectable menu row.
+const MENU_ROW_HEIGHT: f32 = ui_kit::BUTTON_HEIGHT as f32;
+/// Height of a plain label/value row.
+const PLAIN_ROW_HEIGHT: f32 = 11.0;
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "one match maps every content item kind onto widgets"
+)]
 fn modal_content_node(content: &ModalContent, width: f32) -> widgets::UiNode {
     let mut sections = Vec::new();
     let focused_id = current_focused_id();
     let mut selectable_index = 0_usize;
     let mut focus_order = Vec::new();
-    for section in &content.sections {
+    for (section_index, section) in content.sections.iter().enumerate() {
+        if section_index > 0 {
+            sections.push(widgets::UiNode::Spacer(widgets::SpacerNode::sized(
+                width, 2.0,
+            )));
+        }
         sections.push(widgets::UiNode::Text(widgets::TextNode::colored(
-            &section.title,
+            section.title.to_uppercase(),
             TextKind::Heading,
             width,
             section.color,
@@ -612,15 +513,19 @@ fn modal_content_node(content: &ModalContent, width: f32) -> widgets::UiNode {
                     fill,
                     danger,
                 } => {
-                    sections.push(widgets::UiNode::Text(widgets::TextNode::label(
-                        label,
-                        TextKind::Small,
-                        width,
-                    )));
+                    sections.push(widgets::UiNode::Button(
+                        widgets::ButtonNode::label(label, width, PLAIN_ROW_HEIGHT, false, MIST)
+                            .with_row(widgets::RowContent {
+                                value: format!("{value:.0}/{max:.0}"),
+                                value_color: Some(BONE),
+                                face: widgets::RowFace::Plain,
+                                ..widgets::RowContent::default()
+                            }),
+                    ));
                     sections.push(widgets::UiNode::Meter(widgets::MeterNode::colored(
                         ratio(*value, *max),
                         width,
-                        10.0,
+                        8.0,
                         *fill,
                         *danger,
                     )));
@@ -635,27 +540,78 @@ fn modal_content_node(content: &ModalContent, width: f32) -> widgets::UiNode {
                     }
                     let focused =
                         selected || focused_id.as_ref().is_some_and(|focused| focused == &id);
-                    sections.push(widgets::UiNode::Button(widgets::ButtonNode::identified(
-                        Some(id),
-                        format!("{} {}", stat.label, stat.value)
-                            .trim_end()
-                            .to_owned(),
-                        width,
-                        30.0,
-                        focused,
-                        stat.color,
-                    )));
+                    let label = stat.label.get(2..).unwrap_or(&stat.label).to_owned();
+                    sections.push(widgets::UiNode::Button(
+                        widgets::ButtonNode::identified(
+                            Some(id),
+                            label,
+                            width,
+                            MENU_ROW_HEIGHT,
+                            focused,
+                            stat.color,
+                        )
+                        .with_row(widgets::RowContent {
+                            value: stat.value.clone(),
+                            icon: stat.icon,
+                            ..widgets::RowContent::default()
+                        }),
+                    ));
                 }
                 SectionItem::Stat(stat) => {
-                    sections.push(widgets::UiNode::Text(widgets::TextNode::colored(
-                        format!("{} {}", stat.label, stat.value),
-                        TextKind::Small,
-                        width,
-                        stat.color,
-                    )));
+                    sections.push(widgets::UiNode::Button(
+                        widgets::ButtonNode::label(
+                            &stat.label,
+                            width,
+                            PLAIN_ROW_HEIGHT,
+                            false,
+                            stat.color,
+                        )
+                        .with_row(widgets::RowContent {
+                            value: stat.value.clone(),
+                            value_color: Some(stat.color),
+                            icon: stat.icon,
+                            face: widgets::RowFace::Plain,
+                            ..widgets::RowContent::default()
+                        }),
+                    ));
+                }
+                SectionItem::Item(entry) => {
+                    let id = widgets::WidgetId::new(format!("modal-option-{selectable_index}"));
+                    selectable_index += 1;
+                    focus_order.push(id.clone());
+                    if entry.selected {
+                        set_current_focused_id(id.clone());
+                    }
+                    let height = if entry.detail.is_empty() {
+                        MENU_ROW_HEIGHT + 2.0
+                    } else {
+                        ui_kit::ITEM_ROW_HEIGHT as f32
+                    };
+                    sections.push(widgets::UiNode::Button(
+                        widgets::ButtonNode::identified(
+                            Some(id),
+                            &entry.label,
+                            width,
+                            height,
+                            entry.selected,
+                            BONE,
+                        )
+                        .with_row(widgets::RowContent {
+                            value: entry.value.clone(),
+                            value_color: Some(entry.value_color),
+                            detail: entry.detail.clone(),
+                            icon: entry.icon,
+                            coin: entry.coin,
+                            face: if entry.disabled {
+                                widgets::RowFace::Disabled
+                            } else {
+                                widgets::RowFace::Raised
+                            },
+                        }),
+                    ));
                 }
                 SectionItem::Text(text) => sections.push(widgets::UiNode::Text(
-                    widgets::TextNode::label(text, TextKind::Small, width),
+                    widgets::TextNode::colored(text, TextKind::Small, width, MIST),
                 )),
             }
         }
@@ -663,7 +619,7 @@ fn modal_content_node(content: &ModalContent, width: f32) -> widgets::UiNode {
     set_current_focus_order(focus_order);
     widgets::UiNode::Scroll(widgets::ScrollNode::vertical(
         current_scroll_offset(&widgets::WidgetId::new("modal-content")),
-        widgets::UiNode::Stack(widgets::StackNode::vertical(8.0, sections)),
+        widgets::UiNode::Stack(widgets::StackNode::vertical(3.0, sections)),
     ))
 }
 
@@ -774,75 +730,9 @@ fn measure_text_height(kind: TextKind) -> f32 {
 }
 
 fn measure_text_size(text: &str, kind: TextKind) -> Size {
-    let Ok(cstring) = CString::new(text) else {
-        let metrics = font_metrics(kind);
-        return Size {
-            width: text.chars().count() as f32 * metrics.font_size * 0.5,
-            height: metrics.font_size,
-        };
-    };
-    unsafe {
-        let measured = ffi::MeasureTextEx(
-            font_for_role(font_role(kind)),
-            cstring.as_ptr(),
-            font_metrics(kind).font_size,
-            font_metrics(kind).spacing,
-        );
-        Size {
-            width: measured.x,
-            height: measured.y,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(super) struct UiFonts {
-    title: ffi::Font,
-    heading: ffi::Font,
-    small: ffi::Font,
-}
-
-impl UiFonts {
-    pub(super) fn raylib_default() -> Self {
-        let font = unsafe { ffi::GetFontDefault() };
-        Self {
-            title: font,
-            heading: font,
-            small: font,
-        }
-    }
-
-    pub(super) const fn from_raw(title: ffi::Font, heading: ffi::Font, small: ffi::Font) -> Self {
-        Self {
-            title,
-            heading,
-            small,
-        }
-    }
-
-    pub(super) const fn font(self, role: FontRole) -> ffi::Font {
-        match role {
-            FontRole::Title => self.title,
-            FontRole::Heading => self.heading,
-            FontRole::Small => self.small,
-        }
-    }
-}
-
-fn font_for_role(role: FontRole) -> ffi::Font {
-    CURRENT_UI_FONTS.with(|current| {
-        current
-            .borrow()
-            .unwrap_or_else(UiFonts::raylib_default)
-            .font(role)
-    })
-}
-
-const fn font_role(kind: TextKind) -> FontRole {
-    match kind {
-        TextKind::Title => FontRole::Title,
-        TextKind::Heading => FontRole::Heading,
-        TextKind::Small => FontRole::Small,
+    Size {
+        width: ui_kit::text_width(text, kind.style()) as f32,
+        height: font_metrics(kind).font_size,
     }
 }
 
@@ -852,38 +742,20 @@ const fn font_role(kind: TextKind) -> FontRole {
 )]
 pub(super) mod widgets;
 
+/// Pixel-font metrics in canvas art pixels (glyph cell, line pitch, baseline).
 #[derive(Clone, Copy, Debug)]
 struct FontMetrics {
     font_size: f32,
     line_height: f32,
-    #[allow(
-        dead_code,
-        reason = "baseline is part of the configured font metrics contract for upcoming baseline layout"
-    )]
     baseline: f32,
-    spacing: f32,
 }
 
 const fn font_metrics(kind: TextKind) -> FontMetrics {
-    match kind {
-        TextKind::Title => FontMetrics {
-            font_size: 34.0,
-            line_height: 40.0,
-            baseline: 31.0,
-            spacing: 1.0,
-        },
-        TextKind::Heading => FontMetrics {
-            font_size: 20.0,
-            line_height: 25.0,
-            baseline: 19.0,
-            spacing: 1.0,
-        },
-        TextKind::Small => FontMetrics {
-            font_size: 15.0,
-            line_height: 19.0,
-            baseline: 14.0,
-            spacing: 0.5,
-        },
+    let style = kind.style();
+    FontMetrics {
+        font_size: style.height() as f32,
+        line_height: style.line_height() as f32,
+        baseline: (super::pixel_art::font::CAP_HEIGHT * style.scale()) as f32,
     }
 }
 
@@ -895,13 +767,17 @@ struct TextMeasureKey {
 
 thread_local! {
     static TEXT_MEASURE_CACHE: RefCell<BTreeMap<TextMeasureKey, f32>> = const { RefCell::new(BTreeMap::new()) };
-    static CURRENT_UI_FONTS: RefCell<Option<UiFonts>> = const { RefCell::new(None) };
     static CURRENT_UI_STATE: RefCell<Option<widgets::UiState>> = const { RefCell::new(None) };
+    static CURRENT_MODAL_PLACEMENT: std::cell::Cell<ModalPlacement> = const { std::cell::Cell::new(ModalPlacement::Centred) };
 }
 
-pub(super) fn set_current_fonts(fonts: UiFonts) {
-    CURRENT_UI_FONTS.with(|current| *current.borrow_mut() = Some(fonts));
-    TEXT_MEASURE_CACHE.with(|cache| cache.borrow_mut().clear());
+/// Where this frame's dialogs sit.
+pub(super) fn set_modal_placement(placement: ModalPlacement) {
+    CURRENT_MODAL_PLACEMENT.with(|current| current.set(placement));
+}
+
+fn current_modal_placement() -> ModalPlacement {
+    CURRENT_MODAL_PLACEMENT.with(std::cell::Cell::get)
 }
 
 pub(super) fn set_current_ui_state(state: widgets::UiState) {
@@ -954,21 +830,43 @@ fn current_scroll_offset(id: &widgets::WidgetId) -> f32 {
     })
 }
 
+/// The dialog rect on a canvas `viewport`, in whole art pixels.
+fn modal_rect(viewport: Rectangle, placement: ModalPlacement) -> Rectangle {
+    match placement {
+        ModalPlacement::Centred => modal_rect_for_viewport(viewport),
+        ModalPlacement::Counter => {
+            let width = (viewport.width * 0.52)
+                .clamp(250.0, 330.0)
+                .min(viewport.width - 16.0)
+                .max(0.0);
+            let height = (viewport.height - 40.0).clamp(0.0, 320.0);
+            Rectangle {
+                x: (viewport.x + 8.0).floor(),
+                y: (viewport.y + 8.0).floor(),
+                width: width.floor(),
+                height: height.floor(),
+            }
+        }
+    }
+}
+
 fn modal_rect_for_viewport(viewport: Rectangle) -> Rectangle {
     // Never larger than the viewport minus a margin, even below the preferred minimum.
-    let max_width = (viewport.width * 0.78)
-        .clamp(620.0, 980.0)
-        .min(viewport.width - 24.0)
-        .max(0.0);
-    let max_height = (viewport.height * 0.82)
-        .clamp(420.0, 620.0)
-        .min(viewport.height - 24.0)
-        .max(0.0);
+    let width = (viewport.width * 0.78)
+        .clamp(300.0, 500.0)
+        .min(viewport.width - 12.0)
+        .max(0.0)
+        .floor();
+    let height = (viewport.height * 0.88)
+        .clamp(200.0, 330.0)
+        .min(viewport.height - 12.0)
+        .max(0.0)
+        .floor();
     Rectangle {
-        x: viewport.x + (viewport.width - max_width) * 0.5,
-        y: viewport.y + (viewport.height - max_height) * 0.5,
-        width: max_width,
-        height: max_height,
+        x: (viewport.x + (viewport.width - width) * 0.5).floor(),
+        y: (viewport.y + (viewport.height - height) * 0.5).floor(),
+        width,
+        height,
     }
 }
 
@@ -1092,9 +990,9 @@ mod tests {
             width: 1280.0,
             height: 720.0,
         });
-        assert!(rect.width <= 980.0);
-        assert!(rect.height <= 620.0);
-        assert!((rect.x - ((1280.0 - rect.width) * 0.5)).abs() < f32::EPSILON);
+        assert!(rect.width <= 500.0);
+        assert!(rect.height <= 330.0);
+        assert!((rect.x - ((1280.0 - rect.width) * 0.5)).abs() <= 1.0);
     }
 
     #[test]
@@ -1118,8 +1016,10 @@ mod tests {
                 "{rect:?} at {width}x{height}"
             );
             assert!(rect.x + rect.width <= width && rect.y + rect.height <= height);
-            assert_near(rect.x + rect.width * 0.5, width * 0.5);
-            assert_near(rect.y + rect.height * 0.5, height * 0.5);
+            assert!((rect.x + rect.width * 0.5 - width * 0.5).abs() <= 1.0);
+            assert!((rect.y + rect.height * 0.5 - height * 0.5).abs() <= 1.0);
+            assert_near(rect.x.fract(), 0.0);
+            assert_near(rect.width.fract(), 0.0);
         }
     }
 
@@ -1154,16 +1054,8 @@ mod tests {
     }
 
     #[test]
-    fn ui_fonts_default_routes_all_roles_to_font_handles() {
-        let fonts = UiFonts::raylib_default();
-        let _title = fonts.font(FontRole::Title);
-        let _heading = fonts.font(FontRole::Heading);
-        let _small = fonts.font(FontRole::Small);
-    }
-
-    #[test]
     fn configured_font_metrics_have_ordered_baselines() {
-        for kind in [TextKind::Title, TextKind::Heading, TextKind::Small] {
+        for kind in [TextKind::Heading, TextKind::Small] {
             let metrics = font_metrics(kind);
             assert!(metrics.font_size > 0.0);
             assert!(metrics.line_height >= metrics.font_size);
@@ -1293,10 +1185,10 @@ mod tests {
     fn modal_selectable_rows_emit_stable_button_ids_and_focus_selected_row() {
         let content = ModalContent::new(vec![Section::new(
             "Options",
-            Color::SKYBLUE,
+            SKY_LIGHT,
             vec![
-                SectionItem::stat("  First", "", Color::RAYWHITE),
-                SectionItem::stat("> Second", "", Color::GOLD),
+                SectionItem::stat("  First", "", BONE),
+                SectionItem::stat("> Second", "", GOLD),
             ],
         )]);
         set_current_ui_state(widgets::UiState::default());

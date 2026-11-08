@@ -8,14 +8,33 @@ use drillgame_simulation::{
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
-use super::terrain::TerrainRenderer;
+#[allow(
+    clippy::wildcard_imports,
+    reason = "art code names colours from the whole palette"
+)]
+use super::pixel_art::palette::*;
+use super::{
+    pixel_art::{
+        palette,
+        sprite::{self, SpriteDef},
+        sprites::rig,
+    },
+    terrain::TerrainRenderer,
+};
 use crate::{
     effects::SparkParticle,
+    pixel_scale::{WORLD_PIXELS_PER_ART_PIXEL, snap_to_pixel_grid},
     render_snapshot::{DangerLevel, PlayerPresentation},
 };
 
+/// The camera that draws world pixel `camera` at the origin, `zoom` physical pixels per world
+/// pixel. The target is snapped to the physical pixel grid so pixel art never shimmers while the
+/// camera scrolls (see [`crate::pixel_scale`]).
 pub(super) fn world_camera(camera: Vector2, zoom: f32) -> Camera2D {
-    let snapped_camera = Vector2::new(camera.x.round(), camera.y.round());
+    let snapped_camera = Vector2::new(
+        snap_to_pixel_grid(camera.x, zoom),
+        snap_to_pixel_grid(camera.y, zoom),
+    );
     Camera2D {
         offset: Vector2::zero(),
         target: snapped_camera,
@@ -482,6 +501,34 @@ fn draw_remote_player_bar(
     draw.draw_rectangle_lines(x + 28, y, 50, 6, Color::DARKGRAY);
 }
 
+/// Snaps a world coordinate to the art-pixel grid (whole physical pixels at any snapped zoom).
+fn snap_to_art_pixel(value: f32) -> f32 {
+    (value / WORLD_PIXELS_PER_ART_PIXEL).round() * WORLD_PIXELS_PER_ART_PIXEL
+}
+
+/// Draws `sprite` frame `frame` with its top-left at world `(x, y)`, one art pixel per
+/// [`WORLD_PIXELS_PER_ART_PIXEL`] world pixels, snapped to the art-pixel grid.
+fn draw_world_sprite(
+    draw: &mut impl RaylibDraw,
+    sprite: &SpriteDef,
+    frame: usize,
+    x: f32,
+    y: f32,
+    flip: bool,
+) {
+    sprite::draw_sprite_flipped(
+        draw,
+        sprite,
+        frame,
+        Vector2::new(snap_to_art_pixel(x), snap_to_art_pixel(y)),
+        WORLD_PIXELS_PER_ART_PIXEL,
+        flip,
+        Color::WHITE,
+    );
+}
+
+/// The local rig: the pixel-art body (scorched when badly damaged) with its drill head, thruster
+/// flame and damage smoke. Tracks roll with horizontal position so they animate while driving.
 #[allow(
     clippy::too_many_lines,
     reason = "player rendering includes upgrade visual variants"
@@ -490,127 +537,120 @@ pub(super) fn draw_player_at(
     draw: &mut RaylibMode2D<'_, RaylibDrawHandle<'_>>,
     player: &PlayerPresentation,
 ) {
+    let scale = WORLD_PIXELS_PER_ART_PIXEL;
     let active_drill = player.active_drill;
     let (offset_x, offset_y) = drill_visual_offset(active_drill);
-    let screen_x = player.x + offset_x;
-    let screen_y = player.y + offset_y;
-
-    let hull_color = if player.hull < player.max_hull * 0.3 {
-        Color::new(210, 95, 60, 255)
+    let centre_x = player.x + offset_x;
+    let centre_y = player.y + offset_y;
+    let damaged = player.hull < player.max_hull * 0.3;
+    let body = if damaged {
+        &rig::RIG_DAMAGED
     } else {
-        Color::new(235, 190, 45, 255)
+        &rig::RIG
     };
-    draw.draw_rectangle(
-        (screen_x - 14.0) as i32,
-        (screen_y - 10.0) as i32,
-        28,
-        22,
-        hull_color,
-    );
-    draw.draw_rectangle_lines(
-        (screen_x - 14.0) as i32,
-        (screen_y - 10.0) as i32,
-        28,
-        22,
-        Color::BROWN,
-    );
-    draw.draw_rectangle(
-        (screen_x - 7.0) as i32,
-        (screen_y - 17.0) as i32,
-        14,
-        8,
-        Color::SKYBLUE,
-    );
-    draw.draw_circle(
-        (screen_x - 10.0) as i32,
-        (screen_y + 13.0) as i32,
-        4.0,
-        Color::DARKGRAY,
-    );
-    draw.draw_circle(
-        (screen_x + 10.0) as i32,
-        (screen_y + 13.0) as i32,
-        4.0,
-        Color::DARKGRAY,
-    );
+    let (width, height) = (body.width() as f32 * scale, body.height() as f32 * scale);
+    let left = centre_x - width * 0.5;
+    // The body's bottom (tracks) sits on the collision box's bottom edge.
+    let top = centre_y + 12.0 - height;
+    let direction = active_drill.map(|drill| drill.direction);
+    let facing_left = match direction {
+        Some(DrillDirection::Left) => true,
+        Some(DrillDirection::Right) => false,
+        _ => player.velocity_x < -1.0,
+    };
+    let rolling = player.velocity_x.abs() > 5.0;
+    let track_frame = if rolling {
+        (player.x / 4.0).rem_euclid(2.0) as usize
+    } else {
+        0
+    };
+    let drill_frame = active_drill.map_or(0, |drill| (drill.progress * 12.0) as usize % 2);
 
-    let direction = active_drill.map_or(DrillDirection::Down, |drill| drill.direction);
-    match direction {
-        DrillDirection::Down => draw.draw_triangle(
-            Vector2::new(screen_x - 6.0, screen_y + 13.0),
-            Vector2::new(screen_x + 6.0, screen_y + 13.0),
-            Vector2::new(screen_x, screen_y + 28.0),
-            Color::ORANGE,
-        ),
-        DrillDirection::Left => draw.draw_triangle(
-            Vector2::new(screen_x - 15.0, screen_y - 4.0),
-            Vector2::new(screen_x - 15.0, screen_y + 8.0),
-            Vector2::new(screen_x - 29.0, screen_y + 2.0),
-            Color::ORANGE,
-        ),
-        DrillDirection::Right => draw.draw_triangle(
-            Vector2::new(screen_x + 15.0, screen_y - 4.0),
-            Vector2::new(screen_x + 15.0, screen_y + 8.0),
-            Vector2::new(screen_x + 29.0, screen_y + 2.0),
-            Color::ORANGE,
-        ),
-    }
     if player.velocity_y < -40.0 {
-        draw.draw_triangle(
-            Vector2::new(screen_x - 8.0, screen_y + 16.0),
-            Vector2::new(screen_x + 8.0, screen_y + 16.0),
-            Vector2::new(screen_x, screen_y + 34.0),
-            Color::new(255, 95, 20, 220),
+        let flame = &rig::FLAME;
+        let flame_frame = (player.y / 6.0).rem_euclid(2.0) as usize;
+        draw_world_sprite(
+            draw,
+            flame,
+            flame_frame,
+            centre_x - flame.width() as f32 * scale * 0.5,
+            top + height,
+            false,
         );
     }
-    if player.hull < player.max_hull * 0.35 {
-        let smoke_alpha = 90 + ((player.hull as i32).rem_euclid(40) as u8);
-        draw.draw_circle(
-            (screen_x - 16.0) as i32,
-            (screen_y - 18.0) as i32,
-            5.0,
-            Color::new(60, 60, 60, smoke_alpha),
-        );
-        draw.draw_circle(
-            (screen_x - 22.0) as i32,
-            (screen_y - 25.0) as i32,
-            7.0,
-            Color::new(45, 45, 45, smoke_alpha.saturating_sub(25)),
-        );
-    }
-    if player.scanner_level > 0 {
-        draw.draw_circle_lines(
-            screen_x as i32,
-            (screen_y - 24.0) as i32,
-            8.0 + f32::from(player.scanner_level) * 2.0,
-            Color::SKYBLUE,
-        );
-        draw.draw_line(
-            screen_x as i32,
-            (screen_y - 16.0) as i32,
-            screen_x as i32,
-            (screen_y - 30.0) as i32,
-            Color::SKYBLUE,
-        );
-    }
-    if player.radiator_level > 1 {
-        for fin in 0..player.radiator_level {
-            draw.draw_rectangle(
-                (screen_x + 16.0) as i32,
-                (screen_y - 14.0 + f32::from(fin) * 5.0) as i32,
-                10,
-                2,
-                Color::ORANGE,
+    match direction.unwrap_or(DrillDirection::Down) {
+        DrillDirection::Down => {
+            let drill = &rig::DRILL_DOWN;
+            draw_world_sprite(
+                draw,
+                drill,
+                drill_frame,
+                centre_x - drill.width() as f32 * scale * 0.5,
+                top + height - scale,
+                false,
+            );
+        }
+        side => {
+            let drill = &rig::DRILL_SIDE;
+            let drill_width = drill.width() as f32 * scale;
+            let x = if side == DrillDirection::Left {
+                left - drill_width + scale
+            } else {
+                left + width - scale
+            };
+            draw_world_sprite(
+                draw,
+                drill,
+                drill_frame,
+                x,
+                top + height - drill.height() as f32 * scale - 2.0 * scale,
+                side == DrillDirection::Left,
             );
         }
     }
+    draw_world_sprite(draw, body, track_frame, left, top, facing_left);
     if player.hull_level > 2 {
-        draw.draw_rectangle_lines(
-            (screen_x - 19.0) as i32,
-            (screen_y - 18.0) as i32,
-            38,
-            36,
-            Color::GOLD,
+        // Armour plating: a steel band over the lower hull.
+        draw.draw_rectangle_rec(
+            Rectangle::new(
+                snap_to_art_pixel(left + scale),
+                snap_to_art_pixel(top + 7.0 * scale),
+                width - 2.0 * scale,
+                scale,
+            ),
+            STEEL_LIGHT,
         );
+    }
+
+    if player.hull < player.max_hull * 0.35 {
+        // Two drifting smoke puffs above the cabin.
+        let drift = ((player.hull as i32).rem_euclid(4)) as f32 * scale;
+        for (dx, dy, color) in [(-10.0, -6.0, STONE), (-14.0, -14.0, STONE_DARK)] {
+            let x = snap_to_art_pixel(centre_x + dx - drift);
+            let y = snap_to_art_pixel(top + dy - drift);
+            draw.draw_rectangle_rec(
+                Rectangle::new(x, y, 3.0 * scale, 3.0 * scale),
+                palette::with_alpha(color, 170),
+            );
+        }
+    }
+    if player.radiator_level > 1 {
+        // Cooling fins on the rear plate.
+        let fin_x = if facing_left {
+            left + width
+        } else {
+            left - scale
+        };
+        for fin in 0..player.radiator_level.min(4) {
+            draw.draw_rectangle_rec(
+                Rectangle::new(
+                    snap_to_art_pixel(fin_x),
+                    snap_to_art_pixel(top + 8.0 + f32::from(fin) * 2.0 * scale),
+                    scale,
+                    scale,
+                ),
+                ORANGE,
+            );
+        }
     }
 }

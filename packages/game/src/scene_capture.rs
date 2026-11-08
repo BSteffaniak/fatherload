@@ -151,14 +151,15 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 world_replaced: true,
                 ..FrameReport::default()
             },
+            gallery: false,
         };
         (scene.setup)(&mut stage);
-        let report = stage.report;
+        let (report, gallery) = (stage.report, stage.gallery);
         let renderer = renderer
             .get_or_insert_with(|| GameRenderer::new(&mut raylib, &thread, game.world().terrain()));
         let path = options.dir.join(format!("{}.png", scene.name));
         for frame in 0..RENDER_FRAMES {
-            let screen = crate::window::DesktopWindow::screen_size(&raylib);
+            let screen = crate::window::DesktopWindow::screen(&raylib);
             let snapshot = game.snapshot(screen);
             let frame_report = if frame == 0 {
                 report.clone()
@@ -167,7 +168,11 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             };
             renderer.sync(&mut raylib, &thread, &snapshot, &frame_report);
             let mut draw = raylib.begin_drawing(&thread);
-            renderer.render(&mut draw, &game.shell, &snapshot);
+            if gallery {
+                renderer.render_art_gallery(&mut draw);
+            } else {
+                renderer.render(&mut draw, &game.shell, &snapshot);
+            }
             if frame + 1 == RENDER_FRAMES {
                 save_framebuffer(&draw, &thread, &path)?;
             }
@@ -210,6 +215,8 @@ pub struct Scene {
 pub struct SceneStage<'g> {
     game: &'g mut LocalGame,
     report: FrameReport,
+    /// Draw the art reference sheet instead of the game.
+    gallery: bool,
 }
 
 impl SceneStage<'_> {
@@ -257,6 +264,11 @@ macro_rules! interior_scene {
 
 /// Every scene, in capture order.
 pub const SCENES: &[Scene] = &[
+    Scene {
+        name: "art_gallery",
+        summary: "Art reference sheet: palette, UI kit widgets, icons and sprites",
+        setup: |stage| stage.gallery = true,
+    },
     Scene {
         name: "title",
         summary: "Title menu over the idle world",
@@ -698,6 +710,7 @@ mod tests {
             let mut stage = SceneStage {
                 game: &mut game,
                 report: FrameReport::default(),
+                gallery: false,
             };
             (scene.setup)(&mut stage);
             let snapshot = game.snapshot(DEFAULT_SIZE);

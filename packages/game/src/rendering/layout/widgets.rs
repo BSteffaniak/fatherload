@@ -1,6 +1,7 @@
 //! A small retained widget tree: measure, layout and a render plan of draw commands.
 
 use super::{Insets, PanelKind, Size, TextKind, inset};
+use crate::rendering::pixel_art::sprite::SpriteDef;
 use raylib::prelude::{Color, Rectangle};
 use std::collections::BTreeMap;
 
@@ -154,6 +155,7 @@ pub(super) enum RenderCommand {
         id: Option<WidgetId>,
         text: String,
         color: Color,
+        row: RowContent,
     },
     Canvas {
         rect: Rectangle,
@@ -267,6 +269,7 @@ impl UiNode {
                 id: node.id.clone(),
                 text: node.text.clone(),
                 color: node.color,
+                row: node.row.clone(),
             }),
             Self::Canvas(node) => plan.push(RenderCommand::Canvas { rect: node.rect }),
             Self::Spacer(_) => {}
@@ -395,12 +398,36 @@ impl MeterNode {
     }
 }
 
+/// How a button row looks beyond its label: a right-aligned value, a detail line, an icon, and
+/// whether it is a raised (selectable) face, a disabled face or a plain label/value row.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(in crate::rendering) struct RowContent {
+    pub(in crate::rendering) value: String,
+    pub(in crate::rendering) value_color: Option<Color>,
+    pub(in crate::rendering) detail: String,
+    pub(in crate::rendering) icon: Option<&'static SpriteDef>,
+    pub(in crate::rendering) coin: bool,
+    pub(in crate::rendering) face: RowFace,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(in crate::rendering) enum RowFace {
+    /// A selectable button face.
+    #[default]
+    Raised,
+    /// A button face greyed out (unaffordable / unavailable).
+    Disabled,
+    /// No face: a label on the left, the value on the right.
+    Plain,
+}
+
 #[derive(Clone, Debug)]
 pub(super) struct ButtonNode {
     pub(super) focused: bool,
     pub(super) id: Option<WidgetId>,
     pub(super) text: String,
     pub(super) color: Color,
+    pub(super) row: RowContent,
     pub(super) width: f32,
     pub(super) height: f32,
     pub(super) rect: Rectangle,
@@ -430,10 +457,16 @@ impl ButtonNode {
             id,
             text: text.into(),
             color,
+            row: RowContent::default(),
             width,
             height,
             rect: zero_rect(),
         }
+    }
+
+    pub(super) fn with_row(mut self, row: RowContent) -> Self {
+        self.row = row;
+        self
     }
 
     pub(super) fn sized(width: f32, height: f32, focused: bool) -> Self {

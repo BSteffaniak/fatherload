@@ -20,7 +20,7 @@ use crate::{
         client::OnlineClient,
         lan::{self, Background},
     },
-    render_snapshot::RenderSnapshot,
+    render_snapshot::{RenderSnapshot, ScreenSize},
     runtime::{
         ClientState, LocalHost, LocalSeat, OnlineRole, Runtime, RuntimeEvent, RuntimeEventKind,
         SeatInput,
@@ -234,7 +234,7 @@ impl LocalGame {
 
     /// The immutable view of this frame for rendering.
     #[must_use]
-    pub fn snapshot(&self, screen: (i32, i32)) -> RenderSnapshot<'_> {
+    pub fn snapshot(&self, screen: impl Into<ScreenSize>) -> RenderSnapshot<'_> {
         let mut snapshot = RenderSnapshot::build(
             self.runtime.world(),
             self.runtime.local_seats(),

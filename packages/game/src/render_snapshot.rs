@@ -21,26 +21,32 @@ pub const SCREEN_WIDTH: i32 = 1280;
 /// Default (and reference) logical window height, in screen points.
 pub const SCREEN_HEIGHT: i32 = 720;
 
-/// World pixels that fit vertically on the screen, whatever the window height. The world zoom is
-/// `screen height / WORLD_VIEW_HEIGHT`, so a taller window draws the same slice of the mine
-/// larger and crisper instead of revealing more of it. Wider windows still see more horizontally.
-/// Tune this to zoom the whole game in (smaller) or out (larger).
-pub const WORLD_VIEW_HEIGHT: f32 = 720.0;
-/// Smallest world zoom (world pixel -> screen point) the window height can produce.
-pub const MIN_WORLD_SCALE: f32 = 0.5;
-/// Largest world zoom (world pixel -> screen point) the window height can produce.
-pub const MAX_WORLD_SCALE: f32 = 4.0;
+/// The screen a snapshot is laid out for: logical size in screen points and the display's
+/// physical pixels per point (2.0 on Retina).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ScreenSize {
+    pub width: i32,
+    pub height: i32,
+    pub density: f32,
+}
 
-/// Screen points per world pixel for a screen `screen_height` points tall. Based on the whole
-/// screen, not one split-screen view, so every local view draws the world at the same scale.
+impl From<(i32, i32)> for ScreenSize {
+    /// A standard-density screen.
+    fn from((width, height): (i32, i32)) -> Self {
+        Self {
+            width,
+            height,
+            density: 1.0,
+        }
+    }
+}
+
+/// Screen points per world pixel for `screen`, snapped so one art pixel covers a whole number of
+/// physical pixels. Based on the whole screen, not one split-screen view, so every local view
+/// draws the world at the same scale.
 #[must_use]
-pub fn world_scale_for_screen(screen_height: i32) -> f32 {
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "window heights are far below f32's exact integer range"
-    )]
-    let height = screen_height.max(1) as f32;
-    (height / WORLD_VIEW_HEIGHT).clamp(MIN_WORLD_SCALE, MAX_WORLD_SCALE)
+pub fn world_scale_for_screen(screen: ScreenSize) -> f32 {
+    crate::pixel_scale::world_scale(screen.height, screen.density)
 }
 
 /// Every mineral, in market display order.
@@ -264,17 +270,18 @@ pub struct RenderSnapshot<'w> {
 }
 
 impl<'w> RenderSnapshot<'w> {
-    /// Builds the snapshot for `seats` laid out over a `screen_width` x `screen_height` screen.
+    /// Builds the snapshot for `seats` laid out over `screen`.
     #[must_use]
     pub fn build(
         world: &'w WorldState,
         seats: &[LocalSeat],
-        screen: (i32, i32),
+        screen: impl Into<ScreenSize>,
         sparks: &'w [SparkParticle],
         events: &'w [RuntimeEvent],
     ) -> Self {
-        let viewports = split_screen_viewports(seats.len(), screen.0, screen.1);
-        let world_scale = world_scale_for_screen(screen.1);
+        let screen = screen.into();
+        let viewports = split_screen_viewports(seats.len(), screen.width, screen.height);
+        let world_scale = world_scale_for_screen(screen);
         let views = seats
             .iter()
             .zip(viewports)
@@ -517,31 +524,39 @@ mod tests {
         assert!((actual - expected).abs() < 1e-3, "{actual} != {expected}");
     }
 
+    fn scale_at(height: i32) -> f32 {
+        world_scale_for_screen(ScreenSize::from((1, height)))
+    }
+
     #[test]
-    fn world_scale_keeps_the_vertical_world_span_constant() {
-        assert_near(world_scale_for_screen(720), 1.0);
-        assert_near(world_scale_for_screen(1080), 1.5);
-        assert_near(world_scale_for_screen(540), 0.75);
-        assert_near(world_scale_for_screen(1440), 2.0);
-        assert_near(world_scale_for_screen(0), MIN_WORLD_SCALE);
-        assert_near(world_scale_for_screen(100_000), MAX_WORLD_SCALE);
+    fn world_scale_keeps_the_vertical_world_span_near_constant() {
+        assert_near(scale_at(720), 1.0);
+        assert_near(scale_at(1080), 1.5);
+        assert_near(scale_at(540), 1.0);
+        assert_near(scale_at(1440), 2.0);
+        assert_near(scale_at(0), 0.5);
+        let retina = ScreenSize {
+            width: 1280,
+            height: 720,
+            density: 2.0,
+        };
+        assert_near(world_scale_for_screen(retina), 1.0);
         for (width, height) in SCREEN_SIZES {
-            let scale = world_scale_for_screen(height);
+            let scale = scale_at(height);
             let (_, visible_height) = visible_world_size(Viewport::new(0, 0, width, height), scale);
-            assert_near(visible_height, WORLD_VIEW_HEIGHT);
+            assert!(
+                (crate::pixel_scale::WORLD_VIEW_HEIGHT * 0.66
+                    ..=crate::pixel_scale::WORLD_VIEW_HEIGHT * 1.34)
+                    .contains(&visible_height),
+                "{height}: {visible_height}"
+            );
         }
     }
 
     #[test]
     fn wider_screens_see_more_world_horizontally() {
-        let (ultrawide, _) = visible_world_size(
-            Viewport::new(0, 0, 2560, 1080),
-            world_scale_for_screen(1080),
-        );
-        let (standard, _) = visible_world_size(
-            Viewport::new(0, 0, 1920, 1080),
-            world_scale_for_screen(1080),
-        );
+        let (ultrawide, _) = visible_world_size(Viewport::new(0, 0, 2560, 1080), scale_at(1080));
+        let (standard, _) = visible_world_size(Viewport::new(0, 0, 1920, 1080), scale_at(1080));
         assert_near(standard, 1280.0);
         assert_near(ultrawide, 2560.0 / 1.5);
     }
@@ -571,7 +586,7 @@ mod tests {
     fn each_split_view_centres_its_own_rig_at_any_size() {
         let rigs = [(1_000.0, 450.0), (3_000.0, 2_000.0)];
         for (width, height) in SCREEN_SIZES {
-            let scale = world_scale_for_screen(height);
+            let scale = scale_at(height);
             for (viewport, (x, y)) in split_screen_viewports(2, width, height)
                 .into_iter()
                 .zip(rigs)

@@ -100,7 +100,7 @@ pub fn run() {
 
         // Laid out against this frame's real size: the window may have been resized,
         // maximized or switched to fullscreen since the last frame.
-        let snapshot = game.snapshot(DesktopWindow::screen_size(&raylib));
+        let snapshot = game.snapshot(DesktopWindow::screen(&raylib));
         renderer.sync(&mut raylib, &thread, &snapshot, &report);
         let mut draw = raylib.begin_drawing(&thread);
         renderer.render(&mut draw, &game.shell, &snapshot);

@@ -17,18 +17,23 @@ use drillgame_simulation::{
     terrain::{Terrain, TilePosition},
 };
 
+mod gallery;
 mod interior;
 mod layout;
+mod pixel_art;
 mod screen;
 mod terrain;
+mod ui_kit;
 mod world;
 
 use interior::draw_interior;
+use pixel_art::{font::load_pixel_font, palette, sprite};
 use screen::{
     UiFrame, draw_depth_ruler_for_view, draw_game_over, draw_heat_warning_for_view,
     draw_minimap_for_view, draw_modal, draw_online, draw_pause, draw_title, draw_view_hud,
 };
 use terrain::TerrainRenderer;
+use ui_kit::{TextStyle, UiCanvas, UiCanvasScope, UiFontFaces};
 use world::{draw_particles, draw_placed_bombs, draw_scanner_marks, draw_world, world_camera};
 
 use crate::{
@@ -74,77 +79,13 @@ fn view_camera_2d(
 
 pub struct GameRenderer {
     terrain: TerrainRenderer,
-    ui_font_assets: UiFontAssets,
+    /// Every sprite, rasterized at startup (see `pixel_art::sprite`).
+    atlas: Option<Texture2D>,
+    font_regular: Option<Font>,
+    font_bold: Option<Font>,
     ui_state: RefCell<layout::widgets::UiState>,
     /// Discovered tiles already drawn by the terrain renderer (primary view).
     explored_drawn: DiscoveredTiles,
-}
-
-struct UiFontAssets {
-    title: Option<Font>,
-    heading: Option<Font>,
-    small: Option<Font>,
-}
-
-impl UiFontAssets {
-    fn load(raylib: &mut RaylibHandle, thread: &RaylibThread) -> Self {
-        Self {
-            title: load_ui_font(
-                raylib,
-                thread,
-                "title",
-                include_bytes!("../../../assets/ui/title.ttf"),
-                34,
-            ),
-            heading: load_ui_font(
-                raylib,
-                thread,
-                "heading",
-                include_bytes!("../../../assets/ui/heading.ttf"),
-                20,
-            ),
-            small: load_ui_font(
-                raylib,
-                thread,
-                "body",
-                include_bytes!("../../../assets/ui/body.ttf"),
-                15,
-            ),
-        }
-    }
-
-    fn fonts(&self) -> layout::UiFonts {
-        let fallback = unsafe { ffi::GetFontDefault() };
-        layout::UiFonts::from_raw(
-            self.title.as_ref().map_or(fallback, |font| **font),
-            self.heading.as_ref().map_or(fallback, |font| **font),
-            self.small.as_ref().map_or(fallback, |font| **font),
-        )
-    }
-}
-
-fn load_ui_font(
-    raylib: &mut RaylibHandle,
-    thread: &RaylibThread,
-    name: &str,
-    data: &[u8],
-    font_size: i32,
-) -> Option<Font> {
-    match raylib.load_font_from_memory(thread, ".ttf", data, font_size * 2, None) {
-        Ok(font) => {
-            unsafe {
-                ffi::SetTextureFilter(
-                    font.texture,
-                    ffi::TextureFilter::TEXTURE_FILTER_BILINEAR as i32,
-                );
-            }
-            Some(font)
-        }
-        Err(error) => {
-            eprintln!("Failed to load embedded UI font {name}: {error}");
-            None
-        }
-    }
 }
 
 fn ui_scroll_delta(input: PlayerInput, step: f32) -> f32 {
@@ -154,13 +95,21 @@ fn ui_scroll_delta(input: PlayerInput, step: f32) -> f32 {
 
 impl GameRenderer {
     pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, terrain: &Terrain) -> Self {
-        let ui_font_assets = UiFontAssets::load(raylib, thread);
         Self {
             terrain: TerrainRenderer::new(raylib, thread, terrain),
-            ui_font_assets,
+            atlas: sprite::load_atlas(raylib, thread),
+            font_regular: load_pixel_font(raylib, thread, false),
+            font_bold: load_pixel_font(raylib, thread, true),
             ui_state: RefCell::new(layout::widgets::UiState::default()),
             explored_drawn: DiscoveredTiles::default(),
         }
+    }
+
+    fn font_faces(&self) -> Option<UiFontFaces> {
+        Some(UiFontFaces {
+            regular: **self.font_regular.as_ref()?,
+            bold: **self.font_bold.as_ref()?,
+        })
     }
 
     /// Brings terrain textures up to date with this frame's snapshot.
@@ -227,16 +176,24 @@ impl GameRenderer {
         }
     }
 
-    /// Draws one frame: every local view, then the shell overlays once.
+    /// Draws one frame: every local view, then the shell overlays once on the UI canvas.
     pub fn render(
         &self,
         draw: &mut RaylibDrawHandle<'_>,
         shell: &ShellState,
         snapshot: &RenderSnapshot<'_>,
     ) {
-        layout::set_current_fonts(self.ui_font_assets.fonts());
         layout::set_current_ui_state(self.ui_state.borrow().clone());
-        draw.clear_background(Color::new(105, 190, 235, 255));
+        sprite::set_current_atlas(self.atlas.as_ref());
+        // The UI clock follows shell updates so scripted captures are deterministic.
+        let seconds = shell.update_ticks as f32 / 60.0;
+        ui_kit::begin_frame(UiCanvas::from_draw(draw), self.font_faces(), seconds);
+        layout::set_modal_placement(if shell.run_mode == RunMode::Interior {
+            layout::ModalPlacement::Counter
+        } else {
+            layout::ModalPlacement::Centred
+        });
+        draw.clear_background(palette::SKY_LIGHT);
 
         if shell.run_mode == RunMode::Interior {
             if let Some(view) = snapshot.primary_view() {
@@ -248,6 +205,7 @@ impl GameRenderer {
             }
         }
 
+        let _canvas = UiCanvasScope::begin(draw);
         if let Some(view) = snapshot.primary_view() {
             let ui = UiFrame {
                 shell,
@@ -274,18 +232,33 @@ impl GameRenderer {
             draw_net_debug(draw, shell);
         }
 
-        // Bottom-left corner: the top edge belongs to the HUD cards, bottom-right to the minimap.
-        let screen_height = draw.get_screen_height();
-        draw.draw_text(
-            &format!("Vol {:.0}% (+/-)", shell.master_volume * 100.0),
-            12,
-            screen_height - 26,
-            18,
-            Color::LIGHTGRAY,
-        );
+        // Volume readout in menus (bottom-left; the HUD owns the corners while playing).
+        if matches!(
+            shell.run_mode,
+            RunMode::Title | RunMode::Paused | RunMode::Lobby
+        ) {
+            let canvas = ui_kit::canvas();
+            ui_kit::text(
+                draw,
+                &format!("VOL {:.0}%  (+/-)", shell.master_volume * 100.0),
+                6,
+                canvas.height - 13,
+                TextStyle::Body,
+                palette::FOG,
+            );
+        }
         if let Some(ui_state) = layout::take_current_ui_state() {
             *self.ui_state.borrow_mut() = ui_state;
         }
+    }
+
+    /// Draws the art reference sheet (palette, UI kit, icons, sprites) instead of the game.
+    pub fn render_art_gallery(&self, draw: &mut RaylibDrawHandle<'_>) {
+        sprite::set_current_atlas(self.atlas.as_ref());
+        ui_kit::begin_frame(UiCanvas::from_draw(draw), self.font_faces(), 0.0);
+        draw.clear_background(palette::NIGHT);
+        let _canvas = UiCanvasScope::begin(draw);
+        gallery::draw_art_gallery(draw);
     }
 
     fn render_view(
@@ -344,10 +317,14 @@ impl GameRenderer {
                 }
             }
         }
-        draw_heat_warning_for_view(draw, snapshot.terrain, view);
-        draw_view_hud(draw, shell, snapshot, view);
-        draw_depth_ruler_for_view(draw, snapshot.terrain, view);
-        draw_minimap_for_view(draw, snapshot.terrain, view, &snapshot.players);
+        // The title and online screens show the world behind them without a HUD.
+        if !matches!(shell.run_mode, RunMode::Title | RunMode::Lobby) {
+            let _canvas = UiCanvasScope::begin(draw);
+            draw_heat_warning_for_view(draw, snapshot.terrain, view);
+            draw_view_hud(draw, shell, snapshot, view);
+            draw_depth_ruler_for_view(draw, snapshot.terrain, view);
+            draw_minimap_for_view(draw, snapshot.terrain, view, &snapshot.players);
+        }
         if clip {
             end_view_clip();
         }
@@ -355,9 +332,9 @@ impl GameRenderer {
 }
 
 /// F3 network overlay: client/server ticks, input margin, RTT, loss, corrections, snapshot buffer
-/// depth and hash status (or the host's per-client view), plus the dev tuning keys.
+/// depth and hash status (or the host's per-client view), plus the dev tuning keys. Drawn on the
+/// UI canvas.
 fn draw_net_debug(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
-    const LINE_HEIGHT: i32 = 18;
     let mut lines = if shell.online.net_debug.is_empty() {
         vec!["Network overlay: no session data yet.".to_owned()]
     } else {
@@ -369,22 +346,35 @@ fn draw_net_debug(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             crate::runtime::TUNABLE_PARAMETERS[shell.online.tune_parameter]
         ));
     }
+    let line_height = TextStyle::Body.line_height();
     let width = lines
         .iter()
-        .map(|line| draw.measure_text(line, 16))
+        .map(|line| ui_kit::text_width(line, TextStyle::Body))
         .max()
         .unwrap_or(0)
-        + 20;
-    let height = LINE_HEIGHT * i32::try_from(lines.len()).unwrap_or(0) + 12;
-    draw.draw_rectangle(8, 90, width, height, Color::new(0, 0, 0, 190));
+        + 14;
+    let height = line_height * i32::try_from(lines.len()).unwrap_or(0) + 10;
+    let top = 70;
+    ui_kit::panel(
+        draw,
+        Rectangle::new(4.0, top as f32, width as f32, height as f32),
+        ui_kit::PanelStyle::Standard,
+    );
     for (index, line) in lines.iter().enumerate() {
         let color = if line.contains("MISMATCH") {
-            Color::RED
+            palette::RED
         } else {
-            Color::LIME
+            palette::LIME
         };
         let row = i32::try_from(index).unwrap_or(0);
-        draw.draw_text(line, 18, 96 + LINE_HEIGHT * row, 16, color);
+        ui_kit::text(
+            draw,
+            line,
+            11,
+            top + 6 + line_height * row,
+            TextStyle::Body,
+            color,
+        );
     }
 }
 
@@ -432,11 +422,16 @@ mod tests {
     #[test]
     fn view_camera_centres_the_rig_in_its_viewport_on_any_display() {
         use crate::render_snapshot::{
-            Viewport, split_screen_viewports, visible_world_size, world_scale_for_screen,
+            ScreenSize, Viewport, split_screen_viewports, visible_world_size,
+            world_scale_for_screen,
         };
         for (width, height) in [(960, 540), (1280, 720), (1920, 1080), (2560, 1080)] {
-            let world_scale = world_scale_for_screen(height);
             for density in [1.0, 2.0] {
+                let world_scale = world_scale_for_screen(ScreenSize {
+                    width,
+                    height,
+                    density,
+                });
                 for viewport in split_screen_viewports(2, width, height) {
                     let camera = Vector2::new(400.0, 1_200.0);
                     let (visible_width, visible_height) = visible_world_size(viewport, world_scale);
