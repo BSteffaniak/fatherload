@@ -904,7 +904,7 @@ pub const SCENES: &[Scene] = &[
     },
     Scene {
         name: "split_room_prompts",
-        summary: "Split-screen rooms: player 1 at the bank counter (arrow keys), player 2 at the HQ door (PlayStation)",
+        summary: "Split-screen rooms: player 1 at the bank counter (PlayStation), player 2 at the HQ door (arrow keys)",
         setup: |stage| {
             stage.play(2, |world, seats| {
                 park_at(world, seats[0].player, SurfaceZone::Bank);
@@ -916,7 +916,7 @@ pub const SCENES: &[Scene] = &[
             put_seat_inside(stage, 0, SurfaceZone::Bank, None);
             put_seat_inside(stage, 1, SurfaceZone::Headquarters, None);
             stage.seat(1).interior_x = 60.0;
-            stage.use_devices(&[ARROWS, PLAYSTATION]);
+            stage.use_devices(&[PLAYSTATION, ARROWS]);
         },
     },
     Scene {
@@ -940,7 +940,7 @@ pub const SCENES: &[Scene] = &[
     },
     Scene {
         name: "split_rescue_help",
-        summary: "Split-screen: player 1 reading the controls (arrow keys), player 2 stranded with the rescue prompt",
+        summary: "Split-screen: player 1 reading the controls (Xbox), player 2 (arrow keys) stranded with the rescue prompt",
         setup: |stage| {
             stage.play(2, |world, seats| {
                 park_rig(world, seats[0].player, 97, 4);
@@ -954,7 +954,7 @@ pub const SCENES: &[Scene] = &[
             });
             stage.settle(20);
             stage.seat(0).modal = Some(ModalScreen::Help);
-            stage.use_devices(&[ARROWS, XBOX]);
+            stage.use_devices(&[XBOX, ARROWS]);
             "Game saved.".clone_into(&mut stage.shell().message);
             stage.settle(10);
         },
