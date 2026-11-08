@@ -112,6 +112,11 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         subtitle: &str,
         content: &ModalContent,
     ) {
+        CURRENT_UI_STATE.with(|current| {
+            if let Some(state) = current.borrow_mut().as_mut() {
+                state.enter_modal(title, &widgets::WidgetId::new("modal-content"));
+            }
+        });
         // Measure the content first so short dialogs shrink to fit it.
         let full = self.dialog_rect(content.compact);
         let content_width = (full.width - 24.0 - 8.0).max(0.0);

@@ -231,6 +231,9 @@ impl GameRenderer {
         if shell.run_mode == RunMode::Lobby {
             title::draw_backdrop(draw);
         }
+        if snapshot.views.len() > 1 && shell.run_mode != RunMode::Interior {
+            draw_view_dividers(draw, snapshot);
+        }
         if let Some(view) = snapshot.primary_view() {
             let ui = UiFrame {
                 shell,
@@ -369,35 +372,88 @@ fn draw_net_debug(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             crate::runtime::TUNABLE_PARAMETERS[shell.online.tune_parameter]
         ));
     }
+    let canvas = ui_kit::canvas();
     let line_height = TextStyle::Body.line_height();
-    let width = lines
-        .iter()
-        .map(|line| ui_kit::text_width(line, TextStyle::Body))
-        .max()
-        .unwrap_or(0)
-        + 14;
-    let height = line_height * i32::try_from(lines.len()).unwrap_or(0) + 10;
-    let top = 70;
-    ui_kit::panel(
-        draw,
-        Rectangle::new(4.0, top as f32, width as f32, height as f32),
-        ui_kit::PanelStyle::Standard,
-    );
+    let max_text = (canvas.width - 24).min(420);
+    // Wrap long lines; continuation rows are indented and keep their line's colour.
+    let mut rows: Vec<(String, Color)> = Vec::new();
     for (index, line) in lines.iter().enumerate() {
         let color = if line.contains("MISMATCH") {
             palette::RED
+        } else if index == 0 {
+            palette::BONE
+        } else if line.starts_with("dev:") {
+            palette::FOG
         } else {
-            palette::LIME
+            palette::MINT
         };
-        let row = i32::try_from(index).unwrap_or(0);
+        for (part, wrapped) in ui_kit::wrap(line.trim_end(), max_text - 8, TextStyle::Body)
+            .into_iter()
+            .enumerate()
+        {
+            let indent = if part == 0 { "" } else { "  " };
+            rows.push((format!("{indent}{wrapped}"), color));
+        }
+    }
+    let width = rows
+        .iter()
+        .map(|(row, _)| ui_kit::text_width(row, TextStyle::Body))
+        .max()
+        .unwrap_or(0)
+        .max(ui_kit::text_width("NETWORK  F3", TextStyle::Bold))
+        + 16;
+    let height = line_height * i32::try_from(rows.len()).unwrap_or(0) + 24;
+    let (left, top) = (4, 70);
+    ui_kit::panel(
+        draw,
+        Rectangle::new(left as f32, top as f32, width as f32, height as f32),
+        ui_kit::PanelStyle::Standard,
+    );
+    ui_kit::text(
+        draw,
+        "NETWORK",
+        left + 8,
+        top + 6,
+        TextStyle::Bold,
+        palette::GOLD,
+    );
+    ui_kit::text_right(
+        draw,
+        "F3",
+        left + width - 8,
+        top + 6,
+        TextStyle::Bold,
+        palette::FOG,
+    );
+    ui_kit::divider(draw, left + 6, top + 16, width - 12);
+    for (index, (row, color)) in rows.iter().enumerate() {
+        let row_index = i32::try_from(index).unwrap_or(0);
         ui_kit::text(
             draw,
-            line,
-            11,
-            top + 6 + line_height * row,
+            row,
+            left + 8,
+            top + 20 + line_height * row_index,
             TextStyle::Body,
-            color,
+            *color,
         );
+    }
+}
+
+/// Ink seams between split-screen views, so each player's view reads as its own frame.
+fn draw_view_dividers(draw: &mut RaylibDrawHandle<'_>, snapshot: &RenderSnapshot<'_>) {
+    let canvas = ui_kit::canvas();
+    for view in &snapshot.views {
+        let rect = canvas.viewport_rect(view.viewport);
+        let (x, y) = (rect.x as i32, rect.y as i32);
+        let (right, bottom) = ((rect.x + rect.width) as i32, (rect.y + rect.height) as i32);
+        if right < canvas.width {
+            draw.draw_rectangle(right - 1, y, 2, bottom - y, palette::INK);
+            draw.draw_rectangle(right - 2, y, 1, bottom - y, palette::SLATE);
+        }
+        if bottom < canvas.height {
+            draw.draw_rectangle(x, bottom - 1, right - x, 2, palette::INK);
+            draw.draw_rectangle(x, bottom - 2, right - x, 1, palette::SLATE);
+        }
     }
 }
 

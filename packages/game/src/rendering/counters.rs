@@ -428,7 +428,7 @@ pub(super) fn draw_bank(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             format!("Tier {next_tier} policy"),
         )
         .price(insurance_cost, player.credits)
-        .about("Insures the rig. A bigger bank writes higher-tier policies for less.")
+        .about("Rescue insurance: higher tiers cut rescue fees and cargo loss. A bigger bank sells higher tiers for less.")
     };
     let contracts = ui.snapshot.progression.active_side_contracts.len();
     let side = Offer::new(

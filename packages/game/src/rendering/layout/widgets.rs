@@ -22,9 +22,22 @@ pub(in crate::rendering) struct UiState {
     focus_order: Vec<WidgetId>,
     /// The focused row the modal scroll last brought into view.
     followed: Option<WidgetId>,
+    /// Title of the dialog the scroll and follow state belong to.
+    modal: Option<String>,
 }
 
 impl UiState {
+    /// Starts tracking the dialog titled `title`: a different dialog than last frame starts
+    /// scrolled to the top with nothing followed yet.
+    pub(super) fn enter_modal(&mut self, title: &str, scroll_id: &WidgetId) {
+        if self.modal.as_deref() == Some(title) {
+            return;
+        }
+        self.modal = Some(title.to_owned());
+        self.followed = None;
+        self.scroll_offsets.insert(scroll_id.clone(), 0.0);
+    }
+
     /// Records `id` as followed; returns whether it differs from the last followed row.
     pub(super) fn follow(&mut self, id: &WidgetId) -> bool {
         if self.followed.as_ref() == Some(id) {

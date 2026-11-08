@@ -677,6 +677,27 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "net_overlay",
+        summary: "F3 network overlay over a hosted session",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                park_rig(world, seats[0].player, 97, 4);
+            });
+            stage.settle(10);
+            let shell = stage.shell();
+            shell.online.show_net_debug = true;
+            shell.online.net_debug = vec![
+                "HOST tick 4210 | epoch 1 | phase Running | clamps 0".to_owned(),
+                "clients 2 | up 18.4 KB/s | down 3.1 KB/s".to_owned(),
+                "  c1 p2 192.168.1.31:51234 rtt 24ms loss 0.0% margin 2 late 0 held 0 buf 1"
+                    .to_owned(),
+                "  c2 p3 192.168.1.40:50987 rtt 61ms loss 1.2% margin 1 late 3 held 1 buf 2"
+                    .to_owned(),
+                "tuning: input delay 2 | snapshot every 3 ticks | buffer 4".to_owned(),
+            ];
+        },
+    },
+    Scene {
         name: "split_screen",
         summary: "Local split-screen with two views (surface and underground)",
         setup: |stage| {

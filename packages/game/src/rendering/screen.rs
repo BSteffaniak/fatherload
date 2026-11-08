@@ -14,7 +14,11 @@ use super::{
     counters,
     layout::{ModalContent, Section, SectionItem, UiLayout},
     menus,
-    pixel_art::{palette, sprite::SpriteDef, sprites::icons},
+    pixel_art::{
+        palette,
+        sprite::SpriteDef,
+        sprites::{icons, menu_icons, rig},
+    },
     ui_kit::{self, BarColors, PanelStyle, TextStyle},
 };
 use crate::{
@@ -405,6 +409,9 @@ fn hud_warnings(
     if player.hull <= player.max_hull() * 0.35 {
         warnings.push(("HULL", &icons::WARNING));
     }
+    if player.cargo_used() >= player.cargo_capacity {
+        warnings.push(("CARGO FULL", &icons::CARGO));
+    }
     if view.hud.depth >= 60 {
         warnings.push(("HEAT", &icons::HEAT));
     }
@@ -625,8 +632,13 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 GOLD,
                 ORANGE,
             ),
-            SectionItem::stat("Credits", format!("{} cr", ui.player.credits), GOLD),
-            SectionItem::stat("Bombs", ui.player.bombs.to_string(), ORANGE),
+            SectionItem::icon_stat(
+                &icons::CREDITS,
+                "Credits",
+                format!("{} cr", ui.player.credits),
+                GOLD,
+            ),
+            SectionItem::icon_stat(&icons::BOMB, "Bombs", ui.player.bombs.to_string(), ORANGE),
         ],
     ));
     let mineral_items = if ui.player.cargo.is_empty() {
@@ -670,16 +682,41 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         "Field Kits",
         LIME,
         [
-            ("Signal relays", ui.player.signal_relay_kits),
-            ("Survey drones", ui.player.survey_drone_kits),
-            ("Cargo lifts", ui.player.cargo_lift_kits),
-            ("Tunnel supports", ui.player.tunnel_support_kits),
-            ("Pump stations", ui.player.pump_station_kits),
-            ("Ore processors", ui.player.ore_processor_kits),
+            (
+                &menu_icons::SIGNAL,
+                "Signal relays",
+                ui.player.signal_relay_kits,
+            ),
+            (
+                &menu_icons::DRONE,
+                "Survey drones",
+                ui.player.survey_drone_kits,
+            ),
+            (&icons::CARGO, "Cargo lifts", ui.player.cargo_lift_kits),
+            (
+                &menu_icons::HAMMER,
+                "Tunnel supports",
+                ui.player.tunnel_support_kits,
+            ),
+            (
+                &menu_icons::GEAR,
+                "Pump stations",
+                ui.player.pump_station_kits,
+            ),
+            (
+                &menu_icons::ANVIL,
+                "Ore processors",
+                ui.player.ore_processor_kits,
+            ),
         ]
         .into_iter()
-        .map(|(label, count)| {
-            SectionItem::stat(label, count.to_string(), if count > 0 { LIME } else { FOG })
+        .map(|(icon, label, count): (&'static SpriteDef, &str, u32)| {
+            SectionItem::icon_stat(
+                icon,
+                label,
+                count.to_string(),
+                if count > 0 { LIME } else { FOG },
+            )
         })
         .collect(),
     ));
@@ -687,16 +724,18 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         "Rig",
         SKY_LIGHT,
         [
-            ("Drill", ui.player.drill_strength),
-            ("Engine", ui.player.engine_level),
-            ("Fuel Tank", ui.player.fuel_tank_level),
-            ("Cargo Bay", ui.player.cargo_bay_level),
-            ("Hull", ui.player.hull_level),
-            ("Radiator", ui.player.radiator_level),
-            ("Scanner", ui.player.scanner_level),
+            (&rig::DRILL_DOWN, "Drill", ui.player.drill_strength),
+            (&menu_icons::GEAR, "Engine", ui.player.engine_level),
+            (&icons::FUEL, "Fuel Tank", ui.player.fuel_tank_level),
+            (&icons::CARGO, "Cargo Bay", ui.player.cargo_bay_level),
+            (&icons::HULL, "Hull", ui.player.hull_level),
+            (&icons::HEAT, "Radiator", ui.player.radiator_level),
+            (&icons::SCANNER, "Scanner", ui.player.scanner_level),
         ]
         .into_iter()
-        .map(|(label, tier)| SectionItem::stat(label, format!("tier {tier}"), MIST))
+        .map(|(icon, label, tier): (&'static SpriteDef, &str, u8)| {
+            SectionItem::icon_stat(icon, label, format!("tier {tier}"), MIST)
+        })
         .collect(),
     ));
     UiLayout::screen(draw).modal_with_render_plan(
@@ -706,92 +745,167 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     );
 }
 
+/// Map legend entries: colour and label.
+const MAP_LEGEND: [(Color, &str); 6] = [
+    (GOLD, "Ore"),
+    (PINK, "Relic"),
+    (LIME, "Gas"),
+    (ORANGE, "Lava"),
+    (RED, "Blast"),
+    (SLATE_DARK, "Tunnel"),
+];
+
+/// The map legend row starting at `(x, y)`.
+fn draw_map_legend(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32) {
+    let mut lx = x;
+    let ly = y;
+    for (color, label) in MAP_LEGEND {
+        draw.draw_rectangle(lx, ly + 1, 7, 7, INK);
+        draw.draw_rectangle(lx + 1, ly + 2, 5, 5, color);
+        ui_kit::text(draw, label, lx + 10, ly, TextStyle::Body, MIST);
+        lx += ui_kit::text_width(label, TextStyle::Body) + 22;
+    }
+    ui_kit::icon(draw, &super::pixel_art::sprites::menu_icons::PERSON, lx, ly);
+    ui_kit::text(draw, "You", lx + 12, ly, TextStyle::Body, MIST);
+}
+
+/// The mine map: discovered terrain at two art pixels per tile around the rig, with depth
+/// marks, the rig's blinking marker and a legend.
 fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let depth = (ui.player.y / TILE_SIZE).max(0.0) as i32;
     let map_rect = UiLayout::screen(draw).canvas_modal(
         "Mine Map",
         "M/Esc/Backspace closes | discovered terrain only",
         &format!(
-            "Position: {:.0}m lateral, depth {}m | Deepest reached: {}m",
-            ui.player.x / TILE_SIZE,
-            (ui.player.y / TILE_SIZE).max(0.0) as i32,
-            ui.snapshot.progression.deepest_tile_reached
+            "Depth {depth} m | deepest {} m | {:.0} m from the west edge",
+            ui.snapshot.progression.deepest_tile_reached,
+            ui.player.x / TILE_SIZE
         ),
     );
-    let map_x = map_rect.x as i32;
-    let map_y = map_rect.y as i32;
-    let map_w = map_rect.width as i32;
-    let map_h = map_rect.height as i32;
-    draw.draw_rectangle(map_x, map_y, map_w, map_h, Color::new(12, 10, 14, 255));
-    draw.draw_rectangle_lines(map_x, map_y, map_w, map_h, Color::new(190, 205, 220, 230));
-    let terrain_width = ui.snapshot.terrain.width().max(1);
-    let terrain_height = ui.snapshot.terrain.height().max(1);
-    for ty in 0..terrain_height {
-        for tx in 0..terrain_width {
-            let position = TilePosition { x: tx, y: ty };
-            if !ui.view.is_explored(position) {
+    let legend_height = 14;
+    let well = Rectangle {
+        height: (map_rect.height - legend_height as f32).max(0.0),
+        ..map_rect
+    };
+    ui_kit::well(draw, well);
+    // Inside the well, leaving room for the depth scale on the left.
+    let scale_width = 26;
+    let (x0, y0) = (well.x as i32 + 2 + scale_width, well.y as i32 + 2);
+    let (width, height) = (well.width as i32 - 4 - scale_width, well.height as i32 - 4);
+    if width < 8 || height < 8 {
+        return;
+    }
+    draw.draw_rectangle(x0, y0, width, height, NIGHT);
+    let terrain = ui.snapshot.terrain;
+    let (terrain_width, terrain_height) = (terrain.width().max(1), terrain.height().max(1));
+    let pixel = 2;
+    let (columns, rows) = (width / pixel, height / pixel);
+    let player = ui.player.tile_position(TILE_SIZE);
+    let origin_x = (player.x - columns / 2).clamp(0, (terrain_width - columns).max(0));
+    let origin_y = (player.y - rows / 2).clamp(0, (terrain_height - rows).max(0));
+    for row in 0..rows.min(terrain_height - origin_y) {
+        let tile_y = origin_y + row;
+        for column in 0..columns.min(terrain_width - origin_x) {
+            let position = TilePosition {
+                x: origin_x + column,
+                y: tile_y,
+            };
+            let sky = tile_y <= 4;
+            if !sky && !ui.view.is_explored(position) {
                 continue;
             }
-            let Some(tile) = ui.snapshot.terrain.tile(position) else {
-                continue;
+            let color = match terrain.tile(position) {
+                Some(tile) if tile.kind == TileKind::Air && sky => DEEP_BLUE,
+                Some(tile) => minimap_color(tile.kind),
+                None => continue,
             };
-            let color = match tile.kind {
-                TileKind::Air => Color::new(40, 42, 55, 255),
-                TileKind::Foundation => Color::new(135, 125, 105, 255),
-                TileKind::Lava | TileKind::MagmaVent => RED,
-                TileKind::Gas => Color::GREEN,
-                TileKind::ExplosivePocket => ORANGE,
-                TileKind::PressurePocket => SKY_LIGHT,
-                TileKind::Ore(_) => GOLD,
-                TileKind::Artifact(_) => PINK,
-                _ => Color::new(115, 82, 58, 255),
-            };
-            let px = map_x + tx * map_w / terrain_width;
-            let py = map_y + ty * map_h / terrain_height;
-            let pw = ((tx + 1) * map_w / terrain_width - tx * map_w / terrain_width).max(1);
-            let ph = ((ty + 1) * map_h / terrain_height - ty * map_h / terrain_height).max(1);
-            draw.draw_rectangle(px, py, pw, ph, color);
+            draw.draw_rectangle(x0 + column * pixel, y0 + row * pixel, pixel, pixel, color);
         }
     }
-    let player_map_x = map_x + ((ui.player.x / TILE_SIZE) as i32) * map_w / terrain_width;
-    let player_map_y = map_y + ((ui.player.y / TILE_SIZE) as i32) * map_h / terrain_height;
-    draw.draw_circle(player_map_x, player_map_y, 5.0, SKY_LIGHT);
-    draw.draw_circle_lines(player_map_x, player_map_y, 8.0, BONE);
+    // Depth scale: a tick and label every 10 or 20 m.
+    let step = if rows > 60 { 20 } else { 10 };
+    let first = (origin_y + step - 1) / step * step;
+    for mark in (first..origin_y + rows).step_by(usize::try_from(step).unwrap_or(10)) {
+        let y = y0 + (mark - origin_y) * pixel;
+        if y - 4 < y0 {
+            continue;
+        }
+        draw.draw_rectangle(x0 - 4, y, 3, 1, FOG);
+        ui_kit::text_right(
+            draw,
+            &format!("{mark}"),
+            x0 - 6,
+            y - 4,
+            TextStyle::Body,
+            FOG,
+        );
+    }
+    // The rig: an ink-ringed marker that blinks.
+    let marker_x = x0 + (player.x - origin_x) * pixel;
+    let marker_y = y0 + (player.y - origin_y) * pixel;
+    let blink = (ui_kit::seconds() * 2.0) as i32 % 2 == 0;
+    draw.draw_rectangle(marker_x - 3, marker_y - 3, 8, 8, INK);
+    draw.draw_rectangle(
+        marker_x - 2,
+        marker_y - 2,
+        6,
+        6,
+        if blink { BONE } else { SKY_LIGHT },
+    );
+    draw.draw_rectangle(marker_x - 1, marker_y - 1, 4, 4, OCEAN);
+    // Other rigs.
+    for remote in ui
+        .snapshot
+        .players
+        .iter()
+        .filter(|other| other.player_id != ui.view.player_id)
+    {
+        let (tx, ty) = ((remote.x / TILE_SIZE) as i32, (remote.y / TILE_SIZE) as i32);
+        if (origin_x..origin_x + columns).contains(&tx) && (origin_y..origin_y + rows).contains(&ty)
+        {
+            let (rx, ry) = (x0 + (tx - origin_x) * pixel, y0 + (ty - origin_y) * pixel);
+            draw.draw_rectangle(rx - 2, ry - 2, 6, 6, INK);
+            draw.draw_rectangle(rx - 1, ry - 1, 4, 4, ORANGE);
+        }
+    }
+    draw_map_legend(draw, well.x as i32 + 2, (well.y + well.height) as i32 + 4);
 }
 
 fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
+    let rows = |entries: &[(&str, &str)]| {
+        entries
+            .iter()
+            .map(|(action, keys)| SectionItem::stat(*action, *keys, BONE))
+            .collect::<Vec<_>>()
+    };
     UiLayout::screen(draw).modal_with_render_plan(
         "Controls",
-        "Esc/Backspace closes. Controls are context-sensitive.",
+        "Esc/Backspace closes | controls are context-sensitive",
         &ModalContent::new(vec![
             Section::new(
                 "Movement",
                 SKY_LIGHT,
-                [
-                    "Move: A/D or Left/Right",
-                    "Thrust: W or Up",
-                    "Drill down: S or Down",
-                    "Interact: E / Enter",
-                    "Pause: P / Esc",
-                ]
-                .into_iter()
-                .map(SectionItem::text)
-                .collect(),
+                rows(&[
+                    ("Move", "A / D  or  Left / Right"),
+                    ("Thrust", "W  or  Up"),
+                    ("Drill down", "S  or  Down"),
+                    ("Interact", "E  or  Enter"),
+                    ("Pause", "P  or  Esc"),
+                ]),
             ),
             Section::new(
                 "Tools",
                 GOLD,
-                [
-                    "Map: M",
-                    "Inventory: Tab",
-                    "Diagnostics: Ctrl+Tab",
-                    "Scanner: C",
-                    "Bomb: B",
-                    "Infrastructure: R/T/L/U/O/P",
-                    "Save/Load: F5/F9",
-                ]
-                .into_iter()
-                .map(SectionItem::text)
-                .collect(),
+                rows(&[
+                    ("Map", "M"),
+                    ("Inventory", "Tab"),
+                    ("Scanner", "C"),
+                    ("Bomb", "B"),
+                    ("Infrastructure", "R T L U O P"),
+                    ("Quick save / load", "F5 / F9"),
+                    ("Diagnostics", "Ctrl+Tab"),
+                    ("Network overlay", "F3"),
+                ]),
             ),
         ]),
     );
