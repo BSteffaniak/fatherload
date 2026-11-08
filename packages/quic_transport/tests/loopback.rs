@@ -503,3 +503,36 @@ fn stats_are_reported_periodically() {
     assert!(stats.max_datagram_size.is_some());
     assert!((0.0..=1.0).contains(&stats.loss));
 }
+
+#[test]
+fn conditioner_delays_unreliable_messages() {
+    let latency = Duration::from_millis(150);
+    let delayed = NetConfig {
+        link: LinkConditionerConfig {
+            latency,
+            seed: Some(3),
+            ..LinkConditionerConfig::default()
+        },
+        ..test_config()
+    };
+    let (host, descriptor) = start_host(test_config());
+    let (client, client_conn, _) = join(&host, JoinTarget::Descriptor(descriptor), delayed);
+
+    let sent_at = Instant::now();
+    for seq in 0..20 {
+        client
+            .send_unreliable(client_conn, sequenced_payload(seq, 32))
+            .expect("send");
+    }
+    let first = wait_for(&host, "delayed datagram", |event| match event {
+        NetEvent::Message {
+            channel: Channel::Unreliable,
+            ..
+        } => Some(sent_at.elapsed()),
+        _ => None,
+    });
+    assert!(
+        first >= latency - Duration::from_millis(10),
+        "first datagram arrived after only {first:?}"
+    );
+}
