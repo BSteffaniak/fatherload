@@ -119,10 +119,11 @@ impl LocalGame {
     pub fn frame(&mut self, input: &FrameInput, delta_seconds: f32) -> FrameReport {
         let mut report = FrameReport::default();
         let primary_player = self.seats().first().map(|seat| seat.player);
+        let on_title = self.shell.run_mode == crate::shell::RunMode::Title;
         let requests = self.shell.update(
             input.primary,
             delta_seconds,
-            shell_context(&self.runtime, &self.save_target, primary_player),
+            shell_context(&self.runtime, &self.save_target, primary_player, on_title),
         );
         let mut primary_actions = Vec::new();
         for request in requests {
@@ -143,7 +144,8 @@ impl LocalGame {
             };
             if index == 0 {
                 seat_frame.actions.append(&mut primary_actions);
-            } else if let Some(sampled) = sampled
+            } else if gameplay
+                && let Some(sampled) = sampled
                 && (sampled.interact || sampled.confirm)
                 && self.world().failure_state(seat.player).is_some()
             {
@@ -211,7 +213,7 @@ impl LocalGame {
             self.shell.service_resolved(
                 request,
                 applied,
-                shell_context(&self.runtime, &self.save_target, primary_player),
+                shell_context(&self.runtime, &self.save_target, primary_player, false),
             );
         }
     }
@@ -346,18 +348,23 @@ impl LocalGame {
     }
 }
 
+/// The shell's read-only view of the world. `probe_saves` controls whether save files are looked
+/// up on disk: only the title menu reads `saves_exist`, so gameplay frames skip the file-system
+/// probes on the game thread.
 fn shell_context<'a>(
     runtime: &'a Runtime,
     save_target: &SaveTarget,
     player: Option<PlayerId>,
+    probe_saves: bool,
 ) -> ShellContext<'a> {
     ShellContext {
         world: runtime.world(),
         player,
-        saves_exist: match save_target {
-            SaveTarget::UserFiles => save::saves_exist(),
-            SaveTarget::File(path) => path.exists(),
-        },
+        saves_exist: probe_saves
+            && match save_target {
+                SaveTarget::UserFiles => save::saves_exist(),
+                SaveTarget::File(path) => path.exists(),
+            },
     }
 }
 
@@ -902,5 +909,54 @@ mod tests {
         idle(&mut game, 3);
         assert!(game.world().failure_state(PLAYER).is_none(), "rescued");
         assert_eq!(game.world().rescue_count(PLAYER), 1);
+    }
+
+    #[test]
+    fn other_seats_call_rescue_only_while_gameplay_runs() {
+        let second = PlayerId::new(2);
+        let mut world = new_world();
+        world.add_player(second);
+        world.player_mut(second).expect("seat 2 rig").fuel = 0.0;
+        let mut game = playing(world, 2, "seat-rescue");
+        assert_eq!(game.seats()[1].player, second);
+        idle(&mut game, 2);
+        assert!(game.world().failure_state(second).is_some());
+        let seat_two_interact = |game: &mut LocalGame| {
+            let _report = game.frame(
+                &FrameInput {
+                    primary: PlayerInput::default(),
+                    other_seats: vec![PlayerInput {
+                        interact: true,
+                        ..PlayerInput::default()
+                    }],
+                },
+                DT,
+            );
+        };
+
+        // Pressed while the primary player has the game paused: nothing is queued for later.
+        let _report = press(
+            &mut game,
+            PlayerInput {
+                pause: true,
+                ..PlayerInput::default()
+            },
+        );
+        assert_eq!(game.shell.run_mode, RunMode::Paused);
+        seat_two_interact(&mut game);
+        let _report = press(
+            &mut game,
+            PlayerInput {
+                pause: true,
+                ..PlayerInput::default()
+            },
+        );
+        idle(&mut game, 5);
+        assert_eq!(game.world().rescue_count(second), 0, "no deferred rescue");
+
+        seat_two_interact(&mut game);
+        idle(&mut game, 3);
+        assert_eq!(game.world().rescue_count(second), 1);
+        assert!(game.world().failure_state(second).is_none(), "rescued");
     }
 }

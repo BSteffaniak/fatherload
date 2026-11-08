@@ -387,8 +387,9 @@ impl ShellState {
                 if ctx.failed() {
                     if input.interact || input.confirm {
                         requests.push(ShellRequest::Action(PlayerCommand::Rescue));
+                        // The rescue sound plays from the world's `RescueTriggered` event once the
+                        // host applies it, so a refused rescue stays silent and it never doubles.
                         "Rescue crew dispatched.".clone_into(&mut self.message);
-                        self.sound_cues.push(SoundCue::Rescue);
                     }
                     if input.pause || input.cancel {
                         self.run_mode = RunMode::Paused;
