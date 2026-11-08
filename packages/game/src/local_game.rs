@@ -469,8 +469,7 @@ impl LocalGame {
         match LocalHost::online(new_world(), 1, self.host_bind, true) {
             Ok(mut host) => {
                 host.set_host_name(&online::player_name());
-                self.runtime = Runtime::Host(Box::new(host));
-                self.reset_presentation(report);
+                self.go_online(Runtime::Host(Box::new(host)), report);
                 self.shell.online.ready = false;
                 self.shell.show_online(OnlineScreen::Lobby);
                 "Hosting: share the address or descriptor, then start the game."
@@ -1299,7 +1298,11 @@ mod tests {
         let mut host = title_game("online-host");
         host.set_host_bind("127.0.0.1:0".parse().expect("addr"));
         let mut requests = Vec::new();
-        host.handle_request(ShellRequest::HostOnline, &mut requests, &mut FrameReport::default());
+        host.handle_request(
+            ShellRequest::HostOnline,
+            &mut requests,
+            &mut FrameReport::default(),
+        );
         assert_eq!(host.shell.run_mode, RunMode::Lobby);
         let mut pair = Pair {
             host,
@@ -1314,7 +1317,13 @@ mod tests {
                 .as_ref()
                 .is_some_and(|lobby| lobby.addr.is_some())
         });
-        let addr = pair.host.shell.online.lobby.as_ref().and_then(|lobby| lobby.addr);
+        let addr = pair
+            .host
+            .shell
+            .online
+            .lobby
+            .as_ref()
+            .and_then(|lobby| lobby.addr);
         let port = addr.expect("bound").port();
 
         // Join by typing the address into the form.

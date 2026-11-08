@@ -16,9 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use drillgame_netcode::{
-    ClientPhase, EndReason, HostConfig, HostSession, NetTuning, SessionParams,
-};
+use drillgame_netcode::{ClientPhase, EndReason, HostConfig, HostSession, NetTuning, SessionParams};
 use drillgame_quic_transport::JoinTarget;
 use drillgame_simulation::WorldState;
 

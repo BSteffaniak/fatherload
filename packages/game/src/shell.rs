@@ -425,7 +425,6 @@ impl OnlineShell {
     }
 }
 
-
 /// Read-only gameplay facts the shell needs, taken from the runtime's world.
 #[derive(Clone, Copy, Debug)]
 pub struct ShellContext<'w> {
@@ -875,7 +874,6 @@ impl ShellState {
         self.online.selected = self.online.selected.min(count.saturating_sub(1));
         input.confirm.then_some(self.online.selected)
     }
-
 
     fn adjust_volume(&mut self, delta: f32) {
         self.master_volume = (self.master_volume + delta).clamp(0.0, 1.0);
