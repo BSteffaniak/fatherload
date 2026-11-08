@@ -26,7 +26,17 @@ use super::pixel_art::{
 };
 use crate::{pixel_scale, render_snapshot::Viewport};
 
+/// Smallest split-screen seat canvas (art pixels) laid out at the screen's UI scale: a seat
+/// view smaller than this at that scale gets a smaller whole-number scale instead, so its HUD,
+/// counter panels and dialogs always have room (see [`UiCanvas::for_viewport`]).
+pub const MIN_SEAT_CANVAS: (i32, i32) = (232, 160);
+
 /// The frame's UI canvas: its size in art pixels and how it maps to the framebuffer.
+///
+/// The whole-screen canvas starts at the framebuffer's top-left corner. A split-screen seat
+/// draws its own UI (HUD, interior, counter panels, dialogs, toasts) on a canvas covering just
+/// its view ([`UiCanvas::for_viewport`]), so the same layout code places everything inside that
+/// view.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct UiCanvas {
     /// Physical framebuffer pixels per art pixel.
@@ -37,6 +47,9 @@ pub struct UiCanvas {
     pub width: i32,
     /// Canvas height in art pixels.
     pub height: i32,
+    /// Framebuffer position (physical pixels) of the canvas's top-left corner.
+    pub origin_x: i32,
+    pub origin_y: i32,
 }
 
 impl UiCanvas {
@@ -49,7 +62,41 @@ impl UiCanvas {
             density: density.max(1.0),
             width: render_width.max(1) / pixel,
             height: render_height.max(1) / pixel,
+            origin_x: 0,
+            origin_y: 0,
         }
+    }
+
+    /// A canvas covering just `viewport` (logical points) of the `screen` canvas, for one
+    /// split-screen seat. It keeps the screen's UI scale unless the view would be smaller than
+    /// [`MIN_SEAT_CANVAS`] at it, then uses the largest smaller whole scale that fits (at least
+    /// 1), so every seat lays out the same UI at a readable size.
+    #[must_use]
+    pub fn for_viewport(screen: Self, viewport: Viewport) -> Self {
+        let (x, y, width, height) = screen.physical_rect(viewport);
+        let mut pixel = screen.pixel.max(1);
+        while pixel > 1 && (width / pixel < MIN_SEAT_CANVAS.0 || height / pixel < MIN_SEAT_CANVAS.1)
+        {
+            pixel -= 1;
+        }
+        Self {
+            pixel,
+            density: screen.density,
+            width: width.max(1) / pixel,
+            height: height.max(1) / pixel,
+            origin_x: x,
+            origin_y: y,
+        }
+    }
+
+    /// `viewport` (logical points) in whole physical framebuffer pixels: x, y, width, height.
+    #[must_use]
+    pub fn physical_rect(self, viewport: Viewport) -> (i32, i32, i32, i32) {
+        let x0 = (viewport.x as f32 * self.density).round() as i32;
+        let y0 = (viewport.y as f32 * self.density).round() as i32;
+        let x1 = ((viewport.x + viewport.width) as f32 * self.density).round() as i32;
+        let y1 = ((viewport.y + viewport.height) as f32 * self.density).round() as i32;
+        (x0, y0, x1 - x0, y1 - y0)
     }
 
     /// The canvas for the frame being drawn.
@@ -79,10 +126,11 @@ impl UiCanvas {
     #[must_use]
     pub fn viewport_rect(self, viewport: Viewport) -> Rectangle {
         let scale = self.points_per_pixel();
-        let x0 = (viewport.x as f32 / scale).ceil();
-        let y0 = (viewport.y as f32 / scale).ceil();
-        let x1 = ((viewport.x + viewport.width) as f32 / scale).floor();
-        let y1 = ((viewport.y + viewport.height) as f32 / scale).floor();
+        let (origin_x, origin_y) = self.origin_points();
+        let x0 = ((viewport.x as f32 - origin_x) / scale).ceil();
+        let y0 = ((viewport.y as f32 - origin_y) / scale).ceil();
+        let x1 = (((viewport.x + viewport.width) as f32 - origin_x) / scale).floor();
+        let y1 = (((viewport.y + viewport.height) as f32 - origin_y) / scale).floor();
         Rectangle::new(x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0))
     }
 
@@ -90,17 +138,26 @@ impl UiCanvas {
     #[must_use]
     pub fn to_points(self, rect: Rectangle) -> Rectangle {
         let scale = self.points_per_pixel();
+        let (origin_x, origin_y) = self.origin_points();
         Rectangle::new(
-            rect.x * scale,
-            rect.y * scale,
+            rect.x.mul_add(scale, origin_x),
+            rect.y.mul_add(scale, origin_y),
             rect.width * scale,
             rect.height * scale,
         )
     }
 
+    /// The canvas origin in logical screen points.
+    fn origin_points(self) -> (f32, f32) {
+        (
+            self.origin_x as f32 / self.density,
+            self.origin_y as f32 / self.density,
+        )
+    }
+
     fn camera(self) -> Camera2D {
         Camera2D {
-            offset: Vector2::zero(),
+            offset: Vector2::new(self.origin_x as f32, self.origin_y as f32),
             target: Vector2::zero(),
             rotation: 0.0,
             zoom: self.pixel as f32,
@@ -170,6 +227,8 @@ thread_local! {
                 density: 1.0,
                 width: 640,
                 height: 360,
+                origin_x: 0,
+                origin_y: 0,
             },
             fonts: None,
             seconds: 0.0,
@@ -186,6 +245,34 @@ pub fn begin_frame(canvas: UiCanvas, fonts: Option<UiFontFaces>, seconds: f32) {
             seconds,
         });
     });
+}
+
+/// Draws on `canvas` (a seat's view) until the returned guard drops, then goes back to the
+/// canvas that was current. Set it before opening a [`UiCanvasScope`].
+#[must_use]
+pub fn use_canvas(canvas: UiCanvas) -> CanvasRestore {
+    let previous = FRAME.with(|frame| {
+        let mut state = frame.get();
+        let previous = state.canvas;
+        state.canvas = canvas;
+        frame.set(state);
+        previous
+    });
+    CanvasRestore(previous)
+}
+
+/// Restores the previous canvas when dropped (see [`use_canvas`]).
+pub struct CanvasRestore(UiCanvas);
+
+impl Drop for CanvasRestore {
+    fn drop(&mut self) {
+        let previous = self.0;
+        FRAME.with(|frame| {
+            let mut state = frame.get();
+            state.canvas = previous;
+            frame.set(state);
+        });
+    }
 }
 
 /// The frame's canvas.

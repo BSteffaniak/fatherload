@@ -28,7 +28,7 @@ use crate::{
     rendering::GameRenderer,
     runtime::{LobbyInfo, LocalSeat, OnlineRole},
     save::SettingsFile,
-    shell::{ModalScreen, OnlineScreen, RunMode, ShellState, interior_service_x},
+    shell::{ModalScreen, OnlineScreen, RunMode, SeatUi, ShellState, interior_service_x},
 };
 
 /// Fixed frame time for every scripted frame, so captures never depend on machine speed.
@@ -263,6 +263,11 @@ impl SceneStage<'_> {
         &mut self.game.shell
     }
 
+    /// Seat `seat`'s own menus (interior, counter panel, dialogs, messages).
+    fn seat(&mut self, seat: usize) -> &mut SeatUi {
+        self.game.shell.seat_mut(seat)
+    }
+
     /// Shows every seat's prompts for `devices` (in seat order).
     fn use_devices(&mut self, devices: &[InputDevice]) {
         self.game.shell.seat_devices = devices.to_vec();
@@ -296,7 +301,7 @@ macro_rules! room_scene {
             summary: $summary,
             setup: |stage| {
                 enter_interior(stage, SurfaceZone::$zone, None);
-                stage.shell().interior_x = interior_service_x(SurfaceZone::$zone) - 150.0;
+                stage.seat(0).interior_x = interior_service_x(SurfaceZone::$zone) - 150.0;
             },
         }
     };
@@ -485,7 +490,7 @@ pub const SCENES: &[Scene] = &[
         summary: "Upgrade shop room with no panel open, rig walking to the counter",
         setup: |stage| {
             enter_interior(stage, SurfaceZone::Shop, None);
-            stage.shell().interior_x = interior_service_x(SurfaceZone::Shop) - 120.0;
+            stage.seat(0).interior_x = interior_service_x(SurfaceZone::Shop) - 120.0;
         },
     },
     room_scene!("room_fuel", "Fuel station room, no panel open", Fuel),
@@ -504,7 +509,7 @@ pub const SCENES: &[Scene] = &[
         summary: "Upgrade shop counter just after a purchase, with the receipt toast",
         setup: |stage| {
             enter_interior(stage, SurfaceZone::Shop, Some(ModalScreen::Shop));
-            "Bought Carbide Drill for 420 credits.".clone_into(&mut stage.shell().message);
+            "Bought Carbide Drill for 420 credits.".clone_into(&mut stage.seat(0).message);
             stage.settle(12);
         },
     },
@@ -574,7 +579,7 @@ pub const SCENES: &[Scene] = &[
                 }
             });
             stage.settle(20);
-            stage.shell().modal = Some(ModalScreen::Inventory);
+            stage.seat(0).modal = Some(ModalScreen::Inventory);
         },
     },
     Scene {
@@ -590,7 +595,7 @@ pub const SCENES: &[Scene] = &[
                 reveal(world, player, 76..124, 26..35);
             });
             stage.settle(10);
-            stage.shell().modal = Some(ModalScreen::Map);
+            stage.seat(0).modal = Some(ModalScreen::Map);
         },
     },
     Scene {
@@ -1063,7 +1068,7 @@ pub const SCENES: &[Scene] = &[
             });
             stage.settle(10);
             stage.use_devices(&[XBOX]);
-            stage.shell().modal = Some(ModalScreen::Help);
+            stage.seat(0).modal = Some(ModalScreen::Help);
         },
     },
     Scene {
@@ -1110,7 +1115,7 @@ pub const SCENES: &[Scene] = &[
         summary: "Ore depot counter on its last row, scrolled to the hold and prices below",
         setup: |stage| {
             enter_interior(stage, SurfaceZone::Depot, Some(ModalScreen::Depot));
-            stage.shell().selected_menu_item = 4;
+            stage.seat(0).selected_menu_item = 4;
         },
     },
     Scene {
@@ -1118,7 +1123,7 @@ pub const SCENES: &[Scene] = &[
         summary: "Ore depot counter on its last row with Xbox controller prompts",
         setup: |stage| {
             enter_interior(stage, SurfaceZone::Depot, Some(ModalScreen::Depot));
-            stage.shell().selected_menu_item = 4;
+            stage.seat(0).selected_menu_item = 4;
             stage.use_devices(&[XBOX]);
         },
     },
@@ -1130,7 +1135,7 @@ pub const SCENES: &[Scene] = &[
                 park_rig(world, seats[0].player, 97, 4);
             });
             stage.settle(10);
-            stage.shell().modal = Some(ModalScreen::Help);
+            stage.seat(0).modal = Some(ModalScreen::Help);
         },
     },
     Scene {
@@ -1162,13 +1167,22 @@ fn enter_interior(stage: &mut SceneStage<'_>, zone: SurfaceZone, modal: Option<M
         }
     });
     stage.settle(5);
-    let shell = stage.shell();
-    shell.run_mode = RunMode::Interior;
-    shell.interior_zone = Some(zone);
-    shell.interior_x = interior_service_x(zone);
-    shell.interior_facing = 1.0;
-    shell.modal = modal;
-    shell.selected_menu_item = usize::from(modal == Some(ModalScreen::Depot));
+    put_seat_inside(stage, 0, zone, modal);
+}
+
+/// Puts seat `seat` inside `zone` at its counter, optionally with a counter panel open.
+fn put_seat_inside(
+    stage: &mut SceneStage<'_>,
+    seat: usize,
+    zone: SurfaceZone,
+    modal: Option<ModalScreen>,
+) {
+    let seat_ui = stage.seat(seat);
+    seat_ui.interior_zone = Some(zone);
+    seat_ui.interior_x = interior_service_x(zone);
+    seat_ui.interior_facing = 1.0;
+    seat_ui.modal = modal;
+    seat_ui.selected_menu_item = usize::from(modal == Some(ModalScreen::Depot));
 }
 
 fn lobby_entry(id: u32, name: &str, ready: bool, connected: bool, local: bool) -> LobbyEntry {

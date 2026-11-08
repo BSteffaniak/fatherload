@@ -375,7 +375,7 @@ pub(super) fn draw_rescue(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>)
             "Out of fuel",
             "The tank is dry. A rescue crew can tow the rig back to town.".to_owned(),
         ),
-        None => (&icons::WARNING, "Stranded", ui.shell.message.clone()),
+        None => (&icons::WARNING, "Stranded", ui.seat.message.clone()),
     };
     let action = SectionItem::item(ItemEntry {
         icon: Some(&menu_icons::FLAG),

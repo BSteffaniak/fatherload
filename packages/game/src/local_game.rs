@@ -97,6 +97,14 @@ impl FrameInput {
             gamepads: BTreeMap::new(),
         }
     }
+
+    /// Every seat's input in seat order (the primary seat first).
+    #[must_use]
+    pub fn seat_inputs(&self) -> Vec<PlayerInput> {
+        std::iter::once(self.primary)
+            .chain(self.other_seats.iter().copied())
+            .collect()
+    }
 }
 
 /// What a frame did that the window layer must react to.
@@ -210,38 +218,29 @@ impl LocalGame {
             self.shell.seat_devices.clone_from(&input.devices);
         }
         self.shell.gamepads.clone_from(&input.gamepads);
-        let primary_player = self.seats().first().map(|seat| seat.player);
+        let players = self.local_players();
         let on_title = self.shell.run_mode == RunMode::Title;
+        // Every seat's input in seat order; seats without a sampled input stay idle.
+        let mut inputs = input.seat_inputs();
+        inputs.resize_with(players.len().max(1), PlayerInput::default);
         let requests = self.shell.update(
-            input.primary,
+            &inputs,
             delta_seconds,
-            shell_context(&self.runtime, &self.save_target, primary_player, on_title),
+            shell_context(&self.runtime, &self.save_target, &players, on_title),
         );
-        let mut primary_actions = Vec::new();
+        let mut seat_actions = vec![Vec::new(); inputs.len()];
         for request in requests {
-            self.handle_request(request, &mut primary_actions, &mut report);
+            self.handle_request(request, &mut seat_actions, &mut report);
         }
 
-        let gameplay = self.shell.gameplay_input_enabled();
         let seats = self.seats().to_vec();
         for (index, seat) in seats.iter().enumerate() {
-            let sampled = if index == 0 {
-                Some(&input.primary)
-            } else {
-                input.other_seats.get(index - 1)
-            };
-            let mut seat_frame = match sampled {
-                Some(sampled) if gameplay => seat_input(sampled),
+            let mut seat_frame = match inputs.get(index) {
+                Some(sampled) if self.shell.gameplay_input_enabled(index) => seat_input(sampled),
                 _ => SeatInput::default(),
             };
-            if index == 0 {
-                seat_frame.actions.append(&mut primary_actions);
-            } else if gameplay
-                && let Some(sampled) = sampled
-                && (sampled.interact || sampled.confirm)
-                && self.world().failure_state(seat.player).is_some()
-            {
-                seat_frame.actions.push(PlayerCommand::Rescue);
+            if let Some(actions) = seat_actions.get_mut(index) {
+                seat_frame.actions.append(actions);
             }
             self.runtime.submit(seat.seat, seat_frame);
         }
@@ -254,8 +253,8 @@ impl LocalGame {
         report.world_replaced |= frame.world_replaced;
         report.changed_tiles.extend(frame.changed_tiles);
         self.frame_events = self.events.present(frame.events);
-        self.observe_events(primary_player);
-        let local_players: Vec<PlayerId> = self.seats().iter().map(|seat| seat.player).collect();
+        self.observe_events();
+        let local_players = self.local_players();
         self.effects.update(delta_seconds);
         let effect_cues =
             self.effects
@@ -301,6 +300,7 @@ impl LocalGame {
         end_runtime(std::mem::replace(&mut self.runtime, runtime));
         let mut report = FrameReport::default();
         self.reset_presentation(&mut report);
+        self.shell.set_seat_count(staged_seats.len());
         self.shell.enter_world(String::new(), 0.0);
         report
     }
@@ -314,24 +314,36 @@ impl LocalGame {
         }
     }
 
-    fn observe_events(&mut self, primary_player: Option<PlayerId>) {
+    /// The player of every local seat, in seat order.
+    fn local_players(&self) -> Vec<PlayerId> {
+        self.seats().iter().map(|seat| seat.player).collect()
+    }
+
+    /// Hands every local seat the results of the service actions it submitted.
+    fn observe_events(&mut self) {
+        let players = self.local_players();
         let resolved: Vec<_> = self
             .frame_events
             .iter()
-            .filter(|event| event.player.is_some() && event.player == primary_player)
-            .filter_map(|event| match &event.event {
-                RuntimeEventKind::ActionResolved {
-                    command: PlayerCommand::Service(request),
-                    applied,
-                } => Some((*request, *applied)),
-                _ => None,
+            .filter_map(|event| {
+                let seat = players
+                    .iter()
+                    .position(|player| Some(*player) == event.player)?;
+                match &event.event {
+                    RuntimeEventKind::ActionResolved {
+                        command: PlayerCommand::Service(request),
+                        applied,
+                    } => Some((seat, *request, *applied)),
+                    _ => None,
+                }
             })
             .collect();
-        for (request, applied) in resolved {
+        for (seat, request, applied) in resolved {
             self.shell.service_resolved(
+                seat,
                 request,
                 applied,
-                shell_context(&self.runtime, &self.save_target, primary_player, false),
+                shell_context(&self.runtime, &self.save_target, &players, false),
             );
         }
     }
@@ -339,7 +351,7 @@ impl LocalGame {
     fn handle_request(
         &mut self,
         request: ShellRequest,
-        primary_actions: &mut Vec<PlayerCommand>,
+        seat_actions: &mut [Vec<PlayerCommand>],
         report: &mut FrameReport,
     ) {
         match request {
@@ -377,7 +389,11 @@ impl LocalGame {
                 Ok(()) => self.shell.request_exit = true,
                 Err(error) => self.shell.message = format!("Save before exit failed: {error}"),
             },
-            ShellRequest::Action(command) => primary_actions.push(command),
+            ShellRequest::Action { seat, command } => {
+                if let Some(actions) = seat_actions.get_mut(seat) {
+                    actions.push(command);
+                }
+            }
             ShellRequest::AddLocalSeat => self.add_local_seat(),
             ShellRequest::HostOnline => self.host_online(report),
             ShellRequest::OpenOnline => self.open_online(),
@@ -667,6 +683,7 @@ impl LocalGame {
     }
 
     fn reset_presentation(&mut self, report: &mut FrameReport) {
+        self.shell.set_seat_count(self.runtime.local_seats().len());
         self.effects.clear();
         self.events = EventFeed::default();
         self.frame_events.clear();
@@ -699,12 +716,12 @@ fn parse_join_addr(text: &str) -> Option<SocketAddr> {
 fn shell_context<'a>(
     runtime: &'a Runtime,
     save_target: &SaveTarget,
-    player: Option<PlayerId>,
+    players: &'a [PlayerId],
     probe_saves: bool,
 ) -> ShellContext<'a> {
     ShellContext {
         world: runtime.world(),
-        player,
+        players,
         saves_exist: probe_saves
             && match save_target {
                 SaveTarget::UserFiles => save::saves_exist(),
@@ -916,11 +933,11 @@ mod tests {
                 ..PlayerInput::default()
             },
         );
-        assert_eq!(game.shell.run_mode, RunMode::Interior);
-        assert_eq!(game.shell.interior_zone, Some(zone));
+        assert_eq!(game.shell.run_mode, RunMode::Playing);
+        assert_eq!(game.shell.seat(0).interior_zone, Some(zone));
         let target = interior_service_x(zone);
         for _ in 0..600 {
-            let delta = target - game.shell.interior_x;
+            let delta = target - game.shell.seat(0).interior_x;
             if delta.abs() < 10.0 {
                 break;
             }
@@ -1053,8 +1070,12 @@ mod tests {
         let mut game = playing(world, 1, "sell");
         idle(&mut game, 5);
         walk_to_counter(&mut game, SurfaceZone::Depot);
-        assert_eq!(game.shell.modal, Some(ModalScreen::Depot));
-        assert_eq!(game.shell.selected_menu_item, 1, "depot opens on 'sell'");
+        assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Depot));
+        assert_eq!(
+            game.shell.seat(0).selected_menu_item,
+            1,
+            "depot opens on 'sell'"
+        );
         let tick_before = game.world().simulation_tick();
         confirm(&mut game);
 
@@ -1062,15 +1083,15 @@ mod tests {
         assert!(rig.cargo.is_empty(), "cargo sold");
         assert!(rig.credits > 0, "credits earned");
         assert!(
-            game.shell.message.starts_with("Sold cargo for"),
+            game.shell.seat(0).message.starts_with("Sold cargo for"),
             "{}",
-            game.shell.message
+            game.shell.seat(0).message
         );
         assert!(
             game.world().simulation_tick() > tick_before,
             "the sale resolved inside a fixed tick"
         );
-        assert_eq!(game.shell.depot_receipts.len(), 1);
+        assert_eq!(game.shell.seat(0).depot_receipts.len(), 1);
         assert!(
             !game.shell.world_should_tick(),
             "the interior freezes the world again"
@@ -1084,18 +1105,18 @@ mod tests {
         idle(&mut game, 5);
         let before = player(&game, PLAYER);
         walk_to_counter(&mut game, SurfaceZone::Shop);
-        assert_eq!(game.shell.modal, Some(ModalScreen::Shop));
+        assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Shop));
         confirm(&mut game);
-        assert_eq!(game.shell.modal, Some(ModalScreen::ShopConfirm));
+        assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::ShopConfirm));
         confirm(&mut game);
 
         let after = player(&game, PLAYER);
         assert_eq!(after.drill_strength, before.drill_strength + 1);
         assert!(after.credits < before.credits);
         assert!(
-            game.shell.message.starts_with("Bought"),
+            game.shell.seat(0).message.starts_with("Bought"),
             "{}",
-            game.shell.message
+            game.shell.seat(0).message
         );
 
         // Leaving the building resumes play.
@@ -1113,7 +1134,8 @@ mod tests {
                 ..PlayerInput::default()
             },
         );
-        assert_eq!(game.shell.run_mode, RunMode::Playing);
+        assert!(!game.shell.seat(0).inside());
+        assert!(game.shell.world_should_tick());
     }
 
     #[test]

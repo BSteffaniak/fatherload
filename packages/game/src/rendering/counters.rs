@@ -140,7 +140,7 @@ fn draw_counter(
     heading: &str,
     offers: Vec<Offer>,
 ) {
-    let (items, about) = offer_items(offers, ui.shell.selected_menu_item);
+    let (items, about) = offer_items(offers, ui.seat.selected_menu_item);
     let mut sections = Vec::new();
     if !status.is_empty() {
         sections.push(Section::new("Status", SKY_LIGHT, status));
@@ -357,7 +357,7 @@ fn draw_purchase_confirm(
 }
 
 pub(super) fn draw_shop_confirm(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let offer = shop_offers(ui).into_iter().nth(ui.shell.selected_menu_item);
+    let offer = shop_offers(ui).into_iter().nth(ui.seat.selected_menu_item);
     draw_purchase_confirm(draw, "Confirm Upgrade", offer, ui.player.credits);
 }
 
@@ -372,7 +372,7 @@ pub(super) fn draw_fuel_confirm(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
         hud.credits,
     )
     .into_iter()
-    .nth(ui.shell.selected_menu_item);
+    .nth(ui.seat.selected_menu_item);
     draw_purchase_confirm(draw, "Confirm Refuel", offer, hud.credits);
 }
 
@@ -387,7 +387,7 @@ pub(super) fn draw_repair_confirm(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<
         hud.credits,
     )
     .into_iter()
-    .nth(ui.shell.selected_menu_item);
+    .nth(ui.seat.selected_menu_item);
     draw_purchase_confirm(draw, "Confirm Repair", offer, hud.credits);
 }
 
@@ -693,7 +693,7 @@ pub(super) fn draw_headquarters(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
             ),
         ]);
     }
-    let (items, about) = offer_items(offers, ui.shell.selected_menu_item);
+    let (items, about) = offer_items(offers, ui.seat.selected_menu_item);
     let mut sections = vec![
         Section::new(
             "Contract",
@@ -945,11 +945,11 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
         Offer::new(
             &menu_icons::RECEIPT,
             "Receipt history",
-            format!("{} saved receipts", ui.shell.depot_receipts.len()),
+            format!("{} saved receipts", ui.seat.depot_receipts.len()),
         )
         .about("Your recent sales and payouts."),
     ];
-    let (items, about) = offer_items(offers, ui.shell.selected_menu_item);
+    let (items, about) = offer_items(offers, ui.seat.selected_menu_item);
     let cargo_items = cargo_items(ui);
     let market_items = market_items(ui);
     let sections = vec![
@@ -1035,14 +1035,14 @@ fn market_items(ui: &UiFrame<'_, '_>) -> Vec<SectionItem> {
 }
 
 pub(super) fn draw_receipts(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let sections = if ui.shell.depot_receipts.is_empty() {
+    let sections = if ui.seat.depot_receipts.is_empty() {
         vec![Section::new(
             "Receipts",
             GOLD,
             vec![SectionItem::text("No receipts yet. Sell some cargo first.")],
         )]
     } else {
-        ui.shell
+        ui.seat
             .depot_receipts
             .iter()
             .rev()

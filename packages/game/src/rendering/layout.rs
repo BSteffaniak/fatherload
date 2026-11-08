@@ -68,8 +68,29 @@ enum PanelKind {
 pub(super) enum ModalPlacement {
     #[default]
     Centred,
-    /// Left-hand side of the screen, leaving the interior's counter, keeper and rig in view.
+    /// Left-hand side of the canvas, leaving the interior's counter, keeper and rig in view.
+    /// On a canvas narrower than [`COUNTER_SIDE_DOCK_MIN_WIDTH`] (a split-screen seat) the panel
+    /// docks along the bottom at full width instead (see [`counter_panel_is_sheet`]).
     Counter,
+}
+
+/// Narrowest canvas (art pixels) with room for a counter panel beside the counter.
+const COUNTER_SIDE_DOCK_MIN_WIDTH: f32 = 460.0;
+
+/// Shortest canvas that keeps the top of the room above a bottom-docked counter panel; shorter
+/// canvases give the panel the whole view.
+const COUNTER_SHEET_ROOM_MIN_HEIGHT: f32 = 250.0;
+
+/// Whether counter panels on a canvas `viewport` dock along the bottom (narrow split-screen
+/// views) rather than beside the counter.
+pub(super) fn counter_panel_is_sheet(viewport: Rectangle) -> bool {
+    viewport.width < COUNTER_SIDE_DOCK_MIN_WIDTH
+}
+
+/// Whether a bottom-docked counter panel on `viewport` leaves the room's upper part in view, so
+/// the room should be drawn against the top of the view.
+pub(super) fn counter_sheet_leaves_room(viewport: Rectangle) -> bool {
+    counter_panel_is_sheet(viewport) && viewport.height >= COUNTER_SHEET_ROOM_MIN_HEIGHT
 }
 
 pub(super) struct UiLayout<'draw, 'handle> {
@@ -316,9 +337,12 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         if let Some(content) = content_height {
             let wanted = (header as f32 + content + 14.0).ceil().max(72.0);
             if wanted < rect.height {
-                // Centred dialogs stay centred; counter panels keep their top edge.
+                // Centred dialogs stay centred; counter panels keep their top edge, or their
+                // bottom edge when docked along the bottom of a narrow view.
                 if placement == ModalPlacement::Centred {
                     rect.y = (rect.y + (rect.height - wanted) * 0.5).floor();
+                } else if counter_panel_is_sheet(self.viewport) {
+                    rect.y = (rect.y + rect.height - wanted).floor();
                 }
                 rect.height = wanted;
             }
@@ -329,6 +353,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
             (PanelStyle::Accent, GOLD)
         };
         ui_kit::panel(self.draw, rect, style);
+        LAST_DIALOG_RECT.with(|last| last.set(Some(rect)));
         let x = rect.x as i32 + 12;
         let mut y = rect.y as i32 + 10;
         ui_kit::text(self.draw, title, x, y, TextStyle::Title, title_color);
@@ -1099,6 +1124,13 @@ thread_local! {
     static TEXT_MEASURE_CACHE: RefCell<BTreeMap<TextMeasureKey, f32>> = const { RefCell::new(BTreeMap::new()) };
     static CURRENT_UI_STATE: RefCell<Option<widgets::UiState>> = const { RefCell::new(None) };
     static CURRENT_MODAL_PLACEMENT: std::cell::Cell<ModalPlacement> = const { std::cell::Cell::new(ModalPlacement::Centred) };
+    static LAST_DIALOG_RECT: std::cell::Cell<Option<Rectangle>> = const { std::cell::Cell::new(None) };
+}
+
+/// The panel of the last dialog drawn since the previous call, if any (a toast keeps clear of
+/// it). Taking it forgets it.
+pub(super) fn take_last_dialog_rect() -> Option<Rectangle> {
+    LAST_DIALOG_RECT.with(std::cell::Cell::take)
 }
 
 /// Where this frame's dialogs sit.
@@ -1172,6 +1204,22 @@ fn current_scroll_offset(id: &widgets::WidgetId) -> f32 {
 fn modal_rect(viewport: Rectangle, placement: ModalPlacement) -> Rectangle {
     match placement {
         ModalPlacement::Centred => modal_rect_for_viewport(viewport),
+        ModalPlacement::Counter if counter_panel_is_sheet(viewport) => {
+            // Along the bottom of a narrow split-screen view, under the room's upper part
+            // when the view is tall enough to show it.
+            let margin = 6.0;
+            let top = if viewport.height >= COUNTER_SHEET_ROOM_MIN_HEIGHT {
+                (viewport.height * 0.4).floor()
+            } else {
+                margin
+            };
+            Rectangle {
+                x: (viewport.x + margin).floor(),
+                y: (viewport.y + top).floor(),
+                width: (viewport.width - margin * 2.0).max(0.0).floor(),
+                height: (viewport.height - top - margin).max(0.0).floor(),
+            }
+        }
         ModalPlacement::Counter => {
             let width = (viewport.width * 0.52)
                 .clamp(250.0, 330.0)

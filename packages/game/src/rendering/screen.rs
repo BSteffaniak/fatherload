@@ -25,13 +25,15 @@ use super::{
 use crate::{
     input::{devices::InputDevice, prompts::Prompt},
     render_snapshot::{PlayerPresentation, RenderSnapshot, ViewSnapshot},
-    shell::{ModalScreen, RunMode, ShellState, surface_zone_label},
+    shell::{ModalScreen, RunMode, SeatUi, ShellState, surface_zone_label},
 };
 
-/// What screen-space UI (HUD, menus, modals) reads: shell state plus the snapshot and the view
-/// the UI acts for.
+/// What screen-space UI (HUD, menus, modals) reads: shell state plus the snapshot, the view the
+/// UI acts for and that view's seat menus.
 pub(super) struct UiFrame<'a, 'w> {
     pub shell: &'a ShellState,
+    /// The seat the view belongs to (counter panels, selection, receipts).
+    pub seat: &'a SeatUi,
     pub snapshot: &'a RenderSnapshot<'w>,
     pub view: &'a ViewSnapshot<'w>,
     pub player: &'w Player,
@@ -248,6 +250,7 @@ fn draw_view_prompt(
         )
     } else if shell.run_mode == RunMode::Playing
         && shell.modal.is_none()
+        && shell.seat(view.seat_index).modal.is_none()
         && view.failure.is_none()
         && let Some(zone) = view.surface_zone
     {
@@ -371,34 +374,48 @@ fn draw_wallet_panel(
 /// How long a message stays on screen as a toast, in shell ticks.
 const TOAST_TICKS: u64 = 240;
 
-/// The latest shell message as a toast near the bottom of the screen (receipts, saves,
-/// refusals), for a few seconds after it changes. Beside the counter dialog inside buildings.
-pub(super) fn draw_toast(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
-    use crate::shell::RunMode;
-    if shell.message.is_empty()
-        || !matches!(
-            shell.run_mode,
-            RunMode::Playing | RunMode::Interior | RunMode::Paused
-        )
-    {
-        return;
-    }
-    let age = shell.update_ticks.saturating_sub(shell.message_tick);
-    if age >= TOAST_TICKS {
-        return;
-    }
-    let canvas = ui_kit::canvas();
-    let left = if shell.run_mode == RunMode::Interior && shell.modal.is_some() {
-        (canvas.width as f32 * 0.52).clamp(250.0, 330.0) as i32 + 16
+/// The message a view's toast shows: the newer of the global message and the seat's own, while
+/// it is younger than [`TOAST_TICKS`]. Returns the text and its age in shell ticks.
+pub(super) fn toast_message<'a>(shell: &'a ShellState, seat: &'a SeatUi) -> Option<(&'a str, u64)> {
+    let global = (shell.message.as_str(), shell.message_tick);
+    let own = (seat.message.as_str(), seat.message_tick);
+    let (text, tick) = if own.1 >= global.1 && !own.0.is_empty() {
+        own
     } else {
-        0
+        global
     };
-    let area = canvas.width - left;
+    let age = shell.update_ticks.saturating_sub(tick);
+    (!text.is_empty() && age < TOAST_TICKS).then_some((text, age))
+}
+
+/// A message as a toast near the bottom of the current canvas (receipts, saves, refusals), for
+/// a few seconds after it changes. `avoid` is a docked counter panel to keep clear of: the toast
+/// sits beside it when there is room, otherwise above it, otherwise over its lower edge.
+pub(super) fn draw_toast(
+    draw: &mut RaylibDrawHandle<'_>,
+    message: &str,
+    age: u64,
+    avoid: Option<Rectangle>,
+) {
+    let canvas = ui_kit::canvas();
+    // The free horizontal band the toast is centred in, and the bottom it rests on.
+    let (mut left, mut area, mut bottom) = (0, canvas.width, canvas.height - 28);
+    if let Some(panel) = avoid {
+        let beside = (panel.x + panel.width) as i32 + 8;
+        if canvas.width - beside - 24 >= 120 {
+            left = beside;
+            area = canvas.width - beside;
+        } else if panel.y as i32 >= 44 {
+            bottom = panel.y as i32 - 6;
+        } else {
+            bottom = canvas.height - 10;
+        }
+    }
     let max_width = (area - 24).min(300);
     if max_width < 80 {
         return;
     }
-    let lowered = shell.message.to_lowercase();
+    let lowered = message.to_lowercase();
     let warning = [
         "unavailable",
         "not enough",
@@ -421,7 +438,7 @@ pub(super) fn draw_toast(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
     } else {
         &super::pixel_art::sprites::menu_icons::LETTER
     };
-    let lines = ui_kit::wrap(&shell.message, max_width - 26, TextStyle::Body);
+    let lines = ui_kit::wrap(message, max_width - 26, TextStyle::Body);
     let lines = &lines[..lines.len().min(3)];
     let text_width = lines
         .iter()
@@ -433,7 +450,7 @@ pub(super) fn draw_toast(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
     // Slides up into place over its first few frames.
     let rise = i32::try_from(8_u64.saturating_sub(age)).unwrap_or(0);
     let x = left + (area - width) / 2;
-    let y = canvas.height - height - 28 + rise;
+    let y = bottom - height + rise;
     ui_kit::panel(
         draw,
         Rectangle::new(x as f32, y as f32, width as f32, height as f32),

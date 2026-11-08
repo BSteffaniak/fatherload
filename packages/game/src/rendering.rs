@@ -8,7 +8,7 @@
 
 //! Draws a [`RenderSnapshot`] plus [`ShellState`]. The renderer never reads the simulation.
 
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::BTreeMap};
 
 use raylib::{ffi, prelude::*};
 
@@ -31,12 +31,12 @@ mod ui_kit;
 mod ui_sheet;
 mod world;
 
-use interior::draw_interior;
+use interior::{RoomArea, draw_interior};
 use menus::{draw_online, draw_pause, draw_rescue};
 use pixel_art::{font::load_pixel_font, palette, sprite};
 use screen::{
     UiFrame, draw_depth_ruler_for_view, draw_heat_warning_for_view, draw_minimap_for_view,
-    draw_modal, draw_toast, draw_view_hud,
+    draw_modal, draw_toast, draw_view_hud, toast_message,
 };
 use terrain::TerrainRenderer;
 use ui_kit::{TextStyle, UiCanvas, UiCanvasScope, UiFontFaces};
@@ -93,9 +93,18 @@ pub struct GameRenderer {
     atlas: Option<Texture2D>,
     font_regular: Option<Font>,
     font_bold: Option<Font>,
-    ui_state: RefCell<layout::widgets::UiState>,
+    /// Dialog focus and scroll, kept apart for the global screens and for each seat.
+    ui_states: RefCell<BTreeMap<UiOwner, layout::widgets::UiState>>,
     /// Discovered tiles already drawn by the terrain renderer (primary view).
     explored_drawn: DiscoveredTiles,
+}
+
+/// Whose dialogs a [`layout::widgets::UiState`] tracks: the global screens (title, pause,
+/// options, slots, online) or one local seat's counter panels and personal dialogs.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum UiOwner {
+    Global,
+    Seat(usize),
 }
 
 /// Wheel (and right-stick) scrolling in art pixels: positive scrolls down. Keyboard navigation
@@ -149,7 +158,7 @@ impl GameRenderer {
             atlas: sprite::load_atlas(raylib, thread),
             font_regular: load_pixel_font(raylib, thread, false),
             font_bold: load_pixel_font(raylib, thread, true),
-            ui_state: RefCell::new(layout::widgets::UiState::default()),
+            ui_states: RefCell::new(BTreeMap::new()),
             explored_drawn: DiscoveredTiles::default(),
         }
     }
@@ -213,70 +222,104 @@ impl GameRenderer {
             .sync(raylib, thread, snapshot.terrain, explored, &views);
     }
 
-    /// Applies seat 0's menu input to the dialog UI state before the frame is drawn:
-    /// scrolling (see [`apply_modal_scroll`]) and focus steps. `page_keys_tune` is
-    /// `ShellState::tuning_keys_active`.
-    pub fn apply_ui_input(&self, input: PlayerInput, page_keys_tune: bool) {
-        apply_modal_scroll(&mut self.ui_state.borrow_mut(), input, page_keys_tune);
+    /// Applies menu input to the dialog UI states before the frame is drawn: scrolling (see
+    /// [`apply_modal_scroll`]) and focus steps. `inputs` holds every local seat's input in seat
+    /// order. While a global screen is up only the seat driving it scrolls it; otherwise each
+    /// seat's input moves only that seat's own dialog.
+    pub fn apply_ui_input(&self, inputs: &[PlayerInput], shell: &ShellState) {
+        let page_keys_tune = shell.tuning_keys_active();
+        if shell.global_overlay() {
+            let input = inputs
+                .get(shell.menu_seat)
+                .or_else(|| inputs.first())
+                .copied()
+                .unwrap_or_default();
+            self.apply_owner_input(UiOwner::Global, input, page_keys_tune);
+        } else {
+            for (seat, input) in inputs.iter().enumerate() {
+                self.apply_owner_input(UiOwner::Seat(seat), *input, page_keys_tune);
+            }
+        }
+    }
+
+    fn apply_owner_input(&self, owner: UiOwner, input: PlayerInput, page_keys_tune: bool) {
+        let mut states = self.ui_states.borrow_mut();
+        let state = states.entry(owner).or_default();
+        apply_modal_scroll(state, input, page_keys_tune);
         if input.menu_up {
-            self.ui_state.borrow_mut().focus_previous();
+            state.focus_previous();
         } else if input.menu_down {
-            self.ui_state.borrow_mut().focus_next();
+            state.focus_next();
         } else if input.confirm {
-            self.ui_state
-                .borrow_mut()
-                .set_focused(layout::widgets::WidgetId::new("modal-content"));
+            state.set_focused(layout::widgets::WidgetId::new("modal-content"));
         }
     }
 
     /// Forgets dialog focus and scroll (scene captures start each scene fresh).
     pub fn reset_ui_state(&self) {
-        *self.ui_state.borrow_mut() = layout::widgets::UiState::default();
+        self.ui_states.borrow_mut().clear();
     }
 
-    /// Draws one frame: every local view, then the shell overlays once on the UI canvas.
+    /// Makes `owner`'s dialog state current for the layout code.
+    fn begin_ui(&self, owner: UiOwner) {
+        let mut state = self
+            .ui_states
+            .borrow()
+            .get(&owner)
+            .cloned()
+            .unwrap_or_default();
+        state.begin_frame();
+        layout::set_current_ui_state(state);
+    }
+
+    /// Stores `owner`'s dialog state after drawing its UI.
+    fn end_ui(&self, owner: UiOwner) {
+        if let Some(mut state) = layout::take_current_ui_state() {
+            state.end_frame();
+            self.ui_states.borrow_mut().insert(owner, state);
+        }
+    }
+
+    /// Draws one frame: every local seat's view (the world or the building it is in, with its
+    /// own HUD, dialogs, prompts and toasts), then the global screens once over all of them.
     pub fn render(
         &self,
         draw: &mut RaylibDrawHandle<'_>,
         shell: &ShellState,
         snapshot: &RenderSnapshot<'_>,
     ) {
-        let mut ui_state = self.ui_state.borrow().clone();
-        ui_state.begin_frame();
-        layout::set_current_ui_state(ui_state);
-        prompts::set_menu_device(shell.prompt_device(0));
         sprite::set_current_atlas(self.atlas.as_ref());
         // The UI clock follows shell updates so scripted captures are deterministic.
         let seconds = shell.update_ticks as f32 / 60.0;
-        ui_kit::begin_frame(UiCanvas::from_draw(draw), self.font_faces(), seconds);
-        layout::set_modal_placement(if shell.run_mode == RunMode::Interior {
-            layout::ModalPlacement::Counter
-        } else {
-            layout::ModalPlacement::Centred
-        });
+        let screen = UiCanvas::from_draw(draw);
+        ui_kit::begin_frame(screen, self.font_faces(), seconds);
         draw.clear_background(palette::SKY_LIGHT);
 
-        if shell.run_mode == RunMode::Interior {
-            if let Some(view) = snapshot.primary_view() {
-                draw_interior(draw, shell, view, &snapshot.market);
-            }
-        } else if !matches!(shell.run_mode, RunMode::Title | RunMode::Lobby) {
-            // The title and online screens paint their own backdrop over the whole canvas.
+        // The title and online screens paint their own backdrop over the whole canvas.
+        if shell.gameplay_visible() {
             for view in &snapshot.views {
-                self.render_view(draw, shell, snapshot, view);
+                self.render_seat(draw, shell, snapshot, view, screen);
             }
         }
 
+        self.begin_ui(UiOwner::Global);
+        layout::set_modal_placement(layout::ModalPlacement::Centred);
+        prompts::set_menu_device(shell.prompt_device(shell.menu_seat));
         let _canvas = UiCanvasScope::begin(draw);
         if shell.run_mode == RunMode::Lobby {
             title::draw_backdrop(draw);
         }
-        if snapshot.views.len() > 1 && shell.run_mode != RunMode::Interior {
+        if snapshot.views.len() > 1 && shell.gameplay_visible() {
             draw_view_dividers(draw, snapshot);
         }
-        if let Some(view) = snapshot.primary_view() {
+        let menu_view = snapshot
+            .views
+            .get(shell.menu_seat)
+            .or_else(|| snapshot.primary_view());
+        if let Some(view) = menu_view {
             let ui = UiFrame {
                 shell,
+                seat: shell.seat(view.seat_index),
                 snapshot,
                 view,
                 player: view.player,
@@ -284,19 +327,24 @@ impl GameRenderer {
             match shell.run_mode {
                 RunMode::Title => title::draw_title(draw, &ui),
                 RunMode::Paused => draw_pause(draw, &ui),
-                RunMode::Playing | RunMode::Interior | RunMode::Lobby => {}
+                RunMode::Playing | RunMode::Lobby => {}
             }
             if let Some(modal) = shell.modal {
                 draw_modal(draw, &ui, modal);
-            } else if shell.run_mode == RunMode::Playing && view.failure.is_some() {
-                draw_rescue(draw, &ui);
             }
         }
 
         if shell.run_mode == RunMode::Lobby && shell.modal.is_none() {
             draw_online(draw, shell);
         }
-        draw_toast(draw, shell);
+        // Over a global screen the toast is drawn once, above it (saves and loads report
+        // here); otherwise each view shows its own.
+        if shell.global_overlay() && shell.gameplay_visible() {
+            let seat = shell.seat(shell.menu_seat);
+            if let Some((message, age)) = toast_message(shell, seat) {
+                draw_toast(draw, message, age, None);
+            }
+        }
         if shell.online.show_net_debug {
             draw_net_debug(draw, shell);
         }
@@ -319,10 +367,96 @@ impl GameRenderer {
                 palette::FOG,
             );
         }
-        if let Some(mut ui_state) = layout::take_current_ui_state() {
-            ui_state.end_frame();
-            *self.ui_state.borrow_mut() = ui_state;
+        self.end_ui(UiOwner::Global);
+    }
+
+    /// Draws one seat's view: the world with its HUD, or the building the seat is inside, then
+    /// the seat's own dialog (docked at the counter inside a building), rescue prompt and toast.
+    /// In split-screen everything lands inside the seat's viewport, on a UI canvas covering just
+    /// that viewport ([`UiCanvas::for_viewport`]), with the seat's own device prompts.
+    fn render_seat(
+        &self,
+        draw: &mut RaylibDrawHandle<'_>,
+        shell: &ShellState,
+        snapshot: &RenderSnapshot<'_>,
+        view: &ViewSnapshot<'_>,
+        screen: UiCanvas,
+    ) {
+        let split = snapshot.views.len() > 1;
+        let seat = shell.seat(view.seat_index);
+        let canvas = if split {
+            UiCanvas::for_viewport(screen, view.viewport)
+        } else {
+            screen
+        };
+        let _restore = ui_kit::use_canvas(canvas);
+        prompts::set_menu_device(shell.prompt_device(view.seat_index));
+        let owner = UiOwner::Seat(view.seat_index);
+        self.begin_ui(owner);
+        if split {
+            begin_view_clip(view.viewport);
         }
+        if seat.inside() {
+            let area = if split {
+                let (x, y, width, height) = canvas.physical_rect(view.viewport);
+                RoomArea {
+                    x,
+                    y,
+                    width,
+                    height,
+                    viewport: Some(view.viewport),
+                    align_top: seat.modal.is_some()
+                        && layout::counter_sheet_leaves_room(canvas.rect()),
+                }
+            } else {
+                RoomArea::window(draw.get_render_width(), draw.get_render_height())
+            };
+            draw_interior(
+                draw,
+                seat,
+                view,
+                &snapshot.market,
+                area,
+                split.then_some(view.seat_index),
+            );
+        } else {
+            self.render_world(draw, shell, snapshot, view);
+        }
+        {
+            layout::set_modal_placement(if seat.inside() {
+                layout::ModalPlacement::Counter
+            } else {
+                layout::ModalPlacement::Centred
+            });
+            let _canvas = UiCanvasScope::begin(draw);
+            let ui = UiFrame {
+                shell,
+                seat,
+                snapshot,
+                view,
+                player: view.player,
+            };
+            let _ = layout::take_last_dialog_rect();
+            if let Some(modal) = seat.modal {
+                draw_modal(draw, &ui, modal);
+            } else if shell.run_mode == RunMode::Playing
+                && shell.modal.is_none()
+                && !seat.inside()
+                && view.failure.is_some()
+            {
+                draw_rescue(draw, &ui);
+            }
+            let docked = layout::take_last_dialog_rect().filter(|_| seat.inside());
+            if !shell.global_overlay()
+                && let Some((message, age)) = toast_message(shell, seat)
+            {
+                draw_toast(draw, message, age, docked);
+            }
+        }
+        if split {
+            end_view_clip();
+        }
+        self.end_ui(owner);
     }
 
     /// Draws the art reference sheet (palette, UI kit, icons, sprites) instead of the game.
@@ -352,7 +486,8 @@ impl GameRenderer {
         ui_sheet::draw_ui_sheet(draw);
     }
 
-    fn render_view(
+    /// The world through `view`'s camera, then its HUD on the current (seat) canvas.
+    fn render_world(
         &self,
         draw: &mut RaylibDrawHandle<'_>,
         shell: &ShellState,
@@ -360,10 +495,6 @@ impl GameRenderer {
         view: &ViewSnapshot<'_>,
     ) {
         let viewport = view.viewport;
-        let clip = snapshot.views.len() > 1;
-        if clip {
-            begin_view_clip(viewport);
-        }
         let camera = Vector2::new(view.camera.x, view.camera.y);
         let (visible_width, visible_height) = view.visible_world_size();
         let density = render_scale_for_draw(draw);
@@ -396,17 +527,11 @@ impl GameRenderer {
                 },
             );
         }
-        // The title and online screens show the world behind them without a HUD.
-        if !matches!(shell.run_mode, RunMode::Title | RunMode::Lobby) {
-            let _canvas = UiCanvasScope::begin(draw);
-            draw_heat_warning_for_view(draw, snapshot.terrain, view);
-            draw_view_hud(draw, shell, snapshot, view);
-            draw_depth_ruler_for_view(draw, snapshot.terrain, view);
-            draw_minimap_for_view(draw, snapshot.terrain, view, &snapshot.players);
-        }
-        if clip {
-            end_view_clip();
-        }
+        let _canvas = UiCanvasScope::begin(draw);
+        draw_heat_warning_for_view(draw, snapshot.terrain, view);
+        draw_view_hud(draw, shell, snapshot, view);
+        draw_depth_ruler_for_view(draw, snapshot.terrain, view);
+        draw_minimap_for_view(draw, snapshot.terrain, view, &snapshot.players);
     }
 }
 

@@ -30,10 +30,9 @@ pub enum RunMode {
     Title,
     /// Live gameplay.
     Playing,
-    /// Pause menu (single-player pause stops the host).
+    /// The shared pause menu, opened by any seat (single-player pause stops the host). Being
+    /// inside a building is per seat: see [`SeatUi::interior_zone`].
     Paused,
-    /// Inside a surface building.
-    Interior,
     /// Online screens: join forms, LAN list, lobby roster, session notices.
     Lobby,
 }
@@ -65,6 +64,23 @@ pub enum ModalScreen {
     ResearchLog,
     Crafting,
     Inventory,
+}
+
+impl ModalScreen {
+    /// Whether this dialog is global (options, save/load slots, exit confirmations): it covers
+    /// every view and lives in [`ShellState::modal`]. Every other dialog belongs to one seat
+    /// ([`SeatUi::modal`]) and is drawn in that seat's view.
+    #[must_use]
+    pub const fn is_global(self) -> bool {
+        matches!(
+            self,
+            Self::Options
+                | Self::SaveSlots
+                | Self::LoadSlots
+                | Self::ExitConfirm
+                | Self::UnsavedExitConfirm
+        )
+    }
 }
 
 /// Pause menu entries.
@@ -220,8 +236,8 @@ pub enum ShellRequest {
     LoadSlot(usize),
     /// Save to the main file, then exit.
     SaveAndExit,
-    /// A one-shot gameplay action for the primary seat (services, rescue).
-    Action(PlayerCommand),
+    /// A one-shot gameplay action (services, rescue) for local seat `seat`'s player.
+    Action { seat: usize, command: PlayerCommand },
     /// Add another local split-screen seat.
     AddLocalSeat,
     /// Host a new online game (lobby first).
@@ -426,18 +442,39 @@ impl OnlineShell {
 pub struct ShellContext<'w> {
     /// The authoritative (or predicted) world.
     pub world: &'w WorldState,
-    /// The player the shell's menus act for (seat 0).
-    pub player: Option<PlayerId>,
+    /// The player each local seat controls, in seat order.
+    pub players: &'w [PlayerId],
     /// Whether any save exists (title "Resume").
     pub saves_exist: bool,
 }
 
-impl ShellContext<'_> {
+impl<'w> ShellContext<'w> {
+    /// What seat `seat`'s menus read.
+    fn seat(&self, seat: usize, device: InputDevice) -> SeatContext<'w> {
+        SeatContext {
+            world: self.world,
+            seat,
+            player: self.players.get(seat).copied(),
+            device,
+        }
+    }
+}
+
+/// What one seat's menus read: the world, the seat's player and its prompt device.
+#[derive(Clone, Copy, Debug)]
+struct SeatContext<'w> {
+    world: &'w WorldState,
+    seat: usize,
+    player: Option<PlayerId>,
+    device: InputDevice,
+}
+
+impl SeatContext<'_> {
     fn player(&self) -> Option<&drillgame_simulation::Player> {
         self.player.and_then(|player| self.world.player(player))
     }
 
-    /// The building the player stands at: the same rule the host uses to validate service
+    /// The building the seat's rig stands at: the same rule the host uses to validate service
     /// actions, so a menu that opens here is a menu whose transactions the host accepts.
     fn current_zone(&self) -> Option<SurfaceZone> {
         self.world.player_surface_zone(self.player?)
@@ -453,6 +490,11 @@ impl ShellContext<'_> {
     }
 }
 
+/// `prompt`'s key or button on `device`, for messages ("press E" / "press X").
+fn key_for(prompt: Prompt, device: InputDevice) -> String {
+    inline_text(prompt, device).unwrap_or_else(|| "the use button".to_owned())
+}
+
 /// A service transaction submitted from a menu, waiting for its tick result.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PendingService {
@@ -461,7 +503,626 @@ struct PendingService {
     hull: f32,
 }
 
-/// All shell (non-gameplay) state.
+/// One local seat's own menus: outdoors or inside a building (which one, and where the rig
+/// stands), its open counter panel or personal dialog, the selected row, transactions waiting
+/// for their tick, the service animation, its messages and its depot receipts.
+///
+/// Seats never share this state: in split-screen each player walks into buildings, shops and
+/// reads their own dialogs in their own view while the others keep playing. Nothing here is
+/// saved; loading a game puts every seat back outdoors.
+#[derive(Clone, Debug)]
+pub struct SeatUi {
+    /// The seat's counter panel or personal dialog (never a global one, see
+    /// [`ModalScreen::is_global`]).
+    pub modal: Option<ModalScreen>,
+    /// Row selected in `modal`.
+    pub selected_menu_item: usize,
+    /// The building the seat is inside (`None`: outdoors).
+    pub interior_zone: Option<SurfaceZone>,
+    /// Where the rig stands in the room (room units, 0..640).
+    pub interior_x: f32,
+    /// Which way the rig faces in the room (-1 left, 1 right).
+    pub interior_facing: f32,
+    pub service_animation: Option<ServiceAnimation>,
+    pub service_animation_seconds: f32,
+    /// The seat's last few depot receipts.
+    pub depot_receipts: Vec<String>,
+    /// The seat's latest message (service results, door hints, rescue), shown as a toast in
+    /// its own view.
+    pub message: String,
+    /// `ShellState::update_ticks` when `message` last changed.
+    pub message_tick: u64,
+    message_seen: String,
+    pending_services: Vec<PendingService>,
+}
+
+/// The state of a seat that does not exist (yet): outdoors with nothing open.
+static IDLE_SEAT: SeatUi = SeatUi::new();
+
+impl Default for SeatUi {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SeatUi {
+    /// A seat outdoors with nothing open.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            modal: None,
+            selected_menu_item: 0,
+            interior_zone: None,
+            interior_x: 88.0,
+            interior_facing: 1.0,
+            service_animation: None,
+            service_animation_seconds: 0.0,
+            depot_receipts: Vec::new(),
+            message: String::new(),
+            message_tick: 0,
+            message_seen: String::new(),
+            pending_services: Vec::new(),
+        }
+    }
+
+    /// Whether the seat is inside a building.
+    #[must_use]
+    pub const fn inside(&self) -> bool {
+        self.interior_zone.is_some()
+    }
+
+    /// Whether a transaction from this seat is waiting for its tick.
+    #[must_use]
+    pub const fn has_pending_service(&self) -> bool {
+        !self.pending_services.is_empty()
+    }
+
+    /// Back outdoors with nothing open (new game, load, back to the title). Receipts and the
+    /// last message stay.
+    fn reset_outdoors(&mut self) {
+        self.modal = None;
+        self.interior_zone = None;
+        self.selected_menu_item = 0;
+        self.service_animation = None;
+        self.service_animation_seconds = 0.0;
+        self.pending_services.clear();
+    }
+
+    fn track_message(&mut self, tick: u64) {
+        if self.message != self.message_seen {
+            self.message_seen.clone_from(&self.message);
+            self.message_tick = tick;
+        }
+    }
+
+    fn tick_animation(&mut self, delta_seconds: f32) {
+        self.service_animation_seconds = (self.service_animation_seconds - delta_seconds).max(0.0);
+        if self.service_animation_seconds <= 0.0 {
+            self.service_animation = None;
+        }
+    }
+
+    /// One frame of this seat's input while the game runs. Returns `true` when the seat asked
+    /// for the (shared) pause menu.
+    fn update(
+        &mut self,
+        input: PlayerInput,
+        delta_seconds: f32,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+        requests: &mut Vec<ShellRequest>,
+    ) -> bool {
+        debug_assert!(
+            self.modal.is_none_or(|modal| !modal.is_global()),
+            "global dialogs live in ShellState::modal"
+        );
+        toggle_modal(&mut self.modal, input.inventory, ModalScreen::Inventory);
+        toggle_modal(&mut self.modal, input.map, ModalScreen::Map);
+        toggle_modal(&mut self.modal, input.help, ModalScreen::Help);
+        if self.inside() {
+            return self.handle_interior(input, delta_seconds, ctx, cues, requests);
+        }
+        if ctx.failed() {
+            if input.interact || input.confirm {
+                requests.push(ShellRequest::Action {
+                    seat: ctx.seat,
+                    command: PlayerCommand::Rescue,
+                });
+                // The rescue sound plays from the world's `RescueTriggered` event once the
+                // host applies it, so a refused rescue stays silent and it never doubles.
+                "Rescue crew dispatched.".clone_into(&mut self.message);
+            }
+            return input.pause || input.cancel;
+        }
+        if self.handle_modal(input, ctx, cues, requests) {
+            return false;
+        }
+        if input.pause || input.cancel {
+            return true;
+        }
+        if input.interact {
+            if let Some(zone) = ctx.current_zone() {
+                self.enter_interior(zone, ctx.device, cues);
+            } else {
+                "No surface service here.".clone_into(&mut self.message);
+            }
+        }
+        false
+    }
+
+    fn enter_interior(&mut self, zone: SurfaceZone, device: InputDevice, cues: &mut Vec<SoundCue>) {
+        self.interior_zone = Some(zone);
+        self.interior_x = 82.0;
+        self.interior_facing = 1.0;
+        self.modal = None;
+        self.selected_menu_item = 0;
+        cues.push(SoundCue::Ui);
+        self.message = format!(
+            "Entered {}. Walk to the counter and press {}; {} leaves.",
+            surface_zone_label(zone),
+            key_for(Prompt::Use, device),
+            key_for(Prompt::Back, device),
+        );
+    }
+
+    fn handle_interior(
+        &mut self,
+        input: PlayerInput,
+        delta_seconds: f32,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+        requests: &mut Vec<ShellRequest>,
+    ) -> bool {
+        if self.handle_modal(input, ctx, cues, requests) {
+            return false;
+        }
+        if input.pause {
+            return true;
+        }
+        let movement = input.horizontal;
+        if movement.abs() > f32::EPSILON {
+            self.interior_facing = movement.signum();
+        }
+        self.interior_x = movement
+            .mul_add(185.0 * delta_seconds, self.interior_x)
+            .clamp(42.0, 598.0);
+        if input.backs_out() || (input.interact && self.interior_x < 74.0) {
+            self.interior_zone = None;
+            self.modal = None;
+            cues.push(SoundCue::Ui);
+            "Back outside.".clone_into(&mut self.message);
+            return false;
+        }
+        if input.interact {
+            self.open_interior_hotspot(cues);
+        }
+        false
+    }
+
+    fn open_interior_hotspot(&mut self, cues: &mut Vec<SoundCue>) {
+        let Some(zone) = self.interior_zone else {
+            return;
+        };
+        if (self.interior_x - interior_service_x(zone)).abs() > 70.0 {
+            "Walk to the service counter or the exit door.".clone_into(&mut self.message);
+            return;
+        }
+        self.selected_menu_item = 0;
+        self.modal = Some(match zone {
+            SurfaceZone::Fuel => ModalScreen::Fuel,
+            SurfaceZone::Repair => ModalScreen::Repair,
+            SurfaceZone::Depot => {
+                self.selected_menu_item = 1;
+                ModalScreen::Depot
+            }
+            SurfaceZone::Headquarters => ModalScreen::Headquarters,
+            SurfaceZone::Shop => ModalScreen::Shop,
+            SurfaceZone::Bank => ModalScreen::Bank,
+            SurfaceZone::Explosives => ModalScreen::Explosives,
+            SurfaceZone::Salvage => ModalScreen::Salvage,
+        });
+        cues.push(SoundCue::Ui);
+    }
+
+    const fn open_modal(&mut self, modal: ModalScreen) {
+        self.modal = Some(modal);
+        self.selected_menu_item = 0;
+    }
+
+    fn move_selection(&mut self, input: PlayerInput, max_item: usize) {
+        if input.menu_up {
+            self.selected_menu_item = self.selected_menu_item.saturating_sub(1);
+        }
+        if input.menu_down {
+            self.selected_menu_item = (self.selected_menu_item + 1).min(max_item);
+        }
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "exhaustive modal dispatch keeps every building menu in one place"
+    )]
+    fn handle_modal(
+        &mut self,
+        input: PlayerInput,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+        requests: &mut Vec<ShellRequest>,
+    ) -> bool {
+        let Some(modal) = self.modal else {
+            return false;
+        };
+        if input.backs_out() {
+            self.modal = None;
+            return true;
+        }
+        let upgrade_count = ctx
+            .player()
+            .map_or(1, |player| upgrade_offers(player).len());
+        let progression = ctx.world.progression();
+        let max_item = match modal {
+            ModalScreen::Depot => 4,
+            ModalScreen::Fuel | ModalScreen::Repair | ModalScreen::Bank => 2,
+            ModalScreen::Explosives => 3,
+            ModalScreen::Salvage => 5,
+            ModalScreen::Headquarters => {
+                if ctx.deep_claim_unlocked() {
+                    6
+                } else {
+                    2
+                }
+            }
+            ModalScreen::Crafting => RecipeKind::ALL.len() - 1,
+            ModalScreen::TownDevelopment => TownBuilding::ALL.len() - 1,
+            ModalScreen::ExpeditionBoard => progression
+                .expedition_offers
+                .len()
+                .saturating_add(progression.active_expeditions.len())
+                .saturating_sub(1),
+            ModalScreen::Shop | ModalScreen::ShopConfirm => upgrade_count - 1,
+            _ => 0,
+        };
+        self.move_selection(input, max_item);
+        if matches!(modal, ModalScreen::Shop) {
+            if input.menu_left || input.tab_previous {
+                self.selected_menu_item = self.selected_menu_item.saturating_sub(1);
+            }
+            if input.menu_right || input.tab_next {
+                self.selected_menu_item = (self.selected_menu_item + 1).min(upgrade_count - 1);
+            }
+        }
+        if let Some(index) = input.selected_upgrade
+            && matches!(modal, ModalScreen::Shop | ModalScreen::ShopConfirm)
+        {
+            self.selected_menu_item = index.min(upgrade_count - 1);
+        }
+        if !input.confirm {
+            return true;
+        }
+        let service = match modal {
+            ModalScreen::Fuel => {
+                self.modal = Some(ModalScreen::FuelConfirm);
+                None
+            }
+            ModalScreen::FuelConfirm => {
+                self.modal = Some(ModalScreen::Fuel);
+                Some(SessionServiceRequest::Refuel {
+                    menu_item: self.selected_menu_item,
+                })
+            }
+            ModalScreen::Repair => {
+                self.modal = Some(ModalScreen::RepairConfirm);
+                None
+            }
+            ModalScreen::RepairConfirm => {
+                self.modal = Some(ModalScreen::Repair);
+                Some(SessionServiceRequest::Repair {
+                    menu_item: self.selected_menu_item,
+                })
+            }
+            ModalScreen::Depot => match self.selected_menu_item {
+                0 => Some(SessionServiceRequest::CompleteDepotWork),
+                1 => Some(SessionServiceRequest::SellCargo),
+                2 => Some(SessionServiceRequest::AutoSortLowGradeCargo),
+                3 => Some(SessionServiceRequest::SellScanData),
+                _ => {
+                    self.modal = Some(ModalScreen::DepotReceiptHistory);
+                    None
+                }
+            },
+            ModalScreen::DepotReceiptHistory => {
+                self.modal = Some(ModalScreen::Depot);
+                None
+            }
+            ModalScreen::Headquarters => self.confirm_headquarters(ctx, cues),
+            ModalScreen::Shop => {
+                self.modal = Some(ModalScreen::ShopConfirm);
+                None
+            }
+            ModalScreen::ShopConfirm => {
+                self.modal = Some(ModalScreen::Shop);
+                Some(SessionServiceRequest::BuyUpgrade {
+                    index: self.selected_menu_item,
+                })
+            }
+            ModalScreen::Bank => Some(match self.selected_menu_item {
+                0 => SessionServiceRequest::Finance,
+                1 => SessionServiceRequest::BuyInsurance,
+                _ => SessionServiceRequest::StartSideContract,
+            }),
+            ModalScreen::Explosives => Some(match self.selected_menu_item {
+                0 => SessionServiceRequest::BuyBombBundle { count: 3, cost: 55 },
+                1 => SessionServiceRequest::BuyBombBundle {
+                    count: 7,
+                    cost: 120,
+                },
+                2 => SessionServiceRequest::BuyMiningRockets,
+                _ => SessionServiceRequest::ClaimFreeTestCharge,
+            }),
+            ModalScreen::Salvage => Some(match self.selected_menu_item {
+                0 => SessionServiceRequest::SalvageRecoverLostCargo,
+                1 => SessionServiceRequest::SalvagePatchHull,
+                2 => SessionServiceRequest::SalvageLaunchDrone,
+                3 => SessionServiceRequest::SalvageRecoverWreckedPart,
+                4 => SessionServiceRequest::SalvageClearCollapseZones,
+                _ => SessionServiceRequest::SalvageSellScrapTip,
+            }),
+            ModalScreen::TownDevelopment => Some(SessionServiceRequest::UpgradeTownBuilding {
+                building: TownBuilding::ALL
+                    [self.selected_menu_item.min(TownBuilding::ALL.len() - 1)],
+            }),
+            ModalScreen::ExpeditionBoard => {
+                let offers = progression.expedition_offers.len();
+                Some(if self.selected_menu_item < offers {
+                    SessionServiceRequest::AcceptExpedition {
+                        index: self.selected_menu_item,
+                    }
+                } else {
+                    SessionServiceRequest::AbandonExpedition {
+                        index: self.selected_menu_item - offers,
+                    }
+                })
+            }
+            ModalScreen::Crafting => Some(SessionServiceRequest::CraftRecipe {
+                recipe: RecipeKind::ALL[self.selected_menu_item.min(RecipeKind::ALL.len() - 1)],
+            }),
+            ModalScreen::Options
+            | ModalScreen::SaveSlots
+            | ModalScreen::LoadSlots
+            | ModalScreen::ExitConfirm
+            | ModalScreen::UnsavedExitConfirm
+            | ModalScreen::Map
+            | ModalScreen::Help
+            | ModalScreen::Inventory
+            | ModalScreen::ResearchLog => None,
+        };
+        if let Some(request) = service {
+            self.submit_service(request, ctx, requests);
+        }
+        true
+    }
+
+    fn confirm_headquarters(
+        &mut self,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+    ) -> Option<SessionServiceRequest> {
+        let unlocked = ctx.deep_claim_unlocked();
+        match self.selected_menu_item {
+            0 => Some(SessionServiceRequest::CompleteDepotWork),
+            1 => {
+                self.message = hq_story_message(ctx.world);
+                cues.push(SoundCue::Milestone);
+                None
+            }
+            2 => Some(SessionServiceRequest::Finance),
+            3 if unlocked => {
+                self.open_modal(ModalScreen::TownDevelopment);
+                None
+            }
+            4 if unlocked => {
+                self.open_modal(ModalScreen::ExpeditionBoard);
+                None
+            }
+            5 if unlocked => {
+                self.open_modal(ModalScreen::ResearchLog);
+                None
+            }
+            _ if unlocked => {
+                self.open_modal(ModalScreen::Crafting);
+                None
+            }
+            _ => Some(SessionServiceRequest::Finance),
+        }
+    }
+
+    fn submit_service(
+        &mut self,
+        request: SessionServiceRequest,
+        ctx: SeatContext<'_>,
+        requests: &mut Vec<ShellRequest>,
+    ) {
+        let Some(player) = ctx.player() else {
+            "Service unavailable for current player.".clone_into(&mut self.message);
+            return;
+        };
+        self.pending_services.push(PendingService {
+            request,
+            credits: player.credits,
+            hull: player.hull,
+        });
+        requests.push(ShellRequest::Action {
+            seat: ctx.seat,
+            command: PlayerCommand::Service(request),
+        });
+        "Processing...".clone_into(&mut self.message);
+    }
+
+    /// Reports a resolved service action of this seat's player (from the tick's events).
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one message per service keeps the result wording in one place"
+    )]
+    fn service_resolved(
+        &mut self,
+        request: SessionServiceRequest,
+        applied: bool,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+    ) {
+        let Some(index) = self
+            .pending_services
+            .iter()
+            .position(|pending| pending.request == request)
+        else {
+            return;
+        };
+        let pending = self.pending_services.remove(index);
+        if !applied {
+            unavailable_message(request).clone_into(&mut self.message);
+            return;
+        }
+        let Some(player) = ctx.player() else {
+            return;
+        };
+        let spent = pending.credits.saturating_sub(player.credits);
+        let earned = player.credits.saturating_sub(pending.credits);
+        let mut cue = SoundCue::Upgrade;
+        self.message = match request {
+            SessionServiceRequest::Refuel { .. } => {
+                self.service_animation = Some(ServiceAnimation::Fuel);
+                self.service_animation_seconds = 1.4;
+                if spent == 0 {
+                    "Fuel already full or no credits available.".to_owned()
+                } else {
+                    format!("Fuel topped up for {spent} credits.")
+                }
+            }
+            SessionServiceRequest::Repair { .. } => {
+                self.service_animation = Some(ServiceAnimation::Repair);
+                self.service_animation_seconds = 1.4;
+                if spent == 0 {
+                    "Hull already repaired or no credits available.".to_owned()
+                } else {
+                    format!("Hull repaired for {spent} credits.")
+                }
+            }
+            SessionServiceRequest::SellCargo | SessionServiceRequest::AutoSortLowGradeCargo => {
+                cue = SoundCue::Sell;
+                if earned == 0 {
+                    "No cargo to sell.".to_owned()
+                } else {
+                    let receipt = format!("Sold cargo for {earned} credits.");
+                    self.push_receipt(receipt.clone());
+                    receipt
+                }
+            }
+            SessionServiceRequest::BuyUpgrade { index } => {
+                upgrade_offers(player).get(index).map_or_else(
+                    || "Upgrade purchased.".to_owned(),
+                    |offer| {
+                        format!(
+                            "Bought {}.",
+                            upgrade_tier_name(offer.kind, offer.level.saturating_sub(1))
+                        )
+                    },
+                )
+            }
+            SessionServiceRequest::BuyBombBundle { .. }
+            | SessionServiceRequest::BuyMiningRockets
+            | SessionServiceRequest::ClaimFreeTestCharge => {
+                format!("Nix packed your charges. You now carry {}.", player.bombs)
+            }
+            SessionServiceRequest::SalvagePatchHull => format!(
+                "Salvage Yard patch job restored {:.0} hull.",
+                player.hull - pending.hull
+            ),
+            SessionServiceRequest::Finance => {
+                cue = SoundCue::Sell;
+                if earned > 0 {
+                    format!(
+                        "HQ finance issued a {earned} credit advance. Risk-adjusted payoff: {} credits.",
+                        player.loan_debt
+                    )
+                } else {
+                    format!(
+                        "Paid {spent} credits toward HQ debt. Remaining: {}.",
+                        player.loan_debt
+                    )
+                }
+            }
+            SessionServiceRequest::BuyInsurance => format!(
+                "Ledger sold tier {} rescue insurance. Higher tiers reduce fees and cargo loss.",
+                player.insurance_tier
+            ),
+            SessionServiceRequest::CraftRecipe { recipe } => {
+                format!("Crafted {}: {}.", recipe.name(), recipe.description())
+            }
+            SessionServiceRequest::UpgradeTownBuilding { building } => format!(
+                "{} upgraded to level {}. Deep Claim reputation increased.",
+                building.name(),
+                ctx.world.progression().town_development.level(building)
+            ),
+            SessionServiceRequest::SalvageRecoverLostCargo
+            | SessionServiceRequest::SalvageLaunchDrone => {
+                "Mara recovered your marked lost cargo.".to_owned()
+            }
+            SessionServiceRequest::SalvageRecoverWreckedPart => {
+                "Mara recovered a wrecked rig part.".to_owned()
+            }
+            SessionServiceRequest::SalvageClearCollapseZones => {
+                cue = SoundCue::Milestone;
+                format!("Collapse-zone warnings cleared for {earned} credits.")
+            }
+            SessionServiceRequest::SalvageSellScrapTip | SessionServiceRequest::SellScanData => {
+                cue = SoundCue::Sell;
+                format!("Sold data for {earned} credits.")
+            }
+            SessionServiceRequest::CompleteDepotWork => {
+                cue = SoundCue::Sell;
+                let receipt = format!("Contract work complete: earned {earned} credits.");
+                self.push_receipt(receipt.clone());
+                receipt
+            }
+            SessionServiceRequest::StartSideContract => {
+                cue = SoundCue::Ui;
+                ctx.world
+                    .progression()
+                    .active_side_contracts
+                    .last()
+                    .map_or_else(
+                        || "Side contract posted.".to_owned(),
+                        |contract| {
+                            format!(
+                                "Side contract posted: {:?} x{}.",
+                                contract.target, contract.required
+                            )
+                        },
+                    )
+            }
+            SessionServiceRequest::AcceptExpedition { .. } => {
+                cue = SoundCue::Ui;
+                "Expedition accepted.".to_owned()
+            }
+            SessionServiceRequest::AbandonExpedition { .. } => {
+                cue = SoundCue::Ui;
+                "Expedition abandoned.".to_owned()
+            }
+        };
+        cues.push(cue);
+    }
+
+    fn push_receipt(&mut self, receipt: String) {
+        self.depot_receipts.push(receipt);
+        if self.depot_receipts.len() > 5 {
+            self.depot_receipts.remove(0);
+        }
+    }
+}
+
+/// All shell (non-gameplay) state: the global screens (title, pause, options, save slots, exit
+/// confirmations, online lobby), settings and global messages, plus one [`SeatUi`] per local
+/// seat for everything a player does on their own.
 #[allow(
     clippy::struct_excessive_bools,
     reason = "shell flags are independent UI toggles"
@@ -469,19 +1130,21 @@ struct PendingService {
 #[derive(Clone, Debug)]
 pub struct ShellState {
     pub run_mode: RunMode,
+    /// The open global dialog: options, save/load slots or an exit confirmation (see
+    /// [`ModalScreen::is_global`]). Seat dialogs live in [`SeatUi::modal`].
     pub modal: Option<ModalScreen>,
+    /// Row selected in the global dialog.
     pub selected_menu_item: usize,
     pub selected_title_item: usize,
     pub selected_pause_item: usize,
     pub show_details: bool,
+    /// The latest global message (saves, loads, volume, controllers, sessions), shown as a
+    /// toast in every view.
     pub message: String,
     /// `update_ticks` when `message` last changed (drives the on-screen toast).
     pub message_tick: u64,
     /// The message `message_tick` was taken for.
     message_seen: String,
-    pub interior_zone: Option<SurfaceZone>,
-    pub interior_x: f32,
-    pub interior_facing: f32,
     pub master_volume: f32,
     pub fullscreen: bool,
     /// Windowed size/maximized state, kept current by the desktop app and persisted with settings.
@@ -491,10 +1154,7 @@ pub struct ShellState {
     pub request_exit: bool,
     pub update_ticks: u64,
     pub play_seconds: f32,
-    pub service_animation: Option<ServiceAnimation>,
-    pub service_animation_seconds: f32,
     pub sound_cues: Vec<SoundCue>,
-    pub depot_receipts: Vec<String>,
     pub online: OnlineShell,
     /// Clipboard text pasted this frame (Ctrl+V), for the descriptor form.
     pub pasted: Option<String>,
@@ -502,7 +1162,11 @@ pub struct ShellState {
     pub seat_devices: Vec<InputDevice>,
     /// Connected controllers by index and name (F3 overlay).
     pub gamepads: BTreeMap<u8, String>,
-    pending_services: Vec<PendingService>,
+    /// Each local seat's own menus and interior, in seat order.
+    pub seats: Vec<SeatUi>,
+    /// The seat whose input drives the global menus: the one that opened the pause menu (seat
+    /// 0 for the title, the lobby and the window-close prompt).
+    pub menu_seat: usize,
 }
 
 impl Default for ShellState {
@@ -525,9 +1189,6 @@ impl ShellState {
             message: "Mine ore, sell cargo, and buy upgrades at the surface buildings.".to_owned(),
             message_tick: 0,
             message_seen: String::new(),
-            interior_zone: None,
-            interior_x: 88.0,
-            interior_facing: 1.0,
             master_volume: settings.master_volume,
             fullscreen: settings.fullscreen,
             window: settings.window,
@@ -536,15 +1197,13 @@ impl ShellState {
             request_exit: false,
             update_ticks: 0,
             play_seconds: 0.0,
-            service_animation: None,
-            service_animation_seconds: 0.0,
             sound_cues: Vec::new(),
-            depot_receipts: Vec::new(),
             online: OnlineShell::default(),
             pasted: None,
             seat_devices: Vec::new(),
             gamepads: BTreeMap::new(),
-            pending_services: Vec::new(),
+            seats: vec![SeatUi::new()],
+            menu_seat: 0,
         }
     }
 
@@ -557,6 +1216,37 @@ impl ShellState {
             .unwrap_or(InputDevice::KEYBOARD)
     }
 
+    /// Seat `seat`'s menus (an idle outdoor seat when it does not exist).
+    #[must_use]
+    pub fn seat(&self, seat: usize) -> &SeatUi {
+        self.seats.get(seat).unwrap_or(&IDLE_SEAT)
+    }
+
+    /// Seat `seat`'s menus, adding seats up to it.
+    pub fn seat_mut(&mut self, seat: usize) -> &mut SeatUi {
+        if self.seats.len() <= seat {
+            self.seats.resize_with(seat + 1, SeatUi::new);
+        }
+        &mut self.seats[seat]
+    }
+
+    /// Matches the number of local seats (new seats start outdoors).
+    pub fn set_seat_count(&mut self, count: usize) {
+        self.seats.resize_with(count.max(1), SeatUi::new);
+        if self.menu_seat >= self.seats.len() {
+            self.menu_seat = 0;
+        }
+    }
+
+    /// Puts seat `seat` inside `zone` at the door, as walking in does.
+    #[cfg(test)]
+    pub fn enter_interior(&mut self, seat: usize, zone: SurfaceZone) {
+        let device = self.prompt_device(seat);
+        let mut cues = Vec::new();
+        self.seat_mut(seat).enter_interior(zone, device, &mut cues);
+        self.sound_cues.extend(cues);
+    }
+
     /// Whether Page Up / Page Down tune live network values (the F3 overlay is open in a dev
     /// build) instead of scrolling dialogs. Exactly one of the two ever handles the keys.
     #[must_use]
@@ -564,15 +1254,17 @@ impl ShellState {
         self.online.show_net_debug && cfg!(debug_assertions)
     }
 
-    /// `prompt`'s key or button for seat 0, for messages ("press E" / "press X").
-    fn key_for(&self, prompt: Prompt) -> String {
-        inline_text(prompt, self.prompt_device(0)).unwrap_or_else(|| "the use button".to_owned())
-    }
-
     /// Whether the world is on screen behind the shell (not the title or online screens).
     #[must_use]
     pub const fn gameplay_visible(&self) -> bool {
         !matches!(self.run_mode, RunMode::Title | RunMode::Lobby)
+    }
+
+    /// Whether a global screen (title, pause, online, options, slots, exit prompt) is up: it
+    /// covers every view and takes the menu seat's input.
+    #[must_use]
+    pub const fn global_overlay(&self) -> bool {
+        !matches!(self.run_mode, RunMode::Playing) || self.modal.is_some()
     }
 
     /// Current settings for persisting.
@@ -585,68 +1277,82 @@ impl ShellState {
         }
     }
 
-    /// Whether held gameplay controls should reach the world this frame.
+    /// Whether `seat`'s held gameplay controls should reach its rig this frame: the game runs,
+    /// no global dialog is open and the seat is outdoors with nothing open.
     #[must_use]
-    pub const fn gameplay_input_enabled(&self) -> bool {
-        matches!(self.run_mode, RunMode::Playing) && self.modal.is_none()
+    pub fn gameplay_input_enabled(&self, seat: usize) -> bool {
+        let seat = self.seat(seat);
+        matches!(self.run_mode, RunMode::Playing)
+            && self.modal.is_none()
+            && seat.modal.is_none()
+            && !seat.inside()
     }
 
-    /// Whether the local host should tick. Single-player pause, menus and building interiors
-    /// freeze the world, except that a transaction submitted from a building menu runs the ticks
-    /// needed to resolve it.
+    /// Whether the local host should tick: while the game runs and at least one local seat is
+    /// outdoors. Alone, entering a building freezes the world as it always has; in split-screen
+    /// the world keeps running for whoever is still outside and freezes only once every seat is
+    /// inside a building or someone opened the shared pause menu. A transaction submitted from
+    /// a building menu always runs the ticks needed to resolve it. Online hosts never pause
+    /// (see `Runtime::set_paused`).
     #[must_use]
-    pub const fn world_should_tick(&self) -> bool {
-        matches!(self.run_mode, RunMode::Playing) || !self.pending_services.is_empty()
+    pub fn world_should_tick(&self) -> bool {
+        let anyone_outdoors = self.seats.iter().any(|seat| !seat.inside());
+        let pending = self.seats.iter().any(SeatUi::has_pending_service);
+        (matches!(self.run_mode, RunMode::Playing) && anyone_outdoors) || pending
     }
 
-    /// Resets per-run shell state after a new game or load.
+    /// Resets per-run shell state after a new game or load: every seat is back outdoors.
     pub fn enter_world(&mut self, message: impl Into<String>, play_seconds: f32) {
         self.run_mode = RunMode::Playing;
         self.modal = None;
-        self.interior_zone = None;
         self.selected_menu_item = 0;
+        self.menu_seat = 0;
+        for seat in &mut self.seats {
+            seat.reset_outdoors();
+        }
         self.save_dirty = false;
         self.play_seconds = play_seconds;
-        self.service_animation = None;
-        self.service_animation_seconds = 0.0;
-        self.pending_services.clear();
         self.message = message.into();
     }
 
-    /// Handles one frame of shell input (the primary seat's full input).
+    /// Handles one frame of shell input: `inputs` holds every local seat's input in seat order
+    /// (seat 0 first; its keyboard owns the global hotkeys). While the game runs each seat's
+    /// input drives only that seat's menus; the global menus take the menu seat's input.
     #[allow(
         clippy::too_many_lines,
         reason = "top-level shell dispatcher keeps frame order explicit"
     )]
     pub fn update(
         &mut self,
-        input: PlayerInput,
+        inputs: &[PlayerInput],
         delta_seconds: f32,
         ctx: ShellContext<'_>,
     ) -> Vec<ShellRequest> {
+        let primary = inputs.first().copied().unwrap_or_default();
         let mut requests = Vec::new();
+        self.set_seat_count(ctx.players.len().max(inputs.len()));
         self.update_ticks = self.update_ticks.saturating_add(1);
         if self.message != self.message_seen {
             self.message_seen.clone_from(&self.message);
             self.message_tick = self.update_ticks;
         }
-        self.sound_cues.clear();
-        self.show_details = input.details;
-        self.service_animation_seconds = (self.service_animation_seconds - delta_seconds).max(0.0);
-        if self.service_animation_seconds <= 0.0 {
-            self.service_animation = None;
+        for seat in &mut self.seats {
+            seat.track_message(self.update_ticks);
+            seat.tick_animation(delta_seconds);
         }
+        self.sound_cues.clear();
+        self.show_details = primary.details;
         let text_entry = self.text_entry();
         let in_game = !matches!(self.run_mode, RunMode::Title | RunMode::Lobby);
-        if input.net_debug {
+        if primary.net_debug {
             self.online.show_net_debug = !self.online.show_net_debug;
         }
         if self.tuning_keys_active() && !text_entry {
-            if input.tune_next {
+            if primary.tune_next {
                 self.online.tune_parameter =
                     (self.online.tune_parameter + 1) % crate::runtime::TUNABLE_PARAMETERS.len();
             }
-            for (pressed, step) in [(input.page_up, 1), (input.page_down, -1)] {
+            for (pressed, step) in [(primary.page_up, 1), (primary.page_down, -1)] {
                 if pressed {
                     requests.push(ShellRequest::AdjustTuning {
                         parameter: self.online.tune_parameter,
@@ -655,83 +1361,82 @@ impl ShellState {
                 }
             }
         }
-        if input.save && in_game {
+        if primary.save && in_game {
             requests.push(ShellRequest::QuickSave);
         }
-        if input.load && self.run_mode != RunMode::Lobby {
+        if primary.load && self.run_mode != RunMode::Lobby {
             requests.push(ShellRequest::QuickLoad);
         }
-        if self.handle_exit_modal(input, &mut requests) {
+        let menu_input = inputs.get(self.menu_seat).copied().unwrap_or(primary);
+        if self.handle_exit_modal(menu_input, &mut requests) {
             return requests;
         }
-        if input.exit_requested {
+        if primary.exit_requested {
+            self.menu_seat = 0;
             self.request_exit_or_prompt();
             return requests;
         }
-        if in_game && input_changes_game(input) {
+        if in_game && inputs.iter().copied().any(input_changes_game) {
             self.save_dirty = true;
         }
-        if input.local_multiplayer_toggle && in_game {
+        if primary.local_multiplayer_toggle && in_game {
             requests.push(ShellRequest::AddLocalSeat);
         }
-        if in_game {
-            toggle_modal(&mut self.modal, input.inventory, ModalScreen::Inventory);
-            toggle_modal(&mut self.modal, input.map, ModalScreen::Map);
-            toggle_modal(&mut self.modal, input.help, ModalScreen::Help);
-        }
-        if input.volume_up && !text_entry {
+        if primary.volume_up && !text_entry {
             self.adjust_volume(0.1);
         }
-        if input.volume_down && !text_entry {
+        if primary.volume_down && !text_entry {
             self.adjust_volume(-0.1);
         }
-        if input.fullscreen {
+        if primary.fullscreen {
             self.fullscreen = !self.fullscreen;
             self.settings_dirty = true;
             self.sound_cues.push(SoundCue::Ui);
         }
-        if matches!(self.run_mode, RunMode::Playing | RunMode::Interior) {
-            self.play_seconds += delta_seconds;
-        }
         match self.run_mode {
             RunMode::Title => {
-                if !self.handle_modal(input, ctx, &mut requests) {
-                    self.handle_title_menu(input, ctx, &mut requests);
+                if !self.handle_menu_modal(primary, &mut requests) {
+                    self.handle_title_menu(primary, ctx, &mut requests);
                 }
             }
-            RunMode::Paused => self.handle_pause_menu(input, &mut requests),
-            RunMode::Lobby => self.handle_online(input, &mut requests),
-            RunMode::Interior => self.handle_interior(input, delta_seconds, ctx, &mut requests),
+            RunMode::Paused => self.handle_pause_menu(menu_input, &mut requests),
+            RunMode::Lobby => self.handle_online(primary, &mut requests),
             RunMode::Playing => {
-                if ctx.failed() {
-                    if input.interact || input.confirm {
-                        requests.push(ShellRequest::Action(PlayerCommand::Rescue));
-                        // The rescue sound plays from the world's `RescueTriggered` event once the
-                        // host applies it, so a refused rescue stays silent and it never doubles.
-                        "Rescue crew dispatched.".clone_into(&mut self.message);
-                    }
-                    if input.pause || input.cancel {
+                self.play_seconds += delta_seconds;
+                for seat in 0..self.seats.len() {
+                    let input = inputs.get(seat).copied().unwrap_or_default();
+                    let seat_ctx = ctx.seat(seat, self.prompt_device(seat));
+                    let paused = self.seats[seat].update(
+                        input,
+                        delta_seconds,
+                        seat_ctx,
+                        &mut self.sound_cues,
+                        &mut requests,
+                    );
+                    if paused {
+                        // Any seat opens the shared pause menu and drives it until it closes.
                         self.run_mode = RunMode::Paused;
-                    }
-                    return requests;
-                }
-                if self.handle_modal(input, ctx, &mut requests) {
-                    return requests;
-                }
-                if input.pause || input.cancel {
-                    self.run_mode = RunMode::Paused;
-                    return requests;
-                }
-                if input.interact {
-                    if let Some(zone) = ctx.current_zone() {
-                        self.enter_interior(zone);
-                    } else {
-                        "No surface service here.".clone_into(&mut self.message);
+                        self.menu_seat = seat;
+                        break;
                     }
                 }
             }
         }
         requests
+    }
+
+    /// Reports a resolved service action of seat `seat`'s player (from the tick's events).
+    pub fn service_resolved(
+        &mut self,
+        seat: usize,
+        request: SessionServiceRequest,
+        applied: bool,
+        ctx: ShellContext<'_>,
+    ) {
+        let seat_ctx = ctx.seat(seat, self.prompt_device(seat));
+        if let Some(state) = self.seats.get_mut(seat) {
+            state.service_resolved(request, applied, seat_ctx, &mut self.sound_cues);
+        }
     }
 
     /// Whether an online text field has focus (typing must not trigger hotkeys).
@@ -748,6 +1453,7 @@ impl ShellState {
     pub fn show_online(&mut self, screen: OnlineScreen) {
         self.run_mode = RunMode::Lobby;
         self.modal = None;
+        self.menu_seat = 0;
         self.online.screen = screen;
         self.online.selected = 0;
         match screen {
@@ -772,10 +1478,12 @@ impl ShellState {
     pub fn return_to_title(&mut self, message: impl Into<String>) {
         self.run_mode = RunMode::Title;
         self.modal = None;
-        self.interior_zone = None;
+        self.menu_seat = 0;
+        for seat in &mut self.seats {
+            seat.reset_outdoors();
+        }
         self.selected_title_item = 0;
         self.online.ready = false;
-        self.pending_services.clear();
         self.message = message.into();
     }
 
@@ -1097,459 +1805,6 @@ impl ShellState {
         }
     }
 
-    fn enter_interior(&mut self, zone: SurfaceZone) {
-        self.run_mode = RunMode::Interior;
-        self.interior_zone = Some(zone);
-        self.interior_x = 82.0;
-        self.interior_facing = 1.0;
-        self.modal = None;
-        self.selected_menu_item = 0;
-        self.sound_cues.push(SoundCue::Ui);
-        self.message = format!(
-            "Entered {}. Walk to the counter and press {}; {} leaves.",
-            surface_zone_label(zone),
-            self.key_for(Prompt::Use),
-            self.key_for(Prompt::Back),
-        );
-    }
-
-    fn handle_interior(
-        &mut self,
-        input: PlayerInput,
-        delta_seconds: f32,
-        ctx: ShellContext<'_>,
-        requests: &mut Vec<ShellRequest>,
-    ) {
-        if self.handle_modal(input, ctx, requests) {
-            return;
-        }
-        if input.pause {
-            self.run_mode = RunMode::Paused;
-            return;
-        }
-        let movement = input.horizontal;
-        if movement.abs() > f32::EPSILON {
-            self.interior_facing = movement.signum();
-        }
-        self.interior_x = movement
-            .mul_add(185.0 * delta_seconds, self.interior_x)
-            .clamp(42.0, 598.0);
-        if input.backs_out() || (input.interact && self.interior_x < 74.0) {
-            self.run_mode = RunMode::Playing;
-            self.interior_zone = None;
-            self.modal = None;
-            self.sound_cues.push(SoundCue::Ui);
-            "Back outside.".clone_into(&mut self.message);
-            return;
-        }
-        if input.interact {
-            self.open_interior_hotspot();
-        }
-    }
-
-    fn open_interior_hotspot(&mut self) {
-        let Some(zone) = self.interior_zone else {
-            return;
-        };
-        if (self.interior_x - interior_service_x(zone)).abs() > 70.0 {
-            "Walk to the service counter or the exit door.".clone_into(&mut self.message);
-            return;
-        }
-        self.selected_menu_item = 0;
-        self.modal = Some(match zone {
-            SurfaceZone::Fuel => ModalScreen::Fuel,
-            SurfaceZone::Repair => ModalScreen::Repair,
-            SurfaceZone::Depot => {
-                self.selected_menu_item = 1;
-                ModalScreen::Depot
-            }
-            SurfaceZone::Headquarters => ModalScreen::Headquarters,
-            SurfaceZone::Shop => ModalScreen::Shop,
-            SurfaceZone::Bank => ModalScreen::Bank,
-            SurfaceZone::Explosives => ModalScreen::Explosives,
-            SurfaceZone::Salvage => ModalScreen::Salvage,
-        });
-        self.sound_cues.push(SoundCue::Ui);
-    }
-
-    #[allow(
-        clippy::too_many_lines,
-        reason = "exhaustive modal dispatch keeps every building menu in one place"
-    )]
-    fn handle_modal(
-        &mut self,
-        input: PlayerInput,
-        ctx: ShellContext<'_>,
-        requests: &mut Vec<ShellRequest>,
-    ) -> bool {
-        let Some(modal) = self.modal else {
-            return false;
-        };
-        if matches!(
-            modal,
-            ModalScreen::Options | ModalScreen::SaveSlots | ModalScreen::LoadSlots
-        ) {
-            return self.handle_menu_modal(input, requests);
-        }
-        if input.backs_out() {
-            self.modal = None;
-            return true;
-        }
-        let upgrade_count = ctx
-            .player()
-            .map_or(1, |player| upgrade_offers(player).len());
-        let progression = ctx.world.progression();
-        let max_item = match modal {
-            ModalScreen::Depot => 4,
-            ModalScreen::Fuel | ModalScreen::Repair | ModalScreen::Bank => 2,
-            ModalScreen::Explosives => 3,
-            ModalScreen::Salvage => 5,
-            ModalScreen::Headquarters => {
-                if ctx.deep_claim_unlocked() {
-                    6
-                } else {
-                    2
-                }
-            }
-            ModalScreen::Crafting => RecipeKind::ALL.len() - 1,
-            ModalScreen::TownDevelopment => TownBuilding::ALL.len() - 1,
-            ModalScreen::ExpeditionBoard => progression
-                .expedition_offers
-                .len()
-                .saturating_add(progression.active_expeditions.len())
-                .saturating_sub(1),
-            ModalScreen::Shop | ModalScreen::ShopConfirm => upgrade_count - 1,
-            _ => 0,
-        };
-        self.move_selection(input, max_item);
-        if matches!(modal, ModalScreen::Shop) {
-            if input.menu_left || input.tab_previous {
-                self.selected_menu_item = self.selected_menu_item.saturating_sub(1);
-            }
-            if input.menu_right || input.tab_next {
-                self.selected_menu_item = (self.selected_menu_item + 1).min(upgrade_count - 1);
-            }
-        }
-        if let Some(index) = input.selected_upgrade
-            && matches!(modal, ModalScreen::Shop | ModalScreen::ShopConfirm)
-        {
-            self.selected_menu_item = index.min(upgrade_count - 1);
-        }
-        if !input.confirm {
-            return true;
-        }
-        let service = match modal {
-            ModalScreen::Fuel => {
-                self.modal = Some(ModalScreen::FuelConfirm);
-                None
-            }
-            ModalScreen::FuelConfirm => {
-                self.modal = Some(ModalScreen::Fuel);
-                Some(SessionServiceRequest::Refuel {
-                    menu_item: self.selected_menu_item,
-                })
-            }
-            ModalScreen::Repair => {
-                self.modal = Some(ModalScreen::RepairConfirm);
-                None
-            }
-            ModalScreen::RepairConfirm => {
-                self.modal = Some(ModalScreen::Repair);
-                Some(SessionServiceRequest::Repair {
-                    menu_item: self.selected_menu_item,
-                })
-            }
-            ModalScreen::Depot => match self.selected_menu_item {
-                0 => Some(SessionServiceRequest::CompleteDepotWork),
-                1 => Some(SessionServiceRequest::SellCargo),
-                2 => Some(SessionServiceRequest::AutoSortLowGradeCargo),
-                3 => Some(SessionServiceRequest::SellScanData),
-                _ => {
-                    self.modal = Some(ModalScreen::DepotReceiptHistory);
-                    None
-                }
-            },
-            ModalScreen::DepotReceiptHistory => {
-                self.modal = Some(ModalScreen::Depot);
-                None
-            }
-            ModalScreen::Headquarters => self.confirm_headquarters(ctx),
-            ModalScreen::Shop => {
-                self.modal = Some(ModalScreen::ShopConfirm);
-                None
-            }
-            ModalScreen::ShopConfirm => {
-                self.modal = Some(ModalScreen::Shop);
-                Some(SessionServiceRequest::BuyUpgrade {
-                    index: self.selected_menu_item,
-                })
-            }
-            ModalScreen::Bank => Some(match self.selected_menu_item {
-                0 => SessionServiceRequest::Finance,
-                1 => SessionServiceRequest::BuyInsurance,
-                _ => SessionServiceRequest::StartSideContract,
-            }),
-            ModalScreen::Explosives => Some(match self.selected_menu_item {
-                0 => SessionServiceRequest::BuyBombBundle { count: 3, cost: 55 },
-                1 => SessionServiceRequest::BuyBombBundle {
-                    count: 7,
-                    cost: 120,
-                },
-                2 => SessionServiceRequest::BuyMiningRockets,
-                _ => SessionServiceRequest::ClaimFreeTestCharge,
-            }),
-            ModalScreen::Salvage => Some(match self.selected_menu_item {
-                0 => SessionServiceRequest::SalvageRecoverLostCargo,
-                1 => SessionServiceRequest::SalvagePatchHull,
-                2 => SessionServiceRequest::SalvageLaunchDrone,
-                3 => SessionServiceRequest::SalvageRecoverWreckedPart,
-                4 => SessionServiceRequest::SalvageClearCollapseZones,
-                _ => SessionServiceRequest::SalvageSellScrapTip,
-            }),
-            ModalScreen::TownDevelopment => Some(SessionServiceRequest::UpgradeTownBuilding {
-                building: TownBuilding::ALL
-                    [self.selected_menu_item.min(TownBuilding::ALL.len() - 1)],
-            }),
-            ModalScreen::ExpeditionBoard => {
-                let offers = progression.expedition_offers.len();
-                Some(if self.selected_menu_item < offers {
-                    SessionServiceRequest::AcceptExpedition {
-                        index: self.selected_menu_item,
-                    }
-                } else {
-                    SessionServiceRequest::AbandonExpedition {
-                        index: self.selected_menu_item - offers,
-                    }
-                })
-            }
-            ModalScreen::Crafting => Some(SessionServiceRequest::CraftRecipe {
-                recipe: RecipeKind::ALL[self.selected_menu_item.min(RecipeKind::ALL.len() - 1)],
-            }),
-            ModalScreen::Options
-            | ModalScreen::SaveSlots
-            | ModalScreen::LoadSlots
-            | ModalScreen::ExitConfirm
-            | ModalScreen::UnsavedExitConfirm
-            | ModalScreen::Map
-            | ModalScreen::Help
-            | ModalScreen::Inventory
-            | ModalScreen::ResearchLog => None,
-        };
-        if let Some(request) = service {
-            self.submit_service(request, ctx, requests);
-        }
-        true
-    }
-
-    fn confirm_headquarters(&mut self, ctx: ShellContext<'_>) -> Option<SessionServiceRequest> {
-        let unlocked = ctx.deep_claim_unlocked();
-        match self.selected_menu_item {
-            0 => Some(SessionServiceRequest::CompleteDepotWork),
-            1 => {
-                self.message = hq_story_message(ctx.world);
-                self.sound_cues.push(SoundCue::Milestone);
-                None
-            }
-            2 => Some(SessionServiceRequest::Finance),
-            3 if unlocked => {
-                self.open_modal(ModalScreen::TownDevelopment);
-                None
-            }
-            4 if unlocked => {
-                self.open_modal(ModalScreen::ExpeditionBoard);
-                None
-            }
-            5 if unlocked => {
-                self.open_modal(ModalScreen::ResearchLog);
-                None
-            }
-            _ if unlocked => {
-                self.open_modal(ModalScreen::Crafting);
-                None
-            }
-            _ => Some(SessionServiceRequest::Finance),
-        }
-    }
-
-    fn submit_service(
-        &mut self,
-        request: SessionServiceRequest,
-        ctx: ShellContext<'_>,
-        requests: &mut Vec<ShellRequest>,
-    ) {
-        let Some(player) = ctx.player() else {
-            "Service unavailable for current player.".clone_into(&mut self.message);
-            return;
-        };
-        self.pending_services.push(PendingService {
-            request,
-            credits: player.credits,
-            hull: player.hull,
-        });
-        requests.push(ShellRequest::Action(PlayerCommand::Service(request)));
-        "Processing...".clone_into(&mut self.message);
-    }
-
-    /// Reports a resolved service action for the primary seat (from the tick's events).
-    #[allow(
-        clippy::too_many_lines,
-        reason = "one message per service keeps the result wording in one place"
-    )]
-    pub fn service_resolved(
-        &mut self,
-        request: SessionServiceRequest,
-        applied: bool,
-        ctx: ShellContext<'_>,
-    ) {
-        let Some(index) = self
-            .pending_services
-            .iter()
-            .position(|pending| pending.request == request)
-        else {
-            return;
-        };
-        let pending = self.pending_services.remove(index);
-        if !applied {
-            unavailable_message(request).clone_into(&mut self.message);
-            return;
-        }
-        let Some(player) = ctx.player() else {
-            return;
-        };
-        let spent = pending.credits.saturating_sub(player.credits);
-        let earned = player.credits.saturating_sub(pending.credits);
-        let mut cue = SoundCue::Upgrade;
-        self.message = match request {
-            SessionServiceRequest::Refuel { .. } => {
-                self.service_animation = Some(ServiceAnimation::Fuel);
-                self.service_animation_seconds = 1.4;
-                if spent == 0 {
-                    "Fuel already full or no credits available.".to_owned()
-                } else {
-                    format!("Fuel topped up for {spent} credits.")
-                }
-            }
-            SessionServiceRequest::Repair { .. } => {
-                self.service_animation = Some(ServiceAnimation::Repair);
-                self.service_animation_seconds = 1.4;
-                if spent == 0 {
-                    "Hull already repaired or no credits available.".to_owned()
-                } else {
-                    format!("Hull repaired for {spent} credits.")
-                }
-            }
-            SessionServiceRequest::SellCargo | SessionServiceRequest::AutoSortLowGradeCargo => {
-                cue = SoundCue::Sell;
-                if earned == 0 {
-                    "No cargo to sell.".to_owned()
-                } else {
-                    let receipt = format!("Sold cargo for {earned} credits.");
-                    self.push_receipt(receipt.clone());
-                    receipt
-                }
-            }
-            SessionServiceRequest::BuyUpgrade { index } => {
-                upgrade_offers(player).get(index).map_or_else(
-                    || "Upgrade purchased.".to_owned(),
-                    |offer| {
-                        format!(
-                            "Bought {}.",
-                            upgrade_tier_name(offer.kind, offer.level.saturating_sub(1))
-                        )
-                    },
-                )
-            }
-            SessionServiceRequest::BuyBombBundle { .. }
-            | SessionServiceRequest::BuyMiningRockets
-            | SessionServiceRequest::ClaimFreeTestCharge => {
-                format!("Nix packed your charges. You now carry {}.", player.bombs)
-            }
-            SessionServiceRequest::SalvagePatchHull => format!(
-                "Salvage Yard patch job restored {:.0} hull.",
-                player.hull - pending.hull
-            ),
-            SessionServiceRequest::Finance => {
-                cue = SoundCue::Sell;
-                if earned > 0 {
-                    format!(
-                        "HQ finance issued a {earned} credit advance. Risk-adjusted payoff: {} credits.",
-                        player.loan_debt
-                    )
-                } else {
-                    format!(
-                        "Paid {spent} credits toward HQ debt. Remaining: {}.",
-                        player.loan_debt
-                    )
-                }
-            }
-            SessionServiceRequest::BuyInsurance => format!(
-                "Ledger sold tier {} rescue insurance. Higher tiers reduce fees and cargo loss.",
-                player.insurance_tier
-            ),
-            SessionServiceRequest::CraftRecipe { recipe } => {
-                format!("Crafted {}: {}.", recipe.name(), recipe.description())
-            }
-            SessionServiceRequest::UpgradeTownBuilding { building } => format!(
-                "{} upgraded to level {}. Deep Claim reputation increased.",
-                building.name(),
-                ctx.world.progression().town_development.level(building)
-            ),
-            SessionServiceRequest::SalvageRecoverLostCargo
-            | SessionServiceRequest::SalvageLaunchDrone => {
-                "Mara recovered your marked lost cargo.".to_owned()
-            }
-            SessionServiceRequest::SalvageRecoverWreckedPart => {
-                "Mara recovered a wrecked rig part.".to_owned()
-            }
-            SessionServiceRequest::SalvageClearCollapseZones => {
-                cue = SoundCue::Milestone;
-                format!("Collapse-zone warnings cleared for {earned} credits.")
-            }
-            SessionServiceRequest::SalvageSellScrapTip | SessionServiceRequest::SellScanData => {
-                cue = SoundCue::Sell;
-                format!("Sold data for {earned} credits.")
-            }
-            SessionServiceRequest::CompleteDepotWork => {
-                cue = SoundCue::Sell;
-                let receipt = format!("Contract work complete: earned {earned} credits.");
-                self.push_receipt(receipt.clone());
-                receipt
-            }
-            SessionServiceRequest::StartSideContract => {
-                cue = SoundCue::Ui;
-                ctx.world
-                    .progression()
-                    .active_side_contracts
-                    .last()
-                    .map_or_else(
-                        || "Side contract posted.".to_owned(),
-                        |contract| {
-                            format!(
-                                "Side contract posted: {:?} x{}.",
-                                contract.target, contract.required
-                            )
-                        },
-                    )
-            }
-            SessionServiceRequest::AcceptExpedition { .. } => {
-                cue = SoundCue::Ui;
-                "Expedition accepted.".to_owned()
-            }
-            SessionServiceRequest::AbandonExpedition { .. } => {
-                cue = SoundCue::Ui;
-                "Expedition abandoned.".to_owned()
-            }
-        };
-        self.sound_cues.push(cue);
-    }
-
-    fn push_receipt(&mut self, receipt: String) {
-        self.depot_receipts.push(receipt);
-        if self.depot_receipts.len() > 5 {
-            self.depot_receipts.remove(0);
-        }
-    }
-
     /// Confirm on an options row (the rows `menus::draw_options` lists): volume steps up,
     /// fullscreen toggles, back closes.
     fn confirm_options(&mut self) {
@@ -1676,6 +1931,10 @@ mod tests {
         let mut shell = ShellState::new(crate::save::SettingsFile::default());
         shell.enter_world("test", 0.0);
         shell.save_dirty = true;
+        assert!(
+            ModalScreen::UnsavedExitConfirm.is_global() && ModalScreen::ExitConfirm.is_global()
+        );
+        assert!(!ModalScreen::Shop.is_global() && !ModalScreen::Inventory.is_global());
 
         shell.request_exit_or_prompt();
         assert_eq!(shell.modal, Some(ModalScreen::UnsavedExitConfirm));
@@ -1687,9 +1946,11 @@ mod tests {
     }
 
     fn ctx(world: &WorldState) -> ShellContext<'_> {
+        // Tests are short-lived: leaking the seat list keeps the context `Copy` like the app's.
+        let players: &'static [PlayerId] = Box::leak(world.player_ids().collect());
         ShellContext {
             world,
-            player: world.player_ids().next(),
+            players,
             saves_exist: false,
         }
     }
@@ -1719,12 +1980,12 @@ mod tests {
             !shell.tuning_keys_active(),
             "closed overlay: the keys scroll"
         );
-        assert!(!tunes(&shell.update(page_up, 0.016, ctx(&world))));
+        assert!(!tunes(&shell.update(&[page_up], 0.016, ctx(&world))));
 
         shell.online.show_net_debug = true;
         assert_eq!(shell.tuning_keys_active(), cfg!(debug_assertions));
         assert_eq!(
-            tunes(&shell.update(page_up, 0.016, ctx(&world))),
+            tunes(&shell.update(&[page_up], 0.016, ctx(&world))),
             cfg!(debug_assertions),
             "open overlay in a dev build: the keys tune (and the renderer leaves them alone)"
         );
@@ -1734,7 +1995,7 @@ mod tests {
     fn gamepad_back_closes_menus_but_never_pauses_or_quits() {
         let world = WorldState::new_game(PlayerId::new(1));
         let mut shell = ShellState::default();
-        let requests = shell.update(back(), 0.016, ctx(&world));
+        let requests = shell.update(&[back()], 0.016, ctx(&world));
         assert!(
             requests.is_empty() && !shell.request_exit,
             "B on the title does nothing"
@@ -1742,35 +2003,35 @@ mod tests {
         assert_eq!(shell.run_mode, RunMode::Title);
 
         shell.enter_world("test", 0.0);
-        shell.update(back(), 0.016, ctx(&world));
+        shell.update(&[back()], 0.016, ctx(&world));
         assert_eq!(
             shell.run_mode,
             RunMode::Playing,
             "B while playing does not pause"
         );
 
-        shell.modal = Some(ModalScreen::Inventory);
-        shell.update(back(), 0.016, ctx(&world));
-        assert_eq!(shell.modal, None, "B closes a modal");
+        shell.seat_mut(0).modal = Some(ModalScreen::Inventory);
+        shell.update(&[back()], 0.016, ctx(&world));
+        assert_eq!(shell.seat(0).modal, None, "B closes a modal");
 
         shell.run_mode = RunMode::Paused;
-        shell.update(back(), 0.016, ctx(&world));
+        shell.update(&[back()], 0.016, ctx(&world));
         assert_eq!(
             shell.run_mode,
             RunMode::Playing,
             "B resumes from the pause menu"
         );
 
-        shell.run_mode = RunMode::Interior;
-        shell.interior_zone = Some(SurfaceZone::Fuel);
-        shell.update(back(), 0.016, ctx(&world));
-        assert_eq!(shell.run_mode, RunMode::Playing, "B leaves a building");
+        shell.seat_mut(0).interior_zone = Some(SurfaceZone::Fuel);
+        shell.update(&[back()], 0.016, ctx(&world));
+        assert!(!shell.seat(0).inside(), "B leaves a building");
+        assert_eq!(shell.run_mode, RunMode::Playing);
 
         let escape = PlayerInput {
             cancel: true,
             ..PlayerInput::default()
         };
-        shell.update(escape, 0.016, ctx(&world));
+        shell.update(&[escape], 0.016, ctx(&world));
         assert_eq!(shell.run_mode, RunMode::Paused, "Esc still pauses");
     }
 
@@ -1783,19 +2044,19 @@ mod tests {
             ..ShellState::default()
         };
         shell.update(
-            PlayerInput {
+            &[PlayerInput {
                 tab_next: true,
                 ..PlayerInput::default()
-            },
+            }],
             0.016,
             ctx(&world),
         );
         assert!((shell.master_volume - 0.6).abs() < 1e-5);
         shell.update(
-            PlayerInput {
+            &[PlayerInput {
                 menu_left: true,
                 ..PlayerInput::default()
-            },
+            }],
             0.016,
             ctx(&world),
         );
@@ -1803,10 +2064,10 @@ mod tests {
         shell.selected_menu_item = 1;
         let fullscreen = shell.fullscreen;
         shell.update(
-            PlayerInput {
+            &[PlayerInput {
                 confirm: true,
                 ..PlayerInput::default()
-            },
+            }],
             0.016,
             ctx(&world),
         );
@@ -1817,10 +2078,10 @@ mod tests {
         );
         shell.selected_menu_item = 2;
         shell.update(
-            PlayerInput {
+            &[PlayerInput {
                 confirm: true,
                 ..PlayerInput::default()
-            },
+            }],
             0.016,
             ctx(&world),
         );
@@ -1830,14 +2091,23 @@ mod tests {
     #[test]
     fn messages_name_the_active_devices_buttons() {
         let mut shell = ShellState::default();
-        shell.enter_interior(SurfaceZone::Fuel);
-        assert!(shell.message.contains("press E"), "{}", shell.message);
-        shell.seat_devices = vec![InputDevice::Gamepad {
-            index: 0,
-            family: crate::input::devices::PadFamily::Xbox,
-        }];
-        shell.enter_interior(SurfaceZone::Fuel);
-        assert!(shell.message.contains("press X"), "{}", shell.message);
-        assert!(shell.message.contains("B leaves"), "{}", shell.message);
+        shell.enter_interior(0, SurfaceZone::Fuel);
+        let message = &shell.seat(0).message;
+        assert!(message.contains("press E"), "{message}");
+        shell.seat_devices = vec![
+            InputDevice::KEYBOARD,
+            InputDevice::Gamepad {
+                index: 0,
+                family: crate::input::devices::PadFamily::Xbox,
+            },
+        ];
+        shell.enter_interior(1, SurfaceZone::Fuel);
+        let message = &shell.seat(1).message;
+        assert!(message.contains("press X"), "{message}");
+        assert!(message.contains("B leaves"), "{message}");
+        assert!(
+            shell.seat(0).message.contains("press E"),
+            "each seat's messages name its own device"
+        );
     }
 }

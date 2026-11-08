@@ -36,8 +36,8 @@ mod props;
 use crate::{
     input::prompts::Prompt,
     pixel_scale,
-    render_snapshot::{MarketQuote, ViewSnapshot},
-    shell::{ServiceAnimation, ShellState, interior_service_x, surface_zone_label},
+    render_snapshot::{MarketQuote, ViewSnapshot, Viewport},
+    shell::{SeatUi, ServiceAnimation, interior_service_x, surface_zone_label},
 };
 
 /// Room canvas size in art pixels.
@@ -62,12 +62,45 @@ const COUNTER_HEIGHT: i32 = 24;
 /// x 169 at 16:9 sizes, so a long sign shifts right instead of disappearing under the dialog.
 const SIGN_MIN_X: i32 = 174;
 
+/// The part of the framebuffer a room is drawn into: the whole window for one player, or a
+/// split-screen seat's view.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct RoomArea {
+    /// Framebuffer rect in physical pixels.
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    /// The seat's view (logical points) in split-screen; `None` fills the window.
+    pub viewport: Option<Viewport>,
+    /// Lift the room to the top of the area (a counter panel docked along the bottom of a tall
+    /// split-screen view would otherwise cover the floor).
+    pub align_top: bool,
+}
+
+impl RoomArea {
+    /// The whole `render_width` x `render_height` framebuffer.
+    pub(super) const fn window(render_width: i32, render_height: i32) -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            width: render_width,
+            height: render_height,
+            viewport: None,
+            align_top: false,
+        }
+    }
+}
+
 /// Where the room canvas sits in the framebuffer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct RoomPlacement {
     /// Physical pixels per room art pixel.
     pixel: i32,
-    /// Framebuffer position of the room's top-left corner.
+    /// Framebuffer position of the area the room is drawn into.
+    origin_x: i32,
+    origin_y: i32,
+    /// Position of the room's top-left corner inside that area.
     offset_x: i32,
     offset_y: i32,
     render_width: i32,
@@ -75,21 +108,36 @@ struct RoomPlacement {
 }
 
 impl RoomPlacement {
+    #[cfg(test)]
     fn fit(render_width: i32, render_height: i32) -> Self {
+        Self::fit_area(RoomArea::window(render_width, render_height))
+    }
+
+    fn fit_area(area: RoomArea) -> Self {
         let pixel =
-            pixel_scale::fit_pixel_size((render_width, render_height), (ROOM_WIDTH, ROOM_HEIGHT));
+            pixel_scale::fit_pixel_size((area.width, area.height), (ROOM_WIDTH, ROOM_HEIGHT));
+        let centred_y = (area.height - ROOM_HEIGHT * pixel) / 2;
         Self {
             pixel,
-            offset_x: (render_width - ROOM_WIDTH * pixel) / 2,
-            offset_y: (render_height - ROOM_HEIGHT * pixel) / 2,
-            render_width,
-            render_height,
+            origin_x: area.x,
+            origin_y: area.y,
+            offset_x: (area.width - ROOM_WIDTH * pixel) / 2,
+            offset_y: if area.align_top {
+                centred_y.min(0)
+            } else {
+                centred_y
+            },
+            render_width: area.width,
+            render_height: area.height,
         }
     }
 
     fn camera(self) -> Camera2D {
         Camera2D {
-            offset: Vector2::new(self.offset_x as f32, self.offset_y as f32),
+            offset: Vector2::new(
+                (self.origin_x + self.offset_x) as f32,
+                (self.origin_y + self.offset_y) as f32,
+            ),
             target: Vector2::zero(),
             rotation: 0.0,
             zoom: self.pixel as f32,
@@ -113,8 +161,8 @@ impl RoomPlacement {
     /// A room point in UI canvas art pixels.
     const fn to_canvas(self, canvas: ui_kit::UiCanvas, x: i32, y: i32) -> (i32, i32) {
         (
-            (self.offset_x + x * self.pixel) / canvas.pixel,
-            (self.offset_y + y * self.pixel) / canvas.pixel,
+            (self.origin_x - canvas.origin_x + self.offset_x + x * self.pixel) / canvas.pixel,
+            (self.origin_y - canvas.origin_y + self.offset_y + y * self.pixel) / canvas.pixel,
         )
     }
 }
@@ -150,21 +198,35 @@ const fn sign_text(zone: SurfaceZone) -> &'static str {
     }
 }
 
+/// Draws `seat`'s building interior into `area`, then (on the current UI canvas, which covers
+/// the same area) its name plate, controls, keeper's line and door/counter prompts. In
+/// split-screen the plate names the seat's player (`player`).
 pub(super) fn draw_interior(
     draw: &mut RaylibDrawHandle<'_>,
-    shell: &ShellState,
+    seat: &SeatUi,
     view: &ViewSnapshot<'_>,
     market: &[MarketQuote],
+    area: RoomArea,
+    player: Option<usize>,
 ) {
-    let zone = shell.interior_zone.unwrap_or(SurfaceZone::Depot);
-    let set = interior_set(zone);
-    let placement = RoomPlacement::fit(draw.get_render_width(), draw.get_render_height());
+    let zone = seat.interior_zone.unwrap_or(SurfaceZone::Depot);
+    let room_set = interior_set(zone);
+    let placement = RoomPlacement::fit_area(area);
     let seconds = ui_kit::seconds();
-    draw.clear_background(set.shadow);
+    match area.viewport {
+        None => draw.clear_background(room_set.shadow),
+        Some(viewport) => draw.draw_rectangle(
+            viewport.x,
+            viewport.y,
+            viewport.width,
+            viewport.height,
+            room_set.shadow,
+        ),
+    }
     let counter_x = room_pixel_x(interior_service_x(zone)) - COUNTER_WIDTH / 2;
     {
         let mut room = draw.begin_mode2D(placement.camera());
-        draw_room_shell(&mut room, set, placement);
+        draw_room_shell(&mut room, room_set, placement);
         draw_door(&mut room);
         let context = props::RoomContext {
             zone,
@@ -178,32 +240,22 @@ pub(super) fn draw_interior(
             props::draw_room_props(&mut room, &context);
         }
         draw_lamps(&mut room, zone, counter_x);
-        draw_sign(&mut room, zone, set, counter_x);
-        draw_counter(&mut room, set, counter_x, seconds);
+        draw_sign(&mut room, zone, room_set, counter_x);
+        draw_counter(&mut room, room_set, counter_x, seconds);
         props::draw_counter_props(&mut room, &context);
-        draw_service_animation(&mut room, shell, zone, counter_x);
-        draw_rig(&mut room, shell, seconds);
+        draw_service_animation(&mut room, seat, zone, counter_x);
+        draw_rig(&mut room, seat, seconds);
     }
 
     let _canvas = UiCanvasScope::begin(draw);
     let canvas = ui_kit::canvas();
-    // Building name plate.
-    let title = surface_zone_label(zone);
-    let plate_width = ui_kit::text_width(title, TextStyle::Bold) + 16;
-    if shell.modal.is_none() {
-        ui_kit::panel(
-            draw,
-            Rectangle::new(8.0, 8.0, plate_width as f32, 19.0),
-            PanelStyle::Accent,
-        );
-        ui_kit::text(draw, title, 16, 13, TextStyle::Bold, GOLD);
-    }
-    if shell.modal.is_some() {
+    if seat.modal.is_some() {
         return;
     }
+    draw_name_plate(draw, surface_zone_label(zone), player);
     draw_controls_hint(draw, canvas);
-    let near_counter = (shell.interior_x - interior_service_x(zone)).abs() <= COUNTER_REACH;
-    let at_door = shell.interior_x < DOOR_REACH;
+    let near_counter = (seat.interior_x - interior_service_x(zone)).abs() <= COUNTER_REACH;
+    let at_door = seat.interior_x < DOOR_REACH;
     let keeper_x = counter_x + COUNTER_WIDTH / 2;
     let (bubble_x, bubble_y) = placement.to_canvas(canvas, keeper_x, FLOOR_Y - COUNTER_HEIGHT - 17);
     ui_kit::tooltip(
@@ -220,6 +272,25 @@ pub(super) fn draw_interior(
         let label = if at_door { "Leave" } else { "Use counter" };
         draw_key_prompt(draw, prompt_x, prompt_y, hint(Prompt::Use, label));
     }
+}
+
+/// The building's name plate (top-left), led by the player's tag in split-screen.
+fn draw_name_plate(draw: &mut RaylibDrawHandle<'_>, title: &str, player: Option<usize>) {
+    let tag = player.map(|seat| format!("P{}", seat + 1));
+    let tag_width = tag
+        .as_deref()
+        .map_or(0, |tag| ui_kit::text_width(tag, TextStyle::Bold) + 7);
+    let plate_width = tag_width + ui_kit::text_width(title, TextStyle::Bold) + 16;
+    ui_kit::panel(
+        draw,
+        Rectangle::new(8.0, 8.0, plate_width as f32, 19.0),
+        PanelStyle::Accent,
+    );
+    if let Some(tag) = &tag {
+        ui_kit::text(draw, tag, 16, 13, TextStyle::Bold, BONE);
+        draw.draw_rectangle(16 + tag_width - 5, 12, 1, 11, palette::with_alpha(BONE, 90));
+    }
+    ui_kit::text(draw, title, 16 + tag_width, 13, TextStyle::Bold, GOLD);
 }
 
 /// A small "button + action" prompt centred on `x`, bobbing above `y`.
@@ -592,15 +663,15 @@ fn draw_shop_props(draw: &mut impl RaylibDraw, counter_x: i32, seconds: f32) {
 
 fn draw_service_animation(
     draw: &mut impl RaylibDraw,
-    shell: &ShellState,
+    seat: &SeatUi,
     zone: SurfaceZone,
     counter_x: i32,
 ) {
-    let Some(animation) = shell.service_animation else {
+    let Some(animation) = seat.service_animation else {
         return;
     };
-    let step = (shell.service_animation_seconds * 18.0) as i32;
-    let rig_x = room_pixel_x(shell.interior_x);
+    let step = (seat.service_animation_seconds * 18.0) as i32;
+    let rig_x = room_pixel_x(seat.interior_x);
     match animation {
         ServiceAnimation::Fuel if zone == SurfaceZone::Fuel => {
             // Hose from the counter to the rig, with fuel pulses running along it.
@@ -630,10 +701,10 @@ fn draw_service_animation(
     }
 }
 
-/// The player's rig standing on the floor at the shell's `interior_x`.
-fn draw_rig(draw: &mut impl RaylibDraw, shell: &ShellState, seconds: f32) {
+/// The player's rig standing on the floor at the seat's `interior_x`.
+fn draw_rig(draw: &mut impl RaylibDraw, seat: &SeatUi, seconds: f32) {
     let body = &rig::RIG;
-    let x = room_pixel_x(shell.interior_x) - body.width() / 2;
+    let x = room_pixel_x(seat.interior_x) - body.width() / 2;
     let y = FLOOR_Y - body.height();
     draw.draw_rectangle(
         x + 1,
@@ -642,7 +713,7 @@ fn draw_rig(draw: &mut impl RaylibDraw, shell: &ShellState, seconds: f32) {
         1,
         palette::with_alpha(INK, 120),
     );
-    let flip = shell.interior_facing < 0.0;
+    let flip = seat.interior_facing < 0.0;
     // Tracks roll only while the rig is walking (approximated by the animation clock).
     let frame = body.frame_at(seconds);
     room_sprite(draw, body, frame, x, y, flip);

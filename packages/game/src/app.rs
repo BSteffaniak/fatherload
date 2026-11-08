@@ -118,7 +118,7 @@ pub fn run() {
         if input.primary.paste {
             input.clipboard = raylib.get_clipboard_text().ok();
         }
-        renderer.apply_ui_input(input.primary, game.shell.tuning_keys_active());
+        renderer.apply_ui_input(&input.seat_inputs(), &game.shell);
         window.track(&raylib);
         game.shell.window = window.settings();
 
