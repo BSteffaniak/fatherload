@@ -315,7 +315,10 @@ fn draw_key_prompt(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32, action: Hint
     };
     let bob = (ui_kit::seconds() * 2.5) as i32 % 2;
     let width = content + 8;
-    let left = x - width / 2;
+    // Centred on its target, but never past the canvas edge (a narrow split-screen view puts
+    // the door right at the edge).
+    let canvas_width = ui_kit::canvas().width;
+    let left = (x - width / 2).clamp(4, (canvas_width - width - 4).max(4));
     let top = y - 17 - bob;
     ui_kit::panel(
         draw,

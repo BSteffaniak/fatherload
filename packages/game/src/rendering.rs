@@ -413,8 +413,17 @@ impl GameRenderer {
                     width,
                     height,
                     viewport: Some(view.viewport),
-                    align_top: seat.modal.is_some()
-                        && layout::counter_sheet_leaves_room(canvas.rect()),
+                    // Narrow views keep the room against the top, so it stays put when the
+                    // counter panel docks below the floor and when it closes. A room drawn
+                    // smaller than the UI (two seats at the minimum window) stays centred
+                    // until the panel opens: at the top, the keeper's line would cover the
+                    // name plate.
+                    align_top: layout::counter_sheet_leaves_room(canvas.rect())
+                        && (seat.modal.is_some()
+                            || crate::pixel_scale::fit_pixel_size(
+                                (width, height),
+                                (interior::ROOM_WIDTH, interior::ROOM_HEIGHT),
+                            ) >= canvas.pixel),
                 }
             } else {
                 RoomArea::window(draw.get_render_width(), draw.get_render_height())
