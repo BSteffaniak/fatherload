@@ -120,13 +120,18 @@ One art pixel always covers a whole number of physical framebuffer pixels (`pixe
   rows they get a compact header (1x title, one subtitle and footer line), and counter panels
   dock along the bottom at full width below 460 columns (`layout::counter_panel_is_sheet`).
   Only global screens (title, pause, options, slots, exit prompts, lobby) use the
-  whole-window canvas.
+  whole-window canvas. A grid cell no seat uses (three seats in a 2x2 grid) is filled with
+  `NIGHT` and a small "Player 4 / spare controller: A join" card (`draw_free_seats`), never
+  left as bare backdrop.
 - **Interiors**: a room is a fixed 320x180 art-pixel canvas drawn at
   `fit_pixel_size(framebuffer, (320, 180))` (4 px at 720p, 6 px at 1080p) and centred; walls and
   floor extend past it on wide screens. Room art is therefore chunkier than UI art (2x), which
   reads as a close-up. UI drawn over a room uses the normal UI canvas. In split-screen the room
-  fits the seat's view (`interior::RoomArea`) and lifts to the top of a tall view while a
-  counter panel is docked along its bottom, with a `P<n>` tag on the name plate.
+  fits the seat's view (`interior::RoomArea`) with a `P<n>` tag on the name plate. In a tall,
+  narrow view (where the counter panel docks along the bottom) the room always sits against the
+  top, so it does not jump when the panel opens or closes; only a room drawn smaller than the UI
+  (two seats at 960x540) stays centred until the panel opens, so the keeper's line cannot cover
+  the name plate. Door and counter prompts are clamped inside the view.
 
 Text: the pixel font is 9 art pixels tall (cap height 7). `TextStyle::Body` (regular, 1x),
 `Bold` (1x) and `Title` (bold, 2x) are the only sizes. Text always gets a 1-pixel `INK` drop
@@ -332,7 +337,7 @@ no panel open, `toast_receipt`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
 `modal_exit_confirm`, `modal_inventory`, `modal_options`, `modal_save_slots`, `map`,
 `online_lobby_host`, `online_lobby_client`, `online_join_address`, `online_lan_browser`,
 `net_overlay`, `split_screen`, split-screen seat UI (`split_shop_mining`,
-`split_two_interiors`, `split_four_mixed`, `split_pad_counters`, `split_personal_dialogs`,
+`split_two_interiors`, `split_three_seats`, `split_four_mixed`, `split_pad_counters`, `split_personal_dialogs`,
 `split_room_prompts`, `split_rescue_help`, `split_pause`), `rescue_prompt`, `prompt_sheet`,
 controller prompts
 (`pad_title`, `pad_interior_shop`, `pad_room`, `pad_pause`, `pad_hud`, `pad_help`,
