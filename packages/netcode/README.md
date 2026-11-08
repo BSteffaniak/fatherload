@@ -4,6 +4,7 @@ Sans-IO multiplayer netcode for Drillgame (see `multiplayer-architecture-plan.md
 sections 5-8, 11.2, 15 and 16).
 
 - `NetSimulation`: the trait a gameplay simulation implements to be hosted and predicted.
+- `world`: `NetSimulation` for the real `drillgame_simulation::WorldState`.
 - `HostSession`: authoritative fixed-tick host with local seats and remote clients.
 - `ClientSession`: prediction, reconciliation, clock sync and remote interpolation.
 - `protocol`: `ClientMessage` / `ServerMessage` and the versioned postcard codec.
@@ -11,4 +12,5 @@ sections 5-8, 11.2, 15 and 16).
 
 No sockets, threads, async runtimes or wall clock: time is always passed in as a `Duration`.
 
-The `harness` feature exposes a toy simulation, scripted bots and the harness.
+The `harness` feature exposes the end-to-end harness (generic over `HarnessSim`), scripted bots
+for the real world and for a small toy simulation used by unit tests.
