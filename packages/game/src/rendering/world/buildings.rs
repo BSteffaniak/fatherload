@@ -371,11 +371,8 @@ fn headquarters(draw: &mut impl RaylibDraw, lot: Lot<'_>) {
     pen.rect(draw, 19, 34, 90, 2, SLATE_LIGHT);
     pen.rect(draw, 19, 60, 90, 3, FOG);
     for (row, y) in [(0, 15), (1, 39)] {
-        for column in 0..5 {
-            if column == 2 {
-                continue;
-            }
-            let x = 25 + column * 16;
+        // Two windows each side, mirrored about the centre plaque and entrance.
+        for x in [23, 39, 77, 93] {
             window(draw, pen, x, y, 12, 12, row == 1 && lot.open);
         }
     }
