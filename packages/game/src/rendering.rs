@@ -251,10 +251,12 @@ impl GameRenderer {
             draw_net_debug(draw, shell);
         }
 
+        // Bottom-left corner: the top edge belongs to the HUD cards, bottom-right to the minimap.
+        let screen_height = draw.get_screen_height();
         draw.draw_text(
             &format!("Vol {:.0}% (+/-)", shell.master_volume * 100.0),
-            1030,
-            20,
+            12,
+            screen_height - 26,
             18,
             Color::LIGHTGRAY,
         );

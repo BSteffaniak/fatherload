@@ -137,7 +137,8 @@ pub(super) fn draw_minimap_for_view(
 ) {
     let width = (view.viewport.width / 6).clamp(86, 130);
     let height = (view.viewport.height / 8).clamp(64, 96);
-    let x = view.viewport.x + view.viewport.width - width - 18;
+    // Left of the depth ruler, which runs down the viewport's right edge.
+    let x = view.viewport.x + view.viewport.width - width - 40;
     let y = view.viewport.y + view.viewport.height - height - 38;
     draw.draw_rectangle(
         x - 8,

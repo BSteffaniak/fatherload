@@ -955,8 +955,15 @@ fn current_scroll_offset(id: &widgets::WidgetId) -> f32 {
 }
 
 fn modal_rect_for_viewport(viewport: Rectangle) -> Rectangle {
-    let max_width = (viewport.width * 0.78).clamp(620.0, 980.0);
-    let max_height = (viewport.height * 0.82).clamp(420.0, 620.0);
+    // Never larger than the viewport minus a margin, even below the preferred minimum.
+    let max_width = (viewport.width * 0.78)
+        .clamp(620.0, 980.0)
+        .min(viewport.width - 24.0)
+        .max(0.0);
+    let max_height = (viewport.height * 0.82)
+        .clamp(420.0, 620.0)
+        .min(viewport.height - 24.0)
+        .max(0.0);
     Rectangle {
         x: viewport.x + (viewport.width - max_width) * 0.5,
         y: viewport.y + (viewport.height - max_height) * 0.5,
@@ -1088,6 +1095,32 @@ mod tests {
         assert!(rect.width <= 980.0);
         assert!(rect.height <= 620.0);
         assert!((rect.x - ((1280.0 - rect.width) * 0.5)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn modal_rect_fits_every_supported_screen() {
+        for (width, height) in [
+            (960.0, 540.0),
+            (1280.0, 720.0),
+            (1920.0, 1080.0),
+            (2560.0, 1080.0),
+            (480.0, 270.0),
+        ] {
+            let viewport = Rectangle {
+                x: 0.0,
+                y: 0.0,
+                width,
+                height,
+            };
+            let rect = modal_rect_for_viewport(viewport);
+            assert!(
+                rect.x >= 0.0 && rect.y >= 0.0,
+                "{rect:?} at {width}x{height}"
+            );
+            assert!(rect.x + rect.width <= width && rect.y + rect.height <= height);
+            assert_near(rect.x + rect.width * 0.5, width * 0.5);
+            assert_near(rect.y + rect.height * 0.5, height * 0.5);
+        }
     }
 
     #[test]

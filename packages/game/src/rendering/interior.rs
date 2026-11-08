@@ -1,12 +1,84 @@
 use raylib::prelude::*;
 
-use super::{SCREEN_WIDTH, layout::UiLayout};
+use super::{layout::UiLayout, render_scale_for_draw};
 use drillgame_simulation::economy::SurfaceZone;
 
 use crate::{
     render_snapshot::ViewSnapshot,
     shell::{ServiceAnimation, ShellState},
 };
+
+/// The room is authored on a fixed canvas (logical points) and scaled uniformly to fit the screen.
+const CANVAS_WIDTH: f32 = 1280.0;
+const CANVAS_HEIGHT: f32 = 720.0;
+/// Canvas y where the floor starts; the floor colour extends to the screen edges below it.
+const FLOOR_Y: f32 = 455.0;
+/// Gap kept between UI panels and the screen edge.
+const PANEL_MARGIN: f32 = 8.0;
+
+/// Maps the fixed interior canvas onto a screen of any size: uniformly scaled to fit and centred,
+/// so the room never stretches or spills off screen.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct InteriorCanvas {
+    /// Screen points per canvas point.
+    scale: f32,
+    offset_x: f32,
+    offset_y: f32,
+    screen_width: f32,
+    screen_height: f32,
+}
+
+impl InteriorCanvas {
+    fn fit(screen_width: i32, screen_height: i32) -> Self {
+        let screen_width = screen_width.max(1) as f32;
+        let screen_height = screen_height.max(1) as f32;
+        let scale = (screen_width / CANVAS_WIDTH).min(screen_height / CANVAS_HEIGHT);
+        Self {
+            scale,
+            offset_x: CANVAS_WIDTH.mul_add(-scale, screen_width) * 0.5,
+            offset_y: CANVAS_HEIGHT.mul_add(-scale, screen_height) * 0.5,
+            screen_width,
+            screen_height,
+        }
+    }
+
+    fn to_screen(self, x: f32, y: f32) -> Vector2 {
+        Vector2::new(
+            x.mul_add(self.scale, self.offset_x),
+            y.mul_add(self.scale, self.offset_y),
+        )
+    }
+
+    /// The physical-pixel camera that draws canvas coordinates (see `render_scale_for_draw`).
+    fn camera(self, density: f32) -> Camera2D {
+        Camera2D {
+            offset: Vector2::new(self.offset_x * density, self.offset_y * density),
+            target: Vector2::zero(),
+            rotation: 0.0,
+            zoom: self.scale * density,
+        }
+    }
+
+    /// A UI panel authored at `rect` on the canvas: same size in screen points (so text stays
+    /// readable), centred where the canvas rect's centre lands, and kept on screen.
+    fn panel(self, rect: Rectangle) -> Rectangle {
+        let centre = self.to_screen(rect.x + rect.width * 0.5, rect.y + rect.height * 0.5);
+        let max_x = (self.screen_width - rect.width - PANEL_MARGIN).max(PANEL_MARGIN);
+        let max_y = (self.screen_height - rect.height - PANEL_MARGIN).max(PANEL_MARGIN);
+        Rectangle {
+            x: rect
+                .width
+                .mul_add(-0.5, centre.x)
+                .clamp(PANEL_MARGIN, max_x),
+            y: rect
+                .height
+                .mul_add(-0.5, centre.y)
+                .clamp(PANEL_MARGIN, max_y),
+            width: rect.width,
+            height: rect.height,
+        }
+    }
+}
 
 pub(super) fn draw_interior(
     draw: &mut RaylibDrawHandle<'_>,
@@ -15,56 +87,70 @@ pub(super) fn draw_interior(
 ) {
     let zone = shell.interior_zone.unwrap_or(SurfaceZone::Depot);
     let (wall, trim, title) = interior_theme(zone);
+    let (screen_width, screen_height) = (draw.get_screen_width(), draw.get_screen_height());
+    let canvas = InteriorCanvas::fit(screen_width, screen_height);
     draw.clear_background(wall);
-    draw.draw_rectangle(0, 455, SCREEN_WIDTH, 265, Color::new(38, 32, 28, 255));
-    draw.draw_rectangle(35, 130, 1210, 380, Color::new(18, 18, 24, 220));
-    draw.draw_rectangle_lines(35, 130, 1210, 380, trim);
+    let floor_y = canvas.to_screen(0.0, FLOOR_Y).y as i32;
+    draw.draw_rectangle(
+        0,
+        floor_y,
+        screen_width,
+        screen_height - floor_y,
+        Color::new(38, 32, 28, 255),
+    );
 
-    draw.draw_rectangle(58, 338, 48, 118, Color::new(55, 32, 20, 255));
-    draw.draw_rectangle_lines(58, 338, 48, 118, Color::GOLD);
-
-    draw_interior_props(draw, zone);
-    draw_service_animation(draw, shell, zone);
     let service_x = interior_screen_x(interior_service_x_render(zone));
-
     let player_x = interior_screen_x(shell.interior_x);
-    draw.draw_rectangle((player_x - 11.0) as i32, 402, 22, 38, Color::GOLD);
-    draw.draw_circle(player_x as i32, 392, 10.0, Color::SKYBLUE);
-    let visor_offset = if shell.interior_facing >= 0.0 { 5 } else { -13 };
-    draw.draw_rectangle(player_x as i32 + visor_offset, 389, 8, 5, Color::DARKBLUE);
+    {
+        let density = render_scale_for_draw(draw);
+        let mut scene = draw.begin_mode2D(canvas.camera(density));
+        scene.draw_rectangle(35, 130, 1210, 380, Color::new(18, 18, 24, 220));
+        scene.draw_rectangle_lines(35, 130, 1210, 380, trim);
+
+        scene.draw_rectangle(58, 338, 48, 118, Color::new(55, 32, 20, 255));
+        scene.draw_rectangle_lines(58, 338, 48, 118, Color::GOLD);
+
+        draw_interior_props(&mut scene, zone);
+        draw_service_animation(&mut scene, shell, zone);
+
+        scene.draw_rectangle((player_x - 11.0) as i32, 402, 22, 38, Color::GOLD);
+        scene.draw_circle(player_x as i32, 392, 10.0, Color::SKYBLUE);
+        let visor_offset = if shell.interior_facing >= 0.0 { 5 } else { -13 };
+        scene.draw_rectangle(player_x as i32 + visor_offset, 389, 8, 5, Color::DARKBLUE);
+    }
 
     let mut ui = UiLayout::screen(draw);
     ui.anchored_panel(
-        Rectangle {
+        canvas.panel(Rectangle {
             x: 55.0,
             y: 145.0,
             width: 610.0,
             height: 100.0,
-        },
+        }),
         title,
         Some(npc_line(zone, view)),
         trim,
     );
 
     ui.anchored_panel(
-        Rectangle {
+        canvas.panel(Rectangle {
             x: 350.0,
             y: 620.0,
             width: 580.0,
             height: 74.0,
-        },
+        }),
         "Controls",
         Some("A/D walk | E use counter/door | Esc exits"),
         Color::LIGHTGRAY,
     );
 
     ui.anchored_panel(
-        Rectangle {
+        canvas.panel(Rectangle {
             x: service_x - 78.0,
             y: 258.0,
             width: 156.0,
             height: 64.0,
-        },
+        }),
         "Press E",
         None,
         Color::GOLD,
@@ -93,7 +179,7 @@ fn npc_line(zone: SurfaceZone, view: &ViewSnapshot<'_>) -> &'static str {
     }
 }
 
-fn draw_service_animation(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState, zone: SurfaceZone) {
+fn draw_service_animation(draw: &mut impl RaylibDraw, shell: &ShellState, zone: SurfaceZone) {
     let Some(animation) = shell.service_animation else {
         return;
     };
@@ -115,7 +201,7 @@ fn draw_service_animation(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState, z
     }
 }
 
-fn draw_interior_props(draw: &mut RaylibDrawHandle<'_>, zone: SurfaceZone) {
+fn draw_interior_props(draw: &mut impl RaylibDraw, zone: SurfaceZone) {
     match zone {
         SurfaceZone::Fuel => {
             draw.draw_rectangle(760, 330, 70, 120, Color::DARKBLUE);
@@ -215,5 +301,60 @@ const fn interior_theme(zone: SurfaceZone) -> (Color, Color, &'static str) {
             Color::LIME,
             "Mara's Salvage Yard",
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_near(actual: f32, expected: f32) {
+        assert!((actual - expected).abs() < 1e-3, "{actual} != {expected}");
+    }
+
+    fn assert_inside(canvas: InteriorCanvas, rect: Rectangle) {
+        assert!(rect.x >= 0.0 && rect.y >= 0.0, "{rect:?}");
+        assert!(rect.x + rect.width <= canvas.screen_width, "{rect:?}");
+        assert!(rect.y + rect.height <= canvas.screen_height, "{rect:?}");
+    }
+
+    #[test]
+    fn canvas_fits_and_centres_at_any_size() {
+        let reference = InteriorCanvas::fit(1280, 720);
+        assert_near(reference.scale, 1.0);
+        assert_near(reference.offset_x, 0.0);
+        assert_near(reference.offset_y, 0.0);
+
+        let ultrawide = InteriorCanvas::fit(2560, 1080);
+        assert_near(ultrawide.scale, 1.5);
+        assert_near(ultrawide.offset_x, (2560.0 - 1920.0) * 0.5);
+        assert_near(ultrawide.offset_y, 0.0);
+
+        let tall = InteriorCanvas::fit(1000, 1000);
+        assert_near(tall.scale, 1000.0 / 1280.0);
+        assert_near(tall.offset_x, 0.0);
+        assert_near(tall.to_screen(0.0, 360.0).y, 500.0);
+    }
+
+    #[test]
+    fn panels_keep_their_size_and_stay_on_screen() {
+        let panels = [
+            Rectangle::new(55.0, 145.0, 610.0, 100.0),
+            Rectangle::new(350.0, 620.0, 580.0, 74.0),
+            Rectangle::new(interior_screen_x(0.0) - 78.0, 258.0, 156.0, 64.0),
+            Rectangle::new(interior_screen_x(640.0) - 78.0, 258.0, 156.0, 64.0),
+        ];
+        for (width, height) in [(960, 540), (1280, 720), (1920, 1080), (2560, 1080)] {
+            let canvas = InteriorCanvas::fit(width, height);
+            for authored in panels {
+                let placed = canvas.panel(authored);
+                assert_near(placed.width, authored.width);
+                assert_near(placed.height, authored.height);
+                assert_inside(canvas, placed);
+            }
+        }
+        let reference = InteriorCanvas::fit(1280, 720).panel(panels[0]);
+        assert_near(reference.x, panels[0].x);
+        assert_near(reference.y, panels[0].y);
     }
 }
