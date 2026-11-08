@@ -9,8 +9,8 @@ use drillgame_simulation::{
 use super::layout::{HudCard, ModalContent, Section, SectionItem, StatItem, UiLayout};
 use crate::{
     render_snapshot::{PlayerPresentation, RenderSnapshot, ViewSnapshot},
-    save::{latest_save_summary, save_slot_count, save_slot_metadata, saves_exist},
     runtime::OnlineRole,
+    save::{latest_save_summary, save_slot_count, save_slot_metadata, saves_exist},
     shell::{JOIN_MENU, ModalScreen, OnlineScreen, PauseOption, ShellState, TitleOption},
 };
 
@@ -1103,7 +1103,10 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                 "Join",
                 Color::SKYBLUE,
                 option_items(
-                    &JOIN_MENU.iter().map(|label| (*label).to_owned()).collect::<Vec<_>>(),
+                    &JOIN_MENU
+                        .iter()
+                        .map(|label| (*label).to_owned())
+                        .collect::<Vec<_>>(),
                     online.selected,
                 ),
             )],
@@ -1229,7 +1232,11 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                         Color::GOLD,
                         players,
                     ),
-                    Section::new("Menu", Color::SKYBLUE, option_items(&options, online.selected)),
+                    Section::new(
+                        "Menu",
+                        Color::SKYBLUE,
+                        option_items(&options, online.selected),
+                    ),
                 ],
             )
         }

@@ -1354,12 +1354,12 @@ mod tests {
         // Ready up (first lobby entry), then the host starts (first lobby entry).
         pair.frame(PlayerInput::default(), confirm);
         pair.until("the ready flag on the host", |pair| {
-            pair.host.shell.online.lobby.as_ref().is_some_and(|lobby| {
-                lobby
-                    .roster
-                    .iter()
-                    .any(|entry| !entry.local && entry.ready)
-            })
+            pair.host
+                .shell
+                .online
+                .lobby
+                .as_ref()
+                .is_some_and(|lobby| lobby.roster.iter().any(|entry| !entry.local && entry.ready))
         });
         pair.frame(confirm, PlayerInput::default());
         assert_eq!(pair.host.shell.run_mode, RunMode::Playing);

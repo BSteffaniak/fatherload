@@ -16,7 +16,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use drillgame_netcode::{ClientPhase, EndReason, HostConfig, HostSession, NetTuning, SessionParams};
+use drillgame_netcode::{
+    ClientPhase, EndReason, HostConfig, HostSession, NetTuning, SessionParams,
+};
 use drillgame_quic_transport::JoinTarget;
 use drillgame_simulation::WorldState;
 
@@ -402,17 +404,17 @@ fn print_bot_stats(bots: &[Bot], out: &mut impl Write) {
         let (client_up, client_down) = client.byte_rates();
         (up + client_up, down + client_down)
     });
-    let totals = bots
-        .iter()
-        .map(|bot| bot.brain.counters())
-        .fold(BotCounters::default(), |sum, counters| BotCounters {
+    let totals = bots.iter().map(|bot| bot.brain.counters()).fold(
+        BotCounters::default(),
+        |sum, counters| BotCounters {
             cycles: sum.cycles + counters.cycles,
             bombs: sum.bombs + counters.bombs,
             sales: sum.sales + counters.sales,
             refuels: sum.refuels + counters.refuels,
             rescues: sum.rescues + counters.rescues,
             actions: sum.actions + counters.actions,
-        });
+        },
+    );
     let _ignored = writeln!(
         out,
         "bots tick={tick} server_tick={server} clients={in_game}/{} corrections_per_s={corrections:.1} rtt_ms={rtt} up_bytes_per_s={up:.0} down_bytes_per_s={down:.0} actions={} bombs={} sales={} refuels={} rescues={} cycles={}",

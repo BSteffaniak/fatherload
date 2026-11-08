@@ -235,6 +235,9 @@ mod tests {
         meter.tick(0.5);
         assert!((meter.rate() - 1_000.0).abs() < 1.0);
         meter.tick(1.0);
-        assert!(meter.rate().abs() < f32::EPSILON, "an idle second reads zero");
+        assert!(
+            meter.rate().abs() < f32::EPSILON,
+            "an idle second reads zero"
+        );
     }
 }
