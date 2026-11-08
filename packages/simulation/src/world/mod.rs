@@ -69,6 +69,25 @@ pub struct ActiveDrillTimer {
     pub period_ticks: u64,
 }
 
+/// Number of most recent service transactions the world keeps.
+///
+/// The log is an audit trail and part of the replicated Economy section (resent in full whenever
+/// it changes), so it is bounded instead of growing for the whole session.
+pub const SERVICE_TRANSACTION_HISTORY: usize = 64;
+
+/// Appends a service transaction, dropping the oldest entries beyond
+/// [`SERVICE_TRANSACTION_HISTORY`].
+fn record_service_transaction(
+    log: &mut Vec<PlayerServiceTransaction>,
+    transaction: PlayerServiceTransaction,
+) {
+    log.push(transaction);
+    if log.len() > SERVICE_TRANSACTION_HISTORY {
+        let excess = log.len() - SERVICE_TRANSACTION_HISTORY;
+        log.drain(..excess);
+    }
+}
+
 const fn canonical_minerals() -> [MineralKind; 10] {
     [
         MineralKind::Copper,

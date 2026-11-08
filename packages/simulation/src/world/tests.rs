@@ -132,6 +132,35 @@ fn world_state_records_player_scoped_service_transactions() {
 }
 
 #[test]
+fn service_transaction_history_is_bounded() {
+    let game = WorldImport::new_game(LOCAL_PLAYER_ID);
+    let mut world = WorldState::from_import(&game);
+    let total = super::SERVICE_TRANSACTION_HISTORY + 10;
+    for _ in 0..total {
+        assert_eq!(
+            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Repair),
+            crate::PlayerScopedCommandOutcome::Applied
+        );
+    }
+    assert_eq!(
+        world.service_transactions().len(),
+        super::SERVICE_TRANSACTION_HISTORY
+    );
+    assert_eq!(
+        world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Refuel),
+        crate::PlayerScopedCommandOutcome::Applied
+    );
+    assert_eq!(
+        world.service_transactions().len(),
+        super::SERVICE_TRANSACTION_HISTORY
+    );
+    assert_eq!(
+        world.service_transactions().last().map(|t| t.kind),
+        Some(crate::PlayerTransactionKind::Refuel)
+    );
+}
+
+#[test]
 fn world_state_exposes_mutable_player_lookup() {
     let mut world = WorldState::new_game(LOCAL_PLAYER_ID);
 

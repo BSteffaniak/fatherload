@@ -20,6 +20,7 @@ use crate::{
 
 use super::{
     WorldState, canonical_market_factor, canonical_mineral_market_factor, canonical_minerals,
+    record_service_transaction,
 };
 
 /// Length of one market day.
@@ -219,14 +220,17 @@ impl WorldState {
         player.artifacts.clear();
         player.credits = player.credits.saturating_add(payout);
         self.progression.total_earnings = self.progression.total_earnings.saturating_add(payout);
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::SellCargo,
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: 0,
-        });
+        record_service_transaction(
+            &mut self.service_transactions,
+            PlayerServiceTransaction {
+                player_id,
+                kind: PlayerTransactionKind::SellCargo,
+                credits_before,
+                credits_after: player.credits,
+                cargo_before,
+                cargo_after: 0,
+            },
+        );
         PlayerScopedCommandOutcome::Applied
     }
 
@@ -483,14 +487,17 @@ impl WorldState {
         let reward = 420_u32.saturating_add(contract.required.min(10).saturating_mul(80));
         player.credits = player.credits.saturating_add(reward);
         self.progression.total_earnings = self.progression.total_earnings.saturating_add(reward);
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::CompleteContract,
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: player.cargo_used(),
-        });
+        record_service_transaction(
+            &mut self.service_transactions,
+            PlayerServiceTransaction {
+                player_id,
+                kind: PlayerTransactionKind::CompleteContract,
+                credits_before,
+                credits_after: player.credits,
+                cargo_before,
+                cargo_after: player.cargo_used(),
+            },
+        );
         PlayerScopedCommandOutcome::Applied
     }
 
@@ -757,14 +764,17 @@ impl WorldState {
         if !applied {
             return Some(PlayerScopedCommandOutcome::IgnoredUnavailable);
         }
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::BuyUpgrade,
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: player.cargo_used(),
-        });
+        record_service_transaction(
+            &mut self.service_transactions,
+            PlayerServiceTransaction {
+                player_id,
+                kind: PlayerTransactionKind::BuyUpgrade,
+                credits_before,
+                credits_after: player.credits,
+                cargo_before,
+                cargo_after: player.cargo_used(),
+            },
+        );
         Some(PlayerScopedCommandOutcome::Applied)
     }
 
@@ -856,14 +866,17 @@ impl WorldState {
                 .town_development
                 .reputation
                 .saturating_add(1);
-            self.service_transactions.push(PlayerServiceTransaction {
-                player_id,
-                kind: PlayerTransactionKind::CompleteContract,
-                credits_before,
-                credits_after,
-                cargo_before,
-                cargo_after,
-            });
+            record_service_transaction(
+                &mut self.service_transactions,
+                PlayerServiceTransaction {
+                    player_id,
+                    kind: PlayerTransactionKind::CompleteContract,
+                    credits_before,
+                    credits_after,
+                    cargo_before,
+                    cargo_after,
+                },
+            );
             return PlayerScopedCommandOutcome::Applied;
         }
         let Some(player) = self.players.get_mut(&player_id) else {
@@ -886,18 +899,21 @@ impl WorldState {
             self.progression.deep_claim_status = DeepClaimStatus::Unlocked;
         }
         debug_assert_eq!(self.progression.contracts.completed, before_completed + 1);
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: if completion.finished_story {
-                PlayerTransactionKind::WinGame
-            } else {
-                PlayerTransactionKind::CompleteContract
+        record_service_transaction(
+            &mut self.service_transactions,
+            PlayerServiceTransaction {
+                player_id,
+                kind: if completion.finished_story {
+                    PlayerTransactionKind::WinGame
+                } else {
+                    PlayerTransactionKind::CompleteContract
+                },
+                credits_before,
+                credits_after: player.credits,
+                cargo_before,
+                cargo_after: player.cargo_used(),
             },
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: player.cargo_used(),
-        });
+        );
         PlayerScopedCommandOutcome::Applied
     }
 
@@ -916,7 +932,7 @@ impl WorldState {
             cargo_after: player.cargo_used(),
         };
         player.credits = transaction.credits_after;
-        self.service_transactions.push(transaction);
+        record_service_transaction(&mut self.service_transactions, transaction);
         Some(transaction)
     }
 
@@ -938,7 +954,7 @@ impl WorldState {
             cargo_after: player.cargo_used(),
         };
         player.credits = transaction.credits_after;
-        self.service_transactions.push(transaction);
+        record_service_transaction(&mut self.service_transactions, transaction);
         Some(transaction)
     }
 
@@ -959,7 +975,7 @@ impl WorldState {
         };
         player.credits = transaction.credits_after;
         player.loan_debt = transaction.cargo_after;
-        self.service_transactions.push(transaction);
+        record_service_transaction(&mut self.service_transactions, transaction);
         Some(transaction)
     }
 
@@ -979,7 +995,7 @@ impl WorldState {
         };
         player.credits = transaction.credits_after;
         self.authoritative_summary.won_game = true;
-        self.service_transactions.push(transaction);
+        record_service_transaction(&mut self.service_transactions, transaction);
         Some(transaction)
     }
 }

@@ -17,7 +17,7 @@ use crate::{
     terrain::{DeepStratum, MineResult, TILE_SIZE, TileKind, TilePosition, deep_stratum_at_depth},
 };
 
-use super::WorldState;
+use super::{WorldState, record_service_transaction};
 
 /// Scanner cooldown after a scan.
 const SCANNER_COOLDOWN_MILLIS: u64 = 1_000;
@@ -288,28 +288,34 @@ impl WorldState {
                 let credits_before = player.credits;
                 let cargo_before = player.cargo_used();
                 refuel_amount(player, 1.0);
-                self.service_transactions.push(PlayerServiceTransaction {
-                    player_id,
-                    kind: PlayerTransactionKind::Refuel,
-                    credits_before,
-                    credits_after: player.credits,
-                    cargo_before,
-                    cargo_after: player.cargo_used(),
-                });
+                record_service_transaction(
+                    &mut self.service_transactions,
+                    PlayerServiceTransaction {
+                        player_id,
+                        kind: PlayerTransactionKind::Refuel,
+                        credits_before,
+                        credits_after: player.credits,
+                        cargo_before,
+                        cargo_after: player.cargo_used(),
+                    },
+                );
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::Repair => {
                 let credits_before = player.credits;
                 let cargo_before = player.cargo_used();
                 repair_amount(player, 1.0);
-                self.service_transactions.push(PlayerServiceTransaction {
-                    player_id,
-                    kind: PlayerTransactionKind::Repair,
-                    credits_before,
-                    credits_after: player.credits,
-                    cargo_before,
-                    cargo_after: player.cargo_used(),
-                });
+                record_service_transaction(
+                    &mut self.service_transactions,
+                    PlayerServiceTransaction {
+                        player_id,
+                        kind: PlayerTransactionKind::Repair,
+                        credits_before,
+                        credits_after: player.credits,
+                        cargo_before,
+                        cargo_after: player.cargo_used(),
+                    },
+                );
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::SellCargo => self.sell_canonical_cargo(player_id),
@@ -371,14 +377,17 @@ impl WorldState {
                 if buy_upgrade(player, index).is_err() {
                     return PlayerScopedCommandOutcome::IgnoredUnavailable;
                 }
-                self.service_transactions.push(PlayerServiceTransaction {
-                    player_id,
-                    kind: PlayerTransactionKind::BuyUpgrade,
-                    credits_before,
-                    credits_after: player.credits,
-                    cargo_before,
-                    cargo_after: player.cargo_used(),
-                });
+                record_service_transaction(
+                    &mut self.service_transactions,
+                    PlayerServiceTransaction {
+                        player_id,
+                        kind: PlayerTransactionKind::BuyUpgrade,
+                        credits_before,
+                        credits_after: player.credits,
+                        cargo_before,
+                        cargo_after: player.cargo_used(),
+                    },
+                );
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::Rescue => self.canonical_rescue_player(player_id),

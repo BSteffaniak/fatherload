@@ -9,7 +9,7 @@ use crate::{
     terrain::{TILE_SIZE, TilePosition},
 };
 
-use super::{LostCargoSite, WorldState};
+use super::{LostCargoSite, WorldState, record_service_transaction};
 
 impl WorldState {
     #[allow(
@@ -120,14 +120,17 @@ impl WorldState {
             .entry(player_id)
             .and_modify(|count| *count = count.saturating_add(1))
             .or_insert(1);
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::Rescue,
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: player.cargo_used(),
-        });
+        record_service_transaction(
+            &mut self.service_transactions,
+            PlayerServiceTransaction {
+                player_id,
+                kind: PlayerTransactionKind::Rescue,
+                credits_before,
+                credits_after: player.credits,
+                cargo_before,
+                cargo_after: player.cargo_used(),
+            },
+        );
         PlayerScopedCommandOutcome::Applied
     }
 
