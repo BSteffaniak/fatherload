@@ -366,12 +366,25 @@ impl GameRenderer {
             let canvas = ui_kit::canvas();
             let volume = format!("VOL {:.0}%", shell.master_volume * 100.0);
             let y = canvas.height - 15;
+            let hint = prompts::hint(crate::input::prompts::Prompt::Volume, "");
+            let text_width = ui_kit::text_width(&volume, TextStyle::Body);
+            if snapshot.views.len() > 1 && shell.gameplay_visible() {
+                // Split-screen views reach the bottom-left corner (a docked counter panel can
+                // sit there): the readout gets its own plate instead of overlapping them.
+                let width = text_width
+                    + prompts::prompt_width(hint, prompts::menu_device()).map_or(0, |w| w + 5);
+                ui_kit::panel(
+                    draw,
+                    Rectangle::new(1.0, (y - 4) as f32, (width + 10) as f32, 18.0),
+                    ui_kit::PanelStyle::Standard,
+                );
+            }
             ui_kit::text(draw, &volume, 6, y + 2, TextStyle::Body, palette::FOG);
             prompts::draw_prompt(
                 draw,
-                6 + ui_kit::text_width(&volume, TextStyle::Body) + 5,
+                6 + text_width + 5,
                 y,
-                prompts::hint(crate::input::prompts::Prompt::Volume, ""),
+                hint,
                 prompts::menu_device(),
                 palette::FOG,
             );
