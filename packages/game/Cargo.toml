@@ -12,13 +12,14 @@ version.workspace    = true
 
 [features]
 default          = []
-fail-on-warnings = []
+fail-on-warnings = ["drillgame_simulation/fail-on-warnings"]
 
 [[bin]]
 name = "drillgame"
 path = "src/main.rs"
 
 [dependencies]
+drillgame_simulation = { workspace = true }
 hostname   = { workspace = true }
 mdns-sd    = { workspace = true }
 quinn      = { workspace = true }

@@ -371,7 +371,7 @@ impl RealOnlineSessionController {
             crate::multiplayer::HostRuntimeConfig::default(),
             crate::multiplayer::SimulationTick::new(300),
         );
-        let world = crate::session::WorldState::from_legacy_game(game);
+        let world = <crate::session::WorldState as crate::session::LegacyWorldStateAdapter>::from_legacy_game(game);
         let epoch = self.typed_epoch;
         let keyframe = crate::multiplayer::AuthoritativeKeyframe {
             epoch,

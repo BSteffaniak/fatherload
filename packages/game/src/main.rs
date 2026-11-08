@@ -4,8 +4,6 @@
 
 mod app;
 mod audio;
-mod contract;
-mod economy;
 mod game_state;
 mod input;
 mod input_mapping;
@@ -13,14 +11,12 @@ mod lan_discovery;
 pub mod multiplayer;
 mod online_cli;
 mod online_session;
-mod player;
 mod rendering;
 mod save;
 mod session;
-mod surface;
-mod terrain;
 
 use app::run;
+use drillgame_simulation::{contract, economy, player, surface, terrain};
 
 fn main() {
     if let Some(action) = online_cli::parse_online_cli_action(std::env::args().skip(1)) {

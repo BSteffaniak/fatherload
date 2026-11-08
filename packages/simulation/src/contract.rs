@@ -45,6 +45,7 @@ impl ContractLog {
             finished_story,
         })
     }
+    #[must_use]
     pub const fn story_for_completed(completed: u32) -> &'static str {
         match completed {
             1 => "HQ: Copper confirms the claim. Push toward silver-bearing clay.",

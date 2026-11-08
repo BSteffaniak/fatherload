@@ -7,23 +7,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+pub use drillgame_simulation::{
+    FIXED_DELTA_SECONDS, InputSequence, PlayerCommand, PlayerId, SIMULATION_HZ,
+    SequencedPlayerCommand, SimulationTick,
+};
+
 const PROTOCOL_VERSION: u16 = 2;
-
-/// Stable identity for a player participating in an authoritative simulation.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct PlayerId(u64);
-
-impl PlayerId {
-    #[must_use]
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    #[must_use]
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-}
 
 /// Stable identity for a local or remote client view/input source.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -38,48 +27,6 @@ impl ClientId {
     #[must_use]
     pub const fn get(self) -> u64 {
         self.0
-    }
-}
-
-/// Monotonic authoritative simulation tick.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct SimulationTick(u64);
-
-impl SimulationTick {
-    #[must_use]
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    #[must_use]
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0 + 1)
-    }
-}
-
-/// Monotonic per-client input sequence used for acknowledgement and reconciliation.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-pub struct InputSequence(u32);
-
-impl InputSequence {
-    #[must_use]
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0.wrapping_add(1))
     }
 }
 
@@ -105,12 +52,6 @@ pub const LOCAL_PLAYER_ID: PlayerId = PlayerId::new(1);
 
 /// Single-player compatibility client id used while the current game is migrated.
 pub const LOCAL_CLIENT_ID: ClientId = ClientId::new(1);
-
-/// Fixed-tick simulation rate targeted by the multiplayer-ready architecture.
-pub const SIMULATION_HZ: u32 = 60;
-
-/// Fixed-tick simulation delta in seconds.
-pub const FIXED_DELTA_SECONDS: f32 = 1.0 / 60.0;
 
 /// Identifies one authoritative gameplay lifetime. Loading or replacing the world creates a new
 /// epoch so delayed packets from an earlier lifetime cannot affect the current simulation.
@@ -170,46 +111,6 @@ pub enum ClientAction {
     ToggleFullscreen,
     ToggleLocalMultiplayer,
     ExitRequested,
-}
-
-/// Authoritative gameplay commands submitted by a player.
-///
-/// This intentionally represents gameplay intent rather than keyboard/gamepad state so the same
-/// path can be used by local input, split-screen clients, online clients, replay, or AI.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub enum PlayerCommand {
-    Movement {
-        horizontal: f32,
-        thrust: bool,
-        drill_down: bool,
-    },
-    Interact,
-    Cancel,
-    Confirm,
-    UseScanner,
-    PlaceBomb,
-    PlaceInfrastructure {
-        slot: u8,
-    },
-    SelectUpgrade {
-        index: usize,
-    },
-    BuyUpgrade {
-        index: usize,
-    },
-    Refuel,
-    Repair,
-    SellCargo,
-    Rescue,
-}
-
-/// Command packet metadata needed for future network acknowledgement and reconciliation.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct SequencedPlayerCommand {
-    pub player_id: PlayerId,
-    pub sequence: InputSequence,
-    pub target_tick: SimulationTick,
-    pub command: PlayerCommand,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

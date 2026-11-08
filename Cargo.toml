@@ -1,5 +1,5 @@
 [workspace]
-members  = ["packages/game"]
+members  = ["packages/game", "packages/simulation"]
 resolver = "2"
 
 [workspace.package]
@@ -11,6 +11,7 @@ repository = "https://github.com/BSteffaniak/drillgame"
 version    = "0.0.1-alpha.0"
 
 [workspace.dependencies]
+drillgame_simulation = { version = "0.0.1-alpha.0", path = "packages/simulation" }
 hostname = "0.4.2"
 mdns-sd = "0.18.2"
 quinn = { version = "0.11.9", default-features = false, features = [

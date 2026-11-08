@@ -1,0 +1,18 @@
+[package]
+authors.workspace    = true
+categories           = ["games", "simulation"]
+description          = "Deterministic canonical gameplay simulation for Drillgame"
+edition.workspace    = true
+keywords             = ["game", "mining", "simulation", "deterministic"]
+license.workspace    = true
+name                 = "drillgame_simulation"
+readme               = "README.md"
+repository.workspace = true
+version.workspace    = true
+
+[features]
+default          = []
+fail-on-warnings = []
+
+[dependencies]
+serde = { workspace = true }

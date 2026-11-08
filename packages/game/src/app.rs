@@ -1243,9 +1243,11 @@ mod tests {
         assert_eq!(applied, 3);
         assert!(player.fuel > 1.0);
         assert!(player.hull > 1.0);
-        assert!(transaction_kinds.contains(&crate::session::PlayerTransactionKind::Refuel));
-        assert!(transaction_kinds.contains(&crate::session::PlayerTransactionKind::Repair));
-        assert!(transaction_kinds.contains(&crate::session::PlayerTransactionKind::BuyUpgrade));
+        assert!(transaction_kinds.contains(&drillgame_simulation::PlayerTransactionKind::Refuel));
+        assert!(transaction_kinds.contains(&drillgame_simulation::PlayerTransactionKind::Repair));
+        assert!(
+            transaction_kinds.contains(&drillgame_simulation::PlayerTransactionKind::BuyUpgrade)
+        );
         assert!(session.game().player.credits < 10_000);
     }
 

@@ -16,6 +16,13 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+pub use drillgame_simulation::{
+    ActiveWorldEvent, DrillDirection, DrillState, Expedition, ExpeditionObjectiveKind,
+    FallingBoulder, HazardCloud, InfrastructureKind, LegendaryBlueprint, PlacedBomb,
+    PlacedInfrastructure, RecipeKind, RigPartKind, RigSlot, ScanMarker, SessionServiceRequest,
+    SideContract, SideContractKind, TILE_SIZE, WorldEventKind, default_infrastructure_durability,
+};
+
 use crate::{
     contract::ContractLog,
     economy::{DeepClaimStatus, SurfaceZone, TownBuilding, TownDevelopment, upgrade_offers},
@@ -34,7 +41,6 @@ use crate::{
     },
 };
 
-pub const TILE_SIZE: f32 = 32.0;
 const WORLD_WIDTH: i32 = 240;
 const WORLD_HEIGHT: i32 = 220;
 const GRAVITY: f32 = 780.0;
@@ -69,159 +75,6 @@ const fn default_master_volume() -> f32 {
 
 const fn default_fullscreen() -> bool {
     false
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum DrillDirection {
-    Down,
-    Left,
-    Right,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct DrillState {
-    pub target: TilePosition,
-    pub direction: DrillDirection,
-    pub progress: f32,
-    pub initial_durability: u8,
-    pub seconds_per_chip: f32,
-    pub sound_timer: f32,
-    pub dust_timer: f32,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
-pub enum RigSlot {
-    DrillHead,
-    Engine,
-    HullPlating,
-    Radiator,
-    CargoModule,
-    ScannerModule,
-    UtilityModule,
-    EmergencySystem,
-}
-
-impl RigSlot {
-    #[must_use]
-    pub const fn title(self) -> &'static str {
-        match self {
-            Self::DrillHead => "Drill Head",
-            Self::Engine => "Engine",
-            Self::HullPlating => "Hull Plating",
-            Self::Radiator => "Radiator",
-            Self::CargoModule => "Cargo Module",
-            Self::ScannerModule => "Scanner Module",
-            Self::UtilityModule => "Utility Module",
-            Self::EmergencySystem => "Emergency System",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
-pub enum RigPartKind {
-    TitanDrill,
-    NeedleDrill,
-    ResonanceDrill,
-    LightweightEngine,
-    HaulerEngine,
-    BurstEngine,
-    ThermalHull,
-    ImpactHull,
-    PressureHull,
-    ProspectorScanner,
-    HazardScanner,
-    RelicScanner,
-    CargoBalloon,
-    ArmoredCargoBay,
-    SortedCargoRack,
-}
-
-impl RigPartKind {
-    #[must_use]
-    pub const fn title(self) -> &'static str {
-        match self {
-            Self::TitanDrill => "Titan Drill",
-            Self::NeedleDrill => "Needle Drill",
-            Self::ResonanceDrill => "Resonance Drill",
-            Self::LightweightEngine => "Lightweight Engine",
-            Self::HaulerEngine => "Hauler Engine",
-            Self::BurstEngine => "Burst Engine",
-            Self::ThermalHull => "Thermal Hull",
-            Self::ImpactHull => "Impact Hull",
-            Self::PressureHull => "Pressure Hull",
-            Self::ProspectorScanner => "Prospector Scanner",
-            Self::HazardScanner => "Hazard Scanner",
-            Self::RelicScanner => "Relic Scanner",
-            Self::CargoBalloon => "Cargo Balloon",
-            Self::ArmoredCargoBay => "Armored Cargo Bay",
-            Self::SortedCargoRack => "Sorted Cargo Rack",
-        }
-    }
-
-    #[must_use]
-    pub const fn slot(self) -> RigSlot {
-        match self {
-            Self::TitanDrill | Self::NeedleDrill | Self::ResonanceDrill => RigSlot::DrillHead,
-            Self::LightweightEngine | Self::HaulerEngine | Self::BurstEngine => RigSlot::Engine,
-            Self::ThermalHull | Self::ImpactHull | Self::PressureHull => RigSlot::HullPlating,
-            Self::ProspectorScanner | Self::HazardScanner | Self::RelicScanner => {
-                RigSlot::ScannerModule
-            }
-            Self::CargoBalloon | Self::ArmoredCargoBay | Self::SortedCargoRack => {
-                RigSlot::CargoModule
-            }
-        }
-    }
-
-    #[must_use]
-    pub const fn rarity(self) -> &'static str {
-        match self {
-            Self::ResonanceDrill | Self::PressureHull | Self::RelicScanner => "legendary",
-            Self::TitanDrill | Self::BurstEngine | Self::ArmoredCargoBay => "rare",
-            _ => "standard",
-        }
-    }
-
-    #[must_use]
-    pub const fn tradeoff(self) -> &'static str {
-        match self {
-            Self::TitanDrill => "slow, high power, high fuel burn",
-            Self::NeedleDrill => "fast through soft material, poor hard-rock performance",
-            Self::ResonanceDrill => {
-                "strong against crystal/ancient material, unstable near hazards"
-            }
-            Self::LightweightEngine => "agile, low cargo tolerance",
-            Self::HaulerEngine => "slow, handles heavy cargo well",
-            Self::BurstEngine => "strong thrust, inefficient fuel use",
-            Self::ThermalHull => "heat resistant, weak crash protection",
-            Self::ImpactHull => "crash resistant, poor heat resistance",
-            Self::PressureHull => "deep-zone specialist",
-            Self::ProspectorScanner => "finds ore veins, misses hazards",
-            Self::HazardScanner => "finds danger, limited ore detection",
-            Self::RelicScanner => "finds artifacts and anomalies",
-            Self::CargoBalloon => "huge capacity, bad handling",
-            Self::ArmoredCargoBay => "protects cargo, lower capacity",
-            Self::SortedCargoRack => "bonuses for diverse loads",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
-pub enum LegendaryBlueprint {
-    StarPlating,
-    VoidTank,
-    RelicSorter,
-}
-
-impl LegendaryBlueprint {
-    #[must_use]
-    pub const fn title(self) -> &'static str {
-        match self {
-            Self::StarPlating => "Star Plating",
-            Self::VoidTank => "Void Tank",
-            Self::RelicSorter => "Relic Sorter",
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -1928,33 +1781,6 @@ impl OnlineSaveBoundaryStatus {
 pub enum SessionSlotIoRequest {
     Save { slot: usize },
     Load { slot: usize },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SessionServiceRequest {
-    Refuel { menu_item: usize },
-    Repair { menu_item: usize },
-    SellCargo,
-    BuyUpgrade { index: usize },
-    BuyBombBundle { count: u32, cost: u32 },
-    BuyMiningRockets,
-    ClaimFreeTestCharge,
-    SalvagePatchHull,
-    Finance,
-    BuyInsurance,
-    CraftRecipe { recipe: RecipeKind },
-    UpgradeTownBuilding { building: TownBuilding },
-    SalvageRecoverLostCargo,
-    SalvageLaunchDrone,
-    SalvageRecoverWreckedPart,
-    SalvageClearCollapseZones,
-    SalvageSellScrapTip,
-    SellScanData,
-    AutoSortLowGradeCargo,
-    CompleteDepotWork,
-    StartSideContract,
-    AcceptExpedition { index: usize },
-    AbandonExpedition { index: usize },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -3702,163 +3528,6 @@ pub struct DustParticle {
     pub life: f32,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum InfrastructureKind {
-    SignalRelay,
-    SurveyDrone,
-    CargoLift,
-    TunnelSupport,
-    PumpStation,
-    OreProcessor,
-}
-
-impl InfrastructureKind {
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::SignalRelay => "Signal Relay",
-            Self::SurveyDrone => "Survey Drone",
-            Self::CargoLift => "Cargo Lift",
-            Self::TunnelSupport => "Tunnel Support",
-            Self::PumpStation => "Pump Station",
-            Self::OreProcessor => "Ore Processor",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct PlacedInfrastructure {
-    pub kind: InfrastructureKind,
-    pub position: TilePosition,
-    #[serde(default = "default_infrastructure_durability")]
-    pub durability: u8,
-}
-
-pub const fn default_infrastructure_durability() -> u8 {
-    100
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct HazardCloud {
-    pub x: f32,
-    pub y: f32,
-    pub life: f32,
-    pub radius: f32,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct PlacedBomb {
-    pub x: f32,
-    pub y: f32,
-    pub timer_seconds: f32,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct ScanMarker {
-    pub position: TilePosition,
-    pub kind: TileKind,
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub enum SideContractKind {
-    #[default]
-    Cargo,
-    DepthSurvey,
-    HazardScan,
-    Rush,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RecipeKind {
-    ReinforcedBulkhead,
-    AuxiliaryTank,
-    ExpandedSorter,
-    SignalRelayKit,
-    SurveyDroneKit,
-    CargoLiftKit,
-    TunnelSupportKit,
-    PumpStationKit,
-    OreProcessorKit,
-}
-
-impl RecipeKind {
-    pub const ALL: [Self; 9] = [
-        Self::ReinforcedBulkhead,
-        Self::AuxiliaryTank,
-        Self::ExpandedSorter,
-        Self::SignalRelayKit,
-        Self::SurveyDroneKit,
-        Self::CargoLiftKit,
-        Self::TunnelSupportKit,
-        Self::PumpStationKit,
-        Self::OreProcessorKit,
-    ];
-
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::ReinforcedBulkhead => "Reinforced Bulkhead",
-            Self::AuxiliaryTank => "Auxiliary Tank",
-            Self::ExpandedSorter => "Expanded Sorter",
-            Self::SignalRelayKit => "Signal Relay Kit",
-            Self::SurveyDroneKit => "Survey Drone Kit",
-            Self::CargoLiftKit => "Cargo Lift Kit",
-            Self::TunnelSupportKit => "Tunnel Support Kit",
-            Self::PumpStationKit => "Pump Station Kit",
-            Self::OreProcessorKit => "Ore Processor Kit",
-        }
-    }
-
-    #[must_use]
-    pub const fn description(self) -> &'static str {
-        match self {
-            Self::ReinforcedBulkhead => "+15 max hull rig part",
-            Self::AuxiliaryTank => "+20 fuel capacity rig part",
-            Self::ExpandedSorter => "+4 cargo capacity rig part",
-            Self::SignalRelayKit => "crafted infrastructure item",
-            Self::SurveyDroneKit => "reveals nearby map over time",
-            Self::CargoLiftKit => "sends cargo upward from a station",
-            Self::TunnelSupportKit => "protects nearby tunnel from collapses",
-            Self::PumpStationKit => "suppresses nearby gas and heat hazards",
-            Self::OreProcessorKit => "refines cheap ore into strategic materials",
-        }
-    }
-
-    #[must_use]
-    pub const fn cost(self) -> &'static [(StrategicResourceKind, u32)] {
-        match self {
-            Self::ReinforcedBulkhead => &[(StrategicResourceKind::AncientAlloy, 2)],
-            Self::AuxiliaryTank => &[
-                (StrategicResourceKind::AncientAlloy, 1),
-                (StrategicResourceKind::CrystalLens, 1),
-            ],
-            Self::ExpandedSorter => &[
-                (StrategicResourceKind::AncientAlloy, 1),
-                (StrategicResourceKind::CoreShard, 1),
-            ],
-            Self::SignalRelayKit => &[(StrategicResourceKind::CoreShard, 2)],
-            Self::SurveyDroneKit => &[
-                (StrategicResourceKind::CrystalLens, 1),
-                (StrategicResourceKind::CoreShard, 1),
-            ],
-            Self::CargoLiftKit => &[
-                (StrategicResourceKind::AncientAlloy, 2),
-                (StrategicResourceKind::CoreShard, 1),
-            ],
-            Self::TunnelSupportKit => &[(StrategicResourceKind::AncientAlloy, 1)],
-            Self::PumpStationKit => &[
-                (StrategicResourceKind::AncientAlloy, 1),
-                (StrategicResourceKind::CrystalLens, 1),
-                (StrategicResourceKind::CoreShard, 1),
-            ],
-            Self::OreProcessorKit => &[
-                (StrategicResourceKind::AncientAlloy, 2),
-                (StrategicResourceKind::CrystalLens, 1),
-            ],
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub enum NpcStoryRecord {
     ValeIntro,
@@ -3927,153 +3596,10 @@ impl CollectionLog {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-pub enum WorldEventKind {
-    MarketCrash,
-    MarketBoom,
-    RareBuyer,
-    FuelShortage,
-    RepairBacklog,
-    HeatWave,
-    CollapseSurge,
-    DeepPressureStorm,
-    GasBloom,
-    Earthquake,
-    MeteorShower,
-    RivalClaims,
-    AncientMachine,
-}
-
-impl WorldEventKind {
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::MarketCrash => "Market crash",
-            Self::MarketBoom => "Market boom",
-            Self::RareBuyer => "Rare buyer",
-            Self::FuelShortage => "Fuel shortage",
-            Self::RepairBacklog => "Repair backlog",
-            Self::HeatWave => "Heat wave",
-            Self::CollapseSurge => "Collapse surge",
-            Self::DeepPressureStorm => "Deep pressure storm",
-            Self::GasBloom => "Gas bloom",
-            Self::Earthquake => "Earthquake",
-            Self::MeteorShower => "Meteor shower",
-            Self::RivalClaims => "Rival claims",
-            Self::AncientMachine => "Ancient machine",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct ActiveWorldEvent {
-    pub kind: WorldEventKind,
-    pub days_remaining: u32,
-    pub severity: u32,
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub enum ExpeditionObjectiveKind {
-    #[default]
-    ReachDepth,
-    DeliverCargo,
-    ScanHazards,
-    BuildPumpStations,
-    RecoverProbe,
-    MineVein,
-    ScanAnomaly,
-    RescueMiner,
-    DeliverExplosives,
-    StabilizeCollapse,
-    RetrieveArtifact,
-    ReachSignal,
-    NoDamageReturn,
-    FastReturn,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct Expedition {
-    pub kind: ExpeditionObjectiveKind,
-    pub target: TileKind,
-    pub required: u32,
-    pub reward: u32,
-    pub expires_day: u32,
-}
-
-impl Expedition {
-    #[must_use]
-    pub fn title(self) -> String {
-        match self.kind {
-            ExpeditionObjectiveKind::ReachDepth => format!("Survey {}m claim", self.required),
-            ExpeditionObjectiveKind::DeliverCargo => {
-                format!("Deliver {} x{}", self.target.name(), self.required)
-            }
-            ExpeditionObjectiveKind::ScanHazards => format!("Map {} hazards", self.required),
-            ExpeditionObjectiveKind::BuildPumpStations => {
-                format!("Install {} pump station(s)", self.required)
-            }
-            ExpeditionObjectiveKind::RecoverProbe => "Recover a lost probe".to_owned(),
-            ExpeditionObjectiveKind::MineVein => {
-                format!("Mine {} vein x{}", self.target.name(), self.required)
-            }
-            ExpeditionObjectiveKind::ScanAnomaly => format!("Scan {} anomaly", self.target.name()),
-            ExpeditionObjectiveKind::RescueMiner => "Rescue trapped miner signal".to_owned(),
-            ExpeditionObjectiveKind::DeliverExplosives => {
-                format!("Deliver {} charges underground", self.required)
-            }
-            ExpeditionObjectiveKind::StabilizeCollapse => "Stabilize collapse zone".to_owned(),
-            ExpeditionObjectiveKind::RetrieveArtifact => {
-                format!("Retrieve ancient {}", self.target.name())
-            }
-            ExpeditionObjectiveKind::ReachSignal => {
-                "Reach temporary signal before expiry".to_owned()
-            }
-            ExpeditionObjectiveKind::NoDamageReturn => "Return with no hull damage".to_owned(),
-            ExpeditionObjectiveKind::FastReturn => "Return before deadline".to_owned(),
-        }
-    }
-    #[must_use]
-    pub const fn risk_label(self) -> &'static str {
-        match self.kind {
-            ExpeditionObjectiveKind::ReachDepth if self.required >= 120 => "extreme",
-            ExpeditionObjectiveKind::ReachDepth if self.required >= 90 => "high",
-            ExpeditionObjectiveKind::DeliverCargo if self.required >= 3 => "medium",
-            ExpeditionObjectiveKind::ScanHazards
-            | ExpeditionObjectiveKind::BuildPumpStations
-            | ExpeditionObjectiveKind::RecoverProbe
-            | ExpeditionObjectiveKind::DeliverExplosives
-            | ExpeditionObjectiveKind::StabilizeCollapse
-            | ExpeditionObjectiveKind::RescueMiner => "medium",
-            ExpeditionObjectiveKind::ReachSignal
-            | ExpeditionObjectiveKind::NoDamageReturn
-            | ExpeditionObjectiveKind::FastReturn => "high",
-            _ => "low",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct SideContract {
-    pub kind: SideContractKind,
-    pub target: TileKind,
-    pub required: u32,
-    #[serde(default)]
-    pub expires_day: Option<u32>,
-}
-
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ServiceAnimation {
     Fuel,
     Repair,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-pub struct FallingBoulder {
-    pub x: f32,
-    pub y: f32,
-    pub velocity_y: f32,
-    pub warning_seconds: f32,
-    pub life: f32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -10148,27 +9674,6 @@ const fn deep_claim_material_for(
     }
 }
 
-pub fn consume_expedition_delivery(expedition: Expedition, player: &mut Player) {
-    if expedition.kind != ExpeditionObjectiveKind::DeliverCargo {
-        return;
-    }
-    match expedition.target {
-        TileKind::Ore(mineral) => {
-            if let Some(count) = player.cargo.get_mut(&mineral) {
-                *count = count.saturating_sub(expedition.required);
-            }
-            player.cargo.retain(|_, count| *count > 0);
-        }
-        TileKind::Artifact(artifact) => {
-            if let Some(count) = player.artifacts.get_mut(&artifact) {
-                *count = count.saturating_sub(expedition.required);
-            }
-            player.artifacts.retain(|_, count| *count > 0);
-        }
-        _ => {}
-    }
-}
-
 pub fn expedition_satisfied(expedition: Expedition, game: &GameState) -> bool {
     match expedition.kind {
         ExpeditionObjectiveKind::ReachDepth => {
@@ -10248,28 +9753,6 @@ pub fn side_contract_satisfied(contract: SideContract, game: &GameState) -> bool
                 .count()
                 >= usize::try_from(contract.required).unwrap_or(usize::MAX)
         }
-    }
-}
-
-pub fn consume_side_contract_cargo(contract: SideContract, player: &mut Player) {
-    match contract.target {
-        TileKind::Ore(mineral) => {
-            consume_side_count(&mut player.cargo, &mineral, contract.required);
-        }
-        TileKind::Artifact(artifact) => {
-            consume_side_count(&mut player.artifacts, &artifact, contract.required);
-        }
-        _ => {}
-    }
-}
-
-fn consume_side_count<K: Ord>(items: &mut std::collections::BTreeMap<K, u32>, key: &K, count: u32) {
-    let Some(available) = items.get_mut(key) else {
-        return;
-    };
-    *available = available.saturating_sub(count);
-    if *available == 0 {
-        items.remove(key);
     }
 }
 

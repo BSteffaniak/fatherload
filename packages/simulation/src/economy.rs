@@ -73,7 +73,7 @@ impl TownDevelopment {
         }
     }
 
-    pub(crate) const fn level_mut(&mut self, building: TownBuilding) -> &mut u8 {
+    pub const fn level_mut(&mut self, building: TownBuilding) -> &mut u8 {
         match building {
             TownBuilding::Depot => &mut self.depot_level,
             TownBuilding::Mechanic => &mut self.mechanic_level,
@@ -201,6 +201,12 @@ pub fn sell_cargo(player: &mut Player) -> u32 {
     payout
 }
 
+/// Buys the upgrade offer at `index` for `player`.
+///
+/// # Errors
+///
+/// Returns a [`PurchaseError`] when the offer does not exist, is already maxed, or the player
+/// cannot afford it.
 pub fn buy_upgrade(player: &mut Player, index: usize) -> Result<UpgradeOffer, PurchaseError> {
     let offers = upgrade_offers(player);
     let Some(offer) = offers.get(index).copied() else {
@@ -287,6 +293,7 @@ const fn upgrade_description(kind: UpgradeKind) -> &'static str {
     }
 }
 
+#[must_use]
 pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
     let next_level = level.saturating_add(1).min(MAX_UPGRADE_LEVEL);
     match (kind, next_level) {
@@ -330,6 +337,7 @@ pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
 }
 
 #[allow(dead_code, reason = "retained for upcoming richer upgrade UI details")]
+#[must_use]
 pub const fn upgrade_effect(kind: UpgradeKind) -> &'static str {
     match kind {
         UpgradeKind::Drill => "+1 drill tier; unlocks harder strata",

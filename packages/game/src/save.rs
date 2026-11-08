@@ -14,6 +14,8 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+use crate::session::LegacyWorldStateAdapter;
+
 use crate::{
     game_state::{DrillState, GameState, HazardCloud, PlacedBomb, PlacedInfrastructure},
     multiplayer::{LOCAL_PLAYER_ID, PlayerId, SimulationTick},
@@ -974,7 +976,7 @@ mod tests {
             PersistentWorldObjects, PersistentWorldSave, SaveAuthority, SaveFile, SaveSessionKind,
             load_persistent_world_from_path, save_game_slot,
         },
-        session::WorldState,
+        session::{LegacyWorldStateAdapter, WorldState},
         terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TilePosition},
     };
 

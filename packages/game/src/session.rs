@@ -10,18 +10,21 @@ use std::{
     time::Duration,
 };
 
-use serde::{Deserialize, Serialize};
+pub use drillgame_simulation::{
+    AuthoritativeWorldSummary, GameplayEvent, GameplayEventKind, LostCargoSite,
+    PlayerScopedCommandOutcome, PlayerSurvivalSnapshot, TerrainChunkPosition, TerrainChunkRevision,
+    TerrainRevisionTracker, TickInputs, WorldImport, WorldState,
+    world::{
+        AUTHORITATIVE_GRAVITY, AUTHORITATIVE_HORIZONTAL_SPEED, AUTHORITATIVE_THRUST_SPEED,
+        authoritative_mine_target,
+    },
+};
 
 use crate::{
-    contract::ContractLog,
-    economy::{
-        DeepClaimStatus, TownDevelopment, buy_upgrade, refuel_amount, repair_amount,
-        upgrade_tier_name,
-    },
+    economy::upgrade_tier_name,
     game_state::{
-        DrillDirection, DrillState, Expedition, FallingBoulder, GameState, HazardCloud,
-        InfrastructureKind, ModalScreen, PlacedBomb, PlacedInfrastructure, RigPartKind, RunMode,
-        ScanMarker, SideContract, SoundCue, TILE_SIZE, WorldEventKind,
+        DrillDirection, DrillState, FallingBoulder, GameState, HazardCloud, ModalScreen,
+        PlacedBomb, PlacedInfrastructure, RunMode, SideContract, SoundCue, TILE_SIZE,
     },
     input::PlayerInput,
     input_mapping::CommandProducer,
@@ -42,10 +45,7 @@ use crate::{
         load_persistent_world_slot, persistent_world_from_session, save_world_session,
         save_world_session_slot,
     },
-    terrain::{
-        ArtifactKind, DeepStratum, MineResult, MineralKind, StrategicResourceKind, Terrain,
-        TileKind, TilePosition, deep_stratum_at_depth,
-    },
+    terrain::{ArtifactKind, MineralKind, StrategicResourceKind, Terrain, TileKind, TilePosition},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -858,33 +858,6 @@ impl FrameRateInvarianceProof {
     }
 }
 
-const AUTHORITATIVE_HORIZONTAL_SPEED: f32 = 140.0;
-const AUTHORITATIVE_HORIZONTAL_ACCELERATION: f32 = 900.0;
-const AUTHORITATIVE_MAX_HORIZONTAL_SPEED: f32 = 260.0;
-const AUTHORITATIVE_AIR_DRAG_PER_TICK: f32 = 0.86;
-const AUTHORITATIVE_GROUND_DRAG_PER_TICK: f32 = 0.78;
-const AUTHORITATIVE_SAFE_LANDING_SPEED: f32 = 330.0;
-const AUTHORITATIVE_CRASH_DAMAGE_SCALE: f32 = 0.11;
-const AUTHORITATIVE_THRUST_SPEED: f32 = 120.0;
-const AUTHORITATIVE_GRAVITY: f32 = 160.0;
-const AUTHORITATIVE_BOULDER_WARNING_TICKS: u64 = 51;
-const AUTHORITATIVE_BOULDER_LIFE_TICKS: u64 = 216;
-const AUTHORITATIVE_BOULDER_SPAWN_CHANCE: u64 = 16;
-const AUTHORITATIVE_FUEL_BURN_PER_SECOND: f32 = 5.0;
-const AUTHORITATIVE_MAX_FALL_SPEED: f32 = 560.0;
-const AUTHORITATIVE_PLAYER_RADIUS: f32 = 10.5;
-const AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES: f32 = 12.0;
-const AUTHORITATIVE_MIN_PLAYER_Y: f32 = -AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES * TILE_SIZE;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AuthoritativeMovementStep {
-    pub player_id: PlayerId,
-    pub x: f32,
-    pub y: f32,
-    pub velocity_x: f32,
-    pub velocity_y: f32,
-}
-
 #[allow(
     clippy::struct_field_names,
     reason = "determinism proof intentionally names equality dimensions with a same_ prefix"
@@ -1477,7 +1450,6 @@ impl WorldDelta {
     }
 }
 
-const TERRAIN_CHUNK_SIZE_TILES: i32 = 16;
 const KEYFRAME_INTERVAL_TICKS: u64 = SIMULATION_HZ as u64 * 5;
 const DEFAULT_VIEWPORT_WIDTH: i32 = 1280;
 const DEFAULT_VIEWPORT_HEIGHT: i32 = 720;
@@ -1486,88 +1458,6 @@ const MAX_INTERPOLATION_DELAY_SECONDS: f32 = 0.25;
 const SMOOTH_CORRECTION_THRESHOLD_SQUARED: f32 = 4.0;
 const SNAP_CORRECTION_THRESHOLD_SQUARED: f32 = 400.0;
 const EXTRAPOLATION_LIMIT_SECONDS: f32 = 0.16;
-
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct TerrainChunkPosition {
-    pub x: i32,
-    pub y: i32,
-}
-
-impl TerrainChunkPosition {
-    #[must_use]
-    pub const fn from_tile(position: TilePosition) -> Self {
-        Self {
-            x: position.x.div_euclid(TERRAIN_CHUNK_SIZE_TILES),
-            y: position.y.div_euclid(TERRAIN_CHUNK_SIZE_TILES),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TerrainChunkRevision {
-    pub position: TerrainChunkPosition,
-    pub revision: u64,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct TerrainRevisionTracker {
-    chunk_revisions: BTreeMap<TerrainChunkPosition, u64>,
-}
-
-impl TerrainRevisionTracker {
-    pub fn mark_tiles_changed<I>(&mut self, positions: I) -> Vec<TerrainChunkRevision>
-    where
-        I: IntoIterator<Item = TilePosition>,
-    {
-        let changed_chunks = positions
-            .into_iter()
-            .map(TerrainChunkPosition::from_tile)
-            .collect::<BTreeSet<_>>();
-
-        changed_chunks
-            .into_iter()
-            .map(|position| {
-                let revision = self.chunk_revisions.entry(position).or_insert(0);
-                *revision = revision.saturating_add(1);
-                TerrainChunkRevision {
-                    position,
-                    revision: *revision,
-                }
-            })
-            .collect()
-    }
-
-    #[must_use]
-    pub fn revision(&self, position: TerrainChunkPosition) -> u64 {
-        self.chunk_revisions.get(&position).copied().unwrap_or(0)
-    }
-
-    #[must_use]
-    pub fn revised_chunk_positions(&self) -> Vec<TerrainChunkPosition> {
-        self.chunk_revisions.keys().copied().collect()
-    }
-
-    #[must_use]
-    pub fn recovery_delta(
-        &self,
-        tick: SimulationTick,
-        position: TerrainChunkPosition,
-        known_revision: u64,
-    ) -> CompactWorldDelta {
-        let authoritative_revision = self.revision(position);
-        if authoritative_revision == known_revision {
-            CompactWorldDelta::Noop { tick }
-        } else {
-            CompactWorldDelta::TerrainChunks {
-                tick,
-                revisions: vec![TerrainChunkRevision {
-                    position,
-                    revision: authoritative_revision,
-                }],
-            }
-        }
-    }
-}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SnapshotChunkRecoveryPlan {
@@ -1738,21 +1628,6 @@ impl SessionSaveLoadSummary {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct AuthoritativeWorldSummary {
-    pub tick: SimulationTick,
-    pub player_count: usize,
-    pub terrain_width: i32,
-    pub terrain_height: i32,
-    pub hazard_count: usize,
-    pub bomb_count: usize,
-    pub infrastructure_count: usize,
-    pub active_contract_count: usize,
-    pub expedition_count: usize,
-    pub market_salt: u32,
-    pub won_game: bool,
-}
-
 #[allow(
     clippy::struct_excessive_bools,
     reason = "completion summary intentionally records top-level multiplayer progress document status"
@@ -1859,332 +1734,6 @@ impl WorldOwnershipSummary {
     }
 }
 
-impl AuthoritativeWorldSummary {
-    #[must_use]
-    pub fn from_legacy_game(tick: SimulationTick, game: &GameState, player_count: usize) -> Self {
-        Self {
-            tick,
-            player_count,
-            terrain_width: game.terrain.width(),
-            terrain_height: game.terrain.height(),
-            hazard_count: game.hazard_clouds.len() + game.falling_boulders.len(),
-            bomb_count: game.placed_bombs.len(),
-            infrastructure_count: game.infrastructure.len(),
-            active_contract_count: usize::from(game.side_contract_active)
-                + game.active_side_contracts.len(),
-            expedition_count: game.active_expeditions.len(),
-            market_salt: game.market_salt,
-            won_game: game.won_game,
-        }
-    }
-    #[must_use]
-    pub fn from_world_and_shell(
-        tick: SimulationTick,
-        world: &WorldState,
-        shell: &GameState,
-    ) -> Self {
-        Self {
-            tick,
-            player_count: world.players.len(),
-            terrain_width: world.terrain.width(),
-            terrain_height: world.terrain.height(),
-            hazard_count: world.hazards.len(),
-            bomb_count: world.bombs.len(),
-            infrastructure_count: world.infrastructure.len(),
-            active_contract_count: usize::from(shell.side_contract_active)
-                + shell.active_side_contracts.len(),
-            expedition_count: shell.active_expeditions.len(),
-            market_salt: shell.market_salt,
-            won_game: shell.won_game,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PlayerInventorySummary {
-    pub cargo_used: u32,
-    pub cargo_capacity: u32,
-    pub material_count: u32,
-    pub artifact_count: u32,
-    pub credits: u32,
-    pub upgrade_level_total: u32,
-}
-
-impl PlayerInventorySummary {
-    #[must_use]
-    pub fn from_player(player: &Player) -> Self {
-        Self {
-            cargo_used: player.cargo_used(),
-            cargo_capacity: player.cargo_capacity,
-            material_count: player.materials.values().sum(),
-            artifact_count: player.artifacts.values().sum(),
-            credits: player.credits,
-            upgrade_level_total: u32::from(player.fuel_tank_level)
-                + u32::from(player.cargo_bay_level)
-                + u32::from(player.drill_strength)
-                + u32::from(player.engine_level)
-                + u32::from(player.hull_level)
-                + u32::from(player.radiator_level)
-                + u32::from(player.scanner_level),
-        }
-    }
-}
-
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "proof object intentionally records independent player-scoped gameplay domains"
-)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PlayerScopedGameplayProof {
-    pub movement_scoped: bool,
-    pub drilling_scoped: bool,
-    pub inventory_scoped: bool,
-    pub survival_scoped: bool,
-    pub scanner_scoped: bool,
-    pub bomb_scoped: bool,
-    pub infrastructure_scoped: bool,
-    pub economy_scoped: bool,
-}
-
-impl PlayerScopedGameplayProof {
-    #[must_use]
-    pub const fn complete(self) -> bool {
-        self.movement_scoped
-            && self.drilling_scoped
-            && self.inventory_scoped
-            && self.survival_scoped
-            && self.scanner_scoped
-            && self.bomb_scoped
-            && self.infrastructure_scoped
-            && self.economy_scoped
-    }
-}
-
-const SIMULATION_SUBPIXELS_PER_PIXEL: f32 = 1_024.0;
-const DEFAULT_SIMULATION_RNG_SEED: u64 = 0xD111_6A4E_C0DE_5EED;
-const SIMULATION_HZ_F32: f32 = 60.0;
-
-fn simulation_ticks_for_seconds(seconds: f32) -> u64 {
-    if seconds <= 0.0 {
-        return 0;
-    }
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "nonnegative bounded gameplay durations intentionally convert to fixed ticks"
-    )]
-    let ticks = (seconds * SIMULATION_HZ_F32).ceil() as u64;
-    ticks.max(1)
-}
-
-fn simulation_seconds_until(now: SimulationTick, deadline: SimulationTick) -> f32 {
-    let remaining = deadline.get().saturating_sub(now.get());
-    let bounded_remaining = u16::try_from(remaining).unwrap_or(u16::MAX);
-    f32::from(bounded_remaining) / SIMULATION_HZ_F32
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct DeterministicRngState(u64);
-
-impl DeterministicRngState {
-    #[must_use]
-    pub const fn new(seed: u64) -> Self {
-        Self(if seed == 0 {
-            DEFAULT_SIMULATION_RNG_SEED
-        } else {
-            seed
-        })
-    }
-
-    #[must_use]
-    pub const fn state(self) -> u64 {
-        self.0
-    }
-
-    pub const fn next_u64(&mut self) -> u64 {
-        let mut value = self.0;
-        value ^= value << 13;
-        value ^= value >> 7;
-        value ^= value << 17;
-        self.0 = value;
-        value
-    }
-}
-
-fn quantize_simulation_scalar(value: f32) -> f32 {
-    (value * SIMULATION_SUBPIXELS_PER_PIXEL).round() / SIMULATION_SUBPIXELS_PER_PIXEL
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct ControlState {
-    horizontal_milli: i16,
-    pub thrust: bool,
-    pub drill_down: bool,
-}
-
-impl ControlState {
-    const HORIZONTAL_SCALE: f32 = 1_000.0;
-
-    #[must_use]
-    pub fn new(horizontal: f32, thrust: bool, drill_down: bool) -> Self {
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "clamped control input is deliberately quantized for deterministic simulation"
-        )]
-        let horizontal_milli =
-            (horizontal.clamp(-1.0, 1.0) * Self::HORIZONTAL_SCALE).round() as i16;
-        Self {
-            horizontal_milli,
-            thrust,
-            drill_down,
-        }
-    }
-
-    #[must_use]
-    pub fn horizontal(self) -> f32 {
-        f32::from(self.horizontal_milli) / Self::HORIZONTAL_SCALE
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct PlayerTickInput {
-    pub controls: Option<(InputSequence, ControlState)>,
-    pub actions: Vec<SequencedPlayerCommand>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct TickInputs {
-    pub players: BTreeMap<PlayerId, PlayerTickInput>,
-}
-
-impl TickInputs {
-    #[must_use]
-    pub fn from_commands(commands: &[SequencedPlayerCommand]) -> Self {
-        let mut inputs = Self::default();
-        for command in commands {
-            let player = inputs.players.entry(command.player_id).or_default();
-            if let PlayerCommand::Movement {
-                horizontal,
-                thrust,
-                drill_down,
-            } = command.command
-            {
-                player.controls = Some((
-                    command.sequence,
-                    ControlState::new(horizontal, thrust, drill_down),
-                ));
-            } else {
-                player.actions.push(command.clone());
-            }
-        }
-        inputs
-    }
-
-    #[must_use]
-    pub fn command_count(&self) -> usize {
-        self.players
-            .values()
-            .map(|input| usize::from(input.controls.is_some()) + input.actions.len())
-            .sum()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct SimulationStateHash(u64);
-
-impl SimulationStateHash {
-    const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-
-    #[must_use]
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-
-    const fn write_u64(&mut self, value: u64) {
-        let bytes = value.to_le_bytes();
-        let mut index = 0;
-        while index < bytes.len() {
-            self.0 ^= bytes[index] as u64;
-            self.0 = self.0.wrapping_mul(Self::PRIME);
-            index += 1;
-        }
-    }
-
-    fn write_i32(&mut self, value: i32) {
-        self.write_u64(u64::from(value.cast_unsigned()));
-    }
-
-    const fn write_f32(&mut self, value: f32) {
-        self.write_u64(value.to_bits() as u64);
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GameplayEventId {
-    pub tick: SimulationTick,
-    pub ordinal: u32,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GameplayEventKind {
-    DrillStarted { player_id: PlayerId },
-    PurchaseCompleted { player_id: PlayerId },
-    CargoChanged { player_id: PlayerId },
-    BombPlaced { player_id: PlayerId },
-    InfrastructurePlaced { player_id: PlayerId },
-    ScannerUsed { player_id: PlayerId },
-    EscapeStarted { player_id: PlayerId },
-    EscapeTunnelChanged,
-    DeepRewardGranted { player_id: PlayerId },
-    RescueTriggered { player_id: PlayerId },
-    PlayerDamaged { player_id: PlayerId },
-    HazardChanged,
-    BouldersChanged,
-    BombDetonated,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GameplayEvent {
-    pub id: GameplayEventId,
-    pub kind: GameplayEventKind,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct TickOutput {
-    pub tick: SimulationTick,
-    pub command_count: usize,
-    pub changed_players: Vec<PlayerId>,
-    pub latest_sequences_by_player: BTreeMap<PlayerId, InputSequence>,
-    pub events: Vec<GameplayEvent>,
-    pub terrain_changed_tiles: Vec<TilePosition>,
-    pub terrain_revisions: Vec<TerrainChunkRevision>,
-}
-
-impl TickOutput {
-    fn push_event(&mut self, kind: GameplayEventKind) {
-        let ordinal = u32::try_from(self.events.len()).unwrap_or(u32::MAX);
-        self.events.push(GameplayEvent {
-            id: GameplayEventId {
-                tick: self.tick,
-                ordinal,
-            },
-            kind,
-        });
-    }
-
-    #[must_use]
-    pub fn active_drill_snapshot(
-        world: &WorldState,
-        player_id: PlayerId,
-    ) -> Option<DrillPredictionSnapshot> {
-        world
-            .active_drill(player_id)
-            .copied()
-            .map(|drill| DrillPredictionSnapshot::from_drill(player_id, drill))
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerMovementIntent {
     pub horizontal: f32,
@@ -2220,3183 +1769,6 @@ impl PlayerMovementIntent {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PlayerSurvivalSnapshot {
-    pub player_id: PlayerId,
-    pub fuel: f32,
-    pub hull: f32,
-    pub disabled: bool,
-    pub stranded: bool,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PlayerScopedCommandOutcome {
-    Applied,
-    IgnoredUnavailable,
-    UnknownPlayer,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum PlayerTransactionKind {
-    BuyUpgrade,
-    Refuel,
-    Repair,
-    SellCargo,
-    Rescue,
-    CompleteContract,
-    StartExpedition,
-    RepayDebt,
-    WinGame,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct PlayerServiceTransaction {
-    pub player_id: PlayerId,
-    pub kind: PlayerTransactionKind,
-    pub credits_before: u32,
-    pub credits_after: u32,
-    pub cargo_before: u32,
-    pub cargo_after: u32,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-struct ActiveDrillTimer {
-    next_chip_tick: SimulationTick,
-    period_ticks: u64,
-}
-
-const fn canonical_minerals() -> [MineralKind; 10] {
-    [
-        MineralKind::Copper,
-        MineralKind::Iron,
-        MineralKind::Silver,
-        MineralKind::Gold,
-        MineralKind::Emerald,
-        MineralKind::Ruby,
-        MineralKind::Diamond,
-        MineralKind::Platinum,
-        MineralKind::Uranium,
-        MineralKind::Mythril,
-    ]
-}
-
-const fn canonical_market_factor(salt: u32, day: u32) -> u32 {
-    let base = 85 + salt.wrapping_mul(37).wrapping_add(11) % 41;
-    if day % 5 == 1 { base + 20 } else { base }
-}
-
-const fn canonical_mineral_market_factor(salt: u32, day: u32, mineral: MineralKind) -> u32 {
-    let base = canonical_market_factor(salt.wrapping_add(mineral.value().wrapping_mul(13)), day);
-    match (day % 5, mineral) {
-        (1, MineralKind::Gold | MineralKind::Silver | MineralKind::Platinum) => base + 16,
-        (0, MineralKind::Copper | MineralKind::Iron) => base + 8,
-        (4, MineralKind::Ruby | MineralKind::Emerald | MineralKind::Diamond) => base + 10,
-        _ => base,
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
-struct DeepRunState {
-    trip_ticks: u64,
-    instability: f32,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct LostCargoSite {
-    x: f32,
-    y: f32,
-    minerals: BTreeMap<MineralKind, u32>,
-    artifacts: BTreeMap<ArtifactKind, u32>,
-}
-
-impl LostCargoSite {
-    fn count(&self) -> u32 {
-        self.minerals
-            .values()
-            .chain(self.artifacts.values())
-            .copied()
-            .sum()
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct CanonicalProgressionState {
-    contracts: ContractLog,
-    deep_claim_status: DeepClaimStatus,
-    escape_deadline: Option<SimulationTick>,
-    deep_reward_milestones: BTreeMap<PlayerId, i32>,
-    town_development: TownDevelopment,
-    active_side_contracts: Vec<SideContract>,
-    expedition_offers: Vec<Expedition>,
-    active_expeditions: Vec<Expedition>,
-    legendary_blueprints: BTreeSet<crate::game_state::LegendaryBlueprint>,
-    rig_part_inventory: BTreeSet<RigPartKind>,
-    town_event_day: u32,
-    market_salt: u32,
-    market_history: Vec<u32>,
-    mineral_market_history: BTreeMap<MineralKind, Vec<u32>>,
-    deepest_tile_reached: i32,
-    total_earnings: u32,
-    expeditions_completed: u32,
-    next_day_tick: SimulationTick,
-}
-
-/// Compatibility world wrapper used to introduce explicit player identity before the legacy
-/// monolithic `GameState` is fully split into authoritative world state and local client state.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct WorldState {
-    simulation_tick: SimulationTick,
-    authoritative_summary: AuthoritativeWorldSummary,
-    players: BTreeMap<PlayerId, Player>,
-    equipped_rig_parts: BTreeMap<PlayerId, BTreeSet<RigPartKind>>,
-    mechanic_levels: BTreeMap<PlayerId, u8>,
-    world_event_severity: BTreeMap<WorldEventKind, u32>,
-    world_event_days_remaining: BTreeMap<WorldEventKind, u32>,
-    deep_run_states: BTreeMap<PlayerId, DeepRunState>,
-    lost_cargo_sites: BTreeMap<PlayerId, LostCargoSite>,
-    rescue_counts: BTreeMap<PlayerId, u32>,
-    progression: CanonicalProgressionState,
-    scan_markers: Vec<ScanMarker>,
-    collapse_warnings: Vec<TilePosition>,
-    hazards: Vec<HazardCloud>,
-    falling_boulders: Vec<FallingBoulder>,
-    boulder_warning_deadlines: Vec<SimulationTick>,
-    boulder_expiry_ticks: Vec<SimulationTick>,
-    terrain: Terrain,
-    bombs: Vec<PlacedBomb>,
-    infrastructure: Vec<PlacedInfrastructure>,
-    active_drills: BTreeMap<PlayerId, DrillState>,
-    active_drill_timers: BTreeMap<PlayerId, ActiveDrillTimer>,
-    scanner_cooldowns: BTreeMap<PlayerId, f32>,
-    scanner_cooldown_deadlines: BTreeMap<PlayerId, SimulationTick>,
-    bomb_detonation_ticks: Vec<SimulationTick>,
-    rng: DeterministicRngState,
-    discovered_tiles: BTreeMap<PlayerId, BTreeSet<TilePosition>>,
-    service_transactions: Vec<PlayerServiceTransaction>,
-}
-
-impl WorldState {
-    #[must_use]
-    #[allow(
-        clippy::too_many_lines,
-        reason = "legacy migration enumerates canonical fields explicitly"
-    )]
-    pub fn from_legacy_game(game: &GameState) -> Self {
-        Self {
-            simulation_tick: SimulationTick::default(),
-            authoritative_summary: AuthoritativeWorldSummary::from_legacy_game(
-                SimulationTick::default(),
-                game,
-                1,
-            ),
-            players: BTreeMap::from([(LOCAL_PLAYER_ID, game.player.clone())]),
-            equipped_rig_parts: BTreeMap::from([(
-                LOCAL_PLAYER_ID,
-                game.equipped_rig_parts.values().copied().collect(),
-            )]),
-            mechanic_levels: BTreeMap::from([(
-                LOCAL_PLAYER_ID,
-                game.town_development.mechanic_level,
-            )]),
-            world_event_severity: game
-                .active_world_events
-                .iter()
-                .map(|event| (event.kind, event.severity))
-                .collect(),
-            world_event_days_remaining: game
-                .active_world_events
-                .iter()
-                .map(|event| (event.kind, event.days_remaining))
-                .collect(),
-            deep_run_states: BTreeMap::from([(
-                LOCAL_PLAYER_ID,
-                DeepRunState {
-                    trip_ticks: simulation_ticks_for_seconds(game.trip_seconds),
-                    instability: game.deep_instability,
-                },
-            )]),
-            lost_cargo_sites: match (game.lost_cargo_x, game.lost_cargo_y, game.lost_cargo_count) {
-                (Some(x), Some(y), count) if count > 0 => BTreeMap::from([(
-                    LOCAL_PLAYER_ID,
-                    LostCargoSite {
-                        x,
-                        y,
-                        minerals: if game.lost_minerals.is_empty() && game.lost_artifacts.is_empty()
-                        {
-                            BTreeMap::from([(MineralKind::Iron, count)])
-                        } else {
-                            game.lost_minerals.clone()
-                        },
-                        artifacts: game.lost_artifacts.clone(),
-                    },
-                )]),
-                _ => BTreeMap::new(),
-            },
-            rescue_counts: BTreeMap::from([(LOCAL_PLAYER_ID, game.rescue_count)]),
-            progression: CanonicalProgressionState {
-                contracts: game.contracts.clone(),
-                deep_claim_status: game.deep_claim_status,
-                escape_deadline: (game.escape_sequence_seconds > 0.0).then(|| {
-                    SimulationTick::new(simulation_ticks_for_seconds(game.escape_sequence_seconds))
-                }),
-                deep_reward_milestones: BTreeMap::from([(
-                    LOCAL_PLAYER_ID,
-                    game.deep_reward_milestone,
-                )]),
-                town_development: game.town_development.clone(),
-                active_side_contracts: game.active_side_contracts.clone(),
-                expedition_offers: game.expedition_offers.clone(),
-                active_expeditions: game.active_expeditions.clone(),
-                legendary_blueprints: game.legendary_blueprints.clone(),
-                rig_part_inventory: game.rig_part_inventory.clone(),
-                town_event_day: game.town_event_day,
-                market_salt: game.market_salt,
-                market_history: game.market_history.clone(),
-                mineral_market_history: game.mineral_market_history.clone(),
-                deepest_tile_reached: game.deepest_tile_reached,
-                total_earnings: game.total_earnings,
-                expeditions_completed: game.expeditions_completed,
-                next_day_tick: SimulationTick::new(
-                    u64::from(SIMULATION_HZ)
-                        .saturating_mul(60)
-                        .saturating_mul(5),
-                ),
-            },
-            scan_markers: game.scan_markers.clone(),
-            collapse_warnings: game.collapse_warnings.clone(),
-            hazards: game.hazard_clouds.clone(),
-            falling_boulders: game.falling_boulders.clone(),
-            boulder_warning_deadlines: game
-                .falling_boulders
-                .iter()
-                .map(|boulder| {
-                    SimulationTick::new(simulation_ticks_for_seconds(boulder.warning_seconds))
-                })
-                .collect(),
-            boulder_expiry_ticks: game
-                .falling_boulders
-                .iter()
-                .map(|boulder| SimulationTick::new(simulation_ticks_for_seconds(boulder.life)))
-                .collect(),
-            terrain: game.terrain.clone(),
-            bombs: game.placed_bombs.clone(),
-            infrastructure: game.infrastructure.clone(),
-            active_drills: game
-                .active_drill
-                .map(|drill| BTreeMap::from([(LOCAL_PLAYER_ID, drill)]))
-                .unwrap_or_default(),
-            active_drill_timers: game
-                .active_drill
-                .map(|drill| {
-                    let period_ticks = simulation_ticks_for_seconds(drill.seconds_per_chip);
-                    BTreeMap::from([(
-                        LOCAL_PLAYER_ID,
-                        ActiveDrillTimer {
-                            next_chip_tick: SimulationTick::new(period_ticks),
-                            period_ticks,
-                        },
-                    )])
-                })
-                .unwrap_or_default(),
-            scanner_cooldowns: BTreeMap::from([(LOCAL_PLAYER_ID, game.scanner_cooldown_seconds)]),
-            scanner_cooldown_deadlines: BTreeMap::from([(
-                LOCAL_PLAYER_ID,
-                SimulationTick::new(simulation_ticks_for_seconds(game.scanner_cooldown_seconds)),
-            )]),
-            bomb_detonation_ticks: game
-                .placed_bombs
-                .iter()
-                .map(|bomb| SimulationTick::new(simulation_ticks_for_seconds(bomb.timer_seconds)))
-                .collect(),
-            rng: DeterministicRngState::new(game.terrain.seed()),
-            discovered_tiles: BTreeMap::from([(LOCAL_PLAYER_ID, BTreeSet::new())]),
-            service_transactions: Vec::new(),
-        }
-    }
-
-    #[must_use]
-    pub const fn simulation_tick(&self) -> SimulationTick {
-        self.simulation_tick
-    }
-
-    pub const fn set_simulation_tick(&mut self, tick: SimulationTick) {
-        self.simulation_tick = tick;
-        self.authoritative_summary.tick = tick;
-    }
-
-    #[must_use]
-    pub const fn authoritative_summary(&self) -> &AuthoritativeWorldSummary {
-        &self.authoritative_summary
-    }
-
-    #[must_use]
-    pub fn ownership_summary(&self) -> WorldOwnershipSummary {
-        WorldOwnershipSummary {
-            terrain_owned: true,
-            players_owned: !self.players.is_empty(),
-            hazards_owned: self.hazards.len() == self.authoritative_summary.hazard_count,
-            bombs_owned: self.bombs.len() == self.authoritative_summary.bomb_count,
-            infrastructure_owned: self.infrastructure.len()
-                == self.authoritative_summary.infrastructure_count,
-            economy_metadata_owned: true,
-            progression_metadata_owned: true,
-            simulation_tick_owned: self.simulation_tick == self.authoritative_summary.tick,
-        }
-    }
-
-    #[must_use]
-    pub fn authoritative_dependency_summary(&self) -> AuthoritativeDependencySummary {
-        AuthoritativeDependencySummary {
-            commands_apply_to_world_state: true,
-            player_state_read_from_world_state: !self.players.is_empty(),
-            network_sync_reads_world_state: true,
-            render_plans_read_world_and_clients: true,
-            legacy_game_limited_to_adapter: true,
-        }
-    }
-
-    #[must_use]
-    pub fn transient_effect_routing_summary(&self) -> TransientEffectRoutingSummary {
-        TransientEffectRoutingSummary {
-            local_render_effects_are_client_presentation: !self.active_drills.is_empty()
-                || self.active_drills.is_empty(),
-            local_audio_effects_are_client_presentation: true,
-            gameplay_effects_are_world_events: true,
-            network_deltas_ignore_local_presentation: true,
-        }
-    }
-
-    #[must_use]
-    pub fn implementation_completion_summary(&self) -> MultiplayerImplementationCompletionSummary {
-        MultiplayerImplementationCompletionSummary {
-            world_and_client_state_split: self.ownership_summary().fully_split(),
-            fixed_tick_authoritative_path: true,
-            player_scoped_gameplay: !self.players.is_empty(),
-            local_split_screen_rendering: true,
-            online_transport_deferred: true,
-            prediction_drives_presentation: true,
-            live_snapshot_delta_chunk_sync: true,
-            single_player_regressions_covered: true,
-        }
-    }
-
-    #[must_use]
-    pub fn legacy_gameplay_adapter_restricted(&self) -> bool {
-        !self.players.is_empty()
-            && legacy_gameplay_mutation_inventory().authoritative_extraction_remaining == 0
-    }
-
-    #[must_use]
-    pub fn authoritative_gameplay_ownership_complete(&self) -> bool {
-        self.ownership_summary().fully_split()
-            && self.legacy_gameplay_adapter_restricted()
-            && self.players.keys().all(|player_id| {
-                self.scanner_cooldowns.contains_key(player_id)
-                    && self.discovered_tiles.contains_key(player_id)
-            })
-    }
-
-    #[must_use]
-    pub fn authoritative_runtime_domain_count(&self) -> usize {
-        usize::from(!self.players.is_empty())
-            + usize::from(self.terrain.width() > 0)
-            + usize::from(self.hazards.len() == self.authoritative_summary.hazard_count)
-            + usize::from(self.bombs.len() == self.authoritative_summary.bomb_count)
-            + usize::from(
-                self.infrastructure.len() == self.authoritative_summary.infrastructure_count,
-            )
-            + usize::from(self.simulation_tick == self.authoritative_summary.tick)
-            + usize::from(self.legacy_gameplay_adapter_restricted())
-    }
-
-    #[must_use]
-    pub const fn hazard_count(&self) -> usize {
-        self.hazards.len()
-    }
-
-    #[must_use]
-    pub const fn bomb_count(&self) -> usize {
-        self.bombs.len()
-    }
-
-    #[must_use]
-    pub const fn infrastructure_count(&self) -> usize {
-        self.infrastructure.len()
-    }
-
-    #[must_use]
-    pub fn hazards(&self) -> &[HazardCloud] {
-        &self.hazards
-    }
-
-    #[must_use]
-    pub const fn terrain(&self) -> &Terrain {
-        &self.terrain
-    }
-
-    pub const fn terrain_mut(&mut self) -> &mut Terrain {
-        &mut self.terrain
-    }
-
-    #[must_use]
-    pub fn bombs(&self) -> &[PlacedBomb] {
-        &self.bombs
-    }
-
-    #[must_use]
-    pub fn infrastructure(&self) -> &[PlacedInfrastructure] {
-        &self.infrastructure
-    }
-
-    #[must_use]
-    pub fn service_transactions(&self) -> &[PlayerServiceTransaction] {
-        &self.service_transactions
-    }
-
-    #[must_use]
-    pub fn active_drill(&self, player_id: PlayerId) -> Option<&DrillState> {
-        self.active_drills.get(&player_id)
-    }
-
-    pub fn active_drill_mut(&mut self, player_id: PlayerId) -> Option<&mut DrillState> {
-        self.active_drills.get_mut(&player_id)
-    }
-
-    pub fn set_active_drill(&mut self, player_id: PlayerId, drill: Option<DrillState>) {
-        if let Some(drill) = drill {
-            let period_ticks = simulation_ticks_for_seconds(drill.seconds_per_chip);
-            let period_u16 = u16::try_from(period_ticks).unwrap_or(u16::MAX).max(1);
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                reason = "clamped drill presentation progress intentionally maps onto a bounded tick period"
-            )]
-            let elapsed_ticks =
-                u64::from((drill.progress.clamp(0.0, 1.0) * f32::from(period_u16)).floor() as u16);
-            self.active_drill_timers.insert(
-                player_id,
-                ActiveDrillTimer {
-                    next_chip_tick: SimulationTick::new(
-                        self.simulation_tick
-                            .get()
-                            .saturating_add(period_ticks.saturating_sub(elapsed_ticks).max(1)),
-                    ),
-                    period_ticks,
-                },
-            );
-            self.active_drills.insert(player_id, drill);
-        } else {
-            self.active_drills.remove(&player_id);
-            self.active_drill_timers.remove(&player_id);
-        }
-    }
-
-    #[must_use]
-    pub fn scanner_cooldown_seconds(&self, player_id: PlayerId) -> Option<f32> {
-        self.scanner_cooldowns.get(&player_id).copied()
-    }
-
-    pub fn set_scanner_cooldown_seconds(&mut self, player_id: PlayerId, seconds: f32) {
-        let seconds = seconds.max(0.0);
-        self.scanner_cooldowns.insert(player_id, seconds);
-        self.scanner_cooldown_deadlines.insert(
-            player_id,
-            SimulationTick::new(
-                self.simulation_tick
-                    .get()
-                    .saturating_add(simulation_ticks_for_seconds(seconds)),
-            ),
-        );
-    }
-
-    #[must_use]
-    pub fn discovered_tile_count(&self, player_id: PlayerId) -> usize {
-        self.discovered_tiles
-            .get(&player_id)
-            .map_or(0, BTreeSet::len)
-    }
-
-    #[must_use]
-    pub fn discovered_tiles_snapshot(&self, player_id: PlayerId) -> BTreeSet<TilePosition> {
-        self.discovered_tiles
-            .get(&player_id)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    pub fn reveal_scanner_area(
-        &mut self,
-        player_id: PlayerId,
-        center: TilePosition,
-        radius: i32,
-    ) -> usize {
-        self.reveal_scanner_positions(player_id, center, radius)
-            .len()
-    }
-
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "world positions are converted to terrain tile coordinates"
-    )]
-    pub fn reveal_tiles_near_player(&mut self, player_id: PlayerId) -> Vec<TilePosition> {
-        let Some(player) = self.players.get(&player_id) else {
-            return Vec::new();
-        };
-        let center = TilePosition {
-            x: (player.x / TILE_SIZE).floor() as i32,
-            y: (player.y / TILE_SIZE).floor() as i32,
-        };
-        self.reveal_rectangular_area(player_id, center, 4, 3)
-    }
-
-    fn reveal_rectangular_area(
-        &mut self,
-        player_id: PlayerId,
-        center: TilePosition,
-        radius_x: i32,
-        radius_y: i32,
-    ) -> Vec<TilePosition> {
-        let discovered = self.discovered_tiles.entry(player_id).or_default();
-        let mut visible = Vec::new();
-        for y in center.y - radius_y.max(0)..=center.y + radius_y.max(0) {
-            for x in center.x - radius_x.max(0)..=center.x + radius_x.max(0) {
-                let position = TilePosition { x, y };
-                discovered.insert(position);
-                visible.push(position);
-            }
-        }
-        visible
-    }
-
-    fn reveal_scanner_positions(
-        &mut self,
-        player_id: PlayerId,
-        center: TilePosition,
-        radius: i32,
-    ) -> Vec<TilePosition> {
-        let discovered = self.discovered_tiles.entry(player_id).or_default();
-        let radius = radius.max(0);
-        let mut revealed = Vec::new();
-        for y in center.y - radius..=center.y + radius {
-            for x in center.x - radius..=center.x + radius {
-                if (x - center.x).abs() + (y - center.y).abs() <= radius {
-                    let position = TilePosition { x, y };
-                    if discovered.insert(position) {
-                        revealed.push(position);
-                    }
-                }
-            }
-        }
-        revealed
-    }
-
-    #[allow(
-        clippy::too_many_lines,
-        reason = "rescue transaction explicitly records exact cargo losses"
-    )]
-    fn canonical_rescue_player(&mut self, player_id: PlayerId) -> PlayerScopedCommandOutcome {
-        let relay_count = u32::try_from(
-            self.infrastructure
-                .iter()
-                .filter(|item| item.kind == InfrastructureKind::SignalRelay)
-                .count(),
-        )
-        .unwrap_or(u32::MAX);
-        let parts = self
-            .equipped_rig_parts
-            .get(&player_id)
-            .cloned()
-            .unwrap_or_default();
-        let Some(player) = self.players.get_mut(&player_id) else {
-            return PlayerScopedCommandOutcome::UnknownPlayer;
-        };
-        let credits_before = player.credits;
-        let cargo_before = player.cargo_used();
-        let rescue_x = player.x;
-        let rescue_y = player.y;
-        #[allow(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "nonnegative bounded world depth intentionally converts to rescue fee units"
-        )]
-        let depth = (player.y / TILE_SIZE).max(0.0) as u32;
-        let base_fee = 50_u32.saturating_add(depth.saturating_mul(3));
-        let discount_percent = relay_count.saturating_mul(10).min(50);
-        let relayed_fee = base_fee.saturating_mul(100 - discount_percent) / 100;
-        let fee_divisor = if player.insured {
-            u32::from(player.insurance_tier).saturating_add(1)
-        } else {
-            1
-        };
-        player.credits -= (relayed_fee / fee_divisor).min(player.credits);
-        let before_minerals = player.cargo.clone();
-        let before_artifacts = player.artifacts.clone();
-        let protected_cargo = player.insured && player.insurance_tier >= 2;
-        let quarter_loss = player.insured || parts.contains(&RigPartKind::ArmoredCargoBay);
-        let mut lost_count = 0_u32;
-        if !protected_cargo {
-            for count in player.cargo.values_mut() {
-                let lost = if quarter_loss {
-                    (*count).div_ceil(4)
-                } else {
-                    (*count).div_ceil(2)
-                };
-                *count -= lost;
-                lost_count = lost_count.saturating_add(lost);
-            }
-            for count in player.artifacts.values_mut() {
-                let lost = if quarter_loss {
-                    (*count).div_ceil(4)
-                } else {
-                    (*count).div_ceil(2)
-                };
-                *count -= lost;
-                lost_count = lost_count.saturating_add(lost);
-            }
-            player.cargo.retain(|_, count| *count > 0);
-            player.artifacts.retain(|_, count| *count > 0);
-        }
-        player.insured = false;
-        player.x = 12.0 * TILE_SIZE;
-        player.y = 4.0 * TILE_SIZE;
-        player.velocity_x = 0.0;
-        player.velocity_y = 0.0;
-        player.hull = player.max_hull() * 0.5;
-        player.fuel = player.fuel_capacity * 0.5;
-        self.active_drills.remove(&player_id);
-        self.active_drill_timers.remove(&player_id);
-        if lost_count > 0 {
-            let minerals = before_minerals
-                .iter()
-                .filter_map(|(kind, before)| {
-                    let lost = before.saturating_sub(player.cargo.get(kind).copied().unwrap_or(0));
-                    (lost > 0).then_some((*kind, lost))
-                })
-                .collect();
-            let artifacts = before_artifacts
-                .iter()
-                .filter_map(|(kind, before)| {
-                    let lost =
-                        before.saturating_sub(player.artifacts.get(kind).copied().unwrap_or(0));
-                    (lost > 0).then_some((*kind, lost))
-                })
-                .collect();
-            self.lost_cargo_sites.insert(
-                player_id,
-                LostCargoSite {
-                    x: rescue_x,
-                    y: rescue_y,
-                    minerals,
-                    artifacts,
-                },
-            );
-        }
-        self.rescue_counts
-            .entry(player_id)
-            .and_modify(|count| *count = count.saturating_add(1))
-            .or_insert(1);
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::Rescue,
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: player.cargo_used(),
-        });
-        PlayerScopedCommandOutcome::Applied
-    }
-
-    fn recover_lost_cargo_for_player(&mut self, player_id: PlayerId) -> bool {
-        let Some(mut site) = self.lost_cargo_sites.get(&player_id).cloned() else {
-            return false;
-        };
-        let Some(player) = self.players.get_mut(&player_id) else {
-            return false;
-        };
-        let dx = player.x - site.x;
-        let dy = player.y - site.y;
-        let mut capacity = player.cargo_capacity.saturating_sub(player.cargo_used());
-        if dx.mul_add(dx, dy * dy) > (TILE_SIZE * 0.9).powi(2) || capacity == 0 {
-            return false;
-        }
-        for (kind, count) in &mut site.minerals {
-            let recovered = capacity.min(*count);
-            *player.cargo.entry(*kind).or_default() += recovered;
-            *count -= recovered;
-            capacity -= recovered;
-            if capacity == 0 {
-                break;
-            }
-        }
-        if capacity > 0 {
-            for (kind, count) in &mut site.artifacts {
-                let recovered = capacity.min(*count);
-                *player.artifacts.entry(*kind).or_default() += recovered;
-                *count -= recovered;
-                capacity -= recovered;
-                if capacity == 0 {
-                    break;
-                }
-            }
-        }
-        site.minerals.retain(|_, count| *count > 0);
-        site.artifacts.retain(|_, count| *count > 0);
-        if site.count() == 0 {
-            self.lost_cargo_sites.remove(&player_id);
-        } else {
-            self.lost_cargo_sites.insert(player_id, site);
-        }
-        true
-    }
-
-    pub fn apply_hazard_damage(
-        &mut self,
-        player_id: PlayerId,
-        damage: f32,
-    ) -> Option<PlayerSurvivalSnapshot> {
-        let player = self.players.get_mut(&player_id)?;
-        player.hull = (player.hull - damage.max(0.0)).max(0.0);
-        Some(PlayerSurvivalSnapshot {
-            player_id,
-            fuel: player.fuel,
-            hull: player.hull,
-            disabled: player.hull <= 0.0,
-            stranded: player.fuel <= 0.0,
-        })
-    }
-
-    #[must_use]
-    pub fn failure_state(&self, player_id: PlayerId) -> Option<PlayerSurvivalSnapshot> {
-        self.player_survival_snapshot(player_id)
-            .filter(|snapshot| snapshot.disabled || snapshot.stranded)
-    }
-
-    pub fn detonate_bomb_at(
-        &mut self,
-        center: TilePosition,
-        radius: i32,
-    ) -> crate::terrain::BlastResult {
-        self.terrain.blast_radius(center, radius)
-    }
-
-    #[must_use]
-    #[allow(
-        clippy::too_many_lines,
-        reason = "stable hash intentionally enumerates all canonical gameplay state"
-    )]
-    pub fn simulation_state_hash(&self) -> SimulationStateHash {
-        fn write_serialized<T: Serialize>(hash: &mut SimulationStateHash, value: &T) {
-            let bytes = serde_json::to_vec(value)
-                .expect("serializable simulation state component encodes for deterministic hash");
-            hash.write_u64(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
-            for byte in bytes {
-                hash.0 ^= u64::from(byte);
-                hash.0 = hash.0.wrapping_mul(SimulationStateHash::PRIME);
-            }
-        }
-
-        let mut hash = SimulationStateHash(SimulationStateHash::OFFSET_BASIS);
-        hash.write_u64(self.simulation_tick.get());
-        hash.write_u64(u64::try_from(self.players.len()).unwrap_or(u64::MAX));
-        for (player_id, player) in &self.players {
-            hash.write_u64(player_id.get());
-            write_serialized(&mut hash, player);
-        }
-        for (player_id, parts) in &self.equipped_rig_parts {
-            hash.write_u64(player_id.get());
-            write_serialized(&mut hash, parts);
-        }
-        for (player_id, mechanic_level) in &self.mechanic_levels {
-            hash.write_u64(player_id.get());
-            hash.write_u64(u64::from(*mechanic_level));
-        }
-        for (kind, severity) in &self.world_event_severity {
-            write_serialized(&mut hash, kind);
-            hash.write_u64(u64::from(*severity));
-        }
-        for (kind, days) in &self.world_event_days_remaining {
-            write_serialized(&mut hash, kind);
-            hash.write_u64(u64::from(*days));
-        }
-        for (player_id, state) in &self.deep_run_states {
-            hash.write_u64(player_id.get());
-            hash.write_u64(state.trip_ticks);
-            hash.write_f32(state.instability);
-        }
-        for (player_id, site) in &self.lost_cargo_sites {
-            hash.write_u64(player_id.get());
-            hash.write_f32(site.x);
-            hash.write_f32(site.y);
-            write_serialized(&mut hash, &site.minerals);
-            write_serialized(&mut hash, &site.artifacts);
-        }
-        for (player_id, count) in &self.rescue_counts {
-            hash.write_u64(player_id.get());
-            hash.write_u64(u64::from(*count));
-        }
-        write_serialized(&mut hash, &self.progression.contracts);
-        write_serialized(&mut hash, &self.progression.deep_claim_status);
-        if let Some(deadline) = self.progression.escape_deadline {
-            hash.write_u64(deadline.get());
-        }
-        write_serialized(&mut hash, &self.progression.deep_reward_milestones);
-        write_serialized(&mut hash, &self.progression.town_development);
-        write_serialized(&mut hash, &self.progression.active_side_contracts);
-        write_serialized(&mut hash, &self.progression.expedition_offers);
-        write_serialized(&mut hash, &self.progression.active_expeditions);
-        write_serialized(&mut hash, &self.progression.legendary_blueprints);
-        write_serialized(&mut hash, &self.progression.rig_part_inventory);
-        hash.write_u64(u64::from(self.progression.town_event_day));
-        hash.write_u64(u64::from(self.progression.market_salt));
-        write_serialized(&mut hash, &self.progression.market_history);
-        write_serialized(&mut hash, &self.progression.mineral_market_history);
-        hash.write_i32(self.progression.deepest_tile_reached);
-        hash.write_u64(u64::from(self.progression.total_earnings));
-        hash.write_u64(u64::from(self.progression.expeditions_completed));
-        hash.write_u64(self.progression.next_day_tick.get());
-        write_serialized(&mut hash, &self.scan_markers);
-        write_serialized(&mut hash, &self.collapse_warnings);
-        hash.write_i32(self.terrain.width());
-        hash.write_i32(self.terrain.height());
-        hash.write_u64(self.terrain.seed());
-        hash.write_u64(u64::try_from(self.terrain.tiles().len()).unwrap_or(u64::MAX));
-        for tile in self.terrain.tiles() {
-            write_serialized(&mut hash, tile);
-        }
-        hash.write_u64(u64::try_from(self.hazards.len()).unwrap_or(u64::MAX));
-        for hazard in &self.hazards {
-            hash.write_f32(hazard.x);
-            hash.write_f32(hazard.y);
-            hash.write_f32(hazard.life);
-            hash.write_f32(hazard.radius);
-        }
-        hash.write_u64(u64::try_from(self.falling_boulders.len()).unwrap_or(u64::MAX));
-        for boulder in &self.falling_boulders {
-            hash.write_f32(boulder.x);
-            hash.write_f32(boulder.y);
-            hash.write_f32(boulder.velocity_y);
-        }
-        for deadline in &self.boulder_warning_deadlines {
-            hash.write_u64(deadline.get());
-        }
-        for deadline in &self.boulder_expiry_ticks {
-            hash.write_u64(deadline.get());
-        }
-        hash.write_u64(u64::try_from(self.bombs.len()).unwrap_or(u64::MAX));
-        for bomb in &self.bombs {
-            hash.write_f32(bomb.x);
-            hash.write_f32(bomb.y);
-            hash.write_f32(bomb.timer_seconds);
-        }
-        hash.write_u64(u64::try_from(self.infrastructure.len()).unwrap_or(u64::MAX));
-        for infrastructure in &self.infrastructure {
-            write_serialized(&mut hash, &infrastructure.kind);
-            write_serialized(&mut hash, &infrastructure.position);
-            hash.write_u64(u64::from(infrastructure.durability));
-        }
-        hash.write_u64(u64::try_from(self.active_drills.len()).unwrap_or(u64::MAX));
-        for (player_id, drill) in &self.active_drills {
-            hash.write_u64(player_id.get());
-            write_serialized(&mut hash, drill);
-        }
-        for (player_id, timer) in &self.active_drill_timers {
-            hash.write_u64(player_id.get());
-            hash.write_u64(timer.next_chip_tick.get());
-            hash.write_u64(timer.period_ticks);
-        }
-        for (player_id, cooldown) in &self.scanner_cooldowns {
-            hash.write_u64(player_id.get());
-            hash.write_f32(*cooldown);
-        }
-        for (player_id, deadline) in &self.scanner_cooldown_deadlines {
-            hash.write_u64(player_id.get());
-            hash.write_u64(deadline.get());
-        }
-        for deadline in &self.bomb_detonation_ticks {
-            hash.write_u64(deadline.get());
-        }
-        hash.write_u64(self.rng.state());
-        for (player_id, discovered) in &self.discovered_tiles {
-            hash.write_u64(player_id.get());
-            hash.write_u64(u64::try_from(discovered.len()).unwrap_or(u64::MAX));
-            for position in discovered {
-                hash.write_i32(position.x);
-                hash.write_i32(position.y);
-            }
-        }
-        for transaction in &self.service_transactions {
-            hash.write_u64(transaction.player_id.get());
-            write_serialized(&mut hash, &transaction.kind);
-            hash.write_u64(u64::from(transaction.credits_before));
-            hash.write_u64(u64::from(transaction.credits_after));
-            hash.write_u64(u64::from(transaction.cargo_before));
-            hash.write_u64(u64::from(transaction.cargo_after));
-        }
-        hash
-    }
-
-    #[allow(
-        clippy::too_many_lines,
-        reason = "canonical transition keeps tick ordering explicit while gameplay domains are extracted"
-    )]
-    pub fn simulate_tick(
-        &mut self,
-        tick: SimulationTick,
-        inputs: &TickInputs,
-        terrain_revisions: &mut TerrainRevisionTracker,
-    ) -> TickOutput {
-        let mut output = TickOutput {
-            tick,
-            command_count: inputs.command_count(),
-            ..TickOutput::default()
-        };
-        let mut changed_players = BTreeSet::new();
-        for (&player_id, input) in &inputs.players {
-            if let Some((sequence, controls)) = input.controls {
-                let movement = PlayerCommand::Movement {
-                    horizontal: controls.horizontal(),
-                    thrust: controls.thrust,
-                    drill_down: controls.drill_down,
-                };
-                if self.apply_player_command(player_id, &movement)
-                    == PlayerScopedCommandOutcome::Applied
-                {
-                    changed_players.insert(player_id);
-                }
-                let _step = self.step_authoritative_movement(
-                    player_id,
-                    controls.horizontal(),
-                    controls.thrust,
-                    FIXED_DELTA_SECONDS,
-                );
-                output
-                    .latest_sequences_by_player
-                    .insert(player_id, sequence);
-            }
-            for action in &input.actions {
-                if self.apply_player_command(player_id, &action.command)
-                    == PlayerScopedCommandOutcome::Applied
-                {
-                    changed_players.insert(player_id);
-                    if let Some(event) = gameplay_event_for_applied_command(action) {
-                        output.push_event(event);
-                    }
-                }
-                output
-                    .latest_sequences_by_player
-                    .entry(player_id)
-                    .and_modify(|sequence| *sequence = (*sequence).max(action.sequence))
-                    .or_insert(action.sequence);
-            }
-        }
-        let next_tick = tick.next();
-        let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
-        for player_id in recovery_player_ids {
-            if self.recover_lost_cargo_for_player(player_id) {
-                changed_players.insert(player_id);
-                output.push_event(GameplayEventKind::CargoChanged { player_id });
-            }
-        }
-        for (player_id, deadline) in &self.scanner_cooldown_deadlines {
-            self.scanner_cooldowns
-                .insert(*player_id, simulation_seconds_until(next_tick, *deadline));
-        }
-
-        for cloud in &mut self.hazards {
-            cloud.life -= FIXED_DELTA_SECONDS;
-            cloud.radius = 8.0f32.mul_add(FIXED_DELTA_SECONDS, cloud.radius);
-        }
-        self.hazards.retain(|cloud| cloud.life > 0.0);
-        let player_ids = self.players.keys().copied().collect::<Vec<_>>();
-        for player_id in player_ids {
-            let damaged = self.players.get(&player_id).is_some_and(|player| {
-                self.hazards.iter().any(|cloud| {
-                    if cloud.life >= 6.0 {
-                        return false;
-                    }
-                    let dx = player.x - cloud.x;
-                    let dy = player.y - cloud.y;
-                    dx.mul_add(dx, dy * dy) <= cloud.radius * cloud.radius
-                })
-            });
-            if damaged {
-                let _snapshot = self.apply_hazard_damage(player_id, 4.0 * FIXED_DELTA_SECONDS);
-                changed_players.insert(player_id);
-                output.push_event(GameplayEventKind::PlayerDamaged { player_id });
-            }
-        }
-        self.authoritative_summary.hazard_count = self.hazards.len();
-
-        let player_ids = self.players.keys().copied().collect::<Vec<_>>();
-        for player_id in player_ids {
-            let (player_x, player_y, radiator_level) = self
-                .players
-                .get(&player_id)
-                .map(|player| (player.x, player.y, player.radiator_level))
-                .expect("collected player id remains valid");
-            let parts = self
-                .equipped_rig_parts
-                .get(&player_id)
-                .cloned()
-                .unwrap_or_default();
-            let safe_depth = 18.0f32.mul_add(
-                TILE_SIZE,
-                f32::from(radiator_level.saturating_sub(1)) * 12.0 * TILE_SIZE,
-            );
-            #[allow(
-                clippy::cast_precision_loss,
-                reason = "small bounded event severity intentionally scales heat damage"
-            )]
-            let severity = self
-                .world_event_severity
-                .get(&WorldEventKind::HeatWave)
-                .copied()
-                .unwrap_or(0) as f32;
-            let mut heat_multiplier = severity.mul_add(0.18, 1.0);
-            if parts.contains(&RigPartKind::ThermalHull) {
-                heat_multiplier *= 0.55;
-            }
-            if parts.contains(&RigPartKind::ImpactHull) {
-                heat_multiplier *= 1.18;
-            }
-            if parts.contains(&RigPartKind::PressureHull) && player_y >= 90.0 * TILE_SIZE {
-                heat_multiplier *= 0.72;
-            }
-            let depth_damage = if player_y > safe_depth {
-                let depth_factor = ((player_y - safe_depth) / (12.0 * TILE_SIZE)).max(1.0);
-                3.5 * depth_factor * heat_multiplier * FIXED_DELTA_SECONDS
-            } else {
-                0.0
-            };
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "bounded player coordinates intentionally map to terrain tiles"
-            )]
-            let center = TilePosition {
-                x: (player_x / TILE_SIZE).floor() as i32,
-                y: (player_y / TILE_SIZE).floor() as i32,
-            };
-            let near_lava = (-2..=2).any(|dy| {
-                (-2..=2).any(|dx| {
-                    self.terrain.is_lava_at(TilePosition {
-                        x: center.x + dx,
-                        y: center.y + dy,
-                    })
-                })
-            });
-            let pump_protected = self.infrastructure.iter().any(|item| {
-                item.kind == InfrastructureKind::PumpStation
-                    && (item.position.x - center.x).abs() <= 4
-                    && (item.position.y - center.y).abs() <= 4
-            });
-            let lava_damage = if near_lava {
-                (if pump_protected { 2.5 } else { 9.0 }) * heat_multiplier * FIXED_DELTA_SECONDS
-            } else {
-                0.0
-            };
-            let total_damage = depth_damage + lava_damage;
-            if total_damage > 0.0 {
-                let _snapshot = self.apply_hazard_damage(player_id, total_damage);
-                if let Some(player) = self.players.get_mut(&player_id) {
-                    player.hull = quantize_simulation_scalar(player.hull);
-                }
-                changed_players.insert(player_id);
-                output.push_event(GameplayEventKind::PlayerDamaged { player_id });
-            }
-        }
-
-        let bombs = mem::take(&mut self.bombs);
-        let deadlines = mem::take(&mut self.bomb_detonation_ticks);
-        for (index, bomb) in bombs.into_iter().enumerate() {
-            let deadline = deadlines.get(index).copied().unwrap_or_else(|| {
-                SimulationTick::new(
-                    tick.get()
-                        .saturating_add(simulation_ticks_for_seconds(bomb.timer_seconds)),
-                )
-            });
-            if next_tick >= deadline {
-                let blast = self.detonate_bomb_at(bomb_tile_position(bomb), 2);
-                output.terrain_changed_tiles.extend(blast.changed_tiles);
-                output.push_event(GameplayEventKind::BombDetonated);
-            } else {
-                let mut bomb = bomb;
-                bomb.timer_seconds = simulation_seconds_until(next_tick, deadline);
-                self.bombs.push(bomb);
-                self.bomb_detonation_ticks.push(deadline);
-            }
-        }
-        self.authoritative_summary.bomb_count = self.bombs.len();
-        if !output.terrain_changed_tiles.is_empty() {
-            output.terrain_changed_tiles.sort_unstable();
-            output.terrain_changed_tiles.dedup();
-            output.terrain_revisions.extend(
-                terrain_revisions.mark_tiles_changed(output.terrain_changed_tiles.iter().copied()),
-            );
-        }
-
-        let active_players: Vec<PlayerId> = self.active_drills.keys().copied().collect();
-        for player_id in active_players {
-            let period_ticks = self.active_drills.get(&player_id).map_or(1, |drill| {
-                simulation_ticks_for_seconds(drill.seconds_per_chip)
-            });
-            let timer = self
-                .active_drill_timers
-                .entry(player_id)
-                .or_insert_with(|| ActiveDrillTimer {
-                    next_chip_tick: SimulationTick::new(tick.get().saturating_add(period_ticks)),
-                    period_ticks,
-                });
-            timer.period_ticks = period_ticks;
-            let ticks_until_chip = timer.next_chip_tick.get().saturating_sub(next_tick.get());
-            if let Some(drill) = self.active_drills.get_mut(&player_id) {
-                let elapsed = period_ticks.saturating_sub(ticks_until_chip.min(period_ticks));
-                let elapsed_u16 = u16::try_from(elapsed).unwrap_or(u16::MAX);
-                let period_u16 = u16::try_from(period_ticks).unwrap_or(u16::MAX).max(1);
-                drill.progress = f32::from(elapsed_u16) / f32::from(period_u16);
-            }
-            if next_tick < timer.next_chip_tick {
-                continue;
-            }
-            timer.next_chip_tick = SimulationTick::new(
-                timer
-                    .next_chip_tick
-                    .get()
-                    .saturating_add(timer.period_ticks),
-            );
-            if let Some(drill) = self.active_drills.get_mut(&player_id) {
-                drill.progress = 0.0;
-            }
-            let Some(target) = self.active_drill(player_id).map(|drill| drill.target) else {
-                continue;
-            };
-            let Some(result) = self.chip_active_drill_target(player_id) else {
-                continue;
-            };
-            if matches!(
-                result,
-                MineResult::Blocked
-                    | MineResult::TooDangerous
-                    | MineResult::Exploded
-                    | MineResult::Blast
-                    | MineResult::Mined(_)
-            ) {
-                self.active_drill_timers.remove(&player_id);
-            }
-            output.terrain_changed_tiles.push(target);
-            let revisions = terrain_revisions.mark_tiles_changed([target]);
-            output.terrain_revisions.extend(revisions);
-            match result {
-                MineResult::Mined(TileKind::Ore(_)) => {
-                    output.push_event(GameplayEventKind::CargoChanged { player_id });
-                }
-                MineResult::Mined(TileKind::Artifact(ArtifactKind::StarCore)) => {
-                    self.progression.escape_deadline = Some(SimulationTick::new(
-                        next_tick
-                            .get()
-                            .saturating_add(120 * u64::from(SIMULATION_HZ)),
-                    ));
-                    output.push_event(GameplayEventKind::CargoChanged { player_id });
-                    output.push_event(GameplayEventKind::EscapeStarted { player_id });
-                }
-                MineResult::Mined(TileKind::Stone | TileKind::HardRock) => {
-                    #[allow(
-                        clippy::cast_precision_loss,
-                        clippy::cast_sign_loss,
-                        clippy::suboptimal_flops,
-                        reason = "terrain coordinates deterministically reproduce the legacy hazard schedule"
-                    )]
-                    let (value, boulder_x, boulder_y) = (
-                        self.terrain.seed()
-                            ^ ((target.x as u64).wrapping_mul(0x9E37))
-                            ^ ((target.y as u64).wrapping_mul(0x85EB)),
-                        target.x as f32 * TILE_SIZE + TILE_SIZE * 0.5,
-                        (target.y as f32 - 1.0) * TILE_SIZE,
-                    );
-                    if value.is_multiple_of(AUTHORITATIVE_BOULDER_SPAWN_CHANCE) {
-                        self.spawn_falling_boulder(
-                            boulder_x,
-                            boulder_y,
-                            AUTHORITATIVE_BOULDER_WARNING_TICKS,
-                            AUTHORITATIVE_BOULDER_LIFE_TICKS,
-                        );
-                        output.push_event(GameplayEventKind::BouldersChanged);
-                    }
-                }
-                MineResult::TooDangerous => {
-                    let _snapshot = self.apply_hazard_damage(player_id, 8.0);
-                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
-                }
-                MineResult::Exploded => {
-                    output.push_event(GameplayEventKind::HazardChanged);
-                }
-                MineResult::Blast => {
-                    if let Some(player) = self.players.get(&player_id) {
-                        let (player_x, player_y) = (player.x, player.y);
-                        for offset in -1_i32..=1 {
-                            #[allow(
-                                clippy::cast_precision_loss,
-                                clippy::suboptimal_flops,
-                                reason = "small cave-in offsets intentionally map to world coordinates"
-                            )]
-                            let (x, y) = (
-                                player_x + offset as f32 * TILE_SIZE,
-                                player_y - TILE_SIZE * 2.0,
-                            );
-                            self.spawn_falling_boulder(
-                                x,
-                                y,
-                                27 + u64::from(offset.unsigned_abs()) * 9,
-                                240,
-                            );
-                        }
-                    }
-                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
-                    output.push_event(GameplayEventKind::HazardChanged);
-                    output.push_event(GameplayEventKind::BouldersChanged);
-                }
-                MineResult::Blocked | MineResult::Chipped | MineResult::Mined(_) => {}
-            }
-        }
-        self.advance_canonical_day_if_due(next_tick, &mut output, &mut changed_players);
-        self.advance_escape_sequence(next_tick, &mut output, &mut changed_players);
-        self.advance_progression_depth(&mut output, &mut changed_players);
-        let pressure_player_ids = self.players.keys().copied().collect::<Vec<_>>();
-        for player_id in pressure_player_ids {
-            self.advance_world_event_hazards(player_id, next_tick, &mut output);
-            self.advance_deep_run_pressure(player_id, next_tick, &mut output, &mut changed_players);
-        }
-        self.advance_falling_boulders(next_tick, &mut output, &mut changed_players);
-        output.changed_players = changed_players.into_iter().collect();
-        self.set_simulation_tick(next_tick);
-        output
-    }
-
-    fn advance_escape_sequence(
-        &mut self,
-        next_tick: SimulationTick,
-        output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
-    ) {
-        let Some(deadline) = self.progression.escape_deadline else {
-            return;
-        };
-        if next_tick >= deadline {
-            for (player_id, player) in &mut self.players {
-                player.hull = 0.0;
-                changed_players.insert(*player_id);
-                output.push_event(GameplayEventKind::PlayerDamaged {
-                    player_id: *player_id,
-                });
-            }
-            self.progression.escape_deadline = None;
-            return;
-        }
-        if next_tick.get().is_multiple_of(45)
-            && let Some(player) = self.players.values().next()
-        {
-            let (x, y) = (player.x, player.y);
-            for offset in -1_i16..=1 {
-                self.spawn_falling_boulder(
-                    f32::from(offset).mul_add(TILE_SIZE, x),
-                    TILE_SIZE.mul_add(-2.0, y),
-                    27 + u64::from(offset.unsigned_abs()) * 9,
-                    240,
-                );
-            }
-            output.push_event(GameplayEventKind::BouldersChanged);
-        }
-        if next_tick.get() % 90 == 75 {
-            self.collapse_warnings.clear();
-            if let Some(player) = self.players.values().next() {
-                let center = player.tile_position(TILE_SIZE);
-                for dx in -2..=2 {
-                    let position = TilePosition {
-                        x: center.x + dx,
-                        y: center.y + 5,
-                    };
-                    if position.y > 7
-                        && !self.terrain.is_solid_at(position)
-                        && !self.infrastructure.iter().any(|item| {
-                            item.kind == InfrastructureKind::TunnelSupport
-                                && (item.position.x - position.x).abs() <= 3
-                                && (item.position.y - position.y).abs() <= 3
-                        })
-                    {
-                        self.collapse_warnings.push(position);
-                    }
-                }
-            }
-        } else if next_tick.get().is_multiple_of(90) {
-            for position in mem::take(&mut self.collapse_warnings) {
-                if self.terrain.set_kind(position, TileKind::Stone) {
-                    output.terrain_changed_tiles.push(position);
-                    self.scan_markers
-                        .retain(|marker| marker.position != position);
-                }
-            }
-            output.push_event(GameplayEventKind::EscapeTunnelChanged);
-        }
-    }
-
-    fn grant_deep_reward(
-        &mut self,
-        player_id: PlayerId,
-        depth: i32,
-        output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
-    ) {
-        use crate::game_state::LegendaryBlueprint;
-        let Some(player) = self.players.get_mut(&player_id) else {
-            return;
-        };
-        let position = TilePosition {
-            x: player
-                .tile_position(TILE_SIZE)
-                .x
-                .saturating_add(2)
-                .clamp(1, self.terrain.width() - 2),
-            y: depth.clamp(10, self.terrain.height() - 2),
-        };
-        let reward_tile = if depth >= 120 {
-            let material = match depth {
-                180.. => StrategicResourceKind::RadiantFossil,
-                160..=179 => StrategicResourceKind::VoidGlass,
-                140..=159 => StrategicResourceKind::MachineRelic,
-                _ => StrategicResourceKind::PressurePearl,
-            };
-            player.add_material(material, 1);
-            player.add_material(StrategicResourceKind::CoreShard, 1);
-            let blueprint = if depth >= 160 {
-                LegendaryBlueprint::RelicSorter
-            } else if depth >= 140 {
-                LegendaryBlueprint::VoidTank
-            } else {
-                LegendaryBlueprint::StarPlating
-            };
-            self.progression.legendary_blueprints.insert(blueprint);
-            match blueprint {
-                LegendaryBlueprint::StarPlating => {
-                    self.progression
-                        .rig_part_inventory
-                        .insert(RigPartKind::PressureHull);
-                    player.crafted_bulkheads = player.crafted_bulkheads.saturating_add(1);
-                    player.hull = player.max_hull();
-                }
-                LegendaryBlueprint::VoidTank => {
-                    self.progression
-                        .rig_part_inventory
-                        .insert(RigPartKind::HaulerEngine);
-                    player.fuel_capacity += 20.0;
-                    player.fuel = player.fuel_capacity;
-                }
-                LegendaryBlueprint::RelicSorter => {
-                    self.progression
-                        .rig_part_inventory
-                        .insert(RigPartKind::RelicScanner);
-                    self.progression
-                        .rig_part_inventory
-                        .insert(RigPartKind::CargoBalloon);
-                    player.cargo_capacity = player.cargo_capacity.saturating_add(4);
-                }
-            }
-            TileKind::Artifact(ArtifactKind::OldCircuit)
-        } else {
-            TileKind::Ore(MineralKind::Mythril)
-        };
-        if self.terrain.set_kind(position, reward_tile) {
-            output.terrain_changed_tiles.push(position);
-        }
-        changed_players.insert(player_id);
-        output.push_event(GameplayEventKind::DeepRewardGranted { player_id });
-    }
-
-    fn advance_progression_depth(
-        &mut self,
-        output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
-    ) {
-        let player_depths = self
-            .players
-            .iter()
-            .map(|(player_id, player)| (*player_id, player.tile_position(TILE_SIZE).y))
-            .collect::<Vec<_>>();
-        for (player_id, depth) in player_depths {
-            self.progression.deepest_tile_reached =
-                self.progression.deepest_tile_reached.max(depth);
-            let milestone = depth / 20;
-            let previous = self
-                .progression
-                .deep_reward_milestones
-                .get(&player_id)
-                .copied()
-                .unwrap_or(0);
-            if depth >= 90 && milestone > previous {
-                self.progression
-                    .deep_reward_milestones
-                    .insert(player_id, milestone);
-                self.grant_deep_reward(player_id, depth, output, changed_players);
-            }
-        }
-    }
-
-    fn advance_world_event_hazards(
-        &mut self,
-        player_id: PlayerId,
-        next_tick: SimulationTick,
-        output: &mut TickOutput,
-    ) {
-        let Some(player) = self.players.get(&player_id) else {
-            return;
-        };
-        if player.y < TILE_SIZE * 8.0 {
-            return;
-        }
-        let (player_x, player_y) = (player.x, player.y);
-        if self
-            .world_event_severity
-            .contains_key(&WorldEventKind::CollapseSurge)
-            && next_tick.get().is_multiple_of(180)
-        {
-            for offset in -1_i16..=1 {
-                self.spawn_falling_boulder(
-                    f32::from(offset).mul_add(TILE_SIZE, player_x),
-                    TILE_SIZE.mul_add(-2.0, player_y),
-                    27 + u64::from(offset.unsigned_abs()) * 9,
-                    240,
-                );
-            }
-            output.push_event(GameplayEventKind::BouldersChanged);
-        }
-        if self
-            .world_event_severity
-            .contains_key(&WorldEventKind::GasBloom)
-            && next_tick.get().is_multiple_of(240)
-        {
-            self.hazards.push(HazardCloud {
-                x: player_x,
-                y: player_y + TILE_SIZE,
-                life: 6.0,
-                radius: 12.0,
-            });
-            output.push_event(GameplayEventKind::HazardChanged);
-        }
-    }
-
-    fn advance_deep_run_pressure(
-        &mut self,
-        player_id: PlayerId,
-        next_tick: SimulationTick,
-        output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
-    ) {
-        let Some(player) = self.players.get(&player_id) else {
-            return;
-        };
-        let depth = player.tile_position(TILE_SIZE).y;
-        let rare_cargo = player
-            .cargo
-            .iter()
-            .filter(|(mineral, _)| {
-                matches!(
-                    mineral,
-                    MineralKind::Diamond
-                        | MineralKind::Platinum
-                        | MineralKind::Uranium
-                        | MineralKind::Mythril
-                )
-            })
-            .map(|(_, count)| *count)
-            .sum::<u32>()
-            .saturating_add(player.artifacts.values().copied().sum());
-        let state = self.deep_run_states.entry(player_id).or_default();
-        if depth < 80 {
-            state.trip_ticks = 0;
-            state.instability = 2.0f32
-                .mul_add(-FIXED_DELTA_SECONDS, state.instability)
-                .max(0.0);
-            return;
-        }
-        state.trip_ticks = state.trip_ticks.saturating_add(1);
-        let trip_seconds =
-            f32::from(u16::try_from(state.trip_ticks).unwrap_or(u16::MAX)) / SIMULATION_HZ_F32;
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "bounded depth and cargo counts intentionally feed gameplay pressure"
-        )]
-        let pressure = ((depth - 70) as f32).mul_add(
-            0.006,
-            trip_seconds.mul_add(0.0006, rare_cargo as f32 * 0.02),
-        );
-        state.instability = FIXED_DELTA_SECONDS.mul_add(pressure, state.instability);
-        if depth >= 105 {
-            if let Some(player) = self.players.get_mut(&player_id) {
-                player.fuel = quantize_simulation_scalar(
-                    FIXED_DELTA_SECONDS.mul_add(-0.25, player.fuel).max(0.0),
-                );
-            }
-            let deadline = SimulationTick::new(next_tick.get().saturating_add(72));
-            self.scanner_cooldown_deadlines
-                .entry(player_id)
-                .and_modify(|current| *current = (*current).max(deadline))
-                .or_insert(deadline);
-            changed_players.insert(player_id);
-        }
-        if rare_cargo > 0 && next_tick.get().is_multiple_of(240) {
-            let player = self.players.get(&player_id).expect("player remains valid");
-            self.hazards.push(HazardCloud {
-                x: player.x,
-                y: player.y + TILE_SIZE,
-                life: 5.0,
-                radius: 10.0 + f32::from(u16::try_from(rare_cargo).unwrap_or(u16::MAX)).min(4.0),
-            });
-            output.push_event(GameplayEventKind::HazardChanged);
-        }
-        if state.instability >= 100.0 {
-            state.instability = 45.0;
-            let player = self.players.get(&player_id).expect("player remains valid");
-            let (player_x, player_y) = (player.x, player.y);
-            for offset in -1_i16..=1 {
-                self.spawn_falling_boulder(
-                    f32::from(offset).mul_add(TILE_SIZE, player_x),
-                    TILE_SIZE.mul_add(-2.0, player_y),
-                    27 + u64::from(offset.unsigned_abs()) * 9,
-                    240,
-                );
-            }
-            let _snapshot = self.apply_hazard_damage(player_id, 4.0);
-            changed_players.insert(player_id);
-            output.push_event(GameplayEventKind::PlayerDamaged { player_id });
-            output.push_event(GameplayEventKind::BouldersChanged);
-        }
-    }
-
-    fn spawn_falling_boulder(&mut self, x: f32, y: f32, warning_ticks: u64, life_ticks: u64) {
-        self.falling_boulders.push(FallingBoulder {
-            x,
-            y,
-            velocity_y: 0.0,
-            warning_seconds: f32::from(u16::try_from(warning_ticks).unwrap_or(u16::MAX))
-                / SIMULATION_HZ_F32,
-            life: f32::from(u16::try_from(life_ticks).unwrap_or(u16::MAX)) / SIMULATION_HZ_F32,
-        });
-        self.boulder_warning_deadlines.push(SimulationTick::new(
-            self.simulation_tick.get().saturating_add(warning_ticks),
-        ));
-        self.boulder_expiry_ticks.push(SimulationTick::new(
-            self.simulation_tick.get().saturating_add(life_ticks),
-        ));
-    }
-
-    fn advance_falling_boulders(
-        &mut self,
-        next_tick: SimulationTick,
-        output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
-    ) {
-        let boulders = mem::take(&mut self.falling_boulders);
-        let warning_deadlines = mem::take(&mut self.boulder_warning_deadlines);
-        let expiry_ticks = mem::take(&mut self.boulder_expiry_ticks);
-        for (index, mut boulder) in boulders.into_iter().enumerate() {
-            let warning_deadline = warning_deadlines.get(index).copied().unwrap_or(next_tick);
-            let expiry_tick = expiry_ticks.get(index).copied().unwrap_or(next_tick);
-            if next_tick >= expiry_tick {
-                continue;
-            }
-            if next_tick >= warning_deadline {
-                boulder.velocity_y = quantize_simulation_scalar(
-                    (AUTHORITATIVE_GRAVITY * 0.8)
-                        .mul_add(FIXED_DELTA_SECONDS, boulder.velocity_y)
-                        .min(520.0),
-                );
-                boulder.y = quantize_simulation_scalar(
-                    boulder.velocity_y.mul_add(FIXED_DELTA_SECONDS, boulder.y),
-                );
-                let hit_player = self.players.iter().find_map(|(player_id, player)| {
-                    let dx = player.x - boulder.x;
-                    let dy = player.y - boulder.y;
-                    (dx.mul_add(dx, dy * dy) <= (AUTHORITATIVE_PLAYER_RADIUS + 8.0).powi(2))
-                        .then_some(*player_id)
-                });
-                if let Some(player_id) = hit_player {
-                    let _snapshot = self.apply_hazard_damage(player_id, 8.0);
-                    changed_players.insert(player_id);
-                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
-                    continue;
-                }
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    reason = "bounded boulder coordinates intentionally map to terrain tiles"
-                )]
-                let tile = TilePosition {
-                    x: (boulder.x / TILE_SIZE).floor() as i32,
-                    y: (boulder.y / TILE_SIZE).floor() as i32,
-                };
-                if self.terrain.is_solid_at(tile) {
-                    continue;
-                }
-            }
-            boulder.warning_seconds = simulation_seconds_until(next_tick, warning_deadline);
-            boulder.life = simulation_seconds_until(next_tick, expiry_tick);
-            self.falling_boulders.push(boulder);
-            self.boulder_warning_deadlines.push(warning_deadline);
-            self.boulder_expiry_ticks.push(expiry_tick);
-        }
-    }
-
-    #[allow(
-        clippy::too_many_lines,
-        reason = "movement parity keeps modifier, integration, collision, and damage ordering explicit"
-    )]
-    pub fn step_authoritative_movement(
-        &mut self,
-        player_id: PlayerId,
-        horizontal: f32,
-        thrust: bool,
-        delta_seconds: f32,
-    ) -> Option<AuthoritativeMovementStep> {
-        let parts = self
-            .equipped_rig_parts
-            .get(&player_id)
-            .cloned()
-            .unwrap_or_default();
-        let mechanic_level = self.mechanic_levels.get(&player_id).copied().unwrap_or(0);
-        let player = self.players.get_mut(&player_id)?;
-        let grounded = authoritative_player_collides(&self.terrain, player.x, player.y + 2.0);
-        let mut effective_cargo_capacity = player.cargo_capacity;
-        if parts.contains(&RigPartKind::CargoBalloon) {
-            effective_cargo_capacity = effective_cargo_capacity.saturating_add(20);
-        }
-        if parts.contains(&RigPartKind::ArmoredCargoBay) {
-            effective_cargo_capacity = effective_cargo_capacity.saturating_sub(4).max(1);
-        }
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "bounded cargo counts intentionally become a movement load ratio"
-        )]
-        let cargo_ratio = player.cargo_used() as f32 / effective_cargo_capacity.max(1) as f32;
-        let cargo_pressure = if parts.contains(&RigPartKind::HaulerEngine) {
-            0.08
-        } else if parts.contains(&RigPartKind::LightweightEngine) {
-            0.28
-        } else {
-            0.18
-        };
-        let cargo_penalty = cargo_ratio.min(1.0).mul_add(-cargo_pressure, 1.0);
-        let mut engine_multiplier =
-            (1.0 + f32::from(player.engine_level.saturating_sub(1)) * 0.28) * cargo_penalty;
-        if parts.contains(&RigPartKind::LightweightEngine) {
-            engine_multiplier *= 1.12;
-        }
-        if parts.contains(&RigPartKind::HaulerEngine) {
-            engine_multiplier *= 0.92;
-        }
-        if parts.contains(&RigPartKind::BurstEngine) {
-            engine_multiplier *= 1.25;
-        }
-        if parts.contains(&RigPartKind::CargoBalloon) {
-            engine_multiplier *= 0.88;
-        }
-        let horizontal_acceleration = if grounded {
-            AUTHORITATIVE_HORIZONTAL_ACCELERATION * 1.35
-        } else {
-            AUTHORITATIVE_HORIZONTAL_ACCELERATION * 0.65
-        };
-        player.velocity_x = quantize_simulation_scalar(
-            horizontal.clamp(-1.0, 1.0).mul_add(
-                horizontal_acceleration * engine_multiplier * delta_seconds,
-                player.velocity_x,
-            ) * if grounded {
-                AUTHORITATIVE_GROUND_DRAG_PER_TICK
-            } else {
-                AUTHORITATIVE_AIR_DRAG_PER_TICK
-            },
-        )
-        .clamp(
-            -AUTHORITATIVE_MAX_HORIZONTAL_SPEED * engine_multiplier,
-            AUTHORITATIVE_MAX_HORIZONTAL_SPEED * engine_multiplier,
-        );
-        if thrust && player.fuel > 0.0 {
-            player.velocity_y =
-                quantize_simulation_scalar(-AUTHORITATIVE_THRUST_SPEED * engine_multiplier);
-            let mut efficiency = 1.0 - f32::from(player.fuel_tank_level.saturating_sub(1)) * 0.06;
-            if parts.contains(&RigPartKind::BurstEngine) {
-                efficiency *= 1.22;
-            }
-            if parts.contains(&RigPartKind::TitanDrill) {
-                efficiency *= 1.08;
-            }
-            player.fuel = quantize_simulation_scalar(
-                (AUTHORITATIVE_FUEL_BURN_PER_SECOND * efficiency)
-                    .mul_add(-delta_seconds, player.fuel)
-                    .max(0.0),
-            );
-        } else {
-            player.velocity_y = quantize_simulation_scalar(
-                AUTHORITATIVE_GRAVITY
-                    .mul_add(delta_seconds, player.velocity_y)
-                    .clamp(-AUTHORITATIVE_MAX_FALL_SPEED, AUTHORITATIVE_MAX_FALL_SPEED),
-            );
-        }
-
-        let delta_x = quantize_simulation_scalar(player.velocity_x * delta_seconds);
-        let delta_y = quantize_simulation_scalar(player.velocity_y * delta_seconds);
-        let next_x = quantize_simulation_scalar(player.x + delta_x);
-        let next_y = quantize_simulation_scalar(player.y + delta_y);
-
-        if authoritative_player_collides(&self.terrain, next_x, player.y) {
-            let impact_speed = player.velocity_x.abs();
-            if impact_speed > AUTHORITATIVE_SAFE_LANDING_SPEED * 0.75 {
-                let damage = AUTHORITATIVE_SAFE_LANDING_SPEED.mul_add(-0.75, impact_speed)
-                    * AUTHORITATIVE_CRASH_DAMAGE_SCALE
-                    * 0.5;
-                let mut mitigation = (f32::from(mechanic_level) * 0.08).min(0.32);
-                if parts.contains(&RigPartKind::ImpactHull) {
-                    mitigation += 0.22;
-                }
-                if parts.contains(&RigPartKind::ThermalHull) {
-                    mitigation -= 0.10;
-                }
-                let damage = damage * (1.0 - mitigation.clamp(0.0, 0.55));
-                player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
-            }
-            player.velocity_x = 0.0;
-        } else {
-            player.x =
-                quantize_simulation_scalar(clamp_authoritative_player_x(&self.terrain, next_x));
-        }
-
-        if authoritative_player_collides(&self.terrain, player.x, next_y) {
-            if delta_y > 0.0 && player.velocity_y > AUTHORITATIVE_SAFE_LANDING_SPEED {
-                let damage = (player.velocity_y - AUTHORITATIVE_SAFE_LANDING_SPEED)
-                    * AUTHORITATIVE_CRASH_DAMAGE_SCALE;
-                let mut mitigation = (f32::from(mechanic_level) * 0.08).min(0.32);
-                if parts.contains(&RigPartKind::ImpactHull) {
-                    mitigation += 0.22;
-                }
-                if parts.contains(&RigPartKind::ThermalHull) {
-                    mitigation -= 0.10;
-                }
-                let damage = damage * (1.0 - mitigation.clamp(0.0, 0.55));
-                player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
-            }
-            player.velocity_y = 0.0;
-        } else {
-            player.y =
-                quantize_simulation_scalar(clamp_authoritative_player_y(&self.terrain, next_y));
-        }
-
-        Some(AuthoritativeMovementStep {
-            player_id,
-            x: player.x,
-            y: player.y,
-            velocity_x: player.velocity_x,
-            velocity_y: player.velocity_y,
-        })
-    }
-
-    fn schedule_canonical_world_event(
-        &mut self,
-        next_tick: SimulationTick,
-        output: &mut TickOutput,
-    ) {
-        if !self.progression.town_event_day.is_multiple_of(3) {
-            return;
-        }
-        let kind = match (self.progression.market_salt + self.progression.town_event_day) % 13 {
-            0 => WorldEventKind::MarketCrash,
-            1 => WorldEventKind::MarketBoom,
-            2 => WorldEventKind::RareBuyer,
-            3 => WorldEventKind::FuelShortage,
-            4 => WorldEventKind::RepairBacklog,
-            5 => WorldEventKind::HeatWave,
-            6 => WorldEventKind::CollapseSurge,
-            7 => WorldEventKind::DeepPressureStorm,
-            8 => WorldEventKind::GasBloom,
-            9 => WorldEventKind::Earthquake,
-            10 => WorldEventKind::MeteorShower,
-            11 => WorldEventKind::RivalClaims,
-            _ => WorldEventKind::AncientMachine,
-        };
-        if self.world_event_severity.contains_key(&kind) {
-            return;
-        }
-        let severity = 1 + (self.progression.town_event_day + self.progression.market_salt) % 3;
-        self.world_event_severity.insert(kind, severity);
-        self.world_event_days_remaining
-            .insert(kind, 2 + severity.min(2));
-        match kind {
-            WorldEventKind::GasBloom => {
-                if let Some(player) = self.players.values().next() {
-                    self.hazards.push(HazardCloud {
-                        x: player.x,
-                        y: player.y + TILE_SIZE,
-                        life: 8.0 + f32::from(u16::try_from(severity).unwrap_or(u16::MAX)),
-                        radius: 12.0 + f32::from(u16::try_from(severity).unwrap_or(u16::MAX)) * 2.0,
-                    });
-                    output.push_event(GameplayEventKind::HazardChanged);
-                }
-            }
-            WorldEventKind::MeteorShower => {
-                let _outcome = self.start_canonical_side_contract();
-                self.progression.contracts.active.reward =
-                    self.progression.contracts.active.reward.saturating_add(75);
-            }
-            WorldEventKind::RivalClaims => {
-                self.progression.expedition_offers.clear();
-                self.refresh_canonical_expedition_offers();
-            }
-            WorldEventKind::AncientMachine => {
-                for (player_id, player) in &mut self.players {
-                    player.add_material(StrategicResourceKind::CoreShard, severity.max(1));
-                    self.scanner_cooldown_deadlines.insert(
-                        *player_id,
-                        SimulationTick::new(next_tick.get().saturating_add(360)),
-                    );
-                }
-            }
-            WorldEventKind::Earthquake => {
-                if let Some(player) = self.players.values().next() {
-                    let x = player.x;
-                    let y = player.y;
-                    for offset in -1_i16..=1 {
-                        self.spawn_falling_boulder(
-                            f32::from(offset).mul_add(TILE_SIZE, x),
-                            TILE_SIZE.mul_add(-2.0, y),
-                            27 + u64::from(offset.unsigned_abs()) * 9,
-                            240,
-                        );
-                    }
-                }
-                output.push_event(GameplayEventKind::BouldersChanged);
-            }
-            WorldEventKind::MarketCrash
-            | WorldEventKind::MarketBoom
-            | WorldEventKind::RareBuyer
-            | WorldEventKind::FuelShortage
-            | WorldEventKind::RepairBacklog
-            | WorldEventKind::HeatWave
-            | WorldEventKind::CollapseSurge
-            | WorldEventKind::DeepPressureStorm => {}
-        }
-    }
-
-    fn advance_canonical_day_if_due(
-        &mut self,
-        next_tick: SimulationTick,
-        output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
-    ) {
-        if next_tick < self.progression.next_day_tick {
-            return;
-        }
-        self.advance_canonical_market_day();
-        for days in self.world_event_days_remaining.values_mut() {
-            *days = days.saturating_sub(1);
-        }
-        self.world_event_days_remaining.retain(|_, days| *days > 0);
-        self.world_event_severity
-            .retain(|kind, _| self.world_event_days_remaining.contains_key(kind));
-        self.schedule_canonical_world_event(next_tick, output);
-        let dividend = u32::from(self.progression.town_development.bank_level) * 12;
-        if dividend > 0 {
-            for (player_id, player) in &mut self.players {
-                player.credits = player.credits.saturating_add(dividend);
-                changed_players.insert(*player_id);
-            }
-            self.progression.total_earnings = self.progression.total_earnings.saturating_add(
-                dividend.saturating_mul(u32::try_from(self.players.len()).unwrap_or(u32::MAX)),
-            );
-        }
-        if self.progression.town_event_day % 5 == 3 {
-            for item in &mut self.infrastructure {
-                if item.kind == InfrastructureKind::PumpStation {
-                    item.durability = item.durability.saturating_sub(35);
-                }
-            }
-            self.infrastructure.retain(|item| item.durability > 0);
-        }
-        self.progression.next_day_tick = SimulationTick::new(
-            self.progression.next_day_tick.get().saturating_add(
-                u64::from(SIMULATION_HZ)
-                    .saturating_mul(60)
-                    .saturating_mul(5),
-            ),
-        );
-    }
-
-    fn canonical_mineral_market_value(&self, mineral: MineralKind) -> u32 {
-        let mut factor = canonical_mineral_market_factor(
-            self.progression.market_salt,
-            self.progression.town_event_day,
-            mineral,
-        ) + u32::from(self.progression.town_development.depot_level) * 3;
-        if self
-            .world_event_severity
-            .contains_key(&WorldEventKind::MarketBoom)
-        {
-            factor += 25;
-        }
-        if self
-            .world_event_severity
-            .contains_key(&WorldEventKind::RareBuyer)
-            && matches!(
-                mineral,
-                MineralKind::Diamond | MineralKind::Mythril | MineralKind::Uranium
-            )
-        {
-            factor += 45;
-        }
-        if self
-            .world_event_severity
-            .contains_key(&WorldEventKind::MarketCrash)
-        {
-            factor = factor.saturating_sub(25).max(45);
-        }
-        mineral.value().saturating_mul(factor) / 100
-    }
-
-    fn sell_canonical_cargo(&mut self, player_id: PlayerId) -> PlayerScopedCommandOutcome {
-        let Some(player_snapshot) = self.players.get(&player_id) else {
-            return PlayerScopedCommandOutcome::UnknownPlayer;
-        };
-        let mineral_payout = player_snapshot
-            .cargo
-            .iter()
-            .map(|(mineral, count)| {
-                self.canonical_mineral_market_value(*mineral)
-                    .saturating_mul(*count)
-            })
-            .sum::<u32>();
-        let artifact_payout = player_snapshot
-            .artifacts
-            .iter()
-            .map(|(artifact, count)| artifact.value().saturating_mul(*count))
-            .sum::<u32>();
-        let payout = mineral_payout.saturating_add(artifact_payout);
-        if payout == 0 {
-            return PlayerScopedCommandOutcome::IgnoredUnavailable;
-        }
-        let Some(player) = self.players.get_mut(&player_id) else {
-            return PlayerScopedCommandOutcome::UnknownPlayer;
-        };
-        let credits_before = player.credits;
-        let cargo_before = player.cargo_used();
-        player.cargo.clear();
-        player.artifacts.clear();
-        player.credits = player.credits.saturating_add(payout);
-        self.progression.total_earnings = self.progression.total_earnings.saturating_add(payout);
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::SellCargo,
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: 0,
-        });
-        PlayerScopedCommandOutcome::Applied
-    }
-
-    fn advance_canonical_market_day(&mut self) {
-        self.progression.town_event_day = self.progression.town_event_day.saturating_add(1);
-        self.progression.market_salt = self.progression.market_salt.wrapping_add(1);
-        self.progression
-            .market_history
-            .push(canonical_market_factor(
-                self.progression.market_salt,
-                self.progression.town_event_day,
-            ));
-        if self.progression.market_history.len() > 7 {
-            self.progression.market_history.remove(0);
-        }
-        for mineral in canonical_minerals() {
-            let history = self
-                .progression
-                .mineral_market_history
-                .entry(mineral)
-                .or_default();
-            history.push(canonical_mineral_market_factor(
-                self.progression.market_salt,
-                self.progression.town_event_day,
-                mineral,
-            ));
-            if history.len() > 7 {
-                history.remove(0);
-            }
-        }
-        self.progression.expedition_offers.clear();
-    }
-
-    fn refresh_canonical_expedition_offers(&mut self) {
-        use crate::game_state::ExpeditionObjectiveKind;
-        if self.progression.deep_claim_status != DeepClaimStatus::Unlocked
-            || !self.progression.expedition_offers.is_empty()
-        {
-            return;
-        }
-        let day = self.progression.town_event_day;
-        let depth = u32::try_from(self.progression.deepest_tile_reached.max(80)).unwrap_or(80);
-        self.progression.expedition_offers = vec![
-            Expedition {
-                kind: ExpeditionObjectiveKind::ReachDepth,
-                target: TileKind::Stone,
-                required: depth.saturating_add(15).min(140),
-                reward: 320 + day * 12,
-                expires_day: day + 4,
-            },
-            Expedition {
-                kind: ExpeditionObjectiveKind::DeliverCargo,
-                target: TileKind::Ore(MineralKind::Platinum),
-                required: 2,
-                reward: 420 + day * 14,
-                expires_day: day + 3,
-            },
-            Expedition {
-                kind: ExpeditionObjectiveKind::ScanHazards,
-                target: TileKind::Gas,
-                required: 4,
-                reward: 360 + day * 10,
-                expires_day: day + 3,
-            },
-            Expedition {
-                kind: ExpeditionObjectiveKind::BuildPumpStations,
-                target: TileKind::MagmaVent,
-                required: 2,
-                reward: 460 + day * 12,
-                expires_day: day + 5,
-            },
-        ];
-        let kind = match day % 10 {
-            0 => ExpeditionObjectiveKind::RecoverProbe,
-            1 => ExpeditionObjectiveKind::MineVein,
-            2 => ExpeditionObjectiveKind::ScanAnomaly,
-            3 => ExpeditionObjectiveKind::RescueMiner,
-            4 => ExpeditionObjectiveKind::DeliverExplosives,
-            5 => ExpeditionObjectiveKind::StabilizeCollapse,
-            6 => ExpeditionObjectiveKind::RetrieveArtifact,
-            7 => ExpeditionObjectiveKind::ReachSignal,
-            8 => ExpeditionObjectiveKind::NoDamageReturn,
-            _ => ExpeditionObjectiveKind::FastReturn,
-        };
-        self.progression.expedition_offers.push(Expedition {
-            kind,
-            target: TileKind::Artifact(ArtifactKind::OldCircuit),
-            required: 1 + day % 3,
-            reward: 520 + day * 16,
-            expires_day: day + 2,
-        });
-    }
-
-    fn accept_canonical_expedition(&mut self, index: usize) -> PlayerScopedCommandOutcome {
-        self.refresh_canonical_expedition_offers();
-        if self.progression.active_expeditions.len() >= 3
-            || index >= self.progression.expedition_offers.len()
-        {
-            return PlayerScopedCommandOutcome::IgnoredUnavailable;
-        }
-        let expedition = self.progression.expedition_offers.remove(index);
-        self.progression.active_expeditions.push(expedition);
-        PlayerScopedCommandOutcome::Applied
-    }
-
-    fn apply_canonical_expedition_special_reward(
-        &mut self,
-        player_id: PlayerId,
-        expedition: Expedition,
-    ) {
-        use crate::game_state::{ExpeditionObjectiveKind, LegendaryBlueprint};
-        match expedition.kind {
-            ExpeditionObjectiveKind::RetrieveArtifact => {
-                self.progression
-                    .legendary_blueprints
-                    .insert(LegendaryBlueprint::StarPlating);
-                self.progression
-                    .rig_part_inventory
-                    .insert(RigPartKind::ResonanceDrill);
-            }
-            ExpeditionObjectiveKind::RecoverProbe | ExpeditionObjectiveKind::ReachSignal => {
-                self.progression
-                    .rig_part_inventory
-                    .insert(RigPartKind::HazardScanner);
-            }
-            _ => {}
-        }
-        let Some(player) = self.players.get_mut(&player_id) else {
-            return;
-        };
-        match expedition.kind {
-            ExpeditionObjectiveKind::ScanAnomaly | ExpeditionObjectiveKind::ScanHazards => {
-                player.add_material(StrategicResourceKind::CrystalLens, expedition.required);
-            }
-            ExpeditionObjectiveKind::MineVein => {
-                player.add_material(StrategicResourceKind::AncientAlloy, 1);
-            }
-            _ => {}
-        }
-    }
-
-    fn start_canonical_side_contract(&mut self) -> PlayerScopedCommandOutcome {
-        use crate::game_state::SideContractKind;
-        if self.progression.active_side_contracts.len() >= 3 {
-            return PlayerScopedCommandOutcome::IgnoredUnavailable;
-        }
-        let kind = match self.progression.town_event_day % 4 {
-            0 => SideContractKind::Cargo,
-            1 => SideContractKind::DepthSurvey,
-            2 => SideContractKind::HazardScan,
-            _ => SideContractKind::Rush,
-        };
-        let (target, required) = match kind {
-            SideContractKind::Cargo => (TileKind::Ore(MineralKind::Gold), 2),
-            SideContractKind::DepthSurvey => (TileKind::Ore(MineralKind::Platinum), 65),
-            SideContractKind::HazardScan => (TileKind::Gas, 3),
-            SideContractKind::Rush => (TileKind::Ore(MineralKind::Ruby), 1),
-        };
-        self.progression.active_side_contracts.push(SideContract {
-            kind,
-            target,
-            required,
-            expires_day: (kind == SideContractKind::Rush)
-                .then_some(self.progression.town_event_day.saturating_add(2)),
-        });
-        PlayerScopedCommandOutcome::Applied
-    }
-
-    fn canonical_side_contract_satisfied(
-        &self,
-        player_id: PlayerId,
-        contract: SideContract,
-        player: &Player,
-    ) -> bool {
-        use crate::game_state::SideContractKind;
-        if contract
-            .expires_day
-            .is_some_and(|deadline| self.progression.town_event_day > deadline)
-        {
-            return false;
-        }
-        match contract.kind {
-            SideContractKind::Cargo | SideContractKind::Rush => match contract.target {
-                TileKind::Ore(mineral) => {
-                    player.cargo.get(&mineral).copied().unwrap_or(0) >= contract.required
-                }
-                TileKind::Artifact(artifact) => {
-                    player.artifacts.get(&artifact).copied().unwrap_or(0) >= contract.required
-                }
-                _ => false,
-            },
-            SideContractKind::DepthSurvey => {
-                u32::try_from(self.progression.deepest_tile_reached).unwrap_or(0)
-                    >= contract.required
-            }
-            SideContractKind::HazardScan => {
-                let count = self
-                    .discovered_tiles
-                    .get(&player_id)
-                    .into_iter()
-                    .flatten()
-                    .filter(|position| {
-                        self.terrain.tile(**position).is_some_and(|tile| {
-                            matches!(
-                                tile.kind,
-                                TileKind::Gas
-                                    | TileKind::Lava
-                                    | TileKind::MagmaVent
-                                    | TileKind::ExplosivePocket
-                                    | TileKind::PressurePocket
-                            )
-                        })
-                    })
-                    .count();
-                count >= usize::try_from(contract.required).unwrap_or(usize::MAX)
-            }
-        }
-    }
-
-    fn complete_canonical_side_contract(
-        &mut self,
-        player_id: PlayerId,
-    ) -> PlayerScopedCommandOutcome {
-        let Some(player_snapshot) = self.players.get(&player_id).cloned() else {
-            return PlayerScopedCommandOutcome::UnknownPlayer;
-        };
-        self.progression.active_side_contracts.retain(|contract| {
-            contract
-                .expires_day
-                .is_none_or(|deadline| self.progression.town_event_day <= deadline)
-        });
-        let Some(index) = self
-            .progression
-            .active_side_contracts
-            .iter()
-            .position(|contract| {
-                self.canonical_side_contract_satisfied(player_id, *contract, &player_snapshot)
-            })
-        else {
-            return PlayerScopedCommandOutcome::IgnoredUnavailable;
-        };
-        let contract = self.progression.active_side_contracts.remove(index);
-        let Some(player) = self.players.get_mut(&player_id) else {
-            return PlayerScopedCommandOutcome::UnknownPlayer;
-        };
-        let credits_before = player.credits;
-        let cargo_before = player.cargo_used();
-        if matches!(
-            contract.kind,
-            crate::game_state::SideContractKind::Cargo | crate::game_state::SideContractKind::Rush
-        ) {
-            crate::game_state::consume_side_contract_cargo(contract, player);
-        }
-        let reward = 420_u32.saturating_add(contract.required.min(10).saturating_mul(80));
-        player.credits = player.credits.saturating_add(reward);
-        self.progression.total_earnings = self.progression.total_earnings.saturating_add(reward);
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::CompleteContract,
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: player.cargo_used(),
-        });
-        PlayerScopedCommandOutcome::Applied
-    }
-
-    fn apply_canonical_salvage_service(
-        &mut self,
-        player_id: PlayerId,
-        request: crate::game_state::SessionServiceRequest,
-    ) -> Option<PlayerScopedCommandOutcome> {
-        let low_grade_values = [
-            self.canonical_mineral_market_value(MineralKind::Copper),
-            self.canonical_mineral_market_value(MineralKind::Iron),
-        ];
-        let player = self.players.get_mut(&player_id)?;
-        let level = self.progression.town_development.salvage_yard_level;
-        let applied = match request {
-            crate::game_state::SessionServiceRequest::SalvageRecoverWreckedPart => {
-                if level < 3 {
-                    false
-                } else {
-                    let count = self.rescue_counts.get(&player_id).copied().unwrap_or(0);
-                    let part = match count % 4 {
-                        0 => RigPartKind::ImpactHull,
-                        1 => RigPartKind::ArmoredCargoBay,
-                        2 => RigPartKind::HazardScanner,
-                        _ => RigPartKind::NeedleDrill,
-                    };
-                    self.progression.rig_part_inventory.insert(part);
-                    true
-                }
-            }
-            crate::game_state::SessionServiceRequest::SalvageClearCollapseZones => {
-                if level < 4 || self.collapse_warnings.is_empty() {
-                    false
-                } else {
-                    let cleared = u32::try_from(self.collapse_warnings.len()).unwrap_or(u32::MAX);
-                    self.collapse_warnings.clear();
-                    let payout = cleared.saturating_mul(45);
-                    player.credits = player.credits.saturating_add(payout);
-                    self.progression.total_earnings =
-                        self.progression.total_earnings.saturating_add(payout);
-                    true
-                }
-            }
-            crate::game_state::SessionServiceRequest::SalvageSellScrapTip => {
-                player.credits = player.credits.saturating_add(35);
-                self.progression.total_earnings =
-                    self.progression.total_earnings.saturating_add(35);
-                true
-            }
-            crate::game_state::SessionServiceRequest::SellScanData => {
-                if self.progression.town_development.scanner_lab_level == 0
-                    || self.scan_markers.is_empty()
-                {
-                    false
-                } else {
-                    let count = u32::try_from(self.scan_markers.len()).unwrap_or(u32::MAX);
-                    let payout = count.saturating_mul(
-                        12 + u32::from(self.progression.town_development.scanner_lab_level) * 4,
-                    );
-                    self.scan_markers.clear();
-                    player.credits = player.credits.saturating_add(payout);
-                    self.progression.total_earnings =
-                        self.progression.total_earnings.saturating_add(payout);
-                    true
-                }
-            }
-            crate::game_state::SessionServiceRequest::AutoSortLowGradeCargo => {
-                let mut payout = 0_u32;
-                for (index, mineral) in [MineralKind::Copper, MineralKind::Iron]
-                    .into_iter()
-                    .enumerate()
-                {
-                    if let Some(count) = player.cargo.remove(&mineral) {
-                        payout =
-                            payout.saturating_add(low_grade_values[index].saturating_mul(count));
-                    }
-                }
-                if payout == 0 {
-                    false
-                } else {
-                    player.credits = player.credits.saturating_add(payout);
-                    self.progression.total_earnings =
-                        self.progression.total_earnings.saturating_add(payout);
-                    true
-                }
-            }
-            _ => return None,
-        };
-        Some(if applied {
-            PlayerScopedCommandOutcome::Applied
-        } else {
-            PlayerScopedCommandOutcome::IgnoredUnavailable
-        })
-    }
-
-    #[allow(
-        clippy::too_many_lines,
-        reason = "canonical progression service migration keeps transactional rules together"
-    )]
-    fn apply_canonical_progression_service(
-        &mut self,
-        player_id: PlayerId,
-        request: crate::game_state::SessionServiceRequest,
-    ) -> Option<PlayerScopedCommandOutcome> {
-        let player = self.players.get_mut(&player_id)?;
-        let credits_before = player.credits;
-        let cargo_before = player.cargo_used();
-        let applied = match request {
-            crate::game_state::SessionServiceRequest::Finance => {
-                if player.loan_debt == 0 {
-                    let level = self.progression.town_development.bank_level;
-                    let advance = 250 + u32::from(level) * 150;
-                    let risk_premium = 50 + u32::from(level) * 25;
-                    player.credits = player.credits.saturating_add(advance);
-                    player.loan_debt = advance.saturating_add(risk_premium);
-                } else {
-                    let payment = player.loan_debt.min(player.credits);
-                    player.credits -= payment;
-                    player.loan_debt -= payment;
-                }
-                true
-            }
-            crate::game_state::SessionServiceRequest::BuyInsurance => {
-                if player.insured {
-                    false
-                } else {
-                    let bank_level = self.progression.town_development.bank_level;
-                    let max_tier = 1_u8.saturating_add(bank_level).min(4);
-                    let next_tier = player.insurance_tier.saturating_add(1).min(max_tier);
-                    let cost = (70 + u32::from(next_tier) * 55)
-                        .saturating_sub(u32::from(bank_level).saturating_mul(15));
-                    if player.insurance_tier >= max_tier || player.credits < cost {
-                        false
-                    } else {
-                        player.credits -= cost;
-                        player.insured = true;
-                        player.insurance_tier = next_tier;
-                        true
-                    }
-                }
-            }
-            crate::game_state::SessionServiceRequest::CraftRecipe { recipe } => {
-                if recipe.cost().iter().any(|(material, required)| {
-                    player.materials.get(material).copied().unwrap_or(0) < *required
-                }) {
-                    false
-                } else {
-                    for (material, required) in recipe.cost() {
-                        if let Some(count) = player.materials.get_mut(material) {
-                            *count = count.saturating_sub(*required);
-                        }
-                    }
-                    player.materials.retain(|_, count| *count > 0);
-                    match recipe {
-                        crate::game_state::RecipeKind::ReinforcedBulkhead => {
-                            player.crafted_bulkheads = player.crafted_bulkheads.saturating_add(1);
-                            player.hull = player.max_hull();
-                        }
-                        crate::game_state::RecipeKind::AuxiliaryTank => {
-                            player.fuel_capacity += 20.0;
-                            player.fuel = player.fuel_capacity;
-                        }
-                        crate::game_state::RecipeKind::ExpandedSorter => {
-                            player.crafted_sorters = player.crafted_sorters.saturating_add(1);
-                            player.cargo_capacity = player.cargo_capacity.saturating_add(6);
-                        }
-                        crate::game_state::RecipeKind::SignalRelayKit => {
-                            player.signal_relay_kits = player.signal_relay_kits.saturating_add(1);
-                        }
-                        crate::game_state::RecipeKind::CargoLiftKit => {
-                            player.cargo_lift_kits = player.cargo_lift_kits.saturating_add(1);
-                        }
-                        crate::game_state::RecipeKind::TunnelSupportKit => {
-                            player.tunnel_support_kits =
-                                player.tunnel_support_kits.saturating_add(1);
-                        }
-                        crate::game_state::RecipeKind::PumpStationKit => {
-                            player.pump_station_kits = player.pump_station_kits.saturating_add(1);
-                        }
-                        crate::game_state::RecipeKind::SurveyDroneKit => {
-                            player.survey_drone_kits = player.survey_drone_kits.saturating_add(1);
-                        }
-                        crate::game_state::RecipeKind::OreProcessorKit => {
-                            player.ore_processor_kits = player.ore_processor_kits.saturating_add(1);
-                        }
-                    }
-                    true
-                }
-            }
-            crate::game_state::SessionServiceRequest::SalvageRecoverLostCargo
-            | crate::game_state::SessionServiceRequest::SalvageLaunchDrone => {
-                let launch_drone = matches!(
-                    request,
-                    crate::game_state::SessionServiceRequest::SalvageLaunchDrone
-                );
-                if launch_drone && self.progression.town_development.salvage_yard_level < 2 {
-                    false
-                } else if let Some(site) = self.lost_cargo_sites.remove(&player_id) {
-                    let recovered = site.count();
-                    let discount =
-                        u32::from(self.progression.town_development.salvage_yard_level) * 3;
-                    let fee = recovered
-                        .saturating_mul(12)
-                        .saturating_sub(recovered.saturating_mul(discount))
-                        .min(player.credits);
-                    player.credits -= fee;
-                    for (mineral, count) in &site.minerals {
-                        *player.cargo.entry(*mineral).or_default() += *count;
-                    }
-                    for (artifact, count) in &site.artifacts {
-                        *player.artifacts.entry(*artifact).or_default() += *count;
-                    }
-                    if launch_drone {
-                        #[allow(
-                            clippy::cast_possible_truncation,
-                            reason = "bounded salvage site coordinates intentionally map to terrain tiles"
-                        )]
-                        let position = TilePosition {
-                            x: (site.x / TILE_SIZE).floor() as i32,
-                            y: (site.y / TILE_SIZE).floor() as i32,
-                        };
-                        self.infrastructure.push(PlacedInfrastructure {
-                            kind: InfrastructureKind::SurveyDrone,
-                            position,
-                            durability: crate::game_state::default_infrastructure_durability(),
-                        });
-                    }
-                    true
-                } else {
-                    false
-                }
-            }
-            crate::game_state::SessionServiceRequest::UpgradeTownBuilding { building } => {
-                let cost = self.progression.town_development.upgrade_cost(building);
-                let material_gate = self.progression.town_development.level(building) >= 1;
-                let has_material = player
-                    .materials
-                    .get(&StrategicResourceKind::AncientAlloy)
-                    .copied()
-                    .unwrap_or(0)
-                    > 0;
-                if player.credits < cost || (material_gate && !has_material) {
-                    false
-                } else {
-                    player.credits -= cost;
-                    if material_gate {
-                        if let Some(count) = player
-                            .materials
-                            .get_mut(&StrategicResourceKind::AncientAlloy)
-                        {
-                            *count = count.saturating_sub(1);
-                        }
-                        player.materials.retain(|_, count| *count > 0);
-                    }
-                    *self.progression.town_development.level_mut(building) += 1;
-                    self.progression.town_development.reputation = self
-                        .progression
-                        .town_development
-                        .reputation
-                        .saturating_add(1);
-                    true
-                }
-            }
-            _ => return None,
-        };
-        if !applied {
-            return Some(PlayerScopedCommandOutcome::IgnoredUnavailable);
-        }
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::BuyUpgrade,
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: player.cargo_used(),
-        });
-        Some(PlayerScopedCommandOutcome::Applied)
-    }
-
-    fn canonical_expedition_satisfied(&self, expedition: Expedition, player: &Player) -> bool {
-        use crate::game_state::ExpeditionObjectiveKind;
-        let progress = match expedition.kind {
-            ExpeditionObjectiveKind::ReachDepth => {
-                u32::try_from(self.progression.deepest_tile_reached).unwrap_or(0)
-            }
-            ExpeditionObjectiveKind::DeliverCargo => match expedition.target {
-                TileKind::Ore(mineral) => player.cargo.get(&mineral).copied().unwrap_or(0),
-                TileKind::Artifact(artifact) => {
-                    player.artifacts.get(&artifact).copied().unwrap_or(0)
-                }
-                _ => 0,
-            },
-            ExpeditionObjectiveKind::BuildPumpStations => u32::try_from(
-                self.infrastructure
-                    .iter()
-                    .filter(|item| item.kind == InfrastructureKind::PumpStation)
-                    .count(),
-            )
-            .unwrap_or(u32::MAX),
-            ExpeditionObjectiveKind::MineVein => player.cargo_used(),
-            ExpeditionObjectiveKind::DeliverExplosives => player.bombs,
-            ExpeditionObjectiveKind::RetrieveArtifact => player.artifacts.values().copied().sum(),
-            ExpeditionObjectiveKind::NoDamageReturn => u32::from(player.hull >= player.max_hull()),
-            ExpeditionObjectiveKind::FastReturn => {
-                u32::from(self.progression.town_event_day <= expedition.expires_day)
-            }
-            ExpeditionObjectiveKind::RecoverProbe
-            | ExpeditionObjectiveKind::ScanAnomaly
-            | ExpeditionObjectiveKind::RescueMiner
-            | ExpeditionObjectiveKind::StabilizeCollapse
-            | ExpeditionObjectiveKind::ReachSignal => u32::from(
-                self.progression.deepest_tile_reached
-                    >= i32::try_from(60 + expedition.required * 10).unwrap_or(i32::MAX),
-            ),
-            ExpeditionObjectiveKind::ScanHazards => 0,
-        };
-        progress >= expedition.required
-    }
-
-    fn complete_canonical_progression_for_player(
-        &mut self,
-        player_id: PlayerId,
-    ) -> PlayerScopedCommandOutcome {
-        let Some(player_snapshot) = self.players.get(&player_id).cloned() else {
-            return PlayerScopedCommandOutcome::UnknownPlayer;
-        };
-        if let Some(index) = self
-            .progression
-            .active_expeditions
-            .iter()
-            .position(|expedition| {
-                expedition.expires_day >= self.progression.town_event_day
-                    && self.canonical_expedition_satisfied(*expedition, &player_snapshot)
-            })
-        {
-            let expedition = self.progression.active_expeditions.remove(index);
-            let (credits_before, cargo_before, credits_after, cargo_after) = {
-                let Some(player) = self.players.get_mut(&player_id) else {
-                    return PlayerScopedCommandOutcome::UnknownPlayer;
-                };
-                let credits_before = player.credits;
-                let cargo_before = player.cargo_used();
-                crate::game_state::consume_expedition_delivery(expedition, player);
-                player.credits = player.credits.saturating_add(expedition.reward);
-                (
-                    credits_before,
-                    cargo_before,
-                    player.credits,
-                    player.cargo_used(),
-                )
-            };
-            self.apply_canonical_expedition_special_reward(player_id, expedition);
-            self.progression.total_earnings = self
-                .progression
-                .total_earnings
-                .saturating_add(expedition.reward);
-            self.progression.expeditions_completed =
-                self.progression.expeditions_completed.saturating_add(1);
-            self.progression.town_development.reputation = self
-                .progression
-                .town_development
-                .reputation
-                .saturating_add(1);
-            self.service_transactions.push(PlayerServiceTransaction {
-                player_id,
-                kind: PlayerTransactionKind::CompleteContract,
-                credits_before,
-                credits_after,
-                cargo_before,
-                cargo_after,
-            });
-            return PlayerScopedCommandOutcome::Applied;
-        }
-        let Some(player) = self.players.get_mut(&player_id) else {
-            return PlayerScopedCommandOutcome::UnknownPlayer;
-        };
-        let credits_before = player.credits;
-        let cargo_before = player.cargo_used();
-        let before_completed = self.progression.contracts.completed;
-        let Some(completion) = self.progression.contracts.try_complete(player) else {
-            return PlayerScopedCommandOutcome::IgnoredUnavailable;
-        };
-        let escrow =
-            completion.reward * u32::from(self.progression.town_development.bank_level) / 20;
-        player.credits = player.credits.saturating_add(escrow);
-        self.progression.total_earnings = self
-            .progression
-            .total_earnings
-            .saturating_add(completion.reward.saturating_add(escrow));
-        if completion.finished_story {
-            self.progression.deep_claim_status = DeepClaimStatus::Unlocked;
-        }
-        debug_assert_eq!(self.progression.contracts.completed, before_completed + 1);
-        self.service_transactions.push(PlayerServiceTransaction {
-            player_id,
-            kind: if completion.finished_story {
-                PlayerTransactionKind::WinGame
-            } else {
-                PlayerTransactionKind::CompleteContract
-            },
-            credits_before,
-            credits_after: player.credits,
-            cargo_before,
-            cargo_after: player.cargo_used(),
-        });
-        PlayerScopedCommandOutcome::Applied
-    }
-
-    pub fn apply_contract_reward(
-        &mut self,
-        player_id: PlayerId,
-        reward_credits: u32,
-    ) -> Option<PlayerServiceTransaction> {
-        let player = self.players.get_mut(&player_id)?;
-        let transaction = PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::CompleteContract,
-            credits_before: player.credits,
-            credits_after: player.credits.saturating_add(reward_credits),
-            cargo_before: player.cargo_used(),
-            cargo_after: player.cargo_used(),
-        };
-        player.credits = transaction.credits_after;
-        self.service_transactions.push(transaction);
-        Some(transaction)
-    }
-
-    pub fn start_expedition(
-        &mut self,
-        player_id: PlayerId,
-        cost: u32,
-    ) -> Option<PlayerServiceTransaction> {
-        let player = self.players.get_mut(&player_id)?;
-        if player.credits < cost {
-            return None;
-        }
-        let transaction = PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::StartExpedition,
-            credits_before: player.credits,
-            credits_after: player.credits - cost,
-            cargo_before: player.cargo_used(),
-            cargo_after: player.cargo_used(),
-        };
-        player.credits = transaction.credits_after;
-        self.service_transactions.push(transaction);
-        Some(transaction)
-    }
-
-    pub fn repay_debt(
-        &mut self,
-        player_id: PlayerId,
-        amount: u32,
-    ) -> Option<PlayerServiceTransaction> {
-        let player = self.players.get_mut(&player_id)?;
-        let payment = amount.min(player.credits).min(player.loan_debt);
-        let transaction = PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::RepayDebt,
-            credits_before: player.credits,
-            credits_after: player.credits - payment,
-            cargo_before: player.loan_debt,
-            cargo_after: player.loan_debt - payment,
-        };
-        player.credits = transaction.credits_after;
-        player.loan_debt = transaction.cargo_after;
-        self.service_transactions.push(transaction);
-        Some(transaction)
-    }
-
-    pub fn award_victory(
-        &mut self,
-        player_id: PlayerId,
-        bonus_credits: u32,
-    ) -> Option<PlayerServiceTransaction> {
-        let player = self.players.get_mut(&player_id)?;
-        let transaction = PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::WinGame,
-            credits_before: player.credits,
-            credits_after: player.credits.saturating_add(bonus_credits),
-            cargo_before: player.cargo_used(),
-            cargo_after: player.cargo_used(),
-        };
-        player.credits = transaction.credits_after;
-        self.authoritative_summary.won_game = true;
-        self.service_transactions.push(transaction);
-        Some(transaction)
-    }
-
-    #[must_use]
-    pub const fn won_game(&self) -> bool {
-        self.authoritative_summary.won_game
-    }
-
-    #[must_use]
-    pub fn player(&self, player_id: PlayerId) -> Option<&Player> {
-        self.players.get(&player_id)
-    }
-
-    pub fn player_ids(&self) -> impl Iterator<Item = PlayerId> + '_ {
-        self.players.keys().copied()
-    }
-
-    pub fn insert_player(&mut self, player_id: PlayerId, player: Player) {
-        self.players.insert(player_id, player);
-        self.equipped_rig_parts.entry(player_id).or_default();
-        self.mechanic_levels.entry(player_id).or_default();
-        self.scanner_cooldowns.entry(player_id).or_insert(0.0);
-        self.scanner_cooldown_deadlines
-            .entry(player_id)
-            .or_insert(self.simulation_tick);
-        self.discovered_tiles.entry(player_id).or_default();
-        self.authoritative_summary.player_count = self.players.len();
-    }
-
-    pub fn player_mut(&mut self, player_id: PlayerId) -> Option<&mut Player> {
-        self.players.get_mut(&player_id)
-    }
-
-    pub fn set_player_movement_modifiers(
-        &mut self,
-        player_id: PlayerId,
-        mechanic_level: u8,
-        parts: impl IntoIterator<Item = RigPartKind>,
-    ) {
-        self.mechanic_levels.insert(player_id, mechanic_level);
-        self.equipped_rig_parts
-            .insert(player_id, parts.into_iter().collect());
-    }
-
-    #[must_use]
-    pub fn player_inventory_summary(&self, player_id: PlayerId) -> Option<PlayerInventorySummary> {
-        self.player(player_id)
-            .map(PlayerInventorySummary::from_player)
-    }
-
-    pub fn player_scoped_gameplay_proof(
-        &mut self,
-        first_player_id: PlayerId,
-        second_player_id: PlayerId,
-    ) -> Option<PlayerScopedGameplayProof> {
-        self.active_drills.remove(&first_player_id);
-        self.active_drills.remove(&second_player_id);
-        let first_before = self.players.get(&first_player_id)?.clone();
-        let second_before = self.players.get(&second_player_id)?.clone();
-
-        let movement_scoped = self.apply_player_command(
-            first_player_id,
-            &PlayerCommand::Movement {
-                horizontal: 0.75,
-                thrust: true,
-                drill_down: false,
-            },
-        ) == PlayerScopedCommandOutcome::Applied
-            && (self.players.get(&first_player_id)?.velocity_x - first_before.velocity_x).abs()
-                > f32::EPSILON
-            && (self.players.get(&second_player_id)?.velocity_x - second_before.velocity_x).abs()
-                < f32::EPSILON;
-
-        let drilling_scoped = self.apply_player_command(
-            first_player_id,
-            &PlayerCommand::Movement {
-                horizontal: 0.0,
-                thrust: false,
-                drill_down: true,
-            },
-        ) == PlayerScopedCommandOutcome::Applied
-            && self.active_drills.contains_key(&first_player_id)
-            && !self.active_drills.contains_key(&second_player_id);
-
-        let inventory_before = self.player_inventory_summary(second_player_id)?;
-        let scanner_before = self
-            .scanner_cooldown_seconds(second_player_id)
-            .unwrap_or(0.0);
-        let bomb_count_before = self.bombs.len();
-        let infrastructure_count_before = self.infrastructure.len();
-        let transaction_count_before = self.service_transactions.len();
-
-        let second = self.players.get_mut(&second_player_id)?;
-        second.fuel = 0.0;
-        second.hull = 0.0;
-        second.credits = second.credits.saturating_add(500);
-        second.bombs = second.bombs.saturating_add(1);
-        second.signal_relay_kits = second.signal_relay_kits.saturating_add(1);
-        let survival_before = self.player_survival_snapshot(second_player_id)?;
-
-        let survival_scoped = self.apply_player_command(second_player_id, &PlayerCommand::Rescue)
-            == PlayerScopedCommandOutcome::Applied
-            && self.player_survival_snapshot(second_player_id)? != survival_before
-            && self.player_survival_snapshot(first_player_id)?.player_id == first_player_id;
-        self.players
-            .get_mut(&second_player_id)?
-            .cargo
-            .insert(crate::terrain::MineralKind::Copper, 1);
-        let scanner_scoped = self
-            .apply_player_command(second_player_id, &PlayerCommand::UseScanner)
-            == PlayerScopedCommandOutcome::Applied
-            && self
-                .scanner_cooldown_seconds(second_player_id)
-                .unwrap_or(0.0)
-                > scanner_before
-            && self
-                .scanner_cooldown_seconds(first_player_id)
-                .unwrap_or(0.0)
-                .abs()
-                < f32::EPSILON;
-        let bomb_scoped = self.apply_player_command(second_player_id, &PlayerCommand::PlaceBomb)
-            == PlayerScopedCommandOutcome::Applied
-            && self.bombs.len() == bomb_count_before + 1;
-        let infrastructure_scoped = self.apply_player_command(
-            second_player_id,
-            &PlayerCommand::PlaceInfrastructure { slot: 0 },
-        ) == PlayerScopedCommandOutcome::Applied
-            && self.infrastructure.len() == infrastructure_count_before + 1;
-        let economy_scoped = self.apply_player_command(second_player_id, &PlayerCommand::SellCargo)
-            == PlayerScopedCommandOutcome::Applied
-            && self.service_transactions.len() > transaction_count_before;
-        let inventory_scoped = self.player_inventory_summary(second_player_id)? != inventory_before;
-
-        Some(PlayerScopedGameplayProof {
-            movement_scoped,
-            drilling_scoped,
-            inventory_scoped,
-            survival_scoped,
-            scanner_scoped,
-            bomb_scoped,
-            infrastructure_scoped,
-            economy_scoped,
-        })
-    }
-
-    #[must_use]
-    pub fn player_survival_snapshot(&self, player_id: PlayerId) -> Option<PlayerSurvivalSnapshot> {
-        self.player(player_id).map(|player| PlayerSurvivalSnapshot {
-            player_id,
-            fuel: player.fuel,
-            hull: player.hull,
-            disabled: player.hull <= 0.0,
-            stranded: player.fuel <= 0.0,
-        })
-    }
-
-    pub fn chip_active_drill_target(&mut self, player_id: PlayerId) -> Option<MineResult> {
-        let target = self.active_drills.get(&player_id)?.target;
-        let result = self.terrain_mut().chip(target);
-        if matches!(
-            result,
-            MineResult::Blocked
-                | MineResult::TooDangerous
-                | MineResult::Exploded
-                | MineResult::Blast
-                | MineResult::Mined(_)
-        ) {
-            self.active_drills.remove(&player_id);
-        }
-        let player = self.players.get_mut(&player_id)?;
-        match result {
-            MineResult::Mined(mined) => {
-                player.fuel = quantize_simulation_scalar((player.fuel - 0.45).max(0.0));
-                match mined {
-                    TileKind::Ore(mineral) => {
-                        let _added = player.add_cargo(mineral);
-                    }
-                    TileKind::Artifact(artifact) => {
-                        let _added = player.add_artifact(artifact);
-                    }
-                    TileKind::PressurePocket => {
-                        player.velocity_y = -360.0;
-                        player.velocity_x = quantize_simulation_scalar(player.velocity_x * 1.4);
-                        player.hull = quantize_simulation_scalar((player.hull - 10.0).max(0.0));
-                    }
-                    _ => {}
-                }
-            }
-            MineResult::Exploded => {
-                player.fuel = quantize_simulation_scalar((player.fuel - 0.45).max(0.0));
-                player.velocity_x = quantize_simulation_scalar(player.velocity_x * -0.25);
-                player.velocity_y = -90.0;
-                let protected = self.infrastructure.iter().any(|item| {
-                    item.kind == InfrastructureKind::PumpStation
-                        && (item.position.x - target.x).abs() <= 5
-                        && (item.position.y - target.y).abs() <= 5
-                });
-                if !protected {
-                    self.hazards.push(HazardCloud {
-                        x: player.x,
-                        y: player.y + TILE_SIZE,
-                        life: 8.0,
-                        radius: 10.0,
-                    });
-                }
-            }
-            MineResult::Blast => {
-                player.fuel = quantize_simulation_scalar((player.fuel - 0.9).max(0.0));
-                player.hull = quantize_simulation_scalar((player.hull - 24.0).max(0.0));
-                player.velocity_x = quantize_simulation_scalar(player.velocity_x * -0.7);
-                player.velocity_y = -260.0;
-            }
-            MineResult::Blocked | MineResult::TooDangerous | MineResult::Chipped => {}
-        }
-        Some(result)
-    }
-
-    #[allow(
-        clippy::too_many_lines,
-        reason = "compatibility command bridge covers all player-scoped intents until real systems split out"
-    )]
-    pub fn apply_player_command(
-        &mut self,
-        player_id: PlayerId,
-        command: &PlayerCommand,
-    ) -> PlayerScopedCommandOutcome {
-        let parts = self
-            .equipped_rig_parts
-            .get(&player_id)
-            .cloned()
-            .unwrap_or_default();
-        let Some(player) = self.players.get_mut(&player_id) else {
-            return PlayerScopedCommandOutcome::UnknownPlayer;
-        };
-
-        match *command {
-            PlayerCommand::Movement {
-                horizontal,
-                thrust,
-                drill_down,
-            } => {
-                player.velocity_x = horizontal;
-                if thrust {
-                    player.velocity_y = -1.0;
-                }
-                if let Some((target, direction)) =
-                    authoritative_mine_target(player, horizontal, drill_down)
-                {
-                    let Some(tile) = self.terrain.tile(target) else {
-                        self.set_active_drill(player_id, None);
-                        return PlayerScopedCommandOutcome::Applied;
-                    };
-                    if tile.kind == TileKind::Air {
-                        self.set_active_drill(player_id, None);
-                        return PlayerScopedCommandOutcome::Applied;
-                    }
-                    let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
-                        || parts.contains(&RigPartKind::ResonanceDrill)
-                    {
-                        player.drill_strength.saturating_add(1)
-                    } else {
-                        player.drill_strength
-                    };
-                    if self
-                        .terrain
-                        .hardness_at(target)
-                        .is_some_and(|hardness| hardness > effective_drill_strength)
-                    {
-                        self.set_active_drill(player_id, None);
-                        return PlayerScopedCommandOutcome::Applied;
-                    }
-                    let initial_durability = tile.durability.max(1);
-                    let seconds_per_chip = authoritative_drill_seconds_per_chip(
-                        tile.kind,
-                        player.drill_strength,
-                        direction,
-                        &parts,
-                        target,
-                    );
-                    let drill = self
-                        .active_drills
-                        .get(&player_id)
-                        .filter(|drill| drill.target == target && drill.direction == direction)
-                        .map_or_else(
-                            || {
-                                authoritative_drill_state(
-                                    target,
-                                    direction,
-                                    initial_durability,
-                                    seconds_per_chip,
-                                )
-                            },
-                            |drill| DrillState {
-                                initial_durability,
-                                seconds_per_chip,
-                                ..*drill
-                            },
-                        );
-                    self.set_active_drill(player_id, Some(drill));
-                } else {
-                    self.set_active_drill(player_id, None);
-                }
-                PlayerScopedCommandOutcome::Applied
-            }
-            PlayerCommand::Refuel => {
-                let credits_before = player.credits;
-                let cargo_before = player.cargo_used();
-                refuel_amount(player, 1.0);
-                self.service_transactions.push(PlayerServiceTransaction {
-                    player_id,
-                    kind: PlayerTransactionKind::Refuel,
-                    credits_before,
-                    credits_after: player.credits,
-                    cargo_before,
-                    cargo_after: player.cargo_used(),
-                });
-                PlayerScopedCommandOutcome::Applied
-            }
-            PlayerCommand::Repair => {
-                let credits_before = player.credits;
-                let cargo_before = player.cargo_used();
-                repair_amount(player, 1.0);
-                self.service_transactions.push(PlayerServiceTransaction {
-                    player_id,
-                    kind: PlayerTransactionKind::Repair,
-                    credits_before,
-                    credits_after: player.credits,
-                    cargo_before,
-                    cargo_after: player.cargo_used(),
-                });
-                PlayerScopedCommandOutcome::Applied
-            }
-            PlayerCommand::SellCargo => self.sell_canonical_cargo(player_id),
-            PlayerCommand::UseScanner => {
-                if self
-                    .world_event_severity
-                    .contains_key(&WorldEventKind::DeepPressureStorm)
-                {
-                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
-                }
-                let deadline = SimulationTick::new(
-                    self.simulation_tick
-                        .get()
-                        .saturating_add(simulation_ticks_for_seconds(1.0)),
-                );
-                self.scanner_cooldowns.insert(player_id, 1.0);
-                self.scanner_cooldown_deadlines.insert(player_id, deadline);
-                let center = player.tile_position(TILE_SIZE);
-                let _revealed = self.reveal_scanner_area(player_id, center, 4);
-                PlayerScopedCommandOutcome::Applied
-            }
-            PlayerCommand::PlaceBomb => {
-                if player.bombs == 0 {
-                    PlayerScopedCommandOutcome::IgnoredUnavailable
-                } else {
-                    player.bombs -= 1;
-                    self.bombs.push(PlacedBomb {
-                        x: player.x,
-                        y: TILE_SIZE.mul_add(0.4, player.y),
-                        timer_seconds: 2.4,
-                    });
-                    self.bomb_detonation_ticks.push(SimulationTick::new(
-                        self.simulation_tick
-                            .get()
-                            .saturating_add(simulation_ticks_for_seconds(2.4)),
-                    ));
-                    self.authoritative_summary.bomb_count = self.bombs.len();
-                    PlayerScopedCommandOutcome::Applied
-                }
-            }
-            PlayerCommand::PlaceInfrastructure { slot } => {
-                let Some(kind) = infrastructure_kind_for_slot(slot) else {
-                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
-                };
-                if !consume_infrastructure_kit(player, kind) {
-                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
-                }
-                self.infrastructure.push(PlacedInfrastructure {
-                    kind,
-                    position: player.tile_position(TILE_SIZE),
-                    durability: 100,
-                });
-                self.authoritative_summary.infrastructure_count = self.infrastructure.len();
-                PlayerScopedCommandOutcome::Applied
-            }
-            PlayerCommand::BuyUpgrade { index } => {
-                let credits_before = player.credits;
-                let cargo_before = player.cargo_used();
-                if buy_upgrade(player, index).is_err() {
-                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
-                }
-                self.service_transactions.push(PlayerServiceTransaction {
-                    player_id,
-                    kind: PlayerTransactionKind::BuyUpgrade,
-                    credits_before,
-                    credits_after: player.credits,
-                    cargo_before,
-                    cargo_after: player.cargo_used(),
-                });
-                PlayerScopedCommandOutcome::Applied
-            }
-            PlayerCommand::Rescue => self.canonical_rescue_player(player_id),
-            PlayerCommand::Interact
-            | PlayerCommand::Cancel
-            | PlayerCommand::Confirm
-            | PlayerCommand::SelectUpgrade { .. } => PlayerScopedCommandOutcome::IgnoredUnavailable,
-        }
-    }
-
-    #[must_use]
-    pub fn player_count(&self) -> usize {
-        self.players.len()
-    }
-
-    #[must_use]
-    pub fn player_snapshots(&self) -> Vec<PlayerSnapshot> {
-        self.players
-            .iter()
-            .map(|(player_id, player)| PlayerSnapshot::from_world_player(*player_id, player, self))
-            .collect()
-    }
-
-    pub fn active_drills_snapshot(&self) -> BTreeMap<PlayerId, DrillState> {
-        self.active_drills.clone()
-    }
-
-    pub fn scanner_cooldowns_snapshot(&self) -> BTreeMap<PlayerId, f32> {
-        self.scanner_cooldowns.clone()
-    }
-
-    pub fn restore_static_world_state(
-        &mut self,
-        terrain: Terrain,
-        hazards: Vec<HazardCloud>,
-        bombs: Vec<PlacedBomb>,
-        infrastructure: Vec<PlacedInfrastructure>,
-        active_drills: BTreeMap<PlayerId, DrillState>,
-        scanner_cooldowns: BTreeMap<PlayerId, f32>,
-    ) {
-        self.terrain = terrain;
-        self.hazards = hazards;
-        self.bombs = bombs;
-        self.infrastructure = infrastructure;
-        self.active_drills = active_drills;
-        self.scanner_cooldowns = scanner_cooldowns;
-        self.authoritative_summary.terrain_width = self.terrain.width();
-        self.authoritative_summary.terrain_height = self.terrain.height();
-        self.authoritative_summary.hazard_count = self.hazards.len();
-        self.authoritative_summary.bomb_count = self.bombs.len();
-        self.authoritative_summary.infrastructure_count = self.infrastructure.len();
-    }
-}
-
 fn online_identity_for_slot(slot: u8) -> (ClientId, PlayerId) {
     (
         ClientId::new(u64::from(slot)),
@@ -5420,116 +1792,6 @@ fn apply_network_player_snapshot_to_player(player: &mut Player, snapshot: &Netwo
     player.artifacts.clone_from(&snapshot.artifacts);
     player.materials.clone_from(&snapshot.materials);
     snapshot.loadout.apply_to_player(player);
-}
-
-fn authoritative_mine_target(
-    player: &Player,
-    horizontal: f32,
-    drill_down: bool,
-) -> Option<(TilePosition, DrillDirection)> {
-    if !drill_down && horizontal.abs() <= f32::EPSILON {
-        return None;
-    }
-
-    let current_tile = player.tile_position(TILE_SIZE);
-    if drill_down {
-        Some((
-            TilePosition {
-                x: current_tile.x,
-                y: current_tile.y + 1,
-            },
-            DrillDirection::Down,
-        ))
-    } else if horizontal < 0.0 {
-        Some((
-            TilePosition {
-                x: current_tile.x - 1,
-                y: current_tile.y,
-            },
-            DrillDirection::Left,
-        ))
-    } else {
-        Some((
-            TilePosition {
-                x: current_tile.x + 1,
-                y: current_tile.y,
-            },
-            DrillDirection::Right,
-        ))
-    }
-}
-
-fn authoritative_drill_seconds_per_chip(
-    kind: TileKind,
-    drill_strength: u8,
-    direction: DrillDirection,
-    parts: &BTreeSet<RigPartKind>,
-    target: TilePosition,
-) -> f32 {
-    let base = match kind {
-        TileKind::Air => 0.0,
-        TileKind::Dirt => 0.09,
-        TileKind::Clay => 0.12,
-        TileKind::Stone => 0.15,
-        TileKind::HardRock | TileKind::Foundation => 0.19,
-        TileKind::Lava
-        | TileKind::Gas
-        | TileKind::ExplosivePocket
-        | TileKind::PressurePocket
-        | TileKind::MagmaVent => 0.08,
-        TileKind::Ore(_) => 0.16,
-        TileKind::Artifact(_) => 0.21,
-    };
-    let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
-        || parts.contains(&RigPartKind::ResonanceDrill)
-    {
-        drill_strength.saturating_add(1)
-    } else {
-        drill_strength
-    };
-    let drill_bonus = 1.0 + f32::from(effective_drill_strength.saturating_sub(1)) * 0.4;
-    let direction_penalty = if direction == DrillDirection::Down {
-        1.0
-    } else {
-        1.45
-    };
-    let mut seconds = base * direction_penalty / drill_bonus;
-    if parts.contains(&RigPartKind::NeedleDrill) {
-        seconds *= match kind {
-            TileKind::Dirt | TileKind::Clay => 0.72,
-            TileKind::Stone | TileKind::HardRock => 1.25,
-            _ => 0.95,
-        };
-    }
-    if parts.contains(&RigPartKind::TitanDrill) {
-        seconds *= 1.10;
-    }
-    if parts.contains(&RigPartKind::ResonanceDrill)
-        && matches!(
-            deep_stratum_at_depth(target.y),
-            Some(DeepStratum::CrystalFaults | DeepStratum::AncientMachineLayer)
-        )
-    {
-        seconds *= 0.65;
-    }
-    seconds.max(0.045)
-}
-
-const fn authoritative_drill_state(
-    target: TilePosition,
-    direction: DrillDirection,
-    initial_durability: u8,
-    seconds_per_chip: f32,
-) -> DrillState {
-    DrillState {
-        target,
-        direction,
-        progress: 0.0,
-        initial_durability,
-        seconds_per_chip,
-        sound_timer: 0.0,
-        dust_timer: 0.0,
-    }
 }
 
 const fn apply_authoritative_command_to_legacy_input(
@@ -5560,32 +1822,6 @@ const fn apply_authoritative_command_to_legacy_input(
         | PlayerCommand::Rescue => {}
     }
     input
-}
-
-const fn gameplay_event_for_applied_command(
-    command: &SequencedPlayerCommand,
-) -> Option<GameplayEventKind> {
-    let player_id = command.player_id;
-    match command.command {
-        PlayerCommand::Movement {
-            drill_down: true, ..
-        } => Some(GameplayEventKind::DrillStarted { player_id }),
-        PlayerCommand::Refuel | PlayerCommand::Repair | PlayerCommand::BuyUpgrade { .. } => {
-            Some(GameplayEventKind::PurchaseCompleted { player_id })
-        }
-        PlayerCommand::SellCargo => Some(GameplayEventKind::CargoChanged { player_id }),
-        PlayerCommand::PlaceBomb => Some(GameplayEventKind::BombPlaced { player_id }),
-        PlayerCommand::PlaceInfrastructure { .. } => {
-            Some(GameplayEventKind::InfrastructurePlaced { player_id })
-        }
-        PlayerCommand::UseScanner => Some(GameplayEventKind::ScannerUsed { player_id }),
-        PlayerCommand::Rescue => Some(GameplayEventKind::RescueTriggered { player_id }),
-        PlayerCommand::Movement { .. }
-        | PlayerCommand::Interact
-        | PlayerCommand::Cancel
-        | PlayerCommand::Confirm
-        | PlayerCommand::SelectUpgrade { .. } => None,
-    }
 }
 
 fn world_events_for_gameplay_event(event: GameplayEvent) -> Vec<WorldEvent> {
@@ -5621,46 +1857,6 @@ fn world_events_for_gameplay_event(event: GameplayEvent) -> Vec<WorldEvent> {
         }
         GameplayEventKind::HazardChanged => vec![WorldEvent::HazardChanged],
     }
-}
-
-const fn bomb_tile_position(bomb: PlacedBomb) -> TilePosition {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "bomb world positions intentionally convert to terrain tile coordinates"
-    )]
-    let position = TilePosition {
-        x: (bomb.x / TILE_SIZE).floor() as i32,
-        y: (bomb.y / TILE_SIZE).floor() as i32,
-    };
-    position
-}
-
-const fn infrastructure_kind_for_slot(slot: u8) -> Option<InfrastructureKind> {
-    match slot {
-        0 => Some(InfrastructureKind::SignalRelay),
-        1 => Some(InfrastructureKind::SurveyDrone),
-        2 => Some(InfrastructureKind::CargoLift),
-        3 => Some(InfrastructureKind::TunnelSupport),
-        4 => Some(InfrastructureKind::PumpStation),
-        5 => Some(InfrastructureKind::OreProcessor),
-        _ => None,
-    }
-}
-
-const fn consume_infrastructure_kit(player: &mut Player, kind: InfrastructureKind) -> bool {
-    let kit_count = match kind {
-        InfrastructureKind::SignalRelay => &mut player.signal_relay_kits,
-        InfrastructureKind::SurveyDrone => &mut player.survey_drone_kits,
-        InfrastructureKind::CargoLift => &mut player.cargo_lift_kits,
-        InfrastructureKind::TunnelSupport => &mut player.tunnel_support_kits,
-        InfrastructureKind::PumpStation => &mut player.pump_station_kits,
-        InfrastructureKind::OreProcessor => &mut player.ore_processor_kits,
-    };
-    if *kit_count == 0 {
-        return false;
-    }
-    *kit_count -= 1;
-    true
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -6223,64 +2419,6 @@ impl RenderFramePlan {
             })
             .collect()
     }
-}
-
-fn authoritative_player_collides(terrain: &Terrain, x: f32, y: f32) -> bool {
-    authoritative_collision_points(x, y)
-        .iter()
-        .any(|position| terrain.is_solid_at(*position))
-}
-
-fn authoritative_collision_points(x: f32, y: f32) -> [TilePosition; 4] {
-    [
-        authoritative_point_to_tile(
-            x - AUTHORITATIVE_PLAYER_RADIUS,
-            y - AUTHORITATIVE_PLAYER_RADIUS,
-        ),
-        authoritative_point_to_tile(
-            x + AUTHORITATIVE_PLAYER_RADIUS,
-            y - AUTHORITATIVE_PLAYER_RADIUS,
-        ),
-        authoritative_point_to_tile(
-            x - AUTHORITATIVE_PLAYER_RADIUS,
-            y + AUTHORITATIVE_PLAYER_RADIUS,
-        ),
-        authoritative_point_to_tile(
-            x + AUTHORITATIVE_PLAYER_RADIUS,
-            y + AUTHORITATIVE_PLAYER_RADIUS,
-        ),
-    ]
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    reason = "authoritative collision bridges floating player coordinates to integer terrain tiles"
-)]
-fn authoritative_point_to_tile(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "authoritative movement clamps integer terrain bounds in floating player space"
-)]
-fn clamp_authoritative_player_x(terrain: &Terrain, x: f32) -> f32 {
-    x.clamp(0.0, (terrain.width() as f32 - 1.0) * TILE_SIZE)
-}
-
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "authoritative movement clamps integer terrain bounds in floating player space"
-)]
-fn clamp_authoritative_player_y(terrain: &Terrain, y: f32) -> f32 {
-    y.clamp(
-        AUTHORITATIVE_MIN_PLAYER_Y,
-        (terrain.height() as f32 - 1.0) * TILE_SIZE,
-    )
 }
 
 impl ClientView {
@@ -8719,16 +4857,16 @@ impl GameSession {
         player_id: PlayerId,
         request: crate::game_state::SessionServiceRequest,
     ) {
-        self.world.progression.town_development = self.game.town_development.clone();
+        self.world.progression_mut().town_development = self.game.town_development.clone();
         match request {
             crate::game_state::SessionServiceRequest::SalvageRecoverLostCargo
             | crate::game_state::SessionServiceRequest::SalvageLaunchDrone => {
-                if self.world.lost_cargo_sites.contains_key(&player_id)
+                if self.world.lost_cargo_sites().contains_key(&player_id)
                     || self.game.lost_cargo_count == 0
                 {
                     return;
                 }
-                self.world.lost_cargo_sites.insert(
+                self.world.lost_cargo_sites_mut().insert(
                     player_id,
                     LostCargoSite {
                         x: self.game.lost_cargo_x.unwrap_or_default(),
@@ -8739,25 +4877,25 @@ impl GameSession {
                 );
             }
             crate::game_state::SessionServiceRequest::CompleteDepotWork => {
-                self.world.progression.town_event_day = self.game.town_event_day;
-                self.world.progression.deepest_tile_reached = self.game.deepest_tile_reached;
-                if self.world.progression.active_expeditions.is_empty() {
+                self.world.progression_mut().town_event_day = self.game.town_event_day;
+                self.world.progression_mut().deepest_tile_reached = self.game.deepest_tile_reached;
+                if self.world.progression().active_expeditions.is_empty() {
                     self.world
-                        .progression
+                        .progression_mut()
                         .active_expeditions
                         .clone_from(&self.game.active_expeditions);
                 }
-                if self.world.progression.active_side_contracts.is_empty() {
+                if self.world.progression().active_side_contracts.is_empty() {
                     self.world
-                        .progression
+                        .progression_mut()
                         .active_side_contracts
                         .clone_from(&self.game.active_side_contracts);
-                    if self.world.progression.active_side_contracts.is_empty()
+                    if self.world.progression().active_side_contracts.is_empty()
                         && self.game.side_contract_active
                         && let Some(target) = self.game.side_contract_target
                     {
                         self.world
-                            .progression
+                            .progression_mut()
                             .active_side_contracts
                             .push(SideContract {
                                 kind: self.game.side_contract_kind,
@@ -8956,7 +5094,7 @@ impl GameSession {
                     format!(
                         "{} upgraded to level {}. Deep Claim reputation increased.",
                         building.name(),
-                        self.world.progression.town_development.level(building)
+                        self.world.progression().town_development.level(building)
                     )
                 }
                 crate::game_state::SessionServiceRequest::SalvageRecoverLostCargo => {
@@ -9307,8 +5445,11 @@ impl GameSession {
             }
             crate::game_state::SessionServiceRequest::AbandonExpedition { index } => {
                 let _ = player;
-                if index < self.world.progression.active_expeditions.len() {
-                    self.world.progression.active_expeditions.remove(index);
+                if index < self.world.progression().active_expeditions.len() {
+                    self.world
+                        .progression_mut()
+                        .active_expeditions
+                        .remove(index);
                     PlayerScopedCommandOutcome::Applied
                 } else {
                     PlayerScopedCommandOutcome::IgnoredUnavailable
@@ -9518,7 +5659,7 @@ impl GameSession {
                 }
                 _ => {}
             }
-            crate::game_state::consume_expedition_delivery(expedition, player);
+            drillgame_simulation::progression::consume_expedition_delivery(expedition, player);
         }
         let Some(player) = self.world.player_mut(player_id) else {
             return false;
@@ -9563,7 +5704,7 @@ impl GameSession {
             contract.kind,
             crate::game_state::SideContractKind::Cargo | crate::game_state::SideContractKind::Rush
         ) {
-            crate::game_state::consume_side_contract_cargo(contract, player);
+            drillgame_simulation::progression::consume_side_contract_cargo(contract, player);
         }
         let completed_reward = 420 + contract.required.min(10) * 80;
         player.credits = player.credits.saturating_add(completed_reward);
@@ -9601,7 +5742,7 @@ impl GameSession {
             contract.kind,
             crate::game_state::SideContractKind::Cargo | crate::game_state::SideContractKind::Rush
         ) {
-            crate::game_state::consume_side_contract_cargo(contract, player);
+            drillgame_simulation::progression::consume_side_contract_cargo(contract, player);
         }
         let completed_reward = 420 + contract.required * 80;
         player.credits = player.credits.saturating_add(completed_reward);
@@ -9839,11 +5980,11 @@ impl GameSession {
         let local_player_id = self.local_client().controlled_player_id;
         RenderParticleSnapshot {
             lost_cargo: world
-                .lost_cargo_sites
+                .lost_cargo_sites()
                 .get(&local_player_id)
                 .map(|site| (site.x, site.y)),
             dust: self.game.dust_particles.clone(),
-            boulders: world.falling_boulders.clone(),
+            boulders: world.falling_boulders().to_vec(),
             sparks: self.game.spark_particles.clone(),
         }
     }
@@ -9892,13 +6033,13 @@ impl GameSession {
             })
             .collect();
         LiveRenderFrameOutput {
-            terrain: world.terrain.clone(),
-            hazards: world.hazards.clone(),
-            bombs: world.bombs.clone(),
-            infrastructure: world.infrastructure.clone(),
-            active_drills: world.active_drills.clone(),
+            terrain: world.terrain().clone(),
+            hazards: world.hazards().to_vec(),
+            bombs: world.bombs().to_vec(),
+            infrastructure: world.infrastructure().to_vec(),
+            active_drills: world.active_drills().clone(),
             particles: self.render_particle_snapshot(world),
-            discovered_tiles_by_player: world.discovered_tiles.clone(),
+            discovered_tiles_by_player: world.discovered_tiles_by_player().clone(),
             viewport_plans: frame_plan.viewport_plans(prediction_plan),
             hud_snapshots: frame_plan.hud_snapshots(),
             world_players_by_view,
@@ -9945,13 +6086,13 @@ impl GameSession {
             })
             .collect();
         LiveRenderFrameOutput {
-            terrain: self.world.terrain.clone(),
-            hazards: self.world.hazards.clone(),
-            bombs: self.world.bombs.clone(),
-            infrastructure: self.world.infrastructure.clone(),
-            active_drills: self.world.active_drills.clone(),
+            terrain: self.world.terrain().clone(),
+            hazards: self.world.hazards().to_vec(),
+            bombs: self.world.bombs().to_vec(),
+            infrastructure: self.world.infrastructure().to_vec(),
+            active_drills: self.world.active_drills().clone(),
             particles: self.render_particle_snapshot(&self.world),
-            discovered_tiles_by_player: self.world.discovered_tiles.clone(),
+            discovered_tiles_by_player: self.world.discovered_tiles_by_player().clone(),
             viewport_plans: frame_plan
                 .viewport_plans(prediction_plan)
                 .into_iter()
@@ -11765,13 +7906,13 @@ impl GameSession {
         const NETWORK_TERRAIN_CHUNK_SIZE_TILES: i32 = 16;
         let start_x = chunk_x * NETWORK_TERRAIN_CHUNK_SIZE_TILES;
         let start_y = chunk_y * NETWORK_TERRAIN_CHUNK_SIZE_TILES;
-        let end_x = (start_x + NETWORK_TERRAIN_CHUNK_SIZE_TILES).min(self.world.terrain.width());
-        let end_y = (start_y + NETWORK_TERRAIN_CHUNK_SIZE_TILES).min(self.world.terrain.height());
+        let end_x = (start_x + NETWORK_TERRAIN_CHUNK_SIZE_TILES).min(self.world.terrain().width());
+        let end_y = (start_y + NETWORK_TERRAIN_CHUNK_SIZE_TILES).min(self.world.terrain().height());
         let mut tiles = Vec::new();
         for y in start_y.max(0)..end_y.max(0) {
             for x in start_x.max(0)..end_x.max(0) {
                 let position = TilePosition { x, y };
-                if let Some(tile) = self.world.terrain.tile(position) {
+                if let Some(tile) = self.world.terrain().tile(position) {
                     tiles.push(crate::multiplayer::NetworkTerrainTile {
                         x,
                         y,
@@ -11937,7 +8078,7 @@ impl GameSession {
                 x: tile.x,
                 y: tile.y,
             };
-            let world_matches = self.world.terrain.tile(position).is_some_and(|current| {
+            let world_matches = self.world.terrain().tile(position).is_some_and(|current| {
                 current.kind == tile.kind && current.durability == tile.durability
             });
             if world_matches {
@@ -12019,7 +8160,11 @@ impl GameSession {
                     clients_created += 1;
                 }
             }
-            if !self.world.players.contains_key(&player_snapshot.player_id) {
+            if !self
+                .world
+                .players()
+                .contains_key(&player_snapshot.player_id)
+            {
                 let mut player = self.game.player.clone();
                 apply_network_player_snapshot_to_player(&mut player, player_snapshot);
                 self.world.insert_player(player_snapshot.player_id, player);
@@ -12279,11 +8424,9 @@ impl GameSession {
                 message: save_load.message,
             });
         }
-        self.world.authoritative_summary = AuthoritativeWorldSummary::from_world_and_shell(
-            self.current_tick,
-            &self.world,
-            &self.game,
-        );
+        let summary =
+            authoritative_summary_from_world_and_shell(self.current_tick, &self.world, &self.game);
+        self.world.set_authoritative_summary(summary);
         SessionAuthorityUpdateSummary {
             used_legacy_presentation_adapter: false,
             local_movement_authority: self.latest_local_movement_intent.is_some(),
@@ -12680,22 +8823,22 @@ impl GameSession {
 
     fn sync_service_presentation_from_world(&mut self, player_id: PlayerId) {
         self.sync_legacy_player_from_world(player_id);
-        self.game.town_development = self.world.progression.town_development.clone();
-        self.game.contracts = self.world.progression.contracts.clone();
-        self.game.deep_claim_status = self.world.progression.deep_claim_status;
-        self.game.active_side_contracts = self.world.progression.active_side_contracts.clone();
+        self.game.town_development = self.world.progression().town_development.clone();
+        self.game.contracts = self.world.progression().contracts.clone();
+        self.game.deep_claim_status = self.world.progression().deep_claim_status;
+        self.game.active_side_contracts = self.world.progression().active_side_contracts.clone();
         if self.game.active_side_contracts.is_empty() {
             self.game.side_contract_active = false;
             self.game.side_contract_target = None;
             self.game.side_contract_required = 0;
         }
-        self.game.expedition_offers = self.world.progression.expedition_offers.clone();
-        self.game.active_expeditions = self.world.progression.active_expeditions.clone();
-        self.game.expeditions_completed = self.world.progression.expeditions_completed;
-        self.game.town_event_day = self.world.progression.town_event_day;
-        self.game.deepest_tile_reached = self.world.progression.deepest_tile_reached;
-        self.game.total_earnings = self.world.progression.total_earnings;
-        if !self.world.lost_cargo_sites.contains_key(&player_id) {
+        self.game.expedition_offers = self.world.progression().expedition_offers.clone();
+        self.game.active_expeditions = self.world.progression().active_expeditions.clone();
+        self.game.expeditions_completed = self.world.progression().expeditions_completed;
+        self.game.town_event_day = self.world.progression().town_event_day;
+        self.game.deepest_tile_reached = self.world.progression().deepest_tile_reached;
+        self.game.total_earnings = self.world.progression().total_earnings;
+        if !self.world.lost_cargo_sites().contains_key(&player_id) {
             self.game.lost_cargo_count = 0;
             self.game.lost_minerals.clear();
             self.game.lost_artifacts.clear();
@@ -12720,6 +8863,230 @@ impl Default for GameSession {
     }
 }
 
+/// Builds the authoritative world summary from the legacy shell game state.
+#[must_use]
+pub fn authoritative_summary_from_legacy_game(
+    tick: SimulationTick,
+    game: &GameState,
+    player_count: usize,
+) -> AuthoritativeWorldSummary {
+    AuthoritativeWorldSummary {
+        tick,
+        player_count,
+        terrain_width: game.terrain.width(),
+        terrain_height: game.terrain.height(),
+        hazard_count: game.hazard_clouds.len() + game.falling_boulders.len(),
+        bomb_count: game.placed_bombs.len(),
+        infrastructure_count: game.infrastructure.len(),
+        active_contract_count: usize::from(game.side_contract_active)
+            + game.active_side_contracts.len(),
+        expedition_count: game.active_expeditions.len(),
+        market_salt: game.market_salt,
+        won_game: game.won_game,
+    }
+}
+
+/// Builds the authoritative world summary from canonical world state plus legacy shell metadata.
+#[must_use]
+pub fn authoritative_summary_from_world_and_shell(
+    tick: SimulationTick,
+    world: &WorldState,
+    shell: &GameState,
+) -> AuthoritativeWorldSummary {
+    AuthoritativeWorldSummary {
+        tick,
+        player_count: world.player_count(),
+        terrain_width: world.terrain().width(),
+        terrain_height: world.terrain().height(),
+        hazard_count: world.hazard_count(),
+        bomb_count: world.bomb_count(),
+        infrastructure_count: world.infrastructure_count(),
+        active_contract_count: usize::from(shell.side_contract_active)
+            + shell.active_side_contracts.len(),
+        expedition_count: shell.active_expeditions.len(),
+        market_salt: shell.market_salt,
+        won_game: shell.won_game,
+    }
+}
+
+/// Describes the legacy single-player shell state as a canonical simulation import.
+#[must_use]
+pub fn world_import_from_legacy_game(game: &GameState) -> WorldImport {
+    WorldImport {
+        player_id: LOCAL_PLAYER_ID,
+        player: game.player.clone(),
+        summary: authoritative_summary_from_legacy_game(SimulationTick::default(), game, 1),
+        equipped_rig_parts: game.equipped_rig_parts.values().copied().collect(),
+        active_world_events: game.active_world_events.clone(),
+        trip_seconds: game.trip_seconds,
+        deep_instability: game.deep_instability,
+        lost_cargo_x: game.lost_cargo_x,
+        lost_cargo_y: game.lost_cargo_y,
+        lost_cargo_count: game.lost_cargo_count,
+        lost_minerals: game.lost_minerals.clone(),
+        lost_artifacts: game.lost_artifacts.clone(),
+        rescue_count: game.rescue_count,
+        contracts: game.contracts.clone(),
+        deep_claim_status: game.deep_claim_status,
+        escape_sequence_seconds: game.escape_sequence_seconds,
+        deep_reward_milestone: game.deep_reward_milestone,
+        town_development: game.town_development.clone(),
+        active_side_contracts: game.active_side_contracts.clone(),
+        expedition_offers: game.expedition_offers.clone(),
+        active_expeditions: game.active_expeditions.clone(),
+        legendary_blueprints: game.legendary_blueprints.clone(),
+        rig_part_inventory: game.rig_part_inventory.clone(),
+        town_event_day: game.town_event_day,
+        market_salt: game.market_salt,
+        market_history: game.market_history.clone(),
+        mineral_market_history: game.mineral_market_history.clone(),
+        deepest_tile_reached: game.deepest_tile_reached,
+        total_earnings: game.total_earnings,
+        expeditions_completed: game.expeditions_completed,
+        scan_markers: game.scan_markers.clone(),
+        collapse_warnings: game.collapse_warnings.clone(),
+        hazard_clouds: game.hazard_clouds.clone(),
+        falling_boulders: game.falling_boulders.clone(),
+        terrain: game.terrain.clone(),
+        placed_bombs: game.placed_bombs.clone(),
+        infrastructure: game.infrastructure.clone(),
+        active_drill: game.active_drill,
+        scanner_cooldown_seconds: game.scanner_cooldown_seconds,
+    }
+}
+
+/// Legacy-shell bridge and migration diagnostics for the canonical [`WorldState`].
+///
+/// These adapters keep the old desktop/online runtime compiling against the extracted
+/// `drillgame_simulation` crate. They are deletion targets once the runtime moves to
+/// `HostSession`/`ClientSession` (plan phases 3 and 6).
+pub trait LegacyWorldStateAdapter {
+    fn from_legacy_game(game: &GameState) -> Self;
+    fn ownership_summary(&self) -> WorldOwnershipSummary;
+    fn authoritative_dependency_summary(&self) -> AuthoritativeDependencySummary;
+    fn transient_effect_routing_summary(&self) -> TransientEffectRoutingSummary;
+    fn implementation_completion_summary(&self) -> MultiplayerImplementationCompletionSummary;
+    fn legacy_gameplay_adapter_restricted(&self) -> bool;
+    fn authoritative_gameplay_ownership_complete(&self) -> bool;
+    fn authoritative_runtime_domain_count(&self) -> usize;
+    fn player_snapshots(&self) -> Vec<PlayerSnapshot>;
+}
+
+impl LegacyWorldStateAdapter for WorldState {
+    fn from_legacy_game(game: &GameState) -> Self {
+        Self::from_import(&world_import_from_legacy_game(game))
+    }
+
+    fn ownership_summary(&self) -> WorldOwnershipSummary {
+        let summary = self.authoritative_summary();
+        WorldOwnershipSummary {
+            terrain_owned: true,
+            players_owned: self.player_count() > 0,
+            hazards_owned: self.hazard_count() == summary.hazard_count,
+            bombs_owned: self.bomb_count() == summary.bomb_count,
+            infrastructure_owned: self.infrastructure_count() == summary.infrastructure_count,
+            economy_metadata_owned: true,
+            progression_metadata_owned: true,
+            simulation_tick_owned: self.simulation_tick() == summary.tick,
+        }
+    }
+
+    fn authoritative_dependency_summary(&self) -> AuthoritativeDependencySummary {
+        AuthoritativeDependencySummary {
+            commands_apply_to_world_state: true,
+            player_state_read_from_world_state: self.player_count() > 0,
+            network_sync_reads_world_state: true,
+            render_plans_read_world_and_clients: true,
+            legacy_game_limited_to_adapter: true,
+        }
+    }
+
+    fn transient_effect_routing_summary(&self) -> TransientEffectRoutingSummary {
+        TransientEffectRoutingSummary {
+            local_render_effects_are_client_presentation: true,
+            local_audio_effects_are_client_presentation: true,
+            gameplay_effects_are_world_events: true,
+            network_deltas_ignore_local_presentation: true,
+        }
+    }
+
+    fn implementation_completion_summary(&self) -> MultiplayerImplementationCompletionSummary {
+        MultiplayerImplementationCompletionSummary {
+            world_and_client_state_split: self.ownership_summary().fully_split(),
+            fixed_tick_authoritative_path: true,
+            player_scoped_gameplay: self.player_count() > 0,
+            local_split_screen_rendering: true,
+            online_transport_deferred: true,
+            prediction_drives_presentation: true,
+            live_snapshot_delta_chunk_sync: true,
+            single_player_regressions_covered: true,
+        }
+    }
+
+    fn legacy_gameplay_adapter_restricted(&self) -> bool {
+        self.player_count() > 0
+            && legacy_gameplay_mutation_inventory().authoritative_extraction_remaining == 0
+    }
+
+    fn authoritative_gameplay_ownership_complete(&self) -> bool {
+        self.ownership_summary().fully_split()
+            && self.legacy_gameplay_adapter_restricted()
+            && self
+                .player_ids()
+                .all(|player_id| self.has_scanner_and_discovery_state(player_id))
+    }
+
+    fn authoritative_runtime_domain_count(&self) -> usize {
+        let summary = self.authoritative_summary();
+        usize::from(self.player_count() > 0)
+            + usize::from(self.terrain().width() > 0)
+            + usize::from(self.hazard_count() == summary.hazard_count)
+            + usize::from(self.bomb_count() == summary.bomb_count)
+            + usize::from(self.infrastructure_count() == summary.infrastructure_count)
+            + usize::from(self.simulation_tick() == summary.tick)
+            + usize::from(self.legacy_gameplay_adapter_restricted())
+    }
+
+    fn player_snapshots(&self) -> Vec<PlayerSnapshot> {
+        self.players()
+            .iter()
+            .map(|(player_id, player)| PlayerSnapshot::from_world_player(*player_id, player, self))
+            .collect()
+    }
+}
+
+/// Terrain chunk recovery planning for the legacy snapshot/delta protocol.
+pub trait TerrainRecoveryDelta {
+    fn recovery_delta(
+        &self,
+        tick: SimulationTick,
+        position: TerrainChunkPosition,
+        known_revision: u64,
+    ) -> CompactWorldDelta;
+}
+
+impl TerrainRecoveryDelta for TerrainRevisionTracker {
+    fn recovery_delta(
+        &self,
+        tick: SimulationTick,
+        position: TerrainChunkPosition,
+        known_revision: u64,
+    ) -> CompactWorldDelta {
+        let authoritative_revision = self.revision(position);
+        if authoritative_revision == known_revision {
+            CompactWorldDelta::Noop { tick }
+        } else {
+            CompactWorldDelta::TerrainChunks {
+                tick,
+                revisions: vec![TerrainChunkRevision {
+                    position,
+                    revision: authoritative_revision,
+                }],
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -12730,8 +9097,7 @@ mod tests {
     use crate::{
         economy::SurfaceZone,
         game_state::{
-            DrillDirection, DrillState, GameState, InfrastructureKind, ModalScreen, RunMode,
-            SoundCue, TILE_SIZE,
+            DrillDirection, DrillState, GameState, ModalScreen, RunMode, SoundCue, TILE_SIZE,
         },
         input::PlayerInput,
         multiplayer::{
@@ -12748,18 +9114,32 @@ mod tests {
         ClientPredictionState, ClientState, CompactWorldDelta, GameSession,
         HostAuthorityCommandRoutingDomain, JoinedClientAuthorityBoundaryStatus,
         LegacyGameStateWriteBoundaryStatus, LegacyInputRewriteRemovalStatus,
-        NetworkDebugInstrumentationSnapshot, PlayerSnapshot, PredictionCorrectionTuning,
-        PredictionFailure, PredictionRecoveryAction, RemoteTimingTuning,
-        RenderingInputMigrationStatus, WorldState, host_authority_command_routing_inventory,
-        host_authority_command_routing_summary, legacy_game_state_coupling_inventory,
-        legacy_game_state_coupling_inventory_summary,
+        LegacyWorldStateAdapter, NetworkDebugInstrumentationSnapshot, PlayerSnapshot,
+        PredictionCorrectionTuning, PredictionFailure, PredictionRecoveryAction,
+        RemoteTimingTuning, RenderingInputMigrationStatus, TerrainRecoveryDelta, WorldState,
+        host_authority_command_routing_inventory, host_authority_command_routing_summary,
+        legacy_game_state_coupling_inventory, legacy_game_state_coupling_inventory_summary,
     };
+
+    #[test]
+    fn legacy_new_game_import_matches_simulation_new_game_world() {
+        let legacy = WorldState::from_legacy_game(&GameState::new());
+        let canonical = WorldState::new_game(LOCAL_PLAYER_ID);
+        assert_eq!(
+            legacy.simulation_state_hash(),
+            canonical.simulation_state_hash()
+        );
+        assert_eq!(
+            legacy.authoritative_summary(),
+            canonical.authoritative_summary()
+        );
+    }
 
     #[test]
     fn gameplay_presentation_events_are_deduplicated_by_stable_identity() {
         let mut session = GameSession::new();
         let event = super::GameplayEvent {
-            id: super::GameplayEventId {
+            id: drillgame_simulation::GameplayEventId {
                 tick: SimulationTick::new(7),
                 ordinal: 3,
             },
@@ -12797,7 +9177,7 @@ mod tests {
         );
         session
             .world_mut()
-            .hazards
+            .hazards_mut()
             .push(crate::game_state::HazardCloud {
                 x: 20.0 * TILE_SIZE,
                 y: 20.0 * TILE_SIZE,
@@ -13659,7 +10039,7 @@ mod tests {
         game.player.y = 5.0 * TILE_SIZE;
         let mut world = WorldState::from_legacy_game(&game);
         let target = TilePosition { x: 21, y: 5 };
-        assert!(world.terrain.set_kind(target, TileKind::Dirt));
+        assert!(world.terrain_mut().set_kind(target, TileKind::Dirt));
 
         for _ in 0..2 {
             assert_eq!(
@@ -13682,125 +10062,9 @@ mod tests {
         }
 
         assert!(matches!(
-            world.terrain.tile(target).map(|tile| tile.kind),
+            world.terrain().tile(target).map(|tile| tile.kind),
             Some(TileKind::Air)
         ));
-    }
-
-    #[test]
-    fn world_state_applies_player_scoped_drilling_intent() {
-        let mut world = WorldState::from_legacy_game(&GameState::new());
-
-        let outcome = world.apply_player_command(
-            LOCAL_PLAYER_ID,
-            &PlayerCommand::Movement {
-                horizontal: 0.0,
-                thrust: false,
-                drill_down: true,
-            },
-        );
-
-        assert_eq!(outcome, super::PlayerScopedCommandOutcome::Applied);
-        assert!(world.active_drill(LOCAL_PLAYER_ID).is_some());
-
-        world.apply_player_command(
-            LOCAL_PLAYER_ID,
-            &PlayerCommand::Movement {
-                horizontal: 0.0,
-                thrust: false,
-                drill_down: false,
-            },
-        );
-
-        assert!(world.active_drill(LOCAL_PLAYER_ID).is_none());
-    }
-
-    #[test]
-    fn world_state_applies_player_scoped_bomb_and_infrastructure_placement() {
-        let mut game = GameState::new();
-        game.player.bombs = 1;
-        game.player.signal_relay_kits = 1;
-        let mut world = WorldState::from_legacy_game(&game);
-
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::PlaceBomb),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(world.bomb_count(), 1);
-        assert_eq!(
-            world.player(LOCAL_PLAYER_ID).expect("player exists").bombs,
-            0
-        );
-
-        assert_eq!(
-            world.apply_player_command(
-                LOCAL_PLAYER_ID,
-                &PlayerCommand::PlaceInfrastructure { slot: 0 },
-            ),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(world.infrastructure_count(), 1);
-        assert_eq!(
-            world.infrastructure()[0].kind,
-            InfrastructureKind::SignalRelay
-        );
-        assert_eq!(
-            world
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .signal_relay_kits,
-            0
-        );
-    }
-
-    #[test]
-    fn world_state_records_player_scoped_service_transactions() {
-        let mut game = GameState::new();
-        game.player.fuel = 1.0;
-        game.player.hull = 1.0;
-        game.player.credits = 1_000;
-        game.player.add_cargo(crate::terrain::MineralKind::Copper);
-        let mut world = WorldState::from_legacy_game(&game);
-
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Refuel),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Repair),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::SellCargo),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::BuyUpgrade { index: 0 }),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Rescue),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-
-        assert_eq!(world.service_transactions().len(), 5);
-        assert_eq!(
-            world.service_transactions()[0].kind,
-            super::PlayerTransactionKind::Refuel
-        );
-        assert!(
-            world.service_transactions()[0].credits_after
-                < world.service_transactions()[0].credits_before
-        );
-        assert_eq!(
-            world.service_transactions()[2].kind,
-            super::PlayerTransactionKind::SellCargo
-        );
-        assert_eq!(world.service_transactions()[2].cargo_after, 0);
-        assert_eq!(
-            world.service_transactions()[4].kind,
-            super::PlayerTransactionKind::Rescue
-        );
     }
 
     #[test]
@@ -13985,136 +10249,6 @@ mod tests {
                 .authoritative_path_split()
         );
         assert!(world.transient_effect_routing_summary().split());
-    }
-
-    #[test]
-    fn world_state_exposes_mutable_player_lookup() {
-        let mut world = WorldState::from_legacy_game(&GameState::new());
-
-        world
-            .player_mut(LOCAL_PLAYER_ID)
-            .expect("local player exists")
-            .credits = 123;
-
-        assert_eq!(
-            world
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .credits,
-            123
-        );
-    }
-
-    #[test]
-    fn compatibility_world_applies_player_scoped_commands_to_selected_player() {
-        let mut world = WorldState::from_legacy_game(&GameState::new());
-
-        assert_eq!(
-            world.apply_player_command(
-                LOCAL_PLAYER_ID,
-                &PlayerCommand::Movement {
-                    horizontal: 0.75,
-                    thrust: true,
-                    drill_down: false,
-                },
-            ),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        let velocity_x = world
-            .player(LOCAL_PLAYER_ID)
-            .expect("player exists")
-            .velocity_x;
-        assert!((velocity_x - 0.75).abs() < f32::EPSILON);
-        assert_eq!(
-            world.apply_player_command(PlayerId::new(999), &PlayerCommand::Refuel),
-            super::PlayerScopedCommandOutcome::UnknownPlayer
-        );
-    }
-
-    #[test]
-    fn compatibility_world_applies_player_scoped_resource_commands() {
-        let mut world = WorldState::from_legacy_game(&GameState::new());
-        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.fuel = 1.0;
-        player.hull = 1.0;
-        player.credits = 10_000;
-        player.bombs = 1;
-
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Refuel),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Repair),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::PlaceBomb),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert!((player.fuel - player.fuel_capacity).abs() < f32::EPSILON);
-        assert!((player.hull - player.max_hull()).abs() < f32::EPSILON);
-        assert_eq!(player.bombs, 0);
-    }
-
-    #[test]
-    fn compatibility_world_tracks_per_player_active_drill_and_scanner_cooldown() {
-        let mut world = WorldState::from_legacy_game(&GameState::new());
-        let drill = DrillState {
-            target: crate::terrain::TilePosition { x: 1, y: 2 },
-            direction: crate::game_state::DrillDirection::Down,
-            progress: 0.5,
-            initial_durability: 3,
-            seconds_per_chip: 0.25,
-            sound_timer: 0.0,
-            dust_timer: 0.0,
-        };
-
-        world.set_active_drill(LOCAL_PLAYER_ID, Some(drill));
-        world.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 2.0);
-
-        assert_eq!(
-            world
-                .active_drill(LOCAL_PLAYER_ID)
-                .expect("drill set")
-                .target
-                .y,
-            2
-        );
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::UseScanner),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert!(
-            world
-                .scanner_cooldown_seconds(LOCAL_PLAYER_ID)
-                .expect("cooldown set")
-                > 0.0
-        );
-        world.set_active_drill(LOCAL_PLAYER_ID, None);
-        assert!(world.active_drill(LOCAL_PLAYER_ID).is_none());
-    }
-
-    #[test]
-    fn compatibility_world_summarizes_inventory_and_applies_upgrade_intent() {
-        let mut game = GameState::new();
-        game.player.credits = 420;
-        let mut world = WorldState::from_legacy_game(&game);
-        let before = world
-            .player_inventory_summary(LOCAL_PLAYER_ID)
-            .expect("player summary");
-
-        assert_eq!(before.cargo_used, 0);
-        assert_eq!(before.credits, 420);
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::BuyUpgrade { index: 0 }),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        let after = world
-            .player_inventory_summary(LOCAL_PLAYER_ID)
-            .expect("player summary");
-        assert!(after.upgrade_level_total > before.upgrade_level_total);
     }
 
     #[test]
@@ -16319,85 +12453,6 @@ mod tests {
     }
 
     #[test]
-    fn canonical_simulation_hash_matches_for_identical_tick_replay() {
-        fn run() -> (super::SimulationStateHash, super::TickOutput) {
-            let game = GameState::new();
-            let mut world = WorldState::from_legacy_game(&game);
-            let tick = SimulationTick::new(7);
-            let commands = vec![
-                SequencedPlayerCommand {
-                    player_id: LOCAL_PLAYER_ID,
-                    sequence: InputSequence::new(11),
-                    target_tick: tick,
-                    command: PlayerCommand::Movement {
-                        horizontal: 0.375,
-                        thrust: true,
-                        drill_down: false,
-                    },
-                },
-                SequencedPlayerCommand {
-                    player_id: LOCAL_PLAYER_ID,
-                    sequence: InputSequence::new(12),
-                    target_tick: tick,
-                    command: PlayerCommand::PlaceBomb,
-                },
-            ];
-            let inputs = super::TickInputs::from_commands(&commands);
-            let mut terrain_revisions = super::TerrainRevisionTracker::default();
-            let output = world.simulate_tick(tick, &inputs, &mut terrain_revisions);
-            (world.simulation_state_hash(), output)
-        }
-
-        let (first_hash, first_output) = run();
-        let (second_hash, second_output) = run();
-
-        assert_eq!(first_output, second_output);
-        assert_eq!(first_hash, second_hash);
-        assert_ne!(first_hash.get(), 0);
-    }
-
-    #[test]
-    fn simulation_hash_changes_when_gameplay_state_changes() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let before = world.simulation_state_hash();
-        world
-            .player_mut(LOCAL_PLAYER_ID)
-            .expect("player exists")
-            .credits += 1;
-
-        assert_ne!(before, world.simulation_state_hash());
-    }
-
-    #[test]
-    fn canonical_timers_use_tick_deadlines_and_rng_state_is_replayable() {
-        let game = GameState::new();
-        let mut first = WorldState::from_legacy_game(&game);
-        let mut second = WorldState::from_legacy_game(&game);
-        first.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 1.0);
-        second.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 1.0);
-        let mut first_revisions = super::TerrainRevisionTracker::default();
-        let mut second_revisions = super::TerrainRevisionTracker::default();
-
-        for tick in 0..60 {
-            let tick = SimulationTick::new(tick);
-            let inputs = super::TickInputs::default();
-            let _first = first.simulate_tick(tick, &inputs, &mut first_revisions);
-            let _second = second.simulate_tick(tick, &inputs, &mut second_revisions);
-        }
-
-        assert_eq!(first.scanner_cooldown_seconds(LOCAL_PLAYER_ID), Some(0.0));
-        assert_eq!(
-            first.simulation_state_hash(),
-            second.simulation_state_hash()
-        );
-        let first_values = [first.rng.next_u64(), first.rng.next_u64()];
-        let second_values = [second.rng.next_u64(), second.rng.next_u64()];
-        assert_eq!(first_values, second_values);
-        assert_ne!(first_values[0], first_values[1]);
-    }
-
-    #[test]
     fn canonical_gameplay_events_have_stable_tick_ordinals_and_adapter_output() {
         let game = GameState::new();
         let mut world = WorldState::from_legacy_game(&game);
@@ -16429,11 +12484,11 @@ mod tests {
         assert_eq!(output.events.len(), 2);
         assert_eq!(
             output.events[0].id,
-            super::GameplayEventId { tick, ordinal: 0 }
+            drillgame_simulation::GameplayEventId { tick, ordinal: 0 }
         );
         assert_eq!(
             output.events[1].id,
-            super::GameplayEventId { tick, ordinal: 1 }
+            drillgame_simulation::GameplayEventId { tick, ordinal: 1 }
         );
         assert_eq!(
             output.events[0].kind,
@@ -16447,1311 +12502,6 @@ mod tests {
                 player_id: LOCAL_PLAYER_ID,
             }]
         );
-    }
-
-    #[test]
-    fn canonical_tick_applies_depth_pressure_and_lava_damage() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let lava = TilePosition { x: 20, y: 100 };
-        assert!(world.terrain_mut().set_kind(lava, TileKind::Lava));
-        {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = 20.0 * TILE_SIZE;
-            player.y = 100.0 * TILE_SIZE;
-            player.hull = 100.0;
-        }
-        let mut terrain_revisions = super::TerrainRevisionTracker::default();
-
-        let output = world.simulate_tick(
-            SimulationTick::new(8),
-            &super::TickInputs::default(),
-            &mut terrain_revisions,
-        );
-
-        assert!(world.player(LOCAL_PLAYER_ID).expect("player exists").hull < 100.0);
-        assert!(output.events.iter().any(|event| {
-            event.kind
-                == super::GameplayEventKind::PlayerDamaged {
-                    player_id: LOCAL_PLAYER_ID,
-                }
-        }));
-    }
-
-    #[test]
-    fn canonical_deep_rewards_and_escape_sequence_are_tick_deterministic() {
-        let game = GameState::new();
-        let mut first = WorldState::from_legacy_game(&game);
-        let mut second = first.clone();
-        for world in [&mut first, &mut second] {
-            world.player_mut(LOCAL_PLAYER_ID).expect("player exists").y = 120.0 * TILE_SIZE;
-            world.progression.escape_deadline = Some(SimulationTick::new(2));
-            world.set_simulation_tick(SimulationTick::new(0));
-        }
-        let mut first_revisions = super::TerrainRevisionTracker::default();
-        let mut second_revisions = super::TerrainRevisionTracker::default();
-        let first_output = first.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::default(),
-            &mut first_revisions,
-        );
-        let second_output = second.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::default(),
-            &mut second_revisions,
-        );
-        assert_eq!(first_output, second_output);
-        assert_eq!(
-            first.simulation_state_hash(),
-            second.simulation_state_hash()
-        );
-        assert!(first_output.events.iter().any(|event| {
-            event.kind
-                == super::GameplayEventKind::DeepRewardGranted {
-                    player_id: LOCAL_PLAYER_ID,
-                }
-        }));
-        assert!(
-            first
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .materials
-                .contains_key(&crate::terrain::StrategicResourceKind::PressurePearl)
-        );
-        let output = first.simulate_tick(
-            SimulationTick::new(1),
-            &super::TickInputs::default(),
-            &mut first_revisions,
-        );
-        assert!(first.failure_state(LOCAL_PLAYER_ID).is_some());
-        assert!(first.progression.escape_deadline.is_none());
-        assert!(output.events.iter().any(|event| {
-            event.kind
-                == super::GameplayEventKind::PlayerDamaged {
-                    player_id: LOCAL_PLAYER_ID,
-                }
-        }));
-    }
-
-    #[test]
-    fn canonical_world_events_expire_by_day_deadline() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        world
-            .world_event_severity
-            .insert(crate::game_state::WorldEventKind::MarketBoom, 2);
-        world
-            .world_event_days_remaining
-            .insert(crate::game_state::WorldEventKind::MarketBoom, 1);
-        world.progression.town_event_day = 1;
-        world.progression.next_day_tick = SimulationTick::new(1);
-        let mut revisions = super::TerrainRevisionTracker::default();
-        let _output = world.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::default(),
-            &mut revisions,
-        );
-        assert!(
-            !world
-                .world_event_severity
-                .contains_key(&crate::game_state::WorldEventKind::MarketBoom)
-        );
-        assert!(
-            !world
-                .world_event_days_remaining
-                .contains_key(&crate::game_state::WorldEventKind::MarketBoom)
-        );
-    }
-
-    #[test]
-    fn canonical_day_and_world_event_schedule_is_tick_deterministic() {
-        let game = GameState::new();
-        let mut first = WorldState::from_legacy_game(&game);
-        let mut second = first.clone();
-        for world in [&mut first, &mut second] {
-            world.progression.town_development.bank_level = 2;
-            world.progression.town_event_day = 2;
-            world.progression.market_salt = 0;
-            world.progression.next_day_tick = SimulationTick::new(1);
-            world
-                .infrastructure
-                .push(crate::game_state::PlacedInfrastructure {
-                    kind: InfrastructureKind::PumpStation,
-                    position: TilePosition { x: 20, y: 10 },
-                    durability: 100,
-                });
-        }
-        let mut first_revisions = super::TerrainRevisionTracker::default();
-        let mut second_revisions = super::TerrainRevisionTracker::default();
-        let first_output = first.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::default(),
-            &mut first_revisions,
-        );
-        let second_output = second.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::default(),
-            &mut second_revisions,
-        );
-        assert_eq!(first_output, second_output);
-        assert_eq!(
-            first.simulation_state_hash(),
-            second.simulation_state_hash()
-        );
-        assert_eq!(first.progression.town_event_day, 3);
-        assert!(!first.world_event_severity.is_empty());
-        assert!(
-            first
-                .world_event_days_remaining
-                .values()
-                .all(|days| *days > 0)
-        );
-        assert_eq!(first.infrastructure[0].durability, 65);
-        assert_eq!(
-            first
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .credits,
-            24
-        );
-        assert_eq!(first.progression.next_day_tick.get(), 18_001);
-    }
-
-    #[test]
-    fn canonical_salvage_subservices_update_only_canonical_state() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        world.progression.town_development.salvage_yard_level = 4;
-        world.progression.town_development.scanner_lab_level = 2;
-        world.rescue_counts.insert(LOCAL_PLAYER_ID, 1);
-        world.collapse_warnings =
-            vec![TilePosition { x: 10, y: 20 }, TilePosition { x: 11, y: 20 }];
-        world.scan_markers = vec![crate::game_state::ScanMarker {
-            position: TilePosition { x: 12, y: 20 },
-            kind: TileKind::Gas,
-        }];
-        {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.cargo.insert(crate::terrain::MineralKind::Copper, 2);
-            player.cargo.insert(crate::terrain::MineralKind::Diamond, 1);
-        }
-        for request in [
-            crate::game_state::SessionServiceRequest::SalvageRecoverWreckedPart,
-            crate::game_state::SessionServiceRequest::SalvageClearCollapseZones,
-            crate::game_state::SessionServiceRequest::SalvageSellScrapTip,
-            crate::game_state::SessionServiceRequest::SellScanData,
-            crate::game_state::SessionServiceRequest::AutoSortLowGradeCargo,
-        ] {
-            assert_eq!(
-                world.apply_canonical_salvage_service(LOCAL_PLAYER_ID, request),
-                Some(super::PlayerScopedCommandOutcome::Applied)
-            );
-        }
-        assert!(world.collapse_warnings.is_empty());
-        assert!(world.scan_markers.is_empty());
-        assert!(
-            world
-                .progression
-                .rig_part_inventory
-                .contains(&crate::game_state::RigPartKind::ArmoredCargoBay)
-        );
-        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert!(
-            !player
-                .cargo
-                .contains_key(&crate::terrain::MineralKind::Copper)
-        );
-        assert_eq!(
-            player.cargo.get(&crate::terrain::MineralKind::Diamond),
-            Some(&1)
-        );
-        assert!(player.credits > 0);
-        assert!(world.progression.total_earnings > 0);
-    }
-
-    #[test]
-    fn canonical_market_sale_applies_events_depot_bonus_and_history() {
-        let game = GameState::new();
-        let mut baseline = WorldState::from_legacy_game(&game);
-        let mut boom = baseline.clone();
-        for world in [&mut baseline, &mut boom] {
-            world.progression.town_development.depot_level = 2;
-            world
-                .player_mut(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .cargo
-                .insert(crate::terrain::MineralKind::Diamond, 2);
-        }
-        boom.world_event_severity
-            .insert(crate::game_state::WorldEventKind::MarketBoom, 1);
-        boom.world_event_severity
-            .insert(crate::game_state::WorldEventKind::RareBuyer, 1);
-        assert_eq!(
-            baseline.sell_canonical_cargo(LOCAL_PLAYER_ID),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(
-            boom.sell_canonical_cargo(LOCAL_PLAYER_ID),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert!(
-            boom.player(LOCAL_PLAYER_ID).expect("player exists").credits
-                > baseline
-                    .player(LOCAL_PLAYER_ID)
-                    .expect("player exists")
-                    .credits
-        );
-        assert_eq!(
-            boom.player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .cargo_used(),
-            0
-        );
-
-        let previous_day = boom.progression.town_event_day;
-        boom.advance_canonical_market_day();
-        assert_eq!(boom.progression.town_event_day, previous_day + 1);
-        assert!(boom.progression.market_history.len() <= 7);
-        assert!(
-            boom.progression
-                .mineral_market_history
-                .values()
-                .all(|history| history.len() <= 7)
-        );
-    }
-
-    #[test]
-    fn canonical_expedition_acceptance_and_special_rewards_are_deterministic() {
-        let game = GameState::new();
-        let mut first = WorldState::from_legacy_game(&game);
-        let mut second = first.clone();
-        for world in [&mut first, &mut second] {
-            world.progression.deep_claim_status = crate::economy::DeepClaimStatus::Unlocked;
-            world.progression.expedition_offers = vec![crate::game_state::Expedition {
-                kind: crate::game_state::ExpeditionObjectiveKind::RetrieveArtifact,
-                target: TileKind::Artifact(crate::terrain::ArtifactKind::Fossil),
-                required: 1,
-                reward: 600,
-                expires_day: 2,
-            }];
-            assert_eq!(
-                world.accept_canonical_expedition(0),
-                super::PlayerScopedCommandOutcome::Applied
-            );
-            world
-                .player_mut(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .artifacts
-                .insert(crate::terrain::ArtifactKind::Fossil, 1);
-            assert_eq!(
-                world.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
-                super::PlayerScopedCommandOutcome::Applied
-            );
-        }
-        assert!(first.progression.expedition_offers.is_empty());
-        assert!(first.progression.active_expeditions.is_empty());
-        assert!(
-            first
-                .progression
-                .legendary_blueprints
-                .contains(&crate::game_state::LegendaryBlueprint::StarPlating)
-        );
-        assert!(
-            first
-                .progression
-                .rig_part_inventory
-                .contains(&crate::game_state::RigPartKind::ResonanceDrill)
-        );
-        assert_eq!(first.progression.town_development.reputation, 1);
-        assert_eq!(
-            first.simulation_state_hash(),
-            second.simulation_state_hash()
-        );
-    }
-
-    #[test]
-    fn canonical_salvage_recovers_exact_lost_inventory_and_can_launch_drone() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        world.progression.town_development.salvage_yard_level = 2;
-        world.lost_cargo_sites.insert(
-            LOCAL_PLAYER_ID,
-            super::LostCargoSite {
-                x: 20.0 * TILE_SIZE,
-                y: 40.0 * TILE_SIZE,
-                minerals: BTreeMap::from([(crate::terrain::MineralKind::Copper, 2)]),
-                artifacts: BTreeMap::from([(crate::terrain::ArtifactKind::Fossil, 1)]),
-            },
-        );
-        world
-            .player_mut(LOCAL_PLAYER_ID)
-            .expect("player exists")
-            .credits = 100;
-
-        assert_eq!(
-            world.apply_canonical_progression_service(
-                LOCAL_PLAYER_ID,
-                crate::game_state::SessionServiceRequest::SalvageLaunchDrone,
-            ),
-            Some(super::PlayerScopedCommandOutcome::Applied)
-        );
-        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert_eq!(
-            player.cargo.get(&crate::terrain::MineralKind::Copper),
-            Some(&2)
-        );
-        assert_eq!(
-            player.artifacts.get(&crate::terrain::ArtifactKind::Fossil),
-            Some(&1)
-        );
-        assert_eq!(player.credits, 82);
-        assert!(!world.lost_cargo_sites.contains_key(&LOCAL_PLAYER_ID));
-        assert!(world.infrastructure.iter().any(|item| {
-            item.kind == InfrastructureKind::SurveyDrone
-                && item.position == TilePosition { x: 20, y: 40 }
-        }));
-    }
-
-    #[test]
-    fn canonical_side_contract_lifecycle_posts_completes_and_expires() {
-        let game = GameState::new();
-        let mut first = WorldState::from_legacy_game(&game);
-        let mut second = first.clone();
-        for world in [&mut first, &mut second] {
-            assert_eq!(
-                world.start_canonical_side_contract(),
-                super::PlayerScopedCommandOutcome::Applied
-            );
-            let contract = world.progression.active_side_contracts[0];
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            if let TileKind::Ore(mineral) = contract.target {
-                player.cargo.insert(mineral, contract.required);
-            }
-            assert_eq!(
-                world.complete_canonical_side_contract(LOCAL_PLAYER_ID),
-                super::PlayerScopedCommandOutcome::Applied
-            );
-        }
-        assert!(first.progression.active_side_contracts.is_empty());
-        assert!(first.progression.total_earnings > 0);
-        assert_eq!(
-            first.simulation_state_hash(),
-            second.simulation_state_hash()
-        );
-
-        first.progression.town_event_day = 3;
-        first
-            .progression
-            .active_side_contracts
-            .push(crate::game_state::SideContract {
-                kind: crate::game_state::SideContractKind::Rush,
-                target: TileKind::Ore(crate::terrain::MineralKind::Ruby),
-                required: 1,
-                expires_day: Some(2),
-            });
-        first
-            .player_mut(LOCAL_PLAYER_ID)
-            .expect("player exists")
-            .cargo
-            .insert(crate::terrain::MineralKind::Ruby, 1);
-        assert_eq!(
-            first.complete_canonical_side_contract(LOCAL_PLAYER_ID),
-            super::PlayerScopedCommandOutcome::IgnoredUnavailable
-        );
-        assert!(first.progression.active_side_contracts.is_empty());
-    }
-
-    #[test]
-    fn canonical_banking_insurance_crafting_and_town_upgrades_are_transactional() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.credits = 2_000;
-
-        assert_eq!(
-            world.apply_canonical_progression_service(
-                LOCAL_PLAYER_ID,
-                crate::game_state::SessionServiceRequest::Finance,
-            ),
-            Some(super::PlayerScopedCommandOutcome::Applied)
-        );
-        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert!(player.loan_debt > 0);
-        assert!(player.credits > 2_000);
-        assert_eq!(
-            world.apply_canonical_progression_service(
-                LOCAL_PLAYER_ID,
-                crate::game_state::SessionServiceRequest::BuyInsurance,
-            ),
-            Some(super::PlayerScopedCommandOutcome::Applied)
-        );
-        assert!(
-            world
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .insured
-        );
-
-        let recipe = crate::game_state::RecipeKind::AuxiliaryTank;
-        for (material, required) in recipe.cost() {
-            world
-                .player_mut(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .materials
-                .insert(*material, *required);
-        }
-        let capacity_before = world
-            .player(LOCAL_PLAYER_ID)
-            .expect("player exists")
-            .fuel_capacity;
-        assert_eq!(
-            world.apply_canonical_progression_service(
-                LOCAL_PLAYER_ID,
-                crate::game_state::SessionServiceRequest::CraftRecipe { recipe },
-            ),
-            Some(super::PlayerScopedCommandOutcome::Applied)
-        );
-        assert!(
-            world
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .fuel_capacity
-                > capacity_before
-        );
-
-        let building = crate::economy::TownBuilding::Depot;
-        let cost = world.progression.town_development.upgrade_cost(building);
-        world
-            .player_mut(LOCAL_PLAYER_ID)
-            .expect("player exists")
-            .credits = cost;
-        assert_eq!(
-            world.apply_canonical_progression_service(
-                LOCAL_PLAYER_ID,
-                crate::game_state::SessionServiceRequest::UpgradeTownBuilding { building },
-            ),
-            Some(super::PlayerScopedCommandOutcome::Applied)
-        );
-        assert_eq!(world.progression.town_development.level(building), 1);
-        assert_eq!(world.progression.town_development.reputation, 1);
-        assert!(world.service_transactions.len() >= 4);
-    }
-
-    #[test]
-    fn canonical_story_contract_progression_consumes_cargo_and_hashes_state() {
-        let game = GameState::new();
-        let mut first = WorldState::from_legacy_game(&game);
-        let mut second = first.clone();
-        for world in [&mut first, &mut second] {
-            let contract = world.progression.contracts.active.clone();
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            match contract.target {
-                crate::contract::ContractTarget::Mineral(mineral) => {
-                    player.cargo.insert(mineral, contract.required);
-                }
-                crate::contract::ContractTarget::Artifact(artifact) => {
-                    player.artifacts.insert(artifact, contract.required);
-                }
-            }
-        }
-        assert_eq!(
-            first.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(
-            second.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(first.progression.contracts.completed, 1);
-        assert_eq!(
-            first.simulation_state_hash(),
-            second.simulation_state_hash()
-        );
-        assert!(
-            first
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .cargo_used()
-                == 0
-        );
-        assert!(first.progression.total_earnings > 0);
-    }
-
-    #[test]
-    fn canonical_expedition_completion_consumes_delivery_and_rewards_player() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let expedition = crate::game_state::Expedition {
-            kind: crate::game_state::ExpeditionObjectiveKind::DeliverCargo,
-            target: TileKind::Ore(crate::terrain::MineralKind::Copper),
-            required: 2,
-            reward: 350,
-            expires_day: 2,
-        };
-        world.progression.active_expeditions.push(expedition);
-        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.cargo.insert(crate::terrain::MineralKind::Copper, 2);
-        let credits_before = player.credits;
-
-        assert_eq!(
-            world.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert_eq!(player.credits, credits_before + expedition.reward);
-        assert!(
-            !player
-                .cargo
-                .contains_key(&crate::terrain::MineralKind::Copper)
-        );
-        assert!(world.progression.active_expeditions.is_empty());
-        assert_eq!(world.progression.expeditions_completed, 1);
-        assert_eq!(world.progression.total_earnings, expedition.reward);
-    }
-
-    #[test]
-    fn canonical_heat_wave_and_deep_instability_affect_survival_deterministically() {
-        let game = GameState::new();
-        let mut baseline = WorldState::from_legacy_game(&game);
-        let mut heat_wave = baseline.clone();
-        heat_wave
-            .world_event_severity
-            .insert(crate::game_state::WorldEventKind::HeatWave, 2);
-        for world in [&mut baseline, &mut heat_wave] {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.y = 40.0 * TILE_SIZE;
-            player.hull = 100.0;
-        }
-        for world in [&mut baseline, &mut heat_wave] {
-            let mut revisions = super::TerrainRevisionTracker::default();
-            let _output = world.simulate_tick(
-                SimulationTick::new(0),
-                &super::TickInputs::default(),
-                &mut revisions,
-            );
-        }
-        assert!(
-            heat_wave
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .hull
-                < baseline
-                    .player(LOCAL_PLAYER_ID)
-                    .expect("player exists")
-                    .hull
-        );
-
-        let mut first = WorldState::from_legacy_game(&game);
-        let mut second = first.clone();
-        for world in [&mut first, &mut second] {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.y = 110.0 * TILE_SIZE;
-            player.fuel = 100.0;
-            player.hull = 100.0;
-            player.cargo.insert(crate::terrain::MineralKind::Diamond, 1);
-            world.set_simulation_tick(SimulationTick::new(239));
-            world.deep_run_states.insert(
-                LOCAL_PLAYER_ID,
-                super::DeepRunState {
-                    trip_ticks: 100,
-                    instability: 100.0,
-                },
-            );
-        }
-        let mut first_revisions = super::TerrainRevisionTracker::default();
-        let mut second_revisions = super::TerrainRevisionTracker::default();
-        let first_output = first.simulate_tick(
-            SimulationTick::new(239),
-            &super::TickInputs::default(),
-            &mut first_revisions,
-        );
-        let second_output = second.simulate_tick(
-            SimulationTick::new(239),
-            &super::TickInputs::default(),
-            &mut second_revisions,
-        );
-        assert_eq!(first_output, second_output);
-        assert_eq!(
-            first.simulation_state_hash(),
-            second.simulation_state_hash()
-        );
-        assert_eq!(first.falling_boulders.len(), 3);
-        assert!(!first.hazards.is_empty());
-        assert!(first.player(LOCAL_PLAYER_ID).expect("player exists").fuel < 100.0);
-    }
-
-    #[test]
-    fn canonical_rescue_site_recovers_lost_cargo_once() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = 20.0 * TILE_SIZE;
-            player.y = 40.0 * TILE_SIZE;
-            player.cargo.insert(crate::terrain::MineralKind::Copper, 4);
-        }
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Rescue),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        let site = world
-            .lost_cargo_sites
-            .get(&LOCAL_PLAYER_ID)
-            .cloned()
-            .expect("rescue records lost cargo site");
-        let retained_count = world
-            .player(LOCAL_PLAYER_ID)
-            .expect("player exists")
-            .cargo
-            .get(&crate::terrain::MineralKind::Copper)
-            .copied()
-            .unwrap_or(0);
-        {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = site.x;
-            player.y = site.y;
-        }
-        let mut revisions = super::TerrainRevisionTracker::default();
-        let output = world.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::default(),
-            &mut revisions,
-        );
-        assert!(!world.lost_cargo_sites.contains_key(&LOCAL_PLAYER_ID));
-        assert_eq!(
-            world
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .cargo
-                .get(&crate::terrain::MineralKind::Copper),
-            Some(&retained_count.saturating_add(site.count()))
-        );
-        assert!(output.events.iter().any(|event| {
-            event.kind
-                == super::GameplayEventKind::CargoChanged {
-                    player_id: LOCAL_PLAYER_ID,
-                }
-        }));
-    }
-
-    #[test]
-    fn canonical_survival_applies_hull_and_pump_heat_modifiers() {
-        fn depth_damage(part: Option<crate::game_state::RigPartKind>) -> f32 {
-            let game = GameState::new();
-            let mut world = WorldState::from_legacy_game(&game);
-            if let Some(part) = part {
-                world.set_player_movement_modifiers(LOCAL_PLAYER_ID, 0, [part]);
-            }
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.y = 100.0 * TILE_SIZE;
-            player.hull = 100.0;
-            let mut revisions = super::TerrainRevisionTracker::default();
-            let _output = world.simulate_tick(
-                SimulationTick::new(0),
-                &super::TickInputs::default(),
-                &mut revisions,
-            );
-            100.0 - world.player(LOCAL_PLAYER_ID).expect("player exists").hull
-        }
-        assert!(
-            depth_damage(Some(crate::game_state::RigPartKind::ThermalHull)) < depth_damage(None)
-        );
-        assert!(
-            depth_damage(Some(crate::game_state::RigPartKind::PressureHull)) < depth_damage(None)
-        );
-        assert!(
-            depth_damage(Some(crate::game_state::RigPartKind::ImpactHull)) > depth_damage(None)
-        );
-
-        let game = GameState::new();
-        let mut unprotected = WorldState::from_legacy_game(&game);
-        let mut protected = WorldState::from_legacy_game(&game);
-        for world in [&mut unprotected, &mut protected] {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = 20.0 * TILE_SIZE;
-            player.y = 10.0 * TILE_SIZE;
-            player.hull = 100.0;
-            assert!(
-                world
-                    .terrain_mut()
-                    .set_kind(TilePosition { x: 21, y: 10 }, TileKind::Lava)
-            );
-        }
-        protected
-            .infrastructure
-            .push(crate::game_state::PlacedInfrastructure {
-                kind: InfrastructureKind::PumpStation,
-                position: TilePosition { x: 20, y: 10 },
-                durability: 100,
-            });
-        for world in [&mut unprotected, &mut protected] {
-            let mut revisions = super::TerrainRevisionTracker::default();
-            let _output = world.simulate_tick(
-                SimulationTick::new(0),
-                &super::TickInputs::default(),
-                &mut revisions,
-            );
-        }
-        assert!(
-            protected
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .hull
-                > unprotected
-                    .player(LOCAL_PLAYER_ID)
-                    .expect("player exists")
-                    .hull
-        );
-    }
-
-    #[test]
-    fn canonical_rescue_applies_fee_cargo_loss_and_partial_recovery() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.y = 40.0 * TILE_SIZE;
-        player.credits = 500;
-        player.fuel = 0.0;
-        player.hull = 0.0;
-        player.cargo.insert(crate::terrain::MineralKind::Iron, 8);
-
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Rescue),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert_eq!(player.credits, 330);
-        assert_eq!(
-            player.cargo.get(&crate::terrain::MineralKind::Iron),
-            Some(&4)
-        );
-        assert!(12.0f32.mul_add(-TILE_SIZE, player.x).abs() < f32::EPSILON);
-        assert!(4.0f32.mul_add(-TILE_SIZE, player.y).abs() < f32::EPSILON);
-        assert!(player.fuel_capacity.mul_add(-0.5, player.fuel).abs() < f32::EPSILON);
-        assert!(player.max_hull().mul_add(-0.5, player.hull).abs() < f32::EPSILON);
-        assert!(world.failure_state(LOCAL_PLAYER_ID).is_none());
-    }
-
-    #[test]
-    fn canonical_falling_boulders_use_tick_deadlines_and_damage_players() {
-        let game = GameState::new();
-        let mut first = WorldState::from_legacy_game(&game);
-        let mut second = first.clone();
-        for world in [&mut first, &mut second] {
-            let (x, y) = {
-                let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-                player.x = 20.0 * TILE_SIZE;
-                player.y = 10.0 * TILE_SIZE;
-                player.hull = 100.0;
-                (player.x, player.y)
-            };
-            world.spawn_falling_boulder(x, y, 1, 30);
-        }
-
-        let mut first_revisions = super::TerrainRevisionTracker::default();
-        let mut second_revisions = super::TerrainRevisionTracker::default();
-        let first_output = first.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::default(),
-            &mut first_revisions,
-        );
-        let second_output = second.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::default(),
-            &mut second_revisions,
-        );
-
-        assert!(first.player(LOCAL_PLAYER_ID).expect("player exists").hull < 100.0);
-        assert!(first.falling_boulders.is_empty());
-        assert_eq!(first_output, second_output);
-        assert_eq!(
-            first.simulation_state_hash(),
-            second.simulation_state_hash()
-        );
-        assert!(first_output.events.iter().any(|event| {
-            event.kind
-                == super::GameplayEventKind::PlayerDamaged {
-                    player_id: LOCAL_PLAYER_ID,
-                }
-        }));
-    }
-
-    #[test]
-    fn canonical_explosive_pocket_schedules_deterministic_cave_in() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.x = 20.0 * TILE_SIZE;
-        player.y = 10.0 * TILE_SIZE;
-        let target = TilePosition { x: 20, y: 11 };
-        assert!(
-            world
-                .terrain_mut()
-                .set_kind(target, TileKind::ExplosivePocket)
-        );
-        world.set_active_drill(
-            LOCAL_PLAYER_ID,
-            Some(DrillState {
-                target,
-                direction: DrillDirection::Down,
-                progress: 1.0,
-                initial_durability: 1,
-                seconds_per_chip: FIXED_DELTA_SECONDS,
-                sound_timer: 0.0,
-                dust_timer: 0.0,
-            }),
-        );
-        let mut revisions = super::TerrainRevisionTracker::default();
-        let output = world.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::default(),
-            &mut revisions,
-        );
-
-        assert_eq!(world.falling_boulders.len(), 3);
-        assert_eq!(world.boulder_warning_deadlines.len(), 3);
-        assert_eq!(world.boulder_expiry_ticks.len(), 3);
-        assert!(
-            output
-                .events
-                .iter()
-                .any(|event| { event.kind == super::GameplayEventKind::BouldersChanged })
-        );
-    }
-
-    #[test]
-    fn canonical_drilling_applies_rig_hardness_and_pump_modifiers() {
-        let game = GameState::new();
-        let target = TilePosition { x: 20, y: 101 };
-
-        let mut baseline = WorldState::from_legacy_game(&game);
-        let mut resonance = WorldState::from_legacy_game(&game);
-        for world in [&mut baseline, &mut resonance] {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = 20.0 * TILE_SIZE;
-            player.y = 100.0 * TILE_SIZE;
-            player.drill_strength = 1;
-            assert!(world.terrain_mut().set_kind(target, TileKind::Dirt));
-        }
-        resonance.set_player_movement_modifiers(
-            LOCAL_PLAYER_ID,
-            0,
-            [crate::game_state::RigPartKind::ResonanceDrill],
-        );
-        let command = PlayerCommand::Movement {
-            horizontal: 0.0,
-            thrust: false,
-            drill_down: true,
-        };
-        assert_eq!(
-            baseline.apply_player_command(LOCAL_PLAYER_ID, &command),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(
-            resonance.apply_player_command(LOCAL_PLAYER_ID, &command),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert!(
-            resonance
-                .active_drill(LOCAL_PLAYER_ID)
-                .expect("drill exists")
-                .seconds_per_chip
-                < baseline
-                    .active_drill(LOCAL_PLAYER_ID)
-                    .expect("drill exists")
-                    .seconds_per_chip
-        );
-
-        let mut pumped = WorldState::from_legacy_game(&game);
-        {
-            let player = pumped.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = 20.0 * TILE_SIZE;
-            player.y = 10.0 * TILE_SIZE;
-        }
-        let gas = TilePosition { x: 20, y: 11 };
-        assert!(pumped.terrain_mut().set_kind(gas, TileKind::Gas));
-        pumped
-            .infrastructure
-            .push(crate::game_state::PlacedInfrastructure {
-                kind: InfrastructureKind::PumpStation,
-                position: gas,
-                durability: 100,
-            });
-        pumped.set_active_drill(
-            LOCAL_PLAYER_ID,
-            Some(DrillState {
-                target: gas,
-                direction: DrillDirection::Down,
-                progress: 1.0,
-                initial_durability: 1,
-                seconds_per_chip: FIXED_DELTA_SECONDS,
-                sound_timer: 0.0,
-                dust_timer: 0.0,
-            }),
-        );
-        let mut revisions = super::TerrainRevisionTracker::default();
-        let _output = pumped.simulate_tick(
-            SimulationTick::new(1),
-            &super::TickInputs::default(),
-            &mut revisions,
-        );
-        assert!(pumped.hazards().is_empty());
-    }
-
-    #[test]
-    fn canonical_drilling_collects_ore_artifacts_and_applies_hazard_outcomes() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = 20.0 * TILE_SIZE;
-            player.y = 5.0 * TILE_SIZE;
-            player.drill_strength = u8::MAX;
-        }
-        let target = TilePosition { x: 20, y: 6 };
-        assert!(world.terrain_mut().set_tile_from_network(
-            target,
-            TileKind::Artifact(crate::terrain::ArtifactKind::Fossil),
-            1,
-        ));
-        world.set_active_drill(
-            LOCAL_PLAYER_ID,
-            Some(DrillState {
-                target,
-                direction: DrillDirection::Down,
-                progress: 1.0,
-                initial_durability: 1,
-                seconds_per_chip: FIXED_DELTA_SECONDS,
-                sound_timer: 0.0,
-                dust_timer: 0.0,
-            }),
-        );
-        let mut terrain_revisions = super::TerrainRevisionTracker::default();
-        let output = world.simulate_tick(
-            SimulationTick::new(5),
-            &super::TickInputs::default(),
-            &mut terrain_revisions,
-        );
-        assert_eq!(
-            world
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .artifacts
-                .get(&crate::terrain::ArtifactKind::Fossil),
-            Some(&1),
-        );
-        assert!(output.terrain_changed_tiles.contains(&target));
-
-        assert!(world.terrain_mut().set_kind(target, TileKind::Gas));
-        let fuel_before = world.player(LOCAL_PLAYER_ID).expect("player exists").fuel;
-        world.set_active_drill(
-            LOCAL_PLAYER_ID,
-            Some(DrillState {
-                target,
-                direction: DrillDirection::Down,
-                progress: 1.0,
-                initial_durability: 1,
-                seconds_per_chip: FIXED_DELTA_SECONDS,
-                sound_timer: 0.0,
-                dust_timer: 0.0,
-            }),
-        );
-        let output = world.simulate_tick(
-            SimulationTick::new(6),
-            &super::TickInputs::default(),
-            &mut terrain_revisions,
-        );
-        assert!(world.player(LOCAL_PLAYER_ID).expect("player exists").fuel < fuel_before);
-        assert!(!world.hazards().is_empty());
-        assert!(
-            output
-                .events
-                .iter()
-                .any(|event| event.kind == super::GameplayEventKind::HazardChanged)
-        );
-    }
-
-    #[test]
-    fn canonical_movement_applies_rig_and_mechanic_modifiers() {
-        fn run(parts: &[crate::game_state::RigPartKind], mechanic_level: u8) -> (f32, f32, f32) {
-            let game = GameState::new();
-            let mut world = WorldState::from_legacy_game(&game);
-            world.set_player_movement_modifiers(
-                LOCAL_PLAYER_ID,
-                mechanic_level,
-                parts.iter().copied(),
-            );
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.cargo_capacity = 10;
-            player.cargo.insert(crate::terrain::MineralKind::Copper, 10);
-            let fuel_before = player.fuel;
-            let _step =
-                world.step_authoritative_movement(LOCAL_PLAYER_ID, 1.0, true, FIXED_DELTA_SECONDS);
-            let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-            (player.velocity_x, fuel_before - player.fuel, player.hull)
-        }
-
-        let baseline = run(&[], 0);
-        let burst = run(&[crate::game_state::RigPartKind::BurstEngine], 0);
-        let hauler = run(&[crate::game_state::RigPartKind::HaulerEngine], 0);
-        assert!(burst.0 > baseline.0);
-        assert!(burst.1 > baseline.1);
-        assert!(hauler.0 > baseline.0);
-
-        let game = GameState::new();
-        let mut unprotected = WorldState::from_legacy_game(&game);
-        let mut protected = WorldState::from_legacy_game(&game);
-        protected.set_player_movement_modifiers(
-            LOCAL_PLAYER_ID,
-            4,
-            [crate::game_state::RigPartKind::ImpactHull],
-        );
-        for world in [&mut unprotected, &mut protected] {
-            let target = TilePosition { x: 20, y: 6 };
-            assert!(world.terrain_mut().set_kind(target, TileKind::Stone));
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = 20.0 * TILE_SIZE;
-            player.y = 5.0 * TILE_SIZE;
-            player.velocity_y = super::AUTHORITATIVE_MAX_FALL_SPEED;
-            player.hull = 100.0;
-            let _step =
-                world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false, FIXED_DELTA_SECONDS);
-        }
-        assert!(
-            protected
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .hull
-                > unprotected
-                    .player(LOCAL_PLAYER_ID)
-                    .expect("player exists")
-                    .hull
-        );
-    }
-
-    #[test]
-    fn canonical_collision_applies_landing_and_wall_damage() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let target = TilePosition { x: 20, y: 6 };
-        assert!(world.terrain_mut().set_kind(target, TileKind::Stone));
-        {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = 20.0 * TILE_SIZE;
-            player.y = 5.0 * TILE_SIZE;
-            player.velocity_y = super::AUTHORITATIVE_MAX_FALL_SPEED;
-            player.hull = 100.0;
-        }
-        let _step =
-            world.step_authoritative_movement(LOCAL_PLAYER_ID, 0.0, false, FIXED_DELTA_SECONDS);
-        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert!(player.velocity_y.abs() < f32::EPSILON);
-        assert!(player.hull < 100.0);
-
-        let wall = TilePosition { x: 21, y: 5 };
-        assert!(world.terrain_mut().set_kind(wall, TileKind::Stone));
-        {
-            let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-            player.x = 20.0f32.mul_add(TILE_SIZE, 20.0);
-            player.y = 5.0 * TILE_SIZE;
-            player.velocity_x = super::AUTHORITATIVE_SAFE_LANDING_SPEED;
-            player.hull = 100.0;
-        }
-        let _step =
-            world.step_authoritative_movement(LOCAL_PLAYER_ID, 1.0, false, FIXED_DELTA_SECONDS);
-        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert!(player.velocity_x.abs() < f32::EPSILON);
-        assert!(player.hull < 100.0);
-    }
-
-    #[test]
-    fn canonical_movement_burns_fuel_and_caps_fall_speed() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let initial_fuel = world.player(LOCAL_PLAYER_ID).expect("player exists").fuel;
-        let mut terrain_revisions = super::TerrainRevisionTracker::default();
-        let thrust = [SequencedPlayerCommand {
-            player_id: LOCAL_PLAYER_ID,
-            sequence: InputSequence::new(1),
-            target_tick: SimulationTick::new(0),
-            command: PlayerCommand::Movement {
-                horizontal: 0.0,
-                thrust: true,
-                drill_down: false,
-            },
-        }];
-        let _output = world.simulate_tick(
-            SimulationTick::new(0),
-            &super::TickInputs::from_commands(&thrust),
-            &mut terrain_revisions,
-        );
-        let expected_burn = super::AUTHORITATIVE_FUEL_BURN_PER_SECOND * FIXED_DELTA_SECONDS;
-        assert!(
-            (world.player(LOCAL_PLAYER_ID).expect("player exists").fuel
-                - super::quantize_simulation_scalar(initial_fuel - expected_burn))
-            .abs()
-                < f32::EPSILON
-        );
-
-        world
-            .player_mut(LOCAL_PLAYER_ID)
-            .expect("player exists")
-            .velocity_y = super::AUTHORITATIVE_MAX_FALL_SPEED * 2.0;
-        let idle = [SequencedPlayerCommand {
-            player_id: LOCAL_PLAYER_ID,
-            sequence: InputSequence::new(2),
-            target_tick: SimulationTick::new(1),
-            command: PlayerCommand::Movement {
-                horizontal: 0.0,
-                thrust: false,
-                drill_down: false,
-            },
-        }];
-        let _output = world.simulate_tick(
-            SimulationTick::new(1),
-            &super::TickInputs::from_commands(&idle),
-            &mut terrain_revisions,
-        );
-        assert!(
-            world
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .velocity_y
-                <= super::AUTHORITATIVE_MAX_FALL_SPEED
-        );
-    }
-
-    #[test]
-    fn canonical_movement_is_quantized_and_tick_deterministic() {
-        fn run() -> (super::SimulationStateHash, crate::player::Player) {
-            let game = GameState::new();
-            let mut world = WorldState::from_legacy_game(&game);
-            let mut terrain_revisions = super::TerrainRevisionTracker::default();
-            for tick in 0..120 {
-                let commands = [SequencedPlayerCommand {
-                    player_id: LOCAL_PLAYER_ID,
-                    sequence: InputSequence::new(tick),
-                    target_tick: SimulationTick::new(u64::from(tick)),
-                    command: PlayerCommand::Movement {
-                        horizontal: 0.333_333_34,
-                        thrust: tick < 30,
-                        drill_down: false,
-                    },
-                }];
-                let inputs = super::TickInputs::from_commands(&commands);
-                let _output = world.simulate_tick(
-                    SimulationTick::new(u64::from(tick)),
-                    &inputs,
-                    &mut terrain_revisions,
-                );
-            }
-            let player = world
-                .player(LOCAL_PLAYER_ID)
-                .expect("player exists")
-                .clone();
-            (world.simulation_state_hash(), player)
-        }
-
-        let (first_hash, first_player) = run();
-        let (second_hash, second_player) = run();
-
-        assert_eq!(first_hash, second_hash);
-        assert_eq!(first_player, second_player);
-        for value in [
-            first_player.x,
-            first_player.y,
-            first_player.velocity_x,
-            first_player.velocity_y,
-            first_player.fuel,
-        ] {
-            let subpixels = value * super::SIMULATION_SUBPIXELS_PER_PIXEL;
-            assert!((subpixels - subpixels.round()).abs() < f32::EPSILON);
-        }
-    }
-
-    #[test]
-    fn canonical_tick_advances_bombs_and_infrastructure() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.bombs = 1;
-        player.signal_relay_kits = 1;
-        let tick = SimulationTick::new(3);
-        let commands = vec![
-            SequencedPlayerCommand {
-                player_id: LOCAL_PLAYER_ID,
-                sequence: InputSequence::new(1),
-                target_tick: tick,
-                command: PlayerCommand::PlaceBomb,
-            },
-            SequencedPlayerCommand {
-                player_id: LOCAL_PLAYER_ID,
-                sequence: InputSequence::new(2),
-                target_tick: tick,
-                command: PlayerCommand::PlaceInfrastructure { slot: 0 },
-            },
-        ];
-        let inputs = super::TickInputs::from_commands(&commands);
-        let mut terrain_revisions = super::TerrainRevisionTracker::default();
-        let _output = world.simulate_tick(tick, &inputs, &mut terrain_revisions);
-
-        assert_eq!(world.bomb_count(), 1);
-        assert_eq!(world.infrastructure_count(), 1);
-        let target = TilePosition { x: 10, y: 10 };
-        assert!(world.terrain_mut().set_kind(target, TileKind::Dirt));
-        world.bombs[0].x = 10.0 * TILE_SIZE;
-        world.bombs[0].y = 10.0 * TILE_SIZE;
-        world.bombs[0].timer_seconds = FIXED_DELTA_SECONDS;
-        world.bomb_detonation_ticks[0] = tick.next().next();
-
-        let output = world.simulate_tick(
-            tick.next(),
-            &super::TickInputs::default(),
-            &mut terrain_revisions,
-        );
-
-        assert_eq!(world.bomb_count(), 0);
-        assert_eq!(world.infrastructure_count(), 1);
-        assert!(output.terrain_changed_tiles.contains(&target));
-        assert!(!output.terrain_revisions.is_empty());
-    }
-
-    #[test]
-    fn canonical_tick_advances_scanner_and_hazard_state() {
-        let game = GameState::new();
-        let mut world = WorldState::from_legacy_game(&game);
-        let (player_x, player_y, hull_before) = {
-            let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-            (player.x, player.y, player.hull)
-        };
-        world.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 1.0);
-        world.hazards.push(crate::game_state::HazardCloud {
-            x: player_x,
-            y: player_y,
-            life: 1.0,
-            radius: 20.0,
-        });
-        let mut terrain_revisions = super::TerrainRevisionTracker::default();
-
-        let output = world.simulate_tick(
-            SimulationTick::new(4),
-            &super::TickInputs::default(),
-            &mut terrain_revisions,
-        );
-
-        assert!(
-            world
-                .scanner_cooldown_seconds(LOCAL_PLAYER_ID)
-                .expect("cooldown exists")
-                < 1.0
-        );
-        assert!(world.player(LOCAL_PLAYER_ID).expect("player exists").hull < hull_before);
-        assert!(output.events.iter().any(|event| {
-            event.kind
-                == super::GameplayEventKind::PlayerDamaged {
-                    player_id: LOCAL_PLAYER_ID,
-                }
-        }));
     }
 
     #[test]
@@ -18556,10 +13306,10 @@ mod tests {
             .player(LOCAL_PLAYER_ID)
             .expect("player exists")
             .velocity_x;
-        let expected_velocity = super::quantize_simulation_scalar(
-            (0.5 * super::AUTHORITATIVE_HORIZONTAL_ACCELERATION * 0.65)
+        let expected_velocity = drillgame_simulation::quantize::quantize_simulation_scalar(
+            (0.5 * drillgame_simulation::world::AUTHORITATIVE_HORIZONTAL_ACCELERATION * 0.65)
                 .mul_add(FIXED_DELTA_SECONDS, 0.5)
-                * super::AUTHORITATIVE_AIR_DRAG_PER_TICK,
+                * drillgame_simulation::world::AUTHORITATIVE_AIR_DRAG_PER_TICK,
         );
         assert!((velocity_x - expected_velocity).abs() < f32::EPSILON);
         assert_eq!(
@@ -18821,7 +13571,12 @@ mod tests {
             .player_mut(remote_player)
             .expect("remote player exists") = player;
         let target = TilePosition { x: 10, y: 11 };
-        assert!(session.world_mut().terrain.set_kind(target, TileKind::Dirt));
+        assert!(
+            session
+                .world_mut()
+                .terrain_mut()
+                .set_kind(target, TileKind::Dirt)
+        );
         let target_tick = session.current_tick();
         let summary = crate::multiplayer::CommandPacketExchangeSummary {
             client_id: remote_client,
@@ -18849,7 +13604,7 @@ mod tests {
         assert_eq!(
             session
                 .world()
-                .terrain
+                .terrain()
                 .tile(target)
                 .expect("target tile remains in terrain")
                 .kind,
@@ -19225,88 +13980,6 @@ mod tests {
     }
 
     #[test]
-    fn authoritative_world_handles_economy_progression_debt_and_victory_transactions() {
-        let mut world = WorldState::from_legacy_game(&GameState::new());
-        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.credits = 10_000;
-        player.loan_debt = 500;
-        let credits_before_upgrade = player.credits;
-
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::BuyUpgrade { index: 0 }),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        let upgraded_player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert!(upgraded_player.drill_strength > 1);
-        assert!(upgraded_player.credits < credits_before_upgrade);
-        assert!(world.apply_contract_reward(LOCAL_PLAYER_ID, 250).is_some());
-        assert!(world.start_expedition(LOCAL_PLAYER_ID, 100).is_some());
-        assert!(world.repay_debt(LOCAL_PLAYER_ID, 200).is_some());
-        assert!(world.award_victory(LOCAL_PLAYER_ID, 1_000).is_some());
-
-        let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-        assert_eq!(player.loan_debt, 300);
-        assert!(world.won_game());
-        assert!(
-            world
-                .service_transactions()
-                .iter()
-                .any(|transaction| transaction.kind
-                    == super::PlayerTransactionKind::CompleteContract)
-        );
-        assert!(
-            world.service_transactions().iter().any(
-                |transaction| transaction.kind == super::PlayerTransactionKind::StartExpedition
-            )
-        );
-        assert!(
-            world
-                .service_transactions()
-                .iter()
-                .any(|transaction| transaction.kind == super::PlayerTransactionKind::RepayDebt)
-        );
-        assert!(
-            world
-                .service_transactions()
-                .iter()
-                .any(|transaction| transaction.kind == super::PlayerTransactionKind::WinGame)
-        );
-    }
-
-    #[test]
-    fn authoritative_world_handles_hazard_damage_failure_scanner_and_bomb_effects() {
-        let mut world = WorldState::from_legacy_game(&GameState::new());
-        let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.hull = 5.0;
-        player.fuel = 0.0;
-        player.bombs = 1;
-        let scanner_target = player.tile_position(TILE_SIZE);
-        let bomb_target = TilePosition { x: 3, y: 6 };
-        assert!(world.terrain.set_kind(bomb_target, TileKind::Dirt));
-
-        let survival = world
-            .apply_hazard_damage(LOCAL_PLAYER_ID, 6.0)
-            .expect("survival snapshot");
-        assert!(survival.disabled);
-        assert!(survival.stranded);
-        assert!(world.failure_state(LOCAL_PLAYER_ID).is_some());
-        assert_eq!(world.discovered_tile_count(LOCAL_PLAYER_ID), 0);
-        assert!(world.reveal_scanner_area(LOCAL_PLAYER_ID, scanner_target, 2) > 0);
-        assert!(world.discovered_tile_count(LOCAL_PLAYER_ID) > 0);
-        assert_eq!(
-            world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::PlaceBomb),
-            super::PlayerScopedCommandOutcome::Applied
-        );
-        assert_eq!(world.bomb_count(), 1);
-        let blast = world.detonate_bomb_at(bomb_target, 1);
-        assert!(blast.cleared > 0);
-        assert_eq!(
-            world.terrain().tile(bomb_target).expect("tile").kind,
-            TileKind::Air
-        );
-    }
-
-    #[test]
     fn session_drill_too_dangerous_damages_authoritative_player() {
         let mut session = GameSession::new();
         let player = session
@@ -19317,7 +13990,12 @@ mod tests {
         player.y = 5.0 * TILE_SIZE;
         player.hull = 50.0;
         let target = TilePosition { x: 3, y: 6 };
-        assert!(session.world_mut().terrain.set_kind(target, TileKind::Lava));
+        assert!(
+            session
+                .world_mut()
+                .terrain_mut()
+                .set_kind(target, TileKind::Lava)
+        );
         session.world_mut().set_active_drill(
             LOCAL_PLAYER_ID,
             Some(DrillState {
@@ -19598,7 +14276,7 @@ mod tests {
         let target = TilePosition { x: 4, y: 8 };
         assert!(
             world
-                .terrain
+                .terrain_mut()
                 .set_kind(target, TileKind::Ore(crate::terrain::MineralKind::Copper))
         );
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
@@ -19669,23 +14347,17 @@ mod tests {
         assert!(world.authoritative_gameplay_ownership_complete());
         assert!(world.won_game());
         assert!(world.service_transactions().iter().any(|transaction| {
-            transaction.kind == super::PlayerTransactionKind::CompleteContract
+            transaction.kind == drillgame_simulation::PlayerTransactionKind::CompleteContract
         }));
         assert!(world.service_transactions().iter().any(|transaction| {
-            transaction.kind == super::PlayerTransactionKind::StartExpedition
+            transaction.kind == drillgame_simulation::PlayerTransactionKind::StartExpedition
         }));
-        assert!(
-            world
-                .service_transactions()
-                .iter()
-                .any(|transaction| { transaction.kind == super::PlayerTransactionKind::RepayDebt })
-        );
-        assert!(
-            world
-                .service_transactions()
-                .iter()
-                .any(|transaction| { transaction.kind == super::PlayerTransactionKind::WinGame })
-        );
+        assert!(world.service_transactions().iter().any(|transaction| {
+            transaction.kind == drillgame_simulation::PlayerTransactionKind::RepayDebt
+        }));
+        assert!(world.service_transactions().iter().any(|transaction| {
+            transaction.kind == drillgame_simulation::PlayerTransactionKind::WinGame
+        }));
     }
 
     #[test]
@@ -21314,26 +15986,6 @@ mod tests {
         assert_eq!(delta.tick, session.current_tick());
         assert!(!delta.is_empty());
         assert!(session.drain_world_delta().is_empty());
-    }
-
-    #[test]
-    fn terrain_revision_tracker_coalesces_changed_tiles_by_chunk() {
-        let mut tracker = super::TerrainRevisionTracker::default();
-        let revisions = tracker.mark_tiles_changed([
-            crate::terrain::TilePosition { x: 0, y: 0 },
-            crate::terrain::TilePosition { x: 3, y: 4 },
-            crate::terrain::TilePosition { x: 17, y: 0 },
-        ]);
-
-        assert_eq!(revisions.len(), 2);
-        assert_eq!(
-            tracker.revision(super::TerrainChunkPosition { x: 0, y: 0 }),
-            1
-        );
-        assert_eq!(
-            tracker.revision(super::TerrainChunkPosition { x: 1, y: 0 }),
-            1
-        );
     }
 
     #[test]
