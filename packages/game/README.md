@@ -23,14 +23,20 @@ Modules:
 - `runtime` — `Runtime { Host, Client }`, `LocalHost`, `MAX_LOCAL_SEATS` (the only seat cap).
 - `shell` — shell state and menu logic; reads the world, never mutates it.
 - `render_snapshot` — immutable per-frame view, the N-view split-screen layout for the current
-  window size, and the world zoom (`WORLD_VIEW_HEIGHT`: the world spans the same height at any
-  window size).
+  window size, and the world zoom (see `pixel_scale`).
+- `pixel_scale` — the pixel-perfect scaling policy: world zoom snapped to whole physical pixels
+  per art pixel (`WORLD_VIEW_HEIGHT` is kept within one rounding step at any window size) and the
+  integer UI canvas scale.
 - `window` — the resizable, maximizable high-DPI window, borderless fullscreen and the
   remembered window size.
 - `effects` — exactly-once event delivery, sound cues and presentation particles.
 - `rendering` — `GameRenderer`: `terrain` (chunked textures + fog), `world` (rigs, entities),
-  `screen` (HUD, menus, map), `interior`, `layout` (screen layout) and `layout::widgets` (widget
-  tree).
+  `screen` (HUD, menus, map), `interior` (walk-in pixel-art rooms), `layout` (menu/modal
+  layout), `layout::widgets` (widget tree), `ui_kit` (pixel UI canvas and widgets),
+  `pixel_art` (palette, char-grid sprites + atlas, pixel font) and `gallery` (art reference
+  sheet). Art conventions: `src/rendering/ART_GUIDE.md`.
+- `scene_capture` — `drillgame --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`
+  renders scripted scenes to PNGs (see the art guide).
 - `save` — format v5 (`WorldState` + play time); `save::legacy` migrates v1-v4 (v3/v4 worlds
   carried a derived summary whose `won_game` flag is lifted into the world).
 - `input`, `input_mapping` — device sampling and seat input to controls/actions.
