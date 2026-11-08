@@ -118,6 +118,22 @@ pub fn split_screen_viewports(
         .collect()
 }
 
+/// The grid cells [`split_screen_viewports`] leaves empty for `count` views (three seats use a
+/// 2x2 grid with the last cell free).
+#[must_use]
+pub fn empty_split_cells(count: usize, screen_width: i32, screen_height: i32) -> Vec<Viewport> {
+    let count = count.max(1);
+    let mut columns = 1;
+    while columns * columns < count {
+        columns += 1;
+    }
+    let cells = columns * count.div_ceil(columns);
+    split_screen_viewports(cells, screen_width, screen_height)
+        .into_iter()
+        .skip(count)
+        .collect()
+}
+
 /// How endangered a rig looks to other players.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DangerLevel {
@@ -634,6 +650,24 @@ mod tests {
         assert_near(view.world_scale, 1.5);
         assert_near(view.camera.x, x - 640.0);
         assert_near(view.camera.y, y - 360.0);
+    }
+
+    #[test]
+    fn empty_split_cells_fill_the_rest_of_the_grid() {
+        for count in [1, 2, 4] {
+            assert!(empty_split_cells(count, SCREEN_WIDTH, SCREEN_HEIGHT).is_empty());
+        }
+        let half_width = SCREEN_WIDTH / 2;
+        let half_height = SCREEN_HEIGHT / 2;
+        assert_eq!(
+            empty_split_cells(3, SCREEN_WIDTH, SCREEN_HEIGHT),
+            vec![Viewport::new(
+                half_width,
+                half_height,
+                SCREEN_WIDTH - half_width,
+                SCREEN_HEIGHT - half_height
+            )]
+        );
     }
 
     #[test]

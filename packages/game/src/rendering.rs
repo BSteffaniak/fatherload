@@ -308,6 +308,7 @@ impl GameRenderer {
             for view in &snapshot.views {
                 self.render_seat(draw, shell, snapshot, view, screen);
             }
+            draw_free_seats(draw, snapshot, screen);
         }
 
         self.begin_ui(UiOwner::Global);
@@ -670,6 +671,82 @@ fn input_debug_lines(shell: &ShellState) -> Vec<String> {
 }
 
 /// Ink seams between split-screen views, so each player's view reads as its own frame.
+/// Fills the split-screen grid cells no seat uses (three seats leave one of four free) with a
+/// card inviting a spare controller to join, instead of bare backdrop.
+fn draw_free_seats(
+    draw: &mut RaylibDrawHandle<'_>,
+    snapshot: &RenderSnapshot<'_>,
+    screen: UiCanvas,
+) {
+    use crate::input::{devices::InputDevice, prompts::Prompt};
+    let count = snapshot.views.len();
+    if count < 2 {
+        return;
+    }
+    let (width, height) = snapshot.views.iter().fold((0, 0), |(width, height), view| {
+        (
+            width.max(view.viewport.x + view.viewport.width),
+            height.max(view.viewport.y + view.viewport.height),
+        )
+    });
+    for (index, viewport) in crate::render_snapshot::empty_split_cells(count, width, height)
+        .into_iter()
+        .enumerate()
+    {
+        let (x, y, cell_width, cell_height) = screen.physical_rect(viewport);
+        draw.draw_rectangle(x, y, cell_width, cell_height, palette::NIGHT);
+        let canvas = UiCanvas::for_viewport(screen, viewport);
+        let _restore = ui_kit::use_canvas(canvas);
+        let _canvas = UiCanvasScope::begin(draw);
+        let seat = count + index;
+        let title = format!("Player {}", seat + 1);
+        let join = prompts::hint(Prompt::Join, "join");
+        let device = InputDevice::Unassigned;
+        let line = "Spare controller:";
+        let prompt_width = prompts::prompt_width(join, device).unwrap_or(0);
+        let body_width = ui_kit::text_width(line, TextStyle::Body) + 6 + prompt_width;
+        let panel_width = body_width.max(ui_kit::text_width(&title, TextStyle::Bold)) + 24;
+        let panel_height = 46;
+        let left = (canvas.width - panel_width) / 2;
+        let top = (canvas.height - panel_height) / 2;
+        ui_kit::panel(
+            draw,
+            Rectangle::new(
+                left as f32,
+                top as f32,
+                panel_width as f32,
+                panel_height as f32,
+            ),
+            ui_kit::PanelStyle::Standard,
+        );
+        ui_kit::text_centred(
+            draw,
+            &title,
+            canvas.width / 2,
+            top + 8,
+            TextStyle::Bold,
+            palette::FOG,
+        );
+        let body_left = (canvas.width - body_width) / 2;
+        ui_kit::text(
+            draw,
+            line,
+            body_left,
+            top + 28,
+            TextStyle::Body,
+            palette::MIST,
+        );
+        prompts::draw_prompt(
+            draw,
+            body_left + ui_kit::text_width(line, TextStyle::Body) + 6,
+            top + 26,
+            join,
+            device,
+            palette::MIST,
+        );
+    }
+}
+
 fn draw_view_dividers(draw: &mut RaylibDrawHandle<'_>, snapshot: &RenderSnapshot<'_>) {
     let canvas = ui_kit::canvas();
     for view in &snapshot.views {

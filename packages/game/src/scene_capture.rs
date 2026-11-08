@@ -854,6 +854,24 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "split_three_seats",
+        summary: "Three seats: salvage counter (WASD), a rig on the surface (arrow keys), the bank room (Xbox)",
+        setup: |stage| {
+            stage.play(3, |world, seats| {
+                park_at(world, seats[0].player, SurfaceZone::Salvage);
+                if let Some(rig) = world.player_mut(seats[0].player) {
+                    rig.credits = 820;
+                }
+                park_rig(world, seats[1].player, 92, 4);
+                park_at(world, seats[2].player, SurfaceZone::Bank);
+            });
+            stage.settle(10);
+            put_seat_inside(stage, 0, SurfaceZone::Salvage, Some(ModalScreen::Salvage));
+            put_seat_inside(stage, 2, SurfaceZone::Bank, None);
+            stage.use_devices(&[WASD, ARROWS, XBOX]);
+        },
+    },
+    Scene {
         name: "split_pad_counters",
         summary: "Split-screen counters side by side: keyboard prompts for player 1, Xbox for player 2",
         setup: |stage| {
