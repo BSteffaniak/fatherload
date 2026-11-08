@@ -437,6 +437,44 @@ mod tests {
     }
 
     #[test]
+    fn service_actions_away_from_a_building_resolve_as_refused() {
+        let mut world = WorldState::new_game(RIG);
+        // Well below the surface: no building door here.
+        world.player_mut(RIG).expect("rig").y = 30.0 * drillgame_simulation::TILE_SIZE;
+        world
+            .player_mut(RIG)
+            .expect("rig")
+            .cargo
+            .insert(drillgame_simulation::terrain::MineralKind::Gold, 1);
+        let mut runtime = Runtime::local(world, 1);
+        let seat = runtime.local_seats()[0].seat;
+        runtime.submit(
+            seat,
+            SeatInput {
+                controls: ControlState::default(),
+                actions: vec![PlayerCommand::Service(
+                    drillgame_simulation::SessionServiceRequest::SellCargo,
+                )],
+            },
+        );
+        let frame = runtime.advance(Duration::from_millis(50));
+        let resolved: Vec<bool> = frame
+            .events
+            .iter()
+            .filter_map(|event| match &event.event {
+                RuntimeEventKind::ActionResolved { applied, .. } => Some(*applied),
+                RuntimeEventKind::Gameplay(_) => None,
+            })
+            .collect();
+        assert_eq!(resolved, [false], "the sale resolves exactly once, refused");
+        assert_eq!(
+            runtime.world().player(RIG).map(|rig| rig.cargo.len()),
+            Some(1),
+            "nothing was sold"
+        );
+    }
+
+    #[test]
     fn loading_a_save_at_another_tick_rate_rebuilds_the_host() {
         let mut runtime = Runtime::local(WorldState::new_game(RIG), 1);
         let save = WorldState::new_game_with_params(RIG, SimulationParams::new(30));

@@ -83,6 +83,12 @@ impl WorldState {
                 let outcome = if matches!(action.command, PlayerCommand::Movement { .. }) {
                     // Held movement travels in `controls`; a movement action is not a one-shot.
                     PlayerScopedCommandOutcome::IgnoredUnavailable
+                } else if !self.players.contains_key(&player_id) {
+                    PlayerScopedCommandOutcome::UnknownPlayer
+                } else if !self.command_allowed_here(player_id, &action.command) {
+                    // Building services only work at the building (validated here, inside the
+                    // authoritative tick, so it holds for remote clients too).
+                    PlayerScopedCommandOutcome::IgnoredUnavailable
                 } else {
                     self.apply_player_command(player_id, &action.command)
                 };

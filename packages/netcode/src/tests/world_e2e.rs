@@ -1,8 +1,9 @@
 //! End-to-end tests on the real gameplay world (`drillgame_simulation::WorldState`).
 //!
 //! One host and N clients over seeded `LinkSim`s, driven by bots that dig down (placing bombs,
-//! scanning and deploying infrastructure on the way), fly up, hop to the depot and back, sell,
-//! buy upgrades and refuel. Every message crosses the real postcard codec.
+//! scanning and deploying infrastructure on the way), fly up, land back at the depot, sell, and
+//! try to buy upgrades and refuel (which the host refuses away from the shop and fuel station).
+//! Every message crosses the real postcard codec.
 
 use std::time::Duration;
 
@@ -31,7 +32,6 @@ fn assert_played(harness: &WorldHarness) {
         "applied scanner",
         "applied infrastructure",
         "applied bomb",
-        "applied refuel",
         "bomb detonated",
     ] {
         assert!(
@@ -43,10 +43,19 @@ fn assert_played(harness: &WorldHarness) {
 }
 
 fn assert_economy_played(harness: &WorldHarness) {
-    for label in ["applied sell", "applied buy"] {
+    // Sales at the depot apply; shop and fuel transactions issued there are refused by the host.
+    for label in ["applied sell", "ignored action"] {
         assert!(
             harness.event_counts.get(label).copied().unwrap_or(0) > 0,
             "{label}: {:?}",
+            harness.event_counts
+        );
+    }
+    for label in ["applied buy", "applied refuel"] {
+        assert_eq!(
+            harness.event_counts.get(label).copied().unwrap_or(0),
+            0,
+            "{label} away from its building: {:?}",
             harness.event_counts
         );
     }

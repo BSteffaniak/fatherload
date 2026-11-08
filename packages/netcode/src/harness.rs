@@ -24,6 +24,8 @@ use crate::world::{ActionResolution, WorldEvent};
 use drillgame_simulation::{
     ControlState, GameplayEventKind, Player, PlayerCommand, SimulationParams, TILE_SIZE,
     WorldImport, WorldState,
+    economy::SurfaceZone,
+    surface::SURFACE_BUILDINGS,
     terrain::{MineralKind, Terrain, TileKind, TilePosition},
 };
 
@@ -199,12 +201,13 @@ impl HarnessConfig {
     }
 }
 
-/// Width in tiles of the real-world harness map.
-const WORLD_HARNESS_WIDTH_TILES: i32 = 48;
+/// Width in tiles of the real-world harness map: wide enough to include the ore depot, so bots
+/// can sell (service actions only work at their building).
+const WORLD_HARNESS_WIDTH_TILES: i32 = 96;
 /// Depth in tiles of the real-world harness map.
 const WORLD_HARNESS_HEIGHT_TILES: i32 = 64;
-/// Spawn column of the first harness player (later players spread right).
-const WORLD_HARNESS_SPAWN_TILE_X: f32 = 6.0;
+/// The building the harness bots spawn at, dig under and trade at.
+const WORLD_HARNESS_BUILDING: SurfaceZone = SurfaceZone::Depot;
 /// Bot script cycle in render frames (about ten seconds).
 const WORLD_BOT_CYCLE_FRAMES: u64 = 900;
 
@@ -232,10 +235,23 @@ impl HarnessSim for WorldState {
                     .set_kind(TilePosition { x, y: row }, TileKind::Ore(mineral));
             }
         }
-        let mut template = Player::new(
-            (WORLD_HARNESS_SPAWN_TILE_X + 0.5) * TILE_SIZE,
-            4.0 * TILE_SIZE,
-        );
+        // Spawn at the depot (later players spread right, the first four stay inside it) and
+        // replace its foundation with dirt so the bots can dig straight down from the door.
+        let depot = SURFACE_BUILDINGS
+            .iter()
+            .find(|building| building.zone == WORLD_HARNESS_BUILDING)
+            .copied()
+            .expect("the harness building exists");
+        for x in depot.tile_x..depot.tile_x + depot.tile_width {
+            for y in 5..=7 {
+                let _ = world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x, y }, TileKind::Dirt);
+            }
+        }
+        #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
+        let spawn_tile_x = depot.tile_x as f32 + 0.5;
+        let mut template = Player::new(spawn_tile_x * TILE_SIZE, 4.0 * TILE_SIZE);
         template.credits = 600;
         template.bombs = 6;
         template.survey_drone_kits = 3;
@@ -244,8 +260,10 @@ impl HarnessSim for WorldState {
     }
 
     /// Dig down (placing a bomb, scanning and deploying a survey drone on the
-    /// way), fly up out of the shaft, hop over to the depot and back, then sell,
-    /// buy an upgrade and refuel while idle.
+    /// way), fly up out of the shaft, hop and land back at the depot door, then
+    /// sell, try to buy an upgrade and try to refuel while idle. The bots stand at
+    /// the depot, so the host applies the sale and refuses the shop and fuel
+    /// transactions (service actions only work at their building).
     fn bot_decide(bot: &mut Bot) -> (ControlState, Vec<PlayerCommand>) {
         let Some(t) = bot.next_phase(WORLD_BOT_CYCLE_FRAMES) else {
             return (ControlState::default(), Vec::new());

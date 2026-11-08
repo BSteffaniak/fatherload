@@ -60,6 +60,27 @@ pub const SURFACE_BUILDINGS: [SurfaceBuilding; 8] = [
     },
 ];
 
+/// Deepest rig position (in tiles, measured at the rig's centre) that still counts as standing at
+/// a surface building's door.
+pub const SURFACE_SERVICE_MAX_DEPTH_TILES: f32 = 5.5;
+
+/// The surface building zone whose door a rig centred at world pixel `(x, y)` stands at, if any.
+///
+/// This is the single rule for "may this rig use that building": the shell uses it to decide
+/// whether `E` opens an interior, and the simulation uses it to validate service actions.
+#[must_use]
+pub fn surface_zone_at(x: f32, y: f32, tile_size: f32) -> Option<SurfaceZone> {
+    if y > SURFACE_SERVICE_MAX_DEPTH_TILES * tile_size {
+        return None;
+    }
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "world pixel coordinates are bounded by the terrain size"
+    )]
+    let tile_x = (x / tile_size).floor() as i32;
+    surface_building_at_tile(tile_x).map(|building| building.zone)
+}
+
 #[must_use]
 pub fn surface_building_at_tile(tile_x: i32) -> Option<SurfaceBuilding> {
     SURFACE_BUILDINGS.iter().copied().find(|building| {

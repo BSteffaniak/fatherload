@@ -7,8 +7,6 @@
 use drillgame_simulation::{
     PlayerCommand, PlayerId, RecipeKind, SessionServiceRequest, WorldState,
     economy::{DeepClaimStatus, SurfaceZone, TownBuilding, upgrade_offers, upgrade_tier_name},
-    surface::surface_building_at_tile,
-    terrain::TILE_SIZE,
 };
 
 use crate::{input::PlayerInput, save};
@@ -187,12 +185,10 @@ impl ShellContext<'_> {
         self.player.and_then(|player| self.world.player(player))
     }
 
+    /// The building the player stands at: the same rule the host uses to validate service
+    /// actions, so a menu that opens here is a menu whose transactions the host accepts.
     fn current_zone(&self) -> Option<SurfaceZone> {
-        let player = self.player()?;
-        if player.y > 5.5 * TILE_SIZE {
-            return None;
-        }
-        surface_building_at_tile(player.tile_position(TILE_SIZE).x).map(|building| building.zone)
+        self.world.player_surface_zone(self.player?)
     }
 
     fn deep_claim_unlocked(&self) -> bool {
