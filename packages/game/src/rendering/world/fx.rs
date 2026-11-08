@@ -17,7 +17,10 @@ use drillgame_simulation::{
 )]
 use crate::rendering::pixel_art::palette::*;
 use crate::rendering::{
-    pixel_art::sprites::{terrain::CRACKS, world as props},
+    pixel_art::sprites::{
+        terrain::{CRACKS, CRACKS_LIT},
+        world as props,
+    },
     terrain::tile_art::{TILE_ART, hash, material_color},
 };
 use crate::{
@@ -195,6 +198,7 @@ pub fn draw_drill_damage(
     let frames = CRACKS.frames.len();
     let frame = ((progress * frames as f32) as usize).min(frames - 1);
     let (x, y) = tile_origin(drill.target);
+    draw_world_sprite(draw, &CRACKS_LIT, frame, x + ART, y + ART, false);
     draw_world_sprite(draw, &CRACKS, frame, x, y, false);
     // Heat glow at the bit when drilling into gas: a warning pulse.
     if terrain
@@ -233,10 +237,10 @@ pub fn draw_drill_debris(
         tile.kind,
         TileKind::Stone | TileKind::HardRock | TileKind::Ore(_) | TileKind::Artifact(_)
     );
-    for grain in 0..6_u64 {
+    for grain in 0..9_u64 {
         let life = 14;
-        let age = (ticks + grain * 5) % life;
-        let h = hash(grain as i32, ((ticks + grain * 5) / life) as i32, 3);
+        let age = (ticks + grain * 3) % life;
+        let h = hash(grain as i32, ((ticks + grain * 3) / life) as i32, 3);
         let spread = (h % 9) as f32 - 4.0;
         let t = age as f32;
         let (dx, dy) = if out_x == 0.0 {

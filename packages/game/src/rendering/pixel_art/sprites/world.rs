@@ -337,3 +337,20 @@ pub const ORE_PROCESSOR: SpriteDef = SpriteDef {
     ],
     frame_seconds: 0.2,
 };
+
+/// Bedrock beyond the edges of the world (tiled).
+pub const BEDROCK: SpriteDef = SpriteDef {
+    name: "world_bedrock",
+    legend: &[('n', NIGHT), ('o', INK), ('s', SLATE_DARK)],
+    frames: &[&[
+        "nnnnnnnn", //
+        "nsnnnnon", //
+        "nnnnnonn", //
+        "nnnooonn", //
+        "nnnnnnnn", //
+        "nonnnnns", //
+        "oonnnnnn", //
+        "nnnnsnnn", //
+    ]],
+    frame_seconds: 0.0,
+};

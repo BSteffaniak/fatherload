@@ -65,7 +65,7 @@ pub struct Strata {
 }
 
 const DIRT: Ramp = ramp([SOIL_DARK, SOIL, LOAM, CLAY]);
-const CLAY_RAMP: Ramp = ramp([SOIL_DARK, RUST, CLAY, SAND]);
+const CLAY_RAMP: Ramp = ramp([SOIL_DARK, SOIL, RUST, CLAY]);
 const GREY_STONE: Ramp = ramp([NIGHT, STONE_DARK, STONE, STONE_LIGHT]);
 const SLATE_STONE: Ramp = ramp([NIGHT, SLATE_DARK, SLATE, SLATE_LIGHT]);
 const DARK_ROCK: Ramp = ramp([INK, NIGHT, SLATE_DARK, SLATE]);
@@ -256,21 +256,22 @@ fn dirt_level(x: i32, y: i32) -> usize {
     }
 }
 
-/// Clay: wavy, broken horizontal strata.
+/// Clay: a dark body crossed by wavy, broken reddish strata.
 fn clay_level(x: i32, y: i32) -> usize {
     if hash(x, y, 4).is_multiple_of(47) {
         return 0;
     }
     let wave = (noise(x, y, 11, 5) * 6.0) as i32;
     let broken = noise(x, y, 6, 6) + dither(x, y) * 0.2;
-    match (y + wave).rem_euclid(9) {
-        0 if broken > 0.45 => 3,
-        6 if broken > 0.35 => 1,
+    match (y + wave).rem_euclid(8) {
+        0 if broken > 0.5 => 3,
+        0..=2 if broken > 0.3 => 2,
+        5 if broken > 0.55 => 0,
         _ => {
-            if noise(x, y, 4, 7) + dither(x, y) * 0.15 < 0.28 {
-                1
-            } else {
+            if noise(x, y, 4, 7) + dither(x, y) * 0.15 > 0.72 {
                 2
+            } else {
+                1
             }
         }
     }

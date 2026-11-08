@@ -540,6 +540,213 @@ pub const SCENES: &[Scene] = &[
             stage.settle(30);
         },
     },
+    Scene {
+        name: "world_props",
+        summary: "Tunnel with infrastructure, a ticking bomb, scanner pings and another player's rig",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                sink_rig(world, player, 102, 30);
+                carve(world, 96..122, 30..31);
+                carve(world, 112..116, 27..30);
+                reveal(world, player, 90..128, 22..40);
+                if let Some(rig) = world.player_mut(player) {
+                    rig.scanner_level = 3;
+                    rig.bombs = 2;
+                    rig.signal_relay_kits = 1;
+                    rig.survey_drone_kits = 1;
+                    rig.cargo_lift_kits = 1;
+                    rig.tunnel_support_kits = 1;
+                    rig.pump_station_kits = 1;
+                    rig.ore_processor_kits = 1;
+                }
+            });
+            stage.settle(10);
+            let place = |input: fn(&mut PlayerInput)| {
+                let mut held = PlayerInput::default();
+                input(&mut held);
+                held
+            };
+            let steps: [fn(&mut PlayerInput); 6] = [
+                |input| input.place_support = true,
+                |input| input.place_relay = true,
+                |input| input.place_lift = true,
+                |input| input.place_pump = true,
+                |input| input.place_processor = true,
+                |input| input.place_drone = true,
+            ];
+            for step in steps {
+                stage.hold(1, place(step));
+                stage.settle(2);
+                stage.hold(
+                    24,
+                    PlayerInput {
+                        horizontal: 1.0,
+                        ..PlayerInput::default()
+                    },
+                );
+                stage.settle(14);
+            }
+            stage.hold(
+                1,
+                PlayerInput {
+                    bomb: true,
+                    ..PlayerInput::default()
+                },
+            );
+            stage.hold(
+                10,
+                PlayerInput {
+                    horizontal: -1.0,
+                    ..PlayerInput::default()
+                },
+            );
+            stage.settle(20);
+        },
+    },
+    Scene {
+        name: "drill_side",
+        summary: "Rig drilling sideways into stone: spinning bit, cracks and flying chips",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                sink_rig(world, player, 100, 34);
+                carve(world, 94..101, 34..35);
+                world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x: 101, y: 34 }, TileKind::Stone);
+                reveal(world, player, 88..114, 26..42);
+                if let Some(rig) = world.player_mut(player) {
+                    rig.drill_strength = 3;
+                }
+            });
+            stage.settle(10);
+            stage.hold(
+                46,
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+            );
+        },
+    },
+    Scene {
+        name: "remote_rigs",
+        summary: "Two local players side by side; each view shows the other rig with its tag",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_rig(world, seats[0].player, 108, 4);
+                if let Some(second) = seats.get(1) {
+                    park_rig(world, second.player, 111, 4);
+                    if let Some(rig) = world.player_mut(second.player) {
+                        rig.fuel = 24.0;
+                    }
+                }
+            });
+            stage.settle(20);
+        },
+    },
+    Scene {
+        name: "bomb_blast",
+        summary: "A bomb going off in a tunnel",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                sink_rig(world, player, 104, 26);
+                carve(world, 96..112, 26..27);
+                reveal(world, player, 92..118, 18..34);
+                if let Some(rig) = world.player_mut(player) {
+                    rig.bombs = 1;
+                }
+            });
+            stage.settle(5);
+            stage.hold(
+                1,
+                PlayerInput {
+                    bomb: true,
+                    ..PlayerInput::default()
+                },
+            );
+            stage.hold(
+                30,
+                PlayerInput {
+                    horizontal: -1.0,
+                    ..PlayerInput::default()
+                },
+            );
+            stage.settle(126);
+        },
+    },
+    Scene {
+        name: "gas_leak",
+        summary: "Drilling into a gas pocket releases a toxic cloud",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let (x, y) = find_tile(world, 26..70, |kind| kind == TileKind::Gas)
+                    .map_or((110, 30), |tile| (tile.x, tile.y - 1));
+                sink_rig(world, player, x, y);
+                reveal(world, player, x - 14..x + 15, y - 8..y + 9);
+            });
+            stage.settle(10);
+            stage.hold(
+                40,
+                PlayerInput {
+                    drill_down: true,
+                    ..PlayerInput::default()
+                },
+            );
+            stage.settle(4);
+        },
+    },
+    Scene {
+        name: "cave_in",
+        summary: "Drilling an explosive pocket sets off a cave-in of falling boulders",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let (x, y) = find_tile(world, 30..80, |kind| kind == TileKind::ExplosivePocket)
+                    .map_or((110, 40), |tile| (tile.x, tile.y - 1));
+                sink_rig(world, player, x, y);
+                carve(world, x - 2..x + 3, y - 3..y + 1);
+                reveal(world, player, x - 14..x + 15, y - 8..y + 9);
+            });
+            stage.settle(10);
+            stage.hold(
+                30,
+                PlayerInput {
+                    drill_down: true,
+                    ..PlayerInput::default()
+                },
+            );
+        },
+    },
+    Scene {
+        name: "deep_crystal_faults",
+        summary: "The Crystal Faults stratum far below the surface",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                sink_rig(world, player, 120, 100);
+                carve(world, 108..133, 100..101);
+                reveal(world, player, 98..143, 90..112);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "deep_void_geodes",
+        summary: "The Void Geode Fields and Mantle Storm strata near the bottom",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                sink_rig(world, player, 120, 205);
+                carve(world, 108..133, 205..206);
+                reveal(world, player, 98..143, 195..218);
+            });
+            stage.settle(10);
+        },
+    },
 ];
 
 /// Enters `zone`'s interior standing at its counter, optionally with a counter panel open.

@@ -20,6 +20,7 @@ use super::{
     pixel_art::{
         palette,
         sprite::{self, SpriteDef},
+        sprites::world as props,
     },
     terrain::TerrainRenderer,
     ui_kit::{self, TextStyle},
@@ -146,19 +147,36 @@ fn draw_world_edges(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
     if bottom <= top {
         return;
     }
+    let tile = 8.0 * ART;
+    let fill = |draw: &mut dyn FnMut(Rectangle), from: f32, to: f32| {
+        // Anchor the pattern to the world grid so it does not swim while scrolling.
+        let start = (from / tile).floor() * tile;
+        let rows_top = ((top - GROUND_Y) / tile).floor().mul_add(tile, GROUND_Y);
+        draw(Rectangle::new(
+            start,
+            rows_top,
+            to - start,
+            bottom - rows_top,
+        ));
+    };
     if visible.x < 0.0 {
-        let left = visible.x - ART;
-        draw.draw_rectangle_rec(
-            Rectangle::new(left, top, -left, bottom - top),
-            palette::NIGHT,
+        fill(
+            &mut |rect| {
+                sprite::draw_tiled(draw, &props::BEDROCK, 0, rect, ART, Color::WHITE);
+            },
+            visible.x - ART,
+            0.0,
         );
         draw.draw_rectangle_rec(Rectangle::new(-ART, top, ART, bottom - top), palette::INK);
     }
     let right = visible.x + visible.width + ART;
     if right > world_right {
-        draw.draw_rectangle_rec(
-            Rectangle::new(world_right, top, right - world_right, bottom - top),
-            palette::NIGHT,
+        fill(
+            &mut |rect| {
+                sprite::draw_tiled(draw, &props::BEDROCK, 0, rect, ART, Color::WHITE);
+            },
+            world_right,
+            right,
         );
         draw.draw_rectangle_rec(
             Rectangle::new(world_right, top, ART, bottom - top),
