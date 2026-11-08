@@ -430,6 +430,9 @@ pub(in crate::rendering) enum RowFace {
     Disabled,
     /// No face: a label on the left, the value on the right.
     Plain,
+    /// A text entry well: the label is the typed text (or the placeholder in `detail` while
+    /// empty), with a blinking caret.
+    Field,
 }
 
 #[derive(Clone, Debug)]

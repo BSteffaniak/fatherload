@@ -322,6 +322,10 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         color: Color,
         row: &widgets::RowContent,
     ) {
+        if row.face == widgets::RowFace::Field {
+            Self::draw_field(self.draw, rect, label, &row.detail);
+            return;
+        }
         if row.face == widgets::RowFace::Plain {
             let y = rect.y as i32 + 1;
             let mut x = rect.x as i32;
@@ -382,6 +386,34 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
                     value_color,
                 );
             }
+        }
+    }
+
+    /// A text entry well: the typed text's tail (so the caret stays visible) or the
+    /// placeholder, and a blinking caret.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "canvas coordinates are small"
+    )]
+    fn draw_field(draw: &mut RaylibDrawHandle<'_>, rect: Rectangle, text: &str, placeholder: &str) {
+        ui_kit::well(draw, rect);
+        let (x, y) = (
+            rect.x as i32 + 5,
+            rect.y as i32 + (rect.height as i32 - 9) / 2,
+        );
+        let room = rect.width as i32 - 14;
+        if text.is_empty() {
+            let hint = ui_kit::truncate(placeholder, room, TextStyle::Body);
+            ui_kit::text(draw, &hint, x + 3, y, TextStyle::Body, FOG);
+        }
+        let mut shown = text.to_owned();
+        while ui_kit::text_width(&shown, TextStyle::Body) > room && !shown.is_empty() {
+            shown.remove(0);
+        }
+        ui_kit::text(draw, &shown, x, y, TextStyle::Body, CREAM);
+        if (ui_kit::seconds() * 2.0) as i32 % 2 == 0 {
+            let caret_x = x + ui_kit::text_width(&shown, TextStyle::Body) + 1;
+            draw.draw_rectangle(caret_x, y - 1, 2, 10, GOLD);
         }
     }
 
@@ -521,6 +553,11 @@ pub(super) enum SectionItem {
     Stat(StatItem),
     Item(ItemEntry),
     Text(String),
+    /// A text entry field showing `text` (or `placeholder` while empty) and a caret.
+    Field {
+        text: String,
+        placeholder: String,
+    },
 }
 
 impl SectionItem {
@@ -563,6 +600,13 @@ impl SectionItem {
 
     pub(super) fn text(text: impl Into<String>) -> Self {
         Self::Text(text.into())
+    }
+
+    pub(super) fn field(text: impl Into<String>, placeholder: impl Into<String>) -> Self {
+        Self::Field {
+            text: text.into(),
+            placeholder: placeholder.into(),
+        }
     }
 }
 
@@ -701,6 +745,16 @@ fn modal_content_node(content: &ModalContent, width: f32) -> widgets::UiNode {
                 SectionItem::Text(text) => sections.push(widgets::UiNode::Text(
                     widgets::TextNode::colored(text, TextKind::Small, width, MIST),
                 )),
+                SectionItem::Field { text, placeholder } => {
+                    sections.push(widgets::UiNode::Button(
+                        widgets::ButtonNode::label(text, width, MENU_ROW_HEIGHT + 2.0, false, BONE)
+                            .with_row(widgets::RowContent {
+                                detail: placeholder.clone(),
+                                face: widgets::RowFace::Field,
+                                ..widgets::RowContent::default()
+                            }),
+                    ));
+                }
             }
         }
     }

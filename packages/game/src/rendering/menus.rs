@@ -1,0 +1,580 @@
+//! Menu screens drawn with the modal layout: pause, options, save / load slots, exit
+//! confirmations, the rescue prompt, and every online screen (join forms, LAN list, lobby roster
+//! and session notices). Rows carry icons, values and states so each choice reads at a glance.
+
+use drillgame_simulation::terrain::TILE_SIZE;
+use raylib::prelude::*;
+
+#[allow(
+    clippy::wildcard_imports,
+    reason = "art code names colours from the whole palette"
+)]
+use super::pixel_art::palette::*;
+use super::{
+    layout::{ItemEntry, ModalContent, Section, SectionItem, UiLayout},
+    pixel_art::{
+        sprite::SpriteDef,
+        sprites::{icons, menu_icons},
+    },
+    screen::UiFrame,
+};
+use crate::{
+    runtime::OnlineRole,
+    save::{save_slot_count, save_slot_metadata},
+    shell::{JOIN_MENU, LobbyAction, NoticeAction, OnlineScreen, PauseOption, ShellState},
+};
+
+/// A menu row: icon, label, optional detail and right-aligned value.
+struct Entry {
+    icon: &'static SpriteDef,
+    label: String,
+    detail: String,
+    value: String,
+    value_color: Color,
+    disabled: bool,
+}
+
+impl Entry {
+    fn new(icon: &'static SpriteDef, label: impl Into<String>) -> Self {
+        Self {
+            icon,
+            label: label.into(),
+            detail: String::new(),
+            value: String::new(),
+            value_color: BONE,
+            disabled: false,
+        }
+    }
+
+    fn detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = detail.into();
+        self
+    }
+
+    fn value(mut self, value: impl Into<String>, color: Color) -> Self {
+        self.value = value.into();
+        self.value_color = color;
+        self
+    }
+
+    const fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+/// Section items for `entries` with `selected` highlighted.
+fn menu_items(entries: Vec<Entry>, selected: usize) -> Vec<SectionItem> {
+    entries
+        .into_iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            SectionItem::item(ItemEntry {
+                icon: Some(entry.icon),
+                label: entry.label,
+                detail: entry.detail,
+                value: entry.value,
+                value_color: entry.value_color,
+                coin: false,
+                selected: index == selected,
+                disabled: entry.disabled,
+            })
+        })
+        .collect()
+}
+
+const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
+    match option {
+        PauseOption::Resume => &menu_icons::PLAY,
+        PauseOption::Save => &menu_icons::DISK,
+        PauseOption::Load => &menu_icons::FOLDER,
+        PauseOption::OpenOnline => &menu_icons::GLOBE,
+        PauseOption::SessionInfo => &menu_icons::SIGNAL,
+        PauseOption::EndSession => &menu_icons::OFFLINE,
+        PauseOption::LeaveSession | PauseOption::ExitToDesktop => &menu_icons::DOOR,
+        PauseOption::Options => &menu_icons::GEAR,
+    }
+}
+
+pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let entries = PauseOption::for_role(ui.shell.online.role)
+        .into_iter()
+        .map(|option| Entry::new(pause_icon(option), option.label()))
+        .collect();
+    let player = ui.player;
+    let mut rig = vec![
+        SectionItem::icon_stat(
+            &icons::DEPTH,
+            "Depth",
+            format!("{} m", (player.y / TILE_SIZE).max(0.0) as i32),
+            SKY_LIGHT,
+        ),
+        SectionItem::icon_stat(&icons::CREDITS, "Credits", player.credits.to_string(), GOLD),
+        SectionItem::icon_stat(
+            &icons::HULL,
+            "Hull",
+            format!("{:.0}/{:.0}", player.hull, player.max_hull()),
+            if player.hull <= player.max_hull() * 0.35 {
+                RED
+            } else {
+                LIME
+            },
+        ),
+        SectionItem::icon_stat(
+            &icons::FUEL,
+            "Fuel",
+            format!("{:.0}/{:.0}", player.fuel, player.fuel_capacity),
+            if player.fuel <= player.fuel_capacity * 0.2 {
+                RED
+            } else {
+                AMBER
+            },
+        ),
+    ];
+    if ui.snapshot.won_game {
+        rig.push(SectionItem::text(
+            "Star Core secured. Deep Claim operations are open.",
+        ));
+    }
+    UiLayout::screen(draw).modal_with_render_plan(
+        "Paused",
+        "Up/Down select | Enter/E confirm | Esc resume",
+        &ModalContent::new(vec![
+            Section::new(
+                "Menu",
+                SKY_LIGHT,
+                menu_items(entries, ui.shell.selected_pause_item),
+            ),
+            Section::new("Rig", GOLD, rig),
+        ])
+        .compact(),
+    );
+}
+
+pub(super) fn draw_options(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let volume = (ui.shell.master_volume * 100.0).round() as i32;
+    let entries = vec![
+        Entry::new(&menu_icons::SPEAKER, "Master volume")
+            .detail("Left/Right or +/- adjust")
+            .value(format!("\u{2190} {volume}% \u{2192}"), GOLD),
+        Entry::new(&menu_icons::SCREEN, "Fullscreen")
+            .detail("Borderless, F11 anywhere")
+            .value(
+                if ui.shell.fullscreen { "ON" } else { "OFF" },
+                if ui.shell.fullscreen { LIME } else { FOG },
+            ),
+        Entry::new(&menu_icons::BACK, "Back"),
+    ];
+    UiLayout::screen(draw).modal_with_render_plan(
+        "Options",
+        "Up/Down select | Left/Right adjust | Esc close",
+        &ModalContent::new(vec![
+            Section::new(
+                "Settings",
+                SKY_LIGHT,
+                menu_items(entries, ui.shell.selected_menu_item),
+            ),
+            Section::new(
+                "Volume",
+                FOG,
+                vec![SectionItem::meter(
+                    "Level",
+                    volume as f32,
+                    100.0,
+                    SKY_LIGHT,
+                    SKY_LIGHT,
+                )],
+            ),
+        ])
+        .compact(),
+    );
+}
+
+pub(super) fn draw_slots(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, saving: bool) {
+    let entries = (0..save_slot_count())
+        .map(|slot| {
+            let label = format!("Slot {}", slot + 1);
+            save_slot_metadata(slot).map_or_else(
+                || {
+                    let entry = Entry::new(&menu_icons::DISK, label.clone()).detail("Empty slot");
+                    if saving {
+                        entry.value("NEW", LIME)
+                    } else {
+                        entry.value("EMPTY", FOG).disabled(true)
+                    }
+                },
+                |meta| {
+                    let entry = Entry::new(&menu_icons::DISK, label.clone()).detail(format!(
+                        "{}m deep | {} cr | {} contracts | {:.0} min",
+                        meta.depth,
+                        meta.credits,
+                        meta.contracts_completed,
+                        (meta.play_seconds / 60.0).floor()
+                    ));
+                    if saving {
+                        entry.value("OVERWRITE", ORANGE)
+                    } else {
+                        entry.value("LOAD", LIME)
+                    }
+                },
+            )
+        })
+        .collect();
+    UiLayout::screen(draw).modal_with_render_plan(
+        if saving { "Save Game" } else { "Load Game" },
+        "Up/Down select | Enter/E confirm | Esc close",
+        &ModalContent::new(vec![Section::new(
+            "Slots",
+            SKY_LIGHT,
+            menu_items(entries, ui.shell.selected_menu_item),
+        )]),
+    );
+}
+
+pub(super) fn draw_exit_confirm(draw: &mut RaylibDrawHandle<'_>) {
+    UiLayout::screen(draw).modal_with_render_plan(
+        "Exit to Desktop?",
+        "Enter/E exits | Esc returns to the game",
+        &ModalContent::new(vec![Section::new(
+            "Confirm",
+            GOLD,
+            vec![SectionItem::icon_stat(
+                &menu_icons::DOOR,
+                "Close Drillgame now",
+                "",
+                BONE,
+            )],
+        )])
+        .compact(),
+    );
+}
+
+pub(super) fn draw_unsaved_exit_confirm(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let entries = vec![
+        Entry::new(&menu_icons::DISK, "Save and exit").detail("Writes the session save first"),
+        Entry::new(&menu_icons::DOOR, "Exit without saving")
+            .detail("Progress since the last save is lost")
+            .value("LOSE", RED),
+        Entry::new(&menu_icons::BACK, "Cancel").detail("Back to the game"),
+    ];
+    UiLayout::screen(draw).modal_with_render_plan(
+        "Unsaved Progress",
+        "Up/Down select | Enter/E confirm | Esc cancel",
+        &ModalContent::new(vec![Section::new(
+            "Before you go",
+            ORANGE,
+            menu_items(entries, ui.shell.selected_menu_item),
+        )])
+        .compact(),
+    );
+}
+
+/// The emergency prompt for a stranded rig (out of fuel or hull).
+pub(super) fn draw_rescue(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let (icon, headline, body) = match ui.view.failure {
+        Some(failure) if failure.disabled => (
+            &icons::HULL,
+            "Hull breached",
+            "The rig's hull gave out. A rescue crew can tow it back to town.".to_owned(),
+        ),
+        Some(_) => (
+            &icons::FUEL,
+            "Out of fuel",
+            "The tank is dry. A rescue crew can tow the rig back to town.".to_owned(),
+        ),
+        None => (&icons::WARNING, "Stranded", ui.shell.message.clone()),
+    };
+    let action = SectionItem::item(ItemEntry {
+        icon: Some(&menu_icons::FLAG),
+        label: "Call the rescue crew".to_owned(),
+        detail: "Press E or Enter".to_owned(),
+        value: "FEE".to_owned(),
+        value_color: GOLD,
+        coin: false,
+        selected: true,
+        disabled: false,
+    });
+    UiLayout::screen(draw).modal_with_render_plan(
+        "Emergency",
+        "E/Enter call rescue | Esc pause menu",
+        &ModalContent::new(vec![
+            Section::new(
+                headline,
+                RED,
+                vec![
+                    SectionItem::text(body),
+                    SectionItem::icon_stat(
+                        icon,
+                        "Rescues called",
+                        ui.view.rescue_count.to_string(),
+                        MIST,
+                    ),
+                ],
+            ),
+            Section::new("Action", GOLD, vec![action]),
+        ])
+        .warning()
+        .compact(),
+    );
+}
+
+/// Lobby roster rows shown before the rest condense into a count, so any player count fits
+/// (plan §15).
+const MAX_ROSTER_ROWS: usize = 10;
+
+const fn lobby_icon(action: LobbyAction) -> &'static SpriteDef {
+    match action {
+        LobbyAction::Start | LobbyAction::BackToGame => &menu_icons::PLAY,
+        LobbyAction::CopyDescriptor => &menu_icons::KEY,
+        LobbyAction::ToggleReady => &menu_icons::READY,
+        LobbyAction::Leave => &menu_icons::DOOR,
+    }
+}
+
+const fn notice_icon(action: NoticeAction) -> &'static SpriteDef {
+    match action {
+        NoticeAction::Reconnect => &menu_icons::SIGNAL,
+        NoticeAction::BackToTitle => &menu_icons::BACK,
+    }
+}
+
+/// Online screens: join forms, LAN list, lobby roster and session notices. Drawn without a
+/// world view (a joining client has no rig until the host's welcome arrives).
+pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
+    let online = &shell.online;
+    let (title, help, sections) = match online.screen {
+        OnlineScreen::JoinMenu => {
+            let icons: [&SpriteDef; 4] = [
+                &menu_icons::GLOBE,
+                &menu_icons::KEY,
+                &menu_icons::SIGNAL,
+                &menu_icons::BACK,
+            ];
+            let details = [
+                "Type the host's ip:port",
+                "Pins the host's certificate",
+                "Sessions advertised on this network",
+                "",
+            ];
+            let entries = JOIN_MENU
+                .iter()
+                .zip(icons)
+                .zip(details)
+                .map(|((label, icon), detail)| Entry::new(icon, *label).detail(detail))
+                .collect();
+            (
+                "Join Online Game".to_owned(),
+                "Up/Down select | Enter/E confirm | Esc back",
+                vec![Section::new(
+                    "Join",
+                    SKY_LIGHT,
+                    menu_items(entries, online.selected),
+                )],
+            )
+        }
+        OnlineScreen::JoinAddress => (
+            "Join by Address".to_owned(),
+            "Type the host's ip:port | Enter join | Backspace delete | Esc back",
+            vec![Section::new(
+                "Host address",
+                SKY_LIGHT,
+                vec![
+                    SectionItem::field(online.text.clone(), "e.g. 192.168.1.20:47777"),
+                    SectionItem::text(
+                        "Direct-IP joins are encrypted but do not authenticate the host; use a descriptor to pin its certificate.",
+                    ),
+                ],
+            )],
+        ),
+        OnlineScreen::JoinDescriptor => (
+            "Join by Descriptor".to_owned(),
+            "Ctrl+V paste | Enter join | Backspace delete | Esc back",
+            vec![Section::new(
+                "Descriptor",
+                SKY_LIGHT,
+                vec![
+                    SectionItem::field(
+                        online.text.chars().take(96).collect::<String>(),
+                        "Paste the host's descriptor with Ctrl+V",
+                    ),
+                    SectionItem::text(if online.text.is_empty() {
+                        "The host copies it from its lobby (\"Copy descriptor to clipboard\")."
+                            .to_owned()
+                    } else {
+                        format!("{} characters pasted.", online.text.len())
+                    }),
+                ],
+            )],
+        ),
+        OnlineScreen::LanBrowser => lan_screen(online),
+        OnlineScreen::Lobby => lobby_screen(shell),
+        OnlineScreen::Notice => {
+            let entries = online
+                .notice_options()
+                .into_iter()
+                .map(|action| Entry::new(notice_icon(action), action.label()))
+                .collect();
+            (
+                "Online Session".to_owned(),
+                "Up/Down select | Enter/E confirm | Esc title",
+                vec![
+                    Section::new(
+                        "Session over",
+                        ORANGE,
+                        vec![SectionItem::text(online.notice.clone())],
+                    ),
+                    Section::new("Next", SKY_LIGHT, menu_items(entries, online.selected)),
+                ],
+            )
+        }
+    };
+    UiLayout::screen(draw).modal_with_render_plan(&title, help, &ModalContent::new(sections));
+}
+
+/// The LAN browser: discovered sessions, then refresh and back.
+fn lan_screen(online: &crate::shell::OnlineShell) -> (String, &'static str, Vec<Section>) {
+    let mut entries: Vec<Entry> = online
+        .lan_games
+        .iter()
+        .map(|game| {
+            Entry::new(&menu_icons::SIGNAL, game.instance_name.clone())
+                .detail(game.game_addr.to_string())
+                .value("JOIN", LIME)
+        })
+        .collect();
+    entries.push(Entry::new(&icons::SCANNER, "Refresh").detail("Search the network again"));
+    entries.push(Entry::new(&menu_icons::BACK, "Back"));
+    let mut items = Vec::new();
+    if !online.lan_status.is_empty() {
+        items.push(SectionItem::text(online.lan_status.clone()));
+    }
+    items.extend(menu_items(entries, online.selected));
+    (
+        "LAN Games".to_owned(),
+        "Up/Down select | Enter/E join | Esc back",
+        vec![Section::new(
+            format!("Discovered sessions ({})", online.lan_games.len()),
+            SKY_LIGHT,
+            items,
+        )],
+    )
+}
+
+/// One row per lobby player with a state chip, condensed past [`MAX_ROSTER_ROWS`].
+fn roster_items(lobby: &crate::runtime::LobbyInfo) -> Vec<SectionItem> {
+    if lobby.roster.is_empty() {
+        vec![SectionItem::text("Waiting for the roster...")]
+    } else {
+        let hidden = lobby.roster.len().saturating_sub(MAX_ROSTER_ROWS);
+        let mut rows: Vec<SectionItem> = lobby
+            .roster
+            .iter()
+            .take(MAX_ROSTER_ROWS)
+            .map(|entry| {
+                let mut name = entry.name.clone();
+                if lobby.local_player == Some(entry.player) {
+                    name.push_str("  (you)");
+                }
+                let (icon, state, color): (&'static SpriteDef, &str, Color) = if !entry.connected {
+                    (&menu_icons::OFFLINE, "OFFLINE", ORANGE)
+                } else if entry.local {
+                    (&menu_icons::CROWN, "HOST", GOLD)
+                } else if entry.ready {
+                    (&menu_icons::READY, "READY", LIME)
+                } else {
+                    (&menu_icons::WAITING, "WAITING", FOG)
+                };
+                SectionItem::icon_stat(icon, name, state, color)
+            })
+            .collect();
+        if hidden > 0 {
+            rows.push(SectionItem::text(format!("... and {hidden} more")));
+        }
+        rows
+    }
+}
+
+/// The lobby: session facts, the roster with ready states, and the lobby actions.
+fn lobby_screen(shell: &ShellState) -> (String, &'static str, Vec<Section>) {
+    let online = &shell.online;
+    let host = online.role == Some(OnlineRole::Host);
+    let lobby = online.lobby.clone().unwrap_or_default();
+    let mut session = vec![SectionItem::text(lobby.status.clone())];
+    if let Some(addr) = lobby.addr {
+        session.push(SectionItem::icon_stat(
+            &menu_icons::GLOBE,
+            "Address",
+            addr.to_string(),
+            GOLD,
+        ));
+    }
+    if host {
+        session.push(SectionItem::icon_stat(
+            &menu_icons::SIGNAL,
+            "LAN discovery",
+            if lobby.lan_published {
+                "advertised"
+            } else {
+                "off"
+            },
+            if lobby.lan_published { LIME } else { FOG },
+        ));
+        session.push(SectionItem::icon_stat(
+            &menu_icons::KEY,
+            "Descriptor",
+            if lobby.descriptor.is_some() {
+                "ready to copy"
+            } else {
+                "pending"
+            },
+            if lobby.descriptor.is_some() {
+                LIME
+            } else {
+                FOG
+            },
+        ));
+    }
+    if !shell.message.is_empty() {
+        session.push(SectionItem::text(shell.message.clone()));
+    }
+    let ready_count = lobby
+        .roster
+        .iter()
+        .filter(|entry| entry.connected && (entry.local || entry.ready))
+        .count();
+    let players = roster_items(&lobby);
+    let entries = online
+        .lobby_options()
+        .into_iter()
+        .map(|action| {
+            let entry = Entry::new(lobby_icon(action), action.label(host));
+            match action {
+                LobbyAction::ToggleReady => entry.value(
+                    if online.ready { "READY" } else { "NOT READY" },
+                    if online.ready { LIME } else { FOG },
+                ),
+                LobbyAction::Start => {
+                    entry.value(format!("{ready_count}/{} ready", lobby.roster.len()), LIME)
+                }
+                _ => entry,
+            }
+        })
+        .collect();
+    (
+        if host {
+            "Hosting Online Game".to_owned()
+        } else {
+            "Online Lobby".to_owned()
+        },
+        if lobby.started {
+            "Up/Down select | Enter/E confirm | Esc back to the game"
+        } else {
+            "Up/Down select | Enter/E confirm"
+        },
+        vec![
+            Section::new("Session", SKY_LIGHT, session),
+            Section::new(format!("Players ({})", lobby.roster.len()), GOLD, players),
+            Section::new("Actions", SKY_LIGHT, menu_items(entries, online.selected)),
+        ],
+    )
+}

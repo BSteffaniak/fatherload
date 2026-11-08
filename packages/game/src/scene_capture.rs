@@ -464,6 +464,15 @@ pub const SCENES: &[Scene] = &[
     ),
     room_scene!("room_salvage", "Salvage yard room, no panel open", Salvage),
     Scene {
+        name: "toast_receipt",
+        summary: "Upgrade shop counter just after a purchase, with the receipt toast",
+        setup: |stage| {
+            enter_interior(stage, SurfaceZone::Shop, Some(ModalScreen::Shop));
+            "Bought Carbide Drill for 420 credits.".clone_into(&mut stage.shell().message);
+            stage.settle(12);
+        },
+    },
+    Scene {
         name: "hud_low_fuel",
         summary: "HUD close-up underground with the fuel warning",
         setup: |stage| {
@@ -573,6 +582,98 @@ pub const SCENES: &[Scene] = &[
                 status: "Listening for players. 3 connected.".to_owned(),
                 local_player: Some(NetPlayerId(1)),
             });
+        },
+    },
+    Scene {
+        name: "online_lobby_client",
+        summary: "Joined an online game: lobby roster waiting on ready players",
+        setup: |stage| {
+            let shell = stage.shell();
+            shell.run_mode = RunMode::Lobby;
+            shell.online.screen = OnlineScreen::Lobby;
+            shell.online.selected = 0;
+            shell.online.role = Some(OnlineRole::Client);
+            shell.online.ready = true;
+            shell.message.clear();
+            shell.online.lobby = Some(LobbyInfo {
+                roster: vec![
+                    lobby_entry(1, "Ada", true, true, true),
+                    lobby_entry(2, "Brutus", true, true, false),
+                    lobby_entry(3, "Cass", false, true, false),
+                ],
+                addr: "192.168.1.20:47777".parse().ok(),
+                descriptor: None,
+                lan_published: false,
+                started: false,
+                status: "Connected to the host. Waiting for the game to start.".to_owned(),
+                local_player: Some(NetPlayerId(2)),
+            });
+        },
+    },
+    Scene {
+        name: "online_join_address",
+        summary: "Join-by-address form with a partly typed address",
+        setup: |stage| {
+            let shell = stage.shell();
+            shell.run_mode = RunMode::Lobby;
+            shell.online.screen = OnlineScreen::JoinAddress;
+            "192.168.1.2".clone_into(&mut shell.online.text);
+        },
+    },
+    Scene {
+        name: "online_lan_browser",
+        summary: "LAN browser listing two discovered sessions",
+        setup: |stage| {
+            let shell = stage.shell();
+            shell.run_mode = RunMode::Lobby;
+            shell.online.screen = OnlineScreen::LanBrowser;
+            shell.online.selected = 0;
+            "Searching the local network...".clone_into(&mut shell.online.lan_status);
+            shell.online.lan_games = ["Ada's claim", "Night shift"]
+                .into_iter()
+                .enumerate()
+                .map(
+                    |(index, name)| drillgame_quic_transport::lan::LanDiscoveredGame {
+                        instance_name: name.to_owned(),
+                        host_name: "host.local".to_owned(),
+                        game_addr: format!("192.168.1.{}:47777", 20 + index)
+                            .parse()
+                            .expect("address"),
+                        descriptor_addr: format!("192.168.1.{}:47778", 20 + index)
+                            .parse()
+                            .expect("address"),
+                        session_id: format!("session-{index}"),
+                    },
+                )
+                .collect();
+        },
+    },
+    Scene {
+        name: "modal_options",
+        summary: "Options dialog over the pause menu",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                sink_rig(world, seats[0].player, 97, 12);
+            });
+            stage.settle(10);
+            let shell = stage.shell();
+            shell.run_mode = RunMode::Paused;
+            shell.modal = Some(ModalScreen::Options);
+            shell.selected_menu_item = 0;
+        },
+    },
+    Scene {
+        name: "modal_save_slots",
+        summary: "Save slot picker",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                sink_rig(world, seats[0].player, 97, 12);
+            });
+            stage.settle(10);
+            let shell = stage.shell();
+            shell.run_mode = RunMode::Paused;
+            shell.modal = Some(ModalScreen::SaveSlots);
+            shell.selected_menu_item = 1;
         },
     },
     Scene {

@@ -21,6 +21,7 @@ mod counters;
 mod gallery;
 mod interior;
 mod layout;
+mod menus;
 mod pixel_art;
 mod screen;
 mod terrain;
@@ -30,10 +31,11 @@ mod ui_sheet;
 mod world;
 
 use interior::draw_interior;
+use menus::{draw_online, draw_pause, draw_rescue};
 use pixel_art::{font::load_pixel_font, palette, sprite};
 use screen::{
-    UiFrame, draw_depth_ruler_for_view, draw_game_over, draw_heat_warning_for_view,
-    draw_minimap_for_view, draw_modal, draw_online, draw_pause, draw_view_hud,
+    UiFrame, draw_depth_ruler_for_view, draw_heat_warning_for_view, draw_minimap_for_view,
+    draw_modal, draw_toast, draw_view_hud,
 };
 use terrain::TerrainRenderer;
 use ui_kit::{TextStyle, UiCanvas, UiCanvasScope, UiFontFaces};
@@ -218,14 +220,17 @@ impl GameRenderer {
             if let Some(view) = snapshot.primary_view() {
                 draw_interior(draw, shell, view, &snapshot.market);
             }
-        } else if shell.run_mode != RunMode::Title {
-            // The title screen paints its own backdrop over the whole canvas.
+        } else if !matches!(shell.run_mode, RunMode::Title | RunMode::Lobby) {
+            // The title and online screens paint their own backdrop over the whole canvas.
             for view in &snapshot.views {
                 self.render_view(draw, shell, snapshot, view);
             }
         }
 
         let _canvas = UiCanvasScope::begin(draw);
+        if shell.run_mode == RunMode::Lobby {
+            title::draw_backdrop(draw);
+        }
         if let Some(view) = snapshot.primary_view() {
             let ui = UiFrame {
                 shell,
@@ -241,13 +246,14 @@ impl GameRenderer {
             if let Some(modal) = shell.modal {
                 draw_modal(draw, &ui, modal);
             } else if shell.run_mode == RunMode::Playing && view.failure.is_some() {
-                draw_game_over(draw, &ui);
+                draw_rescue(draw, &ui);
             }
         }
 
         if shell.run_mode == RunMode::Lobby && shell.modal.is_none() {
             draw_online(draw, shell);
         }
+        draw_toast(draw, shell);
         if shell.online.show_net_debug {
             draw_net_debug(draw, shell);
         }

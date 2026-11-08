@@ -77,6 +77,16 @@ const fn option_icon(option: TitleOption) -> &'static SpriteDef {
 pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let canvas = ui_kit::canvas();
     let (width, height) = (canvas.width, canvas.height);
+    draw_backdrop(draw);
+    let horizon = height * 3 / 8;
+    let logo_bottom = draw_logo(draw, width, (horizon / 2 - 22).max(10));
+    draw_menu(draw, ui, width, height, logo_bottom + 8);
+}
+
+/// The claim cross-section behind the title and online screens.
+pub(super) fn draw_backdrop(draw: &mut RaylibDrawHandle<'_>) {
+    let canvas = ui_kit::canvas();
+    let (width, height) = (canvas.width, canvas.height);
     let seconds = ui_kit::seconds();
     let horizon = height * 3 / 8;
     draw_sky(draw, width, horizon, seconds);
@@ -85,8 +95,6 @@ pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     draw_strata(draw, width, height, horizon, shaft_x);
     draw_town(draw, width, horizon, shaft_x);
     draw_rig(draw, shaft_x, horizon, height, seconds);
-    let logo_bottom = draw_logo(draw, width, (horizon / 2 - 22).max(10));
-    draw_menu(draw, ui, width, height, logo_bottom + 8);
 }
 
 fn draw_sky(draw: &mut impl RaylibDraw, width: i32, horizon: i32, seconds: f32) {

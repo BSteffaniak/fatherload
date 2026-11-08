@@ -413,16 +413,6 @@ impl OnlineShell {
             vec![NoticeAction::BackToTitle]
         }
     }
-
-    /// LAN browser entries: discovered sessions, then refresh and back.
-    #[must_use]
-    pub fn lan_options(&self) -> Vec<String> {
-        self.lan_games
-            .iter()
-            .map(|game| format!("{} ({})", game.instance_name, game.game_addr))
-            .chain(["Refresh".to_owned(), "Back".to_owned()])
-            .collect()
-    }
 }
 
 /// Read-only gameplay facts the shell needs, taken from the runtime's world.
@@ -479,6 +469,10 @@ pub struct ShellState {
     pub selected_pause_item: usize,
     pub show_details: bool,
     pub message: String,
+    /// `update_ticks` when `message` last changed (drives the on-screen toast).
+    pub message_tick: u64,
+    /// The message `message_tick` was taken for.
+    message_seen: String,
     pub interior_zone: Option<SurfaceZone>,
     pub interior_x: f32,
     pub interior_facing: f32,
@@ -520,6 +514,8 @@ impl ShellState {
             show_details: false,
             message: "Mine ore, sell cargo, and buy upgrades. Press E at surface buildings."
                 .to_owned(),
+            message_tick: 0,
+            message_seen: String::new(),
             interior_zone: None,
             interior_x: 88.0,
             interior_facing: 1.0,
@@ -592,6 +588,10 @@ impl ShellState {
     ) -> Vec<ShellRequest> {
         let mut requests = Vec::new();
         self.update_ticks = self.update_ticks.saturating_add(1);
+        if self.message != self.message_seen {
+            self.message_seen.clone_from(&self.message);
+            self.message_tick = self.update_ticks;
+        }
         self.sound_cues.clear();
         self.show_details = input.details;
         self.service_animation_seconds = (self.service_animation_seconds - delta_seconds).max(0.0);

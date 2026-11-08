@@ -13,14 +13,13 @@ use super::pixel_art::palette::*;
 use super::{
     counters,
     layout::{ModalContent, Section, SectionItem, UiLayout},
+    menus,
     pixel_art::{palette, sprite::SpriteDef, sprites::icons},
     ui_kit::{self, BarColors, PanelStyle, TextStyle},
 };
 use crate::{
     render_snapshot::{PlayerPresentation, RenderSnapshot, ViewSnapshot},
-    runtime::OnlineRole,
-    save::{save_slot_count, save_slot_metadata},
-    shell::{JOIN_MENU, ModalScreen, OnlineScreen, PauseOption, ShellState},
+    shell::{ModalScreen, ShellState},
 };
 
 /// What screen-space UI (HUD, menus, modals) reads: shell state plus the snapshot and the view
@@ -162,25 +161,7 @@ pub(super) fn draw_view_hud(
         0.0,
     );
 
-    // Credits and depth, clear of the depth ruler on the right edge.
-    let money = format!("{}", hud.credits);
-    let depth = format!("{} m", hud.depth);
-    let value_width = ui_kit::text_width(&money, TextStyle::Bold)
-        .max(ui_kit::text_width(&depth, TextStyle::Bold));
-    let money_width = (value_width + icons::ICON_SIZE + 18).max(64);
-    let money_x = (rect.x + rect.width) as i32 - 16 - money_width;
-    if money_x > left + width + 4 {
-        ui_kit::panel(
-            draw,
-            Rectangle::new(money_x as f32, top as f32, money_width as f32, 32.0),
-            PanelStyle::Standard,
-        );
-        let right = money_x + money_width - ui_kit::PANEL_PADDING;
-        ui_kit::icon(draw, &icons::CREDITS, money_x + 6, top + 6);
-        ui_kit::text_right(draw, &money, right, top + 7, TextStyle::Bold, GOLD);
-        ui_kit::icon(draw, &icons::DEPTH, money_x + 6, top + 17);
-        ui_kit::text_right(draw, &depth, right, top + 18, TextStyle::Bold, SKY_LIGHT);
-    }
+    draw_wallet_panel(draw, view, rect, left + width + 4, top);
 
     // Warning badges.
     let mut badge_x = left;
@@ -240,6 +221,174 @@ pub(super) fn draw_view_hud(
                 MIST,
             );
         }
+    }
+}
+
+/// Credits and depth (top-right, clear of the depth ruler), plus the scanner and bomb chips.
+fn draw_wallet_panel(
+    draw: &mut RaylibDrawHandle<'_>,
+    view: &ViewSnapshot<'_>,
+    rect: Rectangle,
+    min_x: i32,
+    top: i32,
+) {
+    let hud = view.hud;
+    let money = format!("{}", hud.credits);
+    let depth = format!("{} m", hud.depth);
+    let has_scanner = view.player.scanner_level > 0;
+    let scan = if hud.scanner_cooldown_seconds > 0.05 {
+        format!("{:.0}s", hud.scanner_cooldown_seconds.ceil())
+    } else {
+        "READY".to_owned()
+    };
+    let bombs = format!("{}", view.player.bombs);
+    let chips_width = ui_kit::text_width(&bombs, TextStyle::Bold)
+        + icons::ICON_SIZE
+        + 3
+        + if has_scanner {
+            ui_kit::text_width(&scan, TextStyle::Bold) + icons::ICON_SIZE + 9
+        } else {
+            0
+        };
+    let value_width = ui_kit::text_width(&money, TextStyle::Bold)
+        .max(ui_kit::text_width(&depth, TextStyle::Bold))
+        + icons::ICON_SIZE
+        + 6;
+    let panel_width = value_width.max(chips_width) + ui_kit::PANEL_PADDING * 2;
+    let panel_width = panel_width.max(64);
+    let x = (rect.x + rect.width) as i32 - 16 - panel_width;
+    if x <= min_x {
+        return;
+    }
+    let height = 45;
+    ui_kit::panel(
+        draw,
+        Rectangle::new(x as f32, top as f32, panel_width as f32, height as f32),
+        PanelStyle::Standard,
+    );
+    let right = x + panel_width - ui_kit::PANEL_PADDING;
+    ui_kit::icon(draw, &icons::CREDITS, x + 6, top + 6);
+    ui_kit::text_right(draw, &money, right, top + 7, TextStyle::Bold, GOLD);
+    ui_kit::icon(draw, &icons::DEPTH, x + 6, top + 17);
+    ui_kit::text_right(draw, &depth, right, top + 18, TextStyle::Bold, SKY_LIGHT);
+    ui_kit::divider(draw, x + 4, top + 28, panel_width - 8);
+    // Tool chips: bombs on the left, the scanner's cooldown on the right.
+    let chip_y = top + 32;
+    ui_kit::icon(draw, &icons::BOMB, x + 6, chip_y);
+    ui_kit::text(
+        draw,
+        &bombs,
+        x + 6 + icons::ICON_SIZE + 2,
+        chip_y + 1,
+        TextStyle::Bold,
+        if view.player.bombs > 0 { ORANGE } else { FOG },
+    );
+    if has_scanner {
+        let ready = scan == "READY";
+        let scan_width = ui_kit::text_width(&scan, TextStyle::Bold);
+        ui_kit::text_right(
+            draw,
+            &scan,
+            right,
+            chip_y + 1,
+            TextStyle::Bold,
+            if ready { MINT } else { FOG },
+        );
+        ui_kit::icon(
+            draw,
+            &icons::SCANNER,
+            right - scan_width - icons::ICON_SIZE - 2,
+            chip_y,
+        );
+    }
+}
+
+/// How long a message stays on screen as a toast, in shell ticks.
+const TOAST_TICKS: u64 = 240;
+
+/// The latest shell message as a toast near the bottom of the screen (receipts, saves,
+/// refusals), for a few seconds after it changes. Beside the counter dialog inside buildings.
+pub(super) fn draw_toast(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
+    use crate::shell::RunMode;
+    if shell.message.is_empty()
+        || !matches!(
+            shell.run_mode,
+            RunMode::Playing | RunMode::Interior | RunMode::Paused
+        )
+    {
+        return;
+    }
+    let age = shell.update_ticks.saturating_sub(shell.message_tick);
+    if age >= TOAST_TICKS {
+        return;
+    }
+    let canvas = ui_kit::canvas();
+    let left = if shell.run_mode == RunMode::Interior && shell.modal.is_some() {
+        (canvas.width as f32 * 0.52).clamp(250.0, 330.0) as i32 + 16
+    } else {
+        0
+    };
+    let area = canvas.width - left;
+    let max_width = (area - 24).min(300);
+    if max_width < 80 {
+        return;
+    }
+    let lowered = shell.message.to_lowercase();
+    let warning = [
+        "unavailable",
+        "not enough",
+        "no cargo",
+        "no contract",
+        "failed",
+        "could not",
+        "not a",
+        "refused",
+        "cannot",
+    ]
+    .iter()
+    .any(|word| lowered.contains(word));
+    let icon: &SpriteDef = if warning {
+        &icons::WARNING
+    } else if lowered.contains("save") || lowered.contains("load") {
+        &super::pixel_art::sprites::menu_icons::DISK
+    } else if lowered.contains("credit") || lowered.contains(" cr") || lowered.contains("bought") {
+        &icons::CREDITS
+    } else {
+        &super::pixel_art::sprites::menu_icons::LETTER
+    };
+    let lines = ui_kit::wrap(&shell.message, max_width - 26, TextStyle::Body);
+    let lines = &lines[..lines.len().min(3)];
+    let text_width = lines
+        .iter()
+        .map(|line| ui_kit::text_width(line, TextStyle::Body))
+        .max()
+        .unwrap_or(0);
+    let width = text_width + 26;
+    let height = i32::try_from(lines.len()).unwrap_or(1) * TextStyle::Body.line_height() + 10;
+    // Slides up into place over its first few frames.
+    let rise = i32::try_from(8_u64.saturating_sub(age)).unwrap_or(0);
+    let x = left + (area - width) / 2;
+    let y = canvas.height - height - 28 + rise;
+    ui_kit::panel(
+        draw,
+        Rectangle::new(x as f32, y as f32, width as f32, height as f32),
+        if warning {
+            PanelStyle::Warning
+        } else {
+            PanelStyle::Accent
+        },
+    );
+    ui_kit::icon(draw, icon, x + 6, y + (height - icons::ICON_SIZE) / 2);
+    for (index, line) in lines.iter().enumerate() {
+        let row = i32::try_from(index).unwrap_or(0);
+        ui_kit::text(
+            draw,
+            line,
+            x + 20,
+            y + 5 + row * TextStyle::Body.line_height(),
+            TextStyle::Body,
+            BONE,
+        );
     }
 }
 
@@ -407,16 +556,12 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Repair => counters::draw_repair(draw, ui),
         ModalScreen::FuelConfirm => counters::draw_fuel_confirm(draw, ui),
         ModalScreen::RepairConfirm => counters::draw_repair_confirm(draw, ui),
-        ModalScreen::ExitConfirm => draw_confirm_modal_ui(
-            draw,
-            "Exit to Desktop?",
-            "Enter/E exits. Esc returns to the game.",
-        ),
-        ModalScreen::UnsavedExitConfirm => draw_unsaved_exit_confirm_ui(draw, ui),
+        ModalScreen::ExitConfirm => menus::draw_exit_confirm(draw),
+        ModalScreen::UnsavedExitConfirm => menus::draw_unsaved_exit_confirm(draw, ui),
         ModalScreen::Shop => counters::draw_shop(draw, ui),
-        ModalScreen::Options => draw_options_ui(draw, ui),
-        ModalScreen::SaveSlots => draw_slots_ui(draw, ui, true),
-        ModalScreen::LoadSlots => draw_slots_ui(draw, ui, false),
+        ModalScreen::Options => menus::draw_options(draw, ui),
+        ModalScreen::SaveSlots => menus::draw_slots(draw, ui, true),
+        ModalScreen::LoadSlots => menus::draw_slots(draw, ui, false),
         ModalScreen::Bank => counters::draw_bank(draw, ui),
         ModalScreen::Explosives => counters::draw_explosives(draw, ui),
         ModalScreen::Salvage => counters::draw_salvage(draw, ui),
@@ -428,123 +573,6 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Inventory => draw_inventory_ui(draw, ui),
         ModalScreen::Map => draw_map_ui(draw, ui),
         ModalScreen::Help => draw_help_ui(draw),
-    }
-}
-
-fn draw_confirm_modal_ui(draw: &mut RaylibDrawHandle<'_>, title: &str, body: &str) {
-    UiLayout::screen(draw).modal_with_render_plan(
-        title,
-        "Enter/E confirms | Esc closes",
-        &ModalContent::new(vec![Section::new(
-            "Confirm",
-            GOLD,
-            vec![SectionItem::text(body)],
-        )])
-        .compact(),
-    );
-}
-
-fn draw_unsaved_exit_confirm_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    draw_option_modal(
-        draw,
-        ui,
-        "Unsaved Progress",
-        "Choose what to do before leaving the game.",
-        &["Save and exit", "Exit without saving", "Cancel"],
-    );
-}
-
-fn draw_options_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let options = [
-        format!("Master volume: {:.0}%", ui.shell.master_volume * 100.0),
-        format!(
-            "Fullscreen: {}",
-            if ui.shell.fullscreen { "on" } else { "off" }
-        ),
-        "Back".to_owned(),
-    ];
-    draw_owned_option_modal(
-        draw,
-        ui,
-        "Options",
-        "Up/Down select | Left/Right adjust | Esc close",
-        &options,
-    );
-}
-
-fn draw_slots_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, saving: bool) {
-    let options = (0..save_slot_count())
-        .map(|slot| {
-            save_slot_metadata(slot).map_or_else(
-                || format!("Slot {} — empty", slot + 1),
-                |metadata| {
-                    format!(
-                        "Slot {} — depth {}m, {} credits",
-                        slot + 1,
-                        metadata.depth,
-                        metadata.credits
-                    )
-                },
-            )
-        })
-        .collect::<Vec<_>>();
-    draw_owned_option_modal(
-        draw,
-        ui,
-        if saving { "Save Game" } else { "Load Game" },
-        "Up/Down select | Enter/E confirm | Esc close",
-        &options,
-    );
-}
-
-fn draw_option_modal(
-    draw: &mut RaylibDrawHandle<'_>,
-    ui: &UiFrame<'_, '_>,
-    title: &str,
-    help: &str,
-    options: &[&str],
-) {
-    let owned = options
-        .iter()
-        .map(|option| (*option).to_owned())
-        .collect::<Vec<_>>();
-    draw_owned_option_modal(draw, ui, title, help, &owned);
-}
-
-fn draw_owned_option_modal(
-    draw: &mut RaylibDrawHandle<'_>,
-    ui: &UiFrame<'_, '_>,
-    title: &str,
-    help: &str,
-    options: &[String],
-) {
-    let items = options
-        .iter()
-        .enumerate()
-        .map(|(index, option)| {
-            SectionItem::stat(
-                selected_label(index == ui.shell.selected_menu_item, option),
-                "",
-                if index == ui.shell.selected_menu_item {
-                    GOLD
-                } else {
-                    BONE
-                },
-            )
-        })
-        .collect();
-    UiLayout::screen(draw).modal_with_render_plan(
-        title,
-        help,
-        &ModalContent::new(vec![Section::new("Options", SKY_LIGHT, items)]).compact(),
-    );
-}
-
-fn selected_label(selected: bool, label: &str) -> String {
-    if selected {
-        format!("> {label}")
-    } else {
-        format!("  {label}")
     }
 }
 
@@ -767,252 +795,4 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
             ),
         ]),
     );
-}
-
-pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let mut items = PauseOption::for_role(ui.shell.online.role)
-        .iter()
-        .enumerate()
-        .map(|(index, option)| {
-            SectionItem::stat(
-                selected_label(index == ui.shell.selected_pause_item, option.label()),
-                "",
-                if index == ui.shell.selected_pause_item {
-                    GOLD
-                } else {
-                    BONE
-                },
-            )
-        })
-        .collect::<Vec<_>>();
-    items.push(SectionItem::text(format!(
-        "Depth {}m | {} credits | hull {:.0}/{:.0} | fuel {:.0}/{:.0}",
-        (ui.player.y / TILE_SIZE).max(0.0) as i32,
-        ui.player.credits,
-        ui.player.hull,
-        ui.player.max_hull(),
-        ui.player.fuel,
-        ui.player.fuel_capacity
-    )));
-    if ui.snapshot.won_game {
-        items.push(SectionItem::text(
-            "Star Core secured. Deep Claim operations are open.",
-        ));
-    }
-    UiLayout::screen(draw).modal_with_render_plan(
-        "Paused",
-        "Up/Down select | Enter/E confirm | Esc resume",
-        &ModalContent::new(vec![Section::new("Menu", SKY_LIGHT, items)]).compact(),
-    );
-}
-
-pub(super) fn draw_game_over(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    UiLayout::screen(draw).modal_with_render_plan(
-        "Emergency",
-        "Press E to pay the rescue fee and return to base.",
-        &ModalContent::new(vec![Section::new(
-            "Status",
-            RED,
-            vec![
-                SectionItem::text(match ui.view.failure {
-                    Some(failure) if failure.disabled => {
-                        "Your rig's hull gave out. Call the rescue crew.".to_owned()
-                    }
-                    Some(_) => "Your rig is out of fuel. Call the rescue crew.".to_owned(),
-                    None => ui.shell.message.clone(),
-                }),
-                SectionItem::stat("Rescues called", ui.view.rescue_count.to_string(), MIST),
-            ],
-        )])
-        .warning()
-        .compact(),
-    );
-}
-
-fn option_items(options: &[String], selected: usize) -> Vec<SectionItem> {
-    options
-        .iter()
-        .enumerate()
-        .map(|(index, option)| {
-            SectionItem::stat(
-                selected_label(index == selected, option),
-                "",
-                if index == selected { GOLD } else { BONE },
-            )
-        })
-        .collect()
-}
-
-/// Lobby roster rows shown before the rest condense into a count, so any player count fits
-/// (plan §15).
-const MAX_ROSTER_ROWS: usize = 10;
-
-/// Online screens: join forms, LAN list, lobby roster and session notices. Drawn without a
-/// world view (a joining client has no rig until the host's welcome arrives).
-#[allow(
-    clippy::too_many_lines,
-    reason = "one screen per online state keeps the online UI in one place"
-)]
-pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
-    let online = &shell.online;
-    let host = online.role == Some(OnlineRole::Host);
-    let (title, help, sections) = match online.screen {
-        OnlineScreen::JoinMenu => (
-            "Join Online Game".to_owned(),
-            "Up/Down select | Enter/E confirm | Esc back",
-            vec![Section::new(
-                "Join",
-                SKY_LIGHT,
-                option_items(
-                    &JOIN_MENU
-                        .iter()
-                        .map(|label| (*label).to_owned())
-                        .collect::<Vec<_>>(),
-                    online.selected,
-                ),
-            )],
-        ),
-        OnlineScreen::JoinAddress => (
-            "Join by Address".to_owned(),
-            "Type the host's ip:port | Enter join | Backspace delete | Esc back",
-            vec![Section::new(
-                "Host address",
-                SKY_LIGHT,
-                vec![
-                    SectionItem::stat(format!("{}_", online.text), "", GOLD),
-                    SectionItem::text(
-                        "Direct-IP joins are encrypted but do not authenticate the host; use a descriptor to pin its certificate.",
-                    ),
-                ],
-            )],
-        ),
-        OnlineScreen::JoinDescriptor => {
-            let preview: String = online.text.chars().take(64).collect();
-            (
-                "Join by Descriptor".to_owned(),
-                "Ctrl+V paste the host's descriptor | Enter join | Backspace delete | Esc back",
-                vec![Section::new(
-                    "Descriptor",
-                    SKY_LIGHT,
-                    vec![if online.text.is_empty() {
-                        SectionItem::text(
-                            "The host copies it from its lobby (\"Copy descriptor to clipboard\").",
-                        )
-                    } else {
-                        SectionItem::stat(
-                            format!("{preview}..."),
-                            format!("{} characters", online.text.len()),
-                            GOLD,
-                        )
-                    }],
-                )],
-            )
-        }
-        OnlineScreen::LanBrowser => {
-            let mut items = vec![SectionItem::text(online.lan_status.clone())];
-            items.extend(option_items(&online.lan_options(), online.selected));
-            (
-                "LAN Games".to_owned(),
-                "Up/Down select | Enter/E join | Esc back",
-                vec![Section::new("Discovered sessions", SKY_LIGHT, items)],
-            )
-        }
-        OnlineScreen::Lobby => {
-            let lobby = online.lobby.clone().unwrap_or_default();
-            let mut session = vec![SectionItem::text(lobby.status.clone())];
-            if let Some(addr) = lobby.addr {
-                session.push(SectionItem::stat("Address", addr.to_string(), GOLD));
-            }
-            if host {
-                session.push(SectionItem::stat(
-                    "LAN discovery",
-                    if lobby.lan_published {
-                        "advertised"
-                    } else {
-                        "not advertised"
-                    },
-                    MIST,
-                ));
-                session.push(SectionItem::stat(
-                    "Descriptor",
-                    if lobby.descriptor.is_some() {
-                        "ready to copy"
-                    } else {
-                        "pending"
-                    },
-                    MIST,
-                ));
-            }
-            if !shell.message.is_empty() {
-                session.push(SectionItem::text(shell.message.clone()));
-            }
-            let players = if lobby.roster.is_empty() {
-                vec![SectionItem::text("Waiting for the roster...")]
-            } else {
-                let hidden = lobby.roster.len().saturating_sub(MAX_ROSTER_ROWS);
-                let mut rows: Vec<SectionItem> = lobby
-                    .roster
-                    .iter()
-                    .take(MAX_ROSTER_ROWS)
-                    .map(|entry| {
-                        let mut name = entry.name.clone();
-                        if lobby.local_player == Some(entry.player) {
-                            name.push_str(" (you)");
-                        } else if entry.local {
-                            name.push_str(" (host)");
-                        }
-                        let (state, color) = if !entry.connected {
-                            ("disconnected", ORANGE)
-                        } else if entry.local || entry.ready {
-                            ("ready", LIME)
-                        } else {
-                            ("not ready", MIST)
-                        };
-                        SectionItem::stat(name, state, color)
-                    })
-                    .collect();
-                if hidden > 0 {
-                    rows.push(SectionItem::text(format!("... and {hidden} more")));
-                }
-                rows
-            };
-            let options: Vec<String> = online
-                .lobby_options()
-                .iter()
-                .map(|action| action.label(host).to_owned())
-                .collect();
-            (
-                if host {
-                    "Hosting Online Game".to_owned()
-                } else {
-                    "Online Lobby".to_owned()
-                },
-                if lobby.started {
-                    "Up/Down select | Enter/E confirm | Esc back to the game"
-                } else {
-                    "Up/Down select | Enter/E confirm"
-                },
-                vec![
-                    Section::new("Session", SKY_LIGHT, session),
-                    Section::new(format!("Players ({})", lobby.roster.len()), GOLD, players),
-                    Section::new("Menu", SKY_LIGHT, option_items(&options, online.selected)),
-                ],
-            )
-        }
-        OnlineScreen::Notice => {
-            let options: Vec<String> = online
-                .notice_options()
-                .iter()
-                .map(|action| action.label().to_owned())
-                .collect();
-            let mut items = vec![SectionItem::text(online.notice.clone())];
-            items.extend(option_items(&options, online.selected));
-            (
-                "Online Session".to_owned(),
-                "Up/Down select | Enter/E confirm | Esc title",
-                vec![Section::new("Session over", ORANGE, items)],
-            )
-        }
-    };
-    UiLayout::screen(draw).modal_with_render_plan(&title, help, &ModalContent::new(sections));
 }
