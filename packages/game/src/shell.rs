@@ -484,6 +484,8 @@ pub struct ShellState {
     pub interior_facing: f32,
     pub master_volume: f32,
     pub fullscreen: bool,
+    /// Windowed size/maximized state, kept current by the desktop app and persisted with settings.
+    pub window: save::WindowSettings,
     pub settings_dirty: bool,
     pub save_dirty: bool,
     pub request_exit: bool,
@@ -523,6 +525,7 @@ impl ShellState {
             interior_facing: 1.0,
             master_volume: settings.master_volume,
             fullscreen: settings.fullscreen,
+            window: settings.window,
             settings_dirty: false,
             save_dirty: false,
             request_exit: false,
@@ -544,6 +547,7 @@ impl ShellState {
         save::SettingsFile {
             master_volume: self.master_volume,
             fullscreen: self.fullscreen,
+            window: self.window,
         }
     }
 

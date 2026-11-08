@@ -31,6 +31,9 @@ pub const SAVE_VERSION: u32 = 5;
 pub struct SettingsFile {
     pub master_volume: f32,
     pub fullscreen: bool,
+    /// Windowed size and maximized state; missing in settings written before it existed.
+    #[serde(default)]
+    pub window: WindowSettings,
 }
 
 impl Default for SettingsFile {
@@ -38,6 +41,26 @@ impl Default for SettingsFile {
         Self {
             master_volume: 0.8,
             fullscreen: false,
+            window: WindowSettings::default(),
+        }
+    }
+}
+
+/// The desktop window's restored (non-maximized, non-fullscreen) size in logical screen points,
+/// and whether it was maximized.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct WindowSettings {
+    pub width: i32,
+    pub height: i32,
+    pub maximized: bool,
+}
+
+impl Default for WindowSettings {
+    fn default() -> Self {
+        Self {
+            width: crate::render_snapshot::SCREEN_WIDTH,
+            height: crate::render_snapshot::SCREEN_HEIGHT,
+            maximized: false,
         }
     }
 }
@@ -353,6 +376,31 @@ mod tests {
 
     fn player(save: &WorldSave) -> &drillgame_simulation::Player {
         save.world.player(LEGACY_PLAYER_ID).expect("legacy rig")
+    }
+
+    #[test]
+    fn settings_without_window_state_keep_their_values() {
+        let settings: SettingsFile =
+            serde_json::from_str(r#"{"master_volume":0.25,"fullscreen":true}"#)
+                .expect("old settings parse");
+        assert!((settings.master_volume - 0.25).abs() < f32::EPSILON);
+        assert!(settings.fullscreen);
+        assert_eq!(settings.window, WindowSettings::default());
+
+        let round_trip: SettingsFile = serde_json::from_str(
+            &serde_json::to_string(&SettingsFile {
+                window: WindowSettings {
+                    width: 1600,
+                    height: 900,
+                    maximized: true,
+                },
+                ..SettingsFile::default()
+            })
+            .expect("serialize"),
+        )
+        .expect("parse");
+        assert_eq!(round_trip.window.width, 1600);
+        assert!(round_trip.window.maximized);
     }
 
     #[test]
