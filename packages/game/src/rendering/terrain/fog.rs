@@ -17,7 +17,9 @@
 use drillgame_simulation::{DiscoveredTiles, terrain::TilePosition};
 
 use crate::rendering::pixel_art::palette::INK;
-use crate::rendering::pixel_art::shade::{PaletteIndex, TRANSPARENT, bayer4, darker_by, index_of};
+use crate::rendering::pixel_art::shade::{
+    PaletteIndex, TRANSPARENT, bayer4, darker_by, index_of, steps_to_ink,
+};
 
 use super::tile_art::{SKY_MAX_TILE_Y, TILE_ART};
 
@@ -187,6 +189,13 @@ impl DarknessGrid {
     }
 }
 
+/// Dither levels the darkness range is split into.
+const DARK_LEVELS: f32 = 5.0;
+/// Level at which every colour has reached `INK`. Ramps are walked in proportion to their length,
+/// so a bright ore colour (seven steps from `INK`) goes black at the same darkness as dirt (three
+/// steps) instead of glowing through fog that already hides the ground around it.
+const INK_LEVEL: f32 = 3.0;
+
 /// `index` seen through `darkness` (0..255) at art pixel `(x, y)`: dithered steps down its ramp,
 /// ending in `INK`.
 #[must_use]
@@ -194,11 +203,13 @@ pub fn apply(index: PaletteIndex, darkness: f32, x: i32, y: i32) -> PaletteIndex
     if index == TRANSPARENT || darkness <= 0.5 {
         return index;
     }
-    let level = (darkness / 255.0).mul_add(5.0, f32::from(bayer4(x, y)) / 16.0) as u8;
-    if level >= 5 {
+    let level = (darkness / 255.0).mul_add(DARK_LEVELS, f32::from(bayer4(x, y)) / 16.0);
+    let ramp = steps_to_ink(index);
+    let steps = (level * f32::from(ramp) / INK_LEVEL) as u8;
+    if steps >= ramp {
         index_of(INK)
     } else {
-        darker_by(index, level)
+        darker_by(index, steps)
     }
 }
 
@@ -269,5 +280,20 @@ mod tests {
         );
         assert_eq!(apply(lit, 255.0, 3, 2), index_of(INK));
         assert_eq!(apply(lit, 0.0, 3, 2), lit);
+    }
+
+    #[test]
+    fn bright_colours_go_black_no_later_than_dirt() {
+        use crate::rendering::pixel_art::palette::{CREAM, SOIL};
+        for darkness in (0..=255u8).step_by(5) {
+            for (x, y) in [(0, 0), (1, 2), (3, 1), (2, 3)] {
+                let dirt_black = apply(index_of(SOIL), f32::from(darkness), x, y) == index_of(INK);
+                let ore_black = apply(index_of(CREAM), f32::from(darkness), x, y) == index_of(INK);
+                assert!(
+                    !dirt_black || ore_black,
+                    "darkness {darkness} at ({x}, {y})"
+                );
+            }
+        }
     }
 }

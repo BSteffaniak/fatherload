@@ -122,6 +122,18 @@ pub fn darker_by(mut index: PaletteIndex, steps: u8) -> PaletteIndex {
     index
 }
 
+/// How many [`darker`] steps take `index` to `INK` (0 for `INK` and [`TRANSPARENT`]).
+#[must_use]
+pub fn steps_to_ink(mut index: PaletteIndex) -> u8 {
+    let ink = index_of(INK);
+    let mut steps = 0;
+    while index != ink && usize::from(index) < PALETTE.len() {
+        index = darker(index);
+        steps += 1;
+    }
+    steps
+}
+
 /// The 4x4 ordered-dither threshold at `(x, y)`, in `0..16`.
 #[must_use]
 pub const fn bayer4(x: i32, y: i32) -> u8 {
@@ -132,6 +144,14 @@ pub const fn bayer4(x: i32, y: i32) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn steps_to_ink_follows_the_ramps() {
+        assert_eq!(steps_to_ink(index_of(INK)), 0);
+        assert_eq!(steps_to_ink(TRANSPARENT), 0);
+        assert_eq!(steps_to_ink(index_of(SOIL)), 3);
+        assert_eq!(steps_to_ink(index_of(CREAM)), 7);
+    }
 
     #[test]
     fn every_colour_darkens_to_ink() {
