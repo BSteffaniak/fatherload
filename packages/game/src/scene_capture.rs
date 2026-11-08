@@ -15,6 +15,7 @@ use drillgame_netcode::{LobbyEntry, PlayerId as NetPlayerId};
 use drillgame_simulation::{
     Discovery, PlayerId, WorldState,
     economy::SurfaceZone,
+    surface::SURFACE_BUILDINGS,
     terrain::{MineralKind, TILE_SIZE, TileKind, TilePosition},
 };
 use raylib::ffi;
@@ -254,6 +255,19 @@ impl SceneStage<'_> {
         }
     }
 
+    /// Runs `frames` frames with every seat holding its input in `inputs` (seat order).
+    fn hold_seats(&mut self, frames: usize, inputs: &[PlayerInput]) {
+        let frame = FrameInput {
+            primary: inputs.first().copied().unwrap_or_default(),
+            other_seats: inputs.iter().skip(1).copied().collect(),
+            ..FrameInput::default()
+        };
+        for _ in 0..frames {
+            let report = self.game.frame(&frame, FRAME_SECONDS);
+            self.absorb(report);
+        }
+    }
+
     /// Runs `frames` idle frames (the world ticks while playing).
     fn settle(&mut self, frames: usize) {
         self.hold(frames, PlayerInput::default());
@@ -317,6 +331,10 @@ const PLAYSTATION: InputDevice = InputDevice::Gamepad {
     index: 1,
     family: PadFamily::PlayStation,
 };
+/// The split-screen WASD keyboard seat.
+const WASD: InputDevice = InputDevice::Keyboard(KeyboardLayout::Wasd);
+/// The split-screen arrow-keys keyboard seat.
+const ARROWS: InputDevice = InputDevice::Keyboard(KeyboardLayout::Arrows);
 /// A Nintendo controller.
 const NINTENDO: InputDevice = InputDevice::Gamepad {
     index: 2,
@@ -753,6 +771,171 @@ pub const SCENES: &[Scene] = &[
                 }
             });
             stage.settle(20);
+        },
+    },
+    Scene {
+        name: "split_shop_mining",
+        summary: "Split-screen: player 1 drilling underground while player 2 buys at the shop counter",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                let miner = seats[0].player;
+                sink_rig(world, miner, 112, 14);
+                if let Some(rig) = world.player_mut(miner) {
+                    load_cargo(rig);
+                }
+                if let Some(shopper) = seats.get(1) {
+                    park_at(world, shopper.player, SurfaceZone::Shop);
+                    if let Some(rig) = world.player_mut(shopper.player) {
+                        rig.credits = 1_260;
+                    }
+                }
+            });
+            put_seat_inside(stage, 1, SurfaceZone::Shop, Some(ModalScreen::Shop));
+            stage.seat(1).selected_menu_item = 1;
+            stage.use_devices(&[WASD, ARROWS]);
+            // The world keeps running for the miner while the shopper browses.
+            stage.hold_seats(
+                40,
+                &[
+                    PlayerInput {
+                        drill_down: true,
+                        ..PlayerInput::default()
+                    },
+                    PlayerInput::default(),
+                ],
+            );
+            "Bought Carbide Drill.".clone_into(&mut stage.seat(1).message);
+            stage.settle(12);
+        },
+    },
+    Scene {
+        name: "split_two_interiors",
+        summary: "Split-screen: player 1 at the depot counter, player 2 walking through the fuel station",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_at(world, seats[0].player, SurfaceZone::Depot);
+                if let Some(rig) = world.player_mut(seats[0].player) {
+                    load_cargo(rig);
+                    rig.credits = 640;
+                }
+                if let Some(second) = seats.get(1) {
+                    park_at(world, second.player, SurfaceZone::Fuel);
+                }
+            });
+            stage.settle(5);
+            put_seat_inside(stage, 0, SurfaceZone::Depot, Some(ModalScreen::Depot));
+            put_seat_inside(stage, 1, SurfaceZone::Fuel, None);
+            stage.seat(1).interior_x = interior_service_x(SurfaceZone::Fuel) - 40.0;
+            stage.use_devices(&[WASD, ARROWS]);
+        },
+    },
+    Scene {
+        name: "split_four_mixed",
+        summary: "Four seats: depot counter, shop counter, one rig on the surface and one digging",
+        setup: |stage| {
+            stage.play(4, |world, seats| {
+                park_at(world, seats[0].player, SurfaceZone::Depot);
+                if let Some(rig) = world.player_mut(seats[0].player) {
+                    load_cargo(rig);
+                }
+                park_at(world, seats[1].player, SurfaceZone::Shop);
+                if let Some(rig) = world.player_mut(seats[1].player) {
+                    rig.credits = 2_400;
+                }
+                park_rig(world, seats[2].player, 104, 4);
+                sink_rig(world, seats[3].player, 118, 12);
+                // Terrain fog follows the first seat's discoveries (see `split_screen`).
+                reveal(world, seats[0].player, 110..127, 4..20);
+            });
+            stage.settle(10);
+            put_seat_inside(stage, 0, SurfaceZone::Depot, Some(ModalScreen::Depot));
+            put_seat_inside(stage, 1, SurfaceZone::Shop, Some(ModalScreen::Shop));
+            stage.use_devices(&[WASD, ARROWS, XBOX, PLAYSTATION]);
+        },
+    },
+    Scene {
+        name: "split_pad_counters",
+        summary: "Split-screen counters side by side: keyboard prompts for player 1, Xbox for player 2",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_at(world, seats[0].player, SurfaceZone::Repair);
+                if let Some(rig) = world.player_mut(seats[0].player) {
+                    rig.hull = rig.max_hull() * 0.45;
+                    rig.credits = 900;
+                }
+                if let Some(second) = seats.get(1) {
+                    park_at(world, second.player, SurfaceZone::Explosives);
+                    if let Some(rig) = world.player_mut(second.player) {
+                        rig.credits = 300;
+                    }
+                }
+            });
+            stage.settle(5);
+            put_seat_inside(stage, 0, SurfaceZone::Repair, Some(ModalScreen::Repair));
+            put_seat_inside(
+                stage,
+                1,
+                SurfaceZone::Explosives,
+                Some(ModalScreen::Explosives),
+            );
+            stage.use_devices(&[WASD, XBOX]);
+        },
+    },
+    Scene {
+        name: "split_personal_dialogs",
+        summary: "Split-screen: player 1 reading the inventory, player 2 the map, each in their own view",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                sink_rig(world, seats[0].player, 97, 14);
+                if let Some(rig) = world.player_mut(seats[0].player) {
+                    load_cargo(rig);
+                }
+                if let Some(second) = seats.get(1) {
+                    sink_rig(world, second.player, 112, 20);
+                    reveal(world, second.player, 100..125, 4..24);
+                    reveal(world, seats[0].player, 100..125, 4..24);
+                }
+            });
+            stage.settle(10);
+            stage.seat(0).modal = Some(ModalScreen::Inventory);
+            stage.seat(1).modal = Some(ModalScreen::Map);
+            stage.use_devices(&[WASD, XBOX]);
+        },
+    },
+    Scene {
+        name: "split_room_prompts",
+        summary: "Split-screen rooms: player 1 at the bank counter (arrow keys), player 2 at the HQ door (PlayStation)",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_at(world, seats[0].player, SurfaceZone::Bank);
+                if let Some(second) = seats.get(1) {
+                    park_at(world, second.player, SurfaceZone::Headquarters);
+                }
+            });
+            stage.settle(5);
+            put_seat_inside(stage, 0, SurfaceZone::Bank, None);
+            put_seat_inside(stage, 1, SurfaceZone::Headquarters, None);
+            stage.seat(1).interior_x = 60.0;
+            stage.use_devices(&[ARROWS, PLAYSTATION]);
+        },
+    },
+    Scene {
+        name: "split_pause",
+        summary: "The shared pause menu opened by player 2 (arrow keys) over both views",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                park_at(world, seats[0].player, SurfaceZone::Depot);
+                if let Some(second) = seats.get(1) {
+                    sink_rig(world, second.player, 112, 10);
+                    reveal(world, seats[0].player, 104..121, 4..16);
+                }
+            });
+            stage.settle(10);
+            put_seat_inside(stage, 0, SurfaceZone::Depot, Some(ModalScreen::Depot));
+            stage.use_devices(&[WASD, ARROWS]);
+            let shell = stage.shell();
+            shell.run_mode = RunMode::Paused;
+            shell.menu_seat = 1;
         },
     },
     Scene {
@@ -1204,6 +1387,15 @@ fn load_cargo(rig: &mut drillgame_simulation::Player) {
     ] {
         rig.cargo.insert(mineral, count);
     }
+}
+
+/// Parks the rig on the surface at `zone`'s door.
+fn park_at(world: &mut WorldState, player: PlayerId, zone: SurfaceZone) {
+    let tile_x = SURFACE_BUILDINGS
+        .iter()
+        .find(|building| building.zone == zone)
+        .map_or(97, |building| building.tile_x + 2);
+    park_rig(world, player, tile_x, 4);
 }
 
 /// Puts the rig centred on tile `(x, y)` at rest, clearing that tile.
