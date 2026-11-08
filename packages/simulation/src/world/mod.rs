@@ -27,6 +27,9 @@ mod hazards;
 mod import;
 mod movement;
 mod progression;
+mod replication;
+#[cfg(test)]
+mod replication_tests;
 mod rescue;
 mod simulate;
 mod state_hash;
@@ -36,6 +39,11 @@ mod tests;
 mod tick_rate_tests;
 mod timing;
 
+pub use replication::{
+    ContractsSection, EconomySection, LiveEntities, MarkersSection, PlayerInventory, PlayerLoadout,
+    PlayerRig, PlayerTickState, ProgressionSection, SectionKey, SectionPayload, SessionSection,
+    TimersSection, WorldEventsSection, hash_serialized, join_player, split_player,
+};
 pub use timing::TickTiming;
 
 pub use commands::authoritative_mine_target;
@@ -54,10 +62,11 @@ pub use movement::{
     AUTHORITATIVE_PLAYER_RADIUS, AUTHORITATIVE_SAFE_LANDING_SPEED,
     AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES, AUTHORITATIVE_THRUST_SPEED, AuthoritativeMovementStep,
 };
+/// Tick deadline of a rig's next drill chip.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
-struct ActiveDrillTimer {
-    next_chip_tick: SimulationTick,
-    period_ticks: u64,
+pub struct ActiveDrillTimer {
+    pub next_chip_tick: SimulationTick,
+    pub period_ticks: u64,
 }
 
 const fn canonical_minerals() -> [MineralKind; 10] {
@@ -90,10 +99,11 @@ const fn canonical_mineral_market_factor(salt: u32, day: u32, mineral: MineralKi
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
-struct DeepRunState {
-    trip_ticks: u64,
-    instability: f32,
+/// Pressure accumulated by a rig on a deep run.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct DeepRunState {
+    pub trip_ticks: u64,
+    pub instability: f32,
 }
 
 /// Cargo dropped by a rescued rig, recoverable by returning to the drop site.

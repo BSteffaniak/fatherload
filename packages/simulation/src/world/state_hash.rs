@@ -15,6 +15,7 @@ impl WorldState {
         hash.write_serialized(&self.timing);
         hash.write_serialized(&self.player_template);
         hash.write_u64(self.simulation_tick.get());
+        hash.write_serialized(&self.authoritative_summary);
         hash.write_u64(u64::try_from(self.players.len()).unwrap_or(u64::MAX));
         for (player_id, player) in &self.players {
             hash.write_u64(player_id.get());
@@ -78,9 +79,7 @@ impl WorldState {
         hash.write_i32(self.terrain.height());
         hash.write_u64(self.terrain.seed());
         hash.write_u64(u64::try_from(self.terrain.tiles().len()).unwrap_or(u64::MAX));
-        for tile in self.terrain.tiles() {
-            hash.write_serialized(tile);
-        }
+        hash.write_u64(self.terrain.digest());
         hash.write_u64(u64::try_from(self.hazards.len()).unwrap_or(u64::MAX));
         for hazard in &self.hazards {
             hash.write_f32(hazard.x);

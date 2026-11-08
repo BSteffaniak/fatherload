@@ -60,6 +60,7 @@ pub use tick::{
     DEFAULT_TICK_RATE_HZ, FIXED_DELTA_SECONDS, SIMULATION_HZ, SimulationParams, TickRate,
 };
 pub use world::{
-    AuthoritativeMovementStep, CanonicalProgressionState, LostCargoSite, TickTiming, WorldImport,
-    WorldState,
+    ActiveDrillTimer, AuthoritativeMovementStep, CanonicalProgressionState, DeepRunState,
+    LiveEntities, LostCargoSite, PlayerLoadout, PlayerTickState, SectionKey, SectionPayload,
+    TickTiming, WorldImport, WorldState,
 };

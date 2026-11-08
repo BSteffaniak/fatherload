@@ -11,7 +11,7 @@ const SECOND_PLAYER: PlayerId = PlayerId::new(2);
 const RUN_TICKS: u64 = 10_000;
 const HASH_EVERY_TICKS: u64 = 250;
 
-fn scripted_world() -> WorldState {
+pub(super) fn scripted_world() -> WorldState {
     let mut world = WorldState::new_game(FIRST_PLAYER);
     let mut second = Player::new(NEW_WORLD_SPAWN.0 + 96.0, NEW_WORLD_SPAWN.1);
     second.credits = 5_000;
@@ -29,7 +29,7 @@ fn scripted_world() -> WorldState {
 
 /// Deterministic bot script covering movement, drilling, bombs, scanning, infrastructure,
 /// economy transactions, and rescue for two rigs.
-fn scripted_commands(tick: u64, sequence: &mut u32) -> Vec<SequencedPlayerCommand> {
+pub(super) fn scripted_commands(tick: u64, sequence: &mut u32) -> Vec<SequencedPlayerCommand> {
     let mut commands = Vec::new();
     for (index, player_id) in [FIRST_PLAYER, SECOND_PLAYER].into_iter().enumerate() {
         let phase = (tick + index as u64 * 137) % 600;
@@ -158,4 +158,25 @@ fn cloned_world_replays_identically_from_a_mid_run_snapshot() {
 
     assert_eq!(continued.checkpoints, replayed.checkpoints);
     assert_eq!(continued.outputs, replayed.outputs);
+}
+
+#[test]
+fn scripted_run_is_deterministic_at_other_tick_rates() {
+    for hz in [30_u32, 120] {
+        let world = || {
+            let mut world = scripted_world();
+            let mut fresh =
+                WorldState::new_game_with_params(FIRST_PLAYER, crate::SimulationParams::new(hz));
+            for (player_id, player) in world.players() {
+                fresh.insert_player(*player_id, player.clone());
+            }
+            world = fresh;
+            world
+        };
+        let first = run(world(), 0, 2_000);
+        let second = run(world(), 0, 2_000);
+        assert_eq!(first.checkpoints, second.checkpoints, "{hz} Hz");
+        assert_eq!(first.outputs, second.outputs, "{hz} Hz");
+        assert_eq!(first.final_world.tick_rate_hz(), hz);
+    }
 }

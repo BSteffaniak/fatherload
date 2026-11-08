@@ -16,3 +16,6 @@ fail-on-warnings = []
 
 [dependencies]
 serde = { workspace = true }
+
+[dev-dependencies]
+postcard = { workspace = true }
