@@ -53,6 +53,9 @@ const DOOR_REACH: f32 = 74.0;
 /// Counter width in art pixels.
 const COUNTER_WIDTH: i32 = 76;
 const COUNTER_HEIGHT: i32 = 24;
+/// Leftmost room x for the sign board. Counter dialogs dock on the left and end around room
+/// x 169 at 16:9 sizes, so a long sign shifts right instead of disappearing under the dialog.
+const SIGN_MIN_X: i32 = 174;
 
 /// Where the room canvas sits in the framebuffer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -412,7 +415,9 @@ fn room_sprite(
 fn draw_sign(draw: &mut impl RaylibDraw, zone: SurfaceZone, set: &InteriorSet, counter_x: i32) {
     let label = sign_text(zone);
     let width = ui_kit::text_width(label, TextStyle::Bold) + 14;
-    let x = counter_x + COUNTER_WIDTH / 2 - width / 2;
+    let x = (counter_x + COUNTER_WIDTH / 2 - width / 2)
+        .max(SIGN_MIN_X)
+        .min(ROOM_WIDTH - width - 4);
     let y = CEILING_Y + 32;
     // Hanging chains.
     draw.draw_rectangle(x + 4, CEILING_Y, 1, y - CEILING_Y, INK);

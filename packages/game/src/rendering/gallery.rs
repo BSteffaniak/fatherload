@@ -53,10 +53,13 @@ fn draw_palette(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32) {
         let (sx, sy) = (x + column * PITCH, y + row * (SWATCH + 4));
         draw.draw_rectangle(sx, sy, SWATCH + 2, SWATCH + 2, INK);
         draw.draw_rectangle(sx + 1, sy + 1, SWATCH, SWATCH, *color);
+        // Abbreviated so every label fits its column: "slate_dark" -> "slatedk".
         let short: String = name
+            .replace("_dark", "dk")
+            .replace("_light", "lt")
             .chars()
             .filter(|c| *c != '_')
-            .take(8)
+            .take(7)
             .collect::<String>()
             .to_lowercase();
         ui_kit::text_shadowed(

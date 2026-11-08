@@ -770,7 +770,7 @@ pub fn item_row(draw: &mut impl RaylibDraw, rect: Rectangle, row: &ItemRow<'_>) 
 
 /// Draws a row of tabs across the top of `rect`; returns the tab strip height.
 pub fn tabs(draw: &mut impl RaylibDraw, rect: Rectangle, labels: &[&str], selected: usize) -> i32 {
-    const TAB_HEIGHT: i32 = 15;
+    const TAB_HEIGHT: i32 = 17;
     let mut x = rect.x as i32 + 4;
     let y = rect.y as i32;
     for (index, label) in labels.iter().enumerate() {
@@ -798,7 +798,7 @@ pub fn tabs(draw: &mut impl RaylibDraw, rect: Rectangle, labels: &[&str], select
             draw,
             label,
             x + 7,
-            top + 4,
+            top + 3,
             TextStyle::Bold,
             if active { GOLD } else { FOG },
         );

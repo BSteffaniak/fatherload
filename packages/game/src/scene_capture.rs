@@ -517,7 +517,10 @@ pub const SCENES: &[Scene] = &[
                 park_rig(world, seats[0].player, 86, 4);
                 if let Some(second) = seats.get(1) {
                     sink_rig(world, second.player, 112, 16);
-                    reveal(world, second.player, 104..121, 10..23);
+                    reveal(world, second.player, 104..121, 4..23);
+                    // Terrain fog is drawn from the primary view's discoveries, so the first
+                    // player must know this area too or the second view renders black.
+                    reveal(world, seats[0].player, 104..121, 4..23);
                 }
             });
             stage.settle(20);
