@@ -47,7 +47,9 @@ Modules:
     arrow-keys scheme);
   - `gamepad` — the controller layout as one binding table (`PAD_BINDINGS`, Xbox names by
     position) and the pure `PadMapper` (sampled `PadState` -> `PlayerInput`: deadzone, edges,
-    stick + d-pad folded into one direction, menu auto-repeat from `repeat`);
+    stick + d-pad folded into one direction, menu auto-repeat from `repeat`; the right stick
+    (`SCROLL_AXIS`) scrolls dialogs in proportion to its deflection, as frame-time scaled
+    wheel notches in `PlayerInput::ui_scroll`);
   - `seats` — the seat policy: solo = keyboard + every pad; split-screen = WASD seat,
     arrow-keys seat, pads fill seats without one (keyboardless, then arrows, then WASD) whenever
     the seat count changes, a spare pad claims a free or new seat with A/Start, a pad keeps its
@@ -80,5 +82,6 @@ reconnect with the token after a dropped connection, and notices when the host e
 rejects the join, or the connection is lost. A running single-player game can be opened from the
 pause menu. Online pause is a local overlay (the world keeps running). Only the host saves (manual
 and a periodic autosave); joined clients cannot save or load. F3 toggles the network overlay; in
-dev builds F4 / Page Up / Page Down tune live `NetTuning` values on the host. The
+dev builds F4 / Page Up / Page Down tune live `NetTuning` values on the host while the overlay is
+open (otherwise Page Up / Page Down scroll dialogs; `ShellState::tuning_keys_active`). The
 `DRILLGAME_NET_SIM` link conditioner applies to every online session.
