@@ -29,6 +29,48 @@ fn world_state_applies_player_scoped_drilling_intent() {
 }
 
 #[test]
+fn drill_started_fires_once_per_new_drill_target() {
+    let mut world = WorldState::new_game(LOCAL_PLAYER_ID);
+    let drill = TickInputs::held(LOCAL_PLAYER_ID, ControlState::new(0.0, false, true));
+    let started = |output: &crate::TickOutput| {
+        output
+            .events
+            .iter()
+            .filter(|event| {
+                event.kind
+                    == crate::GameplayEventKind::DrillStarted {
+                        player_id: LOCAL_PLAYER_ID,
+                    }
+            })
+            .count()
+    };
+    let mut tick = world.simulation_tick();
+    let output = world.simulate_tick(tick, &drill);
+    assert_eq!(
+        started(&output),
+        1,
+        "holding drill on ground starts a drill"
+    );
+    let target = world
+        .active_drill(LOCAL_PLAYER_ID)
+        .map(|drill| drill.target);
+    // Keep drilling the same tile: no new start.
+    tick = tick.next();
+    let output = world.simulate_tick(tick, &drill);
+    assert_eq!(
+        world.active_drill(LOCAL_PLAYER_ID).map(|d| d.target),
+        target
+    );
+    assert_eq!(started(&output), 0);
+    // Releasing and pressing again restarts.
+    tick = tick.next();
+    let idle = TickInputs::held(LOCAL_PLAYER_ID, ControlState::default());
+    assert_eq!(started(&world.simulate_tick(tick, &idle)), 0);
+    tick = tick.next();
+    assert_eq!(started(&world.simulate_tick(tick, &drill)), 1);
+}
+
+#[test]
 fn world_state_applies_player_scoped_bomb_and_infrastructure_placement() {
     let mut game = WorldImport::new_game(LOCAL_PLAYER_ID);
     game.player.bombs = 1;

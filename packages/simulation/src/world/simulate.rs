@@ -56,8 +56,13 @@ impl WorldState {
         self.terrain.start_journal();
         for (&player_id, input) in &inputs.players {
             if let Some(controls) = input.controls {
+                let previous_target = self.active_drills.get(&player_id).map(|drill| drill.target);
                 let _drill =
                     self.apply_drill_intent(player_id, controls.horizontal(), controls.drill_down);
+                let target = self.active_drills.get(&player_id).map(|drill| drill.target);
+                if target.is_some() && target != previous_target {
+                    output.push_event(GameplayEventKind::DrillStarted { player_id });
+                }
                 let _step = self.step_authoritative_movement(
                     player_id,
                     controls.horizontal(),
