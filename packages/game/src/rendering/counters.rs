@@ -153,16 +153,21 @@ fn draw_counter(
 
 const COUNTER_HELP: &str = "Up/Down select | Enter/E confirm | Esc close";
 
-/// Units a service fraction buys: at least one while anything is missing.
-fn service_units(missing: f32, fraction: f32) -> u32 {
-    let missing = missing.ceil().max(0.0);
-    if missing <= 0.0 {
-        return 0;
-    }
-    (missing * fraction).ceil().clamp(1.0, missing) as u32
+/// What a fuel or repair counter bills: the whole missing amount, capped by the player's
+/// credits, as `(units delivered, credits charged, units missing, full price)`.
+///
+/// This mirrors the simulation, which currently resolves every small/half/full choice as a full
+/// service (`menu_item` is ignored), so a quote or receipt never promises a cheaper partial fill
+/// than the one that will actually be billed.
+fn service_charge(missing: f32, unit_cost: u32, credits: u32) -> (u32, u32, u32, u32) {
+    let missing = missing.ceil().max(0.0) as u32;
+    let full_cost = missing * unit_cost;
+    let charge = full_cost.min(credits);
+    (charge / unit_cost.max(1), charge, missing, full_cost)
 }
 
-/// Small / half / full service rows for the fuel station and repair garage.
+/// Small / half / full service rows for the fuel station and repair garage, each quoting what
+/// the counter will actually charge (see [`service_charge`]).
 fn service_offers(
     icon: &'static SpriteDef,
     labels: [&str; 3],
@@ -171,22 +176,28 @@ fn service_offers(
     unit_cost: u32,
     credits: u32,
 ) -> Vec<Offer> {
-    [0.25, 0.5, 1.0]
+    let (units, charge, missing, full_cost) = service_charge(missing, unit_cost, credits);
+    labels
         .into_iter()
-        .zip(labels)
-        .map(|(fraction, label)| {
-            let units = service_units(missing, fraction);
-            let cost = units * unit_cost;
-            if units == 0 {
+        .map(|label| {
+            if missing == 0 {
                 return Offer::new(icon, label, format!("{unit} already full"))
                     .tag("FULL", LIME)
                     .unavailable_if(true);
             }
-            let percent = (fraction * 100.0) as u32;
-            Offer::new(icon, label, format!("+{units} {unit} ({percent}% of missing)"))
-                .price(cost, credits)
+            if units == 0 {
+                return Offer::new(icon, label, format!("+{missing} {unit} to fill up"))
+                    .price(full_cost, credits);
+            }
+            let detail = if units < missing {
+                format!("+{units} of {missing} {unit}, all you can pay for")
+            } else {
+                format!("+{units} {unit}, fills it up")
+            };
+            Offer::new(icon, label, detail)
+                .price(charge, credits)
                 .about(format!(
-                    "{units} {unit} at {unit_cost} cr each. Short on credits, the counter sells as much as you can pay for."
+                    "Every choice fills it up: {units} {unit} at {unit_cost} cr each. Short on credits, the counter sells as much as you can pay for."
                 ))
         })
         .collect()
@@ -1043,4 +1054,45 @@ pub(super) fn draw_receipts(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_
         "Recent sales and payouts | Enter/E or Esc returns",
         &ModalContent::new(sections),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use drillgame_simulation::{
+        economy::{REFUEL_UNIT_COST, REPAIR_UNIT_COST, refuel_amount, repair_amount},
+        player::Player,
+    };
+
+    use super::service_charge;
+
+    /// The fuel and repair quotes must equal what the simulation's full service bills, which is
+    /// what every small/half/full choice resolves to today.
+    #[test]
+    fn service_quotes_match_the_simulated_charge() {
+        for credits in [0, 3, 12, 45, 4850] {
+            let mut player = Player::new(0.0, 0.0);
+            player.fuel = player.fuel_capacity - 45.0;
+            player.hull = player.max_hull() - 30.0;
+            player.credits = credits;
+            let (_, fuel_quote, _, _) = service_charge(
+                player.fuel_capacity - player.fuel,
+                REFUEL_UNIT_COST,
+                credits,
+            );
+            assert_eq!(
+                fuel_quote,
+                refuel_amount(&mut player, 1.0),
+                "fuel, credits {credits}"
+            );
+
+            player.credits = credits;
+            let (_, repair_quote, _, _) =
+                service_charge(player.max_hull() - player.hull, REPAIR_UNIT_COST, credits);
+            assert_eq!(
+                repair_quote,
+                repair_amount(&mut player, 1.0),
+                "repair, credits {credits}"
+            );
+        }
+    }
 }
