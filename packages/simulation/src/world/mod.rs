@@ -31,6 +31,7 @@ mod replication;
 #[cfg(test)]
 mod replication_tests;
 mod rescue;
+mod services;
 mod simulate;
 mod state_hash;
 #[cfg(test)]
@@ -43,6 +44,9 @@ pub use replication::{
     ContractsSection, EconomySection, LiveEntities, MarkersSection, PlayerInventory, PlayerLoadout,
     PlayerRig, PlayerTickState, ProgressionSection, SectionKey, SectionPayload, SessionSection,
     TimersSection, WorldEventsSection, hash_serialized, join_player, split_player,
+};
+pub use services::{
+    BOMB_BUNDLES, MINING_ROCKETS_COST, MINING_ROCKETS_COUNT, MINING_ROCKETS_SHACK_LEVEL,
 };
 pub use timing::TickTiming;
 
@@ -416,6 +420,73 @@ impl WorldState {
             .get(&player_id)
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// Current sale value of one unit of `mineral` (market factor, depot level and world events).
+    #[must_use]
+    pub fn mineral_market_value(&self, mineral: MineralKind) -> u32 {
+        self.canonical_mineral_market_value(mineral)
+    }
+
+    /// Today's market factor (percent) for `mineral`.
+    #[must_use]
+    pub const fn mineral_market_factor(&self, mineral: MineralKind) -> u32 {
+        canonical_mineral_market_factor(
+            self.progression.market_salt,
+            self.progression.town_event_day,
+            mineral,
+        )
+    }
+
+    /// The previous day's market factor (percent) for `mineral`, if recorded.
+    #[must_use]
+    pub fn previous_mineral_market_factor(&self, mineral: MineralKind) -> Option<u32> {
+        self.progression
+            .mineral_market_history
+            .get(&mineral)
+            .and_then(|history| history.iter().rev().nth(1).copied())
+    }
+
+    /// Active world events as `(kind, severity, days remaining)`, in deterministic order.
+    #[must_use]
+    pub fn active_world_events(&self) -> Vec<(WorldEventKind, u32, u32)> {
+        self.world_event_severity
+            .iter()
+            .map(|(kind, severity)| {
+                (
+                    *kind,
+                    *severity,
+                    self.world_event_days_remaining
+                        .get(kind)
+                        .copied()
+                        .unwrap_or(0),
+                )
+            })
+            .collect()
+    }
+
+    /// Scanner markers placed by players.
+    #[must_use]
+    pub fn scan_markers(&self) -> &[ScanMarker] {
+        &self.scan_markers
+    }
+
+    /// Tiles flagged as collapse risks.
+    #[must_use]
+    pub fn collapse_warnings(&self) -> &[TilePosition] {
+        &self.collapse_warnings
+    }
+
+    /// A player's deep-run pressure state, if they are on a run.
+    #[must_use]
+    pub fn deep_run_state(&self, player_id: PlayerId) -> Option<&DeepRunState> {
+        self.deep_run_states.get(&player_id)
+    }
+
+    /// How many rescues a player has called.
+    #[must_use]
+    pub fn rescue_count(&self, player_id: PlayerId) -> u32 {
+        self.rescue_counts.get(&player_id).copied().unwrap_or(0)
     }
 
     #[must_use]

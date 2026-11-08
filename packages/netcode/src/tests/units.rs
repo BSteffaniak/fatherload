@@ -448,6 +448,60 @@ fn host_rejects_wrong_protocol_version() {
 }
 
 #[test]
+fn local_seats_can_adopt_existing_world_players() {
+    let params = params60();
+    let mut world = toy_world(params);
+    world.add_player(PlayerId(7));
+    let mut host = HostSession::new(world, HostConfig::default());
+    assert!(
+        !host.adopt_local_player(SeatId(0), PlayerId(3)),
+        "not in world"
+    );
+    assert!(host.adopt_local_player(SeatId(0), PlayerId(7)));
+    assert_eq!(host.seat_player(SeatId(0)), Some(PlayerId(7)));
+    assert!(
+        !host.adopt_local_player(SeatId(1), PlayerId(7)),
+        "already owned"
+    );
+    assert!(
+        !host.adopt_local_player(SeatId(0), PlayerId(7)),
+        "seat bound"
+    );
+    let fresh = host.add_local_player(SeatId(1));
+    assert!(fresh.0 > 7, "new players never collide with adopted ids");
+    assert_eq!(host.world().player_ids(), vec![PlayerId(7), fresh]);
+    assert!(host.roster().iter().all(|entry| entry.local));
+}
+
+#[test]
+fn host_output_reports_terrain_ops_for_local_presentation() {
+    let params = params60();
+    let mut host = HostSession::new(toy_world(params), HostConfig::default());
+    let a = host.add_local_player(SeatId(0));
+    let mut ops = 0;
+    for _ in 0..120 {
+        host.submit_local_input(
+            a,
+            ToyControls {
+                move_x: 0,
+                move_y: 1,
+                drill: true,
+            },
+            Vec::new(),
+        );
+        let output = host.advance(params.tick_duration());
+        assert!(
+            output
+                .terrain_ops
+                .iter()
+                .all(|(tick, _)| *tick <= host.tick())
+        );
+        ops += output.terrain_ops.len();
+    }
+    assert!(ops > 0, "drilling produced terrain ops");
+}
+
+#[test]
 fn local_seats_play_without_any_clients() {
     let params = params60();
     let mut host = HostSession::new(toy_world(params), HostConfig::default());

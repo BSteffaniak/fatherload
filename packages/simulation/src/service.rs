@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{economy::TownBuilding, ids::PlayerId, terrain::StrategicResourceKind};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum RecipeKind {
     ReinforcedBulkhead,
     AuxiliaryTank,
@@ -95,7 +95,11 @@ impl RecipeKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// A town service transaction requested from a building menu.
+///
+/// Submitted as [`crate::PlayerCommand::Service`] so it goes through the fixed tick like every
+/// other gameplay action (and is never predicted by clients).
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SessionServiceRequest {
     Refuel { menu_item: usize },
     Repair { menu_item: usize },

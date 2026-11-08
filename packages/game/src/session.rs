@@ -1819,6 +1819,7 @@ const fn apply_authoritative_command_to_legacy_input(
         | PlayerCommand::Refuel
         | PlayerCommand::Repair
         | PlayerCommand::SellCargo
+        | PlayerCommand::Service(_)
         | PlayerCommand::Rescue => {}
     }
     input
@@ -3428,6 +3429,7 @@ impl ClientPredictionState {
                 | PlayerCommand::Refuel
                 | PlayerCommand::Repair
                 | PlayerCommand::SellCargo
+                | PlayerCommand::Service(_)
                 | PlayerCommand::Rescue
                 | PlayerCommand::PlaceBomb
                 | PlayerCommand::PlaceInfrastructure { .. } => {
@@ -3846,6 +3848,7 @@ impl ClientPredictionState {
                 | PlayerCommand::Refuel
                 | PlayerCommand::Repair
                 | PlayerCommand::SellCargo
+                | PlayerCommand::Service(_)
                 | PlayerCommand::Rescue
                 | PlayerCommand::PlaceBomb
                 | PlayerCommand::PlaceInfrastructure { .. } => {

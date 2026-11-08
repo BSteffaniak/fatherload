@@ -86,9 +86,10 @@ pub(crate) const fn gameplay_event_for_applied_command(
         PlayerCommand::Movement {
             drill_down: true, ..
         } => Some(GameplayEventKind::DrillStarted { player_id }),
-        PlayerCommand::Refuel | PlayerCommand::Repair | PlayerCommand::BuyUpgrade { .. } => {
-            Some(GameplayEventKind::PurchaseCompleted { player_id })
-        }
+        PlayerCommand::Refuel
+        | PlayerCommand::Repair
+        | PlayerCommand::BuyUpgrade { .. }
+        | PlayerCommand::Service(_) => Some(GameplayEventKind::PurchaseCompleted { player_id }),
         PlayerCommand::SellCargo => Some(GameplayEventKind::CargoChanged { player_id }),
         PlayerCommand::PlaceBomb => Some(GameplayEventKind::BombPlaced { player_id }),
         PlayerCommand::PlaceInfrastructure { .. } => {

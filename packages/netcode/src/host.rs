@@ -73,6 +73,9 @@ pub struct HostOutput<S: NetSimulation> {
     pub outbound: Vec<(ClientId, ServerMessage<S>)>,
     /// All gameplay events from the ticks run (host presentation).
     pub events: Vec<NetEvent<S::Event>>,
+    /// Every op-log (terrain) change from the ticks run, in order (host presentation, e.g.
+    /// marking changed terrain for redraw).
+    pub terrain_ops: Vec<(Tick, S::TerrainOp)>,
     /// Fixed ticks run.
     pub ticks_run: u32,
     /// `(tick, world hash)` after each tick, if enabled.
@@ -84,6 +87,7 @@ impl<S: NetSimulation> Default for HostOutput<S> {
         Self {
             outbound: Vec::new(),
             events: Vec::new(),
+            terrain_ops: Vec::new(),
             ticks_run: 0,
             tick_hashes: Vec::new(),
         }
@@ -428,6 +432,29 @@ impl<S: NetSimulation> HostSession<S> {
         player
     }
 
+    /// Binds a local seat to a player that already exists in the world (for example the rig of
+    /// a loaded save), instead of spawning a new one.
+    ///
+    /// Returns `false` (and changes nothing) if the seat is already bound, the world has no such
+    /// player, or another seat or client already owns it.
+    pub fn adopt_local_player(&mut self, seat: SeatId, player: PlayerId) -> bool {
+        if self.seats.contains_key(&seat)
+            || self.players.contains_key(&player)
+            || !self.world.player_ids().contains(&player)
+        {
+            return false;
+        }
+        self.next_player = self.next_player.max(player.0.saturating_add(1));
+        let token = self.new_token();
+        self.players.insert(
+            player,
+            PlayerSlot::new(Owner::Local(seat), format!("Seat {}", seat.0), token),
+        );
+        self.seats.insert(seat, player);
+        self.broadcast_lobby();
+        true
+    }
+
     /// Removes a local seat's player.
     pub fn remove_local_player(&mut self, seat: SeatId) {
         if let Some(player) = self.seats.remove(&seat) {
@@ -642,6 +669,10 @@ impl<S: NetSimulation> HostSession<S> {
         std::mem::take(&mut self.outbox)
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one tick's input gathering, simulation and fan-out stay in order in one place"
+    )]
     fn step_tick(&mut self, output: &mut HostOutput<S>) {
         let tick = self.world.tick().next();
         self.expire_reservations(tick);
@@ -743,6 +774,9 @@ impl<S: NetSimulation> HostSession<S> {
             remote.pending_events.extend(events.iter().cloned());
         }
         output.events.extend(events);
+        output
+            .terrain_ops
+            .extend(result.terrain_ops.into_iter().map(|op| (tick, op)));
         self.emit_due_frames();
     }
 

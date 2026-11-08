@@ -4755,6 +4755,7 @@ pub fn command_conflicts(commands: &[SequencedPlayerCommand]) -> BTreeSet<Comman
             | PlayerCommand::PlaceBomb
             | PlayerCommand::PlaceInfrastructure { .. }
             | PlayerCommand::SelectUpgrade { .. }
+            | PlayerCommand::Service(_)
             | PlayerCommand::Rescue => {}
         }
     }

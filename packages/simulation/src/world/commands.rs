@@ -391,6 +391,7 @@ impl WorldState {
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::Rescue => self.canonical_rescue_player(player_id),
+            PlayerCommand::Service(request) => self.apply_service_request(player_id, request),
             PlayerCommand::Interact
             | PlayerCommand::Cancel
             | PlayerCommand::Confirm

@@ -364,6 +364,10 @@ impl WorldState {
             self.advance_deep_run_pressure(player_id, next_tick, &mut output, &mut changed_players);
         }
         self.advance_falling_boulders(next_tick, &mut output, &mut changed_players);
+        let explorer_ids = self.players.keys().copied().collect::<Vec<_>>();
+        for player_id in explorer_ids {
+            let _visible = self.reveal_tiles_near_player(player_id);
+        }
         output.changed_players = changed_players.into_iter().collect();
         output.terrain_ops = self.terrain.finish_journal();
         self.set_simulation_tick(next_tick);

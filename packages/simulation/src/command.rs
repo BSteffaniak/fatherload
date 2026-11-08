@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{InputSequence, PlayerId, SimulationTick};
+use crate::{
+    ids::{InputSequence, PlayerId, SimulationTick},
+    service::SessionServiceRequest,
+};
 
 /// Authoritative gameplay commands submitted by a player.
 ///
@@ -33,6 +36,8 @@ pub enum PlayerCommand {
     Repair,
     SellCargo,
     Rescue,
+    /// A town service transaction (shop, bank, salvage, contracts, expeditions, ...).
+    Service(SessionServiceRequest),
 }
 
 /// Command packet metadata needed for future network acknowledgement and reconciliation.
