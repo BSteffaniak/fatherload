@@ -1086,6 +1086,10 @@ fn option_items(options: &[String], selected: usize) -> Vec<SectionItem> {
         .collect()
 }
 
+/// Lobby roster rows shown before the rest condense into a count, so any player count fits
+/// (plan §15).
+const MAX_ROSTER_ROWS: usize = 10;
+
 /// Online screens: join forms, LAN list, lobby roster and session notices. Drawn without a
 /// world view (a joining client has no rig until the host's welcome arrives).
 #[allow(
@@ -1188,9 +1192,11 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             let players = if lobby.roster.is_empty() {
                 vec![SectionItem::text("Waiting for the roster...")]
             } else {
-                lobby
+                let hidden = lobby.roster.len().saturating_sub(MAX_ROSTER_ROWS);
+                let mut rows: Vec<SectionItem> = lobby
                     .roster
                     .iter()
+                    .take(MAX_ROSTER_ROWS)
                     .map(|entry| {
                         let mut name = entry.name.clone();
                         if lobby.local_player == Some(entry.player) {
@@ -1207,7 +1213,11 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
                         };
                         SectionItem::stat(name, state, color)
                     })
-                    .collect()
+                    .collect();
+                if hidden > 0 {
+                    rows.push(SectionItem::text(format!("... and {hidden} more")));
+                }
+                rows
             };
             let options: Vec<String> = online
                 .lobby_options()
