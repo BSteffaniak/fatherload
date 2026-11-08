@@ -7,7 +7,8 @@ one local seat per player and no remote clients; that host is the only gameplay 
 
 Frame loop (`local_game::LocalGame::frame`, driven by `app::run`):
 
-1. Sample input per local seat (`app`).
+1. Sample keyboards and controllers and route them to seats (`app` + `input::router`); each
+   seat's active device goes to the shell for its button prompts.
 2. Shell input (menus, modals, interiors, settings) updates `shell::ShellState`; menu choices
    become `ShellRequest`s (service/rescue actions, saves, loads, new game, extra seats).
 3. Each seat's held controls and one-shot actions go to `runtime::Runtime`, which advances
@@ -41,7 +42,24 @@ Modules:
   renders scripted scenes to PNGs (see the art guide).
 - `save` — format v5 (`WorldState` + play time); `save::legacy` migrates v1-v4 (v3/v4 worlds
   carried a derived summary whose `won_game` flag is lifted into the world).
-- `input`, `input_mapping` — device sampling and seat input to controls/actions.
+- `input` — devices to per-seat `PlayerInput`:
+  - keyboard sampling (`input.rs`; solo reads WASD + arrows, split-screen a WASD and an
+    arrow-keys scheme);
+  - `gamepad` — the controller layout as one binding table (`PAD_BINDINGS`, Xbox names by
+    position) and the pure `PadMapper` (sampled `PadState` -> `PlayerInput`: deadzone, edges,
+    stick + d-pad folded into one direction, menu auto-repeat from `repeat`);
+  - `seats` — the seat policy: solo = keyboard + every pad; split-screen = WASD seat,
+    arrow-keys seat, pads fill seats without one (keyboardless, then arrows, then WASD) whenever
+    the seat count changes, a spare pad claims a free or new seat with A/Start, a pad keeps its
+    seat while unplugged;
+  - `router::InputRouter` — per frame: hot-plug notices (toasts), seat routing, claims and
+    each seat's active device (`devices::SeatActivity`: the last device with *new* input, so
+    stick noise inside the deadzone or a held button never switches it);
+  - `prompts` — action prompts (`Prompt::Use`, `Back`, `Confirm`...) to keycaps or pad glyphs
+    for a device, plus their text form for toasts;
+  - `pads` — raylib/GLFW sampling and `drillgame --list-gamepads` (opens a small window for
+    about a second, prints each pad's index, name, axes/buttons, standard mapping, GUID).
+- `input_mapping` — seat input to held controls and one-shot actions.
 
 - `online` — online play on the same runtime:
   - `bridge` maps netcode `ClientMessage`/`ServerMessage` to `quic_transport` bytes (client

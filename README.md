@@ -44,9 +44,42 @@ Successful return trips award streak bonuses. Emergency rescue returns the rig t
   native fullscreen from the green button)
 - `+` / `-`: volume hotkeys
 
+### Controllers
+
+Xbox, PlayStation and Nintendo controllers (anything GLFW has a standard mapping for) work out
+of the box, over USB or Bluetooth, and can be plugged in or out mid-game. Prompts switch to the
+last device used: keyboard keys as keycaps, or the controller's own button glyphs.
+
+| Action | Controller (Xbox names) | Keyboard |
+| --- | --- | --- |
+| Move / drill sideways | Left stick or d-pad left/right | `A` / `D` |
+| Thrust | `A`, `RT`, or up on stick / d-pad | `W` / Space |
+| Drill down | Down on stick / d-pad | `S` |
+| Use building, counter, door | `X` | `E` |
+| Confirm in menus / call rescue | `A` | `Enter` |
+| Back / close / leave building | `B` (never pauses or quits) | `Esc` / `Backspace` |
+| Menu navigation (auto-repeats) | Left stick or d-pad | arrows / `W` `S` |
+| Pause | `Menu` (Start) | `Esc` / `P` |
+| Inventory | `Y` | `Tab` |
+| Map | `View` (Back) | `M` |
+| Scanner / bomb | `LB` / `RB` | `C` / `B` |
+| Previous / next tab or column | `LB` / `RB` in menus | left / right arrows |
+
+The layout lives in one table (`PAD_BINDINGS` in `packages/game/src/input/gamepad.rs`).
+`drillgame --list-gamepads` lists every detected controller (index, name, axis and button
+counts, whether GLFW has a standard mapping); without a mapping a pad's buttons cannot be read.
+Rumble is not available: raylib's desktop GLFW backend does not implement
+`SetGamepadVibration`.
+
+Split-screen seats: player 1 uses WASD, player 2 the arrow keys (`Right Ctrl` use,
+`Right Shift` back), and connected controllers fill seats without one (keyboardless seats
+first, then the arrow-keys seat, then WASD). A spare controller joins with `A` or `Start`,
+taking a free seat or adding one (up to four). Playing alone, the keyboard and every
+controller drive the rig.
+
 ## Surface Buildings
 
-Press `E` at a surface building to walk inside its room. Move with `A`/`D`, use the service counter with `E`, and leave through the door or `Backspace`/`Esc`.
+Press `E` (controller `X`) at a surface building to walk inside its room. Move with `A`/`D` or the stick, use the service counter with `E`/`X`, and leave through the door or `Backspace`/`Esc` (controller `B`).
 
 - Fuel Station: refills fuel in partial or full service increments
 - Repair Garage: repairs hull in partial or full service increments

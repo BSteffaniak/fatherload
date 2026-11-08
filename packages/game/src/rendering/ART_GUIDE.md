@@ -15,7 +15,8 @@ The quickest way to see the whole kit is the `art_gallery` capture scene (see
 | `rendering/pixel_art/palette.rs` | The palette constants and `PALETTE` list. |
 | `rendering/pixel_art/sprite.rs` | `SpriteDef`, `NineSlice`, atlas packing/rasterizing, draw helpers. |
 | `rendering/pixel_art/shade.rs` | Palette indices, the one-step-darker ramp walk (`darker`) and the 4x4 Bayer dither. |
-| `rendering/pixel_art/sprites/*.rs` | All sprite data: `ui` (frames), `icons` (rig stats, minerals), `menu_icons` (menu rows, counters, roster), `rig`, `interior`. |
+| `rendering/pixel_art/sprites/*.rs` | All sprite data: `ui` (frames), `icons` (rig stats, minerals), `menu_icons` (menu rows, counters, roster), `prompts` (keycap + controller glyphs), `rig`, `interior`. |
+| `rendering/prompts.rs` | Button prompts: glyph drawing, prompt rows, the menu device. |
 | `rendering/pixel_art/font.rs` | The bitmap UI font (regular + derived bold). |
 | `rendering/ui_kit.rs` | UI canvas + widgets (panels, buttons, bars, rows, tabs, tooltips...). |
 | `rendering/layout.rs` | Menu/modal content model drawn with the UI kit. |
@@ -152,6 +153,51 @@ that menu item, so a label always says what Enter does. Show prices with the coi
 rows that cannot be used, keeping the price `RED` when credits are the reason. Selected rows
 draw every value in `INK` on the amber face; disabled rows grey every tag except red prices.
 
+## Button prompts
+
+Never write key names into UI text. Name the *action* and let the prompt system draw it for the
+device the player is using:
+
+```rust
+use super::prompts::{hint, Hint};
+use crate::input::prompts::Prompt;
+
+// Dialogs: prompts sit under the title, drawn for seat 0's device (the menu device).
+ModalContent::new(sections).prompts(&[
+    hint(Prompt::Navigate, "select"),
+    hint(Prompt::Confirm, "buy"),
+    hint(Prompt::Back, "close"),
+]);
+// Anywhere else: one prompt or a row, for an explicit device (per-view HUD) or the menu device.
+prompts::draw_prompt(draw, x, y, hint(Prompt::Use, "Leave"), device, BONE);
+prompts::draw_bar(draw, x, y, &HINTS, prompts::menu_device(), MIST);
+// Sentences and toasts: the text form ("E", "X", "LB/RB"); None when the device has no binding.
+crate::input::prompts::inline_text(Prompt::Use, device);
+```
+
+- `input::prompts::glyphs(prompt, device)` picks the glyphs: keyboard keys per layout (solo,
+  WASD seat, arrow-keys seat) or controller buttons read from the binding table
+  (`input::gamepad::PAD_BINDINGS`), so prompts follow any remapping. A prompt the device has no
+  binding for (F11 on a controller) is simply left out of the row.
+- A hint with an empty label groups with the next one (`[Tab] [Esc] close`).
+- Every glyph is 11 art pixels tall (`PROMPT_HEIGHT`); labels are body text offset 2 pixels so
+  the cap height centres on the glyph. Rows: 1 px between glyphs, 3 px before the label, 9 px
+  between prompts; `wrap_bar` wraps rows to a width.
+- Keyboard keys are the `prompts::KEYCAP` nine-slice (`INK` outline, `BONE` top lip, `MIST`
+  face, `FOG` bottom edge) stretched to the label in `INK`.
+- Controller glyphs (`sprites/prompts.rs`): one 11x11 circle grid per printed letter/symbol,
+  recoloured per family through the legend. Xbox: `A` `LEAF`, `B` `RED`, `X` `SKY`, `Y` `GOLD`
+  faces with `BONE` letters (`INK` on yellow), lit top-left and shaded bottom-right in the same
+  ramp. PlayStation: dark `SLATE_DARK` buttons with coloured symbols (cross `SKY_LIGHT`, circle
+  `ROSE`, square `PINK`, triangle `MINT`). Nintendo: dark `SLATE` buttons with `BONE` letters,
+  printed at their own positions (B bottom, A right, Y left, X top). Bumpers (15 wide) and
+  triggers (13 wide) are blank `STEEL_DARK` shoulder shapes labelled with the font (LB/L1/L,
+  LT/L2/ZL). `MENU` (three lines), `VIEW` (two windows), the d-pad (one cross grid with
+  vertical / horizontal / down arms lit in `BONE`) and the left stick complete the set. The
+  family comes from the controller name (`PadFamily::from_name`); unknown pads use Xbox glyphs.
+- Check changes with the `prompt_sheet` scene (every prompt on every device, glyphs at 3x) and
+  the `pad_*` scenes.
+
 Shell messages appear as a toast (`screen::draw_toast`) for four seconds after they change
 (`ShellState::message_tick`), beside the counter dialog inside buildings; refusals get the red
 frame.
@@ -260,7 +306,10 @@ Scenes (see `--list`): `art_gallery`, `ui_sheet`, `title`, world scenes (`surfac
 no panel open, `toast_receipt`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
 `modal_exit_confirm`, `modal_inventory`, `modal_options`, `modal_save_slots`, `map`,
 `online_lobby_host`, `online_lobby_client`, `online_join_address`, `online_lan_browser`,
-`net_overlay`, `split_screen`, `rescue_prompt`. Check UI changes at 1280x720, 1920x1080 and the
+`net_overlay`, `split_screen`, `rescue_prompt`, `prompt_sheet`, controller prompts
+(`pad_title`, `pad_interior_shop`, `pad_room`, `pad_pause`, `pad_hud`, `pad_help`,
+`pad_split_screen`, `pad_split_join`, `pad_playstation_counter`, `pad_nintendo_options`) and
+`keyboard_hud`. Scenes choose prompt devices with `SceneStage::use_devices`. Check UI changes at 1280x720, 1920x1080 and the
 960x540 minimum.
 
 Adding a scene: append a `Scene { name, summary, setup }` to `scene_capture::SCENES`. `setup`
