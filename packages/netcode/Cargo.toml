@@ -18,5 +18,6 @@ fail-on-warnings = []
 harness = []
 
 [dependencies]
-postcard = { workspace = true }
-serde    = { workspace = true }
+drillgame_simulation = { workspace = true }
+postcard             = { workspace = true }
+serde                = { workspace = true }

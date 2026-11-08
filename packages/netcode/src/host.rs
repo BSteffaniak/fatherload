@@ -268,8 +268,14 @@ pub struct HostSession<S: NetSimulation> {
 
 impl<S: NetSimulation> HostSession<S> {
     /// Creates a host around an initial world.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the world reports a tick rate different from `config.params` (its per-tick
+    /// constants would not match the host clock).
     #[must_use]
     pub fn new(world: S, config: HostConfig) -> Self {
+        assert_world_rate(&world, config.params);
         let next_player = world
             .player_ids()
             .iter()
@@ -565,7 +571,12 @@ impl<S: NetSimulation> HostSession<S> {
     /// Replaces the world (e.g. loading a save) and starts a new epoch. Stale
     /// inputs from the previous epoch are rejected; every client gets a
     /// keyframe of the new world.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the new world reports a different tick rate than the session.
     pub fn new_epoch(&mut self, world: S) {
+        assert_world_rate(&world, self.config.params);
         let old_tick = self.world.tick();
         self.world = world;
         let new_tick = self.world.tick();
@@ -1175,5 +1186,14 @@ fn build_frame<S: NetSimulation>(
         removed_sections,
         events,
         debug_hash: None,
+    }
+}
+
+fn assert_world_rate<S: NetSimulation>(world: &S, params: SessionParams) {
+    if let Some(hz) = world.tick_rate_hz() {
+        assert_eq!(
+            hz, params.tick_rate_hz,
+            "world tick rate must match the session tick rate"
+        );
     }
 }

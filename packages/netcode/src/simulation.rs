@@ -1,8 +1,8 @@
 //! The simulation contract netcode is generic over.
 //!
-//! The real `WorldState` (plan §4) implements [`NetSimulation`]; the netcode
-//! crate never depends on it. A small toy implementation lives in
-//! [`crate::toy`] for tests.
+//! The real `WorldState` (plan §4) implements [`NetSimulation`] in
+//! [`crate::world`]; sessions only ever see the trait. A small toy
+//! implementation lives in [`crate::toy`] for unit tests.
 //!
 //! # Replication model
 //!
@@ -228,6 +228,11 @@ pub trait NetSimulation: Clone + Debug {
 
     /// Current tick (number of ticks simulated).
     fn tick(&self) -> Tick;
+    /// The tick rate the world's per-tick constants were derived for, if it has any. The host
+    /// refuses a world whose rate differs from its [`crate::SessionParams`].
+    fn tick_rate_hz(&self) -> Option<u32> {
+        None
+    }
     /// Overwrites the current tick (used when applying server frames).
     fn set_tick(&mut self, tick: Tick);
 

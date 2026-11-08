@@ -2,12 +2,14 @@
 
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     command::{PlayerCommand, SequencedPlayerCommand},
     ids::{InputSequence, PlayerId},
 };
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct ControlState {
     horizontal_milli: i16,
     pub thrust: bool,

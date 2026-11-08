@@ -136,6 +136,7 @@ dependencies = [
 name = "drillgame_netcode"
 version = "0.0.1-alpha.0"
 dependencies = [
+ "drillgame_simulation",
  "postcard",
  "serde",
 ]

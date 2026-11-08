@@ -20,8 +20,10 @@
 //!   harness to prove the whole stack under latency, jitter, loss, duplication
 //!   and reordering.
 //!
-//! The crate is generic over the gameplay simulation through the
-//! [`NetSimulation`] trait, so it never depends on the real game crate.
+//! The sessions are generic over the gameplay simulation through the
+//! [`NetSimulation`] trait. [`world`] implements it for the real
+//! `drillgame_simulation::WorldState`; [`toy`] is a tiny stand-in for unit
+//! tests.
 //!
 //! No sockets, threads, async runtimes or wall clock are used here: callers
 //! pass elapsed time in as a [`std::time::Duration`].
@@ -37,6 +39,7 @@ mod link;
 mod params;
 pub mod protocol;
 mod simulation;
+pub mod world;
 
 #[cfg(any(test, feature = "harness"))]
 pub mod harness;
@@ -65,3 +68,4 @@ pub use simulation::{
     ActionEnvelope, NetSimulation, PlayerTickInput, Pose, Relevance, TickEvent, TickInputs,
     TickOutput,
 };
+pub use world::{ActionResolution, WorldEvent};

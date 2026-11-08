@@ -542,6 +542,10 @@ impl NetSimulation for ToySim {
         self.tick = tick;
     }
 
+    fn tick_rate_hz(&self) -> Option<u32> {
+        Some(self.rules.tick_rate_hz)
+    }
+
     fn player_ids(&self) -> Vec<PlayerId> {
         self.players.keys().copied().collect()
     }
