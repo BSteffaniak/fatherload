@@ -88,15 +88,43 @@ counts, whether GLFW has a standard mapping); without a mapping a pad's buttons 
 Rumble is not available: raylib's desktop GLFW backend does not implement
 `SetGamepadVibration`.
 
-Split-screen seats: player 1 uses WASD, player 2 the arrow keys (`Right Ctrl` use,
-`Right Shift` back), and connected controllers fill seats without one (keyboardless seats
-first, then the arrow-keys seat, then WASD). A spare controller joins with `A` or `Start`,
-taking a free seat or adding one (up to four). Playing alone, the keyboard and every
-controller drive the rig.
+### Local split-screen
+
+Up to four players share the screen, each in their own view. Player 1 uses WASD, player 2 the
+arrow keys, and connected controllers fill seats without one (keyboardless seats first, then
+the arrow-keys seat, then WASD). A spare controller joins with `A` or `Start`, taking a free
+seat or adding one (up to four). Playing alone, the keyboard and every controller drive the rig.
+
+Every player has their own menus: each walks into any building, uses its counter, reads their
+own inventory or map and leaves again inside their own view (with their own button prompts,
+selection, scrolling and messages), while the others keep playing. Purchases and sales go to
+the player who made them.
+
+| Action | WASD seat (player 1) | Arrow-keys seat (player 2) |
+| --- | --- | --- |
+| Drive / walk, thrust, drill | `A` `D`, `W` / Space, `S` | left / right, up, down |
+| Use building, counter, door | `E` | `Right Ctrl` or `Numpad Enter` |
+| Confirm in menus | `Enter` / `E` | `Right Ctrl` or `Numpad Enter` |
+| Back / close / leave building | `Esc` / `Backspace` | `Right Shift` (never pauses) |
+| Menu navigation | `W` `S` (adjust `A` `D`) | up / down (adjust left / right) |
+| Pause (shared pause menu) | `Esc` / `P` | `Right Alt` (Right Option) |
+| Inventory / map | `Tab` / `M` | `Numpad 1` / `Numpad 2` |
+| Bomb / scanner | `B` / `C` | `Numpad 0` / `Numpad .` |
+| Scroll a dialog | mouse wheel, `Page Up` / `Page Down` | (the selection scrolls it) |
+
+Controllers use their usual buttons (table above) in their own seat, with the right stick
+scrolling that seat's dialogs. Global keys (quick save/load, fullscreen, volume, `F2`, `F3`,
+help) stay on the main keyboard.
+
+Any player's pause opens one shared pause menu, driven by the player who opened it, which
+pauses everyone (save, load, options and exit work as alone). The world keeps running while at
+least one player is outdoors, and rests only once every player is inside a building, just as
+playing alone pauses while you are inside. Online sessions never pause. What a player has open
+is not saved: after loading, everyone starts outdoors.
 
 ## Surface Buildings
 
-Press `E` (controller `X`) at a surface building to walk inside its room. Move with `A`/`D` or the stick, use the service counter with `E`/`X`, and leave through the door or `Backspace`/`Esc` (controller `B`).
+Press `E` (controller `X`) at a surface building to walk inside its room. Move with `A`/`D` or the stick, use the service counter with `E`/`X`, and leave through the door or `Backspace`/`Esc` (controller `B`). In split-screen each player enters and uses buildings on their own (see above).
 
 - Fuel Station: refills fuel in partial or full service increments
 - Repair Garage: repairs hull in partial or full service increments

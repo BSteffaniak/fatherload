@@ -9,15 +9,31 @@ Frame loop (`local_game::LocalGame::frame`, driven by `app::run`):
 
 1. Sample keyboards and controllers and route them to seats (`app` + `input::router`); each
    seat's active device goes to the shell for its button prompts.
-2. Shell input (menus, modals, interiors, settings) updates `shell::ShellState`; menu choices
-   become `ShellRequest`s (service/rescue actions, saves, loads, new game, extra seats).
-3. Each seat's held controls and one-shot actions go to `runtime::Runtime`, which advances
-   0..n fixed ticks from real time. Pause, title and interiors stop the host from ticking.
+2. Every seat's input goes to `shell::ShellState::update`. The shell holds the global screens
+   (title, the shared pause menu, options, save/load slots, exit prompts, online lobby),
+   settings and global messages, plus one `shell::SeatUi` per local seat: outdoors or inside a
+   building (zone, position, facing), its counter panel or personal dialog (inventory, map,
+   help, research log, crafting...), selection, pending services, service animation, messages
+   and receipts. While playing, each seat's input drives only its own `SeatUi`; any seat's
+   pause opens the shared pause menu and that seat (`ShellState::menu_seat`) drives it. Menu
+   choices become `ShellRequest`s (`Action { seat, command }` for service/rescue actions,
+   saves, loads, new game, extra seats). Nothing in a `SeatUi` is saved; loads put every seat
+   outdoors.
+3. Each seat's held controls (only while it is outdoors with nothing open) and one-shot actions
+   go to `runtime::Runtime` as that seat's player's, which advances 0..n fixed ticks from real
+   time. The local host ticks while the game runs and at least one seat is outdoors
+   (`ShellState::world_should_tick`): alone, a building pauses the world as always; in
+   split-screen it keeps running until every seat is inside or someone pauses. Title and pause
+   stop it; online hosts never pause.
 4. `render_snapshot::RenderSnapshot` is built from the world: one view per seat (camera follows
    that seat's rig, map fog from that player's `DiscoveredTiles`), terrain, hazards, bombs,
    infrastructure, HUD values and this frame's de-duplicated gameplay events. Terrain redraws
    follow the host's `WorldOp::Tile` ops (or the client's terrain diff).
 5. `rendering::GameRenderer` draws the snapshot plus shell state; audio plays the frame's cues.
+   Each view draws its seat's world and HUD, or the building the seat is in, with the seat's
+   dialog, rescue prompt and toasts on a UI canvas covering just that view
+   (`ui_kit::UiCanvas::for_viewport`) and prompts for the seat's device; dialog focus and
+   scroll are kept per seat. Only global screens cover the whole window.
 
 Modules:
 
@@ -44,7 +60,9 @@ Modules:
   carried a derived summary whose `won_game` flag is lifted into the world).
 - `input` — devices to per-seat `PlayerInput`:
   - keyboard sampling (`input.rs`; solo reads WASD + arrows, split-screen a WASD and an
-    arrow-keys scheme);
+    arrow-keys scheme: arrows drive and navigate menus, Right Ctrl / Numpad Enter use and
+    confirm, Right Shift backs out, Right Alt pauses, Numpad 1/2 inventory/map, Numpad 0/. bomb
+    and scanner; see `read_secondary_keyboard_input`);
   - `gamepad` — the controller layout as one binding table (`PAD_BINDINGS`, Xbox names by
     position) and the pure `PadMapper` (sampled `PadState` -> `PlayerInput`: deadzone, edges,
     stick + d-pad folded into one direction, menu auto-repeat from `repeat`; the right stick
