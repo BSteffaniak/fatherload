@@ -570,7 +570,7 @@ pub const SCENES: &[Scene] = &[
                 .clone_into(&mut shell.message);
             shell.online.lobby = Some(LobbyInfo {
                 roster: vec![
-                    lobby_entry(1, "Ada (host)", true, true, true),
+                    lobby_entry(1, "Ada", true, true, true),
                     lobby_entry(2, "Brutus", true, true, false),
                     lobby_entry(3, "Cass", false, true, false),
                     lobby_entry(4, "Dmitri", false, false, false),

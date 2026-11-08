@@ -721,7 +721,8 @@ pub fn item_row(draw: &mut impl RaylibDraw, rect: Rectangle, row: &ItemRow<'_>) 
     button_face(draw, rect, row.state);
     let (x, y) = (rect.x as i32, rect.y as i32);
     let (width, height) = (rect.width as i32, rect.height as i32);
-    let slot = (height - 8).clamp(ICON_SIZE + 4, 18);
+    // The well hugs the 1x icon: a wider well leaves a lone glyph floating in a dark box.
+    let slot = (height - 8).clamp(ICON_SIZE + 4, ICON_SIZE + 6);
     if let Some(sprite) = row.icon {
         let slot_y = y + (height - slot) / 2;
         well(

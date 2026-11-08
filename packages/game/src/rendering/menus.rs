@@ -473,7 +473,7 @@ fn roster_items(lobby: &crate::runtime::LobbyInfo) -> Vec<SectionItem> {
             .map(|entry| {
                 let mut name = entry.name.clone();
                 if lobby.local_player == Some(entry.player) {
-                    name.push_str("  (you)");
+                    name.push_str(" (you)");
                 }
                 let (icon, state, color): (&'static SpriteDef, &str, Color) = if !entry.connected {
                     (&menu_icons::OFFLINE, "OFFLINE", ORANGE)
