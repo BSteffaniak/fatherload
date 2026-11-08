@@ -117,7 +117,9 @@ scrolling that seat's dialogs. Global keys (quick save/load, fullscreen, volume,
 help) stay on the main keyboard.
 
 Any player's pause opens one shared pause menu, driven by the player who opened it, which
-pauses everyone (save, load, options and exit work as alone). The world keeps running while at
+pauses everyone (save, load, options and exit work as alone). If that player's controller is
+unplugged, player 1 (keyboard) takes the menu over; the window's close prompt is always answered
+by player 1 and then hands the pause menu back. The world keeps running while at
 least one player is outdoors, and rests only once every player is inside a building, just as
 playing alone pauses while you are inside. Online sessions never pause. What a player has open
 is not saved: after loading, everyone starts outdoors.

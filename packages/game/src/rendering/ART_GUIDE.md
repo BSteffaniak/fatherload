@@ -338,7 +338,8 @@ no panel open, `toast_receipt`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
 `online_lobby_host`, `online_lobby_client`, `online_join_address`, `online_lan_browser`,
 `net_overlay`, `split_screen`, split-screen seat UI (`split_shop_mining`,
 `split_two_interiors`, `split_three_seats`, `split_four_mixed`, `split_pad_counters`, `split_personal_dialogs`,
-`split_room_prompts`, `split_rescue_help`, `split_pause`), `rescue_prompt`, `prompt_sheet`,
+`split_room_prompts`, `split_rescue_help`, `split_pause`, `split_four_rooms`,
+`split_room_dialogs`, `split_exit_prompt`, `split_pause_handoff`), `rescue_prompt`, `prompt_sheet`,
 controller prompts
 (`pad_title`, `pad_interior_shop`, `pad_room`, `pad_pause`, `pad_hud`, `pad_help`,
 `pad_split_screen`, `pad_split_join`, `pad_playstation_counter`, `pad_nintendo_options`) and

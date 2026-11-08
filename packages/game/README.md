@@ -15,7 +15,10 @@ Frame loop (`local_game::LocalGame::frame`, driven by `app::run`):
    building (zone, position, facing), its counter panel or personal dialog (inventory, map,
    help, research log, crafting...), selection, pending services, service animation, messages
    and receipts. While playing, each seat's input drives only its own `SeatUi`; any seat's
-   pause opens the shared pause menu and that seat (`ShellState::menu_seat`) drives it. Menu
+   pause opens the shared pause menu and that seat (`ShellState::menu_seat`, with
+   `ShellState::paused_by` naming who paused) drives it; seat 0 takes over when that seat's
+   controller is unplugged. Every seat's press of a frame lands even when another seat pauses
+   on it, and actions picked on a frame that loads or starts a world are dropped. Menu
    choices become `ShellRequest`s (`Action { seat, command }` for service/rescue actions,
    saves, loads, new game, extra seats). Nothing in a `SeatUi` is saved; loads put every seat
    outdoors.
