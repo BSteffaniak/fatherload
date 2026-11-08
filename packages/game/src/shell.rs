@@ -1367,6 +1367,7 @@ impl ShellState {
         if primary.load && self.run_mode != RunMode::Lobby {
             requests.push(ShellRequest::QuickLoad);
         }
+        self.reclaim_orphaned_menu();
         let menu_input = inputs.get(self.menu_seat).copied().unwrap_or(primary);
         if self.handle_exit_modal(menu_input, &mut requests) {
             return requests;
@@ -1403,6 +1404,9 @@ impl ShellState {
             RunMode::Lobby => self.handle_online(primary, &mut requests),
             RunMode::Playing => {
                 self.play_seconds += delta_seconds;
+                let mut first_pauser = None;
+                // Every seat's press of this frame lands, whatever another seat did: a door,
+                // a purchase or a rescue pressed on the frame someone pauses still happens.
                 for seat in 0..self.seats.len() {
                     let input = inputs.get(seat).copied().unwrap_or_default();
                     let seat_ctx = ctx.seat(seat, self.prompt_device(seat));
@@ -1413,16 +1417,40 @@ impl ShellState {
                         &mut self.sound_cues,
                         &mut requests,
                     );
-                    if paused {
-                        // Any seat opens the shared pause menu and drives it until it closes.
-                        self.run_mode = RunMode::Paused;
-                        self.menu_seat = seat;
-                        break;
+                    if paused && first_pauser.is_none() {
+                        first_pauser = Some(seat);
                     }
+                }
+                if let Some(seat) = first_pauser {
+                    // Any seat opens the shared pause menu and drives it until it closes.
+                    self.run_mode = RunMode::Paused;
+                    self.menu_seat = seat;
                 }
             }
         }
         requests
+    }
+
+    /// Hands the global menus to seat 0 when the seat driving them can no longer press anything:
+    /// its controller was unplugged (or it has no device at all). Otherwise a player who pauses
+    /// and pulls their controller would leave everyone stuck in the pause menu. Seat 0 always
+    /// has the keyboard.
+    fn reclaim_orphaned_menu(&mut self) {
+        if self.menu_seat == 0 || !self.global_overlay() {
+            return;
+        }
+        let orphaned = match self.prompt_device(self.menu_seat) {
+            InputDevice::Gamepad { index, .. } => !self.gamepads.contains_key(&index),
+            InputDevice::Unassigned => true,
+            InputDevice::Keyboard(_) => false,
+        };
+        if orphaned {
+            self.message = format!(
+                "Player {}'s controller disconnected: Player 1 has the menu.",
+                self.menu_seat + 1
+            );
+            self.menu_seat = 0;
+        }
     }
 
     /// Reports a resolved service action of seat `seat`'s player (from the tick's events).
