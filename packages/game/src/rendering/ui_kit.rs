@@ -310,6 +310,45 @@ pub fn text_shadowed(
     }
 }
 
+/// Width of bold `text` drawn at a whole `scale` (logos and banners beyond [`TextStyle::Title`]).
+#[must_use]
+pub fn display_text_width(text: &str, scale: i32) -> i32 {
+    let (Some(font), Ok(cstring)) = (TextStyle::Bold.face(), CString::new(text)) else {
+        return i32::try_from(text.chars().count()).unwrap_or(0) * 6 * scale;
+    };
+    let scale = scale.max(1) as f32;
+    // SAFETY: measuring reads the font and a valid NUL-terminated string.
+    let size =
+        unsafe { ffi::MeasureTextEx(font, cstring.as_ptr(), GLYPH_HEIGHT as f32 * scale, scale) };
+    size.x.round() as i32
+}
+
+/// Draws bold `text` at a whole `scale` with no shadow (callers build outlines from it).
+pub fn display_text(
+    _draw: &mut impl RaylibDraw,
+    text: &str,
+    x: i32,
+    y: i32,
+    scale: i32,
+    color: Color,
+) {
+    let (Some(font), Ok(cstring)) = (TextStyle::Bold.face(), CString::new(text)) else {
+        return;
+    };
+    let scale = scale.max(1) as f32;
+    // SAFETY: drawing reads the font and a valid NUL-terminated string during a frame.
+    unsafe {
+        ffi::DrawTextEx(
+            font,
+            cstring.as_ptr(),
+            Vector2::new(x as f32, y as f32),
+            GLYPH_HEIGHT as f32 * scale,
+            scale,
+            color,
+        );
+    }
+}
+
 /// Draws `text` right-aligned so it ends at `right`.
 pub fn text_right(
     draw: &mut impl RaylibDraw,

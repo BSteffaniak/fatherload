@@ -24,6 +24,7 @@ mod layout;
 mod pixel_art;
 mod screen;
 mod terrain;
+mod title;
 mod ui_kit;
 mod ui_sheet;
 mod world;
@@ -32,7 +33,7 @@ use interior::draw_interior;
 use pixel_art::{font::load_pixel_font, palette, sprite};
 use screen::{
     UiFrame, draw_depth_ruler_for_view, draw_game_over, draw_heat_warning_for_view,
-    draw_minimap_for_view, draw_modal, draw_online, draw_pause, draw_title, draw_view_hud,
+    draw_minimap_for_view, draw_modal, draw_online, draw_pause, draw_view_hud,
 };
 use terrain::TerrainRenderer;
 use ui_kit::{TextStyle, UiCanvas, UiCanvasScope, UiFontFaces};
@@ -217,7 +218,8 @@ impl GameRenderer {
             if let Some(view) = snapshot.primary_view() {
                 draw_interior(draw, shell, view, &snapshot.market);
             }
-        } else {
+        } else if shell.run_mode != RunMode::Title {
+            // The title screen paints its own backdrop over the whole canvas.
             for view in &snapshot.views {
                 self.render_view(draw, shell, snapshot, view);
             }
@@ -232,7 +234,7 @@ impl GameRenderer {
                 player: view.player,
             };
             match shell.run_mode {
-                RunMode::Title => draw_title(draw, &ui),
+                RunMode::Title => title::draw_title(draw, &ui),
                 RunMode::Paused => draw_pause(draw, &ui),
                 RunMode::Playing | RunMode::Interior | RunMode::Lobby => {}
             }

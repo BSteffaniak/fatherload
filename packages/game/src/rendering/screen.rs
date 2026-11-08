@@ -19,8 +19,8 @@ use super::{
 use crate::{
     render_snapshot::{PlayerPresentation, RenderSnapshot, ViewSnapshot},
     runtime::OnlineRole,
-    save::{latest_save_summary, save_slot_count, save_slot_metadata, saves_exist},
-    shell::{JOIN_MENU, ModalScreen, OnlineScreen, PauseOption, ShellState, TitleOption},
+    save::{save_slot_count, save_slot_metadata},
+    shell::{JOIN_MENU, ModalScreen, OnlineScreen, PauseOption, ShellState},
 };
 
 /// What screen-space UI (HUD, menus, modals) reads: shell state plus the snapshot and the view
@@ -766,39 +766,6 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 .collect(),
             ),
         ]),
-    );
-}
-
-pub(super) fn draw_title(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let mut items = TitleOption::all(saves_exist())
-        .iter()
-        .enumerate()
-        .map(|(index, option)| {
-            SectionItem::stat(
-                selected_label(index == ui.shell.selected_title_item, option.label()),
-                "",
-                if index == ui.shell.selected_title_item {
-                    GOLD
-                } else {
-                    BONE
-                },
-            )
-        })
-        .collect::<Vec<_>>();
-    if TitleOption::all(saves_exist()).contains(&TitleOption::Resume)
-        && let Some(meta) = latest_save_summary()
-    {
-        items.push(SectionItem::text(format!(
-            "Last save: depth {}m | {} cr | {:.0} min",
-            meta.depth,
-            meta.credits,
-            (meta.play_seconds / 60.0).floor()
-        )));
-    }
-    UiLayout::screen(draw).modal_with_render_plan(
-        "DRILLGAME",
-        "A frontier mining run awaits below. Up/Down select | Enter/E confirm | Esc exits | F11 fullscreen",
-        &ModalContent::new(vec![Section::new("Menu", SKY_LIGHT, items)]).compact(),
     );
 }
 
