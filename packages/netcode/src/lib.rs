@@ -38,7 +38,13 @@ mod params;
 pub mod protocol;
 mod simulation;
 
+#[cfg(any(test, feature = "harness"))]
+pub mod harness;
+#[cfg(any(test, feature = "harness"))]
+pub mod toy;
 
+#[cfg(test)]
+mod tests;
 
 pub use client::{
     ClientConfig, ClientPhase, ClientSession, ClientStats, ClientView, EventSource, PresentedEvent,
