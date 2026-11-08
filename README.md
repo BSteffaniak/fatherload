@@ -40,7 +40,8 @@ Successful return trips award streak bonuses. Emergency rescue returns the rig t
 - `1`-`6`: quick-select upgrades while the shop is open
 - `F5` / `F9`: quick save/load using `save.json` in the state directory
 - Pause menu: save/load slots, options, exit confirmation
-- `F11`: fullscreen toggle
+- `F11`: borderless fullscreen toggle (the window also resizes, maximizes and uses macOS
+  native fullscreen from the green button)
 - `+` / `-`: volume hotkeys
 
 ## Surface Buildings
@@ -77,4 +78,5 @@ Files live in `$DRILLGAME_STATE_DIR`, else `$XDG_STATE_HOME/drillgame`, else
 - A save (format v4) is the host's `WorldState` plus play time; v1-v3 saves are migrated on load,
   and loading starts a new session epoch.
 - Slot UI displays depth and credits; the title shows the latest save's depth, credits and playtime.
-- Settings are stored in `settings.json` and persist volume/fullscreen preferences.
+- Settings are stored in `settings.json` and persist volume/fullscreen preferences and
+  the window size/maximized state.

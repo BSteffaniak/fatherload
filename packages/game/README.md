@@ -22,7 +22,11 @@ Modules:
 
 - `runtime` — `Runtime { Host, Client }`, `LocalHost`, `MAX_LOCAL_SEATS` (the only seat cap).
 - `shell` — shell state and menu logic; reads the world, never mutates it.
-- `render_snapshot` — immutable per-frame view and the N-view split-screen layout.
+- `render_snapshot` — immutable per-frame view, the N-view split-screen layout for the current
+  window size, and the world zoom (`WORLD_VIEW_HEIGHT`: the world spans the same height at any
+  window size).
+- `window` — the resizable, maximizable high-DPI window, borderless fullscreen and the
+  remembered window size.
 - `effects` — exactly-once event delivery, sound cues and presentation particles.
 - `rendering` — `GameRenderer`: `terrain` (chunked textures + fog), `world` (rigs, entities),
   `screen` (HUD, menus, map), `interior`, `layout` (screen layout) and `layout::widgets` (widget
