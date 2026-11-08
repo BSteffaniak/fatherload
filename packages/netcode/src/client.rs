@@ -512,7 +512,7 @@ impl<S: NetSimulation> ClientSession<S> {
         );
         if let Some(expected) = debug_hash {
             self.stats.hash_checks += 1;
-            if authority.state_hash() != expected {
+            if authority.visible_state_hash(self.player) != expected {
                 self.stats.hash_mismatches += 1;
                 self.outbox
                     .push(ClientMessage::KeyframeRequest { epoch: self.epoch });

@@ -30,7 +30,7 @@ const WAIT: Duration = Duration::from_secs(8);
 struct Host {
     session: HostSession<WorldState>,
     net: HostNet,
-    hashes: BTreeMap<Tick, u64>,
+    hashes: BTreeMap<(Tick, PlayerId), u64>,
     resolved: BTreeMap<PlayerId, Vec<ActionId>>,
     last: Instant,
 }
@@ -66,8 +66,8 @@ impl Host {
         self.last = now;
         self.net.pump(&mut self.session, dt.as_secs_f32());
         let output = self.session.advance(dt);
-        for (tick, hash) in output.tick_hashes {
-            self.hashes.insert(tick, hash);
+        for (tick, player, hash) in output.tick_hashes {
+            self.hashes.insert((tick, player), hash);
         }
         while self.hashes.len() > 4_096 {
             self.hashes.pop_first();
@@ -146,10 +146,11 @@ impl Peer {
         self.frames_seen = frames;
         if fresh_frame
             && let Some(authority) = self.client.session().authority()
-            && let Some(expected) = host.hashes.get(&authority.tick())
+            && let Some(player) = self.player()
+            && let Some(expected) = host.hashes.get(&(authority.tick(), player))
         {
             assert_eq!(
-                authority.state_hash(),
+                drillgame_netcode::NetSimulation::visible_state_hash(authority, Some(player)),
                 *expected,
                 "client authority diverged from the host at tick {}",
                 authority.tick().0

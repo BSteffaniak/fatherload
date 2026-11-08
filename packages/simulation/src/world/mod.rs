@@ -26,6 +26,7 @@ mod discovery;
 mod hazards;
 mod import;
 mod movement;
+mod player_sections;
 mod progression;
 mod replication;
 #[cfg(test)]
@@ -40,12 +41,14 @@ mod tests;
 #[cfg(test)]
 mod tick_rate_tests;
 mod timing;
+mod visibility;
 
 pub use discovery::{DiscoveredTiles, Discovery};
+pub use player_sections::{PlayerInventory, PlayerRig, RigBuild, join_player, split_player};
 pub use replication::{
-    ContractsSection, EconomySection, LiveEntities, MarkersSection, PlayerInventory, PlayerLoadout,
-    PlayerRig, PlayerTickState, ProgressionSection, SectionKey, SectionPayload, SessionSection,
-    TimersSection, WorldEventsSection, hash_serialized, join_player, split_player,
+    ContractsSection, EconomySection, LiveEntities, MarkersSection, PlayerLoadout, PlayerTickState,
+    ProgressionSection, SectionKey, SectionPayload, SessionSection, TimersSection,
+    WorldEventsSection, hash_serialized,
 };
 pub use roster::SPAWN_SPACING;
 pub use services::{

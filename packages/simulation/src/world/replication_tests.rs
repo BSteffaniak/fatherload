@@ -22,12 +22,26 @@ fn wire<T: Serialize + DeserializeOwned>(value: &T) -> T {
 struct Baseline {
     hashes: BTreeMap<SectionKey, u64>,
     sent: usize,
+    /// `Some(viewer)`: replicate only what a client playing `viewer` may see.
+    viewer: Option<PlayerId>,
 }
 
 impl Baseline {
+    fn sees_section(&self, key: SectionKey) -> bool {
+        self.viewer
+            .is_none_or(|viewer| key.visible_to(Some(viewer)))
+    }
+
+    fn sees_player(&self, player_id: PlayerId) -> bool {
+        self.viewer.is_none_or(|viewer| viewer == player_id)
+    }
+
     fn changed_sections(&mut self, authority: &WorldState) -> Vec<(SectionKey, SectionPayload)> {
         let mut changed = Vec::new();
         for key in authority.section_keys() {
+            if !self.sees_section(key) {
+                continue;
+            }
             let hash = authority.section_hash(key).expect("listed section exists");
             if self.hashes.get(&key) != Some(&hash) {
                 self.hashes.insert(key, hash);
@@ -59,7 +73,9 @@ fn replicate_tick(
         replica.apply_tile_change(&op);
     }
     for discovery in wire(&output.discoveries) {
-        replica.apply_discovery(&discovery);
+        if baseline.sees_player(discovery.player_id) {
+            replica.apply_discovery(&discovery);
+        }
     }
     for (key, payload) in wire(&baseline.changed_sections(authority)) {
         replica.apply_section(key, payload);
@@ -146,6 +162,49 @@ fn replica_follows_roster_changes() {
     }
     assert!(replica.player(joined).is_some());
     assert!(replica.player(PlayerId::new(2)).is_none());
+}
+
+#[test]
+fn a_client_replica_without_other_players_private_state_matches_the_visible_hash() {
+    let viewer = PlayerId::new(1);
+    let mut authority = scripted_world();
+    let mut replica: WorldState = wire(&authority.redacted_for(Some(viewer)));
+    let mut baseline = Baseline {
+        viewer: Some(viewer),
+        ..Baseline::default()
+    };
+    let _ = baseline.changed_sections(&authority);
+    let mut full_hash_differed = false;
+    for tick in 0..3_000 {
+        let inputs = scripted_inputs(tick);
+        let output = authority.simulate_tick(SimulationTick::new(tick), &inputs);
+        replicate_tick(&mut replica, &authority, &output, &mut baseline);
+        assert_eq!(
+            replica.visible_state_hash(Some(viewer)),
+            authority.visible_state_hash(Some(viewer)),
+            "client replica diverged at tick {}",
+            tick + 1
+        );
+        full_hash_differed |= replica.simulation_state_hash() != authority.simulation_state_hash();
+    }
+    assert!(
+        full_hash_differed,
+        "the other rig's private state really was withheld"
+    );
+    let other = PlayerId::new(2);
+    assert_ne!(
+        replica.player(other).map(|rig| rig.credits),
+        authority.player(other).map(|rig| rig.credits)
+    );
+    assert_eq!(
+        replica.discovered_tile_count(other),
+        0,
+        "other players' discovery is private"
+    );
+    assert_eq!(
+        replica.discovered_tile_count(viewer),
+        authority.discovered_tile_count(viewer)
+    );
 }
 
 #[test]

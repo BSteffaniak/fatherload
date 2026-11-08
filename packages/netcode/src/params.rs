@@ -136,7 +136,7 @@ pub struct NetTuning {
     pub max_prediction_ms: u32,
     /// Maximum fixed ticks run by one `advance` call (catch-up clamp).
     pub max_catch_up_ticks: u32,
-    /// Include a full-world debug hash every N frames (0 disables).
+    /// Include the client-visible world hash every N frames (0 disables).
     pub debug_hash_interval: u32,
 }
 

@@ -78,6 +78,44 @@ fn world_zero_latency_has_zero_corrections() {
 }
 
 #[test]
+fn world_private_state_reaches_only_its_owner() {
+    use crate::world::to_sim_player;
+
+    let mut harness = harness(60, 3, LinkConditions::perfect());
+    harness.run_ticks(60 * 40);
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    let host = harness.world();
+    let template_credits = host.player_template().credits;
+    let mut other_rich = false;
+    for client in &harness.clients {
+        let me = client.session.player().expect("joined");
+        let authority = client.session.authority().expect("in game");
+        for player in host.player_ids() {
+            let host_rig = host.player(player).expect("host rig");
+            let client_rig = authority.player(player).expect("roster replicated");
+            assert_eq!(
+                client_rig.hull_level, host_rig.hull_level,
+                "rig build is public"
+            );
+            if player == to_sim_player(me) {
+                assert_eq!(client_rig.credits, host_rig.credits);
+                assert_eq!(
+                    authority.discovered_tile_count(player),
+                    host.discovered_tile_count(player)
+                );
+                assert!(host.discovered_tile_count(player) > 0);
+            } else {
+                assert_eq!(client_rig.credits, template_credits, "loadouts are private");
+                assert_eq!(authority.discovered_tile_count(player), 0);
+                other_rich |= host_rig.credits != template_credits;
+            }
+        }
+    }
+    assert!(other_rich, "some rig's credits changed on the host");
+}
+
+#[test]
 fn world_bad_internet_corrections_are_bounded_and_actions_exactly_once() {
     // 150 ms +/- 20 ms jitter with 3 % loss (plus duplication and reordering).
     let link = LinkConditions::new(150, 20, 3.0).with_chaos(2.0, 5.0);

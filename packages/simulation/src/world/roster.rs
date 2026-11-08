@@ -83,7 +83,7 @@ impl WorldState {
             bomb_detonation_ticks: _,
             rng: _,
             discovered_tiles,
-            service_transactions: _,
+            service_transactions,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
@@ -97,6 +97,7 @@ impl WorldState {
         scanner_cooldowns.remove(&player_id);
         scanner_cooldown_deadlines.remove(&player_id);
         discovered_tiles.remove(&player_id);
+        service_transactions.retain(|transaction| transaction.player_id != player_id);
     }
 
     /// The first spawn slot at least [`SPAWN_SPACING`] away from every rig, or the least crowded

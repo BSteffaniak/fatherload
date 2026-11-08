@@ -5,16 +5,19 @@
 //! | Kind | Contents | API |
 //! |---|---|---|
 //! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); live entities: gas clouds, falling boulders, bombs ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
-//! | Op log | terrain tiles | [`crate::TickOutput::terrain_ops`], [`WorldState::apply_tile_change`] |
-//! | On-change | per player: inventory, credits, upgrades, rig parts, rescue/salvage, discovery ([`PlayerLoadout`]); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants | [`WorldState::section`], [`WorldState::apply_section`] |
+//! | Op log | terrain tiles (shared); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
+//! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants | [`WorldState::section`], [`WorldState::apply_section`] |
+//!
+//! Private state (a player's [`PlayerLoadout`] and discovery) is replicated only to its owner;
+//! see [`super::visibility`] for the client-visible state hash and keyframe redaction.
 //!
 //! Terrain dimensions, seed and the initial tiles only travel in a keyframe (the serialized
 //! [`WorldState`] itself).
 //!
 //! Coverage is enforced by the compiler: [`WorldState::section`] and
-//! `WorldState::remove_player` (in `roster`) destructure the whole world, and [`split_player`] destructures
-//! the whole [`Player`], without `..`. Adding a field fails to compile until it is assigned to a
-//! section here.
+//! `WorldState::remove_player` (in `roster`) destructure the whole world, and
+//! [`split_player`] destructures the whole [`crate::Player`], without `..`. Adding a field fails
+//! to compile until it is assigned to a section here.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,15 +30,17 @@ use crate::{
     hazard::{FallingBoulder, HazardCloud, PlacedBomb, ScanMarker},
     ids::{PlayerId, SimulationTick},
     infrastructure::PlacedInfrastructure,
-    player::Player,
     progression::{Expedition, LegendaryBlueprint, SideContract, WorldEventKind},
     rig::{DrillState, RigPartKind},
     rng::DeterministicRngState,
     service::PlayerServiceTransaction,
-    terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TileChange, TilePosition},
+    terrain::{MineralKind, TileChange, TilePosition},
 };
 
-use super::{ActiveDrillTimer, DeepRunState, LostCargoSite, TickTiming, WorldState};
+use super::{
+    ActiveDrillTimer, DeepRunState, LostCargoSite, TickTiming, WorldState,
+    player_sections::{PlayerInventory, RigBuild, join_player, split_player},
+};
 
 /// Per-tick replicated state of one rig.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -51,199 +56,6 @@ pub struct PlayerTickState {
     pub scanner_cooldown: Option<f32>,
     pub scanner_deadline: Option<SimulationTick>,
     pub deep_run: Option<DeepRunState>,
-}
-
-/// The per-tick parts of a [`Player`].
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-pub struct PlayerRig {
-    pub x: f32,
-    pub y: f32,
-    pub velocity_x: f32,
-    pub velocity_y: f32,
-    pub fuel: f32,
-    pub hull: f32,
-}
-
-/// The on-change parts of a [`Player`]: inventory, credits, upgrades and kits.
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "mirrors the player's independent inventory fields"
-)]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct PlayerInventory {
-    pub fuel_capacity: f32,
-    pub cargo: BTreeMap<MineralKind, u32>,
-    pub artifacts: BTreeMap<ArtifactKind, u32>,
-    pub materials: BTreeMap<StrategicResourceKind, u32>,
-    pub cargo_capacity: u32,
-    pub fuel_tank_level: u8,
-    pub cargo_bay_level: u8,
-    pub credits: u32,
-    pub drill_strength: u8,
-    pub engine_level: u8,
-    pub hull_level: u8,
-    pub radiator_level: u8,
-    pub scanner_level: u8,
-    pub bombs: u32,
-    pub loan_debt: u32,
-    pub insured: bool,
-    pub insurance_tier: u8,
-    pub crafted_bulkheads: u8,
-    pub crafted_sorters: u8,
-    pub signal_relay_kits: u32,
-    pub survey_drone_kits: u32,
-    pub cargo_lift_kits: u32,
-    pub tunnel_support_kits: u32,
-    pub pump_station_kits: u32,
-    pub ore_processor_kits: u32,
-}
-
-/// Splits a player into its per-tick and on-change parts (exhaustive: every field goes to one).
-#[must_use]
-pub fn split_player(player: &Player) -> (PlayerRig, PlayerInventory) {
-    let Player {
-        x,
-        y,
-        velocity_x,
-        velocity_y,
-        fuel,
-        fuel_capacity,
-        hull,
-        cargo,
-        artifacts,
-        materials,
-        cargo_capacity,
-        fuel_tank_level,
-        cargo_bay_level,
-        credits,
-        drill_strength,
-        engine_level,
-        hull_level,
-        radiator_level,
-        scanner_level,
-        bombs,
-        loan_debt,
-        insured,
-        insurance_tier,
-        crafted_bulkheads,
-        crafted_sorters,
-        signal_relay_kits,
-        survey_drone_kits,
-        cargo_lift_kits,
-        tunnel_support_kits,
-        pump_station_kits,
-        ore_processor_kits,
-    } = player.clone();
-    (
-        PlayerRig {
-            x,
-            y,
-            velocity_x,
-            velocity_y,
-            fuel,
-            hull,
-        },
-        PlayerInventory {
-            fuel_capacity,
-            cargo,
-            artifacts,
-            materials,
-            cargo_capacity,
-            fuel_tank_level,
-            cargo_bay_level,
-            credits,
-            drill_strength,
-            engine_level,
-            hull_level,
-            radiator_level,
-            scanner_level,
-            bombs,
-            loan_debt,
-            insured,
-            insurance_tier,
-            crafted_bulkheads,
-            crafted_sorters,
-            signal_relay_kits,
-            survey_drone_kits,
-            cargo_lift_kits,
-            tunnel_support_kits,
-            pump_station_kits,
-            ore_processor_kits,
-        },
-    )
-}
-
-/// Reassembles a player from its two parts.
-#[must_use]
-pub fn join_player(rig: PlayerRig, inventory: PlayerInventory) -> Player {
-    let PlayerRig {
-        x,
-        y,
-        velocity_x,
-        velocity_y,
-        fuel,
-        hull,
-    } = rig;
-    let PlayerInventory {
-        fuel_capacity,
-        cargo,
-        artifacts,
-        materials,
-        cargo_capacity,
-        fuel_tank_level,
-        cargo_bay_level,
-        credits,
-        drill_strength,
-        engine_level,
-        hull_level,
-        radiator_level,
-        scanner_level,
-        bombs,
-        loan_debt,
-        insured,
-        insurance_tier,
-        crafted_bulkheads,
-        crafted_sorters,
-        signal_relay_kits,
-        survey_drone_kits,
-        cargo_lift_kits,
-        tunnel_support_kits,
-        pump_station_kits,
-        ore_processor_kits,
-    } = inventory;
-    Player {
-        x,
-        y,
-        velocity_x,
-        velocity_y,
-        fuel,
-        fuel_capacity,
-        hull,
-        cargo,
-        artifacts,
-        materials,
-        cargo_capacity,
-        fuel_tank_level,
-        cargo_bay_level,
-        credits,
-        drill_strength,
-        engine_level,
-        hull_level,
-        radiator_level,
-        scanner_level,
-        bombs,
-        loan_debt,
-        insured,
-        insurance_tier,
-        crafted_bulkheads,
-        crafted_sorters,
-        signal_relay_kits,
-        survey_drone_kits,
-        cargo_lift_kits,
-        tunnel_support_kits,
-        pump_station_kits,
-        ore_processor_kits,
-    }
 }
 
 /// Per-tick live entities. Parallel vectors stay index-aligned.
@@ -266,6 +78,8 @@ pub struct PlayerLoadout {
     pub lost_cargo_site: Option<LostCargoSite>,
     pub rescue_count: Option<u32>,
     pub deep_reward_milestone: Option<i32>,
+    /// This player's entries of the bounded service transaction log, oldest first.
+    pub transactions: Vec<PlayerServiceTransaction>,
 }
 
 /// Market and transaction state.
@@ -276,7 +90,6 @@ pub struct EconomySection {
     pub market_history: Vec<u32>,
     pub mineral_market_history: BTreeMap<MineralKind, Vec<u32>>,
     pub total_earnings: u32,
-    pub service_transactions: Vec<PlayerServiceTransaction>,
 }
 
 /// Story contracts, side contracts and expeditions.
@@ -324,14 +137,16 @@ pub struct TimersSection {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SessionSection {
     pub timing: TickTiming,
-    pub player_template: Player,
+    pub player_template: crate::player::Player,
 }
 
 /// Key of an on-change section.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum SectionKey {
-    /// One player's inventory, credits, upgrades and per-player progress.
+    /// One player's inventory, credits, upgrades and per-player progress (private).
     Loadout(PlayerId),
+    /// The upgrade levels drawn on one player's rig (public).
+    RigBuild(PlayerId),
     Economy,
     Contracts,
     Progression,
@@ -345,6 +160,21 @@ pub enum SectionKey {
 }
 
 impl SectionKey {
+    /// The only player allowed to see this section, if it is private.
+    #[must_use]
+    pub const fn private_to(self) -> Option<PlayerId> {
+        match self {
+            Self::Loadout(player_id) => Some(player_id),
+            _ => None,
+        }
+    }
+
+    /// Whether a client playing `viewer` (`None`: a spectator) may receive this section.
+    #[must_use]
+    pub fn visible_to(self, viewer: Option<PlayerId>) -> bool {
+        self.private_to().is_none_or(|owner| Some(owner) == viewer)
+    }
+
     /// Every shared (not per-player) section.
     pub const SHARED: [Self; 10] = [
         Self::Economy,
@@ -364,6 +194,7 @@ impl SectionKey {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum SectionPayload {
     Loadout(Box<PlayerLoadout>),
+    RigBuild(RigBuild),
     Economy(Box<EconomySection>),
     Contracts(Box<ContractsSection>),
     Progression(ProgressionSection),
@@ -389,7 +220,7 @@ impl WorldState {
     #[must_use]
     pub fn player_tick_state(&self, player_id: PlayerId) -> Option<PlayerTickState> {
         let player = self.players.get(&player_id)?;
-        let (rig, _) = split_player(player);
+        let (rig, _, _) = split_player(player);
         Some(PlayerTickState {
             x: rig.x,
             y: rig.y,
@@ -508,7 +339,12 @@ impl WorldState {
     pub fn section_keys(&self) -> Vec<SectionKey> {
         self.players
             .keys()
-            .map(|player_id| SectionKey::Loadout(*player_id))
+            .flat_map(|player_id| {
+                [
+                    SectionKey::Loadout(*player_id),
+                    SectionKey::RigBuild(*player_id),
+                ]
+            })
             .chain(SectionKey::SHARED)
             .collect()
     }
@@ -576,7 +412,7 @@ impl WorldState {
         } = progression;
         Some(match key {
             SectionKey::Loadout(player_id) => {
-                let (_, inventory) = split_player(players.get(&player_id)?);
+                let (_, _, inventory) = split_player(players.get(&player_id)?);
                 SectionPayload::Loadout(Box::new(PlayerLoadout {
                     inventory,
                     equipped_rig_parts: equipped_rig_parts.get(&player_id).cloned(),
@@ -584,7 +420,16 @@ impl WorldState {
                     lost_cargo_site: lost_cargo_sites.get(&player_id).cloned(),
                     rescue_count: rescue_counts.get(&player_id).copied(),
                     deep_reward_milestone: deep_reward_milestones.get(&player_id).copied(),
+                    transactions: service_transactions
+                        .iter()
+                        .filter(|transaction| transaction.player_id == player_id)
+                        .copied()
+                        .collect(),
                 }))
+            }
+            SectionKey::RigBuild(player_id) => {
+                let (_, build, _) = split_player(players.get(&player_id)?);
+                SectionPayload::RigBuild(build)
             }
             SectionKey::Economy => SectionPayload::Economy(Box::new(EconomySection {
                 town_event_day: *town_event_day,
@@ -592,7 +437,6 @@ impl WorldState {
                 market_history: market_history.clone(),
                 mineral_market_history: mineral_market_history.clone(),
                 total_earnings: *total_earnings,
-                service_transactions: service_transactions.clone(),
             })),
             SectionKey::Contracts => SectionPayload::Contracts(Box::new(ContractsSection {
                 contracts: contracts.clone(),
@@ -653,11 +497,15 @@ impl WorldState {
                     lost_cargo_site,
                     rescue_count,
                     deep_reward_milestone,
+                    transactions,
                 } = *loadout;
                 if let Some(player) = self.players.get_mut(&player_id) {
-                    let (rig, _) = split_player(player);
-                    *player = join_player(rig, inventory);
+                    let (rig, build, _) = split_player(player);
+                    *player = join_player(rig, build, inventory);
                 }
+                self.service_transactions
+                    .retain(|transaction| transaction.player_id != player_id);
+                self.service_transactions.extend(transactions);
                 set_or_remove(&mut self.equipped_rig_parts, player_id, equipped_rig_parts);
                 set_or_remove(&mut self.mechanic_levels, player_id, mechanic_level);
                 set_or_remove(&mut self.lost_cargo_sites, player_id, lost_cargo_site);
@@ -668,6 +516,13 @@ impl WorldState {
                     deep_reward_milestone,
                 );
             }
+            (SectionKey::RigBuild(player_id), SectionPayload::RigBuild(build)) => {
+                self.add_player(player_id);
+                if let Some(player) = self.players.get_mut(&player_id) {
+                    let (rig, _, inventory) = split_player(player);
+                    *player = join_player(rig, build, inventory);
+                }
+            }
             (SectionKey::Economy, SectionPayload::Economy(economy)) => {
                 let EconomySection {
                     town_event_day,
@@ -675,14 +530,12 @@ impl WorldState {
                     market_history,
                     mineral_market_history,
                     total_earnings,
-                    service_transactions,
                 } = *economy;
                 self.progression.town_event_day = town_event_day;
                 self.progression.market_salt = market_salt;
                 self.progression.market_history = market_history;
                 self.progression.mineral_market_history = mineral_market_history;
                 self.progression.total_earnings = total_earnings;
-                self.service_transactions = service_transactions;
             }
             (SectionKey::Contracts, SectionPayload::Contracts(contracts)) => {
                 let ContractsSection {
@@ -755,9 +608,9 @@ impl WorldState {
         }
     }
 
-    /// Removes a section that no longer exists on the authority (a departed player's loadout).
+    /// Removes a section that no longer exists on the authority (a departed player's sections).
     pub fn remove_section(&mut self, key: SectionKey) {
-        if let SectionKey::Loadout(player_id) = key {
+        if let SectionKey::Loadout(player_id) | SectionKey::RigBuild(player_id) = key {
             self.remove_player(player_id);
         }
     }

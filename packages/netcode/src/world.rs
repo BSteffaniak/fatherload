@@ -11,6 +11,9 @@
 //!   [`PlayerTickState`] / [`LiveEntities`], the op log ([`WorldOp`]: terrain [`TileChange`]s
 //!   and per-player [`Discovery`] reveals) and on-change [`SectionKey`] / [`SectionPayload`]
 //!   sections. The keyframe is the world itself.
+//! * A player's loadout section and discovery ops go only to that player's client; other
+//!   clients get the redacted keyframe and compare the client-visible state hash
+//!   ([`WorldState::visible_state_hash`]).
 //! * Poses are in tiles, so the netcode's distance tunables (snap threshold, correction epsilon,
 //!   relevance radius) are expressed in tiles.
 
@@ -272,6 +275,16 @@ impl NetSimulation for WorldState {
         self.apply_player_tick_state(to_sim_player(id), state);
     }
 
+    fn op_relevant(&self, op: &WorldOp, relevance: &Relevance) -> bool {
+        match op {
+            WorldOp::Tile(_) => true,
+            // Discovery is private to its player.
+            WorldOp::Discovery(discovery) => relevance
+                .viewer
+                .is_some_and(|viewer| to_sim_player(viewer) == discovery.player_id),
+        }
+    }
+
     fn entities(&self, relevance: &Relevance) -> LiveEntities {
         if relevance.is_infinite() {
             return self.live_entities();
@@ -312,8 +325,16 @@ impl NetSimulation for WorldState {
         Self::remove_section(self, *key);
     }
 
+    fn section_visible(&self, key: &SectionKey, viewer: Option<PlayerId>) -> bool {
+        key.visible_to(viewer.map(to_sim_player))
+    }
+
     fn keyframe(&self) -> Self {
         self.clone()
+    }
+
+    fn keyframe_for(&self, viewer: Option<PlayerId>) -> Self {
+        self.redacted_for(viewer.map(to_sim_player))
     }
 
     fn from_keyframe(keyframe: Self) -> Self {
@@ -322,5 +343,9 @@ impl NetSimulation for WorldState {
 
     fn state_hash(&self) -> u64 {
         self.simulation_state_hash().get()
+    }
+
+    fn visible_state_hash(&self, viewer: Option<PlayerId>) -> u64 {
+        Self::visible_state_hash(self, viewer.map(to_sim_player)).get()
     }
 }

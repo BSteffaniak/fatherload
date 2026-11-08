@@ -1,16 +1,40 @@
 //! Canonical simulation state hashing.
+//!
+//! [`WorldState::simulation_state_hash`] covers the whole world.
+//! [`WorldState::hash_visible`] covers what one client can see (see [`super::visibility`]):
+//! every player's per-tick state and [`super::RigBuild`] are always included, while a player's
+//! private state (inventory, credits, kits, rig parts, mechanic level, salvage, rescue count,
+//! deep reward milestone, discovery and service transactions) is included only for players the
+//! predicate accepts. Per-player data is hashed player by player, so the result does not depend
+//! on how entries of different players interleave.
 
-use crate::hash::{SimulationStateHash, StateHasher};
+use std::collections::BTreeSet;
 
-use super::WorldState;
+use crate::{
+    hash::{SimulationStateHash, StateHasher},
+    ids::PlayerId,
+};
+
+use super::{WorldState, player_sections::split_player};
 
 impl WorldState {
+    /// Hash of the whole world (determinism checks, local replays).
+    #[must_use]
+    pub fn simulation_state_hash(&self) -> SimulationStateHash {
+        self.hash_visible(|_| true)
+    }
+
+    /// Hash of the world with private per-player state included only where `sees_private`
+    /// accepts the player.
     #[must_use]
     #[allow(
         clippy::too_many_lines,
         reason = "stable hash intentionally enumerates all canonical gameplay state"
     )]
-    pub fn simulation_state_hash(&self) -> SimulationStateHash {
+    pub(super) fn hash_visible(
+        &self,
+        sees_private: impl Fn(PlayerId) -> bool,
+    ) -> SimulationStateHash {
         let mut hash = StateHasher::new();
         hash.write_serialized(&self.timing);
         hash.write_serialized(&self.player_template);
@@ -19,15 +43,24 @@ impl WorldState {
         hash.write_u64(u64::try_from(self.players.len()).unwrap_or(u64::MAX));
         for (player_id, player) in &self.players {
             hash.write_u64(player_id.get());
-            hash.write_serialized(player);
+            let (rig, build, inventory) = split_player(player);
+            hash.write_serialized(&rig);
+            hash.write_serialized(&build);
+            if sees_private(*player_id) {
+                hash.write_serialized(&inventory);
+            }
         }
         for (player_id, parts) in &self.equipped_rig_parts {
-            hash.write_u64(player_id.get());
-            hash.write_serialized(parts);
+            if sees_private(*player_id) {
+                hash.write_u64(player_id.get());
+                hash.write_serialized(parts);
+            }
         }
         for (player_id, mechanic_level) in &self.mechanic_levels {
-            hash.write_u64(player_id.get());
-            hash.write_u64(u64::from(*mechanic_level));
+            if sees_private(*player_id) {
+                hash.write_u64(player_id.get());
+                hash.write_u64(u64::from(*mechanic_level));
+            }
         }
         for (kind, severity) in &self.world_event_severity {
             hash.write_serialized(kind);
@@ -43,6 +76,9 @@ impl WorldState {
             hash.write_f32(state.instability);
         }
         for (player_id, site) in &self.lost_cargo_sites {
+            if !sees_private(*player_id) {
+                continue;
+            }
             hash.write_u64(player_id.get());
             hash.write_f32(site.x);
             hash.write_f32(site.y);
@@ -50,15 +86,22 @@ impl WorldState {
             hash.write_serialized(&site.artifacts);
         }
         for (player_id, count) in &self.rescue_counts {
-            hash.write_u64(player_id.get());
-            hash.write_u64(u64::from(*count));
+            if sees_private(*player_id) {
+                hash.write_u64(player_id.get());
+                hash.write_u64(u64::from(*count));
+            }
         }
         hash.write_serialized(&self.progression.contracts);
         hash.write_serialized(&self.progression.deep_claim_status);
         if let Some(deadline) = self.progression.escape_deadline {
             hash.write_u64(deadline.get());
         }
-        hash.write_serialized(&self.progression.deep_reward_milestones);
+        for (player_id, milestone) in &self.progression.deep_reward_milestones {
+            if sees_private(*player_id) {
+                hash.write_u64(player_id.get());
+                hash.write_i32(*milestone);
+            }
+        }
         hash.write_serialized(&self.progression.town_development);
         hash.write_serialized(&self.progression.active_side_contracts);
         hash.write_serialized(&self.progression.expedition_offers);
@@ -134,15 +177,29 @@ impl WorldState {
         }
         hash.write_u64(self.rng.state());
         for player_id in self.discovered_tiles.keys() {
-            self.hash_discovery(*player_id, &mut hash);
+            if sees_private(*player_id) {
+                self.hash_discovery(*player_id, &mut hash);
+            }
         }
-        for transaction in &self.service_transactions {
-            hash.write_u64(transaction.player_id.get());
-            hash.write_serialized(&transaction.kind);
-            hash.write_u64(u64::from(transaction.credits_before));
-            hash.write_u64(u64::from(transaction.credits_after));
-            hash.write_u64(u64::from(transaction.cargo_before));
-            hash.write_u64(u64::from(transaction.cargo_after));
+        let transacting: BTreeSet<PlayerId> = self
+            .service_transactions
+            .iter()
+            .map(|transaction| transaction.player_id)
+            .filter(|player_id| sees_private(*player_id))
+            .collect();
+        for player_id in transacting {
+            for transaction in self
+                .service_transactions
+                .iter()
+                .filter(|transaction| transaction.player_id == player_id)
+            {
+                hash.write_u64(transaction.player_id.get());
+                hash.write_serialized(&transaction.kind);
+                hash.write_u64(u64::from(transaction.credits_before));
+                hash.write_u64(u64::from(transaction.credits_after));
+                hash.write_u64(u64::from(transaction.cargo_before));
+                hash.write_u64(u64::from(transaction.cargo_after));
+            }
         }
         hash.finish()
     }

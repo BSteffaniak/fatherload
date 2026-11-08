@@ -20,6 +20,16 @@
 //! whenever it changes, using [`NetSimulation::add_player`] /
 //! [`NetSimulation::remove_player`] on the client.
 //!
+//! # Per-client visibility
+//!
+//! A simulation may keep state private to one player (an inventory, a map).
+//! [`NetSimulation::section_visible`] and [`NetSimulation::op_relevant`] (via
+//! [`Relevance::viewer`]) keep it off other clients' wires, and
+//! [`NetSimulation::keyframe_for`] redacts it from their keyframes. A client
+//! then holds only defaults for other players' private state, so replica
+//! checks use [`NetSimulation::visible_state_hash`]: the host computes it for
+//! each client's player and the client over its authority.
+//!
 //! The initial sketch's `encode_replication` / `apply_replication` pair is
 //! deliberately split into these fine-grained hooks so that netcode owns the
 //! per-client baselines (section hashes, pending ops, roster) and the
@@ -269,8 +279,9 @@ pub trait NetSimulation: Clone + Debug {
     /// Replaces the per-tick entities with a received copy.
     fn apply_entities(&mut self, entities: Self::Entities);
 
-    /// Whether an op-log entry should be sent to a client with `relevance`.
-    /// Defaults to always (filtering requires a far-chunk refresh mechanism).
+    /// Whether an op-log entry should be sent to a client with `relevance`
+    /// (for example only to [`Relevance::viewer`] for private ops). Defaults
+    /// to always.
     fn op_relevant(&self, _op: &Self::Op, _relevance: &Relevance) -> bool {
         true
     }
@@ -287,12 +298,27 @@ pub trait NetSimulation: Clone + Debug {
     fn apply_section(&mut self, key: &Self::SectionKey, section: Self::Section);
     /// Removes a section that no longer exists on the host.
     fn remove_section(&mut self, key: &Self::SectionKey);
+    /// Whether a client playing `viewer` may receive a section. Defaults to
+    /// every section being visible to everyone.
+    fn section_visible(&self, _key: &Self::SectionKey, _viewer: Option<PlayerId>) -> bool {
+        true
+    }
 
     /// Full-world snapshot.
     fn keyframe(&self) -> Self::Keyframe;
+    /// The snapshot sent to a client playing `viewer`: the full world minus
+    /// state private to other players.
+    fn keyframe_for(&self, _viewer: Option<PlayerId>) -> Self::Keyframe {
+        self.keyframe()
+    }
     /// Rebuilds a world from a snapshot.
     fn from_keyframe(keyframe: Self::Keyframe) -> Self;
 
     /// Hash over all replicated state (see [`crate::StableHasher`]).
     fn state_hash(&self) -> u64;
+    /// Hash over the state a client playing `viewer` receives. Must agree
+    /// between the host's world and a correctly replicated client authority.
+    fn visible_state_hash(&self, _viewer: Option<PlayerId>) -> u64 {
+        self.state_hash()
+    }
 }

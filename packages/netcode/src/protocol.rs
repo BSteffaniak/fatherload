@@ -216,7 +216,8 @@ pub struct ServerFrame<S: NetSimulation> {
     pub removed_sections: Vec<S::SectionKey>,
     /// Gameplay events since the previous frame.
     pub events: Vec<NetEvent<S::Event>>,
-    /// Full-world hash after this tick (debug builds / harness).
+    /// The host world's hash as visible to this client after this tick
+    /// ([`crate::NetSimulation::visible_state_hash`]; debug builds / harness).
     pub debug_hash: Option<u64>,
 }
 

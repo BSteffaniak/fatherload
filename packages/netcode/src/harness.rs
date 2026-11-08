@@ -421,7 +421,7 @@ pub struct Harness<S: HarnessSim> {
     /// Local time.
     pub now: Duration,
     rng: DetRng,
-    host_hashes: BTreeMap<Tick, u64>,
+    host_hashes: BTreeMap<(Tick, PlayerId), u64>,
     /// `(player, action id) -> times applied` from host events.
     pub applied_actions: BTreeMap<(PlayerId, ActionId), u32>,
     /// Host events counted by [`HarnessSim::event_label`].
@@ -542,8 +542,8 @@ impl<S: HarnessSim> Harness<S> {
         }
 
         let output = self.host.advance(dt);
-        for (tick, hash) in output.tick_hashes {
-            self.host_hashes.insert(tick, hash);
+        for (tick, player, hash) in output.tick_hashes {
+            self.host_hashes.insert((tick, player), hash);
         }
         for event in &output.events {
             if let (Some(player), Some(id)) = (event.player, S::resolved_action(&event.payload)) {
@@ -558,7 +558,7 @@ impl<S: HarnessSim> Harness<S> {
             .tick()
             .0
             .saturating_sub(self.config.params.rate() * 20);
-        self.host_hashes = self.host_hashes.split_off(&Tick(horizon));
+        self.host_hashes = self.host_hashes.split_off(&(Tick(horizon), PlayerId(0)));
 
         for (client_id, message) in output.outbound {
             if let Some(client) = self
@@ -589,10 +589,11 @@ impl<S: HarnessSim> Harness<S> {
                 if is_frame {
                     client.frames_down += 1;
                     if let Some(authority) = client.session.authority()
-                        && let Some(expected) = self.host_hashes.get(&authority.tick())
+                        && let Some(player) = client.session.player()
+                        && let Some(expected) = self.host_hashes.get(&(authority.tick(), player))
                     {
                         client.hash_compares += 1;
-                        if authority.state_hash() != *expected {
+                        if authority.visible_state_hash(Some(player)) != *expected {
                             client.hash_mismatches += 1;
                         }
                     }
@@ -759,10 +760,10 @@ impl<S: HarnessSim> Harness<S> {
         self.host.world()
     }
 
-    /// Hash of the host world at a recorded tick.
+    /// The host world's hash as visible to `player`'s client at a recorded tick.
     #[must_use]
-    pub fn host_hash(&self, tick: Tick) -> Option<u64> {
-        self.host_hashes.get(&tick).copied()
+    pub fn host_hash(&self, tick: Tick, player: PlayerId) -> Option<u64> {
+        self.host_hashes.get(&(tick, player)).copied()
     }
 
     /// Current host tick.

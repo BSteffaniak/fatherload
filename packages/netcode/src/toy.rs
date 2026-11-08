@@ -3,7 +3,7 @@
 //! It exists only to exercise netcode end to end: players fly, fall and drill
 //! through a tile grid (op-log terrain), drop bombs (per-tick entities), and
 //! sell/buy through a per-player wallet and a shared market (on-change
-//! sections). All gameplay math is integer fixed point, and every constant is
+//! sections). Wallets are private: only their owner's client receives them. All gameplay math is integer fixed point, and every constant is
 //! authored per second and converted with the session tick rate.
 
 use std::collections::BTreeMap;
@@ -668,8 +668,25 @@ impl NetSimulation for ToySim {
         }
     }
 
+    fn section_visible(&self, key: &ToySectionKey, viewer: Option<PlayerId>) -> bool {
+        match key {
+            ToySectionKey::Market => true,
+            ToySectionKey::Wallet(owner) => Some(*owner) == viewer,
+        }
+    }
+
     fn keyframe(&self) -> Self {
         self.clone()
+    }
+
+    fn keyframe_for(&self, viewer: Option<PlayerId>) -> Self {
+        let mut world = self.clone();
+        for (owner, wallet) in &mut world.wallets {
+            if Some(*owner) != viewer {
+                *wallet = ToyWallet::default();
+            }
+        }
+        world
     }
 
     fn from_keyframe(keyframe: Self) -> Self {
@@ -678,5 +695,9 @@ impl NetSimulation for ToySim {
 
     fn state_hash(&self) -> u64 {
         stable_hash(self)
+    }
+
+    fn visible_state_hash(&self, viewer: Option<PlayerId>) -> u64 {
+        stable_hash(&self.keyframe_for(viewer))
     }
 }

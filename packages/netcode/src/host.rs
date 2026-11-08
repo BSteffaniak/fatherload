@@ -27,7 +27,8 @@ pub struct HostConfig {
     pub start_in_lobby: bool,
     /// How long a disconnected player stays reserved for its reconnect token.
     pub reconnect_grace: Duration,
-    /// Report the world hash after every tick in [`HostOutput::tick_hashes`].
+    /// Report each remote client's visible world hash after every tick in
+    /// [`HostOutput::tick_hashes`].
     pub record_tick_hashes: bool,
     /// Seed for reconnect token generation.
     ///
@@ -77,8 +78,9 @@ pub struct HostOutput<S: NetSimulation> {
     pub ops: Vec<(Tick, S::Op)>,
     /// Fixed ticks run.
     pub ticks_run: u32,
-    /// `(tick, world hash)` after each tick, if enabled.
-    pub tick_hashes: Vec<(Tick, u64)>,
+    /// `(tick, player, visible hash)` for each joined remote client's player
+    /// after each tick, if enabled (see [`NetSimulation::visible_state_hash`]).
+    pub tick_hashes: Vec<(Tick, PlayerId, u64)>,
 }
 
 impl<S: NetSimulation> Default for HostOutput<S> {
@@ -230,6 +232,7 @@ impl<S: NetSimulation> RemoteClient<S> {
         self.section_hashes = world
             .section_keys()
             .into_iter()
+            .filter(|key| world.section_visible(key, self.player))
             .filter_map(|key| world.section_hash(&key).map(|hash| (key, hash)))
             .collect();
         self.roster_sent = world.player_ids();
@@ -782,7 +785,12 @@ impl<S: NetSimulation> HostSession<S> {
         self.stats.ticks += 1;
         let events = tag_events(tick, result.events, &seqs);
         if self.config.record_tick_hashes {
-            output.tick_hashes.push((tick, self.world.state_hash()));
+            let viewers: BTreeSet<PlayerId> =
+                self.clients.values().filter_map(|c| c.player).collect();
+            for viewer in viewers {
+                let hash = self.world.visible_state_hash(Some(viewer));
+                output.tick_hashes.push((tick, viewer, hash));
+            }
         }
         for remote in self.clients.values_mut() {
             if remote.player.is_none() {
@@ -803,11 +811,6 @@ impl<S: NetSimulation> HostSession<S> {
     fn emit_due_frames(&mut self) {
         let rate = self.config.params.rate();
         let epoch = self.epoch;
-        let debug_world_hash = self
-            .clients
-            .values()
-            .any(|c| c.tuning.debug_hash_interval > 0);
-        let mut world_hash = None;
         for (client, remote) in &mut self.clients {
             if remote.player.is_none() {
                 continue;
@@ -828,12 +831,11 @@ impl<S: NetSimulation> HostSession<S> {
                 .map_or(ActionId(0), |slot| slot.ledger.watermark());
             let mut frame = build_frame(&self.world, epoch, ack_action, remote);
             let interval = u64::from(remote.tuning.debug_hash_interval);
-            if debug_world_hash
-                && interval > 0
+            if interval > 0
                 && remote.stats.frames_sent % interval == 0
                 && relevance_for(&self.world, remote).is_infinite()
             {
-                frame.debug_hash = Some(*world_hash.get_or_insert_with(|| self.world.state_hash()));
+                frame.debug_hash = Some(self.world.visible_state_hash(remote.player));
             }
             remote.stats.frames_sent += 1;
             self.outbox
@@ -933,7 +935,7 @@ impl<S: NetSimulation> HostSession<S> {
             started: self.phase == HostPhase::InGame,
             session_params: self.config.params,
             tuning: remote.tuning,
-            keyframe: self.world.keyframe(),
+            keyframe: self.world.keyframe_for(Some(player)),
         };
         self.outbox
             .push((client, ServerMessage::Welcome(Box::new(welcome))));
@@ -1053,7 +1055,7 @@ impl<S: NetSimulation> HostSession<S> {
             ServerMessage::Keyframe {
                 epoch: self.epoch,
                 tick: self.world.tick(),
-                world: Box::new(self.world.keyframe()),
+                world: Box::new(self.world.keyframe_for(remote.player)),
             },
         ));
     }
@@ -1203,7 +1205,10 @@ fn build_frame<S: NetSimulation>(
 
     let mut sections = Vec::new();
     let keys = world.section_keys();
-    for key in &keys {
+    for key in keys
+        .iter()
+        .filter(|key| world.section_visible(key, remote.player))
+    {
         let Some(hash) = world.section_hash(key) else {
             continue;
         };
