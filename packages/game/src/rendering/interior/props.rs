@@ -467,7 +467,8 @@ fn repair_props(draw: &mut impl RaylibDraw, ctx: &RoomContext<'_>) {
         fill(draw, stripe, FLOOR_Y - 39, 3, 2, INK);
     }
     // Pegboard with tools and a safety poster.
-    pegboard(draw, 150, 34);
+    // Between the hoist and the hanging sign so the sign never covers it.
+    pegboard(draw, 124, 34);
     poster(draw, 56, 36, 20, 26, LEAF);
     // Red tool chest and tyres right of the counter.
     let right = ctx.counter_x + COUNTER_WIDTH + 10;
@@ -886,8 +887,11 @@ fn explosives_props(draw: &mut impl RaylibDraw, ctx: &RoomContext<'_>) {
         }
     }
     floor_shadow(draw, 54, crate_width * 2 + 1);
-    // Red drums with flame markings.
-    for x in [100, 114] {
+    // Red drums with flame markings, set just past the crate stack (whose width follows the
+    // font), and the sandbags beyond them.
+    let drums_x = (57 + crate_width * 2).max(100);
+    let shift = drums_x - 100;
+    for x in [drums_x, drums_x + 14] {
         let y = FLOOR_Y - 18;
         bevel(draw, x, y, 13, 18, ORANGE, RED, MAROON);
         fill(draw, x + 1, y + 5, 11, 1, MAROON);
@@ -898,7 +902,7 @@ fn explosives_props(draw: &mut impl RaylibDraw, ctx: &RoomContext<'_>) {
     }
     // Sandbags.
     for (dx, dy) in [(132, 0), (146, 0), (139, -6)] {
-        let (x, y) = (dx, FLOOR_Y - 7 + dy);
+        let (x, y) = (dx + shift, FLOOR_Y - 7 + dy);
         fill(draw, x, y, 15, 7, INK);
         fill(draw, x + 1, y + 1, 13, 5, SAND);
         fill(draw, x + 1, y + 5, 13, 1, CLAY);
