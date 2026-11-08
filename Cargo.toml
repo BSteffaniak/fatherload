@@ -1,5 +1,5 @@
 [workspace]
-members  = ["packages/game", "packages/quic_transport", "packages/simulation"]
+members  = ["packages/game", "packages/netcode", "packages/quic_transport", "packages/simulation"]
 resolver = "2"
 
 [workspace.package]
@@ -15,6 +15,9 @@ bytes = "1.11.1"
 drillgame_simulation = { version = "0.0.1-alpha.0", path = "packages/simulation" }
 hostname = "0.4.2"
 mdns-sd = "0.18.2"
+postcard = { version = "1.1.3", default-features = false, features = [
+    "use-std",
+] }
 quinn = { version = "0.11.9", default-features = false, features = [
     "rustls",
     "ring",

@@ -1,0 +1,22 @@
+[package]
+authors.workspace    = true
+categories           = ["games", "network-programming"]
+description          = "Sans-IO multiplayer netcode for Drillgame: protocol, host/client sessions, prediction, interpolation and link simulation"
+edition.workspace    = true
+keywords             = ["game", "netcode", "multiplayer", "prediction"]
+license.workspace    = true
+name                 = "drillgame_netcode"
+readme               = "README.md"
+repository.workspace = true
+version.workspace    = true
+
+[features]
+default          = []
+fail-on-warnings = []
+# Exposes the toy simulation, scripted bots and the end-to-end harness so other
+# crates (e.g. a future headless soak binary) can reuse them.
+harness = []
+
+[dependencies]
+postcard = { workspace = true }
+serde    = { workspace = true }
