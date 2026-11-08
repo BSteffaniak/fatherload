@@ -267,6 +267,21 @@ macro_rules! interior_scene {
     };
 }
 
+/// A scene inside `$zone` with no panel open, the rig standing between the door and the counter
+/// so the whole room is visible.
+macro_rules! room_scene {
+    ($name:literal, $summary:literal, $zone:ident) => {
+        Scene {
+            name: $name,
+            summary: $summary,
+            setup: |stage| {
+                enter_interior(stage, SurfaceZone::$zone, None);
+                stage.shell().interior_x = interior_service_x(SurfaceZone::$zone) - 150.0;
+            },
+        }
+    };
+}
+
 /// Every scene, in capture order.
 pub const SCENES: &[Scene] = &[
     Scene {
@@ -437,6 +452,17 @@ pub const SCENES: &[Scene] = &[
             stage.shell().interior_x = interior_service_x(SurfaceZone::Shop) - 120.0;
         },
     },
+    room_scene!("room_fuel", "Fuel station room, no panel open", Fuel),
+    room_scene!("room_repair", "Repair garage room, no panel open", Repair),
+    room_scene!("room_depot", "Ore depot room, no panel open", Depot),
+    room_scene!("room_hq", "Headquarters room, no panel open", Headquarters),
+    room_scene!("room_bank", "Bank room, no panel open", Bank),
+    room_scene!(
+        "room_explosives",
+        "Explosives shack room, no panel open",
+        Explosives
+    ),
+    room_scene!("room_salvage", "Salvage yard room, no panel open", Salvage),
     Scene {
         name: "hud_low_fuel",
         summary: "HUD close-up underground with the fuel warning",

@@ -6,8 +6,9 @@
 //! shell's room units (`interior_x`, 0..640), which map to art pixels at half scale, so the door,
 //! counter and walking rules stay exactly those of [`crate::shell`].
 //!
-//! The Upgrade Shop is the fully dressed style reference; the other buildings share the room
-//! structure in their own colours with simpler props.
+//! Every building shares the room structure (ceiling, wall, wainscot, floor, exit door, sign,
+//! lamps, counter and keeper) in its own wall pattern and colours; [`props`] dresses each room
+//! with its own furniture, and the Upgrade Shop keeps its parts shelves and tool board here.
 
 use raylib::prelude::*;
 
@@ -29,9 +30,11 @@ use super::{
 };
 use drillgame_simulation::economy::SurfaceZone;
 
+mod props;
+
 use crate::{
     pixel_scale,
-    render_snapshot::ViewSnapshot,
+    render_snapshot::{MarketQuote, ViewSnapshot},
     shell::{ServiceAnimation, ShellState, interior_service_x, surface_zone_label},
 };
 
@@ -149,6 +152,7 @@ pub(super) fn draw_interior(
     draw: &mut RaylibDrawHandle<'_>,
     shell: &ShellState,
     view: &ViewSnapshot<'_>,
+    market: &[MarketQuote],
 ) {
     let zone = shell.interior_zone.unwrap_or(SurfaceZone::Depot);
     let set = interior_set(zone);
@@ -160,13 +164,21 @@ pub(super) fn draw_interior(
         let mut room = draw.begin_mode2D(placement.camera());
         draw_room_shell(&mut room, set, placement);
         draw_door(&mut room);
-        draw_lamps(&mut room, zone, counter_x);
-        match zone {
-            SurfaceZone::Shop => draw_shop_props(&mut room, counter_x, seconds),
-            _ => draw_generic_props(&mut room, zone, counter_x, seconds),
+        let context = props::RoomContext {
+            zone,
+            counter_x,
+            seconds,
+            market,
+        };
+        if zone == SurfaceZone::Shop {
+            draw_shop_props(&mut room, counter_x, seconds);
+        } else {
+            props::draw_room_props(&mut room, &context);
         }
+        draw_lamps(&mut room, zone, counter_x);
         draw_sign(&mut room, zone, set, counter_x);
         draw_counter(&mut room, set, counter_x, seconds);
+        props::draw_counter_props(&mut room, &context);
         draw_service_animation(&mut room, shell, zone, counter_x);
         draw_rig(&mut room, shell, seconds);
     }
@@ -364,8 +376,12 @@ fn draw_door(draw: &mut impl RaylibDraw) {
 fn draw_lamps(draw: &mut impl RaylibDraw, zone: SurfaceZone, counter_x: i32) {
     let lamp = &art::LAMP;
     let mut positions = vec![counter_x + COUNTER_WIDTH / 2 - lamp.width() / 2];
-    if zone == SurfaceZone::Shop {
-        positions.push(96);
+    // A second lamp over the showroom where its ceiling is free.
+    match zone {
+        SurfaceZone::Shop | SurfaceZone::Depot | SurfaceZone::Headquarters => positions.push(96),
+        SurfaceZone::Fuel => positions.push(128),
+        SurfaceZone::Explosives => positions.push(106),
+        SurfaceZone::Repair | SurfaceZone::Bank | SurfaceZone::Salvage => {}
     }
     for x in positions {
         // Cord from the ceiling.
@@ -575,99 +591,6 @@ fn draw_shop_props(draw: &mut impl RaylibDraw, counter_x: i32, seconds: f32) {
     draw.draw_rectangle(register_x + 1, register_y + 1, 14, 1, STEEL_LIGHT);
     draw.draw_rectangle(register_x + 3, register_y + 3, 8, 3, INK);
     draw.draw_rectangle(register_x + 4, register_y + 4, 6, 1, LIME);
-}
-
-/// Simpler dressing for the other buildings: a signature prop and a few crates.
-fn draw_generic_props(draw: &mut impl RaylibDraw, zone: SurfaceZone, counter_x: i32, seconds: f32) {
-    let right_x = counter_x + COUNTER_WIDTH + 16;
-    match zone {
-        SurfaceZone::Fuel => {
-            let pump = &art::FUEL_PUMP;
-            for (index, x) in [70, 104].into_iter().enumerate() {
-                let frame = pump.frame_at(seconds + index as f32 * 0.25);
-                room_sprite(draw, pump, frame, x, FLOOR_Y - pump.height(), false);
-            }
-            ui_icon(draw, &art::BARREL, right_x, FLOOR_Y - art::BARREL.height());
-            ui_icon(
-                draw,
-                &art::BARREL,
-                right_x + 11,
-                FLOOR_Y - art::BARREL.height(),
-            );
-        }
-        SurfaceZone::Repair => {
-            // Hydraulic lift.
-            draw.draw_rectangle(60, FLOOR_Y - 6, 84, 6, INK);
-            draw.draw_rectangle(61, FLOOR_Y - 5, 82, 4, RUST);
-            for post in [72, 128] {
-                draw.draw_rectangle(post, FLOOR_Y - 36, 5, 30, INK);
-                draw.draw_rectangle(post + 1, FLOOR_Y - 35, 3, 29, STEEL);
-            }
-            draw.draw_rectangle(66, FLOOR_Y - 38, 72, 4, INK);
-            draw.draw_rectangle(67, FLOOR_Y - 37, 70, 2, AMBER);
-            ui_icon(draw, &art::GEAR, right_x, FLOOR_Y - 20);
-            ui_icon(
-                draw,
-                &art::CRATE,
-                right_x + 10,
-                FLOOR_Y - art::CRATE.height(),
-            );
-        }
-        SurfaceZone::Depot => {
-            for (index, x) in [60, 74, 88].into_iter().enumerate() {
-                let y = FLOOR_Y - art::CRATE.height() * (1 + i32::from(index == 1));
-                ui_icon(draw, &art::CRATE, x, y);
-            }
-            ui_icon(draw, &art::CRATE, 74, FLOOR_Y - art::CRATE.height());
-            ui_icon(draw, &art::BARREL, right_x, FLOOR_Y - art::BARREL.height());
-        }
-        SurfaceZone::Headquarters => {
-            // Wall screen with a mine map.
-            ui_kit::well(draw, Rectangle::new(58.0, 46.0, 72.0, 44.0));
-            for row in 0..6 {
-                let width = 20 + (row * 9) % 40;
-                draw.draw_rectangle(64, 52 + row * 6, width, 3, TEAL);
-            }
-            draw.draw_rectangle(64 + 30, 64, 3, 3, GOLD);
-        }
-        SurfaceZone::Bank => {
-            // Vault door.
-            draw.draw_rectangle(62, FLOOR_Y - 56, 50, 56, INK);
-            draw.draw_rectangle(64, FLOOR_Y - 54, 46, 54, STEEL);
-            draw.draw_rectangle(64, FLOOR_Y - 54, 46, 2, STEEL_LIGHT);
-            draw.draw_rectangle(80, FLOOR_Y - 36, 14, 14, INK);
-            draw.draw_rectangle(82, FLOOR_Y - 34, 10, 10, GOLD);
-            draw.draw_rectangle(86, FLOOR_Y - 34, 2, 10, AMBER);
-        }
-        SurfaceZone::Explosives => {
-            for x in [62, 76, 90] {
-                draw.draw_rectangle(x, FLOOR_Y - 14, 12, 14, INK);
-                draw.draw_rectangle(x + 1, FLOOR_Y - 13, 10, 13, RED);
-                draw.draw_rectangle(x + 1, FLOOR_Y - 9, 10, 2, BONE);
-            }
-            ui_icon(draw, &art::CRATE, right_x, FLOOR_Y - art::CRATE.height());
-        }
-        SurfaceZone::Salvage | SurfaceZone::Shop => {
-            // Scrap pile.
-            for (dx, dy, color) in [
-                (0, 0, RUST),
-                (10, 3, STEEL_DARK),
-                (20, 0, COPPER),
-                (6, 9, STEEL),
-                (16, 11, RUST),
-            ] {
-                draw.draw_rectangle(62 + dx, FLOOR_Y - 14 - dy, 16, 14, INK);
-                draw.draw_rectangle(63 + dx, FLOOR_Y - 13 - dy, 14, 12, color);
-            }
-            ui_icon(draw, &art::GEAR, right_x, FLOOR_Y - 9);
-            ui_icon(
-                draw,
-                &art::BARREL,
-                right_x + 10,
-                FLOOR_Y - art::BARREL.height(),
-            );
-        }
-    }
 }
 
 fn draw_service_animation(

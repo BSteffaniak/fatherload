@@ -215,7 +215,7 @@ impl GameRenderer {
 
         if shell.run_mode == RunMode::Interior {
             if let Some(view) = snapshot.primary_view() {
-                draw_interior(draw, shell, view);
+                draw_interior(draw, shell, view, &snapshot.market);
             }
         } else {
             for view in &snapshot.views {

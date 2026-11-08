@@ -33,6 +33,121 @@ const WALL_GRID: &[&str] = &[
     "bbbbbbbbbbbbbbbb",
 ];
 
+/// Glazed wall tiles, 16x16 (fuel station): `b` grout, `c` light, `a` tile, `d` shade.
+const TILE_WALL_GRID: &[&str] = &[
+    "bbbbbbbbbbbbbbbb",
+    "bccccccabcccccca",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "baddddddbadddddd",
+    "bbbbbbbbbbbbbbbb",
+    "bccccccabcccccca",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "baddddddbadddddd",
+];
+/// Wood panelling, 16x16 (HQ): `b` seam, `c` light edge, `a` board, `d` shade.
+const PANEL_WALL_GRID: &[&str] = &[
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+    "bcaaaaadbcaaaaad",
+];
+/// Marble slabs, 16x16 (bank): `b` joint, `c` light, `a` stone, `d` vein.
+const MARBLE_WALL_GRID: &[&str] = &[
+    "cccccccccccccccb",
+    "cadaaaaaaaaaaaab",
+    "caadaaaaaaaadaab",
+    "caadaaaaaaadaaab",
+    "caaadaaaaaaadaab",
+    "caaaadaaaaaaadab",
+    "caaaadaaaaaaadab",
+    "caaaaadaaaaaaaab",
+    "caaaaaadaaaaaaab",
+    "caaaaaaadaaaaaab",
+    "caaaaaaadaaaaaab",
+    "caaaaaaaadaaaaab",
+    "caaaaaaaaadaaaab",
+    "caaaaaaaaaadaaab",
+    "caaaaaaaaaadaaab",
+    "bbbbbbbbbbbbbbbb",
+];
+/// Dressed stone, 16x16 (depot): `b` mortar, `c` light, `a` stone, `d` shade.
+const STONE_WALL_GRID: &[&str] = &[
+    "bbbbbbbbbbbbbbbb",
+    "bcccccbccccbcccc",
+    "bcaaadbcaadbcaad",
+    "bcaaadbcaadbcaad",
+    "bcaaadbcaadbcaad",
+    "bcddddbcdddbcddd",
+    "bbbbbbbbbbbbbbbb",
+    "cccbcccccbccccbc",
+    "aadbcaaadbcaadbc",
+    "aadbcaaadbcaadbc",
+    "dddbcddddbcdddbc",
+    "bbbbbbbbbbbbbbbb",
+    "cbcccccbccccbccc",
+    "dbcaaadbcaadbcaa",
+    "dbcaaadbcaadbcaa",
+    "dbcddddbcdddbcdd",
+];
+/// Corrugated sheet, 16x16 (salvage): `b` seam and rivets, `c` ridge, `a` sheet, `d` trough.
+const METAL_WALL_GRID: &[&str] = &[
+    "bbbbbbbbbbbbbbbb",
+    "cabdcaadcabdcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+    "caadcaadcaadcaad",
+];
+/// Horizontal boards, 16x16 (explosives): `b` gap, `c` light, `a` board, `d` shade.
+const BOARD_WALL_GRID: &[&str] = &[
+    "cccccbcccccccbcc",
+    "aaaaabaaaaaaabaa",
+    "aaaaabaaaaaaabaa",
+    "bbbbbbbbbbbbbbbb",
+    "cbcccccccbcccccc",
+    "abaaaaaaabaaaaaa",
+    "abaaaaaaabaaaaaa",
+    "bbbbbbbbbbbbbbbb",
+    "cccccccbcccccccb",
+    "aaaaaaabaaaaaaab",
+    "aaaaaaabaaaaaaab",
+    "bbbbbbbbbbbbbbbb",
+    "cccbcccccccbcccc",
+    "aaabaaaaaaabaaaa",
+    "aaabaaaaaaabaaaa",
+    "bbbbbbbbbbbbbbbb",
+];
+
 /// Wainscot planks, 16x16: `e` rail, `s` rail shadow, `c` plank light, `a` plank, `d` seam.
 const PLANK_GRID: &[&str] = &[
     "eeeeeeeeeeeeeeee",
@@ -133,7 +248,7 @@ pub struct InteriorSet {
 macro_rules! interior_set {
     (
         $module:ident, $prefix:literal,
-        wall: ($wc:ident, $wa:ident, $wd:ident, $wb:ident),
+        wall: $wall_grid:ident ($wc:ident, $wa:ident, $wd:ident, $wb:ident),
         plank: ($pe:ident, $ps:ident, $pc:ident, $pa:ident, $pd:ident),
         floor: ($fe:ident, $fa:ident, $fd:ident),
         counter: ($cl:ident, $cm:ident, $cf:ident, $cd:ident),
@@ -147,7 +262,7 @@ macro_rules! interior_set {
             pub const WALL: SpriteDef = SpriteDef {
                 name: concat!($prefix, "_wall"),
                 legend: &[('c', $wc), ('a', $wa), ('d', $wd), ('b', $wb)],
-                frames: &[WALL_GRID],
+                frames: &[$wall_grid],
                 frame_seconds: 0.0,
             };
             pub const PLANK: SpriteDef = SpriteDef {
@@ -217,7 +332,7 @@ macro_rules! interior_set {
 
 interior_set!(
     shop, "shop",
-    wall: (LAVENDER, VIOLET, PLUM, NIGHT),
+    wall: WALL_GRID (LAVENDER, VIOLET, PLUM, NIGHT),
     plank: (CLAY, SOIL_DARK, LOAM, SOIL, SOIL_DARK),
     floor: (STONE_LIGHT, STONE, STONE_DARK),
     counter: (SAND, CLAY, LOAM, SOIL),
@@ -227,7 +342,7 @@ interior_set!(
 );
 interior_set!(
     fuel, "fuel",
-    wall: (SKY, OCEAN, DEEP_BLUE, NIGHT),
+    wall: TILE_WALL_GRID (SKY, OCEAN, DEEP_BLUE, NIGHT),
     plank: (STEEL_LIGHT, STEEL_DARK, STEEL, STEEL_DARK, SLATE),
     floor: (STONE_LIGHT, STONE, STONE_DARK),
     counter: (STEEL_LIGHT, STEEL, OCEAN, DEEP_BLUE),
@@ -237,7 +352,7 @@ interior_set!(
 );
 interior_set!(
     repair, "repair",
-    wall: (CLAY, RUST, MAROON, SOIL_DARK),
+    wall: WALL_GRID (CLAY, RUST, MAROON, SOIL_DARK),
     plank: (STEEL_LIGHT, STEEL_DARK, STEEL, STEEL_DARK, SLATE),
     floor: (STONE, STONE_DARK, INK),
     counter: (STEEL_LIGHT, STEEL, STEEL_DARK, SLATE),
@@ -247,7 +362,7 @@ interior_set!(
 );
 interior_set!(
     depot, "depot",
-    wall: (LEAF, MOSS, PINE, NIGHT),
+    wall: STONE_WALL_GRID (SAND, CLAY, LOAM, SOIL_DARK),
     plank: (SAND, SOIL_DARK, CLAY, LOAM, SOIL),
     floor: (LOAM, SOIL, SOIL_DARK),
     counter: (SAND, CLAY, LOAM, SOIL),
@@ -257,7 +372,7 @@ interior_set!(
 );
 interior_set!(
     hq, "hq",
-    wall: (SLATE_LIGHT, SLATE, SLATE_DARK, NIGHT),
+    wall: PANEL_WALL_GRID (CLAY, LOAM, SOIL, SOIL_DARK),
     plank: (SKY_LIGHT, DEEP_BLUE, OCEAN, DEEP_BLUE, NIGHT),
     floor: (SLATE_LIGHT, SLATE, SLATE_DARK),
     counter: (MIST, STEEL_LIGHT, SLATE, SLATE_DARK),
@@ -267,7 +382,7 @@ interior_set!(
 );
 interior_set!(
     bank, "bank",
-    wall: (TEAL, TEAL_DARK, PINE, NIGHT),
+    wall: MARBLE_WALL_GRID (BONE, MIST, FOG, FOG),
     plank: (CLAY, SOIL_DARK, LOAM, SOIL, SOIL_DARK),
     floor: (MIST, STONE_LIGHT, STONE),
     counter: (GOLD, AMBER, TEAL_DARK, PINE),
@@ -277,7 +392,7 @@ interior_set!(
 );
 interior_set!(
     explosives, "explosives",
-    wall: (CLAY, RED, MAROON, SOIL_DARK),
+    wall: BOARD_WALL_GRID (CLAY, LOAM, SOIL, SOIL_DARK),
     plank: (SAND, SOIL_DARK, LOAM, SOIL, SOIL_DARK),
     floor: (LOAM, SOIL, SOIL_DARK),
     counter: (STONE_LIGHT, STONE, STONE_DARK, INK),
@@ -287,7 +402,7 @@ interior_set!(
 );
 interior_set!(
     salvage, "salvage",
-    wall: (STONE_LIGHT, STONE, STONE_DARK, INK),
+    wall: METAL_WALL_GRID (STEEL, STEEL_DARK, SLATE, NIGHT),
     plank: (COPPER, SOIL_DARK, RUST, MAROON, SOIL_DARK),
     floor: (LOAM, SOIL, SOIL_DARK),
     counter: (STEEL, STEEL_DARK, RUST, MAROON),
