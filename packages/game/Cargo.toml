@@ -14,6 +14,7 @@ version.workspace    = true
 default          = []
 fail-on-warnings = [
     "drillgame_netcode/fail-on-warnings",
+    "drillgame_quic_transport/fail-on-warnings",
     "drillgame_simulation/fail-on-warnings",
 ]
 
@@ -22,8 +23,10 @@ name = "drillgame"
 path = "src/main.rs"
 
 [dependencies]
-drillgame_netcode    = { workspace = true }
-drillgame_simulation = { workspace = true }
-raylib               = { workspace = true }
-serde                = { workspace = true }
-serde_json           = { workspace = true }
+drillgame_netcode        = { workspace = true }
+drillgame_quic_transport = { workspace = true }
+drillgame_simulation     = { workspace = true }
+getrandom                = { workspace = true }
+raylib                   = { workspace = true }
+serde                    = { workspace = true }
+serde_json               = { workspace = true }

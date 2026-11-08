@@ -464,6 +464,17 @@ impl<S: NetSimulation> HostSession<S> {
         }
     }
 
+    /// Renames a local seat's player in the lobby roster (e.g. the host's display name).
+    pub fn set_local_player_name(&mut self, seat: SeatId, name: impl Into<String>) {
+        let Some(player) = self.seats.get(&seat) else {
+            return;
+        };
+        if let Some(slot) = self.players.get_mut(player) {
+            slot.name = name.into();
+            self.broadcast_lobby();
+        }
+    }
+
     /// Sets a local player's held controls and queues one-shot actions for the
     /// next tick. Ignored for players that are not local.
     pub fn submit_local_input(

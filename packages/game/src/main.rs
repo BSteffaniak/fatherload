@@ -8,6 +8,7 @@ mod effects;
 mod input;
 mod input_mapping;
 mod local_game;
+mod online;
 mod render_snapshot;
 mod rendering;
 mod runtime;
@@ -15,5 +16,19 @@ mod save;
 mod shell;
 
 fn main() {
-    app::run();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match online::headless::parse_args(&args) {
+        Ok(None) => app::run(),
+        Ok(Some(mode)) => {
+            let mut stdout = std::io::stdout();
+            if let Err(error) = online::headless::run(&mode, &mut stdout) {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    }
 }
