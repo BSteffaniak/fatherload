@@ -142,6 +142,11 @@ impl LanDescriptorServer {
                 while !thread_shutdown.load(Ordering::Relaxed) {
                     match listener.accept() {
                         Ok((mut stream, _peer)) => {
+                            // Accepted sockets inherit O_NONBLOCK from the listener on BSD/macOS;
+                            // a non-blocking write_all could fail mid-descriptor with WouldBlock.
+                            let _ignored = stream.set_nonblocking(false);
+                            let _ignored =
+                                stream.set_write_timeout(Some(DEFAULT_DESCRIPTOR_FETCH_TIMEOUT));
                             let _ignored = stream.write_all(&json);
                             let _ignored = stream.flush();
                         }
