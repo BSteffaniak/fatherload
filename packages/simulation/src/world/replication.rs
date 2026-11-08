@@ -408,7 +408,7 @@ impl WorldState {
             clippy::cast_precision_loss,
             reason = "small spawn column index becomes a world offset"
         )]
-        let column = (player_id.get().saturating_sub(1) % SPAWN_COLUMNS) as f32;
+        let column = (player_id.get() % SPAWN_COLUMNS) as f32;
         player.x = (column * SPAWN_COLUMN_SPACING_TILES).mul_add(TILE_SIZE, player.x);
         player.x = super::movement::clamp_authoritative_player_x(&self.terrain, player.x);
         self.insert_player(player_id, player);

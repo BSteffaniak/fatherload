@@ -20,9 +20,35 @@ use crate::params::{NetTuning, SessionParams};
 use crate::protocol::{self, ClientMessage, ServerMessage};
 use crate::simulation::NetSimulation;
 use crate::toy::{ToyAction, ToyControls, ToyEvent, ToySim};
+use crate::world::{ActionResolution, WorldEvent};
+use drillgame_simulation::{
+    ControlState, GameplayEventKind, Player, PlayerCommand, SimulationParams, TILE_SIZE,
+    WorldImport, WorldState,
+    terrain::{MineralKind, Terrain, TileKind, TilePosition},
+};
 
-/// Scripted bot: dig down, dig sideways, fly up, idle, with periodic bombs,
-/// sells and buys.
+/// A simulation the harness can host: it knows how to build a test world and
+/// how its scripted bots play.
+pub trait HarnessSim: NetSimulation {
+    /// Builds the host's initial world for a harness run (no players yet).
+    fn harness_world(config: &HarnessConfig) -> Self;
+    /// Controls and actions for the bot's next render frame.
+    fn bot_decide(bot: &mut Bot) -> (Self::Controls, Vec<Self::Action>);
+    /// The action id an event reports as applied (or otherwise resolved), if
+    /// any. Every issued action must be reported exactly once.
+    fn resolved_action(event: &Self::Event) -> Option<ActionId>;
+    /// A measure of how much the bots actually played (e.g. tiles dug).
+    fn play_progress(&self) -> usize;
+    /// A label to count host events under (see [`Harness::event_counts`]).
+    fn event_label(_event: &Self::Event) -> Option<&'static str> {
+        None
+    }
+}
+
+/// The toy-world harness.
+pub type ToyHarness = Harness<ToySim>;
+
+/// Scripted bot state. The script itself lives in [`HarnessSim::bot_decide`].
 #[derive(Clone, Debug)]
 pub struct Bot {
     rng: DetRng,
@@ -49,13 +75,36 @@ impl Bot {
         }
     }
 
-    /// Controls and actions for the next render frame.
-    pub fn decide(&mut self) -> (ToyControls, Vec<ToyAction>) {
+    /// Advances to the next render frame and returns its position in a
+    /// script cycle of `period` frames, or `None` when the bot is inactive.
+    pub const fn next_phase(&mut self, period: u64) -> Option<u64> {
         self.frame += 1;
-        if !self.active {
-            return (ToyControls::default(), Vec::new());
+        if !self.active || period == 0 {
+            return None;
         }
-        let t = (self.frame + self.phase_offset) % 600;
+        Some((self.frame + self.phase_offset) % period)
+    }
+
+    /// The bot's seeded random source.
+    pub const fn rng(&mut self) -> &mut DetRng {
+        &mut self.rng
+    }
+
+    /// Controls and actions for the next render frame.
+    pub fn decide<S: HarnessSim>(&mut self) -> (S::Controls, Vec<S::Action>) {
+        S::bot_decide(self)
+    }
+}
+
+impl HarnessSim for ToySim {
+    fn harness_world(config: &HarnessConfig) -> Self {
+        Self::new(&config.params, config.columns, 48)
+    }
+
+    fn bot_decide(bot: &mut Bot) -> (ToyControls, Vec<ToyAction>) {
+        let Some(t) = bot.next_phase(600) else {
+            return (ToyControls::default(), Vec::new());
+        };
         let controls = match t {
             0..250 => ToyControls {
                 move_x: 0,
@@ -80,14 +129,25 @@ impl Bot {
             _ => ToyControls::default(),
         };
         let mut actions = Vec::new();
-        if self.issue_actions && self.rng.chance(1.0 / 90.0) {
-            actions.push(match self.rng.below(3) {
+        if bot.issue_actions && bot.rng.chance(1.0 / 90.0) {
+            actions.push(match bot.rng.below(3) {
                 0 => ToyAction::Bomb,
                 1 => ToyAction::Sell,
                 _ => ToyAction::Buy,
             });
         }
         (controls, actions)
+    }
+
+    fn resolved_action(event: &ToyEvent) -> Option<ActionId> {
+        match event {
+            ToyEvent::ActionApplied { id, .. } => Some(*id),
+            _ => None,
+        }
+    }
+
+    fn play_progress(&self) -> usize {
+        self.dug_tiles()
     }
 }
 
@@ -139,13 +199,131 @@ impl HarnessConfig {
     }
 }
 
+/// Width in tiles of the real-world harness map.
+const WORLD_HARNESS_WIDTH_TILES: i32 = 48;
+/// Depth in tiles of the real-world harness map.
+const WORLD_HARNESS_HEIGHT_TILES: i32 = 64;
+/// Spawn column of the first harness player (later players spread right).
+const WORLD_HARNESS_SPAWN_TILE_X: f32 = 6.0;
+/// Bot script cycle in render frames (about ten seconds).
+const WORLD_BOT_CYCLE_FRAMES: u64 = 900;
+
+impl HarnessSim for WorldState {
+    fn harness_world(config: &HarnessConfig) -> Self {
+        let first = drillgame_simulation::PlayerId::new(1);
+        let mut import = WorldImport::new_game(first);
+        import.terrain = Terrain::new_seeded(
+            WORLD_HARNESS_WIDTH_TILES,
+            WORLD_HARNESS_HEIGHT_TILES,
+            config.seed ^ 0x5EED,
+        );
+        import.summary.terrain_width = import.terrain.width();
+        import.summary.terrain_height = import.terrain.height();
+        let mut world = Self::from_import_with_params(
+            &import,
+            SimulationParams::new(config.params.tick_rate_hz),
+        );
+        world.remove_player(first);
+        // Shallow ore seams so the bots have cargo to sell.
+        for (row, mineral) in [(7, MineralKind::Copper), (10, MineralKind::Iron)] {
+            for x in 0..WORLD_HARNESS_WIDTH_TILES {
+                let _ = world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x, y: row }, TileKind::Ore(mineral));
+            }
+        }
+        let mut template = Player::new(
+            (WORLD_HARNESS_SPAWN_TILE_X + 0.5) * TILE_SIZE,
+            4.0 * TILE_SIZE,
+        );
+        template.credits = 600;
+        template.bombs = 6;
+        template.survey_drone_kits = 3;
+        world.set_player_template(template);
+        world
+    }
+
+    /// Dig down (placing a bomb, scanning and deploying a survey drone on the
+    /// way), fly up out of the shaft, hop over to the depot and back, then sell,
+    /// buy an upgrade and refuel while idle.
+    fn bot_decide(bot: &mut Bot) -> (ControlState, Vec<PlayerCommand>) {
+        let Some(t) = bot.next_phase(WORLD_BOT_CYCLE_FRAMES) else {
+            return (ControlState::default(), Vec::new());
+        };
+        let controls = match t {
+            30..330 => ControlState::new(0.0, false, true),
+            // A short symmetric hop keeps each bot over its own spawn column.
+            330..560 | 600..680 => ControlState::new(0.0, true, false),
+            560..580 => ControlState::new(0.5, true, false),
+            580..600 => ControlState::new(-0.5, true, false),
+            _ => ControlState::default(),
+        };
+        let mut actions = Vec::new();
+        if bot.issue_actions {
+            match t {
+                100 => actions.push(PlayerCommand::UseScanner),
+                120 => actions.push(PlayerCommand::PlaceInfrastructure { slot: 1 }),
+                200 => actions.push(PlayerCommand::PlaceBomb),
+                760 => actions.push(PlayerCommand::SellCargo),
+                790 => {
+                    let index = usize::try_from(bot.rng().below(8)).unwrap_or(0);
+                    actions.push(PlayerCommand::BuyUpgrade { index });
+                }
+                820 => actions.push(PlayerCommand::Refuel),
+                _ => {}
+            }
+        }
+        (controls, actions)
+    }
+
+    fn resolved_action(event: &WorldEvent) -> Option<ActionId> {
+        match event {
+            WorldEvent::ActionResolved { id, .. } => Some(*id),
+            WorldEvent::Gameplay(_) => None,
+        }
+    }
+
+    fn event_label(event: &WorldEvent) -> Option<&'static str> {
+        match event {
+            WorldEvent::ActionResolved {
+                command,
+                resolution: ActionResolution::Applied,
+                ..
+            } => Some(match command {
+                PlayerCommand::UseScanner => "applied scanner",
+                PlayerCommand::PlaceInfrastructure { .. } => "applied infrastructure",
+                PlayerCommand::PlaceBomb => "applied bomb",
+                PlayerCommand::SellCargo => "applied sell",
+                PlayerCommand::BuyUpgrade { .. } => "applied buy",
+                PlayerCommand::Refuel => "applied refuel",
+                _ => "applied other",
+            }),
+            WorldEvent::ActionResolved { .. } => Some("ignored action"),
+            WorldEvent::Gameplay(event) => match event.kind {
+                GameplayEventKind::BombDetonated => Some("bomb detonated"),
+                GameplayEventKind::CargoChanged { .. } => Some("cargo changed"),
+                _ => None,
+            },
+        }
+    }
+
+    fn play_progress(&self) -> usize {
+        self.terrain()
+            .tiles()
+            .iter()
+            .skip(usize::try_from(5 * self.terrain().width()).unwrap_or(0))
+            .filter(|tile| tile.kind == TileKind::Air)
+            .count()
+    }
+}
+
 /// One simulated remote client.
 #[derive(Debug)]
-pub struct HarnessClient {
+pub struct HarnessClient<S: HarnessSim> {
     /// Transport id.
     pub id: ClientId,
     /// The session under test.
-    pub session: ClientSession<ToySim>,
+    pub session: ClientSession<S>,
     /// Datagram uplink (inputs).
     pub up_unreliable: LinkSim<Vec<u8>>,
     /// Stream uplink.
@@ -217,29 +395,31 @@ pub struct HarnessSummary {
 
 /// The harness.
 #[derive(Debug)]
-pub struct Harness {
+pub struct Harness<S: HarnessSim> {
     /// Configuration.
     pub config: HarnessConfig,
     /// The host.
-    pub host: HostSession<ToySim>,
+    pub host: HostSession<S>,
     /// Remote clients.
-    pub clients: Vec<HarnessClient>,
+    pub clients: Vec<HarnessClient<S>>,
     /// Local time.
     pub now: Duration,
     rng: DetRng,
     host_hashes: BTreeMap<Tick, u64>,
     /// `(player, action id) -> times applied` from host events.
     pub applied_actions: BTreeMap<(PlayerId, ActionId), u32>,
+    /// Host events counted by [`HarnessSim::event_label`].
+    pub event_counts: BTreeMap<&'static str, u64>,
     next_client: u64,
     start_tick: Tick,
     start_time: Duration,
 }
 
-impl Harness {
+impl<S: HarnessSim> Harness<S> {
     /// Builds the host and connects `config.clients` clients.
     #[must_use]
     pub fn new(config: HarnessConfig) -> Self {
-        let world = ToySim::new(&config.params, config.columns, 48);
+        let world = S::harness_world(&config);
         let host_config = HostConfig {
             params: config.params,
             tuning: config.tuning,
@@ -258,6 +438,7 @@ impl Harness {
             rng,
             host_hashes: BTreeMap::new(),
             applied_actions: BTreeMap::new(),
+            event_counts: BTreeMap::new(),
             next_client: 1,
             start_tick: Tick(0),
             start_time: Duration::ZERO,
@@ -349,10 +530,11 @@ impl Harness {
             self.host_hashes.insert(tick, hash);
         }
         for event in &output.events {
-            if let (Some(player), ToyEvent::ActionApplied { id, .. }) =
-                (event.player, event.payload)
-            {
+            if let (Some(player), Some(id)) = (event.player, S::resolved_action(&event.payload)) {
                 *self.applied_actions.entry((player, id)).or_insert(0) += 1;
+            }
+            if let Some(label) = S::event_label(&event.payload) {
+                *self.event_counts.entry(label).or_insert(0) += 1;
             }
         }
         let horizon = self
@@ -384,7 +566,7 @@ impl Harness {
                 continue;
             }
             for bytes in client.down.poll(now) {
-                let message: ServerMessage<ToySim> =
+                let message: ServerMessage<S> =
                     protocol::decode(&bytes).expect("client decodes server bytes");
                 let is_frame = matches!(message, ServerMessage::Frame(_));
                 client.session.handle_server_message(message);
@@ -405,7 +587,7 @@ impl Harness {
                     }
                 }
             }
-            let (controls, actions) = client.bot.decide();
+            let (controls, actions) = client.bot.decide::<S>();
             let messages = client.session.advance(dt, &controls, actions);
             send_client_messages(client, now, messages);
         }
@@ -491,7 +673,8 @@ impl Harness {
             .saturating_sub(self.start_time)
             .as_secs_f64()
             .max(1e-9);
-        let connected: Vec<&HarnessClient> = self.clients.iter().filter(|c| c.connected).collect();
+        let connected: Vec<&HarnessClient<S>> =
+            self.clients.iter().filter(|c| c.connected).collect();
         let n = connected.len().max(1) as f64;
         let mut summary = HarnessSummary {
             ticks: self.host.tick().0 - self.start_tick.0,
@@ -556,7 +739,7 @@ impl Harness {
 
     /// The host world.
     #[must_use]
-    pub const fn world(&self) -> &ToySim {
+    pub const fn world(&self) -> &S {
         self.host.world()
     }
 
@@ -573,10 +756,10 @@ impl Harness {
     }
 }
 
-fn send_client_messages(
-    client: &mut HarnessClient,
+fn send_client_messages<S: HarnessSim>(
+    client: &mut HarnessClient<S>,
     now: Duration,
-    messages: Vec<ClientMessage<ToySim>>,
+    messages: Vec<ClientMessage<S>>,
 ) {
     for message in messages {
         let bytes = protocol::encode(&message).expect("encode client message");
@@ -624,7 +807,7 @@ pub fn sweep_links() -> Vec<(&'static str, LinkConditions)> {
 
 /// Runs the tick rate x snapshot rate x link grid for `seconds` each.
 #[must_use]
-pub fn parameter_sweep(
+pub fn parameter_sweep<S: HarnessSim>(
     tick_rates: &[u32],
     snapshot_rates: &[u32],
     links: &[(&'static str, LinkConditions)],
@@ -641,7 +824,7 @@ pub fn parameter_sweep(
                 let mut config = HarnessConfig::new(SessionParams::new(tick_rate), clients, *link);
                 config.tuning.snapshot_rate_hz = snapshot_rate;
                 config.tuning.debug_hash_interval = 0;
-                let mut harness = Harness::new(config);
+                let mut harness = Harness::<S>::new(config);
                 harness.run_for(Duration::from_secs(3));
                 harness.reset_client_counters();
                 harness.run_for(Duration::from_secs(seconds));

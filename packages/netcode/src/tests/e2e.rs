@@ -2,54 +2,14 @@
 
 use std::time::Duration;
 
-use crate::harness::{Harness, HarnessConfig, format_sweep, parameter_sweep, sweep_links};
+use super::support::{assert_bounded, assert_converged};
+use crate::harness::{HarnessConfig, ToyHarness, format_sweep, parameter_sweep, sweep_links};
+use crate::toy::ToySim;
 use crate::{ClientPhase, LinkConditions, NetSimulation, SessionParams};
-
-fn assert_converged(harness: &Harness) {
-    let summary = harness.summary();
-    assert!(summary.hash_compares > 0, "harness compared hashes");
-    assert_eq!(
-        summary.hash_mismatches, 0,
-        "authority hash == host hash at every frame"
-    );
-    assert!(summary.debug_hash_checks > 0, "client checked debug hashes");
-    assert_eq!(summary.debug_hash_mismatches, 0);
-}
-
-fn assert_bounded(harness: &Harness) {
-    let params = harness.config.params;
-    let max_prediction = params.ms_to_ticks_ceil(harness.config.tuning.max_prediction_ms);
-    for client in harness.clients.iter().filter(|c| c.connected) {
-        let session = &client.session;
-        assert!(
-            session.pending_len() as u64 <= max_prediction,
-            "pending bounded"
-        );
-        assert!(session.stats().max_pending as u64 <= max_prediction);
-        assert!(
-            session.remote_buffer().max_depth() <= 128,
-            "snapshot buffer bounded"
-        );
-        assert!(
-            session.predicted_event_keys() < 256,
-            "event dedup set bounded"
-        );
-        assert!(
-            session.unacked_actions_len() < 64,
-            "unacked actions bounded"
-        );
-        assert!(harness.host.buffered_inputs(client.id) as u64 <= max_prediction);
-        assert!(
-            harness.host.action_backlog(client.id) < 64,
-            "host ledger bounded"
-        );
-        assert!(client.down.in_flight() < 1000, "downlink queue bounded");
-    }
-}
 
 #[test]
 fn zero_latency_has_zero_corrections() {
-    let mut harness = Harness::new(HarnessConfig::new(
+    let mut harness = ToyHarness::new(HarnessConfig::new(
         SessionParams::new(60),
         3,
         LinkConditions::perfect(),
@@ -69,7 +29,7 @@ fn zero_latency_has_zero_corrections() {
 #[test]
 fn small_lan_latency_has_zero_corrections() {
     let link = LinkConditions::new(5, 1, 0.0);
-    let mut harness = Harness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
+    let mut harness = ToyHarness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
     harness.run_ticks(60 * 30);
     harness.settle(Duration::from_secs(1));
     let summary = harness.summary();
@@ -83,7 +43,7 @@ fn bad_internet_corrections_are_rare_and_actions_exactly_once() {
     // 150 ms +/- 20 ms jitter with 3 % loss (plus duplication and reordering on
     // the datagram uplink) for 10k host ticks.
     let link = LinkConditions::new(150, 20, 3.0).with_chaos(2.0, 5.0);
-    let mut harness = Harness::new(HarnessConfig::new(SessionParams::new(60), 3, link));
+    let mut harness = ToyHarness::new(HarnessConfig::new(SessionParams::new(60), 3, link));
     harness.run_for(Duration::from_secs(3));
     harness.reset_client_counters();
     harness.run_ticks(10_000);
@@ -132,7 +92,7 @@ fn input_margin_converges_without_rtt_hint() {
         let link = LinkConditions::new(latency, 5, 0.0);
         let mut config = HarnessConfig::new(SessionParams::new(60), 2, link);
         config.provide_rtt = false;
-        let mut harness = Harness::new(config);
+        let mut harness = ToyHarness::new(config);
         harness.run_for(Duration::from_secs(12));
         let target = harness
             .config
@@ -164,7 +124,7 @@ fn works_at_tick_rates_30_60_120() {
         let link = LinkConditions::new(40, 5, 1.0).with_chaos(1.0, 2.0);
         let mut config = HarnessConfig::new(SessionParams::new(rate), 2, link);
         config.tuning.snapshot_rate_hz = rate.min(30);
-        let mut harness = Harness::new(config);
+        let mut harness = ToyHarness::new(config);
         harness.run_for(Duration::from_secs(20));
         harness.settle(Duration::from_secs(2));
         assert!(harness.host_tick().0 >= u64::from(rate) * 21, "rate {rate}");
@@ -183,7 +143,8 @@ fn works_at_tick_rates_30_60_120() {
 fn scales_to_2_4_and_16_clients() {
     for clients in [2usize, 4, 16] {
         let link = LinkConditions::new(30, 5, 1.0).with_chaos(1.0, 1.0);
-        let mut harness = Harness::new(HarnessConfig::new(SessionParams::new(60), clients, link));
+        let mut harness =
+            ToyHarness::new(HarnessConfig::new(SessionParams::new(60), clients, link));
         harness.run_for(Duration::from_secs(12));
         harness.settle(Duration::from_secs(2));
         assert_eq!(harness.world().player_ids().len(), clients);
@@ -201,7 +162,7 @@ fn relevance_radius_bounds_frame_size_with_16_clients() {
         let mut config = HarnessConfig::new(SessionParams::new(60), 16, link);
         config.tuning.relevance_radius = radius;
         config.columns = 32;
-        let mut harness = Harness::new(config);
+        let mut harness = ToyHarness::new(config);
         harness.run_for(Duration::from_secs(3));
         harness.reset_client_counters();
         harness.run_for(Duration::from_secs(5));
@@ -234,7 +195,7 @@ fn relevance_radius_bounds_frame_size_with_16_clients() {
 #[test]
 fn join_in_progress_converges() {
     let link = LinkConditions::new(60, 10, 1.0).with_chaos(1.0, 2.0);
-    let mut harness = Harness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
+    let mut harness = ToyHarness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
     harness.run_for(Duration::from_secs(10));
     let dug_before = harness.world().dug_tiles();
     assert!(dug_before > 0);
@@ -256,7 +217,7 @@ fn join_in_progress_converges() {
 #[test]
 fn reconnect_reclaims_player() {
     let link = LinkConditions::new(40, 5, 1.0);
-    let mut harness = Harness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
+    let mut harness = ToyHarness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
     harness.run_for(Duration::from_secs(5));
     let player = harness.clients[0].session.player().unwrap();
     let token = harness.clients[0].session.reconnect_token().unwrap();
@@ -286,7 +247,7 @@ fn reservation_expires_and_player_is_removed() {
     let link = LinkConditions::new(10, 0, 0.0);
     let mut config = HarnessConfig::new(SessionParams::new(60), 2, link);
     config.seed = 9;
-    let mut harness = Harness::new(config);
+    let mut harness = ToyHarness::new(config);
     harness.run_for(Duration::from_secs(1));
     let player = harness.clients[1].session.player().unwrap();
     harness.disconnect(1);
@@ -308,7 +269,7 @@ fn reservation_expires_and_player_is_removed() {
 #[test]
 fn epoch_change_rejects_stale_and_converges() {
     let link = LinkConditions::new(50, 10, 2.0).with_chaos(1.0, 3.0);
-    let mut harness = Harness::new(HarnessConfig::new(SessionParams::new(60), 3, link));
+    let mut harness = ToyHarness::new(HarnessConfig::new(SessionParams::new(60), 3, link));
     harness.run_for(Duration::from_secs(5));
     let params = harness.config.params;
     let old_epoch = harness.host.epoch();
@@ -336,7 +297,7 @@ fn lobby_waits_for_start() {
     let link = LinkConditions::new(20, 2, 0.0);
     let mut config = HarnessConfig::new(SessionParams::new(60), 3, link);
     config.start_in_lobby = true;
-    let mut harness = Harness::new(config);
+    let mut harness = ToyHarness::new(config);
     harness.run_for(Duration::from_secs(1));
     assert_eq!(harness.host_tick().0, 0);
     for client in &mut harness.clients {
@@ -356,7 +317,7 @@ fn lobby_waits_for_start() {
 #[test]
 fn per_client_snapshot_rates_differ() {
     let link = LinkConditions::new(20, 2, 0.0);
-    let mut harness = Harness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
+    let mut harness = ToyHarness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
     let slow = harness.clients[1].id;
     let mut tuning = harness.config.tuning;
     tuning.snapshot_rate_hz = 10;
@@ -375,7 +336,7 @@ fn per_client_snapshot_rates_differ() {
 #[test]
 fn remote_players_interpolate_smoothly() {
     let link = LinkConditions::new(50, 10, 1.0);
-    let mut harness = Harness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
+    let mut harness = ToyHarness::new(HarnessConfig::new(SessionParams::new(60), 2, link));
     harness.run_for(Duration::from_secs(3));
     let other = harness.clients[1].session.player().unwrap();
     let mut last = None;
@@ -400,7 +361,7 @@ fn remote_players_interpolate_smoothly() {
 #[test]
 #[ignore = "parameter sweep report; run with --ignored --nocapture"]
 fn parameter_sweep_report() {
-    let rows = parameter_sweep(&[30, 60, 120], &[10, 20, 30, 60], &sweep_links(), 3, 15);
+    let rows = parameter_sweep::<ToySim>(&[30, 60, 120], &[10, 20, 30, 60], &sweep_links(), 3, 15);
     println!("{}", format_sweep(&rows));
 }
 
@@ -413,7 +374,7 @@ fn shared_column_contention_converges() {
     let link = LinkConditions::new(150, 20, 3.0).with_chaos(2.0, 5.0);
     let mut config = HarnessConfig::new(SessionParams::new(60), 4, link);
     config.columns = 1;
-    let mut harness = Harness::new(config);
+    let mut harness = ToyHarness::new(config);
     harness.run_for(Duration::from_secs(3));
     harness.reset_client_counters();
     harness.run_ticks(3_000);
