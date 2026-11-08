@@ -26,18 +26,24 @@
 //! No sockets, threads, async runtimes or wall clock are used here: callers
 //! pass elapsed time in as a [`std::time::Duration`].
 
+mod clock;
 mod hashing;
 mod ids;
+mod interpolation;
 mod ledger;
+mod link;
 mod params;
 pub mod protocol;
 mod simulation;
 
 
 
+pub use clock::{ClientClock, ClockSpeed, MarginResponse};
 pub use hashing::{StableHasher, stable_hash};
 pub use ids::{ActionId, ClientId, InputSeq, PlayerId, ReconnectToken, SeatId, SessionEpoch, Tick};
+pub use interpolation::{InterpTimeline, SnapshotBuffer, VisualOffset};
 pub use ledger::ActionLedger;
+pub use link::{DetRng, LinkConditions, LinkSim, LinkStats};
 pub use params::{InterpDelay, NetTuning, SessionParams};
 pub use protocol::{
     ClientMessage, CodecError, EndReason, InputFrame, LobbyEntry, NetEvent, PROTOCOL_VERSION,
