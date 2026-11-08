@@ -5,7 +5,7 @@
 //! [`LocalGame::frame`] and draws [`LocalGame::snapshot`], so tests drive the exact same path with
 //! scripted inputs.
 
-use std::{net::SocketAddr, time::Duration};
+use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 
 use drillgame_netcode::ReconnectToken;
 use drillgame_quic_transport::{HostDescriptor, JoinTarget, lan::LanDiscoveredGame};
@@ -13,7 +13,7 @@ use drillgame_simulation::{PlayerCommand, PlayerId, WorldState};
 
 use crate::{
     effects::{Effects, EventFeed},
-    input::PlayerInput,
+    input::{PlayerInput, devices::InputDevice},
     input_mapping::seat_input,
     online::{
         self, DEFAULT_PORT,
@@ -53,6 +53,11 @@ pub struct FrameInput {
     pub other_seats: Vec<PlayerInput>,
     /// Clipboard text, sampled when the primary seat pressed paste.
     pub clipboard: Option<String>,
+    /// Each seat's active input device (drives its button prompts), in seat order. Empty
+    /// keeps the devices the shell already has.
+    pub devices: Vec<InputDevice>,
+    /// Connected controllers and their names (F3 overlay).
+    pub gamepads: BTreeMap<u8, String>,
 }
 
 impl FrameInput {
@@ -62,6 +67,8 @@ impl FrameInput {
             primary,
             other_seats: Vec::new(),
             clipboard: None,
+            devices: Vec::new(),
+            gamepads: BTreeMap::new(),
         }
     }
 }
@@ -173,6 +180,10 @@ impl LocalGame {
         self.sync_online(&mut report);
         self.poll_lan(&mut report);
         self.shell.pasted.clone_from(&input.clipboard);
+        if !input.devices.is_empty() {
+            self.shell.seat_devices.clone_from(&input.devices);
+        }
+        self.shell.gamepads.clone_from(&input.gamepads);
         let primary_player = self.seats().first().map(|seat| seat.player);
         let on_title = self.shell.run_mode == RunMode::Title;
         let requests = self.shell.update(
@@ -389,10 +400,20 @@ impl LocalGame {
         );
         if seats > 1 {
             self.shell.message = format!(
-                "Local split-screen with {seats} players: Player 1 WASD, Player 2 arrow keys / gamepad."
+                "Local split-screen with {seats} players: Player 1 WASD, Player 2 arrow keys. \
+                 Controllers fill free seats; press A or Start on another to join."
             );
         }
         self.shell.sound_cues.push(SoundCue::Milestone);
+    }
+
+    /// Adds a split-screen seat for a controller that claimed one; returns its index.
+    pub fn add_seat_for_controller(&mut self) -> Option<usize> {
+        if self.seats().len() <= 1 || !self.shell.gameplay_visible() {
+            return None;
+        }
+        self.runtime.add_local_seat()?;
+        Some(self.seats().len() - 1)
     }
 
     fn add_local_seat(&mut self) {
@@ -734,6 +755,37 @@ mod tests {
         report
     }
 
+    #[test]
+    fn frame_devices_reach_the_shell_and_empty_keeps_them() {
+        let mut game = title_game("devices");
+        let pad = InputDevice::Gamepad {
+            index: 1,
+            family: crate::input::devices::PadFamily::Xbox,
+        };
+        let _report = game.frame(
+            &FrameInput {
+                devices: vec![pad],
+                gamepads: BTreeMap::from([(1, "Xbox Wireless Controller".to_owned())]),
+                ..FrameInput::default()
+            },
+            DT,
+        );
+        assert_eq!(game.shell.prompt_device(0), pad);
+        idle(&mut game, 1);
+        assert_eq!(game.shell.prompt_device(0), pad, "scripted frames keep the device");
+    }
+
+    #[test]
+    fn controllers_add_seats_only_in_split_screen_play() {
+        let mut solo = playing(WorldState::new_game(PLAYER), 1, "claim-solo");
+        assert_eq!(solo.add_seat_for_controller(), None);
+        let mut split = playing(WorldState::new_game(PLAYER), 2, "claim-split");
+        assert_eq!(split.add_seat_for_controller(), Some(2));
+        assert_eq!(split.seats().len(), 3);
+        split.shell.return_to_title("");
+        assert_eq!(split.add_seat_for_controller(), None, "not from the title");
+    }
+
     fn player(game: &LocalGame, id: PlayerId) -> drillgame_simulation::Player {
         game.world().player(id).expect("player exists").clone()
     }
@@ -1073,12 +1125,12 @@ mod tests {
         for _ in 0..45 {
             let _report = game.frame(
                 &FrameInput {
-                    clipboard: None,
                     primary: PlayerInput::default(),
                     other_seats: vec![PlayerInput {
                         horizontal: -1.0,
                         ..PlayerInput::default()
                     }],
+                    ..FrameInput::default()
                 },
                 DT,
             );
@@ -1132,7 +1184,6 @@ mod tests {
         for _ in 0..45 {
             let _report = game.frame(
                 &FrameInput {
-                    clipboard: None,
                     primary: PlayerInput::default(),
                     other_seats: vec![
                         PlayerInput::default(),
@@ -1142,6 +1193,7 @@ mod tests {
                             ..PlayerInput::default()
                         },
                     ],
+                    ..FrameInput::default()
                 },
                 DT,
             );
@@ -1227,12 +1279,12 @@ mod tests {
         let seat_two_interact = |game: &mut LocalGame| {
             let _report = game.frame(
                 &FrameInput {
-                    clipboard: None,
                     primary: PlayerInput::default(),
                     other_seats: vec![PlayerInput {
                         interact: true,
                         ..PlayerInput::default()
                     }],
+                    ..FrameInput::default()
                 },
                 DT,
             );

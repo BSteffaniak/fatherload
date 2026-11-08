@@ -11,8 +11,14 @@ use drillgame_simulation::{
 
 use drillgame_quic_transport::lan::LanDiscoveredGame;
 
+use std::collections::BTreeMap;
+
 use crate::{
-    input::PlayerInput,
+    input::{
+        PlayerInput,
+        devices::InputDevice,
+        prompts::{Prompt, inline_text},
+    },
     runtime::{LobbyInfo, OnlineRole},
     save,
 };
@@ -324,7 +330,7 @@ const MAX_ONLINE_TEXT: usize = 16 * 1024;
 /// Entries of the join menu.
 pub const JOIN_MENU: [&str; 4] = [
     "Join by address (ip:port)",
-    "Join by descriptor (paste with Ctrl+V)",
+    "Join by descriptor",
     "Find LAN games",
     "Back",
 ];
@@ -492,6 +498,10 @@ pub struct ShellState {
     pub online: OnlineShell,
     /// Clipboard text pasted this frame (Ctrl+V), for the descriptor form.
     pub pasted: Option<String>,
+    /// Each local seat's active input device, in seat order (button prompts follow it).
+    pub seat_devices: Vec<InputDevice>,
+    /// Connected controllers by index and name (F3 overlay).
+    pub gamepads: BTreeMap<u8, String>,
     pending_services: Vec<PendingService>,
 }
 
@@ -512,8 +522,7 @@ impl ShellState {
             selected_title_item: 0,
             selected_pause_item: 0,
             show_details: false,
-            message: "Mine ore, sell cargo, and buy upgrades. Press E at surface buildings."
-                .to_owned(),
+            message: "Mine ore, sell cargo, and buy upgrades at the surface buildings.".to_owned(),
             message_tick: 0,
             message_seen: String::new(),
             interior_zone: None,
@@ -533,8 +542,30 @@ impl ShellState {
             depot_receipts: Vec::new(),
             online: OnlineShell::default(),
             pasted: None,
+            seat_devices: Vec::new(),
+            gamepads: BTreeMap::new(),
             pending_services: Vec::new(),
         }
+    }
+
+    /// The device `seat`'s prompts are drawn for (the keyboard until a device is known).
+    #[must_use]
+    pub fn prompt_device(&self, seat: usize) -> InputDevice {
+        self.seat_devices
+            .get(seat)
+            .copied()
+            .unwrap_or(InputDevice::KEYBOARD)
+    }
+
+    /// `prompt`'s key or button for seat 0, for messages ("press E" / "press X").
+    fn key_for(&self, prompt: Prompt) -> String {
+        inline_text(prompt, self.prompt_device(0)).unwrap_or_else(|| "the use button".to_owned())
+    }
+
+    /// Whether the world is on screen behind the shell (not the title or online screens).
+    #[must_use]
+    pub const fn gameplay_visible(&self) -> bool {
+        !matches!(self.run_mode, RunMode::Title | RunMode::Lobby)
     }
 
     /// Current settings for persisting.
@@ -745,7 +776,7 @@ impl ShellState {
         let pasted = self.pasted.take();
         match self.online.screen {
             OnlineScreen::JoinMenu => {
-                if input.cancel {
+                if input.backs_out() {
                     self.return_to_title("Mine ore, sell cargo, and buy upgrades.");
                     return;
                 }
@@ -765,7 +796,7 @@ impl ShellState {
                 self.handle_text_form(input, pasted, requests);
             }
             OnlineScreen::LanBrowser => {
-                if input.cancel {
+                if input.backs_out() {
                     self.show_online(OnlineScreen::JoinMenu);
                     return;
                 }
@@ -781,7 +812,7 @@ impl ShellState {
                 }
             }
             OnlineScreen::Lobby => {
-                if input.cancel && self.online.started() {
+                if input.backs_out() && self.online.started() {
                     self.run_mode = RunMode::Playing;
                     return;
                 }
@@ -800,8 +831,11 @@ impl ShellState {
                             .and_then(|lobby| lobby.descriptor.clone())
                         {
                             requests.push(ShellRequest::CopyToClipboard(descriptor));
-                            "Descriptor copied: joiners paste it with Ctrl+V."
-                                .clone_into(&mut self.message);
+                            self.message = format!(
+                                "Descriptor copied: joiners paste it with {}.",
+                                inline_text(Prompt::Paste, InputDevice::KEYBOARD)
+                                    .unwrap_or_default()
+                            );
                         } else {
                             "The host endpoint is not ready yet.".clone_into(&mut self.message);
                         }
@@ -814,7 +848,7 @@ impl ShellState {
                 }
             }
             OnlineScreen::Notice => {
-                if input.cancel {
+                if input.backs_out() {
                     self.return_to_title("Mine ore, sell cargo, and buy upgrades.");
                     return;
                 }
@@ -847,7 +881,7 @@ impl ShellState {
         }
         if input.text_backspace {
             self.online.text.pop();
-        } else if input.cancel {
+        } else if input.backs_out() {
             self.show_online(OnlineScreen::JoinMenu);
             return;
         }
@@ -937,7 +971,7 @@ impl ShellState {
             self.selected_pause_item += 1;
         }
         self.selected_pause_item = self.selected_pause_item.min(options.len() - 1);
-        if input.pause || input.cancel {
+        if input.pause || input.backs_out() {
             self.run_mode = RunMode::Playing;
             return;
         }
@@ -966,7 +1000,7 @@ impl ShellState {
         let Some(modal) = self.modal else {
             return false;
         };
-        if input.cancel {
+        if input.backs_out() {
             self.modal = None;
             return true;
         }
@@ -976,6 +1010,13 @@ impl ShellState {
             _ => 0,
         };
         self.move_selection(input, max_item);
+        if modal == ModalScreen::Options && self.selected_menu_item == 0 {
+            if input.menu_left || input.tab_previous {
+                self.adjust_volume(-0.1);
+            } else if input.menu_right || input.tab_next {
+                self.adjust_volume(0.1);
+            }
+        }
         if input.confirm {
             match modal {
                 ModalScreen::Options => self.confirm_options(),
@@ -1019,7 +1060,7 @@ impl ShellState {
     fn handle_exit_modal(&mut self, input: PlayerInput, requests: &mut Vec<ShellRequest>) -> bool {
         match self.modal {
             Some(ModalScreen::ExitConfirm) => {
-                if input.cancel {
+                if input.backs_out() {
                     self.modal = None;
                 } else if input.confirm {
                     self.request_exit = true;
@@ -1028,7 +1069,7 @@ impl ShellState {
                 true
             }
             Some(ModalScreen::UnsavedExitConfirm) => {
-                if input.cancel {
+                if input.backs_out() {
                     self.modal = None;
                     return true;
                 }
@@ -1058,8 +1099,10 @@ impl ShellState {
         self.selected_menu_item = 0;
         self.sound_cues.push(SoundCue::Ui);
         self.message = format!(
-            "Entered {}. Walk to a counter and press E; door exits.",
-            surface_zone_label(zone)
+            "Entered {}. Walk to the counter and press {}; {} leaves.",
+            surface_zone_label(zone),
+            self.key_for(Prompt::Use),
+            self.key_for(Prompt::Back),
         );
     }
 
@@ -1084,7 +1127,7 @@ impl ShellState {
         self.interior_x = movement
             .mul_add(185.0 * delta_seconds, self.interior_x)
             .clamp(42.0, 598.0);
-        if input.cancel || (input.interact && self.interior_x < 74.0) {
+        if input.backs_out() || (input.interact && self.interior_x < 74.0) {
             self.run_mode = RunMode::Playing;
             self.interior_zone = None;
             self.modal = None;
@@ -1141,7 +1184,7 @@ impl ShellState {
         ) {
             return self.handle_menu_modal(input, requests);
         }
-        if input.cancel {
+        if input.backs_out() {
             self.modal = None;
             return true;
         }
@@ -1173,10 +1216,10 @@ impl ShellState {
         };
         self.move_selection(input, max_item);
         if matches!(modal, ModalScreen::Shop) {
-            if input.menu_left {
+            if input.menu_left || input.tab_previous {
                 self.selected_menu_item = self.selected_menu_item.saturating_sub(1);
             }
-            if input.menu_right {
+            if input.menu_right || input.tab_next {
                 self.selected_menu_item = (self.selected_menu_item + 1).min(upgrade_count - 1);
             }
         }
@@ -1500,21 +1543,27 @@ impl ShellState {
         }
     }
 
+    /// Confirm on an options row (the rows `menus::draw_options` lists): volume steps up,
+    /// fullscreen toggles, back closes.
     fn confirm_options(&mut self) {
         match self.selected_menu_item {
-            0 => self.master_volume = (self.master_volume + 0.1).min(1.0),
-            1 => self.master_volume = (self.master_volume - 0.1).max(0.0),
-            _ => self.fullscreen = !self.fullscreen,
+            0 => self.adjust_volume(0.1),
+            1 => {
+                self.fullscreen = !self.fullscreen;
+                let mode = if self.fullscreen {
+                    "Fullscreen"
+                } else {
+                    "Windowed"
+                };
+                self.message = inline_text(Prompt::Fullscreen, self.prompt_device(0)).map_or_else(
+                    || format!("{mode} enabled."),
+                    |key| format!("{mode} enabled; {key} toggles it anywhere."),
+                );
+                self.settings_dirty = true;
+                self.sound_cues.push(SoundCue::Ui);
+            }
+            _ => self.modal = None,
         }
-        self.message = if self.selected_menu_item < 2 {
-            format!("Volume: {:.0}%", self.master_volume * 100.0)
-        } else if self.fullscreen {
-            "Fullscreen preference enabled; F11 toggles immediately.".to_owned()
-        } else {
-            "Windowed preference enabled; F11 toggles immediately.".to_owned()
-        };
-        self.settings_dirty = true;
-        self.sound_cues.push(SoundCue::Ui);
     }
 
     /// Takes the "settings changed" flag.
@@ -1628,5 +1677,115 @@ mod tests {
         shell.online.role = Some(OnlineRole::Client);
         shell.request_exit_or_prompt();
         assert_eq!(shell.modal, Some(ModalScreen::ExitConfirm));
+    }
+
+    fn ctx(world: &WorldState) -> ShellContext<'_> {
+        ShellContext {
+            world,
+            player: world.player_ids().next(),
+            saves_exist: false,
+        }
+    }
+
+    fn back() -> PlayerInput {
+        PlayerInput {
+            back: true,
+            ..PlayerInput::default()
+        }
+    }
+
+    #[test]
+    fn gamepad_back_closes_menus_but_never_pauses_or_quits() {
+        let world = WorldState::new_game(PlayerId::new(1));
+        let mut shell = ShellState::default();
+        let requests = shell.update(back(), 0.016, ctx(&world));
+        assert!(requests.is_empty() && !shell.request_exit, "B on the title does nothing");
+        assert_eq!(shell.run_mode, RunMode::Title);
+
+        shell.enter_world("test", 0.0);
+        shell.update(back(), 0.016, ctx(&world));
+        assert_eq!(shell.run_mode, RunMode::Playing, "B while playing does not pause");
+
+        shell.modal = Some(ModalScreen::Inventory);
+        shell.update(back(), 0.016, ctx(&world));
+        assert_eq!(shell.modal, None, "B closes a modal");
+
+        shell.run_mode = RunMode::Paused;
+        shell.update(back(), 0.016, ctx(&world));
+        assert_eq!(shell.run_mode, RunMode::Playing, "B resumes from the pause menu");
+
+        shell.run_mode = RunMode::Interior;
+        shell.interior_zone = Some(SurfaceZone::Fuel);
+        shell.update(back(), 0.016, ctx(&world));
+        assert_eq!(shell.run_mode, RunMode::Playing, "B leaves a building");
+
+        let escape = PlayerInput {
+            cancel: true,
+            ..PlayerInput::default()
+        };
+        shell.update(escape, 0.016, ctx(&world));
+        assert_eq!(shell.run_mode, RunMode::Paused, "Esc still pauses");
+    }
+
+    #[test]
+    fn options_adjust_volume_with_left_right_and_confirm_matches_the_rows() {
+        let world = WorldState::new_game(PlayerId::new(1));
+        let mut shell = ShellState::default();
+        shell.master_volume = 0.5;
+        shell.modal = Some(ModalScreen::Options);
+        shell.update(
+            PlayerInput {
+                tab_next: true,
+                ..PlayerInput::default()
+            },
+            0.016,
+            ctx(&world),
+        );
+        assert!((shell.master_volume - 0.6).abs() < 1e-5);
+        shell.update(
+            PlayerInput {
+                menu_left: true,
+                ..PlayerInput::default()
+            },
+            0.016,
+            ctx(&world),
+        );
+        assert!((shell.master_volume - 0.5).abs() < 1e-5);
+        shell.selected_menu_item = 1;
+        let fullscreen = shell.fullscreen;
+        shell.update(
+            PlayerInput {
+                confirm: true,
+                ..PlayerInput::default()
+            },
+            0.016,
+            ctx(&world),
+        );
+        assert_ne!(shell.fullscreen, fullscreen, "row 1 toggles fullscreen");
+        assert!((shell.master_volume - 0.5).abs() < 1e-5, "and leaves the volume");
+        shell.selected_menu_item = 2;
+        shell.update(
+            PlayerInput {
+                confirm: true,
+                ..PlayerInput::default()
+            },
+            0.016,
+            ctx(&world),
+        );
+        assert_eq!(shell.modal, None, "Back closes");
+    }
+
+    #[test]
+    fn messages_name_the_active_devices_buttons() {
+        let mut shell = ShellState::default();
+        shell.enter_interior(SurfaceZone::Fuel);
+        assert!(shell.message.contains("press E"), "{}", shell.message);
+        shell.seat_devices = vec![InputDevice::Gamepad {
+            index: 0,
+            family: crate::input::devices::PadFamily::Xbox,
+        }];
+        shell.enter_interior(SurfaceZone::Fuel);
+        assert!(shell.message.contains("press X"), "{}", shell.message);
+        assert!(shell.message.contains("B leaves"), "{}", shell.message);
     }
 }

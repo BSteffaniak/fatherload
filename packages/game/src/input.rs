@@ -1,8 +1,19 @@
-use std::collections::BTreeSet;
+//! Device input: keyboard sampling, the gamepad mapping, seat routing and button prompts.
+//!
+//! [`PlayerInput`] is one seat's frame of intent. Keyboards are read straight from raylib here;
+//! controllers are sampled into [`gamepad::PadState`]s and mapped by [`gamepad::PadMapper`];
+//! [`router::InputRouter`] assigns devices to seats and tracks each seat's active device, which
+//! [`prompts`] turns into keycaps or controller glyphs.
+
+pub mod devices;
+pub mod gamepad;
+pub mod pads;
+pub mod prompts;
+pub mod repeat;
+pub mod router;
+pub mod seats;
 
 use raylib::prelude::*;
-
-const GAMEPAD_DEADZONE: f32 = 0.25;
 
 #[allow(
     clippy::struct_excessive_bools,
@@ -15,12 +26,21 @@ pub struct PlayerInput {
     pub drill_down: bool,
     pub interact: bool,
     pub confirm: bool,
+    /// Esc-style cancel (keyboard): backs out of menus, and also pauses play or quits from the
+    /// title.
     pub cancel: bool,
+    /// Gamepad Back (B): backs out of menus, modals, forms and buildings only; never pauses
+    /// play or quits.
+    pub back: bool,
     pub pause: bool,
     pub menu_up: bool,
     pub menu_down: bool,
     pub menu_left: bool,
     pub menu_right: bool,
+    /// Previous tab / column (gamepad LB in menus).
+    pub tab_previous: bool,
+    /// Next tab / column (gamepad RB in menus).
+    pub tab_next: bool,
     pub details: bool,
     pub inventory: bool,
     pub save: bool,
@@ -56,19 +76,107 @@ pub struct PlayerInput {
     pub paste: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum GamepadInputButton {
-    Thrust,
-    Interact,
-    Bomb,
-    Scan,
-}
+impl PlayerInput {
+    /// Whether this input backs out of the current menu (Esc/Backspace or gamepad B).
+    #[must_use]
+    pub const fn backs_out(&self) -> bool {
+        self.cancel || self.back
+    }
 
-#[derive(Clone, Debug, Default)]
-pub struct GamepadInputState {
-    pub left_x: f32,
-    pub left_y: f32,
-    pub buttons: BTreeSet<GamepadInputButton>,
+    /// Whether the input shows deliberate use of its device (any key, button or movement),
+    /// for switching a seat's prompts to it. Closing the window does not count.
+    #[must_use]
+    pub fn has_activity(&self) -> bool {
+        let Self {
+            horizontal,
+            thrust,
+            drill_down,
+            interact,
+            confirm,
+            cancel,
+            back,
+            pause,
+            menu_up,
+            menu_down,
+            menu_left,
+            menu_right,
+            tab_previous,
+            tab_next,
+            details,
+            inventory,
+            save,
+            selected_upgrade,
+            load,
+            map,
+            help,
+            volume_up,
+            volume_down,
+            fullscreen,
+            local_multiplayer_toggle,
+            bomb,
+            scan,
+            place_relay,
+            place_drone,
+            place_lift,
+            place_support,
+            place_pump,
+            place_processor,
+            exit_requested: _,
+            text_input,
+            text_backspace,
+            ui_scroll,
+            net_debug,
+            tune_next,
+            tune_up,
+            tune_down,
+            paste,
+        } = *self;
+        horizontal.abs() > f32::EPSILON
+            || ui_scroll.abs() > f32::EPSILON
+            || selected_upgrade.is_some()
+            || text_input.is_some()
+            || [
+                thrust,
+                drill_down,
+                interact,
+                confirm,
+                cancel,
+                back,
+                pause,
+                menu_up,
+                menu_down,
+                menu_left,
+                menu_right,
+                tab_previous,
+                tab_next,
+                details,
+                inventory,
+                save,
+                load,
+                map,
+                help,
+                volume_up,
+                volume_down,
+                fullscreen,
+                local_multiplayer_toggle,
+                bomb,
+                scan,
+                place_relay,
+                place_drone,
+                place_lift,
+                place_support,
+                place_pump,
+                place_processor,
+                text_backspace,
+                net_debug,
+                tune_next,
+                tune_up,
+                tune_down,
+                paste,
+            ]
+            .into_iter()
+            .any(|pressed| pressed)
+    }
 }
 
 #[must_use]
@@ -89,46 +197,6 @@ pub fn read_input_with_arrow_aliases(
 }
 
 #[must_use]
-pub fn read_gamepad_input(raylib: &RaylibHandle, gamepad: i32) -> Option<PlayerInput> {
-    if !raylib.is_gamepad_available(gamepad) {
-        return None;
-    }
-    let mut buttons = BTreeSet::new();
-    if raylib.is_gamepad_button_down(gamepad, GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_DOWN) {
-        buttons.insert(GamepadInputButton::Thrust);
-    }
-    if raylib.is_gamepad_button_pressed(gamepad, GamepadButton::GAMEPAD_BUTTON_RIGHT_FACE_LEFT) {
-        buttons.insert(GamepadInputButton::Interact);
-    }
-    if raylib.is_gamepad_button_pressed(gamepad, GamepadButton::GAMEPAD_BUTTON_RIGHT_TRIGGER_1) {
-        buttons.insert(GamepadInputButton::Bomb);
-    }
-    if raylib.is_gamepad_button_pressed(gamepad, GamepadButton::GAMEPAD_BUTTON_LEFT_TRIGGER_1) {
-        buttons.insert(GamepadInputButton::Scan);
-    }
-    Some(map_gamepad_state(&GamepadInputState {
-        left_x: raylib.get_gamepad_axis_movement(gamepad, GamepadAxis::GAMEPAD_AXIS_LEFT_X),
-        left_y: raylib.get_gamepad_axis_movement(gamepad, GamepadAxis::GAMEPAD_AXIS_LEFT_Y),
-        buttons,
-    }))
-}
-
-#[must_use]
-pub fn map_gamepad_state(state: &GamepadInputState) -> PlayerInput {
-    let interact = state.buttons.contains(&GamepadInputButton::Interact);
-    PlayerInput {
-        horizontal: gamepad_axis(state.left_x),
-        thrust: state.buttons.contains(&GamepadInputButton::Thrust),
-        drill_down: gamepad_axis(state.left_y) > 0.0,
-        interact,
-        confirm: interact,
-        bomb: state.buttons.contains(&GamepadInputButton::Bomb),
-        scan: state.buttons.contains(&GamepadInputButton::Scan),
-        ..PlayerInput::default()
-    }
-}
-
-#[must_use]
 pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> PlayerInput {
     PlayerInput {
         horizontal: if secondary.horizontal.abs() > primary.horizontal.abs() {
@@ -141,11 +209,14 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         interact: primary.interact || secondary.interact,
         confirm: primary.confirm || secondary.confirm,
         cancel: primary.cancel || secondary.cancel,
+        back: primary.back || secondary.back,
         pause: primary.pause || secondary.pause,
         menu_up: primary.menu_up || secondary.menu_up,
         menu_down: primary.menu_down || secondary.menu_down,
         menu_left: primary.menu_left || secondary.menu_left,
         menu_right: primary.menu_right || secondary.menu_right,
+        tab_previous: primary.tab_previous || secondary.tab_previous,
+        tab_next: primary.tab_next || secondary.tab_next,
         details: primary.details || secondary.details,
         inventory: primary.inventory || secondary.inventory,
         save: primary.save || secondary.save,
@@ -215,6 +286,9 @@ fn read_primary_keyboard_input_with_options(
             || raylib.is_key_pressed(KeyboardKey::KEY_E),
         cancel: raylib.is_key_pressed(KeyboardKey::KEY_BACKSPACE)
             || raylib.is_key_pressed(KeyboardKey::KEY_ESCAPE),
+        back: false,
+        tab_previous: false,
+        tab_next: false,
         pause: raylib.is_key_pressed(KeyboardKey::KEY_P),
         menu_up: raylib.is_key_pressed(KeyboardKey::KEY_UP)
             || raylib.is_key_pressed(KeyboardKey::KEY_W),
@@ -307,61 +381,27 @@ const fn horizontal_axis(left: bool, right: bool) -> f32 {
     }
 }
 
-fn gamepad_axis(value: f32) -> f32 {
-    if value.abs() < GAMEPAD_DEADZONE {
-        0.0
-    } else {
-        value.clamp(-1.0, 1.0)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
-    use super::{
-        GamepadInputButton, GamepadInputState, PlayerInput, combine_player_input, map_gamepad_state,
-    };
+    use super::{PlayerInput, combine_player_input};
 
     #[test]
-    fn gamepad_state_maps_stick_and_buttons_to_player_input() {
-        let input = map_gamepad_state(&GamepadInputState {
-            left_x: 0.7,
-            left_y: 0.8,
-            buttons: BTreeSet::from([
-                GamepadInputButton::Thrust,
-                GamepadInputButton::Interact,
-                GamepadInputButton::Bomb,
-                GamepadInputButton::Scan,
-            ]),
-        });
-
-        assert!(roughly_eq(input.horizontal, 0.7));
-        assert!(input.thrust);
-        assert!(input.drill_down);
-        assert!(input.interact);
-        assert!(input.confirm);
-        assert!(input.bomb);
-        assert!(input.scan);
-    }
-
-    #[test]
-    fn gamepad_state_applies_deadzone_and_clamps_axis() {
-        let deadzone = map_gamepad_state(&GamepadInputState {
-            left_x: 0.1,
-            left_y: 0.1,
-            ..GamepadInputState::default()
-        });
-        let clamped = map_gamepad_state(&GamepadInputState {
-            left_x: -1.5,
-            left_y: 1.5,
-            ..GamepadInputState::default()
-        });
-
-        assert!(roughly_eq(deadzone.horizontal, 0.0));
-        assert!(!deadzone.drill_down);
-        assert!(roughly_eq(clamped.horizontal, -1.0));
-        assert!(clamped.drill_down);
+    fn back_backs_out_without_counting_as_cancel() {
+        let back = PlayerInput {
+            back: true,
+            ..PlayerInput::default()
+        };
+        assert!(back.backs_out() && !back.cancel);
+        assert!(back.has_activity());
+        assert!(!PlayerInput::default().has_activity());
+        assert!(
+            !PlayerInput {
+                exit_requested: true,
+                ..PlayerInput::default()
+            }
+            .has_activity(),
+            "closing the window is not keyboard use"
+        );
     }
 
     #[test]

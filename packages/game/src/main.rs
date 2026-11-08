@@ -20,6 +20,10 @@ mod window;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if input::pads::wants_list(&args) {
+        input::pads::list_gamepads();
+        return;
+    }
     match scene_capture::parse_args(&args) {
         Ok(Some(options)) => {
             if let Err(error) = scene_capture::run(&options) {
