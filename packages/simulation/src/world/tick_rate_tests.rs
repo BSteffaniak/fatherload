@@ -5,8 +5,7 @@
 //! differences between rates are expected to be small, never proportional to the rate.
 
 use crate::{
-    ControlState, InputSequence, PlayerId, SimulationParams, SimulationTick,
-    TerrainRevisionTracker, TickInputs, WorldState,
+    ControlState, PlayerId, SimulationParams, SimulationTick, TickInputs, WorldState,
     input::PlayerTickInput,
     terrain::{TILE_SIZE, TileKind, TilePosition},
 };
@@ -82,7 +81,6 @@ fn flat_world(hz: u32) -> WorldState {
 fn run(hz: u32) -> Outcome {
     let mut world = flat_world(hz);
     let fuel_before = world.player(PLAYER).expect("player").fuel;
-    let mut revisions = TerrainRevisionTracker::default();
     let ticks = u64::from(hz) * END_SECONDS;
     let mut tiles_dug = 0;
     let mut first_dig_seconds = f32::NAN;
@@ -99,14 +97,15 @@ fn run(hz: u32) -> Outcome {
         inputs.players.insert(
             PLAYER,
             PlayerTickInput {
-                controls: Some((
-                    InputSequence::new(u32::try_from(tick).unwrap_or(u32::MAX)),
-                    ControlState::new(segment.horizontal, segment.thrust, segment.drill_down),
+                controls: Some(ControlState::new(
+                    segment.horizontal,
+                    segment.thrust,
+                    segment.drill_down,
                 )),
                 actions: Vec::new(),
             },
         );
-        let output = world.simulate_tick(SimulationTick::new(tick), &inputs, &mut revisions);
+        let output = world.simulate_tick(SimulationTick::new(tick), &inputs);
         let dug = output
             .terrain_ops
             .iter()
@@ -198,18 +197,17 @@ fn horizontal_speed_does_not_depend_on_tick_rate() {
     let distance = |hz: u32| {
         let mut world = flat_world(hz);
         let start = world.player(PLAYER).expect("player").x;
-        let mut revisions = TerrainRevisionTracker::default();
         let ticks = u64::from(hz);
         for tick in 0..ticks {
             let mut inputs = TickInputs::default();
             inputs.players.insert(
                 PLAYER,
                 PlayerTickInput {
-                    controls: Some((InputSequence::new(0), ControlState::new(1.0, false, false))),
+                    controls: Some(ControlState::new(1.0, false, false)),
                     actions: Vec::new(),
                 },
             );
-            let _ = world.simulate_tick(SimulationTick::new(tick), &inputs, &mut revisions);
+            let _ = world.simulate_tick(SimulationTick::new(tick), &inputs);
         }
         world.player(PLAYER).expect("player").x - start
     };

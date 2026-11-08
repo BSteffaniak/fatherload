@@ -27,11 +27,10 @@ pub mod service;
 pub mod summary;
 pub mod surface;
 pub mod terrain;
-pub mod terrain_revision;
 pub mod tick;
 pub mod world;
 
-pub use command::{PlayerCommand, SequencedPlayerCommand};
+pub use command::{PlayerCommand, TickAction};
 pub use event::{ActionOutcome, GameplayEvent, GameplayEventId, GameplayEventKind, TickOutput};
 pub use hash::SimulationStateHash;
 pub use hazard::{FallingBoulder, HazardCloud, PlacedBomb, ScanMarker};
@@ -50,12 +49,8 @@ pub use rng::DeterministicRngState;
 pub use service::{
     PlayerServiceTransaction, PlayerTransactionKind, RecipeKind, SessionServiceRequest,
 };
-pub use summary::{
-    AuthoritativeWorldSummary, PlayerInventorySummary, PlayerScopedCommandOutcome,
-    PlayerScopedGameplayProof, PlayerSurvivalSnapshot,
-};
+pub use summary::{PlayerScopedCommandOutcome, PlayerSurvivalSnapshot};
 pub use terrain::{TILE_SIZE, TileChange};
-pub use terrain_revision::{TerrainChunkPosition, TerrainChunkRevision, TerrainRevisionTracker};
 pub use tick::{
     DEFAULT_TICK_RATE_HZ, FIXED_DELTA_SECONDS, SIMULATION_HZ, SimulationParams, TickRate,
 };

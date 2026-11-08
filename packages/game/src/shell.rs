@@ -198,7 +198,7 @@ pub enum ServiceAnimation {
 }
 
 /// Something the shell needs the app (runtime / saves) to do.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ShellRequest {
     /// Start a fresh world with this many local seats.
     NewGame { seats: usize },

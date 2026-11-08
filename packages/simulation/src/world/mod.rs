@@ -15,7 +15,7 @@ use crate::{
     rig::{DrillState, RigPartKind},
     rng::DeterministicRngState,
     service::PlayerServiceTransaction,
-    summary::{AuthoritativeWorldSummary, PlayerInventorySummary, PlayerSurvivalSnapshot},
+    summary::PlayerSurvivalSnapshot,
     terrain::{ArtifactKind, MineralKind, Terrain, TilePosition},
 };
 
@@ -179,7 +179,7 @@ pub struct WorldState {
     timing: TickTiming,
     player_template: Player,
     simulation_tick: SimulationTick,
-    authoritative_summary: AuthoritativeWorldSummary,
+    won_game: bool,
     players: BTreeMap<PlayerId, Player>,
     equipped_rig_parts: BTreeMap<PlayerId, BTreeSet<RigPartKind>>,
     mechanic_levels: BTreeMap<PlayerId, u8>,
@@ -237,21 +237,9 @@ impl WorldState {
         &self.progression
     }
 
-    pub const fn progression_mut(&mut self) -> &mut CanonicalProgressionState {
-        &mut self.progression
-    }
-
     #[must_use]
     pub const fn lost_cargo_sites(&self) -> &BTreeMap<PlayerId, LostCargoSite> {
         &self.lost_cargo_sites
-    }
-
-    pub const fn lost_cargo_sites_mut(&mut self) -> &mut BTreeMap<PlayerId, LostCargoSite> {
-        &mut self.lost_cargo_sites
-    }
-
-    pub const fn hazards_mut(&mut self) -> &mut Vec<HazardCloud> {
-        &mut self.hazards
     }
 
     #[must_use]
@@ -275,28 +263,12 @@ impl WorldState {
     }
 
     #[must_use]
-    pub fn has_scanner_and_discovery_state(&self, player_id: PlayerId) -> bool {
-        self.scanner_cooldowns.contains_key(&player_id)
-            && self.discovered_tiles.contains_key(&player_id)
-    }
-
-    pub const fn set_authoritative_summary(&mut self, summary: AuthoritativeWorldSummary) {
-        self.authoritative_summary = summary;
-    }
-
-    #[must_use]
     pub const fn simulation_tick(&self) -> SimulationTick {
         self.simulation_tick
     }
 
     pub const fn set_simulation_tick(&mut self, tick: SimulationTick) {
         self.simulation_tick = tick;
-        self.authoritative_summary.tick = tick;
-    }
-
-    #[must_use]
-    pub const fn authoritative_summary(&self) -> &AuthoritativeWorldSummary {
-        &self.authoritative_summary
     }
 
     #[must_use]
@@ -348,11 +320,7 @@ impl WorldState {
         self.active_drills.get(&player_id)
     }
 
-    pub fn active_drill_mut(&mut self, player_id: PlayerId) -> Option<&mut DrillState> {
-        self.active_drills.get_mut(&player_id)
-    }
-
-    pub fn set_active_drill(&mut self, player_id: PlayerId, drill: Option<DrillState>) {
+    pub(crate) fn set_active_drill(&mut self, player_id: PlayerId, drill: Option<DrillState>) {
         if let Some(drill) = drill {
             let continuing = self.active_drills.get(&player_id).is_some_and(|current| {
                 current.target == drill.target && current.direction == drill.direction
@@ -394,7 +362,8 @@ impl WorldState {
         self.scanner_cooldowns.get(&player_id).copied()
     }
 
-    pub fn set_scanner_cooldown_seconds(&mut self, player_id: PlayerId, seconds: f32) {
+    #[cfg(test)]
+    pub(crate) fn set_scanner_cooldown_seconds(&mut self, player_id: PlayerId, seconds: f32) {
         let seconds = seconds.max(0.0);
         self.scanner_cooldowns.insert(player_id, seconds);
         self.scanner_cooldown_deadlines.insert(
@@ -414,8 +383,9 @@ impl WorldState {
             .map_or(0, BTreeSet::len)
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn discovered_tiles_snapshot(&self, player_id: PlayerId) -> BTreeSet<TilePosition> {
+    pub(crate) fn discovered_tiles_snapshot(&self, player_id: PlayerId) -> BTreeSet<TilePosition> {
         self.discovered_tiles
             .get(&player_id)
             .cloned()
@@ -491,7 +461,7 @@ impl WorldState {
 
     #[must_use]
     pub const fn won_game(&self) -> bool {
-        self.authoritative_summary.won_game
+        self.won_game
     }
 
     #[must_use]
@@ -512,14 +482,14 @@ impl WorldState {
             .entry(player_id)
             .or_insert(self.simulation_tick);
         self.discovered_tiles.entry(player_id).or_default();
-        self.authoritative_summary.player_count = self.players.len();
     }
 
     pub fn player_mut(&mut self, player_id: PlayerId) -> Option<&mut Player> {
         self.players.get_mut(&player_id)
     }
 
-    pub fn set_player_movement_modifiers(
+    #[cfg(test)]
+    pub(crate) fn set_player_movement_modifiers(
         &mut self,
         player_id: PlayerId,
         mechanic_level: u8,
@@ -528,12 +498,6 @@ impl WorldState {
         self.mechanic_levels.insert(player_id, mechanic_level);
         self.equipped_rig_parts
             .insert(player_id, parts.into_iter().collect());
-    }
-
-    #[must_use]
-    pub fn player_inventory_summary(&self, player_id: PlayerId) -> Option<PlayerInventorySummary> {
-        self.player(player_id)
-            .map(PlayerInventorySummary::from_player)
     }
 
     #[must_use]
@@ -552,16 +516,6 @@ impl WorldState {
         self.players.len()
     }
 
-    #[must_use]
-    pub fn active_drills_snapshot(&self) -> BTreeMap<PlayerId, DrillState> {
-        self.active_drills.clone()
-    }
-
-    #[must_use]
-    pub fn scanner_cooldowns_snapshot(&self) -> BTreeMap<PlayerId, f32> {
-        self.scanner_cooldowns.clone()
-    }
-
     pub fn restore_static_world_state(
         &mut self,
         terrain: Terrain,
@@ -577,10 +531,5 @@ impl WorldState {
         self.infrastructure = infrastructure;
         self.active_drills = active_drills;
         self.scanner_cooldowns = scanner_cooldowns;
-        self.authoritative_summary.terrain_width = self.terrain.width();
-        self.authoritative_summary.terrain_height = self.terrain.height();
-        self.authoritative_summary.hazard_count = self.hazards.len();
-        self.authoritative_summary.bomb_count = self.bombs.len();
-        self.authoritative_summary.infrastructure_count = self.infrastructure.len();
     }
 }

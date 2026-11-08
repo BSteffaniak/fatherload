@@ -1,9 +1,8 @@
 //! The fixed-tick [`WorldState::simulate_tick`] transition.
 
-use std::{collections::BTreeSet, mem};
+use std::mem;
 
 use crate::{
-    command::PlayerCommand,
     event::{ActionOutcome, GameplayEventKind, TickOutput, gameplay_event_for_applied_command},
     ids::{PlayerId, SimulationTick},
     infrastructure::InfrastructureKind,
@@ -16,7 +15,6 @@ use crate::{
         ArtifactKind, MineResult, MineralKind, StrategicResourceKind, TILE_SIZE, TileKind,
         TilePosition,
     },
-    terrain_revision::TerrainRevisionTracker,
 };
 
 use super::{
@@ -48,42 +46,26 @@ impl WorldState {
         clippy::too_many_lines,
         reason = "canonical transition keeps tick ordering explicit while gameplay domains are extracted"
     )]
-    pub fn simulate_tick(
-        &mut self,
-        tick: SimulationTick,
-        inputs: &TickInputs,
-        terrain_revisions: &mut TerrainRevisionTracker,
-    ) -> TickOutput {
+    pub fn simulate_tick(&mut self, tick: SimulationTick, inputs: &TickInputs) -> TickOutput {
         let mut output = TickOutput {
             tick,
-            command_count: inputs.command_count(),
             ..TickOutput::default()
         };
         let timing = self.timing;
         let delta_seconds = timing.delta_seconds;
         self.terrain.start_journal();
-        let mut changed_players = BTreeSet::new();
         for (&player_id, input) in &inputs.players {
-            if let Some((sequence, controls)) = input.controls {
-                if self.apply_drill_intent(player_id, controls.horizontal(), controls.drill_down)
-                    == PlayerScopedCommandOutcome::Applied
-                {
-                    changed_players.insert(player_id);
-                }
+            if let Some(controls) = input.controls {
+                let _drill =
+                    self.apply_drill_intent(player_id, controls.horizontal(), controls.drill_down);
                 let _step = self.step_authoritative_movement(
                     player_id,
                     controls.horizontal(),
                     controls.thrust,
                 );
-                output
-                    .latest_sequences_by_player
-                    .insert(player_id, sequence);
             }
             for action in &input.actions {
-                let outcome = if matches!(action.command, PlayerCommand::Movement { .. }) {
-                    // Held movement travels in `controls`; a movement action is not a one-shot.
-                    PlayerScopedCommandOutcome::IgnoredUnavailable
-                } else if !self.players.contains_key(&player_id) {
+                let outcome = if !self.players.contains_key(&player_id) {
                     PlayerScopedCommandOutcome::UnknownPlayer
                 } else if !self.command_allowed_here(player_id, &action.command) {
                     // Building services only work at the building (validated here, inside the
@@ -98,23 +80,17 @@ impl WorldState {
                     outcome,
                 });
                 if outcome == PlayerScopedCommandOutcome::Applied {
-                    changed_players.insert(player_id);
-                    if let Some(event) = gameplay_event_for_applied_command(action) {
-                        output.push_event(event);
-                    }
+                    output.push_event(gameplay_event_for_applied_command(
+                        player_id,
+                        &action.command,
+                    ));
                 }
-                output
-                    .latest_sequences_by_player
-                    .entry(player_id)
-                    .and_modify(|sequence| *sequence = (*sequence).max(action.sequence))
-                    .or_insert(action.sequence);
             }
         }
         let next_tick = tick.next();
         let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in recovery_player_ids {
             if self.recover_lost_cargo_for_player(player_id) {
-                changed_players.insert(player_id);
                 output.push_event(GameplayEventKind::CargoChanged { player_id });
             }
         }
@@ -142,11 +118,9 @@ impl WorldState {
             });
             if damaged {
                 let _snapshot = self.apply_hazard_damage(player_id, 4.0 * delta_seconds);
-                changed_players.insert(player_id);
                 output.push_event(GameplayEventKind::PlayerDamaged { player_id });
             }
         }
-        self.authoritative_summary.hazard_count = self.hazards.len();
 
         let player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in player_ids {
@@ -221,7 +195,6 @@ impl WorldState {
                 if let Some(player) = self.players.get_mut(&player_id) {
                     player.hull = quantize_simulation_scalar(player.hull);
                 }
-                changed_players.insert(player_id);
                 output.push_event(GameplayEventKind::PlayerDamaged { player_id });
             }
         }
@@ -236,8 +209,7 @@ impl WorldState {
                 )
             });
             if next_tick >= deadline {
-                let blast = self.detonate_bomb_at(bomb_tile_position(bomb), 2);
-                output.terrain_changed_tiles.extend(blast.changed_tiles);
+                let _blast = self.detonate_bomb_at(bomb_tile_position(bomb), 2);
                 output.push_event(GameplayEventKind::BombDetonated);
             } else {
                 let mut bomb = bomb;
@@ -245,14 +217,6 @@ impl WorldState {
                 self.bombs.push(bomb);
                 self.bomb_detonation_ticks.push(deadline);
             }
-        }
-        self.authoritative_summary.bomb_count = self.bombs.len();
-        if !output.terrain_changed_tiles.is_empty() {
-            output.terrain_changed_tiles.sort_unstable();
-            output.terrain_changed_tiles.dedup();
-            output.terrain_revisions.extend(
-                terrain_revisions.mark_tiles_changed(output.terrain_changed_tiles.iter().copied()),
-            );
         }
 
         let active_players: Vec<PlayerId> = self.active_drills.keys().copied().collect();
@@ -303,9 +267,6 @@ impl WorldState {
             ) {
                 self.active_drill_timers.remove(&player_id);
             }
-            output.terrain_changed_tiles.push(target);
-            let revisions = terrain_revisions.mark_tiles_changed([target]);
-            output.terrain_revisions.extend(revisions);
             match result {
                 MineResult::Mined(TileKind::Ore(_)) => {
                     output.push_event(GameplayEventKind::CargoChanged { player_id });
@@ -361,20 +322,19 @@ impl WorldState {
                 MineResult::Blocked | MineResult::Chipped | MineResult::Mined(_) => {}
             }
         }
-        self.advance_canonical_day_if_due(next_tick, &mut output, &mut changed_players);
-        self.advance_escape_sequence(next_tick, &mut output, &mut changed_players);
-        self.advance_progression_depth(&mut output, &mut changed_players);
+        self.advance_canonical_day_if_due(next_tick, &mut output);
+        self.advance_escape_sequence(next_tick, &mut output);
+        self.advance_progression_depth(&mut output);
         let pressure_player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in pressure_player_ids {
             self.advance_world_event_hazards(player_id, next_tick, &mut output);
-            self.advance_deep_run_pressure(player_id, next_tick, &mut output, &mut changed_players);
+            self.advance_deep_run_pressure(player_id, next_tick, &mut output);
         }
-        self.advance_falling_boulders(next_tick, &mut output, &mut changed_players);
+        self.advance_falling_boulders(next_tick, &mut output);
         let explorer_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in explorer_ids {
             let _visible = self.reveal_tiles_near_player(player_id);
         }
-        output.changed_players = changed_players.into_iter().collect();
         output.terrain_ops = self.terrain.finish_journal();
         self.set_simulation_tick(next_tick);
         output
@@ -384,7 +344,6 @@ impl WorldState {
         &mut self,
         next_tick: SimulationTick,
         output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
     ) {
         let Some(deadline) = self.progression.escape_deadline else {
             return;
@@ -392,7 +351,6 @@ impl WorldState {
         if next_tick >= deadline {
             for (player_id, player) in &mut self.players {
                 player.hull = 0.0;
-                changed_players.insert(*player_id);
                 output.push_event(GameplayEventKind::PlayerDamaged {
                     player_id: *player_id,
                 });
@@ -436,7 +394,6 @@ impl WorldState {
         } else if rate.schedule_fires(next_tick, ESCAPE_COLLAPSE_PERIOD_MILLIS, 0) {
             for position in mem::take(&mut self.collapse_warnings) {
                 if self.terrain.set_kind(position, TileKind::Stone) {
-                    output.terrain_changed_tiles.push(position);
                     self.scan_markers
                         .retain(|marker| marker.position != position);
                 }
@@ -450,7 +407,6 @@ impl WorldState {
         player_id: PlayerId,
         depth: i32,
         output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
     ) {
         use crate::LegendaryBlueprint;
         let Some(player) = self.players.get_mut(&player_id) else {
@@ -510,18 +466,11 @@ impl WorldState {
         } else {
             TileKind::Ore(MineralKind::Mythril)
         };
-        if self.terrain.set_kind(position, reward_tile) {
-            output.terrain_changed_tiles.push(position);
-        }
-        changed_players.insert(player_id);
+        let _placed = self.terrain.set_kind(position, reward_tile);
         output.push_event(GameplayEventKind::DeepRewardGranted { player_id });
     }
 
-    pub(super) fn advance_progression_depth(
-        &mut self,
-        output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
-    ) {
+    pub(super) fn advance_progression_depth(&mut self, output: &mut TickOutput) {
         let player_depths = self
             .players
             .iter()
@@ -541,7 +490,7 @@ impl WorldState {
                 self.progression
                     .deep_reward_milestones
                     .insert(player_id, milestone);
-                self.grant_deep_reward(player_id, depth, output, changed_players);
+                self.grant_deep_reward(player_id, depth, output);
             }
         }
     }

@@ -177,7 +177,7 @@ impl WorldState {
         true
     }
 
-    pub fn apply_hazard_damage(
+    pub(crate) fn apply_hazard_damage(
         &mut self,
         player_id: PlayerId,
         damage: f32,
@@ -199,7 +199,7 @@ impl WorldState {
             .filter(|snapshot| snapshot.disabled || snapshot.stranded)
     }
 
-    pub fn detonate_bomb_at(
+    pub(crate) fn detonate_bomb_at(
         &mut self,
         center: TilePosition,
         radius: i32,

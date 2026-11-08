@@ -41,7 +41,7 @@ pub struct LocalSeat {
 }
 
 /// One seat's gameplay input for the next tick(s).
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct SeatInput {
     /// Held, quantized movement controls.
     pub controls: ControlState,
@@ -50,7 +50,7 @@ pub struct SeatInput {
 }
 
 /// A gameplay event produced by a fixed tick, with its stable identity.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeEvent {
     /// Session epoch the event belongs to (bumps on load / new game).
     pub epoch: u64,
@@ -79,7 +79,7 @@ impl RuntimeEvent {
 }
 
 /// What a runtime event says.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RuntimeEventKind {
     /// A gameplay event (audio/vfx cue, notification).
     Gameplay(GameplayEvent),
@@ -93,7 +93,7 @@ pub enum RuntimeEventKind {
 }
 
 /// What one [`Runtime::advance`] produced.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RuntimeFrame {
     /// Fixed ticks simulated this frame.
     pub ticks_run: u32,

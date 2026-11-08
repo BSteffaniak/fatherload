@@ -7,12 +7,9 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use super::{
     SectionKey, SectionPayload, WorldState,
-    determinism_tests::{scripted_commands, scripted_world},
+    determinism_tests::{scripted_inputs, scripted_world},
 };
-use crate::{
-    LiveEntities, PlayerId, PlayerTickState, SimulationTick, TerrainRevisionTracker, TickInputs,
-    TileChange,
-};
+use crate::{LiveEntities, PlayerId, PlayerTickState, SimulationTick, TileChange};
 
 /// Round-trips a value through the binary wire codec, as the network would.
 fn wire<T: Serialize + DeserializeOwned>(value: &T) -> T {
@@ -79,12 +76,10 @@ fn keyframe_plus_section_updates_reach_identical_hashes() {
         authority.simulation_state_hash()
     );
 
-    let mut revisions = TerrainRevisionTracker::default();
-    let mut sequence = 0;
     let mut ops_seen = 0;
     for tick in 0..6_000 {
-        let inputs = TickInputs::from_commands(&scripted_commands(tick, &mut sequence));
-        let output = authority.simulate_tick(SimulationTick::new(tick), &inputs, &mut revisions);
+        let inputs = scripted_inputs(tick);
+        let output = authority.simulate_tick(SimulationTick::new(tick), &inputs);
         ops_seen += output.terrain_ops.len();
         replicate_tick(&mut replica, &authority, &output.terrain_ops, &mut baseline);
         assert_eq!(
@@ -116,8 +111,6 @@ fn replica_follows_roster_changes() {
     let mut replica: WorldState = wire(&authority);
     let mut baseline = Baseline::default();
     let _ = baseline.changed_sections(&authority);
-    let mut revisions = TerrainRevisionTracker::default();
-    let mut sequence = 0;
     let joined = PlayerId::new(7);
     for tick in 0..600 {
         if tick == 100 {
@@ -126,8 +119,8 @@ fn replica_follows_roster_changes() {
         if tick == 400 {
             authority.remove_player(PlayerId::new(2));
         }
-        let inputs = TickInputs::from_commands(&scripted_commands(tick, &mut sequence));
-        let output = authority.simulate_tick(SimulationTick::new(tick), &inputs, &mut revisions);
+        let inputs = scripted_inputs(tick);
+        let output = authority.simulate_tick(SimulationTick::new(tick), &inputs);
         // Roster first, as netcode does: drop departed players, add new ones.
         let roster: Vec<PlayerId> = authority.player_ids().collect();
         let departed: Vec<PlayerId> = replica

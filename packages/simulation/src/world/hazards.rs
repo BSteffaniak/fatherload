@@ -1,6 +1,6 @@
 //! World-event hazards, deep-run pressure, and falling boulders.
 
-use std::{collections::BTreeSet, mem};
+use std::mem;
 
 use crate::{
     event::{GameplayEventKind, TickOutput},
@@ -77,7 +77,6 @@ impl WorldState {
         player_id: PlayerId,
         next_tick: SimulationTick,
         output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
     ) {
         let Some(player) = self.players.get(&player_id) else {
             return;
@@ -131,7 +130,6 @@ impl WorldState {
                 .entry(player_id)
                 .and_modify(|current| *current = (*current).max(deadline))
                 .or_insert(deadline);
-            changed_players.insert(player_id);
         }
         if rare_cargo > 0
             && timing
@@ -153,7 +151,6 @@ impl WorldState {
             let (player_x, player_y) = (player.x, player.y);
             self.spawn_cave_in(player_x, player_y);
             let _snapshot = self.apply_hazard_damage(player_id, 4.0);
-            changed_players.insert(player_id);
             output.push_event(GameplayEventKind::PlayerDamaged { player_id });
             output.push_event(GameplayEventKind::BouldersChanged);
         }
@@ -201,7 +198,6 @@ impl WorldState {
         &mut self,
         next_tick: SimulationTick,
         output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
     ) {
         let timing = self.timing;
         let boulders = mem::take(&mut self.falling_boulders);
@@ -230,7 +226,6 @@ impl WorldState {
                 });
                 if let Some(player_id) = hit_player {
                     let _snapshot = self.apply_hazard_damage(player_id, 8.0);
-                    changed_players.insert(player_id);
                     output.push_event(GameplayEventKind::PlayerDamaged { player_id });
                     continue;
                 }

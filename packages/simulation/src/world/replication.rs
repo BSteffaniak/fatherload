@@ -6,7 +6,7 @@
 //! |---|---|---|
 //! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); live entities: gas clouds, falling boulders, bombs ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
 //! | Op log | terrain tiles | [`crate::TickOutput::terrain_ops`], [`WorldState::apply_tile_change`] |
-//! | On-change | per player: inventory, credits, upgrades, rig parts, rescue/salvage, discovery ([`PlayerLoadout`]); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, summary, session constants | [`WorldState::section`], [`WorldState::apply_section`] |
+//! | On-change | per player: inventory, credits, upgrades, rig parts, rescue/salvage, discovery ([`PlayerLoadout`]); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants | [`WorldState::section`], [`WorldState::apply_section`] |
 //!
 //! Terrain dimensions, seed and the initial tiles only travel in a keyframe (the serialized
 //! [`WorldState`] itself).
@@ -32,7 +32,6 @@ use crate::{
     rig::{DrillState, RigPartKind},
     rng::DeterministicRngState,
     service::PlayerServiceTransaction,
-    summary::AuthoritativeWorldSummary,
     terrain::{
         ArtifactKind, MineralKind, StrategicResourceKind, TILE_SIZE, TileChange, TilePosition,
     },
@@ -305,6 +304,7 @@ pub struct ProgressionSection {
     pub legendary_blueprints: BTreeSet<LegendaryBlueprint>,
     pub rig_part_inventory: BTreeSet<RigPartKind>,
     pub deepest_tile_reached: i32,
+    pub won_game: bool,
 }
 
 /// Active world events.
@@ -349,14 +349,12 @@ pub enum SectionKey {
     Markers,
     Rng,
     Timers,
-    /// The derived world summary (its tick always follows the world tick).
-    Summary,
     Session,
 }
 
 impl SectionKey {
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 11] = [
+    pub const SHARED: [Self; 10] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -366,7 +364,6 @@ impl SectionKey {
         Self::Markers,
         Self::Rng,
         Self::Timers,
-        Self::Summary,
         Self::Session,
     ];
 }
@@ -384,7 +381,6 @@ pub enum SectionPayload {
     Markers(MarkersSection),
     Rng(DeterministicRngState),
     Timers(TimersSection),
-    Summary(AuthoritativeWorldSummary),
     Session(Box<SessionSection>),
 }
 
@@ -420,7 +416,7 @@ impl WorldState {
             timing: _,
             player_template: _,
             simulation_tick: _,
-            authoritative_summary,
+            won_game: _,
             players,
             equipped_rig_parts,
             mechanic_levels,
@@ -460,7 +456,6 @@ impl WorldState {
         scanner_cooldowns.remove(&player_id);
         scanner_cooldown_deadlines.remove(&player_id);
         discovered_tiles.remove(&player_id);
-        authoritative_summary.player_count = players.len();
     }
 
     /// Per-tick replicated state of one rig.
@@ -604,7 +599,7 @@ impl WorldState {
             timing,
             player_template,
             simulation_tick: _,
-            authoritative_summary,
+            won_game,
             players,
             equipped_rig_parts,
             mechanic_levels,
@@ -685,6 +680,7 @@ impl WorldState {
                 legendary_blueprints: legendary_blueprints.clone(),
                 rig_part_inventory: rig_part_inventory.clone(),
                 deepest_tile_reached: *deepest_tile_reached,
+                won_game: *won_game,
             }),
             SectionKey::Town => SectionPayload::Town(town_development.clone()),
             SectionKey::WorldEvents => SectionPayload::WorldEvents(WorldEventsSection {
@@ -701,12 +697,6 @@ impl WorldState {
                 next_day_tick: *next_day_tick,
                 escape_deadline: *escape_deadline,
             }),
-            SectionKey::Summary => {
-                // The summary's tick mirrors the world tick, which is replicated per tick.
-                let mut summary = authoritative_summary.clone();
-                summary.tick = SimulationTick::default();
-                SectionPayload::Summary(summary)
-            }
             SectionKey::Session => SectionPayload::Session(Box::new(SessionSection {
                 timing: *timing,
                 player_template: player_template.clone(),
@@ -791,10 +781,12 @@ impl WorldState {
                     legendary_blueprints,
                     rig_part_inventory,
                     deepest_tile_reached,
+                    won_game,
                 } = progression;
                 self.progression.legendary_blueprints = legendary_blueprints;
                 self.progression.rig_part_inventory = rig_part_inventory;
                 self.progression.deepest_tile_reached = deepest_tile_reached;
+                self.won_game = won_game;
             }
             (SectionKey::Town, SectionPayload::Town(town)) => {
                 self.progression.town_development = town;
@@ -826,10 +818,6 @@ impl WorldState {
                 } = timers;
                 self.progression.next_day_tick = next_day_tick;
                 self.progression.escape_deadline = escape_deadline;
-            }
-            (SectionKey::Summary, SectionPayload::Summary(mut summary)) => {
-                summary.tick = self.simulation_tick;
-                self.authoritative_summary = summary;
             }
             (SectionKey::Session, SectionPayload::Session(session)) => {
                 let SessionSection {

@@ -13,7 +13,7 @@ use crate::{
     quantize::quantize_simulation_scalar,
     rig::{DrillDirection, DrillState, RigPartKind},
     service::{PlayerServiceTransaction, PlayerTransactionKind},
-    summary::{PlayerScopedCommandOutcome, PlayerScopedGameplayProof},
+    summary::PlayerScopedCommandOutcome,
     terrain::{DeepStratum, MineResult, TILE_SIZE, TileKind, TilePosition, deep_stratum_at_depth},
 };
 
@@ -27,102 +27,7 @@ const BOMB_FUSE_MILLIS: u64 = 2_400;
 const BOMB_FUSE_SECONDS: f32 = 2.4;
 
 impl WorldState {
-    pub fn player_scoped_gameplay_proof(
-        &mut self,
-        first_player_id: PlayerId,
-        second_player_id: PlayerId,
-    ) -> Option<PlayerScopedGameplayProof> {
-        self.active_drills.remove(&first_player_id);
-        self.active_drills.remove(&second_player_id);
-        let first_before = self.players.get(&first_player_id)?.clone();
-        let second_before = self.players.get(&second_player_id)?.clone();
-
-        let movement_scoped = self.apply_player_command(
-            first_player_id,
-            &PlayerCommand::Movement {
-                horizontal: 0.75,
-                thrust: true,
-                drill_down: false,
-            },
-        ) == PlayerScopedCommandOutcome::Applied
-            && (self.players.get(&first_player_id)?.velocity_x - first_before.velocity_x).abs()
-                > f32::EPSILON
-            && (self.players.get(&second_player_id)?.velocity_x - second_before.velocity_x).abs()
-                < f32::EPSILON;
-
-        let drilling_scoped = self.apply_player_command(
-            first_player_id,
-            &PlayerCommand::Movement {
-                horizontal: 0.0,
-                thrust: false,
-                drill_down: true,
-            },
-        ) == PlayerScopedCommandOutcome::Applied
-            && self.active_drills.contains_key(&first_player_id)
-            && !self.active_drills.contains_key(&second_player_id);
-
-        let inventory_before = self.player_inventory_summary(second_player_id)?;
-        let scanner_before = self
-            .scanner_cooldown_seconds(second_player_id)
-            .unwrap_or(0.0);
-        let bomb_count_before = self.bombs.len();
-        let infrastructure_count_before = self.infrastructure.len();
-        let transaction_count_before = self.service_transactions.len();
-
-        let second = self.players.get_mut(&second_player_id)?;
-        second.fuel = 0.0;
-        second.hull = 0.0;
-        second.credits = second.credits.saturating_add(500);
-        second.bombs = second.bombs.saturating_add(1);
-        second.signal_relay_kits = second.signal_relay_kits.saturating_add(1);
-        let survival_before = self.player_survival_snapshot(second_player_id)?;
-
-        let survival_scoped = self.apply_player_command(second_player_id, &PlayerCommand::Rescue)
-            == PlayerScopedCommandOutcome::Applied
-            && self.player_survival_snapshot(second_player_id)? != survival_before
-            && self.player_survival_snapshot(first_player_id)?.player_id == first_player_id;
-        self.players
-            .get_mut(&second_player_id)?
-            .cargo
-            .insert(crate::terrain::MineralKind::Copper, 1);
-        let scanner_scoped = self
-            .apply_player_command(second_player_id, &PlayerCommand::UseScanner)
-            == PlayerScopedCommandOutcome::Applied
-            && self
-                .scanner_cooldown_seconds(second_player_id)
-                .unwrap_or(0.0)
-                > scanner_before
-            && self
-                .scanner_cooldown_seconds(first_player_id)
-                .unwrap_or(0.0)
-                .abs()
-                < f32::EPSILON;
-        let bomb_scoped = self.apply_player_command(second_player_id, &PlayerCommand::PlaceBomb)
-            == PlayerScopedCommandOutcome::Applied
-            && self.bombs.len() == bomb_count_before + 1;
-        let infrastructure_scoped = self.apply_player_command(
-            second_player_id,
-            &PlayerCommand::PlaceInfrastructure { slot: 0 },
-        ) == PlayerScopedCommandOutcome::Applied
-            && self.infrastructure.len() == infrastructure_count_before + 1;
-        let economy_scoped = self.apply_player_command(second_player_id, &PlayerCommand::SellCargo)
-            == PlayerScopedCommandOutcome::Applied
-            && self.service_transactions.len() > transaction_count_before;
-        let inventory_scoped = self.player_inventory_summary(second_player_id)? != inventory_before;
-
-        Some(PlayerScopedGameplayProof {
-            movement_scoped,
-            drilling_scoped,
-            inventory_scoped,
-            survival_scoped,
-            scanner_scoped,
-            bomb_scoped,
-            infrastructure_scoped,
-            economy_scoped,
-        })
-    }
-
-    pub fn chip_active_drill_target(&mut self, player_id: PlayerId) -> Option<MineResult> {
+    pub(crate) fn chip_active_drill_target(&mut self, player_id: PlayerId) -> Option<MineResult> {
         let target = self.active_drills.get(&player_id)?.target;
         let result = self.terrain_mut().chip(target);
         if matches!(
@@ -184,7 +89,7 @@ impl WorldState {
     }
 
     /// Updates a player's drill target from held controls (no velocity change).
-    pub fn apply_drill_intent(
+    pub(crate) fn apply_drill_intent(
         &mut self,
         player_id: PlayerId,
         horizontal: f32,
@@ -261,7 +166,7 @@ impl WorldState {
         clippy::too_many_lines,
         reason = "compatibility command bridge covers all player-scoped intents until real systems split out"
     )]
-    pub fn apply_player_command(
+    pub(crate) fn apply_player_command(
         &mut self,
         player_id: PlayerId,
         command: &PlayerCommand,
@@ -271,19 +176,6 @@ impl WorldState {
         };
 
         match *command {
-            PlayerCommand::Movement {
-                horizontal,
-                thrust,
-                drill_down,
-            } => {
-                // Legacy direct-command bridge: `simulate_tick` integrates held controls with
-                // momentum instead (see `apply_drill_intent` and `step_authoritative_movement`).
-                player.velocity_x = horizontal;
-                if thrust {
-                    player.velocity_y = -1.0;
-                }
-                self.apply_drill_intent(player_id, horizontal, drill_down)
-            }
             PlayerCommand::Refuel => {
                 let credits_before = player.credits;
                 let cargo_before = player.cargo_used();
@@ -352,7 +244,6 @@ impl WorldState {
                             .get()
                             .saturating_add(self.timing.ticks_for_millis(BOMB_FUSE_MILLIS)),
                     ));
-                    self.authoritative_summary.bomb_count = self.bombs.len();
                     PlayerScopedCommandOutcome::Applied
                 }
             }
@@ -368,7 +259,6 @@ impl WorldState {
                     position: player.tile_position(TILE_SIZE),
                     durability: 100,
                 });
-                self.authoritative_summary.infrastructure_count = self.infrastructure.len();
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::BuyUpgrade { index } => {
@@ -392,10 +282,6 @@ impl WorldState {
             }
             PlayerCommand::Rescue => self.canonical_rescue_player(player_id),
             PlayerCommand::Service(request) => self.apply_service_request(player_id, request),
-            PlayerCommand::Interact
-            | PlayerCommand::Cancel
-            | PlayerCommand::Confirm
-            | PlayerCommand::SelectUpgrade { .. } => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 }

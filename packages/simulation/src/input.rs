@@ -4,11 +4,11 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    command::{PlayerCommand, SequencedPlayerCommand},
-    ids::{InputSequence, PlayerId},
-};
+#[cfg(test)]
+use crate::{command::PlayerCommand, ids::InputSequence};
+use crate::{command::TickAction, ids::PlayerId};
 
+/// Held controls, quantized so every peer feeds the simulation identical values.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct ControlState {
     horizontal_milli: i16,
@@ -40,45 +40,40 @@ impl ControlState {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+/// One player's input for one tick: held controls and one-shot actions.
+///
+/// A player without controls (absent from [`TickInputs`] or `controls: None`) is not moved this
+/// tick.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct PlayerTickInput {
-    pub controls: Option<(InputSequence, ControlState)>,
-    pub actions: Vec<SequencedPlayerCommand>,
+    pub controls: Option<ControlState>,
+    pub actions: Vec<TickAction>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+/// Every player's input for one tick, in deterministic order.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TickInputs {
     pub players: BTreeMap<PlayerId, PlayerTickInput>,
 }
 
+#[cfg(test)]
 impl TickInputs {
-    #[must_use]
-    pub fn from_commands(commands: &[SequencedPlayerCommand]) -> Self {
-        let mut inputs = Self::default();
-        for command in commands {
-            let player = inputs.players.entry(command.player_id).or_default();
-            if let PlayerCommand::Movement {
-                horizontal,
-                thrust,
-                drill_down,
-            } = command.command
-            {
-                player.controls = Some((
-                    command.sequence,
-                    ControlState::new(horizontal, thrust, drill_down),
-                ));
-            } else {
-                player.actions.push(command.clone());
-            }
-        }
-        inputs
+    /// Inputs holding `controls` for `player`.
+    pub(crate) fn held(player: PlayerId, controls: ControlState) -> Self {
+        Self::default().hold(player, controls)
     }
 
-    #[must_use]
-    pub fn command_count(&self) -> usize {
-        self.players
-            .values()
-            .map(|input| usize::from(input.controls.is_some()) + input.actions.len())
-            .sum()
+    /// Adds `controls` for `player`.
+    pub(crate) fn hold(mut self, player: PlayerId, controls: ControlState) -> Self {
+        self.players.entry(player).or_default().controls = Some(controls);
+        self
+    }
+
+    /// Adds a one-shot `command` for `player`, sequenced after its previous actions.
+    pub(crate) fn act(mut self, player: PlayerId, command: PlayerCommand) -> Self {
+        let input = self.players.entry(player).or_default();
+        let sequence = InputSequence::new(u32::try_from(input.actions.len()).unwrap_or(u32::MAX));
+        input.actions.push(TickAction { sequence, command });
+        self
     }
 }

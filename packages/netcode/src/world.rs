@@ -15,9 +15,8 @@
 
 use drillgame_simulation::{
     ControlState, GameplayEvent, GameplayEventKind, InputSequence, LiveEntities, PlayerCommand,
-    PlayerScopedCommandOutcome, PlayerTickState, SectionKey, SectionPayload,
-    SequencedPlayerCommand, SimulationTick, TILE_SIZE, TerrainRevisionTracker, TileChange,
-    WorldState, input,
+    PlayerScopedCommandOutcome, PlayerTickState, SectionKey, SectionPayload, SimulationTick,
+    TILE_SIZE, TickAction, TileChange, WorldState, input,
 };
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +41,7 @@ pub enum ActionResolution {
 }
 
 /// Events produced by the real world.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorldEvent {
     /// A gameplay event (audio/vfx cue, notification).
     Gameplay(GameplayEvent),
@@ -163,10 +162,8 @@ impl NetSimulation for WorldState {
                             let sequence =
                                 InputSequence::new(u32::try_from(ids.len()).unwrap_or(u32::MAX));
                             ids.push(envelope.id);
-                            SequencedPlayerCommand {
-                                player_id: player,
+                            TickAction {
                                 sequence,
-                                target_tick: current,
                                 command: envelope.action.clone(),
                             }
                         })
@@ -176,15 +173,14 @@ impl NetSimulation for WorldState {
             sim_inputs.players.insert(
                 player,
                 input::PlayerTickInput {
-                    controls: Some((InputSequence::default(), held)),
+                    controls: Some(held),
                     actions,
                 },
             );
             submitted.push((player, ids));
         }
 
-        let mut revisions = TerrainRevisionTracker::default();
-        let output = Self::simulate_tick(self, current, &sim_inputs, &mut revisions);
+        let output = Self::simulate_tick(self, current, &sim_inputs);
 
         let mut events = Vec::with_capacity(output.events.len() + output.action_outcomes.len());
         for outcome in &output.action_outcomes {

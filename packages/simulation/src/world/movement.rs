@@ -57,7 +57,7 @@ impl WorldState {
         clippy::too_many_lines,
         reason = "movement parity keeps modifier, integration, collision, and damage ordering explicit"
     )]
-    pub fn step_authoritative_movement(
+    pub(crate) fn step_authoritative_movement(
         &mut self,
         player_id: PlayerId,
         horizontal: f32,

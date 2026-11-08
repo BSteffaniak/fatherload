@@ -220,8 +220,6 @@ impl HarnessSim for WorldState {
             WORLD_HARNESS_HEIGHT_TILES,
             config.seed ^ 0x5EED,
         );
-        import.summary.terrain_width = import.terrain.width();
-        import.summary.terrain_height = import.terrain.height();
         let mut world = Self::from_import_with_params(
             &import,
             SimulationParams::new(config.params.tick_rate_hz),

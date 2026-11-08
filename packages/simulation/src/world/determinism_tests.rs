@@ -1,9 +1,8 @@
 //! Long-run determinism: identical seeds and input recordings must produce identical worlds.
 
 use crate::{
-    InputSequence, PlayerCommand, PlayerId, SequencedPlayerCommand, SimulationStateHash,
-    SimulationTick, TerrainRevisionTracker, TickInputs, TickOutput, WorldState, player::Player,
-    world::NEW_WORLD_SPAWN,
+    ControlState, PlayerCommand, PlayerId, SimulationStateHash, SimulationTick, TickInputs,
+    TickOutput, WorldState, player::Player, world::NEW_WORLD_SPAWN,
 };
 
 const FIRST_PLAYER: PlayerId = PlayerId::new(1);
@@ -29,8 +28,8 @@ pub(super) fn scripted_world() -> WorldState {
 
 /// Deterministic bot script covering movement, drilling, bombs, scanning, infrastructure,
 /// economy transactions, and rescue for two rigs.
-pub(super) fn scripted_commands(tick: u64, sequence: &mut u32) -> Vec<SequencedPlayerCommand> {
-    let mut commands = Vec::new();
+pub(super) fn scripted_inputs(tick: u64) -> TickInputs {
+    let mut inputs = TickInputs::default();
     for (index, player_id) in [FIRST_PLAYER, SECOND_PLAYER].into_iter().enumerate() {
         let phase = (tick + index as u64 * 137) % 600;
         let (horizontal, thrust, drill_down) = match phase {
@@ -40,20 +39,10 @@ pub(super) fn scripted_commands(tick: u64, sequence: &mut u32) -> Vec<SequencedP
             420..520 => (-1.0, false, true),
             _ => (0.25, true, false),
         };
+        inputs = inputs.hold(player_id, ControlState::new(horizontal, thrust, drill_down));
         let mut push = |command: PlayerCommand| {
-            *sequence = sequence.wrapping_add(1);
-            commands.push(SequencedPlayerCommand {
-                player_id,
-                sequence: InputSequence::new(*sequence),
-                target_tick: SimulationTick::new(tick),
-                command,
-            });
+            inputs = std::mem::take(&mut inputs).act(player_id, command);
         };
-        push(PlayerCommand::Movement {
-            horizontal,
-            thrust,
-            drill_down,
-        });
         let offset = tick + index as u64 * 13;
         if offset.is_multiple_of(97) {
             push(PlayerCommand::PlaceBomb);
@@ -84,7 +73,7 @@ pub(super) fn scripted_commands(tick: u64, sequence: &mut u32) -> Vec<SequencedP
             push(PlayerCommand::BuyUpgrade { index: 0 });
         }
     }
-    commands
+    inputs
 }
 
 struct RunRecord {
@@ -94,15 +83,11 @@ struct RunRecord {
 }
 
 fn run(mut world: WorldState, start_tick: u64, end_tick: u64) -> RunRecord {
-    let mut revisions = TerrainRevisionTracker::default();
-    let mut sequence = u32::try_from(start_tick)
-        .unwrap_or(u32::MAX)
-        .wrapping_mul(16);
     let mut checkpoints = Vec::new();
     let mut outputs = Vec::new();
     for tick in start_tick..end_tick {
-        let inputs = TickInputs::from_commands(&scripted_commands(tick, &mut sequence));
-        outputs.push(world.simulate_tick(SimulationTick::new(tick), &inputs, &mut revisions));
+        let inputs = scripted_inputs(tick);
+        outputs.push(world.simulate_tick(SimulationTick::new(tick), &inputs));
         if (tick + 1).is_multiple_of(HASH_EVERY_TICKS) {
             checkpoints.push((tick + 1, world.simulation_state_hash()));
         }
@@ -133,7 +118,7 @@ fn ten_thousand_tick_scripted_run_is_deterministic() {
     let changed_tiles: usize = first
         .outputs
         .iter()
-        .map(|output| output.terrain_changed_tiles.len())
+        .map(|output| output.terrain_ops.len())
         .sum();
     assert!(
         event_count > 100,

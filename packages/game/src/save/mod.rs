@@ -1,7 +1,7 @@
 //! Settings and world saves.
 //!
-//! A save is the host's [`WorldState`] plus a little session metadata (format version 4). Older
-//! formats (1-3) are migrated on load by [`legacy`]. Loading always hands the runtime a fresh
+//! A save is the host's [`WorldState`] plus a little session metadata (format version 5). Older
+//! formats (1-4) are migrated on load by [`legacy`]. Loading always hands the runtime a fresh
 //! world, which starts a new session epoch.
 
 mod legacy;
@@ -24,7 +24,7 @@ const SETTINGS_FILE_NAME: &str = "settings.json";
 const SAVE_FILE_NAME: &str = "save.json";
 const SAVE_SLOTS: usize = 3;
 /// Current save format.
-pub const SAVE_VERSION: u32 = 4;
+pub const SAVE_VERSION: u32 = 5;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -203,9 +203,12 @@ fn parse_save(json: &str) -> Result<WorldSave, SaveError> {
         SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
+        4 => serde_json::from_str::<legacy::V4SaveFile>(json)
+            .and_then(legacy::V4SaveFile::migrate)
+            .map_err(SaveError::Serialize),
         1..=3 => {
             if let Ok(file) = serde_json::from_str::<legacy::V3SaveFile>(json) {
-                return Ok(file.migrate());
+                return file.migrate().map_err(SaveError::Serialize);
             }
             if let Ok(file) = serde_json::from_str::<legacy::V2SaveFile>(json) {
                 return Ok(file.migrate());
@@ -382,6 +385,21 @@ mod tests {
         assert_eq!(player(&save).credits, 4321);
         assert_eq!(save.world.simulation_tick(), SimulationTick::new(27));
         assert!((save.play_seconds - 321.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn version_four_lifts_the_won_flag_out_of_the_derived_summary() {
+        let v3: serde_json::Value = serde_json::from_str(V3).expect("v3 json");
+        let mut world = v3["world"]["canonical_world"].clone();
+        world["authoritative_summary"]["won_game"] = serde_json::Value::Bool(true);
+        let v4 = serde_json::json!({
+            "version": 4,
+            "save": { "world": world, "play_seconds": 9.0 },
+        });
+        let save = parse_save(&v4.to_string()).expect("v4 migrates");
+        assert!(save.world.won_game());
+        assert_eq!(player(&save).credits, 4321);
+        assert!((save.play_seconds - 9.0).abs() < f32::EPSILON);
     }
 
     #[test]

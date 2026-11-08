@@ -24,14 +24,9 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         PlayerCommand::SellCargo => Some(&[SurfaceZone::Depot]),
         PlayerCommand::BuyUpgrade { .. } => Some(&[SurfaceZone::Shop]),
         PlayerCommand::Service(request) => Some(service_request_zones(*request)),
-        PlayerCommand::Movement { .. }
-        | PlayerCommand::Interact
-        | PlayerCommand::Cancel
-        | PlayerCommand::Confirm
-        | PlayerCommand::UseScanner
+        PlayerCommand::UseScanner
         | PlayerCommand::PlaceBomb
         | PlayerCommand::PlaceInfrastructure { .. }
-        | PlayerCommand::SelectUpgrade { .. }
         | PlayerCommand::Rescue => None,
     }
 }
@@ -101,7 +96,7 @@ impl WorldState {
     }
 
     /// Resolves one town service transaction for `player_id`.
-    pub fn apply_service_request(
+    pub(crate) fn apply_service_request(
         &mut self,
         player_id: PlayerId,
         request: SessionServiceRequest,
@@ -224,11 +219,9 @@ impl WorldState {
 #[cfg(test)]
 mod tests {
     use crate::{
-        InputSequence, PlayerCommand, PlayerId, PlayerScopedCommandOutcome, SequencedPlayerCommand,
-        SessionServiceRequest, SimulationTick, TerrainRevisionTracker, TickInputs, WorldImport,
-        WorldState,
+        PlayerCommand, PlayerId, PlayerScopedCommandOutcome, SessionServiceRequest, SimulationTick,
+        TickInputs, WorldImport, WorldState,
         economy::SurfaceZone,
-        input::PlayerTickInput,
         surface::SURFACE_BUILDINGS,
         terrain::{MineralKind, TILE_SIZE},
     };
@@ -283,24 +276,12 @@ mod tests {
         commands: Vec<PlayerCommand>,
     ) -> Vec<PlayerScopedCommandOutcome> {
         let tick = world.simulation_tick();
-        let mut inputs = TickInputs::default();
-        inputs.players.insert(
-            PLAYER,
-            PlayerTickInput {
-                controls: None,
-                actions: commands
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, command)| SequencedPlayerCommand {
-                        player_id: PLAYER,
-                        sequence: InputSequence::new(u32::try_from(index).expect("small")),
-                        target_tick: tick,
-                        command,
-                    })
-                    .collect(),
-            },
-        );
-        let output = world.simulate_tick(tick, &inputs, &mut TerrainRevisionTracker::default());
+        let inputs = commands
+            .into_iter()
+            .fold(TickInputs::default(), |inputs, command| {
+                inputs.act(PLAYER, command)
+            });
+        let output = world.simulate_tick(tick, &inputs);
         output
             .action_outcomes
             .iter()
@@ -464,11 +445,7 @@ mod tests {
             .tile_position(TILE_SIZE);
         assert_eq!(world.discovered_tile_count(PLAYER), 0);
         let tick = world.simulation_tick();
-        let _output = world.simulate_tick(
-            tick,
-            &TickInputs::default(),
-            &mut TerrainRevisionTracker::default(),
-        );
+        let _output = world.simulate_tick(tick, &TickInputs::default());
         assert!(world.discovered_tile_count(PLAYER) > 0);
         assert!(world.discovered_tiles_snapshot(PLAYER).contains(&tile));
     }

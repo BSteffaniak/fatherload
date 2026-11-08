@@ -1,7 +1,5 @@
 //! Canonical economy, market days, contracts, expeditions, and town services.
 
-use std::collections::BTreeSet;
-
 use crate::{
     economy::DeepClaimStatus,
     event::{GameplayEventKind, TickOutput},
@@ -117,7 +115,6 @@ impl WorldState {
         &mut self,
         next_tick: SimulationTick,
         output: &mut TickOutput,
-        changed_players: &mut BTreeSet<PlayerId>,
     ) {
         if next_tick < self.progression.next_day_tick {
             return;
@@ -132,9 +129,8 @@ impl WorldState {
         self.schedule_canonical_world_event(next_tick, output);
         let dividend = u32::from(self.progression.town_development.bank_level) * 12;
         if dividend > 0 {
-            for (player_id, player) in &mut self.players {
+            for player in self.players.values_mut() {
                 player.credits = player.credits.saturating_add(dividend);
-                changed_players.insert(*player_id);
             }
             self.progression.total_earnings = self.progression.total_earnings.saturating_add(
                 dividend.saturating_mul(u32::try_from(self.players.len()).unwrap_or(u32::MAX)),
@@ -324,7 +320,10 @@ impl WorldState {
         });
     }
 
-    pub fn accept_canonical_expedition(&mut self, index: usize) -> PlayerScopedCommandOutcome {
+    pub(crate) fn accept_canonical_expedition(
+        &mut self,
+        index: usize,
+    ) -> PlayerScopedCommandOutcome {
         self.refresh_canonical_expedition_offers();
         if self.progression.active_expeditions.len() >= 3
             || index >= self.progression.expedition_offers.len()
@@ -372,7 +371,7 @@ impl WorldState {
         }
     }
 
-    pub fn start_canonical_side_contract(&mut self) -> PlayerScopedCommandOutcome {
+    pub(crate) fn start_canonical_side_contract(&mut self) -> PlayerScopedCommandOutcome {
         use crate::SideContractKind;
         if self.progression.active_side_contracts.len() >= 3 {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
@@ -450,7 +449,7 @@ impl WorldState {
         }
     }
 
-    pub fn complete_canonical_side_contract(
+    pub(crate) fn complete_canonical_side_contract(
         &mut self,
         player_id: PlayerId,
     ) -> PlayerScopedCommandOutcome {
@@ -501,7 +500,7 @@ impl WorldState {
         PlayerScopedCommandOutcome::Applied
     }
 
-    pub fn apply_canonical_salvage_service(
+    pub(crate) fn apply_canonical_salvage_service(
         &mut self,
         player_id: PlayerId,
         request: crate::SessionServiceRequest,
@@ -597,7 +596,7 @@ impl WorldState {
         clippy::too_many_lines,
         reason = "canonical progression service migration keeps transactional rules together"
     )]
-    pub fn apply_canonical_progression_service(
+    pub(crate) fn apply_canonical_progression_service(
         &mut self,
         player_id: PlayerId,
         request: crate::SessionServiceRequest,
@@ -822,7 +821,7 @@ impl WorldState {
         progress >= expedition.required
     }
 
-    pub fn complete_canonical_progression_for_player(
+    pub(crate) fn complete_canonical_progression_for_player(
         &mut self,
         player_id: PlayerId,
     ) -> PlayerScopedCommandOutcome {
@@ -897,6 +896,7 @@ impl WorldState {
             .saturating_add(completion.reward.saturating_add(escrow));
         if completion.finished_story {
             self.progression.deep_claim_status = DeepClaimStatus::Unlocked;
+            self.won_game = true;
         }
         debug_assert_eq!(self.progression.contracts.completed, before_completed + 1);
         record_service_transaction(
@@ -915,87 +915,5 @@ impl WorldState {
             },
         );
         PlayerScopedCommandOutcome::Applied
-    }
-
-    pub fn apply_contract_reward(
-        &mut self,
-        player_id: PlayerId,
-        reward_credits: u32,
-    ) -> Option<PlayerServiceTransaction> {
-        let player = self.players.get_mut(&player_id)?;
-        let transaction = PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::CompleteContract,
-            credits_before: player.credits,
-            credits_after: player.credits.saturating_add(reward_credits),
-            cargo_before: player.cargo_used(),
-            cargo_after: player.cargo_used(),
-        };
-        player.credits = transaction.credits_after;
-        record_service_transaction(&mut self.service_transactions, transaction);
-        Some(transaction)
-    }
-
-    pub fn start_expedition(
-        &mut self,
-        player_id: PlayerId,
-        cost: u32,
-    ) -> Option<PlayerServiceTransaction> {
-        let player = self.players.get_mut(&player_id)?;
-        if player.credits < cost {
-            return None;
-        }
-        let transaction = PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::StartExpedition,
-            credits_before: player.credits,
-            credits_after: player.credits - cost,
-            cargo_before: player.cargo_used(),
-            cargo_after: player.cargo_used(),
-        };
-        player.credits = transaction.credits_after;
-        record_service_transaction(&mut self.service_transactions, transaction);
-        Some(transaction)
-    }
-
-    pub fn repay_debt(
-        &mut self,
-        player_id: PlayerId,
-        amount: u32,
-    ) -> Option<PlayerServiceTransaction> {
-        let player = self.players.get_mut(&player_id)?;
-        let payment = amount.min(player.credits).min(player.loan_debt);
-        let transaction = PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::RepayDebt,
-            credits_before: player.credits,
-            credits_after: player.credits - payment,
-            cargo_before: player.loan_debt,
-            cargo_after: player.loan_debt - payment,
-        };
-        player.credits = transaction.credits_after;
-        player.loan_debt = transaction.cargo_after;
-        record_service_transaction(&mut self.service_transactions, transaction);
-        Some(transaction)
-    }
-
-    pub fn award_victory(
-        &mut self,
-        player_id: PlayerId,
-        bonus_credits: u32,
-    ) -> Option<PlayerServiceTransaction> {
-        let player = self.players.get_mut(&player_id)?;
-        let transaction = PlayerServiceTransaction {
-            player_id,
-            kind: PlayerTransactionKind::WinGame,
-            credits_before: player.credits,
-            credits_after: player.credits.saturating_add(bonus_credits),
-            cargo_before: player.cargo_used(),
-            cargo_after: player.cargo_used(),
-        };
-        player.credits = transaction.credits_after;
-        self.authoritative_summary.won_game = true;
-        record_service_transaction(&mut self.service_transactions, transaction);
-        Some(transaction)
     }
 }

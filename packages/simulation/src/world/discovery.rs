@@ -8,7 +8,7 @@ use crate::{
 use super::WorldState;
 
 impl WorldState {
-    pub fn reveal_scanner_area(
+    pub(crate) fn reveal_scanner_area(
         &mut self,
         player_id: PlayerId,
         center: TilePosition,
@@ -22,7 +22,7 @@ impl WorldState {
         clippy::cast_possible_truncation,
         reason = "world positions are converted to terrain tile coordinates"
     )]
-    pub fn reveal_tiles_near_player(&mut self, player_id: PlayerId) -> Vec<TilePosition> {
+    pub(crate) fn reveal_tiles_near_player(&mut self, player_id: PlayerId) -> Vec<TilePosition> {
         let Some(player) = self.players.get(&player_id) else {
             return Vec::new();
         };

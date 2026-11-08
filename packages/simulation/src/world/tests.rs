@@ -7,9 +7,8 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    DrillDirection, DrillState, FIXED_DELTA_SECONDS, InfrastructureKind, InputSequence,
-    PlayerCommand, PlayerId, SequencedPlayerCommand, SimulationTick, TILE_SIZE, WorldImport,
-    WorldState,
+    ControlState, DrillDirection, DrillState, FIXED_DELTA_SECONDS, InfrastructureKind,
+    PlayerCommand, PlayerId, SimulationTick, TILE_SIZE, TickInputs, WorldImport, WorldState,
     terrain::{TileKind, TilePosition},
 };
 
@@ -19,26 +18,12 @@ const LOCAL_PLAYER_ID: PlayerId = PlayerId::new(1);
 fn world_state_applies_player_scoped_drilling_intent() {
     let mut world = WorldState::new_game(LOCAL_PLAYER_ID);
 
-    let outcome = world.apply_player_command(
-        LOCAL_PLAYER_ID,
-        &PlayerCommand::Movement {
-            horizontal: 0.0,
-            thrust: false,
-            drill_down: true,
-        },
-    );
+    let outcome = world.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, true);
 
     assert_eq!(outcome, crate::PlayerScopedCommandOutcome::Applied);
     assert!(world.active_drill(LOCAL_PLAYER_ID).is_some());
 
-    world.apply_player_command(
-        LOCAL_PLAYER_ID,
-        &PlayerCommand::Movement {
-            horizontal: 0.0,
-            thrust: false,
-            drill_down: false,
-        },
-    );
+    let _outcome = world.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, false);
 
     assert!(world.active_drill(LOCAL_PLAYER_ID).is_none());
 }
@@ -183,21 +168,9 @@ fn compatibility_world_applies_player_scoped_commands_to_selected_player() {
     let mut world = WorldState::new_game(LOCAL_PLAYER_ID);
 
     assert_eq!(
-        world.apply_player_command(
-            LOCAL_PLAYER_ID,
-            &PlayerCommand::Movement {
-                horizontal: 0.75,
-                thrust: true,
-                drill_down: false,
-            },
-        ),
+        world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Refuel),
         crate::PlayerScopedCommandOutcome::Applied
     );
-    let velocity_x = world
-        .player(LOCAL_PLAYER_ID)
-        .expect("player exists")
-        .velocity_x;
-    assert!((velocity_x - 0.75).abs() < f32::EPSILON);
     assert_eq!(
         world.apply_player_command(PlayerId::new(999), &PlayerCommand::Refuel),
         crate::PlayerScopedCommandOutcome::UnknownPlayer
@@ -270,24 +243,20 @@ fn compatibility_world_tracks_per_player_active_drill_and_scanner_cooldown() {
 }
 
 #[test]
-fn compatibility_world_summarizes_inventory_and_applies_upgrade_intent() {
+fn world_applies_upgrade_intent() {
     let mut game = WorldImport::new_game(LOCAL_PLAYER_ID);
     game.player.credits = 420;
     let mut world = WorldState::from_import(&game);
-    let before = world
-        .player_inventory_summary(LOCAL_PLAYER_ID)
-        .expect("player summary");
+    let before = world.player(LOCAL_PLAYER_ID).expect("player").clone();
 
-    assert_eq!(before.cargo_used, 0);
+    assert_eq!(before.cargo_used(), 0);
     assert_eq!(before.credits, 420);
     assert_eq!(
         world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::BuyUpgrade { index: 0 }),
         crate::PlayerScopedCommandOutcome::Applied
     );
-    let after = world
-        .player_inventory_summary(LOCAL_PLAYER_ID)
-        .expect("player summary");
-    assert!(after.upgrade_level_total > before.upgrade_level_total);
+    let after = world.player(LOCAL_PLAYER_ID).expect("player");
+    assert!(after.credits < before.credits);
 }
 
 #[test]
@@ -296,27 +265,9 @@ fn canonical_simulation_hash_matches_for_identical_tick_replay() {
         let game = WorldImport::new_game(LOCAL_PLAYER_ID);
         let mut world = WorldState::from_import(&game);
         let tick = SimulationTick::new(7);
-        let commands = vec![
-            SequencedPlayerCommand {
-                player_id: LOCAL_PLAYER_ID,
-                sequence: InputSequence::new(11),
-                target_tick: tick,
-                command: PlayerCommand::Movement {
-                    horizontal: 0.375,
-                    thrust: true,
-                    drill_down: false,
-                },
-            },
-            SequencedPlayerCommand {
-                player_id: LOCAL_PLAYER_ID,
-                sequence: InputSequence::new(12),
-                target_tick: tick,
-                command: PlayerCommand::PlaceBomb,
-            },
-        ];
-        let inputs = crate::TickInputs::from_commands(&commands);
-        let mut terrain_revisions = crate::TerrainRevisionTracker::default();
-        let output = world.simulate_tick(tick, &inputs, &mut terrain_revisions);
+        let inputs = TickInputs::held(LOCAL_PLAYER_ID, ControlState::new(0.375, true, false))
+            .act(LOCAL_PLAYER_ID, PlayerCommand::PlaceBomb);
+        let output = world.simulate_tick(tick, &inputs);
         (world.simulation_state_hash(), output)
     }
 
@@ -348,14 +299,12 @@ fn canonical_timers_use_tick_deadlines_and_rng_state_is_replayable() {
     let mut second = WorldState::from_import(&game);
     first.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 1.0);
     second.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 1.0);
-    let mut first_revisions = crate::TerrainRevisionTracker::default();
-    let mut second_revisions = crate::TerrainRevisionTracker::default();
 
     for tick in 0..60 {
         let tick = SimulationTick::new(tick);
         let inputs = crate::TickInputs::default();
-        let _first = first.simulate_tick(tick, &inputs, &mut first_revisions);
-        let _second = second.simulate_tick(tick, &inputs, &mut second_revisions);
+        let _first = first.simulate_tick(tick, &inputs);
+        let _second = second.simulate_tick(tick, &inputs);
     }
 
     assert_eq!(first.scanner_cooldown_seconds(LOCAL_PLAYER_ID), Some(0.0));
@@ -381,13 +330,8 @@ fn canonical_tick_applies_depth_pressure_and_lava_damage() {
         player.y = 100.0 * TILE_SIZE;
         player.hull = 100.0;
     }
-    let mut terrain_revisions = crate::TerrainRevisionTracker::default();
 
-    let output = world.simulate_tick(
-        SimulationTick::new(8),
-        &crate::TickInputs::default(),
-        &mut terrain_revisions,
-    );
+    let output = world.simulate_tick(SimulationTick::new(8), &crate::TickInputs::default());
 
     assert!(world.player(LOCAL_PLAYER_ID).expect("player exists").hull < 100.0);
     assert!(output.events.iter().any(|event| {
@@ -408,18 +352,8 @@ fn canonical_deep_rewards_and_escape_sequence_are_tick_deterministic() {
         world.progression.escape_deadline = Some(SimulationTick::new(2));
         world.set_simulation_tick(SimulationTick::new(0));
     }
-    let mut first_revisions = crate::TerrainRevisionTracker::default();
-    let mut second_revisions = crate::TerrainRevisionTracker::default();
-    let first_output = first.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::default(),
-        &mut first_revisions,
-    );
-    let second_output = second.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::default(),
-        &mut second_revisions,
-    );
+    let first_output = first.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
+    let second_output = second.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
     assert_eq!(first_output, second_output);
     assert_eq!(
         first.simulation_state_hash(),
@@ -438,11 +372,7 @@ fn canonical_deep_rewards_and_escape_sequence_are_tick_deterministic() {
             .materials
             .contains_key(&crate::terrain::StrategicResourceKind::PressurePearl)
     );
-    let output = first.simulate_tick(
-        SimulationTick::new(1),
-        &crate::TickInputs::default(),
-        &mut first_revisions,
-    );
+    let output = first.simulate_tick(SimulationTick::new(1), &crate::TickInputs::default());
     assert!(first.failure_state(LOCAL_PLAYER_ID).is_some());
     assert!(first.progression.escape_deadline.is_none());
     assert!(output.events.iter().any(|event| {
@@ -465,12 +395,7 @@ fn canonical_world_events_expire_by_day_deadline() {
         .insert(crate::WorldEventKind::MarketBoom, 1);
     world.progression.town_event_day = 1;
     world.progression.next_day_tick = SimulationTick::new(1);
-    let mut revisions = crate::TerrainRevisionTracker::default();
-    let _output = world.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::default(),
-        &mut revisions,
-    );
+    let _output = world.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
     assert!(
         !world
             .world_event_severity
@@ -499,18 +424,8 @@ fn canonical_day_and_world_event_schedule_is_tick_deterministic() {
             durability: 100,
         });
     }
-    let mut first_revisions = crate::TerrainRevisionTracker::default();
-    let mut second_revisions = crate::TerrainRevisionTracker::default();
-    let first_output = first.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::default(),
-        &mut first_revisions,
-    );
-    let second_output = second.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::default(),
-        &mut second_revisions,
-    );
+    let first_output = first.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
+    let second_output = second.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
     assert_eq!(first_output, second_output);
     assert_eq!(
         first.simulation_state_hash(),
@@ -940,12 +855,7 @@ fn canonical_heat_wave_and_deep_instability_affect_survival_deterministically() 
         player.hull = 100.0;
     }
     for world in [&mut baseline, &mut heat_wave] {
-        let mut revisions = crate::TerrainRevisionTracker::default();
-        let _output = world.simulate_tick(
-            SimulationTick::new(0),
-            &crate::TickInputs::default(),
-            &mut revisions,
-        );
+        let _output = world.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
     }
     assert!(
         heat_wave
@@ -975,18 +885,9 @@ fn canonical_heat_wave_and_deep_instability_affect_survival_deterministically() 
             },
         );
     }
-    let mut first_revisions = crate::TerrainRevisionTracker::default();
-    let mut second_revisions = crate::TerrainRevisionTracker::default();
-    let first_output = first.simulate_tick(
-        SimulationTick::new(239),
-        &crate::TickInputs::default(),
-        &mut first_revisions,
-    );
-    let second_output = second.simulate_tick(
-        SimulationTick::new(239),
-        &crate::TickInputs::default(),
-        &mut second_revisions,
-    );
+    let first_output = first.simulate_tick(SimulationTick::new(239), &crate::TickInputs::default());
+    let second_output =
+        second.simulate_tick(SimulationTick::new(239), &crate::TickInputs::default());
     assert_eq!(first_output, second_output);
     assert_eq!(
         first.simulation_state_hash(),
@@ -1028,12 +929,7 @@ fn canonical_rescue_site_recovers_lost_cargo_once() {
         player.x = site.x;
         player.y = site.y;
     }
-    let mut revisions = crate::TerrainRevisionTracker::default();
-    let output = world.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::default(),
-        &mut revisions,
-    );
+    let output = world.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
     assert!(!world.lost_cargo_sites.contains_key(&LOCAL_PLAYER_ID));
     assert_eq!(
         world
@@ -1062,12 +958,7 @@ fn canonical_survival_applies_hull_and_pump_heat_modifiers() {
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
         player.y = 100.0 * TILE_SIZE;
         player.hull = 100.0;
-        let mut revisions = crate::TerrainRevisionTracker::default();
-        let _output = world.simulate_tick(
-            SimulationTick::new(0),
-            &crate::TickInputs::default(),
-            &mut revisions,
-        );
+        let _output = world.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
         100.0 - world.player(LOCAL_PLAYER_ID).expect("player exists").hull
     }
     assert!(depth_damage(Some(crate::RigPartKind::ThermalHull)) < depth_damage(None));
@@ -1094,12 +985,7 @@ fn canonical_survival_applies_hull_and_pump_heat_modifiers() {
         durability: 100,
     });
     for world in [&mut unprotected, &mut protected] {
-        let mut revisions = crate::TerrainRevisionTracker::default();
-        let _output = world.simulate_tick(
-            SimulationTick::new(0),
-            &crate::TickInputs::default(),
-            &mut revisions,
-        );
+        let _output = world.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
     }
     assert!(
         protected
@@ -1157,18 +1043,8 @@ fn canonical_falling_boulders_use_tick_deadlines_and_damage_players() {
         world.spawn_falling_boulder(x, y, 1, 30);
     }
 
-    let mut first_revisions = crate::TerrainRevisionTracker::default();
-    let mut second_revisions = crate::TerrainRevisionTracker::default();
-    let first_output = first.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::default(),
-        &mut first_revisions,
-    );
-    let second_output = second.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::default(),
-        &mut second_revisions,
-    );
+    let first_output = first.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
+    let second_output = second.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
 
     assert!(first.player(LOCAL_PLAYER_ID).expect("player exists").hull < 100.0);
     assert!(first.falling_boulders.is_empty());
@@ -1210,12 +1086,7 @@ fn canonical_explosive_pocket_schedules_deterministic_cave_in() {
             dust_timer: 0.0,
         }),
     );
-    let mut revisions = crate::TerrainRevisionTracker::default();
-    let output = world.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::default(),
-        &mut revisions,
-    );
+    let output = world.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
 
     assert_eq!(world.falling_boulders.len(), 3);
     assert_eq!(world.boulder_warning_deadlines.len(), 3);
@@ -1247,17 +1118,12 @@ fn canonical_drilling_applies_rig_hardness_and_pump_modifiers() {
         0,
         [crate::RigPartKind::ResonanceDrill],
     );
-    let command = PlayerCommand::Movement {
-        horizontal: 0.0,
-        thrust: false,
-        drill_down: true,
-    };
     assert_eq!(
-        baseline.apply_player_command(LOCAL_PLAYER_ID, &command),
+        baseline.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, true),
         crate::PlayerScopedCommandOutcome::Applied
     );
     assert_eq!(
-        resonance.apply_player_command(LOCAL_PLAYER_ID, &command),
+        resonance.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, true),
         crate::PlayerScopedCommandOutcome::Applied
     );
     assert!(
@@ -1296,12 +1162,7 @@ fn canonical_drilling_applies_rig_hardness_and_pump_modifiers() {
             dust_timer: 0.0,
         }),
     );
-    let mut revisions = crate::TerrainRevisionTracker::default();
-    let _output = pumped.simulate_tick(
-        SimulationTick::new(1),
-        &crate::TickInputs::default(),
-        &mut revisions,
-    );
+    let _output = pumped.simulate_tick(SimulationTick::new(1), &crate::TickInputs::default());
     assert!(pumped.hazards().is_empty());
 }
 
@@ -1333,12 +1194,7 @@ fn canonical_drilling_collects_ore_artifacts_and_applies_hazard_outcomes() {
             dust_timer: 0.0,
         }),
     );
-    let mut terrain_revisions = crate::TerrainRevisionTracker::default();
-    let output = world.simulate_tick(
-        SimulationTick::new(5),
-        &crate::TickInputs::default(),
-        &mut terrain_revisions,
-    );
+    let output = world.simulate_tick(SimulationTick::new(5), &crate::TickInputs::default());
     assert_eq!(
         world
             .player(LOCAL_PLAYER_ID)
@@ -1347,7 +1203,7 @@ fn canonical_drilling_collects_ore_artifacts_and_applies_hazard_outcomes() {
             .get(&crate::terrain::ArtifactKind::Fossil),
         Some(&1),
     );
-    assert!(output.terrain_changed_tiles.contains(&target));
+    assert!(output.terrain_ops.iter().any(|op| op.position == target));
 
     assert!(world.terrain_mut().set_kind(target, TileKind::Gas));
     let fuel_before = world.player(LOCAL_PLAYER_ID).expect("player exists").fuel;
@@ -1363,11 +1219,7 @@ fn canonical_drilling_collects_ore_artifacts_and_applies_hazard_outcomes() {
             dust_timer: 0.0,
         }),
     );
-    let output = world.simulate_tick(
-        SimulationTick::new(6),
-        &crate::TickInputs::default(),
-        &mut terrain_revisions,
-    );
+    let output = world.simulate_tick(SimulationTick::new(6), &crate::TickInputs::default());
     assert!(world.player(LOCAL_PLAYER_ID).expect("player exists").fuel < fuel_before);
     assert!(!world.hazards().is_empty());
     assert!(
@@ -1464,22 +1316,8 @@ fn canonical_movement_burns_fuel_and_caps_fall_speed() {
     let game = WorldImport::new_game(LOCAL_PLAYER_ID);
     let mut world = WorldState::from_import(&game);
     let initial_fuel = world.player(LOCAL_PLAYER_ID).expect("player exists").fuel;
-    let mut terrain_revisions = crate::TerrainRevisionTracker::default();
-    let thrust = [SequencedPlayerCommand {
-        player_id: LOCAL_PLAYER_ID,
-        sequence: InputSequence::new(1),
-        target_tick: SimulationTick::new(0),
-        command: PlayerCommand::Movement {
-            horizontal: 0.0,
-            thrust: true,
-            drill_down: false,
-        },
-    }];
-    let _output = world.simulate_tick(
-        SimulationTick::new(0),
-        &crate::TickInputs::from_commands(&thrust),
-        &mut terrain_revisions,
-    );
+    let thrust = TickInputs::held(LOCAL_PLAYER_ID, ControlState::new(0.0, true, false));
+    let _output = world.simulate_tick(SimulationTick::new(0), &thrust);
     let expected_burn = super::AUTHORITATIVE_FUEL_BURN_PER_SECOND * FIXED_DELTA_SECONDS;
     assert!(
         (world.player(LOCAL_PLAYER_ID).expect("player exists").fuel
@@ -1492,21 +1330,8 @@ fn canonical_movement_burns_fuel_and_caps_fall_speed() {
         .player_mut(LOCAL_PLAYER_ID)
         .expect("player exists")
         .velocity_y = super::AUTHORITATIVE_MAX_FALL_SPEED * 2.0;
-    let idle = [SequencedPlayerCommand {
-        player_id: LOCAL_PLAYER_ID,
-        sequence: InputSequence::new(2),
-        target_tick: SimulationTick::new(1),
-        command: PlayerCommand::Movement {
-            horizontal: 0.0,
-            thrust: false,
-            drill_down: false,
-        },
-    }];
-    let _output = world.simulate_tick(
-        SimulationTick::new(1),
-        &crate::TickInputs::from_commands(&idle),
-        &mut terrain_revisions,
-    );
+    let idle = TickInputs::held(LOCAL_PLAYER_ID, ControlState::default());
+    let _output = world.simulate_tick(SimulationTick::new(1), &idle);
     assert!(
         world
             .player(LOCAL_PLAYER_ID)
@@ -1521,24 +1346,12 @@ fn canonical_movement_is_quantized_and_tick_deterministic() {
     fn run() -> (crate::SimulationStateHash, crate::player::Player) {
         let game = WorldImport::new_game(LOCAL_PLAYER_ID);
         let mut world = WorldState::from_import(&game);
-        let mut terrain_revisions = crate::TerrainRevisionTracker::default();
         for tick in 0..120 {
-            let commands = [SequencedPlayerCommand {
-                player_id: LOCAL_PLAYER_ID,
-                sequence: InputSequence::new(tick),
-                target_tick: SimulationTick::new(u64::from(tick)),
-                command: PlayerCommand::Movement {
-                    horizontal: 0.333_333_34,
-                    thrust: tick < 30,
-                    drill_down: false,
-                },
-            }];
-            let inputs = crate::TickInputs::from_commands(&commands);
-            let _output = world.simulate_tick(
-                SimulationTick::new(u64::from(tick)),
-                &inputs,
-                &mut terrain_revisions,
+            let inputs = TickInputs::held(
+                LOCAL_PLAYER_ID,
+                ControlState::new(0.333_333_34, tick < 30, false),
             );
+            let _output = world.simulate_tick(SimulationTick::new(tick), &inputs);
         }
         let player = world
             .player(LOCAL_PLAYER_ID)
@@ -1572,23 +1385,13 @@ fn canonical_tick_advances_bombs_and_infrastructure() {
     player.bombs = 1;
     player.signal_relay_kits = 1;
     let tick = SimulationTick::new(3);
-    let commands = vec![
-        SequencedPlayerCommand {
-            player_id: LOCAL_PLAYER_ID,
-            sequence: InputSequence::new(1),
-            target_tick: tick,
-            command: PlayerCommand::PlaceBomb,
-        },
-        SequencedPlayerCommand {
-            player_id: LOCAL_PLAYER_ID,
-            sequence: InputSequence::new(2),
-            target_tick: tick,
-            command: PlayerCommand::PlaceInfrastructure { slot: 0 },
-        },
-    ];
-    let inputs = crate::TickInputs::from_commands(&commands);
-    let mut terrain_revisions = crate::TerrainRevisionTracker::default();
-    let _output = world.simulate_tick(tick, &inputs, &mut terrain_revisions);
+    let inputs = TickInputs::default()
+        .act(LOCAL_PLAYER_ID, PlayerCommand::PlaceBomb)
+        .act(
+            LOCAL_PLAYER_ID,
+            PlayerCommand::PlaceInfrastructure { slot: 0 },
+        );
+    let _output = world.simulate_tick(tick, &inputs);
 
     assert_eq!(world.bomb_count(), 1);
     assert_eq!(world.infrastructure_count(), 1);
@@ -1599,16 +1402,11 @@ fn canonical_tick_advances_bombs_and_infrastructure() {
     world.bombs[0].timer_seconds = FIXED_DELTA_SECONDS;
     world.bomb_detonation_ticks[0] = tick.next().next();
 
-    let output = world.simulate_tick(
-        tick.next(),
-        &crate::TickInputs::default(),
-        &mut terrain_revisions,
-    );
+    let output = world.simulate_tick(tick.next(), &crate::TickInputs::default());
 
     assert_eq!(world.bomb_count(), 0);
     assert_eq!(world.infrastructure_count(), 1);
-    assert!(output.terrain_changed_tiles.contains(&target));
-    assert!(!output.terrain_revisions.is_empty());
+    assert!(output.terrain_ops.iter().any(|op| op.position == target));
 }
 
 #[test]
@@ -1626,13 +1424,8 @@ fn canonical_tick_advances_scanner_and_hazard_state() {
         life: 1.0,
         radius: 20.0,
     });
-    let mut terrain_revisions = crate::TerrainRevisionTracker::default();
 
-    let output = world.simulate_tick(
-        SimulationTick::new(4),
-        &crate::TickInputs::default(),
-        &mut terrain_revisions,
-    );
+    let output = world.simulate_tick(SimulationTick::new(4), &crate::TickInputs::default());
 
     assert!(
         world
@@ -1650,11 +1443,10 @@ fn canonical_tick_advances_scanner_and_hazard_state() {
 }
 
 #[test]
-fn authoritative_world_handles_economy_progression_debt_and_victory_transactions() {
+fn authoritative_world_handles_upgrades_and_story_victory() {
     let mut world = WorldState::new_game(LOCAL_PLAYER_ID);
     let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
     player.credits = 10_000;
-    player.loan_debt = 500;
     let credits_before_upgrade = player.credits;
 
     assert_eq!(
@@ -1664,32 +1456,26 @@ fn authoritative_world_handles_economy_progression_debt_and_victory_transactions
     let upgraded_player = world.player(LOCAL_PLAYER_ID).expect("player exists");
     assert!(upgraded_player.drill_strength > 1);
     assert!(upgraded_player.credits < credits_before_upgrade);
-    assert!(world.apply_contract_reward(LOCAL_PLAYER_ID, 250).is_some());
-    assert!(world.start_expedition(LOCAL_PLAYER_ID, 100).is_some());
-    assert!(world.repay_debt(LOCAL_PLAYER_ID, 200).is_some());
-    assert!(world.award_victory(LOCAL_PLAYER_ID, 1_000).is_some());
 
-    let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
-    assert_eq!(player.loan_debt, 300);
+    // Completing the final story contract wins the game.
+    world.progression.contracts.active = crate::contract::Contract {
+        title: "Final".to_string(),
+        target: crate::contract::ContractTarget::Mineral(crate::terrain::MineralKind::Copper),
+        required: 1,
+        reward: 10,
+        final_objective: true,
+    };
+    world
+        .player_mut(LOCAL_PLAYER_ID)
+        .expect("player exists")
+        .cargo
+        .insert(crate::terrain::MineralKind::Copper, 1);
+    assert!(!world.won_game());
+    assert_eq!(
+        world.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
+        crate::PlayerScopedCommandOutcome::Applied
+    );
     assert!(world.won_game());
-    assert!(
-        world
-            .service_transactions()
-            .iter()
-            .any(|transaction| transaction.kind == crate::PlayerTransactionKind::CompleteContract)
-    );
-    assert!(
-        world
-            .service_transactions()
-            .iter()
-            .any(|transaction| transaction.kind == crate::PlayerTransactionKind::StartExpedition)
-    );
-    assert!(
-        world
-            .service_transactions()
-            .iter()
-            .any(|transaction| transaction.kind == crate::PlayerTransactionKind::RepayDebt)
-    );
     assert!(
         world
             .service_transactions()
@@ -1728,25 +1514,5 @@ fn authoritative_world_handles_hazard_damage_failure_scanner_and_bomb_effects() 
     assert_eq!(
         world.terrain().tile(bomb_target).expect("tile").kind,
         TileKind::Air
-    );
-}
-
-#[test]
-fn terrain_revision_tracker_coalesces_changed_tiles_by_chunk() {
-    let mut tracker = crate::TerrainRevisionTracker::default();
-    let revisions = tracker.mark_tiles_changed([
-        crate::terrain::TilePosition { x: 0, y: 0 },
-        crate::terrain::TilePosition { x: 3, y: 4 },
-        crate::terrain::TilePosition { x: 17, y: 0 },
-    ]);
-
-    assert_eq!(revisions.len(), 2);
-    assert_eq!(
-        tracker.revision(crate::TerrainChunkPosition { x: 0, y: 0 }),
-        1
-    );
-    assert_eq!(
-        tracker.revision(crate::TerrainChunkPosition { x: 1, y: 0 }),
-        1
     );
 }

@@ -1,22 +1,25 @@
-//! Readers for the pre-runtime save formats (versions 1-3), migrated to a canonical
-//! [`WorldState`].
+//! Readers for older save formats (versions 1-4), migrated to a canonical [`WorldState`].
 //!
 //! * v1: `{ version, game }` — the whole legacy single-player `GameState`.
 //! * v2: `{ version, world: { session, world, game, roster... } }` — legacy game plus persisted
 //!   per-player state and world objects.
 //! * v3: `{ version, world: { canonical_world, shell: { game } } }` — the canonical world plus the
 //!   legacy shell state.
+//! * v4: `{ version, save: { world, play_seconds } }` — the current envelope, but the world still
+//!   carried a derived `authoritative_summary` (counts plus the `won_game` flag) instead of
+//!   `won_game` itself.
 //!
 //! Only the fields the migration reads are declared; serde ignores the rest.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
+use serde_json::Value;
 
 use drillgame_simulation::{
-    ActiveWorldEvent, AuthoritativeWorldSummary, DrillState, Expedition, FallingBoulder,
-    HazardCloud, PlacedBomb, PlacedInfrastructure, Player, PlayerId, RigPartKind, RigSlot,
-    ScanMarker, SideContract, SideContractKind, SimulationTick, WorldImport, WorldState,
+    ActiveWorldEvent, DrillState, Expedition, FallingBoulder, HazardCloud, PlacedBomb,
+    PlacedInfrastructure, Player, PlayerId, RigPartKind, RigSlot, ScanMarker, SideContract,
+    SideContractKind, SimulationTick, WorldImport, WorldState,
     contract::ContractLog,
     economy::{DeepClaimStatus, TownDevelopment},
     progression::LegendaryBlueprint,
@@ -175,20 +178,7 @@ impl LegacyGame {
         WorldImport {
             player_id: LEGACY_PLAYER_ID,
             player: self.player.clone(),
-            summary: AuthoritativeWorldSummary {
-                tick: SimulationTick::default(),
-                player_count: 1,
-                terrain_width: self.terrain.width(),
-                terrain_height: self.terrain.height(),
-                hazard_count: self.hazard_clouds.len() + self.falling_boulders.len(),
-                bomb_count: self.placed_bombs.len(),
-                infrastructure_count: self.infrastructure.len(),
-                active_contract_count: usize::from(self.side_contract_active)
-                    + self.active_side_contracts.len(),
-                expedition_count: self.active_expeditions.len(),
-                market_salt: self.market_salt,
-                won_game: self.won_game,
-            },
+            won_game: self.won_game,
             equipped_rig_parts: self.equipped_rig_parts.values().copied().collect(),
             active_world_events: self.active_world_events.clone(),
             trip_seconds: self.trip_seconds,
@@ -450,7 +440,7 @@ struct V3Shell {
 
 #[derive(Debug, Deserialize)]
 struct V3WorldSave {
-    canonical_world: WorldState,
+    canonical_world: Value,
     #[serde(default)]
     shell: V3Shell,
 }
@@ -462,10 +452,53 @@ pub struct V3SaveFile {
 }
 
 impl V3SaveFile {
-    pub fn migrate(self) -> WorldSave {
-        WorldSave {
-            world: self.world.canonical_world,
+    pub fn migrate(self) -> Result<WorldSave, serde_json::Error> {
+        Ok(WorldSave {
+            world: world_with_summary(self.world.canonical_world)?,
             play_seconds: self.world.shell.game.play_seconds,
-        }
+        })
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct V4Save {
+    world: Value,
+    #[serde(default)]
+    play_seconds: f32,
+}
+
+/// v4: the current envelope around a world that still has the derived summary.
+#[derive(Debug, Deserialize)]
+pub struct V4SaveFile {
+    save: V4Save,
+}
+
+impl V4SaveFile {
+    pub fn migrate(self) -> Result<WorldSave, serde_json::Error> {
+        Ok(WorldSave {
+            world: world_with_summary(self.save.world)?,
+            play_seconds: self.save.play_seconds,
+        })
+    }
+}
+
+/// The only part of the old derived world summary that was real state.
+#[derive(Debug, Default, Deserialize)]
+struct LegacySummary {
+    #[serde(default)]
+    won_game: bool,
+}
+
+/// Reads a v3/v4 world: lifts `authoritative_summary.won_game` to `won_game` and drops the rest
+/// of the summary (counts the world derives from its own collections).
+fn world_with_summary(mut world: Value) -> Result<WorldState, serde_json::Error> {
+    if let Some(object) = world.as_object_mut()
+        && let Some(summary) = object.remove("authoritative_summary")
+    {
+        let summary: LegacySummary = serde_json::from_value(summary).unwrap_or_default();
+        object
+            .entry("won_game")
+            .or_insert(Value::Bool(summary.won_game));
+    }
+    serde_json::from_value(world)
 }

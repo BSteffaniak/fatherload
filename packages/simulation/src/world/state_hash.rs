@@ -15,7 +15,7 @@ impl WorldState {
         hash.write_serialized(&self.timing);
         hash.write_serialized(&self.player_template);
         hash.write_u64(self.simulation_tick.get());
-        hash.write_serialized(&self.authoritative_summary);
+        hash.write_u64(u64::from(self.won_game));
         hash.write_u64(u64::try_from(self.players.len()).unwrap_or(u64::MAX));
         for (player_id, player) in &self.players {
             hash.write_u64(player_id.get());

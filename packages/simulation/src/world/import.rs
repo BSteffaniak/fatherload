@@ -12,7 +12,6 @@ use crate::{
     progression::{ActiveWorldEvent, Expedition, LegendaryBlueprint, SideContract},
     rig::{DrillState, RigPartKind},
     rng::DeterministicRngState,
-    summary::AuthoritativeWorldSummary,
     terrain::{ArtifactKind, MineralKind, TILE_SIZE, Terrain, TilePosition},
     tick::SimulationParams,
 };
@@ -36,7 +35,7 @@ use super::{
 pub struct WorldImport {
     pub player_id: PlayerId,
     pub player: Player,
-    pub summary: AuthoritativeWorldSummary,
+    pub won_game: bool,
     pub equipped_rig_parts: BTreeSet<RigPartKind>,
     pub active_world_events: Vec<ActiveWorldEvent>,
     pub trip_seconds: f32,
@@ -97,7 +96,7 @@ impl WorldState {
             timing,
             player_template: Player::new(NEW_WORLD_SPAWN.0, NEW_WORLD_SPAWN.1),
             simulation_tick: SimulationTick::default(),
-            authoritative_summary: import.summary.clone(),
+            won_game: import.won_game,
             players: BTreeMap::from([(player_id, import.player.clone())]),
             equipped_rig_parts: BTreeMap::from([(player_id, import.equipped_rig_parts.clone())]),
             mechanic_levels: BTreeMap::from([(player_id, import.town_development.mechanic_level)]),
@@ -231,23 +230,10 @@ impl WorldImport {
             NEW_WORLD_HEIGHT_TILES,
             NEW_WORLD_SEED,
         );
-        let summary = AuthoritativeWorldSummary {
-            tick: SimulationTick::default(),
-            player_count: 1,
-            terrain_width: terrain.width(),
-            terrain_height: terrain.height(),
-            hazard_count: 0,
-            bomb_count: 0,
-            infrastructure_count: 0,
-            active_contract_count: 0,
-            expedition_count: 0,
-            market_salt: 0,
-            won_game: false,
-        };
         Self {
             player_id,
             player: Player::new(NEW_WORLD_SPAWN.0, NEW_WORLD_SPAWN.1),
-            summary,
+            won_game: false,
             equipped_rig_parts: BTreeSet::new(),
             active_world_events: Vec::new(),
             trip_seconds: 0.0,

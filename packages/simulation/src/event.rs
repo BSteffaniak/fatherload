@@ -1,15 +1,11 @@
 //! Gameplay events and per-tick simulation output with stable `(tick, ordinal)` identity.
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    command::{PlayerCommand, SequencedPlayerCommand},
+    command::PlayerCommand,
     ids::{InputSequence, PlayerId, SimulationTick},
     summary::PlayerScopedCommandOutcome,
-    terrain::TilePosition,
-    terrain_revision::TerrainChunkRevision,
 };
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -50,15 +46,11 @@ pub struct ActionOutcome {
     pub outcome: PlayerScopedCommandOutcome,
 }
 
+/// Everything one tick produced besides the state change itself.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TickOutput {
     pub tick: SimulationTick,
-    pub command_count: usize,
-    pub changed_players: Vec<PlayerId>,
-    pub latest_sequences_by_player: BTreeMap<PlayerId, InputSequence>,
     pub events: Vec<GameplayEvent>,
-    pub terrain_changed_tiles: Vec<TilePosition>,
-    pub terrain_revisions: Vec<TerrainChunkRevision>,
     /// Every action in the tick's inputs, in input order, with its outcome.
     pub action_outcomes: Vec<ActionOutcome>,
     /// Every terrain tile write this tick, in order (the op-log replication section).
@@ -79,28 +71,20 @@ impl TickOutput {
 }
 
 pub(crate) const fn gameplay_event_for_applied_command(
-    command: &SequencedPlayerCommand,
-) -> Option<GameplayEventKind> {
-    let player_id = command.player_id;
-    match command.command {
-        PlayerCommand::Movement {
-            drill_down: true, ..
-        } => Some(GameplayEventKind::DrillStarted { player_id }),
+    player_id: PlayerId,
+    command: &PlayerCommand,
+) -> GameplayEventKind {
+    match command {
         PlayerCommand::Refuel
         | PlayerCommand::Repair
         | PlayerCommand::BuyUpgrade { .. }
-        | PlayerCommand::Service(_) => Some(GameplayEventKind::PurchaseCompleted { player_id }),
-        PlayerCommand::SellCargo => Some(GameplayEventKind::CargoChanged { player_id }),
-        PlayerCommand::PlaceBomb => Some(GameplayEventKind::BombPlaced { player_id }),
+        | PlayerCommand::Service(_) => GameplayEventKind::PurchaseCompleted { player_id },
+        PlayerCommand::SellCargo => GameplayEventKind::CargoChanged { player_id },
+        PlayerCommand::PlaceBomb => GameplayEventKind::BombPlaced { player_id },
         PlayerCommand::PlaceInfrastructure { .. } => {
-            Some(GameplayEventKind::InfrastructurePlaced { player_id })
+            GameplayEventKind::InfrastructurePlaced { player_id }
         }
-        PlayerCommand::UseScanner => Some(GameplayEventKind::ScannerUsed { player_id }),
-        PlayerCommand::Rescue => Some(GameplayEventKind::RescueTriggered { player_id }),
-        PlayerCommand::Movement { .. }
-        | PlayerCommand::Interact
-        | PlayerCommand::Cancel
-        | PlayerCommand::Confirm
-        | PlayerCommand::SelectUpgrade { .. } => None,
+        PlayerCommand::UseScanner => GameplayEventKind::ScannerUsed { player_id },
+        PlayerCommand::Rescue => GameplayEventKind::RescueTriggered { player_id },
     }
 }
