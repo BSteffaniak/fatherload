@@ -430,18 +430,16 @@ fn upgrade_shop(draw: &mut impl RaylibDraw, lot: Lot<'_>) {
 /// Bank: a little temple with columns, a pediment and a gold coin.
 fn bank(draw: &mut impl RaylibDraw, lot: Lot<'_>) {
     let pen = lot.pen;
-    // Pediment.
+    // Pediment: each row is outlined across its full width and filled only under the row
+    // above, so the stepped slope keeps a continuous ink edge.
     for row in 0..12 {
         let half = 10 + row * 5;
         pen.rect(draw, 64 - half, 4 + row, half * 2, 1, INK);
-        pen.rect(
-            draw,
-            64 - half + 2,
-            4 + row,
-            half * 2 - 4,
-            1,
-            if row < 2 { BONE } else { MIST },
-        );
+        if row > 0 {
+            let inner = half - 5;
+            let color = if row < 3 { BONE } else { MIST };
+            pen.rect(draw, 64 - inner, 4 + row, inner * 2, 1, color);
+        }
     }
     pen.rect(draw, 4, 15, 120, 1, INK);
     pen.rect(draw, 58, 8, 12, 7, INK);
