@@ -219,12 +219,9 @@ impl LocalHost {
     /// seats in id order (so a loaded save keeps its rigs); further seats spawn new players and
     /// world players beyond the seat count are dropped.
     #[must_use]
-    pub fn new(mut world: WorldState, seats: usize) -> Self {
+    pub fn new(world: WorldState, seats: usize) -> Self {
         let seats = seats.clamp(1, MAX_LOCAL_SEATS);
-        let existing: Vec<PlayerId> = world.player_ids().collect();
-        for extra in existing.iter().skip(seats) {
-            world.remove_player(*extra);
-        }
+        let (world, existing) = keep_first_players(world, seats);
         let config = HostConfig {
             params: SessionParams::new(world.tick_rate_hz()),
             ..HostConfig::default()
@@ -233,19 +230,7 @@ impl LocalHost {
             session: HostSession::new(world, config),
             seats: Vec::new(),
         };
-        for (index, player) in existing.into_iter().take(seats).enumerate() {
-            let seat = seat_id(index);
-            if let Some(net_player) = from_sim_player(player)
-                && host.session.adopt_local_player(seat, net_player)
-            {
-                host.seats.push(LocalSeat { seat, player });
-            }
-        }
-        while host.seats.len() < seats {
-            if host.add_seat().is_none() {
-                break;
-            }
-        }
+        host.bind_seats(existing, seats);
         host
     }
 
@@ -318,19 +303,53 @@ impl LocalHost {
         }
     }
 
-    /// Replaces the world and starts a new epoch, keeping the seats. World players without a
-    /// seat are dropped; seats whose player is missing from the new world respawn.
-    pub fn load_world(&mut self, mut world: WorldState) {
-        let seated: Vec<PlayerId> = self.seats.iter().map(|seat| seat.player).collect();
-        let unseated: Vec<PlayerId> = world
-            .player_ids()
-            .filter(|player| !seated.contains(player))
-            .collect();
-        for player in unseated {
-            world.remove_player(player);
+    /// Replaces the world and starts a new epoch, keeping the seat count.
+    ///
+    /// The seats adopt the saved rigs in id order, exactly like loading from the title: saved
+    /// rigs beyond the seat count are dropped and seats without a saved rig get a fresh one. When
+    /// the save runs at another tick rate the host is rebuilt for that rate instead (its epoch
+    /// restarts; local play has no remote peers holding the old one), so a load never trips the
+    /// session's rate assertion.
+    pub fn load_world(&mut self, world: WorldState) {
+        let seat_count = self.seats.len();
+        if world.tick_rate_hz() != self.session.params().tick_rate_hz {
+            *self = Self::new(world, seat_count);
+            return;
         }
+        for local in std::mem::take(&mut self.seats) {
+            self.session.remove_local_player(local.seat);
+        }
+        let (world, saved) = keep_first_players(world, seat_count);
         self.session.new_epoch(world);
+        self.bind_seats(saved, seat_count);
     }
+
+    /// Binds seats `0..` to `saved` world players in order, then spawns players for the rest up
+    /// to `seat_count`.
+    fn bind_seats(&mut self, saved: Vec<PlayerId>, seat_count: usize) {
+        for (index, player) in saved.into_iter().enumerate() {
+            let seat = seat_id(index);
+            if let Some(net_player) = from_sim_player(player)
+                && self.session.adopt_local_player(seat, net_player)
+            {
+                self.seats.push(LocalSeat { seat, player });
+            }
+        }
+        while self.seats.len() < seat_count {
+            if self.add_seat().is_none() {
+                break;
+            }
+        }
+    }
+}
+
+/// Drops world players beyond the first `seats` (in id order) and returns the kept ids.
+fn keep_first_players(mut world: WorldState, seats: usize) -> (WorldState, Vec<PlayerId>) {
+    let mut kept: Vec<PlayerId> = world.player_ids().collect();
+    for extra in kept.split_off(seats.min(kept.len())) {
+        world.remove_player(extra);
+    }
+    (world, kept)
 }
 
 fn seat_id(index: usize) -> SeatId {
@@ -359,5 +378,78 @@ fn runtime_event(epoch: u64, event: NetEvent<WorldEvent>) -> RuntimeEvent {
                 applied: resolution == ActionResolution::Applied,
             },
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use drillgame_simulation::SimulationParams;
+
+    use super::*;
+
+    const RIG: PlayerId = PlayerId::new(1);
+
+    #[test]
+    fn loading_a_save_with_other_rig_ids_adopts_them_instead_of_respawning() {
+        let mut runtime = Runtime::local(WorldState::new_game(RIG), 1);
+        let epoch = runtime.epoch();
+        let other = PlayerId::new(9);
+        let mut save = WorldState::new_game(other);
+        save.player_mut(other).expect("saved rig").credits = 4_321;
+
+        assert!(runtime.load_world(save));
+
+        assert_eq!(runtime.epoch(), epoch + 1, "same session, new epoch");
+        assert_eq!(
+            runtime.local_seats(),
+            &[LocalSeat {
+                seat: SeatId(0),
+                player: other,
+            }]
+        );
+        assert_eq!(runtime.world().player_ids().collect::<Vec<_>>(), [other]);
+        assert_eq!(
+            runtime.world().player(other).map(|rig| rig.credits),
+            Some(4_321)
+        );
+    }
+
+    #[test]
+    fn loading_keeps_the_seat_count_and_drops_extra_saved_rigs() {
+        let mut runtime = Runtime::local(WorldState::new_game(RIG), 2);
+        let mut save = WorldState::new_game(RIG);
+        for extra in [2, 3, 4] {
+            save.add_player(PlayerId::new(extra));
+        }
+        assert!(runtime.load_world(save));
+        let seated: Vec<PlayerId> = runtime
+            .local_seats()
+            .iter()
+            .map(|seat| seat.player)
+            .collect();
+        assert_eq!(seated, [RIG, PlayerId::new(2)]);
+        assert_eq!(runtime.world().player_ids().collect::<Vec<_>>(), seated);
+
+        // A save with fewer rigs than seats respawns the missing seat.
+        assert!(runtime.load_world(WorldState::new_game(RIG)));
+        assert_eq!(runtime.local_seats().len(), 2);
+        assert_eq!(runtime.world().player_ids().count(), 2);
+    }
+
+    #[test]
+    fn loading_a_save_at_another_tick_rate_rebuilds_the_host() {
+        let mut runtime = Runtime::local(WorldState::new_game(RIG), 1);
+        let save = WorldState::new_game_with_params(RIG, SimulationParams::new(30));
+        assert!(runtime.load_world(save));
+        assert_eq!(runtime.world().tick_rate_hz(), 30);
+        assert_eq!(runtime.local_seats().len(), 1);
+        let ticks: u32 = (0..60)
+            .map(|_| runtime.advance(Duration::from_secs(1) / 60).ticks_run)
+            .sum();
+        // `1s / 60` truncates to whole nanoseconds, so allow one tick of rounding.
+        assert!(
+            (29..=30).contains(&ticks),
+            "the rebuilt host ticks at the save's rate: {ticks}"
+        );
     }
 }
