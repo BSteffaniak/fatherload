@@ -742,10 +742,12 @@ pub fn item_row(draw: &mut impl RaylibDraw, rect: Rectangle, row: &ItemRow<'_>) 
     if !row.price.is_empty() {
         let right = x + width - 6;
         let price_y = y + (height - GLYPH_HEIGHT) / 2;
-        let price_color = if row.state == ButtonState::Selected && row.price_color == BONE {
-            INK
-        } else {
-            row.price_color
+        // Role colours read on the dark faces; the amber selected face takes ink, and a disabled
+        // row keeps red (why it is unavailable) but greys every other tag.
+        let price_color = match row.state {
+            ButtonState::Selected => INK,
+            ButtonState::Disabled if row.price_color != RED => FOG,
+            _ => row.price_color,
         };
         text_shadowed(
             draw,

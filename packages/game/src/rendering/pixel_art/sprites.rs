@@ -4,6 +4,7 @@
 
 pub mod icons;
 pub mod interior;
+pub mod menu_icons;
 pub mod rig;
 pub mod terrain;
 pub mod ui;
@@ -139,6 +140,40 @@ pub const ALL: &[&SpriteDef] = &[
     &interior::CRATE,
     &interior::BARREL,
     &interior::FUEL_PUMP,
+    &menu_icons::HAMMER,
+    &menu_icons::CONTRACT,
+    &menu_icons::RECEIPT,
+    &menu_icons::SORT,
+    &menu_icons::BOOK,
+    &menu_icons::LETTER,
+    &menu_icons::BANK,
+    &menu_icons::INSURANCE,
+    &menu_icons::ROCKET,
+    &menu_icons::GIFT,
+    &menu_icons::DRONE,
+    &menu_icons::SCRAP,
+    &menu_icons::PART,
+    &menu_icons::COLLAPSE,
+    &menu_icons::HOUSE,
+    &menu_icons::FLAG,
+    &menu_icons::ANVIL,
+    &menu_icons::DISK,
+    &menu_icons::FOLDER,
+    &menu_icons::PERSON,
+    &menu_icons::READY,
+    &menu_icons::WAITING,
+    &menu_icons::OFFLINE,
+    &menu_icons::CROWN,
+    &menu_icons::SIGNAL,
+    &menu_icons::KEY,
+    &menu_icons::SPEAKER,
+    &menu_icons::SCREEN,
+    &menu_icons::PLAY,
+    &menu_icons::DOOR,
+    &menu_icons::BACK,
+    &menu_icons::GLOBE,
+    &menu_icons::SPLIT,
+    &menu_icons::GEAR,
 ];
 
 #[cfg(test)]

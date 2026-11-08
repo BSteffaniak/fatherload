@@ -121,19 +121,44 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
             widgets::UiNode::Scroll(scroll) => scroll.content_height,
             other => other.rect().height,
         };
-        let body = self.modal_frame(title, subtitle, full, Some(content_height), content.warning);
+        let footer_lines = content.footer.as_ref().map_or_else(Vec::new, |footer| {
+            let mut lines = ui_kit::wrap(footer, content_width as i32, TextStyle::Body);
+            lines.truncate(3);
+            lines
+        });
+        let footer_height = if footer_lines.is_empty() {
+            0.0
+        } else {
+            (i32::try_from(footer_lines.len()).unwrap_or(3) * TextStyle::Body.line_height() + 7)
+                as f32
+        };
+        let body = self.modal_frame(
+            title,
+            subtitle,
+            full,
+            Some(content_height + footer_height),
+            content.warning,
+        );
         // Room on the left for the selection cursor.
         let body = Rectangle {
             x: body.x + 8.0,
             width: (body.width - 8.0).max(0.0),
+            height: (body.height - footer_height).max(0.0),
             ..body
         };
         let mut node = modal_content_node(content, body.width);
         node.layout(body);
-        let mut overflow = None;
         if let widgets::UiNode::Scroll(scroll) = &node {
             let limit = (scroll.content_height - body.height).max(0.0);
             set_current_scroll_limit(widgets::WidgetId::new("modal-content"), limit);
+        }
+        if follow_focused_row(&node, body) {
+            node = modal_content_node(content, body.width);
+            node.layout(body);
+        }
+        let mut overflow = None;
+        if let widgets::UiNode::Scroll(scroll) = &node {
+            let limit = (scroll.content_height - body.height).max(0.0);
             if limit > 0.0 {
                 overflow = Some((scroll.offset_y.clamp(0.0, limit), scroll.content_height));
             }
@@ -142,6 +167,16 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         self.render_plan(&plan);
         if let Some((offset, content_height)) = overflow {
             self.scroll_bar(body, offset, content_height);
+        }
+        if !footer_lines.is_empty() {
+            let x = body.x as i32 - 8;
+            let mut y = (body.y + body.height) as i32 + 3;
+            ui_kit::divider(self.draw, x, y, body.width as i32 + 8);
+            y += 4;
+            for line in &footer_lines {
+                ui_kit::text(self.draw, line, x, y, TextStyle::Body, MIST);
+                y += TextStyle::Body.line_height();
+            }
         }
     }
 
@@ -409,6 +444,8 @@ pub(super) struct ModalContent {
     sections: Vec<Section>,
     compact: bool,
     warning: bool,
+    /// Text pinned under the scrolling content (e.g. the selected item's description).
+    footer: Option<String>,
 }
 
 impl ModalContent {
@@ -417,7 +454,14 @@ impl ModalContent {
             sections,
             compact: false,
             warning: false,
+            footer: None,
         }
+    }
+
+    /// Pins `text` under the content, outside the scroll area.
+    pub(super) fn footer(mut self, text: Option<String>) -> Self {
+        self.footer = text.filter(|text| !text.is_empty());
+        self
     }
 
     /// A warning dialog (red frame and title): failures and emergencies.
@@ -665,6 +709,48 @@ fn modal_content_node(content: &ModalContent, width: f32) -> widgets::UiNode {
         current_scroll_offset(&widgets::WidgetId::new("modal-content")),
         widgets::UiNode::Stack(widgets::StackNode::vertical(3.0, sections)),
     ))
+}
+
+/// Scrolls the modal so a newly focused row is fully visible; returns whether the offset
+/// changed (the content must then be laid out again).
+fn follow_focused_row(node: &widgets::UiNode, body: Rectangle) -> bool {
+    let plan = node.render_plan();
+    let Some((id, rect)) = plan.commands().iter().find_map(|command| match command {
+        widgets::RenderCommand::Button {
+            rect,
+            focused: true,
+            id: Some(id),
+            ..
+        } => Some((id.clone(), *rect)),
+        _ => None,
+    }) else {
+        return false;
+    };
+    let scroll_id = widgets::WidgetId::new("modal-content");
+    CURRENT_UI_STATE.with(|current| {
+        let mut current = current.borrow_mut();
+        let Some(state) = current.as_mut() else {
+            return false;
+        };
+        if !state.follow(&id) {
+            return false;
+        }
+        let offset = state.scroll_offset(&scroll_id);
+        // Keep a little context above and below the row.
+        let margin = 4.0;
+        let delta = if rect.y - margin < body.y {
+            rect.y - margin - body.y
+        } else if rect.y + rect.height + margin > body.y + body.height {
+            rect.y + rect.height + margin - (body.y + body.height)
+        } else {
+            0.0
+        };
+        if delta.abs() < 0.5 {
+            return false;
+        }
+        state.set_scroll_offset(scroll_id, offset + delta);
+        true
+    })
 }
 
 fn is_selectable_stat(stat: &StatItem) -> bool {

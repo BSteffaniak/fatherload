@@ -17,6 +17,7 @@ use drillgame_simulation::{
     terrain::{Terrain, TilePosition},
 };
 
+mod counters;
 mod gallery;
 mod interior;
 mod layout;
@@ -24,6 +25,7 @@ mod pixel_art;
 mod screen;
 mod terrain;
 mod ui_kit;
+mod ui_sheet;
 mod world;
 
 use interior::draw_interior;
@@ -275,6 +277,15 @@ impl GameRenderer {
         draw.clear_background(palette::NIGHT);
         let _canvas = UiCanvasScope::begin(draw);
         gallery::draw_art_gallery(draw);
+    }
+
+    /// Draws the UI reference sheet (menu icons and interior props) instead of the game.
+    pub fn render_ui_sheet(&self, draw: &mut RaylibDrawHandle<'_>) {
+        sprite::set_current_atlas(self.atlas.as_ref());
+        ui_kit::begin_frame(UiCanvas::from_draw(draw), self.font_faces(), 0.0);
+        draw.clear_background(palette::NIGHT);
+        let _canvas = UiCanvasScope::begin(draw);
+        ui_sheet::draw_ui_sheet(draw);
     }
 
     fn render_view(

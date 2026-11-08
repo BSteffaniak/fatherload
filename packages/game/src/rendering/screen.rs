@@ -2,7 +2,6 @@ use raylib::prelude::*;
 
 use drillgame_simulation::{
     Player,
-    economy::{UpgradeKind, upgrade_offers, upgrade_tier_name},
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
@@ -12,12 +11,9 @@ use drillgame_simulation::{
 )]
 use super::pixel_art::palette::*;
 use super::{
-    layout::{ItemEntry, ModalContent, Section, SectionItem, UiLayout},
-    pixel_art::{
-        palette,
-        sprite::SpriteDef,
-        sprites::{icons, interior as interior_sprites, rig},
-    },
+    counters,
+    layout::{ModalContent, Section, SectionItem, UiLayout},
+    pixel_art::{palette, sprite::SpriteDef, sprites::icons},
     ui_kit::{self, BarColors, PanelStyle, TextStyle},
 };
 use crate::{
@@ -404,174 +400,35 @@ pub(super) fn draw_modal(
 )]
 fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: ModalScreen) {
     match modal {
-        ModalScreen::Depot => draw_modal_depot_ui(draw, ui),
-        ModalScreen::DepotReceiptHistory => draw_depot_receipt_history_ui(draw, ui),
-        ModalScreen::ShopConfirm => draw_confirm_modal_ui(
-            draw,
-            "Confirm Upgrade Purchase",
-            "Enter/E buys the selected upgrade. Esc returns to the shop.",
-        ),
-        ModalScreen::Fuel => draw_service_modal_ui(draw, ui, "Fuel Station", "fuel"),
-        ModalScreen::Repair => draw_service_modal_ui(draw, ui, "Repair Garage", "hull"),
-        ModalScreen::FuelConfirm => draw_confirm_modal_ui(
-            draw,
-            "Confirm Fuel Purchase",
-            "Enter/E confirms the selected refuel amount. Esc cancels.",
-        ),
-        ModalScreen::RepairConfirm => draw_confirm_modal_ui(
-            draw,
-            "Confirm Repair",
-            "Enter/E confirms the selected hull repair. Esc cancels.",
-        ),
+        ModalScreen::Depot => counters::draw_depot(draw, ui),
+        ModalScreen::DepotReceiptHistory => counters::draw_receipts(draw, ui),
+        ModalScreen::ShopConfirm => counters::draw_shop_confirm(draw, ui),
+        ModalScreen::Fuel => counters::draw_fuel(draw, ui),
+        ModalScreen::Repair => counters::draw_repair(draw, ui),
+        ModalScreen::FuelConfirm => counters::draw_fuel_confirm(draw, ui),
+        ModalScreen::RepairConfirm => counters::draw_repair_confirm(draw, ui),
         ModalScreen::ExitConfirm => draw_confirm_modal_ui(
             draw,
             "Exit to Desktop?",
             "Enter/E exits. Esc returns to the game.",
         ),
         ModalScreen::UnsavedExitConfirm => draw_unsaved_exit_confirm_ui(draw, ui),
-        ModalScreen::Shop => draw_shop_ui(draw, ui),
+        ModalScreen::Shop => counters::draw_shop(draw, ui),
         ModalScreen::Options => draw_options_ui(draw, ui),
         ModalScreen::SaveSlots => draw_slots_ui(draw, ui, true),
         ModalScreen::LoadSlots => draw_slots_ui(draw, ui, false),
-        ModalScreen::Bank => draw_generic_options_ui(
-            draw,
-            ui,
-            "Bank",
-            "Manage deposits and debt. Esc closes.",
-            &["Deposit credits", "Withdraw credits", "Pay debt"],
-        ),
-        ModalScreen::Explosives => draw_generic_options_ui(
-            draw,
-            ui,
-            "Explosives Shack",
-            "Purchase mining explosives and blast tools. Esc closes.",
-            &[
-                "Small bomb pack",
-                "Standard bomb pack",
-                "Heavy blast charge",
-                "Safety permit",
-            ],
-        ),
-        ModalScreen::Salvage => draw_generic_options_ui(
-            draw,
-            ui,
-            "Salvage Yard",
-            "Buy and deploy field infrastructure. Esc closes.",
-            &[
-                "Signal relay kit",
-                "Survey drone kit",
-                "Cargo lift kit",
-                "Rock support kit",
-                "Pump kit",
-                "Processor kit",
-            ],
-        ),
-        ModalScreen::Headquarters => draw_generic_options_ui(
-            draw,
-            ui,
-            "Headquarters",
-            "Contracts, story briefings, finance, and expedition planning.",
-            &[
-                "Complete depot work",
-                "Read briefing",
-                "Request finance",
-                "Open expedition board",
-                "Research log",
-                "Town development",
-                "Deep claim status",
-            ],
-        ),
-        ModalScreen::Crafting => draw_generic_options_ui(
-            draw,
-            ui,
-            "Crafting Bench",
-            "Turn recovered materials into support equipment.",
-            &[
-                "Relay parts",
-                "Drone parts",
-                "Lift frame",
-                "Support brace",
-                "Pump assembly",
-                "Processor assembly",
-            ],
-        ),
-        ModalScreen::TownDevelopment => draw_generic_options_ui(
-            draw,
-            ui,
-            "Town Development",
-            "Invest in settlement upgrades and local services.",
-            &[
-                "Depot expansion",
-                "Fuel cooperative",
-                "Repair garage",
-                "Research hall",
-                "Residential blocks",
-                "Trade office",
-            ],
-        ),
-        ModalScreen::ExpeditionBoard => draw_generic_options_ui(
-            draw,
-            ui,
-            "Expedition Board",
-            "Review active expeditions and available claims.",
-            &[
-                "Accept first offer",
-                "Accept second offer",
-                "Review active expedition",
-                "Collect completed expedition",
-            ],
-        ),
+        ModalScreen::Bank => counters::draw_bank(draw, ui),
+        ModalScreen::Explosives => counters::draw_explosives(draw, ui),
+        ModalScreen::Salvage => counters::draw_salvage(draw, ui),
+        ModalScreen::Headquarters => counters::draw_headquarters(draw, ui),
+        ModalScreen::Crafting => counters::draw_crafting(draw, ui),
+        ModalScreen::TownDevelopment => counters::draw_town_development(draw, ui),
+        ModalScreen::ExpeditionBoard => counters::draw_expedition_board(draw, ui),
         ModalScreen::ResearchLog => draw_research_log_ui(draw, ui),
         ModalScreen::Inventory => draw_inventory_ui(draw, ui),
         ModalScreen::Map => draw_map_ui(draw, ui),
         ModalScreen::Help => draw_help_ui(draw),
     }
-}
-
-fn draw_service_modal_ui(
-    draw: &mut RaylibDrawHandle<'_>,
-    ui: &UiFrame<'_, '_>,
-    title: &str,
-    service: &str,
-) {
-    let hud = ui.view.hud;
-    let mut items = if service == "fuel" {
-        let missing = (hud.fuel_capacity - hud.fuel).ceil().max(0.0) as u32;
-        vec![
-            SectionItem::meter("Fuel tank", hud.fuel, hud.fuel_capacity, AMBER, RED),
-            SectionItem::icon_stat(&icons::FUEL, "Fill cost", format!("{missing} cr"), GOLD),
-        ]
-    } else {
-        vec![SectionItem::meter(
-            "Hull integrity",
-            hud.hull,
-            hud.max_hull,
-            LEAF,
-            RED,
-        )]
-    };
-    items.push(SectionItem::icon_stat(
-        &icons::CREDITS,
-        "Credits",
-        hud.credits.to_string(),
-        GOLD,
-    ));
-    for (index, option) in ["Small 25%", "Half 50%", "Full 100%"].iter().enumerate() {
-        items.push(SectionItem::stat(
-            selected_label(index == ui.shell.selected_menu_item, option),
-            "",
-            if index == ui.shell.selected_menu_item {
-                GOLD
-            } else {
-                BONE
-            },
-        ));
-    }
-    UiLayout::screen(draw).modal_with_render_plan(
-        title,
-        "Up/Down: small/half/full | Enter/E buy selected | Esc close",
-        &ModalContent::new(vec![Section::new("Service", SKY_LIGHT, items)]),
-    );
 }
 
 fn draw_confirm_modal_ui(draw: &mut RaylibDrawHandle<'_>, title: &str, body: &str) {
@@ -594,59 +451,6 @@ fn draw_unsaved_exit_confirm_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
         "Unsaved Progress",
         "Choose what to do before leaving the game.",
         &["Save and exit", "Exit without saving", "Cancel"],
-    );
-}
-
-/// The icon for an upgrade line in the shop.
-const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
-    match kind {
-        UpgradeKind::Drill => &rig::DRILL_DOWN,
-        UpgradeKind::FuelTank => &icons::FUEL,
-        UpgradeKind::CargoBay => &icons::CARGO,
-        UpgradeKind::Engine => &interior_sprites::GEAR,
-        UpgradeKind::Hull => &icons::HULL,
-        UpgradeKind::Radiator => &icons::HEAT,
-        UpgradeKind::Scanner => &icons::SCANNER,
-        UpgradeKind::BombPack => &icons::BOMB,
-    }
-}
-
-/// The upgrade shop counter: one item row per upgrade with its icon, next tier and price
-/// (red and greyed out while unaffordable).
-fn draw_shop_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let credits = ui.player.credits;
-    let mut items = vec![SectionItem::icon_stat(
-        &icons::CREDITS,
-        "Your credits",
-        credits.to_string(),
-        GOLD,
-    )];
-    items.extend(
-        upgrade_offers(ui.player)
-            .iter()
-            .enumerate()
-            .map(|(index, offer)| {
-                let affordable = credits >= offer.cost;
-                SectionItem::item(ItemEntry {
-                    icon: Some(upgrade_icon(offer.kind)),
-                    label: offer.name.to_owned(),
-                    detail: format!(
-                        "Tier {} {}",
-                        offer.level + 1,
-                        upgrade_tier_name(offer.kind, offer.level)
-                    ),
-                    value: offer.cost.to_string(),
-                    value_color: if affordable { BONE } else { RED },
-                    coin: true,
-                    selected: index == ui.shell.selected_menu_item,
-                    disabled: !affordable,
-                })
-            }),
-    );
-    UiLayout::screen(draw).modal_with_render_plan(
-        "Upgrade Shop",
-        "Up/Down select | Enter/E buy | Esc close",
-        &ModalContent::new(vec![Section::new("Upgrades", SKY_LIGHT, items)]),
     );
 }
 
@@ -691,16 +495,6 @@ fn draw_slots_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, saving: 
         "Up/Down select | Enter/E confirm | Esc close",
         &options,
     );
-}
-
-fn draw_generic_options_ui(
-    draw: &mut RaylibDrawHandle<'_>,
-    ui: &UiFrame<'_, '_>,
-    title: &str,
-    help: &str,
-    options: &[&str],
-) {
-    draw_option_modal(draw, ui, title, help, options);
 }
 
 fn draw_option_modal(
@@ -752,39 +546,6 @@ fn selected_label(selected: bool, label: &str) -> String {
     } else {
         format!("  {label}")
     }
-}
-
-fn draw_depot_receipt_history_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let items = if ui.shell.depot_receipts.is_empty() {
-        vec![SectionItem::text("No depot receipts yet.")]
-    } else {
-        ui.shell
-            .depot_receipts
-            .iter()
-            .rev()
-            .take(10)
-            .enumerate()
-            .flat_map(|(index, receipt)| {
-                let mut items = vec![SectionItem::stat(
-                    format!("Receipt {}", index + 1),
-                    "",
-                    GOLD,
-                )];
-                items.extend(
-                    receipt
-                        .lines()
-                        .take(5)
-                        .map(|line| SectionItem::text(line.to_owned())),
-                );
-                items
-            })
-            .collect()
-    };
-    UiLayout::screen(draw).modal_with_render_plan(
-        "Depot Receipts",
-        "Recent sales and contract payouts. Esc closes.",
-        &ModalContent::new(vec![Section::new("History", GOLD, items)]),
-    );
 }
 
 fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
@@ -1004,132 +765,6 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 .map(SectionItem::text)
                 .collect(),
             ),
-        ]),
-    );
-}
-
-#[allow(
-    clippy::too_many_lines,
-    reason = "depot modal builds several dynamic semantic sections"
-)]
-fn draw_modal_depot_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let option_data = [
-        (
-            "Complete active contract".to_owned(),
-            format!(
-                "{}: {}/{} {} for {} credits",
-                ui.snapshot.progression.contracts.active.title,
-                ui.snapshot.progression.contracts.active.progress(ui.player),
-                ui.snapshot.progression.contracts.active.required,
-                ui.snapshot.progression.contracts.active.target.name(),
-                ui.snapshot.progression.contracts.active.reward
-            ),
-        ),
-        (
-            "Sell loose cargo".to_owned(),
-            format!(
-                "Cargo manifest: {}/{} slots",
-                ui.player.cargo_used(),
-                ui.player.cargo_capacity
-            ),
-        ),
-        (
-            "Auto-sort low-grade cargo".to_owned(),
-            "Keep valuable ores while clearing cheap cargo from the hold.".to_owned(),
-        ),
-        (
-            "Sell scan data".to_owned(),
-            format!("Market: {}", ui.snapshot.world_event_summary()),
-        ),
-        (
-            "Receipt history".to_owned(),
-            format!("{} saved receipts", ui.shell.depot_receipts.len()),
-        ),
-    ];
-    let options = option_data
-        .iter()
-        .enumerate()
-        .map(|(index, (label, detail))| {
-            SectionItem::item(ItemEntry {
-                icon: None,
-                label: label.clone(),
-                detail: detail.clone(),
-                value: String::new(),
-                value_color: BONE,
-                coin: false,
-                selected: index == ui.shell.selected_menu_item,
-                disabled: false,
-            })
-        })
-        .collect();
-    let cargo_items = if ui.player.cargo_used() == 0 {
-        vec![SectionItem::text("Cargo hold empty")]
-    } else {
-        ui.player
-            .cargo
-            .iter()
-            .map(|(mineral, count)| {
-                SectionItem::icon_stat(
-                    icons::mineral(*mineral),
-                    format!("{} x{count}", mineral.name()),
-                    format!("{} cr", mineral.value() * count),
-                    GOLD,
-                )
-            })
-            .chain(ui.player.artifacts.iter().map(|(artifact, count)| {
-                SectionItem::stat(
-                    artifact.name(),
-                    format!("x{count} = {} cr", artifact.value() * count),
-                    PINK,
-                )
-            }))
-            .collect()
-    };
-    let minerals = crate::render_snapshot::MINERALS;
-    let market_items = minerals
-        .into_iter()
-        .map(|mineral| {
-            let quote = ui
-                .snapshot
-                .market
-                .iter()
-                .find(|quote| quote.mineral == mineral)
-                .copied();
-            let current = quote.map_or(100, |quote| quote.factor);
-            let previous = quote
-                .and_then(|quote| quote.previous_factor)
-                .unwrap_or(current);
-            let trend = match current.cmp(&previous) {
-                std::cmp::Ordering::Greater => "↑",
-                std::cmp::Ordering::Less => "↓",
-                std::cmp::Ordering::Equal => "→",
-            };
-            let label = if current >= 120 {
-                "high"
-            } else if current <= 90 {
-                "low"
-            } else {
-                "avg"
-            };
-            SectionItem::icon_stat(
-                icons::mineral(mineral),
-                mineral.name(),
-                format!("{} cr {trend} {label}", ui.snapshot.market_value(mineral)),
-                match label {
-                    "high" => LIME,
-                    "low" => ORANGE,
-                    _ => MIST,
-                },
-            )
-        })
-        .collect();
-    UiLayout::screen(draw).modal_with_render_plan(
-        "Ore Depot",
-        "Up/Down select | Enter/E confirm | Esc/Backspace close",
-        &ModalContent::new(vec![
-            Section::new("Depot Actions", SKY_LIGHT, options),
-            Section::new("Current Cargo", GOLD, cargo_items),
-            Section::new("Market Snapshot", LIME, market_items),
         ]),
     );
 }

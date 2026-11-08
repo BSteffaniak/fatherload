@@ -20,9 +20,20 @@ pub(in crate::rendering) struct UiState {
     scroll_offsets: BTreeMap<WidgetId, f32>,
     scroll_limits: BTreeMap<WidgetId, f32>,
     focus_order: Vec<WidgetId>,
+    /// The focused row the modal scroll last brought into view.
+    followed: Option<WidgetId>,
 }
 
 impl UiState {
+    /// Records `id` as followed; returns whether it differs from the last followed row.
+    pub(super) fn follow(&mut self, id: &WidgetId) -> bool {
+        if self.followed.as_ref() == Some(id) {
+            return false;
+        }
+        self.followed = Some(id.clone());
+        true
+    }
+
     pub(super) fn focused(&self) -> Option<WidgetId> {
         self.focused.clone()
     }

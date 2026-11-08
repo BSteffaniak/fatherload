@@ -152,9 +152,10 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 ..FrameReport::default()
             },
             gallery: false,
+            ui_sheet: false,
         };
         (scene.setup)(&mut stage);
-        let (report, gallery) = (stage.report, stage.gallery);
+        let (report, gallery, ui_sheet) = (stage.report, stage.gallery, stage.ui_sheet);
         let renderer = renderer
             .get_or_insert_with(|| GameRenderer::new(&mut raylib, &thread, game.world().terrain()));
         let path = options.dir.join(format!("{}.png", scene.name));
@@ -170,6 +171,8 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             let mut draw = raylib.begin_drawing(&thread);
             if gallery {
                 renderer.render_art_gallery(&mut draw);
+            } else if ui_sheet {
+                renderer.render_ui_sheet(&mut draw);
             } else {
                 renderer.render(&mut draw, &game.shell, &snapshot);
             }
@@ -217,6 +220,8 @@ pub struct SceneStage<'g> {
     report: FrameReport,
     /// Draw the art reference sheet instead of the game.
     gallery: bool,
+    /// Draw the UI icon and interior prop sheet instead of the game.
+    ui_sheet: bool,
 }
 
 impl SceneStage<'_> {
@@ -268,6 +273,11 @@ pub const SCENES: &[Scene] = &[
         name: "art_gallery",
         summary: "Art reference sheet: palette, UI kit widgets, icons and sprites",
         setup: |stage| stage.gallery = true,
+    },
+    Scene {
+        name: "ui_sheet",
+        summary: "UI reference sheet: menu icons and interior props at 1x and 3x",
+        setup: |stage| stage.ui_sheet = true,
     },
     Scene {
         name: "title",
@@ -975,6 +985,7 @@ mod tests {
                 game: &mut game,
                 report: FrameReport::default(),
                 gallery: false,
+                ui_sheet: false,
             };
             (scene.setup)(&mut stage);
             let snapshot = game.snapshot(DEFAULT_SIZE);
