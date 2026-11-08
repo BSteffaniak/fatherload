@@ -1283,10 +1283,21 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(4));
             }
             fn until(&mut self, what: &str, done: impl Fn(&Self) -> bool) {
+                self.holding_until(what, PlayerInput::default(), done);
+            }
+            /// Frames with the client holding `client_input` until `done`. The runtimes tick
+            /// from real time, so holding for a fixed frame count would cover a
+            /// machine-dependent number of ticks.
+            fn holding_until(
+                &mut self,
+                what: &str,
+                client_input: PlayerInput,
+                done: impl Fn(&Self) -> bool,
+            ) {
                 let deadline = std::time::Instant::now() + Duration::from_secs(8);
                 while !done(self) {
                     assert!(std::time::Instant::now() < deadline, "timed out: {what}");
-                    self.frame(PlayerInput::default(), PlayerInput::default());
+                    self.frame(PlayerInput::default(), client_input);
                 }
             }
         }
@@ -1371,16 +1382,11 @@ mod tests {
 
         // The client's rig moves on the host.
         let start_x = pair.host.world().player(client_player).expect("rig").x;
-        for _ in 0..80 {
-            pair.frame(
-                PlayerInput::default(),
-                PlayerInput {
-                    horizontal: 1.0,
-                    ..PlayerInput::default()
-                },
-            );
-        }
-        pair.until("the client's movement on the host", |pair| {
+        let right = PlayerInput {
+            horizontal: 1.0,
+            ..PlayerInput::default()
+        };
+        pair.holding_until("the client's movement on the host", right, |pair| {
             pair.host.world().player(client_player).expect("rig").x > start_x + TILE_SIZE
         });
 
