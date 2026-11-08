@@ -130,14 +130,41 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         };
         let mut node = modal_content_node(content, body.width);
         node.layout(body);
+        let mut overflow = None;
         if let widgets::UiNode::Scroll(scroll) = &node {
-            set_current_scroll_limit(
-                widgets::WidgetId::new("modal-content"),
-                (scroll.content_height - body.height).max(0.0),
-            );
+            let limit = (scroll.content_height - body.height).max(0.0);
+            set_current_scroll_limit(widgets::WidgetId::new("modal-content"), limit);
+            if limit > 0.0 {
+                overflow = Some((scroll.offset_y.clamp(0.0, limit), scroll.content_height));
+            }
         }
         let plan = node.render_plan();
         self.render_plan(&plan);
+        if let Some((offset, content_height)) = overflow {
+            self.scroll_bar(body, offset, content_height);
+        }
+    }
+
+    /// A thin scroll bar in the dialog's right margin, so lists taller than the panel show
+    /// that more rows exist below (or above) the visible ones.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "canvas coordinates are small"
+    )]
+    fn scroll_bar(&mut self, body: Rectangle, offset: f32, content_height: f32) {
+        let x = (body.x + body.width) as i32 + 4;
+        let top = body.y as i32;
+        let height = body.height as i32;
+        if height < 8 || content_height <= 0.0 {
+            return;
+        }
+        self.draw.draw_rectangle(x, top, 3, height, INK);
+        let thumb = ((body.height / content_height) * body.height).max(6.0) as i32;
+        let travel = (height - thumb).max(0);
+        let max_offset = (content_height - body.height).max(1.0);
+        let thumb_top = top + ((offset / max_offset) * travel as f32).round() as i32;
+        self.draw.draw_rectangle(x, thumb_top, 3, thumb, AMBER);
+        self.draw.draw_rectangle(x, thumb_top, 1, thumb, GOLD);
     }
 
     /// The dialog rect for this frame's placement (`compact` narrows centred dialogs).

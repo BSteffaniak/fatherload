@@ -132,7 +132,8 @@ Menus and dialogs should go through `layout::UiLayout::modal_with_render_plan` w
 prefixed `"> "`/`"  "`), `icon_stat`, `item` (icon + label + detail + price rows, the shop
 style), `meter` and `text`. `ModalContent::compact()` narrows short menus, `.warning()` gives
 the red frame. Dialogs shrink to their content; inside a building they dock on the left
-(`ModalPlacement::Counter`) so the counter, keeper and rig stay visible.
+(`ModalPlacement::Counter`) so the counter, keeper and rig stay visible. Content taller than
+the panel scrolls, and a thin amber scroll bar in the right margin shows that more rows exist.
 
 Screen colour roles: titles `GOLD` (warnings `ORANGE`), section headings `SKY_LIGHT` (or a role
 colour), labels `MIST`, values `BONE`/`GOLD`, hints `FOG`, selection `AMBER` face with `INK`
