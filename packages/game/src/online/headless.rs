@@ -22,7 +22,7 @@ use drillgame_simulation::WorldState;
 
 use super::{
     DEFAULT_PORT,
-    bots::BotBrain,
+    bots::{BotBrain, BotCounters},
     client::{ClientLink, OnlineClient},
     host::{HostNet, HostNetStatus},
     random_token_seed,
@@ -402,11 +402,27 @@ fn print_bot_stats(bots: &[Bot], out: &mut impl Write) {
         let (client_up, client_down) = client.byte_rates();
         (up + client_up, down + client_down)
     });
-    let actions: u64 = bots.iter().map(|bot| bot.brain.counters().actions).sum();
+    let totals = bots
+        .iter()
+        .map(|bot| bot.brain.counters())
+        .fold(BotCounters::default(), |sum, counters| BotCounters {
+            cycles: sum.cycles + counters.cycles,
+            bombs: sum.bombs + counters.bombs,
+            sales: sum.sales + counters.sales,
+            refuels: sum.refuels + counters.refuels,
+            rescues: sum.rescues + counters.rescues,
+            actions: sum.actions + counters.actions,
+        });
     let _ignored = writeln!(
         out,
-        "bots tick={tick} server_tick={server} clients={in_game}/{} corrections_per_s={corrections:.1} rtt_ms={rtt} up_bytes_per_s={up:.0} down_bytes_per_s={down:.0} actions={actions}",
-        bots.len()
+        "bots tick={tick} server_tick={server} clients={in_game}/{} corrections_per_s={corrections:.1} rtt_ms={rtt} up_bytes_per_s={up:.0} down_bytes_per_s={down:.0} actions={} bombs={} sales={} refuels={} rescues={} cycles={}",
+        bots.len(),
+        totals.actions,
+        totals.bombs,
+        totals.sales,
+        totals.refuels,
+        totals.rescues,
+        totals.cycles,
     );
     let _ignored = out.flush();
 }

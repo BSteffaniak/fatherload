@@ -187,6 +187,7 @@ impl Runtime {
     }
 
     /// Current session epoch.
+    #[cfg(test)]
     #[must_use]
     pub fn epoch(&self) -> u64 {
         match self {
@@ -434,18 +435,6 @@ impl LocalHost {
         if let Some(first) = self.seats.first() {
             self.session.set_local_player_name(first.seat, name);
         }
-    }
-
-    /// The netcode session.
-    #[must_use]
-    pub const fn session(&self) -> &HostSession<WorldState> {
-        &self.session
-    }
-
-    /// The network side, when online.
-    #[must_use]
-    pub const fn net(&self) -> Option<&HostNet> {
-        self.net.as_ref()
     }
 
     /// Detaches the network side (to shut it down explicitly).

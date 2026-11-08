@@ -9,7 +9,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use drillgame_netcode::{
-    ClientConfig, ClientPhase, ClientSession, ReconnectToken, SeatId,
+    ClientConfig, ClientSession, ReconnectToken, SeatId,
     world::{ActionResolution, WorldEvent, to_sim_player},
 };
 use drillgame_quic_transport::{ConnId, JoinTarget, LinkStats, NetErrorKind, NetEvent, NetHandle};
@@ -324,6 +324,7 @@ impl OnlineClient {
 
     /// Drops the transport connection without leaving, as a crash or network loss would: the
     /// host keeps the player reserved for the reconnect token.
+    #[cfg(test)]
     pub fn drop_connection(&mut self) {
         if let (Some(net), ClientLink::Connected(conn)) = (self.net.as_ref(), &self.link) {
             let _ignored = net.disconnect(*conn, "connection dropped");
@@ -340,11 +341,12 @@ impl OnlineClient {
 
     /// Whether the session is over from this client's point of view (ended, rejected, or the
     /// connection closed).
+    #[cfg(test)]
     #[must_use]
     pub const fn finished(&self) -> bool {
         matches!(
             self.session.phase(),
-            ClientPhase::Ended(_) | ClientPhase::Rejected(_)
+            drillgame_netcode::ClientPhase::Ended(_) | drillgame_netcode::ClientPhase::Rejected(_)
         ) || matches!(self.link, ClientLink::Closed(_))
     }
 

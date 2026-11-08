@@ -148,14 +148,12 @@ pub struct RateMeter {
     window_seconds: f32,
     window_count: u64,
     rate: f32,
-    total: u64,
 }
 
 impl RateMeter {
     /// Counts `amount` (bytes, corrections, ...).
     pub const fn add(&mut self, amount: u64) {
         self.window_count = self.window_count.saturating_add(amount);
-        self.total = self.total.saturating_add(amount);
     }
 
     /// Advances the window; the rate updates once per second.
@@ -176,12 +174,6 @@ impl RateMeter {
     #[must_use]
     pub const fn rate(&self) -> f32 {
         self.rate
-    }
-
-    /// Everything counted so far.
-    #[must_use]
-    pub const fn total(&self) -> u64 {
-        self.total
     }
 }
 
@@ -242,6 +234,7 @@ mod tests {
         meter.add(500);
         meter.tick(0.5);
         assert!((meter.rate() - 1_000.0).abs() < 1.0);
-        assert_eq!(meter.total(), 1_000);
+        meter.tick(1.0);
+        assert!(meter.rate().abs() < f32::EPSILON, "an idle second reads zero");
     }
 }
