@@ -261,14 +261,14 @@ fn clay_level(x: i32, y: i32) -> usize {
     if hash(x, y, 4).is_multiple_of(47) {
         return 0;
     }
-    let wave = (noise(x, y, 11, 5) * 6.0) as i32;
-    let broken = noise(x, y, 6, 6) + dither(x, y) * 0.2;
-    match (y + wave).rem_euclid(8) {
-        0 if broken > 0.5 => 3,
-        0..=2 if broken > 0.3 => 2,
-        5 if broken > 0.55 => 0,
+    let wave = (noise(x, y, 13, 5) * 6.0) as i32;
+    let broken = noise(x, y, 7, 6) + dither(x, y) * 0.1;
+    match (y + wave).rem_euclid(10) {
+        0 if broken > 0.6 => 3,
+        0..=1 if broken > 0.35 => 2,
+        6 if broken > 0.55 => 0,
         _ => {
-            if noise(x, y, 4, 7) + dither(x, y) * 0.15 > 0.72 {
+            if noise(x, y, 4, 7) + dither(x, y) * 0.1 > 0.8 {
                 2
             } else {
                 1
