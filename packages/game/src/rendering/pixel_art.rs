@@ -3,5 +3,6 @@
 
 pub mod font;
 pub mod palette;
+pub mod shade;
 pub mod sprite;
 pub mod sprites;

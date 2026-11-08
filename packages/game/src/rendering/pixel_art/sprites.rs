@@ -5,7 +5,9 @@
 pub mod icons;
 pub mod interior;
 pub mod rig;
+pub mod terrain;
 pub mod ui;
+pub mod world;
 
 use super::sprite::SpriteDef;
 
@@ -47,6 +49,45 @@ pub const ALL: &[&SpriteDef] = &[
     &rig::DRILL_DOWN,
     &rig::DRILL_SIDE,
     &rig::FLAME,
+    &rig::FLAME_SMALL,
+    &rig::RIG_TEAL,
+    &rig::RIG_ROSE,
+    &rig::RIG_LIME,
+    &rig::RIG_VIOLET,
+    &rig::RIG_SKY,
+    &world::BOULDER,
+    &world::BOMB,
+    &world::CARGO_CRATE,
+    &world::MARKER_ARROW,
+    &world::SIGNAL_RELAY,
+    &world::SURVEY_DRONE,
+    &world::CARGO_LIFT,
+    &world::TUNNEL_SUPPORT,
+    &world::PUMP_STATION,
+    &world::ORE_PROCESSOR,
+    &terrain::ORE_COPPER,
+    &terrain::ORE_IRON,
+    &terrain::ORE_SILVER,
+    &terrain::ORE_GOLD,
+    &terrain::ORE_EMERALD,
+    &terrain::ORE_RUBY,
+    &terrain::ORE_DIAMOND,
+    &terrain::ORE_PLATINUM,
+    &terrain::ORE_URANIUM,
+    &terrain::ORE_MYTHRIL,
+    &terrain::VOLATILE_CRYSTAL,
+    &terrain::FOSSIL,
+    &terrain::OLD_CIRCUIT,
+    &terrain::BURIED_IDOL,
+    &terrain::STAR_CORE,
+    &terrain::CRYSTAL_PRISM,
+    &terrain::RADIANT_SHELL,
+    &terrain::PRESSURE_GLYPH,
+    &terrain::REACTOR_BLOOM,
+    &terrain::MACHINE_SIGIL,
+    &terrain::VOID_PEARL,
+    &terrain::MANTLE_HEART,
+    &terrain::CRACKS,
     &interior::shop::WALL,
     &interior::shop::PLANK,
     &interior::shop::FLOOR,

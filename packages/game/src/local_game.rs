@@ -239,7 +239,7 @@ impl LocalGame {
             self.runtime.world(),
             self.runtime.local_seats(),
             screen,
-            self.effects.sparks(),
+            (self.effects.sparks(), self.effects.explosions()),
             &self.frame_events,
         );
         // A client draws its rig where prediction + smoothing put it (the camera follows that

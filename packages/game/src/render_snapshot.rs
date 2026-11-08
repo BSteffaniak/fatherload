@@ -14,7 +14,11 @@ use drillgame_simulation::{
     terrain::{MineralKind, TILE_SIZE, Terrain, TilePosition},
 };
 
-use crate::{effects::SparkParticle, runtime::LocalSeat, runtime::RuntimeEvent};
+use crate::{
+    effects::{Explosion, SparkParticle},
+    runtime::LocalSeat,
+    runtime::RuntimeEvent,
+};
 
 /// Default (and reference) logical window width, in screen points.
 pub const SCREEN_WIDTH: i32 = 1280;
@@ -256,6 +260,8 @@ pub struct RenderSnapshot<'w> {
     pub infrastructure: &'w [PlacedInfrastructure],
     pub boulders: &'w [FallingBoulder],
     pub sparks: &'w [SparkParticle],
+    /// Bomb blasts in progress.
+    pub explosions: &'w [Explosion],
     /// Every rig in the world.
     pub players: Vec<PlayerPresentation>,
     /// One view per local seat, in seat order.
@@ -276,9 +282,10 @@ impl<'w> RenderSnapshot<'w> {
         world: &'w WorldState,
         seats: &[LocalSeat],
         screen: impl Into<ScreenSize>,
-        sparks: &'w [SparkParticle],
+        effects: (&'w [SparkParticle], &'w [Explosion]),
         events: &'w [RuntimeEvent],
     ) -> Self {
+        let (sparks, explosions) = effects;
         let screen = screen.into();
         let viewports = split_screen_viewports(seats.len(), screen.width, screen.height);
         let world_scale = world_scale_for_screen(screen);
@@ -298,6 +305,7 @@ impl<'w> RenderSnapshot<'w> {
             infrastructure: world.infrastructure(),
             boulders: world.falling_boulders(),
             sparks,
+            explosions,
             players: world
                 .players()
                 .iter()
@@ -496,8 +504,13 @@ mod tests {
             seat: drillgame_netcode::SeatId(0),
             player: rig,
         }];
-        let mut snapshot =
-            RenderSnapshot::build(&world, &seats, (SCREEN_WIDTH, SCREEN_HEIGHT), &[], &[]);
+        let mut snapshot = RenderSnapshot::build(
+            &world,
+            &seats,
+            (SCREEN_WIDTH, SCREEN_HEIGHT),
+            (&[], &[]),
+            &[],
+        );
         let (x, y) = (1_000.0, 450.0);
         snapshot.apply_pose_overrides(&BTreeMap::from([(rig, (x, y))]));
         let drawn = snapshot
@@ -610,7 +623,7 @@ mod tests {
             seat: drillgame_netcode::SeatId(0),
             player: rig,
         }];
-        let mut snapshot = RenderSnapshot::build(&world, &seats, (1920, 1080), &[], &[]);
+        let mut snapshot = RenderSnapshot::build(&world, &seats, (1920, 1080), (&[], &[]), &[]);
         let (x, y) = (1_000.0, 450.0);
         snapshot.apply_pose_overrides(&BTreeMap::from([(rig, (x, y))]));
         let view = snapshot.primary_view().expect("view");

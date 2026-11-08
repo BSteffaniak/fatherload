@@ -1,4 +1,8 @@
 //! The mining rig, authored facing right (flip for left), plus its drill heads and flame.
+//!
+//! The body is 16x13 art pixels (32x26 world pixels, one tile wide): a glass cockpit dome, a
+//! beacon mast and exhaust stack, a painted hull and rolling tracks. Remote players' rigs reuse
+//! the same grids with other hull paint (`rig_body!`).
 
 use raylib::prelude::Color;
 
@@ -9,157 +13,269 @@ use raylib::prelude::Color;
 use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::sprite::SpriteDef;
 
-const RIG_LEGEND: &[(char, Color)] = &[
-    ('o', INK),
-    ('g', SKY),
-    ('w', ICE),
-    ('y', GOLD),
-    ('h', CREAM),
-    ('a', AMBER),
-    ('r', ORANGE),
-    ('t', STEEL),
-    ('T', STEEL_DARK),
-    ('l', CREAM),
-    ('k', STEEL_DARK),
+/// Body frames: the tracks roll between the two.
+const BODY_FRAMES: &[&[&str]] = &[
+    &[
+        "..b.............", //
+        "..t.....ooooo...", //
+        "..t...oowwggGo..", //
+        ".oSo.owwggggGGo.", //
+        ".oooooooooooooo.", //
+        "ohhhhhhhhhhhhhyo", //
+        "ohyySyyyyyyyyyll", //
+        "ohrrrrrrrrrrrrao", //
+        "oyyyyyyySyyyyyao", //
+        "oaaaaaaaaaaaaaao", //
+        ".oooooooooooooo.", //
+        "oLdLdLdLdLdLdLdo", //
+        ".oooooooooooooo.", //
+    ],
+    &[
+        "..b.............", //
+        "..t.....ooooo...", //
+        "..t...oowwggGo..", //
+        ".oSo.owwggggGGo.", //
+        ".oooooooooooooo.", //
+        "ohhhhhhhhhhhhhyo", //
+        "ohyySyyyyyyyyyll", //
+        "ohrrrrrrrrrrrrao", //
+        "oyyyyyyySyyyyyao", //
+        "oaaaaaaaaaaaaaao", //
+        ".oooooooooooooo.", //
+        "odLdLdLdLdLdLdLo", //
+        ".oooooooooooooo.", //
+    ],
 ];
 
-/// Rig body, 14x11 art pixels (28x22 world pixels); two frames roll the tracks.
-pub const RIG: SpriteDef = SpriteDef {
-    name: "rig",
-    legend: RIG_LEGEND,
-    frames: &[
-        &[
-            ".k....oooo....",
-            ".k...ogggwo...",
-            ".k...ogwggo...",
-            "ooooooooooooo.",
-            "oyhyyyyyyyyyao",
-            "oyhyyyyyyyyylo",
-            "oyyyyyyyyyyyao",
-            "oaaaaaaaaaarro",
-            "oooooooooooooo",
-            "otTtTtTtTtTtTo",
-            ".oooooooooooo.",
-        ],
-        &[
-            ".k....oooo....",
-            ".k...ogggwo...",
-            ".k...ogwggo...",
-            "ooooooooooooo.",
-            "oyhyyyyyyyyyao",
-            "oyhyyyyyyyyylo",
-            "oyyyyyyyyyyyao",
-            "oaaaaaaaaaarro",
-            "oooooooooooooo",
-            "oTtTtTtTtTtTto",
-            ".oooooooooooo.",
-        ],
+/// Damaged body: scorch marks, a cracked dome and a dead headlight.
+const DAMAGED_FRAMES: &[&[&str]] = &[
+    &[
+        "..b.............", //
+        "..t.....ooooo...", //
+        "..t...oowxggGo..", //
+        ".oSo.owwgxggGGo.", //
+        ".oooooooooooooo.", //
+        "ohhhhxhhhhhhxhyo", //
+        "ohyxxyyyyyyxxyko", //
+        "ohrrrxrrrrrrrrao", //
+        "oyyyxyyySxyyyyao", //
+        "oaaraaaaxxaaaaao", //
+        ".oooooooooooooo.", //
+        "oLdLdLdLdLdLdLdo", //
+        ".oooooooooooooo.", //
     ],
-    frame_seconds: 0.08,
-};
-
-/// Rig body when the hull is badly damaged: scorched plates.
-pub const RIG_DAMAGED: SpriteDef = SpriteDef {
-    name: "rig_damaged",
-    legend: &[
-        ('o', INK),
-        ('g', SKY),
-        ('w', ICE),
-        ('y', AMBER),
-        ('h', GOLD),
-        ('a', ORANGE),
-        ('r', RUST),
-        ('t', STEEL),
-        ('T', STEEL_DARK),
-        ('l', CREAM),
-        ('k', STEEL_DARK),
-        ('x', STONE_DARK),
+    &[
+        "..b.............", //
+        "..t.....ooooo...", //
+        "..t...oowxggGo..", //
+        ".oSo.owwgxggGGo.", //
+        ".oooooooooooooo.", //
+        "ohhhhxhhhhhhxhyo", //
+        "ohyxxyyyyyyxxyko", //
+        "ohrrrxrrrrrrrrao", //
+        "oyyyxyyySxyyyyao", //
+        "oaaraaaaxxaaaaao", //
+        ".oooooooooooooo.", //
+        "odLdLdLdLdLdLdLo", //
+        ".oooooooooooooo.", //
     ],
-    frames: &[&[
-        ".k....oooo....",
-        ".k...ogxgwo...",
-        ".k...ogwggo...",
-        "ooooooooooooo.",
-        "oyhyyxyyyyyyao",
-        "oyhyxxyyyxyylo",
-        "oyyyyyyyxxyyao",
-        "oaaraaaaaaarro",
-        "oooooooooooooo",
-        "otTtTtTtTtTtTo",
-        ".oooooooooooo.",
-    ]],
-    frame_seconds: 0.0,
-};
+];
 
-/// Drill head pointing down (drawn centred under the rig).
+macro_rules! rig_body {
+    ($ident:ident, $name:literal, $frames:ident, $light:ident, $body:ident, $shade:ident, $deep:ident) => {
+        pub const $ident: SpriteDef = SpriteDef {
+            name: $name,
+            legend: &[
+                ('o', INK),
+                ('b', RED),
+                ('t', STEEL_LIGHT),
+                ('S', STEEL_DARK),
+                ('g', SKY),
+                ('G', OCEAN),
+                ('w', ICE),
+                ('h', $light),
+                ('y', $body),
+                ('a', $shade),
+                ('r', $deep),
+                ('l', CREAM),
+                ('k', STEEL_DARK),
+                ('x', STONE_DARK),
+                ('L', STEEL_LIGHT),
+                ('d', STEEL_DARK),
+            ],
+            frames: $frames,
+            frame_seconds: 0.08,
+        };
+    };
+}
+
+rig_body!(RIG, "rig", BODY_FRAMES, CREAM, GOLD, AMBER, ORANGE);
+rig_body!(
+    RIG_DAMAGED,
+    "rig_damaged",
+    DAMAGED_FRAMES,
+    GOLD,
+    AMBER,
+    ORANGE,
+    RUST
+);
+rig_body!(
+    RIG_TEAL,
+    "rig_teal",
+    BODY_FRAMES,
+    MINT,
+    TEAL,
+    TEAL_DARK,
+    TEAL_DARK
+);
+rig_body!(RIG_ROSE, "rig_rose", BODY_FRAMES, PINK, ROSE, RED, MAROON);
+rig_body!(RIG_LIME, "rig_lime", BODY_FRAMES, LIME, LEAF, MOSS, PINE);
+rig_body!(
+    RIG_VIOLET,
+    "rig_violet",
+    BODY_FRAMES,
+    LAVENDER,
+    VIOLET,
+    PLUM,
+    PLUM
+);
+rig_body!(RIG_SKY, "rig_sky", BODY_FRAMES, ICE, SKY_LIGHT, SKY, OCEAN);
+
+/// Hull paints for other players' rigs, chosen by player id.
+pub const REMOTE_BODIES: [&SpriteDef; 5] = [&RIG_TEAL, &RIG_ROSE, &RIG_LIME, &RIG_VIOLET, &RIG_SKY];
+
+const DRILL_LEGEND: &[(char, Color)] = &[
+    ('o', INK),
+    ('L', STEEL_LIGHT),
+    ('m', STEEL),
+    ('d', STEEL_DARK),
+    ('S', SLATE),
+    ('w', BONE),
+];
+
+/// Drill head pointing down (drawn centred under the rig); a bright band spirals down it.
 pub const DRILL_DOWN: SpriteDef = SpriteDef {
     name: "rig_drill_down",
-    legend: &[('o', INK), ('m', STEEL_LIGHT), ('d', STEEL), ('w', BONE)],
+    legend: DRILL_LEGEND,
     frames: &[
         &[
-            "oooooooo", //
-            "omwmmmdo", //
-            ".omwmdo.", //
-            ".ommddo.", //
-            "..omdo..", //
-            "...oo...", //
+            "oooooooooo", //
+            "oSSSSSSSSo", //
+            ".owmmmmdo.", //
+            "..oLmwdo..", //
+            "..oLmmdo..", //
+            "...owdo...", //
+            "....oo....", //
         ],
         &[
-            "oooooooo", //
-            "ommmwmdo", //
-            ".ommwdo.", //
-            ".omddmo.", //
-            "..omdo..", //
-            "...oo...", //
+            "oooooooooo", //
+            "oSSSSSSSSo", //
+            ".oLmwmmdo.", //
+            "..oLmmdo..", //
+            "..owmmdo..", //
+            "...oLwo...", //
+            "....oo....", //
+        ],
+        &[
+            "oooooooooo", //
+            "oSSSSSSSSo", //
+            ".oLmmmwdo.", //
+            "..owmmdo..", //
+            "..oLmwdo..", //
+            "...oLdo...", //
+            "....oo....", //
         ],
     ],
-    frame_seconds: 0.06,
+    frame_seconds: 0.05,
 };
 
-/// Drill head pointing right (flip for left), drawn at the rig's side.
+/// Drill head pointing right (flip for left), drawn at the rig's front.
 pub const DRILL_SIDE: SpriteDef = SpriteDef {
     name: "rig_drill_side",
-    legend: &[('o', INK), ('m', STEEL_LIGHT), ('d', STEEL), ('w', BONE)],
+    legend: DRILL_LEGEND,
     frames: &[
         &[
-            "oo....", //
-            "owoo..", //
-            "ommwoo", //
-            "ommddo", //
-            "omdoo.", //
-            "ooo...", //
+            "oo......", //
+            "oSoo....", //
+            "oSwmoo..", //
+            "oSLmmwoo", //
+            "oSmmmddo", //
+            "oSmwdoo.", //
+            "oSdoo...", //
+            "ooo.....", //
         ],
         &[
-            "oo....", //
-            "omoo..", //
-            "omwmoo", //
-            "omdwdo", //
-            "odmoo.", //
-            "ooo...", //
+            "oo......", //
+            "oSoo....", //
+            "oSLwoo..", //
+            "oSLmmmoo", //
+            "oSmwmddo", //
+            "oSmddoo.", //
+            "oSwoo...", //
+            "ooo.....", //
+        ],
+        &[
+            "oo......", //
+            "oSoo....", //
+            "oSLmoo..", //
+            "oSwmmmoo", //
+            "oSmmmdwo", //
+            "oSwddoo.", //
+            "oSdoo...", //
+            "ooo.....", //
         ],
     ],
-    frame_seconds: 0.06,
+    frame_seconds: 0.05,
 };
 
-/// Thruster flame under the rig while climbing.
+/// Thruster flame under the rig.
 pub const FLAME: SpriteDef = SpriteDef {
     name: "rig_flame",
     legend: &[('r', RED), ('a', ORANGE), ('g', GOLD), ('c', CREAM)],
     frames: &[
         &[
-            "rgccgr", //
+            "agccga", //
             "ragcar", //
-            ".raar.", //
-            ".rar..", //
+            ".rgcr.", //
+            ".rgar.", //
+            "..ra..", //
             "..r...", //
         ],
         &[
             "agccga", //
+            "rgccgr", //
+            ".agca.", //
+            "..gar.", //
+            "..rr..", //
+            "...r..", //
+        ],
+        &[
+            "agccga", //
             "ragcgr", //
+            ".rgcar", //
+            ".rag..", //
+            ".rr...", //
+            "..r...", //
+        ],
+    ],
+    frame_seconds: 0.06,
+};
+
+/// A short hover flame (thrusting without climbing).
+pub const FLAME_SMALL: SpriteDef = SpriteDef {
+    name: "rig_flame_small",
+    legend: &[('r', RED), ('a', ORANGE), ('g', GOLD), ('c', CREAM)],
+    frames: &[
+        &[
+            "agccga", //
             ".rgar.", //
-            "..rar.", //
+            "..r...", //
+        ],
+        &[
+            "agccga", //
+            ".ragr.", //
             "...r..", //
         ],
     ],
-    frame_seconds: 0.07,
+    frame_seconds: 0.06,
 };

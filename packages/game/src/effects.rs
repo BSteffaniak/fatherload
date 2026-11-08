@@ -13,6 +13,8 @@ use crate::{
 const PRESENTED_EVENT_HISTORY: usize = 4_096;
 const DAMAGE_CUE_COOLDOWN_SECONDS: f32 = 0.5;
 const SPARK_LIFE_SECONDS: f32 = 0.45;
+/// How long a bomb blast stays on screen.
+pub const EXPLOSION_SECONDS: f32 = 0.7;
 
 /// Delivers each runtime event to presentation at most once, keyed by its stable identity
 /// `(epoch, tick, player, kind, ordinal)`. Host events are already unique; a predicting client
@@ -54,10 +56,21 @@ pub struct SparkParticle {
     pub life: f32,
 }
 
+/// A bomb blast in world space, `age` seconds old.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Explosion {
+    pub x: f32,
+    pub y: f32,
+    pub age: f32,
+}
+
 /// Transient presentation effects.
 #[derive(Clone, Debug, Default)]
 pub struct Effects {
     sparks: Vec<SparkParticle>,
+    explosions: Vec<Explosion>,
+    /// Bomb positions seen last frame, so a detonation can be placed where its bomb was.
+    known_bombs: Vec<(f32, f32)>,
     damage_cooldowns: BTreeMap<PlayerId, f32>,
     spawn_counter: u32,
 }
@@ -69,9 +82,17 @@ impl Effects {
         &self.sparks
     }
 
+    /// Live bomb blasts.
+    #[must_use]
+    pub fn explosions(&self) -> &[Explosion] {
+        &self.explosions
+    }
+
     /// Clears everything (new world).
     pub fn clear(&mut self) {
         self.sparks.clear();
+        self.explosions.clear();
+        self.known_bombs.clear();
         self.damage_cooldowns.clear();
     }
 
@@ -84,6 +105,11 @@ impl Effects {
             spark.life -= delta_seconds;
         }
         self.sparks.retain(|spark| spark.life > 0.0);
+        for explosion in &mut self.explosions {
+            explosion.age += delta_seconds;
+        }
+        self.explosions
+            .retain(|explosion| explosion.age < EXPLOSION_SECONDS);
         for cooldown in self.damage_cooldowns.values_mut() {
             *cooldown -= delta_seconds;
         }
@@ -121,7 +147,10 @@ impl Effects {
                     }
                 }
                 GameplayEventKind::DrillStarted { .. } if local => cues.push(SoundCue::Drill),
-                GameplayEventKind::BombDetonated => cues.push(SoundCue::Explosion),
+                GameplayEventKind::BombDetonated => {
+                    cues.push(SoundCue::Explosion);
+                    self.spawn_explosions(world);
+                }
                 GameplayEventKind::RescueTriggered { .. } if local => cues.push(SoundCue::Rescue),
                 GameplayEventKind::EscapeStarted { .. }
                 | GameplayEventKind::DeepRewardGranted { .. }
@@ -133,7 +162,35 @@ impl Effects {
                 _ => {}
             }
         }
+        self.known_bombs = world.bombs().iter().map(|bomb| (bomb.x, bomb.y)).collect();
         cues
+    }
+
+    /// Blasts where bombs seen last frame have disappeared.
+    fn spawn_explosions(&mut self, world: &WorldState) {
+        let remaining = world.bombs();
+        let gone: Vec<(f32, f32)> = self
+            .known_bombs
+            .iter()
+            .copied()
+            .filter(|(x, y)| {
+                !remaining
+                    .iter()
+                    .any(|bomb| (bomb.x - x).abs() < 1.0 && (bomb.y - y).abs() < 1.0)
+            })
+            .collect();
+        for (x, y) in gone {
+            if self
+                .explosions
+                .iter()
+                .any(|explosion| explosion.age < 0.05 && (explosion.x - x).abs() < 1.0)
+            {
+                continue;
+            }
+            self.explosions.push(Explosion { x, y, age: 0.0 });
+            self.spawn_sparks(x, y);
+            self.spawn_sparks(x, y - 8.0);
+        }
     }
 
     fn spawn_sparks(&mut self, x: f32, y: f32) {

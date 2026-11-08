@@ -34,7 +34,7 @@ use screen::{
 };
 use terrain::TerrainRenderer;
 use ui_kit::{TextStyle, UiCanvas, UiCanvasScope, UiFontFaces};
-use world::{draw_particles, draw_placed_bombs, draw_scanner_marks, draw_world, world_camera};
+use world::{SkyArt, WorldScene, draw_world_scene, world_camera};
 
 use crate::{
     input::PlayerInput,
@@ -79,6 +79,8 @@ fn view_camera_2d(
 
 pub struct GameRenderer {
     terrain: TerrainRenderer,
+    /// Sky gradient, hills and clouds, rasterized at startup.
+    sky: SkyArt,
     /// Every sprite, rasterized at startup (see `pixel_art::sprite`).
     atlas: Option<Texture2D>,
     font_regular: Option<Font>,
@@ -97,6 +99,7 @@ impl GameRenderer {
     pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, terrain: &Terrain) -> Self {
         Self {
             terrain: TerrainRenderer::new(raylib, thread, terrain),
+            sky: SkyArt::load(raylib, thread),
             atlas: sprite::load_atlas(raylib, thread),
             font_regular: load_pixel_font(raylib, thread, false),
             font_bold: load_pixel_font(raylib, thread, true),
@@ -142,7 +145,7 @@ impl GameRenderer {
                     (-radius, radius),
                     (radius, radius),
                 ] {
-                    self.terrain.mark_tile_dirty(TilePosition {
+                    self.terrain.mark_fog_dirty(TilePosition {
                         x: tile.x + dx,
                         y: tile.y + dy,
                     });
@@ -150,8 +153,16 @@ impl GameRenderer {
             }
             self.explored_drawn.clone_from(explored);
         }
+        let views: Vec<Rectangle> = snapshot
+            .views
+            .iter()
+            .map(|view| {
+                let (width, height) = view.visible_world_size();
+                Rectangle::new(view.camera.x, view.camera.y, width, height)
+            })
+            .collect();
         self.terrain
-            .sync(raylib, thread, snapshot.terrain, explored);
+            .sync(raylib, thread, snapshot.terrain, explored, &views);
     }
 
     pub fn apply_ui_input(&self, input: PlayerInput) {
@@ -279,43 +290,30 @@ impl GameRenderer {
         {
             let view_camera = view_camera_2d(viewport, camera, view.world_scale, density);
             let mut world_draw = draw.begin_mode2D(view_camera);
-            draw_world(
+            draw_world_scene(
                 &mut world_draw,
-                Rectangle::new(camera.x, camera.y, visible_width, visible_height),
-                &self.terrain,
-                snapshot.terrain,
-                snapshot.infrastructure,
-                view.active_drill,
-                shell.update_ticks,
+                &WorldScene {
+                    visible: Rectangle::new(camera.x, camera.y, visible_width, visible_height),
+                    terrain_renderer: &self.terrain,
+                    terrain: snapshot.terrain,
+                    sky: &self.sky,
+                    infrastructure: snapshot.infrastructure,
+                    hazards: snapshot.hazards,
+                    bombs: snapshot.bombs,
+                    boulders: snapshot.boulders,
+                    sparks: snapshot.sparks,
+                    explosions: snapshot.explosions,
+                    players: &snapshot.players,
+                    local: snapshot
+                        .players
+                        .iter()
+                        .find(|player| player.player_id == view.player_id),
+                    active_drill: view.active_drill,
+                    lost_cargo: view.lost_cargo,
+                    explored: view.explored,
+                    ticks: shell.update_ticks,
+                },
             );
-            draw_particles(
-                &mut world_draw,
-                view.lost_cargo,
-                snapshot.boulders,
-                snapshot.sparks,
-            );
-            draw_placed_bombs(&mut world_draw, snapshot.bombs);
-            if let Some(local) = snapshot
-                .players
-                .iter()
-                .find(|player| player.player_id == view.player_id)
-            {
-                draw_scanner_marks(&mut world_draw, snapshot.terrain, local);
-            }
-            for cloud in snapshot.hazards {
-                world_draw.draw_circle_v(
-                    Vector2::new(cloud.x, cloud.y),
-                    cloud.radius,
-                    Color::new(90, 190, 80, 70),
-                );
-            }
-            for player in &snapshot.players {
-                if player.player_id == view.player_id {
-                    world::draw_player_at(&mut world_draw, player);
-                } else {
-                    world::draw_remote_player(&mut world_draw, player);
-                }
-            }
         }
         // The title and online screens show the world behind them without a HUD.
         if !matches!(shell.run_mode, RunMode::Title | RunMode::Lobby) {
