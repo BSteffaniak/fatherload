@@ -21,4 +21,5 @@ drillgame-save.json
 
 # agent/editor state
 .aider*
+.claude/
 .cursor/
