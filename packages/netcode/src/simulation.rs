@@ -127,7 +127,8 @@ impl<C, A> TickInputs<C, A> {
 ///
 /// `player` + `kind` are used for prediction deduplication: the client plays
 /// local-player events from prediction immediately and suppresses the
-/// authoritative copy keyed by `(player, input seq, kind, ordinal)`.
+/// authoritative copy keyed by `(player, tick, kind, ordinal)` (and the input
+/// seq, when the host consumed one that tick).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TickEvent<E> {
     /// The player the event belongs to, if any.

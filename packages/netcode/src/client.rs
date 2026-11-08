@@ -130,7 +130,11 @@ pub struct ClientView<'a, S: NetSimulation> {
     pub smoothing: VisualOffset,
 }
 
-type EventKey = (PlayerId, InputSeq, u32, u32);
+/// `(player, tick, kind, ordinal)`. The client predicts input `seq` on exactly
+/// `target_tick`, so tick and seq identify the same input; keying by tick also
+/// matches authoritative events the host produced under held input (which
+/// carry no seq).
+type EventKey = (PlayerId, Tick, u32, u32);
 
 /// A connected client.
 #[derive(Debug)]
@@ -162,7 +166,7 @@ pub struct ClientSession<S: NetSimulation> {
     far_players: Vec<PlayerMarker>,
     lobby: Vec<LobbyEntry>,
     events: Vec<PresentedEvent<S::Event>>,
-    predicted_events: BTreeMap<EventKey, Tick>,
+    predicted_events: BTreeMap<EventKey, InputSeq>,
     outbox: Vec<ClientMessage<S>>,
     stats: ClientStats,
     rtt: Option<Duration>,
@@ -357,7 +361,7 @@ impl<S: NetSimulation> ClientSession<S> {
 
     /// Leaves the session for good and returns the message to send.
     pub const fn leave(&mut self) -> ClientMessage<S> {
-        self.phase = ClientPhase::Ended(EndReason::HostClosed);
+        self.phase = ClientPhase::Ended(EndReason::Left);
         ClientMessage::Leave
     }
 
@@ -514,7 +518,16 @@ impl<S: NetSimulation> ClientSession<S> {
                     .push(ClientMessage::KeyframeRequest { epoch: self.epoch });
             }
         }
-        let roster_now: BTreeSet<PlayerId> = authority.player_ids().into_iter().collect();
+        // Remote players that are still in the world *and* inside this
+        // client's relevance set. Players that left relevance stop being
+        // interpolated (they would otherwise freeze at the edge forever) and
+        // are shown through `far_players` markers instead.
+        let roster: BTreeSet<PlayerId> = authority.player_ids().into_iter().collect();
+        let interpolated: BTreeSet<PlayerId> = relevant
+            .iter()
+            .copied()
+            .filter(|player| roster.contains(player))
+            .collect();
         let remote_poses: Vec<(PlayerId, Pose)> = relevant
             .iter()
             .filter(|player| Some(**player) != self.player)
@@ -557,7 +570,7 @@ impl<S: NetSimulation> ClientSession<S> {
         for (player, pose) in remote_poses {
             self.remote.push(player, tick, pose);
         }
-        self.remote.retain_players(&roster_now);
+        self.remote.retain_players(&interpolated);
         if let Some(far) = far_players {
             self.far_players = far;
         }
@@ -569,16 +582,19 @@ impl<S: NetSimulation> ClientSession<S> {
     }
 
     /// Queues authoritative events, suppressing local-player events already
-    /// played from prediction (keyed by `(player, seq, kind, ordinal)`).
+    /// played from prediction: same `(player, tick, kind, ordinal)` and, when
+    /// the host consumed an input that tick, the same input seq.
     fn present_authoritative_events(&mut self, events: Vec<NetEvent<S::Event>>, tick: Tick) {
         for event in events {
-            if let (Some(player), Some(seq)) = (event.player, event.seq)
-                && Some(player) == self.player
-                && self
-                    .predicted_events
-                    .remove(&(player, seq, event.kind, event.ordinal))
-                    .is_some()
+            let key = event
+                .player
+                .filter(|player| Some(*player) == self.player)
+                .map(|player| (player, event.tick, event.kind, event.ordinal));
+            let predicted_seq = key.and_then(|key| self.predicted_events.get(&key).copied());
+            if let (Some(key), Some(predicted_seq)) = (key, predicted_seq)
+                && event.seq.is_none_or(|seq| seq == predicted_seq)
             {
+                self.predicted_events.remove(&key);
                 self.stats.deduplicated_events += 1;
                 continue;
             }
@@ -588,7 +604,7 @@ impl<S: NetSimulation> ClientSession<S> {
             });
         }
         self.predicted_events
-            .retain(|_, event_tick| *event_tick > tick);
+            .retain(|(_, event_tick, _, _), _| *event_tick > tick);
     }
 
     fn trim_pending(&mut self, tick: Tick) {
@@ -769,7 +785,7 @@ impl<S: NetSimulation> ClientSession<S> {
                         continue;
                     }
                     self.predicted_events
-                        .insert((local, seq, event.kind, event.ordinal), tick);
+                        .insert((local, tick, event.kind, event.ordinal), seq);
                     self.events.push(PresentedEvent {
                         source: EventSource::Predicted,
                         event,

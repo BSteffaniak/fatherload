@@ -155,6 +155,8 @@ pub enum EndReason {
     HostClosed,
     /// The host removed this client.
     Kicked,
+    /// This client left on its own (local only; never sent by the host).
+    Left,
 }
 
 /// Initial state for a newly joined client.
