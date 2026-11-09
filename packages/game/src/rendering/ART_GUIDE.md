@@ -276,8 +276,9 @@ Animation is driven by shell ticks (`WorldScene::ticks`), never wall-clock time.
   cobbles lit top-left), hard rock (Manhattan-Worley angular slabs), foundation (offset blocks),
   bedrock (big diamond-faceted obsidian slabs in `INK`/`NIGHT`/`SLATE_DARK` with `PLUM` lit
   faces and rare `LAVENDER` glints; the floor of deep worlds, never dug). The tiled
-  `sprites::world::BEDROCK` beyond the world's edges and under its last row uses the same
-  colours, so the floor and the walls read as one mass.
+  `sprites::world::BEDROCK` beyond the world's edges and under its last row is the same slab
+  recipe on a wrapping 4x4 grid of 11-pixel cells (44x44 art pixels), so the floor and the
+  walls read as one mass without a stripe pattern or visible repeats.
 - Each band recolours them through 4-step ramps (`Strata`, `strata_for(band)`): topsoil, clay,
   grey stone, slate, basalt, then one palette per deep stratum (Crystal Faults blues, Fossil
   Oceans sand, Pressure Cathedrals steel, Radioactive Hollow greens, Ancient Machine
@@ -395,7 +396,7 @@ close look at individual pixels.
 Scenes (see `--list`): `art_gallery`, `ui_sheet`, `title`, world scenes (`surface_town`, `town_west`, `town_market`, `town_east`,
 `surface_flying`, `shallow_dig`, `mid_depth_ores`, `deep_lava`, `lost_cargo`, `world_props`,
 `drill_side`, `remote_rigs`, `bomb_blast`, `gas_leak`, `cave_in`, `deep_crystal_faults`,
-`deep_void_geodes`, `bedrock_floor`, `hazard_telltales`, `strata_boundary`), points of interest
+`deep_void_geodes`, `bedrock_floor`, `bedrock_corner`, `hazard_telltales`, `strata_boundary`), points of interest
 (`poi_supply_cache`, `poi_derelict_rig`, `poi_vault_sequence`, `poi_vault_seals`,
 `poi_vault_relay`, `poi_vault_open`, `poi_fossil_bed`, `poi_geode`, `poi_rival_claim`,
 `poi_scanner_silhouette`, `poi_scanner_echo`, `map_poi_contacts`, `modal_collection_log`), quests

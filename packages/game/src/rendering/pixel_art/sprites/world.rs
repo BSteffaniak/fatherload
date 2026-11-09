@@ -342,24 +342,60 @@ pub const ORE_PROCESSOR: SpriteDef = SpriteDef {
 /// seams and violet facets as the bedrock floor's tile art.
 pub const BEDROCK: SpriteDef = SpriteDef {
     name: "world_bedrock",
-    legend: &[('n', NIGHT), ('o', INK), ('s', SLATE_DARK), ('p', PLUM)],
+    legend: &[
+        ('n', NIGHT),
+        ('o', INK),
+        ('s', SLATE_DARK),
+        ('p', PLUM),
+        ('l', LAVENDER),
+    ],
+    // Generated from the bedrock tile art's faceted-slab recipe (`tile_art::bedrock_pixel`) on a
+    // 4x4 grid of 11-pixel cells that wraps, so the fill tiles without visible repeats or seams.
     frames: &[&[
-        "ppssnnnnonnnnnss", //
-        "pssnnnnoppssnnns", //
-        "ssnnnnoppssnnnnn", //
-        "snnnnoppssnnnnno", //
-        "nnnnoppssnnnnnoo", //
-        "nnnoppssnnnnnopp", //
-        "nnoossnnnnnnopps", //
-        "noonnnnnnnnoppss", //
-        "oonnnnnnnnoppssn", //
-        "ppsnnnnnnopssnnn", //
-        "pssnnnnnoossnnnn", //
-        "ssnnnnnoonnnnnnn", //
-        "snnnnnoonnnnnnnn", //
-        "nnnnnoonnnnnnnnn", //
-        "nnnnoonnnnnnnnoo", //
-        "onnoonnnnnnnnoop", //
+        "oossnnllnnonnnnnopppssssnnnnoosssnnnnnnosnnn", //
+        "oosnnnnnnnoooooooppssssnnnnnoossnnnnnnnonnnn", //
+        "oonnnnnnnoppssssnossssnnnnnnoosnnnnnnnnonnnn", //
+        "oonnnnnnoppssssnnnossnnnnnnnoonnnnnnnnnonnnn", //
+        "oonnnnloppssssnnnnnonnnnnnnnoonnnnnnnnnonnnn", //
+        "oonnnnoplssssnlnnnnnonnnnnnnoonnnnnnnnnonnln", //
+        "oonnnoppssssnnnnnnnnnonnnnnnoonnlnnnnnnonnnn", //
+        "oonnnopssssnnnnnnnnnnonnnnnnooonnnnnnnnonnnn", //
+        "oonnnossssnnnnoooooooonnnnnoppoonnnooooonnnn", //
+        "oonnnoooooonnosssnnnnnonnnoppppoonooooooonnn", //
+        "ooooopppppsoosssnnnnnnnonoppppppooopppppoonn", //
+        "pppppppppssosssnnnnnnnnnoppppppssopppppsssop", //
+        "ppppppppsssossnnnnnnnnnnopppppsssoppppssssop", //
+        "pppppppssssnonnnnnnnnnnopppppssssopppssssnop", //
+        "ppppppssssnnnonnnnnnnnopppppssssnoppsslsnnop", //
+        "pppppssssnnnnonnnnnnnopppppssssnnopssssnnnno", //
+        "opppssssnnnnnonnnnnnopppppssssnnnossssnnnnnn", //
+        "nopssssnnnnnnonnnnnopppppssssnnnnosssnnnnnnn", //
+        "nlosssnnnnnnnonnnnnoppppssssnnnnosssnnnnnnnn", //
+        "nnnooooooonnnonnnnnopppssssnnnnosssnnnnnnnnn", //
+        "nnopppppppoooonnnnopooosssnnnnnossnnnnnnnnnn", //
+        "oopppppppssssnooooppopposnnnnnnosnnnnnoooooo", //
+        "ooppppppssssnnnnnoppoppponnnnnnonnnnnooooooo", //
+        "oopppppssssnnnnnnoppopppponnnnnonnnnoossssnn", //
+        "ooppppssssnnnnnnnoppopppssonnnnoooooossssnnn", //
+        "oopppssssnnnnnnnnoppoppssssonnoooooossssnnnn", //
+        "noopssssnnnnnnnnopppopssssnooooppppssssnnnnn", //
+        "nnoooosnnnnnnnnopppsossssnnoooppppssssnnnnnn", //
+        "nnooooolnnnnnlopppssosssnnnooooppssssnnnnnnn", //
+        "noppppoonnnnnopppsssossnnnnooooossssnnnnnnnn", //
+        "oppppssoonnnopppssssosnnnnnoooooossnnnnnnnnn", //
+        "ppppssssoooopppssssnnonnnnossssnoonnnnnnnnno", //
+        "pppssssnnoooopssssnnnonlnossssnnnoonnnnnnnop", //
+        "ppssssnnnnnooosssnnnnonnossssnnnnnoonnnnnopp", //
+        "pssssnnnnnnoooosnnnnnonossssnnnnnnnoonnnoppp", //
+        "ssssnnnnnnoopssonnnnnoossssnnnnnnnnnoonnoooo", //
+        "ossnnnnnnoopssssonnnnoosssnnnnnnnooooonopppp", //
+        "sonnnnnnoopssssnnonnnoossnnnnnnnoooooooppppp", //
+        "ssooonnoopssssnnnnonnoooonnnnnnooppssoppppps", //
+        "ssoooooopssssnnnnnnoopppponnnnooppsssoppppss", //
+        "snoosoopssssnnnnnnnnopppssonnooppssssopppsss", //
+        "nnoosssosssnnnnnnnnoppplsssoooppssssnoppssss", //
+        "nnoossnnosnnnnnnnnopppssssnnoopssssnnopssssn", //
+        "noossnnnnonnnnnnnopppssssnnnoossssnnnnosssnn", //
     ]],
     frame_seconds: 0.0,
 };

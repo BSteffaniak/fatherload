@@ -1464,6 +1464,24 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "bedrock_corner",
+        summary: "The bottom-left corner of a deep world: the floor meets the west wall, no sky",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let settings = *world.world_settings();
+                let x = 2;
+                let floor = drillgame_simulation::worldgen::strata::bedrock_top_row(&settings, x)
+                    .unwrap_or_else(|| world.terrain().height());
+                let row = floor - 1;
+                sink_rig(world, player, x, row);
+                carve(world, 0..x + 10, row - 1..row + 1);
+                reveal(world, player, 0..x + 30, row - 12..world.terrain().height());
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
         name: "new_world_setup",
         summary: "New World dialog over the title: seed, size, resources and hazards",
         setup: |stage| {
