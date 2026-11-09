@@ -15,10 +15,12 @@ use drillgame_netcode::{LobbyEntry, PlayerId as NetPlayerId};
 use drillgame_simulation::{
     Discovery, PlayerId, WorldState,
     economy::SurfaceZone,
+    poi::{FormationStyle, LoreId, PoiKnowledge, PoiTile, PoiVariant, VaultPuzzle},
     surface::SURFACE_BUILDINGS,
-    terrain::{MineralKind, TILE_SIZE, TileKind, TilePosition},
+    terrain::{MineralKind, TILE_SIZE, Terrain, TileKind, TilePosition},
     worldgen::{
-        Band, FeatureDetail, FeatureKind, HazardKind, ResourceRichness, WorldSettings, WorldSize,
+        Band, DEFAULT_WORLD_SEED, FeatureDetail, FeatureKind, HazardKind, ResourceRichness,
+        WorldFeature, WorldSettings, WorldSize,
     },
 };
 use raylib::ffi;
@@ -1401,6 +1403,152 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "poi_supply_cache",
+        summary: "A supply cache: a hollow of crates below the clay",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| variant == PoiVariant::SupplyCache);
+                visit_poi(world, seats[0].player, &poi);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "poi_derelict_rig",
+        summary: "A crashed prospector rig with its glowing salvage core",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| {
+                    matches!(variant, PoiVariant::DerelictRig { .. })
+                });
+                visit_poi(world, seats[0].player, &poi);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "poi_vault_sequence",
+        summary: "A sealed vault with a sequence lock: numbered floor switches",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| {
+                    variant == PoiVariant::Vault(VaultPuzzle::Sequence)
+                });
+                visit_poi(world, seats[0].player, &poi);
+                // The first switch is already lit.
+                light_vault_switches(world, &poi, 1);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "poi_vault_seals",
+        summary: "A sealed vault with pressure seals in its walls",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| {
+                    variant == PoiVariant::Vault(VaultPuzzle::Seals)
+                });
+                visit_poi(world, seats[0].player, &poi);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "poi_vault_relay",
+        summary: "A sealed vault with twin relays, one of them lit",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| {
+                    variant == PoiVariant::Vault(VaultPuzzle::Relay)
+                });
+                visit_poi(world, seats[0].player, &poi);
+                light_vault_switches(world, &poi, 1);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "poi_vault_open",
+        summary: "An opened vault: the doors are gone and the cache waits on its pedestal",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| {
+                    variant == PoiVariant::Vault(VaultPuzzle::Sequence)
+                });
+                visit_poi(world, seats[0].player, &poi);
+                light_vault_switches(world, &poi, 3);
+                for position in poi.bounds.positions() {
+                    if world.terrain().tile(position).map(|tile| tile.kind)
+                        == Some(TileKind::Poi(PoiTile::VaultDoor))
+                    {
+                        world.terrain_mut().set_kind(position, TileKind::Air);
+                    }
+                }
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "poi_fossil_bed",
+        summary: "A fossil bed formation packed with artifacts, guarded by gas",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| {
+                    variant == PoiVariant::Formation(FormationStyle::FossilBed)
+                });
+                visit_poi(world, seats[0].player, &poi);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "poi_geode",
+        summary: "A deep geode: a crystal shell lined with rich ore, guarded by its layer",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| {
+                    variant == PoiVariant::Formation(FormationStyle::Geode)
+                });
+                visit_poi(world, seats[0].player, &poi);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "poi_rival_claim",
+        summary: "An abandoned rival outpost with salvage lockers",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| variant == PoiVariant::RivalClaim);
+                visit_poi(world, seats[0].player, &poi);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "map_poi_contacts",
+        summary: "Mine map with visited sites, identified silhouettes and strange echoes",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                stage_poi_contacts(world, seats[0].player);
+            });
+            stage.settle(10);
+            stage.seat(0).modal = Some(ModalScreen::Map);
+        },
+    },
+    Scene {
+        name: "modal_collection_log",
+        summary: "Collection log: sites visited, scanner contacts and recovered logs",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                stage_poi_contacts(world, seats[0].player);
+            });
+            stage.settle(10);
+            stage.seat(0).modal = Some(ModalScreen::ResearchLog);
+        },
+    },
+    Scene {
         name: "prompt_sheet",
         summary: "Button-prompt reference: every action on keyboard, Xbox, PlayStation, Nintendo",
         setup: |stage| stage.prompt_sheet = true,
@@ -1592,6 +1740,94 @@ fn lobby_entry(id: u32, name: &str, ready: bool, connected: bool, local: bool) -
         ready,
         connected,
         local,
+    }
+}
+
+/// Swaps in the first world (from the default seed on) that has a POI `wanted` accepts, and
+/// returns that POI.
+fn stage_poi(world: &mut WorldState, wanted: fn(PoiVariant) -> bool) -> WorldFeature {
+    let (terrain, poi) = (0..256_u64)
+        .find_map(|offset| {
+            let terrain =
+                Terrain::generate(&WorldSettings::new(DEFAULT_WORLD_SEED.wrapping_add(offset)));
+            let poi = terrain
+                .features()
+                .pois()
+                .find(|poi| poi.poi().is_some_and(wanted))
+                .copied()?;
+            Some((terrain, poi))
+        })
+        .expect("some seed holds the wanted POI");
+    *world.terrain_mut() = terrain;
+    poi
+}
+
+/// A rig dug in just left of `poi`, a tunnel up to its edge, and the POI and its surroundings
+/// explored.
+fn visit_poi(world: &mut WorldState, player: PlayerId, poi: &WorldFeature) {
+    let bounds = poi.bounds;
+    let (x, y) = ((bounds.min.x - 3).max(2), bounds.max.y - 1);
+    sink_rig(world, player, x, y);
+    carve(world, x..bounds.min.x, y..y + 1);
+    reveal(
+        world,
+        player,
+        bounds.min.x - 14..bounds.max.x + 15,
+        bounds.min.y - 7..bounds.max.y + 8,
+    );
+}
+
+/// Lights the first `count` switches (by order) or relays of a vault.
+fn light_vault_switches(world: &mut WorldState, poi: &WorldFeature, count: u8) {
+    let mut relays = 0;
+    for position in poi.bounds.positions() {
+        let lit = match world.terrain().tile(position).map(|tile| tile.kind) {
+            Some(TileKind::Poi(PoiTile::VaultSwitch { order, .. })) if order <= count => {
+                PoiTile::VaultSwitch { order, lit: true }
+            }
+            Some(TileKind::Poi(PoiTile::VaultRelay { .. })) if relays < count => {
+                relays += 1;
+                PoiTile::VaultRelay { lit: true }
+            }
+            _ => continue,
+        };
+        world.terrain_mut().set_kind(position, TileKind::Poi(lit));
+    }
+}
+
+/// A mid-depth rig with a tier-2 scanner (live echoes), a few visited and identified sites in
+/// its journal and three recovered logs.
+fn stage_poi_contacts(world: &mut WorldState, player: PlayerId) {
+    let pois: Vec<WorldFeature> = world.world_features().pois().copied().collect();
+    let anchor = pois
+        .iter()
+        .find(|poi| poi.band == Band::Slate)
+        .map_or((120, 55), |poi| {
+            (poi.bounds.min.x - 3, poi.bounds.max.y - 1)
+        });
+    sink_rig(world, player, anchor.0, anchor.1);
+    carve(world, anchor.0 - 20..anchor.0 + 3, anchor.1..anchor.1 + 1);
+    reveal(
+        world,
+        player,
+        anchor.0 - 30..anchor.0 + 30,
+        anchor.1 - 20..anchor.1 + 12,
+    );
+    let Some(rig) = world.player_mut(player) else {
+        return;
+    };
+    rig.scanner_level = 2;
+    for (index, poi) in pois.iter().enumerate() {
+        let near = (poi.center.y - anchor.1).abs() < 40;
+        let knowledge = match index % 3 {
+            0 if near => PoiKnowledge::Visited,
+            1 if near => PoiKnowledge::Identified,
+            _ => continue,
+        };
+        rig.journal.learn(poi.id, knowledge);
+    }
+    for log in [0, 4, 7] {
+        rig.journal.logs.insert(LoreId(log));
     }
 }
 
