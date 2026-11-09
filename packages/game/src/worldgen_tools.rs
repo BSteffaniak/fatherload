@@ -9,7 +9,6 @@
 //!   their map icon).
 
 use drillgame_simulation::{
-    poi::PoiKind,
     terrain::{MineralKind, TileKind},
     worldgen::{
         self, Band, FeatureKind, GeneratorVersion, HazardIntensity, HazardKind, ResourceRichness,
@@ -20,7 +19,11 @@ use drillgame_simulation::{
 use raylib::prelude::Color;
 
 use crate::rendering::{
-    pixel_art::{palette, sprite::SpriteDef, sprites::poi::poi_icon},
+    pixel_art::{
+        palette,
+        sprite::SpriteDef,
+        sprites::poi::{poi_color, poi_icon},
+    },
     terrain::tile_art,
 };
 
@@ -326,9 +329,7 @@ fn preview_image(
                 FeatureKind::Motherlode => palette::GOLD,
                 FeatureKind::ArtifactBed => palette::PINK,
                 FeatureKind::Chamber => palette::ICE,
-                FeatureKind::PointOfInterest => {
-                    feature.poi_kind().map_or(palette::BONE, poi_outline_color)
-                }
+                FeatureKind::PointOfInterest => feature.poi_kind().map_or(palette::BONE, poi_color),
                 FeatureKind::PrefabSlot
                 | FeatureKind::LargeCavern
                 | FeatureKind::HazardCluster
@@ -356,17 +357,6 @@ fn preview_image(
         }
     }
     image
-}
-
-/// Outline colour of a POI kind on the preview.
-const fn poi_outline_color(kind: PoiKind) -> Color {
-    match kind {
-        PoiKind::SupplyCache => palette::SAND,
-        PoiKind::DerelictRig => palette::STEEL_LIGHT,
-        PoiKind::Vault => palette::AMBER,
-        PoiKind::Formation => palette::LAVENDER,
-        PoiKind::RivalClaim => palette::MINT,
-    }
 }
 
 /// The hazard tile within two tiles of `(x, y)`, if any (the reach of the in-game stain).

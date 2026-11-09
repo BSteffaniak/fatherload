@@ -115,6 +115,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     }
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
+        fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);
     }
     for player in scene.players {
         rig::draw_rig(draw, scene.terrain, player, scene.facings, scene.ticks);

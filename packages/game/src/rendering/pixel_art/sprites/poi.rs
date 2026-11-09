@@ -618,6 +618,18 @@ pub const ICON_ECHO: SpriteDef = SpriteDef {
     frame_seconds: 0.5,
 };
 
+/// The colour that marks a POI kind on maps, previews and scanner brackets.
+#[must_use]
+pub const fn poi_color(kind: PoiKind) -> raylib::prelude::Color {
+    match kind {
+        PoiKind::SupplyCache => SAND,
+        PoiKind::DerelictRig => GOLD,
+        PoiKind::Vault => AMBER,
+        PoiKind::Formation => LAVENDER,
+        PoiKind::RivalClaim => MINT,
+    }
+}
+
 /// The icon of a POI kind.
 #[must_use]
 pub const fn poi_icon(kind: PoiKind) -> &'static SpriteDef {

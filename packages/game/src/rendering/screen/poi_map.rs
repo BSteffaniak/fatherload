@@ -19,7 +19,7 @@ use raylib::prelude::*;
 use super::super::pixel_art::palette::*;
 use super::super::{
     layout::{Section, SectionItem},
-    pixel_art::sprites::poi::{ICON_ECHO, known_poi_icon, poi_icon},
+    pixel_art::sprites::poi::{ICON_ECHO, known_poi_icon, poi_color, poi_icon},
     terrain::tile_art::hash,
     ui_kit,
 };
@@ -46,17 +46,6 @@ impl PoiMarker {
         } else {
             (center.x, center.y)
         }
-    }
-}
-
-/// Map colour of a POI kind.
-pub(super) const fn poi_color(kind: PoiKind) -> Color {
-    match kind {
-        PoiKind::SupplyCache => SAND,
-        PoiKind::DerelictRig => GOLD,
-        PoiKind::Vault => AMBER,
-        PoiKind::Formation => LAVENDER,
-        PoiKind::RivalClaim => MINT,
     }
 }
 

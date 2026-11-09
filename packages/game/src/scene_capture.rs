@@ -1527,6 +1527,28 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "poi_scanner_silhouette",
+        summary: "A tier-3 scanner outlining an unexplored vault's silhouette nearby",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| matches!(variant, PoiVariant::Vault(_)));
+                approach_poi(world, seats[0].player, &poi, 3);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "poi_scanner_echo",
+        summary: "A tier-1 scanner hearing a strange echo from a site it cannot resolve",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let poi = stage_poi(world, |variant| matches!(variant, PoiVariant::Vault(_)));
+                approach_poi(world, seats[0].player, &poi, 1);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
         name: "map_poi_contacts",
         summary: "Mine map with visited sites, identified silhouettes and strange echoes",
         setup: |stage| {
@@ -1775,6 +1797,19 @@ fn visit_poi(world: &mut WorldState, player: PlayerId, poi: &WorldFeature) {
         bounds.min.x - 14..bounds.max.x + 15,
         bounds.min.y - 7..bounds.max.y + 8,
     );
+}
+
+/// A rig with a scanner of `scanner_level` dug in a few tiles left of `poi`, with only its own
+/// surroundings explored.
+fn approach_poi(world: &mut WorldState, player: PlayerId, poi: &WorldFeature, scanner_level: u8) {
+    let bounds = poi.bounds;
+    let (x, y) = ((bounds.min.x - 7).max(2), bounds.max.y - 1);
+    sink_rig(world, player, x, y);
+    carve(world, x - 3..x + 3, y..y + 1);
+    reveal(world, player, x - 6..x + 4, y - 4..y + 3);
+    if let Some(rig) = world.player_mut(player) {
+        rig.scanner_level = scanner_level;
+    }
 }
 
 /// Lights the first `count` switches (by order) or relays of a vault.

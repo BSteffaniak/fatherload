@@ -15,13 +15,13 @@ The quickest way to see the whole kit is the `art_gallery` capture scene (see
 | `rendering/pixel_art/palette.rs` | The palette constants and `PALETTE` list. |
 | `rendering/pixel_art/sprite.rs` | `SpriteDef`, `NineSlice`, atlas packing/rasterizing, draw helpers. |
 | `rendering/pixel_art/shade.rs` | Palette indices, the one-step-darker ramp walk (`darker`) and the 4x4 Bayer dither. |
-| `rendering/pixel_art/sprites/*.rs` | All sprite data: `ui` (frames), `icons` (rig stats, minerals), `menu_icons` (menu rows, counters, roster), `prompts` (keycap + controller glyphs), `rig`, `interior`. |
+| `rendering/pixel_art/sprites/*.rs` | All sprite data: `ui` (frames), `icons` (rig stats, minerals), `menu_icons` (menu rows, counters, roster), `prompts` (keycap + controller glyphs), `rig`, `interior`, `poi` (point-of-interest tile stamps, fossil imprints, POI map icons and kind colours). |
 | `rendering/prompts.rs` | Button prompts: glyph drawing, prompt rows, the menu device. |
 | `rendering/pixel_art/font.rs` | The bitmap UI font (regular + derived bold). |
 | `rendering/ui_kit.rs` | UI canvas + widgets (panels, buttons, bars, rows, tabs, tooltips...). |
 | `rendering/layout.rs` | Menu/modal content model drawn with the UI kit. |
-| `rendering/screen.rs` | HUD (stats, wallet + tool chips, warning badges), toasts, minimap, depth ruler, inventory, map, help. |
-| `rendering/terrain.rs` + `terrain/{tile_art,fog}.rs` | Terrain chunks, the procedural tile art and the exploration fog. |
+| `rendering/screen.rs` | HUD (stats, wallet + tool chips, warning badges), toasts, minimap, depth ruler, inventory, map, help; `screen/poi_map.rs` draws POI markers on the minimap and map and builds the collection log. |
+| `rendering/terrain.rs` + `terrain/{tile_art,fog}.rs` | Terrain chunks, the procedural tile art and the exploration fog; `tile_art/poi_art.rs` paints point-of-interest tiles. |
 | `rendering/world.rs` + `world/{sky,buildings,rig,fx}.rs` | Everything in world space: sky and parallax, the town, rigs, props and effects. |
 | `rendering/interior.rs` | The walk-in building rooms (shell, door, lamps, sign, counter, keeper, shop dressing). |
 | `rendering/counters.rs` | Every building's counter panel and the receipt-style purchase confirmations. |
@@ -257,7 +257,7 @@ text, unaffordable prices `RED` on a disabled row.
 
 - **World** (`world.rs`): see [World art](#world-art).
 
-Still placeholder (next steps): the map modal's drawing.
+Still placeholder (next steps): the map modal's terrain drawing (flat colours per tile).
 
 ## World art
 
@@ -292,6 +292,36 @@ Animation is driven by shell ticks (`WorldScene::ticks`), never wall-clock time.
   (`Strata::back`) with contact shadows under ceilings and along walls.
 - `material_color(kind, band)` is a tile's representative colour (debris, dust, the depth ruler's
   band tint and the `--worldgen-preview` map).
+
+**Points of interest** (`terrain/tile_art/poi_art.rs`, `sprites/poi.rs`). Built things read as
+built, natural ones take their band's palette:
+
+- *Vault walls* are offset 8x8 blocks of dark alloy (`STEEL`/`STEEL_DARK`, bevelled, `INK`
+  mortar) with brass rivets and glyphs whose centre glows in the stratum's accent colour. Every
+  face of the shell that meets something else gets a brass band (`GOLD` top/left, `AMBER`
+  bottom/right) inside the outline, so the whole vault reads as one framed structure. Air
+  inside a vault's bounds shows tiled `NIGHT` panels with a faint brass grid instead of rock.
+- Vault fixtures are stamps over the wall: the door (banded steel, ring lock, red lamp), the
+  pressure seal (red valve wheel and gauge) and its vented form (cracked, scorched), the
+  sequence switch plate (brass frame, one to three pips showing its order, lit `LIME` on
+  `TEAL_DARK`, a chevron below meaning "drill from above"), the relay (copper coil; lit it
+  glows `GOLD` and throws arcs) and the cache (an ornate reliquary with a glowing gem).
+  Fixtures are stamped after the frame so outlines never cut them.
+- *Wreckage* is prospector-orange hull panels with dark seams and rivets, soot, rust blooms and
+  flaked bare steel; the salvage core is a cockpit console with a glowing `MINT` screen.
+- *Supply crates* are planked boxes with steel corners and a stencil plate.
+- *Fossil shale* is pale sandy laminations over the band's darkest stone with a shell or bone
+  imprint on every tile; *geode shells* are faceted crystal in a per-stratum ramp (Crystal
+  Faults ice blue, Mantle Storm orange, Radioactive Hollow lime, Ancient Machine amber, Fossil
+  Oceans sand, Void Geodes and basalt lavender).
+- *Outposts* are corrugated steel with rivet rows, rust streaks and a teal company stripe, and
+  teal lockers with vents and a logo plate.
+- POI kinds have one colour each (`sprites::poi::poi_color`: cache `SAND`, derelict `GOLD`,
+  vault `AMBER`, formation `LAVENDER`, rival claim `MINT`) and a 9x9 icon (`poi_icon`), shared
+  by the minimap dots, the map (outline + icon), the collection log and `--worldgen-preview`.
+  A scanner echo is the blinking teal `ICON_ECHO` "?" a couple of tiles off the site; an
+  identified site in scanner range gets thick pulsing corner brackets around its bounds in the
+  world, with its icon above (`world/fx.rs::draw_poi_scanner_marks`).
 
 **Fog** (`terrain/fog.rs`). Per-tile darkness (deeper and farther from explored tiles is darker;
 the top three ground rows are capped so the surface stays readable) is interpolated between tile
@@ -337,7 +367,10 @@ close look at individual pixels.
 Scenes (see `--list`): `art_gallery`, `ui_sheet`, `title`, world scenes (`surface_town`, `town_west`, `town_market`, `town_east`,
 `surface_flying`, `shallow_dig`, `mid_depth_ores`, `deep_lava`, `lost_cargo`, `world_props`,
 `drill_side`, `remote_rigs`, `bomb_blast`, `gas_leak`, `cave_in`, `deep_crystal_faults`,
-`deep_void_geodes`), every
+`deep_void_geodes`, `hazard_telltales`, `strata_boundary`), points of interest
+(`poi_supply_cache`, `poi_derelict_rig`, `poi_vault_sequence`, `poi_vault_seals`,
+`poi_vault_relay`, `poi_vault_open`, `poi_fossil_bed`, `poi_geode`, `poi_rival_claim`,
+`poi_scanner_silhouette`, `poi_scanner_echo`, `map_poi_contacts`, `modal_collection_log`), every
 `interior_<building>` with its counter open, `interior_shop_walk`, every `room_<building>` with
 no panel open, `toast_receipt`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
 `modal_exit_confirm`, `modal_inventory`, `modal_options`, `modal_save_slots`, `map`,
@@ -355,7 +388,9 @@ controller prompts
 Adding a scene: append a `Scene { name, summary, setup }` to `scene_capture::SCENES`. `setup`
 gets a `SceneStage`: `play(seats, |world, seats| ..)` enters a staged world (helpers
 `park_rig`, `park_at`, `sink_rig`, `carve`, `reveal`, `find_tile`, `load_cargo`),
-`hold(frames, input)` / `hold_seats(frames, inputs)` / `settle(frames)` run frames, `shell()`
+`hold(frames, input)` / `hold_seats(frames, inputs)` / `settle(frames)` run frames;
+`stage_poi` swaps in a world holding a wanted POI and `visit_poi` / `approach_poi` place the rig
+beside it (explored) or a few tiles off (unexplored, with a given scanner tier); `shell()`
 opens global menus directly and `seat(n)` / `put_seat_inside` set up one seat's interior and
 dialogs. A unit test builds every scene
 headlessly.

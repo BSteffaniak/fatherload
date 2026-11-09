@@ -8,6 +8,7 @@ use raylib::prelude::*;
 use drillgame_simulation::{
     DiscoveredTiles, DrillDirection, DrillState, FallingBoulder, HazardCloud, InfrastructureKind,
     PlacedBomb, PlacedInfrastructure,
+    poi::{PoiKnowledge, in_scanner_range, scanner_poi_knowledge, scanner_poi_range},
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
@@ -18,6 +19,7 @@ use drillgame_simulation::{
 use crate::rendering::pixel_art::palette::*;
 use crate::rendering::{
     pixel_art::sprites::{
+        poi as poi_art,
         terrain::{CRACKS, CRACKS_LIT},
         world as props,
     },
@@ -480,6 +482,77 @@ pub fn draw_explosion(draw: &mut impl RaylibDraw, explosion: &Explosion) {
         if heat > 0.6 {
             disc(draw, x, y, (radius * 0.2) as i32, CREAM);
         }
+    }
+}
+
+/// Scanner contacts with points of interest in range: big corner brackets around the site's
+/// outline (its silhouette) in the POI's colour from the identifying tier, or a blinking
+/// "strange echo" glyph near it below that.
+pub fn draw_poi_scanner_marks(
+    draw: &mut impl RaylibDraw,
+    terrain: &Terrain,
+    player: &PlayerPresentation,
+    seconds: f32,
+) {
+    if !terrain.settings().generator.has_points_of_interest() {
+        return;
+    }
+    let Some(knowledge) = scanner_poi_knowledge(player.scanner_level, false) else {
+        return;
+    };
+    let center = TilePosition {
+        x: (player.x / TILE_SIZE).floor() as i32,
+        y: (player.y / TILE_SIZE).floor() as i32,
+    };
+    let range = scanner_poi_range(player.scanner_level, false);
+    let pulse = (seconds * 2.0) as i32 % 2 == 0;
+    for poi in terrain.features().pois() {
+        let Some(kind) = poi.poi_kind() else {
+            continue;
+        };
+        if !in_scanner_range(&poi.bounds, center, range) {
+            continue;
+        }
+        if knowledge == PoiKnowledge::Echo {
+            let h = hash(poi.center.x, poi.center.y, 131);
+            let (x, y) = (
+                poi.center.x + (h % 5).cast_signed() - 2,
+                poi.center.y + ((h >> 4) % 5).cast_signed() - 2,
+            );
+            let pen = Pen::at(x as f32 * TILE_SIZE, y as f32 * TILE_SIZE);
+            pen.sprite(
+                draw,
+                &poi_art::ICON_ECHO,
+                poi_art::ICON_ECHO.frame_at(seconds),
+                3,
+                3,
+            );
+            continue;
+        }
+        let color = with_alpha(poi_art::poi_color(kind), if pulse { 230 } else { 150 });
+        let pen = Pen::at(
+            poi.bounds.min.x as f32 * TILE_SIZE,
+            poi.bounds.min.y as f32 * TILE_SIZE,
+        );
+        let (width, height) = (
+            poi.bounds.width() * TILE_ART,
+            poi.bounds.height() * TILE_ART,
+        );
+        let arm = 10;
+        for (x, y, dx, dy) in [
+            (-3, -3, 1, 1),
+            (width + 1, -3, -1, 1),
+            (-3, height + 1, 1, -1),
+            (width + 1, height + 1, -1, -1),
+        ] {
+            let hx = if dx > 0 { x } else { x - arm + 2 };
+            let vy = if dy > 0 { y } else { y - arm + 2 };
+            pen.rect(draw, hx - 1, y - 1, arm + 2, 4, with_alpha(INK, 160));
+            pen.rect(draw, x - 1, vy - 1, 4, arm + 2, with_alpha(INK, 160));
+            pen.rect(draw, hx, y, arm, 2, color);
+            pen.rect(draw, x, vy, 2, arm, color);
+        }
+        pen.sprite(draw, poi_art::poi_icon(kind), 0, width / 2 - 4, -12);
     }
 }
 
