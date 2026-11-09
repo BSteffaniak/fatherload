@@ -118,7 +118,26 @@ impl WorldState {
             drill_down,
             thrust: thrust && player.fuel > 0.0,
         };
-        if let Some((target, direction)) = authoritative_mine_target(player, intent, contact) {
+        let mut chosen = authoritative_mine_target(player, intent, contact);
+        if chosen.is_some_and(|(target, direction)| {
+            direction.is_sideways()
+                && self
+                    .terrain
+                    .tile(target)
+                    .is_none_or(|tile| tile.kind == TileKind::Air)
+        }) {
+            // Steering past open air: a crown bore pressed into the ceiling still bores upward
+            // (an analog stick is rarely dead centre while thrusting).
+            chosen = authoritative_mine_target(
+                player,
+                DrillIntent {
+                    horizontal: 0.0,
+                    ..intent
+                },
+                contact,
+            );
+        }
+        if let Some((target, direction)) = chosen {
             let Some(tile) = self.terrain.tile(target) else {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;

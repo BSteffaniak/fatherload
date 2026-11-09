@@ -281,6 +281,37 @@ fn thrusting_into_the_ceiling_bores_upward_with_the_crown_bore_at_any_tick_rate(
 }
 
 #[test]
+fn crown_bore_still_bores_up_while_steering_past_open_air() {
+    let mut world = shaft_world(60);
+    set_mount(&mut world, 2);
+    // Open the shaft sideways just under the ceiling, so steering points at air.
+    for x in [SHAFT_X - 1, SHAFT_X + 1] {
+        let _ = world.terrain_mut().set_kind(
+            TilePosition {
+                x,
+                y: CEILING_Y + 1,
+            },
+            TileKind::Air,
+        );
+    }
+    under_ceiling(&mut world);
+    let tick = world.simulation_tick();
+    let _ = world.simulate_tick(
+        tick,
+        &TickInputs::held(PLAYER, ControlState::new(0.3, true, false)),
+    );
+    let drill = world.active_drill(PLAYER).expect("drilling");
+    assert_eq!(drill.direction, DrillDirection::Up);
+    assert_eq!(
+        drill.target,
+        TilePosition {
+            x: SHAFT_X,
+            y: CEILING_Y
+        }
+    );
+}
+
+#[test]
 fn falling_past_a_wall_only_drills_it_with_the_gimbal() {
     let mut stock = shaft_world(60);
     mid_air(&mut stock);

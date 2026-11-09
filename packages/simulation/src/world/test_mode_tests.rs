@@ -209,3 +209,58 @@ fn test_mode_replicates_as_a_shared_section_and_round_trips_through_serde() {
         authority.simulation_state_hash()
     );
 }
+
+#[test]
+fn warps_land_safely_on_generated_worlds_of_any_seed_and_size() {
+    use crate::{
+        SimulationParams,
+        worldgen::{HazardIntensity, ResourceRichness, WorldSettings, WorldSize},
+    };
+    for (seed, size) in [
+        (3, WorldSize::Standard),
+        (77, WorldSize::Large),
+        (90_210, WorldSize::Standard),
+    ] {
+        let settings = WorldSettings {
+            size,
+            richness: ResourceRichness::Rich,
+            hazards: HazardIntensity::Brutal,
+            ..WorldSettings::new(seed)
+        };
+        let mut world =
+            WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::default());
+        world.enable_test_mode();
+        let _ = act(&mut world, PLAYER, TestModeAction::SetInvulnerable(true));
+        // Warp down through every band and back up, from wherever the last warp left the rig.
+        for band in Band::ALL
+            .into_iter()
+            .skip(1)
+            .chain(Band::ALL.into_iter().rev())
+        {
+            let output = act(&mut world, PLAYER, TestModeAction::WarpToBand(band));
+            assert_eq!(
+                output.action_outcomes[0].outcome,
+                PlayerScopedCommandOutcome::Applied,
+                "seed {seed}: {band:?}"
+            );
+            idle(&mut world, 60);
+            let rig = world.player(PLAYER).expect("player");
+            let tile = rig.tile_position(TILE_SIZE);
+            if band != Band::Topsoil {
+                assert_eq!(
+                    world.terrain().band_at(tile),
+                    band,
+                    "seed {seed}: settles in {band:?}"
+                );
+                assert!(
+                    world.terrain().is_solid_at(TilePosition {
+                        x: tile.x,
+                        y: tile.y + 1
+                    }),
+                    "seed {seed}: {band:?} pocket has a floor"
+                );
+            }
+            assert!(rig.velocity_y.abs() < 1.0, "seed {seed}: {band:?} at rest");
+        }
+    }
+}
