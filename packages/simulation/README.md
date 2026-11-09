@@ -13,8 +13,22 @@ Every other mutator is `pub(crate)` and runs inside it. Outside this crate it is
 `drillgame_netcode`'s `NetSimulation` impl (host ticks and client prediction) and by tests.
 
 - `TickInputs`: per player, held `ControlState` (quantized horizontal axis, thrust, drill) and
-  one-shot `TickAction`s (`PlayerCommand`: bomb, scanner, infrastructure, rescue and every town
-  service transaction, validated against the acting rig's building).
+  one-shot `TickAction`s (`PlayerCommand`: bomb, scanner, infrastructure, rescue, test-mode
+  toggles and warps, and every town service transaction, validated against the acting rig's
+  building).
+
+Drilling (`world/commands.rs`): the rig drills down or sideways only while resting on solid
+ground (`DrillContact`). The drill mount upgrade (`Player::drill_mount_level`, in the public
+`RigBuild`) adds sideways drilling in flight (tier 1, gimbal) and drilling up into a ceiling the
+rig thrusts against (tier 2, crown bore, `DrillDirection::Up`). The shop gates both tiers on the
+world's deepest tile reaching a band (`economy::upgrade_locked_by`).
+
+Test mode (`test_mode.rs`, `world/test_mode.rs`): `WorldState::enable_test_mode` (before play)
+maxes every rig and the player template, fills the parts locker and grants credits;
+`PlayerCommand::TestMode` toggles invulnerable hulls / infinite fuel (refilled every tick) or
+warps the acting rig into a carved, hazard-free pocket at the top of a band. Depth records and
+deep-reward milestones are skipped. The toggles replicate as the shared `SectionKey::TestMode`
+section and save with the world.
 - `TickOutput`: gameplay events with stable `(tick, ordinal)` ids, one `ActionOutcome` per
   action, the tick's terrain tile writes (`terrain_ops`) and newly discovered tiles per player
   (`discoveries`).
@@ -35,6 +49,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `visibility` | what one client may see: `SectionKey::visible_to`, `redacted_for`, `visible_state_hash` |
 | `state_hash` | the stable world hash (`simulation_state_hash`) and the client-visible variant |
 | `import`, `timing` | building worlds (new game, legacy imports) and per-tick constants |
+| `test_mode` | test-mode setup, per-tick refills and the band warp |
 
 ## World generation (`src/worldgen/`)
 
@@ -79,10 +94,10 @@ seed is bit-identical everywhere:
 
 | Module | Owns |
 |---|---|
-| `strata` | the band stack (`Band`): fixed order, per-seed boundary shifts, waves along x and interleaved fingers |
+| `strata` | the band stack (`Band`): fixed order, per-seed boundary bases (V1/V2: small shifts; V3: a cumulative thickness model with minimum gaps), waves along x and interleaved fingers, `band_layout_rows` for placement passes |
 | `caves` | smoothed noise caverns, worm tunnels and deep chambers; crust, town and spawn-shaft protection |
 | `hazards` | clustered hazard pockets by band rules, scaled by intensity; clearance around spawn and town |
-| `deposits` | per-mineral depth curves, veins / pods / motherlodes, per-band ore budgets, the starter field, artifact beds, prefab slot reservation (V1) |
+| `deposits` | per-mineral depth curves, veins / pods / motherlodes, per-band ore budgets, the starter field, artifact beds, prefab slot reservation (V1); V3 rich worlds thin deep ore specks into fewer, chunkier deposits |
 | `prefabs` | hand-authored POI rooms as char grids with a shared legend (size limits, random fills, switch slots) |
 | `pois` | V2+: POI placement in a per-band region grid (guaranteed kinds, random fills, depth windows, spacing, hazard clearance, spawn/town exclusion) and stamping (flips, shuffled lock orders, band ore/artifacts/guardian hazards); empty regions become reserved prefab slots |
 | `features` | `FeatureIndex`: caverns, chambers, motherlodes, artifact beds, hazard clusters, stratum transitions, prefab slots and points of interest, queryable by kind, band, depth, region or proximity, plus POI queries (`pois`, `pois_of(kind)`, `pois_in_band`, `poi_at(position)`, `nearest_poi(position, kind)`) for quests to bind to (`WorldState::world_features`, recomputed from settings and cached per settings, never replicated) |
@@ -93,7 +108,8 @@ The fairness suite (`worldgen/tests.rs`) checks every sampled seed for a fixed s
 town, caves and hazards clear of spawn and the town, clustered hazards, a starter field worth
 the first upgrades, per-band ore value within target, ore never harder than its band's drill, a
 path to the bottom with each band's own drill, artifacts in every stratum and feature counts in
-bounds, plus golden digests pinned to `GeneratorVersion::V1` and `V2`. `worldgen/poi_tests.rs`
+bounds, V3 band thicknesses within bounds and varying by seed, few deep ore specks on rich V3
+worlds, plus golden digests pinned to `GeneratorVersion::V1`, `V2` and `V3`. `worldgen/poi_tests.rs`
 checks POI counts per band and per kind, caches in the clay, grey stone and slate, spacing,
 spawn/town/hazard clearance, nothing undiggable below spawn, and that every vault's doors,
 switches, relays and seals can be reached and worked from spawn. `DRILLGAME_WORLDGEN_SEEDS=300

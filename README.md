@@ -45,12 +45,21 @@ Drill below the surface, gather minerals and artifacts, manage fuel/hull/cargo/d
 Every new game is a different world. "New Game", "Local Split-Screen" and "Host Online Game"
 open a **New World** dialog: a random seed (re-roll it, type hex digits or any words, or paste
 with `Ctrl+V`), world size (standard 240 tiles wide or large 360), resources (lean / standard /
-rich) and hazards (calm / standard / brutal). The same seed and settings make the same world on
-every machine; the pause menu shows the seed and copies it to share. Online, the host's
-settings define the session.
+rich), hazards (calm / standard / brutal) and **test mode**. The same seed and settings make
+the same world on every machine; the pause menu shows the seed and copies it to share. Online,
+the host's settings define the session.
+
+**Test mode** is for exploring the layers quickly (a god mode): every rig starts with every
+upgrade maxed (drill mount included), every rig part in the locker and 1,000,000 credits. The
+pause menu adds **Warp to Layer** (drops your rig into a safe carved pocket at the top of any
+layer), **Invulnerable Hull** and **Infinite Fuel** (for the whole crew). Depth records and
+deep-reward milestones do not count. Test-mode worlds are marked on the HUD, the pause menu,
+save slots and the title's last-save line; it works in split-screen and online (the host
+chooses it).
 
 Worlds keep a familiar town and a fixed order of layers (topsoil, clay beds, grey stone, slate,
-basalt, then seven deep strata), but each seed shifts and waves the layer boundaries, shapes
+basalt, then seven deep strata), but each seed picks its own layer thicknesses (so a layer can
+start a dozen rows higher or lower than in another world), waves the layer boundaries, shapes
 soft channels and hard shelves, and places its own caverns, worm tunnels, deep chambers, ore
 veins and pods, rare motherlodes, artifact beds and clustered hazard pockets. Rock next to a
 hazard pocket shows tell-tale stains, so careful drillers can read danger before breaking in.
@@ -59,8 +68,9 @@ through each layer with that layer's drill.
 
 ### Points of interest
 
-Hand-built places are stamped into every world (generator v2; worlds and saves from the first
-seeded generator keep generating exactly as before):
+Hand-built places are stamped into every world (generator v2 and later; worlds and saves from
+older generators keep generating exactly as before; v3, the current generator, adds per-seed
+layer thicknesses and fewer, chunkier deep ore deposits on rich worlds):
 
 - **Supply caches** (every layer below the topsoil): hollows of crates. Drill a crate open for a
   fuel canister, a bomb or two, or some credits.
@@ -84,11 +94,11 @@ replacement for selling ore (reward tables: `packages/simulation/src/poi.rs`).
 World generation tools (no window opens):
 
 ```bash
-cargo run --release --bin drillgame -- --worldgen-report --seeds 300 [--size large] [--richness rich] [--hazards brutal]
+cargo run --release --bin drillgame -- --worldgen-report --seeds 300 [--size large] [--richness rich] [--hazards brutal] [--generator v2]
 cargo run --release --bin drillgame -- --worldgen-preview D111-6A4E world.png [--size large] [--scale 4]
 ```
 
-The report prints per-layer ore value, cave share, hazard tiles, artifacts and points of
+The report prints per-layer top row, ore value, ore specks (deposits of 1-3 tiles), cave share, hazard tiles, artifacts and points of
 interest plus feature, POI-kind and hazard-cluster counts (min / mean / max over the seeds); the
 preview writes a whole-world map (layers, caves, ores, hazards, artifacts, with motherlodes,
 artifact beds and chambers outlined, and each point of interest outlined with its map icon).
@@ -97,9 +107,10 @@ Successful return trips award streak bonuses. Emergency rescue returns the rig t
 
 ## Controls
 
-- `A` / `D` or left/right arrows: move horizontally and drill sideways while grounded
-- `W` / up arrow / space: thrust upward
-- `S` / down arrow: drill downward
+- `A` / `D` or left/right arrows: move horizontally and drill sideways while resting on the
+  ground (in flight too with the gimbal drill mount)
+- `W` / up arrow / space: thrust upward (with the crown bore, thrusting into a ceiling drills it)
+- `S` / down arrow: drill downward (while resting on the ground)
 - `C`: trigger an active scanner pulse when a scanner is installed
 - `B`: place a purchased timed bomb underground
 - `E` / `Enter`: interact with buildings/interior counters, confirm menus, or start game
@@ -187,7 +198,10 @@ Press `E` (controller `X`) at a surface building to walk inside its room. Move w
 - Repair Garage: repairs hull in partial or full service increments
 - Ore Depot: sells mineral/artifact cargo and shows receipt history
 - HQ: completes contracts, provides named story/radio briefings, and offers/collects debt advances
-- Upgrade Shop: sells drill, fuel tank, cargo bay, engine, hull, radiator, scanner, and bomb-pack upgrades
+- Upgrade Shop: sells drill, fuel tank, cargo bay, engine, hull, radiator, scanner, and bomb-pack upgrades,
+  plus the late-game **Drill Mount**: the Gimbal Drill Mount (6,000 cr, on sale once anyone reaches
+  the Crystal Faults) drills sideways in flight, and the Crown Bore Mount (24,000 cr, once anyone
+  reaches the Pressure Cathedrals) drills up into a ceiling you thrust against
 
 ## Multiplayer Status
 

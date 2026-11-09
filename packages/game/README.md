@@ -64,12 +64,18 @@ Modules:
   and the `poi_*` scenes swap in the first world from the default seed on that holds the POI
   they show (`stage_poi`).
 - `worldgen_tools` — `drillgame --worldgen-report [--seeds N] [--first-seed S] [--size X]
-  [--richness X] [--hazards X] [--legacy]` prints generator distributions over many seeds, and
+  [--richness X] [--hazards X] [--legacy] [--generator v1|v2|v3]` prints generator distributions over many seeds, and
   `drillgame --worldgen-preview <seed> <out.png> [--size X] [--richness X] [--hazards X]
   [--scale N] [--no-features]` writes a whole-world map PNG through raylib's encoder without a
   window (points of interest get their kind's outline and map icon).
-- `shell::world_setup` — the New World dialog (seed, size, richness, hazards) opened by every
-  "new world" title entry; the seed comes from OS randomness (`random_world_seed`, 48 bits).
+- `shell::world_setup` — the New World dialog (seed, size, richness, hazards, test mode) opened
+  by every "new world" title entry; the seed comes from OS randomness (`random_world_seed`, 48
+  bits). `local_game::world_from_setup` builds the world (test mode via
+  `WorldState::enable_test_mode`).
+- `shell::test_mode` — the pause menu's test-mode entries (Warp to Layer list, invulnerable hull
+  and infinite fuel toggles), each a `PlayerCommand::TestMode` action for the seat driving the
+  menu; a paused local world applies toggles on resume, so the menu shows the pending choice
+  (`ShellState::pending_test_mode`) until the world catches up.
 - `save` — format v6 (`WorldState` + play time; the terrain as generation settings plus tile
   diffs, see the simulation README); `save::legacy` migrates v1-v5 (v1-v5 terrain wrote out
   every tile and is read as `FullTerrain`; v3/v4 worlds carried a derived summary whose
