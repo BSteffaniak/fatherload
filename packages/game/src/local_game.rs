@@ -1012,6 +1012,7 @@ mod tests {
         shell::{ModalScreen, PauseOption, TitleOption, interior_service_x},
     };
 
+    mod quest_tests;
     mod split_seat_tests;
     mod test_mode_tests;
 

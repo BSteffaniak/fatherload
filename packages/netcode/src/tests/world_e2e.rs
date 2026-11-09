@@ -129,6 +129,107 @@ fn world_private_state_reaches_only_its_owner() {
     }
 }
 
+/// Has `player` accept `quest` on `world` (standing at the giver's door for one tick).
+fn accept_quest(
+    world: &mut WorldState,
+    player: drillgame_simulation::PlayerId,
+    quest: drillgame_simulation::QuestId,
+    crew: bool,
+) {
+    use drillgame_simulation::{
+        InputSequence, PlayerCommand, PlayerTickInput, TILE_SIZE, TickAction, TickInputs,
+        quest::binding::giver_door, service::SessionServiceRequest,
+    };
+    let door = giver_door(quest.def().expect("quest").giver);
+    let rig = world.player_mut(player).expect("rig");
+    #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+    {
+        rig.x = (door.x as f32 + 0.5) * TILE_SIZE;
+        rig.y = (door.y as f32 + 0.5) * TILE_SIZE;
+    }
+    let mut inputs = TickInputs::default();
+    inputs.players.insert(
+        player,
+        PlayerTickInput {
+            controls: None,
+            actions: vec![TickAction {
+                sequence: InputSequence::new(0),
+                command: PlayerCommand::Service(SessionServiceRequest::AcceptQuest { quest, crew }),
+            }],
+        },
+    );
+    let tick = world.simulation_tick();
+    let output = world.simulate_tick(tick, &inputs);
+    assert!(
+        output.events.iter().any(|event| matches!(
+            event.kind,
+            drillgame_simulation::GameplayEventKind::QuestAccepted { .. }
+        )),
+        "{quest:?} accepted"
+    );
+}
+
+#[test]
+fn world_quests_replicate_solo_privately_and_crew_quests_to_everyone() {
+    use drillgame_simulation::{QuestId, quest::QuestLog};
+
+    let mut harness = harness(60, 2, LinkConditions::new(20, 3, 0.5));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    let mut world = harness.world().clone();
+    let players: Vec<_> = world.player_ids().collect();
+    let (lead, wing) = (players[0], players[1]);
+    // The lead takes a crew job, the wing a private solo job.
+    {
+        // A crew delivery job: it needs no generated features, so it binds in the harness world.
+        let log = &mut world.player_mut(lead).expect("lead").quests;
+        log.reputation
+            .insert(drillgame_simulation::QuestGiver::Kade, 10);
+        log.deepest_row = 45;
+    }
+    accept_quest(&mut world, lead, QuestId(104), true);
+    accept_quest(&mut world, wing, QuestId(101), false);
+    assert_eq!(world.crew_quests().active.len(), 1);
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(3));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+
+    let host = harness.world();
+    assert_eq!(
+        host.crew_quests().active.len(),
+        1,
+        "the crew job is still on"
+    );
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let me = crate::world::to_sim_player(client.session.player().expect("joined"));
+        let authority = client.session.authority().expect("in game");
+        assert_eq!(
+            authority.crew_quests(),
+            host.crew_quests(),
+            "crew quests are shared"
+        );
+        for player in [lead, wing] {
+            let seen = &authority.player(player).expect("rig").quests;
+            if player == me {
+                assert_eq!(seen, &host.player(player).expect("rig").quests);
+            } else {
+                assert_eq!(seen, &QuestLog::default(), "quest logs are private");
+            }
+        }
+    }
+    assert!(
+        host.player(wing)
+            .expect("wing")
+            .quests
+            .active
+            .iter()
+            .any(|quest| quest.quest == QuestId(101)),
+        "the solo job is on the host"
+    );
+}
+
 #[test]
 fn world_bad_internet_corrections_are_bounded_and_actions_exactly_once() {
     // 150 ms +/- 20 ms jitter with 3 % loss (plus duplication and reordering).
