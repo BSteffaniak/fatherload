@@ -53,8 +53,8 @@ the host's settings define the session.
 
 **Test mode** is for exploring the layers quickly (a god mode): every rig starts with every
 upgrade and hazard counter maxed (drill mount included), every rig part in the locker and
-1,000,000 credits, and drills through anything (lava, foundations, vault walls) near-instantly.
-The
+1,000,000 credits, and drills through anything except bedrock (including lava, foundations and
+vault walls) near-instantly. The
 pause menu adds **Warp to Layer** (drops your rig into a safe carved pocket at the top of any
 layer), **Invulnerable Hull** and **Infinite Fuel** (for the whole crew). Depth records and
 deep-reward milestones do not count. Test-mode worlds are marked on the HUD, the pause menu,
