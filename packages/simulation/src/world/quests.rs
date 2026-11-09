@@ -32,6 +32,27 @@ const CREW_LATCH_MILLIS: u64 = 1_000;
 const ESCORT_RADIUS: i32 = 4;
 /// Rows below the surface after which the stay-down twist arms.
 const STAY_DOWN_ARM_ROWS: i32 = 6;
+/// Rows a relay leg must cover before the marker can go back to the rig that handed it over.
+const RELAY_MIN_LEG_ROWS: i32 = 4;
+
+/// The window (ms) a simultaneous objective allows. A crew with a rig for every spot gets the
+/// tight crew window; a crew short of rigs gets a window stretched toward the solo one for each
+/// spot nobody can stand on (so two rigs can still work a three-spot job with one runner).
+fn simultaneous_window(
+    crew: bool,
+    rigs: usize,
+    spots: usize,
+    window_ms: u32,
+    solo_window_ms: u32,
+) -> u64 {
+    let (window, solo) = (u64::from(window_ms), u64::from(solo_window_ms));
+    if !crew {
+        return solo;
+    }
+    let missing = spots.saturating_sub(rigs.max(1)) as u64;
+    let stretch = spots.saturating_sub(1).max(1) as u64;
+    window + solo.saturating_sub(window) * missing.min(stretch) / stretch
+}
 
 /// What this tick did that objectives care about, gathered while it ran.
 #[derive(Clone, Debug, Default)]
@@ -888,11 +909,13 @@ impl WorldState {
                         helpers.push(*id);
                     }
                 }
-                let window = ticks(u64::from(if quest.crew {
-                    window_ms
-                } else {
-                    solo_window_ms
-                }));
+                let window = ticks(simultaneous_window(
+                    quest.crew,
+                    rigs.len(),
+                    progress.spots.len(),
+                    window_ms,
+                    solo_window_ms,
+                ));
                 let lit = progress.marks.iter().all(|mark| *mark > 0);
                 let first = progress.marks.iter().copied().min().unwrap_or(0);
                 let last = progress.marks.iter().copied().max().unwrap_or(0);
@@ -919,9 +942,15 @@ impl WorldState {
                         progress.done = true;
                         return;
                     }
+                    // A rig can't take the marker straight back: the leg it handed over has
+                    // to be carried a few rows first, or two rigs flying side by side would
+                    // pass it back and forth every tick and never need a real relay.
+                    let leg = (position.y - progress.anchor).abs();
                     if quest.crew
                         && let Some((next, _)) = rigs.iter().find(|(id, tile)| {
-                            *id != carrier && tile_distance(*tile, *position) <= 1
+                            *id != carrier
+                                && tile_distance(*tile, *position) <= 1
+                                && (progress.last_carrier != Some(*id) || leg >= RELAY_MIN_LEG_ROWS)
                         })
                     {
                         progress.carrier = Some(*next);
@@ -929,7 +958,7 @@ impl WorldState {
                         progress.anchor = position.y;
                         return;
                     }
-                    if (position.y - progress.anchor).abs() > i32::from(leg_rows) {
+                    if leg > i32::from(leg_rows) {
                         // Too hot to hold: it drops here and cools.
                         progress.carrier = None;
                         progress.last_carrier = Some(carrier);
@@ -1165,4 +1194,22 @@ fn check_twists(
         return Err(QuestFailure::Rescued);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::simultaneous_window;
+
+    #[test]
+    fn simultaneous_windows_stretch_for_a_crew_short_of_rigs() {
+        // Solo: always the solo window.
+        assert_eq!(simultaneous_window(false, 3, 3, 4_000, 45_000), 45_000);
+        // A rig per spot: the tight crew window.
+        assert_eq!(simultaneous_window(true, 3, 3, 4_000, 45_000), 4_000);
+        assert_eq!(simultaneous_window(true, 4, 2, 3_000, 25_000), 3_000);
+        // Two rigs on three spots: halfway to the solo window.
+        assert_eq!(simultaneous_window(true, 2, 3, 4_000, 45_000), 24_500);
+        // One rig in a crew quest: as forgiving as solo.
+        assert_eq!(simultaneous_window(true, 1, 3, 4_000, 45_000), 45_000);
+    }
 }

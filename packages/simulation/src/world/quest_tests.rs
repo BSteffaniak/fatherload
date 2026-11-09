@@ -28,6 +28,7 @@ const DEMOLITION: QuestId = QuestId(301);
 const TWIN_FUSES: QuestId = QuestId(305);
 const DEAD_MANS_SWITCH: QuestId = QuestId(306);
 const RELAY_RACE: QuestId = QuestId(503);
+const SYNCHRONIZED_FUELING: QuestId = QuestId(505);
 
 fn solo_world() -> WorldState {
     WorldState::new_game_with_settings(LEAD, &WorldSettings::new(3), SimulationParams::default())
@@ -508,6 +509,82 @@ fn the_relay_marker_passes_rig_to_rig_or_cools_for_a_solo_pilot() {
         active(&world, LEAD, RELAY_RACE).expect("active").objectives[0].carrier,
         Some(LEAD)
     );
+}
+
+#[test]
+fn two_rigs_cannot_pass_the_relay_marker_back_and_forth_every_tick() {
+    let mut world = crew_world();
+    unlock(&mut world, LEAD, RELAY_RACE);
+    accept(&mut world, LEAD, RELAY_RACE, true);
+    let door = giver_door(QuestGiver::Pip);
+    let carrier =
+        |world: &WorldState| active(world, LEAD, RELAY_RACE).expect("active").objectives[0].carrier;
+    let _ = idle(&mut world, 1);
+    assert_eq!(carrier(&world), Some(LEAD));
+    place(
+        &mut world,
+        WING,
+        TilePosition {
+            x: door.x + 1,
+            y: door.y,
+        },
+    );
+    let _ = idle(&mut world, 1);
+    assert_eq!(carrier(&world), Some(WING), "handed to the wing");
+    let _ = idle(&mut world, 5);
+    assert_eq!(
+        carrier(&world),
+        Some(WING),
+        "it doesn't bounce straight back to the lead"
+    );
+    // Once the wing has carried a few rows, the lead can take the next leg.
+    let below = door.y + 7;
+    place(
+        &mut world,
+        WING,
+        TilePosition {
+            x: door.x,
+            y: below,
+        },
+    );
+    place(
+        &mut world,
+        LEAD,
+        TilePosition {
+            x: door.x + 1,
+            y: below,
+        },
+    );
+    let _ = idle(&mut world, 1);
+    assert_eq!(carrier(&world), Some(LEAD));
+}
+
+#[test]
+fn a_two_rig_crew_can_work_a_three_spot_job_with_one_runner() {
+    let mut world = crew_world();
+    unlock(&mut world, LEAD, SYNCHRONIZED_FUELING);
+    accept(&mut world, LEAD, SYNCHRONIZED_FUELING, true);
+    assert!(
+        active(&world, LEAD, SYNCHRONIZED_FUELING)
+            .expect("active")
+            .crew
+    );
+    let valves = spots(&world, LEAD, SYNCHRONIZED_FUELING, 0);
+    assert_eq!(valves.len(), 3);
+    place(&mut world, LEAD, valves[0]);
+    place(&mut world, WING, valves[1]);
+    let _ = idle(&mut world, 1);
+    // The wing runs on to the third valve: slower than the three-rig window, but two rigs get
+    // a stretched one.
+    place(&mut world, WING, TilePosition { x: 20, y: 4 });
+    let run = seconds(&world, 8);
+    let _ = idle(&mut world, run);
+    place(&mut world, WING, valves[2]);
+    let events = idle(&mut world, 1);
+    assert!(events.contains(&GameplayEventKind::QuestReady {
+        player_id: LEAD,
+        quest: SYNCHRONIZED_FUELING
+    }));
 }
 
 /// Opens a straight shaft from `from` up to the sky.
