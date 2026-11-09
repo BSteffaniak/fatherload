@@ -1,5 +1,5 @@
 //! The feature index: notable places in a generated world (caverns, motherlodes, artifact beds,
-//! hazard clusters, band transitions and reserved prefab slots).
+//! hazard clusters, band transitions, points of interest and reserved prefab slots).
 //!
 //! It is a deterministic by-product of generation, recomputable from [`super::WorldSettings`],
 //! so it is never replicated or saved. Later systems (quests, POI prefabs, scanners) bind to it
@@ -9,7 +9,10 @@ use std::ops::RangeInclusive;
 
 use serde::{Deserialize, Serialize};
 
-use crate::terrain::{ArtifactKind, MineralKind, TileKind, TilePosition};
+use crate::{
+    poi::{PoiKind, PoiVariant},
+    terrain::{ArtifactKind, MineralKind, TileKind, TilePosition},
+};
 
 use super::strata::Band;
 
@@ -34,10 +37,13 @@ pub enum FeatureKind {
     StratumTransition,
     /// A spot reserved for a future hand-authored prefab room (left untouched for now).
     PrefabSlot,
+    /// A stamped prefab point of interest (see [`crate::poi`]); its detail is
+    /// [`FeatureDetail::Poi`].
+    PointOfInterest,
 }
 
 impl FeatureKind {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::LargeCavern,
         Self::Chamber,
         Self::Motherlode,
@@ -45,6 +51,7 @@ impl FeatureKind {
         Self::HazardCluster,
         Self::StratumTransition,
         Self::PrefabSlot,
+        Self::PointOfInterest,
     ];
 
     #[must_use]
@@ -57,6 +64,7 @@ impl FeatureKind {
             Self::HazardCluster => "hazard cluster",
             Self::StratumTransition => "stratum transition",
             Self::PrefabSlot => "prefab slot",
+            Self::PointOfInterest => "point of interest",
         }
     }
 }
@@ -124,6 +132,18 @@ pub enum FeatureDetail {
     Artifact(ArtifactKind),
     Hazard(HazardKind),
     Transition { upper: Band, lower: Band },
+    Poi(PoiVariant),
+}
+
+impl FeatureDetail {
+    /// The POI variant, if this is a point of interest.
+    #[must_use]
+    pub const fn poi(self) -> Option<PoiVariant> {
+        match self {
+            Self::Poi(variant) => Some(variant),
+            _ => None,
+        }
+    }
 }
 
 /// An inclusive tile rectangle.
@@ -173,6 +193,36 @@ impl TileRect {
     pub const fn height(&self) -> i32 {
         self.max.y - self.min.y + 1
     }
+
+    /// The centre tile (rounded towards the top-left).
+    #[must_use]
+    pub const fn center(&self) -> TilePosition {
+        TilePosition {
+            x: i32::midpoint(self.min.x, self.max.x),
+            y: i32::midpoint(self.min.y, self.max.y),
+        }
+    }
+
+    /// The rectangle grown by `margin` tiles on every side.
+    #[must_use]
+    pub const fn expanded(&self, margin: i32) -> Self {
+        Self {
+            min: TilePosition {
+                x: self.min.x - margin,
+                y: self.min.y - margin,
+            },
+            max: TilePosition {
+                x: self.max.x + margin,
+                y: self.max.y + margin,
+            },
+        }
+    }
+
+    /// Every tile position inside, row by row.
+    pub fn positions(&self) -> impl Iterator<Item = TilePosition> + use<> {
+        let (min, max) = (self.min, self.max);
+        (min.y..=max.y).flat_map(move |y| (min.x..=max.x).map(move |x| TilePosition { x, y }))
+    }
 }
 
 /// One notable place in a world.
@@ -187,6 +237,23 @@ pub struct WorldFeature {
     pub bounds: TileRect,
     /// Tiles the feature covers (open tiles of a cavern, ore of a motherlode, ...).
     pub size: u32,
+}
+
+impl WorldFeature {
+    /// The POI variant, if this feature is a point of interest.
+    #[must_use]
+    pub const fn poi(&self) -> Option<PoiVariant> {
+        self.detail.poi()
+    }
+
+    /// The POI kind, if this feature is a point of interest.
+    #[must_use]
+    pub const fn poi_kind(&self) -> Option<PoiKind> {
+        match self.detail.poi() {
+            Some(variant) => Some(variant.kind()),
+            None => None,
+        }
+    }
 }
 
 /// Every notable feature of one world, in deterministic generation order.
@@ -272,13 +339,52 @@ impl FeatureIndex {
             .filter(move |feature| feature.bounds.intersects(&region))
     }
 
+    /// Every point of interest, in id order.
+    pub fn pois(&self) -> impl Iterator<Item = &WorldFeature> {
+        self.of_kind(FeatureKind::PointOfInterest)
+    }
+
+    /// Points of interest of one kind.
+    pub fn pois_of(&self, kind: PoiKind) -> impl Iterator<Item = &WorldFeature> {
+        self.pois()
+            .filter(move |feature| feature.poi_kind() == Some(kind))
+    }
+
+    /// Points of interest whose centre lies in `band`.
+    pub fn pois_in_band(&self, band: Band) -> impl Iterator<Item = &WorldFeature> {
+        self.pois().filter(move |feature| feature.band == band)
+    }
+
+    /// The point of interest whose bounds contain `position` (lowest id if several overlap).
+    #[must_use]
+    pub fn poi_at(&self, position: TilePosition) -> Option<&WorldFeature> {
+        self.pois()
+            .find(|feature| feature.bounds.contains(position))
+    }
+
+    /// The point of interest (of `kind`, or any kind) whose centre is nearest `position`
+    /// (ties: lowest id).
+    #[must_use]
+    pub fn nearest_poi(
+        &self,
+        position: TilePosition,
+        kind: Option<PoiKind>,
+    ) -> Option<&WorldFeature> {
+        self.pois()
+            .filter(|feature| kind.is_none_or(|kind| feature.poi_kind() == Some(kind)))
+            .min_by_key(|feature| distance_squared(feature.center, position))
+    }
+
     /// The feature of `kind` whose centre is nearest `position` (ties: lowest id).
     #[must_use]
     pub fn nearest(&self, position: TilePosition, kind: FeatureKind) -> Option<&WorldFeature> {
-        self.of_kind(kind).min_by_key(|feature| {
-            let dx = i64::from(feature.center.x - position.x);
-            let dy = i64::from(feature.center.y - position.y);
-            dx * dx + dy * dy
-        })
+        self.of_kind(kind)
+            .min_by_key(|feature| distance_squared(feature.center, position))
     }
+}
+
+fn distance_squared(a: TilePosition, b: TilePosition) -> i64 {
+    let dx = i64::from(a.x - b.x);
+    let dy = i64::from(a.y - b.y);
+    dx * dx + dy * dy
 }

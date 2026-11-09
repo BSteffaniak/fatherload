@@ -4,7 +4,7 @@
 //! |---|---|---|
 //! | [`PlayerRig`]: pose, velocity, fuel, hull | per tick | everyone it is relevant to |
 //! | [`RigBuild`]: the upgrade levels drawn on a rig (hull, radiator, scanner, bulkheads) | on-change [`super::SectionKey::RigBuild`] | everyone |
-//! | [`PlayerInventory`]: cargo, credits, other upgrades, kits, debt, insurance | on-change [`super::SectionKey::Loadout`] | the owner only |
+//! | [`PlayerInventory`]: cargo, credits, other upgrades, kits, debt, insurance, POI journal | on-change [`super::SectionKey::Loadout`] | the owner only |
 //!
 //! [`split_player`] destructures the whole [`Player`] without `..`, so a new player field fails
 //! to compile until it is assigned to one of the parts.
@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     player::Player,
+    poi::PoiJournal,
     terrain::{ArtifactKind, MineralKind, StrategicResourceKind},
 };
 
@@ -67,6 +68,7 @@ pub struct PlayerInventory {
     pub tunnel_support_kits: u32,
     pub pump_station_kits: u32,
     pub ore_processor_kits: u32,
+    pub journal: PoiJournal,
 }
 
 /// Splits a player into its per-tick, public and private parts (exhaustive: every field goes to
@@ -105,6 +107,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         tunnel_support_kits,
         pump_station_kits,
         ore_processor_kits,
+        journal,
     } = player.clone();
     (
         PlayerRig {
@@ -143,6 +146,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             tunnel_support_kits,
             pump_station_kits,
             ore_processor_kits,
+            journal,
         },
     )
 }
@@ -186,6 +190,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         tunnel_support_kits,
         pump_station_kits,
         ore_processor_kits,
+        journal,
     } = inventory;
     Player {
         x,
@@ -219,5 +224,6 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         tunnel_support_kits,
         pump_station_kits,
         ore_processor_kits,
+        journal,
     }
 }

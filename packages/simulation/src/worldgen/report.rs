@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeMap, fmt::Write as _};
 
-use crate::terrain::TileKind;
+use crate::{poi::PoiKind, terrain::TileKind};
 
 use super::{
     Band, FeatureKind, GeneratedWorld, HazardKind, WorldSettings, band_at,
@@ -19,6 +19,8 @@ pub struct BandStats {
     pub artifacts: u64,
     pub artifact_value: u64,
     pub hazard_tiles: u64,
+    /// Points of interest centred in the band.
+    pub pois: u64,
 }
 
 /// Statistics of one world.
@@ -29,6 +31,7 @@ pub struct WorldStats {
     pub hazard_tiles: BTreeMap<HazardKind, u64>,
     pub hazard_clusters: BTreeMap<HazardKind, u64>,
     pub features: BTreeMap<FeatureKind, u64>,
+    pub pois: BTreeMap<PoiKind, u64>,
     pub starter_field_value: u64,
 }
 
@@ -80,6 +83,10 @@ impl WorldStats {
             if let super::FeatureDetail::Hazard(hazard) = feature.detail {
                 *stats.hazard_clusters.entry(hazard).or_default() += 1;
             }
+            if let Some(kind) = feature.poi_kind() {
+                *stats.pois.entry(kind).or_default() += 1;
+                stats.bands[feature.band.index()].pois += 1;
+            }
         }
         stats.starter_field_value = starter_field_value(kind_at);
         stats
@@ -130,6 +137,11 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
     let mut open = [Spread::default(); 12];
     let mut hazards = [Spread::default(); 12];
     let mut artifacts = [Spread::default(); 12];
+    let mut pois = [Spread::default(); 12];
+    let mut poi_kinds: BTreeMap<PoiKind, Spread> = PoiKind::ALL
+        .into_iter()
+        .map(|kind| (kind, Spread::default()))
+        .collect();
     let mut caves = Spread::default();
     let mut starter = Spread::default();
     let mut features: BTreeMap<FeatureKind, Spread> = FeatureKind::ALL
@@ -149,6 +161,10 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
             open[index].add(band.open_tiles * 1000 / band.tiles.max(1));
             hazards[index].add(band.hazard_tiles);
             artifacts[index].add(band.artifacts);
+            pois[index].add(band.pois);
+        }
+        for (kind, spread) in &mut poi_kinds {
+            spread.add(stats.pois.get(kind).copied().unwrap_or_default());
         }
         caves.add(stats.cave_per_mille());
         starter.add(stats.starter_field_value);
@@ -171,25 +187,30 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
     let _ = writeln!(out, "(each cell: min mean max over seeds)\n");
     let _ = writeln!(
         out,
-        "{:<22} {:^23} {:^23} {:^23} {:^23}",
-        "band", "ore value / 10 tiles", "caves (per mille)", "hazard tiles", "artifacts"
+        "{:<22} {:^23} {:^23} {:^23} {:^23} {:^23}",
+        "band", "ore value / 10 tiles", "caves (per mille)", "hazard tiles", "artifacts", "POIs"
     );
     for band in Band::ALL {
         let index = band.index();
         let _ = writeln!(
             out,
-            "{:<22} {} {} {} {}",
+            "{:<22} {} {} {} {} {}",
             band.name(),
             ore[index].cell(),
             open[index].cell(),
             hazards[index].cell(),
             artifacts[index].cell(),
+            pois[index].cell(),
         );
     }
     let _ = writeln!(out, "\n{:<22} {}", "caves overall", caves.cell());
     let _ = writeln!(out, "{:<22} {}", "starter field value", starter.cell());
     let _ = writeln!(out, "\nfeatures");
     for (kind, spread) in &features {
+        let _ = writeln!(out, "  {:<20} {}", kind.name(), spread.cell());
+    }
+    let _ = writeln!(out, "\npoints of interest");
+    for (kind, spread) in &poi_kinds {
         let _ = writeln!(out, "  {:<20} {}", kind.name(), spread.cell());
     }
     let _ = writeln!(out, "\nhazard clusters");

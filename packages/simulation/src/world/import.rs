@@ -161,6 +161,7 @@ impl WorldState {
                 total_earnings: import.total_earnings,
                 expeditions_completed: import.expeditions_completed,
                 next_day_tick: SimulationTick::new(timing.ticks_for_millis(MARKET_DAY_MILLIS)),
+                vault_relay_deadlines: BTreeMap::new(),
             },
             scan_markers: import.scan_markers.clone(),
             collapse_warnings: import.collapse_warnings.clone(),

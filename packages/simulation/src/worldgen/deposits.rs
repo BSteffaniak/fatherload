@@ -502,7 +502,7 @@ const fn band_artifacts(band: Band) -> &'static [(ArtifactKind, u32)] {
     }
 }
 
-fn pick_artifact(band: Band, rng: &mut RegionRng) -> Option<ArtifactKind> {
+pub(crate) fn pick_artifact(band: Band, rng: &mut RegionRng) -> Option<ArtifactKind> {
     let table = band_artifacts(band);
     let weights: Vec<u32> = table.iter().map(|(_, weight)| *weight).collect();
     rng.pick(&weights).map(|index| table[index].0)

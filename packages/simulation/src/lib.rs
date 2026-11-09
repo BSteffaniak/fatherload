@@ -19,6 +19,7 @@ pub mod ids;
 pub mod infrastructure;
 pub mod input;
 pub mod player;
+pub mod poi;
 pub mod progression;
 pub mod quantize;
 pub mod rig;
@@ -41,6 +42,7 @@ pub use infrastructure::{
 };
 pub use input::{ControlState, PlayerTickInput, TickInputs};
 pub use player::Player;
+pub use poi::{PoiJournal, PoiKind, PoiKnowledge, PoiReward, PoiTile, PoiVariant};
 pub use progression::{
     ActiveWorldEvent, Expedition, ExpeditionObjectiveKind, LegendaryBlueprint, SideContract,
     SideContractKind, WorldEventKind,

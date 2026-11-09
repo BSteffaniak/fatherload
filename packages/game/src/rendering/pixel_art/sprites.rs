@@ -5,6 +5,7 @@
 pub mod icons;
 pub mod interior;
 pub mod menu_icons;
+pub mod poi;
 pub mod prompts;
 pub mod rig;
 pub mod terrain;
@@ -92,6 +93,29 @@ pub const ALL: &[&SpriteDef] = &[
     &terrain::MANTLE_HEART,
     &terrain::CRACKS,
     &terrain::CRACKS_LIT,
+    &poi::CRATE,
+    &poi::SALVAGE_CORE,
+    &poi::VAULT_DOOR,
+    &poi::VAULT_SEAL,
+    &poi::VAULT_SEAL_VENTED,
+    &poi::SWITCH_1,
+    &poi::SWITCH_2,
+    &poi::SWITCH_3,
+    &poi::SWITCH_1_LIT,
+    &poi::SWITCH_2_LIT,
+    &poi::SWITCH_3_LIT,
+    &poi::RELAY,
+    &poi::RELAY_LIT,
+    &poi::VAULT_CACHE,
+    &poi::LOCKER,
+    &poi::SHELL_IMPRINT,
+    &poi::BONE_IMPRINT,
+    &poi::ICON_CACHE,
+    &poi::ICON_DERELICT,
+    &poi::ICON_VAULT,
+    &poi::ICON_FORMATION,
+    &poi::ICON_OUTPOST,
+    &poi::ICON_ECHO,
     &interior::shop::WALL,
     &interior::shop::PLANK,
     &interior::shop::FLOOR,

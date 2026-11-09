@@ -218,8 +218,9 @@ impl WorldState {
                 )
             });
             if next_tick >= deadline {
-                let _blast = self.detonate_bomb_at(bomb_tile_position(bomb), 2);
+                let blast = self.detonate_bomb_at(bomb_tile_position(bomb), 2);
                 output.push_event(GameplayEventKind::BombDetonated);
+                self.vent_vault_seals(&blast.changed_tiles, &mut output);
             } else {
                 let mut bomb = bomb;
                 bomb.timer_seconds = timing.rate.seconds_until(next_tick, deadline);
@@ -273,6 +274,7 @@ impl WorldState {
                     | MineResult::Exploded
                     | MineResult::Blast
                     | MineResult::Mined(_)
+                    | MineResult::Activated(_)
             ) {
                 self.active_drill_timers.remove(&player_id);
             }
@@ -328,6 +330,12 @@ impl WorldState {
                     output.push_event(GameplayEventKind::HazardChanged);
                     output.push_event(GameplayEventKind::BouldersChanged);
                 }
+                MineResult::Mined(TileKind::Poi(tile)) => {
+                    self.open_poi_tile(player_id, target, tile, &mut output);
+                }
+                MineResult::Activated(lit) => {
+                    self.activate_vault_lock(target, lit, next_tick, &mut output);
+                }
                 MineResult::Blocked | MineResult::Chipped | MineResult::Mined(_) => {}
             }
         }
@@ -340,6 +348,8 @@ impl WorldState {
             self.advance_deep_run_pressure(player_id, next_tick, &mut output);
         }
         self.advance_falling_boulders(next_tick, &mut output);
+        self.advance_vault_relays(next_tick, &mut output);
+        self.track_poi_visits(&mut output);
         self.reveal_tiles_near_players();
         output.terrain_ops = self.terrain.finish_journal();
         output.discoveries = self.take_discoveries();

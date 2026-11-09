@@ -26,6 +26,14 @@ fn sample_seeds() -> impl Iterator<Item = u64> {
     (0..count).map(|index| index.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x5EED)
 }
 
+/// Standard settings pinned to [`GeneratorVersion::V1`].
+const fn v1(seed: u64) -> WorldSettings {
+    WorldSettings {
+        generator: GeneratorVersion::V1,
+        ..WorldSettings::new(seed)
+    }
+}
+
 fn tile_at(world: &GeneratedWorld, x: i32, y: i32) -> Option<TileKind> {
     (x >= 0 && y >= 0 && x < world.width && y < world.height)
         .then(|| world.tiles[usize::try_from(y * world.width + x).unwrap_or(0)].kind)
@@ -62,17 +70,14 @@ fn same_settings_generate_identical_worlds() {
 #[test]
 fn golden_world_digests_are_pinned_to_the_generator_version() {
     let cases = [
-        (
-            WorldSettings::new(DEFAULT_WORLD_SEED),
-            0xacad_3db4_cf17_715d,
-        ),
-        (WorldSettings::new(1), 0xe24f_c0a8_4dfb_6f08),
+        (v1(DEFAULT_WORLD_SEED), 0xacad_3db4_cf17_715d),
+        (v1(1), 0xe24f_c0a8_4dfb_6f08),
         (
             WorldSettings {
                 size: WorldSize::Large,
                 richness: ResourceRichness::Rich,
                 hazards: HazardIntensity::Brutal,
-                ..WorldSettings::new(0x00C0_FFEE)
+                ..v1(0x00C0_FFEE)
             },
             0xea3e_f91a_6ab2_2d0c,
         ),
@@ -80,7 +85,7 @@ fn golden_world_digests_are_pinned_to_the_generator_version() {
             WorldSettings {
                 richness: ResourceRichness::Lean,
                 hazards: HazardIntensity::Calm,
-                ..WorldSettings::new(77)
+                ..v1(77)
             },
             0x2c63_e545_6d83_9051,
         ),
@@ -93,6 +98,41 @@ fn golden_world_digests_are_pinned_to_the_generator_version() {
     assert_eq!(
         actual, expected,
         "generator v1 output changed; actual digests: {actual:#x?}"
+    );
+}
+
+/// Golden digests of a few worlds for [`GeneratorVersion::V2`] (V1 plus points of interest).
+#[test]
+fn golden_v2_world_digests_are_pinned() {
+    let cases = [
+        (
+            WorldSettings::new(DEFAULT_WORLD_SEED),
+            0xc3cb_282d_a845_6bca,
+        ),
+        (WorldSettings::new(1), 0x527b_dadf_83a0_c355),
+        (
+            WorldSettings {
+                size: WorldSize::Large,
+                richness: ResourceRichness::Rich,
+                hazards: HazardIntensity::Brutal,
+                ..WorldSettings::new(0x00C0_FFEE)
+            },
+            0xbde8_0bc6_70c9_8897,
+        ),
+    ];
+    assert!(
+        cases
+            .iter()
+            .all(|(settings, _)| settings.generator == GeneratorVersion::V2)
+    );
+    let actual: Vec<u64> = cases
+        .iter()
+        .map(|(settings, _)| digest(&generate(settings)))
+        .collect();
+    let expected: Vec<u64> = cases.iter().map(|(_, digest)| *digest).collect();
+    assert_eq!(
+        actual, expected,
+        "generator v2 output changed; actual digests: {actual:#x?}"
     );
 }
 
@@ -464,7 +504,8 @@ fn the_feature_index_counts_stay_in_bounds() {
                 (FeatureKind::ArtifactBed, 10 * scale, 24 * scale),
                 (FeatureKind::HazardCluster, 30 * scale, 120 * scale),
                 (FeatureKind::StratumTransition, 11, 11),
-                (FeatureKind::PrefabSlot, 8 * scale, 11 * scale),
+                (FeatureKind::PrefabSlot, 4 * scale, 16 * scale),
+                (FeatureKind::PointOfInterest, 6 * scale + 12, 24 * scale),
             ];
             for (kind, low, high) in bounds {
                 let count = features.count(kind);

@@ -17,6 +17,11 @@
 //! 6. **Features** ([`features`]): the index of notable places, for quests and prefabs to bind
 //!    to later.
 //!
+//! From [`GeneratorVersion::V2`], **points of interest** ([`pois`]) are stamped between steps 4
+//! and 5: hand-authored [`prefabs`] (caches, derelicts, vaults, formations, rival claims) in a
+//! region grid, kept clear of hazards, spawn and the town; regions left empty stay reserved
+//! prefab slots. Deposits then flow around them and count their ore toward the band budgets.
+//!
 //! Region-based placement uses [`noise::RegionRng`] seeded per region and purpose, so the
 //! result never depends on iteration order across platforms.
 
@@ -25,6 +30,10 @@ pub mod deposits;
 pub mod features;
 pub mod hazards;
 pub mod noise;
+#[cfg(test)]
+mod poi_tests;
+pub mod pois;
+pub mod prefabs;
 pub mod report;
 pub mod strata;
 #[cfg(test)]
@@ -50,20 +59,30 @@ use strata::SKY_ROWS;
 pub enum GeneratorVersion {
     /// The original fixed-depth hash generator (saves from before seeded generation).
     Legacy,
-    /// Seeded layered generation, first version.
-    #[default]
+    /// Seeded layered generation, first version (no points of interest).
     V1,
+    /// V1 plus hand-authored prefab points of interest (caches, derelicts, vaults, formations
+    /// and rival claims) stamped into a region grid.
+    #[default]
+    V2,
 }
 
 impl GeneratorVersion {
     /// The generator new worlds use.
-    pub const CURRENT: Self = Self::V1;
+    pub const CURRENT: Self = Self::V2;
+
+    /// Whether this generator stamps points of interest.
+    #[must_use]
+    pub const fn has_points_of_interest(self) -> bool {
+        matches!(self, Self::V2)
+    }
 
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
             Self::Legacy => "legacy",
             Self::V1 => "v1",
+            Self::V2 => "v2",
         }
     }
 }
@@ -311,6 +330,9 @@ pub fn generate(settings: &WorldSettings) -> GeneratedWorld {
     canvas.fill_rock();
     caves::carve(&mut canvas);
     hazards::place(&mut canvas);
+    if settings.generator.has_points_of_interest() {
+        pois::place(&mut canvas);
+    }
     deposits::place(&mut canvas);
     canvas.index_layout_features();
     let tiles = canvas
@@ -433,7 +455,8 @@ impl<'s> Canvas<'s> {
         }
     }
 
-    /// Step 6 (layout part): band transitions and reserved prefab slots.
+    /// Step 6 (layout part): band transitions, plus reserved prefab slots in V1 worlds (V2+
+    /// reserves its slots while placing POIs).
     fn index_layout_features(&mut self) {
         for index in 0..strata::BOUNDARY_COUNT {
             let depths: Vec<i32> = (0..self.width)
@@ -470,7 +493,9 @@ impl<'s> Canvas<'s> {
                 u32::try_from(self.width).unwrap_or_default(),
             );
         }
-        deposits::reserve_prefab_slots(self);
+        if !self.settings.generator.has_points_of_interest() {
+            deposits::reserve_prefab_slots(self);
+        }
     }
 }
 

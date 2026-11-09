@@ -130,10 +130,12 @@ pub struct MarkersSection {
 }
 
 /// World-level deadlines.
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TimersSection {
     pub next_day_tick: SimulationTick,
     pub escape_deadline: Option<SimulationTick>,
+    /// Twin-relay vault locks waiting for their second relay.
+    pub vault_relay_deadlines: BTreeMap<crate::worldgen::FeatureId, SimulationTick>,
 }
 
 /// Session constants: fixed for the lifetime of a session.
@@ -427,6 +429,7 @@ impl WorldState {
             total_earnings,
             expeditions_completed,
             next_day_tick,
+            vault_relay_deadlines,
         } = progression;
         Some(match key {
             SectionKey::Loadout(player_id) => {
@@ -484,6 +487,7 @@ impl WorldState {
             SectionKey::Timers => SectionPayload::Timers(TimersSection {
                 next_day_tick: *next_day_tick,
                 escape_deadline: *escape_deadline,
+                vault_relay_deadlines: vault_relay_deadlines.clone(),
             }),
             SectionKey::Session => SectionPayload::Session(Box::new(SessionSection {
                 timing: *timing,
@@ -611,9 +615,11 @@ impl WorldState {
                 let TimersSection {
                     next_day_tick,
                     escape_deadline,
+                    vault_relay_deadlines,
                 } = timers;
                 self.progression.next_day_tick = next_day_tick;
                 self.progression.escape_deadline = escape_deadline;
+                self.progression.vault_relay_deadlines = vault_relay_deadlines;
             }
             (SectionKey::Session, SectionPayload::Session(session)) => {
                 let SessionSection {

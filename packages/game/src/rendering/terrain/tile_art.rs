@@ -34,6 +34,10 @@ use crate::rendering::pixel_art::{
     sprites::terrain::{VOLATILE_CRYSTAL, artifact_stamp, ore_stamp},
 };
 
+mod poi_art;
+
+pub use poi_art::poi_color;
+
 /// Art pixels per tile edge (a tile is 32 world pixels at 2 world pixels per art pixel).
 pub const TILE_ART: i32 = 16;
 const TILE_ART_USIZE: usize = 16;
@@ -190,6 +194,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Lava => index_of(ORANGE),
         TileKind::Gas => index_of(LEAF),
         TileKind::Air => strata.back[0],
+        TileKind::Poi(tile) => return poi_color(tile, band),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -363,7 +368,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Artifact(_)
         | TileKind::Gas
         | TileKind::ExplosivePocket
-        | TileKind::PressurePocket => base_pixel(host, strata, host, x, y),
+        | TileKind::PressurePocket
+        | TileKind::Poi(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -516,7 +522,26 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             paint_grass_blades(&mut canvas, terrain, position, down);
         } else {
             paint_cave(&mut canvas, &strata, up, left, right);
+            if poi_art::inside_vault(terrain, position) {
+                paint_vault_room(&mut canvas, &strata, up, left, right);
+            }
         }
+        return canvas;
+    }
+    if let TileKind::Poi(tile) = kind {
+        poi_art::paint(
+            &mut canvas,
+            terrain,
+            position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
         return canvas;
     }
 
@@ -838,6 +863,25 @@ fn paint_grass_blades(
                 canvas.set(px, TILE_ART - 3, leaf);
             }
             _ => {}
+        }
+    }
+}
+
+/// Air inside a vault: tiled panels instead of rock, with the same contact shadows.
+fn paint_vault_room(canvas: &mut TileCanvas, strata: &Strata, up: Cell, left: Cell, right: Cell) {
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
+            let shadowed = (up == Cell::Solid && (py < 2 || (py < 4 && bayer4(gx, gy) < 6)))
+                || (left == Cell::Solid && (px == 0 || (px == 1 && bayer4(gx, gy) < 8)))
+                || (right == Cell::Solid
+                    && (px == TILE_ART - 1 || (px == TILE_ART - 2 && bayer4(gx, gy) < 8)));
+            let index = if shadowed {
+                index_of(INK)
+            } else {
+                poi_art::vault_floor_pixel(strata, gx, gy)
+            };
+            canvas.set(px, py, index);
         }
     }
 }

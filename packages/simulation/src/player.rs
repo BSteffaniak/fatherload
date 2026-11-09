@@ -7,7 +7,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TilePosition};
+use crate::{
+    poi::PoiJournal,
+    terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TilePosition},
+};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Player {
@@ -56,6 +59,9 @@ pub struct Player {
     pub pump_station_kits: u32,
     #[serde(default)]
     pub ore_processor_kits: u32,
+    /// Points of interest this player knows about and the logs they recovered.
+    #[serde(default)]
+    pub journal: PoiJournal,
 }
 
 #[allow(
@@ -97,6 +103,7 @@ impl Player {
             tunnel_support_kits: 0,
             pump_station_kits: 0,
             ore_processor_kits: 0,
+            journal: PoiJournal::default(),
         }
     }
 

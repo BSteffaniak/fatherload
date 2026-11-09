@@ -37,6 +37,7 @@ impl WorldState {
                 | MineResult::Exploded
                 | MineResult::Blast
                 | MineResult::Mined(_)
+                | MineResult::Activated(_)
         ) {
             self.active_drills.remove(&player_id);
         }
@@ -82,6 +83,9 @@ impl WorldState {
                 player.hull = quantize_simulation_scalar((player.hull - 24.0).max(0.0));
                 player.velocity_x = quantize_simulation_scalar(player.velocity_x * -0.7);
                 player.velocity_y = -260.0;
+            }
+            MineResult::Activated(_) => {
+                player.fuel = quantize_simulation_scalar((player.fuel - 0.45).max(0.0));
             }
             MineResult::Blocked | MineResult::TooDangerous | MineResult::Chipped => {}
         }
@@ -228,6 +232,7 @@ impl WorldState {
                 self.scanner_cooldown_deadlines.insert(player_id, deadline);
                 let center = player.tile_position(TILE_SIZE);
                 let _revealed = self.reveal_scanner_area(player_id, center, 4);
+                let _contacts = self.ping_pois(player_id, center);
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::PlaceBomb => {
@@ -346,6 +351,13 @@ pub(super) fn authoritative_drill_seconds_per_chip(
         | TileKind::MagmaVent => 0.08,
         TileKind::Ore(_) => 0.16,
         TileKind::Artifact(_) => 0.21,
+        TileKind::Poi(tile) => match tile {
+            crate::poi::PoiTile::SupplyCrate
+            | crate::poi::PoiTile::VaultSwitch { .. }
+            | crate::poi::PoiTile::VaultRelay { .. } => 0.12,
+            crate::poi::PoiTile::GeodeShell => 0.2,
+            _ => 0.16,
+        },
     };
     let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
         || parts.contains(&RigPartKind::ResonanceDrill)

@@ -4,9 +4,12 @@
 //!   [--richness lean|standard|rich] [--hazards calm|standard|brutal] [--legacy]` prints ore,
 //!   cave, hazard, artifact and feature distributions over many seeds.
 //! - `drillgame --worldgen-preview <seed> <out.png> [--size standard|large] [--richness X]
-//!   [--hazards Y] [--scale N] [--no-features]` writes a whole-world map PNG (no window opens).
+//!   [--hazards Y] [--scale N] [--no-features]` writes a whole-world map PNG (no window opens),
+//!   with motherlodes, artifact beds, chambers and points of interest outlined (POIs also get
+//!   their map icon).
 
 use drillgame_simulation::{
+    poi::PoiKind,
     terrain::{MineralKind, TileKind},
     worldgen::{
         self, Band, FeatureKind, GeneratorVersion, HazardIntensity, HazardKind, ResourceRichness,
@@ -16,7 +19,10 @@ use drillgame_simulation::{
 };
 use raylib::prelude::Color;
 
-use crate::rendering::{pixel_art::palette, terrain::tile_art};
+use crate::rendering::{
+    pixel_art::{palette, sprite::SpriteDef, sprites::poi::poi_icon},
+    terrain::tile_art,
+};
 
 /// A parsed worldgen tool invocation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -216,6 +222,28 @@ impl Canvas {
         self.draw_rectangle(x + width - 1, y, 1, height, color);
     }
 
+    /// Blits `sprite`'s first frame with each art pixel `scale` pixels square.
+    fn draw_sprite(&mut self, sprite: &SpriteDef, x: i32, y: i32, scale: i32) {
+        let Some(rows) = sprite.frames.first() else {
+            return;
+        };
+        for (row_index, row) in (0_i32..).zip(rows.iter()) {
+            for (column, symbol) in (0_i32..).zip(row.chars()) {
+                if let Some(color) = sprite.color_of(symbol)
+                    && color.a > 0
+                {
+                    self.draw_rectangle(
+                        x + column * scale,
+                        y + row_index * scale,
+                        scale,
+                        scale,
+                        color,
+                    );
+                }
+            }
+        }
+    }
+
     fn export_png(&mut self, path: &str) -> Result<(), String> {
         let c_path = std::ffi::CString::new(path).map_err(|error| error.to_string())?;
         let image = raylib::ffi::Image {
@@ -298,6 +326,9 @@ fn preview_image(
                 FeatureKind::Motherlode => palette::GOLD,
                 FeatureKind::ArtifactBed => palette::PINK,
                 FeatureKind::Chamber => palette::ICE,
+                FeatureKind::PointOfInterest => {
+                    feature.poi_kind().map_or(palette::BONE, poi_outline_color)
+                }
                 FeatureKind::PrefabSlot
                 | FeatureKind::LargeCavern
                 | FeatureKind::HazardCluster
@@ -312,8 +343,30 @@ fn preview_image(
                 color,
             );
         }
+        // POI icons on top of every outline, centred on the POI.
+        let icon_scale = (scale / 2).max(1);
+        for poi in world.features.pois() {
+            let Some(kind) = poi.poi_kind() else {
+                continue;
+            };
+            let icon = poi_icon(kind);
+            let x = legend + poi.center.x * scale + scale / 2 - icon.width() * icon_scale / 2;
+            let y = poi.center.y * scale + scale / 2 - icon.height() * icon_scale / 2;
+            image.draw_sprite(icon, x, y, icon_scale);
+        }
     }
     image
+}
+
+/// Outline colour of a POI kind on the preview.
+const fn poi_outline_color(kind: PoiKind) -> Color {
+    match kind {
+        PoiKind::SupplyCache => palette::SAND,
+        PoiKind::DerelictRig => palette::STEEL_LIGHT,
+        PoiKind::Vault => palette::AMBER,
+        PoiKind::Formation => palette::LAVENDER,
+        PoiKind::RivalClaim => palette::MINT,
+    }
 }
 
 /// The hazard tile within two tiles of `(x, y)`, if any (the reach of the in-game stain).
@@ -372,6 +425,7 @@ fn tile_color(kind: TileKind, band: Band, y: i32) -> Color {
         TileKind::MagmaVent => palette::RED,
         TileKind::PressurePocket => palette::SKY,
         TileKind::ExplosivePocket => palette::AMBER,
+        TileKind::Poi(tile) => tile_art::poi_color(tile, band),
     }
 }
 

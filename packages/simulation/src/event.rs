@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     command::PlayerCommand,
     ids::{InputSequence, PlayerId, SimulationTick},
+    poi::{PoiKind, PoiReward},
     summary::PlayerScopedCommandOutcome,
+    worldgen::FeatureId,
 };
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -16,20 +18,61 @@ pub struct GameplayEventId {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum GameplayEventKind {
-    DrillStarted { player_id: PlayerId },
-    PurchaseCompleted { player_id: PlayerId },
-    CargoChanged { player_id: PlayerId },
-    BombPlaced { player_id: PlayerId },
-    InfrastructurePlaced { player_id: PlayerId },
-    ScannerUsed { player_id: PlayerId },
-    EscapeStarted { player_id: PlayerId },
+    DrillStarted {
+        player_id: PlayerId,
+    },
+    PurchaseCompleted {
+        player_id: PlayerId,
+    },
+    CargoChanged {
+        player_id: PlayerId,
+    },
+    BombPlaced {
+        player_id: PlayerId,
+    },
+    InfrastructurePlaced {
+        player_id: PlayerId,
+    },
+    ScannerUsed {
+        player_id: PlayerId,
+    },
+    EscapeStarted {
+        player_id: PlayerId,
+    },
     EscapeTunnelChanged,
-    DeepRewardGranted { player_id: PlayerId },
-    RescueTriggered { player_id: PlayerId },
-    PlayerDamaged { player_id: PlayerId },
+    DeepRewardGranted {
+        player_id: PlayerId,
+    },
+    RescueTriggered {
+        player_id: PlayerId,
+    },
+    PlayerDamaged {
+        player_id: PlayerId,
+    },
     HazardChanged,
     BouldersChanged,
     BombDetonated,
+    /// A player opened a POI tile (a crate, a derelict's core, a vault cache, an outpost
+    /// locker) and received `reward`.
+    PoiOpened {
+        player_id: PlayerId,
+        poi: PoiKind,
+        reward: PoiReward,
+    },
+    /// A player entered a point of interest for the first time.
+    PoiDiscovered {
+        player_id: PlayerId,
+        feature: FeatureId,
+        poi: PoiKind,
+    },
+    /// A vault's lock opened (its doors are gone).
+    VaultOpened {
+        feature: FeatureId,
+    },
+    /// A vault's lock reset (wrong switch, or a relay cooled down).
+    VaultLockReset {
+        feature: FeatureId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

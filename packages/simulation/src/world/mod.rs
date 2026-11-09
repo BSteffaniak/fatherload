@@ -31,6 +31,9 @@ mod movement;
 #[cfg(test)]
 mod persistence_tests;
 mod player_sections;
+#[cfg(test)]
+mod poi_tests;
+mod pois;
 mod progression;
 mod replication;
 #[cfg(test)]
@@ -183,6 +186,9 @@ pub struct CanonicalProgressionState {
     pub total_earnings: u32,
     pub expeditions_completed: u32,
     pub next_day_tick: SimulationTick,
+    /// Twin-relay vaults with one relay lit, and the tick their lock resets at.
+    #[serde(default)]
+    pub vault_relay_deadlines: BTreeMap<crate::worldgen::FeatureId, SimulationTick>,
 }
 
 /// The canonical gameplay world.

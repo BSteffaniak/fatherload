@@ -10,6 +10,7 @@ mod persistence;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    poi::PoiTile,
     surface::building_foundation_at,
     worldgen::{self, Band, FeatureIndex, WorldSettings},
 };
@@ -213,6 +214,8 @@ pub enum TileKind {
     MagmaVent,
     Ore(MineralKind),
     Artifact(ArtifactKind),
+    /// A point-of-interest fixture (crates, wreckage, vault parts, formations, outposts).
+    Poi(PoiTile),
 }
 
 impl TileKind {
@@ -232,6 +235,7 @@ impl TileKind {
             Self::MagmaVent => "magma vent",
             Self::Ore(mineral) => mineral.name(),
             Self::Artifact(artifact) => artifact.name(),
+            Self::Poi(tile) => tile.name(),
         }
     }
 }
@@ -323,6 +327,7 @@ impl Tile {
             TileKind::MagmaVent => 10,
             TileKind::Ore(mineral) => 0x100 | mineral as u64,
             TileKind::Artifact(artifact) => 0x200 | artifact as u64,
+            TileKind::Poi(tile) => 0x300 | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -621,9 +626,23 @@ impl Terrain {
             return MineResult::Blast;
         }
 
+        if let TileKind::Poi(poi) = tile.kind
+            && poi.hardness() == crate::poi::UNDRILLABLE
+        {
+            return MineResult::Blocked;
+        }
+
         tile.durability = tile.durability.saturating_sub(1);
         if tile.durability > 0 {
             return MineResult::Chipped;
+        }
+
+        if let TileKind::Poi(poi) = tile.kind
+            && let Some(lit) = poi.activated()
+        {
+            tile.kind = TileKind::Poi(lit);
+            tile.durability = lit.durability();
+            return MineResult::Activated(lit);
         }
 
         let mined = tile.kind;
@@ -642,21 +661,29 @@ impl Terrain {
                 let Some(index) = self.index(position) else {
                     continue;
                 };
-                if !matches!(
-                    self.tiles[index].kind,
-                    TileKind::Air | TileKind::Lava | TileKind::Foundation
-                ) {
-                    self.write_tile(
-                        index,
-                        position,
-                        Tile {
-                            kind: TileKind::Air,
-                            durability: 0,
-                        },
-                    );
+                let left = match self.tiles[index].kind {
+                    TileKind::Air | TileKind::Lava | TileKind::Foundation => continue,
+                    TileKind::Poi(poi) => match poi.after_blast() {
+                        None => continue,
+                        Some(left) => left,
+                    },
+                    _ => None,
+                };
+                let tile = left.map_or(
+                    Tile {
+                        kind: TileKind::Air,
+                        durability: 0,
+                    },
+                    |poi| Tile {
+                        kind: TileKind::Poi(poi),
+                        durability: poi.durability(),
+                    },
+                );
+                self.write_tile(index, position, tile);
+                if tile.kind == TileKind::Air {
                     result.cleared += 1;
-                    result.changed_tiles.push(position);
                 }
+                result.changed_tiles.push(position);
             }
         }
         result
@@ -686,6 +713,8 @@ pub enum MineResult {
     Blast,
     Chipped,
     Mined(TileKind),
+    /// A vault switch or relay was drilled through and lit up (it stays in place).
+    Activated(PoiTile),
 }
 
 /// A tile of the original fixed-depth generator ([`GeneratorVersion::Legacy`] worlds).
@@ -908,6 +937,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
             | MineralKind::Mythril,
         )
         | TileKind::Artifact(ArtifactKind::BuriedIdol | ArtifactKind::StarCore) => 4,
+        TileKind::Poi(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -936,6 +966,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         | TileKind::MagmaVent => 1,
         TileKind::Ore(mineral) => tile_hardness(TileKind::Ore(mineral)) + 2,
         TileKind::Artifact(artifact) => tile_hardness(TileKind::Artifact(artifact)) + 5,
+        TileKind::Poi(tile) => tile.durability(),
     }
 }
 

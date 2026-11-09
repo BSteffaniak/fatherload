@@ -1,8 +1,11 @@
+mod poi_map;
+
 use raylib::prelude::*;
 
 use drillgame_simulation::{
     DiscoveredTiles, Player,
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
+    worldgen::Band,
 };
 
 #[allow(
@@ -521,6 +524,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::ExplosivePocket | TileKind::PressurePocket => RED,
         TileKind::Stone | TileKind::HardRock | TileKind::Foundation => STONE,
         TileKind::Dirt | TileKind::Clay => LOAM,
+        TileKind::Poi(tile) => super::terrain::tile_art::poi_color(tile, Band::Stone),
     }
 }
 
@@ -583,6 +587,14 @@ pub(super) fn draw_minimap_for_view(
             y + (tile_y - origin_y) * height / visible_height,
         )
     };
+    poi_map::draw_minimap_markers(
+        draw,
+        &poi_map::markers(terrain, view.player),
+        |tile_x, tile_y| {
+            (tile_y >= origin_y && tile_y < origin_y + visible_height)
+                .then(|| to_map(tile_x, tile_y))
+        },
+    );
     for remote in players
         .iter()
         .filter(|other| other.player_id != view.player_id)
@@ -707,36 +719,38 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
     }
 }
 
+/// The collection log: sites visited, scanner contacts, recovered logs and mining intelligence.
 fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let mut sections = poi_map::collection_sections(ui.snapshot.terrain, ui.player);
+    sections.push(Section::new(
+        "Discoveries",
+        PINK,
+        vec![
+            SectionItem::stat(
+                "Warnings",
+                format!(
+                    "{} | World events: {}",
+                    ui.snapshot.warning_summary(ui.view),
+                    ui.snapshot.world_event_summary()
+                ),
+                MIST,
+            ),
+            SectionItem::stat(
+                "Deep instability",
+                format!(
+                    "{:.0}% | deepest reached: {}m",
+                    ui.view.deep_instability.min(100.0),
+                    ui.snapshot.progression.deepest_tile_reached
+                ),
+                MIST,
+            ),
+        ],
+    ));
     UiLayout::screen(draw).modal_with_render_plan(
-        "Research Log",
-        "Collected discoveries and mining intelligence.",
-        &ModalContent::new(vec![Section::new(
-            "Discoveries",
-            PINK,
-            vec![
-                SectionItem::stat(
-                    "Warnings",
-                    format!(
-                        "{} | World events: {}",
-                        ui.snapshot.warning_summary(ui.view),
-                        ui.snapshot.world_event_summary()
-                    ),
-                    MIST,
-                ),
-                SectionItem::stat(
-                    "Deep instability",
-                    format!(
-                        "{:.0}% | deepest reached: {}m",
-                        ui.view.deep_instability.min(100.0),
-                        ui.snapshot.progression.deepest_tile_reached
-                    ),
-                    MIST,
-                ),
-                SectionItem::text("Use the collection log and expedition board for detailed objectives while the UI migration continues to consolidate data models."),
-            ],
-        )])
-        .prompts(&[hint(Prompt::Back, "close")]),
+        "Collection Log",
+        "Sites you have found, scanner contacts and recovered logs.",
+        &ModalContent::new(sections)
+            .prompts(&[hint(Prompt::Confirm, "map"), hint(Prompt::Back, "close")]),
     );
 }
 
@@ -881,6 +895,12 @@ const MAP_LEGEND: [(Color, &str); 6] = [
     (SLATE_DARK, "Tunnel"),
 ];
 
+/// Map legend entries drawn with an icon: a known site and a scanner echo.
+const MAP_LEGEND_ICONS: [(&SpriteDef, &str); 2] = [
+    (&super::pixel_art::sprites::poi::ICON_VAULT, "Site"),
+    (&super::pixel_art::sprites::poi::ICON_ECHO, "Echo"),
+];
+
 /// Height of one map legend row.
 const MAP_LEGEND_ROW: i32 = 11;
 
@@ -891,6 +911,11 @@ fn map_legend_layout(x: i32, y: i32, width: i32) -> (Vec<(i32, i32)>, i32) {
     let widths = MAP_LEGEND
         .iter()
         .map(|(_, label)| ui_kit::text_width(label, TextStyle::Body) + 10)
+        .chain(
+            MAP_LEGEND_ICONS
+                .iter()
+                .map(|(_, label)| ui_kit::text_width(label, TextStyle::Body) + 12),
+        )
         .chain([ui_kit::text_width("You", TextStyle::Body) + 12]);
     let (mut lx, mut ly, mut rows) = (x, y, 1);
     let mut positions = Vec::new();
@@ -914,7 +939,14 @@ fn draw_map_legend(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32, width: i32) 
         draw.draw_rectangle(lx + 1, ly + 2, 5, 5, *color);
         ui_kit::text(draw, label, lx + 10, *ly, TextStyle::Body, MIST);
     }
-    if let Some((lx, ly)) = positions.get(MAP_LEGEND.len()) {
+    for ((icon, label), (lx, ly)) in MAP_LEGEND_ICONS
+        .iter()
+        .zip(positions.iter().skip(MAP_LEGEND.len()))
+    {
+        ui_kit::icon(draw, icon, *lx, *ly);
+        ui_kit::text(draw, label, lx + 12, *ly, TextStyle::Body, MIST);
+    }
+    if let Some((lx, ly)) = positions.get(MAP_LEGEND.len() + MAP_LEGEND_ICONS.len()) {
         ui_kit::icon(
             draw,
             &super::pixel_art::sprites::menu_icons::PERSON,
@@ -946,8 +978,12 @@ fn map_footer(ui: &UiFrame<'_, '_>) -> String {
 fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let map_rect = UiLayout::screen(draw).canvas_modal(
         "Mine Map",
-        "Discovered terrain only.",
-        &[hint(Prompt::Map, ""), hint(Prompt::Back, "close")],
+        "Discovered terrain and scanner contacts.",
+        &[
+            hint(Prompt::Confirm, "log"),
+            hint(Prompt::Map, ""),
+            hint(Prompt::Back, "close"),
+        ],
         &map_footer(ui),
     );
     let (_, legend_rows) = map_legend_layout(0, 0, map_rect.width as i32 - 4);
@@ -991,24 +1027,10 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             draw.draw_rectangle(x0 + column * pixel, y0 + row * pixel, pixel, pixel, color);
         }
     }
-    // Depth scale: a tick and label every 10 or 20 m.
-    let step = if rows > 60 { 20 } else { 10 };
-    let first = (origin_y + step - 1) / step * step;
-    for mark in (first..origin_y + rows).step_by(usize::try_from(step).unwrap_or(10)) {
-        let y = y0 + (mark - origin_y) * pixel;
-        if y - 4 < y0 {
-            continue;
-        }
-        draw.draw_rectangle(x0 - 4, y, 3, 1, FOG);
-        ui_kit::text_right(
-            draw,
-            &format!("{mark}"),
-            x0 - 6,
-            y - 4,
-            TextStyle::Body,
-            FOG,
-        );
-    }
+    draw_map_depth_scale(draw, (x0, y0), origin_y, rows, pixel);
+    let clip = Rectangle::new(x0 as f32, y0 as f32, width as f32, height as f32);
+    let markers = poi_map::markers(terrain, ui.player);
+    poi_map::draw_map_markers(draw, &markers, clip, (origin_x, origin_y), pixel);
     // The rig: an ink-ringed marker that blinks.
     let marker_x = x0 + (player.x - origin_x) * pixel;
     let marker_y = y0 + (player.y - origin_y) * pixel;
@@ -1043,6 +1065,33 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         (well.y + well.height) as i32 + 4,
         well.width as i32 - 4,
     );
+}
+
+/// The map's depth scale: a tick and label every 10 or 20 m down its left edge.
+fn draw_map_depth_scale(
+    draw: &mut RaylibDrawHandle<'_>,
+    (x0, y0): (i32, i32),
+    origin_y: i32,
+    rows: i32,
+    pixel: i32,
+) {
+    let step = if rows > 60 { 20 } else { 10 };
+    let first = (origin_y + step - 1) / step * step;
+    for mark in (first..origin_y + rows).step_by(usize::try_from(step).unwrap_or(10)) {
+        let y = y0 + (mark - origin_y) * pixel;
+        if y - 4 < y0 {
+            continue;
+        }
+        draw.draw_rectangle(x0 - 4, y, 3, 1, FOG);
+        ui_kit::text_right(
+            draw,
+            &format!("{mark}"),
+            x0 - 6,
+            y - 4,
+            TextStyle::Body,
+            FOG,
+        );
+    }
 }
 
 /// The controls reference: every action with its keys or buttons for the menu device, in two
