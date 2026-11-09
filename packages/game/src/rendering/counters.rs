@@ -148,8 +148,10 @@ fn draw_counter(
     sections.push(Section::new(heading, GOLD, items));
     UiLayout::screen(draw).modal_with_render_plan(
         title,
-        "",
-        &ModalContent::new(sections).footer(about).prompts(hints),
+        &super::quests::quest_tab_subtitle(ui),
+        &ModalContent::new(sections)
+            .footer(about)
+            .prompts(&super::quests::with_quest_tab(ui, hints)),
     );
 }
 
@@ -751,10 +753,10 @@ pub(super) fn draw_headquarters(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
     }
     UiLayout::screen(draw).modal_with_render_plan(
         "Borealis HQ",
-        "",
+        &super::quests::quest_tab_subtitle(ui),
         &ModalContent::new(sections)
             .footer(about)
-            .prompts(COUNTER_HELP),
+            .prompts(&super::quests::with_quest_tab(ui, COUNTER_HELP)),
     );
 }
 
@@ -983,10 +985,10 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     ];
     UiLayout::screen(draw).modal_with_render_plan(
         "Ore Depot",
-        "",
+        &super::quests::quest_tab_subtitle(ui),
         &ModalContent::new(sections)
             .footer(about)
-            .prompts(COUNTER_HELP),
+            .prompts(&super::quests::with_quest_tab(ui, COUNTER_HELP)),
     );
 }
 

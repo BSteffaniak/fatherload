@@ -8,11 +8,12 @@
 use std::collections::BTreeMap;
 
 use drillgame_simulation::{
-    CanonicalProgressionState, DiscoveredTiles, DrillState, FallingBoulder, HazardCloud,
-    InfrastructureKind, PlacedBomb, PlacedInfrastructure, Player, PlayerId, PlayerSurvivalSnapshot,
-    TestModeState, WorldEventKind, WorldState,
+    ActiveQuest, CanonicalProgressionState, DiscoveredTiles, DrillState, FallingBoulder,
+    HazardCloud, InfrastructureKind, PlacedBomb, PlacedInfrastructure, Player, PlayerId,
+    PlayerSurvivalSnapshot, TestModeState, TickRate, WorldEventKind, WorldState,
     economy::SurfaceZone,
     poi::RELAY_WINDOW_MILLIS,
+    quest::describe::{QuestMarker, quest_markers},
     terrain::{MineralKind, TILE_SIZE, Terrain, TilePosition},
     worldgen::TileRect,
 };
@@ -241,6 +242,12 @@ pub struct ViewSnapshot<'w> {
     pub deep_instability: f32,
     /// The surface building the rig stands at (its door prompt).
     pub surface_zone: Option<SurfaceZone>,
+    /// The quests this player sees: their own solo quests, then the crew's.
+    pub quests: Vec<&'w ActiveQuest>,
+    /// Markers of those quests' current objectives (map, minimap and world).
+    pub quest_markers: Vec<QuestMarker>,
+    /// The quest desk of the keeper whose door the rig stands at (empty elsewhere).
+    pub quest_desk: Vec<crate::shell::DeskRow>,
 }
 
 impl ViewSnapshot<'_> {
@@ -310,6 +317,8 @@ pub struct WorldEventView {
 #[derive(Clone, Debug)]
 pub struct RenderSnapshot<'w> {
     pub tick: u64,
+    /// The session tick rate (quest timers in seconds).
+    pub tick_rate: TickRate,
     pub terrain: &'w Terrain,
     pub hazards: &'w [HazardCloud],
     pub bombs: &'w [PlacedBomb],
@@ -359,6 +368,7 @@ impl<'w> RenderSnapshot<'w> {
             .collect();
         Self {
             tick: world.simulation_tick().get(),
+            tick_rate: world.timing().rate,
             terrain: world.terrain(),
             hazards: world.hazards(),
             bombs: world.bombs(),
@@ -552,6 +562,17 @@ fn view_snapshot(
             .deep_run_state(player_id)
             .map_or(0.0, |state| state.instability),
         surface_zone: world.player_surface_zone(player_id),
+        quests: world.visible_quests(player_id),
+        quest_markers: world
+            .visible_quests(player_id)
+            .into_iter()
+            .flat_map(|quest| quest_markers(quest, world.simulation_tick().get()))
+            .collect(),
+        quest_desk: world
+            .player_surface_zone(player_id)
+            .and_then(drillgame_simulation::quest::QuestGiver::at)
+            .map(|giver| crate::shell::desk_rows(world, player_id, giver))
+            .unwrap_or_default(),
     })
 }
 

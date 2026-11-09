@@ -24,6 +24,7 @@ mod layout;
 mod menus;
 pub mod pixel_art;
 mod prompts;
+mod quests;
 mod screen;
 pub mod terrain;
 mod title;
@@ -505,6 +506,11 @@ impl GameRenderer {
             {
                 draw_toast(draw, message, age, docked);
             }
+            if !shell.global_overlay()
+                && let Some(fanfare) = &seat.fanfare
+            {
+                quests::draw_fanfare(draw, fanfare, shell.update_ticks);
+            }
         }
         if split {
             end_view_clip();
@@ -569,6 +575,7 @@ impl GameRenderer {
                     sparks: snapshot.sparks,
                     explosions: snapshot.explosions,
                     relay_countdowns: &snapshot.relay_countdowns,
+                    quest_markers: &view.quest_markers,
                     players: &snapshot.players,
                     facings: &self.rig_facings,
                     local: snapshot

@@ -33,6 +33,7 @@ use crate::{
 
 mod buildings;
 mod fx;
+mod quest_marks;
 mod rig;
 mod sky;
 
@@ -75,6 +76,8 @@ pub(super) struct WorldScene<'a> {
     pub explosions: &'a [Explosion],
     /// Twin-relay vault locks counting down.
     pub relay_countdowns: &'a [RelayCountdown],
+    /// Markers of the view player's quests.
+    pub quest_markers: &'a [drillgame_simulation::quest::describe::QuestMarker],
     pub players: &'a [PlayerPresentation],
     /// Each rig's last facing.
     pub facings: &'a RigFacings,
@@ -116,6 +119,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     for boulder in scene.boulders {
         fx::draw_boulder(draw, boulder, seconds);
     }
+    quest_marks::draw_quest_markers(draw, scene.quest_markers, seconds);
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
         fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);

@@ -24,9 +24,13 @@ use crate::{
     save,
 };
 
+mod quests;
 mod test_mode;
 mod world_setup;
 
+pub use quests::{
+    DeskRow, Fanfare, FanfareKind, desk_rows, has_quest_tab, log_quests, tracked_quest,
+};
 pub use test_mode::WARP_BANDS;
 
 pub use world_setup::{SetupOutcome, SetupPurpose, WorldSetup, random_world_seed};
@@ -87,6 +91,10 @@ pub enum ModalScreen {
     WorldSetup,
     /// Test mode: the band list the pause menu's "Warp to Layer" opens.
     WarpToLayer,
+    /// A keeper's quest desk: the second tab of their counter.
+    QuestDesk,
+    /// The seat's quest log (flips with the mine map and the collection log).
+    QuestLog,
 }
 
 impl ModalScreen {
@@ -583,6 +591,12 @@ pub struct SeatUi {
     pub message_tick: u64,
     message_seen: String,
     pending_services: Vec<PendingService>,
+    /// The quest the seat tracks on its HUD (`None`: the first active one).
+    pub tracked_quest: Option<drillgame_simulation::quest::QuestId>,
+    /// A desk row confirmed once: a second confirm drops that quest.
+    quest_abandon_armed: Option<drillgame_simulation::quest::QuestId>,
+    /// The latest quest banner (completion fanfare, ready, failed, blueprint).
+    pub fanfare: Option<Fanfare>,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -611,6 +625,9 @@ impl SeatUi {
             message_tick: 0,
             message_seen: String::new(),
             pending_services: Vec::new(),
+            tracked_quest: None,
+            quest_abandon_armed: None,
+            fanfare: None,
         }
     }
 
@@ -814,6 +831,9 @@ impl SeatUi {
             self.modal = None;
             return true;
         }
+        if self.switch_quest_tab(modal, input) {
+            return true;
+        }
         let upgrade_count = ctx
             .player()
             .map_or(1, |player| upgrade_offers(player).len());
@@ -838,9 +858,20 @@ impl SeatUi {
                 .saturating_add(progression.active_expeditions.len())
                 .saturating_sub(1),
             ModalScreen::Shop | ModalScreen::ShopConfirm => upgrade_count - 1,
+            ModalScreen::QuestDesk => self.desk_rows(ctx).len().saturating_sub(1),
+            ModalScreen::QuestLog => ctx.player.map_or(0, |player| {
+                log_quests(ctx.world, player).len().saturating_sub(1)
+            }),
             _ => 0,
         };
+        let before = self.selected_menu_item;
         self.move_selection(input, max_item);
+        if self.selected_menu_item != before {
+            self.quest_abandon_armed = None;
+        }
+        if modal == ModalScreen::QuestLog {
+            self.track_log_selection(ctx);
+        }
         if matches!(modal, ModalScreen::Shop) {
             if input.menu_left || input.tab_previous {
                 self.selected_menu_item = self.selected_menu_item.saturating_sub(1);
@@ -894,13 +925,18 @@ impl SeatUi {
             }
             // The mine map and the collection log flip between each other.
             ModalScreen::Map => {
-                self.modal = Some(ModalScreen::ResearchLog);
+                self.open_modal(ModalScreen::ResearchLog);
                 None
             }
             ModalScreen::ResearchLog => {
+                self.open_modal(ModalScreen::QuestLog);
+                None
+            }
+            ModalScreen::QuestLog => {
                 self.modal = Some(ModalScreen::Map);
                 None
             }
+            ModalScreen::QuestDesk => self.confirm_quest_desk(ctx, cues),
             ModalScreen::Headquarters => self.confirm_headquarters(ctx, cues),
             ModalScreen::Shop => {
                 self.modal = Some(ModalScreen::ShopConfirm);
@@ -1046,7 +1082,14 @@ impl SeatUi {
         };
         let pending = self.pending_services.remove(index);
         if !applied {
-            unavailable_message(request).clone_into(&mut self.message);
+            quests::quest_unavailable_message(request)
+                .unwrap_or_else(|| unavailable_message(request))
+                .clone_into(&mut self.message);
+            return;
+        }
+        if let Some((message, cue)) = self.quest_resolved(request, ctx) {
+            self.message = message;
+            cues.push(cue);
             return;
         }
         let Some(player) = ctx.player() else {
@@ -1175,6 +1218,9 @@ impl SeatUi {
                 cue = SoundCue::Ui;
                 "Expedition abandoned.".to_owned()
             }
+            SessionServiceRequest::AcceptQuest { .. }
+            | SessionServiceRequest::TurnInQuest { .. }
+            | SessionServiceRequest::AbandonQuest { .. } => return,
         };
         cues.push(cue);
     }
@@ -1550,6 +1596,25 @@ impl ShellState {
         let seat_ctx = ctx.seat(seat, self.prompt_device(seat));
         if let Some(state) = self.seats.get_mut(seat) {
             state.service_resolved(request, applied, seat_ctx, &mut self.sound_cues);
+        }
+    }
+
+    /// Raises a quest banner in seat `seat`'s view.
+    pub fn quest_fanfare(
+        &mut self,
+        seat: usize,
+        kind: FanfareKind,
+        title: impl Into<String>,
+        detail: impl Into<String>,
+    ) {
+        let tick = self.update_ticks;
+        if let Some(state) = self.seats.get_mut(seat) {
+            state.fanfare = Some(Fanfare {
+                kind,
+                title: title.into(),
+                detail: detail.into(),
+                tick,
+            });
         }
     }
 

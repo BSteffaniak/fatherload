@@ -359,6 +359,132 @@ impl LocalGame {
             );
         }
         self.announce_points_of_interest(&players);
+        self.announce_quests(&players);
+    }
+
+    /// Quest news for local seats: the owner's banner when a job is done, paid, failed or a
+    /// blueprint finished, and the next objective when a stage is done (every local seat for a
+    /// crew quest).
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per quest event keeps the announcements in one place"
+    )]
+    fn announce_quests(&mut self, players: &[PlayerId]) {
+        use crate::shell::FanfareKind;
+        type Banner = Option<(FanfareKind, String, String)>;
+        use drillgame_simulation::quest::describe::current_lines;
+        let world = self.runtime.world();
+        let rate = world.timing().rate;
+        let mut news: Vec<(usize, Banner, Option<String>)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+            match gameplay.kind {
+                GameplayEventKind::QuestStageDone { player_id, quest }
+                | GameplayEventKind::QuestReady { player_id, quest } => {
+                    let Some(def) = quest.def() else {
+                        continue;
+                    };
+                    let active = world
+                        .visible_quests(player_id)
+                        .into_iter()
+                        .find(|active| active.quest == quest && active.owner == player_id);
+                    let crew = active.is_some_and(|active| active.crew);
+                    let ready = matches!(gameplay.kind, GameplayEventKind::QuestReady { .. });
+                    let next = active
+                        .and_then(|active| {
+                            current_lines(active, world.player(player_id), rate)
+                                .into_iter()
+                                .find(|(_, done)| !done)
+                        })
+                        .map(|(line, _)| line)
+                        .unwrap_or_default();
+                    for (seat, player) in players.iter().enumerate() {
+                        if *player != player_id && !crew {
+                            continue;
+                        }
+                        if ready {
+                            news.push((
+                                seat,
+                                Some((
+                                    FanfareKind::Ready,
+                                    def.title.to_owned(),
+                                    format!("Return to {} to get paid.", def.giver.name()),
+                                )),
+                                None,
+                            ));
+                        } else {
+                            news.push((seat, None, Some(format!("{}: next, {next}.", def.title))));
+                        }
+                    }
+                }
+                GameplayEventKind::QuestCompleted { player_id, quest } => {
+                    if let (Some(seat), Some(def)) = (seat_of(player_id), quest.def()) {
+                        news.push((
+                            seat,
+                            Some((
+                                FanfareKind::Complete,
+                                def.title.to_owned(),
+                                def.reward.summary(),
+                            )),
+                            None,
+                        ));
+                    }
+                }
+                GameplayEventKind::QuestFailed {
+                    player_id,
+                    quest,
+                    reason,
+                } => {
+                    if let (Some(seat), Some(def)) = (seat_of(player_id), quest.def()) {
+                        news.push((
+                            seat,
+                            Some((
+                                FanfareKind::Failed,
+                                def.title.to_owned(),
+                                format!(
+                                    "Failed: {}. {} will offer it again.",
+                                    reason.describe(),
+                                    def.giver.name()
+                                ),
+                            )),
+                            None,
+                        ));
+                    }
+                }
+                GameplayEventKind::BlueprintCompleted {
+                    player_id,
+                    blueprint,
+                } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        let unlocks = match blueprint.unlock() {
+                            drillgame_simulation::quest::BlueprintUnlock::Part(part) => {
+                                format!("Unlocked the {} rig part.", part.title())
+                            }
+                            drillgame_simulation::quest::BlueprintUnlock::Recipe(recipe) => {
+                                format!("Recipe filed: {recipe}.")
+                            }
+                        };
+                        news.push((
+                            seat,
+                            Some((FanfareKind::Blueprint, blueprint.name().to_owned(), unlocks)),
+                            None,
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (seat, fanfare, message) in news {
+            if let Some((kind, title, detail)) = fanfare {
+                self.shell.quest_fanfare(seat, kind, title, detail);
+            }
+            if let Some(message) = message {
+                self.shell.seat_mut(seat).message = message;
+            }
+        }
     }
 
     /// Tells each local seat what its rig found or opened at a point of interest, and seats

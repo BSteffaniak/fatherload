@@ -152,8 +152,11 @@ impl Effects {
                     self.spawn_explosions(world);
                 }
                 GameplayEventKind::RescueTriggered { .. } if local => cues.push(SoundCue::Rescue),
+                // Milestones, including the quest fanfare and a job done.
                 GameplayEventKind::EscapeStarted { .. }
                 | GameplayEventKind::DeepRewardGranted { .. }
+                | GameplayEventKind::QuestCompleted { .. }
+                | GameplayEventKind::QuestReady { .. }
                     if local =>
                 {
                     cues.push(SoundCue::Milestone);
@@ -176,6 +179,11 @@ impl Effects {
                     }
                 }
                 GameplayEventKind::VaultOpened { .. } => cues.push(SoundCue::Milestone),
+                GameplayEventKind::QuestStageDone { .. } if local => cues.push(SoundCue::Ui),
+                GameplayEventKind::QuestFailed { .. } if local => cues.push(SoundCue::Damage),
+                GameplayEventKind::BlueprintCompleted { .. } if local => {
+                    cues.push(SoundCue::Upgrade);
+                }
                 _ => {}
             }
         }

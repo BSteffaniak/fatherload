@@ -23,6 +23,7 @@ use super::{
         sprites::{icons, menu_icons, rig},
     },
     prompts::{self, hint},
+    quests,
     ui_kit::{self, BarColors, PanelStyle, TextStyle},
     world::player_accent,
 };
@@ -179,9 +180,18 @@ pub(super) fn draw_view_hud(
     // Warning badges.
     let mut badge_x = left;
     let badge_y = top + panel_height + 3;
+    let mut warned = false;
     for (warning, sprite) in hud_warnings(snapshot, view) {
         badge_x += ui_kit::badge(draw, badge_x, badge_y, sprite, warning) + 2;
+        warned = true;
     }
+    quests::draw_quest_tracker(
+        draw,
+        shell.seat(view.seat_index),
+        snapshot,
+        view,
+        (left, badge_y + if warned { 16 } else { 0 }, width),
+    );
 
     if shell.show_details {
         let lines = [
@@ -599,6 +609,9 @@ pub(super) fn draw_minimap_for_view(
                 .then(|| to_map(tile_x, tile_y))
         },
     );
+    quests::draw_minimap_quest_markers(draw, &view.quest_markers, |tile_x, tile_y| {
+        (tile_y >= origin_y && tile_y < origin_y + visible_height).then(|| to_map(tile_x, tile_y))
+    });
     for remote in players
         .iter()
         .filter(|other| other.player_id != view.player_id)
@@ -721,6 +734,8 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Help => draw_help_ui(draw),
         ModalScreen::WorldSetup => menus::draw_world_setup(draw, ui),
         ModalScreen::WarpToLayer => menus::draw_warp_layers(draw, ui),
+        ModalScreen::QuestDesk => quests::draw_quest_desk(draw, ui),
+        ModalScreen::QuestLog => quests::draw_quest_log(draw, ui),
     }
 }
 
@@ -1037,6 +1052,13 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let clip = Rectangle::new(x0 as f32, y0 as f32, width as f32, height as f32);
     let markers = poi_map::markers(terrain, ui.player);
     poi_map::draw_map_markers(draw, &markers, clip, (origin_x, origin_y), pixel);
+    quests::draw_map_quest_markers(
+        draw,
+        &ui.view.quest_markers,
+        clip,
+        (origin_x, origin_y),
+        pixel,
+    );
     // The rig: an ink-ringed marker that blinks.
     let marker_x = x0 + (player.x - origin_x) * pixel;
     let marker_y = y0 + (player.y - origin_y) * pixel;
