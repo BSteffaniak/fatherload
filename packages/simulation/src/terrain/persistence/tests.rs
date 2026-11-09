@@ -4,7 +4,10 @@ use super::super::{
     ArtifactKind, ChunkPosition, MineralKind, Terrain, Tile, TileChange, TileKind, TilePosition,
 };
 use super::{FullTerrain, TerrainRestoreError, TerrainSnapshot, TileDiffs};
-use crate::worldgen::{GeneratorVersion, WorldSettings, WorldSize};
+use crate::{
+    poi::PoiTile,
+    worldgen::{GeneratorVersion, WorldSettings, WorldSize},
+};
 
 /// The binary layout of a [`TerrainSnapshot`] with plain integers for the enums (postcard
 /// encodes an enum variant as its index), to forge unknown variants.
@@ -133,13 +136,47 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         ]
         .map(TileKind::Artifact),
     );
+    kinds.extend(
+        [
+            PoiTile::SupplyCrate,
+            PoiTile::Wreckage,
+            PoiTile::SalvageCore,
+            PoiTile::VaultWall,
+            PoiTile::VaultDoor,
+            PoiTile::VaultSeal,
+            PoiTile::VaultSealVented,
+            PoiTile::VaultSwitch {
+                order: 1,
+                lit: false,
+            },
+            PoiTile::VaultSwitch {
+                order: 3,
+                lit: true,
+            },
+            PoiTile::VaultRelay { lit: false },
+            PoiTile::VaultRelay { lit: true },
+            PoiTile::VaultCache,
+            PoiTile::FossilShale,
+            PoiTile::GeodeShell,
+            PoiTile::OutpostPlating,
+            PoiTile::OutpostSalvage,
+        ]
+        .map(TileKind::Poi),
+    );
     for kind in kinds {
         for durability in [0, 1, 7, 255] {
             let tile = Tile { kind, durability };
             assert_eq!(Tile::from_code(tile.code()), Some(tile));
         }
     }
-    for code in [11 << 8, 0x10A << 8, 0x20B << 8, 0x300 << 8, u64::MAX] {
+    for code in [
+        11 << 8,
+        0x10A << 8,
+        0x20B << 8,
+        0x3FF << 8,
+        0x400 << 8,
+        u64::MAX,
+    ] {
         assert_eq!(Tile::from_code(code), None, "code {code:#x}");
     }
 }
@@ -310,7 +347,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
     assert!(matches!(
         Terrain::from_snapshot(foreign),
         Err(TerrainRestoreError::DigestMismatch {
-            generator: GeneratorVersion::V1,
+            generator: GeneratorVersion::V2,
             ..
         })
     ));
@@ -359,7 +396,8 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
             size: 0,
             richness: 1,
             hazards: 1,
-            generator: 1,
+            // `WorldSettings::new` uses the current generator (V2, variant index 2).
+            generator: 2,
         },
         width: 240,
         height: 220,
@@ -386,6 +424,46 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
     json["diffs"][0][1][0] = serde_json::Value::from(0xFFFF_FFFF_u64);
     let error = serde_json::from_value::<Terrain>(json).expect_err("bad tile code");
     assert!(error.to_string().contains("invalid tile code"), "{error}");
+}
+
+/// Points of interest live in their tiles: a looted crate and lit vault switches must survive
+/// the compact save/keyframe form exactly.
+#[test]
+fn changed_poi_tiles_round_trip_through_snapshots() {
+    let settings = WorldSettings::new(0x9017);
+    let mut terrain = Terrain::generate(&settings);
+    let mut changed = 0;
+    let poi_tiles: Vec<(TilePosition, PoiTile)> = terrain
+        .features()
+        .pois()
+        .flat_map(|feature| feature.bounds.positions())
+        .filter_map(|position| match terrain.tile(position)?.kind {
+            TileKind::Poi(tile) => Some((position, tile)),
+            _ => None,
+        })
+        .collect();
+    assert!(!poi_tiles.is_empty(), "a V2 world has points of interest");
+    for (position, tile) in poi_tiles {
+        let replacement = match tile {
+            PoiTile::SupplyCrate | PoiTile::SalvageCore => TileKind::Air,
+            PoiTile::VaultSwitch { order, .. } => {
+                TileKind::Poi(PoiTile::VaultSwitch { order, lit: true })
+            }
+            PoiTile::VaultRelay { .. } => TileKind::Poi(PoiTile::VaultRelay { lit: true }),
+            PoiTile::VaultSeal => TileKind::Poi(PoiTile::VaultSealVented),
+            _ => continue,
+        };
+        if terrain.set_kind(position, replacement) {
+            changed += 1;
+        }
+    }
+    assert!(changed > 0, "the test changed some POI tiles");
+
+    let restored = Terrain::from_snapshot(terrain.snapshot()).expect("restore");
+    assert_same_tiles(&restored, &terrain);
+    let bytes = postcard::to_allocvec(&terrain).expect("encode");
+    let decoded: Terrain = postcard::from_bytes(&bytes).expect("decode");
+    assert_same_tiles(&decoded, &terrain);
 }
 
 /// Generation timings behind the full-world (not per-chunk) regeneration decision.

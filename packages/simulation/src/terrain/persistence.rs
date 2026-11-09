@@ -28,7 +28,10 @@ use super::{
     ArtifactKind, ChunkPosition, MineralKind, Terrain, Tile, TileChange, TileKind, TilePosition,
     chunk_positions, legacy_tile_kind, tile_durability,
 };
-use crate::worldgen::{self, FeatureIndex, GeneratorVersion, WorldSettings};
+use crate::{
+    poi::PoiTile,
+    worldgen::{self, FeatureIndex, GeneratorVersion, WorldSettings},
+};
 
 /// Largest accepted width or height of restored terrain, in tiles.
 pub const MAX_TERRAIN_SIDE_TILES: i32 = 4_096;
@@ -583,6 +586,10 @@ impl Tile {
             10 => TileKind::MagmaVent,
             0x100..=0x1FF if variant < MINERALS.len() => TileKind::Ore(MINERALS[variant]),
             0x200..=0x2FF if variant < ARTIFACTS.len() => TileKind::Artifact(ARTIFACTS[variant]),
+            0x300..=0x3FF => match PoiTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Poi(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

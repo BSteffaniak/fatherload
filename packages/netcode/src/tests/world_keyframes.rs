@@ -158,13 +158,15 @@ fn a_keyframe_from_an_unknown_generator_is_a_codec_error() {
     let seed = postcard::to_allocvec(&world.world_settings().seed)
         .expect("encode seed")
         .len();
-    bytes[start + seed + 3] = 9;
+    let generator = start + seed + 3;
+    let original = bytes[generator];
+    bytes[generator] = 9;
 
     let mut client: ClientSession<WorldState> = ClientSession::new(ClientConfig::default());
     assert!(client.handle_server_bytes(&bytes).is_err());
     assert!(client.authority().is_none());
 
     // The untouched message decodes.
-    bytes[start + seed + 3] = 1;
+    bytes[generator] = original;
     assert!(protocol::decode::<ServerMessage<WorldState>>(&bytes).is_ok());
 }

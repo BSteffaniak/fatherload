@@ -332,6 +332,32 @@ impl PoiTile {
         }
     }
 
+    /// Inverse of [`Self::code`], or `None` for a code no POI tile has (saves and keyframes).
+    #[must_use]
+    pub const fn from_code(code: u64) -> Option<Self> {
+        Some(match code {
+            0 => Self::SupplyCrate,
+            1 => Self::Wreckage,
+            2 => Self::SalvageCore,
+            3 => Self::VaultWall,
+            4 => Self::VaultDoor,
+            5 => Self::VaultSeal,
+            6 => Self::VaultSealVented,
+            7 => Self::VaultCache,
+            8 => Self::FossilShale,
+            9 => Self::GeodeShell,
+            10 => Self::OutpostPlating,
+            11 => Self::OutpostSalvage,
+            0x10..=0x1F => Self::VaultSwitch {
+                #[allow(clippy::cast_possible_truncation, reason = "masked to three bits")]
+                order: ((code >> 1) & 0x7) as u8,
+                lit: code & 1 == 1,
+            },
+            0x20 | 0x21 => Self::VaultRelay { lit: code & 1 == 1 },
+            _ => return None,
+        })
+    }
+
     /// What a bomb blast leaves of this tile: `None` if it is blast-proof.
     ///
     /// Loot fixtures (crates, salvage cores, lockers, vault caches) shrug off blasts: a bomb has
