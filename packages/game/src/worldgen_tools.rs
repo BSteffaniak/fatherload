@@ -1,12 +1,15 @@
 //! World generation tools:
 //!
 //! - `drillgame --worldgen-report [--seeds N] [--first-seed S] [--size standard|large]
-//!   [--richness lean|standard|rich] [--hazards calm|standard|brutal] [--legacy] [--generator v1|v2|v3]` prints ore,
-//!   cave, hazard, artifact and feature distributions over many seeds.
+//!   [--richness lean|standard|rich] [--hazards calm|standard|brutal] [--legacy]
+//!   [--generator v1|v2|v3|v4]` prints band depths, ore, cave, hazard, artifact and feature
+//!   distributions over many seeds.
 //! - `drillgame --worldgen-preview <seed> <out.png> [--size standard|large] [--richness X]
-//!   [--hazards Y] [--scale N] [--no-features]` writes a whole-world map PNG (no window opens),
-//!   with motherlodes, artifact beds, chambers and points of interest outlined (POIs also get
-//!   their map icon).
+//!   [--hazards Y] [--generator G] [--scale N] [--columns N] [--no-features]` writes a
+//!   whole-world map PNG (no window opens), with motherlodes, artifact beds, chambers and points
+//!   of interest outlined (POIs also get their map icon). Deep worlds are cut into side-by-side
+//!   columns (top to bottom, left to right) so the image stays viewable; `--columns` overrides
+//!   the count.
 
 use drillgame_simulation::{
     terrain::{MineralKind, TileKind},
@@ -40,6 +43,8 @@ pub enum WorldgenCommand {
         out: String,
         scale: i32,
         features: bool,
+        /// Side-by-side columns the world is cut into (`None`: picked from the world's depth).
+        columns: Option<i32>,
     },
 }
 
@@ -56,6 +61,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<WorldgenCommand>, String> {
     let mut first_seed = 1;
     let mut scale = 4;
     let mut features = true;
+    let mut columns = None;
     let (mut skip, mut positional) = (Vec::new(), Vec::new());
     match (report, preview) {
         (None, None) => return Ok(None),
@@ -106,6 +112,15 @@ pub fn parse_args(args: &[String]) -> Result<Option<WorldgenCommand>, String> {
                     .filter(|scale| (1..=8).contains(scale))
                     .ok_or("--scale needs 1 to 8")?;
             }
+            "--columns" => {
+                columns = Some(
+                    value("--columns")?
+                        .parse()
+                        .ok()
+                        .filter(|columns| (1..=8).contains(columns))
+                        .ok_or("--columns needs 1 to 8")?,
+                );
+            }
             "--legacy" => settings.generator = GeneratorVersion::Legacy,
             "--generator" => settings.generator = parse_generator(&value("--generator")?)?,
             "--no-features" => features = false,
@@ -125,19 +140,15 @@ pub fn parse_args(args: &[String]) -> Result<Option<WorldgenCommand>, String> {
         out: positional[1].clone(),
         scale,
         features,
+        columns,
     }))
 }
 
 fn parse_generator(text: &str) -> Result<GeneratorVersion, String> {
-    [
-        GeneratorVersion::Legacy,
-        GeneratorVersion::V1,
-        GeneratorVersion::V2,
-        GeneratorVersion::V3,
-    ]
-    .into_iter()
-    .find(|generator| generator.name().eq_ignore_ascii_case(text))
-    .ok_or_else(|| format!("unknown generator {text} (legacy, v1, v2, v3)"))
+    GeneratorVersion::ALL
+        .into_iter()
+        .find(|generator| generator.name().eq_ignore_ascii_case(text))
+        .ok_or_else(|| format!("unknown generator {text} (legacy, v1, v2, v3, v4)"))
 }
 
 fn parse_size(text: &str) -> Result<WorldSize, String> {
@@ -181,16 +192,20 @@ pub fn run(command: &WorldgenCommand, out: &mut impl std::io::Write) -> Result<(
             out: path,
             scale,
             features,
+            columns,
         } => {
             let world = worldgen::generate(settings);
             let stats = WorldStats::measure(settings, &world);
-            let mut image = preview_image(settings, &world, *scale, *features);
+            let image = preview_image(settings, &world, *scale, *features);
+            let columns = columns.unwrap_or_else(|| auto_columns(world.height));
+            let mut image = image.split_into_columns(columns, *scale);
             image.export_png(path)?;
             writeln!(
                 out,
-                "wrote {path}: seed {} ({}), {}x{} tiles, {} features, caves {} per mille, starter field {}",
+                "wrote {path}: seed {} ({}, generator {}), {}x{} tiles in {columns} column(s), {} features, caves {} per mille, starter field {}",
                 settings.seed_text(),
                 settings.size.name(),
+                settings.generator.name(),
                 world.width,
                 world.height,
                 world.features.len(),
@@ -204,6 +219,18 @@ pub fn run(command: &WorldgenCommand, out: &mut impl std::io::Write) -> Result<(
 
 /// Width in tiles of the band legend strip on the preview's left edge.
 const LEGEND_TILES: i32 = 3;
+/// Most world rows one preview column shows before the image is cut into more columns.
+const PREVIEW_COLUMN_ROWS: i32 = 320;
+/// Pixels between preview columns.
+const PREVIEW_COLUMN_GAP: i32 = 12;
+/// Rows between the depth ticks on the preview's legend strip.
+const PREVIEW_DEPTH_TICK_ROWS: i32 = 50;
+
+/// How many side-by-side columns a world `height` rows deep is cut into.
+const fn auto_columns(height: i32) -> i32 {
+    let columns = (height + PREVIEW_COLUMN_ROWS - 1) / PREVIEW_COLUMN_ROWS;
+    if columns < 1 { 1 } else { columns }
+}
 
 /// An RGBA pixel buffer written out through raylib's PNG encoder (no window or GPU needed).
 struct Canvas {
@@ -260,6 +287,36 @@ impl Canvas {
         }
     }
 
+    /// The image cut into `columns` equal slices of whole tile rows (`scale` pixels each), laid
+    /// side by side, top to bottom then left to right.
+    fn split_into_columns(self, columns: i32, scale: i32) -> Self {
+        if columns <= 1 {
+            return self;
+        }
+        let rows = (self.height / scale.max(1) + columns - 1) / columns;
+        let slice = rows * scale;
+        let mut out = Self::new(
+            self.width * columns + PREVIEW_COLUMN_GAP * (columns - 1),
+            slice,
+            palette::NIGHT,
+        );
+        let row_bytes = usize::try_from(self.width * 4).unwrap_or_default();
+        for column in 0..columns {
+            let left = column * (self.width + PREVIEW_COLUMN_GAP);
+            for y in 0..slice {
+                let source_y = column * slice + y;
+                if source_y >= self.height {
+                    break;
+                }
+                let from = usize::try_from(source_y * self.width * 4).unwrap_or_default();
+                let to = usize::try_from((y * out.width + left) * 4).unwrap_or_default();
+                out.pixels[to..to + row_bytes]
+                    .copy_from_slice(&self.pixels[from..from + row_bytes]);
+            }
+        }
+        out
+    }
+
     fn export_png(&mut self, path: &str) -> Result<(), String> {
         let c_path = std::ffi::CString::new(path).map_err(|error| error.to_string())?;
         let image = raylib::ffi::Image {
@@ -301,6 +358,15 @@ fn preview_image(
         // Band legend: each row's band at the world's middle column.
         let band = band_at(settings, world.width / 2, y);
         image.draw_rectangle(0, y * scale, legend - 1, scale, legend_color(band, y));
+        if y > 0 && y % PREVIEW_DEPTH_TICK_ROWS == 0 {
+            // A depth tick every fifty rows (longer every hundred).
+            let length = if y % (PREVIEW_DEPTH_TICK_ROWS * 2) == 0 {
+                legend - 1
+            } else {
+                legend / 2
+            };
+            image.draw_rectangle(0, y * scale, length, scale.min(2), palette::BONE);
+        }
         for x in 0..world.width {
             let Some(kind) = kind_at(x, y) else {
                 continue;
