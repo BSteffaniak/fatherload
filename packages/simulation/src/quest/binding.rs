@@ -11,7 +11,7 @@ use crate::{
     poi::{PoiJournal, PoiKind, PoiKnowledge, PoiTile},
     surface::SURFACE_BUILDINGS,
     terrain::{Terrain, TileKind, TilePosition},
-    worldgen::{FeatureId, WorldFeature, noise::hash2},
+    worldgen::{FeatureId, FeatureKind, WorldFeature, noise::hash2},
 };
 
 use super::{
@@ -116,6 +116,15 @@ pub fn giver_door(giver: QuestGiver) -> TilePosition {
     }
 }
 
+/// The feature kind a quest binds to when a world has none of `kind` anywhere.
+const fn stand_in(kind: FeatureKind) -> Option<FeatureKind> {
+    match kind {
+        FeatureKind::Motherlode => Some(FeatureKind::ArtifactBed),
+        FeatureKind::Chamber => Some(FeatureKind::LargeCavern),
+        _ => None,
+    }
+}
+
 /// Candidate features for `spec`, best first.
 fn candidates<'a>(
     spec: TargetSpec,
@@ -141,7 +150,34 @@ fn candidates<'a>(
                 .filter(|feature| !unopened || poi_unopened(terrain, feature))
                 .collect()
         }
-        TargetSpec::Feature { kind, .. } => features.of_kind(kind).filter(in_bands).collect(),
+        TargetSpec::Feature { kind, .. } => {
+            let found: Vec<&WorldFeature> = features.of_kind(kind).filter(in_bands).collect();
+            if found.is_empty() {
+                // Lean or unlucky worlds can lack a feature kind in the wanted bands (shallow
+                // motherlodes especially): fall back to the nearest bands that have one rather
+                // than leave the quest unbindable.
+                let band_gap = |feature: &&WorldFeature| {
+                    let index = feature.band.index();
+                    usize::from(first)
+                        .saturating_sub(index)
+                        .max(index.saturating_sub(usize::from(last)))
+                };
+                // A world without any of the kind (some lean worlds roll no motherlode at
+                // all) uses its closest stand-in.
+                let mut all: Vec<&WorldFeature> = features.of_kind(kind).collect();
+                if all.is_empty()
+                    && let Some(stand_in) = stand_in(kind)
+                {
+                    all = features.of_kind(stand_in).collect();
+                }
+                let nearest = all.iter().map(band_gap).min();
+                all.into_iter()
+                    .filter(|feature| Some(band_gap(feature)) == nearest)
+                    .collect()
+            } else {
+                found
+            }
+        }
     };
     found.sort_by_key(|feature| {
         (
@@ -221,19 +257,7 @@ fn objective_progress(
             ..
         } => {
             let center = target(index)?.center;
-            let count = i32::from(spots);
-            for spot in 0..count {
-                let offset = (2 * spot - (count - 1)) * SIMULTANEOUS_SPREAD / 2;
-                let wanted = TilePosition {
-                    x: center.x + offset,
-                    y: center.y,
-                };
-                let spot = nearest_diggable(terrain, wanted)?;
-                if progress.spots.contains(&spot) {
-                    return None;
-                }
-                progress.spots.push(spot);
-            }
+            progress.spots = simultaneous_spots(terrain, center, spots)?;
             progress.marks = vec![0; usize::from(spots)];
         }
         Objective::Detonate {
@@ -299,6 +323,63 @@ fn objective_progress(
         }
     }
     Some(progress)
+}
+
+/// Marked spots for a simultaneous objective: `spots` spots [`SIMULTANEOUS_SPREAD`] apart in a
+/// row through `center`, slid inward when the row would leave the world, and stacked in a column
+/// instead when a row does not fit (a feature under a vault or against the world's edge).
+fn simultaneous_spots(
+    terrain: &Terrain,
+    center: TilePosition,
+    spots: u8,
+) -> Option<Vec<TilePosition>> {
+    let count = i32::from(spots);
+    let offsets: Vec<i32> = (0..count)
+        .map(|spot| (2 * spot - (count - 1)) * SIMULTANEOUS_SPREAD / 2)
+        .collect();
+    let first = *offsets.first()?;
+    let last = *offsets.last()?;
+    let slide = |center: i32, low: i32, high: i32| {
+        // Keep `center + first ..= center + last` inside `low..=high` where it fits.
+        if center + first < low {
+            low - first
+        } else if center + last > high {
+            high - last
+        } else {
+            center
+        }
+    };
+    let row = TilePosition {
+        x: slide(center.x, 3, terrain.width() - 4),
+        y: center.y,
+    };
+    let column = TilePosition {
+        x: center.x,
+        y: slide(center.y, SURFACE_ROW + 4, terrain.height() - 4),
+    };
+    let layouts = [(row, true), (column, false)];
+    layouts.into_iter().find_map(|(origin, across)| {
+        let mut laid: Vec<TilePosition> = Vec::with_capacity(offsets.len());
+        for offset in &offsets {
+            let wanted = if across {
+                TilePosition {
+                    x: origin.x + offset,
+                    y: origin.y,
+                }
+            } else {
+                TilePosition {
+                    x: origin.x,
+                    y: origin.y + offset,
+                }
+            };
+            let spot = nearest_diggable(terrain, wanted)?;
+            if laid.contains(&spot) {
+                return None;
+            }
+            laid.push(spot);
+        }
+        Some(laid)
+    })
 }
 
 /// One posting on the HQ board.

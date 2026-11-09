@@ -310,6 +310,44 @@ fn the_first_batch_has_the_promised_shape() {
     assert!(kinds.len() >= 15, "{} distinct primitives", kinds.len());
 }
 
+/// Worlds the binding test covers: [`seed_count`] default worlds, every world option on a few
+/// seeds, and seeds that once failed to bind (no motherlode in a lean world, a cavern too close
+/// to the edge for a row of marks).
+fn binding_worlds() -> Vec<WorldSettings> {
+    use crate::worldgen::{HazardIntensity, ResourceRichness, WorldSize};
+    let mut worlds: Vec<WorldSettings> = (0..seed_count()).map(WorldSettings::new).collect();
+    let variant = |seed, size, hazards, richness| {
+        let mut settings = WorldSettings::new(seed);
+        settings.size = size;
+        settings.hazards = hazards;
+        settings.richness = richness;
+        settings
+    };
+    for seed in [162] {
+        for size in WorldSize::ALL {
+            for hazards in HazardIntensity::ALL {
+                for richness in ResourceRichness::ALL {
+                    worlds.push(variant(seed, size, hazards, richness));
+                }
+            }
+        }
+    }
+    worlds.extend([59, 118, 128, 163, 208, 283].map(WorldSettings::new));
+    worlds.push(variant(
+        198,
+        WorldSize::Standard,
+        HazardIntensity::Brutal,
+        ResourceRichness::Standard,
+    ));
+    worlds.push(variant(
+        297,
+        WorldSize::Standard,
+        HazardIntensity::Standard,
+        ResourceRichness::Lean,
+    ));
+    worlds
+}
+
 #[test]
 fn every_quest_binds_on_many_seeds() {
     let origin = TilePosition {
@@ -317,8 +355,9 @@ fn every_quest_binds_on_many_seeds() {
         y: 4,
     };
     let journal = PoiJournal::default();
-    for seed in 0..seed_count() {
-        let terrain = Terrain::generate(&WorldSettings::new(seed));
+    for settings in binding_worlds() {
+        let seed = settings.seed;
+        let terrain = Terrain::generate(&settings);
         let mut salts = vec![0_u64];
         salts.extend(
             (0..4)
@@ -334,7 +373,10 @@ fn every_quest_binds_on_many_seeds() {
                 let Some((targets, objectives)) =
                     bind_quest(def, &terrain, origin, &journal, *salt, &BTreeSet::new())
                 else {
-                    panic!("{} does not bind on seed {seed} (salt {salt})", def.title);
+                    panic!(
+                        "{} does not bind on seed {seed} {:?}/{:?}/{:?} (salt {salt})",
+                        def.title, settings.size, settings.hazards, settings.richness
+                    );
                 };
                 assert_eq!(targets.len(), def.targets.len());
                 assert_eq!(objectives.len(), def.objectives().count());
