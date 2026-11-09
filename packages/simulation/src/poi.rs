@@ -330,6 +330,9 @@ impl PoiTile {
     }
 
     /// What a bomb blast leaves of this tile: `None` if it is blast-proof.
+    ///
+    /// Loot fixtures (crates, salvage cores, lockers, vault caches) shrug off blasts: a bomb has
+    /// no owner to pay, and blowing up a derelict's core would lose its log for good.
     #[must_use]
     pub const fn after_blast(self) -> Option<Option<Self>> {
         match self {
@@ -338,15 +341,14 @@ impl PoiTile {
             | Self::VaultSealVented
             | Self::VaultSwitch { .. }
             | Self::VaultRelay { .. }
-            | Self::VaultCache => None,
-            Self::VaultSeal => Some(Some(Self::VaultSealVented)),
-            Self::SupplyCrate
-            | Self::Wreckage
+            | Self::VaultCache
+            | Self::SupplyCrate
             | Self::SalvageCore
-            | Self::FossilShale
-            | Self::GeodeShell
-            | Self::OutpostPlating
-            | Self::OutpostSalvage => Some(None),
+            | Self::OutpostSalvage => None,
+            Self::VaultSeal => Some(Some(Self::VaultSealVented)),
+            Self::Wreckage | Self::FossilShale | Self::GeodeShell | Self::OutpostPlating => {
+                Some(None)
+            }
         }
     }
 

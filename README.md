@@ -65,7 +65,8 @@ seeded generator keep generating exactly as before):
 - **Supply caches** (every layer below the topsoil): hollows of crates. Drill a crate open for a
   fuel canister, a bomb or two, or some credits.
 - **Derelict rigs** (mid to deep): crashed prospector rigs. Drill the glowing core for salvage, a
-  layer material, sometimes a part, and a log entry for your collection.
+  layer material, sometimes a part, and a log entry for your collection. Loot (crates, cores,
+  lockers, vault prizes) shrugs off bombs, so a blast never wastes it.
 - **Vaults** (basalt and the deep strata): sealed rooms with walls no drill or bomb gets through.
   Open the lock to reach the prize: drill the floor switches in the order their pips show (a
   wrong one resets them), bomb every pressure seal in the walls, or drill both relays within nine

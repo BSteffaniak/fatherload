@@ -458,3 +458,23 @@ fn relay_windows_last_the_same_time_at_every_tick_rate() {
     assert!((at_60 - at_30).abs() < 0.1, "{at_60} vs {at_30}");
     assert!((at_60 - 9.0).abs() < 0.1, "{at_60}");
 }
+
+#[test]
+fn bombs_never_destroy_loot() {
+    let (mut world, derelict) =
+        world_with(|variant| matches!(variant, PoiVariant::DerelictRig { .. }));
+    let core = poi_tiles(&world, &derelict, |tile| tile == PoiTile::SalvageCore)[0];
+    let wreck_before = poi_tiles(&world, &derelict, |tile| tile == PoiTile::Wreckage).len();
+    let _ = world.detonate_bomb_at(core, 2);
+    assert_eq!(tile(&world, core), TileKind::Poi(PoiTile::SalvageCore));
+    // The plating around it still blows apart.
+    assert!(poi_tiles(&world, &derelict, |tile| tile == PoiTile::Wreckage).len() < wreck_before);
+    let events = drill_down_into(&mut world, core);
+    assert!(events.iter().any(|event| matches!(
+        event,
+        GameplayEventKind::PoiOpened {
+            poi: PoiKind::DerelictRig,
+            ..
+        }
+    )));
+}
