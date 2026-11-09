@@ -321,20 +321,30 @@ impl WorldState {
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::PlaceBomb => {
-                if player.bombs == 0 {
+                if player.bombs == 0 || self.bombs.len() >= super::bombs::MAX_ACTIVE_BOMBS {
                     PlayerScopedCommandOutcome::IgnoredUnavailable
                 } else {
                     player.bombs -= 1;
+                    let x = player.x;
+                    let y = TILE_SIZE.mul_add(0.4, player.y);
                     self.bombs.push(PlacedBomb {
-                        x: player.x,
-                        y: TILE_SIZE.mul_add(0.4, player.y),
+                        id: self.next_bomb_id,
+                        x,
+                        y,
+                        previous_x: x,
+                        previous_y: y,
+                        velocity_x: player.velocity_x * 0.25,
+                        velocity_y: player.velocity_y.max(0.0),
+                        angle: 0.0,
+                        chain_triggered: false,
+                        detonation_tick: SimulationTick::new(
+                            self.simulation_tick
+                                .get()
+                                .saturating_add(self.timing.ticks_for_millis(BOMB_FUSE_MILLIS)),
+                        ),
                         timer_seconds: BOMB_FUSE_SECONDS,
                     });
-                    self.bomb_detonation_ticks.push(SimulationTick::new(
-                        self.simulation_tick
-                            .get()
-                            .saturating_add(self.timing.ticks_for_millis(BOMB_FUSE_MILLIS)),
-                    ));
+                    self.next_bomb_id = self.next_bomb_id.saturating_add(1);
                     PlayerScopedCommandOutcome::Applied
                 }
             }

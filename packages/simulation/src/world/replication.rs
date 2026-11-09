@@ -69,7 +69,8 @@ pub struct LiveEntities {
     pub boulder_warning_deadlines: Vec<SimulationTick>,
     pub boulder_expiry_ticks: Vec<SimulationTick>,
     pub bombs: Vec<PlacedBomb>,
-    pub bomb_detonation_ticks: Vec<SimulationTick>,
+    #[serde(default)]
+    pub next_bomb_id: u64,
 }
 
 /// One player's on-change section.
@@ -296,6 +297,7 @@ impl WorldState {
     #[must_use]
     pub fn live_entities_where(&self, relevant: impl Fn(f32, f32) -> bool) -> LiveEntities {
         let mut entities = LiveEntities {
+            next_bomb_id: self.next_bomb_id,
             hazards: self
                 .hazards
                 .iter()
@@ -315,12 +317,9 @@ impl WorldState {
                     .extend(self.boulder_expiry_ticks.get(index).copied());
             }
         }
-        for (index, bomb) in self.bombs.iter().enumerate() {
+        for bomb in &self.bombs {
             if relevant(bomb.x, bomb.y) {
                 entities.bombs.push(*bomb);
-                entities
-                    .bomb_detonation_ticks
-                    .extend(self.bomb_detonation_ticks.get(index).copied());
             }
         }
         entities
@@ -334,14 +333,14 @@ impl WorldState {
             boulder_warning_deadlines,
             boulder_expiry_ticks,
             bombs,
-            bomb_detonation_ticks,
+            next_bomb_id,
         } = entities;
         self.hazards = hazards;
         self.falling_boulders = falling_boulders;
         self.boulder_warning_deadlines = boulder_warning_deadlines;
         self.boulder_expiry_ticks = boulder_expiry_ticks;
         self.bombs = bombs;
-        self.bomb_detonation_ticks = bomb_detonation_ticks;
+        self.next_bomb_id = next_bomb_id;
     }
 
     /// Applies one op-log entry.
@@ -413,7 +412,7 @@ impl WorldState {
             active_drill_timers: _,
             scanner_cooldowns: _,
             scanner_cooldown_deadlines: _,
-            bomb_detonation_ticks: _,
+            next_bomb_id: _,
             rng,
             discovered_tiles: _,
             service_transactions,

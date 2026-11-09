@@ -555,7 +555,20 @@ impl GameRenderer {
         view: &ViewSnapshot<'_>,
     ) {
         let viewport = view.viewport;
-        let camera = Vector2::new(view.camera.x, view.camera.y);
+        let mut camera = Vector2::new(view.camera.x, view.camera.y);
+        // Local, distance-scaled blast shake; HUD placement is never moved.
+        let mut shake = 0.0_f32;
+        for blast in snapshot.explosions {
+            let dx = blast.x - view.player.x;
+            let dy = blast.y - view.player.y;
+            let proximity =
+                (1.0 - dx.hypot(dy) / (fatherload_simulation::TILE_SIZE * 12.0)).clamp(0.0, 1.0);
+            shake += (1.0 - blast.age / 0.25).clamp(0.0, 1.0) * proximity * 3.0;
+        }
+        let shake = shake.min(5.0);
+        let phase = shell.update_ticks as f32;
+        camera.x += (phase * 2.3).sin() * shake;
+        camera.y += (phase * 3.1).cos() * shake;
         let (visible_width, visible_height) = view.visible_world_size();
         let density = render_scale_for_draw(draw);
         {
@@ -571,6 +584,7 @@ impl GameRenderer {
                     infrastructure: snapshot.infrastructure,
                     hazards: snapshot.hazards,
                     bombs: snapshot.bombs,
+                    bomb_alpha: snapshot.bomb_alpha,
                     boulders: snapshot.boulders,
                     sparks: snapshot.sparks,
                     explosions: snapshot.explosions,

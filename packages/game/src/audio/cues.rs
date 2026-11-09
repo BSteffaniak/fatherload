@@ -80,6 +80,7 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::UiError => Patch::UiError,
         SoundCue::Pickup => Patch::Pickup,
         SoundCue::BombPlaced => Patch::BombArm,
+        SoundCue::BombBounce => Patch::LandLight,
         SoundCue::InfrastructurePlaced => Patch::Deploy,
         SoundCue::Scanner => Patch::ScannerPulse,
         SoundCue::PoiDiscovered => Patch::PoiDiscovered,
@@ -109,7 +110,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         | GameplayEventKind::QuestCompleted { .. } => Some(SoundCue::Milestone),
         GameplayEventKind::RescueTriggered { .. } => Some(SoundCue::Rescue),
         GameplayEventKind::PlayerDamaged { .. } => Some(SoundCue::Damage),
-        GameplayEventKind::BombDetonated => Some(SoundCue::Explosion),
+        GameplayEventKind::BombDetonated { .. } => Some(SoundCue::Explosion),
+        GameplayEventKind::BombBounced { .. } => Some(SoundCue::BombBounce),
         GameplayEventKind::PoiOpened { poi, .. } => Some(match poi {
             PoiKind::SupplyCache | PoiKind::RivalClaim => SoundCue::CrateOpened,
             PoiKind::DerelictRig | PoiKind::Vault | PoiKind::Formation => SoundCue::SalvageOpened,
@@ -164,7 +166,8 @@ mod tests {
             | GameplayEventKind::PlayerDamaged { .. }
             | GameplayEventKind::HazardChanged
             | GameplayEventKind::BouldersChanged
-            | GameplayEventKind::BombDetonated
+            | GameplayEventKind::BombDetonated { .. }
+            | GameplayEventKind::BombBounced { .. }
             | GameplayEventKind::PoiOpened { .. }
             | GameplayEventKind::PoiDiscovered { .. }
             | GameplayEventKind::VaultOpened { .. }
@@ -191,7 +194,16 @@ mod tests {
             GameplayEventKind::PlayerDamaged { player_id },
             GameplayEventKind::HazardChanged,
             GameplayEventKind::BouldersChanged,
-            GameplayEventKind::BombDetonated,
+            GameplayEventKind::BombDetonated {
+                bomb_id: 1,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::BombBounced {
+                bomb_id: 1,
+                x: 0,
+                y: 0,
+            },
             GameplayEventKind::PoiDiscovered {
                 player_id,
                 feature,
@@ -265,6 +277,7 @@ mod tests {
             SoundCue::UiError,
             SoundCue::Pickup,
             SoundCue::BombPlaced,
+            SoundCue::BombBounce,
             SoundCue::InfrastructurePlaced,
             SoundCue::Scanner,
             SoundCue::PoiDiscovered,

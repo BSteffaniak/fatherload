@@ -12,10 +12,20 @@ pub struct HazardCloud {
     pub radius: f32,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
 pub struct PlacedBomb {
+    /// Stable session identity; retained in replication and saves.
+    pub id: u64,
     pub x: f32,
     pub y: f32,
+    pub velocity_x: f32,
+    pub velocity_y: f32,
+    /// Previous tick position for presentation-only interpolation.
+    pub previous_x: f32,
+    pub previous_y: f32,
+    pub angle: f32,
+    pub detonation_tick: crate::SimulationTick,
+    pub chain_triggered: bool,
     pub timer_seconds: f32,
 }
 

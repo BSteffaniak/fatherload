@@ -322,6 +322,8 @@ pub struct RenderSnapshot<'w> {
     pub terrain: &'w Terrain,
     pub hazards: &'w [HazardCloud],
     pub bombs: &'w [PlacedBomb],
+    /// Presentation fraction between a bomb's previous and current fixed-tick poses.
+    pub bomb_alpha: f32,
     pub infrastructure: &'w [PlacedInfrastructure],
     pub boulders: &'w [FallingBoulder],
     pub sparks: &'w [SparkParticle],
@@ -372,6 +374,7 @@ impl<'w> RenderSnapshot<'w> {
             terrain: world.terrain(),
             hazards: world.hazards(),
             bombs: world.bombs(),
+            bomb_alpha: 1.0,
             infrastructure: world.infrastructure(),
             boulders: world.falling_boulders(),
             sparks,

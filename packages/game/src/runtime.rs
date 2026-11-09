@@ -167,6 +167,15 @@ impl Runtime {
         Self::Host(Box::new(LocalHost::new(world, seats)))
     }
 
+    /// Fraction of a fixed tick for presentation, never gameplay.
+    #[must_use]
+    pub fn interpolation_alpha(&self) -> f32 {
+        match self {
+            Self::Host(host) => host.session.interpolation_alpha(),
+            Self::Client(client) => client.session().interpolation_alpha(),
+        }
+    }
+
     /// The world rendering and the shell read (a client's predicted world).
     #[must_use]
     pub fn world(&self) -> &WorldState {

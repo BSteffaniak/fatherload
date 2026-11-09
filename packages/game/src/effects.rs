@@ -70,12 +70,12 @@ pub struct Explosion {
 pub struct Effects {
     sparks: Vec<SparkParticle>,
     explosions: Vec<Explosion>,
-    /// Bomb positions seen last frame, so a detonation can be placed where its bomb was.
-    known_bombs: Vec<(f32, f32)>,
     damage_cooldowns: BTreeMap<PlayerId, f32>,
     /// Items in each local player's bay last frame (a pickup is growth).
     cargo_totals: BTreeMap<PlayerId, u32>,
     spawn_counter: u32,
+    presented_blasts: BTreeSet<u64>,
+    blast_order: VecDeque<u64>,
 }
 
 impl Effects {
@@ -95,7 +95,8 @@ impl Effects {
     pub fn clear(&mut self) {
         self.sparks.clear();
         self.explosions.clear();
-        self.known_bombs.clear();
+        self.presented_blasts.clear();
+        self.blast_order.clear();
         self.damage_cooldowns.clear();
         self.cargo_totals.clear();
     }
@@ -130,8 +131,8 @@ impl Effects {
         local_players: &[PlayerId],
     ) -> Vec<PlacedCue> {
         let mut cues = Vec::new();
-        // Several detonations in one frame share one pass over the vanished bombs.
-        let mut blasted = false;
+        let mut blast_cues = 0;
+        let mut impact_cues = 0;
         for event in events {
             let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
                 continue;
@@ -146,16 +147,35 @@ impl Effects {
                         self.spawn_sparks(player.x, player.y + 18.0);
                     }
                 }
-                GameplayEventKind::BombDetonated => {
-                    let blasts = self.spawn_explosions(world);
-                    if blasts.is_empty() && !blasted {
-                        // A bomb placed and detonated between two frames was never seen: still
-                        // heard, just not placed.
-                        cues.push(PlacedCue::interface(SoundCue::Explosion));
+                GameplayEventKind::BombDetonated { bomb_id, x, y } => {
+                    if !self.presented_blasts.insert(bomb_id) {
+                        continue;
                     }
-                    blasted = true;
-                    for (x, y) in blasts {
+                    self.blast_order.push_back(bomb_id);
+                    if self.blast_order.len() > PRESENTED_EVENT_HISTORY
+                        && let Some(expired) = self.blast_order.pop_front()
+                    {
+                        self.presented_blasts.remove(&expired);
+                    }
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    if self.explosions.len() < 64 {
+                        self.explosions.push(Explosion { x, y, age: 0.0 });
+                        self.spawn_blast_debris(x, y);
+                    }
+                    if blast_cues < 8 {
                         cues.push(PlacedCue::world(SoundCue::Explosion, x, y));
+                        blast_cues += 1;
+                    }
+                    continue;
+                }
+                GameplayEventKind::BombBounced { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    self.spawn_sparks(x, y + 6.0);
+                    if impact_cues < 4 {
+                        cues.push(PlacedCue::world(SoundCue::BombBounce, x, y));
+                        impact_cues += 1;
                     }
                     continue;
                 }
@@ -198,42 +218,31 @@ impl Effects {
                 self.cargo_totals.insert(*player_id, cargo_total(player));
             }
         }
-        self.known_bombs = world.bombs().iter().map(|bomb| (bomb.x, bomb.y)).collect();
         cues
     }
 
-    /// Blasts where bombs seen last frame have disappeared; returns where they went off.
-    fn spawn_explosions(&mut self, world: &WorldState) -> Vec<(f32, f32)> {
-        let remaining = world.bombs();
-        let gone: Vec<(f32, f32)> = self
-            .known_bombs
-            .iter()
-            .copied()
-            .filter(|(x, y)| {
-                !remaining
-                    .iter()
-                    .any(|bomb| (bomb.x - x).abs() < 1.0 && (bomb.y - y).abs() < 1.0)
-            })
-            .collect();
-        let mut blasts = Vec::new();
-        for (x, y) in gone {
-            if self
-                .explosions
-                .iter()
-                .any(|explosion| explosion.age < 0.05 && (explosion.x - x).abs() < 1.0)
-            {
-                continue;
+    fn spawn_blast_debris(&mut self, x: f32, y: f32) {
+        for grain in 0..16_u8 {
+            if self.sparks.len() >= 768 {
+                break;
             }
-            self.explosions.push(Explosion { x, y, age: 0.0 });
-            self.spawn_sparks(x, y);
-            self.spawn_sparks(x, y - 8.0);
-            blasts.push((x, y));
+            let angle = f32::from(grain) / 16.0 * std::f32::consts::TAU;
+            let speed = 90.0 + f32::from(grain % 4) * 28.0;
+            self.sparks.push(SparkParticle {
+                x,
+                y,
+                velocity_x: angle.cos() * speed,
+                velocity_y: angle.sin().mul_add(speed, -80.0),
+                life: SPARK_LIFE_SECONDS,
+            });
         }
-        blasts
     }
 
     fn spawn_sparks(&mut self, x: f32, y: f32) {
         for index in 0..6_u8 {
+            if self.sparks.len() >= 768 {
+                break;
+            }
             self.spawn_counter = self.spawn_counter.wrapping_add(1);
             let spread = f32::from(index) - 2.5;
             #[allow(
@@ -277,7 +286,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
-        | GameplayEventKind::BombDetonated
+        | GameplayEventKind::BombDetonated { .. }
+        | GameplayEventKind::BombBounced { .. }
         | GameplayEventKind::VaultOpened { .. }
         | GameplayEventKind::VaultLockReset { .. } => None,
     }
@@ -359,6 +369,33 @@ mod tests {
     }
 
     #[test]
+    fn a_large_blast_batch_caps_sound_particles_and_explosions() {
+        let local = PlayerId::new(1);
+        let world = WorldState::new_game(local);
+        let events: Vec<_> = (0..256_u64)
+            .map(|id| {
+                event(
+                    1,
+                    local,
+                    GameplayEventKind::BombDetonated {
+                        bomb_id: id,
+                        x: 200,
+                        y: 300,
+                    },
+                )
+            })
+            .collect();
+        let mut effects = Effects::default();
+        let cues = effects.apply(&events, &world, &[local]);
+        assert_eq!(cues.len(), 8);
+        assert_eq!(effects.explosions.len(), 64);
+        assert!(effects.sparks.len() <= 768);
+        assert!(effects.apply(&events, &world, &[local]).is_empty());
+        effects.clear();
+        assert_eq!(effects.apply(&events[..1], &world, &[local]).len(), 1);
+    }
+
+    #[test]
     fn unseen_detonations_still_sound_once_and_pickups_need_cargo_growth() {
         let local = PlayerId::new(1);
         let mut world = WorldState::new_game(local);
@@ -368,12 +405,26 @@ mod tests {
             ..event(tick, local, kind)
         };
         let blasts = [
-            world_event(1, GameplayEventKind::BombDetonated),
-            world_event(1, GameplayEventKind::BombDetonated),
+            world_event(
+                1,
+                GameplayEventKind::BombDetonated {
+                    bomb_id: 1,
+                    x: 120,
+                    y: 80,
+                },
+            ),
+            world_event(
+                1,
+                GameplayEventKind::BombDetonated {
+                    bomb_id: 1,
+                    x: 120,
+                    y: 80,
+                },
+            ),
         ];
         assert_eq!(
             effects.apply(&blasts, &world, &[local]),
-            vec![PlacedCue::interface(SoundCue::Explosion)]
+            vec![PlacedCue::world(SoundCue::Explosion, 120.0, 80.0)]
         );
         // Selling (the bay shrinks or stays) is not a pickup; mining (it grows) is.
         let changed = [event(

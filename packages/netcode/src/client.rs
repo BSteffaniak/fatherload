@@ -839,6 +839,12 @@ impl<S: NetSimulation> ClientSession<S> {
             + 1
     }
 
+    /// Fraction of the predicted fixed tick, for rendering only.
+    #[must_use]
+    pub fn interpolation_alpha(&self) -> f32 {
+        self.clock.alpha()
+    }
+
     // ----- presentation ------------------------------------------------------
 
     /// Builds the render view.

@@ -274,6 +274,33 @@ pub fn draw_sprite_flipped(
     blit(rect.source(), dest, flip_x, tint);
 }
 
+/// Draws an atlas sprite rotating around its centre (loose physical props).
+pub fn draw_sprite_rotated(
+    _draw: &mut impl RaylibDraw,
+    sprite: &SpriteDef,
+    frame: usize,
+    center: Vector2,
+    scale: f32,
+    degrees: f32,
+) {
+    let (Some(texture), Some(rect)) = (current_atlas(), layout().frame(sprite.name, frame)) else {
+        return;
+    };
+    let width = rect.width as f32 * scale;
+    let height = rect.height as f32 * scale;
+    // SAFETY: like blit, the current atlas lives throughout the renderer's draw scope.
+    unsafe {
+        ffi::DrawTexturePro(
+            texture,
+            rect.source(),
+            Rectangle::new(center.x, center.y, width, height),
+            Vector2::new(width * 0.5, height * 0.5),
+            degrees,
+            Color::WHITE,
+        );
+    }
+}
+
 /// Draws `slice` stretched over `dest`; corners are `border * scale` units.
 pub fn draw_nine_slice(
     _draw: &mut impl RaylibDraw,

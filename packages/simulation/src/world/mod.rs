@@ -19,6 +19,9 @@ use crate::{
     terrain::{ArtifactKind, MineralKind, Terrain, TilePosition},
 };
 
+#[cfg(test)]
+mod bomb_tests;
+mod bombs;
 mod commands;
 #[cfg(test)]
 mod determinism_tests;
@@ -238,7 +241,8 @@ pub struct WorldState {
     active_drill_timers: BTreeMap<PlayerId, ActiveDrillTimer>,
     scanner_cooldowns: BTreeMap<PlayerId, f32>,
     scanner_cooldown_deadlines: BTreeMap<PlayerId, SimulationTick>,
-    bomb_detonation_ticks: Vec<SimulationTick>,
+    #[serde(default)]
+    next_bomb_id: u64,
     rng: DeterministicRngState,
     discovered_tiles: BTreeMap<PlayerId, DiscoveredTiles>,
     service_transactions: Vec<PlayerServiceTransaction>,

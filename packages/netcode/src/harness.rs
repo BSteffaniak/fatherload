@@ -316,7 +316,7 @@ impl HarnessSim for WorldState {
             }),
             WorldEvent::ActionResolved { .. } => Some("ignored action"),
             WorldEvent::Gameplay(event) => match event.kind {
-                GameplayEventKind::BombDetonated => Some("bomb detonated"),
+                GameplayEventKind::BombDetonated { .. } => Some("bomb detonated"),
                 GameplayEventKind::CargoChanged { .. } => Some("cargo changed"),
                 _ => None,
             },

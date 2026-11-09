@@ -14,7 +14,7 @@ use crate::params::{NetTuning, SessionParams};
 use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 
 /// Version byte prefixed to every encoded message.
-pub const PROTOCOL_VERSION: u8 = 6;
+pub const PROTOCOL_VERSION: u8 = 7;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

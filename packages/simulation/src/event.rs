@@ -52,7 +52,16 @@ pub enum GameplayEventKind {
     },
     HazardChanged,
     BouldersChanged,
-    BombDetonated,
+    BombDetonated {
+        bomb_id: u64,
+        x: i32,
+        y: i32,
+    },
+    BombBounced {
+        bomb_id: u64,
+        x: i32,
+        y: i32,
+    },
     /// A player opened a POI tile (a crate, a derelict's core, a vault cache, an outpost
     /// locker) and received `reward`.
     PoiOpened {

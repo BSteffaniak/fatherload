@@ -179,7 +179,19 @@ impl WorldState {
                 .map(|boulder| SimulationTick::new(ticks(boulder.life)))
                 .collect(),
             terrain: import.terrain.clone(),
-            bombs: import.placed_bombs.clone(),
+            bombs: import
+                .placed_bombs
+                .iter()
+                .enumerate()
+                .map(|(index, bomb)| {
+                    let mut bomb = *bomb;
+                    bomb.id = u64::try_from(index).unwrap_or(u64::MAX);
+                    bomb.previous_x = bomb.x;
+                    bomb.previous_y = bomb.y;
+                    bomb.detonation_tick = SimulationTick::new(ticks(bomb.timer_seconds));
+                    bomb
+                })
+                .collect(),
             infrastructure: import.infrastructure.clone(),
             active_drills: import
                 .active_drill
@@ -203,11 +215,7 @@ impl WorldState {
                 player_id,
                 SimulationTick::new(ticks(import.scanner_cooldown_seconds)),
             )]),
-            bomb_detonation_ticks: import
-                .placed_bombs
-                .iter()
-                .map(|bomb| SimulationTick::new(ticks(bomb.timer_seconds)))
-                .collect(),
+            next_bomb_id: u64::try_from(import.placed_bombs.len()).unwrap_or(u64::MAX),
             rng: DeterministicRngState::new(import.terrain.seed()),
             discovered_tiles: BTreeMap::from([(player_id, DiscoveredTiles::default())]),
             service_transactions: Vec::new(),

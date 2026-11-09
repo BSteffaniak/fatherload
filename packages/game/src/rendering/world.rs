@@ -71,6 +71,7 @@ pub(super) struct WorldScene<'a> {
     pub infrastructure: &'a [PlacedInfrastructure],
     pub hazards: &'a [HazardCloud],
     pub bombs: &'a [PlacedBomb],
+    pub bomb_alpha: f32,
     pub boulders: &'a [FallingBoulder],
     pub sparks: &'a [SparkParticle],
     pub explosions: &'a [Explosion],
@@ -114,7 +115,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     }
     fx::draw_relay_countdowns(draw, scene.terrain, scene.relay_countdowns, seconds);
     for bomb in scene.bombs {
-        fx::draw_bomb(draw, bomb, seconds);
+        fx::draw_bomb(draw, bomb, seconds, scene.bomb_alpha);
     }
     for boulder in scene.boulders {
         fx::draw_boulder(draw, boulder, seconds);

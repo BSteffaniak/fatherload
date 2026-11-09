@@ -146,9 +146,7 @@ impl WorldState {
         }
         hash.write_u64(u64::try_from(self.bombs.len()).unwrap_or(u64::MAX));
         for bomb in &self.bombs {
-            hash.write_f32(bomb.x);
-            hash.write_f32(bomb.y);
-            hash.write_f32(bomb.timer_seconds);
+            hash.write_serialized(bomb);
         }
         hash.write_u64(u64::try_from(self.infrastructure.len()).unwrap_or(u64::MAX));
         for infrastructure in &self.infrastructure {
@@ -174,9 +172,7 @@ impl WorldState {
             hash.write_u64(player_id.get());
             hash.write_u64(deadline.get());
         }
-        for deadline in &self.bomb_detonation_ticks {
-            hash.write_u64(deadline.get());
-        }
+        hash.write_u64(self.next_bomb_id);
         hash.write_u64(self.rng.state());
         hash.write_serialized(&self.test_mode);
         for player_id in self.discovered_tiles.keys() {

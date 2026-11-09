@@ -667,6 +667,17 @@ impl<S: NetSimulation> HostSession<S> {
         }
     }
 
+    /// Fraction of a fixed tick accumulated, for presentation-only interpolation.
+    #[must_use]
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        reason = "accumulator fraction is bounded to one tick"
+    )]
+    pub fn interpolation_alpha(&self) -> f32 {
+        (self.acc as f64 / SessionParams::accumulator_unit() as f64).clamp(0.0, 1.0) as f32
+    }
+
     // ----- ticking ---------------------------------------------------------
 
     /// Advances real time by `dt`, running 0..n fixed ticks (subtracting

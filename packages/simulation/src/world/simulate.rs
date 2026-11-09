@@ -20,7 +20,6 @@ use crate::{
 
 use super::{
     ActiveDrillTimer, WorldState,
-    commands::bomb_tile_position,
     movement::{
         AUTHORITATIVE_BOULDER_LIFE_MILLIS, AUTHORITATIVE_BOULDER_SPAWN_CHANCE,
         AUTHORITATIVE_BOULDER_WARNING_MILLIS, boulder_spawn_chance,
@@ -240,27 +239,7 @@ impl WorldState {
             }
         }
 
-        let bombs = mem::take(&mut self.bombs);
-        let deadlines = mem::take(&mut self.bomb_detonation_ticks);
-        for (index, bomb) in bombs.into_iter().enumerate() {
-            let deadline = deadlines.get(index).copied().unwrap_or_else(|| {
-                SimulationTick::new(
-                    tick.get()
-                        .saturating_add(timing.rate.ticks_for_seconds(bomb.timer_seconds)),
-                )
-            });
-            if next_tick >= deadline {
-                quest_notes.detonations.push(bomb_tile_position(bomb));
-                let blast = self.detonate_bomb_at(bomb_tile_position(bomb), 2);
-                output.push_event(GameplayEventKind::BombDetonated);
-                self.vent_vault_seals(&blast.changed_tiles, &mut output);
-            } else {
-                let mut bomb = bomb;
-                bomb.timer_seconds = timing.rate.seconds_until(next_tick, deadline);
-                self.bombs.push(bomb);
-                self.bomb_detonation_ticks.push(deadline);
-            }
-        }
+        self.advance_bombs(next_tick, &mut quest_notes, &mut output);
 
         let active_players: Vec<PlayerId> = self.active_drills.keys().copied().collect();
         for player_id in active_players {

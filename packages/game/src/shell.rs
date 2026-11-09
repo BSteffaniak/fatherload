@@ -269,6 +269,7 @@ pub enum SoundCue {
     /// Ore or an artifact went into the cargo bay.
     Pickup,
     BombPlaced,
+    BombBounce,
     InfrastructurePlaced,
     Scanner,
     PoiDiscovered,

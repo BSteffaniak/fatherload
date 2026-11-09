@@ -529,6 +529,49 @@ mod tests {
     }
 
     #[test]
+    fn save_load_preserves_an_airborne_chain_triggered_bomb_and_its_future() {
+        use fatherload_simulation::{PlacedBomb, TickInputs};
+        let mut world = fatherload_simulation::WorldState::new_game(LEGACY_PLAYER_ID);
+        let mut entities = world.live_entities();
+        entities.next_bomb_id = 82;
+        entities.bombs.push(PlacedBomb {
+            id: 81,
+            x: 500.0,
+            y: 50.0,
+            previous_x: 499.0,
+            previous_y: 52.0,
+            velocity_x: 110.0,
+            velocity_y: -140.0,
+            angle: 0.4,
+            chain_triggered: true,
+            detonation_tick: SimulationTick::new(30),
+            timer_seconds: 0.5,
+        });
+        world.apply_live_entities(entities);
+        let save = WorldSave {
+            world,
+            play_seconds: 4.0,
+        };
+        let json = serde_json::to_string(&SaveFile {
+            version: SAVE_VERSION,
+            save: save.clone(),
+        })
+        .unwrap();
+        let mut restored = parse_save(&json).unwrap();
+        let mut original = save;
+        for _ in 0..60 {
+            let tick = original.world.simulation_tick();
+            let output = original.world.simulate_tick(tick, &TickInputs::default());
+            let replayed = restored.world.simulate_tick(tick, &TickInputs::default());
+            assert_eq!(output, replayed);
+            assert_eq!(
+                original.world.simulation_state_hash(),
+                restored.world.simulation_state_hash()
+            );
+        }
+    }
+
+    #[test]
     fn current_format_round_trips_the_world_exactly() {
         let mut world = WorldState::new_game(PlayerId::new(1));
         world.player_mut(PlayerId::new(1)).expect("rig").credits = 77;

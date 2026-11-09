@@ -1481,7 +1481,7 @@ fn canonical_tick_advances_bombs_and_infrastructure() {
     world.bombs[0].x = 10.0 * TILE_SIZE;
     world.bombs[0].y = 10.0 * TILE_SIZE;
     world.bombs[0].timer_seconds = FIXED_DELTA_SECONDS;
-    world.bomb_detonation_ticks[0] = tick.next().next();
+    world.bombs[0].detonation_tick = tick.next().next();
 
     let output = world.simulate_tick(tick.next(), &crate::TickInputs::default());
 

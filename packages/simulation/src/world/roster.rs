@@ -85,7 +85,7 @@ impl WorldState {
             active_drill_timers,
             scanner_cooldowns,
             scanner_cooldown_deadlines,
-            bomb_detonation_ticks: _,
+            next_bomb_id: _,
             rng: _,
             discovered_tiles,
             service_transactions,

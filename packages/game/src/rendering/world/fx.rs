@@ -308,25 +308,55 @@ pub fn draw_lost_cargo(draw: &mut impl RaylibDraw, x: f32, y: f32, seconds: f32)
 }
 
 /// A placed bomb: the fuse fizzes faster and a warning light flashes as it runs down.
-pub fn draw_bomb(draw: &mut impl RaylibDraw, bomb: &PlacedBomb, seconds: f32) {
+pub fn draw_bomb(draw: &mut impl RaylibDraw, bomb: &PlacedBomb, seconds: f32, alpha: f32) {
     let sprite = &props::BOMB;
-    let rate = if bomb.timer_seconds < 0.8 { 16.0 } else { 7.0 };
+    let urgent = bomb.chain_triggered || bomb.timer_seconds < 0.8;
+    let rate = if urgent { 20.0 } else { 7.0 };
     let frame = (seconds * rate) as usize % sprite.frames.len();
-    let (width, height) = (sprite.width() as f32 * ART, sprite.height() as f32 * ART);
-    let left = bomb.x - width * 0.5;
-    let top = bomb.y + 8.0 - height;
-    draw_world_sprite(draw, sprite, frame, left, top, false);
-    let flash =
-        ((bomb.timer_seconds * if bomb.timer_seconds < 0.8 { 12.0 } else { 4.0 }) as i32) % 2 == 0;
+    let x = (bomb.x - bomb.previous_x).mul_add(alpha, bomb.previous_x);
+    let y = (bomb.y - bomb.previous_y).mul_add(alpha, bomb.previous_y);
+    // Quantized rotation preserves the crunchy pixel silhouette while still tumbling.
+    let degrees = (bomb.angle.to_degrees() / 15.0).round() * 15.0;
+    crate::rendering::pixel_art::sprite::draw_sprite_rotated(
+        draw,
+        sprite,
+        frame,
+        Vector2::new(snap(x), snap(y)),
+        ART,
+        degrees,
+    );
+    let flash = (seconds * rate) as i32 % 2 == 0;
     if flash {
         disc(
             draw,
-            left + width * 0.5,
-            top + 7.0 * ART,
+            x,
+            y,
             6,
-            with_alpha(RED, 70),
+            with_alpha(if urgent { ORANGE } else { RED }, 75),
         );
-        Pen::at(left, top).rect(draw, 2, 6, 2, 2, ROSE);
+    }
+    // Fuse sparks and a short velocity-facing trail are cosmetic, not networked entities.
+    let angle = bomb.angle;
+    let fuse_x = x + angle.sin() * 10.0;
+    let fuse_y = y - angle.cos() * 10.0;
+    let flicker = ((seconds * 30.0) as i32 % 3) as f32;
+    draw.draw_rectangle_rec(
+        Rectangle::new(snap(fuse_x), snap(fuse_y - flicker * ART), ART, ART),
+        if urgent { CREAM } else { GOLD },
+    );
+    if bomb.velocity_x.abs() + bomb.velocity_y.abs() > 120.0 {
+        for step in 1..=3 {
+            let t = step as f32 * 0.008;
+            draw.draw_rectangle_rec(
+                Rectangle::new(
+                    snap(x - bomb.velocity_x * t),
+                    snap(y - bomb.velocity_y * t),
+                    ART,
+                    ART,
+                ),
+                with_alpha(FOG, 100 / step as u8),
+            );
+        }
     }
 }
 

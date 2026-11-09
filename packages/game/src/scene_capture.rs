@@ -302,6 +302,48 @@ impl SceneStage<'_> {
     }
 }
 
+/// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
+fn bomb_cascade_scene(stage: &mut SceneStage<'_>, frames: usize) {
+    stage.play(1, |world, seats| {
+        for y in 10..=28 {
+            for x in 100..=124 {
+                let kind = if y == 28 {
+                    TileKind::Bedrock
+                } else if y == 20 && (107..=116).contains(&x) {
+                    TileKind::Stone
+                } else {
+                    TileKind::Air
+                };
+                let _ = world.terrain_mut().set_kind(TilePosition { x, y }, kind);
+            }
+        }
+        park_rig(world, seats[0].player, 111, 24);
+        reveal(world, seats[0].player, 99..126, 9..30);
+        let mut entities = world.live_entities();
+        for id in 0..9_u8 {
+            let x = (109.5 + f32::from(id % 5)) * TILE_SIZE;
+            let y = (19.0 - f32::from(id / 5)) * TILE_SIZE;
+            entities.bombs.push(fatherload_simulation::PlacedBomb {
+                id: u64::from(id),
+                x,
+                y,
+                previous_x: x,
+                previous_y: y,
+                timer_seconds: if id == 2 { 0.85 } else { 5.0 },
+                detonation_tick: fatherload_simulation::SimulationTick::new(if id == 2 {
+                    51
+                } else {
+                    300
+                }),
+                ..fatherload_simulation::PlacedBomb::default()
+            });
+        }
+        entities.next_bomb_id = 9;
+        world.apply_live_entities(entities);
+    });
+    stage.settle(frames);
+}
+
 /// A scene inside `$zone` standing at its counter with `$modal` (the counter panel) open.
 macro_rules! interior_scene {
     ($name:literal, $summary:literal, $zone:ident, $modal:ident) => {
@@ -366,6 +408,26 @@ pub const SCENES: &[Scene] = &[
         name: "title",
         summary: "Title menu over the idle world",
         setup: |_| {},
+    },
+    Scene {
+        name: "bomb_cascade_before",
+        summary: "Loose bombs, removed support and delayed blast cascade: before",
+        setup: |stage| bomb_cascade_scene(stage, 45),
+    },
+    Scene {
+        name: "bomb_cascade_blast",
+        summary: "Loose bombs, removed support and delayed blast cascade: blast",
+        setup: |stage| bomb_cascade_scene(stage, 52),
+    },
+    Scene {
+        name: "bomb_cascade_airborne",
+        summary: "Loose bombs, removed support and delayed blast cascade: airborne",
+        setup: |stage| bomb_cascade_scene(stage, 62),
+    },
+    Scene {
+        name: "bomb_cascade_after",
+        summary: "Loose bombs, removed support and delayed blast cascade: after",
+        setup: |stage| bomb_cascade_scene(stage, 100),
     },
     Scene {
         name: "surface_town",
