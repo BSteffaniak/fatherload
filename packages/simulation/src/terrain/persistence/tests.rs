@@ -157,14 +157,41 @@ fn odd_sized_and_extended_terrain_round_trips() {
     // A short v1 world extended to full depth regains exactly the generated rows.
     let settings = WorldSettings::new(0xACE);
     let generated = Terrain::generate(&settings);
-    let mut short = Terrain::from(FullTerrain {
+    let mut short = Terrain::try_from(FullTerrain {
         tiles: generated.tiles()[..usize::try_from(240 * 100).expect("small")].to_vec(),
         height: 100,
         ..FullTerrain::from(&generated)
-    });
+    })
+    .expect("valid full terrain");
     short.ensure_depth(settings.height_tiles());
     assert_same_tiles(&short, &generated);
     assert!(short.snapshot().diffs.is_empty());
+}
+
+#[test]
+fn full_terrain_with_the_wrong_tile_count_or_size_is_rejected() {
+    let generated = Terrain::new_seeded(20, 30, 5);
+    let full = FullTerrain::from(&generated);
+    let mut short = full.clone();
+    short.tiles.pop();
+    assert_eq!(
+        Terrain::try_from(short).expect_err("short").to_string(),
+        "terrain holds 599 tiles but its size needs 600"
+    );
+    let mut long = full.clone();
+    long.tiles.push(long.tiles[0]);
+    assert!(matches!(
+        Terrain::try_from(long),
+        Err(TerrainRestoreError::TileCountMismatch { .. })
+    ));
+    let mut empty = full.clone();
+    empty.width = 0;
+    assert!(matches!(
+        Terrain::try_from(empty),
+        Err(TerrainRestoreError::InvalidSize { .. })
+    ));
+    let restored = Terrain::try_from(full).expect("valid");
+    assert_same_tiles(&restored, &generated);
 }
 
 #[test]

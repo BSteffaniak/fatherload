@@ -234,6 +234,8 @@ pub enum TerrainRestoreError {
     InvalidSize { width: i32, height: i32 },
     /// A diff points outside the terrain.
     DiffOutOfBounds { index: u64 },
+    /// A full-tile terrain does not hold exactly one tile per position.
+    TileCountMismatch { expected: u64, actual: u64 },
     /// The rebuilt terrain does not match the digest: the snapshot was made by a generator that
     /// produces different terrain for the same settings, or it is corrupted.
     DigestMismatch {
@@ -255,6 +257,10 @@ impl fmt::Display for TerrainRestoreError {
                     "terrain tile diff {index} is outside the terrain"
                 )
             }
+            Self::TileCountMismatch { expected, actual } => write!(
+                formatter,
+                "terrain holds {actual} tiles but its size needs {expected}"
+            ),
             Self::DigestMismatch {
                 generator,
                 expected,
@@ -283,8 +289,12 @@ pub struct FullTerrain {
     pub settings: Option<WorldSettings>,
 }
 
-impl From<FullTerrain> for Terrain {
-    fn from(full: FullTerrain) -> Self {
+impl TryFrom<FullTerrain> for Terrain {
+    type Error = TerrainRestoreError;
+
+    /// Checks the size and that there is exactly one tile per position (a corrupted old save
+    /// is an error, not a terrain whose tile count disagrees with its size).
+    fn try_from(full: FullTerrain) -> Result<Self, Self::Error> {
         let FullTerrain {
             width,
             height,
@@ -292,12 +302,20 @@ impl From<FullTerrain> for Terrain {
             tiles,
             settings,
         } = full;
-        Self::from_tiles(
+        validate_size(width, height)?;
+        let expected = usize::try_from(i64::from(width) * i64::from(height)).unwrap_or(usize::MAX);
+        if tiles.len() != expected {
+            return Err(TerrainRestoreError::TileCountMismatch {
+                expected: u64::try_from(expected).unwrap_or(u64::MAX),
+                actual: u64::try_from(tiles.len()).unwrap_or(u64::MAX),
+            });
+        }
+        Ok(Self::from_tiles(
             settings.unwrap_or_else(|| WorldSettings::legacy(seed)),
             width,
             height,
             tiles,
-        )
+        ))
     }
 }
 

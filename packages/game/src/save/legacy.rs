@@ -18,7 +18,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, de::Error as _};
 use serde_json::Value;
 
 use drillgame_simulation::{
@@ -46,7 +46,7 @@ const fn legacy_current_game_version() -> u32 {
 
 /// Reads a pre-v6 terrain, which wrote out every tile.
 fn full_terrain<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Terrain, D::Error> {
-    FullTerrain::deserialize(deserializer).map(Terrain::from)
+    Terrain::try_from(FullTerrain::deserialize(deserializer)?).map_err(D::Error::custom)
 }
 
 /// Rewrites a pre-v6 world's full-tile `terrain` in the current compact form, so the rest of
@@ -54,7 +54,8 @@ fn full_terrain<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Terrain, D
 fn compact_terrain(world: &mut Value) -> Result<(), serde_json::Error> {
     if let Some(terrain) = world.get_mut("terrain") {
         let full: FullTerrain = serde_json::from_value(terrain.take())?;
-        *terrain = serde_json::to_value(Terrain::from(full))?;
+        let terrain_value = Terrain::try_from(full).map_err(serde::de::Error::custom)?;
+        *terrain = serde_json::to_value(terrain_value)?;
     }
     Ok(())
 }

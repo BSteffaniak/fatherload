@@ -795,6 +795,18 @@ mod tests {
         let mut truncated: serde_json::Value = serde_json::from_str(&v6_json(&save)).expect("json");
         truncated["save"]["world"]["terrain"]["diffs"] = serde_json::json!([]);
         assert!(parse_save(&truncated.to_string()).is_err());
+
+        // A v5 save whose full tiles do not fill its terrain fails cleanly too.
+        let mut short_v5 = v5_json(&save);
+        short_v5["save"]["world"]["terrain"]["tiles"]
+            .as_array_mut()
+            .expect("tiles")
+            .truncate(10);
+        let error = parse_save(&short_v5.to_string()).expect_err("short v5 tiles");
+        assert!(
+            error.to_string().contains("tiles but its size needs"),
+            "{error}"
+        );
     }
 
     /// Save file sizes, v5 (full tiles) against v6 (diffs from generation).
