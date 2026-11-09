@@ -9,7 +9,7 @@
 use drillgame_simulation::{
     terrain::{MineralKind, TileKind},
     worldgen::{
-        self, Band, FeatureKind, GeneratorVersion, HazardIntensity, ResourceRichness,
+        self, Band, FeatureKind, GeneratorVersion, HazardIntensity, HazardKind, ResourceRichness,
         WorldSettings, WorldSize, band_at, parse_seed,
         report::{WorldStats, distribution_report},
     },
@@ -263,6 +263,14 @@ fn preview_image(
             };
             let band = band_at(settings, x, y);
             let mut color = tile_color(kind, band, y);
+            // Tell-tale stain: rock near a hazard pocket takes on the pocket's colour, as the
+            // game's tile art stains it, so the preview shows what a player can read.
+            if kind != TileKind::Air
+                && HazardKind::of_tile(kind).is_none()
+                && let Some(hazard) = nearby_hazard(&kind_at, x, y)
+            {
+                color = mix(color, tile_color(hazard, band, y), 35);
+            }
             // Light the floors and darken the ceilings of open spaces so caves read as volumes.
             if kind != TileKind::Air && y > 4 {
                 if kind_at(x, y - 1) == Some(TileKind::Air) {
@@ -272,6 +280,16 @@ fn preview_image(
                 }
             }
             image.draw_rectangle(legend + x * scale, y * scale, scale, scale, color);
+            // Hazard tiles get a dark rim so pockets never read as ore of a similar colour.
+            if HazardKind::of_tile(kind).is_some() && scale >= 3 {
+                image.draw_rectangle_lines(
+                    legend + x * scale,
+                    y * scale,
+                    scale,
+                    scale,
+                    palette::INK,
+                );
+            }
         }
     }
     if features {
@@ -296,6 +314,18 @@ fn preview_image(
         }
     }
     image
+}
+
+/// The hazard tile within two tiles of `(x, y)`, if any (the reach of the in-game stain).
+fn nearby_hazard(
+    kind_at: &impl Fn(i32, i32) -> Option<TileKind>,
+    x: i32,
+    y: i32,
+) -> Option<TileKind> {
+    (-2..=2)
+        .flat_map(|dy| (-2..=2).map(move |dx| (dx, dy)))
+        .filter_map(|(dx, dy)| kind_at(x + dx, y + dy))
+        .find(|kind| HazardKind::of_tile(*kind).is_some())
 }
 
 fn mix(a: Color, b: Color, percent: u16) -> Color {
