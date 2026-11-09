@@ -489,10 +489,11 @@ impl Mixer {
             let (pan_left, pan_right) = pan_gains(voice.pan);
             let (left_end, right_end, send_end) =
                 (pan_left * level, pan_right * level, level * voice.send);
+            // The filter always runs (only its output is bypassed while open), so a cutoff
+            // gliding below OPEN_CUTOFF picks up a settled filter instead of one starting
+            // from zero state mid-sound, which would click.
             let filtered = voice.cutoff < OPEN_CUTOFF;
-            if filtered {
-                voice.filter.set(voice.cutoff, 0.707);
-            }
+            voice.filter.set(voice.cutoff.min(OPEN_CUTOFF), 0.707);
             let rate = f64::from(voice.rate.clamp(0.05, 4.0));
             let length = buffer.len() as f64;
             for frame in 0..frames {
@@ -500,10 +501,9 @@ impl Mixer {
                 let left = voice.last_left + (left_end - voice.last_left) * ramp;
                 let right = voice.last_right + (right_end - voice.last_right) * ramp;
                 let wet = voice.last_send + (send_end - voice.last_send) * ramp;
-                let mut sample = hermite(buffer, voice.position, voice.looped);
-                if filtered {
-                    sample = voice.filter.process(sample);
-                }
+                let raw = hermite(buffer, voice.position, voice.looped);
+                let low = voice.filter.process(raw);
+                let sample = if filtered { low } else { raw };
                 out[frame * 2] += sample * left;
                 out[frame * 2 + 1] += sample * right;
                 send[frame] += sample * wet;
