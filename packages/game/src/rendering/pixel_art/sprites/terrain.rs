@@ -5,7 +5,10 @@
 //! `w` glint). Artifact stamps are one-offs. They are registered in the atlas too, so the gallery
 //! and tests see them, but the terrain uses them CPU-side via [`SpriteDef::color_of`].
 
-use drillgame_simulation::terrain::{ArtifactKind, MineralKind};
+use drillgame_simulation::{
+    terrain::{ArtifactKind, DeepStratum, MineralKind},
+    worldgen::Band,
+};
 
 #[allow(
     clippy::wildcard_imports,
@@ -106,6 +109,20 @@ ore_stamp!(
     LAVENDER,
     PINK
 );
+// Mythril in the Void Geode Fields, whose rock shares its violet: a pale ice rim and a brighter
+// body keep the veins readable against the geode rock.
+pub const ORE_MYTHRIL_GEODE: SpriteDef = SpriteDef {
+    name: "ore_mythril_geode",
+    legend: &[
+        ('o', ICE),
+        ('d', VIOLET),
+        ('m', LAVENDER),
+        ('l', PINK),
+        ('w', BONE),
+    ],
+    frames: &[GEM],
+    frame_seconds: 0.0,
+};
 // Volatile crystals in explosive pockets.
 ore_stamp!(
     VOLATILE_CRYSTAL,
@@ -131,6 +148,16 @@ pub const fn ore_stamp(mineral: MineralKind) -> (&'static SpriteDef, u32) {
         MineralKind::Platinum => (&ORE_PLATINUM, 3),
         MineralKind::Uranium => (&ORE_URANIUM, 3),
         MineralKind::Mythril => (&ORE_MYTHRIL, 3),
+    }
+}
+
+/// The cluster stamp for `mineral` embedded in `band`'s rock: [`ore_stamp`], with a high-contrast
+/// variant where the band's rock shares the ore's colours.
+#[must_use]
+pub const fn ore_stamp_in(mineral: MineralKind, band: Band) -> (&'static SpriteDef, u32) {
+    match (mineral, band) {
+        (MineralKind::Mythril, Band::Deep(DeepStratum::VoidGeodeFields)) => (&ORE_MYTHRIL_GEODE, 3),
+        _ => ore_stamp(mineral),
     }
 }
 

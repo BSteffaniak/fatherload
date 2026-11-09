@@ -31,7 +31,7 @@ use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     shade::{PaletteIndex, TRANSPARENT, bayer4, index_of},
     sprite::SpriteDef,
-    sprites::terrain::{VOLATILE_CRYSTAL, artifact_stamp, ore_stamp},
+    sprites::terrain::{VOLATILE_CRYSTAL, artifact_stamp, ore_stamp_in},
 };
 
 mod poi_art;
@@ -553,7 +553,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         }
     }
     let seed = hash(x, y, 101);
-    paint_stamps(&mut canvas, kind, seed);
+    paint_stamps(&mut canvas, kind, band, seed);
     paint_telltale(&mut canvas, terrain, position, kind, seed);
     let material = match kind {
         TileKind::Ore(_)
@@ -599,11 +599,11 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
 }
 
 /// The features a tile kind adds over its host rock: pebbles, ore, artifacts and pockets.
-fn paint_stamps(canvas: &mut TileCanvas, kind: TileKind, seed: u32) {
+fn paint_stamps(canvas: &mut TileCanvas, kind: TileKind, band: Band, seed: u32) {
     match kind {
         TileKind::Dirt => paint_pebbles(canvas, seed),
         TileKind::Ore(mineral) => {
-            let (stamp, count) = ore_stamp(mineral);
+            let (stamp, count) = ore_stamp_in(mineral, band);
             paint_clusters(canvas, stamp, count, seed);
         }
         TileKind::Artifact(artifact) => {

@@ -79,6 +79,7 @@ pub const ALL: &[&SpriteDef] = &[
     &terrain::ORE_DIAMOND,
     &terrain::ORE_PLATINUM,
     &terrain::ORE_URANIUM,
+    &terrain::ORE_MYTHRIL_GEODE,
     &terrain::ORE_MYTHRIL,
     &terrain::VOLATILE_CRYSTAL,
     &terrain::FOSSIL,

@@ -1,8 +1,8 @@
 //! Tile art for point-of-interest fixtures (see `drillgame_simulation::poi`).
 //!
 //! Built things read as built: vault walls are dressed blocks of dark alloy with brass inlay
-//! (the inlay glows in the stratum's accent colour), wreckage is dented hull plating in the
-//! prospector yellow, outposts are corrugated steel with a teal company stripe. Natural
+//! (the inlay glows in the stratum's accent colour), wreckage is dented, weathered teal-grey
+//! hull plating with rust, outposts are corrugated steel with a teal company stripe. Natural
 //! formations take their band's palette: fossil shale is laminated stratum stone with shell and
 //! bone imprints, geode shells are faceted crystal in a per-stratum ramp. Objects (crates,
 //! consoles, doors, seals, switches, relays, the vault cache, lockers) are 16x16 stamps from
@@ -59,7 +59,7 @@ const fn crystal_ramp(band: Band) -> Ramp {
 pub const fn poi_color(tile: PoiTile, band: Band) -> Color {
     match tile {
         PoiTile::SupplyCrate => SAND,
-        PoiTile::Wreckage => STEEL_LIGHT,
+        PoiTile::Wreckage => TEAL_DARK,
         PoiTile::SalvageCore => MINT,
         PoiTile::VaultWall | PoiTile::VaultSealVented => SLATE,
         PoiTile::VaultDoor | PoiTile::VaultSwitch { lit: false, .. } => GOLD,
@@ -141,27 +141,29 @@ pub(super) fn vault_floor_pixel(strata: &Strata, x: i32, y: i32) -> PaletteIndex
     }
 }
 
-/// Wreckage: prospector-yellow hull panels with dark seams and rivets, rust blooms and soot.
+/// Wreckage: weathered teal-grey hull panels with dark seams and rivets, flaking paint, rust
+/// blooms and soot. No warm paint, so a wreck never reads as lava or a hot vent.
 fn wreck_pixel(x: i32, y: i32) -> PaletteIndex {
     let (px, py) = (x.rem_euclid(10), y.rem_euclid(8));
     if px == 0 || py == 0 {
         return if (px == 0 && py == 4) || (py == 0 && px == 5) {
             HULL_STEEL[2]
         } else {
-            index_of(STEEL_DARK)
+            index_of(SLATE_DARK)
         };
     }
     let soot = noise(x, y, 6, 79);
     let rust = noise(x, y, 4, 73);
-    if soot > 0.64 {
+    if soot > 0.66 {
         return index_of(if hash(x, y, 81).is_multiple_of(3) {
             STONE_DARK
         } else {
             NIGHT
         });
     }
-    if rust > 0.62 {
-        return index_of(if hash(x, y, 77).is_multiple_of(3) {
+    if rust > 0.66 {
+        // Rust streaks: mostly deep rust, a few fresher copper flecks.
+        return index_of(if hash(x, y, 77).is_multiple_of(5) {
             COPPER
         } else {
             RUST
@@ -171,15 +173,18 @@ fn wreck_pixel(x: i32, y: i32) -> PaletteIndex {
     if noise(x, y, 3, 85) > 0.7 {
         return HULL_STEEL[usize::from(py < 4)];
     }
-    // Each panel is lit at the top-left and shaded at the bottom-right.
+    // Faded teal company paint on each panel, lit at the top-left and shaded at the
+    // bottom-right.
     index_of(if py == 1 || px == 1 {
-        GOLD
+        STEEL_LIGHT
     } else if py == 7 || px == 9 {
-        RUST
+        TEAL_DARK
     } else if py >= 4 {
-        ORANGE
+        STEEL_DARK
+    } else if noise(x, y, 5, 87) > 0.45 {
+        TEAL
     } else {
-        AMBER
+        STEEL
     })
 }
 
@@ -355,7 +360,7 @@ pub(super) fn paint(
         }
         PoiTile::Wreckage => {
             fill(canvas, |x, y, _, _| wreck_pixel(x, y));
-            Some((index_of(CREAM), index_of(RUST), false))
+            Some((index_of(STEEL_LIGHT), index_of(SLATE_DARK), false))
         }
         PoiTile::FossilShale => {
             fill(canvas, |x, y, _, _| shale_pixel(strata, x, y));

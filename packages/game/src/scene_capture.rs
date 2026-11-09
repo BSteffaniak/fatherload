@@ -17,7 +17,7 @@ use drillgame_simulation::{
     economy::SurfaceZone,
     poi::{FormationStyle, LoreId, PoiKnowledge, PoiTile, PoiVariant, VaultPuzzle},
     surface::SURFACE_BUILDINGS,
-    terrain::{MineralKind, TILE_SIZE, Terrain, TileKind, TilePosition},
+    terrain::{DeepStratum, MineralKind, TILE_SIZE, Terrain, TileKind, TilePosition},
     worldgen::{
         Band, DEFAULT_WORLD_SEED, FeatureDetail, FeatureKind, HazardKind, ResourceRichness,
         WorldFeature, WorldSettings, WorldSize,
@@ -1213,6 +1213,108 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "drill_up_crown_bore",
+        summary: "Crown bore: the rig thrusts into a stone ceiling and drills upward",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                sink_rig(world, player, 100, 34);
+                world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x: 100, y: 30 }, TileKind::Stone);
+                place_rig(world, player, 100, 31);
+                reveal(world, player, 88..114, 22..42);
+                if let Some(rig) = world.player_mut(player) {
+                    rig.drill_strength = 3;
+                    rig.drill_mount_level = 2;
+                }
+            });
+            stage.hold(
+                40,
+                PlayerInput {
+                    thrust: true,
+                    ..PlayerInput::default()
+                },
+            );
+        },
+    },
+    Scene {
+        name: "drill_side_gimbal_flight",
+        summary: "Gimbal mount in a test-mode world: hovering in a shaft, drilling the wall sideways",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                world.enable_test_mode();
+                sink_rig(world, player, 100, 34);
+                world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x: 101, y: 29 }, TileKind::Stone);
+                place_rig(world, player, 100, 29);
+                reveal(world, player, 88..114, 22..42);
+            });
+            // Feather the thruster to hover while pushing into the wall.
+            for _ in 0..8 {
+                stage.hold(
+                    3,
+                    PlayerInput {
+                        horizontal: 1.0,
+                        thrust: true,
+                        ..PlayerInput::default()
+                    },
+                );
+                stage.hold(
+                    2,
+                    PlayerInput {
+                        horizontal: 1.0,
+                        ..PlayerInput::default()
+                    },
+                );
+            }
+        },
+    },
+    Scene {
+        name: "shop_drill_mount",
+        summary: "Upgrade shop with the late-game Drill Mount row selected (locked until the deep strata)",
+        setup: |stage| {
+            enter_interior(stage, SurfaceZone::Shop, Some(ModalScreen::Shop));
+            stage.seat(0).selected_menu_item =
+                drillgame_simulation::economy::UPGRADE_OFFER_COUNT - 1;
+        },
+    },
+    Scene {
+        name: "test_mode_pause",
+        summary: "Pause menu in a test-mode world: warp and god-mode toggles",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                world.enable_test_mode();
+                sink_rig(world, seats[0].player, 97, 12);
+            });
+            stage.settle(20);
+            let shell = stage.shell();
+            shell.pending_test_mode = Some(drillgame_simulation::TestModeState {
+                invulnerable: true,
+                infinite_fuel: false,
+            });
+            shell.run_mode = RunMode::Paused;
+            shell.selected_pause_item = 2;
+        },
+    },
+    Scene {
+        name: "test_mode_warp",
+        summary: "Test mode's Warp to Layer list",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                world.enable_test_mode();
+                sink_rig(world, seats[0].player, 97, 12);
+            });
+            stage.settle(20);
+            let shell = stage.shell();
+            shell.run_mode = RunMode::Paused;
+            shell.modal = Some(ModalScreen::WarpToLayer);
+            shell.selected_menu_item = 6;
+        },
+    },
+    Scene {
         name: "remote_rigs",
         summary: "Two local players side by side; each view shows the other rig with its tag",
         setup: |stage| {
@@ -1309,9 +1411,10 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
-                sink_rig(world, player, 120, 100);
-                carve(world, 108..133, 100..101);
-                reveal(world, player, 98..143, 90..112);
+                let row = band_row(world, Band::Deep(DeepStratum::CrystalFaults), 8);
+                sink_rig(world, player, 120, row);
+                carve(world, 108..133, row..row + 1);
+                reveal(world, player, 98..143, row - 10..row + 12);
             });
             stage.settle(10);
         },
@@ -1322,9 +1425,10 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
-                sink_rig(world, player, 120, 205);
-                carve(world, 108..133, 205..206);
-                reveal(world, player, 98..143, 195..218);
+                let row = band_row(world, Band::Deep(DeepStratum::MantleStormZone), -2);
+                sink_rig(world, player, 120, row);
+                carve(world, 108..133, row..row + 1);
+                reveal(world, player, 98..143, row - 10..row + 13);
             });
             stage.settle(10);
         },
@@ -1898,6 +2002,12 @@ fn park_at(world: &mut WorldState, player: PlayerId, zone: SurfaceZone) {
         .find(|building| building.zone == zone)
         .map_or(97, |building| building.tile_x + 2);
     park_rig(world, player, tile_x, 4);
+}
+
+/// The row `offset` rows below the top of `band` in this world (negative: above it).
+const fn band_row(world: &WorldState, band: Band, offset: i32) -> i32 {
+    drillgame_simulation::worldgen::strata::band_layout_rows(world.world_settings(), band).0
+        + offset
 }
 
 /// Puts the rig centred on tile `(x, y)` at rest, clearing that tile.

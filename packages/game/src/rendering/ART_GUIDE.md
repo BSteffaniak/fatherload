@@ -279,7 +279,9 @@ Animation is driven by shell ticks (`WorldScene::ticks`), never wall-clock time.
   of a tile comes from `Terrain::band_at`, never from a fixed depth: generated worlds have wavy,
   interleaved band boundaries that differ per seed, and the palettes follow them tile by tile.
 - Ores are 3-4 cluster stamps (`sprites::terrain::ore_stamp`: nugget/gem/chunk/flake shapes in
-  the mineral's ramp) on the host rock of that depth; artifacts are one centred stamp each;
+  the mineral's ramp) on the host rock of that depth (`ore_stamp_in` swaps in a high-contrast
+  variant where the rock shares the ore's colours: mythril in the Void Geode Fields gets an `ICE`
+  rim and a brighter `VIOLET`/`LAVENDER`/`PINK` body); artifacts are one centred stamp each;
   gas/pressure pockets are bubbled cavities, explosive pockets volatile red crystals, magma vents
   a glowing seam, lava molten noise (plus an animated glow and glints in `world/fx.rs`, only on
   explored tiles).
@@ -309,8 +311,9 @@ built, natural ones take their band's palette:
   Fixtures are stamped after the frame so outlines never cut them.
 - While a twin-relay lock counts down, both relays carry a draining timer bar (`INK` frame,
   `GOLD` fill, blinking `RED`/`ROSE` in the last third; `world/fx.rs::draw_relay_countdowns`).
-- *Wreckage* is prospector-orange hull panels with dark seams and rivets, soot, rust blooms and
-  flaked bare steel; the salvage core is a cockpit console with a glowing `MINT` screen.
+- *Wreckage* is weathered teal-grey hull panels (`STEEL`/`TEAL` paint, `STEEL_LIGHT` lit edge,
+  `TEAL_DARK` shade) with `SLATE_DARK` seams and rivets, soot, `RUST` blooms with a few `COPPER`
+  flecks and flaked bare steel, and no warm paint, so a wreck never reads as lava; the salvage core is a cockpit console with a glowing `MINT` screen.
 - *Supply crates* are planked boxes with steel corners and a stencil plate.
 - *Fossil shale* is pale sandy laminations over the band's darkest stone with a shell or bone
   imprint on every tile; *geode shells* are faceted crystal in a per-stratum ramp (Crystal
@@ -335,8 +338,10 @@ centres and applied per art pixel as a Bayer-dithered walk down each colour's ra
 
 **Rig** (`sprites/rig.rs`, `world/rig.rs`). 16x13 body facing right (flipped for left, and a
 stopped rig keeps its last facing); tracks roll while driving; a nose drill at the front, the
-spinning bit below while drilling down, a side bit while drilling sideways, one-pixel drilling
-shake; a long climb flame or short hover flame; exhaust puffs, thick smoke and sparks under 35%
+spinning bit below while drilling down, a side bit while drilling sideways, the bit on the roof
+pointing up while the crown bore drills a ceiling (`DRILL_UP`), one-pixel drilling shake; a drill
+mount shows as a brass gimbal ring at the nose (glowing while drilling sideways in flight) and,
+for the crown bore, a steel collar on the roof; a long climb flame or short hover flame; exhaust puffs, thick smoke and sparks under 35%
 hull, scorched paint under 30%, a fast red beacon under 15%. Other players' rigs use another hull
 paint by player id (`PLAYER_BODIES`, player 1 yellow; the same paint in every view and inside buildings) and carry a name tag with fuel/hull pips whose border turns
 amber (warning) or blinks red (critical).
