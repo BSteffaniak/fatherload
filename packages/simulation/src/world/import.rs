@@ -162,6 +162,7 @@ impl WorldState {
                 expeditions_completed: import.expeditions_completed,
                 next_day_tick: SimulationTick::new(timing.ticks_for_millis(MARKET_DAY_MILLIS)),
                 vault_relay_deadlines: BTreeMap::new(),
+                crew_quests: crate::quest::CrewQuests::default(),
             },
             scan_markers: import.scan_markers.clone(),
             collapse_warnings: import.collapse_warnings.clone(),

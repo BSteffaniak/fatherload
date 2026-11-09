@@ -6,6 +6,7 @@ use crate::{
     command::PlayerCommand,
     ids::{InputSequence, PlayerId, SimulationTick},
     poi::{PoiKind, PoiReward},
+    quest::{BlueprintId, QuestFailure, QuestId},
     summary::PlayerScopedCommandOutcome,
     worldgen::FeatureId,
 };
@@ -76,6 +77,37 @@ pub enum GameplayEventKind {
     /// A player changed a test-mode toggle or warped (test-mode worlds only).
     TestModeChanged {
         player_id: PlayerId,
+    },
+    /// A player took on a quest at its giver's counter.
+    QuestAccepted {
+        player_id: PlayerId,
+        quest: QuestId,
+    },
+    /// A quest moved on to its next stage.
+    QuestStageDone {
+        player_id: PlayerId,
+        quest: QuestId,
+    },
+    /// Every stage of a quest is done: it can be turned in.
+    QuestReady {
+        player_id: PlayerId,
+        quest: QuestId,
+    },
+    /// A quest was turned in and paid (the completion fanfare).
+    QuestCompleted {
+        player_id: PlayerId,
+        quest: QuestId,
+    },
+    /// A quest failed (its twist caught the player out).
+    QuestFailed {
+        player_id: PlayerId,
+        quest: QuestId,
+        reason: QuestFailure,
+    },
+    /// A player finished assembling a blueprint from its fragments.
+    BlueprintCompleted {
+        player_id: PlayerId,
+        blueprint: BlueprintId,
     },
 }
 

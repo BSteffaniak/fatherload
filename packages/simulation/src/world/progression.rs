@@ -204,6 +204,11 @@ impl WorldState {
             .map(|(artifact, count)| artifact.value().saturating_mul(*count))
             .sum::<u32>();
         let payout = mineral_payout.saturating_add(artifact_payout);
+        let payout = payout.saturating_add(
+            payout.saturating_mul(
+                self.quest_rebate_percent(player_id, crate::quest::QuestGiver::Kade),
+            ) / 100,
+        );
         if payout == 0 {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }

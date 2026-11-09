@@ -37,6 +37,9 @@ mod player_sections;
 mod poi_tests;
 mod pois;
 mod progression;
+#[cfg(test)]
+mod quest_tests;
+mod quests;
 mod replication;
 #[cfg(test)]
 mod replication_tests;
@@ -57,6 +60,7 @@ mod visibility;
 
 pub use discovery::{DiscoveredTiles, Discovery};
 pub use player_sections::{PlayerInventory, PlayerRig, RigBuild, join_player, split_player};
+pub use quests::{QuestAvailability, QuestOffer};
 pub use replication::{
     ContractsSection, EconomySection, LiveEntities, MarkersSection, PlayerLoadout, PlayerTickState,
     ProgressionSection, SectionKey, SectionPayload, SessionSection, TimersSection,
@@ -194,6 +198,9 @@ pub struct CanonicalProgressionState {
     /// Twin-relay vaults with one relay lit, and the tick their lock resets at.
     #[serde(default)]
     pub vault_relay_deadlines: BTreeMap<crate::worldgen::FeatureId, SimulationTick>,
+    /// Quests accepted in crew mode, shared with every player.
+    #[serde(default)]
+    pub crew_quests: crate::quest::CrewQuests,
 }
 
 /// The canonical gameplay world.

@@ -32,7 +32,7 @@
 //! | | layer material (tier 2+) | - | - | 1 | 1 | 2 |
 //! | | rig part | 15 % chance of an unowned common part | | | | |
 //! | | log entry | always (one per derelict) | | | | |
-//! | Vault cache | always | an unowned rare part; once all are owned: a permanent fitting (+15 hull, +15 fuel capacity or +2 cargo) and 2 layer material | | | | |
+//! | Vault cache | always | an unowned rare part; once all are owned: a blueprint fragment toward the opener's next vault blueprint (a permanent fitting, +15 hull, +15 fuel capacity or +2 cargo, once those are all finished) and 2 layer material | | | | |
 //! | | credits | 100 x tier | | | | |
 //! | Outpost salvage (rival claim) | always | one infrastructure kit + 10 x (tier + 1) credits | | | | |
 
@@ -507,6 +507,9 @@ pub struct PoiReward {
     pub fitting: Option<RigFitting>,
     pub kit: Option<InfrastructureKind>,
     pub log: Option<LoreId>,
+    /// A blueprint fragment (vaults, once every rare part is owned).
+    #[serde(default)]
+    pub fragment: Option<crate::quest::BlueprintId>,
 }
 
 impl PoiReward {
@@ -541,6 +544,9 @@ impl PoiReward {
         }
         if let Some(log) = self.log {
             parts.push(format!("log: {}", log.entry().title));
+        }
+        if let Some(blueprint) = self.fragment {
+            parts.push(format!("{} blueprint fragment", blueprint.name()));
         }
         if parts.is_empty() {
             "nothing useful".to_owned()
@@ -582,6 +588,7 @@ pub const fn crate_reward(seed: u64, position: TilePosition, band: Band) -> PoiR
         fitting: None,
         kit: None,
         log: None,
+        fragment: None,
     };
     if pick < 40 {
         #[allow(clippy::cast_possible_truncation, reason = "at most 55 fuel")]

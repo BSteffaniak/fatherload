@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{economy::TownBuilding, ids::PlayerId, terrain::StrategicResourceKind};
+use crate::{economy::TownBuilding, ids::PlayerId, quest::QuestId, terrain::StrategicResourceKind};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum RecipeKind {
@@ -101,18 +101,31 @@ impl RecipeKind {
 /// other gameplay action (and is never predicted by clients).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum SessionServiceRequest {
-    Refuel { menu_item: usize },
-    Repair { menu_item: usize },
+    Refuel {
+        menu_item: usize,
+    },
+    Repair {
+        menu_item: usize,
+    },
     SellCargo,
-    BuyUpgrade { index: usize },
-    BuyBombBundle { count: u32, cost: u32 },
+    BuyUpgrade {
+        index: usize,
+    },
+    BuyBombBundle {
+        count: u32,
+        cost: u32,
+    },
     BuyMiningRockets,
     ClaimFreeTestCharge,
     SalvagePatchHull,
     Finance,
     BuyInsurance,
-    CraftRecipe { recipe: RecipeKind },
-    UpgradeTownBuilding { building: TownBuilding },
+    CraftRecipe {
+        recipe: RecipeKind,
+    },
+    UpgradeTownBuilding {
+        building: TownBuilding,
+    },
     SalvageRecoverLostCargo,
     SalvageLaunchDrone,
     SalvageRecoverWreckedPart,
@@ -122,8 +135,26 @@ pub enum SessionServiceRequest {
     AutoSortLowGradeCargo,
     CompleteDepotWork,
     StartSideContract,
-    AcceptExpedition { index: usize },
-    AbandonExpedition { index: usize },
+    AcceptExpedition {
+        index: usize,
+    },
+    AbandonExpedition {
+        index: usize,
+    },
+    /// Take on a quest at its giver's counter (`crew`: share it with every rig when the quest
+    /// has co-op objectives and others are playing; otherwise its solo variant).
+    AcceptQuest {
+        quest: QuestId,
+        crew: bool,
+    },
+    /// Hand in a finished quest at its giver's counter.
+    TurnInQuest {
+        quest: QuestId,
+    },
+    /// Drop an active quest at its giver's counter.
+    AbandonQuest {
+        quest: QuestId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

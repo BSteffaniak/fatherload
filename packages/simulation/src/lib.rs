@@ -22,6 +22,7 @@ pub mod player;
 pub mod poi;
 pub mod progression;
 pub mod quantize;
+pub mod quest;
 pub mod rig;
 pub mod rng;
 pub mod service;
@@ -47,6 +48,9 @@ pub use poi::{PoiJournal, PoiKind, PoiKnowledge, PoiReward, PoiTile, PoiVariant}
 pub use progression::{
     ActiveWorldEvent, Expedition, ExpeditionObjectiveKind, LegendaryBlueprint, SideContract,
     SideContractKind, WorldEventKind,
+};
+pub use quest::{
+    ActiveQuest, BlueprintId, CrewQuests, QuestDef, QuestFailure, QuestGiver, QuestId, QuestLog,
 };
 pub use rig::{DrillDirection, DrillState, RigPartKind, RigSlot};
 pub use rng::DeterministicRngState;

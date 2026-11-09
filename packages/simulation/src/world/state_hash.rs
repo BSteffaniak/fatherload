@@ -117,6 +117,7 @@ impl WorldState {
         hash.write_u64(u64::from(self.progression.expeditions_completed));
         hash.write_u64(self.progression.next_day_tick.get());
         hash.write_serialized(&self.progression.vault_relay_deadlines);
+        hash.write_serialized(&self.progression.crew_quests);
         hash.write_serialized(&self.scan_markers);
         hash.write_serialized(&self.collapse_warnings);
         hash.write_i32(self.terrain.width());

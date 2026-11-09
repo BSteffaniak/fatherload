@@ -112,6 +112,12 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<drillgame_simul
         GameplayEventKind::VaultOpened { .. } => (16, None),
         GameplayEventKind::VaultLockReset { .. } => (17, None),
         GameplayEventKind::TestModeChanged { player_id } => (18, Some(player_id)),
+        GameplayEventKind::QuestAccepted { player_id, .. } => (19, Some(player_id)),
+        GameplayEventKind::QuestStageDone { player_id, .. } => (20, Some(player_id)),
+        GameplayEventKind::QuestReady { player_id, .. } => (21, Some(player_id)),
+        GameplayEventKind::QuestCompleted { player_id, .. } => (22, Some(player_id)),
+        GameplayEventKind::QuestFailed { player_id, .. } => (23, Some(player_id)),
+        GameplayEventKind::BlueprintCompleted { player_id, .. } => (24, Some(player_id)),
     }
 }
 

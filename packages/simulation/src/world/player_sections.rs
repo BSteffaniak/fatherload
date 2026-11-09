@@ -4,7 +4,7 @@
 //! |---|---|---|
 //! | [`PlayerRig`]: pose, velocity, fuel, hull | per tick | everyone it is relevant to |
 //! | [`RigBuild`]: the upgrade levels drawn on a rig (hull, radiator, scanner, bulkheads, drill mount) | on-change [`super::SectionKey::RigBuild`] | everyone |
-//! | [`PlayerInventory`]: cargo, credits, other upgrades, kits, debt, insurance, POI journal | on-change [`super::SectionKey::Loadout`] | the owner only |
+//! | [`PlayerInventory`]: cargo, credits, other upgrades, kits, debt, insurance, POI journal, quest log | on-change [`super::SectionKey::Loadout`] | the owner only |
 //!
 //! [`split_player`] destructures the whole [`Player`] without `..`, so a new player field fails
 //! to compile until it is assigned to one of the parts.
@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     player::Player,
     poi::PoiJournal,
+    quest::QuestLog,
     terrain::{ArtifactKind, MineralKind, StrategicResourceKind},
 };
 
@@ -73,6 +74,7 @@ pub struct PlayerInventory {
     pub pump_station_kits: u32,
     pub ore_processor_kits: u32,
     pub journal: PoiJournal,
+    pub quests: QuestLog,
 }
 
 /// Splits a player into its per-tick, public and private parts (exhaustive: every field goes to
@@ -113,6 +115,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         pump_station_kits,
         ore_processor_kits,
         journal,
+        quests,
     } = player.clone();
     (
         PlayerRig {
@@ -153,6 +156,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             pump_station_kits,
             ore_processor_kits,
             journal,
+            quests,
         },
     )
 }
@@ -198,6 +202,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         pump_station_kits,
         ore_processor_kits,
         journal,
+        quests,
     } = inventory;
     Player {
         x,
@@ -233,5 +238,6 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         pump_station_kits,
         ore_processor_kits,
         journal,
+        quests,
     }
 }

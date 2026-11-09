@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     poi::PoiJournal,
+    quest::QuestLog,
     terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TilePosition},
 };
 
@@ -66,6 +67,9 @@ pub struct Player {
     /// Points of interest this player knows about and the logs they recovered.
     #[serde(default)]
     pub journal: PoiJournal,
+    /// Side quests: active solo quests, history, reputation and blueprint fragments.
+    #[serde(default)]
+    pub quests: QuestLog,
 }
 
 #[allow(
@@ -109,6 +113,7 @@ impl Player {
             pump_station_kits: 0,
             ore_processor_kits: 0,
             journal: PoiJournal::default(),
+            quests: QuestLog::default(),
         }
     }
 

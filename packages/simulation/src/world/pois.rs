@@ -63,14 +63,35 @@ impl WorldState {
                     ),
                 )
             }
-            PoiTile::VaultCache => (
-                PoiKind::Vault,
-                vault_reward(seed, target, band, &self.progression.rig_part_inventory),
-            ),
+            PoiTile::VaultCache => {
+                let mut reward =
+                    vault_reward(seed, target, band, &self.progression.rig_part_inventory);
+                // With every rare part owned, a vault holds a blueprint fragment; the fitting
+                // stays the fallback once the player's vault blueprints are all finished.
+                if reward.part.is_none()
+                    && let Some(blueprint) = self.players.get(&player_id).and_then(|player| {
+                        player
+                            .quests
+                            .next_vault_blueprint(crate::worldgen::noise::hash2(
+                                seed,
+                                0x0E57_0003,
+                                target.x,
+                                target.y,
+                            ))
+                    })
+                {
+                    reward.fitting = None;
+                    reward.fragment = Some(blueprint);
+                }
+                (PoiKind::Vault, reward)
+            }
             PoiTile::OutpostSalvage => (PoiKind::RivalClaim, outpost_reward(seed, target, band)),
             _ => return,
         };
         self.grant_poi_reward(player_id, &reward);
+        let blueprint = reward
+            .fragment
+            .and_then(|blueprint| self.grant_blueprint_fragment(player_id, blueprint));
         if let Some(feature) = feature
             && let Some(player) = self.players.get_mut(&player_id)
         {
@@ -81,9 +102,12 @@ impl WorldState {
             poi,
             reward,
         });
+        if let Some(event) = blueprint {
+            output.push_event(event);
+        }
     }
 
-    fn grant_poi_reward(&mut self, player_id: PlayerId, reward: &PoiReward) {
+    pub(super) fn grant_poi_reward(&mut self, player_id: PlayerId, reward: &PoiReward) {
         if let Some(part) = reward.part {
             self.progression.rig_part_inventory.insert(part);
         }

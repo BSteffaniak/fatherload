@@ -11,6 +11,7 @@ use crate::{
     player::Player,
     progression::WorldEventKind,
     quantize::quantize_simulation_scalar,
+    quest::QuestGiver,
     rig::{DrillDirection, DrillState, RigPartKind},
     service::{PlayerServiceTransaction, PlayerTransactionKind},
     summary::PlayerScopedCommandOutcome,
@@ -213,7 +214,9 @@ impl WorldState {
             PlayerCommand::Refuel => {
                 let credits_before = player.credits;
                 let cargo_before = player.cargo_used();
-                refuel_amount(player, 1.0);
+                let spent = refuel_amount(player, 1.0);
+                let rebate = spent.saturating_mul(rebate_percent(player, QuestGiver::Pip)) / 100;
+                player.credits = player.credits.saturating_add(rebate);
                 record_service_transaction(
                     &mut self.service_transactions,
                     PlayerServiceTransaction {
@@ -230,7 +233,9 @@ impl WorldState {
             PlayerCommand::Repair => {
                 let credits_before = player.credits;
                 let cargo_before = player.cargo_used();
-                repair_amount(player, 1.0);
+                let spent = repair_amount(player, 1.0);
+                let rebate = spent.saturating_mul(rebate_percent(player, QuestGiver::Iona)) / 100;
+                player.credits = player.credits.saturating_add(rebate);
                 record_service_transaction(
                     &mut self.service_transactions,
                     PlayerServiceTransaction {
@@ -522,4 +527,9 @@ pub(super) const fn consume_infrastructure_kit(
     }
     *kit_count -= 1;
     true
+}
+
+/// The reputation rebate (percent) `giver` hands `player`.
+fn rebate_percent(player: &crate::player::Player, giver: QuestGiver) -> u32 {
+    giver.rebate_percent(player.quests.rank(giver))
 }

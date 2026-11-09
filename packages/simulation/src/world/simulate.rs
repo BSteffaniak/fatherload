@@ -24,6 +24,7 @@ use super::{
         AUTHORITATIVE_BOULDER_LIFE_MILLIS, AUTHORITATIVE_BOULDER_SPAWN_CHANCE,
         AUTHORITATIVE_BOULDER_WARNING_MILLIS,
     },
+    quests::QuestNotes,
 };
 
 /// Time the rigs have to escape after the star core is mined.
@@ -54,6 +55,7 @@ impl WorldState {
         let timing = self.timing;
         let delta_seconds = timing.delta_seconds;
         self.terrain.start_journal();
+        let mut quest_notes = QuestNotes::default();
         for (&player_id, input) in &inputs.players {
             if let Some(controls) = input.controls {
                 let previous_target = self.active_drills.get(&player_id).map(|drill| drill.target);
@@ -80,6 +82,13 @@ impl WorldState {
                     // Building services only work at the building (validated here, inside the
                     // authoritative tick, so it holds for remote clients too).
                     PlayerScopedCommandOutcome::IgnoredUnavailable
+                } else if let Some((outcome, events)) =
+                    self.quest_command(player_id, &action.command)
+                {
+                    for event in events {
+                        output.push_event(event);
+                    }
+                    outcome
                 } else {
                     self.apply_player_command(player_id, &action.command)
                 };
@@ -222,6 +231,7 @@ impl WorldState {
                 )
             });
             if next_tick >= deadline {
+                quest_notes.detonations.push(bomb_tile_position(bomb));
                 let blast = self.detonate_bomb_at(bomb_tile_position(bomb), 2);
                 output.push_event(GameplayEventKind::BombDetonated);
                 self.vent_vault_seals(&blast.changed_tiles, &mut output);
@@ -281,6 +291,9 @@ impl WorldState {
                     | MineResult::Activated(_)
             ) {
                 self.active_drill_timers.remove(&player_id);
+            }
+            if let MineResult::Mined(kind) = result {
+                quest_notes.mined.push((player_id, target, kind));
             }
             match result {
                 MineResult::Mined(TileKind::Ore(_)) => {
@@ -354,6 +367,7 @@ impl WorldState {
         self.advance_falling_boulders(next_tick, &mut output);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
+        self.advance_quests(next_tick, &quest_notes, &mut output);
         self.reveal_tiles_near_players();
         self.apply_test_mode_refills();
         output.terrain_ops = self.terrain.finish_journal();

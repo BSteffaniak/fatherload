@@ -278,9 +278,12 @@ fn twin_relays_must_be_drilled_within_the_window() {
     assert!(poi_tiles(&world, &vault, |tile| tile == PoiTile::VaultDoor).is_empty());
 }
 
-#[test]
-fn vault_caches_hand_out_a_rare_part_or_a_fitting() {
+/// Opens the first vault cache of a fresh world with `prepare` applied to the rig first.
+fn open_vault_cache(
+    prepare: impl FnOnce(&mut crate::Player),
+) -> (WorldState, crate::poi::PoiReward, Vec<GameplayEventKind>) {
     let (mut world, vault) = world_with(|variant| matches!(variant, PoiVariant::Vault(_)));
+    prepare(world.player_mut(RIG).expect("rig"));
     let cache = poi_tiles(&world, &vault, |tile| tile == PoiTile::VaultCache)[0];
     let events = drill_down_into(&mut world, cache);
     let reward = events
@@ -294,8 +297,29 @@ fn vault_caches_hand_out_a_rare_part_or_a_fitting() {
             _ => None,
         })
         .expect("the vault paid out");
-    // A new crew owns every part already, so the vault fits the rig instead.
+    (world, reward, events)
+}
+
+#[test]
+fn vault_caches_hand_out_a_blueprint_fragment_once_every_part_is_owned() {
+    // A new crew owns every part already, so the vault holds a blueprint fragment.
+    let (world, reward, _) = open_vault_cache(|_| {});
     assert_eq!(reward.part, None);
+    assert_eq!(reward.fitting, None);
+    let blueprint = reward.fragment.expect("a blueprint fragment");
+    assert!(crate::quest::BlueprintId::VAULT_POOL.contains(&blueprint));
+    let rig = world.player(RIG).expect("rig");
+    assert_eq!(rig.quests.fragments_of(blueprint), 1);
+}
+
+#[test]
+fn vault_caches_fall_back_to_a_fitting_once_vault_blueprints_are_finished() {
+    let (world, reward, _) = open_vault_cache(|rig| {
+        rig.quests
+            .blueprints
+            .extend(crate::quest::BlueprintId::VAULT_POOL);
+    });
+    assert_eq!(reward.fragment, None);
     let fitting = reward.fitting.expect("a fitting");
     let rig = world.player(RIG).expect("rig");
     match fitting {
@@ -303,6 +327,29 @@ fn vault_caches_hand_out_a_rare_part_or_a_fitting() {
         crate::poi::RigFitting::AuxiliaryTank => assert!(rig.fuel_capacity > 100.0),
         crate::poi::RigFitting::CargoRack => assert_eq!(rig.cargo_capacity, 14),
     }
+}
+
+#[test]
+fn the_last_vault_fragment_completes_its_blueprint() {
+    let blueprint = crate::quest::BlueprintId::DampenerCoil;
+    let (world, reward, events) = open_vault_cache(|rig| {
+        rig.quests
+            .fragments
+            .insert(blueprint, blueprint.fragments_needed() - 1);
+    });
+    assert_eq!(reward.fragment, Some(blueprint));
+    assert!(events.contains(&GameplayEventKind::BlueprintCompleted {
+        player_id: RIG,
+        blueprint
+    }));
+    assert!(
+        world
+            .player(RIG)
+            .expect("rig")
+            .quests
+            .blueprints
+            .contains(&blueprint)
+    );
 }
 
 #[test]

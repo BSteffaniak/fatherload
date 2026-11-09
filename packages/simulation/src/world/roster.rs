@@ -98,6 +98,10 @@ impl WorldState {
         lost_cargo_sites.remove(&player_id);
         rescue_counts.remove(&player_id);
         progression.deep_reward_milestones.remove(&player_id);
+        progression
+            .crew_quests
+            .active
+            .retain(|quest| quest.owner != player_id);
         active_drills.remove(&player_id);
         active_drill_timers.remove(&player_id);
         scanner_cooldowns.remove(&player_id);

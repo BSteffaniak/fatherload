@@ -62,6 +62,17 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
         | SessionServiceRequest::UpgradeTownBuilding { .. }
         | SessionServiceRequest::AcceptExpedition { .. }
         | SessionServiceRequest::AbandonExpedition { .. } => &[SurfaceZone::Headquarters],
+        // Every quest giver's counter; the quest's own giver is checked when it resolves.
+        SessionServiceRequest::AcceptQuest { .. }
+        | SessionServiceRequest::TurnInQuest { .. }
+        | SessionServiceRequest::AbandonQuest { .. } => &[
+            SurfaceZone::Depot,
+            SurfaceZone::Salvage,
+            SurfaceZone::Explosives,
+            SurfaceZone::Repair,
+            SurfaceZone::Fuel,
+            SurfaceZone::Headquarters,
+        ],
     }
 }
 
@@ -117,6 +128,11 @@ impl WorldState {
         if let Some(command) = direct {
             return self.apply_player_command(player_id, &command);
         }
+        if let Some((outcome, _events)) =
+            self.quest_command(player_id, &PlayerCommand::Service(request))
+        {
+            return outcome;
+        }
         if let Some(outcome) = self.apply_canonical_progression_service(player_id, request) {
             return outcome;
         }
@@ -146,6 +162,7 @@ impl WorldState {
                 player.credits -= cost;
                 let bonus = u32::from(shack_level / 2);
                 player.bombs = player.bombs.saturating_add(count + bonus);
+                self.apply_quest_rebate(player_id, crate::quest::QuestGiver::Nix, cost);
                 PlayerScopedCommandOutcome::Applied
             }
             SessionServiceRequest::BuyMiningRockets => {
@@ -210,7 +227,10 @@ impl WorldState {
             | SessionServiceRequest::SalvageClearCollapseZones
             | SessionServiceRequest::SalvageSellScrapTip
             | SessionServiceRequest::SellScanData
-            | SessionServiceRequest::AutoSortLowGradeCargo => {
+            | SessionServiceRequest::AutoSortLowGradeCargo
+            | SessionServiceRequest::AcceptQuest { .. }
+            | SessionServiceRequest::TurnInQuest { .. }
+            | SessionServiceRequest::AbandonQuest { .. } => {
                 PlayerScopedCommandOutcome::IgnoredUnavailable
             }
         }
