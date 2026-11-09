@@ -395,7 +395,7 @@ close look at individual pixels.
 Scenes (see `--list`): `art_gallery`, `ui_sheet`, `title`, world scenes (`surface_town`, `town_west`, `town_market`, `town_east`,
 `surface_flying`, `shallow_dig`, `mid_depth_ores`, `deep_lava`, `lost_cargo`, `world_props`,
 `drill_side`, `remote_rigs`, `bomb_blast`, `gas_leak`, `cave_in`, `deep_crystal_faults`,
-`deep_void_geodes`, `hazard_telltales`, `strata_boundary`), points of interest
+`deep_void_geodes`, `bedrock_floor`, `hazard_telltales`, `strata_boundary`), points of interest
 (`poi_supply_cache`, `poi_derelict_rig`, `poi_vault_sequence`, `poi_vault_seals`,
 `poi_vault_relay`, `poi_vault_open`, `poi_fossil_bed`, `poi_geode`, `poi_rival_claim`,
 `poi_scanner_silhouette`, `poi_scanner_echo`, `map_poi_contacts`, `modal_collection_log`), quests

@@ -448,9 +448,11 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
-                sink_rig(world, player, 120, 42);
-                carve(world, 108..133, 42..43);
-                reveal(world, player, 100..141, 33..53);
+                // Classic row 42 (the grey stone / slate seam), wherever this world puts it.
+                let row = world.terrain().scaled_row(42);
+                sink_rig(world, player, 120, row);
+                carve(world, 108..133, row..row + 1);
+                reveal(world, player, 100..141, row - 9..row + 11);
             });
             stage.settle(20);
         },
@@ -461,8 +463,10 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
-                let (x, y) = find_tile(world, 60..200, |kind| kind == TileKind::Lava)
-                    .map_or((120, 95), |tile| (tile.x - 2, tile.y));
+                let rows = world.terrain().scaled_row(60)..world.terrain().scaled_row(200);
+                let fallback = world.terrain().scaled_row(95);
+                let (x, y) = find_tile(world, rows, |kind| kind == TileKind::Lava)
+                    .map_or((120, fallback), |tile| (tile.x - 2, tile.y));
                 sink_rig(world, player, x, y);
                 reveal(world, player, x - 16..x + 17, y - 10..y + 11);
             });
@@ -561,7 +565,8 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
-                sink_rig(world, player, 97, 66);
+                let row = world.terrain().scaled_row(66);
+                sink_rig(world, player, 97, row);
                 if let Some(rig) = world.player_mut(player) {
                     rig.hull = rig.max_hull() * 0.22;
                     load_cargo(rig);
@@ -1431,6 +1436,29 @@ pub const SCENES: &[Scene] = &[
                 sink_rig(world, player, 120, row);
                 carve(world, 108..133, row..row + 1);
                 reveal(world, player, 98..143, row - 10..row + 13);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "bedrock_floor",
+        summary: "The bottom of a deep world: the rig on the bedrock floor, solid rock below",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let settings = *world.world_settings();
+                let x = 120;
+                let floor = drillgame_simulation::worldgen::strata::bedrock_top_row(&settings, x)
+                    .unwrap_or_else(|| world.terrain().height());
+                let row = floor - 1;
+                sink_rig(world, player, x, row);
+                carve(world, x - 12..x + 13, row - 1..row + 1);
+                reveal(
+                    world,
+                    player,
+                    x - 24..x + 25,
+                    row - 12..world.terrain().height(),
+                );
             });
             stage.settle(10);
         },
