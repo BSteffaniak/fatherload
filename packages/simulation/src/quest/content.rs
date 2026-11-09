@@ -402,7 +402,7 @@ pub const QUESTS: &[QuestDef] = &[
             target: 0,
             count: 8,
         }]],
-        twists: &[Twist::NoBombs, Twist::Fragile { max_damage: 15 }],
+        twists: &[Twist::NoBombs, Twist::Fragile { max_damage: 25 }],
         reward: QuestReward::credits(270, 7),
         text: text(
             "A real demolitionist knows when not to. There's a formation down there wound tighter than me before coffee. Dig it loose by hand. No charges, and don't bump it either. If I hear a boom, I'll know.",
