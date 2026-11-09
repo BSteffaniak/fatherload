@@ -182,6 +182,25 @@ fn route_ui_input(
     }
 }
 
+/// Adds every tile in `views` that `union` lacks to `union`, returning the newly added tiles
+/// (each once, even when several views discovered it).
+fn merge_explored<'a>(
+    union: &mut DiscoveredTiles,
+    views: impl Iterator<Item = &'a DiscoveredTiles>,
+) -> Vec<TilePosition> {
+    let mut added = Vec::new();
+    for explored in views {
+        // Collected first: `union` is borrowed by the diff and grows below.
+        let fresh: Vec<TilePosition> = explored.newly_discovered_since(union).collect();
+        for tile in fresh {
+            if union.insert(tile) {
+                added.push(tile);
+            }
+        }
+    }
+    added
+}
+
 impl GameRenderer {
     pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, terrain: &Terrain) -> Self {
         Self {
@@ -220,29 +239,28 @@ impl GameRenderer {
         for tile in &report.changed_tiles {
             self.terrain.mark_tile_dirty(*tile);
         }
-        let empty = DiscoveredTiles::default();
-        let explored = snapshot
-            .primary_view()
-            .and_then(|view| view.explored)
-            .unwrap_or(&empty);
-        if explored.len() != self.explored_drawn.len() {
-            let radius = EXPLORATION_REDRAW_RADIUS_TILES;
-            for tile in explored.newly_discovered_since(&self.explored_drawn) {
-                for (dx, dy) in [
-                    (0, 0),
-                    (-radius, -radius),
-                    (radius, -radius),
-                    (-radius, radius),
-                    (radius, radius),
-                ] {
-                    self.terrain.mark_fog_dirty(TilePosition {
-                        x: tile.x + dx,
-                        y: tile.y + dy,
-                    });
-                }
+        // The fog shows everything any local player has explored: every split-screen view
+        // shares one terrain cache, so a tile one seat uncovers is lit for all of them.
+        let fresh = merge_explored(
+            &mut self.explored_drawn,
+            snapshot.views.iter().filter_map(|view| view.explored),
+        );
+        let radius = EXPLORATION_REDRAW_RADIUS_TILES;
+        for tile in fresh {
+            for (dx, dy) in [
+                (0, 0),
+                (-radius, -radius),
+                (radius, -radius),
+                (-radius, radius),
+                (radius, radius),
+            ] {
+                self.terrain.mark_fog_dirty(TilePosition {
+                    x: tile.x + dx,
+                    y: tile.y + dy,
+                });
             }
-            self.explored_drawn.clone_from(explored);
         }
+        let explored = &self.explored_drawn;
         let views: Vec<Rectangle> = snapshot
             .views
             .iter()
@@ -558,7 +576,7 @@ impl GameRenderer {
                         .find(|player| player.player_id == view.player_id),
                     active_drill: view.active_drill,
                     lost_cargo: view.lost_cargo,
-                    explored: view.explored,
+                    explored: Some(&self.explored_drawn),
                     ticks: shell.update_ticks,
                 },
             );
@@ -567,7 +585,13 @@ impl GameRenderer {
         draw_heat_warning_for_view(draw, snapshot.terrain, view);
         draw_view_hud(draw, shell, snapshot, view);
         draw_depth_ruler_for_view(draw, snapshot.terrain, view);
-        draw_minimap_for_view(draw, snapshot.terrain, view, &snapshot.players);
+        draw_minimap_for_view(
+            draw,
+            snapshot.terrain,
+            view,
+            &snapshot.players,
+            &self.explored_drawn,
+        );
     }
 }
 
@@ -961,6 +985,28 @@ mod tests {
                 assert!(points.x + points.width <= (viewport.x + viewport.width) as f32 + 0.01);
             }
         }
+    }
+
+    #[test]
+    fn explored_union_merges_every_local_view_once() {
+        let tile = |x, y| TilePosition { x, y };
+        let mut first = DiscoveredTiles::default();
+        let mut second = DiscoveredTiles::default();
+        let _ = first.insert(tile(1, 5));
+        let _ = first.insert(tile(2, 5));
+        let _ = second.insert(tile(2, 5));
+        let _ = second.insert(tile(40, 30));
+        let mut union = DiscoveredTiles::default();
+        let fresh = merge_explored(&mut union, [&first, &second].into_iter());
+        assert_eq!(fresh.len(), 3, "shared tiles are added once: {fresh:?}");
+        assert!(
+            union.contains(tile(40, 30)),
+            "player 2's discoveries light the fog"
+        );
+        assert!(
+            merge_explored(&mut union, [&first, &second].into_iter()).is_empty(),
+            "nothing new the second time"
+        );
     }
 
     #[test]

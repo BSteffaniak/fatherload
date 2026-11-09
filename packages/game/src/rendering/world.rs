@@ -36,7 +36,7 @@ mod fx;
 mod rig;
 mod sky;
 
-pub use rig::RigFacings;
+pub use rig::{RigFacings, player_accent};
 pub use sky::SkyArt;
 
 /// World pixels per art pixel.
@@ -117,17 +117,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
     }
     for player in scene.players {
-        let is_local = scene
-            .local
-            .is_some_and(|local| local.player_id == player.player_id);
-        rig::draw_rig(
-            draw,
-            scene.terrain,
-            player,
-            scene.facings,
-            is_local,
-            scene.ticks,
-        );
+        rig::draw_rig(draw, scene.terrain, player, scene.facings, scene.ticks);
     }
     if let Some(drill) = scene.active_drill {
         fx::draw_drill_debris(draw, scene.terrain, drill, scene.ticks);

@@ -1,7 +1,7 @@
 use raylib::prelude::*;
 
 use drillgame_simulation::{
-    Player,
+    DiscoveredTiles, Player,
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
@@ -21,6 +21,7 @@ use super::{
     },
     prompts::{self, hint},
     ui_kit::{self, BarColors, PanelStyle, TextStyle},
+    world::player_accent,
 };
 use crate::{
     input::{devices::InputDevice, prompts::Prompt},
@@ -128,7 +129,7 @@ pub(super) fn draw_view_hud(
             inner_x,
             y,
             TextStyle::Bold,
-            GOLD,
+            player_accent(view.player_id),
         );
         y += header;
     }
@@ -529,6 +530,7 @@ pub(super) fn draw_minimap_for_view(
     terrain: &Terrain,
     view: &ViewSnapshot<'_>,
     players: &[PlayerPresentation],
+    explored: &DiscoveredTiles,
 ) {
     let rect = view_rect(view);
     let width = ((rect.width / 6.0) as i32).clamp(48, 80);
@@ -564,7 +566,7 @@ pub(super) fn draw_minimap_for_view(
                 y: tile_y,
             };
             let sky = tile_y <= 4;
-            if !sky && !view.is_explored(position) {
+            if !sky && !explored.contains(position) {
                 continue;
             }
             let color = match terrain.tile(position) {
@@ -591,7 +593,7 @@ pub(super) fn draw_minimap_for_view(
             continue;
         }
         let (map_x, map_y) = to_map(tile_x, tile_y);
-        draw.draw_rectangle(map_x - 1, map_y - 1, 2, 2, ORANGE);
+        draw.draw_rectangle(map_x - 1, map_y - 1, 2, 2, player_accent(remote.player_id));
     }
     let (map_x, map_y) = to_map(player_tile.x, player_tile.y);
     let blink = (ui_kit::seconds() * 2.0) as i32 % 2 == 0;

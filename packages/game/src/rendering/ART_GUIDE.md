@@ -297,7 +297,7 @@ stopped rig keeps its last facing); tracks roll while driving; a nose drill at t
 spinning bit below while drilling down, a side bit while drilling sideways, one-pixel drilling
 shake; a long climb flame or short hover flame; exhaust puffs, thick smoke and sparks under 35%
 hull, scorched paint under 30%, a fast red beacon under 15%. Other players' rigs use another hull
-paint by player id (`REMOTE_BODIES`) and carry a name tag with fuel/hull pips whose border turns
+paint by player id (`PLAYER_BODIES`, player 1 yellow; the same paint in every view and inside buildings) and carry a name tag with fuel/hull pips whose border turns
 amber (warning) or blinks red (critical).
 
 **Surface** (`world/sky.rs`, `world/buildings.rs`). The sky is a startup texture of flat bands

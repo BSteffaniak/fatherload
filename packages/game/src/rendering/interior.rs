@@ -29,7 +29,7 @@ use super::{
     prompts::{self, Hint, hint},
     ui_kit::{self, PanelStyle, TextStyle, UiCanvasScope},
 };
-use drillgame_simulation::economy::SurfaceZone;
+use drillgame_simulation::{PlayerId, economy::SurfaceZone};
 
 mod props;
 
@@ -251,7 +251,7 @@ pub(super) fn draw_interior(
         draw_counter(&mut room, room_set, counter_x, seconds);
         props::draw_counter_props(&mut room, &context);
         draw_service_animation(&mut room, seat, zone, counter_x);
-        draw_rig(&mut room, seat, seconds);
+        draw_rig(&mut room, seat, view.player_id, seconds);
     }
 
     let _canvas = UiCanvasScope::begin(draw);
@@ -719,8 +719,9 @@ fn draw_service_animation(
 }
 
 /// The player's rig standing on the floor at the seat's `interior_x`.
-fn draw_rig(draw: &mut impl RaylibDraw, seat: &SeatUi, seconds: f32) {
-    let body = &rig::RIG;
+fn draw_rig(draw: &mut impl RaylibDraw, seat: &SeatUi, player_id: PlayerId, seconds: f32) {
+    // The player's own paint, the same as outdoors and in other players' views.
+    let body = rig::PLAYER_BODIES[rig::paint_index(player_id.get())];
     let x = room_pixel_x(seat.interior_x) - body.width() / 2;
     let y = FLOOR_Y - body.height();
     draw.draw_rectangle(

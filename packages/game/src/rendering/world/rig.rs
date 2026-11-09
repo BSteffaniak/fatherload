@@ -66,24 +66,21 @@ fn wanted_facing_left(player: &PlayerPresentation) -> Option<bool> {
     }
 }
 
-/// The hull paint of a rig.
-fn body_sprite(player: &PlayerPresentation, is_local: bool) -> &'static SpriteDef {
-    if is_local {
-        if player.hull < player.max_hull * 0.3 {
-            &rig::RIG_DAMAGED
-        } else {
-            &rig::RIG
-        }
+/// The hull paint of a rig: the player's own paint everywhere, scuffed when player 1's yellow
+/// rig is badly damaged (other paints show damage through smoke and the beacon).
+fn body_sprite(player: &PlayerPresentation) -> &'static SpriteDef {
+    let index = rig::paint_index(player.player_id.get());
+    if index == 0 && player.hull < player.max_hull * 0.3 {
+        &rig::RIG_DAMAGED
     } else {
-        let index = (player.player_id.get() as usize) % rig::REMOTE_BODIES.len();
-        rig::REMOTE_BODIES[index]
+        rig::PLAYER_BODIES[index]
     }
 }
 
-/// The accent colour of a remote rig's paint (name tags).
-const fn remote_color(player: &PlayerPresentation) -> Color {
-    const COLORS: [Color; 5] = [MINT, PINK, LIME, LAVENDER, SKY_LIGHT];
-    COLORS[(player.player_id.get() as usize) % COLORS.len()]
+/// A player's accent colour, matching their hull paint (name tags, HUD title, minimap marker).
+#[must_use]
+pub const fn player_accent(player_id: PlayerId) -> Color {
+    rig::PLAYER_ACCENTS[rig::paint_index(player_id.get())]
 }
 
 fn is_airborne(terrain: &Terrain, player: &PlayerPresentation) -> bool {
@@ -114,10 +111,9 @@ pub fn draw_rig(
     terrain: &Terrain,
     player: &PlayerPresentation,
     facings: &RigFacings,
-    is_local: bool,
     ticks: u64,
 ) {
-    let body = body_sprite(player, is_local);
+    let body = body_sprite(player);
     let (width, height) = (body.width() as f32 * ART, body.height() as f32 * ART);
     let drilling = player.active_drill.map(|drill| drill.direction);
     let place = Placement {
@@ -327,7 +323,7 @@ pub fn draw_remote_tag(draw: &mut impl RaylibDraw, player: &PlayerPresentation, 
         &label,
         (width - text_width) / 2,
         1,
-        remote_color(player),
+        player_accent(player.player_id),
     );
     let bar_width = width - 4;
     for (row, (value, color)) in [
@@ -386,5 +382,29 @@ mod tests {
         assert!(!facings.facing_left(&rig(id, 40.0)));
         facings.update(&[]);
         assert!(!facings.facing_left(&rig(id, 0.0)));
+    }
+
+    #[test]
+    fn each_player_has_one_paint_and_accent_everywhere() {
+        use crate::rendering::pixel_art::sprites::rig as paints;
+        assert_eq!(
+            body_sprite(&rig(PlayerId::new(1), 0.0)).name,
+            paints::RIG.name
+        );
+        assert_eq!(
+            body_sprite(&rig(PlayerId::new(2), 0.0)).name,
+            paints::RIG_TEAL.name,
+            "player 2 is teal in every view"
+        );
+        let distinct = (1..=6_u64)
+            .map(|id| paints::PLAYER_BODIES[paints::paint_index(id)].name)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(distinct.len(), 6, "players 1-6 get distinct paints");
+        assert_eq!(player_accent(PlayerId::new(2)), paints::PLAYER_ACCENTS[1]);
+        assert_eq!(
+            paints::paint_index(7),
+            paints::paint_index(1),
+            "paints cycle"
+        );
     }
 }

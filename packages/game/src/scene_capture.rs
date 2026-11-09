@@ -765,9 +765,6 @@ pub const SCENES: &[Scene] = &[
                 if let Some(second) = seats.get(1) {
                     sink_rig(world, second.player, 112, 16);
                     reveal(world, second.player, 104..121, 4..23);
-                    // Terrain fog is drawn from the primary view's discoveries, so the first
-                    // player must know this area too or the second view renders black.
-                    reveal(world, seats[0].player, 104..121, 4..23);
                 }
             });
             stage.settle(20);
@@ -844,8 +841,7 @@ pub const SCENES: &[Scene] = &[
                 }
                 park_rig(world, seats[2].player, 104, 4);
                 sink_rig(world, seats[3].player, 118, 12);
-                // Terrain fog follows the first seat's discoveries (see `split_screen`).
-                reveal(world, seats[0].player, 110..127, 4..20);
+                reveal(world, seats[3].player, 110..127, 4..20);
             });
             stage.settle(10);
             put_seat_inside(stage, 0, SurfaceZone::Depot, Some(ModalScreen::Depot));
@@ -911,7 +907,6 @@ pub const SCENES: &[Scene] = &[
                 if let Some(second) = seats.get(1) {
                     sink_rig(world, second.player, 112, 20);
                     reveal(world, second.player, 100..125, 4..24);
-                    reveal(world, seats[0].player, 100..125, 4..24);
                 }
             });
             stage.settle(10);
@@ -945,7 +940,7 @@ pub const SCENES: &[Scene] = &[
                 park_at(world, seats[0].player, SurfaceZone::Depot);
                 if let Some(second) = seats.get(1) {
                     sink_rig(world, second.player, 112, 10);
-                    reveal(world, seats[0].player, 104..121, 4..16);
+                    reveal(world, second.player, 104..121, 4..16);
                 }
             });
             stage.settle(10);
@@ -965,7 +960,7 @@ pub const SCENES: &[Scene] = &[
                 park_rig(world, seats[0].player, 97, 4);
                 if let Some(second) = seats.get(1) {
                     sink_rig(world, second.player, 112, 20);
-                    reveal(world, seats[0].player, 104..121, 4..26);
+                    reveal(world, second.player, 104..121, 4..26);
                     if let Some(rig) = world.player_mut(second.player) {
                         rig.fuel = 0.0;
                     }

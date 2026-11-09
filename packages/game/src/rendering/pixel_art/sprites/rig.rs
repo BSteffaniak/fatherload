@@ -141,8 +141,20 @@ rig_body!(
 );
 rig_body!(RIG_SKY, "rig_sky", BODY_FRAMES, ICE, SKY_LIGHT, SKY, OCEAN);
 
-/// Hull paints for other players' rigs, chosen by player id.
-pub const REMOTE_BODIES: [&SpriteDef; 5] = [&RIG_TEAL, &RIG_ROSE, &RIG_LIME, &RIG_VIOLET, &RIG_SKY];
+/// Each player's hull paint, chosen by player id (player 1 is the classic yellow rig). A player
+/// has the same paint in every view: their own, a split-screen partner's, a remote client's, and
+/// inside buildings.
+pub const PLAYER_BODIES: [&SpriteDef; 6] =
+    [&RIG, &RIG_TEAL, &RIG_ROSE, &RIG_LIME, &RIG_VIOLET, &RIG_SKY];
+
+/// The accent colour matching each entry of [`PLAYER_BODIES`] (name tags, HUD title, minimap).
+pub const PLAYER_ACCENTS: [Color; 6] = [GOLD, MINT, PINK, LIME, LAVENDER, SKY_LIGHT];
+
+/// Index into [`PLAYER_BODIES`] / [`PLAYER_ACCENTS`] for a player id (ids start at 1).
+#[must_use]
+pub const fn paint_index(player_id: u64) -> usize {
+    (player_id.saturating_sub(1) % PLAYER_BODIES.len() as u64) as usize
+}
 
 const DRILL_LEGEND: &[(char, Color)] = &[
     ('o', INK),
