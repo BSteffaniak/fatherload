@@ -147,15 +147,39 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     }
 }
 
-/// Solid bedrock beyond the left and right edges of the world, below the ground line.
+/// Solid bedrock beyond the left and right edges of the world below the ground line, and under
+/// the world's last row, so the view never shows sky past the floor (deep worlds end in their
+/// own bedrock rows, which this continues).
 fn draw_world_edges(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectangle) {
     let world_right = terrain.width() as f32 * TILE_SIZE;
+    let world_bottom = terrain.height() as f32 * TILE_SIZE;
     let top = GROUND_Y.max(visible.y);
     let bottom = visible.y + visible.height + ART;
     if bottom <= top {
         return;
     }
-    let tile = 8.0 * ART;
+    let tile = props::BEDROCK.width() as f32 * ART;
+    if bottom > world_bottom {
+        // Anchored to the world grid like the side walls, so the floor does not swim.
+        let start = (visible.x / tile).floor() * tile - tile;
+        let floor_top = world_bottom.max(top);
+        let rows_top = ((floor_top - world_bottom) / tile)
+            .floor()
+            .mul_add(tile, world_bottom);
+        sprite::draw_tiled(
+            draw,
+            &props::BEDROCK,
+            0,
+            Rectangle::new(
+                start,
+                rows_top,
+                visible.x + visible.width + tile * 2.0 - start,
+                bottom - rows_top,
+            ),
+            ART,
+            Color::WHITE,
+        );
+    }
     let fill = |draw: &mut dyn FnMut(Rectangle), from: f32, to: f32| {
         // Anchor the pattern to the world grid so it does not swim while scrolling.
         let start = (from / tile).floor() * tile;

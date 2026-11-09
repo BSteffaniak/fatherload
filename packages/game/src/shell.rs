@@ -2180,7 +2180,11 @@ fn hq_story_message(world: &WorldState) -> String {
     if world.won_game() {
         return "Director Vale: The Star Core is secure. Deep Claim operations are open: build relays, chase expeditions, catalogue strata, and push for legendary blueprints.".to_owned();
     }
-    match world.progression().deepest_tile_reached {
+    // Story beats follow classic nominal depths (deep worlds stretch them with their bands).
+    match world
+        .terrain()
+        .nominal_row(world.progression().deepest_tile_reached)
+    {
         0..=19 => "Director Vale: Bring us contract cargo and prove this shaft is profitable.",
         20..=39 => "Mechanic Iona: Silver strata ahead. Upgrade before chasing deep seams.",
         40..=59 => "Surveyor Kade: Relic signals are stronger. Gas pockets are no longer rumors.",

@@ -338,19 +338,28 @@ pub const ORE_PROCESSOR: SpriteDef = SpriteDef {
     frame_seconds: 0.2,
 };
 
-/// Bedrock beyond the edges of the world (tiled).
+/// Bedrock beyond the edges and below the floor of the world (tiled): the same obsidian slabs,
+/// seams and violet facets as the bedrock floor's tile art.
 pub const BEDROCK: SpriteDef = SpriteDef {
     name: "world_bedrock",
-    legend: &[('n', NIGHT), ('o', INK), ('s', SLATE_DARK)],
+    legend: &[('n', NIGHT), ('o', INK), ('s', SLATE_DARK), ('p', PLUM)],
     frames: &[&[
-        "nnnnnnnn", //
-        "nsnnnnon", //
-        "nnnnnonn", //
-        "nnnooonn", //
-        "nnnnnnnn", //
-        "nonnnnns", //
-        "oonnnnnn", //
-        "nnnnsnnn", //
+        "ppssnnnnonnnnnss", //
+        "pssnnnnoppssnnns", //
+        "ssnnnnoppssnnnnn", //
+        "snnnnoppssnnnnno", //
+        "nnnnoppssnnnnnoo", //
+        "nnnoppssnnnnnopp", //
+        "nnoossnnnnnnopps", //
+        "noonnnnnnnnoppss", //
+        "oonnnnnnnnoppssn", //
+        "ppsnnnnnnopssnnn", //
+        "pssnnnnnoossnnnn", //
+        "ssnnnnnoonnnnnnn", //
+        "snnnnnoonnnnnnnn", //
+        "nnnnnoonnnnnnnnn", //
+        "nnnnoonnnnnnnnoo", //
+        "onnoonnnnnnnnoop", //
     ]],
     frame_seconds: 0.0,
 };

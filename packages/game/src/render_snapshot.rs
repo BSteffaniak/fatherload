@@ -472,7 +472,8 @@ impl<'w> RenderSnapshot<'w> {
     #[must_use]
     pub fn warning_summary(&self, view: &ViewSnapshot<'_>) -> String {
         let player = view.player;
-        let depth = player.tile_position(TILE_SIZE).y;
+        // Warning depths are classic nominal rows (deep worlds stretch them with their bands).
+        let depth = self.terrain.nominal_row(player.tile_position(TILE_SIZE).y);
         let mut warnings = Vec::new();
         if player.fuel <= player.fuel_capacity * 0.2 {
             warnings.push("fuel");

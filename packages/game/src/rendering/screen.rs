@@ -516,13 +516,15 @@ fn hud_warnings(
     if player.cargo_used() >= player.cargo_capacity {
         warnings.push(("CARGO FULL", &icons::CARGO));
     }
-    if view.hud.depth >= 60 {
+    // Warning depths are classic nominal rows (deep worlds stretch them with their bands).
+    let depth = snapshot.terrain.nominal_row(view.hud.depth);
+    if depth >= 60 {
         warnings.push(("HEAT", &icons::HEAT));
     }
     if view.deep_instability >= 60.0 {
         warnings.push(("UNSTABLE", &icons::WARNING));
     }
-    if view.hud.depth >= 80 && snapshot.signal_relay_count == 0 {
+    if depth >= 80 && snapshot.signal_relay_count == 0 {
         warnings.push(("NO SIGNAL", &icons::WARNING));
     }
     warnings
@@ -648,7 +650,11 @@ pub(super) fn draw_depth_ruler_for_view(
     );
     let max_depth = terrain.height().max(80);
     draw_ruler_strata(draw, terrain, view, (x, top, height), max_depth);
-    let step = if max_depth > 180 { 50 } else { 20 };
+    let step = match max_depth {
+        0..=180 => 20,
+        181..=500 => 50,
+        _ => 100,
+    };
     for marker in (0..=max_depth).step_by(usize::try_from(step).unwrap_or(20)) {
         let y = top + marker * (height - 1) / max_depth;
         draw.draw_rectangle(x - 3, y, 3, 1, FOG);

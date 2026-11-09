@@ -263,7 +263,8 @@ Still placeholder (next steps): the map modal's terrain drawing (flat colours pe
 ## World art
 
 Draw order (`world::draw_world_scene`): sky, sun, clouds and hills; the town; bedrock beyond the
-world's edges; terrain; lava glow; infrastructure; drill cracks; lost cargo; bombs; boulders;
+world's left and right edges and below its last row (the view never shows sky past the floor);
+terrain; lava glow; infrastructure; drill cracks; lost cargo; bombs; boulders;
 scanner pings; rigs; drill debris; gas clouds; sparks; explosions; remote name tags. Everything
 snaps to the art grid (`world::Pen` draws art-pixel rectangles, `draw_world_sprite` sprites).
 Animation is driven by shell ticks (`WorldScene::ticks`), never wall-clock time.
@@ -272,7 +273,11 @@ Animation is driven by shell ticks (`WorldScene::ticks`), never wall-clock time.
 
 - Materials are patterns sampled in *global* art coordinates so they flow across tiles: dirt
   (noise clumps, grains, pebbles), clay (dark body with broken wavy strata), stone (Worley
-  cobbles lit top-left), hard rock (Manhattan-Worley angular slabs), foundation (offset blocks).
+  cobbles lit top-left), hard rock (Manhattan-Worley angular slabs), foundation (offset blocks),
+  bedrock (big diamond-faceted obsidian slabs in `INK`/`NIGHT`/`SLATE_DARK` with `PLUM` lit
+  faces and rare `LAVENDER` glints; the floor of deep worlds, never dug). The tiled
+  `sprites::world::BEDROCK` beyond the world's edges and under its last row uses the same
+  colours, so the floor and the walls read as one mass.
 - Each band recolours them through 4-step ramps (`Strata`, `strata_for(band)`): topsoil, clay,
   grey stone, slate, basalt, then one palette per deep stratum (Crystal Faults blues, Fossil
   Oceans sand, Pressure Cathedrals steel, Radioactive Hollow greens, Ancient Machine
