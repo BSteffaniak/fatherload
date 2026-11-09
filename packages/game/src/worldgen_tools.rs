@@ -45,7 +45,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<WorldgenCommand>, String> {
     let mut settings = WorldSettings::new(0);
     let mut seeds = 200;
     let mut first_seed = 1;
-    let mut scale = 3;
+    let mut scale = 4;
     let mut features = true;
     let (mut skip, mut positional) = (Vec::new(), Vec::new());
     match (report, preview) {

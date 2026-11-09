@@ -272,20 +272,26 @@ Animation is driven by shell ticks (`WorldScene::ticks`), never wall-clock time.
 - Materials are patterns sampled in *global* art coordinates so they flow across tiles: dirt
   (noise clumps, grains, pebbles), clay (dark body with broken wavy strata), stone (Worley
   cobbles lit top-left), hard rock (Manhattan-Worley angular slabs), foundation (offset blocks).
-- Each depth band recolours them through 4-step ramps (`Strata`): topsoil 5-13, clay 14-27, grey
-  stone 28-45, slate 46-64, basalt 65-89, then one palette per deep stratum (Crystal Faults
-  blues, Fossil Oceans sand, Pressure Cathedrals steel, Radioactive Hollow greens, Ancient
-  Machine steel/copper, Void Geode purples, Mantle Storm maroon), each with rare accent specks.
+- Each band recolours them through 4-step ramps (`Strata`, `strata_for(band)`): topsoil, clay,
+  grey stone, slate, basalt, then one palette per deep stratum (Crystal Faults blues, Fossil
+  Oceans sand, Pressure Cathedrals steel, Radioactive Hollow greens, Ancient Machine
+  steel/copper, Void Geode purples, Mantle Storm maroon), each with rare accent specks. The band
+  of a tile comes from `Terrain::band_at`, never from a fixed depth: generated worlds have wavy,
+  interleaved band boundaries that differ per seed, and the palettes follow them tile by tile.
 - Ores are 3-4 cluster stamps (`sprites::terrain::ore_stamp`: nugget/gem/chunk/flake shapes in
   the mineral's ramp) on the host rock of that depth; artifacts are one centred stamp each;
   gas/pressure pockets are bubbled cavities, explosive pockets volatile red crystals, magma vents
   a glowing seam, lava molten noise (plus an animated glow and glints in `world/fx.rs`, only on
   explored tiles).
+- Rock within `TELLTALE_RADIUS` (2) tiles of a hazard pocket carries its tell-tale: green
+  seepage near gas, glowing cracks near lava and vents, damp blue stains near pressure pockets,
+  yellow grit near explosive pockets, with a hairline crack right beside the pocket. A tile
+  change repaints the 5x5 neighbourhood so the stains appear and vanish with the pocket.
 - Faces meeting dug air get an `INK` outline, a lit lip (top/left) or shade (bottom/right) and
   rounded outer corners; ground under open sky gets grass. Dug air shows the band's back wall
   (`Strata::back`) with contact shadows under ceilings and along walls.
-- `material_color(kind, y)` is a tile's representative colour (debris, dust; usable by the minimap
-  if it wants to match the terrain).
+- `material_color(kind, band)` is a tile's representative colour (debris, dust, the depth ruler's
+  band tint and the `--worldgen-preview` map).
 
 **Fog** (`terrain/fog.rs`). Per-tile darkness (deeper and farther from explored tiles is darker;
 the top three ground rows are capped so the surface stays readable) is interpolated between tile

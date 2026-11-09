@@ -58,7 +58,16 @@ Modules:
   `pixel_art` (palette, char-grid sprites + atlas, pixel font) and `gallery` (art reference
   sheet). Art conventions: `src/rendering/ART_GUIDE.md`.
 - `scene_capture` — `drillgame --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`
-  renders scripted scenes to PNGs (see the art guide).
+  renders scripted scenes to PNGs (see the art guide). Scenes run in the default world (fixed
+  seed `D111-6A4E`); scenes that need a particular place (`hazard_telltales`,
+  `strata_boundary`) find it through the world's feature index rather than fixed coordinates.
+- `worldgen_tools` — `drillgame --worldgen-report [--seeds N] [--first-seed S] [--size X]
+  [--richness X] [--hazards X] [--legacy]` prints generator distributions over many seeds, and
+  `drillgame --worldgen-preview <seed> <out.png> [--size X] [--richness X] [--hazards X]
+  [--scale N] [--no-features]` writes a whole-world map PNG through raylib's encoder without a
+  window.
+- `shell::world_setup` — the New World dialog (seed, size, richness, hazards) opened by every
+  "new world" title entry; the seed comes from OS randomness (`random_world_seed`, 48 bits).
 - `save` — format v5 (`WorldState` + play time); `save::legacy` migrates v1-v4 (v3/v4 worlds
   carried a derived summary whose `won_game` flag is lifted into the world).
 - `input` — devices to per-seat `PlayerInput`:

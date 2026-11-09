@@ -40,6 +40,34 @@ Saves and settings go to `%LOCALAPPDATA%\drillgame`.
 
 Drill below the surface, gather minerals and artifacts, manage fuel/hull/cargo/debt, complete HQ contracts, buy upgrades, use scanners and bombs, and push deeper toward the Star Core. Deeper layers add harder rock, richer ore, artifacts, gas, lava, magma vents, pressure pockets, explosive pockets, falling boulders, cave-ins, and stronger heat pressure.
 
+### Worlds
+
+Every new game is a different world. "New Game", "Local Split-Screen" and "Host Online Game"
+open a **New World** dialog: a random seed (re-roll it, type hex digits or any words, or paste
+with `Ctrl+V`), world size (standard 240 tiles wide or large 360), resources (lean / standard /
+rich) and hazards (calm / standard / brutal). The same seed and settings make the same world on
+every machine; the pause menu shows the seed and copies it to share. Online, the host's
+settings define the session.
+
+Worlds keep a familiar town and a fixed order of layers (topsoil, clay beds, grey stone, slate,
+basalt, then seven deep strata), but each seed shifts and waves the layer boundaries, shapes
+soft channels and hard shelves, and places its own caverns, worm tunnels, deep chambers, ore
+veins and pods, rare motherlodes, artifact beds and clustered hazard pockets. Rock next to a
+hazard pocket shows tell-tale stains, so careful drillers can read danger before breaking in.
+Every world guarantees a starter ore field near spawn, an ore budget per layer, and a path down
+through each layer with that layer's drill.
+
+World generation tools (no window opens):
+
+```bash
+cargo run --release --bin drillgame -- --worldgen-report --seeds 300 [--size large] [--richness rich] [--hazards brutal]
+cargo run --release --bin drillgame -- --worldgen-preview D111-6A4E world.png [--size large] [--scale 4]
+```
+
+The report prints per-layer ore value, cave share, hazard tiles and artifacts plus feature and
+hazard-cluster counts (min / mean / max over the seeds); the preview writes a whole-world map
+(layers, caves, ores, hazards, artifacts, with motherlodes, artifact beds and chambers outlined).
+
 Successful return trips award streak bonuses. Emergency rescue returns the rig to the surface for a fee, drops part of the cargo at the rescue site, and records a depot invoice; lost cargo can be recovered later if there is cargo space.
 
 ## Controls
@@ -157,8 +185,9 @@ Files live in `$DRILLGAME_STATE_DIR`, else `$XDG_STATE_HOME/drillgame`, else
 `%LOCALAPPDATA%\drillgame` on Windows, else `~/.local/state/drillgame`.
 
 - Quick save: `save.json`; save slots: `save-slot-1.json` through `save-slot-3.json`
-- A save (format v4) is the host's `WorldState` plus play time; v1-v3 saves are migrated on load,
-  and loading starts a new session epoch.
+- A save (format v5) is the host's `WorldState` (including the world's seed and settings) plus
+  play time; v1-v4 saves are migrated on load, saves from before seeded worlds keep their
+  terrain and load as legacy worlds, and loading starts a new session epoch.
 - Slot UI displays depth and credits; the title shows the latest save's depth, credits and playtime.
 - Settings are stored in `settings.json` and persist volume/fullscreen preferences and
   the window size/maximized state.

@@ -36,6 +36,34 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `state_hash` | the stable world hash (`simulation_state_hash`) and the client-visible variant |
 | `import`, `timing` | building worlds (new game, legacy imports) and per-tick constants |
 
+## World generation (`src/worldgen/`)
+
+A world is a pure function of its `WorldSettings` (seed, `WorldSize`, `ResourceRichness`,
+`HazardIntensity`, `GeneratorVersion`). The settings live in the `Terrain` (saved, hashed, and
+carried in the session section); `Terrain::generate` builds a world and `Terrain::band_at` /
+`deep_stratum_at` answer which layer a tile is in. Saves without settings are legacy worlds
+(`GeneratorVersion::Legacy`, the original fixed-depth generator).
+
+Generation is integer-only (fixed-point value noise, splitmix hashing, region-seeded RNG) so a
+seed is bit-identical everywhere:
+
+| Module | Owns |
+|---|---|
+| `strata` | the band stack (`Band`): fixed order, per-seed boundary shifts, waves along x and interleaved fingers |
+| `caves` | smoothed noise caverns, worm tunnels and deep chambers; crust, town and spawn-shaft protection |
+| `hazards` | clustered hazard pockets by band rules, scaled by intensity; clearance around spawn and town |
+| `deposits` | per-mineral depth curves, veins / pods / motherlodes, per-band ore budgets, the starter field, artifact beds, prefab slot reservation |
+| `features` | `FeatureIndex`: caverns, chambers, motherlodes, artifact beds, hazard clusters, stratum transitions and prefab slots, queryable by kind, band, depth, region or proximity (`WorldState::world_features`, recomputed from settings, never replicated) |
+| `report` | `WorldStats` and the distribution report behind `--worldgen-report` |
+| `noise` | integer value / fractal / ridge noise and `RegionRng` |
+
+The fairness suite (`worldgen/tests.rs`) checks every sampled seed for a fixed surface and
+town, caves and hazards clear of spawn and the town, clustered hazards, a starter field worth
+the first upgrades, per-band ore value within target, ore never harder than its band's drill, a
+path to the bottom with each band's own drill, artifacts in every stratum and feature counts in
+bounds, plus golden digests pinned to `GeneratorVersion::V1`. `DRILLGAME_WORLDGEN_SEEDS=300
+cargo test --release -p drillgame_simulation worldgen` runs it over more seeds.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
@@ -48,7 +76,7 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | Op log | per-player discovery | the owner only |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig | everyone |
 | On change | `Loadout(player)`: inventory, credits, upgrades, kits, rig parts, salvage, rescue count, deep reward milestone, service transactions | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers, session constants | everyone |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers, session constants (tick timing, player template, world settings) | everyone |
 
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is
