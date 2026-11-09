@@ -263,14 +263,21 @@ pub fn objective_line(
             solo_window_ms,
             ..
         } => {
-            let window = if quest.crew {
+            let window = if progress.window_ms > 0 {
+                progress.window_ms
+            } else if quest.crew {
                 window_ms
             } else {
                 solo_window_ms
             };
             let lit = progress.marks.iter().filter(|mark| **mark > 0).count();
+            let marks = if spots == 2 {
+                "both marks".to_owned()
+            } else {
+                format!("all {spots} marks")
+            };
             format!(
-                "Light all {spots} marks within {}s ({lit} lit)",
+                "Light {marks} within {}s ({lit} lit)",
                 window.div_ceil(1_000)
             )
         }

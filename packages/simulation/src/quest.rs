@@ -922,6 +922,10 @@ pub struct ObjectiveProgress {
     /// The row where the relay's current leg started.
     #[serde(default)]
     pub anchor: i32,
+    /// Simultaneous marks: the window (ms) the rigs get right now (it stretches for a crew
+    /// short of rigs). 0 until the objective first steps.
+    #[serde(default)]
+    pub window_ms: u32,
 }
 
 /// One accepted quest.

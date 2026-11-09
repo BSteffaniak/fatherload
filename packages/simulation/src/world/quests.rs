@@ -909,13 +909,15 @@ impl WorldState {
                         helpers.push(*id);
                     }
                 }
-                let window = ticks(simultaneous_window(
+                let window_ms = simultaneous_window(
                     quest.crew,
                     rigs.len(),
                     progress.spots.len(),
                     window_ms,
                     solo_window_ms,
-                ));
+                );
+                progress.window_ms = u32::try_from(window_ms).unwrap_or(u32::MAX);
+                let window = ticks(window_ms);
                 let lit = progress.marks.iter().all(|mark| *mark > 0);
                 let first = progress.marks.iter().copied().min().unwrap_or(0);
                 let last = progress.marks.iter().copied().max().unwrap_or(0);
