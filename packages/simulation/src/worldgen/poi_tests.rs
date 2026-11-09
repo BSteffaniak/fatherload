@@ -111,6 +111,8 @@ fn v1_worlds_have_no_points_of_interest() {
         ..WorldSettings::new(3)
     });
     assert_eq!(world.features.pois().count(), 0);
+    // V1 keeps its own reserved slots (one per band and 120-column segment, minus spawn).
+    assert!((16..=22).contains(&world.features.count(FeatureKind::PrefabSlot)));
     assert!(
         !world
             .tiles
