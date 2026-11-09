@@ -70,8 +70,8 @@ Modules:
   window (points of interest get their kind's outline and map icon).
 - `shell::quests` — quests in the shell: each keeper's counter (fuel, repair, depot, HQ,
   explosives, salvage) has a Quests tab (left/right or LB/RB) listing jobs to turn in, jobs on
-  offer, jobs in progress (confirm twice to drop) and the next locked ones; co-op jobs are taken
-  as crew jobs when other rigs play. The quest log flips with the mine map and the collection
+  offer, jobs in progress (confirm twice to drop) and the next locked ones; while other rigs
+  play, a co-op job has two rows: take it as a crew job, or take its solo variant. The quest log flips with the mine map and the collection
   log (map -> log -> quests -> map) and its selection is the seat's tracked quest
   (`SeatUi::tracked_quest`); `SeatUi::fanfare` is the banner raised for a finished, ready,
   failed job or a completed blueprint (`LocalGame::announce_quests`). `rendering::quests` draws

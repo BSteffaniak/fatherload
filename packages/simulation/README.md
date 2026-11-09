@@ -157,8 +157,8 @@ stable and saved (Kade 1xx, Mara 2xx, Nix 3xx, Iona 4xx, Pip 5xx, board template
 | `Build` | infrastructure of a kind stands at the target |
 | `Detonate` | bombs go off at the marked spots in order (a wrong spot resets) |
 | `RecoverLog` | the target derelict's salvage core is drilled |
-| `Simultaneous` (co-op) | rigs on every marked spot within a crew window (solo: one rig, a long window) |
-| `Relay` (co-op) | a marker reaches the target; it overheats after N rows and must be handed to another rig (solo: it drops and cools) |
+| `Simultaneous` (co-op) | rigs on every marked spot within a crew window, stretched toward the solo one when the crew has fewer rigs than spots (solo: one rig, a long window) |
+| `Relay` (co-op) | a marker reaches the target; it overheats after N rows and must be handed to another rig, which can't hand it straight back (solo: it drops and cools) |
 | `HoldAndClimb` (co-op) | a rig reaches the goal while the switch is held, anchored by infrastructure, or (solo) still latched |
 | `Escort` (co-op) | a slow haul crawls through open tunnel to the surface while rigs walk beside it (faster with two) |
 | `SplitDelivery` (co-op) | goods dropped at two buildings within a window (solo: a longer one; a stale half spoils) |
@@ -168,7 +168,10 @@ quest is dropped and counted; the giver offers it again.
 
 - **Binding** (`quest::binding`): accepting binds each target to a real feature or POI through
   the feature index (unvisited first, then nearest; places other active quests use are
-  avoided) and lays out marked spots; same world, player and quest bind the same places.
+  avoided) and lays out marked spots; same world, player and quest bind the same places. A
+  feature target with nothing in its bands falls back to the nearest bands that have one, then
+  to a stand-in kind (an artifact bed for a motherlode, a cavern for a chamber); a row of marks
+  that doesn't fit slides inward or stands as a column.
   Board postings (`board_offers`: three a day from the seed and the market day) carry a twist
   pick and a binding salt so they spread over different places.
 - **State**: a player's `QuestLog` (active solo quests, completions, failures, reputation,
@@ -195,7 +198,8 @@ The content suite (`quest/content_tests.rs`) checks that every reference resolve
 graph is acyclic and fully reachable from a fresh game, co-op primitives have solo variants,
 rewards fit their tier's bounds (`QuestTier::reward_bounds`), no quest uses only basic
 primitives without a twist or co-op, the first batch keeps its shape (25-35 quests, 4+ givers,
-8+ co-op) and every quest binds on 50 seeds (`DRILLGAME_QUEST_SEEDS` for more).
+8+ co-op) and every quest binds on 50 seeds, every world option on one seed and seeds that
+once failed (`DRILLGAME_QUEST_SEEDS` for more seeds).
 `world/quest_tests.rs` plays quests through the tick: solo and crew completions, twists,
 rewards, the board, rebates, replication, saves and determinism.
 
