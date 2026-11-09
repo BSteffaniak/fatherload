@@ -512,36 +512,41 @@ impl Director {
         }
 
         // Alarms escalate: shorter gaps as the reserve drops, then a harsher critical patch.
+        // The low warnings stay sparse (a quarter tank can last minutes of play).
         if playing {
             if fuel_fraction < 0.25 {
+                let critical = fuel_fraction < 0.1;
+                if critical {
+                    state.fuel_alarm = state.fuel_alarm.min(CRITICAL_ALARM_GAP.0);
+                }
                 state.fuel_alarm -= dt;
                 if state.fuel_alarm <= 0.0 {
-                    let critical = fuel_fraction < 0.1;
                     let patch = if critical {
                         Patch::FuelCritical
                     } else {
                         Patch::FuelLow
                     };
                     self.play(patch, 0.8, pan, 1.0);
-                    let urgency = 1.0 - fuel_fraction / 0.25;
-                    state.fuel_alarm = if critical { 1.3 } else { 3.0 } - urgency * 0.8;
+                    state.fuel_alarm = alarm_gap(1.0 - fuel_fraction / 0.25, critical);
                     state.hull_alarm = state.hull_alarm.max(0.6);
                 }
             } else {
                 state.fuel_alarm = 0.0;
             }
             if hull_fraction < 0.3 {
+                let critical = hull_fraction < 0.12;
+                if critical {
+                    state.hull_alarm = state.hull_alarm.min(CRITICAL_ALARM_GAP.0);
+                }
                 state.hull_alarm -= dt;
                 if state.hull_alarm <= 0.0 {
-                    let critical = hull_fraction < 0.12;
                     let patch = if critical {
                         Patch::HullCritical
                     } else {
                         Patch::HullLow
                     };
                     self.play(patch, 0.8, pan, 1.0);
-                    let urgency = 1.0 - hull_fraction / 0.3;
-                    state.hull_alarm = if critical { 1.1 } else { 2.6 } - urgency * 0.7;
+                    state.hull_alarm = alarm_gap(1.0 - hull_fraction / 0.3, critical);
                     state.fuel_alarm = state.fuel_alarm.max(0.6);
                 }
             } else {
@@ -641,6 +646,27 @@ impl Director {
             }
         }
         self.fuses.retain(|key, _| seen.contains(key));
+    }
+}
+
+/// Seconds between low-reserve warnings: (at the threshold, at the critical line).
+const LOW_ALARM_GAP: (f32, f32) = (8.0, 4.0);
+/// Seconds between critical warnings: (at the critical line, empty).
+const CRITICAL_ALARM_GAP: (f32, f32) = (2.0, 1.0);
+/// Urgency (0 at the warning threshold, 1 empty) where the critical alarm takes over; both
+/// alarms put their critical line at 40% of their warning threshold.
+const CRITICAL_URGENCY: f32 = 0.6;
+
+/// Gap before the next alarm at `urgency` (0 at the warning threshold, 1 empty).
+fn alarm_gap(urgency: f32, critical: bool) -> f32 {
+    let lerp = |(from, to): (f32, f32), x: f32| from + (to - from) * x.clamp(0.0, 1.0);
+    if critical {
+        lerp(
+            CRITICAL_ALARM_GAP,
+            (urgency - CRITICAL_URGENCY) / (1.0 - CRITICAL_URGENCY),
+        )
+    } else {
+        lerp(LOW_ALARM_GAP, urgency / CRITICAL_URGENCY)
     }
 }
 
@@ -924,7 +950,8 @@ mod tests {
         let alarms = |world: &WorldState, director: &mut Director| {
             let snapshot = RenderSnapshot::build(world, &seats, (1280, 720), (&[], &[]), &[]);
             let mut found = Vec::new();
-            for _ in 0..600 {
+            // 20 s of play.
+            for _ in 0..1_200 {
                 found.extend(
                     plays(director.update(&frame(&snapshot, &[], &playing)))
                         .into_iter()
@@ -944,13 +971,28 @@ mod tests {
             player.fuel = capacity * 0.2;
         }
         let low = alarms(&world, &mut Director::new(1));
-        assert!(low.iter().all(|patch| *patch == Patch::FuelLow) && low.len() >= 3);
+        // Sparse: one at once, then every ~6.7 s at a fifth of a tank.
+        assert!(low.iter().all(|patch| *patch == Patch::FuelLow));
+        assert!((3..=4).contains(&low.len()), "{} low alarms", low.len());
         if let Some(player) = world.player_mut(one) {
             player.fuel = capacity * 0.05;
         }
         let critical = alarms(&world, &mut Director::new(1));
         assert!(critical.iter().all(|patch| *patch == Patch::FuelCritical));
-        assert!(critical.len() > low.len(), "critical alarms come faster");
+        assert!(
+            critical.len() > low.len() * 3,
+            "critical alarms come faster"
+        );
+    }
+
+    #[test]
+    fn alarm_gaps_shrink_as_the_reserve_drops() {
+        assert!((alarm_gap(0.0, false) - LOW_ALARM_GAP.0).abs() < 1e-6);
+        assert!((alarm_gap(CRITICAL_URGENCY, false) - LOW_ALARM_GAP.1).abs() < 1e-6);
+        assert!((alarm_gap(CRITICAL_URGENCY, true) - CRITICAL_ALARM_GAP.0).abs() < 1e-6);
+        assert!((alarm_gap(1.0, true) - CRITICAL_ALARM_GAP.1).abs() < 1e-6);
+        assert!(alarm_gap(0.3, false) > alarm_gap(0.5, false));
+        assert!(alarm_gap(0.7, true) > alarm_gap(0.9, true));
     }
 
     #[test]
