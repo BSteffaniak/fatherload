@@ -57,6 +57,29 @@ hazard pocket shows tell-tale stains, so careful drillers can read danger before
 Every world guarantees a starter ore field near spawn, an ore budget per layer, and a path down
 through each layer with that layer's drill.
 
+### Points of interest
+
+Hand-built places are stamped into every world (generator v2; worlds and saves from the first
+seeded generator keep generating exactly as before):
+
+- **Supply caches** (every layer below the topsoil): hollows of crates. Drill a crate open for a
+  fuel canister, a bomb or two, or some credits.
+- **Derelict rigs** (mid to deep): crashed prospector rigs. Drill the glowing core for salvage, a
+  layer material, sometimes a part, and a log entry for your collection.
+- **Vaults** (basalt and the deep strata): sealed rooms with walls no drill or bomb gets through.
+  Open the lock to reach the prize: drill the floor switches in the order their pips show (a
+  wrong one resets them), bomb every pressure seal in the walls, or drill both relays within nine
+  seconds of each other.
+- **Formations**: fossil beds packed with artifacts and geodes lined with rich ore, guarded by
+  their layer's hazard.
+- **Rival claims**: abandoned outposts whose lockers hold infrastructure kits.
+
+A scanner hears a "strange echo" from sites in range; from tier 3 it outlines them and shows
+their kind, in the world, on the minimap and on the map, and a scanner pulse records them. The
+map shows every site you have found or detected; confirm on the map opens the **collection
+log** (sites visited, scanner contacts and recovered logs). Rewards are a top-up, never a
+replacement for selling ore (reward tables: `packages/simulation/src/poi.rs`).
+
 World generation tools (no window opens):
 
 ```bash
@@ -64,9 +87,10 @@ cargo run --release --bin drillgame -- --worldgen-report --seeds 300 [--size lar
 cargo run --release --bin drillgame -- --worldgen-preview D111-6A4E world.png [--size large] [--scale 4]
 ```
 
-The report prints per-layer ore value, cave share, hazard tiles and artifacts plus feature and
-hazard-cluster counts (min / mean / max over the seeds); the preview writes a whole-world map
-(layers, caves, ores, hazards, artifacts, with motherlodes, artifact beds and chambers outlined).
+The report prints per-layer ore value, cave share, hazard tiles, artifacts and points of
+interest plus feature, POI-kind and hazard-cluster counts (min / mean / max over the seeds); the
+preview writes a whole-world map (layers, caves, ores, hazards, artifacts, with motherlodes,
+artifact beds and chambers outlined, and each point of interest outlined with its map icon).
 
 Successful return trips award streak bonuses. Emergency rescue returns the rig to the surface for a fee, drops part of the cargo at the rescue site, and records a depot invoice; lost cargo can be recovered later if there is cargo space.
 

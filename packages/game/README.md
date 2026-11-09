@@ -60,12 +60,14 @@ Modules:
 - `scene_capture` — `drillgame --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`
   renders scripted scenes to PNGs (see the art guide). Scenes run in the default world (fixed
   seed `D111-6A4E`); scenes that need a particular place (`hazard_telltales`,
-  `strata_boundary`) find it through the world's feature index rather than fixed coordinates.
+  `strata_boundary`) find it through the world's feature index rather than fixed coordinates,
+  and the `poi_*` scenes swap in the first world from the default seed on that holds the POI
+  they show (`stage_poi`).
 - `worldgen_tools` — `drillgame --worldgen-report [--seeds N] [--first-seed S] [--size X]
   [--richness X] [--hazards X] [--legacy]` prints generator distributions over many seeds, and
   `drillgame --worldgen-preview <seed> <out.png> [--size X] [--richness X] [--hazards X]
   [--scale N] [--no-features]` writes a whole-world map PNG through raylib's encoder without a
-  window.
+  window (points of interest get their kind's outline and map icon).
 - `shell::world_setup` — the New World dialog (seed, size, richness, hazards) opened by every
   "new world" title entry; the seed comes from OS randomness (`random_world_seed`, 48 bits).
 - `save` — format v6 (`WorldState` + play time; the terrain as generation settings plus tile

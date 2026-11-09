@@ -82,8 +82,10 @@ seed is bit-identical everywhere:
 | `strata` | the band stack (`Band`): fixed order, per-seed boundary shifts, waves along x and interleaved fingers |
 | `caves` | smoothed noise caverns, worm tunnels and deep chambers; crust, town and spawn-shaft protection |
 | `hazards` | clustered hazard pockets by band rules, scaled by intensity; clearance around spawn and town |
-| `deposits` | per-mineral depth curves, veins / pods / motherlodes, per-band ore budgets, the starter field, artifact beds, prefab slot reservation |
-| `features` | `FeatureIndex`: caverns, chambers, motherlodes, artifact beds, hazard clusters, stratum transitions and prefab slots, queryable by kind, band, depth, region or proximity (`WorldState::world_features`, recomputed from settings, never replicated) |
+| `deposits` | per-mineral depth curves, veins / pods / motherlodes, per-band ore budgets, the starter field, artifact beds, prefab slot reservation (V1) |
+| `prefabs` | hand-authored POI rooms as char grids with a shared legend (size limits, random fills, switch slots) |
+| `pois` | V2+: POI placement in a per-band region grid (guaranteed kinds, random fills, depth windows, spacing, hazard clearance, spawn/town exclusion) and stamping (flips, shuffled lock orders, band ore/artifacts/guardian hazards); empty regions become reserved prefab slots |
+| `features` | `FeatureIndex`: caverns, chambers, motherlodes, artifact beds, hazard clusters, stratum transitions, prefab slots and points of interest, queryable by kind, band, depth, region or proximity, plus POI queries (`pois`, `pois_of(kind)`, `pois_in_band`, `poi_at(position)`, `nearest_poi(position, kind)`) for quests to bind to (`WorldState::world_features`, recomputed from settings and cached per settings, never replicated) |
 | `report` | `WorldStats` and the distribution report behind `--worldgen-report` |
 | `noise` | integer value / fractal / ridge noise and `RegionRng` |
 
@@ -91,8 +93,30 @@ The fairness suite (`worldgen/tests.rs`) checks every sampled seed for a fixed s
 town, caves and hazards clear of spawn and the town, clustered hazards, a starter field worth
 the first upgrades, per-band ore value within target, ore never harder than its band's drill, a
 path to the bottom with each band's own drill, artifacts in every stratum and feature counts in
-bounds, plus golden digests pinned to `GeneratorVersion::V1`. `DRILLGAME_WORLDGEN_SEEDS=300
+bounds, plus golden digests pinned to `GeneratorVersion::V1` and `V2`. `worldgen/poi_tests.rs`
+checks POI counts per band and per kind, caches in the clay, grey stone and slate, spacing,
+spawn/town/hazard clearance, nothing undiggable below spawn, and that every vault's doors,
+switches, relays and seals can be reached and worked from spawn. `DRILLGAME_WORLDGEN_SEEDS=300
 cargo test --release -p drillgame_simulation worldgen` runs it over more seeds.
+
+## Points of interest (`src/poi.rs`, `src/world/pois.rs`)
+
+Generator v2 worlds hold supply caches, derelict rigs, vaults (sequence switches, pressure
+seals, twin relays), formations (fossil beds, geodes) and rival claims (`PoiKind`,
+`PoiVariant`). They are built from `TileKind::Poi(PoiTile)` fixtures: crates, wreckage and
+salvage cores, vault walls/doors/seals/switches/relays/caches (vault fixtures are undrillable
+and blast-proof; a seal vents only under a bomb), fossil shale, geode shells, outpost plating
+and lockers. A POI's state lives in its tiles (opened crates are gone, switches light, doors
+vanish), so it replicates through the terrain op log and saves with the terrain; the twin-relay
+deadlines ride in the timers section and each player's `PoiJournal` (known sites, recovered
+logs) in their private loadout.
+
+Drilling a crate, salvage core, vault cache or outpost locker pays a deterministic reward from
+the world seed, the tile and its depth tier (tables in `poi.rs`; tuned as a top-up next to ore
+sales); a vault hands out an unowned rare part first, then a permanent fitting. Entering a POI
+records a visit; a scanner pulse records the POIs in range as echoes (tiers 1-2) or identified
+silhouettes (tier 3+, or the relic scanner). Events: `PoiOpened`, `PoiDiscovered`,
+`VaultOpened`, `VaultLockReset`.
 
 ## Replication
 
@@ -105,8 +129,8 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
 | Op log | per-player discovery | the owner only |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig | everyone |
-| On change | `Loadout(player)`: inventory, credits, upgrades, kits, rig parts, salvage, rescue count, deep reward milestone, service transactions | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers, session constants (tick timing, player template, world settings) | everyone |
+| On change | `Loadout(player)`: inventory, credits, upgrades, kits, rig parts, POI journal, salvage, rescue count, deep reward milestone, service transactions | the owner only |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings) | everyone |
 
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is
