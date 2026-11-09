@@ -32,7 +32,8 @@ Frame loop (`local_game::LocalGame::frame`, driven by `app::run`):
    that seat's rig, map fog from that player's `DiscoveredTiles`), terrain, hazards, bombs,
    infrastructure, HUD values and this frame's de-duplicated gameplay events. Terrain redraws
    follow the host's `WorldOp::Tile` ops (or the client's terrain diff).
-5. `rendering::GameRenderer` draws the snapshot plus shell state; audio plays the frame's cues.
+5. `rendering::GameRenderer` draws the snapshot plus shell state; `audio::AudioBus` hears the
+   frame's placed cues plus the snapshot (thrust, drilling, impacts, alarms, nearby hazards).
    Each view draws its seat's world and HUD, or the building the seat is in, with the seat's
    dialog, rescue prompt and toasts on a UI canvas covering just that view
    (`ui_kit::UiCanvas::for_viewport`) and prompts for the seat's device; dialog focus and
@@ -49,8 +50,14 @@ Modules:
   integer UI canvas scale.
 - `window` — the resizable, maximizable high-DPI window, borderless fullscreen and the
   remembered window size.
-- `effects` — exactly-once event delivery, sound cues and presentation particles (sparks, bomb
-  blasts).
+- `effects` — exactly-once event delivery, placed sound cues (event -> cue table in
+  `audio::cues`) and presentation particles (sparks, bomb blasts).
+- `audio` — procedural sound (no audio files): a synth engine renders 41 designed patches with
+  seeded variations at startup, a software mixer plays them on raylib's audio thread (voices,
+  loops, pan, priorities, ducking, reverb, limiter) and a director turns each frame into mixer
+  commands, panning each seat's sounds toward its split-screen view and attenuating world
+  sounds by distance. `drillgame --render-audio <dir> [--seed N]` writes every patch to WAV with
+  a level report and a showcase. Design table and details: `src/audio/README.md`.
 - `rendering` — `GameRenderer`: `terrain` (chunked art-resolution textures of procedural pixel
   tiles + dithered fog), `world` (sky and parallax, the town, rigs, props and effects),
   `screen` (HUD, menus, map), `interior` (walk-in pixel-art rooms), `layout` (menu/modal

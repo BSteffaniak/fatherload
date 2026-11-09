@@ -103,6 +103,14 @@ interest plus feature, POI-kind and hazard-cluster counts (min / mean / max over
 preview writes a whole-world map (layers, caves, ores, hazards, artifacts, with motherlodes,
 artifact beds and chambers outlined, and each point of interest outlined with its map icon).
 
+Audio review (no window opens): every sound is generated in code; this writes each one (and its
+variations) to WAV with a level report and a `showcase.wav` tour through the in-game mixer (see
+`packages/game/src/audio/README.md`):
+
+```bash
+cargo run --release --bin drillgame -- --render-audio target/audio-review
+```
+
 Successful return trips award streak bonuses. Emergency rescue returns the rig to the surface for a fee, drops part of the cargo at the rescue site, and records a depot invoice; lost cargo can be recovered later if there is cargo space.
 
 ## Controls
