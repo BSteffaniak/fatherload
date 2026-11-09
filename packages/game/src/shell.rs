@@ -1589,9 +1589,7 @@ impl ShellState {
     /// is backed out of. Global menus listen to the seat driving them; while playing, each seat
     /// with its own dialog open is heard.
     fn push_navigation_cues(&mut self, inputs: &[PlayerInput], menu_input: PlayerInput) {
-        let stepped = |input: &PlayerInput| {
-            input.menu_up || input.menu_down || input.tab_previous || input.tab_next
-        };
+        let stepped = |input: &PlayerInput| input.menu_up || input.menu_down;
         let backed = |input: &PlayerInput| input.back || input.cancel;
         let global = !matches!(self.run_mode, RunMode::Playing) || self.modal.is_some();
         let menus: Vec<PlayerInput> = if global {
@@ -2333,6 +2331,22 @@ mod tests {
         };
         shell.update(&[escape], 0.016, ctx(&world));
         assert_eq!(shell.run_mode, RunMode::Paused, "Esc still pauses");
+    }
+
+    #[test]
+    fn menus_tick_on_navigation_but_driving_stays_quiet() {
+        let world = WorldState::new_game(PlayerId::new(1));
+        let down = PlayerInput {
+            menu_down: true,
+            ..PlayerInput::default()
+        };
+        let mut shell = ShellState::default();
+        shell.update(&[down], 0.016, ctx(&world));
+        assert!(shell.sound_cues.contains(&SoundCue::UiMove));
+        // Outdoors with nothing open, up/down drive the rig: no menu sounds.
+        shell.enter_world("", 0.0);
+        shell.update(&[down], 0.016, ctx(&world));
+        assert!(!shell.sound_cues.contains(&SoundCue::UiMove));
     }
 
     #[test]

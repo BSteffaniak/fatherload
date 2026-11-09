@@ -130,6 +130,8 @@ impl Effects {
         local_players: &[PlayerId],
     ) -> Vec<PlacedCue> {
         let mut cues = Vec::new();
+        // Several detonations in one frame share one pass over the vanished bombs.
+        let mut blasted = false;
         for event in events {
             let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
                 continue;
@@ -145,7 +147,14 @@ impl Effects {
                     }
                 }
                 GameplayEventKind::BombDetonated => {
-                    for (x, y) in self.spawn_explosions(world) {
+                    let blasts = self.spawn_explosions(world);
+                    if blasts.is_empty() && !blasted {
+                        // A bomb placed and detonated between two frames was never seen: still
+                        // heard, just not placed.
+                        cues.push(PlacedCue::interface(SoundCue::Explosion));
+                    }
+                    blasted = true;
+                    for (x, y) in blasts {
                         cues.push(PlacedCue::world(SoundCue::Explosion, x, y));
                     }
                     continue;
@@ -346,6 +355,42 @@ mod tests {
         assert_eq!(
             effects.apply(&burst, &world, &[local]),
             vec![PlacedCue::player(SoundCue::Damage, local)]
+        );
+    }
+
+    #[test]
+    fn unseen_detonations_still_sound_once_and_pickups_need_cargo_growth() {
+        let local = PlayerId::new(1);
+        let mut world = WorldState::new_game(local);
+        let mut effects = Effects::default();
+        let world_event = |tick, kind| RuntimeEvent {
+            player: None,
+            ..event(tick, local, kind)
+        };
+        let blasts = [
+            world_event(1, GameplayEventKind::BombDetonated),
+            world_event(1, GameplayEventKind::BombDetonated),
+        ];
+        assert_eq!(
+            effects.apply(&blasts, &world, &[local]),
+            vec![PlacedCue::interface(SoundCue::Explosion)]
+        );
+        // Selling (the bay shrinks or stays) is not a pickup; mining (it grows) is.
+        let changed = [event(
+            2,
+            local,
+            GameplayEventKind::CargoChanged { player_id: local },
+        )];
+        assert!(effects.apply(&changed, &world, &[local]).is_empty());
+        if let Some(player) = world.player_mut(local) {
+            *player
+                .cargo
+                .entry(drillgame_simulation::terrain::MineralKind::Copper)
+                .or_default() += 1;
+        }
+        assert_eq!(
+            effects.apply(&changed, &world, &[local]),
+            vec![PlacedCue::player(SoundCue::Pickup, local)]
         );
     }
 }
