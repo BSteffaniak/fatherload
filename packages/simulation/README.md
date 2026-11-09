@@ -42,6 +42,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 |---|---|
 | `simulate` | the tick: inputs, hazards, bombs, drilling, day cycle, escape, deep rewards |
 | `movement`, `commands`, `services`, `progression`, `hazards`, `rescue` | gameplay rules used by the tick |
+| `quests` | quest services (accept, turn in, abandon at the giver's counter), objectives stepping inside the tick, twists, rewards, reputation rebates, blueprint fragments |
 | `roster` | `add_player` / `remove_player`; spawn placement on an unbounded grid so any number of rigs spawn without overlap |
 | `discovery` | `DiscoveredTiles` (16x16 chunk bitsets; positions in JSON saves, bitsets in binary keyframes), clamped allocation-free reveals, `Discovery` op-log entries |
 | `player_sections` | how a `Player` splits into per-tick `PlayerRig`, public `RigBuild` and private `PlayerInventory` |
@@ -129,10 +130,74 @@ logs) in their private loadout.
 
 Drilling a crate, salvage core, vault cache or outpost locker pays a deterministic reward from
 the world seed, the tile and its depth tier (tables in `poi.rs`; tuned as a top-up next to ore
-sales); a vault hands out an unowned rare part first, then a permanent fitting. Entering a POI
+sales); a vault hands out an unowned rare part first, then a fragment of the opener's next
+vault blueprint, and a permanent fitting once those blueprints are all finished. Entering a POI
 records a visit; a scanner pulse records the POIs in range as echoes (tiers 1-2) or identified
 silhouettes (tier 3+, or the relic scanner). Events: `PoiOpened`, `PoiDiscovered`,
 `VaultOpened`, `VaultLockReset`.
+
+## Side quests (`src/quest.rs`, `src/quest/`, `src/world/quests.rs`)
+
+Plan §8's quest engine. Quests are data (`quest/content.rs`): a `QuestDef` names its giver
+(`QuestGiver`: the keepers Kade, Mara, Nix, Iona and Pip, plus Director Vale's HQ board), tier,
+hook (why it is fun), `Prerequisite`s (depth reached, a POI kind visited, logs recovered,
+reputation, other quests, upgrade levels), `TargetSpec`s to bind, stages of `Objective`
+primitives, `Twist`s, a `QuestReward` and authored offer/progress/complete lines. Ids are
+stable and saved (Kade 1xx, Mara 2xx, Nix 3xx, Iona 4xx, Pip 5xx, board templates 9xx).
+
+| Primitive | Done when |
+|---|---|
+| `Deliver` | the owner carries the goods (handed over at turn-in; last stage only) |
+| `Reach`, `ReachDepth`, `ReturnToSurface` | a rig gets there |
+| `Dig` | rigs drill N tiles in and around the target |
+| `Scan` | a scanner pulse near the target |
+| `OpenPoi` | the target vault's lock opens, or a crate/core/cache/locker inside it is drilled |
+| `Survive` | rigs spend N seconds in and around the target (a hazard pocket) |
+| `PickUp` | the owner collects the quest parcel (the fragile twist then counts damage) |
+| `Build` | infrastructure of a kind stands at the target |
+| `Detonate` | bombs go off at the marked spots in order (a wrong spot resets) |
+| `RecoverLog` | the target derelict's salvage core is drilled |
+| `Simultaneous` (co-op) | rigs on every marked spot within a crew window (solo: one rig, a long window) |
+| `Relay` (co-op) | a marker reaches the target; it overheats after N rows and must be handed to another rig (solo: it drops and cools) |
+| `HoldAndClimb` (co-op) | a rig reaches the goal while the switch is held, anchored by infrastructure, or (solo) still latched |
+| `Escort` (co-op) | a slow haul crawls through open tunnel to the surface while rigs walk beside it (faster with two) |
+| `SplitDelivery` (co-op) | goods dropped at two buildings within a window (solo: a longer one; a stale half spoils) |
+
+Twists: `TimeLimit`, `Fragile` (hull damage cap), `NoScanner`, `NoBombs`, `StayDown`. A failed
+quest is dropped and counted; the giver offers it again.
+
+- **Binding** (`quest::binding`): accepting binds each target to a real feature or POI through
+  the feature index (unvisited first, then nearest; places other active quests use are
+  avoided) and lays out marked spots; same world, player and quest bind the same places.
+  Board postings (`board_offers`: three a day from the seed and the market day) carry a twist
+  pick and a binding salt so they spread over different places.
+- **State**: a player's `QuestLog` (active solo quests, completions, failures, reputation,
+  blueprint fragments, deepest row, visited POI kinds, the board ledger) is part of `Player` and
+  rides in the private `Loadout` section; quests accepted in crew mode (co-op quests with other
+  rigs present) live in `CrewQuests` in the shared `Quests` section so every rig sees their
+  markers. Everything saves with the world (serde defaults keep older saves loading) and feeds
+  the state hash.
+- **Rules**: `AcceptQuest`, `TurnInQuest` and `AbandonQuest` are town services validated at the
+  giver's counter; objectives advance near the end of each tick from what the tick did (tiles
+  mined, blasts, scanner pulses, vault openings, rig positions, infrastructure). Durations are
+  authored in milliseconds, so quests behave the same at any tick rate. Crew helpers get a
+  quarter of the credits and half the reputation.
+- **Reputation** ranks (`REPUTATION_RANKS`: 10/25/50/90) unlock deeper chains and give rebates:
+  Pip on fuel, Iona on repairs, Nix on charges (4 % a rank), Kade on cargo sales (+2 % a rank).
+- **Blueprints**: `BlueprintId`s collect fragments from quests and vaults; a finished blueprint
+  unlocks a rig part (Hauler Engine, Cargo Balloon, Pressure Hull) or records a recipe for later
+  systems (dampener, tow winch, outpost refinery).
+- **Reading** (`quest::describe`): objective lines, twists, time left and map/world markers.
+- **Events**: `QuestAccepted`, `QuestStageDone`, `QuestReady`, `QuestCompleted` (the fanfare),
+  `QuestFailed`, `BlueprintCompleted`.
+
+The content suite (`quest/content_tests.rs`) checks that every reference resolves, the unlock
+graph is acyclic and fully reachable from a fresh game, co-op primitives have solo variants,
+rewards fit their tier's bounds (`QuestTier::reward_bounds`), no quest uses only basic
+primitives without a twist or co-op, the first batch keeps its shape (25-35 quests, 4+ givers,
+8+ co-op) and every quest binds on 50 seeds (`DRILLGAME_QUEST_SEEDS` for more).
+`world/quest_tests.rs` plays quests through the tick: solo and crew completions, twists,
+rewards, the board, rebates, replication, saves and determinism.
 
 ## Replication
 
@@ -145,8 +210,8 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
 | Op log | per-player discovery | the owner only |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig | everyone |
-| On change | `Loadout(player)`: inventory, credits, upgrades, kits, rig parts, POI journal, salvage, rescue count, deep reward milestone, service transactions | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings) | everyone |
+| On change | `Loadout(player)`: inventory, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions | the owner only |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests | everyone |
 
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is

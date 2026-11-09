@@ -68,6 +68,15 @@ Modules:
   `drillgame --worldgen-preview <seed> <out.png> [--size X] [--richness X] [--hazards X]
   [--scale N] [--no-features]` writes a whole-world map PNG through raylib's encoder without a
   window (points of interest get their kind's outline and map icon).
+- `shell::quests` — quests in the shell: each keeper's counter (fuel, repair, depot, HQ,
+  explosives, salvage) has a Quests tab (left/right or LB/RB) listing jobs to turn in, jobs on
+  offer, jobs in progress (confirm twice to drop) and the next locked ones; co-op jobs are taken
+  as crew jobs when other rigs play. The quest log flips with the mine map and the collection
+  log (map -> log -> quests -> map) and its selection is the seat's tracked quest
+  (`SeatUi::tracked_quest`); `SeatUi::fanfare` is the banner raised for a finished, ready,
+  failed job or a completed blueprint (`LocalGame::announce_quests`). `rendering::quests` draws
+  the desk, the log, the HUD tracker, the fanfare and map/minimap markers;
+  `rendering/world/quest_marks.rs` draws them in the world.
 - `shell::world_setup` — the New World dialog (seed, size, richness, hazards, test mode) opened
   by every "new world" title entry; the seed comes from OS randomness (`random_world_seed`, 48
   bits). `local_game::world_from_setup` builds the world (test mode via

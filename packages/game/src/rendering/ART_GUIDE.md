@@ -25,6 +25,7 @@ The quickest way to see the whole kit is the `art_gallery` capture scene (see
 | `rendering/world.rs` + `world/{sky,buildings,rig,fx}.rs` | Everything in world space: sky and parallax, the town, rigs, props and effects. |
 | `rendering/interior.rs` | The walk-in building rooms (shell, door, lamps, sign, counter, keeper, shop dressing). |
 | `rendering/counters.rs` | Every building's counter panel and the receipt-style purchase confirmations. |
+| `rendering/quests.rs` + `world/quest_marks.rs` | Quest desks (the counters' Quests tab), the quest log, the HUD tracker, the fanfare banner and quest markers on the maps and in the world. |
 | `rendering/menus.rs` | Pause, options, save/load slots, exit confirmations, rescue prompt, online screens and lobby. |
 | `rendering/title.rs` | The title screen: claim cross-section backdrop (shared by online screens), logo, menu. |
 | `rendering/interior/props.rs` | Each non-shop room's furniture and counter-top details. |
@@ -331,6 +332,18 @@ built, natural ones take their band's palette:
   identified site in scanner range gets thick pulsing corner brackets around its bounds in the
   world, with its icon above (`world/fx.rs::draw_poi_scanner_marks`).
 
+**Quests** (`rendering/quests.rs`, `world/quest_marks.rs`). Quest gold is `GOLD`; done is
+`LIME`, warnings `ORANGE`/`RED`, blueprints `VIOLET`. In the world a target gets a bobbing 7x7
+ink-outlined diamond with a short tail over its tile; marked spots get corner brackets (`ORANGE`
+waiting, blinking `GOLD`/`CREAM` with a diamond for the next detonation, `LIME` once lit); the
+escorted haul is a small copper sled with a blinking beacon; the relay beacon a pulsing teal orb;
+a hold-and-climb switch a lever box (`LIME` held, `RED` free). The maps use the same colours as
+5x5 minimap dots and small diamonds. The HUD tracker sits under the warning badges (title in
+gold, the next objective, a timer that turns red under 30 s). The fanfare is a centred banner
+near the top of the seat's view (Title heading, Bold quest name, one or two Body lines) that
+drops in over its first frames and lasts 4.5 s; completions twinkle in its corners. Desks and
+the log are ordinary `ModalContent` dialogs.
+
 **Fog** (`terrain/fog.rs`). Per-tile darkness (deeper and farther from explored tiles is darker;
 the top three ground rows are capped so the surface stays readable) is interpolated between tile
 centres and applied per art pixel as a Bayer-dithered walk down each colour's ramp
@@ -380,7 +393,9 @@ Scenes (see `--list`): `art_gallery`, `ui_sheet`, `title`, world scenes (`surfac
 `deep_void_geodes`, `hazard_telltales`, `strata_boundary`), points of interest
 (`poi_supply_cache`, `poi_derelict_rig`, `poi_vault_sequence`, `poi_vault_seals`,
 `poi_vault_relay`, `poi_vault_open`, `poi_fossil_bed`, `poi_geode`, `poi_rival_claim`,
-`poi_scanner_silhouette`, `poi_scanner_echo`, `map_poi_contacts`, `modal_collection_log`), every
+`poi_scanner_silhouette`, `poi_scanner_echo`, `map_poi_contacts`, `modal_collection_log`), quests
+(`quest_desk`, `quest_counter_tab`, `quest_board`, `quest_log`, `quest_hud_tracker`,
+`quest_map_markers`, `quest_complete_toast`, `split_crew_quest`), every
 `interior_<building>` with its counter open, `interior_shop_walk`, every `room_<building>` with
 no panel open, `toast_receipt`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
 `modal_exit_confirm`, `modal_inventory`, `modal_options`, `modal_save_slots`, `map`,
@@ -400,7 +415,9 @@ gets a `SceneStage`: `play(seats, |world, seats| ..)` enters a staged world (hel
 `park_rig`, `park_at`, `sink_rig`, `carve`, `reveal`, `find_tile`, `load_cargo`),
 `hold(frames, input)` / `hold_seats(frames, inputs)` / `settle(frames)` run frames;
 `stage_poi` swaps in a world holding a wanted POI and `visit_poi` / `approach_poi` place the rig
-beside it (explored) or a few tiles off (unexplored, with a given scanner tier); `shell()`
+beside it (explored) or a few tiles off (unexplored, with a given scanner tier);
+`quest_history`, `accept_for` / `accept_crew`, `finish_quest` and `quest_spots` stage quests;
+`shell()`
 opens global menus directly and `seat(n)` / `put_seat_inside` set up one seat's interior and
 dialogs. A unit test builds every scene
 headlessly.
