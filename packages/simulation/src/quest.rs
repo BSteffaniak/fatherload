@@ -33,7 +33,7 @@ use crate::{
     poi::{PoiKind, RigFitting},
     rig::RigPartKind,
     terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TilePosition},
-    worldgen::{FeatureId, FeatureKind, TileRect},
+    worldgen::{FeatureId, FeatureKind, TileRect, WorldSettings, strata},
 };
 
 pub mod binding;
@@ -305,7 +305,8 @@ impl UpgradeStat {
 /// What a player must have done before a quest is offered.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Prerequisite {
-    /// The player has been this deep (tile row).
+    /// The player has been this deep: a classic nominal row (see
+    /// [`strata::scaled_row`]), so the same depth stays the same place in a deeper world.
     Depth(i32),
     /// The player has visited a point of interest of this kind.
     Visited(PoiKind),
@@ -320,15 +321,15 @@ pub enum Prerequisite {
 }
 
 impl Prerequisite {
-    /// Whether `player` meets it.
+    /// Whether `player` meets it in the world `settings` describe.
     #[must_use]
-    pub fn met(self, player: &Player) -> bool {
+    pub fn met(self, player: &Player, settings: &WorldSettings) -> bool {
         let log = &player.quests;
         match self {
             Self::Depth(row) => {
                 log.deepest_row
                     .max(player.tile_position(crate::TILE_SIZE).y)
-                    >= row
+                    >= strata::scaled_row(settings, row)
             }
             Self::Visited(kind) => log.visited_kinds.contains(&kind),
             Self::Logs(count) => player.journal.logs.len() >= usize::from(count),
@@ -338,11 +339,11 @@ impl Prerequisite {
         }
     }
 
-    /// A short "needs" line for locked quests.
+    /// A short "needs" line for locked quests in the world `settings` describe.
     #[must_use]
-    pub fn describe(self) -> String {
+    pub fn describe(self, settings: &WorldSettings) -> String {
         match self {
-            Self::Depth(row) => format!("reach {row}m"),
+            Self::Depth(row) => format!("reach {}m", strata::scaled_row(settings, row)),
             Self::Visited(kind) => format!("visit a {}", kind.name().to_lowercase()),
             Self::Logs(count) => format!("recover {count} derelict log(s)"),
             Self::Reputation(giver, points) => {
@@ -469,7 +470,8 @@ pub enum Objective {
     Deliver { item: QuestItem, count: u32 },
     /// Bring a rig to the target.
     Reach { target: u8 },
-    /// Bring a rig this deep (tile row).
+    /// Bring a rig this deep: a classic nominal row, bound to this world's row (kept in the
+    /// objective's `anchor`) when the quest is accepted.
     ReachDepth { row: i32 },
     /// Drill `count` tiles in and around the target.
     Dig { target: u8, count: u32 },
@@ -859,12 +861,13 @@ impl QuestDef {
         self.objectives().any(Objective::is_coop)
     }
 
-    /// Whether every prerequisite is met by `player` (ignores completion and active state).
+    /// Whether every prerequisite is met by `player` in the world `settings` describe (ignores
+    /// completion and active state).
     #[must_use]
-    pub fn unlocked_for(&self, player: &Player) -> bool {
+    pub fn unlocked_for(&self, player: &Player, settings: &WorldSettings) -> bool {
         self.prerequisites
             .iter()
-            .all(|prerequisite| prerequisite.met(player))
+            .all(|prerequisite| prerequisite.met(player, settings))
     }
 
     /// The twists that apply to an accepted quest (`variant` picks a board twist).
@@ -919,7 +922,8 @@ pub struct ObjectiveProgress {
     /// A deadline tick: the escort's next step, the relay cooldown, the switch latch.
     #[serde(default)]
     pub timer: u64,
-    /// The row where the relay's current leg started.
+    /// The row where the relay's current leg started; for a depth objective, the world row to
+    /// reach (0 in quests bound before deep worlds: the authored row).
     #[serde(default)]
     pub anchor: i32,
     /// Simultaneous marks: the window (ms) the rigs get right now (it stretches for a crew

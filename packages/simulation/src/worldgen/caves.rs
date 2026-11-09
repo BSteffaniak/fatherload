@@ -61,8 +61,19 @@ const fn cavern_share(band: Band) -> u32 {
     }
 }
 
-/// Cavern noise cell size per band: wide flat galleries shallow, taller voids deep.
-const fn cavern_cells(band: Band) -> (i32, i32) {
+/// Cavern noise cell size per band: wide flat galleries shallow, taller voids deep. Deep (V4)
+/// worlds stretch every cell by a quarter, so their thicker bands get roomier cave systems
+/// rather than just more of the same small pockets.
+const fn cavern_cells(band: Band, deep_world: bool) -> (i32, i32) {
+    let (cell_x, cell_y) = classic_cavern_cells(band);
+    if deep_world {
+        (cell_x * 5 / 4, cell_y * 5 / 4)
+    } else {
+        (cell_x, cell_y)
+    }
+}
+
+const fn classic_cavern_cells(band: Band) -> (i32, i32) {
     match band {
         Band::Topsoil | Band::Clay => (14, 6),
         Band::Stone | Band::Slate => (18, 8),
@@ -84,7 +95,7 @@ pub(crate) fn carve(canvas: &mut Canvas<'_>) {
             if let Some(index) = canvas.index(x, y)
                 && open[index]
                 && cave_allowed(x, y)
-                && canvas.kinds[index] != TileKind::Foundation
+                && !canvas.is_fixed(x, y)
             {
                 canvas.kinds[index] = TileKind::Air;
             }
@@ -96,11 +107,12 @@ pub(crate) fn carve(canvas: &mut Canvas<'_>) {
 /// Thresholded fractal noise smoothed by a few cellular-automaton passes.
 fn cavern_mask(canvas: &Canvas<'_>) -> Vec<bool> {
     let seed = canvas.seed();
+    let deep_world = canvas.settings.generator.is_deep();
     let mut open = vec![false; canvas.kinds.len()];
     for y in CRUST_ROWS..canvas.height {
         for x in 0..canvas.width {
             let band = canvas.band(x, y);
-            let (cell_x, cell_y) = cavern_cells(band);
+            let (cell_x, cell_y) = cavern_cells(band, deep_world);
             let base = fractal_noise(seed, SALT_CAVERN, x, y, cell_x, cell_y, 3);
             // A little fine detail so edges are not perfectly smooth blobs.
             let detail = value_noise(seed, SALT_CAVERN_DETAIL, x, y, 3, 3);
@@ -279,7 +291,7 @@ fn carve_chambers(canvas: &mut Canvas<'_>, open: &mut [bool]) {
             let mut rng = RegionRng::new(seed, SALT_CHAMBER, rx, ry);
             let cx = rx * CHAMBER_REGION.0 + rng.range(10, CHAMBER_REGION.0 - 10);
             let cy = ry * CHAMBER_REGION.1 + rng.range(6, CHAMBER_REGION.1 - 6);
-            if cx >= canvas.width - 8 || cy >= canvas.height - 6 {
+            if cx >= canvas.width - 8 || cx < 0 || cy >= canvas.floor_row(cx) - 6 {
                 continue;
             }
             let band = canvas.band(cx, cy);

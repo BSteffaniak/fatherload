@@ -118,6 +118,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         TileKind::ExplosivePocket,
         TileKind::PressurePocket,
         TileKind::MagmaVent,
+        TileKind::Bedrock,
     ];
     kinds.extend(crate::worldgen::deposits::MINERALS.map(TileKind::Ore));
     kinds.extend(
@@ -170,7 +171,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         }
     }
     for code in [
-        11 << 8,
+        12 << 8,
         0x10A << 8,
         0x20B << 8,
         0x3FF << 8,
@@ -360,7 +361,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
 
     let out_of_bounds = TerrainSnapshot {
         diffs: TileDiffs::new([(
-            u32::try_from(240 * 220).expect("small"),
+            u32::try_from(snapshot.width * snapshot.height).expect("small"),
             Tile {
                 kind: TileKind::Air,
                 durability: 0,
@@ -396,11 +397,11 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
             size: 0,
             richness: 1,
             hazards: 1,
-            // `WorldSettings::new` uses the current generator (V3, variant index 3).
-            generator: 3,
+            // `WorldSettings::new` uses the current generator (V4, variant index 4).
+            generator: 4,
         },
         width: 240,
-        height: 220,
+        height: WorldSettings::new(0xBAD).height_tiles(),
         digest: Terrain::generate(&WorldSettings::new(0xBAD)).digest(),
         diffs: Vec::new(),
     };
@@ -476,6 +477,10 @@ fn generation_timing_report() {
             size: WorldSize::Large,
             ..WorldSettings::new(0x7112)
         },
+        WorldSettings {
+            generator: GeneratorVersion::V3,
+            ..WorldSettings::new(0x7111)
+        },
         WorldSettings::legacy(0x7113),
     ] {
         let start = Instant::now();
@@ -488,8 +493,12 @@ fn generation_timing_report() {
         let _restored: Terrain = postcard::from_bytes(&bytes).expect("decode (cached base)");
         let cached = start.elapsed();
         println!(
-            "{:?} {}x{}: generate {generate:?}, restore with cached base {cached:?}",
-            settings.generator, world.width, world.height
+            "{:?} {}x{}: generate {generate:?}, restore with cached base {cached:?}, \
+             snapshot after a dig {} bytes",
+            settings.generator,
+            world.width,
+            world.height,
+            bytes.len()
         );
     }
 }

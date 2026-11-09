@@ -59,6 +59,9 @@ impl WorldStats {
                 let Some(kind) = kind_at(x, y) else {
                     continue;
                 };
+                if kind == TileKind::Bedrock {
+                    continue;
+                }
                 let band = &mut stats.bands[band_at(settings, x, y).index()];
                 band.tiles += 1;
                 match kind {
@@ -152,6 +155,7 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
     let mut pois = [Spread::default(); 12];
     let mut specks = [Spread::default(); 12];
     let mut band_tops = [Spread::default(); 12];
+    let mut band_rows = [Spread::default(); 12];
     let mut poi_kinds: BTreeMap<PoiKind, Spread> = PoiKind::ALL
         .into_iter()
         .map(|kind| (kind, Spread::default()))
@@ -179,8 +183,9 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
             specks[index].add(band.ore_specks);
         }
         for band in Band::ALL {
-            let top = super::strata::band_layout_rows(&settings, band).0;
+            let (top, bottom) = super::strata::band_layout_rows(&settings, band);
             band_tops[band.index()].add(u64::try_from(top).unwrap_or_default());
+            band_rows[band.index()].add(u64::try_from(bottom - top + 1).unwrap_or_default());
         }
         for (kind, spread) in &mut poi_kinds {
             spread.add(stats.pois.get(kind).copied().unwrap_or_default());
@@ -203,12 +208,23 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
         template.richness.name(),
         template.hazards.name(),
     );
+    let _ = writeln!(
+        out,
+        "world height {} rows{}",
+        template.height_tiles(),
+        if template.generator.is_deep() {
+            " (bedrock floor at the bottom)"
+        } else {
+            ""
+        }
+    );
     let _ = writeln!(out, "(each cell: min mean max over seeds)\n");
     let _ = writeln!(
         out,
-        "{:<22} {:^23} {:^23} {:^23} {:^23} {:^23} {:^23} {:^23}",
+        "{:<22} {:^23} {:^23} {:^23} {:^23} {:^23} {:^23} {:^23} {:^23}",
         "band",
         "top row",
+        "rows",
         "ore value / 10 tiles",
         "ore specks (<=3)",
         "caves (per mille)",
@@ -220,9 +236,10 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
         let index = band.index();
         let _ = writeln!(
             out,
-            "{:<22} {} {} {} {} {} {} {}",
+            "{:<22} {} {} {} {} {} {} {} {}",
             band.name(),
             band_tops[index].cell(),
+            band_rows[index].cell(),
             ore[index].cell(),
             specks[index].cell(),
             open[index].cell(),

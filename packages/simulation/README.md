@@ -86,21 +86,24 @@ so a chunk cannot be generated alone cheaply, and a whole world is fast enough. 
 
 | World | Debug generate | Release generate | Restore with cached base (debug / release) |
 |---|---|---|---|
-| V1 standard (240x220) | 118 ms | 11.5 ms | 2.1 ms / 0.3 ms |
-| V1 large (360x220) | 176 ms | 17.2 ms | 2.7 ms / 0.4 ms |
-| Legacy (240x220) | 13 ms | 1.4 ms | 2.1 ms / 0.3 ms |
+| V4 standard (240x860) | 489 ms | 44 ms | 6.4 ms / 1.1 ms |
+| V4 large (360x900) | 1086 ms | 68 ms | 9.5 ms / 1.6 ms |
+| V3 standard (240x220) | 122 ms | 11.1 ms | 2.1 ms / 0.3 ms |
+| Legacy (240x220) | 14 ms | 1.4 ms | 2.2 ms / 0.5 ms |
+
+A compact snapshot of a lightly dug world stays around 6 KB whatever the world's depth.
 
 Generation is integer-only (fixed-point value noise, splitmix hashing, region-seeded RNG) so a
 seed is bit-identical everywhere:
 
 | Module | Owns |
 |---|---|
-| `strata` | the band stack (`Band`): fixed order, per-seed boundary bases (V1/V2: small shifts; V3: a cumulative thickness model with minimum gaps), waves along x and interleaved fingers, `band_layout_rows` for placement passes |
+| `strata` | the band stack (`Band`): fixed order, per-seed boundary bases (V1/V2: small shifts; V3: a cumulative thickness model with minimum gaps; V4: the same model for every band of a world about four times deeper, `WorldSize::deep_height_tiles`), waves along x and interleaved fingers (V4: wide transition zones of lenses), the V4 bedrock floor (`bedrock_top_row`), `band_layout_rows` for placement passes, and `nominal_row` / `scaled_row` / `nominal_depth` / `scaled_span`, which map a world's rows onto the classic ~220-row stack so depth rules authored against it (mineral curves, hazard gates, heat, deep-run pressure, deep rewards, quest depths) stretch with deeper worlds |
 | `caves` | smoothed noise caverns, worm tunnels and deep chambers; crust, town and spawn-shaft protection |
 | `hazards` | clustered hazard pockets by band rules, scaled by intensity; clearance around spawn and town |
-| `deposits` | per-mineral depth curves, veins / pods / motherlodes, per-band ore budgets, the starter field, artifact beds, prefab slot reservation (V1); V3 rich worlds thin deep ore specks into fewer, chunkier deposits |
+| `deposits` | per-mineral depth curves (classic nominal rows), veins / pods / motherlodes, per-band ore budgets, the starter field, artifact beds (V4: more per band, spread through it), prefab slot reservation (V1); V3+ rich worlds thin deep ore specks into fewer, chunkier deposits |
 | `prefabs` | hand-authored POI rooms as char grids with a shared legend (size limits, random fills, switch slots) |
-| `pois` | V2+: POI placement in a per-band region grid (guaranteed kinds, random fills, depth windows, spacing, hazard clearance, spawn/town exclusion) and stamping (flips, shuffled lock orders, band ore/artifacts/guardian hazards); empty regions become reserved prefab slots |
+| `pois` | V2+: POI placement in a per-band region grid (guaranteed kinds, random fills, depth windows, spacing, hazard clearance, spawn/town exclusion; V4 stacks a row of regions per tier of about 28 rows, with an extra supply cache per tier) and stamping (flips, shuffled lock orders, band ore/artifacts/guardian hazards); empty regions become reserved prefab slots |
 | `features` | `FeatureIndex`: caverns, chambers, motherlodes, artifact beds, hazard clusters, stratum transitions, prefab slots and points of interest, queryable by kind, band, depth, region or proximity, plus POI queries (`pois`, `pois_of(kind)`, `pois_in_band`, `poi_at(position)`, `nearest_poi(position, kind)`) for quests to bind to (`WorldState::world_features`, recomputed from settings and cached per settings, never replicated) |
 | `report` | `WorldStats` and the distribution report behind `--worldgen-report` |
 | `noise` | integer value / fractal / ridge noise and `RegionRng` |
@@ -109,8 +112,9 @@ The fairness suite (`worldgen/tests.rs`) checks every sampled seed for a fixed s
 town, caves and hazards clear of spawn and the town, clustered hazards, a starter field worth
 the first upgrades, per-band ore value within target, ore never harder than its band's drill, a
 path to the bottom with each band's own drill, artifacts in every stratum and feature counts in
-bounds, V3 band thicknesses within bounds and varying by seed, few deep ore specks on rich V3
-worlds, plus golden digests pinned to `GeneratorVersion::V1`, `V2` and `V3`. `worldgen/poi_tests.rs`
+bounds, V3 and V4 band thicknesses within bounds and varying by seed, V4 transition zones that
+interleave over many rows, a solid V4 bedrock floor that nothing breaks, few deep ore specks on
+rich V3+ worlds, plus golden digests pinned to `GeneratorVersion::V1`, `V2`, `V3` and `V4`. `worldgen/poi_tests.rs`
 checks POI counts per band and per kind, caches in the clay, grey stone and slate, spacing,
 spawn/town/hazard clearance, nothing undiggable below spawn, and that every vault's doors,
 switches, relays and seals can be reached and worked from spawn. `DRILLGAME_WORLDGEN_SEEDS=300

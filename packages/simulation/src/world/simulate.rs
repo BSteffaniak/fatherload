@@ -184,9 +184,12 @@ impl WorldState {
             {
                 heat_multiplier *= 0.72;
             }
-            let depth_damage = if player_y > safe_depth {
+            // Heat depths are classic nominal depths: deeper worlds stretch them with their
+            // bands.
+            let heat_y = self.terrain.nominal_depth(player_y / TILE_SIZE) * TILE_SIZE;
+            let depth_damage = if heat_y > safe_depth {
                 // Ramps smoothly from the safe depth: double damage one ramp below it.
-                let depth_factor = 1.0 + (player_y - safe_depth) / (HEAT_RAMP_TILES * TILE_SIZE);
+                let depth_factor = 1.0 + (heat_y - safe_depth) / (HEAT_RAMP_TILES * TILE_SIZE);
                 3.5 * depth_factor * heat_multiplier * delta_seconds
             } else {
                 0.0
@@ -454,8 +457,10 @@ impl WorldState {
                 .clamp(1, self.terrain.width() - 2),
             y: depth.clamp(10, self.terrain.height() - 2),
         };
-        let reward_tile = if depth >= 120 {
-            let material = match depth {
+        // Reward tiers read classic nominal depths.
+        let tier_depth = self.terrain.nominal_row(depth);
+        let reward_tile = if tier_depth >= 120 {
+            let material = match tier_depth {
                 180.. => StrategicResourceKind::RadiantFossil,
                 160..=179 => StrategicResourceKind::VoidGlass,
                 140..=159 => StrategicResourceKind::MachineRelic,
@@ -463,9 +468,9 @@ impl WorldState {
             };
             player.add_material(material, 1);
             player.add_material(StrategicResourceKind::CoreShard, 1);
-            let blueprint = if depth >= 160 {
+            let blueprint = if tier_depth >= 160 {
                 LegendaryBlueprint::RelicSorter
-            } else if depth >= 140 {
+            } else if tier_depth >= 140 {
                 LegendaryBlueprint::VoidTank
             } else {
                 LegendaryBlueprint::StarPlating
@@ -517,14 +522,16 @@ impl WorldState {
         for (player_id, depth) in player_depths {
             self.progression.deepest_tile_reached =
                 self.progression.deepest_tile_reached.max(depth);
-            let milestone = depth / 20;
+            // Milestones every 20 classic nominal rows from the first deep stratum.
+            let nominal = self.terrain.nominal_row(depth);
+            let milestone = nominal / 20;
             let previous = self
                 .progression
                 .deep_reward_milestones
                 .get(&player_id)
                 .copied()
                 .unwrap_or(0);
-            if depth >= 90 && milestone > previous {
+            if nominal >= 90 && milestone > previous {
                 self.progression
                     .deep_reward_milestones
                     .insert(player_id, milestone);

@@ -110,8 +110,11 @@ fn place_cluster(canvas: &mut Canvas<'_>, rng: &mut RegionRng, x: i32, y: i32) {
     }
     let band = canvas.band(x, y);
     let (_, mut weights) = band_rules(band);
+    // The depth gates were authored against the classic stack: deep worlds read them at the
+    // same relative depth.
+    let nominal = super::strata::nominal_row(canvas.settings, y);
     for (weight, kind) in weights.iter_mut().zip(HazardKind::ALL) {
-        if y < family_min_row(kind) {
+        if nominal < family_min_row(kind) {
             *weight = 0;
         }
     }

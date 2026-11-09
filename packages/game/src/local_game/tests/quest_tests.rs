@@ -100,7 +100,10 @@ fn a_two_seat_crew_splits_a_delivery_and_both_get_paid() {
     {
         let lead = world.player_mut(PLAYER).expect("lead");
         lead.quests.reputation.insert(QuestGiver::Kade, 10);
-        lead.quests.deepest_row = 30;
+        lead.quests.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
+            &drillgame_simulation::worldgen::WorldSettings::default(),
+            30,
+        );
         lead.cargo.insert(MineralKind::Silver, 2);
     }
     world
@@ -143,7 +146,10 @@ fn a_crew_job_can_also_be_taken_solo_while_others_play() {
     {
         let lead = world.player_mut(PLAYER).expect("lead");
         lead.quests.reputation.insert(QuestGiver::Kade, 10);
-        lead.quests.deepest_row = 30;
+        lead.quests.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
+            &drillgame_simulation::worldgen::WorldSettings::default(),
+            30,
+        );
     }
     let mut game = playing(world, 2, "quest-crew-solo");
     idle(&mut game, 5);
@@ -218,7 +224,12 @@ fn accept_in_world(world: &mut WorldState, quest: QuestId) {
 
 #[test]
 fn the_quest_log_tracks_the_selected_job_and_flips_with_the_map() {
-    let mut world = rig_at_building(SurfaceZone::Fuel, |rig| rig.quests.deepest_row = 30);
+    let mut world = rig_at_building(SurfaceZone::Fuel, |rig| {
+        rig.quests.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
+            &drillgame_simulation::worldgen::WorldSettings::default(),
+            30,
+        );
+    });
     accept_in_world(&mut world, QuestId(301));
     let mut game = playing(world, 1, "quest-log");
     idle(&mut game, 5);

@@ -273,12 +273,18 @@ impl WorldState {
             return;
         }
         let day = self.progression.town_event_day;
-        let depth = u32::try_from(self.progression.deepest_tile_reached.max(80)).unwrap_or(80);
+        // Survey depths are picked on the classic nominal scale and posted in this world's rows.
+        let nominal = self
+            .terrain
+            .nominal_row(self.progression.deepest_tile_reached)
+            .max(80);
+        let survey_row = self.terrain.scaled_row(nominal.saturating_add(15).min(140));
+        let depth = u32::try_from(survey_row).unwrap_or(95);
         self.progression.expedition_offers = vec![
             Expedition {
                 kind: ExpeditionObjectiveKind::ReachDepth,
                 target: TileKind::Stone,
-                required: depth.saturating_add(15).min(140),
+                required: depth,
                 reward: 320 + day * 12,
                 expires_day: day + 4,
             },
@@ -389,7 +395,10 @@ impl WorldState {
         };
         let (target, required) = match kind {
             SideContractKind::Cargo => (TileKind::Ore(MineralKind::Gold), 2),
-            SideContractKind::DepthSurvey => (TileKind::Ore(MineralKind::Platinum), 65),
+            SideContractKind::DepthSurvey => (
+                TileKind::Ore(MineralKind::Platinum),
+                u32::try_from(self.terrain.scaled_row(65)).unwrap_or(65),
+            ),
             SideContractKind::HazardScan => (TileKind::Gas, 3),
             SideContractKind::Rush => (TileKind::Ore(MineralKind::Ruby), 1),
         };
@@ -818,7 +827,8 @@ impl WorldState {
             | ExpeditionObjectiveKind::RescueMiner
             | ExpeditionObjectiveKind::StabilizeCollapse
             | ExpeditionObjectiveKind::ReachSignal => u32::from(
-                self.progression.deepest_tile_reached
+                self.terrain
+                    .nominal_row(self.progression.deepest_tile_reached)
                     >= i32::try_from(60 + expedition.required * 10).unwrap_or(i32::MAX),
             ),
             ExpeditionObjectiveKind::ScanHazards => 0,

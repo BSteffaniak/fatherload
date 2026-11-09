@@ -66,18 +66,31 @@ pub enum GeneratorVersion {
     V2,
     /// V2 with per-seed band thicknesses (layer depths differ noticeably between seeds) and
     /// chunkier, less specky deep ore on rich worlds.
-    #[default]
     V3,
+    /// V3 about four times deeper ([`WorldSize::deep_height_tiles`]): thicker bands with wide
+    /// transition zones, placement scaled to the bigger bands, and a solid bedrock floor.
+    #[default]
+    V4,
 }
 
 impl GeneratorVersion {
     /// The generator new worlds use.
-    pub const CURRENT: Self = Self::V3;
+    pub const CURRENT: Self = Self::V4;
+
+    /// Every generator, oldest first.
+    pub const ALL: [Self; 5] = [Self::Legacy, Self::V1, Self::V2, Self::V3, Self::V4];
 
     /// Whether this generator stamps points of interest.
     #[must_use]
     pub const fn has_points_of_interest(self) -> bool {
-        matches!(self, Self::V2 | Self::V3)
+        matches!(self, Self::V2 | Self::V3 | Self::V4)
+    }
+
+    /// Whether this generator builds the deep (about four times taller) band stack with a
+    /// bedrock floor.
+    #[must_use]
+    pub const fn is_deep(self) -> bool {
+        matches!(self, Self::V4)
     }
 
     #[must_use]
@@ -87,11 +100,13 @@ impl GeneratorVersion {
             Self::V1 => "v1",
             Self::V2 => "v2",
             Self::V3 => "v3",
+            Self::V4 => "v4",
         }
     }
 }
 
-/// World width option. Depth is set by the band stack and does not change.
+/// World size option: the width, and (from [`GeneratorVersion::V4`]) the depth of the band
+/// stack.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub enum WorldSize {
     #[default]
@@ -115,6 +130,16 @@ impl WorldSize {
         match self {
             Self::Standard => 240,
             Self::Large => 360,
+        }
+    }
+
+    /// Height in tiles of a deep ([`GeneratorVersion::V4`]) world of this size, bedrock floor
+    /// included. The one knob for how deep new worlds go.
+    #[must_use]
+    pub const fn deep_height_tiles(self) -> i32 {
+        match self {
+            Self::Standard => 860,
+            Self::Large => 900,
         }
     }
 }
@@ -195,7 +220,8 @@ pub struct WorldSettings {
 
 /// Seed of the default world (tests, fixtures and scripted scenes).
 pub const DEFAULT_WORLD_SEED: u64 = 0xD1_11_6A_4E;
-/// Height in tiles of every world (the band stack).
+/// Height in tiles of every classic (legacy to V3) world: the band stack the depth rules were
+/// authored against. V4 worlds are deeper ([`WorldSize::deep_height_tiles`]).
 pub const WORLD_HEIGHT_TILES: i32 = 220;
 /// Column the first rig spawns above.
 pub const SPAWN_TILE_X: i32 = 97;
@@ -237,7 +263,11 @@ impl WorldSettings {
 
     #[must_use]
     pub const fn height_tiles(&self) -> i32 {
-        WORLD_HEIGHT_TILES
+        if self.generator.is_deep() {
+            self.size.deep_height_tiles()
+        } else {
+            WORLD_HEIGHT_TILES
+        }
     }
 
     /// The seed as players see and share it (see [`parse_seed`]).
@@ -376,10 +406,11 @@ impl<'s> Canvas<'s> {
     fn new(settings: &'s WorldSettings) -> Self {
         let (width, height) = (settings.width_tiles(), settings.height_tiles());
         let mut bands = Vec::with_capacity(usize::try_from(width * height).unwrap_or_default());
+        let bases = strata::boundary_bases(settings);
         for y in 0..height {
             for x in 0..width {
                 #[allow(clippy::cast_possible_truncation, reason = "there are twelve bands")]
-                bands.push(band_at(settings, x, y).index() as u8);
+                bands.push(strata::band_at_with_bases(settings, &bases, x, y).index() as u8);
             }
         }
         Self {
@@ -421,6 +452,20 @@ impl<'s> Canvas<'s> {
         })
     }
 
+    /// Whether `(x, y)` holds a fixed tile no generation step may change (town foundations and
+    /// the bedrock floor).
+    pub fn is_fixed(&self, x: i32, y: i32) -> bool {
+        matches!(
+            self.get(x, y),
+            Some(TileKind::Foundation | TileKind::Bedrock)
+        )
+    }
+
+    /// The first row of the bedrock floor in column `x` (the world's height when it has none).
+    pub fn floor_row(&self, x: i32) -> i32 {
+        strata::bedrock_top_row(self.settings, x).unwrap_or(self.height)
+    }
+
     /// Whether `(x, y)` holds plain rock that deposits and hazards may replace.
     pub fn is_plain_rock(&self, x: i32, y: i32) -> bool {
         matches!(
@@ -429,13 +474,16 @@ impl<'s> Canvas<'s> {
         )
     }
 
-    /// Step 2: sky, town foundations and each band's rock mass.
+    /// Step 2: sky, town foundations, the bedrock floor (V4) and each band's rock mass.
     fn fill_rock(&mut self) {
         let seed = self.seed();
+        let floors: Vec<i32> = (0..self.width).map(|x| self.floor_row(x)).collect();
         for y in 0..self.height {
             for x in 0..self.width {
                 let kind = if y < SKY_ROWS {
                     TileKind::Air
+                } else if y >= floors[usize::try_from(x).unwrap_or_default()] {
+                    TileKind::Bedrock
                 } else if building_foundation_at(x, y) {
                     TileKind::Foundation
                 } else {

@@ -41,7 +41,8 @@ pub const MINERALS: [MineralKind; 10] = [
     MineralKind::Mythril,
 ];
 
-/// Depth curve of a mineral: (first row, peak row, last row, peak weight).
+/// Depth curve of a mineral: (first row, peak row, last row, peak weight), in classic nominal
+/// rows (deep worlds pass [`super::strata::nominal_row`]).
 const fn depth_curve(mineral: MineralKind) -> (i32, i32, i32, u32) {
     match mineral {
         MineralKind::Copper => (SKY_ROWS, 9, 42, 100),
@@ -78,8 +79,10 @@ const fn stratum_signatures(stratum: DeepStratum) -> &'static [(MineralKind, u32
     }
 }
 
-/// Relative weight of each mineral (in [`MINERALS`] order) at row `y` of `band`. Minerals too
-/// hard for the band's required drill never appear, so ore never blocks a band.
+/// Relative weight of each mineral (in [`MINERALS`] order) at classic nominal row `y` of `band`.
+///
+/// Deep worlds pass [`super::strata::nominal_row`]. Minerals too hard for the band's required
+/// drill never appear, so ore never blocks a band.
 #[must_use]
 pub fn mineral_weights(band: Band, y: i32) -> [u32; 10] {
     let mut weights = [0; 10];
@@ -148,8 +151,15 @@ pub const SPECK_MAX_TILES: usize = 3;
 /// Whether deep ore comes in fewer, chunkier deposits: V3 rich worlds, whose extra veins
 /// otherwise litter the deep strata with one-to-three-tile specks.
 const fn chunky_deep_ore(canvas: &Canvas<'_>) -> bool {
-    matches!(canvas.settings.generator, super::GeneratorVersion::V3)
-        && matches!(canvas.settings.richness, super::ResourceRichness::Rich)
+    matches!(
+        canvas.settings.generator,
+        super::GeneratorVersion::V3 | super::GeneratorVersion::V4
+    ) && matches!(canvas.settings.richness, super::ResourceRichness::Rich)
+}
+
+/// The classic nominal row of row `y` (what the depth curves read).
+const fn nominal(canvas: &Canvas<'_>, y: i32) -> i32 {
+    super::strata::nominal_row(canvas.settings, y)
 }
 
 /// The ore deposits (4-connected ore tiles) of `size`, each as its tile list, among the tiles
@@ -260,7 +270,7 @@ fn place_veins(canvas: &mut Canvas<'_>) {
                     x.div_euclid(9),
                     y.div_euclid(6),
                 );
-                if let Some(mineral) = mineral_from_hash(band, y, stretch) {
+                if let Some(mineral) = mineral_from_hash(band, nominal(canvas, y), stretch) {
                     canvas.set(x, y, TileKind::Ore(mineral));
                 }
             }
@@ -326,7 +336,7 @@ fn cluster(
     let band = canvas.band(x, y);
     let mineral = match mineral {
         Some(mineral) => mineral,
-        None => match rng.pick(&mineral_weights(band, y)) {
+        None => match rng.pick(&mineral_weights(band, nominal(canvas, y))) {
             Some(index) => MINERALS[index],
             None => return 0,
         },
@@ -390,14 +400,14 @@ fn place_motherlodes(canvas: &mut Canvas<'_>) {
             let mut rng = RegionRng::new(seed, SALT_MOTHERLODE, rx, ry);
             let x = rx * MOTHERLODE_REGION.0 + rng.range(6, MOTHERLODE_REGION.0 - 6);
             let y = ry * MOTHERLODE_REGION.1 + rng.range(5, MOTHERLODE_REGION.1 - 5);
-            if y < 34 || x >= canvas.width - 4 || y >= canvas.height - 4 {
+            if nominal(canvas, y) < 34 || x >= canvas.width - 4 || y >= canvas.floor_row(x) - 4 {
                 continue;
             }
             if !rng.chance(260 * rich / 100) {
                 continue;
             }
             let band = canvas.band(x, y);
-            let weights = mineral_weights(band, y);
+            let weights = mineral_weights(band, nominal(canvas, y));
             // The most valuable mineral with a real presence here.
             let Some(mineral) = MINERALS
                 .iter()
@@ -447,6 +457,9 @@ fn band_ore_values(canvas: &Canvas<'_>) -> ([u64; 12], [u64; 12]) {
     let mut tiles = [0_u64; 12];
     for y in SKY_ROWS..canvas.height {
         for x in 0..canvas.width {
+            if canvas.get(x, y) == Some(TileKind::Bedrock) {
+                continue;
+            }
             let band = canvas.band(x, y).index();
             tiles[band] += 1;
             if let Some(TileKind::Ore(mineral)) = canvas.get(x, y) {
@@ -497,8 +510,11 @@ fn top_up_bands(canvas: &mut Canvas<'_>) {
         );
         let (first, last) = band_layout_rows(canvas.settings, band);
         let top = first - 4;
-        // V1/V2 search the band's first 26 rows, as they always did; V3 bands can be thicker.
-        let span = if canvas.settings.generator == super::GeneratorVersion::V3 {
+        // V1/V2 search the band's first 26 rows, as they always did; V3+ bands can be thicker.
+        let span = if matches!(
+            canvas.settings.generator,
+            super::GeneratorVersion::V3 | super::GeneratorVersion::V4
+        ) {
             (last - first + 8).max(26)
         } else {
             26
@@ -601,6 +617,9 @@ pub(crate) fn pick_artifact(band: Band, rng: &mut RegionRng) -> Option<ArtifactK
     rng.pick(&weights).map(|index| table[index].0)
 }
 
+/// Rows of a deep-world band that hold one classic band's worth of artifact beds.
+const ARTIFACT_LAYER_ROWS: i32 = 30;
+
 /// Artifact beds (a few artifacts close together, one or two per band) and rare strays.
 fn place_artifacts(canvas: &mut Canvas<'_>) {
     let seed = canvas.seed();
@@ -612,15 +631,26 @@ fn place_artifacts(canvas: &mut Canvas<'_>) {
             i32::try_from(band.index()).unwrap_or(0),
             0,
         );
-        // Two or three beds per band in a standard world, three or four in a large one.
-        let beds = width_factor + i32::from(rng.chance(500));
-        let top = band_layout_rows(canvas.settings, band).0;
+        // Two or three beds per band in a standard world, three or four in a large one; deep
+        // worlds add as many again for every classic band's worth of rows, spread through the
+        // whole band.
+        let (top, bottom) = band_layout_rows(canvas.settings, band);
+        let (beds, last_row) = if canvas.settings.generator.is_deep() {
+            let thickness = bottom - top + 1;
+            let per_layer = width_factor + i32::from(rng.chance(500));
+            (
+                (per_layer * thickness / ARTIFACT_LAYER_ROWS).max(per_layer),
+                (bottom - 2).max(top + 4),
+            )
+        } else {
+            (width_factor + i32::from(rng.chance(500)), top + 16)
+        };
         let mut placed_beds = 0;
         let mut attempts = 0;
-        while placed_beds < beds && attempts < 200 {
+        while placed_beds < beds && attempts < 200 * beds.max(1) {
             attempts += 1;
             let x = rng.range(4, canvas.width - 5);
-            let y = rng.range(top + 2, top + 16).min(canvas.height - 3);
+            let y = rng.range(top + 2, last_row).min(canvas.height - 3);
             if canvas.band(x, y) != band || !canvas.is_plain_rock(x, y) {
                 continue;
             }
@@ -663,7 +693,7 @@ fn place_artifacts(canvas: &mut Canvas<'_>) {
     }
     // Strays: rare single artifacts anywhere below the clay line.
     let rich = richness(canvas);
-    for y in 20..canvas.height {
+    for y in super::strata::scaled_row(canvas.settings, 20)..canvas.height {
         for x in 0..canvas.width {
             if !canvas.is_plain_rock(x, y)
                 || !chance(seed, SALT_ARTIFACT_STRAY, x, y, 2 * rich / 100 + 1)

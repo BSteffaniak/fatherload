@@ -76,6 +76,8 @@ const SLATE_STONE: Ramp = ramp([NIGHT, SLATE_DARK, SLATE, SLATE_LIGHT]);
 const DARK_ROCK: Ramp = ramp([INK, NIGHT, SLATE_DARK, SLATE]);
 const BASALT: Ramp = ramp([INK, NIGHT, STONE_DARK, STONE]);
 const FOUNDATION: Ramp = ramp([STONE_DARK, STONE, STONE_LIGHT, MIST]);
+/// The bedrock floor: near-black obsidian slabs with violet facets.
+pub const BEDROCK: Ramp = ramp([INK, NIGHT, SLATE_DARK, PLUM]);
 
 const TOPSOIL_BAND: Strata = Strata {
     dirt: DIRT,
@@ -191,6 +193,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Stone => strata.stone[2],
         TileKind::HardRock | TileKind::MagmaVent => strata.hard[2],
         TileKind::Foundation => FOUNDATION[2],
+        TileKind::Bedrock => BEDROCK[1],
         TileKind::Lava => index_of(ORANGE),
         TileKind::Gas => index_of(LEAF),
         TileKind::Air => strata.back[0],
@@ -362,6 +365,7 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         TileKind::Stone => accent(strata.stone[cobble_level(x, y)]),
         TileKind::HardRock | TileKind::MagmaVent => accent(strata.hard[slab_level(x, y)]),
         TileKind::Foundation => FOUNDATION[brick_level(x, y)],
+        TileKind::Bedrock => bedrock_pixel(x, y),
         TileKind::Lava => lava_pixel(x, y),
         TileKind::Air => backdrop_pixel(strata, x, y),
         TileKind::Ore(_)
@@ -370,6 +374,26 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::ExplosivePocket
         | TileKind::PressurePocket
         | TileKind::Poi(_) => base_pixel(host, strata, host, x, y),
+    }
+}
+
+/// Bedrock: big diamond-faceted obsidian slabs split by black seams, their upper-left faces
+/// catching a violet sheen, with rare lavender glints. Anchored to the world grid, so the floor
+/// reads as one unbroken mass.
+fn bedrock_pixel(x: i32, y: i32) -> PaletteIndex {
+    let (near, second, dx, dy) = worley(x, y, 11, 43, true);
+    if second - near < 1.5 {
+        return BEDROCK[0];
+    }
+    if hash(x, y, 47).is_multiple_of(97) {
+        return index_of(LAVENDER);
+    }
+    if dx + dy <= -5 {
+        BEDROCK[3]
+    } else if dx + dy <= -1 {
+        BEDROCK[2]
+    } else {
+        BEDROCK[1]
     }
 }
 
@@ -568,6 +592,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         TileKind::Clay => strata.clay[3],
         TileKind::Stone => strata.stone[3],
         TileKind::Foundation => FOUNDATION[3],
+        TileKind::Bedrock => BEDROCK[3],
         TileKind::Lava => index_of(CREAM),
         _ => strata.hard[3],
     };
@@ -576,6 +601,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         TileKind::Clay => strata.clay[0],
         TileKind::Stone => strata.stone[0],
         TileKind::Foundation => FOUNDATION[0],
+        TileKind::Bedrock => BEDROCK[0],
         TileKind::Lava => index_of(RED),
         _ => strata.hard[0],
     };

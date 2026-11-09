@@ -253,7 +253,7 @@ impl SeatUi {
                 let needs = match &offer.availability {
                     QuestAvailability::Locked(missing) => missing
                         .iter()
-                        .map(|prerequisite| prerequisite.describe())
+                        .map(|prerequisite| prerequisite.describe(ctx.world.terrain().settings()))
                         .collect::<Vec<_>>()
                         .join(", "),
                     _ => String::new(),

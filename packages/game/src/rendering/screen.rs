@@ -540,6 +540,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Stone | TileKind::HardRock | TileKind::Foundation => STONE,
         TileKind::Dirt | TileKind::Clay => LOAM,
         TileKind::Poi(tile) => super::terrain::tile_art::poi_color(tile, Band::Stone),
+        TileKind::Bedrock => PLUM,
     }
 }
 

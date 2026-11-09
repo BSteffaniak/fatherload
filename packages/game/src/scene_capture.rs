@@ -1967,7 +1967,10 @@ pub const SCENES: &[Scene] = &[
                 let (lead, wing) = (seats[0].player, seats[1].player);
                 if let Some(rig) = world.player_mut(lead) {
                     rig.quests.completed.insert(QuestId(302));
-                    rig.quests.deepest_row = 45;
+                    rig.quests.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
+                        &drillgame_simulation::worldgen::WorldSettings::default(),
+                        45,
+                    );
                 }
                 accept_crew(world, lead, QuestId(305));
                 let spots = quest_spots(world, lead, QuestId(305));
@@ -2164,7 +2167,10 @@ fn quest_history(world: &mut WorldState, player: PlayerId) {
         log.reputation.insert(QuestGiver::Kade, 13);
         log.reputation.insert(QuestGiver::Nix, 6);
         log.reputation.insert(QuestGiver::Pip, 6);
-        log.deepest_row = 34;
+        log.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
+            &drillgame_simulation::worldgen::WorldSettings::default(),
+            34,
+        );
         log.fragments.insert(BlueprintId::HaulerFrame, 1);
         log.fragments.insert(BlueprintId::DampenerCoil, 2);
     }

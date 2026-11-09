@@ -228,7 +228,8 @@ pub(super) fn draw_quest_desk(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
                             "Needs {}",
                             missing
                                 .iter()
-                                .map(|prerequisite| prerequisite.describe())
+                                .map(|prerequisite| prerequisite
+                                    .describe(ui.snapshot.terrain.settings()))
                                 .collect::<Vec<_>>()
                                 .join(", ")
                         ),

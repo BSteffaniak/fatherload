@@ -4,8 +4,16 @@
 //! at a per-seed depth, waves along x, and frays into short interleaved fingers, so a band
 //! transition reads as a ragged natural seam rather than a ruler line. V1/V2 worlds shift each
 //! boundary a row or two; V3 worlds draw every band's thickness per seed (within bounds, with a
-//! minimum gap) and stack them, so layer depths differ noticeably between seeds. Legacy worlds
-//! keep the original fixed depths.
+//! minimum gap) and stack them, so layer depths differ noticeably between seeds. V4 worlds are
+//! about four times deeper: every band (topsoil included) draws its thickness from the same kind
+//! of cumulative model, each boundary is a wide transition zone where lenses of the band below
+//! thicken over many rows until they take over, and a solid bedrock floor closes the bottom.
+//! Legacy worlds keep the original fixed depths.
+//!
+//! Depth-dependent rules authored against the classic ~220-row stack (mineral depth curves,
+//! hazard depth gates, heat, deep-run pressure, quest depths) read rows through
+//! [`nominal_row`] / [`scaled_row`], which map a world's own band layout onto the classic
+//! nominal rows, so they keep their meaning in deeper worlds.
 
 use serde::{Deserialize, Serialize};
 
@@ -209,6 +217,8 @@ const BOUNDARIES: [BoundarySpec; 11] = [
 
 /// Number of band boundaries (one fewer than bands).
 pub const BOUNDARY_COUNT: usize = BOUNDARIES.len();
+/// Number of bands.
+pub const BAND_COUNT: usize = BOUNDARY_COUNT + 1;
 
 const SALT_SHIFT: u64 = 0x5743_0001;
 const SALT_WAVE: u64 = 0x5743_0100;
@@ -256,6 +266,56 @@ const V3_THICKNESS: [(i32, u64); BOUNDARY_COUNT - 1] = [
 const V3_FIRST_JITTER: i32 = 1;
 /// Per-seed shift of the last (mantle) boundary in V3 worlds.
 const V3_LAST_JITTER: i32 = 3;
+
+/// V4 band thickness model for every band, topsoil to mantle: `(minimum rows, base share of the
+/// spare rows)`.
+///
+/// Each world draws a weight per band (from 0.4 to 1.6 times its base share) and splits the rows
+/// between the ground line and the bedrock floor that the minimums leave by those weights. The
+/// shares match the spare rows of a mean world, so a band's mean thickness is about its minimum
+/// plus its share. Every minimum leaves room for both bounding transition zones (see
+/// [`V4_BOUNDARIES`]), so a column never skips a band.
+const V4_THICKNESS: [(i32, u64); BAND_COUNT] = [
+    (24, 8),
+    (34, 14),
+    (42, 18),
+    (46, 20),
+    (56, 24),
+    (58, 24),
+    (58, 24),
+    (58, 24),
+    (58, 24),
+    (58, 24),
+    (58, 24),
+    (50, 18),
+];
+
+/// Shape of each V4 boundary: `(wave amplitude, half height of the transition zone)`.
+///
+/// Inside the transition zone, lenses and fingers of the lower band grow from rare specks at the
+/// top of the zone to the whole rock mass at its bottom, so moving between bands takes a few
+/// screens of mixed ground instead of a single seam.
+const V4_BOUNDARIES: [(i32, i32); BOUNDARY_COUNT] = [
+    (3, 4),
+    (6, 8),
+    (8, 10),
+    (8, 10),
+    (10, 12),
+    (10, 12),
+    (10, 12),
+    (10, 12),
+    (10, 12),
+    (10, 12),
+    (10, 12),
+];
+
+/// Rows of bedrock under every column of a V4 world at least; the floor's top waves up to
+/// [`BEDROCK_WAVE_ROWS`] rows higher.
+pub const BEDROCK_MIN_ROWS: i32 = 6;
+/// Extra rows the bedrock floor's top rises by in places.
+pub const BEDROCK_WAVE_ROWS: i32 = 3;
+const SALT_BEDROCK: u64 = 0x5743_0400;
+const SALT_LENS: u64 = 0x5743_0500;
 
 /// This world's base row of every boundary (before waves and fingers): fixed in legacy worlds,
 /// nominal plus a small shift in V1/V2, and the cumulative thickness model in V3.
@@ -325,14 +385,115 @@ pub const fn boundary_bases(settings: &WorldSettings) -> [i32; BOUNDARY_COUNT] {
                 band += 1;
             }
         }
+        GeneratorVersion::V4 => {
+            let thickness = v4_thicknesses(settings);
+            let mut row = SKY_ROWS;
+            let mut index = 0;
+            while index < BOUNDARY_COUNT {
+                row += thickness[index];
+                bases[index] = row;
+                index += 1;
+            }
+        }
     }
     bases
+}
+
+/// First row below the V4 band layout: the bedrock floor starts here or, in places, up to
+/// [`BEDROCK_WAVE_ROWS`] rows lower (see [`bedrock_top_row`]).
+#[must_use]
+pub const fn v4_floor_row(settings: &WorldSettings) -> i32 {
+    settings.height_tiles() - BEDROCK_MIN_ROWS - BEDROCK_WAVE_ROWS
+}
+
+/// Each band's thickness in a V4 world, top to bottom (the mantle runs down to the floor).
+const fn v4_thicknesses(settings: &WorldSettings) -> [i32; BAND_COUNT] {
+    let seed = settings.seed;
+    let mut weights = [0_u64; BAND_COUNT];
+    let mut total_weight = 0;
+    let mut minimum = 0;
+    let mut band = 0;
+    while band < BAND_COUNT {
+        let (rows, share) = V4_THICKNESS[band];
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_possible_wrap,
+            reason = "band indices are tiny"
+        )]
+        let roll = hash2(seed, SALT_THICKNESS ^ 0x0400, band as i32, 0) % 121;
+        weights[band] = share * (40 + roll);
+        total_weight += weights[band];
+        minimum += rows;
+        band += 1;
+    }
+    let spare = (v4_floor_row(settings) - SKY_ROWS - minimum).unsigned_abs() as u64;
+    let mut thickness = [0_i32; BAND_COUNT];
+    let mut handed_out = 0;
+    band = 0;
+    while band < BAND_COUNT {
+        let extra = spare * weights[band] / total_weight;
+        handed_out += extra;
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_possible_wrap,
+            reason = "extra rows are below the world height"
+        )]
+        let rows = V4_THICKNESS[band].0 + extra as i32;
+        thickness[band] = rows;
+        band += 1;
+    }
+    // Rounding leftovers go one row each to the deepest bands.
+    band = BAND_COUNT;
+    while handed_out < spare {
+        band = if band == 0 { BAND_COUNT - 1 } else { band - 1 };
+        thickness[band] += 1;
+        handed_out += 1;
+    }
+    thickness
+}
+
+/// First bedrock row of column `x` in a V4 world (`None` in older worlds, which have no floor).
+#[must_use]
+pub const fn bedrock_top_row(settings: &WorldSettings, x: i32) -> Option<i32> {
+    if !matches!(settings.generator, GeneratorVersion::V4) {
+        return None;
+    }
+    let wave = (line_noise(settings.seed, SALT_BEDROCK, x, 9) * 2
+        + line_noise(settings.seed, SALT_BEDROCK ^ 0xFF, x, 3))
+        / 3;
+    let rise = wave * (BEDROCK_WAVE_ROWS + 1) / (super::noise::NOISE_MAX + 1);
+    Some(settings.height_tiles() - BEDROCK_MIN_ROWS - rise)
+}
+
+/// Whether tile `(x, y)` is part of the bedrock floor.
+#[must_use]
+pub const fn is_bedrock(settings: &WorldSettings, x: i32, y: i32) -> bool {
+    match bedrock_top_row(settings, x) {
+        Some(top) => y >= top,
+        None => false,
+    }
+}
+
+/// `(wave amplitude, fringe)` of boundary `index`: how far its line waves along x, and how many
+/// rows either side of that line the two bands interleave (fingers in V1-V3, a transition zone
+/// in V4).
+const fn boundary_shape(settings: &WorldSettings, index: usize) -> (i32, i32) {
+    if matches!(settings.generator, GeneratorVersion::V4) {
+        V4_BOUNDARIES[index]
+    } else {
+        (BOUNDARIES[index].wave, BOUNDARIES[index].finger)
+    }
 }
 
 /// Wave offset of boundary `index` in column `x`.
 const fn boundary_wave(settings: &WorldSettings, index: usize, x: i32) -> i32 {
     let seed = settings.seed;
     let salt = SALT_WAVE + index as u64;
+    if matches!(settings.generator, GeneratorVersion::V4) {
+        // Longer, deeper swells for the deeper stack.
+        let wave = (line_noise(seed, salt, x, 53) * 2 + line_noise(seed, salt ^ 0xFF, x, 17)) / 3;
+        return centred(wave, V4_BOUNDARIES[index].0);
+    }
     let wave = (line_noise(seed, salt, x, 31) * 2 + line_noise(seed, salt ^ 0xFF, x, 11)) / 3;
     centred(wave, BOUNDARIES[index].wave)
 }
@@ -352,6 +513,9 @@ const fn below_boundary(settings: &WorldSettings, base: i32, index: usize, x: i3
     if matches!(settings.generator, GeneratorVersion::Legacy) {
         return y >= base;
     }
+    if matches!(settings.generator, GeneratorVersion::V4) {
+        return below_v4_boundary(settings, base, index, x, y);
+    }
     let spec = BOUNDARIES[index];
     let reach = spec.wave + spec.finger + 1;
     if y >= base + reach {
@@ -367,10 +531,57 @@ const fn below_boundary(settings: &WorldSettings, base: i32, index: usize, x: i3
     y >= base + boundary_wave(settings, index, x) + finger
 }
 
+/// [`below_boundary`] for V4 worlds: a transition zone `half` rows either side of the wavy
+/// boundary line, in which lenses of the lower band (smooth noise blobs, a little stretched
+/// sideways, with fine fingers on their rims) get likelier row by row.
+const fn below_v4_boundary(
+    settings: &WorldSettings,
+    base: i32,
+    index: usize,
+    x: i32,
+    y: i32,
+) -> bool {
+    let (wave, half) = V4_BOUNDARIES[index];
+    if y >= base + wave + half {
+        return true;
+    }
+    if y < base - wave - half {
+        return false;
+    }
+    let line = base + boundary_wave(settings, index, x);
+    let top = line - half;
+    if y < top {
+        return false;
+    }
+    if y >= line + half {
+        return true;
+    }
+    // How far through the zone this row is, 0..NOISE_MAX.
+    let along = (y - top) * super::noise::NOISE_MAX / (half * 2);
+    let salt = SALT_LENS + index as u64;
+    let lens = value_noise(settings.seed, salt, x, y, 9, 4);
+    let fringe = value_noise(settings.seed, salt ^ 0xFF, x, y, 3, 2);
+    let mixed = (lens * 3 + fringe) / 4;
+    // Stretch the bell-shaped noise so the first lenses appear near the top of the zone and the
+    // last pockets of the upper band linger near its bottom.
+    let spread = 32_768 + (mixed - 32_768) * 2;
+    spread < along
+}
+
 /// The band containing tile `(x, y)` (rows above the ground count as topsoil).
 #[must_use]
 pub const fn band_at(settings: &WorldSettings, x: i32, y: i32) -> Band {
-    let bases = boundary_bases(settings);
+    band_at_with_bases(settings, &boundary_bases(settings), x, y)
+}
+
+/// [`band_at`] with this world's [`boundary_bases`] already computed (bulk passes).
+#[must_use]
+pub const fn band_at_with_bases(
+    settings: &WorldSettings,
+    bases: &[i32; BOUNDARY_COUNT],
+    x: i32,
+    y: i32,
+) -> Band {
     let mut index = 0;
     while index < BOUNDARY_COUNT && below_boundary(settings, bases[index], index, x, y) {
         index += 1;
@@ -381,15 +592,12 @@ pub const fn band_at(settings: &WorldSettings, x: i32, y: i32) -> Band {
 /// Rows a boundary may occupy in this world: `(shallowest, deepest)` over every column.
 #[must_use]
 pub const fn boundary_depth_range(settings: &WorldSettings, index: usize) -> (i32, i32) {
-    let spec = BOUNDARIES[index];
+    let (wave, fringe) = boundary_shape(settings, index);
     let base = boundary_bases(settings)[index];
     if matches!(settings.generator, GeneratorVersion::Legacy) {
         return (base, base);
     }
-    (
-        base - spec.wave - spec.finger,
-        base + spec.wave + spec.finger,
-    )
+    (base - wave - fringe, base + wave + fringe)
 }
 
 /// The shallowest row `band` reaches anywhere in this world (where its top boundary rises
@@ -413,7 +621,9 @@ pub const fn band_solid_top_row(settings: &WorldSettings, band: Band, x: i32) ->
             if matches!(settings.generator, GeneratorVersion::Legacy) {
                 BOUNDARIES[boundary].nominal
             } else {
-                boundary_column_depth(settings, boundary, x) + BOUNDARIES[boundary].finger + 1
+                boundary_column_depth(settings, boundary, x)
+                    + boundary_shape(settings, boundary).1
+                    + 1
             }
         }
     }
@@ -433,6 +643,20 @@ pub const fn band_reached(settings: &WorldSettings, deepest_row: i32, band: Band
 pub const fn band_layout_rows(settings: &WorldSettings, band: Band) -> (i32, i32) {
     let index = band.index();
     let last_band = Band::ALL.len() - 1;
+    if matches!(settings.generator, GeneratorVersion::V4) {
+        let bases = boundary_bases(settings);
+        let top = if index == 0 {
+            SKY_ROWS
+        } else {
+            bases[index - 1]
+        };
+        let bottom = if index < last_band {
+            bases[index] - 1
+        } else {
+            v4_floor_row(settings) - 1
+        };
+        return (top, bottom);
+    }
     if !matches!(settings.generator, GeneratorVersion::V3) {
         let top = nominal_band_top(band);
         let bottom = if index < last_band {
@@ -454,6 +678,121 @@ pub const fn band_layout_rows(settings: &WorldSettings, band: Band) -> (i32, i32
         super::WORLD_HEIGHT_TILES - 1
     };
     (top, bottom)
+}
+
+/// The rows the nominal mapping pins together: this world's first row of every band (and the
+/// row past the last band) against the classic nominal rows.
+const fn nominal_anchors(
+    settings: &WorldSettings,
+) -> ([i32; BAND_COUNT + 1], [i32; BAND_COUNT + 1]) {
+    let bases = boundary_bases(settings);
+    let mut world = [0; BAND_COUNT + 1];
+    let mut nominal = [0; BAND_COUNT + 1];
+    world[0] = SKY_ROWS;
+    nominal[0] = SKY_ROWS;
+    let mut index = 0;
+    while index < BOUNDARY_COUNT {
+        world[index + 1] = bases[index];
+        nominal[index + 1] = BOUNDARIES[index].nominal;
+        index += 1;
+    }
+    world[BAND_COUNT] = v4_floor_row(settings);
+    nominal[BAND_COUNT] = super::WORLD_HEIGHT_TILES;
+    (world, nominal)
+}
+
+/// Linear interpolation of `value` from the rows `from` onto the rows `to` (slope 1 past either
+/// end).
+const fn remap(value: i32, from: &[i32; BAND_COUNT + 1], to: &[i32; BAND_COUNT + 1]) -> i32 {
+    if value <= from[0] {
+        return to[0] + (value - from[0]);
+    }
+    let mut index = 0;
+    while index < BAND_COUNT {
+        let (low, high) = (from[index], from[index + 1]);
+        if value < high {
+            let span = high - low;
+            if span <= 0 {
+                return to[index];
+            }
+            return to[index] + (value - low) * (to[index + 1] - to[index]) / span;
+        }
+        index += 1;
+    }
+    to[BAND_COUNT] + (value - from[BAND_COUNT])
+}
+
+/// The classic nominal row (of the ~220-row stack the depth rules were authored against) that
+/// row `row` of this world corresponds to: the same relative position inside the same band.
+///
+/// The identity in every world before V4.
+#[must_use]
+pub const fn nominal_row(settings: &WorldSettings, row: i32) -> i32 {
+    if !matches!(settings.generator, GeneratorVersion::V4) {
+        return row;
+    }
+    let (world, nominal) = nominal_anchors(settings);
+    remap(row, &world, &nominal)
+}
+
+/// The inverse of [`nominal_row`]: the first row of this world that maps at or past the classic
+/// nominal row `nominal`. The identity in every world before V4.
+#[must_use]
+pub const fn scaled_row(settings: &WorldSettings, nominal: i32) -> i32 {
+    if !matches!(settings.generator, GeneratorVersion::V4) {
+        return nominal;
+    }
+    let (world, nominal_rows) = nominal_anchors(settings);
+    let mut row = remap(nominal, &nominal_rows, &world);
+    // Integer rounding: settle on the first row that maps at or past `nominal`.
+    while remap(row - 1, &world, &nominal_rows) >= nominal && row > 0 {
+        row -= 1;
+    }
+    while remap(row, &world, &nominal_rows) < nominal {
+        row += 1;
+    }
+    row
+}
+
+/// [`nominal_row`] for a continuous depth in tile rows (e.g. a rig's world-pixel depth divided by
+/// the tile size), interpolating between rows.
+#[must_use]
+pub fn nominal_depth(settings: &WorldSettings, rows: f32) -> f32 {
+    if !matches!(settings.generator, GeneratorVersion::V4) {
+        return rows;
+    }
+    let (world, nominal) = nominal_anchors(settings);
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "rows are far below f32's integer range"
+    )]
+    let to_f32 = |value: i32| value as f32;
+    if rows <= to_f32(world[0]) {
+        return rows;
+    }
+    for index in 0..BAND_COUNT {
+        let (low, high) = (to_f32(world[index]), to_f32(world[index + 1]));
+        if rows < high {
+            let span = (high - low).max(1.0);
+            return (rows - low).mul_add(
+                (to_f32(nominal[index + 1]) - to_f32(nominal[index])) / span,
+                to_f32(nominal[index]),
+            );
+        }
+    }
+    to_f32(nominal[BAND_COUNT]) + (rows - to_f32(world[BAND_COUNT]))
+}
+
+/// How many of this world's rows a span of `nominal_rows` classic rows covers on average (quest
+/// relay legs and similar distances authored against the classic stack).
+#[must_use]
+pub const fn scaled_span(settings: &WorldSettings, nominal_rows: i32) -> i32 {
+    if !matches!(settings.generator, GeneratorVersion::V4) {
+        return nominal_rows;
+    }
+    let world_rows = v4_floor_row(settings) - SKY_ROWS;
+    let classic_rows = super::WORLD_HEIGHT_TILES - SKY_ROWS;
+    nominal_rows * world_rows / classic_rows
 }
 
 /// Nominal (legacy) first row of `band`.
@@ -487,14 +826,29 @@ mod tests {
         );
     }
 
+    const fn v3(seed: u64) -> WorldSettings {
+        WorldSettings {
+            generator: GeneratorVersion::V3,
+            ..WorldSettings::new(seed)
+        }
+    }
+
     #[test]
     fn generated_bands_keep_their_order_in_every_column() {
         for seed in 0..40 {
-            let settings = WorldSettings::new(seed);
-            for x in (0..360).step_by(7) {
+            for settings in [v3(seed), WorldSettings::new(seed)] {
+                check_band_order(&settings);
+            }
+        }
+    }
+
+    fn check_band_order(settings: &WorldSettings) {
+        let seed = settings.seed;
+        {
+            for x in (0..settings.width_tiles()).step_by(7) {
                 let mut previous = 0;
-                for y in 0..220 {
-                    let index = band_at(&settings, x, y).index();
+                for y in 0..settings.height_tiles() {
+                    let index = band_at(settings, x, y).index();
                     // Fingers may interleave neighbours, but never skip a band or jump back
                     // more than one.
                     assert!(index + 1 >= previous, "seed {seed} x {x} y {y}");
@@ -510,8 +864,7 @@ mod tests {
     fn v3_band_thicknesses_vary_by_seed_within_bounds() {
         let mut tops = vec![Vec::new(); Band::ALL.len()];
         for seed in 0..200 {
-            let settings = WorldSettings::new(seed);
-            assert_eq!(settings.generator, GeneratorVersion::V3);
+            let settings = v3(seed);
             let bases = boundary_bases(&settings);
             assert!((13..=15).contains(&bases[0]), "seed {seed}: {bases:?}");
             assert!(
@@ -539,6 +892,139 @@ mod tests {
     }
 
     #[test]
+    fn v4_worlds_are_about_four_times_deeper_with_varied_thick_bands() {
+        let mut tops = vec![Vec::new(); Band::ALL.len()];
+        for seed in 0..200 {
+            for size in super::super::WorldSize::ALL {
+                let settings = WorldSettings {
+                    size,
+                    ..WorldSettings::new(seed)
+                };
+                assert_eq!(settings.generator, GeneratorVersion::V4);
+                assert!(settings.height_tiles() >= 4 * super::super::WORLD_HEIGHT_TILES * 9 / 10);
+                let mut total = 0;
+                for (band, (minimum, _)) in V4_THICKNESS.iter().enumerate() {
+                    let (top, bottom) = band_layout_rows(&settings, Band::ALL[band]);
+                    let thickness = bottom - top + 1;
+                    assert!(
+                        thickness >= *minimum,
+                        "seed {seed}: band {band} is {thickness} rows"
+                    );
+                    // Room for both bounding transition zones.
+                    let above = band
+                        .checked_sub(1)
+                        .map_or(0, |index| V4_BOUNDARIES[index].0 + V4_BOUNDARIES[index].1);
+                    let below = V4_BOUNDARIES
+                        .get(band)
+                        .map_or(BEDROCK_WAVE_ROWS, |(wave, half)| wave + half);
+                    assert!(thickness > above + below, "seed {seed}: band {band}");
+                    total += thickness;
+                }
+                // The bands fill the world from the ground line to the floor.
+                assert_eq!(total, v4_floor_row(&settings) - SKY_ROWS);
+                if size == super::super::WorldSize::Standard {
+                    for band in Band::ALL {
+                        tops[band.index()].push(band_layout_rows(&settings, band).0);
+                    }
+                }
+            }
+        }
+        // Every band below the topsoil moves by a good few rows between seeds.
+        for band in Band::ALL.iter().skip(2) {
+            let rows = &tops[band.index()];
+            let spread = rows.iter().max().unwrap_or(&0) - rows.iter().min().unwrap_or(&0);
+            assert!(spread >= 20, "{band:?} top only varies by {spread} rows");
+        }
+    }
+
+    #[test]
+    fn v4_transitions_interleave_over_many_rows() {
+        let settings = WorldSettings::new(7);
+        for index in 1..BOUNDARY_COUNT {
+            let (shallowest, deepest) = boundary_depth_range(&settings, index);
+            let (upper, lower) = (Band::ALL[index], Band::ALL[index + 1]);
+            // Rows of the zone where both bands show up in the same row (lenses and fingers).
+            let mixed_rows = (shallowest..=deepest)
+                .filter(|y| {
+                    let bands: Vec<Band> = (0..settings.width_tiles())
+                        .map(|x| band_at(&settings, x, *y))
+                        .collect();
+                    bands.contains(&upper) && bands.contains(&lower)
+                })
+                .count();
+            assert!(
+                mixed_rows >= 12,
+                "boundary {index}: {mixed_rows} mixed rows"
+            );
+            // Somewhere a lens of the lower band sits above a pocket of the upper band.
+            let lensed = (0..settings.width_tiles()).any(|x| {
+                let mut seen_lower = false;
+                (shallowest..=deepest).any(|y| {
+                    let band = band_at(&settings, x, y);
+                    seen_lower |= band == lower;
+                    seen_lower && band == upper
+                })
+            });
+            assert!(lensed, "boundary {index} never interleaves");
+        }
+    }
+
+    #[test]
+    fn v4_worlds_end_in_a_bedrock_floor_and_older_worlds_do_not() {
+        let settings = WorldSettings::new(11);
+        let height = settings.height_tiles();
+        let mut tops = Vec::new();
+        for x in 0..settings.width_tiles() {
+            let top = bedrock_top_row(&settings, x).expect("v4 has a floor");
+            assert!(top >= v4_floor_row(&settings) && top <= height - BEDROCK_MIN_ROWS);
+            assert!(is_bedrock(&settings, x, height - 1));
+            assert!(is_bedrock(&settings, x, top));
+            assert!(!is_bedrock(&settings, x, top - 1));
+            tops.push(top);
+        }
+        assert!(tops.iter().min() != tops.iter().max(), "the floor is flat");
+        assert_eq!(bedrock_top_row(&v3(11), 4), None);
+        assert!(!is_bedrock(&v3(11), 4, 219));
+    }
+
+    #[test]
+    fn nominal_rows_map_bands_onto_the_classic_stack() {
+        for seed in 0..20 {
+            let settings = WorldSettings::new(seed);
+            for band in Band::ALL {
+                let (top, bottom) = band_layout_rows(&settings, band);
+                let classic_top = nominal_band_top(band);
+                assert_eq!(nominal_row(&settings, top), classic_top, "{band:?}");
+                assert!(nominal_row(&settings, bottom) < classic_top.max(SKY_ROWS) + 60);
+                assert_eq!(scaled_row(&settings, classic_top), top, "{band:?}");
+            }
+            let mut previous = nominal_row(&settings, 0);
+            for row in 1..settings.height_tiles() {
+                let nominal = nominal_row(&settings, row);
+                assert!(nominal >= previous, "seed {seed} row {row}");
+                previous = nominal;
+                // Scaling back lands on the first row with that nominal row.
+                let scaled = scaled_row(&settings, nominal);
+                assert!(scaled <= row && nominal_row(&settings, scaled) == nominal);
+                let depth = nominal_depth(&settings, f32::from(i16::try_from(row).unwrap_or(0)));
+                assert!(
+                    (depth - f32::from(i16::try_from(nominal).unwrap_or(0))).abs() < 1.0,
+                    "seed {seed} row {row}"
+                );
+            }
+            assert_eq!(nominal_row(&settings, v4_floor_row(&settings)), 220);
+            assert!(scaled_span(&settings, 22) > 70);
+        }
+        // Older worlds keep their rows.
+        let classic = v3(3);
+        for row in [0, 14, 90, 219] {
+            assert_eq!(nominal_row(&classic, row), row);
+            assert_eq!(scaled_row(&classic, row), row);
+        }
+        assert_eq!(scaled_span(&classic, 22), 22);
+    }
+
+    #[test]
     fn older_generators_keep_their_boundaries() {
         let v2 = WorldSettings {
             generator: GeneratorVersion::V2,
@@ -556,7 +1042,7 @@ mod tests {
 
     #[test]
     fn boundaries_wave_between_columns() {
-        let settings = WorldSettings::new(42);
+        let settings = v3(42);
         let depths: Vec<i32> = (0..240)
             .map(|x| boundary_column_depth(&settings, 4, x))
             .collect();

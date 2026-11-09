@@ -417,7 +417,7 @@ pub(super) fn authoritative_drill_seconds_per_chip(
         TileKind::Dirt => 0.09,
         TileKind::Clay => 0.12,
         TileKind::Stone => 0.15,
-        TileKind::HardRock | TileKind::Foundation => 0.19,
+        TileKind::HardRock | TileKind::Foundation | TileKind::Bedrock => 0.19,
         TileKind::Lava
         | TileKind::Gas
         | TileKind::ExplosivePocket

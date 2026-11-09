@@ -66,11 +66,21 @@ hazard pocket shows tell-tale stains, so careful drillers can read danger before
 Every world guarantees a starter ore field near spawn, an ore budget per layer, and a path down
 through each layer with that layer's drill.
 
+New worlds (generator v4) are deep: about 860 rows (900 for large worlds) instead of the classic
+220, every layer about four times thicker with per-seed variation, and wide transition zones
+where lenses of the next layer thicken over a dozen or more rows before it takes over. Caves,
+ore, artifact beds, hazard pockets and points of interest scale with the bigger layers. The
+bottom is a solid bedrock floor that nothing digs or blasts through (test mode included), and the
+view shows bedrock past the world's edges and floor, never sky. Depth rules authored against the
+classic stack (mineral depth curves, heat, deep-run pressure, deep rewards, quest depths) read a
+rig's depth at the same relative place in its layer, so they stretch with the deeper world.
+
 ### Points of interest
 
 Hand-built places are stamped into every world (generator v2 and later; worlds and saves from
-older generators keep generating exactly as before; v3, the current generator, adds per-seed
-layer thicknesses and fewer, chunkier deep ore deposits on rich worlds):
+older generators keep generating exactly as before; v3 adds per-seed layer thicknesses and
+fewer, chunkier deep ore deposits on rich worlds; v4, the current generator, is the deep world
+with stacked placement tiers per thick layer and a bedrock floor):
 
 - **Supply caches** (every layer below the topsoil): hollows of crates. Drill a crate open for a
   fuel canister, a bomb or two, or some credits.

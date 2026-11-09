@@ -42,6 +42,14 @@ const fn v2(seed: u64) -> WorldSettings {
     }
 }
 
+/// Standard settings pinned to [`GeneratorVersion::V3`].
+const fn v3(seed: u64) -> WorldSettings {
+    WorldSettings {
+        generator: GeneratorVersion::V3,
+        ..WorldSettings::new(seed)
+    }
+}
+
 fn tile_at(world: &GeneratedWorld, x: i32, y: i32) -> Option<TileKind> {
     (x >= 0 && y >= 0 && x < world.width && y < world.height)
         .then(|| world.tiles[usize::try_from(y * world.width + x).unwrap_or(0)].kind)
@@ -146,17 +154,14 @@ fn golden_v2_world_digests_are_pinned() {
 #[test]
 fn golden_v3_world_digests_are_pinned() {
     let cases = [
-        (
-            WorldSettings::new(DEFAULT_WORLD_SEED),
-            0x3b31_8f48_890b_8c15,
-        ),
-        (WorldSettings::new(1), 0xbee4_e60d_9d0e_2076),
+        (v3(DEFAULT_WORLD_SEED), 0x3b31_8f48_890b_8c15),
+        (v3(1), 0xbee4_e60d_9d0e_2076),
         (
             WorldSettings {
                 size: WorldSize::Large,
                 richness: ResourceRichness::Rich,
                 hazards: HazardIntensity::Brutal,
-                ..WorldSettings::new(0x00C0_FFEE)
+                ..v3(0x00C0_FFEE)
             },
             0x2138_ac79_7d36_7881,
         ),
@@ -177,6 +182,42 @@ fn golden_v3_world_digests_are_pinned() {
     );
 }
 
+/// Golden digests of a few worlds for [`GeneratorVersion::V4`] (the deep stack with transition
+/// zones and a bedrock floor).
+#[test]
+fn golden_v4_world_digests_are_pinned() {
+    let cases = [
+        (
+            WorldSettings::new(DEFAULT_WORLD_SEED),
+            0xde23_4c1a_9971_cafe,
+        ),
+        (WorldSettings::new(1), 0xbd9b_77ef_6bfe_0911),
+        (
+            WorldSettings {
+                size: WorldSize::Large,
+                richness: ResourceRichness::Rich,
+                hazards: HazardIntensity::Brutal,
+                ..WorldSettings::new(0x00C0_FFEE)
+            },
+            0xf3ec_c9fb_411a_b20e,
+        ),
+    ];
+    assert!(
+        cases
+            .iter()
+            .all(|(settings, _)| settings.generator == GeneratorVersion::V4)
+    );
+    let actual: Vec<u64> = cases
+        .iter()
+        .map(|(settings, _)| digest(&generate(settings)))
+        .collect();
+    let expected: Vec<u64> = cases.iter().map(|(_, digest)| *digest).collect();
+    assert_eq!(
+        actual, expected,
+        "generator v4 output changed; actual digests: {actual:#x?}"
+    );
+}
+
 #[test]
 fn legacy_settings_reproduce_the_original_generator() {
     let settings = WorldSettings::legacy(0xD1_11_6A_4E);
@@ -188,13 +229,81 @@ fn legacy_settings_reproduce_the_original_generator() {
 
 #[test]
 fn worlds_have_the_configured_size() {
-    let standard = generate(&WorldSettings::new(5));
+    let standard = generate(&v3(5));
     assert_eq!((standard.width, standard.height), (240, WORLD_HEIGHT_TILES));
     let large = generate(&WorldSettings {
         size: WorldSize::Large,
-        ..WorldSettings::new(5)
+        ..v3(5)
     });
     assert_eq!((large.width, large.height), (360, WORLD_HEIGHT_TILES));
+    // Deep (V4) worlds: about four times the classic depth, set per size.
+    for size in WorldSize::ALL {
+        let world = generate(&WorldSettings {
+            size,
+            ..WorldSettings::new(5)
+        });
+        assert_eq!(
+            (world.width, world.height),
+            (size.width_tiles(), size.deep_height_tiles())
+        );
+        assert!(world.height >= WORLD_HEIGHT_TILES * 39 / 10);
+    }
+}
+
+#[test]
+fn deep_worlds_rest_on_a_solid_bedrock_floor() {
+    for seed in sample_seeds().take(8) {
+        let settings = WorldSettings::new(seed);
+        let world = generate(&settings);
+        for x in 0..world.width {
+            let floor = strata::bedrock_top_row(&settings, x).expect("a floor");
+            assert!(world.height - floor >= strata::BEDROCK_MIN_ROWS);
+            for y in 0..world.height {
+                let bedrock = tile_at(&world, x, y) == Some(TileKind::Bedrock);
+                assert_eq!(bedrock, y >= floor, "seed {seed} ({x}, {y})");
+            }
+        }
+        // Nothing generated reaches into the floor: no feature is centred in it.
+        for feature in world.features.all() {
+            if feature.kind != FeatureKind::StratumTransition {
+                let floor = strata::bedrock_top_row(&settings, feature.center.x).unwrap_or(0);
+                assert!(feature.center.y < floor, "seed {seed}: {feature:?}");
+            }
+        }
+    }
+    // Classic worlds have none.
+    let classic = generate(&v3(1));
+    assert!(
+        !classic
+            .tiles
+            .iter()
+            .any(|tile| tile.kind == TileKind::Bedrock)
+    );
+}
+
+#[test]
+fn bedrock_is_unbreakable() {
+    let settings = WorldSettings::new(2);
+    let mut terrain = Terrain::generate(&settings);
+    let x = 40;
+    let floor = strata::bedrock_top_row(&settings, x).expect("a floor");
+    let position = TilePosition { x, y: floor };
+    assert_eq!(tile_hardness(TileKind::Bedrock), u8::MAX);
+    assert!(crate::terrain::is_unbreakable(TileKind::Bedrock));
+    for _ in 0..1_000 {
+        assert_eq!(terrain.chip(position), crate::terrain::MineResult::Blocked);
+    }
+    let blast = terrain.blast_radius(position, 4);
+    assert!(
+        blast
+            .changed_tiles
+            .iter()
+            .all(|tile| tile.y < strata::bedrock_top_row(&settings, tile.x).unwrap_or(0))
+    );
+    assert_eq!(
+        terrain.tile(position).map(|tile| tile.kind),
+        Some(TileKind::Bedrock)
+    );
 }
 
 #[test]
@@ -501,9 +610,11 @@ fn every_band_is_reachable_with_its_own_drill() {
                 }
             }
         }
-        let bottom = world.height - 1;
-        let reached_bottom =
-            (0..world.width).any(|x| seen[usize::try_from(bottom * world.width + x).unwrap_or(0)]);
+        // The bottom: the last row above the bedrock floor (the floor itself is never passable).
+        let reached_bottom = (0..world.width).any(|x| {
+            let bottom = strata::bedrock_top_row(&settings, x).unwrap_or(world.height) - 1;
+            seen[usize::try_from(bottom * world.width + x).unwrap_or(0)]
+        });
         assert!(reached_bottom, "seed {seed}: the bottom is sealed off");
         for band in Band::ALL {
             assert!(
@@ -564,16 +675,30 @@ fn the_feature_index_counts_stay_in_bounds() {
             let world = generate(&settings);
             let features = &world.features;
             let scale = usize::try_from(settings.width_tiles() / 120).unwrap_or(2);
-            let bounds = [
-                (FeatureKind::LargeCavern, 4 * scale, 30 * scale),
-                (FeatureKind::Chamber, 0, 10 * scale),
-                (FeatureKind::Motherlode, 0, 8 * scale),
-                (FeatureKind::ArtifactBed, 10 * scale, 24 * scale),
-                (FeatureKind::HazardCluster, 30 * scale, 120 * scale),
-                (FeatureKind::StratumTransition, 11, 11),
-                (FeatureKind::PrefabSlot, 4 * scale, 16 * scale),
-                (FeatureKind::PointOfInterest, 6 * scale + 12, 24 * scale),
-            ];
+            // Deep worlds hold about four classic worlds' worth of rock.
+            let bounds = if settings.generator.is_deep() {
+                [
+                    (FeatureKind::LargeCavern, 16 * scale, 80 * scale),
+                    (FeatureKind::Chamber, 4 * scale, 25 * scale),
+                    (FeatureKind::Motherlode, 2 * scale, 20 * scale),
+                    (FeatureKind::ArtifactBed, 20 * scale, 50 * scale),
+                    (FeatureKind::HazardCluster, 120 * scale, 480 * scale),
+                    (FeatureKind::StratumTransition, 11, 11),
+                    (FeatureKind::PrefabSlot, 8 * scale, 50 * scale),
+                    (FeatureKind::PointOfInterest, 20 * scale, 50 * scale),
+                ]
+            } else {
+                [
+                    (FeatureKind::LargeCavern, 4 * scale, 30 * scale),
+                    (FeatureKind::Chamber, 0, 10 * scale),
+                    (FeatureKind::Motherlode, 0, 8 * scale),
+                    (FeatureKind::ArtifactBed, 10 * scale, 24 * scale),
+                    (FeatureKind::HazardCluster, 30 * scale, 120 * scale),
+                    (FeatureKind::StratumTransition, 11, 11),
+                    (FeatureKind::PrefabSlot, 4 * scale, 16 * scale),
+                    (FeatureKind::PointOfInterest, 6 * scale + 12, 24 * scale),
+                ]
+            };
             for (kind, low, high) in bounds {
                 let count = features.count(kind);
                 assert!(
@@ -742,4 +867,56 @@ fn loaded_terrain_recomputes_the_same_feature_index() {
     assert_eq!(loaded.digest(), terrain.digest());
     assert_eq!(loaded.features(), terrain.features());
     assert!(!loaded.features().is_empty());
+}
+
+#[test]
+#[ignore = "calibration helper: prints band rows and generation time of current worlds"]
+fn print_band_layout_and_timing() {
+    for size in WorldSize::ALL {
+        let mut rows = vec![Vec::new(); Band::ALL.len()];
+        let mut tops = vec![Vec::new(); Band::ALL.len()];
+        let mut total = std::time::Duration::ZERO;
+        let mut slowest = std::time::Duration::ZERO;
+        for seed in 0..50 {
+            let settings = WorldSettings {
+                size,
+                ..WorldSettings::new(seed)
+            };
+            let start = std::time::Instant::now();
+            let world = generate(&settings);
+            let elapsed = start.elapsed();
+            total += elapsed;
+            slowest = slowest.max(elapsed);
+            assert_eq!(world.height, settings.height_tiles());
+            for band in Band::ALL {
+                let (top, bottom) = strata::band_layout_rows(&settings, band);
+                rows[band.index()].push(bottom - top + 1);
+                tops[band.index()].push(top);
+            }
+        }
+        println!(
+            "{size:?}: height {} generation mean {:?} max {:?}",
+            WorldSettings {
+                size,
+                ..WorldSettings::new(0)
+            }
+            .height_tiles(),
+            total / 50,
+            slowest
+        );
+        let spread = |values: &[i32]| {
+            let min = values.iter().min().copied().unwrap_or_default();
+            let max = values.iter().max().copied().unwrap_or_default();
+            let mean = values.iter().sum::<i32>() / i32::try_from(values.len()).unwrap_or(1);
+            format!("{min:>4} {mean:>4} {max:>4}")
+        };
+        for band in Band::ALL {
+            println!(
+                "  {:<22} top {}  rows {}",
+                band.name(),
+                spread(&tops[band.index()]),
+                spread(&rows[band.index()])
+            );
+        }
+    }
 }

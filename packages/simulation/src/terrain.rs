@@ -216,6 +216,9 @@ pub enum TileKind {
     Artifact(ArtifactKind),
     /// A point-of-interest fixture (crates, wreckage, vault parts, formations, outposts).
     Poi(PoiTile),
+    /// The floor of a deep world: nothing drills, blasts or digs through it (see
+    /// [`UNBREAKABLE_HARDNESS`]).
+    Bedrock,
 }
 
 impl TileKind {
@@ -236,6 +239,7 @@ impl TileKind {
             Self::Ore(mineral) => mineral.name(),
             Self::Artifact(artifact) => artifact.name(),
             Self::Poi(tile) => tile.name(),
+            Self::Bedrock => "bedrock",
         }
     }
 }
@@ -328,6 +332,7 @@ impl Tile {
             TileKind::Ore(mineral) => 0x100 | mineral as u64,
             TileKind::Artifact(artifact) => 0x200 | artifact as u64,
             TileKind::Poi(tile) => 0x300 | tile.code(),
+            TileKind::Bedrock => 11,
         };
         (kind << 8) | self.durability as u64
     }
@@ -445,6 +450,27 @@ impl Terrain {
     #[must_use]
     pub const fn band_at(&self, position: TilePosition) -> Band {
         worldgen::band_at(&self.settings, position.x, position.y)
+    }
+
+    /// The classic nominal row (of the ~220-row stack depth rules were authored against) that
+    /// row `row` of this world corresponds to (see [`worldgen::strata::nominal_row`]). The
+    /// identity before generator V4.
+    #[must_use]
+    pub const fn nominal_row(&self, row: i32) -> i32 {
+        worldgen::strata::nominal_row(&self.settings, row)
+    }
+
+    /// The first row of this world at the classic nominal row `nominal` (see
+    /// [`worldgen::strata::scaled_row`]).
+    #[must_use]
+    pub const fn scaled_row(&self, nominal: i32) -> i32 {
+        worldgen::strata::scaled_row(&self.settings, nominal)
+    }
+
+    /// [`Self::nominal_row`] for a continuous depth in tile rows.
+    #[must_use]
+    pub fn nominal_depth(&self, rows: f32) -> f32 {
+        worldgen::strata::nominal_depth(&self.settings, rows)
     }
 
     /// The deep stratum containing `position`, if it is below the shallow layers.
@@ -575,10 +601,15 @@ impl Terrain {
         true
     }
 
+    /// Writes a fresh tile of `kind` at `position`. Refused (returns `false`) outside the world
+    /// and over unbreakable tiles (the bedrock floor), so no gameplay effect breaches the floor.
     pub fn set_kind(&mut self, position: TilePosition, kind: TileKind) -> bool {
         let Some(index) = self.index(position) else {
             return false;
         };
+        if is_unbreakable(self.tiles[index].kind) && kind != self.tiles[index].kind {
+            return false;
+        }
         self.write_tile(
             index,
             position,
@@ -603,7 +634,7 @@ impl Terrain {
     }
 
     fn chip_tile(tile: &mut Tile) -> MineResult {
-        if tile.kind == TileKind::Air {
+        if matches!(tile.kind, TileKind::Air | TileKind::Bedrock) {
             return MineResult::Blocked;
         }
 
@@ -662,7 +693,9 @@ impl Terrain {
                     continue;
                 };
                 let left = match self.tiles[index].kind {
-                    TileKind::Air | TileKind::Lava | TileKind::Foundation => continue,
+                    TileKind::Air | TileKind::Lava | TileKind::Foundation | TileKind::Bedrock => {
+                        continue;
+                    }
                     TileKind::Poi(poi) => match poi.after_blast() {
                         None => continue,
                         Some(left) => left,
@@ -913,10 +946,21 @@ const fn seeded_hash(x: i32, y: i32, seed: u64) -> u64 {
     value
 }
 
+/// Hardness of tiles nothing can ever dig (the bedrock floor): above every drill strength,
+/// test mode's included.
+pub const UNBREAKABLE_HARDNESS: u8 = u8::MAX;
+
+/// Whether `kind` can never be dug, drilled or blasted away by anything.
+#[must_use]
+pub const fn is_unbreakable(kind: TileKind) -> bool {
+    matches!(kind, TileKind::Bedrock)
+}
+
 /// Drill strength needed to dig a tile.
 #[must_use]
 pub const fn tile_hardness(kind: TileKind) -> u8 {
     match kind {
+        TileKind::Bedrock => UNBREAKABLE_HARDNESS,
         TileKind::Air
         | TileKind::Lava
         | TileKind::Gas
@@ -967,6 +1011,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Ore(mineral) => tile_hardness(TileKind::Ore(mineral)) + 2,
         TileKind::Artifact(artifact) => tile_hardness(TileKind::Artifact(artifact)) + 5,
         TileKind::Poi(tile) => tile.durability(),
+        TileKind::Bedrock => u8::MAX,
     }
 }
 

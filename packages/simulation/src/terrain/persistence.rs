@@ -584,6 +584,7 @@ impl Tile {
             8 => TileKind::ExplosivePocket,
             9 => TileKind::PressurePocket,
             10 => TileKind::MagmaVent,
+            11 => TileKind::Bedrock,
             0x100..=0x1FF if variant < MINERALS.len() => TileKind::Ore(MINERALS[variant]),
             0x200..=0x2FF if variant < ARTIFACTS.len() => TileKind::Artifact(ARTIFACTS[variant]),
             0x300..=0x3FF => match PoiTile::from_code(variant as u64) {

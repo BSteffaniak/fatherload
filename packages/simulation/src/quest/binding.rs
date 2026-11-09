@@ -312,6 +312,9 @@ fn objective_progress(
             progress.marks = vec![0; 2];
             progress.counts = vec![0; 2];
         }
+        Objective::ReachDepth { row } => {
+            progress.anchor = terrain.scaled_row(row);
+        }
         other => {
             for index in other.targets() {
                 target(index)?;

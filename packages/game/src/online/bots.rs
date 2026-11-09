@@ -241,9 +241,21 @@ mod tests {
         let mut world = new_world();
         let rig = world.player_ids().next().expect("one rig");
         world.player_mut(rig).expect("rig").bombs = 3;
+        let mut bot = BotBrain::new(0);
+        // Seed the bot's dig column with copper so the run does not hinge on what the
+        // generator happened to put there.
+        #[allow(clippy::cast_possible_truncation, reason = "a small tile column")]
+        let column = (bot.dig_site_x() / TILE_SIZE).floor() as i32;
+        for y in 7..12 {
+            let _ = world.terrain_mut().set_kind(
+                drillgame_simulation::terrain::TilePosition { x: column, y },
+                drillgame_simulation::terrain::TileKind::Ore(
+                    drillgame_simulation::terrain::MineralKind::Copper,
+                ),
+            );
+        }
         let mut runtime = Runtime::local(world, 1);
         let seat = runtime.local_seats()[0];
-        let mut bot = BotBrain::new(0);
         let mut deepest = 0.0_f32;
         let mut sales_resolved = 0;
         let mut bombs_applied = 0;

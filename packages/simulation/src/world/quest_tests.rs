@@ -143,10 +143,15 @@ fn target(world: &WorldState, owner: PlayerId, quest: QuestId, index: usize) -> 
 
 fn unlock(world: &mut WorldState, player: PlayerId, quest: QuestId) {
     let def = quest.def().expect("quest");
+    let terrain = world.terrain().clone();
     let rig = world.player_mut(player).expect("rig");
     for prerequisite in def.prerequisites {
+        let scaled = match *prerequisite {
+            crate::quest::Prerequisite::Depth(row) => terrain.scaled_row(row),
+            _ => 0,
+        };
         match *prerequisite {
-            crate::quest::Prerequisite::Depth(row) => rig.quests.deepest_row = row,
+            crate::quest::Prerequisite::Depth(_) => rig.quests.deepest_row = scaled,
             crate::quest::Prerequisite::Quest(other) => {
                 rig.quests.completed.insert(other);
             }
@@ -463,9 +468,19 @@ fn the_relay_marker_passes_rig_to_rig_or_cools_for_a_solo_pilot() {
         Some(LEAD),
         "the lead picks it up at the door"
     );
+    // One row past the relay's leg (authored in classic rows, stretched in deep worlds).
+    let leg_rows = RELAY_RACE
+        .def()
+        .expect("quest")
+        .objectives()
+        .find_map(|objective| match objective {
+            crate::quest::Objective::Relay { leg_rows, .. } => Some(i32::from(leg_rows)),
+            _ => None,
+        })
+        .expect("a relay");
     let hot = TilePosition {
         x: door.x,
-        y: door.y + 15,
+        y: door.y + crate::worldgen::strata::scaled_span(world.terrain().settings(), leg_rows) + 1,
     };
     place(&mut world, LEAD, hot);
     let _ = idle(&mut world, 1);
@@ -709,7 +724,8 @@ fn split_deliveries_must_land_close_together() {
 #[test]
 fn the_hq_board_posts_daily_jobs_each_taken_once() {
     let mut world = solo_world();
-    world.player_mut(LEAD).expect("rig").quests.deepest_row = 30;
+    let row = world.terrain().scaled_row(30);
+    world.player_mut(LEAD).expect("rig").quests.deepest_row = row;
     world
         .player_mut(LEAD)
         .expect("rig")

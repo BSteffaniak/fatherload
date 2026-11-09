@@ -264,3 +264,79 @@ fn warps_land_safely_on_generated_worlds_of_any_seed_and_size() {
         }
     }
 }
+
+#[test]
+fn nothing_drills_or_blasts_through_the_bedrock_floor_even_in_test_mode() {
+    use crate::worldgen::strata::bedrock_top_row;
+    let mut world = test_world();
+    let settings = *world.terrain().settings();
+    let column = 60;
+    let floor = bedrock_top_row(&settings, column).expect("deep worlds have a floor");
+    // Open a pocket just above the floor and rest the maxed rig in it.
+    for y in floor - 3..floor {
+        for x in column - 1..=column + 1 {
+            let _ = world
+                .terrain_mut()
+                .set_kind(TilePosition { x, y }, TileKind::Air);
+        }
+    }
+    {
+        let rig = world.player_mut(PLAYER).expect("player");
+        assert_eq!(rig.drill_strength, MAX_UPGRADE_LEVEL);
+        #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+        let (x, y) = (column as f32, floor as f32);
+        rig.x = TILE_SIZE.mul_add(x, TILE_SIZE * 0.5);
+        rig.y = TILE_SIZE.mul_add(y, -12.0);
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+    }
+    // Hold the drill down (and sideways) for a long while: the floor never gives.
+    for horizontal in [0.0, 1.0, -1.0] {
+        let inputs = TickInputs::held(PLAYER, ControlState::new(horizontal, false, true));
+        for _ in 0..600 {
+            let tick = world.simulation_tick();
+            let _ = world.simulate_tick(tick, &inputs);
+        }
+    }
+    for x in column - 3..=column + 3 {
+        let top = bedrock_top_row(&settings, x).expect("floor");
+        for y in top..world.terrain().height() {
+            assert_eq!(
+                world
+                    .terrain()
+                    .tile(TilePosition { x, y })
+                    .map(|tile| tile.kind),
+                Some(TileKind::Bedrock),
+                "({x}, {y})"
+            );
+        }
+    }
+    let rig = world
+        .player(PLAYER)
+        .expect("player")
+        .tile_position(TILE_SIZE);
+    let floor_below_rig = bedrock_top_row(&settings, rig.x).expect("floor");
+    assert!(rig.y < floor_below_rig, "the rig stays above the floor");
+    for x in 0..world.terrain().width() {
+        let top = bedrock_top_row(&settings, x).expect("floor");
+        assert!(
+            (top..world.terrain().height()).all(|y| world
+                .terrain()
+                .tile(TilePosition { x, y })
+                .is_some_and(|tile| tile.kind == TileKind::Bedrock)),
+            "column {x} breached"
+        );
+    }
+    // Blasts and direct writes leave it alone too.
+    let position = TilePosition {
+        x: column,
+        y: floor,
+    };
+    let blast = world.terrain_mut().blast_radius(position, 3);
+    assert!(!blast.changed_tiles.contains(&position));
+    assert!(!world.terrain_mut().set_kind(position, TileKind::Air));
+    assert_eq!(
+        world.terrain().tile(position).map(|tile| tile.kind),
+        Some(TileKind::Bedrock)
+    );
+}

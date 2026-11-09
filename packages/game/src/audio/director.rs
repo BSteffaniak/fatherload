@@ -99,7 +99,8 @@ impl Material {
             | TileKind::Foundation
             | TileKind::ExplosivePocket
             | TileKind::MagmaVent
-            | TileKind::Poi(_) => Self::Hard,
+            | TileKind::Poi(_)
+            | TileKind::Bedrock => Self::Hard,
             TileKind::Ore(_) | TileKind::Artifact(_) => Self::Ore,
         }
     }

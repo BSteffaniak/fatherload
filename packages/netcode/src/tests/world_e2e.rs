@@ -185,7 +185,10 @@ fn world_quests_replicate_solo_privately_and_crew_quests_to_everyone() {
         let log = &mut world.player_mut(lead).expect("lead").quests;
         log.reputation
             .insert(drillgame_simulation::QuestGiver::Kade, 10);
-        log.deepest_row = 45;
+        log.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
+            &drillgame_simulation::worldgen::WorldSettings::default(),
+            45,
+        );
     }
     accept_quest(&mut world, lead, QuestId(104), true);
     accept_quest(&mut world, wing, QuestId(101), false);

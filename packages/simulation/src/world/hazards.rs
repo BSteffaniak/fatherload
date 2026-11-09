@@ -81,7 +81,8 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return;
         };
-        let depth = player.tile_position(TILE_SIZE).y;
+        // Pressure depths are classic nominal rows, stretched with a deep world's bands.
+        let depth = self.terrain.nominal_row(player.tile_position(TILE_SIZE).y);
         let rare_cargo = player
             .cargo
             .iter()

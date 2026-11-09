@@ -178,7 +178,7 @@ impl WorldState {
             .prerequisites
             .iter()
             .copied()
-            .filter(|prerequisite| !prerequisite.met(player))
+            .filter(|prerequisite| !prerequisite.met(player, self.terrain.settings()))
             .collect();
         if !missing.is_empty() {
             return QuestAvailability::Locked(missing);
@@ -755,6 +755,7 @@ impl WorldState {
                 }
             }
             Objective::ReachDepth { row } => {
+                let row = crate::quest::describe::depth_row(row, progress);
                 if let Some((id, _)) = rigs.iter().find(|(_, tile)| tile.y >= row) {
                     helpers.push(*id);
                     progress.done = true;
@@ -960,7 +961,12 @@ impl WorldState {
                         progress.anchor = position.y;
                         return;
                     }
-                    if leg > i32::from(leg_rows) {
+                    if leg
+                        > crate::worldgen::strata::scaled_span(
+                            self.terrain.settings(),
+                            i32::from(leg_rows),
+                        )
+                    {
                         // Too hot to hold: it drops here and cools.
                         progress.carrier = None;
                         progress.last_carrier = Some(carrier);

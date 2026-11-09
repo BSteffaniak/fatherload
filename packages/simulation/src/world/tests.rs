@@ -396,13 +396,20 @@ fn canonical_tick_applies_depth_pressure_and_lava_damage() {
     }));
 }
 
+/// World-pixel y of the row at classic nominal row `row` in `world` (depth rules were authored
+/// against the classic stack; deep worlds stretch them with their bands).
+fn classic_row_y(world: &WorldState, row: i32) -> f32 {
+    f32::from(i16::try_from(world.terrain().scaled_row(row)).expect("small row")) * TILE_SIZE
+}
+
 #[test]
 fn canonical_deep_rewards_and_escape_sequence_are_tick_deterministic() {
     let game = WorldImport::new_game(LOCAL_PLAYER_ID);
     let mut first = WorldState::from_import(&game);
     let mut second = first.clone();
     for world in [&mut first, &mut second] {
-        world.player_mut(LOCAL_PLAYER_ID).expect("player exists").y = 120.0 * TILE_SIZE;
+        let y = classic_row_y(world, 120);
+        world.player_mut(LOCAL_PLAYER_ID).expect("player exists").y = y;
         world.progression.escape_deadline = Some(SimulationTick::new(2));
         world.set_simulation_tick(SimulationTick::new(0));
     }
@@ -904,8 +911,9 @@ fn canonical_heat_wave_and_deep_instability_affect_survival_deterministically() 
         .world_event_severity
         .insert(crate::WorldEventKind::HeatWave, 2);
     for world in [&mut baseline, &mut heat_wave] {
+        let y = classic_row_y(world, 40);
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.y = 40.0 * TILE_SIZE;
+        player.y = y;
         player.hull = 100.0;
     }
     for world in [&mut baseline, &mut heat_wave] {
@@ -925,8 +933,9 @@ fn canonical_heat_wave_and_deep_instability_affect_survival_deterministically() 
     let mut first = WorldState::from_import(&game);
     let mut second = first.clone();
     for world in [&mut first, &mut second] {
+        let y = classic_row_y(world, 110);
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.y = 110.0 * TILE_SIZE;
+        player.y = y;
         player.fuel = 100.0;
         player.hull = 100.0;
         player.cargo.insert(crate::terrain::MineralKind::Diamond, 1);
@@ -1003,29 +1012,30 @@ fn canonical_rescue_site_recovers_lost_cargo_once() {
 
 #[test]
 fn canonical_survival_applies_hull_and_pump_heat_modifiers() {
-    fn depth_damage_at(part: Option<crate::RigPartKind>, row: f32) -> f32 {
+    fn depth_damage_at(part: Option<crate::RigPartKind>, row: i32) -> f32 {
         let game = WorldImport::new_game(LOCAL_PLAYER_ID);
         let mut world = WorldState::from_import(&game);
         if let Some(part) = part {
             world.set_player_movement_modifiers(LOCAL_PLAYER_ID, 0, [part]);
         }
+        let y = classic_row_y(&world, row);
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.y = row * TILE_SIZE;
+        player.y = y;
         player.hull = 100.0;
         let _output = world.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
         100.0 - world.player(LOCAL_PLAYER_ID).expect("player exists").hull
     }
     fn depth_damage(part: Option<crate::RigPartKind>) -> f32 {
-        depth_damage_at(part, 105.0)
+        depth_damage_at(part, 105)
     }
     assert!(depth_damage(Some(crate::RigPartKind::ThermalHull)) < depth_damage(None));
     assert!(depth_damage(Some(crate::RigPartKind::PressureHull)) < depth_damage(None));
     assert!(depth_damage(Some(crate::RigPartKind::ImpactHull)) > depth_damage(None));
-    // The pressure hull only helps inside the deep strata (row 75 is basalt in every world).
+    // The pressure hull only helps inside the deep strata (classic row 75 is basalt in every
+    // world).
     assert!(
-        (depth_damage_at(Some(crate::RigPartKind::PressureHull), 75.0)
-            - depth_damage_at(None, 75.0))
-        .abs()
+        (depth_damage_at(Some(crate::RigPartKind::PressureHull), 75) - depth_damage_at(None, 75))
+            .abs()
             < f32::EPSILON
     );
 

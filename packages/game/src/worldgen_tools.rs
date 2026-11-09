@@ -429,6 +429,7 @@ fn tile_color(kind: TileKind, band: Band, y: i32) -> Color {
         TileKind::PressurePocket => palette::SKY,
         TileKind::ExplosivePocket => palette::AMBER,
         TileKind::Poi(tile) => tile_art::poi_color(tile, band),
+        TileKind::Bedrock => tile_art::material_color(kind, band),
     }
 }
 

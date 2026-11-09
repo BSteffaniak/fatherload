@@ -50,6 +50,9 @@ pub const VAULT_SPAWN_CLEAR_HALF_WIDTH: i32 = 4;
 pub const POI_MIN_ROW: i32 = CRUST_ROWS;
 /// Chance (per mille) that a region left after the guaranteed kinds gets a random POI.
 const RANDOM_FILL_PER_MILLE: u32 = 250;
+/// [`RANDOM_FILL_PER_MILLE`] in deep worlds, whose stacked tiers would otherwise leave long
+/// stretches of a thick band with nothing to find.
+const DEEP_RANDOM_FILL_PER_MILLE: u32 = 400;
 
 /// Number of derelict logs (fits a `u16`).
 #[allow(clippy::cast_possible_truncation, reason = "a dozen logs")]
@@ -103,11 +106,36 @@ pub const fn guardian_hazard(band: Band) -> TileKind {
 /// Rows `band` nominally spans (first, last).
 const fn band_rows(canvas: &Canvas<'_>, band: Band) -> (i32, i32) {
     let (top, bottom) = band_layout_rows(canvas.settings, band);
-    if band.index() + 1 < Band::ALL.len() {
+    if band.index() + 1 < Band::ALL.len() || canvas.settings.generator.is_deep() {
         (top, bottom)
     } else {
         (top, canvas.height - 1)
     }
+}
+
+/// Rows of a deep-world band per tier of placement regions: a thick band is split into stacked
+/// tiers, each with its own row of regions, so POIs fill the whole band.
+pub const TIER_ROWS: i32 = 28;
+
+/// The tiers of `band`: the rows each spans. Classic worlds have one tier, the whole band.
+fn band_tiers(canvas: &Canvas<'_>, band: Band) -> Vec<(i32, i32)> {
+    let (top, bottom) = band_rows(canvas, band);
+    if !canvas.settings.generator.is_deep() {
+        return vec![(top, bottom)];
+    }
+    let tiers = ((bottom - top + 1) / TIER_ROWS).max(1);
+    let height = (bottom - top + 1) / tiers;
+    (0..tiers)
+        .map(|tier| {
+            let first = top + tier * height;
+            let last = if tier + 1 == tiers {
+                bottom
+            } else {
+                first + height - 1
+            };
+            (first, last)
+        })
+        .collect()
 }
 
 /// Whether `rect` keeps clear of spawn and the town.
@@ -166,8 +194,71 @@ pub(crate) fn place(canvas: &mut Canvas<'_>) {
     let mut placed: Vec<TileRect> = Vec::new();
     let mut derelicts: u16 = 0;
     let lore_offset = u16::try_from(seed % u64::from(LORE_COUNT)).unwrap_or(0);
+    let deep_world = canvas.settings.generator.is_deep();
     for band in Band::ALL {
-        let band_index = i32::try_from(band.index()).unwrap_or(0);
+        let tiers = band_tiers(canvas, band);
+        let tier_count = tiers.len();
+        let guaranteed = guaranteed_kinds(band);
+        let mut pending: Vec<PoiKind> = Vec::new();
+        for (tier, rows) in tiers.into_iter().enumerate() {
+            // Classic worlds key their region RNGs by band alone, as they always did.
+            let band_index = if deep_world {
+                i32::try_from(band.index() * 64 + tier).unwrap_or(0)
+            } else {
+                i32::try_from(band.index()).unwrap_or(0)
+            };
+            // Guaranteed kinds are dealt out across the tiers; any a tier could not place carry
+            // over to the next. Every further tier of a deep band below the topsoil also gets a
+            // supply cache, so a long dive always passes somewhere to restock.
+            pending.extend(
+                guaranteed
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| index % tier_count == tier)
+                    .map(|(_, kind)| *kind),
+            );
+            if deep_world && tier > 0 && band != Band::Topsoil {
+                pending.push(PoiKind::SupplyCache);
+            }
+            place_tier(
+                canvas,
+                band,
+                band_index,
+                rows,
+                (regions, region_width),
+                &mut pending,
+                &mut placed,
+                &mut derelicts,
+                lore_offset,
+            );
+        }
+    }
+}
+
+/// Places one tier (the rows `rows`) of `band`: a shuffled row of `regions` regions of
+/// `region_width` columns, the `pending` guaranteed kinds first.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the placement state threads through every tier"
+)]
+fn place_tier(
+    canvas: &mut Canvas<'_>,
+    band: Band,
+    band_index: i32,
+    rows: (i32, i32),
+    (regions, region_width): (i32, i32),
+    pending: &mut Vec<PoiKind>,
+    placed: &mut Vec<TileRect>,
+    derelicts: &mut u16,
+    lore_offset: u16,
+) {
+    let seed = canvas.seed();
+    let random_fill = if canvas.settings.generator.is_deep() {
+        DEEP_RANDOM_FILL_PER_MILLE
+    } else {
+        RANDOM_FILL_PER_MILLE
+    };
+    {
         let mut rng = RegionRng::new(seed, SALT_POI, band_index, 0);
         let mut order: Vec<i32> = (0..regions).collect();
         for index in (1..order.len()).rev() {
@@ -175,14 +266,13 @@ pub(crate) fn place(canvas: &mut Canvas<'_>) {
                 usize::try_from(rng.range(0, i32::try_from(index).unwrap_or(0))).unwrap_or(0);
             order.swap(index, other);
         }
-        let mut pending: Vec<PoiKind> = guaranteed_kinds(band).to_vec();
         for region in order {
             let x_range = (region * region_width, (region + 1) * region_width - 1);
             let mut fill_rng = RegionRng::new(seed, SALT_FILL, band_index, region);
             let forced = !pending.is_empty();
             let kind = if forced {
                 Some(pending.remove(0))
-            } else if fill_rng.chance(RANDOM_FILL_PER_MILLE) {
+            } else if fill_rng.chance(random_fill) {
                 fill_rng
                     .pick(&fill_weights(band))
                     .map(|index| PoiKind::ALL[index])
@@ -191,7 +281,7 @@ pub(crate) fn place(canvas: &mut Canvas<'_>) {
             };
             let spot = kind.and_then(|kind| {
                 let mut spot_rng = RegionRng::new(seed, SALT_SPOT, band_index, region);
-                find_spot(canvas, band, kind, x_range, &placed, &mut spot_rng)
+                find_spot(canvas, band, kind, (x_range, rows), placed, &mut spot_rng)
             });
             match (kind, spot) {
                 (Some(_), Some(spot)) => {
@@ -199,8 +289,8 @@ pub(crate) fn place(canvas: &mut Canvas<'_>) {
                     let variant = match spot.prefab.role {
                         PrefabRole::SupplyCache => PoiVariant::SupplyCache,
                         PrefabRole::DerelictRig => {
-                            let log = LoreId((derelicts + lore_offset) % LORE_COUNT);
-                            derelicts += 1;
+                            let log = LoreId((*derelicts + lore_offset) % LORE_COUNT);
+                            *derelicts += 1;
                             PoiVariant::DerelictRig { log }
                         }
                         PrefabRole::Vault(puzzle) => PoiVariant::Vault(puzzle),
@@ -224,7 +314,7 @@ pub(crate) fn place(canvas: &mut Canvas<'_>) {
                         // Try the guaranteed kind again in the next region.
                         pending.insert(0, kind);
                     }
-                    reserve_slot(canvas, band, x_range, &placed);
+                    reserve_slot(canvas, x_range, rows, placed);
                 }
                 (None, Some(_)) => {}
             }
@@ -232,12 +322,13 @@ pub(crate) fn place(canvas: &mut Canvas<'_>) {
     }
 }
 
-/// Picks a prefab of `kind` and a spot for it in the region's columns `x_range` of `band`.
+/// Picks a prefab of `kind` and a spot for it in the region's columns `x_range` and rows `rows`
+/// of `band`.
 fn find_spot(
     canvas: &Canvas<'_>,
     band: Band,
     kind: PoiKind,
-    x_range: (i32, i32),
+    (x_range, (top, bottom)): ((i32, i32), (i32, i32)),
     placed: &[TileRect],
     rng: &mut RegionRng,
 ) -> Option<Spot> {
@@ -250,7 +341,6 @@ fn find_spot(
     if candidates.is_empty() {
         return None;
     }
-    let (top, bottom) = band_rows(canvas, band);
     for _ in 0..40 {
         let prefab = candidates[usize::try_from(
             rng.range(0, i32::try_from(candidates.len()).unwrap_or(1) - 1),
@@ -311,7 +401,7 @@ fn fits(canvas: &Canvas<'_>, band: Band, kind: PoiKind, spot: &Spot, placed: &[T
     let mut total = 0;
     for position in bounds.positions() {
         match canvas.get(position.x, position.y) {
-            Some(TileKind::Foundation) | None => return false,
+            Some(TileKind::Foundation | TileKind::Bedrock) | None => return false,
             Some(TileKind::Air) => open += 1,
             _ => {}
         }
@@ -323,8 +413,12 @@ fn fits(canvas: &Canvas<'_>, band: Band, kind: PoiKind, spot: &Spot, placed: &[T
 
 /// Reserves an untouched spot in the region for later prefabs (when it is clear of spawn and
 /// the other POIs).
-fn reserve_slot(canvas: &mut Canvas<'_>, band: Band, x_range: (i32, i32), placed: &[TileRect]) {
-    let (top, bottom) = band_rows(canvas, band);
+fn reserve_slot(
+    canvas: &mut Canvas<'_>,
+    x_range: (i32, i32),
+    (top, bottom): (i32, i32),
+    placed: &[TileRect],
+) {
     let center = TilePosition {
         x: i32::midpoint(x_range.0, x_range.1),
         y: i32::midpoint(top, bottom).clamp(POI_MIN_ROW + 3, canvas.height - 5),
@@ -363,6 +457,7 @@ fn stamp(canvas: &mut Canvas<'_>, band: Band, spot: &Spot, rng: &mut RegionRng) 
     let mut changed = 0;
     for position in bounds.positions() {
         let (x, y) = (position.x, position.y);
+        let nominal_y = super::strata::nominal_row(canvas.settings, y);
         let host = canvas.band(x, y).soft_material();
         let kind = match spot.cell_at(x, y) {
             Cell::Keep => continue,
@@ -390,10 +485,10 @@ fn stamp(canvas: &mut Canvas<'_>, band: Band, spot: &Spot, rng: &mut RegionRng) 
             Cell::Artifact => {
                 deposits::pick_artifact(band, rng).map_or(TileKind::Poi(matrix), TileKind::Artifact)
             }
-            Cell::Ore => formation_ore(band, y, rng).unwrap_or(TileKind::Poi(matrix)),
+            Cell::Ore => formation_ore(band, nominal_y, rng).unwrap_or(TileKind::Poi(matrix)),
             Cell::OreOrMatrix => {
                 if rng.chance(500) {
-                    formation_ore(band, y, rng).unwrap_or(TileKind::Poi(matrix))
+                    formation_ore(band, nominal_y, rng).unwrap_or(TileKind::Poi(matrix))
                 } else {
                     TileKind::Poi(matrix)
                 }
@@ -412,7 +507,7 @@ fn stamp(canvas: &mut Canvas<'_>, band: Band, spot: &Spot, rng: &mut RegionRng) 
     changed
 }
 
-/// Rich ore for a formation: the band's two most valuable minerals.
+/// Rich ore for a formation: the band's two most valuable minerals at classic nominal row `y`.
 fn formation_ore(band: Band, y: i32, rng: &mut RegionRng) -> Option<TileKind> {
     let weights = deposits::mineral_weights(band, y);
     let mut best: Vec<usize> = (0..weights.len())

@@ -182,6 +182,17 @@ fn depth(quest: &ActiveQuest, index: u8) -> String {
         .map_or_else(String::new, |target| format!(" ({}m)", target.center.y))
 }
 
+/// The world row a depth objective asks for: the row bound at acceptance, or the authored row in
+/// quests bound before deep worlds.
+#[must_use]
+pub const fn depth_row(row: i32, progress: &ObjectiveProgress) -> i32 {
+    if progress.anchor > 0 {
+        progress.anchor
+    } else {
+        row
+    }
+}
+
 /// One line describing an objective and its progress.
 #[must_use]
 #[allow(
@@ -205,7 +216,7 @@ pub fn objective_line(
         Objective::Reach { target } => {
             format!("Reach the {}{}", noun(def, target), depth(quest, target))
         }
-        Objective::ReachDepth { row } => format!("Dive to {row}m"),
+        Objective::ReachDepth { row } => format!("Dive to {}m", depth_row(row, progress)),
         Objective::Dig { target, count } => format!(
             "Dig at the {}{} ({}/{count})",
             noun(def, target),

@@ -219,7 +219,7 @@ impl WorldState {
 /// Width in tiles of a freshly generated single-player world.
 pub const NEW_WORLD_WIDTH_TILES: i32 = 240;
 /// Height in tiles of a freshly generated single-player world.
-pub const NEW_WORLD_HEIGHT_TILES: i32 = 220;
+pub const NEW_WORLD_HEIGHT_TILES: i32 = WorldSettings::new(NEW_WORLD_SEED).height_tiles();
 /// Seed of the default world ([`WorldState::new_game`]; tests, fixtures and scripted scenes).
 pub const NEW_WORLD_SEED: u64 = crate::worldgen::DEFAULT_WORLD_SEED;
 /// Rig spawn position (world pixels) of a freshly generated single-player world.
