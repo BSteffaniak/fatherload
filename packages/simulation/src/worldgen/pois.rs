@@ -52,7 +52,7 @@ pub const POI_MIN_ROW: i32 = CRUST_ROWS;
 const RANDOM_FILL_PER_MILLE: u32 = 250;
 /// [`RANDOM_FILL_PER_MILLE`] in deep worlds, whose stacked tiers would otherwise leave long
 /// stretches of a thick band with nothing to find.
-const DEEP_RANDOM_FILL_PER_MILLE: u32 = 400;
+const DEEP_RANDOM_FILL_PER_MILLE: u32 = 600;
 
 /// Number of derelict logs (fits a `u16`).
 #[allow(clippy::cast_possible_truncation, reason = "a dozen logs")]
@@ -115,7 +115,7 @@ const fn band_rows(canvas: &Canvas<'_>, band: Band) -> (i32, i32) {
 
 /// Rows of a deep-world band per tier of placement regions: a thick band is split into stacked
 /// tiers, each with its own row of regions, so POIs fill the whole band.
-pub const TIER_ROWS: i32 = 28;
+pub const TIER_ROWS: i32 = 22;
 
 /// The tiers of `band`: the rows each spans. Classic worlds have one tier, the whole band.
 fn band_tiers(canvas: &Canvas<'_>, band: Band) -> Vec<(i32, i32)> {

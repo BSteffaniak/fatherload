@@ -189,9 +189,9 @@ fn golden_v4_world_digests_are_pinned() {
     let cases = [
         (
             WorldSettings::new(DEFAULT_WORLD_SEED),
-            0xde23_4c1a_9971_cafe,
+            0xe5e0_679b_e30a_e722,
         ),
-        (WorldSettings::new(1), 0xbd9b_77ef_6bfe_0911),
+        (WorldSettings::new(1), 0xb36d_92b7_c218_99e2),
         (
             WorldSettings {
                 size: WorldSize::Large,
@@ -199,7 +199,7 @@ fn golden_v4_world_digests_are_pinned() {
                 hazards: HazardIntensity::Brutal,
                 ..WorldSettings::new(0x00C0_FFEE)
             },
-            0xf3ec_c9fb_411a_b20e,
+            0x99ce_6f8a_b542_d59f,
         ),
     ];
     assert!(
@@ -685,7 +685,7 @@ fn the_feature_index_counts_stay_in_bounds() {
                     (FeatureKind::HazardCluster, 120 * scale, 480 * scale),
                     (FeatureKind::StratumTransition, 11, 11),
                     (FeatureKind::PrefabSlot, 8 * scale, 50 * scale),
-                    (FeatureKind::PointOfInterest, 20 * scale, 50 * scale),
+                    (FeatureKind::PointOfInterest, 30 * scale, 75 * scale),
                 ]
             } else {
                 [

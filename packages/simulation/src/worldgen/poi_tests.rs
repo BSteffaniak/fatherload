@@ -68,15 +68,17 @@ fn poi_counts_per_band_stay_in_bounds() {
             let world = generate(&settings);
             let scale = usize::try_from(settings.width_tiles() / 120).unwrap_or(2);
             // Deep worlds stack tiers of placement regions in their thick bands.
-            let (band_max, total_max) = if settings.generator.is_deep() {
-                (7 * scale, 50 * scale)
+            // Their density per row matches the classic worlds (about one POI per 7 rows of a
+            // standard world's width).
+            let (band_max, total) = if settings.generator.is_deep() {
+                (10 * scale, 30 * scale..=75 * scale)
             } else {
-                (3 * scale, 24 * scale)
+                (3 * scale, 6 * scale + 12..=24 * scale)
             };
-            let total = world.features.pois().count();
+            let count = world.features.pois().count();
             assert!(
-                (6 * scale + 12..=total_max).contains(&total),
-                "seed {seed} {size:?}: {total} POIs"
+                total.contains(&count),
+                "seed {seed} {size:?}: {count} POIs"
             );
             for band in Band::ALL.into_iter().skip(1) {
                 let count = world.features.pois_in_band(band).count();
