@@ -11,13 +11,14 @@ use crate::terrain::{ArtifactKind, DeepStratum, MineralKind, TileKind, TilePosit
 use super::{
     Canvas, SPAWN_TILE_X,
     features::{FeatureDetail, FeatureKind, TileRect},
-    noise::{NOISE_MAX, RegionRng, chance, fractal_noise, hash2, ridge, value_noise},
+    noise::{NOISE_MAX, RegionRng, centred, chance, fractal_noise, hash2, ridge, value_noise},
     strata::{Band, SKY_ROWS, nominal_band_top},
 };
 
 const SALT_VEIN: u64 = 0x0E0E_0001;
 const SALT_VEIN_MASK: u64 = 0x0E0E_0002;
 const SALT_VEIN_MINERAL: u64 = 0x0E0E_0003;
+const SALT_VEIN_WARP: u64 = 0x0E0E_0004;
 const SALT_CLUSTER: u64 = 0x0E0E_0100;
 const SALT_MOTHERLODE: u64 = 0x0E0E_0200;
 const SALT_TOP_UP: u64 = 0x0E0E_0300;
@@ -141,11 +142,14 @@ fn place_veins(canvas: &mut Canvas<'_>) {
                 if !canvas.is_plain_rock(x, y) {
                     continue;
                 }
+                // A little domain warp makes the veins wander instead of running ruler-straight.
+                let warp_x = x + centred(value_noise(seed, SALT_VEIN_WARP, x, y, 5, 5), 3);
+                let warp_y = y + centred(value_noise(seed, SALT_VEIN_WARP + 1, x, y, 5, 5), 2);
                 let line = ridge(fractal_noise(
                     seed,
                     SALT_VEIN + family,
-                    x,
-                    y,
+                    warp_x,
+                    warp_y,
                     cell_x,
                     cell_y,
                     2,

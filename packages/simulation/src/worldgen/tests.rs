@@ -55,8 +55,11 @@ fn same_settings_generate_identical_worlds() {
 #[test]
 fn golden_world_digests_are_pinned_to_the_generator_version() {
     let cases = [
-        (WorldSettings::new(DEFAULT_WORLD_SEED), 0x2357_2cae_eba5_73f9),
-        (WorldSettings::new(1), 0x7b4c_d4d6_d056_b73c),
+        (
+            WorldSettings::new(DEFAULT_WORLD_SEED),
+            0xc886_5661_f9ae_c549,
+        ),
+        (WorldSettings::new(1), 0xda42_34d4_d954_ab4a),
         (
             WorldSettings {
                 size: WorldSize::Large,
@@ -64,7 +67,7 @@ fn golden_world_digests_are_pinned_to_the_generator_version() {
                 hazards: HazardIntensity::Brutal,
                 ..WorldSettings::new(0x00C0_FFEE)
             },
-            0xe8e4_56c2_1994_ec1f,
+            0xea44_744f_bb90_c7a6,
         ),
         (
             WorldSettings {
@@ -72,7 +75,7 @@ fn golden_world_digests_are_pinned_to_the_generator_version() {
                 hazards: HazardIntensity::Calm,
                 ..WorldSettings::new(77)
             },
-            0x1313_ff4f_3150_4ca2,
+            0xf78a_2141_54ca_16a3,
         ),
     ];
     let actual: Vec<u64> = cases

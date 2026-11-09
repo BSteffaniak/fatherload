@@ -11,7 +11,7 @@ use crate::terrain::{DeepStratum, TileKind};
 
 use super::{
     GeneratorVersion, WorldSettings,
-    noise::{NOISE_MAX, hash2, line_noise, value_noise},
+    noise::{centred, hash2, line_noise, value_noise},
 };
 
 /// Deepest tile row that is always open sky; ground starts on the next row.
@@ -223,17 +223,6 @@ const fn boundary_shift(seed: u64, index: usize) -> i32 {
     )]
     let shift = (hash2(seed, SALT_SHIFT, index as i32, 0) % span) as i32 - spec.jitter;
     shift
-}
-
-/// Scales a centred noise value (`0..=NOISE_MAX`) to `-amplitude..=amplitude`, rounding to the
-/// nearest row.
-const fn centred(value: i32, amplitude: i32) -> i32 {
-    let offset = (value - NOISE_MAX / 2) * amplitude * 2;
-    if offset >= 0 {
-        (offset + NOISE_MAX / 2) / NOISE_MAX
-    } else {
-        -((-offset + NOISE_MAX / 2) / NOISE_MAX)
-    }
 }
 
 /// First row of the band below boundary `index` in column `x`, before fingering.

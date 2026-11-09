@@ -120,6 +120,18 @@ pub const fn fractal_noise(
     }
 }
 
+/// Scales a noise value (`0..=NOISE_MAX`) to `-amplitude..=amplitude` around its middle,
+/// rounding to the nearest whole step.
+#[must_use]
+pub const fn centred(value: i32, amplitude: i32) -> i32 {
+    let offset = (value - NOISE_MAX / 2) * amplitude * 2;
+    if offset >= 0 {
+        (offset + NOISE_MAX / 2) / NOISE_MAX
+    } else {
+        -((-offset + NOISE_MAX / 2) / NOISE_MAX)
+    }
+}
+
 /// Ridge transform: `NOISE_MAX` where `value` crosses the middle, falling to 0 at the extremes.
 /// Thresholding a ridge near the top gives thin wandering lines (veins, seams).
 #[must_use]
