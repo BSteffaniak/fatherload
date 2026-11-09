@@ -9,7 +9,7 @@
 //! `sprites::poi` over one of those bases.
 
 use drillgame_simulation::{
-    poi::{PoiKind, PoiTile},
+    poi::{FormationStyle, PoiKind, PoiTile, PoiVariant},
     terrain::{DeepStratum, Terrain, TileKind, TilePosition},
     worldgen::Band,
 };
@@ -229,6 +229,84 @@ fn fill(canvas: &mut TileCanvas, pixel: impl Fn(i32, i32, i32, i32) -> PaletteIn
         for px in 0..TILE_ART {
             let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
             canvas.set(px, py, pixel(gx, gy, px, py));
+        }
+    }
+}
+
+/// Crystals lining the hollow of a geode: on an open tile inside a geode, every side that
+/// touches the shell grows a row of faceted points in the band's crystal ramp (dark at the
+/// root, a bright glint at the tip), so the hollow reads as a crystal-lined cavity rather than
+/// a plain cave.
+pub(super) fn paint_geode_lining(
+    canvas: &mut TileCanvas,
+    terrain: &Terrain,
+    position: TilePosition,
+    band: Band,
+) {
+    if !terrain.settings().generator.has_points_of_interest() {
+        return;
+    }
+    let in_geode = terrain.features().poi_at(position).is_some_and(|poi| {
+        // Only the hollow: the ring of tiles just inside the bounds is shell or outside rock.
+        poi.poi() == Some(PoiVariant::Formation(FormationStyle::Geode))
+            && poi.bounds.expanded(-2).contains(position)
+    });
+    if !in_geode {
+        return;
+    }
+    let crystal = crystal_ramp(band);
+    let shell = |dx: i32, dy: i32| {
+        terrain
+            .tile(TilePosition {
+                x: position.x + dx,
+                y: position.y + dy,
+            })
+            .is_some_and(|tile| {
+                matches!(
+                    tile.kind,
+                    TileKind::Poi(PoiTile::GeodeShell) | TileKind::Ore(_)
+                )
+            })
+    };
+    // (neighbour offset, side index) for floor, ceiling, left and right walls.
+    for (dx, dy, side) in [(0, 1, 0_u32), (0, -1, 1), (-1, 0, 2), (1, 0, 3)] {
+        if !shell(dx, dy) {
+            continue;
+        }
+        let salt = 151 + 2 * side;
+        let seed = u64::from(hash(position.x, position.y, salt))
+            | (u64::from(hash(position.x, position.y, salt + 1)) << 32);
+        // Three or four points per side, at hashed offsets along it.
+        for point in 0..4_u64 {
+            if point == 3 && (seed >> 60) % 2 == 0 {
+                continue;
+            }
+            let along = 2 + ((seed >> (point * 12)) % 12) as i32;
+            let length = 5 + ((seed >> (point * 12 + 6)) % 6) as i32;
+            for depth in 0..length {
+                // A faceted point: five pixels wide at the root narrowing to one at the tip.
+                let half = (length - 1 - depth) * 5 / (2 * length);
+                for offset in -half..=half {
+                    let shade = if depth >= length - 2 && offset == 0 {
+                        crystal[3]
+                    } else if offset == -half && half > 0 {
+                        crystal[0]
+                    } else if offset < 0 {
+                        crystal[2]
+                    } else if offset == 0 {
+                        crystal[3]
+                    } else {
+                        crystal[1]
+                    };
+                    let (px, py) = match side {
+                        0 => (along + offset, TILE_ART - 1 - depth),
+                        1 => (along + offset, depth),
+                        2 => (depth, along + offset),
+                        _ => (TILE_ART - 1 - depth, along + offset),
+                    };
+                    canvas.set(px, py, shade);
+                }
+            }
         }
     }
 }

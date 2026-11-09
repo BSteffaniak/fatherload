@@ -315,7 +315,10 @@ built, natural ones take their band's palette:
 - *Fossil shale* is pale sandy laminations over the band's darkest stone with a shell or bone
   imprint on every tile; *geode shells* are faceted crystal in a per-stratum ramp (Crystal
   Faults ice blue, Mantle Storm orange, Radioactive Hollow lime, Ancient Machine amber, Fossil
-  Oceans sand, Void Geodes and basalt lavender).
+  Oceans sand, Void Geodes and basalt lavender). Open tiles in a geode's hollow grow faceted
+  crystal points from every side that touches the shell or its ore (same ramp, darkest facet
+  on the left, a bright tip; `poi_art::paint_geode_lining`), so the hollow reads as a lined
+  cavity, not a plain cave.
 - *Outposts* are corrugated steel with rivet rows, rust streaks and a teal company stripe, and
   teal lockers with vents and a logo plate.
 - POI kinds have one colour each (`sprites::poi::poi_color`: cache `SAND`, derelict `GOLD`,

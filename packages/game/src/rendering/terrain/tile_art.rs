@@ -525,6 +525,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             if poi_art::inside_vault(terrain, position) {
                 paint_vault_room(&mut canvas, &strata, up, left, right);
             }
+            poi_art::paint_geode_lining(&mut canvas, terrain, position, band);
         }
         return canvas;
     }
