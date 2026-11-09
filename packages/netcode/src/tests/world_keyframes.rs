@@ -84,6 +84,74 @@ fn heavily_dug_world_converges_on_epoch_change_join_and_reconnect() {
 }
 
 #[test]
+fn test_mode_world_converges_with_toggles_warps_and_late_joiners() {
+    use drillgame_simulation::{
+        InputSequence, PlayerCommand, PlayerTickInput, TestModeAction, TickAction, TickInputs,
+        terrain::TILE_SIZE, worldgen::Band,
+    };
+
+    let link = LinkConditions::new(40, 5, 1.0);
+    let mut harness =
+        Harness::<WorldState>::new(HarnessConfig::new(SessionParams::new(60), 2, link));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+
+    // The host switches to a test-mode copy of its world: toggles on, one rig warped to the grey stone (the harness world is shallow).
+    let mut test = harness.world().clone();
+    test.enable_test_mode();
+    let warped = test.player_ids().next().expect("a rig");
+    let actions = [
+        TestModeAction::SetInvulnerable(true),
+        TestModeAction::SetInfiniteFuel(true),
+        TestModeAction::WarpToBand(Band::Stone),
+    ];
+    let mut inputs = TickInputs::default();
+    inputs.players.insert(
+        warped,
+        PlayerTickInput {
+            controls: None,
+            actions: actions
+                .iter()
+                .zip(0..)
+                .map(|(action, sequence)| TickAction {
+                    sequence: InputSequence::new(sequence),
+                    command: PlayerCommand::TestMode(*action),
+                })
+                .collect(),
+        },
+    );
+    let tick = test.simulation_tick();
+    let _ = test.simulate_tick(tick, &inputs);
+    let rig = test.player(warped).expect("warped rig");
+    assert_eq!(
+        test.terrain().band_at(rig.tile_position(TILE_SIZE)),
+        Band::Stone
+    );
+    harness.host.new_epoch(test);
+    harness.run_for(Duration::from_secs(3));
+
+    // A late joiner gets the test-mode section and a maxed rig from the template.
+    let late = harness.add_client(None);
+    harness.run_for(Duration::from_secs(3));
+    harness.settle(Duration::from_secs(1));
+    assert!(harness.clients[late].session.player().is_some());
+
+    assert_converged(&harness);
+    let host_mode = harness.world().test_mode();
+    assert!(host_mode.is_some_and(|mode| mode.invulnerable && mode.infinite_fuel));
+    for client in &harness.clients {
+        let authority = client.session.authority().expect("in game");
+        assert_eq!(authority.test_mode(), host_mode);
+        let me = crate::world::to_sim_player(client.session.player().expect("joined"));
+        assert_eq!(
+            authority.player(me).expect("own rig").drill_mount_level,
+            2,
+            "every rig starts maxed in a test-mode world"
+        );
+    }
+}
+
+#[test]
 fn keyframes_carry_only_tiles_that_differ_from_generation() {
     let mut report = Vec::new();
     for (label, settings) in [
