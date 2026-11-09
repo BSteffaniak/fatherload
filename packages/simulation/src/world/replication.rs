@@ -5,14 +5,17 @@
 //! | Kind | Contents | API |
 //! |---|---|---|
 //! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); live entities: gas clouds, falling boulders, bombs ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
-//! | Op log | terrain tiles (shared; a client outside a chunk's relevance skips its ops and gets [`WorldState::terrain_chunk`] when it approaches); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
+//! | Op log | terrain tiles (shared; a client outside a chunk's relevance skips its ops and gets [`WorldState::terrain_chunk`] (the chunk's diffs from generation) when it approaches); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
 //! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants | [`WorldState::section`], [`WorldState::apply_section`] |
 //!
 //! Private state (a player's [`PlayerLoadout`] and discovery) is replicated only to its owner;
 //! see [`super::visibility`] for the client-visible state hash and keyframe redaction.
 //!
-//! Terrain dimensions and the initial tiles only travel in a keyframe (the serialized
-//! [`WorldState`] itself); the world's generation settings also ride in the session section.
+//! Terrain travels in a keyframe (the serialized [`WorldState`] itself) as its compact
+//! [`crate::terrain::TerrainSnapshot`]: generation settings, size and only the tiles that differ
+//! from generation; the receiver regenerates the rest. Chunk refreshes likewise carry only the
+//! chunk's tiles that differ from generation ([`TileDiffs`]). The generation settings also ride
+//! in the session section.
 //!
 //! Coverage is enforced by the compiler: [`WorldState::section`] and
 //! `WorldState::remove_player` (in `roster`) destructure the whole world, and
@@ -34,7 +37,7 @@ use crate::{
     rig::{DrillState, RigPartKind},
     rng::DeterministicRngState,
     service::PlayerServiceTransaction,
-    terrain::{ChunkPosition, MineralKind, Tile, TileChange, TilePosition},
+    terrain::{ChunkPosition, MineralKind, TileChange, TileDiffs, TilePosition},
 };
 
 use super::{
@@ -336,15 +339,17 @@ impl WorldState {
         self.terrain.apply_tile_change(change)
     }
 
-    /// Every tile of one terrain chunk (refreshing a client that skipped its op log).
+    /// The tiles of one terrain chunk that differ from generation (refreshing a client that
+    /// skipped its op log; the client regenerates the rest from the world settings).
     #[must_use]
-    pub fn terrain_chunk(&self, chunk: ChunkPosition) -> Vec<Tile> {
-        self.terrain.chunk_tiles(chunk)
+    pub fn terrain_chunk(&self, chunk: ChunkPosition) -> TileDiffs {
+        self.terrain.chunk_diffs(chunk)
     }
 
-    /// Overwrites one terrain chunk with a [`Self::terrain_chunk`] copy.
-    pub fn apply_terrain_chunk(&mut self, chunk: ChunkPosition, tiles: &[Tile]) {
-        self.terrain.set_chunk_tiles(chunk, tiles);
+    /// Overwrites one terrain chunk with its generated tiles plus a [`Self::terrain_chunk`]
+    /// copy.
+    pub fn apply_terrain_chunk(&mut self, chunk: ChunkPosition, diffs: &TileDiffs) {
+        self.terrain.apply_chunk_diffs(chunk, diffs);
     }
 
     /// Keys of every on-change section that currently exists.

@@ -28,6 +28,8 @@ mod flight_tests;
 mod hazards;
 mod import;
 mod movement;
+#[cfg(test)]
+mod persistence_tests;
 mod player_sections;
 mod progression;
 mod replication;

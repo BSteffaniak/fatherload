@@ -1,4 +1,4 @@
-//! Readers for older save formats (versions 1-4), migrated to a canonical [`WorldState`].
+//! Readers for older save formats (versions 1-5), migrated to a canonical [`WorldState`].
 //!
 //! * v1: `{ version, game }` — the whole legacy single-player `GameState`.
 //! * v2: `{ version, world: { session, world, game, roster... } }` — legacy game plus persisted
@@ -8,12 +8,17 @@
 //! * v4: `{ version, save: { world, play_seconds } }` — the current envelope, but the world still
 //!   carried a derived `authoritative_summary` (counts plus the `won_game` flag) instead of
 //!   `won_game` itself.
+//! * v5: the current envelope and world, but the terrain wrote out every tile ([`FullTerrain`])
+//!   instead of its generation settings plus the tiles that differ from generation.
+//!
+//! Every pre-v6 terrain is read as a [`FullTerrain`] and converted; re-saving writes the compact
+//! form.
 //!
 //! Only the fields the migration reads are declared; serde ignores the rest.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 use drillgame_simulation::{
@@ -23,7 +28,7 @@ use drillgame_simulation::{
     contract::ContractLog,
     economy::{DeepClaimStatus, TownDevelopment},
     progression::LegendaryBlueprint,
-    terrain::{ArtifactKind, MineralKind, StrategicResourceKind, Terrain, TileKind},
+    terrain::{ArtifactKind, FullTerrain, MineralKind, StrategicResourceKind, Terrain, TileKind},
 };
 
 use super::WorldSave;
@@ -39,9 +44,25 @@ const fn legacy_current_game_version() -> u32 {
     LEGACY_CURRENT_GAME_VERSION
 }
 
+/// Reads a pre-v6 terrain, which wrote out every tile.
+fn full_terrain<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Terrain, D::Error> {
+    FullTerrain::deserialize(deserializer).map(Terrain::from)
+}
+
+/// Rewrites a pre-v6 world's full-tile `terrain` in the current compact form, so the rest of
+/// the world deserializes as a current [`WorldState`].
+fn compact_terrain(world: &mut Value) -> Result<(), serde_json::Error> {
+    if let Some(terrain) = world.get_mut("terrain") {
+        let full: FullTerrain = serde_json::from_value(terrain.take())?;
+        *terrain = serde_json::to_value(Terrain::from(full))?;
+    }
+    Ok(())
+}
+
 /// The parts of the legacy `GameState` that carry gameplay state.
 #[derive(Clone, Debug, Deserialize)]
 pub struct LegacyGame {
+    #[serde(deserialize_with = "full_terrain")]
     terrain: Terrain,
     player: Player,
     #[serde(default = "legacy_current_game_version")]
@@ -361,6 +382,7 @@ struct PersistentSessionState {
 
 #[derive(Clone, Debug, Deserialize)]
 struct PersistentWorldObjects {
+    #[serde(deserialize_with = "full_terrain")]
     terrain: Terrain,
     #[serde(default)]
     hazards: Vec<HazardCloud>,
@@ -489,9 +511,27 @@ struct LegacySummary {
     won_game: bool,
 }
 
+/// v5: the current envelope and world around a full-tile terrain.
+#[derive(Debug, Deserialize)]
+pub struct V5SaveFile {
+    save: V4Save,
+}
+
+impl V5SaveFile {
+    pub fn migrate(self) -> Result<WorldSave, serde_json::Error> {
+        let mut world = self.save.world;
+        compact_terrain(&mut world)?;
+        Ok(WorldSave {
+            world: serde_json::from_value(world)?,
+            play_seconds: self.save.play_seconds,
+        })
+    }
+}
+
 /// Reads a v3/v4 world: lifts `authoritative_summary.won_game` to `won_game` and drops the rest
 /// of the summary (counts the world derives from its own collections).
 fn world_with_summary(mut world: Value) -> Result<WorldState, serde_json::Error> {
+    compact_terrain(&mut world)?;
     if let Some(object) = world.as_object_mut()
         && let Some(summary) = object.remove("authoritative_summary")
     {

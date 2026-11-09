@@ -10,7 +10,9 @@
 //! * Replication maps one-to-one onto the world's replication sections: per-tick
 //!   [`PlayerTickState`] / [`LiveEntities`], the op log ([`WorldOp`]: terrain [`TileChange`]s
 //!   and per-player [`Discovery`] reveals) and on-change [`SectionKey`] / [`SectionPayload`]
-//!   sections. The keyframe is the world itself.
+//!   sections. The keyframe is the world itself, whose terrain serializes as generation
+//!   settings plus the tiles that differ from generation (the client regenerates the rest and
+//!   checks the terrain digest); a chunk refresh is that chunk's [`TileDiffs`] the same way.
 //! * A player's loadout section, discovery ops and action results go only to that player's
 //!   client; other
 //!   clients get the redacted keyframe and compare the client-visible state hash
@@ -22,7 +24,7 @@ use drillgame_simulation::{
     ControlState, Discovery, GameplayEvent, GameplayEventKind, InputSequence, LiveEntities,
     PlayerCommand, PlayerScopedCommandOutcome, PlayerTickState, SectionKey, SectionPayload,
     SimulationTick, TILE_SIZE, TickAction, TileChange, WorldState, input,
-    terrain::{CHUNK_SIZE_TILES, ChunkPosition, Tile},
+    terrain::{CHUNK_SIZE_TILES, ChunkPosition, TileDiffs},
 };
 use serde::{Deserialize, Serialize};
 
@@ -121,7 +123,7 @@ impl NetSimulation for WorldState {
     type Entities = LiveEntities;
     type Op = WorldOp;
     type Chunk = ChunkPosition;
-    type ChunkSnapshot = Vec<Tile>;
+    type ChunkSnapshot = TileDiffs;
     type SectionKey = SectionKey;
     type Section = SectionPayload;
     type Keyframe = Self;
@@ -314,11 +316,11 @@ impl NetSimulation for WorldState {
         relevance.touches_box(left, top, left + size, top + size)
     }
 
-    fn chunk_snapshot(&self, chunk: &ChunkPosition) -> Option<Vec<Tile>> {
+    fn chunk_snapshot(&self, chunk: &ChunkPosition) -> Option<TileDiffs> {
         Some(self.terrain_chunk(*chunk))
     }
 
-    fn apply_chunk_snapshot(&mut self, chunk: &ChunkPosition, snapshot: Vec<Tile>) {
+    fn apply_chunk_snapshot(&mut self, chunk: &ChunkPosition, snapshot: TileDiffs) {
         self.apply_terrain_chunk(*chunk, &snapshot);
     }
 

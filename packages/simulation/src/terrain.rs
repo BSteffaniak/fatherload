@@ -5,12 +5,19 @@
 
 use std::sync::{Arc, OnceLock};
 
+mod persistence;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
     surface::building_foundation_at,
-    worldgen::{self, Band, FeatureIndex, GeneratorVersion, WorldSettings},
+    worldgen::{self, Band, FeatureIndex, WorldSettings},
 };
+
+pub use persistence::{
+    FullTerrain, MAX_TERRAIN_SIDE_TILES, TerrainRestoreError, TerrainSnapshot, TileDiffs,
+};
+use persistence::{GeneratedBase, generated_base};
 
 /// World-space pixels per terrain tile.
 pub const TILE_SIZE: f32 = 32.0;
@@ -332,20 +339,11 @@ const fn tile_digest(index: usize, tile: Tile) -> u64 {
     z ^ (z >> 31)
 }
 
-/// Serialized form of [`Terrain`] (the digest is recomputed on load).
-#[derive(Clone, Deserialize, Serialize)]
-struct TerrainData {
-    width: i32,
-    height: i32,
-    seed: u64,
-    tiles: Vec<Tile>,
-    /// Missing in saves written before seeded generation: those are legacy worlds.
-    #[serde(default)]
-    settings: Option<WorldSettings>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(from = "TerrainData", into = "TerrainData")]
+/// A terrain grid with its generation settings.
+///
+/// Serializes as a [`TerrainSnapshot`]: the settings, the size, a digest and only the tiles
+/// that differ from freshly generated terrain (see [`persistence`]).
+#[derive(Clone, Debug)]
 pub struct Terrain {
     width: i32,
     height: i32,
@@ -357,46 +355,10 @@ pub struct Terrain {
     digest: u64,
     /// Tile writes recorded while a simulation tick runs (never serialized or hashed).
     journal: Option<Vec<TileChange>>,
-    /// The generator's feature index, recomputed from `settings` on first use (never
-    /// serialized, replicated or hashed).
-    features: OnceLock<Arc<FeatureIndex>>,
-}
-
-impl From<TerrainData> for Terrain {
-    fn from(data: TerrainData) -> Self {
-        let TerrainData {
-            width,
-            height,
-            seed,
-            tiles,
-            settings,
-        } = data;
-        let settings = settings.unwrap_or_else(|| WorldSettings::legacy(seed));
-        let digest = tiles.iter().enumerate().fold(0_u64, |sum, (index, tile)| {
-            sum.wrapping_add(tile_digest(index, *tile))
-        });
-        Self {
-            width,
-            height,
-            settings,
-            tiles,
-            digest,
-            journal: None,
-            features: OnceLock::new(),
-        }
-    }
-}
-
-impl From<Terrain> for TerrainData {
-    fn from(terrain: Terrain) -> Self {
-        Self {
-            width: terrain.width,
-            height: terrain.height,
-            seed: terrain.settings.seed,
-            tiles: terrain.tiles,
-            settings: Some(terrain.settings),
-        }
-    }
+    /// The freshly generated terrain and feature index of `settings` at this size, shared
+    /// through a per-process cache and computed on first use (never serialized, replicated or
+    /// hashed).
+    base: OnceLock<Arc<GeneratedBase>>,
 }
 
 impl Terrain {
@@ -410,40 +372,53 @@ impl Terrain {
     /// harness worlds).
     #[must_use]
     pub fn new_seeded(width: i32, height: i32, seed: u64) -> Self {
-        let mut tiles = Vec::with_capacity((width * height) as usize);
-
-        for y in 0..height {
-            for x in 0..width {
-                let kind = legacy_tile_kind(x, y, seed);
-                tiles.push(Tile {
-                    kind,
-                    durability: tile_durability(kind),
-                });
-            }
-        }
-
-        Self::from(TerrainData {
+        let settings = WorldSettings::legacy(seed);
+        Self::from_base(
+            settings,
             width,
             height,
-            seed,
-            tiles,
-            settings: Some(WorldSettings::legacy(seed)),
-        })
+            generated_base(&settings, width, height),
+        )
     }
 
     /// Generates the world `settings` describe (see [`crate::worldgen`]).
     #[must_use]
     pub fn generate(settings: &WorldSettings) -> Self {
-        let world = worldgen::generate(settings);
-        let terrain = Self::from(TerrainData {
-            width: world.width,
-            height: world.height,
-            seed: settings.seed,
-            tiles: world.tiles,
-            settings: Some(*settings),
-        });
-        let _ = terrain.features.set(Arc::new(world.features));
+        let (width, height) = (settings.width_tiles(), settings.height_tiles());
+        Self::from_base(
+            *settings,
+            width,
+            height,
+            generated_base(settings, width, height),
+        )
+    }
+
+    /// A terrain holding exactly the generated `base`.
+    fn from_base(
+        settings: WorldSettings,
+        width: i32,
+        height: i32,
+        base: Arc<GeneratedBase>,
+    ) -> Self {
+        let mut terrain = Self::from_tiles(settings, width, height, base.tiles.clone());
+        terrain.base = OnceLock::from(base);
         terrain
+    }
+
+    /// A terrain from explicit tiles (the digest is computed here).
+    fn from_tiles(settings: WorldSettings, width: i32, height: i32, tiles: Vec<Tile>) -> Self {
+        let digest = tiles.iter().enumerate().fold(0_u64, |sum, (index, tile)| {
+            sum.wrapping_add(tile_digest(index, *tile))
+        });
+        Self {
+            width,
+            height,
+            settings,
+            tiles,
+            digest,
+            journal: None,
+            base: OnceLock::new(),
+        }
     }
 
     /// How this terrain was generated.
@@ -457,7 +432,7 @@ impl Terrain {
     pub fn set_settings(&mut self, settings: WorldSettings) {
         if self.settings != settings {
             self.settings = settings;
-            self.features = OnceLock::new();
+            self.base = OnceLock::new();
         }
     }
 
@@ -477,13 +452,7 @@ impl Terrain {
     /// band transitions, prefab slots). Empty for legacy worlds.
     #[must_use]
     pub fn features(&self) -> &FeatureIndex {
-        self.features.get_or_init(|| {
-            if self.settings.generator == GeneratorVersion::Legacy {
-                Arc::new(FeatureIndex::default())
-            } else {
-                Arc::new(worldgen::generate(&self.settings).features)
-            }
-        })
+        &self.base().features
     }
 
     /// Order-independent digest of every tile, maintained incrementally.
@@ -519,20 +488,12 @@ impl Terrain {
         self.set_tile_from_network(change.position, change.tile.kind, change.tile.durability)
     }
 
-    /// The in-bounds tiles of `chunk`, row-major (a terrain relevance refresh).
+    /// The in-bounds tiles of `chunk`, row-major (refreshes send [`Self::chunk_diffs`] instead).
     #[must_use]
     pub fn chunk_tiles(&self, chunk: ChunkPosition) -> Vec<Tile> {
         chunk_positions(self.width, self.height, chunk)
             .filter_map(|position| self.tile(position))
             .collect()
-    }
-
-    /// Overwrites `chunk` with tiles from [`Self::chunk_tiles`] of a terrain with the same
-    /// dimensions. Extra or missing tiles are ignored.
-    pub fn set_chunk_tiles(&mut self, chunk: ChunkPosition, tiles: &[Tile]) {
-        for (position, tile) in chunk_positions(self.width, self.height, chunk).zip(tiles) {
-            let _ = self.set_tile_from_network(position, tile.kind, tile.durability);
-        }
     }
 
     #[must_use]
@@ -560,29 +521,13 @@ impl Terrain {
         if minimum_height <= self.height {
             return;
         }
-        let generated = (self.settings.generator != GeneratorVersion::Legacy)
-            .then(|| worldgen::generate(&self.settings));
-        self.tiles
-            .reserve(((minimum_height - self.height) * self.width) as usize);
-        for y in self.height..minimum_height {
-            for x in 0..self.width {
-                let kind = generated
-                    .as_ref()
-                    .and_then(|world| {
-                        (x < world.width && y < world.height)
-                            .then(|| world.tiles[(y * world.width + x) as usize].kind)
-                    })
-                    .unwrap_or_else(|| legacy_tile_kind(x, y, self.settings.seed));
-                let tile = Tile {
-                    kind,
-                    durability: tile_durability(kind),
-                };
-                self.digest = self
-                    .digest
-                    .wrapping_add(tile_digest(self.tiles.len(), tile));
-                self.tiles.push(tile);
-            }
+        let base = generated_base(&self.settings, self.width, minimum_height);
+        let start = self.tiles.len();
+        self.tiles.extend_from_slice(&base.tiles[start..]);
+        for (index, tile) in self.tiles.iter().enumerate().skip(start) {
+            self.digest = self.digest.wrapping_add(tile_digest(index, *tile));
         }
+        self.base = OnceLock::from(base);
         self.height = minimum_height;
     }
 
