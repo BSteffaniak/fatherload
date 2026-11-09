@@ -70,8 +70,39 @@ fn settings_cases() -> [WorldSettings; 3] {
     ]
 }
 
+/// Stops compiling when a mineral or artifact gains a variant, so it is added to
+/// [`Tile::from_code`] (and to the list below) instead of becoming an undecodable save tile.
+const fn assert_payload_kinds_listed(mineral: MineralKind, artifact: ArtifactKind) {
+    match mineral {
+        MineralKind::Copper
+        | MineralKind::Iron
+        | MineralKind::Silver
+        | MineralKind::Gold
+        | MineralKind::Emerald
+        | MineralKind::Ruby
+        | MineralKind::Diamond
+        | MineralKind::Platinum
+        | MineralKind::Uranium
+        | MineralKind::Mythril => {}
+    }
+    match artifact {
+        ArtifactKind::Fossil
+        | ArtifactKind::OldCircuit
+        | ArtifactKind::BuriedIdol
+        | ArtifactKind::StarCore
+        | ArtifactKind::CrystalPrism
+        | ArtifactKind::RadiantShell
+        | ArtifactKind::PressureGlyph
+        | ArtifactKind::ReactorBloom
+        | ArtifactKind::MachineSigil
+        | ArtifactKind::VoidPearl
+        | ArtifactKind::MantleHeart => {}
+    }
+}
+
 #[test]
 fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
+    assert_payload_kinds_listed(MineralKind::Copper, ArtifactKind::Fossil);
     let mut kinds = vec![
         TileKind::Air,
         TileKind::Dirt,
