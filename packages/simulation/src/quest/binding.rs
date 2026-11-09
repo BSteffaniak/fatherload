@@ -135,48 +135,44 @@ fn candidates<'a>(
 ) -> Vec<&'a WorldFeature> {
     let features = terrain.features();
     let (first, last) = spec.bands();
-    let in_bands = |feature: &&WorldFeature| {
+    // How many bands a feature lies outside the wanted range (0 inside it).
+    let band_gap = |feature: &&WorldFeature| {
         let index = feature.band.index();
-        index >= usize::from(first) && index <= usize::from(last)
+        usize::from(first)
+            .saturating_sub(index)
+            .max(index.saturating_sub(usize::from(last)))
+    };
+    // Lean or unlucky worlds (and generators whose bands vary in thickness) can lack a kind in
+    // the wanted bands: keep the candidates in the nearest bands that have one rather than leave
+    // the quest unbindable.
+    let nearest_bands = |all: Vec<&'a WorldFeature>| -> Vec<&'a WorldFeature> {
+        let nearest = all.iter().map(band_gap).min();
+        all.into_iter()
+            .filter(|feature| Some(band_gap(feature)) == nearest)
+            .collect()
     };
     let mut found: Vec<&WorldFeature> = match spec {
         TargetSpec::Poi { kind, unopened, .. } => {
             if !terrain.settings().generator.has_points_of_interest() {
                 return Vec::new();
             }
-            features
-                .pois_of(kind)
-                .filter(in_bands)
-                .filter(|feature| !unopened || poi_unopened(terrain, feature))
-                .collect()
+            nearest_bands(
+                features
+                    .pois_of(kind)
+                    .filter(|feature| !unopened || poi_unopened(terrain, feature))
+                    .collect(),
+            )
         }
         TargetSpec::Feature { kind, .. } => {
-            let found: Vec<&WorldFeature> = features.of_kind(kind).filter(in_bands).collect();
-            if found.is_empty() {
-                // Lean or unlucky worlds can lack a feature kind in the wanted bands (shallow
-                // motherlodes especially): fall back to the nearest bands that have one rather
-                // than leave the quest unbindable.
-                let band_gap = |feature: &&WorldFeature| {
-                    let index = feature.band.index();
-                    usize::from(first)
-                        .saturating_sub(index)
-                        .max(index.saturating_sub(usize::from(last)))
-                };
-                // A world without any of the kind (some lean worlds roll no motherlode at
-                // all) uses its closest stand-in.
-                let mut all: Vec<&WorldFeature> = features.of_kind(kind).collect();
-                if all.is_empty()
-                    && let Some(stand_in) = stand_in(kind)
-                {
-                    all = features.of_kind(stand_in).collect();
-                }
-                let nearest = all.iter().map(band_gap).min();
-                all.into_iter()
-                    .filter(|feature| Some(band_gap(feature)) == nearest)
-                    .collect()
-            } else {
-                found
+            // A world without any of the kind (some lean worlds roll no motherlode at all)
+            // uses its closest stand-in.
+            let mut all: Vec<&WorldFeature> = features.of_kind(kind).collect();
+            if all.is_empty()
+                && let Some(stand_in) = stand_in(kind)
+            {
+                all = features.of_kind(stand_in).collect();
             }
+            nearest_bands(all)
         }
     };
     found.sort_by_key(|feature| {
