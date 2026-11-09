@@ -95,10 +95,11 @@ impl TerrainRenderer {
     }
 
     /// Tile `position` changed: repaint it and its neighbours (whose edges and shadows depend on
-    /// it).
+    /// it, and whose hazard tell-tales reach [`tile_art::TELLTALE_RADIUS`] tiles).
     pub(super) fn mark_tile_dirty(&mut self, position: TilePosition) {
-        for dy in -1..=1 {
-            for dx in -1..=1 {
+        let reach = tile_art::TELLTALE_RADIUS.max(1);
+        for dy in -reach..=reach {
+            for dx in -reach..=reach {
                 let tile = TilePosition {
                     x: position.x + dx,
                     y: position.y + dy,

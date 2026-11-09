@@ -19,7 +19,7 @@
 
 use drillgame_simulation::{
     terrain::{DeepStratum, Terrain, TileKind, TilePosition},
-    worldgen::Band,
+    worldgen::{Band, HazardKind},
 };
 use raylib::prelude::Color;
 
@@ -499,8 +499,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         .tile(position)
         .map_or(TileKind::Air, |tile| tile.kind);
     let band = terrain.band_at(position);
-    let strata = strata_for(band);
-    let host = host_material(band);
+    let (strata, host) = (strata_for(band), host_material(band));
     let mut canvas = TileCanvas {
         pixels: [TRANSPARENT; TILE_ART_USIZE * TILE_ART_USIZE],
         origin_x: position.x * TILE_ART,
@@ -528,34 +527,8 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         }
     }
     let seed = hash(x, y, 101);
-    match kind {
-        TileKind::Dirt => paint_pebbles(&mut canvas, seed),
-        TileKind::Ore(mineral) => {
-            let (stamp, count) = ore_stamp(mineral);
-            paint_clusters(&mut canvas, stamp, count, seed);
-        }
-        TileKind::Artifact(artifact) => {
-            let stamp = artifact_stamp(artifact);
-            let jitter_x = (seed % 3) as i32 - 1;
-            let jitter_y = ((seed >> 4) % 3) as i32 - 1;
-            canvas.stamp(
-                stamp,
-                (TILE_ART - stamp.width()) / 2 + jitter_x,
-                (TILE_ART - stamp.height()) / 2 + jitter_y,
-            );
-        }
-        TileKind::Gas => paint_pocket(&mut canvas, seed, [PINE, MOSS, LEAF, LIME]),
-        TileKind::PressurePocket => {
-            paint_pocket(&mut canvas, seed, [DEEP_BLUE, OCEAN, SKY, ICE]);
-            paint_fractures(&mut canvas, seed);
-        }
-        TileKind::ExplosivePocket => {
-            paint_fractures(&mut canvas, seed);
-            paint_clusters(&mut canvas, &VOLATILE_CRYSTAL, 3, seed);
-        }
-        TileKind::MagmaVent => paint_fissure(&mut canvas, seed),
-        _ => {}
-    }
+    paint_stamps(&mut canvas, kind, seed);
+    paint_telltale(&mut canvas, terrain, position, kind, seed);
     let material = match kind {
         TileKind::Ore(_)
         | TileKind::Artifact(_)
@@ -597,6 +570,125 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         kind == TileKind::Foundation,
     );
     canvas
+}
+
+/// The features a tile kind adds over its host rock: pebbles, ore, artifacts and pockets.
+fn paint_stamps(canvas: &mut TileCanvas, kind: TileKind, seed: u32) {
+    match kind {
+        TileKind::Dirt => paint_pebbles(canvas, seed),
+        TileKind::Ore(mineral) => {
+            let (stamp, count) = ore_stamp(mineral);
+            paint_clusters(canvas, stamp, count, seed);
+        }
+        TileKind::Artifact(artifact) => {
+            let stamp = artifact_stamp(artifact);
+            let jitter_x = (seed % 3) as i32 - 1;
+            let jitter_y = ((seed >> 4) % 3) as i32 - 1;
+            canvas.stamp(
+                stamp,
+                (TILE_ART - stamp.width()) / 2 + jitter_x,
+                (TILE_ART - stamp.height()) / 2 + jitter_y,
+            );
+        }
+        TileKind::Gas => paint_pocket(canvas, seed, [PINE, MOSS, LEAF, LIME]),
+        TileKind::PressurePocket => {
+            paint_pocket(canvas, seed, [DEEP_BLUE, OCEAN, SKY, ICE]);
+            paint_fractures(canvas, seed);
+        }
+        TileKind::ExplosivePocket => {
+            paint_fractures(canvas, seed);
+            paint_clusters(canvas, &VOLATILE_CRYSTAL, 3, seed);
+        }
+        TileKind::MagmaVent => paint_fissure(canvas, seed),
+        _ => {}
+    }
+}
+
+/// How far (Chebyshev tiles) a hazard pocket stains the rock around it.
+pub const TELLTALE_RADIUS: i32 = 2;
+
+/// The closest hazard tile within [`TELLTALE_RADIUS`] of `position` and its distance.
+fn nearby_hazard(terrain: &Terrain, position: TilePosition) -> Option<(TileKind, i32)> {
+    let mut best: Option<(TileKind, i32)> = None;
+    for dy in -TELLTALE_RADIUS..=TELLTALE_RADIUS {
+        for dx in -TELLTALE_RADIUS..=TELLTALE_RADIUS {
+            let distance = dx.abs().max(dy.abs());
+            if distance == 0 || best.is_some_and(|(_, best)| best <= distance) {
+                continue;
+            }
+            let Some(tile) = terrain.tile(TilePosition {
+                x: position.x + dx,
+                y: position.y + dy,
+            }) else {
+                continue;
+            };
+            if HazardKind::of_tile(tile.kind).is_some() {
+                best = Some((tile.kind, distance));
+            }
+        }
+    }
+    best
+}
+
+/// Tell-tale signs on rock next to a hazard pocket, so a careful driller can read the danger
+/// before breaking in: sickly green seepage near gas, glowing hot cracks near lava and magma,
+/// damp blue stains near pressure pockets and yellow crystal grit near explosive pockets. The
+/// stain is denser right beside the pocket and fades one tile further out.
+fn paint_telltale(
+    canvas: &mut TileCanvas,
+    terrain: &Terrain,
+    position: TilePosition,
+    kind: TileKind,
+    seed: u32,
+) {
+    let rock = matches!(
+        kind,
+        TileKind::Dirt
+            | TileKind::Clay
+            | TileKind::Stone
+            | TileKind::HardRock
+            | TileKind::Ore(_)
+            | TileKind::Artifact(_)
+    );
+    if !rock {
+        return;
+    }
+    let Some((hazard, distance)) = nearby_hazard(terrain, position) else {
+        return;
+    };
+    let [dark, light] = match hazard {
+        TileKind::Gas => [MOSS, LIME],
+        TileKind::Lava | TileKind::MagmaVent => [RED, ORANGE],
+        TileKind::PressurePocket => [OCEAN, SKY],
+        _ => [RUST, AMBER],
+    }
+    .map(index_of);
+    let density = if distance <= 1 { 13 } else { 5 };
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
+            let roll = hash(gx, gy, 211) % 100;
+            if roll < density {
+                canvas.set(px, py, if roll.is_multiple_of(3) { light } else { dark });
+            }
+        }
+    }
+    if distance <= 1 {
+        // A hairline crack in the hazard's colour.
+        let h = hash(seed as i32, 7, 223);
+        let (mut x, mut y) = (2 + (h % 12) as i32, 1 + ((h >> 4) % 4) as i32);
+        let step = if h & 1 == 0 { 1 } else { -1 };
+        for length in 0..9 {
+            canvas.set(x, y, dark);
+            if length % 3 == 1 {
+                canvas.set(x + step, y, light);
+            }
+            y += 1;
+            if (h >> (length + 8)) & 1 == 1 {
+                x += step;
+            }
+        }
+    }
 }
 
 /// One or two small stones in the soil.
