@@ -233,6 +233,8 @@ pub fn draw_drill_debris(
         DrillDirection::Down => (x + TILE_SIZE * 0.5, y + ART, 0.0, -1.0),
         DrillDirection::Left => (x + TILE_SIZE - ART, y + TILE_SIZE * 0.6, 1.0, -0.4),
         DrillDirection::Right => (x + ART, y + TILE_SIZE * 0.6, -1.0, -0.4),
+        // Spoil rains down out of the ceiling.
+        DrillDirection::Up => (x + TILE_SIZE * 0.5, y + TILE_SIZE - ART, 0.0, 1.0),
     };
     let dust = material_color(tile.kind, terrain.band_at(drill.target));
     let hard = matches!(

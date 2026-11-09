@@ -9,7 +9,7 @@ use drillgame_simulation::{
     RecipeKind,
     economy::{
         DeepClaimStatus, REFUEL_UNIT_COST, REPAIR_UNIT_COST, TownBuilding, UpgradeKind,
-        upgrade_offers, upgrade_tier_name,
+        upgrade_locked_by, upgrade_maxed, upgrade_offers, upgrade_tier_name,
     },
     terrain::MineralKind,
     world::{BOMB_BUNDLES, MINING_ROCKETS_COST, MINING_ROCKETS_COUNT, MINING_ROCKETS_SHACK_LEVEL},
@@ -270,25 +270,43 @@ const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
         UpgradeKind::Radiator => &icons::HEAT,
         UpgradeKind::Scanner => &icons::SCANNER,
         UpgradeKind::BombPack => &icons::BOMB,
+        UpgradeKind::DrillMount => &rig::DRILL_UP,
     }
 }
 
 fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
     let credits = ui.player.credits;
+    let settings = ui.snapshot.terrain.settings();
+    let deepest = ui.snapshot.progression.deepest_tile_reached;
     upgrade_offers(ui.player)
         .iter()
         .map(|offer| {
-            Offer::new(
-                upgrade_icon(offer.kind),
-                offer.name,
-                format!(
-                    "Tier {} {}",
-                    offer.level + 1,
-                    upgrade_tier_name(offer.kind, offer.level)
-                ),
-            )
-            .price(offer.cost, credits)
-            .about(offer.description)
+            let icon = upgrade_icon(offer.kind);
+            if upgrade_maxed(offer) {
+                return Offer::new(icon, offer.name, format!("Tier {} fitted", offer.level))
+                    .tag("MAX", LIME)
+                    .unavailable_if(true)
+                    .about(offer.description);
+            }
+            let tier = format!(
+                "Tier {} {}",
+                offer.level + 1,
+                upgrade_tier_name(offer.kind, offer.level)
+            );
+            if let Some(band) = upgrade_locked_by(offer, settings, deepest) {
+                return Offer::new(icon, offer.name, tier)
+                    .tag("LOCKED", RED)
+                    .unavailable_if(true)
+                    .about(format!(
+                        "Late-game gear: on sale once anyone reaches the {} ({} cr). {}.",
+                        band.name(),
+                        offer.cost,
+                        offer.description
+                    ));
+            }
+            Offer::new(icon, offer.name, tier)
+                .price(offer.cost, credits)
+                .about(offer.description)
         })
         .collect()
 }

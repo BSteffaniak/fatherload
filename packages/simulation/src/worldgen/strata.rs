@@ -289,6 +289,22 @@ pub const fn boundary_depth_range(settings: &WorldSettings, index: usize) -> (i3
     )
 }
 
+/// The shallowest row `band` reaches anywhere in this world (where its top boundary rises
+/// highest).
+#[must_use]
+pub const fn band_shallowest_row(settings: &WorldSettings, band: Band) -> i32 {
+    match band.index() {
+        0 => SKY_ROWS + 1,
+        index => boundary_depth_range(settings, index - 1).0,
+    }
+}
+
+/// Whether a crew whose deepest tile row is `deepest_row` has reached `band` in this world.
+#[must_use]
+pub const fn band_reached(settings: &WorldSettings, deepest_row: i32, band: Band) -> bool {
+    deepest_row >= band_shallowest_row(settings, band)
+}
+
 /// Nominal (legacy) first row of `band`.
 #[must_use]
 pub const fn nominal_band_top(band: Band) -> i32 {

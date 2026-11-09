@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     command::PlayerCommand,
-    economy::{buy_upgrade, refuel_amount, repair_amount},
+    economy::{buy_upgrade, refuel_amount, repair_amount, upgrade_locked_by, upgrade_offers},
     hazard::{HazardCloud, PlacedBomb},
     ids::{PlayerId, SimulationTick},
     infrastructure::{InfrastructureKind, PlacedInfrastructure},
@@ -17,7 +17,7 @@ use crate::{
     terrain::{DeepStratum, MineResult, TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
-use super::{WorldState, record_service_transaction};
+use super::{WorldState, movement::authoritative_player_collides, record_service_transaction};
 
 /// Scanner cooldown after a scan.
 const SCANNER_COOLDOWN_MILLIS: u64 = 1_000;
@@ -93,11 +93,16 @@ impl WorldState {
     }
 
     /// Updates a player's drill target from held controls (no velocity change).
+    ///
+    /// The stock rig only drills while resting on solid ground: down into the tile below, or
+    /// sideways. The drill mount upgrade adds sideways drilling in flight (gimbal) and drilling
+    /// up into a ceiling the rig thrusts against (crown bore).
     pub(crate) fn apply_drill_intent(
         &mut self,
         player_id: PlayerId,
         horizontal: f32,
         drill_down: bool,
+        thrust: bool,
     ) -> PlayerScopedCommandOutcome {
         let parts = self
             .equipped_rig_parts
@@ -107,8 +112,13 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
-        if let Some((target, direction)) = authoritative_mine_target(player, horizontal, drill_down)
-        {
+        let contact = DrillContact::of(&self.terrain, player);
+        let intent = DrillIntent {
+            horizontal,
+            drill_down,
+            thrust: thrust && player.fuel > 0.0,
+        };
+        if let Some((target, direction)) = authoritative_mine_target(player, intent, contact) {
             let Some(tile) = self.terrain.tile(target) else {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;
@@ -268,6 +278,16 @@ impl WorldState {
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::BuyUpgrade { index } => {
+                if upgrade_offers(player).get(index).is_some_and(|offer| {
+                    upgrade_locked_by(
+                        offer,
+                        self.terrain.settings(),
+                        self.progression.deepest_tile_reached,
+                    )
+                    .is_some()
+                }) {
+                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
+                }
                 let credits_before = player.credits;
                 let cargo_before = player.cargo_used();
                 if buy_upgrade(player, index).is_err() {
@@ -292,42 +312,71 @@ impl WorldState {
     }
 }
 
+/// Held drilling controls for one tick.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DrillIntent {
+    /// Horizontal stick, `-1..=1`.
+    pub horizontal: f32,
+    pub drill_down: bool,
+    /// Thrust held with fuel to burn (the "up" control).
+    pub thrust: bool,
+}
+
+/// What the rig is touching this tick.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct DrillContact {
+    /// Resting on solid ground.
+    pub grounded: bool,
+    /// Pressed against a solid ceiling.
+    pub ceiling: bool,
+}
+
+impl DrillContact {
+    /// The contacts of `player`'s rig in `terrain`.
+    #[must_use]
+    pub fn of(terrain: &Terrain, player: &Player) -> Self {
+        Self {
+            grounded: authoritative_player_collides(terrain, player.x, player.y + CONTACT_PROBE),
+            ceiling: authoritative_player_collides(terrain, player.x, player.y - CONTACT_PROBE),
+        }
+    }
+}
+
+/// How far (px) below or above the rig's collision box a solid tile still counts as touching.
+const CONTACT_PROBE: f32 = 2.0;
+
+/// The tile `player` drills this tick, and in which direction, from the held `intent` and the
+/// rig's `contact`s.
+///
+/// Down needs ground contact and wins over sideways; sideways needs ground contact unless the
+/// rig has the gimbal mount; up needs the crown bore and a ceiling the rig is thrusting into.
 #[must_use]
 pub fn authoritative_mine_target(
     player: &Player,
-    horizontal: f32,
-    drill_down: bool,
+    intent: DrillIntent,
+    contact: DrillContact,
 ) -> Option<(TilePosition, DrillDirection)> {
-    if !drill_down && horizontal.abs() <= f32::EPSILON {
-        return None;
-    }
-
     let current_tile = player.tile_position(TILE_SIZE);
-    if drill_down {
-        Some((
-            TilePosition {
-                x: current_tile.x,
-                y: current_tile.y + 1,
-            },
-            DrillDirection::Down,
-        ))
-    } else if horizontal < 0.0 {
-        Some((
-            TilePosition {
-                x: current_tile.x - 1,
-                y: current_tile.y,
-            },
-            DrillDirection::Left,
-        ))
-    } else {
-        Some((
-            TilePosition {
-                x: current_tile.x + 1,
-                y: current_tile.y,
-            },
-            DrillDirection::Right,
-        ))
+    let at = |dx: i32, dy: i32| TilePosition {
+        x: current_tile.x + dx,
+        y: current_tile.y + dy,
+    };
+    if intent.drill_down {
+        return contact.grounded.then(|| (at(0, 1), DrillDirection::Down));
     }
+    if intent.horizontal.abs() > f32::EPSILON
+        && (contact.grounded || player.drills_sideways_in_flight())
+    {
+        return Some(if intent.horizontal < 0.0 {
+            (at(-1, 0), DrillDirection::Left)
+        } else {
+            (at(1, 0), DrillDirection::Right)
+        });
+    }
+    if intent.thrust && contact.ceiling && player.drills_upward() {
+        return Some((at(0, -1), DrillDirection::Up));
+    }
+    None
 }
 
 pub(super) fn authoritative_drill_seconds_per_chip(
@@ -367,10 +416,11 @@ pub(super) fn authoritative_drill_seconds_per_chip(
         drill_strength
     };
     let drill_bonus = 1.0 + f32::from(effective_drill_strength.saturating_sub(1)) * 0.4;
-    let direction_penalty = if direction == DrillDirection::Down {
-        1.0
-    } else {
-        1.45
+    let direction_penalty = match direction {
+        DrillDirection::Down => 1.0,
+        DrillDirection::Left | DrillDirection::Right => 1.45,
+        // Boring overhead fights gravity and falling spoil.
+        DrillDirection::Up => 1.7,
     };
     let mut seconds = base * direction_penalty / drill_bonus;
     if parts.contains(&RigPartKind::NeedleDrill) {

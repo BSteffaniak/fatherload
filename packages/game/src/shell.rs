@@ -1993,7 +1993,7 @@ const fn unavailable_message(request: SessionServiceRequest) -> &'static str {
             "No cargo the depot will buy."
         }
         SessionServiceRequest::BuyUpgrade { .. } => {
-            "Upgrade purchase unavailable: check credits and tier."
+            "Upgrade unavailable: check credits, tier and depth unlocks."
         }
         SessionServiceRequest::CompleteDepotWork => "No contract is ready to complete.",
         _ => "Not enough credits or materials, or the service is locked.",

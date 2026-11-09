@@ -870,6 +870,7 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             (&icons::HULL, "Hull", ui.player.hull_level),
             (&icons::HEAT, "Radiator", ui.player.radiator_level),
             (&icons::SCANNER, "Scanner", ui.player.scanner_level),
+            (&rig::DRILL_UP, "Drill Mount", ui.player.drill_mount_level),
         ]
         .into_iter()
         .map(|(icon, label, tier): (&'static SpriteDef, &str, u8)| {
@@ -1103,8 +1104,8 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
             "Movement",
             SKY_LIGHT,
             &[
-                (Prompt::Walk, "Move"),
-                (Prompt::Thrust, "Thrust"),
+                (Prompt::Walk, "Move / dig sideways"),
+                (Prompt::Thrust, "Thrust / crown bore"),
                 (Prompt::Drill, "Drill down"),
                 (Prompt::Use, "Use building"),
                 (Prompt::Pause, "Pause"),

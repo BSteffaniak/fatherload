@@ -158,6 +158,8 @@ pub struct PlayerPresentation {
     pub scanner_level: u8,
     pub radiator_level: u8,
     pub hull_level: u8,
+    /// Drill mount tier (gimbal / crown bore), drawn on the rig's nose and roof.
+    pub drill_mount_level: u8,
     pub active_drill: Option<DrillState>,
 }
 
@@ -175,6 +177,7 @@ impl PlayerPresentation {
             scanner_level: player.scanner_level,
             radiator_level: player.radiator_level,
             hull_level: player.hull_level,
+            drill_mount_level: player.drill_mount_level,
             active_drill: world.active_drill(player_id).copied(),
         }
     }

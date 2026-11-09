@@ -50,6 +50,7 @@ pub const ALL: &[&SpriteDef] = &[
     &rig::RIG,
     &rig::RIG_DAMAGED,
     &rig::DRILL_DOWN,
+    &rig::DRILL_UP,
     &rig::DRILL_SIDE,
     &rig::FLAME,
     &rig::FLAME_SMALL,

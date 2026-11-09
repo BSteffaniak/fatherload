@@ -7,7 +7,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::player::Player;
+use crate::{
+    player::Player,
+    terrain::DeepStratum,
+    worldgen::{Band, WorldSettings, strata::band_reached},
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub enum TownBuilding {
@@ -119,6 +123,20 @@ pub enum UpgradeKind {
     Radiator,
     Scanner,
     BombPack,
+    /// Late-game drill mount: tier 1 (gimbal) drills sideways in flight, tier 2 (crown bore)
+    /// also drills upward.
+    DrillMount,
+}
+
+impl UpgradeKind {
+    /// Highest level this upgrade line reaches.
+    #[must_use]
+    pub const fn max_level(self) -> u8 {
+        match self {
+            Self::DrillMount => MAX_DRILL_MOUNT_LEVEL,
+            _ => MAX_UPGRADE_LEVEL,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -131,11 +149,16 @@ pub struct UpgradeOffer {
 }
 
 pub const MAX_UPGRADE_LEVEL: u8 = 5;
+/// Highest drill mount tier (crown bore).
+pub const MAX_DRILL_MOUNT_LEVEL: u8 = 2;
 pub const REFUEL_UNIT_COST: u32 = 1;
 pub const REPAIR_UNIT_COST: u32 = 2;
 
+/// Number of shop upgrade lines (the length of [`upgrade_offers`]).
+pub const UPGRADE_OFFER_COUNT: usize = 9;
+
 #[must_use]
-pub fn upgrade_offers(player: &Player) -> [UpgradeOffer; 8] {
+pub fn upgrade_offers(player: &Player) -> [UpgradeOffer; UPGRADE_OFFER_COUNT] {
     [
         offer(UpgradeKind::Drill, player.drill_strength),
         offer(UpgradeKind::FuelTank, player.fuel_tank_level),
@@ -145,7 +168,47 @@ pub fn upgrade_offers(player: &Player) -> [UpgradeOffer; 8] {
         offer(UpgradeKind::Radiator, player.radiator_level),
         offer(UpgradeKind::Scanner, player.scanner_level),
         offer(UpgradeKind::BombPack, 0),
+        offer(UpgradeKind::DrillMount, player.drill_mount_level),
     ]
+}
+
+/// The band a crew must have reached before the shop sells the level of `kind` after
+/// `current_level`, if that level is gated.
+///
+/// The drill mount is late-game gear:
+/// the gimbal unlocks once someone reaches the first deep stratum, the crown bore once someone
+/// reaches the pressure cathedrals.
+#[must_use]
+pub const fn upgrade_unlock_band(kind: UpgradeKind, current_level: u8) -> Option<Band> {
+    match (kind, current_level) {
+        (UpgradeKind::DrillMount, 0) => Some(Band::Deep(DeepStratum::CrystalFaults)),
+        (UpgradeKind::DrillMount, _) => Some(Band::Deep(DeepStratum::PressureCathedrals)),
+        _ => None,
+    }
+}
+
+/// The band still to reach before the shop sells `offer`, or `None` when it is on sale: the
+/// world (`settings`) has been dug to `deepest_row` by someone, and maxed lines are never
+/// locked.
+#[must_use]
+pub const fn upgrade_locked_by(
+    offer: &UpgradeOffer,
+    settings: &WorldSettings,
+    deepest_row: i32,
+) -> Option<Band> {
+    if upgrade_maxed(offer) {
+        return None;
+    }
+    match upgrade_unlock_band(offer.kind, offer.level) {
+        Some(band) if !band_reached(settings, deepest_row, band) => Some(band),
+        _ => None,
+    }
+}
+
+/// Whether `offer` is already at its line's top level (bomb packs never max out).
+#[must_use]
+pub const fn upgrade_maxed(offer: &UpgradeOffer) -> bool {
+    !matches!(offer.kind, UpgradeKind::BombPack) && offer.level >= offer.kind.max_level()
 }
 
 pub fn refuel_amount(player: &mut Player, fraction: f32) -> u32 {
@@ -213,7 +276,7 @@ pub fn buy_upgrade(player: &mut Player, index: usize) -> Result<UpgradeOffer, Pu
         return Err(PurchaseError::InvalidSelection);
     };
 
-    if offer.kind != UpgradeKind::BombPack && offer.level >= MAX_UPGRADE_LEVEL {
+    if upgrade_maxed(&offer) {
         return Err(PurchaseError::MaxLevel);
     }
 
@@ -253,11 +316,48 @@ fn apply_upgrade(player: &mut Player, kind: UpgradeKind) {
         UpgradeKind::Radiator => player.radiator_level += 1,
         UpgradeKind::Scanner => player.scanner_level += 1,
         UpgradeKind::BombPack => player.bombs += 3,
+        UpgradeKind::DrillMount => {
+            player.drill_mount_level = (player.drill_mount_level + 1).min(MAX_DRILL_MOUNT_LEVEL);
+        }
+    }
+}
+
+/// Raises every upgrade line of `player` to its top level (test mode), refilling fuel and hull.
+pub fn max_out_upgrades(player: &mut Player) {
+    for kind in [
+        UpgradeKind::Drill,
+        UpgradeKind::FuelTank,
+        UpgradeKind::CargoBay,
+        UpgradeKind::Engine,
+        UpgradeKind::Hull,
+        UpgradeKind::Radiator,
+        UpgradeKind::Scanner,
+        UpgradeKind::DrillMount,
+    ] {
+        while current_level(player, kind) < kind.max_level() {
+            apply_upgrade(player, kind);
+        }
+    }
+    player.fuel = player.fuel_capacity;
+    player.hull = player.max_hull();
+}
+
+const fn current_level(player: &Player, kind: UpgradeKind) -> u8 {
+    match kind {
+        UpgradeKind::Drill => player.drill_strength,
+        UpgradeKind::FuelTank => player.fuel_tank_level,
+        UpgradeKind::CargoBay => player.cargo_bay_level,
+        UpgradeKind::Engine => player.engine_level,
+        UpgradeKind::Hull => player.hull_level,
+        UpgradeKind::Radiator => player.radiator_level,
+        UpgradeKind::Scanner => player.scanner_level,
+        UpgradeKind::DrillMount => player.drill_mount_level,
+        UpgradeKind::BombPack => 0,
     }
 }
 
 fn offer(kind: UpgradeKind, current_level: u8) -> UpgradeOffer {
-    let next_level = current_level.saturating_add(1).min(MAX_UPGRADE_LEVEL);
+    let next_level = current_level.saturating_add(1).min(kind.max_level());
     UpgradeOffer {
         kind,
         name: upgrade_name(kind),
@@ -277,6 +377,7 @@ const fn upgrade_name(kind: UpgradeKind) -> &'static str {
         UpgradeKind::Radiator => "Radiator",
         UpgradeKind::Scanner => "Mineral Scanner",
         UpgradeKind::BombPack => "Bomb Pack",
+        UpgradeKind::DrillMount => "Drill Mount",
     }
 }
 
@@ -290,12 +391,15 @@ const fn upgrade_description(kind: UpgradeKind) -> &'static str {
         UpgradeKind::Radiator => "Resist deep heat pressure",
         UpgradeKind::Scanner => "Reveal nearby ore and hazards",
         UpgradeKind::BombPack => "Adds 3 underground blasting charges",
+        UpgradeKind::DrillMount => {
+            "Gimbal: drill sideways in flight. Crown Bore: thrust into a ceiling to drill up"
+        }
     }
 }
 
 #[must_use]
 pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
-    let next_level = level.saturating_add(1).min(MAX_UPGRADE_LEVEL);
+    let next_level = level.saturating_add(1).min(kind.max_level());
     match (kind, next_level) {
         (UpgradeKind::Drill, 1) => "Steel Drill",
         (UpgradeKind::Drill, 2) => "Carbide Drill",
@@ -333,6 +437,8 @@ pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
         (UpgradeKind::Scanner, 4) => "Artifact Scanner",
         (UpgradeKind::Scanner, _) => "Deep Scanner",
         (UpgradeKind::BombPack, _) => "Pack of 3 Bombs",
+        (UpgradeKind::DrillMount, 1) => "Gimbal Drill Mount",
+        (UpgradeKind::DrillMount, _) => "Crown Bore Mount",
     }
 }
 
@@ -346,6 +452,8 @@ fn upgrade_cost(kind: UpgradeKind, next_level: u8) -> u32 {
         UpgradeKind::Radiator => 115,
         UpgradeKind::Scanner => 135,
         UpgradeKind::BombPack => 80,
+        // Late-game: 6,000 cr for the gimbal, 24,000 cr for the crown bore.
+        UpgradeKind::DrillMount => 6_000,
     };
     base * u32::from(next_level) * u32::from(next_level)
 }

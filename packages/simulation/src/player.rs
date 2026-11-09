@@ -35,6 +35,10 @@ pub struct Player {
     pub radiator_level: u8,
     #[serde(default)]
     pub scanner_level: u8,
+    /// Drill mount tier: 0 stock (drills only while resting on the ground), 1 gimbal mount
+    /// (sideways drilling in flight), 2 crown bore (also drills upward into ceilings).
+    #[serde(default)]
+    pub drill_mount_level: u8,
     #[serde(default)]
     pub bombs: u32,
     #[serde(default)]
@@ -91,6 +95,7 @@ impl Player {
             hull_level: 1,
             radiator_level: 1,
             scanner_level: 0,
+            drill_mount_level: 0,
             bombs: 0,
             loan_debt: 0,
             insured: false,
@@ -113,6 +118,18 @@ impl Player {
             x: (self.x / tile_size).floor() as i32,
             y: (self.y / tile_size).floor() as i32,
         }
+    }
+
+    /// Whether the drill mount lets the rig drill sideways while airborne.
+    #[must_use]
+    pub const fn drills_sideways_in_flight(&self) -> bool {
+        self.drill_mount_level >= 1
+    }
+
+    /// Whether the drill mount lets the rig drill upward into a ceiling.
+    #[must_use]
+    pub const fn drills_upward(&self) -> bool {
+        self.drill_mount_level >= 2
     }
 
     #[must_use]

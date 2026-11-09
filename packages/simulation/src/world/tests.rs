@@ -14,16 +14,27 @@ use crate::{
 
 const LOCAL_PLAYER_ID: PlayerId = PlayerId::new(1);
 
+/// Lets the freshly spawned rig drop onto the ground (it spawns in the air, and drilling needs
+/// ground contact).
+fn land(world: &mut WorldState) {
+    let idle = TickInputs::held(LOCAL_PLAYER_ID, ControlState::default());
+    for _ in 0..240 {
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(tick, &idle);
+    }
+}
+
 #[test]
 fn world_state_applies_player_scoped_drilling_intent() {
     let mut world = WorldState::new_game(LOCAL_PLAYER_ID);
+    land(&mut world);
 
-    let outcome = world.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, true);
+    let outcome = world.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, true, false);
 
     assert_eq!(outcome, crate::PlayerScopedCommandOutcome::Applied);
     assert!(world.active_drill(LOCAL_PLAYER_ID).is_some());
 
-    let _outcome = world.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, false);
+    let _outcome = world.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, false, false);
 
     assert!(world.active_drill(LOCAL_PLAYER_ID).is_none());
 }
@@ -31,6 +42,7 @@ fn world_state_applies_player_scoped_drilling_intent() {
 #[test]
 fn drill_started_fires_once_per_new_drill_target() {
     let mut world = WorldState::new_game(LOCAL_PLAYER_ID);
+    land(&mut world);
     let drill = TickInputs::held(LOCAL_PLAYER_ID, ControlState::new(0.0, false, true));
     let started = |output: &crate::TickOutput| {
         output
@@ -1171,11 +1183,11 @@ fn canonical_drilling_applies_rig_hardness_and_pump_modifiers() {
         [crate::RigPartKind::ResonanceDrill],
     );
     assert_eq!(
-        baseline.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, true),
+        baseline.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, true, false),
         crate::PlayerScopedCommandOutcome::Applied
     );
     assert_eq!(
-        resonance.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, true),
+        resonance.apply_drill_intent(LOCAL_PLAYER_ID, 0.0, true, false),
         crate::PlayerScopedCommandOutcome::Applied
     );
     assert!(

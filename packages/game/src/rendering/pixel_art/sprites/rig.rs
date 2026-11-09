@@ -201,6 +201,43 @@ pub const DRILL_DOWN: SpriteDef = SpriteDef {
     frame_seconds: 0.05,
 };
 
+/// Drill head pointing up (the crown bore, drawn centred on the rig's roof): [`DRILL_DOWN`]
+/// upside down.
+pub const DRILL_UP: SpriteDef = SpriteDef {
+    name: "rig_drill_up",
+    legend: DRILL_LEGEND,
+    frames: &[
+        &[
+            "....oo....", //
+            "...owdo...", //
+            "..oLmmdo..", //
+            "..oLmwdo..", //
+            ".owmmmmdo.", //
+            "oSSSSSSSSo", //
+            "oooooooooo", //
+        ],
+        &[
+            "....oo....", //
+            "...oLwo...", //
+            "..owmmdo..", //
+            "..oLmmdo..", //
+            ".oLmwmmdo.", //
+            "oSSSSSSSSo", //
+            "oooooooooo", //
+        ],
+        &[
+            "....oo....", //
+            "...oLdo...", //
+            "..oLmwdo..", //
+            "..owmmdo..", //
+            ".oLmmmwdo.", //
+            "oSSSSSSSSo", //
+            "oooooooooo", //
+        ],
+    ],
+    frame_seconds: 0.05,
+};
+
 /// Drill head pointing right (flip for left), drawn at the rig's front.
 pub const DRILL_SIDE: SpriteDef = SpriteDef {
     name: "rig_drill_side",

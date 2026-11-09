@@ -9,6 +9,17 @@ pub enum DrillDirection {
     Down,
     Left,
     Right,
+    /// Boring into the ceiling (needs the [`crate::economy::UpgradeKind::DrillMount`] crown
+    /// bore tier).
+    Up,
+}
+
+impl DrillDirection {
+    /// Whether the drill points left or right.
+    #[must_use]
+    pub const fn is_sideways(self) -> bool {
+        matches!(self, Self::Left | Self::Right)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]

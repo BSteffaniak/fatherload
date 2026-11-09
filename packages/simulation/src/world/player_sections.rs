@@ -3,7 +3,7 @@
 //! | Part | Section | Seen by |
 //! |---|---|---|
 //! | [`PlayerRig`]: pose, velocity, fuel, hull | per tick | everyone it is relevant to |
-//! | [`RigBuild`]: the upgrade levels drawn on a rig (hull, radiator, scanner, bulkheads) | on-change [`super::SectionKey::RigBuild`] | everyone |
+//! | [`RigBuild`]: the upgrade levels drawn on a rig (hull, radiator, scanner, bulkheads, drill mount) | on-change [`super::SectionKey::RigBuild`] | everyone |
 //! | [`PlayerInventory`]: cargo, credits, other upgrades, kits, debt, insurance, POI journal | on-change [`super::SectionKey::Loadout`] | the owner only |
 //!
 //! [`split_player`] destructures the whole [`Player`] without `..`, so a new player field fails
@@ -38,6 +38,10 @@ pub struct RigBuild {
     pub radiator_level: u8,
     pub scanner_level: u8,
     pub crafted_bulkheads: u8,
+    /// Drill mount tier (the gimbal / crown bore is drawn on the rig, and the drill pose
+    /// depends on it).
+    #[serde(default)]
+    pub drill_mount_level: u8,
 }
 
 /// The private on-change parts of a [`Player`]: inventory, credits, upgrades and kits.
@@ -95,6 +99,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         hull_level,
         radiator_level,
         scanner_level,
+        drill_mount_level,
         bombs,
         loan_debt,
         insured,
@@ -123,6 +128,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             radiator_level,
             scanner_level,
             crafted_bulkheads,
+            drill_mount_level,
         },
         PlayerInventory {
             fuel_capacity,
@@ -167,6 +173,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         radiator_level,
         scanner_level,
         crafted_bulkheads,
+        drill_mount_level,
     } = build;
     let PlayerInventory {
         fuel_capacity,
@@ -212,6 +219,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         hull_level,
         radiator_level,
         scanner_level,
+        drill_mount_level,
         bombs,
         loan_debt,
         insured,

@@ -11,7 +11,7 @@ use drillgame_simulation::{
 };
 
 /// Longest a bot digs before flying out.
-const DIG_SECONDS: f32 = 6.0;
+const DIG_SECONDS: f32 = 7.5;
 /// Longest a bot flies up before giving up and travelling anyway.
 const FLY_SECONDS: f32 = 8.0;
 /// Longest a bot travels before giving up and digging where it is.

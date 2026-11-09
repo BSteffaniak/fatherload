@@ -1,6 +1,7 @@
 //! Drawing rigs: the body with rolling tracks, the drill (nose drill while driving, the spinning
-//! bit when drilling down or sideways), the thruster flame, exhaust and damage smoke, and a name
-//! tag with fuel/hull pips over other players' rigs.
+//! bit when drilling down, sideways or up), the drill mount upgrades (gimbal ring on the nose,
+//! crown bore collar on the roof), the thruster flame, exhaust and damage smoke, and a name tag
+//! with fuel/hull pips over other players' rigs.
 
 use std::collections::BTreeMap;
 
@@ -139,10 +140,10 @@ pub fn draw_rig(
     let airborne = is_airborne(terrain, player);
     draw_flame(draw, player, place, airborne);
     draw_drill(draw, player, place, drilling);
-    let body_y = if drilling == Some(DrillDirection::Down) {
-        place.top + place.shake
-    } else {
-        place.top
+    let body_y = match drilling {
+        Some(DrillDirection::Down) => place.top + place.shake,
+        Some(DrillDirection::Up) => place.top - place.shake,
+        _ => place.top,
     };
     draw_world_sprite(
         draw,
@@ -170,6 +171,7 @@ pub fn draw_rig(
             pen.px(draw, column(0) + if left { 1 } else { -1 }, 5 + fin, ORANGE);
         }
     }
+    draw_drill_mount(draw, player, pen, left, drilling, airborne, ticks);
     draw_exhaust(draw, player, pen, left, ticks);
     // Dust kicked up behind the tracks.
     if rolling && !airborne {
@@ -220,6 +222,19 @@ fn draw_drill(
     place: Placement,
     drilling: Option<DrillDirection>,
 ) {
+    if drilling == Some(DrillDirection::Up) {
+        // The crown bore swings the bit onto the roof, pointing up.
+        let drill = &rig::DRILL_UP;
+        draw_world_sprite(
+            draw,
+            drill,
+            place.spin % drill.frames.len(),
+            player.x - drill.width() as f32 * ART * 0.5,
+            place.top - drill.height() as f32 * ART + 2.0 * ART - place.shake,
+            false,
+        );
+        return;
+    }
     if drilling == Some(DrillDirection::Down) {
         let drill = &rig::DRILL_DOWN;
         draw_world_sprite(
@@ -252,6 +267,37 @@ fn draw_drill(
         place.top + place.height - drill.height() as f32 * ART - ART,
         place.facing_left,
     );
+}
+
+/// The drill mount upgrades: a brass gimbal ring where the nose drill meets the hull (it glows
+/// while the rig drills sideways in flight), and for the crown bore a collar on the roof.
+fn draw_drill_mount(
+    draw: &mut impl RaylibDraw,
+    player: &PlayerPresentation,
+    pen: Pen,
+    left: bool,
+    drilling: Option<DrillDirection>,
+    airborne: bool,
+    ticks: u64,
+) {
+    if player.drill_mount_level == 0 {
+        return;
+    }
+    let column = |x: i32| if left { 15 - x } else { x };
+    let gimbal_live = airborne
+        && drilling.is_some_and(DrillDirection::is_sideways)
+        && (ticks / 4).is_multiple_of(2);
+    let ring = if gimbal_live { CREAM } else { GOLD };
+    pen.px(draw, column(15), 6, ring);
+    pen.px(draw, column(15), 9, ring);
+    pen.px(draw, column(14), 7, AMBER);
+    pen.px(draw, column(14), 8, AMBER);
+    if player.drill_mount_level >= 2 && drilling != Some(DrillDirection::Up) {
+        // Crown bore collar on the roof, the bit stowed inside.
+        pen.rect(draw, 6, 1, 4, 1, STEEL_DARK);
+        pen.px(draw, 7, 0, STEEL_LIGHT);
+        pen.px(draw, 8, 0, STEEL);
+    }
 }
 
 /// Exhaust puffs from the stack while running, thick smoke and sparks when damaged.
@@ -366,6 +412,7 @@ mod tests {
             scanner_level: 0,
             radiator_level: 0,
             hull_level: 0,
+            drill_mount_level: 0,
             active_drill: None,
         }
     }

@@ -24,6 +24,8 @@ mod commands;
 mod determinism_tests;
 mod discovery;
 #[cfg(test)]
+mod drill_tests;
+#[cfg(test)]
 mod flight_tests;
 mod hazards;
 mod import;
@@ -63,7 +65,7 @@ pub use services::{
 };
 pub use timing::TickTiming;
 
-pub use commands::authoritative_mine_target;
+pub use commands::{DrillContact, DrillIntent, authoritative_mine_target};
 pub use import::{
     NEW_WORLD_HEIGHT_TILES, NEW_WORLD_SEED, NEW_WORLD_SPAWN, NEW_WORLD_WIDTH_TILES, WorldImport,
 };
