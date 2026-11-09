@@ -21,10 +21,38 @@ Drilling (`world/commands.rs`): the rig drills down or sideways only while resti
 ground (`DrillContact`). The drill mount upgrade (`Player::drill_mount_level`, in the public
 `RigBuild`) adds sideways drilling in flight (tier 1, gimbal) and drilling up into a ceiling the
 rig thrusts against (tier 2, crown bore, `DrillDirection::Up`). The shop gates both tiers on the
-world's deepest tile reaching a band (`economy::upgrade_locked_by`).
+world's deepest tile reaching a band (`economy::upgrade_locked_by`). Drill pace: a drill tier
+sets the chip rate (`player::drill_speed`, floored at `MIN_DRILL_SECONDS_PER_CHIP`, about three
+ticks at 60 Hz) and, from tier 6, the durability each chip takes off (`player::drill_bite`, up to
+5), so a maxed drill clears hard rock in about 0.15 s at every tick rate. Lava and magma vents
+are drillable (they turn to air and burn the rig, see hazard counters); building foundations
+and vault fixtures are not, except in test mode. `terrain::is_indestructible` names tiles no
+drill can ever dig (the place for a bedrock floor); every drill path checks it.
+
+Upgrades (`economy.rs`): fourteen shop lines, offer index = position in `UpgradeKind::ALL` (the
+drill mount stays at `DRILL_MOUNT_OFFER_INDEX` 8). The core lines (drill, fuel tank, cargo bay,
+engine, hull, radiator) run to tier 15, the scanner to 10, each hazard counter to 6-8. Prices
+grow geometrically per tier from a cheap first purchase (`upgrade_cost`); stat curves live in
+`player.rs` (`cargo_capacity_for_level` ~300 at the top, `fuel_capacity_for_level` ~3,000,
+`hull_capacity_for_level` ~2,500, `engine_power` ~4x with handling/climb speed capped).
+Capacities are stored, so a save from the old five-tier curves keeps its levels and catches up
+to the new curve on its next purchase; levels load whatever their value.
+
+Hazard counters (`protection.rs`, `Player::hazard_gear`, private loadout): Heat Shielding,
+Lava Plating, Gas Scrubber, Pressure Bracing (pressure pockets, explosive pockets, magma vents)
+and Boulder Deflector (boulders, cave-ins). Each stops `1 - (1 - tier/max)^2` of its hazard, all
+of it at the top tier. Heat is per band, not per row: each band has a heat level
+(`band_heat_level`, 0 in the topsoil and clay up to 10 in the mantle storm zone) and the rig's
+cooling (`heat_cooling` = radiator tiers + shielding tiers) covers that many; each uncovered
+level burns `HEAT_DAMAGE_PER_EXCESS_LEVEL` hull per second. Deep-run instability builds from the
+basalt deeps down and the pressure fuel drain/scanner lockout starts at the fossil oceans (both
+by band). Boulders loosened by mining are one per 80 stone tiles with a 1.5 s warning.
 
 Test mode (`test_mode.rs`, `world/test_mode.rs`): `WorldState::enable_test_mode` (before play)
-maxes every rig and the player template, fills the parts locker and grants credits;
+maxes every rig (hazard counters included) and the player template, fills the parts locker and
+grants credits. Test-mode rigs drill any tile but an indestructible one in a single chip,
+ignoring hardness; with the invulnerable toggle on (`WorldState::damage_immune`) no source
+damages a hull (and no damage events fire);
 `PlayerCommand::TestMode` toggles invulnerable hulls / infinite fuel (refilled every tick) or
 warps the acting rig into a carved, hazard-free pocket at the top of a band. Depth records and
 deep-reward milestones are skipped. The toggles replicate as the shared `SectionKey::TestMode`

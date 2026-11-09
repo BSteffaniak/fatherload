@@ -40,6 +40,8 @@ Saves and settings go to `%LOCALAPPDATA%\drillgame`.
 
 Drill below the surface, gather minerals and artifacts, manage fuel/hull/cargo/debt, complete HQ contracts, buy upgrades, use scanners and bombs, and push deeper toward the Star Core. Deeper layers add harder rock, richer ore, artifacts, gas, lava, magma vents, pressure pockets, explosive pockets, falling boulders, cave-ins, and stronger heat pressure.
 
+The upgrade shop sells long upgrade lines (up to 15 tiers: endgame bays of ~300 slots, tanks of ~3,000 fuel, hulls of ~2,500, drills that plow through the hardest rock) and a hazard counter for every danger: Heat Shielding (each layer runs hotter; radiator and shielding together decide how deep you stay cool), Lava Plating (lava is drillable but burns; the top tier is lava-proof), Gas Scrubber, Pressure Bracing (pressure pockets, explosive pockets, magma vents) and Boulder Deflector.
+
 ### Worlds
 
 Every new game is a different world. "New Game", "Local Split-Screen" and "Host Online Game"
@@ -50,7 +52,9 @@ the same world on every machine; the pause menu shows the seed and copies it to 
 the host's settings define the session.
 
 **Test mode** is for exploring the layers quickly (a god mode): every rig starts with every
-upgrade maxed (drill mount included), every rig part in the locker and 1,000,000 credits. The
+upgrade and hazard counter maxed (drill mount included), every rig part in the locker and
+1,000,000 credits, and drills through anything (lava, foundations, vault walls) near-instantly.
+The
 pause menu adds **Warp to Layer** (drops your rig into a safe carved pocket at the top of any
 layer), **Invulnerable Hull** and **Infinite Fuel** (for the whole crew). Depth records and
 deep-reward milestones do not count. Test-mode worlds are marked on the HUD, the pause menu,

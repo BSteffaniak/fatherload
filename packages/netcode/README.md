@@ -23,7 +23,7 @@ Bytes move through `drillgame_quic_transport` in the app and through `LinkSim` i
 - `client`: `ClientSession`: authority + predicted worlds, pending inputs, reconciliation and
   smoothing, clock sync (`clock`), remote interpolation (`interpolation`), event de-duplication.
 - `protocol`: `ClientMessage` / `ServerMessage` and the versioned postcard codec
-  (`PROTOCOL_VERSION` 4).
+  (`PROTOCOL_VERSION` 6).
 - `params`: `SessionParams` (tick rate) and live `NetTuning`.
 - `link`, `harness` (feature `harness`), `toy`: deterministic lossy link, the end-to-end
   harness with scripted bots, and a small toy simulation for unit tests.

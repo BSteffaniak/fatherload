@@ -63,7 +63,11 @@ Modules:
   `screen` (HUD, menus, map), `interior` (walk-in pixel-art rooms), `layout` (menu/modal
   layout), `layout::widgets` (widget tree), `ui_kit` (pixel UI canvas and widgets),
   `pixel_art` (palette, char-grid sprites + atlas, pixel font) and `gallery` (art reference
-  sheet). Art conventions: `src/rendering/ART_GUIDE.md`.
+  sheet). Art conventions: `src/rendering/ART_GUIDE.md`. The upgrade shop (`counters`) lists
+  all fourteen lines in one scrolling list (core upgrades, then the hazard counters with their
+  own icons), each row showing `Tier n/max` and the footer the next tier's effect
+  (`economy::upgrade_effect`); the inventory lists every line's tier; HUD bars whose maximum
+  passes 999 show just the reading (`ui_kit::compact_amount`) so large tanks and hulls fit.
 - `scene_capture` — `drillgame --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`
   renders scripted scenes to PNGs (see the art guide). Scenes run in the default world (fixed
   seed `D111-6A4E`); scenes that need a particular place (`hazard_telltales`,
