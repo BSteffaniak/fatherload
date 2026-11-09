@@ -439,22 +439,6 @@ impl Svf {
     }
 }
 
-/// Removes DC offset (a 20 Hz one-pole high-pass).
-#[derive(Clone, Debug, Default)]
-pub struct DcBlocker {
-    x1: f32,
-    y1: f32,
-}
-
-impl DcBlocker {
-    pub fn process(&mut self, input: f32) -> f32 {
-        let y = input - self.x1 + 0.997_15 * self.y1;
-        self.x1 = input;
-        self.y1 = y;
-        y
-    }
-}
-
 /// Smooth saturation normalized so `drive` changes the colour, not the level of a full-scale
 /// input.
 #[must_use]

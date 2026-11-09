@@ -112,7 +112,7 @@ mod tests {
 
     use super::{
         analysis::{Measurements, loudness, seam_ratio},
-        dsp::{db_to_gain, gain_to_db},
+        dsp::{FilterMode, Osc, Svf, Wave, db_to_gain, gain_to_db},
         patch::{Category, PEAK_CEILING, Patch, render_patch, variation_seed},
     };
 
@@ -161,6 +161,14 @@ mod tests {
                     measured.seconds
                 );
             }
+            // Little inaudible infrasound (brown-noise drift, sub glides): it would only eat
+            // headroom and push the limiter.
+            let sub = sub_bass_fraction(&samples);
+            assert!(
+                sub < 0.12,
+                "{name} carries {:.0}% of its power below 30 Hz",
+                sub * 100.0
+            );
             // A sensible brightness: nothing is pure sub-bass or pure hiss except by design.
             let (low, high) = match patch {
                 Patch::GasHissLoop => (3_000.0, 12_000.0),
@@ -187,6 +195,31 @@ mod tests {
                 measured.centroid_hz
             );
         }
+    }
+
+    /// Share of `samples`' power below ~30 Hz (a 4th-order low-pass split).
+    fn sub_bass_fraction(samples: &[f32]) -> f32 {
+        let mut first = Svf::new(FilterMode::LowPass, 30.0, std::f32::consts::FRAC_1_SQRT_2);
+        let mut second = Svf::new(FilterMode::LowPass, 30.0, std::f32::consts::FRAC_1_SQRT_2);
+        let (mut low, mut total) = (0.0_f64, 0.0_f64);
+        for &sample in samples {
+            let sub = second.process(first.process(sample));
+            low += f64::from(sub * sub);
+            total += f64::from(sample * sample);
+        }
+        #[allow(clippy::cast_possible_truncation, reason = "a ratio in 0..1")]
+        let fraction = (low / total.max(1e-12)) as f32;
+        fraction
+    }
+
+    #[test]
+    fn sub_bass_fraction_tells_rumble_from_mids() {
+        let tone = |frequency: f32| -> Vec<f32> {
+            let mut osc = Osc::new(Wave::Sine);
+            (0..44_100).map(|_| osc.next(frequency)).collect()
+        };
+        assert!(sub_bass_fraction(&tone(15.0)) > 0.8);
+        assert!(sub_bass_fraction(&tone(200.0)) < 0.01);
     }
 
     #[test]

@@ -69,8 +69,9 @@ impl Category {
 
 /// Highest sample peak a finished patch may reach (-1 dBFS).
 pub const PEAK_CEILING: f32 = 0.891;
-/// Length of every loop patch (seconds).
-pub const LOOP_SECONDS: f32 = 2.0;
+/// Length of every loop patch (seconds). Long enough that repeating noise textures do not
+/// become recognisable during minutes of drilling or flying (a 2 s frozen-noise loop does).
+pub const LOOP_SECONDS: f32 = 4.0;
 /// Crossfade folded over a loop's seam (seconds).
 const LOOP_CROSSFADE_SECONDS: f32 = 0.3;
 
@@ -353,21 +354,39 @@ pub fn render_patch(patch: Patch, seed: u64) -> Vec<f32> {
         }
     }
     if patch.looped() {
+        // Before the fold, so the seam crossfades filtered audio with filtered audio.
+        sub_cut(&mut samples, 2);
         samples = fold_loop(&samples);
         let mean = samples.iter().sum::<f32>() / samples.len().max(1) as f32;
         for sample in &mut samples {
             *sample -= mean;
         }
     } else {
-        let mut blocker = super::dsp::DcBlocker::default();
-        for sample in &mut samples {
-            *sample = blocker.process(*sample);
-        }
+        sub_cut(&mut samples, 1);
         trim_tail(&mut samples);
         fade_edges(&mut samples);
     }
     normalize(&mut samples, patch.info().category.target_db());
     samples
+}
+
+/// Below this (Hz) a patch's content is removed: brown-noise rumble and sub glides otherwise
+/// pile up infrasonic energy nobody hears but every speaker and the limiter have to carry.
+const SUB_CUT_HZ: f32 = 30.0;
+
+/// High-passes `samples` at [`SUB_CUT_HZ`] with `stages` cascaded 12 dB/octave Butterworth
+/// sections (this also removes any DC offset).
+fn sub_cut(samples: &mut [f32], stages: usize) {
+    for _ in 0..stages {
+        let mut filter = Svf::new(
+            FilterMode::HighPass,
+            SUB_CUT_HZ,
+            std::f32::consts::FRAC_1_SQRT_2,
+        );
+        for sample in samples.iter_mut() {
+            *sample = filter.process(*sample);
+        }
+    }
 }
 
 /// Folds the last [`LOOP_CROSSFADE_SECONDS`] over the start so the buffer loops seamlessly:
@@ -496,7 +515,8 @@ fn scatter(rng: &mut Rng, count: usize, start: f32, end: f32, skew: f32) -> Vec<
     times
 }
 
-/// Grit: short band-passed noise grains (debris, crumbling dirt, rock chips).
+/// Grit: short band-passed noise grains (debris, crumbling dirt, rock chips), bunched early in
+/// `span` and thinning out like settling debris.
 fn grains(
     rng: &mut Rng,
     out: &mut Vec<f32>,
@@ -505,7 +525,22 @@ fn grains(
     band: (f32, f32),
     level: f32,
 ) {
-    for time in scatter(rng, count, span.0, span.1, 1.8) {
+    scatter_grains(rng, out, count, span, band, level, true);
+}
+
+/// Grains over `span`: settling as in [`grains`], or (for loops, where anything bunched or
+/// fading pulses at the loop rate) spread evenly at a steady level.
+fn scatter_grains(
+    rng: &mut Rng,
+    out: &mut Vec<f32>,
+    count: usize,
+    span: (f32, f32),
+    band: (f32, f32),
+    level: f32,
+    settling: bool,
+) {
+    let skew = if settling { 1.8 } else { 1.0 };
+    for time in scatter(rng, count, span.0, span.1, skew) {
         let cutoff = rng.range(band.0, band.1);
         let length = rng.range(0.008, 0.035);
         let grain = burst(
@@ -516,13 +551,12 @@ fn grains(
             1.4,
             length,
         );
-        let fade = 1.0 - (time - span.0) / (span.1 - span.0).max(1e-3);
-        mix_into(
-            out,
-            &grain,
-            time,
-            level * rng.range(0.4, 1.0) * fade.max(0.15),
-        );
+        let fade = if settling {
+            (1.0 - (time - span.0) / (span.1 - span.0).max(1e-3)).max(0.15)
+        } else {
+            1.0
+        };
+        mix_into(out, &grain, time, level * rng.range(0.4, 1.0) * fade);
     }
 }
 
@@ -1215,11 +1249,24 @@ fn rescue(rng: &mut Rng) -> Vec<f32> {
 
 // ---------------------------------------------------------------------------------------------
 // Loops (rendered LOOP_SECONDS + crossfade, then folded seamless by `fold_loop`). Periodic parts
-// use frequencies that complete whole cycles in LOOP_SECONDS (multiples of 0.5 Hz).
+// use frequencies that complete whole cycles in LOOP_SECONDS (multiples of 0.5 Hz). Scattered
+// events (pops, knocks, grains) are spread evenly over the whole render at a steady density, so
+// nothing marks where the loop restarts.
 // ---------------------------------------------------------------------------------------------
 
 fn loop_length() -> f32 {
     LOOP_SECONDS + LOOP_CROSSFADE_SECONDS
+}
+
+/// How many scattered events a loop render holds at `per_second` events a second.
+fn loop_events(per_second: f32) -> usize {
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a small positive event count"
+    )]
+    let count = (per_second * loop_length()).round() as usize;
+    count
 }
 
 /// Slow random flutter: smoothed noise around 1.0 with `depth`.
@@ -1277,6 +1324,9 @@ fn drill_hard_loop(rng: &mut Rng) -> Vec<f32> {
     let mut grind_post = Svf::new(FilterMode::LowPass, 4_500.0, 0.7);
     let mut rough = flutter(rng, 40.0, 0.6);
     let mut squeal = flutter(rng, 3.0, 0.02);
+    // Phase-accumulating: `sine(t, f(t))` would turn the wobble into a sweep growing with `t`.
+    let mut squeal_a = Osc::new(Wave::Sine);
+    let mut squeal_b = Osc::new(Wave::Sine);
     render(loop_length(), |t| {
         let chatter = 0.55 + 0.45 * sine(t, 24.0).abs();
         let motor = motor_filter.process(motor_a.next(120.0) + motor_b.next(240.0) * 0.5);
@@ -1285,7 +1335,7 @@ fn drill_hard_loop(rng: &mut Rng) -> Vec<f32> {
             5.0,
         ));
         let pitch = squeal();
-        let metal = (sine(t, 3_100.0 * pitch) + sine(t, 4_700.0 * pitch) * 0.6) * 0.04;
+        let metal = (squeal_a.next(3_100.0 * pitch) + squeal_b.next(4_700.0 * pitch) * 0.6) * 0.04;
         motor * 0.3 + grinding * 0.5 + metal
     })
 }
@@ -1312,7 +1362,7 @@ fn lava_sizzle_loop(rng: &mut Rng) -> Vec<f32> {
         crackling + rumble_filter.process(rumble.next()) * 0.8
     });
     // Pops and bubbles.
-    for time in scatter(rng, 26, 0.0, loop_length() - 0.1, 1.0) {
+    for time in scatter(rng, loop_events(11.5), 0.0, loop_length() - 0.1, 1.0) {
         let pop = burst(
             rng.next_u64(),
             NoiseColor::White,
@@ -1323,7 +1373,7 @@ fn lava_sizzle_loop(rng: &mut Rng) -> Vec<f32> {
         );
         mix_into(&mut out, &pop, time, rng.range(0.3, 0.8));
     }
-    for time in scatter(rng, 10, 0.0, loop_length() - 0.1, 1.0) {
+    for time in scatter(rng, loop_events(4.5), 0.0, loop_length() - 0.1, 1.0) {
         let mut osc = Osc::new(Wave::Sine);
         let base = rng.range(180.0, 260.0);
         let bubble = render(0.05, |t| {
@@ -1345,7 +1395,7 @@ fn boulder_rumble_loop(rng: &mut Rng) -> Vec<f32> {
         low.process(noise.next()) * roll * 0.8
             + grind_filter.process(grind.next()) * grind_level() * 2.0
     });
-    for time in scatter(rng, 7, 0.0, loop_length() - 0.15, 1.0) {
+    for time in scatter(rng, loop_events(3.0), 0.0, loop_length() - 0.15, 1.0) {
         let knock = thump(rng.range(70.0, 100.0), 55.0, 0.1, 1.5);
         mix_into(&mut out, &knock, time, rng.range(0.2, 0.4));
         let crack = burst(
@@ -1358,13 +1408,14 @@ fn boulder_rumble_loop(rng: &mut Rng) -> Vec<f32> {
         );
         mix_into(&mut out, &crack, time, rng.range(0.3, 0.6));
     }
-    grains(
+    scatter_grains(
         rng,
         &mut out,
-        30,
+        loop_events(13.0),
         (0.0, loop_length() - 0.1),
         (600.0, 2_000.0),
         0.2,
+        false,
     );
     out
 }

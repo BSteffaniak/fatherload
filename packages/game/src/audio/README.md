@@ -1,7 +1,7 @@
 # Procedural audio
 
 The game ships no audio files. Every sound is synthesized in code at startup (on a background
-thread, ~1 s in release builds, ~18 MB of samples), then played by a software mixer on raylib's
+thread, ~1 s in release builds, ~20 MB of samples), then played by a software mixer on raylib's
 audio thread.
 
 ```
@@ -15,7 +15,7 @@ RenderSnapshot (rigs, drill, hazards) ----+       (audio.rs AudioBus)      (audi
 | Module      | Role |
 |-------------|------|
 | `dsp`       | 44.1 kHz building blocks: seeded RNG, polyBLEP saw/square (DC-free pulse) and integrated triangle, sine, white/pink/brown noise, ADSR, percussive and glide envelopes, Simper state-variable filter (LP/HP/BP, safe under per-sample modulation), two-operator FM, saturation, wavefolding, decimation, damped feedback delay, Freeverb-style stereo reverb, equal-power pan, cubic Hermite resampling. |
-| `patch`     | The 41 designed patches (below), their playback metadata (category, variations, priority, instance cap, reverb send, pitch/gain jitter, ducking) and `render_patch`: design, DC removal, 1 ms / 12 ms edge fades (one-shots) or a 0.3 s equal-power seam fold (loops), loudness normalization. |
+| `patch`     | The 41 designed patches (below), their playback metadata (category, variations, priority, instance cap, reverb send, pitch/gain jitter, ducking) and `render_patch`: design, a 30 Hz sub-cut (12 dB/oct on one-shots, 24 dB/oct on loops; also removes DC), 1 ms / 12 ms edge fades (one-shots) or a 0.3 s equal-power seam fold (loops), loudness normalization. |
 | `bank`      | Every patch's variations pre-rendered in parallel. One-shots get 4 variations, loops 1. |
 | `mixer`     | 24 voices (+8 slots for stolen voices to fade out over 6 ms). Per voice: gain, pan, playback rate, low-pass (distance muffling), reverb send, all smoothed per 64-frame block and ramped across it. One-shots pick a variation (never the last one) and jitter pitch/gain. Loops are keyed (`LoopKey`): refreshed each frame, faded in/out (60 ms / 100 ms), and fade on their own if not refreshed for 0.35 s. Voice stealing: oldest instance past a patch's cap, else the lowest-priority oldest voice; a request outranked by everything playing is dropped. Big patches duck lower-priority voices (10 ms attack, 0.35 s hold, 0.25 s release). Reverb bus, smoothed volume, peak limiter at 0.95. No allocation in the render path. |
 | `cues`      | `SoundCue` -> patch, gameplay event -> cue (exhaustive, so a new event kind must decide how it sounds), and `SoundSource` (interface / player / world point). |
@@ -80,7 +80,7 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `loop_lava_sizzle` | loop | Crackling sizzle, random pops, rising bubble blips, low rumble. |
 | `loop_boulder_rumble` | loop | Brown-noise rumble rolling at 4 Hz, a band-passed grind, knocks with cracks, grit. |
 
-Periodic parts of loops use frequencies with whole cycles in the 2 s loop (multiples of 0.5 Hz).
+Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes of drilling). Periodic parts use frequencies with whole cycles in the loop (multiples of 0.5 Hz); scattered events (pops, knocks, grit) are spread evenly at a steady density, so nothing marks the restart.
 
 ## What the director drives
 
