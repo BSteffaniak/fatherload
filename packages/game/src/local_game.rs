@@ -14,6 +14,7 @@ use drillgame_simulation::{
 };
 
 use crate::{
+    audio::cues::PlacedCue,
     effects::{Effects, EventFeed},
     input::{PlayerInput, devices::InputDevice},
     input_mapping::seat_input,
@@ -121,8 +122,8 @@ pub struct FrameReport {
     pub world_replaced: bool,
     /// Terrain tiles changed this frame.
     pub changed_tiles: Vec<drillgame_simulation::terrain::TilePosition>,
-    /// Sounds to play.
-    pub sound_cues: Vec<SoundCue>,
+    /// Sounds to play, with where they come from.
+    pub sound_cues: Vec<PlacedCue>,
     /// Settings changed and should be persisted.
     pub settings_changed: bool,
     /// Text to put on the system clipboard.
@@ -271,9 +272,13 @@ impl LocalGame {
         let effect_cues =
             self.effects
                 .apply(&self.frame_events, self.runtime.world(), &local_players);
-        report
-            .sound_cues
-            .extend(self.shell.sound_cues.iter().copied());
+        report.sound_cues.extend(
+            self.shell
+                .sound_cues
+                .iter()
+                .copied()
+                .map(PlacedCue::interface),
+        );
         report.sound_cues.extend(effect_cues);
         report.settings_changed = self.shell.take_settings_dirty();
         self.autosave(delta_seconds);

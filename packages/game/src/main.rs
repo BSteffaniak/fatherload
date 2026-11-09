@@ -39,6 +39,20 @@ fn main() {
             std::process::exit(2);
         }
     }
+    match audio::render_tool::parse_args(&args) {
+        Ok(Some(options)) => {
+            if let Err(error) = audio::render_tool::run(&options, &mut std::io::stdout()) {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+            return;
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    }
     match scene_capture::parse_args(&args) {
         Ok(Some(options)) => {
             if let Err(error) = scene_capture::run(&options) {

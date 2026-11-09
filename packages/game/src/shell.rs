@@ -247,7 +247,8 @@ impl TitleOption {
     }
 }
 
-/// Sound effects the shell or gameplay events ask the audio bus to play.
+/// Sound effects the shell or gameplay events ask the audio bus to play (each maps to a designed
+/// patch in `audio::cues`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SoundCue {
     Drill,
@@ -257,7 +258,24 @@ pub enum SoundCue {
     Milestone,
     Rescue,
     Explosion,
+    /// Menu confirm / open.
     Ui,
+    /// Menu selection moved.
+    UiMove,
+    /// Menu closed / backed out.
+    UiBack,
+    /// A refused action.
+    UiError,
+    /// Ore or an artifact went into the cargo bay.
+    Pickup,
+    BombPlaced,
+    InfrastructurePlaced,
+    Scanner,
+    PoiDiscovered,
+    CrateOpened,
+    SalvageOpened,
+    VaultOpened,
+    VaultReset,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -1085,6 +1103,7 @@ impl SeatUi {
             quests::quest_unavailable_message(request)
                 .unwrap_or_else(|| unavailable_message(request))
                 .clone_into(&mut self.message);
+            cues.push(SoundCue::UiError);
             return;
         }
         if let Some((message, cue)) = self.quest_resolved(request, ctx) {
@@ -1520,6 +1539,9 @@ impl ShellState {
             self.settings_dirty = true;
             self.sound_cues.push(SoundCue::Ui);
         }
+        if !text_entry {
+            self.push_navigation_cues(inputs, menu_input);
+        }
         match self.run_mode {
             RunMode::Title => {
                 if self.modal == Some(ModalScreen::WorldSetup) {
@@ -1561,6 +1583,39 @@ impl ShellState {
             }
         }
         requests
+    }
+
+    /// Menu navigation sounds: a tick when an open menu's selection steps, a back sound when one
+    /// is backed out of. Global menus listen to the seat driving them; while playing, each seat
+    /// with its own dialog open is heard.
+    fn push_navigation_cues(&mut self, inputs: &[PlayerInput], menu_input: PlayerInput) {
+        let stepped = |input: &PlayerInput| {
+            input.menu_up || input.menu_down || input.tab_previous || input.tab_next
+        };
+        let backed = |input: &PlayerInput| input.back || input.cancel;
+        let global = !matches!(self.run_mode, RunMode::Playing) || self.modal.is_some();
+        let menus: Vec<PlayerInput> = if global {
+            vec![menu_input]
+        } else {
+            inputs
+                .iter()
+                .enumerate()
+                .filter(|(seat, _)| {
+                    self.seats
+                        .get(*seat)
+                        .is_some_and(|seat| seat.modal.is_some())
+                })
+                .map(|(_, input)| *input)
+                .collect()
+        };
+        for input in &menus {
+            if stepped(input) {
+                self.sound_cues.push(SoundCue::UiMove);
+            }
+            if backed(input) {
+                self.sound_cues.push(SoundCue::UiBack);
+            }
+        }
     }
 
     /// Hands the global menus to seat 0 when the seat driving them can no longer press anything:

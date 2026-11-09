@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use drillgame_simulation::{GameplayEventKind, PlayerId, WorldState};
 
 use crate::{
+    audio::cues::{PlacedCue, event_cue},
     runtime::{RuntimeEvent, RuntimeEventKind},
     shell::SoundCue,
 };
@@ -72,6 +73,8 @@ pub struct Effects {
     /// Bomb positions seen last frame, so a detonation can be placed where its bomb was.
     known_bombs: Vec<(f32, f32)>,
     damage_cooldowns: BTreeMap<PlayerId, f32>,
+    /// Items in each local player's bay last frame (a pickup is growth).
+    cargo_totals: BTreeMap<PlayerId, u32>,
     spawn_counter: u32,
 }
 
@@ -94,6 +97,7 @@ impl Effects {
         self.explosions.clear();
         self.known_bombs.clear();
         self.damage_cooldowns.clear();
+        self.cargo_totals.clear();
     }
 
     /// Ages particles and cooldowns.
@@ -116,14 +120,15 @@ impl Effects {
         self.damage_cooldowns.retain(|_, cooldown| *cooldown > 0.0);
     }
 
-    /// Turns freshly presented events into sound cues and particles. Only events of
-    /// `local_players` (or world-wide events) make sound.
+    /// Turns freshly presented events into placed sound cues and particles. Events of
+    /// `local_players` (or world-wide events) make sound; see `audio::cues::event_cue` for the
+    /// event -> cue table.
     pub fn apply(
         &mut self,
         events: &[RuntimeEvent],
         world: &WorldState,
         local_players: &[PlayerId],
-    ) -> Vec<SoundCue> {
+    ) -> Vec<PlacedCue> {
         let mut cues = Vec::new();
         for event in events {
             let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
@@ -133,66 +138,63 @@ impl Effects {
                 .player
                 .is_none_or(|player| local_players.contains(&player));
             match gameplay.kind {
-                GameplayEventKind::PlayerDamaged { player_id } if local => {
+                GameplayEventKind::CargoChanged { player_id }
+                | GameplayEventKind::PoiOpened { player_id, .. } => {
+                    if let Some(player) = world.player(player_id) {
+                        self.spawn_sparks(player.x, player.y + 18.0);
+                    }
+                }
+                GameplayEventKind::BombDetonated => {
+                    for (x, y) in self.spawn_explosions(world) {
+                        cues.push(PlacedCue::world(SoundCue::Explosion, x, y));
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+            let Some(cue) = event_cue(&gameplay.kind) else {
+                continue;
+            };
+            let player = gameplay_player(&gameplay.kind);
+            if !local || player.is_some_and(|player| !local_players.contains(&player)) {
+                continue;
+            }
+            match gameplay.kind {
+                GameplayEventKind::PlayerDamaged { player_id } => {
                     if let std::collections::btree_map::Entry::Vacant(entry) =
                         self.damage_cooldowns.entry(player_id)
                     {
                         entry.insert(DAMAGE_CUE_COOLDOWN_SECONDS);
-                        cues.push(SoundCue::Damage);
+                    } else {
+                        continue;
                     }
                 }
                 GameplayEventKind::CargoChanged { player_id } => {
-                    if let Some(player) = world.player(player_id) {
-                        self.spawn_sparks(player.x, player.y + 18.0);
+                    // Selling empties the bay (coins play for that); only growth is a pickup.
+                    let total = world.player(player_id).map_or(0, cargo_total);
+                    let previous = self.cargo_totals.insert(player_id, total);
+                    if previous.is_none_or(|previous| total <= previous) {
+                        continue;
                     }
-                }
-                GameplayEventKind::DrillStarted { .. } if local => cues.push(SoundCue::Drill),
-                GameplayEventKind::BombDetonated => {
-                    cues.push(SoundCue::Explosion);
-                    self.spawn_explosions(world);
-                }
-                GameplayEventKind::RescueTriggered { .. } if local => cues.push(SoundCue::Rescue),
-                // Milestones, including the quest fanfare and a job done.
-                GameplayEventKind::EscapeStarted { .. }
-                | GameplayEventKind::DeepRewardGranted { .. }
-                | GameplayEventKind::QuestCompleted { .. }
-                | GameplayEventKind::QuestReady { .. }
-                    if local =>
-                {
-                    cues.push(SoundCue::Milestone);
-                }
-                GameplayEventKind::ScannerUsed { .. } | GameplayEventKind::PoiDiscovered { .. }
-                    if local =>
-                {
-                    cues.push(SoundCue::Ui);
-                }
-                GameplayEventKind::PoiOpened { player_id, poi, .. } => {
-                    if let Some(player) = world.player(player_id) {
-                        self.spawn_sparks(player.x, player.y + 18.0);
-                    }
-                    if local {
-                        cues.push(if poi == drillgame_simulation::PoiKind::SupplyCache {
-                            SoundCue::Ui
-                        } else {
-                            SoundCue::Milestone
-                        });
-                    }
-                }
-                GameplayEventKind::VaultOpened { .. } => cues.push(SoundCue::Milestone),
-                GameplayEventKind::QuestStageDone { .. } if local => cues.push(SoundCue::Ui),
-                GameplayEventKind::QuestFailed { .. } if local => cues.push(SoundCue::Damage),
-                GameplayEventKind::BlueprintCompleted { .. } if local => {
-                    cues.push(SoundCue::Upgrade);
                 }
                 _ => {}
+            }
+            cues.push(player.map_or_else(
+                || PlacedCue::interface(cue),
+                |player| PlacedCue::player(cue, player),
+            ));
+        }
+        for player_id in local_players {
+            if let Some(player) = world.player(*player_id) {
+                self.cargo_totals.insert(*player_id, cargo_total(player));
             }
         }
         self.known_bombs = world.bombs().iter().map(|bomb| (bomb.x, bomb.y)).collect();
         cues
     }
 
-    /// Blasts where bombs seen last frame have disappeared.
-    fn spawn_explosions(&mut self, world: &WorldState) {
+    /// Blasts where bombs seen last frame have disappeared; returns where they went off.
+    fn spawn_explosions(&mut self, world: &WorldState) -> Vec<(f32, f32)> {
         let remaining = world.bombs();
         let gone: Vec<(f32, f32)> = self
             .known_bombs
@@ -204,6 +206,7 @@ impl Effects {
                     .any(|bomb| (bomb.x - x).abs() < 1.0 && (bomb.y - y).abs() < 1.0)
             })
             .collect();
+        let mut blasts = Vec::new();
         for (x, y) in gone {
             if self
                 .explosions
@@ -215,7 +218,9 @@ impl Effects {
             self.explosions.push(Explosion { x, y, age: 0.0 });
             self.spawn_sparks(x, y);
             self.spawn_sparks(x, y - 8.0);
+            blasts.push((x, y));
         }
+        blasts
     }
 
     fn spawn_sparks(&mut self, x: f32, y: f32) {
@@ -236,6 +241,47 @@ impl Effects {
             });
         }
     }
+}
+
+/// The player an event is about, if any.
+const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
+    match *kind {
+        GameplayEventKind::DrillStarted { player_id }
+        | GameplayEventKind::PurchaseCompleted { player_id }
+        | GameplayEventKind::CargoChanged { player_id }
+        | GameplayEventKind::BombPlaced { player_id }
+        | GameplayEventKind::InfrastructurePlaced { player_id }
+        | GameplayEventKind::ScannerUsed { player_id }
+        | GameplayEventKind::EscapeStarted { player_id }
+        | GameplayEventKind::DeepRewardGranted { player_id }
+        | GameplayEventKind::RescueTriggered { player_id }
+        | GameplayEventKind::PlayerDamaged { player_id }
+        | GameplayEventKind::PoiOpened { player_id, .. }
+        | GameplayEventKind::PoiDiscovered { player_id, .. }
+        | GameplayEventKind::TestModeChanged { player_id }
+        | GameplayEventKind::QuestAccepted { player_id, .. }
+        | GameplayEventKind::QuestStageDone { player_id, .. }
+        | GameplayEventKind::QuestReady { player_id, .. }
+        | GameplayEventKind::QuestCompleted { player_id, .. }
+        | GameplayEventKind::QuestFailed { player_id, .. }
+        | GameplayEventKind::BlueprintCompleted { player_id, .. } => Some(player_id),
+        GameplayEventKind::EscapeTunnelChanged
+        | GameplayEventKind::HazardChanged
+        | GameplayEventKind::BouldersChanged
+        | GameplayEventKind::BombDetonated
+        | GameplayEventKind::VaultOpened { .. }
+        | GameplayEventKind::VaultLockReset { .. } => None,
+    }
+}
+
+/// Everything in a rig's bay: ore, artifacts and materials.
+fn cargo_total(player: &drillgame_simulation::Player) -> u32 {
+    player
+        .cargo
+        .values()
+        .chain(player.artifacts.values())
+        .chain(player.materials.values())
+        .sum()
 }
 
 #[cfg(test)]
@@ -288,7 +334,7 @@ mod tests {
             .collect();
         assert_eq!(
             effects.apply(&burst, &world, &[local]),
-            vec![SoundCue::Damage]
+            vec![PlacedCue::player(SoundCue::Damage, local)]
         );
         let remote_hit = [event(
             20,
@@ -299,7 +345,7 @@ mod tests {
         effects.update(1.0);
         assert_eq!(
             effects.apply(&burst, &world, &[local]),
-            vec![SoundCue::Damage]
+            vec![PlacedCue::player(SoundCue::Damage, local)]
         );
     }
 }

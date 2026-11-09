@@ -1,108 +1,216 @@
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    reason = "procedural audio converts bounded sample positions to PCM values"
-)]
+//! Procedural audio (plan §10): a small synth engine renders every sound effect in code at
+//! startup, a software mixer plays them on raylib's audio thread, and a director turns each
+//! frame's cues and snapshot into mixer commands. No audio assets.
+//!
+//! - [`dsp`] — oscillators, noise, envelopes, filters, FM, waveshaping, delay and reverb.
+//! - [`patch`] — the designed patches (see `audio/README.md` for the design table).
+//! - [`bank`] — every patch's variations pre-rendered to sample buffers.
+//! - [`mixer`] — voices, loops, pan, priorities and stealing, ducking, reverb bus, limiter.
+//! - [`cues`] — cue -> patch and gameplay event -> cue tables, cue sources.
+//! - [`director`] — continuous sounds, spatialization and alarm logic.
+//! - [`analysis`] — level/spectrum/click measurements used by the tests and the render tool.
+//! - [`render_tool`] — `drillgame --render-audio <dir>`.
 
-use std::{fs, path::PathBuf};
+pub mod analysis;
+pub mod bank;
+pub mod cues;
+pub mod director;
+pub mod dsp;
+pub mod mixer;
+pub mod patch;
+pub mod render_tool;
 
-use raylib::prelude::*;
+use std::sync::{Arc, Mutex};
 
-use crate::shell::SoundCue;
+use raylib::{
+    core::callbacks::audio_stream_callback::{
+        set_audio_stream_callback, unset_audio_stream_callback,
+    },
+    prelude::*,
+};
 
+use self::{
+    bank::{DEFAULT_BANK_SEED, SoundBank},
+    director::{AudioFrame, Director},
+    dsp::SAMPLE_RATE,
+    mixer::Mixer,
+};
+
+/// Frames raylib asks the mixer for at a time (~23 ms at 44.1 kHz).
+const STREAM_BUFFER_FRAMES: i32 = 1_024;
+
+/// The desktop audio device: a stereo `f32` stream whose callback pulls frames from the shared
+/// [`Mixer`], plus the [`Director`] that feeds it each frame.
 pub struct AudioBus {
-    audio: &'static RaylibAudio,
-    drill: Sound<'static>,
-    sell: Sound<'static>,
-    upgrade: Sound<'static>,
-    damage: Sound<'static>,
-    milestone: Sound<'static>,
-    rescue: Sound<'static>,
-    ui: Sound<'static>,
+    stream: AudioStream<'static>,
+    mixer: Arc<Mutex<Mixer>>,
+    director: Director,
 }
 
 impl AudioBus {
+    /// Opens the audio device and starts rendering the sound bank in the background (sounds
+    /// requested before it is ready are skipped).
+    ///
+    /// # Errors
+    ///
+    /// When the audio device cannot be opened or the stream callback cannot be installed.
     pub fn new() -> Result<Self, String> {
-        let audio = Box::leak(Box::new(
+        let audio: &'static RaylibAudio = Box::leak(Box::new(
             RaylibAudio::init_audio_device().map_err(|error| error.to_string())?,
         ));
-        audio.set_master_volume(0.8);
+        // Volume is applied (smoothed) inside the mixer.
+        audio.set_master_volume(1.0);
+        audio.set_audio_stream_buffer_size_default(STREAM_BUFFER_FRAMES);
+        let stream = audio.new_audio_stream(SAMPLE_RATE, 32, 2);
+        let mixer = Arc::new(Mutex::new(Mixer::new(DEFAULT_BANK_SEED)));
+        let shared = Arc::clone(&mixer);
+        set_audio_stream_callback::<f32, _>(&stream, move |buffer: &mut [f32]| {
+            match shared.lock() {
+                Ok(mut mixer) => mixer.render(buffer),
+                Err(_) => buffer.fill(0.0),
+            }
+        })
+        .map_err(|error| error.to_string())?;
+        stream.play();
+        let loader = Arc::clone(&mixer);
+        std::thread::Builder::new()
+            .name("drillgame-sound-bank".into())
+            .spawn(move || {
+                let bank = Arc::new(SoundBank::render(DEFAULT_BANK_SEED));
+                if let Ok(mut mixer) = loader.lock() {
+                    mixer.set_bank(bank);
+                }
+            })
+            .map_err(|error| error.to_string())?;
         Ok(Self {
-            audio,
-            drill: sound(audio, 130.0, 0.09).ok_or("generated drill sound failed")?,
-            sell: sound(audio, 680.0, 0.16).ok_or("generated sell sound failed")?,
-            upgrade: sound(audio, 880.0, 0.18).ok_or("generated upgrade sound failed")?,
-            damage: sound(audio, 90.0, 0.22).ok_or("generated damage sound failed")?,
-            milestone: sound(audio, 520.0, 0.28).ok_or("generated milestone sound failed")?,
-            rescue: sound(audio, 250.0, 0.36).ok_or("generated rescue sound failed")?,
-            ui: sound(audio, 980.0, 0.06).ok_or("generated ui sound failed")?,
+            stream,
+            mixer,
+            director: Director::new(DEFAULT_BANK_SEED),
         })
     }
 
-    pub fn set_volume(&self, volume: f32) {
-        self.audio.set_master_volume(volume.clamp(0.0, 1.0));
-    }
-
-    pub fn play(&self, cues: &[SoundCue]) {
-        for cue in cues {
-            match cue {
-                SoundCue::Drill => self.drill.play(),
-                SoundCue::Sell => self.sell.play(),
-                SoundCue::Upgrade => self.upgrade.play(),
-                SoundCue::Damage => self.damage.play(),
-                SoundCue::Milestone => self.milestone.play(),
-                SoundCue::Rescue | SoundCue::Explosion => self.rescue.play(),
-                SoundCue::Ui => self.ui.play(),
-            }
+    /// Plays this frame: places its cues, steers continuous sounds and applies `volume` (0..1).
+    pub fn update(&mut self, frame: &AudioFrame<'_, '_>, volume: f32) {
+        let commands = self.director.update(frame);
+        if let Ok(mut mixer) = self.mixer.lock() {
+            mixer.set_volume(volume);
+            mixer.apply(commands);
         }
     }
 }
 
-fn sound(audio: &'static RaylibAudio, frequency: f32, seconds: f32) -> Option<Sound<'static>> {
-    let wave_bytes = wav_bytes(frequency, seconds);
-    let path = sound_path(frequency, seconds);
-    fs::write(&path, wave_bytes).ok()?;
-    audio.new_sound(path.to_str()?).ok()
+impl Drop for AudioBus {
+    fn drop(&mut self) {
+        // Stop raylib calling into the mixer before the stream goes away.
+        unset_audio_stream_callback(&self.stream);
+    }
 }
 
-fn sound_path(frequency: f32, seconds: f32) -> PathBuf {
-    let mut path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    path.push("target");
-    path.push("drillgame-audio");
-    let _ = fs::create_dir_all(&path);
-    path.push(format!(
-        "drillgame-{frequency:.0}hz-{duration_ms:.0}ms.wav",
-        duration_ms = seconds * 1_000.0
-    ));
-    path
-}
+#[cfg(test)]
+mod tests {
+    //! Quality gates over every finished patch: the stand-in for a listening pass.
 
-fn wav_bytes(frequency: f32, seconds: f32) -> Vec<u8> {
-    let sample_rate = 22_050_u32;
-    let samples = (sample_rate as f32 * seconds) as u32;
-    let data_len = samples * 2;
-    let mut bytes = Vec::with_capacity(44 + data_len as usize);
-    bytes.extend_from_slice(b"RIFF");
-    bytes.extend_from_slice(&(36 + data_len).to_le_bytes());
-    bytes.extend_from_slice(b"WAVEfmt ");
-    bytes.extend_from_slice(&16_u32.to_le_bytes());
-    bytes.extend_from_slice(&1_u16.to_le_bytes());
-    bytes.extend_from_slice(&1_u16.to_le_bytes());
-    bytes.extend_from_slice(&sample_rate.to_le_bytes());
-    bytes.extend_from_slice(&(sample_rate * 2).to_le_bytes());
-    bytes.extend_from_slice(&2_u16.to_le_bytes());
-    bytes.extend_from_slice(&16_u16.to_le_bytes());
-    bytes.extend_from_slice(b"data");
-    bytes.extend_from_slice(&data_len.to_le_bytes());
+    use super::{
+        analysis::{Measurements, loudness, seam_ratio},
+        dsp::{db_to_gain, gain_to_db},
+        patch::{Category, PEAK_CEILING, Patch, render_patch, variation_seed},
+    };
 
-    for sample in 0..samples {
-        let t = sample as f32 / sample_rate as f32;
-        let envelope = 1.0 - sample as f32 / samples as f32;
-        let value = (t * frequency * std::f32::consts::TAU).sin() * envelope * 0.35;
-        let pcm = (value * f32::from(i16::MAX)) as i16;
-        bytes.extend_from_slice(&pcm.to_le_bytes());
+    #[test]
+    fn every_patch_meets_the_quality_bar() {
+        for &patch in Patch::ALL {
+            let samples = render_patch(patch, variation_seed(11, patch, 0));
+            let name = patch.name();
+            let info = patch.info();
+            assert!(!samples.is_empty(), "{name} is empty");
+            assert!(samples.iter().all(|s| s.is_finite()), "{name} has NaN/inf");
+            let measured = Measurements::of(&samples);
+            assert!(
+                measured.peak_db <= gain_to_db(PEAK_CEILING) + 0.01,
+                "{name} peaks at {:.2} dBFS",
+                measured.peak_db
+            );
+            assert!(measured.dc.abs() < 0.002, "{name} has DC {}", measured.dc);
+            // On target, unless the peak ceiling forced it quieter (very transient sounds).
+            let target = info.category.target_db();
+            let limited = measured.peak_db > gain_to_db(PEAK_CEILING) - 0.1;
+            assert!(
+                (measured.loudness_db - target).abs() < 0.5
+                    || (limited && measured.loudness_db < target),
+                "{name} loudness {:.1} dB vs target {target}",
+                measured.loudness_db
+            );
+            if patch.looped() {
+                assert!(
+                    seam_ratio(&samples) < 2.0,
+                    "{name} clicks at its loop point ({:.2})",
+                    seam_ratio(&samples)
+                );
+                assert!((measured.seconds - super::patch::LOOP_SECONDS).abs() < 0.01);
+            } else {
+                assert!(measured.edge < 1e-4, "{name} starts or ends off zero");
+                let (shortest, longest) = match info.category {
+                    Category::Interface => (0.02, 0.8),
+                    Category::Feedback | Category::Alarm | Category::Impact => (0.02, 2.0),
+                    Category::Big => (0.8, 4.0),
+                    Category::Loop => (0.0, f32::MAX),
+                };
+                assert!(
+                    (shortest..=longest).contains(&measured.seconds),
+                    "{name} lasts {:.2} s",
+                    measured.seconds
+                );
+            }
+            // A sensible brightness: nothing is pure sub-bass or pure hiss except by design.
+            let (low, high) = match patch {
+                Patch::GasHissLoop => (3_000.0, 12_000.0),
+                // Thuds: their weight is in the low end, a clunk on top.
+                Patch::BoulderRumbleLoop
+                | Patch::LandLight
+                | Patch::LandMedium
+                | Patch::LandHeavy
+                | Patch::WallBump
+                | Patch::BreakSoft
+                | Patch::BreakHard
+                | Patch::Deploy
+                | Patch::ThrustIgnite
+                | Patch::Explosion
+                | Patch::ThrustLoop => (40.0, 3_000.0),
+                Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
+                    (1_500.0, 12_000.0)
+                }
+                _ => (150.0, 8_000.0),
+            };
+            assert!(
+                (low..=high).contains(&measured.centroid_hz),
+                "{name} centroid {:.0} Hz outside {low}..{high}",
+                measured.centroid_hz
+            );
+        }
     }
 
-    bytes
+    #[test]
+    fn variations_differ_but_stay_level_matched() {
+        for &patch in &[
+            Patch::HullHit,
+            Patch::Coins,
+            Patch::DrillCrunch,
+            Patch::UiMove,
+        ] {
+            let levels: Vec<f32> = (0..patch.info().variations)
+                .map(|variation| {
+                    loudness(&render_patch(patch, variation_seed(5, patch, variation)))
+                })
+                .collect();
+            let (min, max) = levels
+                .iter()
+                .fold((f32::MAX, 0.0_f32), |(lo, hi), &l| (lo.min(l), hi.max(l)));
+            assert!(
+                max / min < db_to_gain(3.0),
+                "{} variations spread {:.1} dB",
+                patch.name(),
+                gain_to_db(max / min)
+            );
+        }
+    }
 }

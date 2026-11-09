@@ -3,7 +3,10 @@
 use raylib::prelude::MouseButton;
 
 use crate::{
-    audio::AudioBus,
+    audio::{
+        AudioBus,
+        director::{AudioFrame, SeatAudio},
+    },
     input::{
         PlayerInput,
         pads::sample_pads,
@@ -14,6 +17,7 @@ use crate::{
     rendering::GameRenderer,
     runtime::MAX_LOCAL_SEATS,
     save::{load_settings, save_settings},
+    shell::RunMode,
     window::DesktopWindow,
 };
 
@@ -86,6 +90,22 @@ fn sample_frame_input(
     }
 }
 
+/// What audio needs from each seat this frame: its thrust, whether it is driving its rig and
+/// when its toast last changed.
+fn seat_audio(input: &FrameInput, game: &LocalGame) -> Vec<SeatAudio> {
+    input
+        .seat_inputs()
+        .iter()
+        .enumerate()
+        .take(game.seats().len().max(1))
+        .map(|(seat, sampled)| SeatAudio {
+            thrust: sampled.thrust,
+            playing: game.shell.gameplay_input_enabled(seat),
+            message_tick: game.shell.seat(seat).message_tick,
+        })
+        .collect()
+}
+
 pub fn run() {
     let settings = load_settings();
     let (mut raylib, thread, mut window) = DesktopWindow::open(settings.window);
@@ -95,7 +115,7 @@ pub fn run() {
     let mut saved_window = settings.window;
     let mut game = LocalGame::new(settings, SaveTarget::UserFiles);
     window.set_fullscreen(&mut raylib, game.shell.fullscreen);
-    let audio = match AudioBus::new() {
+    let mut audio = match AudioBus::new() {
         Ok(audio) => Some(audio),
         Err(error) => {
             eprintln!("Audio disabled: {error}");
@@ -136,14 +156,23 @@ pub fn run() {
                 eprintln!("Settings save failed: {error}");
             }
         }
-        if let Some(audio) = &audio {
-            audio.set_volume(game.shell.master_volume);
-            audio.play(&report.sound_cues);
-        }
 
         // Laid out against this frame's real size: the window may have been resized,
         // maximized or switched to fullscreen since the last frame.
         let snapshot = game.snapshot(DesktopWindow::screen(&raylib));
+        if let Some(audio) = &mut audio {
+            let seats = seat_audio(&input, &game);
+            let frame = AudioFrame {
+                snapshot: &snapshot,
+                cues: &report.sound_cues,
+                seats: &seats,
+                world_running: game.shell.world_should_tick()
+                    && game.shell.run_mode == RunMode::Playing,
+                message_tick: game.shell.message_tick,
+                delta_seconds,
+            };
+            audio.update(&frame, game.shell.master_volume);
+        }
         renderer.sync(&mut raylib, &thread, &snapshot, &report);
         let mut draw = raylib.begin_drawing(&thread);
         renderer.render(&mut draw, &game.shell, &snapshot);
