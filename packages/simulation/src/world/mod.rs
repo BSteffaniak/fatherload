@@ -27,6 +27,8 @@ mod discovery;
 mod drill_tests;
 #[cfg(test)]
 mod flight_tests;
+#[cfg(test)]
+mod hazard_counter_tests;
 mod hazards;
 mod import;
 mod movement;
