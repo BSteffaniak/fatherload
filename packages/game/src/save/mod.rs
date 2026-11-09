@@ -482,6 +482,58 @@ mod tests {
     }
 
     #[test]
+    fn world_settings_survive_a_save_and_older_v5_saves_load_as_legacy_worlds() {
+        use drillgame_simulation::{
+            SimulationParams,
+            worldgen::{GeneratorVersion, HazardIntensity, ResourceRichness, WorldSettings},
+        };
+        let settings = WorldSettings {
+            richness: ResourceRichness::Lean,
+            hazards: HazardIntensity::Brutal,
+            ..WorldSettings::new(0x5EED_CAFE)
+        };
+        let world = WorldState::new_game_with_settings(
+            PlayerId::new(1),
+            &settings,
+            SimulationParams::default(),
+        );
+        let json = serde_json::to_value(SaveFile {
+            version: SAVE_VERSION,
+            save: WorldSave {
+                world: world.clone(),
+                play_seconds: 0.0,
+            },
+        })
+        .expect("serialize");
+        let loaded = parse_save(&json.to_string()).expect("current save loads");
+        assert_eq!(*loaded.world.world_settings(), settings);
+        assert_eq!(
+            loaded.world.simulation_state_hash(),
+            world.simulation_state_hash()
+        );
+        assert_eq!(loaded.world.world_features(), world.world_features());
+
+        // A v5 save written before world settings existed: same tiles, legacy settings.
+        let mut old = json;
+        old["save"]["world"]["terrain"]
+            .as_object_mut()
+            .expect("terrain object")
+            .remove("settings");
+        let loaded = parse_save(&old.to_string()).expect("pre-settings v5 save loads");
+        assert_eq!(
+            loaded.world.world_settings().generator,
+            GeneratorVersion::Legacy
+        );
+        assert_eq!(loaded.world.world_settings().seed, 0x5EED_CAFE);
+        assert_eq!(
+            loaded.world.terrain().digest(),
+            world.terrain().digest(),
+            "the saved tiles load unchanged"
+        );
+        assert!(loaded.world.world_features().is_empty());
+    }
+
+    #[test]
     fn unknown_versions_are_rejected() {
         assert!(matches!(
             parse_save(r#"{"version": 99}"#),

@@ -13,10 +13,17 @@ use super::{
 };
 use crate::terrain::{Terrain, TileKind, TilePosition, tile_hardness};
 
-/// Seeds the property suite checks. Generation is a few milliseconds per world in release and
-/// roughly ten times that in debug, so the suite samples a spread of seeds rather than hundreds.
+/// Seeds the property suite checks.
+///
+/// Generation is a few milliseconds per world in release and roughly ten times that in debug,
+/// so by default the suite samples a spread of 32 seeds. Set `DRILLGAME_WORLDGEN_SEEDS` (e.g.
+/// 300, with `--release`) for a deep run over many more.
 fn sample_seeds() -> impl Iterator<Item = u64> {
-    (0..48_u64).map(|index| index.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x5EED)
+    let count = std::env::var("DRILLGAME_WORLDGEN_SEEDS")
+        .ok()
+        .and_then(|text| text.parse::<u64>().ok())
+        .unwrap_or(32);
+    (0..count).map(|index| index.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ 0x5EED)
 }
 
 fn tile_at(world: &GeneratedWorld, x: i32, y: i32) -> Option<TileKind> {
@@ -543,4 +550,86 @@ fn print_noise_percentiles() {
         let index = values.len() * (1000 - share) / 1000;
         println!("({share}, {}),", values[index]);
     }
+}
+
+#[test]
+fn a_seed_builds_the_same_world_at_every_tick_rate() {
+    use crate::{PlayerId, SimulationParams, WorldState};
+    let settings = WorldSettings {
+        size: WorldSize::Large,
+        ..WorldSettings::new(0xFEED)
+    };
+    let build = |hz| {
+        WorldState::new_game_with_settings(PlayerId::new(1), &settings, SimulationParams::new(hz))
+    };
+    let reference = build(60);
+    for hz in [30, 120, 240] {
+        let world = build(hz);
+        assert_eq!(
+            world.terrain().digest(),
+            reference.terrain().digest(),
+            "{hz} Hz"
+        );
+        assert_eq!(world.world_settings(), reference.world_settings());
+        assert_eq!(world.world_features(), reference.world_features());
+    }
+}
+
+#[test]
+fn replicas_receive_the_world_settings_in_the_session_section() {
+    use crate::{PlayerId, SectionKey, SimulationParams, WorldState};
+    let settings = WorldSettings {
+        hazards: HazardIntensity::Calm,
+        ..WorldSettings::new(42)
+    };
+    let authority = WorldState::new_game_with_settings(
+        PlayerId::new(1),
+        &settings,
+        SimulationParams::default(),
+    );
+    let mut replica = WorldState::new_game(PlayerId::new(1));
+    assert_ne!(
+        replica.section_hash(SectionKey::Session),
+        authority.section_hash(SectionKey::Session)
+    );
+    let payload = authority
+        .section(SectionKey::Session)
+        .expect("session section");
+    replica.apply_section(SectionKey::Session, payload);
+    assert_eq!(*replica.world_settings(), settings);
+    assert_eq!(
+        replica.section_hash(SectionKey::Session),
+        authority.section_hash(SectionKey::Session)
+    );
+}
+
+#[test]
+fn the_state_hash_covers_the_world_settings() {
+    use crate::{PlayerId, SimulationParams, WorldState};
+    let plain = WorldState::new_game_with_settings(
+        PlayerId::new(1),
+        &WorldSettings::new(5),
+        SimulationParams::default(),
+    );
+    let mut relabelled = plain.clone();
+    relabelled.terrain_mut().set_settings(WorldSettings {
+        richness: ResourceRichness::Rich,
+        ..WorldSettings::new(5)
+    });
+    assert_ne!(
+        plain.simulation_state_hash(),
+        relabelled.simulation_state_hash()
+    );
+}
+
+#[test]
+fn loaded_terrain_recomputes_the_same_feature_index() {
+    let settings = WorldSettings::new(31);
+    let terrain = Terrain::generate(&settings);
+    let json = serde_json::to_string(&terrain).expect("serialize");
+    let loaded: Terrain = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(loaded.settings(), &settings);
+    assert_eq!(loaded.digest(), terrain.digest());
+    assert_eq!(loaded.features(), terrain.features());
+    assert!(!loaded.features().is_empty());
 }
