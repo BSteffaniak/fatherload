@@ -991,21 +991,31 @@ fn canonical_rescue_site_recovers_lost_cargo_once() {
 
 #[test]
 fn canonical_survival_applies_hull_and_pump_heat_modifiers() {
-    fn depth_damage(part: Option<crate::RigPartKind>) -> f32 {
+    fn depth_damage_at(part: Option<crate::RigPartKind>, row: f32) -> f32 {
         let game = WorldImport::new_game(LOCAL_PLAYER_ID);
         let mut world = WorldState::from_import(&game);
         if let Some(part) = part {
             world.set_player_movement_modifiers(LOCAL_PLAYER_ID, 0, [part]);
         }
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.y = 100.0 * TILE_SIZE;
+        player.y = row * TILE_SIZE;
         player.hull = 100.0;
         let _output = world.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
         100.0 - world.player(LOCAL_PLAYER_ID).expect("player exists").hull
     }
+    fn depth_damage(part: Option<crate::RigPartKind>) -> f32 {
+        depth_damage_at(part, 105.0)
+    }
     assert!(depth_damage(Some(crate::RigPartKind::ThermalHull)) < depth_damage(None));
     assert!(depth_damage(Some(crate::RigPartKind::PressureHull)) < depth_damage(None));
     assert!(depth_damage(Some(crate::RigPartKind::ImpactHull)) > depth_damage(None));
+    // The pressure hull only helps inside the deep strata (row 75 is basalt in every world).
+    assert!(
+        (depth_damage_at(Some(crate::RigPartKind::PressureHull), 75.0)
+            - depth_damage_at(None, 75.0))
+        .abs()
+            < f32::EPSILON
+    );
 
     let game = WorldImport::new_game(LOCAL_PLAYER_ID);
     let mut unprotected = WorldState::from_import(&game);

@@ -159,15 +159,6 @@ impl WorldState {
             if parts.contains(&RigPartKind::ImpactHull) {
                 heat_multiplier *= 1.18;
             }
-            if parts.contains(&RigPartKind::PressureHull) && player_y >= 90.0 * TILE_SIZE {
-                heat_multiplier *= 0.72;
-            }
-            let depth_damage = if player_y > safe_depth {
-                let depth_factor = ((player_y - safe_depth) / (12.0 * TILE_SIZE)).max(1.0);
-                3.5 * depth_factor * heat_multiplier * delta_seconds
-            } else {
-                0.0
-            };
             #[allow(
                 clippy::cast_possible_truncation,
                 reason = "bounded player coordinates intentionally map to terrain tiles"
@@ -175,6 +166,19 @@ impl WorldState {
             let center = TilePosition {
                 x: (player_x / TILE_SIZE).floor() as i32,
                 y: (player_y / TILE_SIZE).floor() as i32,
+            };
+            // The pressure hull pays off in the deep strata, wherever this world's wavy
+            // boundary puts them.
+            if parts.contains(&RigPartKind::PressureHull)
+                && self.terrain.deep_stratum_at(center).is_some()
+            {
+                heat_multiplier *= 0.72;
+            }
+            let depth_damage = if player_y > safe_depth {
+                let depth_factor = ((player_y - safe_depth) / (12.0 * TILE_SIZE)).max(1.0);
+                3.5 * depth_factor * heat_multiplier * delta_seconds
+            } else {
+                0.0
             };
             let near_lava = (-2..=2).any(|dy| {
                 (-2..=2).any(|dx| {
