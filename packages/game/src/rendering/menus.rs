@@ -26,8 +26,11 @@ use crate::{
     },
     runtime::OnlineRole,
     save::{save_slot_count, save_slot_metadata},
-    shell::{JOIN_MENU, LobbyAction, NoticeAction, OnlineScreen, PauseOption, ShellState},
+    shell::{
+        JOIN_MENU, LobbyAction, NoticeAction, OnlineScreen, PauseOption, SetupPurpose, ShellState,
+    },
 };
+use drillgame_simulation::worldgen::{HazardIntensity, ResourceRichness};
 
 /// Select / confirm / back to the previous screen.
 const NAVIGATE_BACK: &[Hint] = &[
@@ -166,6 +169,7 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::EndSession => &menu_icons::OFFLINE,
         PauseOption::LeaveSession | PauseOption::ExitToDesktop => &menu_icons::DOOR,
         PauseOption::Options => &menu_icons::GEAR,
+        PauseOption::CopySeed => &menu_icons::KEY,
     }
 }
 
@@ -204,6 +208,12 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
             },
         ),
     ];
+    rig.push(SectionItem::icon_stat(
+        &menu_icons::KEY,
+        "World seed",
+        ui.snapshot.terrain.settings().seed_text(),
+        SKY_LIGHT,
+    ));
     if ui.snapshot.won_game {
         rig.push(SectionItem::text(
             "Star Core secured. Deep Claim operations are open.",
@@ -318,6 +328,104 @@ pub(super) fn draw_slots(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, 
             menu_items(entries, ui.shell.selected_menu_item),
         )])
         .prompts(NAVIGATE_CLOSE),
+    );
+}
+
+/// The world setup dialog while typing a seed.
+const SEED_FORM: &[Hint] = &[
+    hint(Prompt::Paste, "paste"),
+    hint(Prompt::Confirm, "keep"),
+    hint(Prompt::Delete, "delete"),
+    hint(Prompt::Back, "cancel"),
+];
+/// The world setup dialog.
+const SETUP_PROMPTS: &[Hint] = &[
+    hint(Prompt::Navigate, "select"),
+    hint(Prompt::Adjust, "change"),
+    hint(Prompt::Confirm, "confirm"),
+    hint(Prompt::Back, "back"),
+];
+
+/// `← value →` for a row whose value cycles with left/right.
+fn cycler(value: &str) -> String {
+    format!("\u{2190} {value} \u{2192}")
+}
+
+pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let Some(setup) = ui.shell.world_setup.as_ref() else {
+        return;
+    };
+    let settings = setup.settings;
+    let (subtitle, start_label) = match setup.purpose {
+        SetupPurpose::Local { seats: 1 } => (
+            "Same seed and settings, same world on any machine.".to_owned(),
+            "Start Digging",
+        ),
+        SetupPurpose::Local { seats } => (
+            format!("Local split-screen for {seats} players."),
+            "Start Split-Screen",
+        ),
+        SetupPurpose::HostOnline => (
+            "You host: everyone who joins digs this world.".to_owned(),
+            "Host Game",
+        ),
+    };
+    let seed_value = if setup.typing() {
+        format!("{}_", setup.seed_text())
+    } else {
+        setup.seed_text()
+    };
+    let paste = inline_text(Prompt::Paste, InputDevice::KEYBOARD).unwrap_or_default();
+    let entries = vec![
+        Entry::new(&menu_icons::KEY, "Seed")
+            .detail(if setup.typing() {
+                "Hex digits or any words".to_owned()
+            } else {
+                format!("Type, or paste with {paste}")
+            })
+            .value(seed_value, if setup.typing() { LIME } else { GOLD }),
+        Entry::new(&menu_icons::DICE, "Re-roll Seed").detail("Draw a new random world"),
+        Entry::new(&menu_icons::GLOBE, "World Size")
+            .detail(format!("{} tiles wide", settings.width_tiles()))
+            .value(cycler(settings.size.name()), SKY_LIGHT),
+        Entry::new(&icons::CREDITS, "Resources")
+            .detail(match settings.richness {
+                ResourceRichness::Lean => "Sparse ore, every vein counts",
+                ResourceRichness::Standard => "Balanced veins and pods",
+                ResourceRichness::Rich => "Fat veins, more motherlodes",
+            })
+            .value(cycler(settings.richness.name()), GOLD),
+        Entry::new(&icons::WARNING, "Hazards")
+            .detail(match settings.hazards {
+                HazardIntensity::Calm => "Few gas and lava pockets",
+                HazardIntensity::Standard => "Clustered pockets by layer",
+                HazardIntensity::Brutal => "Dense pockets, deep trouble",
+            })
+            .value(
+                cycler(settings.hazards.name()),
+                match settings.hazards {
+                    HazardIntensity::Calm => LIME,
+                    HazardIntensity::Standard => AMBER,
+                    HazardIntensity::Brutal => RED,
+                },
+            ),
+        Entry::new(&menu_icons::PLAY, start_label),
+        Entry::new(&menu_icons::BACK, "Back"),
+    ];
+    UiLayout::screen(draw).modal_with_render_plan(
+        "New World",
+        &subtitle,
+        &ModalContent::new(vec![Section::new(
+            "World",
+            SKY_LIGHT,
+            menu_items(entries, setup.selected),
+        )])
+        .compact()
+        .prompts(if setup.typing() {
+            SEED_FORM
+        } else {
+            SETUP_PROMPTS
+        }),
     );
 }
 

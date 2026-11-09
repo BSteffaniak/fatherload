@@ -590,6 +590,23 @@ menu_icon!(
 );
 
 menu_icon!(
+    DICE,
+    "menu_dice",
+    [('w', BONE), ('m', MIST), ('p', RED)],
+    [
+        ".ooooooo.",
+        "owwwwwwmo",
+        "owpwwwpmo",
+        "owwwwwwmo",
+        "owwwpwwmo",
+        "owwwwwwmo",
+        "owpwwwpmo",
+        "ommmmmmmo",
+        ".ooooooo.",
+    ]
+);
+
+menu_icon!(
     GEAR,
     "menu_gear",
     [('m', STEEL_LIGHT), ('d', STEEL), ('k', STEEL_DARK)],

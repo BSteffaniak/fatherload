@@ -316,6 +316,7 @@ fn ending_an_online_session_from_pause_with_seats_inside_resets_everyone() {
 
     // A new game from the title starts clean.
     press_seat(&mut game, 0, confirm_input());
+    let _report = super::start_world_setup(&mut game);
     assert_eq!(game.shell.run_mode, RunMode::Playing);
     assert!(!game.shell.seat(0).inside());
 }

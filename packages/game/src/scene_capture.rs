@@ -17,6 +17,9 @@ use drillgame_simulation::{
     economy::SurfaceZone,
     surface::SURFACE_BUILDINGS,
     terrain::{MineralKind, TILE_SIZE, TileKind, TilePosition},
+    worldgen::{
+        Band, FeatureDetail, FeatureKind, HazardKind, ResourceRichness, WorldSettings, WorldSize,
+    },
 };
 use raylib::ffi;
 
@@ -29,7 +32,9 @@ use crate::{
     rendering::GameRenderer,
     runtime::{LobbyInfo, LocalSeat, OnlineRole},
     save::SettingsFile,
-    shell::{ModalScreen, OnlineScreen, RunMode, SeatUi, ShellState, interior_service_x},
+    shell::{
+        ModalScreen, OnlineScreen, RunMode, SeatUi, SetupPurpose, ShellState, interior_service_x,
+    },
 };
 
 /// Fixed frame time for every scripted frame, so captures never depend on machine speed.
@@ -1318,6 +1323,79 @@ pub const SCENES: &[Scene] = &[
                 sink_rig(world, player, 120, 205);
                 carve(world, 108..133, 205..206);
                 reveal(world, player, 98..143, 195..218);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "new_world_setup",
+        summary: "New World dialog over the title: seed, size, resources and hazards",
+        setup: |stage| {
+            let shell = stage.shell();
+            shell.open_world_setup(SetupPurpose::Local { seats: 1 });
+            if let Some(setup) = shell.world_setup.as_mut() {
+                setup.settings = WorldSettings {
+                    size: WorldSize::Large,
+                    richness: ResourceRichness::Rich,
+                    ..WorldSettings::new(0x3F2A_91C0_77B1)
+                };
+                setup.selected = 3;
+            }
+        },
+    },
+    Scene {
+        name: "new_world_seed_entry",
+        summary: "Typing a seed into the New World dialog (split-screen setup)",
+        setup: |stage| {
+            let shell = stage.shell();
+            shell.open_world_setup(SetupPurpose::Local { seats: 2 });
+            if let Some(setup) = shell.world_setup.as_mut() {
+                setup.settings = WorldSettings::new(0x0BAD_5EED);
+                setup.seed_edit = Some("deep rocks".to_owned());
+            }
+        },
+    },
+    Scene {
+        name: "hazard_telltales",
+        summary: "Explored rock around hazard pockets showing their tell-tale stains",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                // The default world's first gas cluster below the clay beds.
+                let (x, y) = world
+                    .world_features()
+                    .of_kind(FeatureKind::HazardCluster)
+                    .find(|feature| feature.detail == FeatureDetail::Hazard(HazardKind::Gas))
+                    .map_or((110, 40), |feature| (feature.center.x, feature.center.y));
+                sink_rig(world, player, x - 5, y);
+                reveal(world, player, x - 18..x + 19, y - 9..y + 10);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "strata_boundary",
+        summary: "The wavy, interleaved seam where the Basalt Deeps give way to the Crystal Faults",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let (x, y) = world
+                    .world_features()
+                    .of_kind(FeatureKind::StratumTransition)
+                    .find(|feature| {
+                        matches!(
+                            feature.detail,
+                            FeatureDetail::Transition {
+                                upper: Band::Basalt,
+                                ..
+                            }
+                        )
+                    })
+                    .map_or((120, 90), |feature| (feature.center.x, feature.center.y));
+                let x = x.clamp(30, world.terrain().width() - 30);
+                sink_rig(world, player, x, y - 3);
+                carve(world, x - 12..x + 13, y - 3..y - 2);
+                reveal(world, player, x - 24..x + 25, y - 12..y + 12);
             });
             stage.settle(10);
         },

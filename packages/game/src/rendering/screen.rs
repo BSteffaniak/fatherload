@@ -667,6 +667,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Inventory => draw_inventory_ui(draw, ui),
         ModalScreen::Map => draw_map_ui(draw, ui),
         ModalScreen::Help => draw_help_ui(draw),
+        ModalScreen::WorldSetup => menus::draw_world_setup(draw, ui),
     }
 }
 

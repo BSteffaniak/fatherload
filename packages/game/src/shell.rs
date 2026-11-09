@@ -7,6 +7,7 @@
 use drillgame_simulation::{
     PlayerCommand, PlayerId, RecipeKind, SessionServiceRequest, WorldState,
     economy::{DeepClaimStatus, SurfaceZone, TownBuilding, upgrade_offers, upgrade_tier_name},
+    worldgen::WorldSettings,
 };
 
 use drillgame_quic_transport::lan::LanDiscoveredGame;
@@ -22,6 +23,20 @@ use crate::{
     runtime::{LobbyInfo, OnlineRole},
     save,
 };
+
+mod world_setup;
+
+pub use world_setup::{SetupOutcome, SetupPurpose, WorldSetup, random_world_seed};
+
+/// Row index of "Start" in the world setup dialog.
+#[cfg(test)]
+#[must_use]
+pub fn world_setup_start_row() -> usize {
+    world_setup::SetupRow::ALL
+        .iter()
+        .position(|row| *row == world_setup::SetupRow::Start)
+        .unwrap_or_default()
+}
 
 /// Top-level app mode.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,6 +79,9 @@ pub enum ModalScreen {
     ResearchLog,
     Crafting,
     Inventory,
+    /// The new-world setup dialog (seed, size, richness, hazards); its state is
+    /// [`ShellState::world_setup`].
+    WorldSetup,
 }
 
 impl ModalScreen {
@@ -79,6 +97,7 @@ impl ModalScreen {
                 | Self::LoadSlots
                 | Self::ExitConfirm
                 | Self::UnsavedExitConfirm
+                | Self::WorldSetup
         )
     }
 }
@@ -98,6 +117,8 @@ pub enum PauseOption {
     /// Client: leave the host's session.
     LeaveSession,
     Options,
+    /// Copy the world seed to the clipboard (to share the world).
+    CopySeed,
     ExitToDesktop,
 }
 
@@ -113,6 +134,7 @@ impl PauseOption {
                 Self::Load,
                 Self::OpenOnline,
                 Self::Options,
+                Self::CopySeed,
                 Self::ExitToDesktop,
             ],
             Some(OnlineRole::Host) => vec![
@@ -122,6 +144,7 @@ impl PauseOption {
                 Self::Load,
                 Self::EndSession,
                 Self::Options,
+                Self::CopySeed,
                 Self::ExitToDesktop,
             ],
             Some(OnlineRole::Client) => vec![
@@ -129,6 +152,7 @@ impl PauseOption {
                 Self::SessionInfo,
                 Self::LeaveSession,
                 Self::Options,
+                Self::CopySeed,
                 Self::ExitToDesktop,
             ],
         }
@@ -145,6 +169,7 @@ impl PauseOption {
             Self::EndSession => "End Online Session",
             Self::LeaveSession => "Leave Session",
             Self::Options => "Options",
+            Self::CopySeed => "Copy World Seed",
             Self::ExitToDesktop => "Exit to Desktop",
         }
     }
@@ -222,8 +247,11 @@ pub enum ServiceAnimation {
 /// Something the shell needs the app (runtime / saves) to do.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ShellRequest {
-    /// Start a fresh world with this many local seats.
-    NewGame { seats: usize },
+    /// Start a fresh world generated from `settings` with this many local seats.
+    NewGame {
+        seats: usize,
+        settings: WorldSettings,
+    },
     /// Load the most recent save.
     ResumeLatest,
     /// Quick save (F5) to the main save file.
@@ -240,8 +268,8 @@ pub enum ShellRequest {
     Action { seat: usize, command: PlayerCommand },
     /// Add another local split-screen seat.
     AddLocalSeat,
-    /// Host a new online game (lobby first).
-    HostOnline,
+    /// Host a new online game (lobby first) in a world generated from `settings`.
+    HostOnline { settings: WorldSettings },
     /// Open the running local game to remote players.
     OpenOnline,
     /// Join a host by `ip:port` (or bare ip with the default port).
@@ -900,6 +928,7 @@ impl SeatUi {
             | ModalScreen::LoadSlots
             | ModalScreen::ExitConfirm
             | ModalScreen::UnsavedExitConfirm
+            | ModalScreen::WorldSetup
             | ModalScreen::Map
             | ModalScreen::Help
             | ModalScreen::Inventory
@@ -1179,6 +1208,8 @@ pub struct ShellState {
     /// The seat that opened the pause menu (the menu says so; it drives the menu unless its
     /// controller was unplugged, see `menu_seat`).
     pub paused_by: usize,
+    /// The new-world setup dialog, while [`ModalScreen::WorldSetup`] is open.
+    pub world_setup: Option<WorldSetup>,
 }
 
 impl Default for ShellState {
@@ -1217,6 +1248,7 @@ impl ShellState {
             seats: vec![SeatUi::new()],
             menu_seat: 0,
             paused_by: 0,
+            world_setup: None,
         }
     }
 
@@ -1409,11 +1441,16 @@ impl ShellState {
         }
         match self.run_mode {
             RunMode::Title => {
-                if !self.handle_menu_modal(primary, &mut requests) {
+                if self.modal == Some(ModalScreen::WorldSetup) {
+                    self.handle_world_setup(primary, &mut requests);
+                } else if !self.handle_menu_modal(primary, &mut requests) {
                     self.handle_title_menu(primary, ctx, &mut requests);
                 }
             }
-            RunMode::Paused => self.handle_pause_menu(menu_input, &mut requests),
+            RunMode::Paused => {
+                let seed = ctx.world.world_settings().seed_text();
+                self.handle_pause_menu(menu_input, &seed, &mut requests);
+            }
             RunMode::Lobby => self.handle_online(primary, &mut requests),
             RunMode::Playing => {
                 self.play_seconds += delta_seconds;
@@ -1483,12 +1520,15 @@ impl ShellState {
 
     /// Whether an online text field has focus (typing must not trigger hotkeys).
     #[must_use]
-    pub const fn text_entry(&self) -> bool {
-        matches!(self.run_mode, RunMode::Lobby)
+    pub fn text_entry(&self) -> bool {
+        let online_form = matches!(self.run_mode, RunMode::Lobby)
             && matches!(
                 self.online.screen,
                 OnlineScreen::JoinAddress | OnlineScreen::JoinDescriptor
-            )
+            );
+        let seed_field = self.modal == Some(ModalScreen::WorldSetup)
+            && self.world_setup.as_ref().is_some_and(WorldSetup::typing);
+        online_form || seed_field
     }
 
     /// Shows an online screen.
@@ -1701,9 +1741,11 @@ impl ShellState {
         }
         match options[self.selected_title_item] {
             TitleOption::Resume => requests.push(ShellRequest::ResumeLatest),
-            TitleOption::NewGame => requests.push(ShellRequest::NewGame { seats: 1 }),
-            TitleOption::LocalMultiplayer => requests.push(ShellRequest::NewGame { seats: 2 }),
-            TitleOption::HostOnline => requests.push(ShellRequest::HostOnline),
+            TitleOption::NewGame => self.open_world_setup(SetupPurpose::Local { seats: 1 }),
+            TitleOption::LocalMultiplayer => {
+                self.open_world_setup(SetupPurpose::Local { seats: 2 });
+            }
+            TitleOption::HostOnline => self.open_world_setup(SetupPurpose::HostOnline),
             TitleOption::JoinOnline => self.show_online(OnlineScreen::JoinMenu),
             TitleOption::LoadSlot => self.open_modal(ModalScreen::LoadSlots),
             TitleOption::Options => self.open_modal(ModalScreen::Options),
@@ -1714,7 +1756,41 @@ impl ShellState {
         }
     }
 
-    fn handle_pause_menu(&mut self, input: PlayerInput, requests: &mut Vec<ShellRequest>) {
+    /// Opens the world setup dialog with a fresh random seed.
+    pub fn open_world_setup(&mut self, purpose: SetupPurpose) {
+        self.world_setup = Some(WorldSetup::new(purpose, random_world_seed()));
+        self.open_modal(ModalScreen::WorldSetup);
+    }
+
+    fn handle_world_setup(&mut self, input: PlayerInput, requests: &mut Vec<ShellRequest>) {
+        let pasted = self.pasted.take();
+        let Some(setup) = self.world_setup.as_mut() else {
+            self.modal = None;
+            return;
+        };
+        match setup.update(input, pasted, random_world_seed) {
+            SetupOutcome::Stay => {}
+            SetupOutcome::Close => {
+                self.modal = None;
+                self.world_setup = None;
+            }
+            SetupOutcome::Start(purpose, settings) => {
+                self.modal = None;
+                self.world_setup = None;
+                requests.push(match purpose {
+                    SetupPurpose::Local { seats } => ShellRequest::NewGame { seats, settings },
+                    SetupPurpose::HostOnline => ShellRequest::HostOnline { settings },
+                });
+            }
+        }
+    }
+
+    fn handle_pause_menu(
+        &mut self,
+        input: PlayerInput,
+        seed: &str,
+        requests: &mut Vec<ShellRequest>,
+    ) {
         if self.modal.is_some() {
             // Slot / options modals opened from the pause menu.
             let _handled = self.handle_menu_modal(input, requests);
@@ -1748,6 +1824,10 @@ impl ShellState {
                 requests.push(ShellRequest::LeaveOnline);
             }
             PauseOption::Options => self.open_modal(ModalScreen::Options),
+            PauseOption::CopySeed => {
+                requests.push(ShellRequest::CopyToClipboard(seed.to_owned()));
+                self.message = format!("World seed {seed} copied: share it to share this world.");
+            }
             PauseOption::ExitToDesktop => self.request_exit_or_prompt(),
         }
     }

@@ -50,6 +50,7 @@ const MENU_ICONS: &[&SpriteDef] = &[
     &menu_icons::BACK,
     &menu_icons::GLOBE,
     &menu_icons::SPLIT,
+    &menu_icons::DICE,
     &menu_icons::GEAR,
 ];
 

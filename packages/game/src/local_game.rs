@@ -9,7 +9,7 @@ use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 
 use drillgame_netcode::ReconnectToken;
 use drillgame_quic_transport::{HostDescriptor, JoinTarget, lan::LanDiscoveredGame};
-use drillgame_simulation::{PlayerCommand, PlayerId, WorldState};
+use drillgame_simulation::{PlayerCommand, PlayerId, WorldState, worldgen::WorldSettings};
 
 use crate::{
     effects::{Effects, EventFeed},
@@ -365,7 +365,7 @@ impl LocalGame {
         report: &mut FrameReport,
     ) {
         match request {
-            ShellRequest::NewGame { seats } => self.new_game(seats, report),
+            ShellRequest::NewGame { seats, settings } => self.new_game(seats, &settings, report),
             ShellRequest::ResumeLatest => {
                 let loaded = match &self.save_target {
                     SaveTarget::UserFiles => save::load_latest_world(),
@@ -405,7 +405,7 @@ impl LocalGame {
                 }
             }
             ShellRequest::AddLocalSeat => self.add_local_seat(),
-            ShellRequest::HostOnline => self.host_online(report),
+            ShellRequest::HostOnline { settings } => self.host_online(&settings, report),
             ShellRequest::OpenOnline => self.open_online(),
             ShellRequest::JoinAddress(text) => match parse_join_addr(&text) {
                 Some(addr) => self.start_join(JoinTarget::Addr(addr), None, report),
@@ -443,8 +443,8 @@ impl LocalGame {
         }
     }
 
-    fn new_game(&mut self, seats: usize, report: &mut FrameReport) {
-        self.runtime = Runtime::local(new_world(), seats);
+    fn new_game(&mut self, seats: usize, settings: &WorldSettings, report: &mut FrameReport) {
+        self.runtime = Runtime::local(world_from_settings(settings), seats);
         self.reset_presentation(report);
         self.shell.enter_world(
             "Welcome to the dig site. Visit the depot for contracts.",
@@ -561,8 +561,8 @@ impl LocalGame {
         }
     }
 
-    fn host_online(&mut self, report: &mut FrameReport) {
-        match LocalHost::online(new_world(), 1, self.host_bind, true) {
+    fn host_online(&mut self, settings: &WorldSettings, report: &mut FrameReport) {
+        match LocalHost::online(world_from_settings(settings), 1, self.host_bind, true) {
             Ok(mut host) => {
                 host.set_host_name(&online::player_name());
                 self.go_online(Runtime::Host(Box::new(host)), report);
@@ -740,10 +740,22 @@ fn shell_context<'a>(
     }
 }
 
-/// A brand-new single-rig world.
+/// A brand-new single-rig world with the default settings (the idle world behind the title,
+/// tests and scripted scenes).
 #[must_use]
 pub fn new_world() -> WorldState {
     WorldState::new_game(save::LEGACY_PLAYER_ID)
+}
+
+/// A brand-new single-rig world generated from `settings` (a "New Game" from the world setup
+/// dialog).
+#[must_use]
+pub fn world_from_settings(settings: &WorldSettings) -> WorldState {
+    WorldState::new_game_with_settings(
+        save::LEGACY_PLAYER_ID,
+        settings,
+        drillgame_simulation::SimulationParams::default(),
+    )
 }
 
 #[cfg(test)]
@@ -819,6 +831,15 @@ mod tests {
             confirm: true,
             ..PlayerInput::default()
         }
+    }
+
+    /// Starts the world from the open world setup dialog (moves to "Start" and confirms).
+    pub(super) fn start_world_setup(game: &mut LocalGame) -> FrameReport {
+        assert_eq!(game.shell.modal, Some(ModalScreen::WorldSetup));
+        for _ in 0..crate::shell::world_setup_start_row() {
+            let _report = press(game, down());
+        }
+        press(game, confirm_input())
     }
 
     /// Navigating the options rows with Down and confirming acts on the highlighted row.
@@ -996,7 +1017,20 @@ mod tests {
                 ..PlayerInput::default()
             },
         );
+        assert!(
+            !report.world_replaced,
+            "New Game opens the world setup first"
+        );
+        let seed = game
+            .shell
+            .world_setup
+            .as_ref()
+            .expect("world setup open")
+            .settings
+            .seed;
+        let report = start_world_setup(&mut game);
         assert!(report.world_replaced);
+        assert_eq!(game.world().world_settings().seed, seed);
         assert_eq!(game.shell.run_mode, RunMode::Playing);
         assert!(matches!(game.runtime(), Runtime::Host(_)));
         assert_eq!(game.seats().len(), 1);
@@ -1161,6 +1195,7 @@ mod tests {
                 ..PlayerInput::default()
             },
         );
+        let _report = start_world_setup(&mut game);
         for _ in 0..40 {
             let _report = step(
                 &mut game,
@@ -1247,6 +1282,7 @@ mod tests {
                 ..PlayerInput::default()
             },
         );
+        let _report = start_world_setup(&mut game);
         assert_eq!(game.seats().len(), 2);
         let first = game.seats()[0].player;
         let second = game.seats()[1].player;
@@ -2012,7 +2048,9 @@ mod tests {
         host.set_host_bind("127.0.0.1:0".parse().expect("addr"));
         let mut requests = Vec::new();
         host.handle_request(
-            ShellRequest::HostOnline,
+            ShellRequest::HostOnline {
+                settings: WorldSettings::default(),
+            },
             &mut requests,
             &mut FrameReport::default(),
         );
