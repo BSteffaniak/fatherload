@@ -425,6 +425,21 @@ fn old_saves_past_the_old_top_tier_keep_upgrading() {
     assert_eq!(current_level(&loaded, UpgradeKind::CargoBay), 6);
     assert!(loaded.cargo_capacity >= cargo_capacity_for_level(6));
     assert!(loaded.fuel_capacity >= fuel_capacity_for_level(6));
+    // Loading catches an old rig up to the current curves at once, keeping earned bonuses.
+    let mut old = Player::new(0.0, 0.0);
+    old.cargo_bay_level = 5;
+    old.cargo_capacity = 44 + 4;
+    old.fuel_tank_level = 5;
+    old.fuel_capacity = 300.0 + 20.0;
+    old.catch_up_capacity_curves();
+    assert_eq!(old.cargo_capacity, cargo_capacity_for_level(5) + 4);
+    assert!((old.fuel_capacity - (fuel_capacity_for_level(5) + 20.0)).abs() < f32::EPSILON);
+    let caught_up = old.clone();
+    old.catch_up_capacity_curves();
+    assert_eq!(old, caught_up, "idempotent");
+    let mut stock = Player::new(0.0, 0.0);
+    stock.catch_up_capacity_curves();
+    assert_eq!(stock, Player::new(0.0, 0.0), "current rigs are untouched");
     // Levels beyond the new top load fine too (clamped by the shop, not by loading).
     let mut beyond = Player::new(0.0, 0.0);
     beyond.drill_strength = 20;

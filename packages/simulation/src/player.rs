@@ -181,6 +181,26 @@ impl Player {
     }
 }
 
+impl Player {
+    /// Lifts fuel tank and cargo bay capacities stored under the old five-tier curves (+50 fuel
+    /// and +8 slots a tier) onto the current curves for the fitted tiers, keeping any bonus
+    /// earned on top of the old curve. Rigs already on the current curves are untouched, so this
+    /// is safe to run on every load.
+    pub fn catch_up_capacity_curves(&mut self) {
+        let cargo = cargo_capacity_for_level(self.cargo_bay_level);
+        if self.cargo_capacity < cargo {
+            let legacy = 12 + 8 * tiers_past_first(self.cargo_bay_level);
+            self.cargo_capacity = cargo + self.cargo_capacity.saturating_sub(legacy);
+        }
+        let fuel = fuel_capacity_for_level(self.fuel_tank_level);
+        if self.fuel_capacity < fuel {
+            #[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
+            let legacy = (tiers_past_first(self.fuel_tank_level) as f32).mul_add(50.0, 100.0);
+            self.fuel_capacity = fuel + (self.fuel_capacity - legacy).max(0.0);
+        }
+    }
+}
+
 /// Upgrade tiers bought past the first (tier 1 is the stock part).
 const fn tiers_past_first(level: u8) -> u32 {
     level.saturating_sub(1) as u32

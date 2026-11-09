@@ -267,6 +267,16 @@ impl WorldState {
     }
 
     /// Replaces the template for players added with [`Self::add_player`].
+    /// Load-time fixup for saves from the old five-tier upgrade curves: lifts every rig's (and
+    /// the player template's) stored fuel and cargo capacity onto the current curve for its
+    /// fitted tiers (see [`Player::catch_up_capacity_curves`]). A no-op for current saves.
+    pub fn catch_up_capacity_curves(&mut self) {
+        self.player_template.catch_up_capacity_curves();
+        for player in self.players.values_mut() {
+            player.catch_up_capacity_curves();
+        }
+    }
+
     pub fn set_player_template(&mut self, template: Player) {
         self.player_template = template;
     }

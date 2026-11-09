@@ -132,9 +132,10 @@ pub const fn band_heat_units(band: Band) -> u8 {
     band_heat_level(band).saturating_mul(HEAT_UNITS_PER_LEVEL)
 }
 
-/// Heat units a radiator of `radiator_level` covers: a full heat level per tier up to tier 5
-/// (the old top radiator, which reached the first deep stratum), then a third of a level per
-/// tier, so every tier cools a little more.
+/// Heat units a radiator of `radiator_level` covers.
+///
+/// A full heat level per tier up to tier 5 (the old top radiator, which reached the first deep
+/// stratum), then a third of a level per tier, so every tier cools a little more.
 #[must_use]
 pub const fn radiator_cooling(radiator_level: u8) -> u8 {
     let level = radiator_level.saturating_sub(1);

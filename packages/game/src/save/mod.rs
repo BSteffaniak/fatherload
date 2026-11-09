@@ -275,6 +275,14 @@ pub fn load_world_from_path(path: impl AsRef<Path>) -> Result<WorldSave, SaveErr
 }
 
 fn parse_save(json: &str) -> Result<WorldSave, SaveError> {
+    parse_save_file(json).map(|mut save| {
+        // Rigs from the old five-tier upgrade curves catch up to the current tank and bay sizes.
+        save.world.catch_up_capacity_curves();
+        save
+    })
+}
+
+fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
     let probe: VersionProbe = serde_json::from_str(json).map_err(SaveError::Serialize)?;
     if matches!(probe.version, 5 | SAVE_VERSION) {
         check_generator(json)?;

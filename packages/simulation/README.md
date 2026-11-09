@@ -35,8 +35,10 @@ engine, hull, radiator) run to tier 15, the scanner to 10, each hazard counter t
 grow geometrically per tier from a cheap first purchase (`upgrade_cost`); stat curves live in
 `player.rs` (`cargo_capacity_for_level` ~300 at the top, `fuel_capacity_for_level` ~3,000,
 `hull_capacity_for_level` ~2,500, `engine_power` ~4x with handling/climb speed capped).
-Capacities are stored, so a save from the old five-tier curves keeps its levels and catches up
-to the new curve on its next purchase; levels load whatever their value.
+Capacities are stored, so a save from the old five-tier curves keeps its levels; loading it
+(`WorldState::catch_up_capacity_curves`, run by the game's save loader) lifts the tank and bay
+onto the new curve for the fitted tiers, keeping bonuses earned on top. Levels load whatever
+their value.
 
 Hazard counters (`protection.rs`, `Player::hazard_gear`, private loadout): Heat Shielding,
 Lava Plating, Gas Scrubber, Pressure Bracing (pressure pockets, explosive pockets, magma vents)
