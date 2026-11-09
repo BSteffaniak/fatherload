@@ -1285,6 +1285,15 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             enter_interior(stage, SurfaceZone::Shop, Some(ModalScreen::Shop));
             stage.seat(0).selected_menu_item =
+                drillgame_simulation::economy::DRILL_MOUNT_OFFER_INDEX;
+        },
+    },
+    Scene {
+        name: "shop_hazard_counters",
+        summary: "Upgrade shop scrolled to the hazard counters (Boulder Deflector row selected)",
+        setup: |stage| {
+            enter_interior(stage, SurfaceZone::Shop, Some(ModalScreen::Shop));
+            stage.seat(0).selected_menu_item =
                 drillgame_simulation::economy::UPGRADE_OFFER_COUNT - 1;
         },
     },

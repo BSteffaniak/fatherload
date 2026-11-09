@@ -4,6 +4,7 @@ use raylib::prelude::*;
 
 use drillgame_simulation::{
     DiscoveredTiles, Player,
+    economy::{UpgradeKind, current_level},
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
     worldgen::Band,
 };
@@ -55,9 +56,12 @@ pub(super) fn draw_heat_warning_for_view(
     terrain: &Terrain,
     view: &ViewSnapshot<'_>,
 ) {
-    let depth_heat =
-        view.player.y > drillgame_simulation::heat_safe_depth(view.player.radiator_level);
     let tile = view.player.tile_position(TILE_SIZE);
+    let depth_heat = drillgame_simulation::protection::heat_excess(
+        terrain.band_at(tile),
+        view.player.radiator_level,
+        view.player.hazard_gear.heat_shield,
+    ) > 0;
     let near_lava = (-2..=2).any(|dy| {
         (-2..=2).any(|dx| {
             matches!(
@@ -891,19 +895,53 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         "Rig",
         SKY_LIGHT,
         [
-            (&rig::DRILL_DOWN, "Drill", ui.player.drill_strength),
-            (&menu_icons::GEAR, "Engine", ui.player.engine_level),
-            (&icons::FUEL, "Fuel Tank", ui.player.fuel_tank_level),
-            (&icons::CARGO, "Cargo Bay", ui.player.cargo_bay_level),
-            (&icons::HULL, "Hull", ui.player.hull_level),
-            (&icons::HEAT, "Radiator", ui.player.radiator_level),
-            (&icons::SCANNER, "Scanner", ui.player.scanner_level),
-            (&rig::DRILL_UP, "Drill Mount", ui.player.drill_mount_level),
+            (&rig::DRILL_DOWN, "Drill", UpgradeKind::Drill),
+            (&menu_icons::GEAR, "Engine", UpgradeKind::Engine),
+            (&icons::FUEL, "Fuel Tank", UpgradeKind::FuelTank),
+            (&icons::CARGO, "Cargo Bay", UpgradeKind::CargoBay),
+            (&icons::HULL, "Hull", UpgradeKind::Hull),
+            (&icons::HEAT, "Radiator", UpgradeKind::Radiator),
+            (&icons::SCANNER, "Scanner", UpgradeKind::Scanner),
+            (&rig::DRILL_UP, "Drill Mount", UpgradeKind::DrillMount),
+            (
+                &icons::HEAT_SHIELD,
+                "Heat Shielding",
+                UpgradeKind::HeatShield,
+            ),
+            (
+                &icons::LAVA_PLATING,
+                "Lava Plating",
+                UpgradeKind::LavaPlating,
+            ),
+            (
+                &icons::GAS_SCRUBBER,
+                "Gas Scrubber",
+                UpgradeKind::GasScrubber,
+            ),
+            (
+                &icons::PRESSURE_BRACING,
+                "Pressure Bracing",
+                UpgradeKind::PressureBracing,
+            ),
+            (
+                &icons::BOULDER_DEFLECTOR,
+                "Boulder Deflector",
+                UpgradeKind::BoulderDeflector,
+            ),
         ]
         .into_iter()
-        .map(|(icon, label, tier): (&'static SpriteDef, &str, u8)| {
-            SectionItem::icon_stat(icon, label, format!("tier {tier}"), MIST)
-        })
+        .map(
+            |(icon, label, kind): (&'static SpriteDef, &str, UpgradeKind)| {
+                let tier = current_level(ui.player, kind);
+                let max = kind.max_level();
+                SectionItem::icon_stat(
+                    icon,
+                    label,
+                    format!("tier {tier}/{max}"),
+                    if tier >= max { LIME } else { MIST },
+                )
+            },
+        )
         .collect(),
     ));
     UiLayout::screen(draw).modal_with_render_plan(

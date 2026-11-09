@@ -4,7 +4,7 @@
 use crate::{
     ControlState, DrillDirection, GameplayEventKind, PlayerCommand, PlayerId,
     PlayerScopedCommandOutcome, SimulationParams, TickInputs, WorldState,
-    economy::{UPGRADE_OFFER_COUNT, UpgradeKind, upgrade_offers},
+    economy::{DRILL_MOUNT_OFFER_INDEX, UpgradeKind, upgrade_offers},
     terrain::{DeepStratum, TILE_SIZE, TileKind, TilePosition},
     worldgen::{Band, strata::band_shallowest_row},
 };
@@ -18,7 +18,7 @@ const SHAFT_X: i32 = 30;
 const CEILING_Y: i32 = 8;
 const FLOOR_Y: i32 = 13;
 /// Index of the drill mount in the shop's offers.
-const DRILL_MOUNT_OFFER: usize = UPGRADE_OFFER_COUNT - 1;
+const DRILL_MOUNT_OFFER: usize = DRILL_MOUNT_OFFER_INDEX;
 
 /// A world at `hz` with a one-tile-wide vertical shaft of air (rows `CEILING_Y + 1 ..
 /// FLOOR_Y`) in solid dirt, and a strong drill.

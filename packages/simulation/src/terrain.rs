@@ -621,27 +621,42 @@ impl Terrain {
         true
     }
 
+    /// Takes one point of durability off the tile at `position` (one drill chip).
     pub fn chip(&mut self, position: TilePosition) -> MineResult {
+        self.chip_by(position, 1, false)
+    }
+
+    /// Takes `bite` points of durability off the tile at `position` (one drill chip from a drill
+    /// that bites `bite` deep).
+    ///
+    /// With `unrestricted` (a test-mode rig) building foundations and undrillable vault fixtures
+    /// give way too; nothing ever digs an [`is_indestructible`] tile or a tile outside the world.
+    pub fn chip_by(&mut self, position: TilePosition, bite: u8, unrestricted: bool) -> MineResult {
         let Some(index) = self.index(position) else {
             return MineResult::Blocked;
         };
         let mut tile = self.tiles[index];
-        let result = Self::chip_tile(&mut tile);
+        let result = Self::chip_tile(&mut tile, bite.max(1), unrestricted);
         if tile != self.tiles[index] {
             self.write_tile(index, position, tile);
         }
         result
     }
 
-    fn chip_tile(tile: &mut Tile) -> MineResult {
-        if matches!(tile.kind, TileKind::Air | TileKind::Bedrock) {
+    /// Whether no drill, not even a test-mode rig's, can dig the tile at `position` (outside the
+    /// world, or an [`is_indestructible`] tile).
+    #[must_use]
+    pub fn is_indestructible_at(&self, position: TilePosition) -> bool {
+        self.tile(position)
+            .is_none_or(|tile| is_indestructible(tile.kind))
+    }
+
+    fn chip_tile(tile: &mut Tile, bite: u8, unrestricted: bool) -> MineResult {
+        if tile.kind == TileKind::Air || is_indestructible(tile.kind) {
             return MineResult::Blocked;
         }
 
-        if matches!(
-            tile.kind,
-            TileKind::Lava | TileKind::MagmaVent | TileKind::Foundation
-        ) {
+        if tile.kind == TileKind::Foundation && !unrestricted {
             return MineResult::TooDangerous;
         }
 
@@ -659,11 +674,12 @@ impl Terrain {
 
         if let TileKind::Poi(poi) = tile.kind
             && poi.hardness() == crate::poi::UNDRILLABLE
+            && !unrestricted
         {
             return MineResult::Blocked;
         }
 
-        tile.durability = tile.durability.saturating_sub(1);
+        tile.durability = tile.durability.saturating_sub(bite);
         if tile.durability > 0 {
             return MineResult::Chipped;
         }
@@ -954,6 +970,12 @@ pub const UNBREAKABLE_HARDNESS: u8 = u8::MAX;
 #[must_use]
 pub const fn is_unbreakable(kind: TileKind) -> bool {
     matches!(kind, TileKind::Bedrock)
+}
+
+/// Whether no drill can ever dig `kind`, not even a test-mode rig's.
+#[must_use]
+pub const fn is_indestructible(kind: TileKind) -> bool {
+    is_unbreakable(kind)
 }
 
 /// Drill strength needed to dig a tile.

@@ -8,7 +8,8 @@ use crate::{
     ids::{PlayerId, SimulationTick},
     progression::WorldEventKind,
     quantize::quantize_simulation_scalar,
-    terrain::{MineralKind, TILE_SIZE, TilePosition},
+    terrain::{DeepStratum, MineralKind, TILE_SIZE, TilePosition},
+    worldgen::Band,
 };
 
 use super::{
@@ -28,6 +29,11 @@ const GAS_BLOOM_PERIOD_MILLIS: u64 = 4_000;
 const RARE_CARGO_GAS_PERIOD_MILLIS: u64 = 4_000;
 /// Scanner lockout refreshed every tick while below the pressure depth.
 const DEEP_PRESSURE_SCANNER_LOCKOUT_MILLIS: u64 = 1_200;
+/// Instability per second added for each band below the slate shelves (a full meter
+/// triggers a cave-in).
+const DEEP_PRESSURE_PER_BAND: f32 = 0.05;
+/// Hull damage of a falling boulder hitting a rig (before the boulder deflector).
+pub const BOULDER_HIT_DAMAGE: f32 = 8.0;
 
 impl WorldState {
     pub(super) fn advance_world_event_hazards(
@@ -81,8 +87,7 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return;
         };
-        // Pressure depths are classic nominal rows, stretched with a deep world's bands.
-        let depth = self.terrain.nominal_row(player.tile_position(TILE_SIZE).y);
+        let band = self.terrain.band_at(player.tile_position(TILE_SIZE));
         let rare_cargo = player
             .cargo
             .iter()
@@ -101,7 +106,9 @@ impl WorldState {
         let timing = self.timing;
         let delta_seconds = timing.delta_seconds;
         let state = self.deep_run_states.entry(player_id).or_default();
-        if depth < 80 {
+        // Instability builds from the basalt deeps down, wherever this world's strata put them.
+        let bands_deep = band.index().saturating_sub(Band::Slate.index());
+        if bands_deep == 0 {
             state.trip_ticks = 0;
             state.instability = 2.0f32.mul_add(-delta_seconds, state.instability).max(0.0);
             return;
@@ -110,14 +117,14 @@ impl WorldState {
         let trip_seconds = timing.rate.seconds_for_ticks(state.trip_ticks);
         #[allow(
             clippy::cast_precision_loss,
-            reason = "bounded depth and cargo counts intentionally feed gameplay pressure"
+            reason = "bounded band and cargo counts intentionally feed gameplay pressure"
         )]
-        let pressure = ((depth - 70) as f32).mul_add(
-            0.006,
-            trip_seconds.mul_add(0.0006, rare_cargo as f32 * 0.02),
+        let pressure = (bands_deep as f32).mul_add(
+            DEEP_PRESSURE_PER_BAND,
+            trip_seconds.mul_add(0.0003, rare_cargo as f32 * 0.01),
         );
         state.instability = delta_seconds.mul_add(pressure, state.instability);
-        if depth >= 105 {
+        if band.index() >= Band::Deep(DeepStratum::FossilOceans).index() {
             if let Some(player) = self.players.get_mut(&player_id) {
                 player.fuel =
                     quantize_simulation_scalar(delta_seconds.mul_add(-0.25, player.fuel).max(0.0));
@@ -150,9 +157,11 @@ impl WorldState {
             state.instability = 45.0;
             let player = self.players.get(&player_id).expect("player remains valid");
             let (player_x, player_y) = (player.x, player.y);
+            let damage = player.hazard_gear.boulder_damage(4.0);
             self.spawn_cave_in(player_x, player_y);
-            let _snapshot = self.apply_hazard_damage(player_id, 4.0);
-            output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+            if self.damage_player(player_id, damage) {
+                output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+            }
             output.push_event(GameplayEventKind::BouldersChanged);
         }
     }
@@ -223,11 +232,13 @@ impl WorldState {
                     let dx = player.x - boulder.x;
                     let dy = player.y - boulder.y;
                     (dx.mul_add(dx, dy * dy) <= (AUTHORITATIVE_PLAYER_RADIUS + 8.0).powi(2))
-                        .then_some(*player_id)
+                        .then_some((*player_id, player.hazard_gear))
                 });
-                if let Some(player_id) = hit_player {
-                    let _snapshot = self.apply_hazard_damage(player_id, 8.0);
-                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+                if let Some((player_id, gear)) = hit_player {
+                    // The boulder shatters on the rig; the deflector turns aside its weight.
+                    if self.damage_player(player_id, gear.boulder_damage(BOULDER_HIT_DAMAGE)) {
+                        output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+                    }
                     continue;
                 }
                 #[allow(

@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     poi::PoiJournal,
+    protection::HazardGear,
     quest::QuestLog,
     terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TilePosition},
 };
@@ -40,6 +41,10 @@ pub struct Player {
     /// (sideways drilling in flight), 2 crown bore (also drills upward into ceilings).
     #[serde(default)]
     pub drill_mount_level: u8,
+    /// Hazard counter tiers (heat shielding, lava plating, gas scrubber, pressure bracing,
+    /// boulder deflector).
+    #[serde(default)]
+    pub hazard_gear: HazardGear,
     #[serde(default)]
     pub bombs: u32,
     #[serde(default)]
@@ -100,6 +105,7 @@ impl Player {
             radiator_level: 1,
             scanner_level: 0,
             drill_mount_level: 0,
+            hazard_gear: HazardGear::default(),
             bombs: 0,
             loan_debt: 0,
             insured: false,
@@ -149,10 +155,7 @@ impl Player {
 
     #[must_use]
     pub fn max_hull(&self) -> f32 {
-        f32::from(self.crafted_bulkheads).mul_add(
-            15.0,
-            100.0 + f32::from(self.hull_level.saturating_sub(1)) * 35.0,
-        )
+        f32::from(self.crafted_bulkheads).mul_add(15.0, hull_capacity_for_level(self.hull_level))
     }
 
     pub fn add_cargo(&mut self, mineral: MineralKind) -> bool {
@@ -176,4 +179,89 @@ impl Player {
         *self.artifacts.entry(artifact).or_default() += 1;
         true
     }
+}
+
+/// Upgrade tiers bought past the first (tier 1 is the stock part).
+const fn tiers_past_first(level: u8) -> u32 {
+    level.saturating_sub(1) as u32
+}
+
+/// Cargo slots of a cargo bay at `level`: 12 stock, each tier adding two more slots than the
+/// last (+8, +10, +12, ...), about 300 at the top tier.
+#[must_use]
+pub const fn cargo_capacity_for_level(level: u8) -> u32 {
+    let n = tiers_past_first(level);
+    12 + 8 * n + n * n.saturating_sub(1)
+}
+
+/// Fuel of a fuel tank at `level`: 100 stock, each tier adding 25 more than the last (+50,
+/// +75, +100, ...), about 3,000 at the top tier.
+#[must_use]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "tank sizes are a few thousand units, exact in f32"
+)]
+pub const fn fuel_capacity_for_level(level: u8) -> f32 {
+    let n = tiers_past_first(level);
+    (100 + 50 * n + 25 * n * n.saturating_sub(1) / 2) as f32
+}
+
+/// Hull integrity of hull plating at `level` (before crafted bulkheads): 100 stock, each tier
+/// adding 20 more than the last (+40, +60, +80, ...), about 2,500 at the top tier.
+#[must_use]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "hull sizes are a few thousand units, exact in f32"
+)]
+pub const fn hull_capacity_for_level(level: u8) -> f32 {
+    let n = tiers_past_first(level);
+    (100 + 40 * n + 10 * n * n.saturating_sub(1)) as f32
+}
+
+/// Thrust and handling multiplier of an engine at `level`: +0.28 per tier up to tier 5, then
+/// +0.2 per tier (about 4x stock at the top tier).
+#[must_use]
+#[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
+pub const fn engine_power(level: u8) -> f32 {
+    let n = tiers_past_first(level);
+    if n <= 4 {
+        (n as f32).mul_add(0.28, 1.0)
+    } else {
+        ((n - 4) as f32).mul_add(0.2, 2.12)
+    }
+}
+
+/// Horizontal speed multiplier cap: the top engines lift far more but do not skate faster
+/// than this (keeps steps well under a tile per tick at every supported tick rate).
+pub const ENGINE_HANDLING_CAP: f32 = 2.4;
+/// Climb speed multiplier cap (as [`ENGINE_HANDLING_CAP`], for climbing).
+pub const ENGINE_CLIMB_CAP: f32 = 3.0;
+
+/// Fuel burned per second of thrust relative to stock, for a fuel tank at `level` (better
+/// injectors come with every tank tier, never below 40 %).
+#[must_use]
+#[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
+pub const fn fuel_burn_efficiency(level: u8) -> f32 {
+    (tiers_past_first(level) as f32)
+        .mul_add(-0.05, 1.0)
+        .max(0.4)
+}
+
+/// Chip-rate multiplier of a drill at `level`: +0.4 per tier up to tier 5, then +0.5 per tier.
+#[must_use]
+#[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
+pub const fn drill_speed(level: u8) -> f32 {
+    let n = tiers_past_first(level);
+    if n <= 4 {
+        (n as f32).mul_add(0.4, 1.0)
+    } else {
+        ((n - 4) as f32).mul_add(0.5, 2.6)
+    }
+}
+
+/// Durability a drill at `level` takes off a tile per chip: 1 up to tier 5, then one more every
+/// three tiers (5 at the top tier, so hard rock falls in three chips).
+#[must_use]
+pub const fn drill_bite(level: u8) -> u8 {
+    if level < 6 { 1 } else { 2 + (level - 6) / 3 }
 }

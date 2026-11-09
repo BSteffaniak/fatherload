@@ -776,7 +776,13 @@ pub fn stat_bar(
     icon(draw, sprite, x, y);
     let label_x = x + ICON_SIZE + 3;
     text(draw, label, label_x, y + 1, TextStyle::Bold, MIST);
-    let numbers = format!("{value:.0}/{max:.0}");
+    // Late-game tanks and hulls run into the thousands: past 999, show only the reading (the
+    // bar shows the fill) so the numbers never squeeze the bar away.
+    let numbers = if max >= 1_000.0 {
+        compact_amount(value)
+    } else {
+        format!("{value:.0}/{max:.0}")
+    };
     text_right(draw, &numbers, x + width, y + 1, TextStyle::Body, BONE);
     let bar_x = label_x + text_width("CARGO", TextStyle::Bold) + 4;
     let bar_width = (x + width - text_width(&numbers, TextStyle::Body) - 4 - bar_x).max(8);
@@ -793,6 +799,19 @@ pub fn stat_bar(
         danger_below,
     );
     ICON_SIZE + 3
+}
+
+/// `value` in at most five characters: whole numbers to 9999, then thousands (`12.5k`, `250k`).
+#[must_use]
+pub fn compact_amount(value: f32) -> String {
+    let value = value.max(0.0);
+    if value < 9_999.5 {
+        format!("{value:.0}")
+    } else if value < 99_950.0 {
+        format!("{:.1}k", value / 1_000.0)
+    } else {
+        format!("{:.0}k", value / 1_000.0)
+    }
 }
 
 /// One row of a shop / inventory list.

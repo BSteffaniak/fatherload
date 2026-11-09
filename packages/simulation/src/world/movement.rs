@@ -2,6 +2,7 @@
 
 use crate::{
     ids::PlayerId,
+    player::{ENGINE_CLIMB_CAP, ENGINE_HANDLING_CAP, engine_power, fuel_burn_efficiency},
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
     terrain::{TILE_SIZE, Terrain, TilePosition},
@@ -37,16 +38,16 @@ pub const AUTHORITATIVE_MAX_CLIMB_SPEED: f32 = 190.0;
 /// Vertical air resistance (per second): velocity relaxes toward `acceleration / rate`.
 pub const AUTHORITATIVE_VERTICAL_DRAG_RATE_PER_SECOND: f32 = 0.7;
 /// Warning time before a boulder loosened by mining starts to fall.
-pub const AUTHORITATIVE_BOULDER_WARNING_MILLIS: u64 = 850;
+pub const AUTHORITATIVE_BOULDER_WARNING_MILLIS: u64 = 1_500;
 /// Lifetime of a boulder loosened by mining.
-pub const AUTHORITATIVE_BOULDER_LIFE_MILLIS: u64 = 3_600;
+pub const AUTHORITATIVE_BOULDER_LIFE_MILLIS: u64 = 4_200;
 /// One in this many mined stone tiles loosens a boulder (per mined tile, not per tick, so it is
-/// independent of the tick rate).
-pub const AUTHORITATIVE_BOULDER_SPAWN_CHANCE: u64 = 16;
+/// independent of the tick rate). Was one in 16; boulders are a rare surprise now.
+pub const AUTHORITATIVE_BOULDER_SPAWN_CHANCE: u64 = 80;
 /// Warning time of the centre boulder of a cave-in.
-pub const AUTHORITATIVE_CAVE_IN_WARNING_MILLIS: u64 = 450;
+pub const AUTHORITATIVE_CAVE_IN_WARNING_MILLIS: u64 = 900;
 /// Extra warning time per tile away from the centre of a cave-in.
-pub const AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS: u64 = 150;
+pub const AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS: u64 = 200;
 /// Lifetime of cave-in boulders.
 pub const AUTHORITATIVE_CAVE_IN_LIFE_MILLIS: u64 = 4_000;
 pub const AUTHORITATIVE_FUEL_BURN_PER_SECOND: f32 = 5.0;
@@ -83,6 +84,7 @@ impl WorldState {
             .cloned()
             .unwrap_or_default();
         let mechanic_level = self.mechanic_levels.get(&player_id).copied().unwrap_or(0);
+        let immune = self.damage_immune();
         let player = self.players.get_mut(&player_id)?;
         let grounded = authoritative_player_collides(&self.terrain, player.x, player.y + 2.0);
         let mut effective_cargo_capacity = player.cargo_capacity;
@@ -105,8 +107,7 @@ impl WorldState {
             0.18
         };
         let cargo_penalty = cargo_ratio.min(1.0).mul_add(-cargo_pressure, 1.0);
-        let mut engine_multiplier =
-            (1.0 + f32::from(player.engine_level.saturating_sub(1)) * 0.28) * cargo_penalty;
+        let mut engine_multiplier = engine_power(player.engine_level) * cargo_penalty;
         if parts.contains(&RigPartKind::LightweightEngine) {
             engine_multiplier *= 1.12;
         }
@@ -129,13 +130,17 @@ impl WorldState {
         } else {
             (timing.air_drag_per_tick, timing.air_acceleration_gain)
         };
+        // The top engines lift far more, but handling and climb speed are capped so a step
+        // stays well under a tile per tick.
+        let handling = engine_multiplier.min(ENGINE_HANDLING_CAP);
+        let climb = engine_multiplier.min(ENGINE_CLIMB_CAP);
         player.velocity_x = quantize_simulation_scalar(
-            (horizontal.clamp(-1.0, 1.0) * horizontal_acceleration * engine_multiplier)
+            (horizontal.clamp(-1.0, 1.0) * horizontal_acceleration * handling)
                 .mul_add(gain, player.velocity_x * drag),
         )
         .clamp(
-            -AUTHORITATIVE_MAX_HORIZONTAL_SPEED * engine_multiplier,
-            AUTHORITATIVE_MAX_HORIZONTAL_SPEED * engine_multiplier,
+            -AUTHORITATIVE_MAX_HORIZONTAL_SPEED * handling,
+            AUTHORITATIVE_MAX_HORIZONTAL_SPEED * handling,
         );
         let thrusting = thrust && player.fuel > 0.0;
         // Exact integration of dv/dt = a - k v over the tick (positive y is down).
@@ -156,12 +161,12 @@ impl WorldState {
                     player.velocity_y * timing.vertical_drag_per_tick,
                 )
                 .clamp(
-                    -AUTHORITATIVE_MAX_CLIMB_SPEED * engine_multiplier,
+                    -AUTHORITATIVE_MAX_CLIMB_SPEED * climb,
                     AUTHORITATIVE_MAX_FALL_SPEED,
                 ),
         );
         if thrusting {
-            let mut efficiency = 1.0 - f32::from(player.fuel_tank_level.saturating_sub(1)) * 0.06;
+            let mut efficiency = fuel_burn_efficiency(player.fuel_tank_level);
             if parts.contains(&RigPartKind::BurstEngine) {
                 efficiency *= 1.22;
             }
@@ -194,7 +199,9 @@ impl WorldState {
                     mitigation -= 0.10;
                 }
                 let damage = damage * (1.0 - mitigation.clamp(0.0, 0.55));
-                player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
+                if !immune {
+                    player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
+                }
             }
             player.velocity_x = 0.0;
         } else {
@@ -214,7 +221,9 @@ impl WorldState {
                     mitigation -= 0.10;
                 }
                 let damage = damage * (1.0 - mitigation.clamp(0.0, 0.55));
-                player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
+                if !immune {
+                    player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
+                }
             }
             player.velocity_y = 0.0;
         } else {

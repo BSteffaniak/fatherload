@@ -208,6 +208,108 @@ pub const SCANNER: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+/// Heat shielding: a shield with a cool core.
+pub const HEAT_SHIELD: SpriteDef = SpriteDef {
+    name: "icon_heat_shield",
+    legend: &[('o', INK), ('a', ORANGE), ('i', ICE), ('s', SKY_LIGHT)],
+    frames: &[&[
+        "ooooooooo",
+        "oaaaaaaao",
+        "oaissssao",
+        "oaisiisao",
+        "oaisiisao",
+        ".oaissao.",
+        ".oaaisao.",
+        "..oaaao..",
+        "...ooo...",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Lava plating: an armour plate over a lava drip.
+pub const LAVA_PLATING: SpriteDef = SpriteDef {
+    name: "icon_lava_plating",
+    legend: &[
+        ('o', INK),
+        ('k', STEEL),
+        ('w', STEEL_LIGHT),
+        ('r', RED),
+        ('a', ORANGE),
+    ],
+    frames: &[&[
+        ".ooooooo.",
+        "owwwwwwko",
+        "owkkkkkko",
+        "okkkkkkko",
+        ".ooooooo.",
+        "..oao.o..",
+        "..oro.ao.",
+        "...o..ro.",
+        ".......o.",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Gas scrubber: a filter mask.
+pub const GAS_SCRUBBER: SpriteDef = SpriteDef {
+    name: "icon_gas_scrubber",
+    legend: &[('o', INK), ('m', MINT), ('k', SLATE), ('l', LIME)],
+    frames: &[&[
+        "..ooooo..",
+        ".ommmmmo.",
+        "omkmmmkmo",
+        "ommmmmmmo",
+        ".ommkmmo.",
+        "..okkko..",
+        "l.okoko.l",
+        ".l.ooo.l.",
+        "l.......l",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Pressure bracing: crossed struts in a frame.
+pub const PRESSURE_BRACING: SpriteDef = SpriteDef {
+    name: "icon_pressure_bracing",
+    legend: &[('o', INK), ('k', STEEL), ('g', GOLD)],
+    frames: &[&[
+        "ooooooooo",
+        "ogk...kgo",
+        "o.gk.kg.o",
+        "o..gkg..o",
+        "o...g...o",
+        "o..gkg..o",
+        "o.gk.kg.o",
+        "ogk...kgo",
+        "ooooooooo",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Boulder deflector: a sloped plate turning a rock aside.
+pub const BOULDER_DEFLECTOR: SpriteDef = SpriteDef {
+    name: "icon_boulder_deflector",
+    legend: &[
+        ('o', INK),
+        ('s', STONE),
+        ('l', STONE_LIGHT),
+        ('k', STEEL),
+        ('w', STEEL_LIGHT),
+    ],
+    frames: &[&[
+        ".ooo.....",
+        "olsso....",
+        "ossso....",
+        ".ooo.....",
+        "......oo.",
+        "....oowko",
+        "..oowkkko",
+        "oowkkkko.",
+        "ooooooo..",
+    ]],
+    frame_seconds: 0.0,
+};
+
 /// Rounded ore nugget (metals): `d` shade, `m` body, `l` light, `w` glint.
 const NUGGET: &[&str] = &[
     ".........",

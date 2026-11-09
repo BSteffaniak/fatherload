@@ -933,9 +933,16 @@ fn canonical_heat_wave_and_deep_instability_affect_survival_deterministically() 
     let mut first = WorldState::from_import(&game);
     let mut second = first.clone();
     for world in [&mut first, &mut second] {
-        let y = classic_row_y(world, 110);
+        // Inside the fossil oceans, where the deep pressure drains fuel.
+        let settings = *world.terrain().settings();
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.y = y;
+        let column = player.tile_position(TILE_SIZE).x;
+        let row = crate::worldgen::strata::band_solid_top_row(
+            &settings,
+            crate::worldgen::Band::Deep(crate::terrain::DeepStratum::FossilOceans),
+            column,
+        ) + 2;
+        player.y = (f32::from(i16::try_from(row).expect("row")) + 0.5) * TILE_SIZE;
         player.fuel = 100.0;
         player.hull = 100.0;
         player.cargo.insert(crate::terrain::MineralKind::Diamond, 1);
@@ -1592,16 +1599,17 @@ fn authoritative_world_handles_hazard_damage_failure_scanner_and_bomb_effects() 
 }
 
 #[test]
-fn a_maxed_radiator_keeps_the_rig_cool_into_the_first_deep_strata() {
-    use crate::economy::MAX_UPGRADE_LEVEL;
-    assert!(18.0f32.mul_add(-TILE_SIZE, super::heat_safe_depth(1)).abs() < f32::EPSILON);
-    let maxed = super::heat_safe_depth(MAX_UPGRADE_LEVEL) / TILE_SIZE;
+fn the_old_top_radiator_keeps_the_rig_cool_into_the_first_deep_stratum() {
+    use crate::{protection::heat_excess, terrain::DeepStratum, worldgen::Band};
+    let crystal = Band::Deep(DeepStratum::CrystalFaults);
+    assert!(heat_excess(Band::Topsoil, 1, 0) == 0);
     assert!(
-        maxed >= 110.0,
-        "a level-{MAX_UPGRADE_LEVEL} radiator is cool to row {maxed}"
+        heat_excess(crystal, 4, 0) > 0,
+        "tier 4 runs hot in the crystal faults"
     );
+    assert_eq!(heat_excess(crystal, 5, 0), 0, "tier 5 is cool there");
     assert!(
-        super::heat_safe_depth(3) > super::heat_safe_depth(2),
-        "every radiator level helps"
+        heat_excess(Band::Deep(DeepStratum::FossilOceans), 5, 0) > 0,
+        "but not one band further down"
     );
 }

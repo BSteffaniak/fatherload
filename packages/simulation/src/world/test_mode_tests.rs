@@ -3,7 +3,8 @@
 use crate::{
     ControlState, PlayerCommand, PlayerId, PlayerScopedCommandOutcome, SectionKey, TickInputs,
     TickOutput, WorldState,
-    economy::{MAX_DRILL_MOUNT_LEVEL, MAX_UPGRADE_LEVEL},
+    economy::{MAX_DRILL_MOUNT_LEVEL, MAX_SCANNER_LEVEL, MAX_UPGRADE_LEVEL},
+    protection::HazardGear,
     rig::RigPartKind,
     terrain::{DeepStratum, TILE_SIZE, TileKind, TilePosition},
     test_mode::{TEST_MODE_CREDITS, TestModeAction},
@@ -46,10 +47,11 @@ fn test_mode_starts_every_rig_maxed_with_every_part() {
             player.cargo_bay_level,
             player.hull_level,
             player.radiator_level,
-            player.scanner_level,
         ] {
             assert_eq!(level, MAX_UPGRADE_LEVEL);
         }
+        assert_eq!(player.scanner_level, MAX_SCANNER_LEVEL);
+        assert_eq!(player.hazard_gear, HazardGear::MAXED);
         assert_eq!(player.drill_mount_level, MAX_DRILL_MOUNT_LEVEL);
         assert!(player.credits >= TEST_MODE_CREDITS);
         assert!((player.fuel - player.fuel_capacity).abs() < f32::EPSILON);

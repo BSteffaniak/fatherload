@@ -8,18 +8,32 @@ use crate::{
     hazard::{HazardCloud, PlacedBomb},
     ids::{PlayerId, SimulationTick},
     infrastructure::{InfrastructureKind, PlacedInfrastructure},
-    player::Player,
+    player::{Player, drill_bite, drill_speed},
     progression::WorldEventKind,
     quantize::quantize_simulation_scalar,
     quest::QuestGiver,
     rig::{DrillDirection, DrillState, RigPartKind},
     service::{PlayerServiceTransaction, PlayerTransactionKind},
     summary::PlayerScopedCommandOutcome,
-    terrain::{DeepStratum, MineResult, TILE_SIZE, Terrain, TileKind, TilePosition},
+    terrain::{
+        DeepStratum, MineResult, TILE_SIZE, Terrain, TileKind, TilePosition, is_indestructible,
+    },
 };
 
 use super::{WorldState, movement::authoritative_player_collides, record_service_transaction};
 
+/// Shortest time between two drill chips (about three ticks at 60 Hz). Faster drills bite
+/// deeper per chip instead (see [`drill_bite`]), which keeps the dig pace the same at every tick
+/// rate.
+pub const MIN_DRILL_SECONDS_PER_CHIP: f32 = 0.045;
+/// Hull damage from drilling into a lava tile (before lava plating).
+pub const LAVA_DRILL_DAMAGE: f32 = 6.0;
+/// Hull damage from drilling into a pressure pocket (before pressure bracing).
+pub const PRESSURE_POCKET_DAMAGE: f32 = 10.0;
+/// Hull damage from drilling into an explosive pocket (before pressure bracing).
+pub const POCKET_BLAST_DAMAGE: f32 = 24.0;
+/// Hull damage from drilling into a magma vent (before pressure bracing).
+pub const MAGMA_VENT_DAMAGE: f32 = 14.0;
 /// Scanner cooldown after a scan.
 const SCANNER_COOLDOWN_MILLIS: u64 = 1_000;
 /// Fuse of a placed bomb.
@@ -28,9 +42,21 @@ const BOMB_FUSE_MILLIS: u64 = 2_400;
 const BOMB_FUSE_SECONDS: f32 = 2.4;
 
 impl WorldState {
-    pub(crate) fn chip_active_drill_target(&mut self, player_id: PlayerId) -> Option<MineResult> {
+    /// Lands one chip of `player_id`'s active drill, returning what it did and whether the rig
+    /// took damage from it.
+    pub(crate) fn chip_active_drill_target(
+        &mut self,
+        player_id: PlayerId,
+    ) -> Option<(MineResult, bool)> {
         let target = self.active_drills.get(&player_id)?.target;
-        let result = self.terrain_mut().chip(target);
+        let unrestricted = self.is_test_mode();
+        let bite = if unrestricted {
+            // Test mode: every tile falls to a single chip.
+            u8::MAX
+        } else {
+            drill_bite(self.players.get(&player_id)?.drill_strength)
+        };
+        let result = self.terrain_mut().chip_by(target, bite, unrestricted);
         if matches!(
             result,
             MineResult::Blocked
@@ -43,6 +69,8 @@ impl WorldState {
             self.active_drills.remove(&player_id);
         }
         let player = self.players.get_mut(&player_id)?;
+        let gear = player.hazard_gear;
+        let mut damage = 0.0;
         match result {
             MineResult::Mined(mined) => {
                 player.fuel = quantize_simulation_scalar((player.fuel - 0.45).max(0.0));
@@ -54,9 +82,20 @@ impl WorldState {
                         let _added = player.add_artifact(artifact);
                     }
                     TileKind::PressurePocket => {
-                        player.velocity_y = -360.0;
-                        player.velocity_x = quantize_simulation_scalar(player.velocity_x * 1.4);
-                        player.hull = quantize_simulation_scalar((player.hull - 10.0).max(0.0));
+                        let kick = 1.0 - gear.pressure_absorbed();
+                        player.velocity_y = quantize_simulation_scalar(-360.0 * kick);
+                        player.velocity_x =
+                            quantize_simulation_scalar(player.velocity_x * kick.mul_add(0.4, 1.0));
+                        damage = gear.pressure_damage(PRESSURE_POCKET_DAMAGE);
+                    }
+                    TileKind::Lava => {
+                        // Drilling through lava splashes the rig; the plating takes the heat.
+                        damage = gear.lava_damage(LAVA_DRILL_DAMAGE);
+                    }
+                    TileKind::MagmaVent => {
+                        let kick = 1.0 - gear.pressure_absorbed();
+                        player.velocity_y = quantize_simulation_scalar(-200.0 * kick);
+                        damage = gear.pressure_damage(MAGMA_VENT_DAMAGE);
                     }
                     _ => {}
                 }
@@ -80,17 +119,22 @@ impl WorldState {
                 }
             }
             MineResult::Blast => {
+                let kick = 1.0 - gear.pressure_absorbed();
                 player.fuel = quantize_simulation_scalar((player.fuel - 0.9).max(0.0));
-                player.hull = quantize_simulation_scalar((player.hull - 24.0).max(0.0));
-                player.velocity_x = quantize_simulation_scalar(player.velocity_x * -0.7);
-                player.velocity_y = -260.0;
+                player.velocity_x = quantize_simulation_scalar(player.velocity_x * -0.7 * kick);
+                player.velocity_y = quantize_simulation_scalar(-260.0 * kick);
+                damage = gear.pressure_damage(POCKET_BLAST_DAMAGE);
             }
             MineResult::Activated(_) => {
                 player.fuel = quantize_simulation_scalar((player.fuel - 0.45).max(0.0));
             }
             MineResult::Blocked | MineResult::TooDangerous | MineResult::Chipped => {}
         }
-        Some(result)
+        let damaged = self.damage_player(player_id, damage);
+        if damaged && let Some(player) = self.players.get_mut(&player_id) {
+            player.hull = quantize_simulation_scalar(player.hull);
+        }
+        Some((result, damaged))
     }
 
     /// Updates a player's drill target from held controls (no velocity change).
@@ -143,10 +187,12 @@ impl WorldState {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;
             };
-            if tile.kind == TileKind::Air {
+            if tile.kind == TileKind::Air || is_indestructible(tile.kind) {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;
             }
+            // Test mode drills anything but the world's floor, near-instantly.
+            let unrestricted = self.is_test_mode();
             let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
                 || parts.contains(&RigPartKind::ResonanceDrill)
             {
@@ -154,23 +200,28 @@ impl WorldState {
             } else {
                 player.drill_strength
             };
-            if self
-                .terrain
-                .hardness_at(target)
-                .is_some_and(|hardness| hardness > effective_drill_strength)
+            if !unrestricted
+                && self
+                    .terrain
+                    .hardness_at(target)
+                    .is_some_and(|hardness| hardness > effective_drill_strength)
             {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;
             }
             let initial_durability = tile.durability.max(1);
-            let seconds_per_chip = authoritative_drill_seconds_per_chip(
-                tile.kind,
-                player.drill_strength,
-                direction,
-                &parts,
-                &self.terrain,
-                target,
-            );
+            let seconds_per_chip = if unrestricted {
+                MIN_DRILL_SECONDS_PER_CHIP
+            } else {
+                authoritative_drill_seconds_per_chip(
+                    tile.kind,
+                    player.drill_strength,
+                    direction,
+                    &parts,
+                    &self.terrain,
+                    target,
+                )
+            };
             let drill = self
                 .active_drills
                 .get(&player_id)
@@ -440,7 +491,7 @@ pub(super) fn authoritative_drill_seconds_per_chip(
     } else {
         drill_strength
     };
-    let drill_bonus = 1.0 + f32::from(effective_drill_strength.saturating_sub(1)) * 0.4;
+    let drill_bonus = drill_speed(effective_drill_strength);
     let direction_penalty = match direction {
         DrillDirection::Down => 1.0,
         DrillDirection::Left | DrillDirection::Right => 1.45,
@@ -466,7 +517,7 @@ pub(super) fn authoritative_drill_seconds_per_chip(
     {
         seconds *= 0.65;
     }
-    seconds.max(0.045)
+    seconds.max(MIN_DRILL_SECONDS_PER_CHIP)
 }
 
 pub(super) const fn authoritative_drill_state(

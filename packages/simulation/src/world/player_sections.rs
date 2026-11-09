@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     player::Player,
     poi::PoiJournal,
+    protection::HazardGear,
     quest::QuestLog,
     terrain::{ArtifactKind, MineralKind, StrategicResourceKind},
 };
@@ -62,6 +63,9 @@ pub struct PlayerInventory {
     pub credits: u32,
     pub drill_strength: u8,
     pub engine_level: u8,
+    /// Hazard counter tiers.
+    #[serde(default)]
+    pub hazard_gear: HazardGear,
     pub bombs: u32,
     pub loan_debt: u32,
     pub insured: bool,
@@ -102,6 +106,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         radiator_level,
         scanner_level,
         drill_mount_level,
+        hazard_gear,
         bombs,
         loan_debt,
         insured,
@@ -144,6 +149,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             credits,
             drill_strength,
             engine_level,
+            hazard_gear,
             bombs,
             loan_debt,
             insured,
@@ -190,6 +196,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         credits,
         drill_strength,
         engine_level,
+        hazard_gear,
         bombs,
         loan_debt,
         insured,
@@ -225,6 +232,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         radiator_level,
         scanner_level,
         drill_mount_level,
+        hazard_gear,
         bombs,
         loan_debt,
         insured,

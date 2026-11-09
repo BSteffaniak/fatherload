@@ -9,7 +9,7 @@ use drillgame_simulation::{
     RecipeKind,
     economy::{
         DeepClaimStatus, REFUEL_UNIT_COST, REPAIR_UNIT_COST, TownBuilding, UpgradeKind,
-        upgrade_locked_by, upgrade_maxed, upgrade_offers, upgrade_tier_name,
+        upgrade_effect, upgrade_locked_by, upgrade_maxed, upgrade_offers, upgrade_tier_name,
     },
     terrain::MineralKind,
     world::{BOMB_BUNDLES, MINING_ROCKETS_COST, MINING_ROCKETS_COUNT, MINING_ROCKETS_SHACK_LEVEL},
@@ -273,6 +273,11 @@ const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
         UpgradeKind::Scanner => &icons::SCANNER,
         UpgradeKind::BombPack => &icons::BOMB,
         UpgradeKind::DrillMount => &rig::DRILL_UP,
+        UpgradeKind::HeatShield => &icons::HEAT_SHIELD,
+        UpgradeKind::LavaPlating => &icons::LAVA_PLATING,
+        UpgradeKind::GasScrubber => &icons::GAS_SCRUBBER,
+        UpgradeKind::PressureBracing => &icons::PRESSURE_BRACING,
+        UpgradeKind::BoulderDeflector => &icons::BOULDER_DEFLECTOR,
     }
 }
 
@@ -284,16 +289,29 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
         .iter()
         .map(|offer| {
             let icon = upgrade_icon(offer.kind);
+            let max = offer.kind.max_level();
             if upgrade_maxed(offer) {
-                return Offer::new(icon, offer.name, format!("Tier {} fitted", offer.level))
-                    .tag("MAX", LIME)
-                    .unavailable_if(true)
-                    .about(offer.description);
+                return Offer::new(
+                    icon,
+                    offer.name,
+                    format!("Tier {}/{max} fitted", offer.level),
+                )
+                .tag("MAX", LIME)
+                .unavailable_if(true)
+                .about(offer.description);
             }
-            let tier = format!(
-                "Tier {} {}",
-                offer.level + 1,
-                upgrade_tier_name(offer.kind, offer.level)
+            let tier = if offer.kind == UpgradeKind::BombPack {
+                upgrade_tier_name(offer.kind, offer.level).to_owned()
+            } else {
+                format!(
+                    "Tier {}/{max} {}",
+                    offer.level + 1,
+                    upgrade_tier_name(offer.kind, offer.level)
+                )
+            };
+            let about = upgrade_effect(ui.player, offer.kind).map_or_else(
+                || offer.description.to_owned(),
+                |effect| format!("{effect}. {}.", offer.description),
             );
             if let Some(band) = upgrade_locked_by(offer, settings, deepest) {
                 return Offer::new(icon, offer.name, tier)
@@ -308,7 +326,7 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
             }
             Offer::new(icon, offer.name, tier)
                 .price(offer.cost, credits)
-                .about(offer.description)
+                .about(about)
         })
         .collect()
 }

@@ -21,6 +21,7 @@ pub mod input;
 pub mod player;
 pub mod poi;
 pub mod progression;
+pub mod protection;
 pub mod quantize;
 pub mod quest;
 pub mod rig;
@@ -66,5 +67,5 @@ pub use tick::{
 pub use world::{
     ActiveDrillTimer, AuthoritativeMovementStep, CanonicalProgressionState, DeepRunState,
     DiscoveredTiles, Discovery, LiveEntities, LostCargoSite, PlayerLoadout, PlayerTickState,
-    SectionKey, SectionPayload, TickTiming, WorldImport, WorldState, heat_safe_depth,
+    SectionKey, SectionPayload, TickTiming, WorldImport, WorldState,
 };

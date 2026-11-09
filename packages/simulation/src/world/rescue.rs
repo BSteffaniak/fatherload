@@ -177,13 +177,32 @@ impl WorldState {
         true
     }
 
+    /// Whether rigs take no damage at all: a test-mode world with the invulnerable toggle on.
+    #[must_use]
+    pub fn damage_immune(&self) -> bool {
+        self.test_mode.is_some_and(|state| state.invulnerable)
+    }
+
+    /// Takes `damage` off `player_id`'s hull, returning whether any was taken (nothing in an
+    /// invulnerable test-mode world, or for zero damage after the rig's counters).
+    pub(crate) fn damage_player(&mut self, player_id: PlayerId, damage: f32) -> bool {
+        if damage <= 0.0 || self.damage_immune() || !self.players.contains_key(&player_id) {
+            return false;
+        }
+        let _snapshot = self.apply_hazard_damage(player_id, damage);
+        true
+    }
+
     pub(crate) fn apply_hazard_damage(
         &mut self,
         player_id: PlayerId,
         damage: f32,
     ) -> Option<PlayerSurvivalSnapshot> {
+        let immune = self.damage_immune();
         let player = self.players.get_mut(&player_id)?;
-        player.hull = (player.hull - damage.max(0.0)).max(0.0);
+        if !immune {
+            player.hull = (player.hull - damage.max(0.0)).max(0.0);
+        }
         Some(PlayerSurvivalSnapshot {
             player_id,
             fuel: player.fuel,

@@ -201,7 +201,7 @@ fn draw_widgets(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32) {
 fn draw_sprites(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32) {
     ui_kit::text(draw, "ICONS", x, y, TextStyle::Bold, SKY_LIGHT);
     let mut ix = x;
-    let stat_icons: [&SpriteDef; 9] = [
+    let stat_icons: [&SpriteDef; 14] = [
         &icons::FUEL,
         &icons::HULL,
         &icons::CARGO,
@@ -211,6 +211,11 @@ fn draw_sprites(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32) {
         &icons::HEAT,
         &icons::BOMB,
         &icons::SCANNER,
+        &icons::HEAT_SHIELD,
+        &icons::LAVA_PLATING,
+        &icons::GAS_SCRUBBER,
+        &icons::PRESSURE_BRACING,
+        &icons::BOULDER_DEFLECTOR,
     ];
     for icon in stat_icons {
         ui_kit::icon(draw, icon, ix, y + 12);

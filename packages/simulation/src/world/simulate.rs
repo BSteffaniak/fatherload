@@ -8,6 +8,7 @@ use crate::{
     infrastructure::InfrastructureKind,
     input::TickInputs,
     progression::WorldEventKind,
+    protection::{HEAT_DAMAGE_PER_EXCESS_LEVEL, heat_excess},
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
     summary::PlayerScopedCommandOutcome,
@@ -124,7 +125,7 @@ impl WorldState {
         self.hazards.retain(|cloud| cloud.life > 0.0);
         let player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in player_ids {
-            let damaged = self.players.get(&player_id).is_some_and(|player| {
+            let in_cloud = self.players.get(&player_id).is_some_and(|player| {
                 self.hazards.iter().any(|cloud| {
                     if cloud.life >= 6.0 {
                         return false;
@@ -134,25 +135,33 @@ impl WorldState {
                     dx.mul_add(dx, dy * dy) <= cloud.radius * cloud.radius
                 })
             });
-            if damaged {
-                let _snapshot = self.apply_hazard_damage(player_id, 4.0 * delta_seconds);
+            let damage = self.players.get(&player_id).map_or(0.0, |player| {
+                player.hazard_gear.gas_damage(4.0 * delta_seconds)
+            });
+            if in_cloud && self.damage_player(player_id, damage) {
                 output.push_event(GameplayEventKind::PlayerDamaged { player_id });
             }
         }
 
         let player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in player_ids {
-            let (player_x, player_y, radiator_level) = self
+            let (player_x, player_y, radiator_level, gear) = self
                 .players
                 .get(&player_id)
-                .map(|player| (player.x, player.y, player.radiator_level))
+                .map(|player| {
+                    (
+                        player.x,
+                        player.y,
+                        player.radiator_level,
+                        player.hazard_gear,
+                    )
+                })
                 .expect("collected player id remains valid");
             let parts = self
                 .equipped_rig_parts
                 .get(&player_id)
                 .cloned()
                 .unwrap_or_default();
-            let safe_depth = heat_safe_depth(radiator_level);
             #[allow(
                 clippy::cast_precision_loss,
                 reason = "small bounded event severity intentionally scales heat damage"
@@ -184,13 +193,16 @@ impl WorldState {
             {
                 heat_multiplier *= 0.72;
             }
-            // Heat depths are classic nominal depths: deeper worlds stretch them with their
-            // bands.
-            let heat_y = self.terrain.nominal_depth(player_y / TILE_SIZE) * TILE_SIZE;
-            let depth_damage = if heat_y > safe_depth {
-                // Ramps smoothly from the safe depth: double damage one ramp below it.
-                let depth_factor = 1.0 + (heat_y - safe_depth) / (HEAT_RAMP_TILES * TILE_SIZE);
-                3.5 * depth_factor * heat_multiplier * delta_seconds
+            // Band heat: each band runs a heat level hotter than the one above it, and the
+            // radiator plus heat shielding cover a number of heat levels (see
+            // `crate::protection`), so heat follows the strata wherever they lie.
+            let excess = heat_excess(
+                self.terrain.band_at(center),
+                radiator_level,
+                gear.heat_shield,
+            );
+            let depth_damage = if excess > 0 {
+                HEAT_DAMAGE_PER_EXCESS_LEVEL * f32::from(excess) * heat_multiplier * delta_seconds
             } else {
                 0.0
             };
@@ -208,13 +220,19 @@ impl WorldState {
                     && (item.position.y - center.y).abs() <= 4
             });
             let lava_damage = if near_lava {
-                (if pump_protected { 2.5 } else { 9.0 }) * heat_multiplier * delta_seconds
+                gear.lava_damage(
+                    (if pump_protected {
+                        2.5
+                    } else {
+                        LAVA_PROXIMITY_DAMAGE_PER_SECOND
+                    }) * heat_multiplier
+                        * delta_seconds,
+                )
             } else {
                 0.0
             };
             let total_damage = depth_damage + lava_damage;
-            if total_damage > 0.0 {
-                let _snapshot = self.apply_hazard_damage(player_id, total_damage);
+            if self.damage_player(player_id, total_damage) {
                 if let Some(player) = self.players.get_mut(&player_id) {
                     player.hull = quantize_simulation_scalar(player.hull);
                 }
@@ -279,9 +297,12 @@ impl WorldState {
             let Some(target) = self.active_drill(player_id).map(|drill| drill.target) else {
                 continue;
             };
-            let Some(result) = self.chip_active_drill_target(player_id) else {
+            let Some((result, damaged)) = self.chip_active_drill_target(player_id) else {
                 continue;
             };
+            if damaged {
+                output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+            }
             if matches!(
                 result,
                 MineResult::Blocked
@@ -333,8 +354,9 @@ impl WorldState {
                     }
                 }
                 MineResult::TooDangerous => {
-                    let _snapshot = self.apply_hazard_damage(player_id, 8.0);
-                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+                    if self.damage_player(player_id, 8.0) {
+                        output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+                    }
                 }
                 MineResult::Exploded => {
                     output.push_event(GameplayEventKind::HazardChanged);
@@ -344,7 +366,6 @@ impl WorldState {
                         let (player_x, player_y) = (player.x, player.y);
                         self.spawn_cave_in(player_x, player_y);
                     }
-                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
                     output.push_event(GameplayEventKind::HazardChanged);
                     output.push_event(GameplayEventKind::BouldersChanged);
                 }
@@ -386,7 +407,11 @@ impl WorldState {
             return;
         };
         if next_tick >= deadline {
+            let immune = self.damage_immune();
             for (player_id, player) in &mut self.players {
+                if immune {
+                    continue;
+                }
                 player.hull = 0.0;
                 output.push_event(GameplayEventKind::PlayerDamaged {
                     player_id: *player_id,
@@ -541,19 +566,5 @@ impl WorldState {
     }
 }
 
-/// Depth (tiles) above which a level-1 radiator keeps the rig cool.
-pub const HEAT_SAFE_DEPTH_TILES: f32 = 18.0;
-/// Extra cool depth (tiles) each radiator level past the first buys; a maxed radiator keeps the
-/// rig cool into the first deep strata, where the thermal hull takes over.
-pub const HEAT_SAFE_DEPTH_PER_RADIATOR_TILES: f32 = 24.0;
-/// Tiles below the safe depth over which heat damage doubles.
-pub const HEAT_RAMP_TILES: f32 = 24.0;
-
-/// World-pixel depth above which a rig with `radiator_level` takes no depth heat.
-#[must_use]
-pub fn heat_safe_depth(radiator_level: u8) -> f32 {
-    f32::from(radiator_level.saturating_sub(1)).mul_add(
-        HEAT_SAFE_DEPTH_PER_RADIATOR_TILES * TILE_SIZE,
-        HEAT_SAFE_DEPTH_TILES * TILE_SIZE,
-    )
-}
+/// Hull damage per second from lava within two tiles of the rig (before lava plating).
+pub const LAVA_PROXIMITY_DAMAGE_PER_SECOND: f32 = 9.0;

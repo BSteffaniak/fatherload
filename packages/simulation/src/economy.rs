@@ -8,7 +8,15 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    player::Player,
+    player::{
+        Player, cargo_capacity_for_level, drill_bite, drill_speed, engine_power,
+        fuel_capacity_for_level, hull_capacity_for_level,
+    },
+    protection::{
+        BOULDER_DEFLECTOR_MAX_LEVEL, GAS_SCRUBBER_MAX_LEVEL, HEAT_SHIELD_MAX_LEVEL,
+        LAVA_PLATING_MAX_LEVEL, MAX_BAND_HEAT, PRESSURE_BRACING_MAX_LEVEL, heat_cooling,
+        protection_fraction,
+    },
     terrain::DeepStratum,
     worldgen::{Band, WorldSettings, strata::band_reached},
 };
@@ -126,16 +134,91 @@ pub enum UpgradeKind {
     /// Late-game drill mount: tier 1 (gimbal) drills sideways in flight, tier 2 (crown bore)
     /// also drills upward.
     DrillMount,
+    /// Hazard counter: extra cooling on top of the radiator (see [`crate::protection`]).
+    HeatShield,
+    /// Hazard counter: cuts lava burns.
+    LavaPlating,
+    /// Hazard counter: filters gas clouds.
+    GasScrubber,
+    /// Hazard counter: absorbs pressure pockets, pocket blasts and magma vents.
+    PressureBracing,
+    /// Hazard counter: deflects falling boulders and cave-ins.
+    BoulderDeflector,
 }
 
 impl UpgradeKind {
+    /// Every upgrade line, in shop order (index `i` is the shop's offer `i`).
+    pub const ALL: [Self; UPGRADE_OFFER_COUNT] = [
+        Self::Drill,
+        Self::FuelTank,
+        Self::CargoBay,
+        Self::Engine,
+        Self::Hull,
+        Self::Radiator,
+        Self::Scanner,
+        Self::BombPack,
+        Self::DrillMount,
+        Self::HeatShield,
+        Self::LavaPlating,
+        Self::GasScrubber,
+        Self::PressureBracing,
+        Self::BoulderDeflector,
+    ];
+
     /// Highest level this upgrade line reaches.
     #[must_use]
     pub const fn max_level(self) -> u8 {
         match self {
             Self::DrillMount => MAX_DRILL_MOUNT_LEVEL,
-            _ => MAX_UPGRADE_LEVEL,
+            Self::Scanner => MAX_SCANNER_LEVEL,
+            Self::HeatShield => HEAT_SHIELD_MAX_LEVEL,
+            Self::LavaPlating => LAVA_PLATING_MAX_LEVEL,
+            Self::GasScrubber => GAS_SCRUBBER_MAX_LEVEL,
+            Self::PressureBracing => PRESSURE_BRACING_MAX_LEVEL,
+            Self::BoulderDeflector => BOULDER_DEFLECTOR_MAX_LEVEL,
+            Self::Drill
+            | Self::FuelTank
+            | Self::CargoBay
+            | Self::Engine
+            | Self::Hull
+            | Self::Radiator
+            | Self::BombPack => MAX_UPGRADE_LEVEL,
         }
+    }
+
+    /// The level a fresh rig starts this line at (the stock part counts as tier 1 for the core
+    /// lines; scanners, mounts and hazard counters start uninstalled).
+    #[must_use]
+    pub const fn starting_level(self) -> u8 {
+        match self {
+            Self::Drill
+            | Self::FuelTank
+            | Self::CargoBay
+            | Self::Engine
+            | Self::Hull
+            | Self::Radiator => 1,
+            Self::Scanner
+            | Self::BombPack
+            | Self::DrillMount
+            | Self::HeatShield
+            | Self::LavaPlating
+            | Self::GasScrubber
+            | Self::PressureBracing
+            | Self::BoulderDeflector => 0,
+        }
+    }
+
+    /// Whether this line is a hazard counter.
+    #[must_use]
+    pub const fn is_hazard_counter(self) -> bool {
+        matches!(
+            self,
+            Self::HeatShield
+                | Self::LavaPlating
+                | Self::GasScrubber
+                | Self::PressureBracing
+                | Self::BoulderDeflector
+        )
     }
 }
 
@@ -148,28 +231,23 @@ pub struct UpgradeOffer {
     pub description: &'static str,
 }
 
-pub const MAX_UPGRADE_LEVEL: u8 = 5;
+/// Top tier of the core upgrade lines (drill, fuel tank, cargo bay, engine, hull, radiator).
+pub const MAX_UPGRADE_LEVEL: u8 = 15;
+/// Top scanner tier.
+pub const MAX_SCANNER_LEVEL: u8 = 10;
 /// Highest drill mount tier (crown bore).
 pub const MAX_DRILL_MOUNT_LEVEL: u8 = 2;
 pub const REFUEL_UNIT_COST: u32 = 1;
 pub const REPAIR_UNIT_COST: u32 = 2;
 
 /// Number of shop upgrade lines (the length of [`upgrade_offers`]).
-pub const UPGRADE_OFFER_COUNT: usize = 9;
+pub const UPGRADE_OFFER_COUNT: usize = 14;
+/// Shop index of the drill mount line.
+pub const DRILL_MOUNT_OFFER_INDEX: usize = 8;
 
 #[must_use]
 pub fn upgrade_offers(player: &Player) -> [UpgradeOffer; UPGRADE_OFFER_COUNT] {
-    [
-        offer(UpgradeKind::Drill, player.drill_strength),
-        offer(UpgradeKind::FuelTank, player.fuel_tank_level),
-        offer(UpgradeKind::CargoBay, player.cargo_bay_level),
-        offer(UpgradeKind::Engine, player.engine_level),
-        offer(UpgradeKind::Hull, player.hull_level),
-        offer(UpgradeKind::Radiator, player.radiator_level),
-        offer(UpgradeKind::Scanner, player.scanner_level),
-        offer(UpgradeKind::BombPack, 0),
-        offer(UpgradeKind::DrillMount, player.drill_mount_level),
-    ]
+    UpgradeKind::ALL.map(|kind| offer(kind, current_level(player, kind)))
 }
 
 /// The band a crew must have reached before the shop sells the level of `kind` after
@@ -297,16 +375,26 @@ pub enum PurchaseError {
 }
 
 fn apply_upgrade(player: &mut Player, kind: UpgradeKind) {
+    let gear = &mut player.hazard_gear;
     match kind {
         UpgradeKind::Drill => player.drill_strength += 1,
         UpgradeKind::FuelTank => {
+            let level = player.fuel_tank_level;
+            let added = fuel_capacity_for_level(level + 1) - fuel_capacity_for_level(level);
             player.fuel_tank_level += 1;
-            player.fuel_capacity += 50.0;
+            // Rigs from older curves catch up to this tier's tank on their next purchase.
+            player.fuel_capacity =
+                (player.fuel_capacity + added).max(fuel_capacity_for_level(player.fuel_tank_level));
             player.fuel = player.fuel_capacity;
         }
         UpgradeKind::CargoBay => {
+            let level = player.cargo_bay_level;
+            let added = cargo_capacity_for_level(level + 1) - cargo_capacity_for_level(level);
             player.cargo_bay_level += 1;
-            player.cargo_capacity += 8;
+            player.cargo_capacity = player
+                .cargo_capacity
+                .saturating_add(added)
+                .max(cargo_capacity_for_level(player.cargo_bay_level));
         }
         UpgradeKind::Engine => player.engine_level += 1,
         UpgradeKind::Hull => {
@@ -319,21 +407,21 @@ fn apply_upgrade(player: &mut Player, kind: UpgradeKind) {
         UpgradeKind::DrillMount => {
             player.drill_mount_level = (player.drill_mount_level + 1).min(MAX_DRILL_MOUNT_LEVEL);
         }
+        UpgradeKind::HeatShield => gear.heat_shield += 1,
+        UpgradeKind::LavaPlating => gear.lava_plating += 1,
+        UpgradeKind::GasScrubber => gear.gas_scrubber += 1,
+        UpgradeKind::PressureBracing => gear.pressure_bracing += 1,
+        UpgradeKind::BoulderDeflector => gear.boulder_deflector += 1,
     }
 }
 
-/// Raises every upgrade line of `player` to its top level (test mode), refilling fuel and hull.
+/// Raises every upgrade line of `player` (hazard counters included) to its top level (test
+/// mode), refilling fuel and hull.
 pub fn max_out_upgrades(player: &mut Player) {
-    for kind in [
-        UpgradeKind::Drill,
-        UpgradeKind::FuelTank,
-        UpgradeKind::CargoBay,
-        UpgradeKind::Engine,
-        UpgradeKind::Hull,
-        UpgradeKind::Radiator,
-        UpgradeKind::Scanner,
-        UpgradeKind::DrillMount,
-    ] {
+    for kind in UpgradeKind::ALL {
+        if kind == UpgradeKind::BombPack {
+            continue;
+        }
         while current_level(player, kind) < kind.max_level() {
             apply_upgrade(player, kind);
         }
@@ -342,7 +430,10 @@ pub fn max_out_upgrades(player: &mut Player) {
     player.hull = player.max_hull();
 }
 
-const fn current_level(player: &Player, kind: UpgradeKind) -> u8 {
+/// The level `player` has reached on the `kind` line (bomb packs are always level 0).
+#[must_use]
+pub const fn current_level(player: &Player, kind: UpgradeKind) -> u8 {
+    let gear = player.hazard_gear;
     match kind {
         UpgradeKind::Drill => player.drill_strength,
         UpgradeKind::FuelTank => player.fuel_tank_level,
@@ -353,16 +444,20 @@ const fn current_level(player: &Player, kind: UpgradeKind) -> u8 {
         UpgradeKind::Scanner => player.scanner_level,
         UpgradeKind::DrillMount => player.drill_mount_level,
         UpgradeKind::BombPack => 0,
+        UpgradeKind::HeatShield => gear.heat_shield,
+        UpgradeKind::LavaPlating => gear.lava_plating,
+        UpgradeKind::GasScrubber => gear.gas_scrubber,
+        UpgradeKind::PressureBracing => gear.pressure_bracing,
+        UpgradeKind::BoulderDeflector => gear.boulder_deflector,
     }
 }
 
 fn offer(kind: UpgradeKind, current_level: u8) -> UpgradeOffer {
-    let next_level = current_level.saturating_add(1).min(kind.max_level());
     UpgradeOffer {
         kind,
         name: upgrade_name(kind),
         level: current_level,
-        cost: upgrade_cost(kind, next_level),
+        cost: upgrade_cost(kind, current_level),
         description: upgrade_description(kind),
     }
 }
@@ -378,84 +473,330 @@ const fn upgrade_name(kind: UpgradeKind) -> &'static str {
         UpgradeKind::Scanner => "Mineral Scanner",
         UpgradeKind::BombPack => "Bomb Pack",
         UpgradeKind::DrillMount => "Drill Mount",
+        UpgradeKind::HeatShield => "Heat Shielding",
+        UpgradeKind::LavaPlating => "Lava Plating",
+        UpgradeKind::GasScrubber => "Gas Scrubber",
+        UpgradeKind::PressureBracing => "Pressure Bracing",
+        UpgradeKind::BoulderDeflector => "Boulder Deflector",
     }
 }
 
 const fn upgrade_description(kind: UpgradeKind) -> &'static str {
     match kind {
-        UpgradeKind::Drill => "Mine harder and faster",
-        UpgradeKind::FuelTank => "Carry more fuel",
+        UpgradeKind::Drill => "Mine harder rock, faster: late tiers bite several layers per chip",
+        UpgradeKind::FuelTank => "Carry more fuel and burn less of it",
         UpgradeKind::CargoBay => "Carry more ore",
-        UpgradeKind::Engine => "Stronger lift and handling",
+        UpgradeKind::Engine => "Stronger lift and handling, even with a full bay",
         UpgradeKind::Hull => "Survive harder impacts",
-        UpgradeKind::Radiator => "Resist deep heat pressure",
-        UpgradeKind::Scanner => "Reveal nearby ore and hazards",
+        UpgradeKind::Radiator => "Cools the rig: each tier keeps it safe in hotter bands",
+        UpgradeKind::Scanner => "Reveal nearby ore and hazards, further with every tier",
         UpgradeKind::BombPack => "Adds 3 underground blasting charges",
         UpgradeKind::DrillMount => {
             "Gimbal: drill sideways in flight. Crown Bore: thrust into a ceiling to drill up"
         }
+        UpgradeKind::HeatShield => {
+            "Each tier cools one more heat level on top of the radiator; with enough, even the \
+             mantle runs cool"
+        }
+        UpgradeKind::LavaPlating => {
+            "Cuts lava burns from drilling through or skimming past lava; the top tier is \
+             lava-proof"
+        }
+        UpgradeKind::GasScrubber => {
+            "Filters gas clouds from drilled pockets and blooms; the top tier breathes any gas"
+        }
+        UpgradeKind::PressureBracing => {
+            "Absorbs pressure pocket kicks, pocket blasts and magma vents; the top tier shrugs \
+             them off"
+        }
+        UpgradeKind::BoulderDeflector => {
+            "Deflects falling boulders and cave-ins; the top tier is rockfall-proof"
+        }
     }
 }
 
+const DRILL_TIERS: [&str; MAX_UPGRADE_LEVEL as usize] = [
+    "Steel Drill",
+    "Carbide Drill",
+    "Tempered Drill",
+    "Diamond Drill",
+    "Plasma Drill",
+    "Twin-Bit Drill",
+    "Sonic Drill",
+    "Thermite Drill",
+    "Graphene Drill",
+    "Resonant Drill",
+    "Fusion Drill",
+    "Quantum Drill",
+    "Singularity Drill",
+    "Nova Drill",
+    "Star Drill",
+];
+const FUEL_TANK_TIERS: [&str; MAX_UPGRADE_LEVEL as usize] = [
+    "Aux Fuel Tank",
+    "Twin Fuel Tank",
+    "Pressure Fuel Tank",
+    "Deep Fuel Tank",
+    "Endurance Fuel Tank",
+    "Bladder Fuel Tank",
+    "Cryo Fuel Tank",
+    "Reserve Fuel Tank",
+    "Expedition Fuel Tank",
+    "Leviathan Fuel Tank",
+    "Abyssal Fuel Tank",
+    "Reactor Feed Tank",
+    "Titan Fuel Tank",
+    "Bottomless Fuel Tank",
+    "Infinity Fuel Tank",
+];
+const CARGO_BAY_TIERS: [&str; MAX_UPGRADE_LEVEL as usize] = [
+    "Ore Basket",
+    "Cargo Bay",
+    "Expanded Cargo Bay",
+    "Industrial Cargo Bay",
+    "Vault Cargo Bay",
+    "Freight Bay",
+    "Compression Bay",
+    "Twin Freight Bay",
+    "Bulk Hauler Bay",
+    "Mega Hold",
+    "Colossus Hold",
+    "Fold-Space Hold",
+    "Leviathan Hold",
+    "Titan Hold",
+    "Bottomless Hold",
+];
+const ENGINE_TIERS: [&str; MAX_UPGRADE_LEVEL as usize] = [
+    "Lift Engine",
+    "Tuned Engine",
+    "Turbo Engine",
+    "Vector Engine",
+    "Fusion Engine",
+    "Twin-Turbine Engine",
+    "Ion Engine",
+    "Plasma Engine",
+    "Afterburner Engine",
+    "Gravitic Engine",
+    "Pulse Engine",
+    "Antimatter Engine",
+    "Warp Engine",
+    "Titan Engine",
+    "Star Engine",
+];
+const HULL_TIERS: [&str; MAX_UPGRADE_LEVEL as usize] = [
+    "Riveted Hull",
+    "Reinforced Hull",
+    "Titanium Hull",
+    "Ablative Hull",
+    "Composite Hull",
+    "Ceramic Hull",
+    "Tungsten Hull",
+    "Graphene Hull",
+    "Nanoweave Hull",
+    "Fortress Hull",
+    "Bastion Hull",
+    "Adamant Hull",
+    "Titan Hull",
+    "Neutron Hull",
+    "Star Hull",
+];
+const RADIATOR_TIERS: [&str; MAX_UPGRADE_LEVEL as usize] = [
+    "Basic Radiator",
+    "Copper Radiator",
+    "Liquid Radiator",
+    "Cryo Radiator",
+    "Magma Radiator",
+    "Twin Radiator",
+    "Vapor Radiator",
+    "Heat-Pipe Radiator",
+    "Superfluid Radiator",
+    "Phase Radiator",
+    "Glacier Radiator",
+    "Plasma Radiator",
+    "Zero-Point Radiator",
+    "Mantle Radiator",
+    "Core Radiator",
+];
+const SCANNER_TIERS: [&str; MAX_SCANNER_LEVEL as usize] = [
+    "Pulse Scanner",
+    "Ore Scanner",
+    "Hazard Scanner",
+    "Artifact Scanner",
+    "Deep Scanner",
+    "Sonar Scanner",
+    "Seismic Scanner",
+    "Spectral Scanner",
+    "Quantum Scanner",
+    "Omni Scanner",
+];
+const HEAT_SHIELD_TIERS: [&str; HEAT_SHIELD_MAX_LEVEL as usize] = [
+    "Foil Heat Shield",
+    "Ceramic Heat Shield",
+    "Ablative Heat Shield",
+    "Cryo Heat Shield",
+    "Magma Heat Shield",
+    "Core Heat Shield",
+];
+const LAVA_PLATING_TIERS: [&str; LAVA_PLATING_MAX_LEVEL as usize] = [
+    "Scorch Plating",
+    "Basalt Plating",
+    "Obsidian Plating",
+    "Ceramic Lava Plating",
+    "Tungsten Lava Plating",
+    "Magma-Forged Plating",
+    "Mantle Plating",
+    "Lava Walker Plating",
+];
+const GAS_SCRUBBER_TIERS: [&str; GAS_SCRUBBER_MAX_LEVEL as usize] = [
+    "Filter Mask",
+    "Charcoal Scrubber",
+    "Catalytic Scrubber",
+    "Sealed Cabin",
+    "Ion Scrubber",
+    "Closed-Loop Life Support",
+];
+const PRESSURE_BRACING_TIERS: [&str; PRESSURE_BRACING_MAX_LEVEL as usize] = [
+    "Strut Bracing",
+    "Shock Bracing",
+    "Hydraulic Bracing",
+    "Blast Bracing",
+    "Vent-Proof Bracing",
+    "Bulwark Bracing",
+];
+const BOULDER_DEFLECTOR_TIERS: [&str; BOULDER_DEFLECTOR_MAX_LEVEL as usize] = [
+    "Roll Cage",
+    "Deflector Plate",
+    "Sloped Deflector",
+    "Kinetic Deflector",
+    "Repulsor Deflector",
+    "Rockfall Aegis",
+];
+
+/// The name of the tier the shop sells next on the `kind` line, when `level` is fitted (the top
+/// tier's name once the line is maxed).
 #[must_use]
 pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
-    let next_level = level.saturating_add(1).min(kind.max_level());
-    match (kind, next_level) {
-        (UpgradeKind::Drill, 1) => "Steel Drill",
-        (UpgradeKind::Drill, 2) => "Carbide Drill",
-        (UpgradeKind::Drill, 3) => "Diamond Drill",
-        (UpgradeKind::Drill, 4) => "Plasma Drill",
-        (UpgradeKind::Drill, _) => "Star Drill",
-        (UpgradeKind::FuelTank, 1) => "Aux Fuel Tank",
-        (UpgradeKind::FuelTank, 2) => "Twin Fuel Tank",
-        (UpgradeKind::FuelTank, 3) => "Pressure Fuel Tank",
-        (UpgradeKind::FuelTank, 4) => "Deep Fuel Tank",
-        (UpgradeKind::FuelTank, _) => "Endurance Fuel Tank",
-        (UpgradeKind::CargoBay, 1) => "Ore Basket",
-        (UpgradeKind::CargoBay, 2) => "Cargo Bay",
-        (UpgradeKind::CargoBay, 3) => "Expanded Cargo Bay",
-        (UpgradeKind::CargoBay, 4) => "Industrial Cargo Bay",
-        (UpgradeKind::CargoBay, _) => "Vault Cargo Bay",
-        (UpgradeKind::Engine, 1) => "Lift Engine",
-        (UpgradeKind::Engine, 2) => "Tuned Engine",
-        (UpgradeKind::Engine, 3) => "Turbo Engine",
-        (UpgradeKind::Engine, 4) => "Vector Engine",
-        (UpgradeKind::Engine, _) => "Fusion Engine",
-        (UpgradeKind::Hull, 1) => "Riveted Hull",
-        (UpgradeKind::Hull, 2) => "Reinforced Hull",
-        (UpgradeKind::Hull, 3) => "Titanium Hull",
-        (UpgradeKind::Hull, 4) => "Ablative Hull",
-        (UpgradeKind::Hull, _) => "Star Hull",
-        (UpgradeKind::Radiator, 1) => "Basic Radiator",
-        (UpgradeKind::Radiator, 2) => "Copper Radiator",
-        (UpgradeKind::Radiator, 3) => "Liquid Radiator",
-        (UpgradeKind::Radiator, 4) => "Cryo Radiator",
-        (UpgradeKind::Radiator, _) => "Magma Radiator",
-        (UpgradeKind::Scanner, 1) => "Pulse Scanner",
-        (UpgradeKind::Scanner, 2) => "Ore Scanner",
-        (UpgradeKind::Scanner, 3) => "Hazard Scanner",
-        (UpgradeKind::Scanner, 4) => "Artifact Scanner",
-        (UpgradeKind::Scanner, _) => "Deep Scanner",
-        (UpgradeKind::BombPack, _) => "Pack of 3 Bombs",
-        (UpgradeKind::DrillMount, 1) => "Gimbal Drill Mount",
-        (UpgradeKind::DrillMount, _) => "Crown Bore Mount",
-    }
+    let tiers: &[&'static str] = match kind {
+        UpgradeKind::Drill => &DRILL_TIERS,
+        UpgradeKind::FuelTank => &FUEL_TANK_TIERS,
+        UpgradeKind::CargoBay => &CARGO_BAY_TIERS,
+        UpgradeKind::Engine => &ENGINE_TIERS,
+        UpgradeKind::Hull => &HULL_TIERS,
+        UpgradeKind::Radiator => &RADIATOR_TIERS,
+        UpgradeKind::Scanner => &SCANNER_TIERS,
+        UpgradeKind::HeatShield => &HEAT_SHIELD_TIERS,
+        UpgradeKind::LavaPlating => &LAVA_PLATING_TIERS,
+        UpgradeKind::GasScrubber => &GAS_SCRUBBER_TIERS,
+        UpgradeKind::PressureBracing => &PRESSURE_BRACING_TIERS,
+        UpgradeKind::BoulderDeflector => &BOULDER_DEFLECTOR_TIERS,
+        UpgradeKind::BombPack => return "Pack of 3 Bombs",
+        UpgradeKind::DrillMount => {
+            return if level == 0 {
+                "Gimbal Drill Mount"
+            } else {
+                "Crown Bore Mount"
+            };
+        }
+    };
+    let next_level = level.saturating_add(1).clamp(1, kind.max_level());
+    tiers[usize::from(next_level - 1).min(tiers.len() - 1)]
 }
 
-fn upgrade_cost(kind: UpgradeKind, next_level: u8) -> u32 {
-    let base = match kind {
-        UpgradeKind::Drill => 105,
-        UpgradeKind::FuelTank => 85,
-        UpgradeKind::CargoBay => 95,
-        UpgradeKind::Engine => 100,
-        UpgradeKind::Hull => 90,
-        UpgradeKind::Radiator => 115,
-        UpgradeKind::Scanner => 135,
-        UpgradeKind::BombPack => 80,
+/// What the next tier of `kind` changes for `player`, as `"now -> next"` (for the shop's
+/// details footer), or `None` for maxed lines and lines without a single headline number.
+#[must_use]
+pub fn upgrade_effect(player: &Player, kind: UpgradeKind) -> Option<String> {
+    let level = current_level(player, kind);
+    if level >= kind.max_level() {
+        return None;
+    }
+    let next = level + 1;
+    let gear = player.hazard_gear;
+    let percent = |fraction: f32| (fraction * 100.0).round() as u32;
+    Some(match kind {
+        UpgradeKind::Drill => format!(
+            "Dig rate x{:.1} -> x{:.1}",
+            drill_speed(level) * f32::from(drill_bite(level)),
+            drill_speed(next) * f32::from(drill_bite(next)),
+        ),
+        UpgradeKind::FuelTank => format!(
+            "Tank {:.0} -> {:.0} fuel",
+            fuel_capacity_for_level(level),
+            fuel_capacity_for_level(next)
+        ),
+        UpgradeKind::CargoBay => format!(
+            "Bay {} -> {} slots",
+            cargo_capacity_for_level(level),
+            cargo_capacity_for_level(next)
+        ),
+        UpgradeKind::Engine => format!(
+            "Thrust x{:.2} -> x{:.2}",
+            engine_power(level),
+            engine_power(next)
+        ),
+        UpgradeKind::Hull => format!(
+            "Plating {:.0} -> {:.0} hull",
+            hull_capacity_for_level(level),
+            hull_capacity_for_level(next)
+        ),
+        UpgradeKind::Radiator => format!(
+            "Cools heat {} -> {} of {MAX_BAND_HEAT} with your shielding",
+            heat_cooling(level, gear.heat_shield),
+            heat_cooling(next, gear.heat_shield)
+        ),
+        UpgradeKind::HeatShield => format!(
+            "Cools heat {} -> {} of {MAX_BAND_HEAT} with your radiator",
+            heat_cooling(player.radiator_level, level),
+            heat_cooling(player.radiator_level, next)
+        ),
+        UpgradeKind::LavaPlating
+        | UpgradeKind::GasScrubber
+        | UpgradeKind::PressureBracing
+        | UpgradeKind::BoulderDeflector => format!(
+            "Stops {}% -> {}% of it",
+            percent(protection_fraction(level, kind.max_level())),
+            percent(protection_fraction(next, kind.max_level()))
+        ),
+        UpgradeKind::Scanner | UpgradeKind::BombPack | UpgradeKind::DrillMount => return None,
+    })
+}
+
+/// Price of the tier after `level` on the `kind` line: the first purchase is cheap and every
+/// tier after it costs a fixed percentage more, so the top tiers line up with deep cargo runs.
+#[must_use]
+pub fn upgrade_cost(kind: UpgradeKind, level: u8) -> u32 {
+    let (first, growth_percent): (u64, u64) = match kind {
+        UpgradeKind::Drill => (420, 155),
+        UpgradeKind::FuelTank => (340, 150),
+        UpgradeKind::CargoBay => (380, 152),
+        UpgradeKind::Engine => (400, 152),
+        UpgradeKind::Hull => (360, 150),
+        UpgradeKind::Radiator => (460, 150),
+        UpgradeKind::Scanner => (135, 175),
+        UpgradeKind::BombPack => return 80,
         // Late-game: 6,000 cr for the gimbal, 24,000 cr for the crown bore.
-        UpgradeKind::DrillMount => 6_000,
+        UpgradeKind::DrillMount => (6_000, 400),
+        UpgradeKind::HeatShield => (900, 200),
+        UpgradeKind::LavaPlating => (800, 175),
+        UpgradeKind::GasScrubber => (450, 185),
+        UpgradeKind::PressureBracing => (600, 190),
+        UpgradeKind::BoulderDeflector => (350, 185),
     };
-    base * u32::from(next_level) * u32::from(next_level)
+    // Tiers bought on this line so far (the stock part is free).
+    let bought = level
+        .saturating_sub(kind.starting_level())
+        .min(kind.max_level());
+    let mut cost = first;
+    for _ in 0..bought {
+        cost = cost * growth_percent / 100;
+    }
+    let step = match cost {
+        0..1_000 => 10,
+        1_000..10_000 => 50,
+        10_000..100_000 => 250,
+        _ => 1_000,
+    };
+    u32::try_from(cost.div_ceil(step) * step).unwrap_or(u32::MAX)
 }
 
 #[allow(
