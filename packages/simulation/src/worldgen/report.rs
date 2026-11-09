@@ -6,7 +6,7 @@ use crate::{poi::PoiKind, terrain::TileKind};
 
 use super::{
     Band, FeatureKind, GeneratedWorld, HazardKind, WorldSettings, band_at,
-    deposits::starter_field_value,
+    deposits::{SPECK_MAX_TILES, ore_deposits, starter_field_value},
 };
 
 /// Statistics of one band of one world.
@@ -21,6 +21,8 @@ pub struct BandStats {
     pub hazard_tiles: u64,
     /// Points of interest centred in the band.
     pub pois: u64,
+    /// Ore deposits of at most [`SPECK_MAX_TILES`] tiles.
+    pub ore_specks: u64,
 }
 
 /// Statistics of one world.
@@ -88,6 +90,12 @@ impl WorldStats {
                 stats.bands[feature.band.index()].pois += 1;
             }
         }
+        for deposit in ore_deposits(world.width, world.height, kind_at, |_, _| true) {
+            if deposit.len() <= SPECK_MAX_TILES {
+                let (x, y) = deposit[0];
+                stats.bands[band_at(settings, x, y).index()].ore_specks += 1;
+            }
+        }
         stats.starter_field_value = starter_field_value(kind_at);
         stats
     }
@@ -132,12 +140,18 @@ impl Spread {
 /// Generates `seeds` worlds (seeds `first_seed..`) with `template`'s other settings and
 /// formats their distributions as a text report.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one table per metric, gathered and printed in reading order"
+)]
 pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64) -> String {
     let mut ore = [Spread::default(); 12];
     let mut open = [Spread::default(); 12];
     let mut hazards = [Spread::default(); 12];
     let mut artifacts = [Spread::default(); 12];
     let mut pois = [Spread::default(); 12];
+    let mut specks = [Spread::default(); 12];
+    let mut band_tops = [Spread::default(); 12];
     let mut poi_kinds: BTreeMap<PoiKind, Spread> = PoiKind::ALL
         .into_iter()
         .map(|kind| (kind, Spread::default()))
@@ -162,6 +176,11 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
             hazards[index].add(band.hazard_tiles);
             artifacts[index].add(band.artifacts);
             pois[index].add(band.pois);
+            specks[index].add(band.ore_specks);
+        }
+        for band in Band::ALL {
+            let top = super::strata::band_layout_rows(&settings, band).0;
+            band_tops[band.index()].add(u64::try_from(top).unwrap_or_default());
         }
         for (kind, spread) in &mut poi_kinds {
             spread.add(stats.pois.get(kind).copied().unwrap_or_default());
@@ -187,16 +206,25 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
     let _ = writeln!(out, "(each cell: min mean max over seeds)\n");
     let _ = writeln!(
         out,
-        "{:<22} {:^23} {:^23} {:^23} {:^23} {:^23}",
-        "band", "ore value / 10 tiles", "caves (per mille)", "hazard tiles", "artifacts", "POIs"
+        "{:<22} {:^23} {:^23} {:^23} {:^23} {:^23} {:^23} {:^23}",
+        "band",
+        "top row",
+        "ore value / 10 tiles",
+        "ore specks (<=3)",
+        "caves (per mille)",
+        "hazard tiles",
+        "artifacts",
+        "POIs"
     );
     for band in Band::ALL {
         let index = band.index();
         let _ = writeln!(
             out,
-            "{:<22} {} {} {} {} {}",
+            "{:<22} {} {} {} {} {} {} {}",
             band.name(),
+            band_tops[index].cell(),
             ore[index].cell(),
+            specks[index].cell(),
             open[index].cell(),
             hazards[index].cell(),
             artifacts[index].cell(),

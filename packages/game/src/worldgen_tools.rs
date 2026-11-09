@@ -1,7 +1,7 @@
 //! World generation tools:
 //!
 //! - `drillgame --worldgen-report [--seeds N] [--first-seed S] [--size standard|large]
-//!   [--richness lean|standard|rich] [--hazards calm|standard|brutal] [--legacy]` prints ore,
+//!   [--richness lean|standard|rich] [--hazards calm|standard|brutal] [--legacy] [--generator v1|v2|v3]` prints ore,
 //!   cave, hazard, artifact and feature distributions over many seeds.
 //! - `drillgame --worldgen-preview <seed> <out.png> [--size standard|large] [--richness X]
 //!   [--hazards Y] [--scale N] [--no-features]` writes a whole-world map PNG (no window opens),
@@ -107,6 +107,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<WorldgenCommand>, String> {
                     .ok_or("--scale needs 1 to 8")?;
             }
             "--legacy" => settings.generator = GeneratorVersion::Legacy,
+            "--generator" => settings.generator = parse_generator(&value("--generator")?)?,
             "--no-features" => features = false,
             other => return Err(format!("unknown worldgen argument {other}")),
         }
@@ -125,6 +126,18 @@ pub fn parse_args(args: &[String]) -> Result<Option<WorldgenCommand>, String> {
         scale,
         features,
     }))
+}
+
+fn parse_generator(text: &str) -> Result<GeneratorVersion, String> {
+    [
+        GeneratorVersion::Legacy,
+        GeneratorVersion::V1,
+        GeneratorVersion::V2,
+        GeneratorVersion::V3,
+    ]
+    .into_iter()
+    .find(|generator| generator.name().eq_ignore_ascii_case(text))
+    .ok_or_else(|| format!("unknown generator {text} (legacy, v1, v2, v3)"))
 }
 
 fn parse_size(text: &str) -> Result<WorldSize, String> {

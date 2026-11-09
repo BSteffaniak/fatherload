@@ -347,7 +347,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
     assert!(matches!(
         Terrain::from_snapshot(foreign),
         Err(TerrainRestoreError::DigestMismatch {
-            generator: GeneratorVersion::V2,
+            generator: GeneratorVersion::CURRENT,
             ..
         })
     ));
@@ -396,8 +396,8 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
             size: 0,
             richness: 1,
             hazards: 1,
-            // `WorldSettings::new` uses the current generator (V2, variant index 2).
-            generator: 2,
+            // `WorldSettings::new` uses the current generator (V3, variant index 3).
+            generator: 3,
         },
         width: 240,
         height: 220,

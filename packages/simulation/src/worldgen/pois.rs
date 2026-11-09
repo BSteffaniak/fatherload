@@ -29,7 +29,7 @@ use super::{
     hazards::hazard_allowed,
     noise::RegionRng,
     prefabs::{Cell, Prefab, PrefabRole, prefabs_of},
-    strata::{Band, nominal_band_top},
+    strata::{Band, band_layout_rows},
     town_columns,
 };
 
@@ -102,13 +102,12 @@ pub const fn guardian_hazard(band: Band) -> TileKind {
 
 /// Rows `band` nominally spans (first, last).
 const fn band_rows(canvas: &Canvas<'_>, band: Band) -> (i32, i32) {
-    let top = nominal_band_top(band);
-    let bottom = if band.index() + 1 < Band::ALL.len() {
-        nominal_band_top(Band::from_index(band.index() + 1)) - 1
+    let (top, bottom) = band_layout_rows(canvas.settings, band);
+    if band.index() + 1 < Band::ALL.len() {
+        (top, bottom)
     } else {
-        canvas.height - 1
-    };
-    (top, bottom)
+        (top, canvas.height - 1)
+    }
 }
 
 /// Whether `rect` keeps clear of spawn and the town.

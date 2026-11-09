@@ -63,18 +63,21 @@ pub enum GeneratorVersion {
     V1,
     /// V1 plus hand-authored prefab points of interest (caches, derelicts, vaults, formations
     /// and rival claims) stamped into a region grid.
-    #[default]
     V2,
+    /// V2 with per-seed band thicknesses (layer depths differ noticeably between seeds) and
+    /// chunkier, less specky deep ore on rich worlds.
+    #[default]
+    V3,
 }
 
 impl GeneratorVersion {
     /// The generator new worlds use.
-    pub const CURRENT: Self = Self::V2;
+    pub const CURRENT: Self = Self::V3;
 
     /// Whether this generator stamps points of interest.
     #[must_use]
     pub const fn has_points_of_interest(self) -> bool {
-        matches!(self, Self::V2)
+        matches!(self, Self::V2 | Self::V3)
     }
 
     #[must_use]
@@ -83,6 +86,7 @@ impl GeneratorVersion {
             Self::Legacy => "legacy",
             Self::V1 => "v1",
             Self::V2 => "v2",
+            Self::V3 => "v3",
         }
     }
 }

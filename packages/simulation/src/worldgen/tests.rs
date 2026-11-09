@@ -34,6 +34,14 @@ const fn v1(seed: u64) -> WorldSettings {
     }
 }
 
+/// Standard settings pinned to [`GeneratorVersion::V2`].
+const fn v2(seed: u64) -> WorldSettings {
+    WorldSettings {
+        generator: GeneratorVersion::V2,
+        ..WorldSettings::new(seed)
+    }
+}
+
 fn tile_at(world: &GeneratedWorld, x: i32, y: i32) -> Option<TileKind> {
     (x >= 0 && y >= 0 && x < world.width && y < world.height)
         .then(|| world.tiles[usize::try_from(y * world.width + x).unwrap_or(0)].kind)
@@ -105,17 +113,14 @@ fn golden_world_digests_are_pinned_to_the_generator_version() {
 #[test]
 fn golden_v2_world_digests_are_pinned() {
     let cases = [
-        (
-            WorldSettings::new(DEFAULT_WORLD_SEED),
-            0xc3cb_282d_a845_6bca,
-        ),
-        (WorldSettings::new(1), 0x527b_dadf_83a0_c355),
+        (v2(DEFAULT_WORLD_SEED), 0xc3cb_282d_a845_6bca),
+        (v2(1), 0x527b_dadf_83a0_c355),
         (
             WorldSettings {
                 size: WorldSize::Large,
                 richness: ResourceRichness::Rich,
                 hazards: HazardIntensity::Brutal,
-                ..WorldSettings::new(0x00C0_FFEE)
+                ..v2(0x00C0_FFEE)
             },
             0xbde8_0bc6_70c9_8897,
         ),
@@ -133,6 +138,42 @@ fn golden_v2_world_digests_are_pinned() {
     assert_eq!(
         actual, expected,
         "generator v2 output changed; actual digests: {actual:#x?}"
+    );
+}
+
+/// Golden digests of a few worlds for [`GeneratorVersion::V3`] (V2 with per-seed band
+/// thicknesses and chunkier deep ore on rich worlds).
+#[test]
+fn golden_v3_world_digests_are_pinned() {
+    let cases = [
+        (
+            WorldSettings::new(DEFAULT_WORLD_SEED),
+            0x3b31_8f48_890b_8c15,
+        ),
+        (WorldSettings::new(1), 0xbee4_e60d_9d0e_2076),
+        (
+            WorldSettings {
+                size: WorldSize::Large,
+                richness: ResourceRichness::Rich,
+                hazards: HazardIntensity::Brutal,
+                ..WorldSettings::new(0x00C0_FFEE)
+            },
+            0x2138_ac79_7d36_7881,
+        ),
+    ];
+    assert!(
+        cases
+            .iter()
+            .all(|(settings, _)| settings.generator == GeneratorVersion::V3)
+    );
+    let actual: Vec<u64> = cases
+        .iter()
+        .map(|(settings, _)| digest(&generate(settings)))
+        .collect();
+    let expected: Vec<u64> = cases.iter().map(|(_, digest)| *digest).collect();
+    assert_eq!(
+        actual, expected,
+        "generator v3 output changed; actual digests: {actual:#x?}"
     );
 }
 
@@ -343,6 +384,32 @@ fn ore_value_per_band_stays_in_its_target_range() {
     }
 }
 
+/// Rich V3 worlds keep their deep ore in whole deposits instead of one-to-three-tile specks.
+#[test]
+fn rich_deep_strata_hold_few_ore_specks() {
+    let specks = |generator: GeneratorVersion| -> u64 {
+        sample_seeds()
+            .take(6)
+            .map(|seed| {
+                let settings = WorldSettings {
+                    richness: ResourceRichness::Rich,
+                    generator,
+                    ..WorldSettings::new(seed)
+                };
+                let world = generate(&settings);
+                WorldStats::measure(&settings, &world)
+                    .bands
+                    .iter()
+                    .skip(Band::Deep(crate::terrain::DeepStratum::CrystalFaults).index())
+                    .map(|band| band.ore_specks)
+                    .sum::<u64>()
+            })
+            .sum()
+    };
+    let (v2, v3) = (specks(GeneratorVersion::V2), specks(GeneratorVersion::V3));
+    assert!(v3 * 10 < v2, "v3 {v3} specks vs v2 {v2}");
+}
+
 #[test]
 fn richness_scales_ore() {
     let total = |richness: ResourceRichness| -> u64 {
@@ -526,7 +593,8 @@ fn the_feature_index_counts_stay_in_bounds() {
 
 #[test]
 fn feature_queries_filter_by_kind_depth_and_region() {
-    let world = generate(&WorldSettings::new(9));
+    let settings = WorldSettings::new(9);
+    let world = generate(&settings);
     let features = &world.features;
     let deep: Vec<_> = features.in_depth(100..=219).collect();
     assert!(deep.iter().all(|feature| feature.center.y >= 100));
@@ -551,7 +619,8 @@ fn feature_queries_filter_by_kind_depth_and_region() {
             )
         })
         .expect("the basalt transition exists");
-    assert!((80..=100).contains(&transition.center.y));
+    let (shallowest, deepest) = strata::boundary_depth_range(&settings, Band::Basalt.index());
+    assert!((shallowest..=deepest).contains(&transition.center.y));
     assert_eq!(
         features.nearest(transition.center, FeatureKind::StratumTransition),
         Some(transition)

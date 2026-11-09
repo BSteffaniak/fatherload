@@ -12,7 +12,7 @@ use super::{
     Canvas, SPAWN_TILE_X,
     features::{FeatureDetail, FeatureKind, TileRect},
     noise::{NOISE_MAX, RegionRng, centred, chance, fractal_noise, hash2, ridge, value_noise},
-    strata::{Band, SKY_ROWS, nominal_band_top},
+    strata::{Band, SKY_ROWS, band_layout_rows},
 };
 
 const SALT_VEIN: u64 = 0x0E0E_0001;
@@ -134,9 +134,85 @@ pub(crate) fn place(canvas: &mut Canvas<'_>) {
     place_motherlodes(canvas);
     place_clusters(canvas);
     place_veins(canvas);
+    if chunky_deep_ore(canvas) {
+        thin_deep_specks(canvas);
+    }
     top_up_bands(canvas);
     guarantee_starter_field(canvas);
     place_artifacts(canvas);
+}
+
+/// Largest ore deposit (4-connected tiles) that counts as a speck.
+pub const SPECK_MAX_TILES: usize = 3;
+
+/// Whether deep ore comes in fewer, chunkier deposits: V3 rich worlds, whose extra veins
+/// otherwise litter the deep strata with one-to-three-tile specks.
+const fn chunky_deep_ore(canvas: &Canvas<'_>) -> bool {
+    matches!(canvas.settings.generator, super::GeneratorVersion::V3)
+        && matches!(canvas.settings.richness, super::ResourceRichness::Rich)
+}
+
+/// The ore deposits (4-connected ore tiles) of `size`, each as its tile list, among the tiles
+/// `include` accepts. `kind_at` reads a tile.
+pub fn ore_deposits(
+    width: i32,
+    height: i32,
+    kind_at: impl Fn(i32, i32) -> Option<TileKind>,
+    include: impl Fn(i32, i32) -> bool,
+) -> Vec<Vec<(i32, i32)>> {
+    let is_ore = |x: i32, y: i32| matches!(kind_at(x, y), Some(TileKind::Ore(_)));
+    let cells = usize::try_from(width * height).unwrap_or_default();
+    let mut seen = vec![false; cells];
+    let index = |x: i32, y: i32| usize::try_from(y * width + x).unwrap_or_default();
+    let mut deposits = Vec::new();
+    for y in SKY_ROWS..height {
+        for x in 0..width {
+            if seen[index(x, y)] || !is_ore(x, y) || !include(x, y) {
+                continue;
+            }
+            let mut deposit = vec![(x, y)];
+            seen[index(x, y)] = true;
+            let mut next = 0;
+            while next < deposit.len() {
+                let (cx, cy) = deposit[next];
+                next += 1;
+                for (nx, ny) in [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)] {
+                    if nx >= 0
+                        && ny >= 0
+                        && nx < width
+                        && ny < height
+                        && !seen[index(nx, ny)]
+                        && is_ore(nx, ny)
+                        && include(nx, ny)
+                    {
+                        seen[index(nx, ny)] = true;
+                        deposit.push((nx, ny));
+                    }
+                }
+            }
+            deposits.push(deposit);
+        }
+    }
+    deposits
+}
+
+/// Turns the deep strata's ore specks back into rock (the top-up then refills the band budget
+/// with whole clusters).
+fn thin_deep_specks(canvas: &mut Canvas<'_>) {
+    let specks: Vec<(i32, i32)> = ore_deposits(
+        canvas.width,
+        canvas.height,
+        |x, y| canvas.get(x, y),
+        |x, y| canvas.band(x, y).deep_stratum().is_some(),
+    )
+    .into_iter()
+    .filter(|deposit| deposit.len() <= SPECK_MAX_TILES)
+    .flatten()
+    .collect();
+    for (x, y) in specks {
+        let rock = canvas.band(x, y).soft_material();
+        canvas.set(x, y, rock);
+    }
 }
 
 /// Ore richness scaled by the world setting (percent).
@@ -220,6 +296,10 @@ fn place_clusters(canvas: &mut Canvas<'_>) {
                 origin.1 + CLUSTER_REGION.1 / 2,
             );
             let mut expected = cluster_density(band) * rich / 100;
+            if chunky_deep_ore(canvas) && band.deep_stratum().is_some() {
+                // Fewer clusters, each bigger (see `cluster`): about the same ore value.
+                expected = expected * 3 / 4;
+            }
             while expected > 0 {
                 if expected >= 1000 || rng.chance(expected) {
                     let x = origin.0 + rng.range(0, CLUSTER_REGION.0 - 1);
@@ -262,6 +342,12 @@ fn cluster(
         }
         MineralKind::Uranium | MineralKind::Mythril => (rng.range(1, 2), 1),
         _ => (rng.range(2, 3), rng.range(1, 2)),
+    };
+    // Chunky deep ore: no single-row nuggets in the deep strata.
+    let (radius_x, radius_y) = if chunky_deep_ore(canvas) && band.deep_stratum().is_some() {
+        (radius_x.max(2), radius_y.max(1) + i32::from(radius_x <= 1))
+    } else {
+        (radius_x, radius_y)
     };
     let edge_salt = rng.next_u64();
     let mut placed = 0;
@@ -409,13 +495,20 @@ fn top_up_bands(canvas: &mut Canvas<'_>) {
             i32::try_from(band.index()).unwrap_or(0),
             0,
         );
-        let top = nominal_band_top(band) - 4;
+        let (first, last) = band_layout_rows(canvas.settings, band);
+        let top = first - 4;
+        // V1/V2 search the band's first 26 rows, as they always did; V3 bands can be thicker.
+        let span = if canvas.settings.generator == super::GeneratorVersion::V3 {
+            (last - first + 8).max(26)
+        } else {
+            26
+        };
         let mut attempts = 0;
         while values[band.index()] < budget && attempts < 4_000 {
             attempts += 1;
             let x = rng.range(0, canvas.width - 1);
             let y = rng
-                .range(top, top + 26)
+                .range(top, top + span)
                 .clamp(SKY_ROWS + 1, canvas.height - 1);
             if canvas.band(x, y) != band {
                 continue;
@@ -521,7 +614,7 @@ fn place_artifacts(canvas: &mut Canvas<'_>) {
         );
         // Two or three beds per band in a standard world, three or four in a large one.
         let beds = width_factor + i32::from(rng.chance(500));
-        let top = nominal_band_top(band);
+        let top = band_layout_rows(canvas.settings, band).0;
         let mut placed_beds = 0;
         let mut attempts = 0;
         while placed_beds < beds && attempts < 200 {
@@ -592,7 +685,7 @@ pub(crate) fn reserve_prefab_slots(canvas: &mut Canvas<'_>) {
     let segments = (canvas.width / 120).max(1);
     let segment_width = canvas.width / segments;
     for band in Band::ALL.into_iter().skip(1) {
-        let top = nominal_band_top(band);
+        let top = band_layout_rows(canvas.settings, band).0;
         for segment in 0..segments {
             let mut rng = RegionRng::new(
                 seed,
