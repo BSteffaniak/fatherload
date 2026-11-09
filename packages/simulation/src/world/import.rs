@@ -14,6 +14,7 @@ use crate::{
     rng::DeterministicRngState,
     terrain::{ArtifactKind, MineralKind, TILE_SIZE, Terrain, TilePosition},
     tick::SimulationParams,
+    worldgen::WorldSettings,
 };
 
 use super::{
@@ -216,20 +217,26 @@ impl WorldState {
 pub const NEW_WORLD_WIDTH_TILES: i32 = 240;
 /// Height in tiles of a freshly generated single-player world.
 pub const NEW_WORLD_HEIGHT_TILES: i32 = 220;
-/// Terrain seed of a freshly generated single-player world.
-pub const NEW_WORLD_SEED: u64 = 0xD1_11_6A_4E;
+/// Seed of the default world ([`WorldState::new_game`]; tests, fixtures and scripted scenes).
+pub const NEW_WORLD_SEED: u64 = crate::worldgen::DEFAULT_WORLD_SEED;
 /// Rig spawn position (world pixels) of a freshly generated single-player world.
 pub const NEW_WORLD_SPAWN: (f32, f32) = (97.0 * TILE_SIZE, 4.0 * TILE_SIZE);
 
 impl WorldImport {
-    /// Describes a brand-new single-rig world, matching the desktop game's "new game" defaults.
+    /// Describes a brand-new single-rig world from the default settings (fixed seed).
     #[must_use]
     pub fn new_game(player_id: PlayerId) -> Self {
-        let terrain = Terrain::new_seeded(
-            NEW_WORLD_WIDTH_TILES,
-            NEW_WORLD_HEIGHT_TILES,
-            NEW_WORLD_SEED,
-        );
+        Self::new_game_with_settings(player_id, &WorldSettings::default())
+    }
+
+    /// Describes a brand-new single-rig world generated from `settings`.
+    #[must_use]
+    pub fn new_game_with_settings(player_id: PlayerId, settings: &WorldSettings) -> Self {
+        let terrain = if *settings == WorldSettings::default() {
+            default_terrain()
+        } else {
+            Terrain::generate(settings)
+        };
         Self {
             player_id,
             player: Player::new(NEW_WORLD_SPAWN.0, NEW_WORLD_SPAWN.1),
@@ -310,4 +317,39 @@ impl WorldState {
     pub fn new_game_with_params(player_id: PlayerId, params: SimulationParams) -> Self {
         Self::from_import_with_params(&WorldImport::new_game(player_id), params)
     }
+
+    /// Builds a brand-new single-rig world generated from `settings` for a session's
+    /// parameters.
+    #[must_use]
+    pub fn new_game_with_settings(
+        player_id: PlayerId,
+        settings: &WorldSettings,
+        params: SimulationParams,
+    ) -> Self {
+        Self::from_import_with_params(
+            &WorldImport::new_game_with_settings(player_id, settings),
+            params,
+        )
+    }
+
+    /// How this world was generated (seed, size, richness, hazards, generator version).
+    #[must_use]
+    pub const fn world_settings(&self) -> &WorldSettings {
+        self.terrain.settings()
+    }
+
+    /// The generator's index of notable places in this world (empty for legacy worlds).
+    #[must_use]
+    pub fn world_features(&self) -> &crate::worldgen::FeatureIndex {
+        self.terrain.features()
+    }
+}
+
+/// The default world's terrain, generated once per process (generation is a pure function of
+/// the settings, and tests and the title screen build the default world many times).
+fn default_terrain() -> Terrain {
+    static DEFAULT: std::sync::OnceLock<Terrain> = std::sync::OnceLock::new();
+    DEFAULT
+        .get_or_init(|| Terrain::generate(&WorldSettings::default()))
+        .clone()
 }

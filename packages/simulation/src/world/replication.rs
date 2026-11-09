@@ -11,8 +11,8 @@
 //! Private state (a player's [`PlayerLoadout`] and discovery) is replicated only to its owner;
 //! see [`super::visibility`] for the client-visible state hash and keyframe redaction.
 //!
-//! Terrain dimensions, seed and the initial tiles only travel in a keyframe (the serialized
-//! [`WorldState`] itself).
+//! Terrain dimensions and the initial tiles only travel in a keyframe (the serialized
+//! [`WorldState`] itself); the world's generation settings also ride in the session section.
 //!
 //! Coverage is enforced by the compiler: [`WorldState::section`] and
 //! `WorldState::remove_player` (in `roster`) destructure the whole world, and
@@ -138,6 +138,8 @@ pub struct TimersSection {
 pub struct SessionSection {
     pub timing: TickTiming,
     pub player_template: crate::player::Player,
+    /// How the world was generated (the terrain itself travels in keyframes).
+    pub world_settings: crate::worldgen::WorldSettings,
 }
 
 /// Key of an on-change section.
@@ -389,7 +391,7 @@ impl WorldState {
             falling_boulders: _,
             boulder_warning_deadlines: _,
             boulder_expiry_ticks: _,
-            terrain: _,
+            terrain,
             bombs: _,
             infrastructure,
             active_drills: _,
@@ -481,6 +483,7 @@ impl WorldState {
             SectionKey::Session => SectionPayload::Session(Box::new(SessionSection {
                 timing: *timing,
                 player_template: player_template.clone(),
+                world_settings: *terrain.settings(),
             })),
         })
     }
@@ -611,9 +614,11 @@ impl WorldState {
                 let SessionSection {
                     timing,
                     player_template,
+                    world_settings,
                 } = *session;
                 self.timing = timing;
                 self.player_template = player_template;
+                self.terrain.set_settings(world_settings);
             }
             _ => {}
         }

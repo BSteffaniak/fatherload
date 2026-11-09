@@ -29,6 +29,7 @@ pub mod surface;
 pub mod terrain;
 pub mod tick;
 pub mod world;
+pub mod worldgen;
 
 pub use command::{PlayerCommand, TickAction};
 pub use event::{ActionOutcome, GameplayEvent, GameplayEventId, GameplayEventKind, TickOutput};

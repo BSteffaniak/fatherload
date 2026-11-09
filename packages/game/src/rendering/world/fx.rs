@@ -232,7 +232,7 @@ pub fn draw_drill_debris(
         DrillDirection::Left => (x + TILE_SIZE - ART, y + TILE_SIZE * 0.6, 1.0, -0.4),
         DrillDirection::Right => (x + ART, y + TILE_SIZE * 0.6, -1.0, -0.4),
     };
-    let dust = material_color(tile.kind, drill.target.y);
+    let dust = material_color(tile.kind, terrain.band_at(drill.target));
     let hard = matches!(
         tile.kind,
         TileKind::Stone | TileKind::HardRock | TileKind::Ore(_) | TileKind::Artifact(_)

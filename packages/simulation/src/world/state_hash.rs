@@ -120,7 +120,7 @@ impl WorldState {
         hash.write_serialized(&self.collapse_warnings);
         hash.write_i32(self.terrain.width());
         hash.write_i32(self.terrain.height());
-        hash.write_u64(self.terrain.seed());
+        hash.write_serialized(self.terrain.settings());
         hash.write_u64(u64::try_from(self.terrain.tiles().len()).unwrap_or(u64::MAX));
         hash.write_u64(self.terrain.digest());
         hash.write_u64(u64::try_from(self.hazards.len()).unwrap_or(u64::MAX));

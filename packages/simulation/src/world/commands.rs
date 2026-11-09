@@ -14,7 +14,7 @@ use crate::{
     rig::{DrillDirection, DrillState, RigPartKind},
     service::{PlayerServiceTransaction, PlayerTransactionKind},
     summary::PlayerScopedCommandOutcome,
-    terrain::{DeepStratum, MineResult, TILE_SIZE, TileKind, TilePosition, deep_stratum_at_depth},
+    terrain::{DeepStratum, MineResult, TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
 use super::{WorldState, record_service_transaction};
@@ -134,6 +134,7 @@ impl WorldState {
                 player.drill_strength,
                 direction,
                 &parts,
+                &self.terrain,
                 target,
             );
             let drill = self
@@ -329,6 +330,7 @@ pub(super) fn authoritative_drill_seconds_per_chip(
     drill_strength: u8,
     direction: DrillDirection,
     parts: &BTreeSet<RigPartKind>,
+    terrain: &Terrain,
     target: TilePosition,
 ) -> f32 {
     let base = match kind {
@@ -371,7 +373,7 @@ pub(super) fn authoritative_drill_seconds_per_chip(
     }
     if parts.contains(&RigPartKind::ResonanceDrill)
         && matches!(
-            deep_stratum_at_depth(target.y),
+            terrain.deep_stratum_at(target),
             Some(DeepStratum::CrystalFaults | DeepStratum::AncientMachineLayer)
         )
     {

@@ -3,9 +3,14 @@
     reason = "terrain bounds are validated before indexing"
 )]
 
+use std::sync::{Arc, OnceLock};
+
 use serde::{Deserialize, Serialize};
 
-use crate::surface::building_foundation_at;
+use crate::{
+    surface::building_foundation_at,
+    worldgen::{self, Band, FeatureIndex, GeneratorVersion, WorldSettings},
+};
 
 /// World-space pixels per terrain tile.
 pub const TILE_SIZE: f32 = 32.0;
@@ -121,8 +126,8 @@ impl DeepStratum {
     }
 }
 
-#[must_use]
-pub const fn deep_stratum_at_depth(depth: i32) -> Option<DeepStratum> {
+/// The deep stratum of row `depth` in a legacy (fixed-depth) world.
+const fn legacy_deep_stratum(depth: i32) -> Option<DeepStratum> {
     match depth {
         90..=109 => Some(DeepStratum::CrystalFaults),
         110..=129 => Some(DeepStratum::FossilOceans),
@@ -334,6 +339,9 @@ struct TerrainData {
     height: i32,
     seed: u64,
     tiles: Vec<Tile>,
+    /// Missing in saves written before seeded generation: those are legacy worlds.
+    #[serde(default)]
+    settings: Option<WorldSettings>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -341,13 +349,17 @@ struct TerrainData {
 pub struct Terrain {
     width: i32,
     height: i32,
-    seed: u64,
+    /// How the terrain was generated (seed, size, richness, hazards, generator version).
+    settings: WorldSettings,
     tiles: Vec<Tile>,
     /// Running sum of [`tile_digest`] over every tile, maintained on each write so hashing the
     /// world does not walk the whole grid.
     digest: u64,
     /// Tile writes recorded while a simulation tick runs (never serialized or hashed).
     journal: Option<Vec<TileChange>>,
+    /// The generator's feature index, recomputed from `settings` on first use (never
+    /// serialized, replicated or hashed).
+    features: OnceLock<Arc<FeatureIndex>>,
 }
 
 impl From<TerrainData> for Terrain {
@@ -357,17 +369,20 @@ impl From<TerrainData> for Terrain {
             height,
             seed,
             tiles,
+            settings,
         } = data;
+        let settings = settings.unwrap_or_else(|| WorldSettings::legacy(seed));
         let digest = tiles.iter().enumerate().fold(0_u64, |sum, (index, tile)| {
             sum.wrapping_add(tile_digest(index, *tile))
         });
         Self {
             width,
             height,
-            seed,
+            settings,
             tiles,
             digest,
             journal: None,
+            features: OnceLock::new(),
         }
     }
 }
@@ -377,8 +392,9 @@ impl From<Terrain> for TerrainData {
         Self {
             width: terrain.width,
             height: terrain.height,
-            seed: terrain.seed,
+            seed: terrain.settings.seed,
             tiles: terrain.tiles,
+            settings: Some(terrain.settings),
         }
     }
 }
@@ -390,13 +406,15 @@ impl Terrain {
         Self::new_seeded(width, height, 0xD1_11_6A_4E)
     }
 
+    /// A `width` x `height` terrain from the legacy fixed-depth generator (small test and
+    /// harness worlds).
     #[must_use]
     pub fn new_seeded(width: i32, height: i32, seed: u64) -> Self {
         let mut tiles = Vec::with_capacity((width * height) as usize);
 
         for y in 0..height {
             for x in 0..width {
-                let kind = generated_tile_kind(x, y, seed);
+                let kind = legacy_tile_kind(x, y, seed);
                 tiles.push(Tile {
                     kind,
                     durability: tile_durability(kind),
@@ -409,6 +427,62 @@ impl Terrain {
             height,
             seed,
             tiles,
+            settings: Some(WorldSettings::legacy(seed)),
+        })
+    }
+
+    /// Generates the world `settings` describe (see [`crate::worldgen`]).
+    #[must_use]
+    pub fn generate(settings: &WorldSettings) -> Self {
+        let world = worldgen::generate(settings);
+        let terrain = Self::from(TerrainData {
+            width: world.width,
+            height: world.height,
+            seed: settings.seed,
+            tiles: world.tiles,
+            settings: Some(*settings),
+        });
+        let _ = terrain.features.set(Arc::new(world.features));
+        terrain
+    }
+
+    /// How this terrain was generated.
+    #[must_use]
+    pub const fn settings(&self) -> &WorldSettings {
+        &self.settings
+    }
+
+    /// Replaces the generation settings record (replicas following the authority's session
+    /// section; the tiles are not regenerated).
+    pub fn set_settings(&mut self, settings: WorldSettings) {
+        if self.settings != settings {
+            self.settings = settings;
+            self.features = OnceLock::new();
+        }
+    }
+
+    /// The band (shallow layer or deep stratum) containing `position`.
+    #[must_use]
+    pub const fn band_at(&self, position: TilePosition) -> Band {
+        worldgen::band_at(&self.settings, position.x, position.y)
+    }
+
+    /// The deep stratum containing `position`, if it is below the shallow layers.
+    #[must_use]
+    pub const fn deep_stratum_at(&self, position: TilePosition) -> Option<DeepStratum> {
+        self.band_at(position).deep_stratum()
+    }
+
+    /// The generator's notable features (caverns, motherlodes, artifact beds, hazard clusters,
+    /// band transitions, prefab slots). Empty for legacy worlds.
+    #[must_use]
+    pub fn features(&self) -> &FeatureIndex {
+        self.features.get_or_init(|| {
+            if self.settings.generator == GeneratorVersion::Legacy {
+                Arc::new(FeatureIndex::default())
+            } else {
+                Arc::new(worldgen::generate(&self.settings).features)
+            }
         })
     }
 
@@ -478,18 +552,27 @@ impl Terrain {
 
     #[must_use]
     pub const fn seed(&self) -> u64 {
-        self.seed
+        self.settings.seed
     }
 
+    /// Extends the terrain downwards with freshly generated rows (old saves of shallower worlds).
     pub fn ensure_depth(&mut self, minimum_height: i32) {
         if minimum_height <= self.height {
             return;
         }
+        let generated = (self.settings.generator != GeneratorVersion::Legacy)
+            .then(|| worldgen::generate(&self.settings));
         self.tiles
             .reserve(((minimum_height - self.height) * self.width) as usize);
         for y in self.height..minimum_height {
             for x in 0..self.width {
-                let kind = generated_tile_kind(x, y, self.seed);
+                let kind = generated
+                    .as_ref()
+                    .and_then(|world| {
+                        (x < world.width && y < world.height)
+                            .then(|| world.tiles[(y * world.width + x) as usize].kind)
+                    })
+                    .unwrap_or_else(|| legacy_tile_kind(x, y, self.settings.seed));
                 let tile = Tile {
                     kind,
                     durability: tile_durability(kind),
@@ -660,7 +743,8 @@ pub enum MineResult {
     Mined(TileKind),
 }
 
-fn generated_tile_kind(x: i32, y: i32, seed: u64) -> TileKind {
+/// A tile of the original fixed-depth generator ([`GeneratorVersion::Legacy`] worlds).
+pub(crate) fn legacy_tile_kind(x: i32, y: i32, seed: u64) -> TileKind {
     if y <= 4 {
         return TileKind::Air;
     }
@@ -693,7 +777,7 @@ fn generated_tile_kind(x: i32, y: i32, seed: u64) -> TileKind {
         return TileKind::Gas;
     }
 
-    if let Some(stratum) = deep_stratum_at_depth(y)
+    if let Some(stratum) = legacy_deep_stratum(y)
         && seeded_hash(x, y, seed ^ 0xD33F).is_multiple_of(29)
     {
         return stratum.primary_hazard();
@@ -769,7 +853,7 @@ const fn artifact_spot(x: i32, y: i32, seed: u64) -> bool {
 }
 
 const fn artifact_at_depth(x: i32, y: i32) -> ArtifactKind {
-    if let Some(stratum) = deep_stratum_at_depth(y) {
+    if let Some(stratum) = legacy_deep_stratum(y) {
         return match stratum {
             DeepStratum::CrystalFaults => ArtifactKind::CrystalPrism,
             DeepStratum::FossilOceans => ArtifactKind::RadiantShell,
@@ -799,7 +883,7 @@ const fn ore_or_base_tile(x: i32, y: i32, base: TileKind, seed: u64) -> TileKind
         return base;
     }
 
-    if let Some(stratum) = deep_stratum_at_depth(y) {
+    if let Some(stratum) = legacy_deep_stratum(y) {
         return TileKind::Ore(match stratum {
             DeepStratum::CrystalFaults | DeepStratum::VoidGeodeFields => MineralKind::Diamond,
             DeepStratum::FossilOceans => MineralKind::Platinum,
@@ -855,7 +939,9 @@ const fn seeded_hash(x: i32, y: i32, seed: u64) -> u64 {
     value
 }
 
-const fn tile_hardness(kind: TileKind) -> u8 {
+/// Drill strength needed to dig a tile.
+#[must_use]
+pub const fn tile_hardness(kind: TileKind) -> u8 {
     match kind {
         TileKind::Air
         | TileKind::Lava
@@ -889,7 +975,9 @@ const fn tile_hardness(kind: TileKind) -> u8 {
     }
 }
 
-const fn tile_durability(kind: TileKind) -> u8 {
+/// Chips a freshly generated tile takes to dig.
+#[must_use]
+pub const fn tile_durability(kind: TileKind) -> u8 {
     match kind {
         TileKind::Air => 0,
         TileKind::Dirt => 2,

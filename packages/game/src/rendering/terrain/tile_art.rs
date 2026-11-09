@@ -17,8 +17,9 @@
     reason = "procedural art mixes small hashed integers and short coordinate names"
 )]
 
-use drillgame_simulation::terrain::{
-    DeepStratum, Terrain, TileKind, TilePosition, deep_stratum_at_depth,
+use drillgame_simulation::{
+    terrain::{DeepStratum, Terrain, TileKind, TilePosition},
+    worldgen::Band,
 };
 use raylib::prelude::Color;
 
@@ -157,35 +158,29 @@ const fn deep_strata(stratum: DeepStratum) -> Strata {
     }
 }
 
-/// The palettes of the depth band containing tile row `tile_y`.
+/// The palettes of `band` (the world's band at a tile comes from [`Terrain::band_at`], so the
+/// palettes follow the world's wavy band boundaries).
 #[must_use]
-pub const fn strata_at(tile_y: i32) -> Strata {
-    if let Some(stratum) = deep_stratum_at_depth(tile_y) {
-        return deep_strata(stratum);
-    }
-    match tile_y {
-        ..=13 => TOPSOIL_BAND,
-        14..=27 => CLAY_BAND,
-        28..=45 => GREY_BAND,
-        46..=64 => SLATE_BAND,
-        _ => BASALT_BAND,
+pub const fn strata_for(band: Band) -> Strata {
+    match band {
+        Band::Topsoil => TOPSOIL_BAND,
+        Band::Clay => CLAY_BAND,
+        Band::Stone => GREY_BAND,
+        Band::Slate => SLATE_BAND,
+        Band::Basalt => BASALT_BAND,
+        Band::Deep(stratum) => deep_strata(stratum),
     }
 }
 
-/// The plain rock an ore, artifact or pocket at row `tile_y` is embedded in.
-const fn host_material(tile_y: i32) -> TileKind {
-    match tile_y {
-        ..=13 => TileKind::Dirt,
-        14..=27 => TileKind::Clay,
-        28..=64 | 90..=129 => TileKind::Stone,
-        _ => TileKind::HardRock,
-    }
+/// The plain rock an ore, artifact or pocket in `band` is embedded in.
+const fn host_material(band: Band) -> TileKind {
+    band.soft_material()
 }
 
-/// Representative colour of a tile kind at `tile_y` (drill dust, debris).
+/// Representative colour of a tile kind in `band` (drill dust, debris, map previews).
 #[must_use]
-pub fn material_color(kind: TileKind, tile_y: i32) -> Color {
-    let strata = strata_at(tile_y);
+pub fn material_color(kind: TileKind, band: Band) -> Color {
+    let strata = strata_for(band);
     let index = match kind {
         TileKind::Dirt => strata.dirt[2],
         TileKind::Clay => strata.clay[2],
@@ -198,7 +193,7 @@ pub fn material_color(kind: TileKind, tile_y: i32) -> Color {
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
-        | TileKind::PressurePocket => return material_color(host_material(tile_y), tile_y),
+        | TileKind::PressurePocket => return material_color(host_material(band), band),
     };
     crate::rendering::pixel_art::shade::color_at(index)
 }
@@ -351,7 +346,7 @@ const fn brick_level(x: i32, y: i32) -> usize {
     }
 }
 
-fn base_pixel(kind: TileKind, strata: &Strata, x: i32, y: i32) -> PaletteIndex {
+fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -> PaletteIndex {
     let accent = |index: PaletteIndex| match strata.accent {
         Some(accent) if hash(x, y, 31).is_multiple_of(89) => accent,
         _ => index,
@@ -368,9 +363,7 @@ fn base_pixel(kind: TileKind, strata: &Strata, x: i32, y: i32) -> PaletteIndex {
         | TileKind::Artifact(_)
         | TileKind::Gas
         | TileKind::ExplosivePocket
-        | TileKind::PressurePocket => {
-            base_pixel(host_material(y.div_euclid(TILE_ART)), strata, x, y)
-        }
+        | TileKind::PressurePocket => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -505,7 +498,9 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     let kind = terrain
         .tile(position)
         .map_or(TileKind::Air, |tile| tile.kind);
-    let strata = strata_at(position.y);
+    let band = terrain.band_at(position);
+    let strata = strata_for(band);
+    let host = host_material(band);
     let mut canvas = TileCanvas {
         pixels: [TRANSPARENT; TILE_ART_USIZE * TILE_ART_USIZE],
         origin_x: position.x * TILE_ART,
@@ -529,7 +524,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     for py in 0..TILE_ART {
         for px in 0..TILE_ART {
             let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
-            canvas.set(px, py, base_pixel(kind, &strata, gx, gy));
+            canvas.set(px, py, base_pixel(kind, &strata, host, gx, gy));
         }
     }
     let seed = hash(x, y, 101);
@@ -566,7 +561,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         | TileKind::Artifact(_)
         | TileKind::Gas
         | TileKind::ExplosivePocket
-        | TileKind::PressurePocket => host_material(y),
+        | TileKind::PressurePocket => host,
         other => other,
     };
     let lip = match material {
@@ -886,8 +881,8 @@ mod tests {
 
     #[test]
     fn every_band_uses_palette_indices() {
-        for y in 0..260 {
-            let strata = strata_at(y);
+        for band in Band::ALL {
+            let strata = strata_for(band);
             for index in strata
                 .dirt
                 .iter()
