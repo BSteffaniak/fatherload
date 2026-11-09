@@ -43,8 +43,9 @@ Lava Plating, Gas Scrubber, Pressure Bracing (pressure pockets, explosive pocket
 and Boulder Deflector (boulders, cave-ins). Each stops `1 - (1 - tier/max)^2` of its hazard, all
 of it at the top tier. Heat is per band, not per row: each band has a heat level
 (`band_heat_level`, 0 in the topsoil and clay up to 10 in the mantle storm zone) and the rig's
-cooling (`heat_cooling` = radiator tiers + shielding tiers) covers that many; each uncovered
-level burns `HEAT_DAMAGE_PER_EXCESS_LEVEL` hull per second. Deep-run instability builds from the
+cooling (`heat_cooling`, counted in thirds of a level: a whole level per radiator tier to
+tier 5, a third per radiator tier after that, a whole level per shielding tier) covers that
+much; each uncovered third burns `HEAT_DAMAGE_PER_EXCESS_UNIT` hull per second (3 per level). Deep-run instability builds from the
 basalt deeps down and the pressure fuel drain/scanner lockout starts at the fossil oceans (both
 by band). Boulders loosened by mining are one per 80 stone tiles with a 1.5 s warning.
 

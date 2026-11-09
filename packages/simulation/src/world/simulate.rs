@@ -8,7 +8,7 @@ use crate::{
     infrastructure::InfrastructureKind,
     input::TickInputs,
     progression::WorldEventKind,
-    protection::{HEAT_DAMAGE_PER_EXCESS_LEVEL, heat_excess},
+    protection::{HEAT_DAMAGE_PER_EXCESS_UNIT, heat_excess},
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
     summary::PlayerScopedCommandOutcome,
@@ -202,7 +202,7 @@ impl WorldState {
                 gear.heat_shield,
             );
             let depth_damage = if excess > 0 {
-                HEAT_DAMAGE_PER_EXCESS_LEVEL * f32::from(excess) * heat_multiplier * delta_seconds
+                HEAT_DAMAGE_PER_EXCESS_UNIT * f32::from(excess) * heat_multiplier * delta_seconds
             } else {
                 0.0
             };

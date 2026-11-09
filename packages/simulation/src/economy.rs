@@ -15,7 +15,7 @@ use crate::{
     protection::{
         BOULDER_DEFLECTOR_MAX_LEVEL, GAS_SCRUBBER_MAX_LEVEL, HEAT_SHIELD_MAX_LEVEL,
         LAVA_PLATING_MAX_LEVEL, MAX_BAND_HEAT, PRESSURE_BRACING_MAX_LEVEL, heat_cooling,
-        protection_fraction,
+        heat_levels_label, protection_fraction,
     },
     terrain::DeepStratum,
     worldgen::{Band, WorldSettings, strata::band_reached},
@@ -741,13 +741,13 @@ pub fn upgrade_effect(player: &Player, kind: UpgradeKind) -> Option<String> {
         ),
         UpgradeKind::Radiator => format!(
             "Cools heat {} -> {} of {MAX_BAND_HEAT} with your shielding",
-            heat_cooling(level, gear.heat_shield),
-            heat_cooling(next, gear.heat_shield)
+            heat_levels_label(heat_cooling(level, gear.heat_shield)),
+            heat_levels_label(heat_cooling(next, gear.heat_shield))
         ),
         UpgradeKind::HeatShield => format!(
             "Cools heat {} -> {} of {MAX_BAND_HEAT} with your radiator",
-            heat_cooling(player.radiator_level, level),
-            heat_cooling(player.radiator_level, next)
+            heat_levels_label(heat_cooling(player.radiator_level, level)),
+            heat_levels_label(heat_cooling(player.radiator_level, next))
         ),
         UpgradeKind::LavaPlating
         | UpgradeKind::GasScrubber
