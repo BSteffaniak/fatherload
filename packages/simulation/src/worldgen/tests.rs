@@ -64,9 +64,9 @@ fn golden_world_digests_are_pinned_to_the_generator_version() {
     let cases = [
         (
             WorldSettings::new(DEFAULT_WORLD_SEED),
-            0xc886_5661_f9ae_c549,
+            0xacad_3db4_cf17_715d,
         ),
-        (WorldSettings::new(1), 0xda42_34d4_d954_ab4a),
+        (WorldSettings::new(1), 0xe24f_c0a8_4dfb_6f08),
         (
             WorldSettings {
                 size: WorldSize::Large,
@@ -74,7 +74,7 @@ fn golden_world_digests_are_pinned_to_the_generator_version() {
                 hazards: HazardIntensity::Brutal,
                 ..WorldSettings::new(0x00C0_FFEE)
             },
-            0xea44_744f_bb90_c7a6,
+            0xea3e_f91a_6ab2_2d0c,
         ),
         (
             WorldSettings {
@@ -82,7 +82,7 @@ fn golden_world_digests_are_pinned_to_the_generator_version() {
                 hazards: HazardIntensity::Calm,
                 ..WorldSettings::new(77)
             },
-            0xf78a_2141_54ca_16a3,
+            0x2c63_e545_6d83_9051,
         ),
     ];
     let actual: Vec<u64> = cases
@@ -461,7 +461,7 @@ fn the_feature_index_counts_stay_in_bounds() {
                 (FeatureKind::LargeCavern, 4 * scale, 30 * scale),
                 (FeatureKind::Chamber, 0, 10 * scale),
                 (FeatureKind::Motherlode, 0, 8 * scale),
-                (FeatureKind::ArtifactBed, 11, 24 * scale),
+                (FeatureKind::ArtifactBed, 10 * scale, 24 * scale),
                 (FeatureKind::HazardCluster, 30 * scale, 120 * scale),
                 (FeatureKind::StratumTransition, 11, 11),
                 (FeatureKind::PrefabSlot, 8 * scale, 11 * scale),

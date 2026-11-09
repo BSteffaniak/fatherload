@@ -57,14 +57,24 @@ const fn depth_curve(mineral: MineralKind) -> (i32, i32, i32, u32) {
     }
 }
 
-/// The mineral a deep stratum is known for.
-const fn stratum_signature(stratum: DeepStratum) -> MineralKind {
+/// The minerals a deep stratum is known for, with the weight bonus each gets there.
+///
+/// The deepest strata lean on the most valuable minerals so ore value keeps rising with depth
+/// (the reward for braving the worst hazards).
+const fn stratum_signatures(stratum: DeepStratum) -> &'static [(MineralKind, u32)] {
     match stratum {
-        DeepStratum::CrystalFaults | DeepStratum::VoidGeodeFields => MineralKind::Diamond,
-        DeepStratum::FossilOceans => MineralKind::Platinum,
-        DeepStratum::PressureCathedrals | DeepStratum::AncientMachineLayer => MineralKind::Mythril,
-        DeepStratum::RadioactiveHollow => MineralKind::Uranium,
-        DeepStratum::MantleStormZone => MineralKind::Ruby,
+        DeepStratum::CrystalFaults => &[(MineralKind::Diamond, 24)],
+        DeepStratum::FossilOceans => &[(MineralKind::Platinum, 24)],
+        DeepStratum::PressureCathedrals | DeepStratum::AncientMachineLayer => {
+            &[(MineralKind::Mythril, 24)]
+        }
+        DeepStratum::RadioactiveHollow => &[(MineralKind::Uranium, 24)],
+        DeepStratum::VoidGeodeFields => &[(MineralKind::Diamond, 12), (MineralKind::Mythril, 30)],
+        DeepStratum::MantleStormZone => &[
+            (MineralKind::Mythril, 36),
+            (MineralKind::Uranium, 10),
+            (MineralKind::Ruby, 6),
+        ],
     }
 }
 
@@ -90,8 +100,14 @@ pub fn mineral_weights(band: Band, y: i32) -> [u32; 10] {
         }
     }
     if let Band::Deep(stratum) = band {
-        let signature = stratum_signature(stratum) as usize;
-        weights[signature] = weights[signature] * 3 + 24;
+        let signatures = stratum_signatures(stratum);
+        let mut index = 0;
+        while index < signatures.len() {
+            let (mineral, bonus) = signatures[index];
+            let slot = mineral as usize;
+            weights[slot] = weights[slot] * 3 + bonus;
+            index += 1;
+        }
     }
     weights
 }
@@ -181,6 +197,8 @@ const CLUSTER_REGION: (i32, i32) = (14, 10);
 /// Clusters per region (thousandths) by band, before richness.
 const fn cluster_density(band: Band) -> u32 {
     match band {
+        Band::Deep(DeepStratum::VoidGeodeFields) => 2_500,
+        Band::Deep(DeepStratum::MantleStormZone) => 2_400,
         Band::Topsoil | Band::Deep(_) => 1_500,
         Band::Clay => 1_900,
         Band::Stone | Band::Slate | Band::Basalt => 2_000,
@@ -368,8 +386,8 @@ pub const fn band_ore_target_per_ten_tiles(band: Band) -> u64 {
         Band::Deep(DeepStratum::PressureCathedrals) => 340,
         Band::Deep(DeepStratum::RadioactiveHollow) => 320,
         Band::Deep(DeepStratum::AncientMachineLayer) => 420,
-        Band::Deep(DeepStratum::VoidGeodeFields) => 280,
-        Band::Deep(DeepStratum::MantleStormZone) => 200,
+        Band::Deep(DeepStratum::VoidGeodeFields) => 450,
+        Band::Deep(DeepStratum::MantleStormZone) => 490,
     }
 }
 
@@ -501,7 +519,8 @@ fn place_artifacts(canvas: &mut Canvas<'_>) {
             i32::try_from(band.index()).unwrap_or(0),
             0,
         );
-        let beds = width_factor / 2 + 1 + i32::from(rng.chance(500));
+        // Two or three beds per band in a standard world, three or four in a large one.
+        let beds = width_factor + i32::from(rng.chance(500));
         let top = nominal_band_top(band);
         let mut placed_beds = 0;
         let mut attempts = 0;
