@@ -136,6 +136,53 @@ fn a_two_seat_crew_splits_a_delivery_and_both_get_paid() {
     assert!(game.world().crew_quests().active.is_empty());
 }
 
+#[test]
+fn a_crew_job_can_also_be_taken_solo_while_others_play() {
+    let second = PlayerId::new(2);
+    let mut world = split_world(&[Some(SurfaceZone::Depot), Some(SurfaceZone::Salvage)]);
+    {
+        let lead = world.player_mut(PLAYER).expect("lead");
+        lead.quests.reputation.insert(QuestGiver::Kade, 10);
+        lead.quests.deepest_row = 30;
+    }
+    let mut game = playing(world, 2, "quest-crew-solo");
+    idle(&mut game, 5);
+    press_seat(&mut game, 0, interact());
+    walk_seats_to_counters(&mut game, &[0]);
+    let _report = press(&mut game, right());
+    let rows = desk_rows(game.world(), PLAYER, QuestGiver::Kade);
+    let crew_row = row_of(&game, PLAYER, QuestGiver::Kade, TWO_COUNTERS);
+    assert!(matches!(rows[crew_row], DeskRow::Offer(_)));
+    assert!(
+        matches!(&rows[crew_row + 1], DeskRow::SoloOffer(offer) if offer.quest == TWO_COUNTERS),
+        "the solo variant sits right under the crew row"
+    );
+    // Solo-only quests get one row.
+    assert_eq!(
+        rows.iter().filter(|row| row.quest() == SCALES).count(),
+        1,
+        "{rows:?}"
+    );
+    select_row(&mut game, crew_row + 1);
+    confirm(&mut game);
+    assert!(game.world().crew_quests().active.is_empty());
+    assert!(
+        player(&game, PLAYER)
+            .quests
+            .active
+            .iter()
+            .any(|quest| quest.quest == TWO_COUNTERS && !quest.crew),
+        "taken as the lead's own solo job"
+    );
+    assert!(
+        !game
+            .world()
+            .visible_quests(second)
+            .iter()
+            .any(|quest| quest.quest == TWO_COUNTERS)
+    );
+}
+
 /// Accepts `quest` for the world's first rig straight through the simulation (standing it at
 /// the giver's door for one tick).
 fn accept_in_world(world: &mut WorldState, quest: QuestId) {

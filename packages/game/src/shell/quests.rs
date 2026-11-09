@@ -2,9 +2,9 @@
 //! counter's services), the per-seat quest log, the tracked quest and completion fanfares.
 //!
 //! The desk lists, in order: finished jobs to turn in, jobs on offer, jobs in progress (drop
-//! them with a second confirm) and the next locked ones with what they need. Accepting a quest
-//! with co-op objectives while other rigs are playing takes it as a crew quest; alone, its solo
-//! variant.
+//! them with a second confirm) and the next locked ones with what they need. A quest with co-op
+//! objectives offered while other rigs are playing gets two rows: take it as a crew quest, or
+//! take its solo variant; alone, only the solo variant is offered.
 
 use drillgame_simulation::{
     ActiveQuest, PlayerId, SessionServiceRequest, WorldState,
@@ -56,8 +56,12 @@ impl Fanfare {
 pub enum DeskRow {
     /// A finished quest: confirm turns it in.
     TurnIn(QuestId),
-    /// A quest on offer (or one the player cannot take yet because their log is full).
+    /// A quest on offer (or one the player cannot take yet because their log is full). A co-op
+    /// quest offered while other rigs play is taken as a crew quest from this row.
     Offer(QuestOffer),
+    /// The solo variant of a co-op quest, offered next to the crew row while other rigs play,
+    /// so a pilot whose crew is busy elsewhere can still take it alone.
+    SoloOffer(QuestOffer),
     /// A quest in progress: confirm (twice) drops it.
     Active(QuestId),
     /// A quest whose prerequisites are still missing.
@@ -69,7 +73,7 @@ impl DeskRow {
     pub const fn quest(&self) -> QuestId {
         match self {
             Self::TurnIn(quest) | Self::Active(quest) => *quest,
-            Self::Offer(offer) | Self::Locked(offer) => offer.quest,
+            Self::Offer(offer) | Self::SoloOffer(offer) | Self::Locked(offer) => offer.quest,
         }
     }
 }
@@ -89,13 +93,15 @@ pub fn desk_rows(world: &WorldState, player: PlayerId, giver: QuestGiver) -> Vec
         .map(|quest| DeskRow::TurnIn(quest.quest))
         .collect();
     let offers = world.quest_offers(player, giver);
-    rows.extend(
-        offers
-            .iter()
-            .filter(|offer| !matches!(offer.availability, QuestAvailability::Locked(_)))
-            .cloned()
-            .map(DeskRow::Offer),
-    );
+    for offer in offers
+        .iter()
+        .filter(|offer| !matches!(offer.availability, QuestAvailability::Locked(_)))
+    {
+        rows.push(DeskRow::Offer(offer.clone()));
+        if crew_mode(world, offer.quest) {
+            rows.push(DeskRow::SoloOffer(offer.clone()));
+        }
+    }
     rows.extend(
         mine.iter()
             .filter(|quest| !quest.ready)
@@ -219,11 +225,11 @@ impl SeatUi {
         let title = row.quest().def().map_or("that job", |def| def.title);
         match row {
             DeskRow::TurnIn(quest) => Some(SessionServiceRequest::TurnInQuest { quest: *quest }),
-            DeskRow::Offer(offer) => {
+            DeskRow::Offer(offer) | DeskRow::SoloOffer(offer) => {
                 if offer.availability == QuestAvailability::Available {
                     Some(SessionServiceRequest::AcceptQuest {
                         quest: offer.quest,
-                        crew: crew_mode(ctx.world, offer.quest),
+                        crew: matches!(row, DeskRow::Offer(_)) && crew_mode(ctx.world, offer.quest),
                     })
                 } else {
                     "Your quest log is full: finish or drop a job first."

@@ -114,21 +114,23 @@ fn desk_about(row: &DeskRow, ui: &UiFrame<'_, '_>) -> String {
         _ => def.text.offer.to_owned(),
     };
     let twists: Vec<String> = match row {
-        DeskRow::Offer(offer) | DeskRow::Locked(offer) => offer.posting.map_or_else(
-            || {
-                def.twists
-                    .iter()
-                    .copied()
-                    .map(drillgame_simulation::quest::Twist::describe)
-                    .collect()
-            },
-            |posting| {
-                def.active_twists(posting.variant)
-                    .into_iter()
-                    .map(drillgame_simulation::quest::Twist::describe)
-                    .collect()
-            },
-        ),
+        DeskRow::Offer(offer) | DeskRow::SoloOffer(offer) | DeskRow::Locked(offer) => {
+            offer.posting.map_or_else(
+                || {
+                    def.twists
+                        .iter()
+                        .copied()
+                        .map(drillgame_simulation::quest::Twist::describe)
+                        .collect()
+                },
+                |posting| {
+                    def.active_twists(posting.variant)
+                        .into_iter()
+                        .map(drillgame_simulation::quest::Twist::describe)
+                        .collect()
+                },
+            )
+        }
         _ => quest.map(|quest| twist_lines(quest)).unwrap_or_default(),
     };
     if !twists.is_empty() {
@@ -136,12 +138,14 @@ fn desk_about(row: &DeskRow, ui: &UiFrame<'_, '_>) -> String {
         about.push_str(&twists.join("; "));
         about.push(']');
     }
-    if def.is_coop() && matches!(row, DeskRow::Offer(_)) {
-        about.push_str(if ui.snapshot.players.len() >= 2 {
-            " Crew job: shared with every rig."
-        } else {
-            " Solo variant: one rig, longer windows."
-        });
+    match row {
+        DeskRow::Offer(_) if def.is_coop() && ui.snapshot.players.len() >= 2 => {
+            about.push_str(" Crew job: shared with every rig, tight co-op windows.");
+        }
+        DeskRow::Offer(_) | DeskRow::SoloOffer(_) if def.is_coop() => {
+            about.push_str(" Solo variant: one rig, longer windows.");
+        }
+        _ => {}
     }
     about.push_str(" Pays ");
     about.push_str(&def.reward.summary());
@@ -184,9 +188,15 @@ pub(super) fn draw_quest_desk(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
                     true,
                     false,
                 ),
-                DeskRow::Offer(offer) => (
+                DeskRow::Offer(offer) | DeskRow::SoloOffer(offer) => (
                     &menu_icons::LETTER,
-                    quest_kind(def),
+                    match row {
+                        DeskRow::SoloOffer(_) => format!("{} | take solo", quest_kind(def)),
+                        _ if def.is_coop() && ui.snapshot.players.len() >= 2 => {
+                            format!("{} | take with crew", quest_kind(def))
+                        }
+                        _ => quest_kind(def),
+                    },
                     format!("+{}", def.reward.credits),
                     if offer.availability == QuestAvailability::Available {
                         GOLD
