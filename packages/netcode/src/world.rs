@@ -111,6 +111,7 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<drillgame_simul
         GameplayEventKind::PoiDiscovered { player_id, .. } => (15, Some(player_id)),
         GameplayEventKind::VaultOpened { .. } => (16, None),
         GameplayEventKind::VaultLockReset { .. } => (17, None),
+        GameplayEventKind::TestModeChanged { player_id } => (18, Some(player_id)),
     }
 }
 

@@ -210,6 +210,7 @@ impl WorldState {
             rng: DeterministicRngState::new(import.terrain.seed()),
             discovered_tiles: BTreeMap::from([(player_id, DiscoveredTiles::default())]),
             service_transactions: Vec::new(),
+            test_mode: None,
         }
     }
 }

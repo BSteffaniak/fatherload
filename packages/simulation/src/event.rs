@@ -73,6 +73,10 @@ pub enum GameplayEventKind {
     VaultLockReset {
         feature: FeatureId,
     },
+    /// A player changed a test-mode toggle or warped (test-mode worlds only).
+    TestModeChanged {
+        player_id: PlayerId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -131,5 +135,6 @@ pub(crate) const fn gameplay_event_for_applied_command(
         }
         PlayerCommand::UseScanner => GameplayEventKind::ScannerUsed { player_id },
         PlayerCommand::Rescue => GameplayEventKind::RescueTriggered { player_id },
+        PlayerCommand::TestMode(_) => GameplayEventKind::TestModeChanged { player_id },
     }
 }

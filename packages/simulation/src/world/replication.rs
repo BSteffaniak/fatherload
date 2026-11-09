@@ -6,7 +6,7 @@
 //! |---|---|---|
 //! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); live entities: gas clouds, falling boulders, bombs ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
 //! | Op log | terrain tiles (shared; a client outside a chunk's relevance skips its ops and gets [`WorldState::terrain_chunk`] (the chunk's diffs from generation) when it approaches); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
-//! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants | [`WorldState::section`], [`WorldState::apply_section`] |
+//! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants, test-mode toggles | [`WorldState::section`], [`WorldState::apply_section`] |
 //!
 //! Private state (a player's [`PlayerLoadout`] and discovery) is replicated only to its owner;
 //! see [`super::visibility`] for the client-visible state hash and keyframe redaction.
@@ -164,6 +164,8 @@ pub enum SectionKey {
     Rng,
     Timers,
     Session,
+    /// Test-mode toggles (absent outside a test-mode world).
+    TestMode,
 }
 
 impl SectionKey {
@@ -183,7 +185,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 10] = [
+    pub const SHARED: [Self; 11] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -194,6 +196,7 @@ impl SectionKey {
         Self::Rng,
         Self::Timers,
         Self::Session,
+        Self::TestMode,
     ];
 }
 
@@ -212,6 +215,7 @@ pub enum SectionPayload {
     Rng(DeterministicRngState),
     Timers(TimersSection),
     Session(Box<SessionSection>),
+    TestMode(Option<crate::test_mode::TestModeState>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -409,6 +413,7 @@ impl WorldState {
             rng,
             discovered_tiles: _,
             service_transactions,
+            test_mode,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -494,6 +499,7 @@ impl WorldState {
                 player_template: player_template.clone(),
                 world_settings: *terrain.settings(),
             })),
+            SectionKey::TestMode => SectionPayload::TestMode(*test_mode),
         })
     }
 
@@ -630,6 +636,9 @@ impl WorldState {
                 self.timing = timing;
                 self.player_template = player_template;
                 self.terrain.set_settings(world_settings);
+            }
+            (SectionKey::TestMode, SectionPayload::TestMode(test_mode)) => {
+                self.test_mode = test_mode;
             }
             _ => {}
         }

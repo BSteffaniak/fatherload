@@ -89,6 +89,7 @@ impl WorldState {
             rng: _,
             discovered_tiles,
             service_transactions,
+            test_mode: _,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);

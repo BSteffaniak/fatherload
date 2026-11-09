@@ -28,6 +28,7 @@ pub mod service;
 pub mod summary;
 pub mod surface;
 pub mod terrain;
+pub mod test_mode;
 pub mod tick;
 pub mod world;
 pub mod worldgen;
@@ -54,6 +55,7 @@ pub use service::{
 };
 pub use summary::{PlayerScopedCommandOutcome, PlayerSurvivalSnapshot};
 pub use terrain::{TILE_SIZE, TileChange};
+pub use test_mode::{TestModeAction, TestModeState};
 pub use tick::{
     DEFAULT_TICK_RATE_HZ, FIXED_DELTA_SECONDS, SIMULATION_HZ, SimulationParams, TickRate,
 };

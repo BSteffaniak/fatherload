@@ -45,6 +45,9 @@ mod roster;
 mod services;
 mod simulate;
 mod state_hash;
+mod test_mode;
+#[cfg(test)]
+mod test_mode_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -230,6 +233,9 @@ pub struct WorldState {
     rng: DeterministicRngState,
     discovered_tiles: BTreeMap<PlayerId, DiscoveredTiles>,
     service_transactions: Vec<PlayerServiceTransaction>,
+    /// Test-mode toggles; `None` outside a test-mode world (see [`crate::test_mode`]).
+    #[serde(default)]
+    test_mode: Option<crate::test_mode::TestModeState>,
 }
 
 impl WorldState {

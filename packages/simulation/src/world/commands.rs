@@ -308,6 +308,7 @@ impl WorldState {
             }
             PlayerCommand::Rescue => self.canonical_rescue_player(player_id),
             PlayerCommand::Service(request) => self.apply_service_request(player_id, request),
+            PlayerCommand::TestMode(action) => self.apply_test_mode_action(player_id, action),
         }
     }
 }

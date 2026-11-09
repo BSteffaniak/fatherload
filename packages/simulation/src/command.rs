@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ids::InputSequence, service::SessionServiceRequest};
+use crate::{ids::InputSequence, service::SessionServiceRequest, test_mode::TestModeAction};
 
 /// One-shot gameplay commands submitted by a player.
 ///
@@ -25,6 +25,8 @@ pub enum PlayerCommand {
     Rescue,
     /// A town service transaction (shop, bank, salvage, contracts, expeditions, ...).
     Service(SessionServiceRequest),
+    /// A test-mode toggle or warp (ignored outside a test-mode world).
+    TestMode(TestModeAction),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

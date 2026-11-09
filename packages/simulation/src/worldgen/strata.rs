@@ -299,6 +299,23 @@ pub const fn band_shallowest_row(settings: &WorldSettings, band: Band) -> i32 {
     }
 }
 
+/// The first row of column `x` that lies inside `band` whatever the boundary fingers do there
+/// (the band's top, pushed past any interleaving with the band above).
+#[must_use]
+pub const fn band_solid_top_row(settings: &WorldSettings, band: Band, x: i32) -> i32 {
+    match band.index() {
+        0 => SKY_ROWS + 1,
+        index => {
+            let boundary = index - 1;
+            if matches!(settings.generator, GeneratorVersion::Legacy) {
+                BOUNDARIES[boundary].nominal
+            } else {
+                boundary_column_depth(settings, boundary, x) + BOUNDARIES[boundary].finger + 1
+            }
+        }
+    }
+}
+
 /// Whether a crew whose deepest tile row is `deepest_row` has reached `band` in this world.
 #[must_use]
 pub const fn band_reached(settings: &WorldSettings, deepest_row: i32, band: Band) -> bool {

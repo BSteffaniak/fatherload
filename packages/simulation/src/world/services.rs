@@ -27,7 +27,8 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         PlayerCommand::UseScanner
         | PlayerCommand::PlaceBomb
         | PlayerCommand::PlaceInfrastructure { .. }
-        | PlayerCommand::Rescue => None,
+        | PlayerCommand::Rescue
+        | PlayerCommand::TestMode(_) => None,
     }
 }
 

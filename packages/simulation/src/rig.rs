@@ -81,6 +81,25 @@ pub enum RigPartKind {
 }
 
 impl RigPartKind {
+    /// Every rig part.
+    pub const ALL: [Self; 15] = [
+        Self::TitanDrill,
+        Self::NeedleDrill,
+        Self::ResonanceDrill,
+        Self::LightweightEngine,
+        Self::HaulerEngine,
+        Self::BurstEngine,
+        Self::ThermalHull,
+        Self::ImpactHull,
+        Self::PressureHull,
+        Self::ProspectorScanner,
+        Self::HazardScanner,
+        Self::RelicScanner,
+        Self::CargoBalloon,
+        Self::ArmoredCargoBay,
+        Self::SortedCargoRack,
+    ];
+
     #[must_use]
     pub const fn title(self) -> &'static str {
         match self {

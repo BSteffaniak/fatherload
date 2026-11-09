@@ -177,6 +177,7 @@ impl WorldState {
             hash.write_u64(deadline.get());
         }
         hash.write_u64(self.rng.state());
+        hash.write_serialized(&self.test_mode);
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

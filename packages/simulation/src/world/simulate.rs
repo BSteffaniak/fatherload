@@ -355,6 +355,7 @@ impl WorldState {
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.reveal_tiles_near_players();
+        self.apply_test_mode_refills();
         output.terrain_ops = self.terrain.finish_journal();
         output.discoveries = self.take_discoveries();
         self.set_simulation_tick(next_tick);
@@ -492,6 +493,10 @@ impl WorldState {
     }
 
     pub(super) fn advance_progression_depth(&mut self, output: &mut TickOutput) {
+        if self.is_test_mode() {
+            // Depth records and deep-reward milestones do not count in test mode.
+            return;
+        }
         let player_depths = self
             .players
             .iter()
