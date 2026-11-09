@@ -338,6 +338,31 @@ fn boulders_fall_rarely_and_with_a_long_warning() {
 }
 
 #[test]
+fn fast_drills_loosen_no_more_boulders_per_minute() {
+    // The spawn odds fall with the drill's bite, so plowing through rock with a top drill does
+    // not rain boulders any faster than digging with a mid-game one.
+    let world = pocket_world(TileKind::Dirt);
+    let per_second = |level: u8| {
+        let tiles_per_second = 1.0 / dig_seconds(&world, TileKind::HardRock, level, 60);
+        #[allow(clippy::cast_precision_loss, reason = "small constants")]
+        let chance = 1.0 / super::movement::boulder_spawn_chance(level) as f32;
+        tiles_per_second * chance
+    };
+    let mid_game = per_second(5);
+    assert_eq!(
+        super::movement::boulder_spawn_chance(1),
+        AUTHORITATIVE_BOULDER_SPAWN_CHANCE
+    );
+    for level in 6..=MAX_UPGRADE_LEVEL {
+        assert!(
+            per_second(level) <= mid_game,
+            "tier {level}: {} boulders/s vs {mid_game} at tier 5",
+            per_second(level)
+        );
+    }
+}
+
+#[test]
 fn test_mode_drills_anything_near_instantly_without_harm() {
     for floor in [
         TileKind::Foundation,

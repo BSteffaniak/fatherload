@@ -23,7 +23,7 @@ use super::{
     commands::bomb_tile_position,
     movement::{
         AUTHORITATIVE_BOULDER_LIFE_MILLIS, AUTHORITATIVE_BOULDER_SPAWN_CHANCE,
-        AUTHORITATIVE_BOULDER_WARNING_MILLIS,
+        AUTHORITATIVE_BOULDER_WARNING_MILLIS, boulder_spawn_chance,
     },
     quests::QuestNotes,
 };
@@ -343,7 +343,13 @@ impl WorldState {
                         target.x as f32 * TILE_SIZE + TILE_SIZE * 0.5,
                         (target.y as f32 - 1.0) * TILE_SIZE,
                     );
-                    if value.is_multiple_of(AUTHORITATIVE_BOULDER_SPAWN_CHANCE) {
+                    let chance = self
+                        .players
+                        .get(&player_id)
+                        .map_or(AUTHORITATIVE_BOULDER_SPAWN_CHANCE, |player| {
+                            boulder_spawn_chance(player.drill_strength)
+                        });
+                    if value.is_multiple_of(chance) {
                         self.spawn_falling_boulder(
                             boulder_x,
                             boulder_y,

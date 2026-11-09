@@ -2,7 +2,9 @@
 
 use crate::{
     ids::PlayerId,
-    player::{ENGINE_CLIMB_CAP, ENGINE_HANDLING_CAP, engine_power, fuel_burn_efficiency},
+    player::{
+        ENGINE_CLIMB_CAP, ENGINE_HANDLING_CAP, drill_bite, engine_power, fuel_burn_efficiency,
+    },
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
     terrain::{TILE_SIZE, Terrain, TilePosition},
@@ -44,6 +46,17 @@ pub const AUTHORITATIVE_BOULDER_LIFE_MILLIS: u64 = 4_200;
 /// One in this many mined stone tiles loosens a boulder (per mined tile, not per tick, so it is
 /// independent of the tick rate). Was one in 16; boulders are a rare surprise now.
 pub const AUTHORITATIVE_BOULDER_SPAWN_CHANCE: u64 = 80;
+
+/// One in this many stone tiles mined by a drill of `drill_strength` loosens a boulder.
+///
+/// A drill that bites deeper cuts cleaner: the odds fall with the square of the bite (as fast as
+/// the dig rate rises), so a top drill plowing through rock loosens no more boulders per minute
+/// than a mid-game one.
+#[must_use]
+pub const fn boulder_spawn_chance(drill_strength: u8) -> u64 {
+    let bite = drill_bite(drill_strength) as u64;
+    AUTHORITATIVE_BOULDER_SPAWN_CHANCE * bite * bite
+}
 /// Warning time of the centre boulder of a cave-in.
 pub const AUTHORITATIVE_CAVE_IN_WARNING_MILLIS: u64 = 900;
 /// Extra warning time per tile away from the centre of a cave-in.

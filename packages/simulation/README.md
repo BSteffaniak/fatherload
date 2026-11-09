@@ -49,7 +49,9 @@ cooling (`heat_cooling`, counted in thirds of a level: a whole level per radiato
 tier 5, a third per radiator tier after that, a whole level per shielding tier) covers that
 much; each uncovered third burns `HEAT_DAMAGE_PER_EXCESS_UNIT` hull per second (3 per level). Deep-run instability builds from the
 basalt deeps down and the pressure fuel drain/scanner lockout starts at the fossil oceans (both
-by band). Boulders loosened by mining are one per 80 stone tiles with a 1.5 s warning.
+by band). Boulders loosened by mining are one per 80 stone tiles with a 1.5 s warning,
+rarer still for late drills (`boulder_spawn_chance`: odds fall with the square of the drill's
+bite, so a top drill loosens no more boulders per minute than a tier 5 one).
 
 Test mode (`test_mode.rs`, `world/test_mode.rs`): `WorldState::enable_test_mode` (before play)
 maxes every rig (hazard counters included) and the player template, fills the parts locker and
