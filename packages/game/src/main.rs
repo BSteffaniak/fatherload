@@ -17,12 +17,27 @@ mod save;
 mod scene_capture;
 mod shell;
 mod window;
+mod worldgen_tools;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if input::pads::wants_list(&args) {
         input::pads::list_gamepads();
         return;
+    }
+    match worldgen_tools::parse_args(&args) {
+        Ok(Some(command)) => {
+            if let Err(error) = worldgen_tools::run(&command, &mut std::io::stdout()) {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+            return;
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
     }
     match scene_capture::parse_args(&args) {
         Ok(Some(options)) => {
