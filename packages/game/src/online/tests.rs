@@ -37,7 +37,10 @@ struct Host {
 
 impl Host {
     fn start() -> Self {
-        let world = headless_world();
+        Self::start_with(headless_world())
+    }
+
+    fn start_with(world: WorldState) -> Self {
         let tuning = NetTuning {
             debug_hash_interval: 1,
             ..NetTuning::default()
@@ -293,6 +296,94 @@ fn host_and_two_clients_play_over_real_quic_rejoin_and_end_cleanly() {
     // The host ends the session: both clients learn why, then their connections close.
     end_session_and_await_clients(host, [alice, bob_again]);
     bob.client.shutdown_blocking();
+}
+
+/// Blasts craters and cuts tunnels across the whole terrain (thousands of tiles that differ
+/// from generation, which the welcome keyframe must carry).
+fn excavate(world: &mut WorldState) {
+    use drillgame_simulation::terrain::TilePosition;
+    let terrain = world.terrain_mut();
+    let (width, height) = (terrain.width(), terrain.height());
+    for step in 0..(width * height / 60) {
+        let x = (step * 37).rem_euclid(width);
+        let y = 6 + (step * 53).rem_euclid(height - 6);
+        let _ = terrain.blast_radius(TilePosition { x, y }, 2);
+        let _ = terrain.chip(TilePosition { x: x + 3, y });
+    }
+}
+
+#[test]
+fn clients_join_and_rejoin_a_heavily_dug_world_over_real_quic() {
+    let mut world = headless_world();
+    excavate(&mut world);
+    let diffs = world.terrain().generation_diffs().len();
+    assert!(diffs > 5_000, "heavily dug: {diffs} diffs");
+    let mut host = Host::start_with(world);
+    let deadline = Instant::now() + WAIT;
+    while host.addr().is_none() {
+        assert!(Instant::now() < deadline, "host endpoint never bound");
+        host.step();
+        std::thread::sleep(FRAME);
+    }
+    let addr = host.addr().expect("bound");
+
+    // Join in progress: the welcome keyframe is the compact terrain, regenerated client side.
+    let mut carol = Peer::join(addr, "carol", None);
+    run_until(
+        &mut host,
+        &mut [&mut carol],
+        "carol's welcome",
+        |_, peers| peers[0].client.session().phase() == ClientPhase::InGame,
+    );
+    let carol_player = carol.player().expect("carol has a player");
+    run_for(&mut host, &mut [&mut carol], Duration::from_secs(1));
+    let client_diffs = carol
+        .client
+        .session()
+        .authority()
+        .expect("in game")
+        .terrain()
+        .generation_diffs()
+        .len();
+    assert!(
+        client_diffs >= diffs,
+        "the dug terrain reached the client: {client_diffs} of {diffs} diffs"
+    );
+    assert!(carol.hash_matches > 0);
+    assert_eq!(carol.client.session().stats().hash_mismatches, 0);
+
+    // Reconnect: a fresh keyframe of the (still dug) world.
+    let token = carol.client.reconnect_token().expect("reconnect token");
+    carol.client.drop_connection();
+    run_until(
+        &mut host,
+        &mut [&mut carol],
+        "the host to notice carol left",
+        |host, _| {
+            host.session
+                .roster()
+                .iter()
+                .any(|entry| entry.player == carol_player && !entry.connected)
+        },
+    );
+    let mut carol_again = Peer::join(addr, "carol", Some(token));
+    run_until(
+        &mut host,
+        &mut [&mut carol_again],
+        "carol's rejoin",
+        |_, peers| peers[0].client.session().phase() == ClientPhase::InGame,
+    );
+    assert_eq!(carol_again.player(), Some(carol_player));
+    run_for(
+        &mut host,
+        &mut [&mut carol_again],
+        Duration::from_millis(800),
+    );
+    assert!(carol_again.hash_matches > 0);
+    assert_eq!(carol_again.client.session().stats().hash_mismatches, 0);
+
+    end_session_and_await_clients(host, [carol_again]);
+    carol.client.shutdown_blocking();
 }
 
 /// Every action `peer` issued resolved exactly once on the host, and its authority hashes

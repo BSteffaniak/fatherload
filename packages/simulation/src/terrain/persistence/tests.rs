@@ -6,6 +6,26 @@ use super::super::{
 use super::{FullTerrain, TerrainRestoreError, TerrainSnapshot, TileDiffs};
 use crate::worldgen::{GeneratorVersion, WorldSettings, WorldSize};
 
+/// The binary layout of a [`TerrainSnapshot`] with plain integers for the enums (postcard
+/// encodes an enum variant as its index), to forge unknown variants.
+#[derive(serde::Serialize)]
+struct WireSettings {
+    seed: u64,
+    size: u32,
+    richness: u32,
+    hazards: u32,
+    generator: u32,
+}
+
+#[derive(serde::Serialize)]
+struct WireSnapshot {
+    settings: WireSettings,
+    width: i32,
+    height: i32,
+    digest: u64,
+    diffs: Vec<(u32, Vec<u64>)>,
+}
+
 /// Digs tunnels, blasts craters, chips tiles and plants ore across the whole terrain.
 fn excavate(terrain: &mut Terrain, salt: i32) {
     let (width, height) = (terrain.width(), terrain.height());
@@ -251,7 +271,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
                 durability: 0,
             },
         )]),
-        ..snapshot.clone()
+        ..snapshot
     };
     assert!(matches!(
         Terrain::from_snapshot(out_of_bounds),
@@ -275,22 +295,6 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
     assert!(error.to_string().contains("V9"), "{error}");
 
     // The same in the binary keyframe codec: postcard encodes the variant as its index.
-    #[derive(serde::Serialize)]
-    struct WireSettings {
-        seed: u64,
-        size: u32,
-        richness: u32,
-        hazards: u32,
-        generator: u32,
-    }
-    #[derive(serde::Serialize)]
-    struct WireSnapshot {
-        settings: WireSettings,
-        width: i32,
-        height: i32,
-        digest: u64,
-        diffs: Vec<(u32, Vec<u64>)>,
-    }
     let known = WireSnapshot {
         settings: WireSettings {
             seed: 0xBAD,
