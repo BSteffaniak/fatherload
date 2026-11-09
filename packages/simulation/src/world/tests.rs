@@ -1580,3 +1580,18 @@ fn authoritative_world_handles_hazard_damage_failure_scanner_and_bomb_effects() 
         TileKind::Air
     );
 }
+
+#[test]
+fn a_maxed_radiator_keeps_the_rig_cool_into_the_first_deep_strata() {
+    use crate::economy::MAX_UPGRADE_LEVEL;
+    assert!(18.0f32.mul_add(-TILE_SIZE, super::heat_safe_depth(1)).abs() < f32::EPSILON);
+    let maxed = super::heat_safe_depth(MAX_UPGRADE_LEVEL) / TILE_SIZE;
+    assert!(
+        maxed >= 110.0,
+        "a level-{MAX_UPGRADE_LEVEL} radiator is cool to row {maxed}"
+    );
+    assert!(
+        super::heat_safe_depth(3) > super::heat_safe_depth(2),
+        "every radiator level helps"
+    );
+}

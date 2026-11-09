@@ -152,10 +152,7 @@ impl WorldState {
                 .get(&player_id)
                 .cloned()
                 .unwrap_or_default();
-            let safe_depth = 18.0f32.mul_add(
-                TILE_SIZE,
-                f32::from(radiator_level.saturating_sub(1)) * 12.0 * TILE_SIZE,
-            );
+            let safe_depth = heat_safe_depth(radiator_level);
             #[allow(
                 clippy::cast_precision_loss,
                 reason = "small bounded event severity intentionally scales heat damage"
@@ -188,7 +185,8 @@ impl WorldState {
                 heat_multiplier *= 0.72;
             }
             let depth_damage = if player_y > safe_depth {
-                let depth_factor = ((player_y - safe_depth) / (12.0 * TILE_SIZE)).max(1.0);
+                // Ramps smoothly from the safe depth: double damage one ramp below it.
+                let depth_factor = 1.0 + (player_y - safe_depth) / (HEAT_RAMP_TILES * TILE_SIZE);
                 3.5 * depth_factor * heat_multiplier * delta_seconds
             } else {
                 0.0
@@ -534,4 +532,21 @@ impl WorldState {
             }
         }
     }
+}
+
+/// Depth (tiles) above which a level-1 radiator keeps the rig cool.
+pub const HEAT_SAFE_DEPTH_TILES: f32 = 18.0;
+/// Extra cool depth (tiles) each radiator level past the first buys; a maxed radiator keeps the
+/// rig cool into the first deep strata, where the thermal hull takes over.
+pub const HEAT_SAFE_DEPTH_PER_RADIATOR_TILES: f32 = 24.0;
+/// Tiles below the safe depth over which heat damage doubles.
+pub const HEAT_RAMP_TILES: f32 = 24.0;
+
+/// World-pixel depth above which a rig with `radiator_level` takes no depth heat.
+#[must_use]
+pub fn heat_safe_depth(radiator_level: u8) -> f32 {
+    f32::from(radiator_level.saturating_sub(1)).mul_add(
+        HEAT_SAFE_DEPTH_PER_RADIATOR_TILES * TILE_SIZE,
+        HEAT_SAFE_DEPTH_TILES * TILE_SIZE,
+    )
 }

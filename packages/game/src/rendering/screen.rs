@@ -55,7 +55,8 @@ pub(super) fn draw_heat_warning_for_view(
     terrain: &Terrain,
     view: &ViewSnapshot<'_>,
 ) {
-    let depth_heat = view.player.y > 18.0 * TILE_SIZE;
+    let depth_heat =
+        view.player.y > drillgame_simulation::heat_safe_depth(view.player.radiator_level);
     let tile = view.player.tile_position(TILE_SIZE);
     let near_lava = (-2..=2).any(|dy| {
         (-2..=2).any(|dx| {

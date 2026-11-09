@@ -44,7 +44,12 @@ impl WorldState {
     /// every rig that joins later, starts with maxed upgrades and a large balance, and the parts
     /// locker holds every rig part.
     pub fn enable_test_mode(&mut self) {
-        self.test_mode.get_or_insert_with(TestModeState::default);
+        // Test mode is for exploring: start invulnerable with infinite fuel (both can be
+        // switched off in the pause menu to test real survival).
+        self.test_mode.get_or_insert(TestModeState {
+            invulnerable: true,
+            infinite_fuel: true,
+        });
         equip_for_testing(&mut self.player_template);
         for player in self.players.values_mut() {
             equip_for_testing(player);

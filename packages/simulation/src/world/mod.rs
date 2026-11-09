@@ -47,6 +47,9 @@ mod rescue;
 mod roster;
 mod services;
 mod simulate;
+pub use simulate::{
+    HEAT_RAMP_TILES, HEAT_SAFE_DEPTH_PER_RADIATOR_TILES, HEAT_SAFE_DEPTH_TILES, heat_safe_depth,
+};
 mod state_hash;
 mod test_mode;
 #[cfg(test)]

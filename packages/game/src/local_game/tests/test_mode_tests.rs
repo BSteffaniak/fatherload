@@ -70,6 +70,11 @@ fn each_seat_warps_its_own_rig_and_toggles_apply_on_resume() {
     let second = PlayerId::new(2);
     let mut game = playing(world, 2, "test-mode-split");
     idle(&mut game, 5);
+    let toggles = game.runtime.world().test_mode().expect("test mode");
+    assert!(
+        toggles.invulnerable && toggles.infinite_fuel,
+        "test mode starts invulnerable with infinite fuel"
+    );
     let first_band = band_of(&game, PLAYER);
 
     // Seat 2 warps to the Fossil Oceans.
@@ -89,18 +94,19 @@ fn each_seat_warps_its_own_rig_and_toggles_apply_on_resume() {
     assert_eq!(band_of(&game, second), target);
     assert_eq!(band_of(&game, PLAYER), first_band, "seat 1 stays put");
 
-    // Seat 1 turns on invulnerability: shown at once, applied once the world resumes.
+    // Seat 1 turns invulnerability off: shown at once, applied once the world resumes.
     choose(&mut game, 0, PauseOption::ToggleInvulnerable);
     let shown = game
         .shell
         .shown_test_mode(game.runtime.world().test_mode())
         .expect("test mode");
-    assert!(shown.invulnerable);
+    assert!(!shown.invulnerable);
     press_seat(&mut game, 0, pause_input());
     assert_eq!(game.shell.run_mode, RunMode::Playing);
     idle(&mut game, 3);
     assert!(
-        game.runtime
+        !game
+            .runtime
             .world()
             .test_mode()
             .expect("test mode")
