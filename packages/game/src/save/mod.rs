@@ -169,6 +169,8 @@ pub struct SaveSlotMetadata {
     pub deep_claim_unlocked: bool,
     pub modified_unix_seconds: Option<u64>,
     pub won_game: bool,
+    /// The world is a test-mode world.
+    pub test_mode: bool,
 }
 
 impl SaveSlotMetadata {
@@ -192,6 +194,7 @@ impl SaveSlotMetadata {
             deep_claim_unlocked: world.progression().deep_claim_status == DeepClaimStatus::Unlocked,
             modified_unix_seconds,
             won_game: world.won_game(),
+            test_mode: world.is_test_mode(),
         }
     }
 }

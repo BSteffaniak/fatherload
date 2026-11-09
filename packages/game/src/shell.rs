@@ -5,7 +5,7 @@
 //! carries out through the runtime (service actions, rescue) or the save module.
 
 use drillgame_simulation::{
-    PlayerCommand, PlayerId, RecipeKind, SessionServiceRequest, WorldState,
+    PlayerCommand, PlayerId, RecipeKind, SessionServiceRequest, TestModeState, WorldState,
     economy::{DeepClaimStatus, SurfaceZone, TownBuilding, upgrade_offers, upgrade_tier_name},
     worldgen::WorldSettings,
 };
@@ -24,7 +24,10 @@ use crate::{
     save,
 };
 
+mod test_mode;
 mod world_setup;
+
+pub use test_mode::WARP_BANDS;
 
 pub use world_setup::{SetupOutcome, SetupPurpose, WorldSetup, random_world_seed};
 
@@ -82,6 +85,8 @@ pub enum ModalScreen {
     /// The new-world setup dialog (seed, size, richness, hazards); its state is
     /// [`ShellState::world_setup`].
     WorldSetup,
+    /// Test mode: the band list the pause menu's "Warp to Layer" opens.
+    WarpToLayer,
 }
 
 impl ModalScreen {
@@ -98,6 +103,7 @@ impl ModalScreen {
                 | Self::ExitConfirm
                 | Self::UnsavedExitConfirm
                 | Self::WorldSetup
+                | Self::WarpToLayer
         )
     }
 }
@@ -120,6 +126,12 @@ pub enum PauseOption {
     /// Copy the world seed to the clipboard (to share the world).
     CopySeed,
     ExitToDesktop,
+    /// Test mode: pick a band to warp this seat's rig to.
+    WarpToLayer,
+    /// Test mode: toggle the crew's invulnerable hulls.
+    ToggleInvulnerable,
+    /// Test mode: toggle the crew's infinite fuel.
+    ToggleInfiniteFuel,
 }
 
 impl PauseOption {
@@ -171,6 +183,9 @@ impl PauseOption {
             Self::Options => "Options",
             Self::CopySeed => "Copy World Seed",
             Self::ExitToDesktop => "Exit to Desktop",
+            Self::WarpToLayer => "Warp to Layer",
+            Self::ToggleInvulnerable => "Invulnerable Hull",
+            Self::ToggleInfiniteFuel => "Infinite Fuel",
         }
     }
 }
@@ -251,6 +266,8 @@ pub enum ShellRequest {
     NewGame {
         seats: usize,
         settings: WorldSettings,
+        /// Start the world in test mode.
+        test_mode: bool,
     },
     /// Load the most recent save.
     ResumeLatest,
@@ -269,7 +286,11 @@ pub enum ShellRequest {
     /// Add another local split-screen seat.
     AddLocalSeat,
     /// Host a new online game (lobby first) in a world generated from `settings`.
-    HostOnline { settings: WorldSettings },
+    /// `test_mode` starts it in test mode (for everyone who joins).
+    HostOnline {
+        settings: WorldSettings,
+        test_mode: bool,
+    },
     /// Open the running local game to remote players.
     OpenOnline,
     /// Join a host by `ip:port` (or bare ip with the default port).
@@ -938,6 +959,7 @@ impl SeatUi {
             | ModalScreen::ExitConfirm
             | ModalScreen::UnsavedExitConfirm
             | ModalScreen::WorldSetup
+            | ModalScreen::WarpToLayer
             | ModalScreen::Help
             | ModalScreen::Inventory => None,
         };
@@ -1217,6 +1239,9 @@ pub struct ShellState {
     pub paused_by: usize,
     /// The new-world setup dialog, while [`ModalScreen::WorldSetup`] is open.
     pub world_setup: Option<WorldSetup>,
+    /// Test-mode toggles chosen in the pause menu that the world has not applied yet (a paused
+    /// local world applies them when it resumes).
+    pub pending_test_mode: Option<TestModeState>,
 }
 
 impl Default for ShellState {
@@ -1256,6 +1281,7 @@ impl ShellState {
             menu_seat: 0,
             paused_by: 0,
             world_setup: None,
+            pending_test_mode: None,
         }
     }
 
@@ -1364,6 +1390,7 @@ impl ShellState {
         }
         self.save_dirty = false;
         self.play_seconds = play_seconds;
+        self.pending_test_mode = None;
         self.message = message.into();
     }
 
@@ -1420,6 +1447,7 @@ impl ShellState {
             requests.push(ShellRequest::QuickLoad);
         }
         self.reclaim_orphaned_menu();
+        self.sync_pending_test_mode(ctx.world.test_mode());
         let menu_input = inputs.get(self.menu_seat).copied().unwrap_or(primary);
         if self.handle_exit_modal(menu_input, &mut requests) {
             return requests;
@@ -1456,7 +1484,7 @@ impl ShellState {
             }
             RunMode::Paused => {
                 let seed = ctx.world.world_settings().seed_text();
-                self.handle_pause_menu(menu_input, &seed, &mut requests);
+                self.handle_pause_menu(menu_input, &seed, ctx.world.test_mode(), &mut requests);
             }
             RunMode::Lobby => self.handle_online(primary, &mut requests),
             RunMode::Playing => {
@@ -1781,12 +1809,19 @@ impl ShellState {
                 self.modal = None;
                 self.world_setup = None;
             }
-            SetupOutcome::Start(purpose, settings) => {
+            SetupOutcome::Start(purpose, settings, test_mode) => {
                 self.modal = None;
                 self.world_setup = None;
                 requests.push(match purpose {
-                    SetupPurpose::Local { seats } => ShellRequest::NewGame { seats, settings },
-                    SetupPurpose::HostOnline => ShellRequest::HostOnline { settings },
+                    SetupPurpose::Local { seats } => ShellRequest::NewGame {
+                        seats,
+                        settings,
+                        test_mode,
+                    },
+                    SetupPurpose::HostOnline => ShellRequest::HostOnline {
+                        settings,
+                        test_mode,
+                    },
                 });
             }
         }
@@ -1796,6 +1831,7 @@ impl ShellState {
         &mut self,
         input: PlayerInput,
         seed: &str,
+        test_mode: Option<TestModeState>,
         requests: &mut Vec<ShellRequest>,
     ) {
         if self.modal.is_some() {
@@ -1803,7 +1839,7 @@ impl ShellState {
             let _handled = self.handle_menu_modal(input, requests);
             return;
         }
-        let options = PauseOption::for_role(self.online.role);
+        let options = PauseOption::for_session(self.online.role, test_mode.is_some());
         if input.menu_up {
             self.selected_pause_item = self.selected_pause_item.saturating_sub(1);
         }
@@ -1836,6 +1872,10 @@ impl ShellState {
                 self.message = format!("World seed {seed} copied: share it to share this world.");
             }
             PauseOption::ExitToDesktop => self.request_exit_or_prompt(),
+            PauseOption::WarpToLayer => self.open_modal(ModalScreen::WarpToLayer),
+            PauseOption::ToggleInvulnerable | PauseOption::ToggleInfiniteFuel => {
+                self.toggle_test_mode(options[self.selected_pause_item], test_mode, requests);
+            }
         }
     }
 
@@ -1850,6 +1890,7 @@ impl ShellState {
         }
         let max_item = match modal {
             ModalScreen::Options => 2,
+            ModalScreen::WarpToLayer => test_mode::WARP_BANDS.len() - 1,
             ModalScreen::SaveSlots | ModalScreen::LoadSlots => save::save_slot_count() - 1,
             _ => 0,
         };
@@ -1870,6 +1911,7 @@ impl ShellState {
                 ModalScreen::LoadSlots => {
                     requests.push(ShellRequest::LoadSlot(self.selected_menu_item));
                 }
+                ModalScreen::WarpToLayer => self.confirm_warp(requests),
                 _ => {}
             }
         }

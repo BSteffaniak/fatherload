@@ -492,6 +492,10 @@ fn hud_warnings(
 ) -> Vec<(&'static str, &'static SpriteDef)> {
     let player = view.player;
     let mut warnings = Vec::new();
+    if snapshot.test_mode.is_some() {
+        // Always first: this world's records do not count.
+        warnings.push(("TEST MODE", &menu_icons::ROCKET));
+    }
     if player.fuel <= player.fuel_capacity * 0.2 {
         warnings.push(("LOW FUEL", &icons::FUEL));
     }
@@ -716,6 +720,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Map => draw_map_ui(draw, ui),
         ModalScreen::Help => draw_help_ui(draw),
         ModalScreen::WorldSetup => menus::draw_world_setup(draw, ui),
+        ModalScreen::WarpToLayer => menus::draw_warp_layers(draw, ui),
     }
 }
 

@@ -440,7 +440,8 @@ fn draw_menu(draw: &mut impl RaylibDraw, ui: &UiFrame<'_, '_>, width: i32, heigh
         && let Some(meta) = latest_save_summary()
     {
         let line = format!(
-            "Last save: {}m deep | {} cr | {:.0} min played",
+            "Last save: {}{}m deep | {} cr | {:.0} min played",
+            if meta.test_mode { "TEST MODE | " } else { "" },
             meta.depth,
             meta.credits,
             (meta.play_seconds / 60.0).floor()

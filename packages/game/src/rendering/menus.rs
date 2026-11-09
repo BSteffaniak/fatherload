@@ -28,9 +28,13 @@ use crate::{
     save::{save_slot_count, save_slot_metadata},
     shell::{
         JOIN_MENU, LobbyAction, NoticeAction, OnlineScreen, PauseOption, SetupPurpose, ShellState,
+        WARP_BANDS,
     },
 };
-use drillgame_simulation::worldgen::{HazardIntensity, ResourceRichness};
+use drillgame_simulation::{
+    TestModeState,
+    worldgen::{HazardIntensity, ResourceRichness, strata::band_solid_top_row},
+};
 
 /// Select / confirm / back to the previous screen.
 const NAVIGATE_BACK: &[Hint] = &[
@@ -170,13 +174,39 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::LeaveSession | PauseOption::ExitToDesktop => &menu_icons::DOOR,
         PauseOption::Options => &menu_icons::GEAR,
         PauseOption::CopySeed => &menu_icons::KEY,
+        PauseOption::WarpToLayer => &menu_icons::ROCKET,
+        PauseOption::ToggleInvulnerable => &icons::HULL,
+        PauseOption::ToggleInfiniteFuel => &icons::FUEL,
+    }
+}
+
+/// `ON` / `OFF` for a toggle row.
+const fn on_off(on: bool) -> (&'static str, Color) {
+    if on { ("ON", LIME) } else { ("OFF", FOG) }
+}
+
+/// A pause menu row, with the current value of a test-mode toggle.
+fn pause_entry(option: PauseOption, test_mode: Option<TestModeState>) -> Entry {
+    let entry = Entry::new(pause_icon(option), option.label());
+    let toggle = match option {
+        PauseOption::ToggleInvulnerable => test_mode.map(|state| state.invulnerable),
+        PauseOption::ToggleInfiniteFuel => test_mode.map(|state| state.infinite_fuel),
+        _ => None,
+    };
+    match toggle {
+        Some(on) => {
+            let (value, color) = on_off(on);
+            entry.value(value, color)
+        }
+        None => entry,
     }
 }
 
 pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let entries = PauseOption::for_role(ui.shell.online.role)
+    let test_mode = ui.shell.shown_test_mode(ui.snapshot.test_mode);
+    let entries = PauseOption::for_session(ui.shell.online.role, test_mode.is_some())
         .into_iter()
-        .map(|option| Entry::new(pause_icon(option), option.label()))
+        .map(|option| pause_entry(option, test_mode))
         .collect();
     let player = ui.player;
     let mut rig = vec![
@@ -220,13 +250,20 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
         ));
     }
     // In split-screen the seat that paused drives this menu (and the rig shown is theirs).
-    let subtitle = if ui.snapshot.views.len() > 1 {
+    let mut subtitle = if ui.snapshot.views.len() > 1 {
         format!("Player {} paused the game.", ui.shell.paused_by + 1)
     } else {
         String::new()
     };
+    if test_mode.is_some() {
+        subtitle = format!("TEST MODE: records off. {subtitle}");
+    }
     UiLayout::screen(draw).modal_with_render_plan(
-        "Paused",
+        if test_mode.is_some() {
+            "Paused (Test Mode)"
+        } else {
+            "Paused"
+        },
         &subtitle,
         &ModalContent::new(vec![
             Section::new(
@@ -304,7 +341,8 @@ pub(super) fn draw_slots(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, 
                 },
                 |meta| {
                     let entry = Entry::new(&menu_icons::DISK, label.clone()).detail(format!(
-                        "{}m deep | {} cr | {} contracts | {:.0} min",
+                        "{}{}m deep | {} cr | {} contracts | {:.0} min",
+                        if meta.test_mode { "TEST MODE | " } else { "" },
                         meta.depth,
                         meta.credits,
                         meta.contracts_completed,
@@ -409,6 +447,16 @@ pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
                     HazardIntensity::Brutal => RED,
                 },
             ),
+        Entry::new(&menu_icons::ROCKET, "Test Mode")
+            .detail(if setup.test_mode {
+                "Maxed rig, warps, god toggles; no records"
+            } else {
+                "Normal game"
+            })
+            .value(
+                cycler(if setup.test_mode { "ON" } else { "OFF" }),
+                if setup.test_mode { ORANGE } else { FOG },
+            ),
         Entry::new(&menu_icons::PLAY, start_label),
         Entry::new(&menu_icons::BACK, "Back"),
     ];
@@ -426,6 +474,44 @@ pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
         } else {
             SETUP_PROMPTS
         }),
+    );
+}
+
+/// Test mode's band list: warp the rig to the top of any layer.
+pub(super) fn draw_warp_layers(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let settings = ui.snapshot.terrain.settings();
+    let here = ui
+        .snapshot
+        .terrain
+        .band_at(ui.player.tile_position(TILE_SIZE));
+    let entries = WARP_BANDS
+        .iter()
+        .map(|band| {
+            let top = band_solid_top_row(settings, *band, ui.player.tile_position(TILE_SIZE).x);
+            let entry = Entry::new(&icons::DEPTH, band.name()).detail(format!(
+                "Top at about {top} m | drill tier {}",
+                band.required_drill_strength()
+            ));
+            if *band == here {
+                entry.value("HERE", LIME)
+            } else {
+                entry
+            }
+        })
+        .collect();
+    UiLayout::screen(draw).modal_with_render_plan(
+        "Warp to Layer",
+        "Test mode: drops your rig into a safe pocket at the top of the layer.",
+        &ModalContent::new(vec![Section::new(
+            "Layers",
+            ORANGE,
+            menu_items(entries, ui.shell.selected_menu_item),
+        )])
+        .prompts(&[
+            hint(Prompt::Navigate, "select"),
+            hint(Prompt::Confirm, "warp"),
+            hint(Prompt::Back, "back"),
+        ]),
     );
 }
 

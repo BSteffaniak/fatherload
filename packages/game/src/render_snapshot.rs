@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use drillgame_simulation::{
     CanonicalProgressionState, DiscoveredTiles, DrillState, FallingBoulder, HazardCloud,
     InfrastructureKind, PlacedBomb, PlacedInfrastructure, Player, PlayerId, PlayerSurvivalSnapshot,
-    WorldEventKind, WorldState,
+    TestModeState, WorldEventKind, WorldState,
     economy::SurfaceZone,
     poi::RELAY_WINDOW_MILLIS,
     terrain::{MineralKind, TILE_SIZE, Terrain, TilePosition},
@@ -329,6 +329,8 @@ pub struct RenderSnapshot<'w> {
     pub world_events: Vec<WorldEventView>,
     pub signal_relay_count: usize,
     pub won_game: bool,
+    /// The world's test-mode toggles (`None` outside test mode).
+    pub test_mode: Option<TestModeState>,
     /// Gameplay events presented for the first time this frame (audio/particles).
     pub events: &'w [RuntimeEvent],
 }
@@ -396,6 +398,7 @@ impl<'w> RenderSnapshot<'w> {
                 .filter(|item| item.kind == InfrastructureKind::SignalRelay)
                 .count(),
             won_game: world.won_game(),
+            test_mode: world.test_mode(),
             events,
         }
     }

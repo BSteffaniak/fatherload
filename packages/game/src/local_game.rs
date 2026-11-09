@@ -442,7 +442,11 @@ impl LocalGame {
         report: &mut FrameReport,
     ) {
         match request {
-            ShellRequest::NewGame { seats, settings } => self.new_game(seats, &settings, report),
+            ShellRequest::NewGame {
+                seats,
+                settings,
+                test_mode,
+            } => self.new_game(seats, &settings, test_mode, report),
             ShellRequest::ResumeLatest => {
                 let loaded = match &self.save_target {
                     SaveTarget::UserFiles => save::load_latest_world(),
@@ -482,7 +486,10 @@ impl LocalGame {
                 }
             }
             ShellRequest::AddLocalSeat => self.add_local_seat(),
-            ShellRequest::HostOnline { settings } => self.host_online(&settings, report),
+            ShellRequest::HostOnline {
+                settings,
+                test_mode,
+            } => self.host_online(&settings, test_mode, report),
             ShellRequest::OpenOnline => self.open_online(),
             ShellRequest::JoinAddress(text) => match parse_join_addr(&text) {
                 Some(addr) => self.start_join(JoinTarget::Addr(addr), None, report),
@@ -520,11 +527,21 @@ impl LocalGame {
         }
     }
 
-    fn new_game(&mut self, seats: usize, settings: &WorldSettings, report: &mut FrameReport) {
-        self.runtime = Runtime::local(world_from_settings(settings), seats);
+    fn new_game(
+        &mut self,
+        seats: usize,
+        settings: &WorldSettings,
+        test_mode: bool,
+        report: &mut FrameReport,
+    ) {
+        self.runtime = Runtime::local(world_from_setup(settings, test_mode), seats);
         self.reset_presentation(report);
         self.shell.enter_world(
-            "Welcome to the dig site. Visit the depot for contracts.",
+            if test_mode {
+                "TEST MODE: maxed rig, every part, 1,000,000 cr. Pause for warps and god toggles."
+            } else {
+                "Welcome to the dig site. Visit the depot for contracts."
+            },
             0.0,
         );
         if seats > 1 {
@@ -638,8 +655,13 @@ impl LocalGame {
         }
     }
 
-    fn host_online(&mut self, settings: &WorldSettings, report: &mut FrameReport) {
-        match LocalHost::online(world_from_settings(settings), 1, self.host_bind, true) {
+    fn host_online(&mut self, settings: &WorldSettings, test_mode: bool, report: &mut FrameReport) {
+        match LocalHost::online(
+            world_from_setup(settings, test_mode),
+            1,
+            self.host_bind,
+            true,
+        ) {
             Ok(mut host) => {
                 host.set_host_name(&online::player_name());
                 self.go_online(Runtime::Host(Box::new(host)), report);
@@ -835,6 +857,17 @@ pub fn world_from_settings(settings: &WorldSettings) -> WorldState {
     )
 }
 
+/// A brand-new world from the world setup dialog: generated from `settings`, in test mode when
+/// `test_mode` is set.
+#[must_use]
+pub fn world_from_setup(settings: &WorldSettings, test_mode: bool) -> WorldState {
+    let mut world = world_from_settings(settings);
+    if test_mode {
+        world.enable_test_mode();
+    }
+    world
+}
+
 #[cfg(test)]
 mod tests {
     //! Headless app-level tests: scripted input through `LocalGame::frame`, exactly the path the
@@ -854,6 +887,7 @@ mod tests {
     };
 
     mod split_seat_tests;
+    mod test_mode_tests;
 
     const DT: f32 = 1.0 / 60.0;
     const PLAYER: PlayerId = save::LEGACY_PLAYER_ID;
@@ -2127,6 +2161,7 @@ mod tests {
         host.handle_request(
             ShellRequest::HostOnline {
                 settings: WorldSettings::default(),
+                test_mode: false,
             },
             &mut requests,
             &mut FrameReport::default(),
