@@ -307,6 +307,8 @@ built, natural ones take their band's palette:
   `TEAL_DARK`, a chevron below meaning "drill from above"), the relay (copper coil; lit it
   glows `GOLD` and throws arcs) and the cache (an ornate reliquary with a glowing gem).
   Fixtures are stamped after the frame so outlines never cut them.
+- While a twin-relay lock counts down, both relays carry a draining timer bar (`INK` frame,
+  `GOLD` fill, blinking `RED`/`ROSE` in the last third; `world/fx.rs::draw_relay_countdowns`).
 - *Wreckage* is prospector-orange hull panels with dark seams and rivets, soot, rust blooms and
   flaked bare steel; the salvage core is a cockpit console with a glowing `MINT` screen.
 - *Supply crates* are planked boxes with steel corners and a stencil plate.

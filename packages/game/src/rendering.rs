@@ -568,6 +568,7 @@ impl GameRenderer {
                     boulders: snapshot.boulders,
                     sparks: snapshot.sparks,
                     explosions: snapshot.explosions,
+                    relay_countdowns: &snapshot.relay_countdowns,
                     players: &snapshot.players,
                     facings: &self.rig_facings,
                     local: snapshot

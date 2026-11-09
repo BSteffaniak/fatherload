@@ -28,7 +28,7 @@ use super::{
 use crate::{
     effects::{Explosion, SparkParticle},
     pixel_scale::{WORLD_PIXELS_PER_ART_PIXEL, snap_to_pixel_grid},
-    render_snapshot::PlayerPresentation,
+    render_snapshot::{PlayerPresentation, RelayCountdown},
 };
 
 mod buildings;
@@ -73,6 +73,8 @@ pub(super) struct WorldScene<'a> {
     pub boulders: &'a [FallingBoulder],
     pub sparks: &'a [SparkParticle],
     pub explosions: &'a [Explosion],
+    /// Twin-relay vault locks counting down.
+    pub relay_countdowns: &'a [RelayCountdown],
     pub players: &'a [PlayerPresentation],
     /// Each rig's last facing.
     pub facings: &'a RigFacings,
@@ -107,6 +109,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     if let Some((x, y)) = scene.lost_cargo {
         fx::draw_lost_cargo(draw, x, y, seconds);
     }
+    fx::draw_relay_countdowns(draw, scene.terrain, scene.relay_countdowns, seconds);
     for bomb in scene.bombs {
         fx::draw_bomb(draw, bomb, seconds);
     }

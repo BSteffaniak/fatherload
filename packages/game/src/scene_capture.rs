@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use drillgame_netcode::{LobbyEntry, PlayerId as NetPlayerId};
 use drillgame_simulation::{
-    Discovery, PlayerId, WorldState,
+    Discovery, PlayerId, SectionKey, SectionPayload, SimulationTick, WorldState,
     economy::SurfaceZone,
     poi::{FormationStyle, LoreId, PoiKnowledge, PoiTile, PoiVariant, VaultPuzzle},
     surface::SURFACE_BUILDINGS,
@@ -1456,7 +1456,7 @@ pub const SCENES: &[Scene] = &[
     },
     Scene {
         name: "poi_vault_relay",
-        summary: "A sealed vault with twin relays, one of them lit",
+        summary: "A sealed vault with twin relays, one lit and its timer draining",
         setup: |stage| {
             stage.play(1, |world, seats| {
                 let poi = stage_poi(world, |variant| {
@@ -1464,6 +1464,7 @@ pub const SCENES: &[Scene] = &[
                 });
                 visit_poi(world, seats[0].player, &poi);
                 light_vault_switches(world, &poi, 1);
+                start_relay_countdown(world, &poi, 9_000);
             });
             stage.settle(10);
         },
@@ -1828,6 +1829,19 @@ fn light_vault_switches(world: &mut WorldState, poi: &WorldFeature, count: u8) {
         };
         world.terrain_mut().set_kind(position, TileKind::Poi(lit));
     }
+}
+
+/// Starts `vault`'s twin-relay countdown with `millis` left (as if its first relay was just
+/// drilled a while ago).
+fn start_relay_countdown(world: &mut WorldState, vault: &WorldFeature, millis: u64) {
+    let Some(SectionPayload::Timers(mut timers)) = world.section(SectionKey::Timers) else {
+        return;
+    };
+    let deadline = world.simulation_tick().get() + world.timing().ticks_for_millis(millis);
+    timers
+        .vault_relay_deadlines
+        .insert(vault.id, SimulationTick::new(deadline));
+    world.apply_section(SectionKey::Timers, SectionPayload::Timers(timers));
 }
 
 /// A mid-depth rig with a tier-2 scanner (live echoes), a few visited and identified sites in

@@ -12,7 +12,9 @@ use drillgame_simulation::{
     InfrastructureKind, PlacedBomb, PlacedInfrastructure, Player, PlayerId, PlayerSurvivalSnapshot,
     WorldEventKind, WorldState,
     economy::SurfaceZone,
+    poi::RELAY_WINDOW_MILLIS,
     terrain::{MineralKind, TILE_SIZE, Terrain, TilePosition},
+    worldgen::TileRect,
 };
 
 use crate::{
@@ -261,6 +263,38 @@ pub struct MarketQuote {
     pub previous_factor: Option<u32>,
 }
 
+/// A twin-relay vault lock with one relay lit, counting down to its reset.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RelayCountdown {
+    /// The vault's bounds (tiles).
+    pub bounds: TileRect,
+    /// Share of the relay window left, `1.0` just lit down to `0.0` at the reset.
+    pub remaining: f32,
+}
+
+/// The twin-relay locks of `world` waiting for their second relay.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "tick counts of a few hundred map exactly to f32"
+)]
+fn relay_countdowns(world: &WorldState) -> Vec<RelayCountdown> {
+    let window = world.timing().ticks_for_millis(RELAY_WINDOW_MILLIS).max(1);
+    let now = world.simulation_tick().get();
+    world
+        .progression()
+        .vault_relay_deadlines
+        .iter()
+        .filter_map(|(feature, deadline)| {
+            let vault = world.world_features().get(*feature)?;
+            let left = deadline.get().saturating_sub(now).min(window);
+            Some(RelayCountdown {
+                bounds: vault.bounds,
+                remaining: left as f32 / window as f32,
+            })
+        })
+        .collect()
+}
+
 /// An active world event.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldEventView {
@@ -281,6 +315,8 @@ pub struct RenderSnapshot<'w> {
     pub sparks: &'w [SparkParticle],
     /// Bomb blasts in progress.
     pub explosions: &'w [Explosion],
+    /// Twin-relay vault locks counting down.
+    pub relay_countdowns: Vec<RelayCountdown>,
     /// Every rig in the world.
     pub players: Vec<PlayerPresentation>,
     /// One view per local seat, in seat order.
@@ -325,6 +361,7 @@ impl<'w> RenderSnapshot<'w> {
             boulders: world.falling_boulders(),
             sparks,
             explosions,
+            relay_countdowns: relay_countdowns(world),
             players: world
                 .players()
                 .iter()

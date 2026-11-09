@@ -8,7 +8,7 @@ use raylib::prelude::*;
 use drillgame_simulation::{
     DiscoveredTiles, DrillDirection, DrillState, FallingBoulder, HazardCloud, InfrastructureKind,
     PlacedBomb, PlacedInfrastructure,
-    poi::{PoiKnowledge, in_scanner_range, scanner_poi_knowledge, scanner_poi_range},
+    poi::{PoiKnowledge, PoiTile, in_scanner_range, scanner_poi_knowledge, scanner_poi_range},
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
@@ -27,7 +27,7 @@ use crate::rendering::{
 };
 use crate::{
     effects::{EXPLOSION_SECONDS, Explosion, SparkParticle},
-    render_snapshot::PlayerPresentation,
+    render_snapshot::{PlayerPresentation, RelayCountdown},
 };
 
 use super::{ART, Pen, draw_world_sprite, snap};
@@ -481,6 +481,43 @@ pub fn draw_explosion(draw: &mut impl RaylibDraw, explosion: &Explosion) {
         );
         if heat > 0.6 {
             disc(draw, x, y, (radius * 0.2) as i32, CREAM);
+        }
+    }
+}
+
+/// Twin-relay locks counting down: a draining timer bar over both relays of the vault (gold,
+/// then a blinking red in the last third), so the pilot can see how long is left to reach the
+/// other relay.
+pub fn draw_relay_countdowns(
+    draw: &mut impl RaylibDraw,
+    terrain: &Terrain,
+    countdowns: &[RelayCountdown],
+    seconds: f32,
+) {
+    let blink = (seconds * 6.0) as i32 % 2 == 0;
+    for countdown in countdowns {
+        let urgent = countdown.remaining < 0.34;
+        let fill = if urgent && blink {
+            ROSE
+        } else if urgent {
+            RED
+        } else {
+            GOLD
+        };
+        let inner = TILE_ART;
+        let filled = ((inner as f32) * countdown.remaining.clamp(0.0, 1.0)).ceil() as i32;
+        for position in countdown.bounds.positions() {
+            if !matches!(
+                terrain.tile(position).map(|tile| tile.kind),
+                Some(TileKind::Poi(PoiTile::VaultRelay { .. }))
+            ) {
+                continue;
+            }
+            let pen = Pen::at(position.x as f32 * TILE_SIZE, position.y as f32 * TILE_SIZE);
+            pen.rect(draw, -1, -8, TILE_ART + 2, 6, with_alpha(INK, 230));
+            pen.rect(draw, 0, -7, inner, 4, with_alpha(STONE_DARK, 240));
+            pen.rect(draw, 0, -7, filled, 4, fill);
+            pen.rect(draw, 0, -7, filled, 1, with_alpha(BONE, 120));
         }
     }
 }

@@ -69,8 +69,8 @@ seeded generator keep generating exactly as before):
   lockers, vault prizes) shrugs off bombs, so a blast never wastes it.
 - **Vaults** (basalt and the deep strata): sealed rooms with walls no drill or bomb gets through.
   Open the lock to reach the prize: drill the floor switches in the order their pips show (a
-  wrong one resets them), bomb every pressure seal in the walls, or drill both relays within nine
-  seconds of each other.
+  wrong one resets them), bomb every pressure seal in the walls, or drill both relays within 15
+  seconds of each other (a timer bar over the relays shows what is left).
 - **Formations**: fossil beds packed with artifacts and geodes lined with rich ore, guarded by
   their layer's hazard.
 - **Rival claims**: abandoned outposts whose lockers hold infrastructure kits.
