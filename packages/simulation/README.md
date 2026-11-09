@@ -44,6 +44,36 @@ carried in the session section); `Terrain::generate` builds a world and `Terrain
 `deep_stratum_at` answer which layer a tile is in. Saves without settings are legacy worlds
 (`GeneratorVersion::Legacy`, the original fixed-depth generator).
 
+### Compact terrain (`terrain/persistence.rs`)
+
+A `Terrain` serializes as a `TerrainSnapshot`: its `WorldSettings`, size, digest and only the
+tiles that differ from freshly generated terrain (`TileDiffs`, row-major, written as runs of
+`Tile::code`s). Saves (v6) and network keyframes both use it. Deserializing regenerates the base
+(`Terrain::regenerate`), applies the diffs and checks the digest; a mismatch
+(`TerrainRestoreError::DigestMismatch`: a snapshot from a different generator build, or
+corrupted) and an unknown generator version are errors, never panics. Legacy-generator worlds
+of any size (and old saves extended with `ensure_depth`) work the same way, since the legacy
+generator is deterministic too. Other APIs: `generation_diffs` / `from_generation_diffs`
+(position-keyed diffs, applicable in any order and idempotent), `chunk_diffs` /
+`apply_chunk_diffs` for relevance refreshes, and `FullTerrain`, the pre-v6 every-tile form kept
+for save migration.
+
+Changing what a generator version produces breaks its existing saves (the digest check refuses
+them): ship generator changes as a new `GeneratorVersion`.
+
+The generated base is memoized per process (a few bases keyed by settings and size): a host, its
+clients and tests rebuild the same world many times. Whole-world generation is kept, not lazy
+per-chunk generation: caves, hazards and deposits are placed per region across chunk borders,
+so a chunk cannot be generated alone cheaply, and a whole world is fast enough. Measured with
+`generation_timing_report` (`cargo test -p drillgame_simulation generation_timing_report --
+--ignored --nocapture`):
+
+| World | Debug generate | Release generate | Restore with cached base (debug / release) |
+|---|---|---|---|
+| V1 standard (240x220) | 118 ms | 11.5 ms | 2.1 ms / 0.3 ms |
+| V1 large (360x220) | 176 ms | 17.2 ms | 2.7 ms / 0.4 ms |
+| Legacy (240x220) | 13 ms | 1.4 ms | 2.1 ms / 0.3 ms |
+
 Generation is integer-only (fixed-point value noise, splitmix hashing, region-seeded RNG) so a
 seed is bit-identical everywhere:
 
@@ -72,7 +102,7 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | Kind | Contents | Who receives it |
 |---|---|---|
 | Per tick | rig pose, velocity, fuel, hull, drill/scanner timers, deep-run pressure; gas clouds, boulders, bombs | clients the rig/entity is relevant to |
-| Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed whole with `terrain_chunk`) |
+| Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
 | Op log | per-player discovery | the owner only |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig | everyone |
 | On change | `Loadout(player)`: inventory, credits, upgrades, kits, rig parts, salvage, rescue count, deep reward milestone, service transactions | the owner only |
@@ -81,4 +111,5 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is
 hashed player by player, so host and a correct client authority agree exactly. Terrain
-dimensions, seed and initial tiles travel only in keyframes (`redacted_for(viewer)`).
+dimensions, settings and the tiles that differ from generation travel only in keyframes
+(`redacted_for(viewer)`); the receiver regenerates the rest.

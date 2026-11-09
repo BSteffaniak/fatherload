@@ -68,8 +68,12 @@ Modules:
   window.
 - `shell::world_setup` — the New World dialog (seed, size, richness, hazards) opened by every
   "new world" title entry; the seed comes from OS randomness (`random_world_seed`, 48 bits).
-- `save` — format v5 (`WorldState` + play time); `save::legacy` migrates v1-v4 (v3/v4 worlds
-  carried a derived summary whose `won_game` flag is lifted into the world).
+- `save` — format v6 (`WorldState` + play time; the terrain as generation settings plus tile
+  diffs, see the simulation README); `save::legacy` migrates v1-v5 (v1-v5 terrain wrote out
+  every tile and is read as `FullTerrain`; v3/v4 worlds carried a derived summary whose
+  `won_game` flag is lifted into the world). A save naming an unknown generator version fails
+  with `SaveError::UnknownGenerator`. A fresh world's save is ~3.4 KB (v5: ~1.8 MB), a heavily
+  dug one ~43 KB (v5: ~1.8 MB).
 - `input` — devices to per-seat `PlayerInput`:
   - keyboard sampling (`input.rs`; solo reads WASD + arrows, split-screen a WASD and an
     arrow-keys scheme: arrows drive and navigate menus, Right Ctrl / Numpad Enter use and

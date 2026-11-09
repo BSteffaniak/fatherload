@@ -185,9 +185,13 @@ Files live in `$DRILLGAME_STATE_DIR`, else `$XDG_STATE_HOME/drillgame`, else
 `%LOCALAPPDATA%\drillgame` on Windows, else `~/.local/state/drillgame`.
 
 - Quick save: `save.json`; save slots: `save-slot-1.json` through `save-slot-3.json`
-- A save (format v5) is the host's `WorldState` (including the world's seed and settings) plus
-  play time; v1-v4 saves are migrated on load, saves from before seeded worlds keep their
-  terrain and load as legacy worlds, and loading starts a new session epoch.
+- A save (format v6) is the host's `WorldState` plus play time. Its terrain is stored as the
+  world's generation settings (seed, size, richness, hazards, generator version) and only the
+  tiles that differ from freshly generated terrain; loading regenerates the rest and checks a
+  terrain digest. v1-v5 saves (which wrote out every tile) are migrated on load and re-saved as
+  v6; saves from before seeded worlds keep their terrain and load as legacy worlds. A save from
+  an unknown generator version is refused with a clear error. Loading starts a new session
+  epoch.
 - Slot UI displays depth and credits; the title shows the latest save's depth, credits and playtime.
 - Settings are stored in `settings.json` and persist volume/fullscreen preferences and
   the window size/maximized state.
