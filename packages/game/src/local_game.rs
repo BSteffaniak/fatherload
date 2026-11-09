@@ -890,7 +890,10 @@ impl LocalGame {
                 success.clone_into(&mut self.shell.message);
                 self.shell.sound_cues.push(SoundCue::Ui);
             }
-            Err(error) => self.shell.message = format!("Save failed: {error}"),
+            Err(error) => {
+                self.shell.message = format!("Save failed: {error}");
+                self.shell.sound_cues.push(SoundCue::UiError);
+            }
         }
     }
 
@@ -912,13 +915,17 @@ impl LocalGame {
                         "Joined clients cannot load over the host's session."
                     };
                     refusal.clone_into(&mut self.shell.message);
+                    self.shell.sound_cues.push(SoundCue::UiError);
                     return;
                 }
                 self.reset_presentation(report);
                 self.shell.enter_world(success, save.play_seconds);
                 self.shell.sound_cues.push(SoundCue::Ui);
             }
-            Err(error) => self.shell.message = format!("Load failed: {error}"),
+            Err(error) => {
+                self.shell.message = format!("Load failed: {error}");
+                self.shell.sound_cues.push(SoundCue::UiError);
+            }
         }
     }
 
