@@ -138,7 +138,7 @@ pub const QUESTS: &[QuestDef] = &[
             item: QuestItem::Mineral(MineralKind::Silver),
             count: 2,
             zones: [SurfaceZone::Depot, SurfaceZone::Salvage],
-            window_ms: 20_000,
+            window_ms: 8_000,
             solo_window_ms: 120_000,
         }]],
         twists: &[],
