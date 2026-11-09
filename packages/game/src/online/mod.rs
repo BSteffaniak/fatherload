@@ -54,7 +54,6 @@ pub fn random_token_seed() -> u64 {
 #[must_use]
 pub fn player_name() -> String {
     std::env::var("FATHERLOAD_PLAYER_NAME")
-        .or_else(|_| std::env::var("DRILLGAME_PLAYER_NAME"))
         .ok()
         .filter(|name| !name.trim().is_empty())
         .unwrap_or_else(fatherload_quic_transport::lan::local_machine_name)

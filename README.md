@@ -2,23 +2,6 @@
 
 A Rust-native 2D mining game mechanically inspired by classic drill/mining games, with original names, procedural programmer art, and a desktop-first initial target.
 
-## Upgrade from Drillgame
-
-Fatherload imports `save.json`, all three save slots, and `settings.json` from the old
-`drillgame` state directory on first use, only when the `fatherload` directory does not
-already exist. Import is staged and serialized across processes; old files are never removed.
-A failed import leaves the old state intact and uses it for that launch, with a diagnostic.
-Existing Fatherload data always wins; the two directories are never automatically merged.
-Save formats and world generator versions are unchanged.
-
-`FATHERLOAD_STATE_DIR`, `FATHERLOAD_PLAYER_NAME`, and `FATHERLOAD_NET_SIM` take precedence
-over their legacy `DRILLGAME_*` equivalents, which remain supported. Explicit state-directory
-overrides bypass automatic import. Default roots are `$XDG_STATE_HOME`, `%LOCALAPPDATA%`
-on Windows, or `~/.local/state`; the game directory below that root is now `fatherload`.
-
-LAN discovery uses `_fatherload._udp.local.` and QUIC uses `fatherload-quic/1`. Update
-all peers together: the old Drillgame executable does not connect to Fatherload sessions.
-
 ## Development
 
 ```bash

@@ -8,9 +8,9 @@
 //! starts a new session epoch.
 
 mod legacy;
-mod state_directory;
 
 use std::{
+    env,
     error::Error,
     fmt, fs, io,
     path::{Path, PathBuf},
@@ -391,7 +391,19 @@ fn latest_save_path() -> Option<PathBuf> {
 }
 
 fn default_state_dir() -> PathBuf {
-    state_directory::default_dir()
+    if let Ok(path) = env::var("FATHERLOAD_STATE_DIR") {
+        return PathBuf::from(path);
+    }
+    let root = env::var_os("XDG_STATE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| {
+            cfg!(windows)
+                .then(|| env::var_os("LOCALAPPDATA").map(PathBuf::from))
+                .flatten()
+        })
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))
+        .unwrap_or_else(env::temp_dir);
+    root.join("fatherload")
 }
 
 /// Save/load failures.

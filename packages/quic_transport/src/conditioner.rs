@@ -48,7 +48,7 @@ impl LinkConditionerConfig {
     ///
     /// Returns an error if the variable is set but malformed.
     pub fn from_env() -> Result<Option<Self>, ParseLinkConditionerError> {
-        match std::env::var(NET_SIM_ENV_VAR).or_else(|_| std::env::var("DRILLGAME_NET_SIM")) {
+        match std::env::var(NET_SIM_ENV_VAR) {
             Ok(value) if !value.trim().is_empty() => value.parse().map(Some),
             _ => Ok(None),
         }
