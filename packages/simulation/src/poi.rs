@@ -146,7 +146,10 @@ impl VaultPuzzle {
 }
 
 /// Time both relays of a [`VaultPuzzle::Relay`] vault must be drilled within.
-pub const RELAY_WINDOW_MILLIS: u64 = 9_000;
+///
+/// A clean solo run through the relay prefab's corridor takes about 7 s (rigs cross about
+/// two tiles a second), so the window leaves a human pilot real slack; two rigs can split up.
+pub const RELAY_WINDOW_MILLIS: u64 = 15_000;
 
 /// What a formation is made of.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]

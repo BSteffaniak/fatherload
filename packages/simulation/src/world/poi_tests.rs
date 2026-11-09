@@ -1,6 +1,8 @@
 //! Point-of-interest gameplay through the real tick: crates, vault locks, visits, scanner
 //! contacts, and their replication and hashing.
 
+use std::time::Duration;
+
 use crate::{
     ControlState, GameplayEventKind, PlayerCommand, PlayerId, SectionKey, SimulationParams,
     TILE_SIZE, TickInputs, TickOutput, WorldState,
@@ -456,7 +458,8 @@ fn relay_windows_last_the_same_time_at_every_tick_rate() {
     };
     let (at_60, at_30) = (run(60), run(30));
     assert!((at_60 - at_30).abs() < 0.1, "{at_60} vs {at_30}");
-    assert!((at_60 - 9.0).abs() < 0.1, "{at_60}");
+    let window = Duration::from_millis(RELAY_WINDOW_MILLIS).as_secs_f32();
+    assert!((at_60 - window).abs() < 0.1, "{at_60}");
 }
 
 #[test]
@@ -477,4 +480,79 @@ fn bombs_never_destroy_loot() {
             ..
         }
     )));
+}
+
+/// Flies the rig with real controls towards the centre of `target` (a simple waypoint
+/// follower: steer at the target column, thrust while it is above). Returns the ticks taken.
+#[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
+fn fly_to(world: &mut WorldState, target: TilePosition, max_ticks: u64) -> u64 {
+    let goal_x = (target.x as f32 + 0.5) * TILE_SIZE;
+    let goal_y = (target.y as f32 + 0.5) * TILE_SIZE;
+    for tick in 0..max_ticks {
+        let rig = world.player(RIG).expect("rig");
+        let (dx, dy) = (goal_x - rig.x, goal_y - rig.y);
+        if dx.abs() < 6.0 && dy.abs() < 6.0 {
+            return tick;
+        }
+        let horizontal = (dx / 12.0).clamp(-1.0, 1.0);
+        // Climb while the goal is above; roll along floors and fall otherwise.
+        let thrust = dy < -12.0;
+        let inputs = TickInputs::held(RIG, ControlState::new(horizontal, thrust, false));
+        let _ = step(world, &inputs);
+    }
+    let rig = world.player(RIG).expect("rig");
+    panic!("never reached {target:?} (rig at {} {})", rig.x, rig.y);
+}
+
+#[test]
+fn one_rig_can_work_both_twin_relays_inside_the_window() {
+    let (mut world, vault) = world_with(|variant| variant == PoiVariant::Vault(VaultPuzzle::Relay));
+    let relays = poi_tiles(&world, &vault, |tile| {
+        matches!(tile, PoiTile::VaultRelay { .. })
+    });
+    let (first, second) = (relays[0], relays[1]);
+    let _ = drill_down_into(&mut world, first);
+    let lit_at = world.simulation_tick();
+    // The corridor runs up from each relay and across the top of the vault.
+    let corridor = vault.bounds.min.y + 1;
+    let budget = world.timing().ticks_for_millis(RELAY_WINDOW_MILLIS);
+    for waypoint in [
+        TilePosition {
+            x: first.x,
+            y: corridor,
+        },
+        TilePosition {
+            x: second.x,
+            y: corridor,
+        },
+        TilePosition {
+            x: second.x,
+            y: second.y - 1,
+        },
+    ] {
+        let _ = fly_to(&mut world, waypoint, budget);
+    }
+    let drill = TickInputs::held(RIG, ControlState::new(0.0, false, true));
+    let mut opened = false;
+    for _ in 0..budget {
+        let output = step(&mut world, &drill);
+        opened |= output
+            .events
+            .iter()
+            .any(|event| event.kind == GameplayEventKind::VaultOpened { feature: vault.id });
+        if opened {
+            break;
+        }
+    }
+    let took = world
+        .timing()
+        .rate
+        .seconds_for_ticks(world.simulation_tick().get() - lit_at.get());
+    assert!(opened, "the second relay was not lit in time ({took:.1} s)");
+    // A clean run leaves real slack for a human pilot.
+    let window = world.timing().rate.seconds_for_ticks(budget);
+    assert!(
+        took < window * 0.6,
+        "a clean run took {took:.1} s of the {window:.1} s window"
+    );
 }
