@@ -19,9 +19,9 @@ fn all() -> impl Iterator<Item = &'static QuestDef> {
     QUESTS.iter().chain(BOARD_TEMPLATES.iter())
 }
 
-/// Seeds the binding test covers (`DRILLGAME_QUEST_SEEDS` overrides).
+/// Seeds the binding test covers (`FATHERLOAD_QUEST_SEEDS` overrides).
 fn seed_count() -> u64 {
-    std::env::var("DRILLGAME_QUEST_SEEDS")
+    std::env::var("FATHERLOAD_QUEST_SEEDS")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(50)

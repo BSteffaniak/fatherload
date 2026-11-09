@@ -2,7 +2,7 @@
 //! confirmations, the rescue prompt, and every online screen (join forms, LAN list, lobby roster
 //! and session notices). Rows carry icons, values and states so each choice reads at a glance.
 
-use drillgame_simulation::terrain::TILE_SIZE;
+use fatherload_simulation::terrain::TILE_SIZE;
 use raylib::prelude::*;
 
 #[allow(
@@ -31,7 +31,7 @@ use crate::{
         WARP_BANDS,
     },
 };
-use drillgame_simulation::{
+use fatherload_simulation::{
     TestModeState,
     worldgen::{HazardIntensity, ResourceRichness, strata::band_solid_top_row},
 };
@@ -524,7 +524,7 @@ pub(super) fn draw_exit_confirm(draw: &mut RaylibDrawHandle<'_>) {
             GOLD,
             vec![SectionItem::icon_stat(
                 &menu_icons::DOOR,
-                "Close Drillgame now",
+                "Close Fatherload now",
                 "",
                 BONE,
             )],

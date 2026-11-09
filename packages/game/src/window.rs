@@ -14,7 +14,7 @@ pub const MIN_WINDOW_WIDTH: i32 = 960;
 /// Smallest window the UI is laid out for, in logical points.
 pub const MIN_WINDOW_HEIGHT: i32 = 540;
 
-const WINDOW_TITLE: &str = "Drillgame";
+const WINDOW_TITLE: &str = "Fatherload";
 
 /// A saved windowed size made usable: at least the minimum size and, when the monitor size is
 /// known, no larger than the monitor.

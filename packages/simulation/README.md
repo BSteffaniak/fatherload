@@ -1,6 +1,6 @@
-# drillgame_simulation
+# fatherload_simulation
 
-Canonical, deterministic Drillgame gameplay simulation: `WorldState`, its single fixed-tick
+Canonical, deterministic Fatherload gameplay simulation: `WorldState`, its single fixed-tick
 transition, terrain, rigs, drilling, hazards, economy, contracts, expeditions, rescue,
 deterministic RNG, map discovery, replication sections and state hashing.
 
@@ -10,7 +10,7 @@ No IO, clocks, rendering, async runtime or networking dependencies (`serde` only
 
 `WorldState::simulate_tick(tick, &TickInputs) -> TickOutput` is the only gameplay transition.
 Every other mutator is `pub(crate)` and runs inside it. Outside this crate it is called only by
-`drillgame_netcode`'s `NetSimulation` impl (host ticks and client prediction) and by tests.
+`fatherload_netcode`'s `NetSimulation` impl (host ticks and client prediction) and by tests.
 
 - `TickInputs`: per player, held `ControlState` (quantized horizontal axis, thrust, drill) and
   one-shot `TickAction`s (`PlayerCommand`: bomb, scanner, infrastructure, rescue, test-mode
@@ -114,7 +114,7 @@ The generated base is memoized per process (a few bases keyed by settings and si
 clients and tests rebuild the same world many times. Whole-world generation is kept, not lazy
 per-chunk generation: caves, hazards and deposits are placed per region across chunk borders,
 so a chunk cannot be generated alone cheaply, and a whole world is fast enough. Measured with
-`generation_timing_report` (`cargo test -p drillgame_simulation generation_timing_report --
+`generation_timing_report` (`cargo test -p fatherload_simulation generation_timing_report --
 --ignored --nocapture`):
 
 | World | Debug generate | Release generate | Restore with cached base (debug / release) |
@@ -150,8 +150,8 @@ interleave over many rows, a solid V4 bedrock floor that nothing breaks, few dee
 rich V3+ worlds, plus golden digests pinned to `GeneratorVersion::V1`, `V2`, `V3` and `V4`. `worldgen/poi_tests.rs`
 checks POI counts per band and per kind, caches in the clay, grey stone and slate, spacing,
 spawn/town/hazard clearance, nothing undiggable below spawn, and that every vault's doors,
-switches, relays and seals can be reached and worked from spawn. `DRILLGAME_WORLDGEN_SEEDS=300
-cargo test --release -p drillgame_simulation worldgen` runs it over more seeds.
+switches, relays and seals can be reached and worked from spawn. `FATHERLOAD_WORLDGEN_SEEDS=300
+cargo test --release -p fatherload_simulation worldgen` runs it over more seeds.
 
 ## Points of interest (`src/poi.rs`, `src/world/pois.rs`)
 
@@ -236,7 +236,7 @@ graph is acyclic and fully reachable from a fresh game, co-op primitives have so
 rewards fit their tier's bounds (`QuestTier::reward_bounds`), no quest uses only basic
 primitives without a twist or co-op, the first batch keeps its shape (25-35 quests, 4+ givers,
 8+ co-op) and every quest binds on 50 seeds, every world option on one seed and seeds that
-once failed (`DRILLGAME_QUEST_SEEDS` for more seeds).
+once failed (`FATHERLOAD_QUEST_SEEDS` for more seeds).
 `world/quest_tests.rs` plays quests through the tick: solo and crew completions, twists,
 rewards, the board, rebates, replication, saves and determinism.
 

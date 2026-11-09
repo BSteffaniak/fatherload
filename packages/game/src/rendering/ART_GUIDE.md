@@ -1,6 +1,6 @@
-# Drillgame art guide
+# Fatherload art guide
 
-Drillgame's look is **crisp pixel art**: every tile, sprite, glyph and UI frame is authored in
+Fatherload's look is **crisp pixel art**: every tile, sprite, glyph and UI frame is authored in
 code in *art pixels*, drawn from one named palette, and shown at whole-number scales with point
 (nearest) filtering. Nothing is downloaded or loaded from image files.
 
@@ -380,11 +380,11 @@ puffs; scanner pings are pulsing corner brackets (gold ore, pink artifact, red h
 ## Screenshot workflow
 
 ```sh
-cargo build --release -p drillgame_game
-./target/release/drillgame --screenshot-scenes target/shots/latest            # all scenes, 1280x720
-./target/release/drillgame --screenshot-scenes target/shots/1080 --size 1920x1080
-./target/release/drillgame --screenshot-scenes target/shots/shop --only interior_shop,art_gallery
-./target/release/drillgame --screenshot-scenes x --list                        # scene names
+cargo build --release -p fatherload_game
+./target/release/fatherload --screenshot-scenes target/shots/latest            # all scenes, 1280x720
+./target/release/fatherload --screenshot-scenes target/shots/1080 --size 1920x1080
+./target/release/fatherload --screenshot-scenes target/shots/shop --only interior_shop,art_gallery
+./target/release/fatherload --screenshot-scenes x --list                        # scene names
 ```
 
 A window opens briefly, each scene is built deterministically (fixed seed, fixed frame time,

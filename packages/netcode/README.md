@@ -1,16 +1,16 @@
-# drillgame_netcode
+# fatherload_netcode
 
-Sans-IO multiplayer netcode for Drillgame (see `multiplayer-architecture-plan.md`, sections
+Sans-IO multiplayer netcode for Fatherload (see `multiplayer-architecture-plan.md`, sections
 5-8, 11.2, 15 and 16): server-authoritative state replication, client-side prediction of the
 local rig and interpolation of remote rigs.
 
 No sockets, threads, async runtimes or wall clock: time is always passed in as a `Duration`.
-Bytes move through `drillgame_quic_transport` in the app and through `LinkSim` in tests.
+Bytes move through `fatherload_quic_transport` in the app and through `LinkSim` in tests.
 
 ## Modules
 
 - `simulation`: the `NetSimulation` trait sessions are generic over, plus `Relevance`.
-- `world`: `NetSimulation` for the real `drillgame_simulation::WorldState` (`WorldOp` op log:
+- `world`: `NetSimulation` for the real `fatherload_simulation::WorldState` (`WorldOp` op log:
   terrain `Tile` writes and per-player `Discovery`; 16x16 terrain chunks). The keyframe is the
   world itself, whose terrain serializes as generation settings plus the tiles that differ
   from generation: the client regenerates the rest and checks the terrain digest, so a
@@ -55,6 +55,6 @@ Replica checks use `visible_state_hash(viewer)`: the host puts it in `debug_hash
 
 ## Tests
 
-`cargo test -p drillgame_netcode`: component tests, toy and real-world end-to-end harness runs
+`cargo test -p fatherload_netcode`: component tests, toy and real-world end-to-end harness runs
 (0 ms and lossy links, 30/60/120 Hz, 2/4/16 clients, join in progress, reconnect, epochs,
 private state reaching only its owner), and terrain relevance convergence with a finite radius.

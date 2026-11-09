@@ -5,7 +5,7 @@
 //! `w` glint). Artifact stamps are one-offs. They are registered in the atlas too, so the gallery
 //! and tests see them, but the terrain uses them CPU-side via [`SpriteDef::color_of`].
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     terrain::{ArtifactKind, DeepStratum, MineralKind},
     worldgen::Band,
 };

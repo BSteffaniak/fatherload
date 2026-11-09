@@ -1,6 +1,23 @@
-# Drillgame
+# Fatherload
 
 A Rust-native 2D mining game mechanically inspired by classic drill/mining games, with original names, procedural programmer art, and a desktop-first initial target.
+
+## Upgrade from Drillgame
+
+Fatherload imports `save.json`, all three save slots, and `settings.json` from the old
+`drillgame` state directory on first use, only when the `fatherload` directory does not
+already exist. Import is staged and serialized across processes; old files are never removed.
+A failed import leaves the old state intact and uses it for that launch, with a diagnostic.
+Existing Fatherload data always wins; the two directories are never automatically merged.
+Save formats and world generator versions are unchanged.
+
+`FATHERLOAD_STATE_DIR`, `FATHERLOAD_PLAYER_NAME`, and `FATHERLOAD_NET_SIM` take precedence
+over their legacy `DRILLGAME_*` equivalents, which remain supported. Explicit state-directory
+overrides bypass automatic import. Default roots are `$XDG_STATE_HOME`, `%LOCALAPPDATA%`
+on Windows, or `~/.local/state`; the game directory below that root is now `fatherload`.
+
+LAN discovery uses `_fatherload._udp.local.` and QUIC uses `fatherload-quic/1`. Update
+all peers together: the old Drillgame executable does not connect to Fatherload sessions.
 
 ## Development
 
@@ -10,13 +27,13 @@ cargo check --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo deny check
-cargo run --bin drillgame
+cargo run --bin fatherload
 ```
 
 With Nix:
 
 ```bash
-nix develop -c cargo run --bin drillgame
+nix develop -c cargo run --bin fatherload
 ```
 
 ### Windows
@@ -31,10 +48,10 @@ source, so it needs:
 
 ```powershell
 $env:LIBCLANG_PATH = "C:\path\to\folder\with\libclang"
-cargo build --release -p drillgame_game   # target\release\drillgame.exe
+cargo build --release -p fatherload_game   # target\release\fatherload.exe
 ```
 
-Saves and settings go to `%LOCALAPPDATA%\drillgame`.
+Saves and settings go to `%LOCALAPPDATA%\fatherload`.
 
 ## Current Gameplay
 
@@ -108,8 +125,8 @@ replacement for selling ore (reward tables: `packages/simulation/src/poi.rs`).
 World generation tools (no window opens):
 
 ```bash
-cargo run --release --bin drillgame -- --worldgen-report --seeds 300 [--size large] [--richness rich] [--hazards brutal] [--generator v2]
-cargo run --release --bin drillgame -- --worldgen-preview D111-6A4E world.png [--size large] [--scale 4]
+cargo run --release --bin fatherload -- --worldgen-report --seeds 300 [--size large] [--richness rich] [--hazards brutal] [--generator v2]
+cargo run --release --bin fatherload -- --worldgen-preview D111-6A4E world.png [--size large] [--scale 4]
 ```
 
 The report prints per-layer top row, ore value, ore specks (deposits of 1-3 tiles), cave share, hazard tiles, artifacts and points of
@@ -122,7 +139,7 @@ variations) to WAV with a level report and a `showcase.wav` tour through the in-
 `packages/game/src/audio/README.md`):
 
 ```bash
-cargo run --release --bin drillgame -- --render-audio target/audio-review
+cargo run --release --bin fatherload -- --render-audio target/audio-review
 ```
 
 Successful return trips award streak bonuses. Emergency rescue returns the rig to the surface for a fee, drops part of the cargo at the rescue site, and records a depot invoice; lost cargo can be recovered later if there is cargo space.
@@ -169,7 +186,7 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 | Previous / next tab or column | `LB` / `RB` in menus | left / right arrows |
 
 The layout lives in one table (`PAD_BINDINGS` in `packages/game/src/input/gamepad.rs`).
-`drillgame --list-gamepads` lists every detected controller (index, name, axis and button
+`fatherload --list-gamepads` lists every detected controller (index, name, axis and button
 counts, whether GLFW has a standard mapping); without a mapping a pad's buttons cannot be read.
 Rumble is not available: raylib's desktop GLFW backend does not implement
 `SetGamepadVibration`.
@@ -242,8 +259,8 @@ Online host/join is hidden in the menus until it is wired onto the same runtime.
 
 ## Saves and Settings
 
-Files live in `$DRILLGAME_STATE_DIR`, else `$XDG_STATE_HOME/drillgame`, else
-`%LOCALAPPDATA%\drillgame` on Windows, else `~/.local/state/drillgame`.
+Files live in `$FATHERLOAD_STATE_DIR`, else `$XDG_STATE_HOME/fatherload`, else
+`%LOCALAPPDATA%\fatherload` on Windows, else `~/.local/state/fatherload`.
 
 - Quick save: `save.json`; save slots: `save-slot-1.json` through `save-slot-3.json`
 - A save (format v6) is the host's `WorldState` plus play time. Its terrain is stored as the

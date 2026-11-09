@@ -3,7 +3,7 @@
 
 use raylib::prelude::*;
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     quest::describe::{QuestMarker, QuestMarkerKind},
     terrain::TILE_SIZE,
 };

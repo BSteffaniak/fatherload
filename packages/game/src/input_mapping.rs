@@ -1,6 +1,6 @@
 //! Maps a seat's sampled [`PlayerInput`] to gameplay intent: held controls plus one-shot actions.
 
-use drillgame_simulation::{ControlState, PlayerCommand};
+use fatherload_simulation::{ControlState, PlayerCommand};
 
 use crate::{input::PlayerInput, runtime::SeatInput};
 

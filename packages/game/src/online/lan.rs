@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use drillgame_quic_transport::{
+use fatherload_quic_transport::{
     HostDescriptor,
     lan::{
         LanDiscoveredGame, LanDiscoveryBrowser, fetch_descriptor, patch_descriptor_addr_for_lan,
@@ -54,7 +54,7 @@ impl<T: Send + 'static> Background<T> {
 /// Browses the LAN for advertised sessions for [`LAN_BROWSE_DURATION`].
 #[must_use]
 pub fn browse() -> Background<Vec<LanDiscoveredGame>> {
-    Background::spawn("drillgame-lan-browse", || {
+    Background::spawn("fatherload-lan-browse", || {
         LanDiscoveryBrowser::new()
             .and_then(|browser| browser.browse_for(LAN_BROWSE_DURATION))
             .map_err(|error| error.to_string())
@@ -66,7 +66,7 @@ pub fn browse() -> Background<Vec<LanDiscoveredGame>> {
 pub fn fetch(game: &LanDiscoveredGame) -> Background<HostDescriptor> {
     let descriptor_addr = game.descriptor_addr;
     let game_addr = game.game_addr;
-    Background::spawn("drillgame-lan-descriptor-fetch", move || {
+    Background::spawn("fatherload-lan-descriptor-fetch", move || {
         fetch_descriptor(descriptor_addr)
             .map(|descriptor| patch_descriptor_addr_for_lan(descriptor, game_addr))
             .map_err(|error| error.to_string())

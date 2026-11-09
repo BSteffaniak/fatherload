@@ -4,7 +4,7 @@
 //! and a live reading of their scanner while the POI is in range: low scanner tiers only show a
 //! blinking "strange echo" near the site, higher tiers its outline (silhouette) and icon.
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     Player,
     poi::{PoiKind, PoiKnowledge, PoiTile, PoiVariant, poi_reading},
     terrain::{TILE_SIZE, Terrain, TileKind},

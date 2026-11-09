@@ -1,4 +1,4 @@
-//! End-to-end tests on the real gameplay world (`drillgame_simulation::WorldState`).
+//! End-to-end tests on the real gameplay world (`fatherload_simulation::WorldState`).
 //!
 //! One host and N clients over seeded `LinkSim`s, driven by bots that dig down (placing bombs,
 //! scanning and deploying infrastructure on the way), fly up, land back at the depot, sell, and
@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use drillgame_simulation::WorldState;
+use fatherload_simulation::WorldState;
 
 use super::support::{assert_bounded, assert_converged};
 use crate::harness::{
@@ -132,11 +132,11 @@ fn world_private_state_reaches_only_its_owner() {
 /// Has `player` accept `quest` on `world` (standing at the giver's door for one tick).
 fn accept_quest(
     world: &mut WorldState,
-    player: drillgame_simulation::PlayerId,
-    quest: drillgame_simulation::QuestId,
+    player: fatherload_simulation::PlayerId,
+    quest: fatherload_simulation::QuestId,
     crew: bool,
 ) {
-    use drillgame_simulation::{
+    use fatherload_simulation::{
         InputSequence, PlayerCommand, PlayerTickInput, TILE_SIZE, TickAction, TickInputs,
         quest::binding::giver_door, service::SessionServiceRequest,
     };
@@ -163,7 +163,7 @@ fn accept_quest(
     assert!(
         output.events.iter().any(|event| matches!(
             event.kind,
-            drillgame_simulation::GameplayEventKind::QuestAccepted { .. }
+            fatherload_simulation::GameplayEventKind::QuestAccepted { .. }
         )),
         "{quest:?} accepted"
     );
@@ -171,7 +171,7 @@ fn accept_quest(
 
 #[test]
 fn world_quests_replicate_solo_privately_and_crew_quests_to_everyone() {
-    use drillgame_simulation::{QuestId, quest::QuestLog};
+    use fatherload_simulation::{QuestId, quest::QuestLog};
 
     let mut harness = harness(60, 2, LinkConditions::new(20, 3, 0.5));
     harness.run_for(Duration::from_secs(2));
@@ -184,9 +184,9 @@ fn world_quests_replicate_solo_privately_and_crew_quests_to_everyone() {
         // A crew delivery job: it needs no generated features, so it binds in the harness world.
         let log = &mut world.player_mut(lead).expect("lead").quests;
         log.reputation
-            .insert(drillgame_simulation::QuestGiver::Kade, 10);
-        log.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
-            &drillgame_simulation::worldgen::WorldSettings::default(),
+            .insert(fatherload_simulation::QuestGiver::Kade, 10);
+        log.deepest_row = fatherload_simulation::worldgen::strata::scaled_row(
+            &fatherload_simulation::worldgen::WorldSettings::default(),
             45,
         );
     }

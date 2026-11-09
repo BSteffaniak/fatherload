@@ -13,7 +13,7 @@ use crate::{
 };
 
 fn sample_seeds() -> impl Iterator<Item = u64> {
-    let count = std::env::var("DRILLGAME_WORLDGEN_SEEDS")
+    let count = std::env::var("FATHERLOAD_WORLDGEN_SEEDS")
         .ok()
         .and_then(|text| text.parse::<u64>().ok())
         .unwrap_or(32);

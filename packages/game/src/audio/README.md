@@ -21,7 +21,7 @@ RenderSnapshot (rigs, drill, hazards) ----+       (audio.rs AudioBus)      (audi
 | `cues`      | `SoundCue` -> patch, gameplay event -> cue (exhaustive, so a new event kind must decide how it sounds), and `SoundSource` (interface / player / world point). |
 | `director`  | Per frame: places one-shot cues, and drives everything continuous from the snapshot (table below). |
 | `analysis`  | Peak, RMS, DC, loudness (loudest 100 ms window after a 100 Hz high-pass), spectral centroid (FFT), loop-seam ratio. |
-| `render_tool` | `drillgame --render-audio <dir> [--seed N]`. |
+| `render_tool` | `fatherload --render-audio <dir> [--seed N]`. |
 
 ## Loudness
 
@@ -103,7 +103,7 @@ on (kept on that seat's side of the screen). All of it is then scaled by the mas
 ## Reviewing
 
 ```bash
-cargo run --release --bin drillgame -- --render-audio target/audio-review [--seed N]
+cargo run --release --bin fatherload -- --render-audio target/audio-review [--seed N]
 ```
 
 Writes `<patch>_<variation>.wav` for every variation (loops twice over, so the seam is audible),

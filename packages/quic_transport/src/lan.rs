@@ -23,7 +23,7 @@ use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent, ServiceInfo};
 
 use crate::tls::HostDescriptor;
 
-pub const SERVICE_TYPE: &str = "_drillgame._udp.local.";
+pub const SERVICE_TYPE: &str = "_fatherload._udp.local.";
 pub const PROTOCOL_VERSION: &str = "1";
 pub const DEFAULT_GAME_PORT: u16 = 4_242;
 const DESCRIPTOR_READ_LIMIT_BYTES: u64 = 128 * 1024;
@@ -45,11 +45,11 @@ impl LanGameAdvertisement {
         let game_addr = descriptor.host_addr;
         let descriptor_addr = SocketAddr::new(game_addr.ip(), 0);
         Self {
-            instance_name: format!("Drillgame on {machine_name}"),
+            instance_name: format!("Fatherload on {machine_name}"),
             host_name: format!("{}.local.", dns_label(&machine_name)),
             game_addr,
             descriptor_addr,
-            session_id: format!("drillgame-{}", game_addr.port()),
+            session_id: format!("fatherload-{}", game_addr.port()),
         }
     }
 
@@ -134,7 +134,7 @@ impl LanDescriptorServer {
         let shutdown = Arc::new(AtomicBool::new(false));
         let thread_shutdown = Arc::clone(&shutdown);
         let handle = thread::Builder::new()
-            .name("drillgame-lan-descriptor".to_owned())
+            .name("fatherload-lan-descriptor".to_owned())
             .spawn(move || {
                 while !thread_shutdown.load(Ordering::Relaxed) {
                     match listener.accept() {
@@ -190,7 +190,7 @@ pub struct LanDiscoveryBrowser {
 }
 
 impl LanDiscoveryBrowser {
-    /// Create an mDNS browser for Drillgame LAN sessions.
+    /// Create an mDNS browser for Fatherload LAN sessions.
     ///
     /// # Errors
     ///
@@ -378,7 +378,7 @@ mod tests {
 
         assert_eq!(advertisement.game_addr, descriptor.host_addr);
         assert_eq!(advertisement.descriptor_addr.port(), 4244);
-        assert!(advertisement.instance_name.starts_with("Drillgame on "));
+        assert!(advertisement.instance_name.starts_with("Fatherload on "));
     }
 
     #[test]

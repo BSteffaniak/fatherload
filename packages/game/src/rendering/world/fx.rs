@@ -5,7 +5,7 @@
 
 use raylib::prelude::*;
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     DiscoveredTiles, DrillDirection, DrillState, FallingBoulder, HazardCloud, InfrastructureKind,
     PlacedBomb, PlacedInfrastructure,
     poi::{PoiKnowledge, PoiTile, in_scanner_range, scanner_poi_knowledge, scanner_poi_range},

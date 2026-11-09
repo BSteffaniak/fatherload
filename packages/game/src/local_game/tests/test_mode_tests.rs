@@ -1,7 +1,7 @@
 //! Test mode through `LocalGame::frame`: the setup dialog starts a test-mode world, and each
 //! split-screen seat warps its own rig and flips the crew toggles from the pause menu.
 
-use drillgame_simulation::{terrain::DeepStratum, worldgen::Band};
+use fatherload_simulation::{terrain::DeepStratum, worldgen::Band};
 
 use super::*;
 use crate::shell::WARP_BANDS;

@@ -1,8 +1,8 @@
-# drillgame_game
+# fatherload_game
 
-Desktop raylib frontend for Drillgame.
+Desktop raylib frontend for Fatherload.
 
-Single-player and local split-screen run on `drillgame_netcode::HostSession<WorldState>` with
+Single-player and local split-screen run on `fatherload_netcode::HostSession<WorldState>` with
 one local seat per player and no remote clients; that host is the only gameplay authority.
 
 Frame loop (`local_game::LocalGame::frame`, driven by `app::run`):
@@ -56,7 +56,7 @@ Modules:
   seeded variations at startup, a software mixer plays them on raylib's audio thread (voices,
   loops, pan, priorities, ducking, reverb, limiter) and a director turns each frame into mixer
   commands, panning each seat's sounds toward its split-screen view and attenuating world
-  sounds by distance. `drillgame --render-audio <dir> [--seed N]` writes every patch to WAV with
+  sounds by distance. `fatherload --render-audio <dir> [--seed N]` writes every patch to WAV with
   a level report and a showcase. Design table and details: `src/audio/README.md`.
 - `rendering` — `GameRenderer`: `terrain` (chunked art-resolution textures of procedural pixel
   tiles + dithered fog), `world` (sky and parallax, the town, rigs, props and effects),
@@ -68,15 +68,15 @@ Modules:
   own icons), each row showing `Tier n/max` and the footer the next tier's effect
   (`economy::upgrade_effect`); the inventory lists every line's tier; HUD bars whose maximum
   passes 999 show just the reading (`ui_kit::compact_amount`) so large tanks and hulls fit.
-- `scene_capture` — `drillgame --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`
+- `scene_capture` — `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`
   renders scripted scenes to PNGs (see the art guide). Scenes run in the default world (fixed
   seed `D111-6A4E`); scenes that need a particular place (`hazard_telltales`,
   `strata_boundary`) find it through the world's feature index rather than fixed coordinates,
   and the `poi_*` scenes swap in the first world from the default seed on that holds the POI
   they show (`stage_poi`).
-- `worldgen_tools` — `drillgame --worldgen-report [--seeds N] [--first-seed S] [--size X]
+- `worldgen_tools` — `fatherload --worldgen-report [--seeds N] [--first-seed S] [--size X]
   [--richness X] [--hazards X] [--legacy] [--generator v1|v2|v3]` prints generator distributions over many seeds, and
-  `drillgame --worldgen-preview <seed> <out.png> [--size X] [--richness X] [--hazards X]
+  `fatherload --worldgen-preview <seed> <out.png> [--size X] [--richness X] [--hazards X]
   [--scale N] [--no-features]` writes a whole-world map PNG through raylib's encoder without a
   window (points of interest get their kind's outline and map icon).
 - `shell::quests` — quests in the shell: each keeper's counter (fuel, repair, depot, HQ,
@@ -121,7 +121,7 @@ Modules:
     stick noise inside the deadzone or a held button never switches it);
   - `prompts` — action prompts (`Prompt::Use`, `Back`, `Confirm`...) to keycaps or pad glyphs
     for a device, plus their text form for toasts;
-  - `pads` — raylib/GLFW sampling and `drillgame --list-gamepads` (opens a small window for
+  - `pads` — raylib/GLFW sampling and `fatherload --list-gamepads` (opens a small window for
     about a second, prints each pad's index, name, axes/buttons, standard mapping, GUID).
 - `input_mapping` — seat input to held controls and one-shot actions.
 
@@ -135,8 +135,8 @@ Modules:
     holds its own player's loadout and discovery (other rigs show their public build), so its
     F3 hash status compares the host's client-visible hash;
   - `lan` runs mDNS browsing and descriptor fetches on helper threads;
-  - `bots` + `headless`: `drillgame --headless-host [addr] [--lan] [--duration S]` and
-    `drillgame --bot-client <addr> [--count N] [--duration S]` (no window, periodic stats lines).
+  - `bots` + `headless`: `fatherload --headless-host [addr] [--lan] [--duration S]` and
+    `fatherload --bot-client <addr> [--count N] [--duration S]` (no window, periodic stats lines).
 
 Online flow: Title > Host Online Game (lobby with address, descriptor copy, roster, Start) or
 Join Online Game (address, pasted descriptor, or LAN list), lobby ready toggle, Leave/End,
@@ -146,4 +146,4 @@ pause menu. Online pause is a local overlay (the world keeps running). Only the 
 and a periodic autosave); joined clients cannot save or load. F3 toggles the network overlay; in
 dev builds F4 / Page Up / Page Down tune live `NetTuning` values on the host while the overlay is
 open (otherwise Page Up / Page Down scroll dialogs; `ShellState::tuning_keys_active`). The
-`DRILLGAME_NET_SIM` link conditioner applies to every online session.
+`FATHERLOAD_NET_SIM` link conditioner applies to every online session.

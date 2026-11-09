@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     ActiveQuest, CanonicalProgressionState, DiscoveredTiles, DrillState, FallingBoulder,
     HazardCloud, InfrastructureKind, PlacedBomb, PlacedInfrastructure, Player, PlayerId,
     PlayerSurvivalSnapshot, TestModeState, TickRate, WorldEventKind, WorldState,
@@ -571,7 +571,7 @@ fn view_snapshot(
             .collect(),
         quest_desk: world
             .player_surface_zone(player_id)
-            .and_then(drillgame_simulation::quest::QuestGiver::at)
+            .and_then(fatherload_simulation::quest::QuestGiver::at)
             .map(|giver| crate::shell::desk_rows(world, player_id, giver))
             .unwrap_or_default(),
     })
@@ -586,7 +586,7 @@ mod tests {
         let rig = PlayerId::new(1);
         let world = WorldState::new_game(rig);
         let seats = [LocalSeat {
-            seat: drillgame_netcode::SeatId(0),
+            seat: fatherload_netcode::SeatId(0),
             player: rig,
         }];
         let mut snapshot = RenderSnapshot::build(
@@ -705,7 +705,7 @@ mod tests {
         let rig = PlayerId::new(1);
         let world = WorldState::new_game(rig);
         let seats = [LocalSeat {
-            seat: drillgame_netcode::SeatId(0),
+            seat: fatherload_netcode::SeatId(0),
             player: rig,
         }];
         let mut snapshot = RenderSnapshot::build(&world, &seats, (1920, 1080), (&[], &[]), &[]);

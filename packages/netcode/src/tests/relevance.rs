@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     ControlState, WorldState,
     terrain::{ChunkPosition, TILE_SIZE},
 };
@@ -169,10 +169,10 @@ fn toy_client_converges_on_far_terrain_when_it_moves_close() {
 #[test]
 fn world_client_converges_on_far_terrain_when_it_moves_close() {
     let params = SessionParams::new(60);
-    let sim_digger = drillgame_simulation::PlayerId::new(0);
+    let sim_digger = fatherload_simulation::PlayerId::new(0);
     let mut world = WorldState::new_game_with_params(
         sim_digger,
-        drillgame_simulation::SimulationParams::new(params.tick_rate_hz),
+        fatherload_simulation::SimulationParams::new(params.tick_rate_hz),
     );
     // The digger works 22 tiles left of where new rigs spawn (clear of building foundations).
     let spawn_x = 62.5 * TILE_SIZE;

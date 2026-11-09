@@ -1,6 +1,6 @@
 //! The pixel-perfect scaling policy shared by the world view and the UI.
 //!
-//! Drillgame's art is pixel art: every sprite, tile and UI frame is authored in *art pixels*. To
+//! Fatherload's art is pixel art: every sprite, tile and UI frame is authored in *art pixels*. To
 //! keep it crisp (no shimmering, no blurred or uneven pixels) one art pixel always covers a whole
 //! number of physical framebuffer pixels. Two integer scales are chosen from the framebuffer
 //! size every frame:

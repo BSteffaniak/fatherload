@@ -1,4 +1,4 @@
-//! `drillgame --render-audio <dir> [--seed N]`: writes every patch's variations to WAV files for
+//! `fatherload --render-audio <dir> [--seed N]`: writes every patch's variations to WAV files for
 //! listening review (loops are written twice over so the seam is audible), a scripted
 //! `showcase.wav` played through the real mixer (pan, reverb, ducking, loops), and a level report
 //! (`levels.tsv`, also printed) with the measurements the quality tests check.
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn wav_files_have_a_valid_header() {
-        let dir = std::env::temp_dir().join(format!("drillgame-wav-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("fatherload-wav-{}", std::process::id()));
         fs::create_dir_all(&dir).expect("temp dir");
         let path = dir.join("tone.wav");
         write_wav(&path, &[0.0, 0.5, -0.5, 1.0], 2).expect("write");

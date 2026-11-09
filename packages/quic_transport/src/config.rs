@@ -48,11 +48,11 @@ impl Default for NetConfig {
 }
 
 impl NetConfig {
-    /// Defaults, with the link conditioner taken from `DRILLGAME_NET_SIM` when set.
+    /// Defaults, with the link conditioner taken from `FATHERLOAD_NET_SIM` when set.
     ///
     /// # Errors
     ///
-    /// Returns an error if `DRILLGAME_NET_SIM` is set but malformed.
+    /// Returns an error if `FATHERLOAD_NET_SIM` is set but malformed.
     pub fn from_env() -> Result<Self, ParseLinkConditionerError> {
         Ok(Self {
             link: LinkConditionerConfig::from_env()?.unwrap_or_default(),

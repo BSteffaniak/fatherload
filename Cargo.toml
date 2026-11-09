@@ -12,14 +12,14 @@ authors    = ["Braden Steffaniak"]
 edition    = "2024"
 license    = "MPL-2.0"
 readme     = "README.md"
-repository = "https://github.com/BSteffaniak/drillgame"
+repository = "https://github.com/BSteffaniak/fatherload"
 version    = "0.0.1-alpha.0"
 
 [workspace.dependencies]
 bytes = "1.11.1"
-drillgame_netcode = { version = "0.0.1-alpha.0", path = "packages/netcode" }
-drillgame_quic_transport = { version = "0.0.1-alpha.0", path = "packages/quic_transport" }
-drillgame_simulation = { version = "0.0.1-alpha.0", path = "packages/simulation" }
+fatherload_netcode = { version = "0.0.1-alpha.0", path = "packages/netcode" }
+fatherload_quic_transport = { version = "0.0.1-alpha.0", path = "packages/quic_transport" }
+fatherload_simulation = { version = "0.0.1-alpha.0", path = "packages/simulation" }
 getrandom = { version = "0.3.4", default-features = false }
 hostname = "0.4.2"
 mdns-sd = "0.18.2"

@@ -16,10 +16,10 @@ use crate::terrain::{Terrain, TileKind, TilePosition, tile_hardness};
 /// Seeds the property suite checks.
 ///
 /// Generation is a few milliseconds per world in release and roughly ten times that in debug,
-/// so by default the suite samples a spread of 32 seeds. Set `DRILLGAME_WORLDGEN_SEEDS` (e.g.
+/// so by default the suite samples a spread of 32 seeds. Set `FATHERLOAD_WORLDGEN_SEEDS` (e.g.
 /// 300, with `--release`) for a deep run over many more.
 fn sample_seeds() -> impl Iterator<Item = u64> {
-    let count = std::env::var("DRILLGAME_WORLDGEN_SEEDS")
+    let count = std::env::var("FATHERLOAD_WORLDGEN_SEEDS")
         .ok()
         .and_then(|text| text.parse::<u64>().ok())
         .unwrap_or(32);

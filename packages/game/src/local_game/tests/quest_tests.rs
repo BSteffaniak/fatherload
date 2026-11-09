@@ -2,7 +2,7 @@
 //! turning in a solo job, a two-seat crew job, the quest log's tracked quest, and a save made
 //! mid-quest.
 
-use drillgame_simulation::quest::{QuestGiver, QuestId};
+use fatherload_simulation::quest::{QuestGiver, QuestId};
 
 use super::*;
 use crate::shell::{DeskRow, FanfareKind, desk_rows};
@@ -100,8 +100,8 @@ fn a_two_seat_crew_splits_a_delivery_and_both_get_paid() {
     {
         let lead = world.player_mut(PLAYER).expect("lead");
         lead.quests.reputation.insert(QuestGiver::Kade, 10);
-        lead.quests.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
-            &drillgame_simulation::worldgen::WorldSettings::default(),
+        lead.quests.deepest_row = fatherload_simulation::worldgen::strata::scaled_row(
+            &fatherload_simulation::worldgen::WorldSettings::default(),
             30,
         );
         lead.cargo.insert(MineralKind::Silver, 2);
@@ -146,8 +146,8 @@ fn a_crew_job_can_also_be_taken_solo_while_others_play() {
     {
         let lead = world.player_mut(PLAYER).expect("lead");
         lead.quests.reputation.insert(QuestGiver::Kade, 10);
-        lead.quests.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
-            &drillgame_simulation::worldgen::WorldSettings::default(),
+        lead.quests.deepest_row = fatherload_simulation::worldgen::strata::scaled_row(
+            &fatherload_simulation::worldgen::WorldSettings::default(),
             30,
         );
     }
@@ -192,11 +192,11 @@ fn a_crew_job_can_also_be_taken_solo_while_others_play() {
 /// Accepts `quest` for the world's first rig straight through the simulation (standing it at
 /// the giver's door for one tick).
 fn accept_in_world(world: &mut WorldState, quest: QuestId) {
-    use drillgame_simulation::{
+    use fatherload_simulation::{
         InputSequence, PlayerTickInput, TickAction, TickInputs, service::SessionServiceRequest,
     };
     let giver = quest.def().expect("quest").giver;
-    let door = drillgame_simulation::quest::binding::giver_door(giver);
+    let door = fatherload_simulation::quest::binding::giver_door(giver);
     let rig = world.player_mut(PLAYER).expect("rig");
     let home = rig.x;
     #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
@@ -225,8 +225,8 @@ fn accept_in_world(world: &mut WorldState, quest: QuestId) {
 #[test]
 fn the_quest_log_tracks_the_selected_job_and_flips_with_the_map() {
     let mut world = rig_at_building(SurfaceZone::Fuel, |rig| {
-        rig.quests.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
-            &drillgame_simulation::worldgen::WorldSettings::default(),
+        rig.quests.deepest_row = fatherload_simulation::worldgen::strata::scaled_row(
+            &fatherload_simulation::worldgen::WorldSettings::default(),
             30,
         );
     });
@@ -293,7 +293,7 @@ fn a_save_made_mid_quest_loads_and_the_job_carries_on() {
         play_seconds: 1.0,
     };
     let path =
-        std::env::temp_dir().join(format!("drillgame-quest-save-{}.json", std::process::id()));
+        std::env::temp_dir().join(format!("fatherload-quest-save-{}.json", std::process::id()));
     save::save_world_to_path(&save, &path).expect("write");
     let loaded = save::load_world_from_path(&path).expect("read");
     let _ignored = std::fs::remove_file(&path);

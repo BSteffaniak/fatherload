@@ -23,7 +23,7 @@ use crate::config::NetConfig;
 pub const DEFAULT_SERVER_NAME: &str = "localhost";
 
 /// ALPN protocol identifier negotiated by both sides.
-pub const ALPN: &[u8] = b"drillgame-quic/1";
+pub const ALPN: &[u8] = b"fatherload-quic/1";
 
 /// Everything a client needs to join a host with a pinned certificate. Serializable (JSON)
 /// so it can be copied between processes or served over LAN.

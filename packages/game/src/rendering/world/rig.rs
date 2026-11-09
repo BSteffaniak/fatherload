@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use raylib::prelude::*;
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     DrillDirection, PlayerId,
     terrain::{TILE_SIZE, Terrain, TilePosition},
 };

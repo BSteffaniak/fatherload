@@ -2,9 +2,9 @@
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 #![allow(clippy::multiple_crate_versions)]
 
-//! # `drillgame_quic_transport`
+//! # `fatherload_quic_transport`
 //!
-//! Moves **bytes** between Drillgame peers over QUIC. It knows nothing about gameplay or
+//! Moves **bytes** between Fatherload peers over QUIC. It knows nothing about gameplay or
 //! netcode messages; callers encode/decode their own payloads.
 //!
 //! ## Model
@@ -19,7 +19,7 @@
 //!   [`NetHandle::drain`]; neither blocks.
 //!
 //! ```no_run
-//! use drillgame_quic_transport::{HostConfig, NetConfig, NetEvent, NetHandle};
+//! use fatherload_quic_transport::{HostConfig, NetConfig, NetEvent, NetHandle};
 //!
 //! let net = NetHandle::start(NetConfig::from_env().unwrap_or_default())?;
 //! net.host("0.0.0.0:4242".parse()?, HostConfig::default())?;
@@ -77,7 +77,7 @@
 //! [`LinkConditionerConfig`] adds latency, jitter, loss and duplication to outgoing traffic
 //! inside the network thread. Reliable messages are only delayed (order preserved);
 //! unreliable messages are delayed independently, dropped and duplicated. Set it in
-//! [`NetConfig::link`] or via `DRILLGAME_NET_SIM="latency=80,jitter=15,loss=2,dup=0"` with
+//! [`NetConfig::link`] or via `FATHERLOAD_NET_SIM="latency=80,jitter=15,loss=2,dup=0"` with
 //! [`NetConfig::from_env`].
 
 mod api;

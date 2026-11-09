@@ -2,7 +2,7 @@
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 #![allow(clippy::multiple_crate_versions)]
 
-//! Canonical, deterministic Drillgame gameplay simulation.
+//! Canonical, deterministic Fatherload gameplay simulation.
 //!
 //! [`WorldState::simulate_tick`] advances the world exactly one fixed tick from a set of
 //! [`TickInputs`]. The crate performs no IO, owns no clocks, and has no rendering, async runtime, or

@@ -11,7 +11,7 @@
 
 use raylib::prelude::*;
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     DiscoveredTiles, DrillState, FallingBoulder, HazardCloud, PlacedBomb, PlacedInfrastructure,
     terrain::{TILE_SIZE, Terrain},
 };
@@ -77,7 +77,7 @@ pub(super) struct WorldScene<'a> {
     /// Twin-relay vault locks counting down.
     pub relay_countdowns: &'a [RelayCountdown],
     /// Markers of the view player's quests.
-    pub quest_markers: &'a [drillgame_simulation::quest::describe::QuestMarker],
+    pub quest_markers: &'a [fatherload_simulation::quest::describe::QuestMarker],
     pub players: &'a [PlayerPresentation],
     /// Each rig's last facing.
     pub facings: &'a RigFacings,

@@ -1,4 +1,4 @@
-//! [`NetSimulation`] for the real gameplay world, [`drillgame_simulation::WorldState`].
+//! [`NetSimulation`] for the real gameplay world, [`fatherload_simulation::WorldState`].
 //!
 //! * Controls are the quantized held movement controls ([`ControlState`]: horizontal axis,
 //!   thrust, drill).
@@ -20,7 +20,7 @@
 //! * Poses are in tiles, so the netcode's distance tunables (snap threshold, correction epsilon,
 //!   relevance radius) are expressed in tiles.
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     ControlState, Discovery, GameplayEvent, GameplayEventKind, InputSequence, LiveEntities,
     PlayerCommand, PlayerScopedCommandOutcome, PlayerTickState, SectionKey, SectionPayload,
     SimulationTick, TILE_SIZE, TickAction, TileChange, WorldState, input,
@@ -75,13 +75,13 @@ pub enum WorldOp {
 
 /// Converts a netcode player id to the simulation's.
 #[must_use]
-pub fn to_sim_player(id: PlayerId) -> drillgame_simulation::PlayerId {
-    drillgame_simulation::PlayerId::new(u64::from(id.0))
+pub fn to_sim_player(id: PlayerId) -> fatherload_simulation::PlayerId {
+    fatherload_simulation::PlayerId::new(u64::from(id.0))
 }
 
 /// Converts a simulation player id to netcode's (`None` if it does not fit).
 #[must_use]
-pub fn from_sim_player(id: drillgame_simulation::PlayerId) -> Option<PlayerId> {
+pub fn from_sim_player(id: fatherload_simulation::PlayerId) -> Option<PlayerId> {
     u32::try_from(id.get()).ok().map(PlayerId)
 }
 
@@ -91,7 +91,7 @@ pub fn controls(horizontal: f32, thrust: bool, drill_down: bool) -> ControlState
     ControlState::new(horizontal, thrust, drill_down)
 }
 
-const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<drillgame_simulation::PlayerId>) {
+const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simulation::PlayerId>) {
     match *kind {
         GameplayEventKind::DrillStarted { player_id } => (0, Some(player_id)),
         GameplayEventKind::PurchaseCompleted { player_id } => (1, Some(player_id)),
@@ -121,7 +121,7 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<drillgame_simul
     }
 }
 
-const fn drill_mode(target: drillgame_simulation::terrain::TilePosition) -> u32 {
+const fn drill_mode(target: fatherload_simulation::terrain::TilePosition) -> u32 {
     // Distinct non-zero code per target tile (zero means "not drilling").
     ((target.y.cast_unsigned() << 16) ^ (target.x.cast_unsigned() & 0xFFFF)).wrapping_add(1)
 }
@@ -173,9 +173,9 @@ impl NetSimulation for WorldState {
             "inputs target the next tick"
         );
         let current = self.simulation_tick();
-        let mut sim_inputs = drillgame_simulation::TickInputs::default();
+        let mut sim_inputs = fatherload_simulation::TickInputs::default();
         // Per player: the ids of the actions handed to the world, indexed by sequence.
-        let mut submitted: Vec<(drillgame_simulation::PlayerId, Vec<ActionId>)> = Vec::new();
+        let mut submitted: Vec<(fatherload_simulation::PlayerId, Vec<ActionId>)> = Vec::new();
         for player in Self::player_ids(self) {
             let Some(net_player) = from_sim_player(player) else {
                 continue;

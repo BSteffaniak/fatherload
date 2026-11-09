@@ -1,4 +1,4 @@
-//! `drillgame --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`: renders scripted game
+//! `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`: renders scripted game
 //! states to PNG files without user input, then exits.
 //!
 //! Each [`Scene`] builds a deterministic state through the same [`LocalGame`] the app runs (fixed
@@ -11,8 +11,8 @@
 
 use std::path::{Path, PathBuf};
 
-use drillgame_netcode::{LobbyEntry, PlayerId as NetPlayerId};
-use drillgame_simulation::{
+use fatherload_netcode::{LobbyEntry, PlayerId as NetPlayerId};
+use fatherload_simulation::{
     Discovery, PlayerId, SectionKey, SectionPayload, SimulationTick, WorldState,
     economy::SurfaceZone,
     poi::{FormationStyle, LoreId, PoiKnowledge, PoiTile, PoiVariant, VaultPuzzle},
@@ -148,7 +148,7 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
     let (mut raylib, thread) = raylib::init()
         .size(width, height)
         .highdpi()
-        .title("Drillgame scene capture")
+        .title("Fatherload scene capture")
         .build();
     raylib.set_exit_key(None);
     let scratch_save = options.dir.join(".scene-capture-save.json");
@@ -706,7 +706,7 @@ pub const SCENES: &[Scene] = &[
                 .into_iter()
                 .enumerate()
                 .map(
-                    |(index, name)| drillgame_quic_transport::lan::LanDiscoveredGame {
+                    |(index, name)| fatherload_quic_transport::lan::LanDiscoveredGame {
                         instance_name: name.to_owned(),
                         host_name: "host.local".to_owned(),
                         game_addr: format!("192.168.1.{}:47777", 20 + index)
@@ -1285,7 +1285,7 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             enter_interior(stage, SurfaceZone::Shop, Some(ModalScreen::Shop));
             stage.seat(0).selected_menu_item =
-                drillgame_simulation::economy::DRILL_MOUNT_OFFER_INDEX;
+                fatherload_simulation::economy::DRILL_MOUNT_OFFER_INDEX;
         },
     },
     Scene {
@@ -1294,7 +1294,7 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             enter_interior(stage, SurfaceZone::Shop, Some(ModalScreen::Shop));
             stage.seat(0).selected_menu_item =
-                drillgame_simulation::economy::UPGRADE_OFFER_COUNT - 1;
+                fatherload_simulation::economy::UPGRADE_OFFER_COUNT - 1;
         },
     },
     Scene {
@@ -1307,7 +1307,7 @@ pub const SCENES: &[Scene] = &[
             });
             stage.settle(20);
             let shell = stage.shell();
-            shell.pending_test_mode = Some(drillgame_simulation::TestModeState {
+            shell.pending_test_mode = Some(fatherload_simulation::TestModeState {
                 invulnerable: true,
                 infinite_fuel: false,
             });
@@ -1457,7 +1457,7 @@ pub const SCENES: &[Scene] = &[
                 let player = seats[0].player;
                 let settings = *world.world_settings();
                 let x = 120;
-                let floor = drillgame_simulation::worldgen::strata::bedrock_top_row(&settings, x)
+                let floor = fatherload_simulation::worldgen::strata::bedrock_top_row(&settings, x)
                     .unwrap_or_else(|| world.terrain().height());
                 let row = floor - 1;
                 sink_rig(world, player, x, row);
@@ -1480,7 +1480,7 @@ pub const SCENES: &[Scene] = &[
                 let player = seats[0].player;
                 let settings = *world.world_settings();
                 let x = 2;
-                let floor = drillgame_simulation::worldgen::strata::bedrock_top_row(&settings, x)
+                let floor = fatherload_simulation::worldgen::strata::bedrock_top_row(&settings, x)
                     .unwrap_or_else(|| world.terrain().height());
                 let row = floor - 1;
                 sink_rig(world, player, x, row);
@@ -2022,8 +2022,8 @@ pub const SCENES: &[Scene] = &[
                 let (lead, wing) = (seats[0].player, seats[1].player);
                 if let Some(rig) = world.player_mut(lead) {
                     rig.quests.completed.insert(QuestId(302));
-                    rig.quests.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
-                        &drillgame_simulation::worldgen::WorldSettings::default(),
+                    rig.quests.deepest_row = fatherload_simulation::worldgen::strata::scaled_row(
+                        &fatherload_simulation::worldgen::WorldSettings::default(),
                         45,
                     );
                 }
@@ -2200,7 +2200,7 @@ fn stage_poi_contacts(world: &mut WorldState, player: PlayerId) {
     }
 }
 
-fn load_cargo(rig: &mut drillgame_simulation::Player) {
+fn load_cargo(rig: &mut fatherload_simulation::Player) {
     for (mineral, count) in [
         (MineralKind::Copper, 6),
         (MineralKind::Iron, 4),
@@ -2222,8 +2222,8 @@ fn quest_history(world: &mut WorldState, player: PlayerId) {
         log.reputation.insert(QuestGiver::Kade, 13);
         log.reputation.insert(QuestGiver::Nix, 6);
         log.reputation.insert(QuestGiver::Pip, 6);
-        log.deepest_row = drillgame_simulation::worldgen::strata::scaled_row(
-            &drillgame_simulation::worldgen::WorldSettings::default(),
+        log.deepest_row = fatherload_simulation::worldgen::strata::scaled_row(
+            &fatherload_simulation::worldgen::WorldSettings::default(),
             34,
         );
         log.fragments.insert(BlueprintId::HaulerFrame, 1);
@@ -2234,7 +2234,7 @@ fn quest_history(world: &mut WorldState, player: PlayerId) {
 /// Has `player` take `quest` (crew mode when `crew`), standing at the giver's door for one tick
 /// and going back where it was.
 fn accept_quest_as(world: &mut WorldState, player: PlayerId, quest: QuestId, crew: bool) {
-    use drillgame_simulation::{
+    use fatherload_simulation::{
         InputSequence, PlayerCommand, PlayerTickInput, TickAction, TickInputs,
         quest::binding::giver_door, service::SessionServiceRequest,
     };
@@ -2317,7 +2317,7 @@ fn park_at(world: &mut WorldState, player: PlayerId, zone: SurfaceZone) {
 
 /// The row `offset` rows below the top of `band` in this world (negative: above it).
 const fn band_row(world: &WorldState, band: Band, offset: i32) -> i32 {
-    drillgame_simulation::worldgen::strata::band_layout_rows(world.world_settings(), band).0
+    fatherload_simulation::worldgen::strata::band_layout_rows(world.world_settings(), band).0
         + offset
 }
 
@@ -2441,7 +2441,7 @@ mod tests {
     #[test]
     fn every_scene_builds_headlessly() {
         let path = std::env::temp_dir().join(format!(
-            "drillgame-scene-capture-test-{}.json",
+            "fatherload-scene-capture-test-{}.json",
             std::process::id()
         ));
         for scene in SCENES {

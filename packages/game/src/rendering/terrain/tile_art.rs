@@ -17,7 +17,7 @@
     reason = "procedural art mixes small hashed integers and short coordinate names"
 )]
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     terrain::{DeepStratum, Terrain, TileKind, TilePosition},
     worldgen::{Band, HazardKind},
 };

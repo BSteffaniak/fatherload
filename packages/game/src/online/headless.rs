@@ -2,8 +2,8 @@
 //! built from exactly the pieces the app uses ([`HostNet`] + `HostSession`, [`OnlineClient`]).
 //!
 //! ```text
-//! drillgame --headless-host [addr] [--duration SECS] [--lan]
-//! drillgame --bot-client <addr> [--count N] [--duration SECS]
+//! fatherload --headless-host [addr] [--duration SECS] [--lan]
+//! fatherload --bot-client <addr> [--count N] [--duration SECS]
 //! ```
 //!
 //! Both print `key=value` stats lines periodically. The host prints `HOST_READY addr=<addr>`
@@ -16,11 +16,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use drillgame_netcode::{
+use fatherload_netcode::{
     ClientPhase, EndReason, HostConfig, HostSession, NetTuning, SessionParams,
 };
-use drillgame_quic_transport::JoinTarget;
-use drillgame_simulation::WorldState;
+use fatherload_quic_transport::JoinTarget;
+use fatherload_simulation::WorldState;
 
 use super::{
     DEFAULT_PORT,
@@ -129,7 +129,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<HeadlessMode>, String> {
 /// Command-line usage.
 #[must_use]
 pub fn usage() -> String {
-    "usage: drillgame [--headless-host [addr] [--lan] | --bot-client <addr> [--count N]] [--duration SECS]".to_owned()
+    "usage: fatherload [--headless-host [addr] [--lan] | --bot-client <addr> [--count N]] [--duration SECS]".to_owned()
 }
 
 fn parse_addr(value: &str) -> Result<SocketAddr, String> {

@@ -1,18 +1,18 @@
 //! The net bridge: maps netcode messages to `quic_transport` bytes and back (plan §9, §10).
 //!
 //! `quic_transport` moves opaque bytes on a reliable ordered control stream or as best-effort
-//! datagrams; `drillgame_netcode` produces and consumes typed [`ClientMessage`] /
+//! datagrams; `fatherload_netcode` produces and consumes typed [`ClientMessage`] /
 //! [`ServerMessage`] values. This module is the only place the two meet:
 //!
-//! - every message is encoded with the versioned postcard codec (`drillgame_netcode::protocol`);
+//! - every message is encoded with the versioned postcard codec (`fatherload_netcode::protocol`);
 //! - client `Inputs` travel as datagrams ([`Channel::Unreliable`]); everything else (hello,
 //!   ready, leave, keyframe requests, and every host message including frames) goes on the
 //!   reliable stream, as plan §9 prescribes until playtests show head-of-line stalls;
 //! - transport connection ids double as netcode client ids.
 
-use drillgame_netcode::{ClientId, ClientMessage, CodecError, ServerMessage, protocol};
-use drillgame_quic_transport::{Channel, ConnId, NetHandle, NetThreadStopped};
-use drillgame_simulation::WorldState;
+use fatherload_netcode::{ClientId, ClientMessage, CodecError, ServerMessage, protocol};
+use fatherload_quic_transport::{Channel, ConnId, NetHandle, NetThreadStopped};
+use fatherload_simulation::WorldState;
 
 /// Netcode client message over the real world.
 pub type WorldClientMessage = ClientMessage<WorldState>;
@@ -179,7 +179,7 @@ impl RateMeter {
 
 #[cfg(test)]
 mod tests {
-    use drillgame_netcode::{ActionId, PROTOCOL_VERSION, ReconnectToken, SessionEpoch};
+    use fatherload_netcode::{ActionId, PROTOCOL_VERSION, ReconnectToken, SessionEpoch};
 
     use super::*;
 
@@ -203,7 +203,7 @@ mod tests {
             Channel::Reliable
         );
         let ended = WorldServerMessage::SessionEnded {
-            reason: drillgame_netcode::EndReason::HostClosed,
+            reason: fatherload_netcode::EndReason::HostClosed,
         };
         assert_eq!(server_channel(&ended), Channel::Reliable);
     }

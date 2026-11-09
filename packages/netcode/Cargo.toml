@@ -1,11 +1,11 @@
 [package]
 authors.workspace    = true
 categories           = ["games", "network-programming"]
-description          = "Sans-IO multiplayer netcode for Drillgame: protocol, host/client sessions, prediction, interpolation and link simulation"
+description          = "Sans-IO multiplayer netcode for Fatherload: protocol, host/client sessions, prediction, interpolation and link simulation"
 edition.workspace    = true
 keywords             = ["game", "netcode", "multiplayer", "prediction"]
 license.workspace    = true
-name                 = "drillgame_netcode"
+name                 = "fatherload_netcode"
 readme               = "README.md"
 repository.workspace = true
 version.workspace    = true
@@ -18,6 +18,6 @@ fail-on-warnings = []
 harness = []
 
 [dependencies]
-drillgame_simulation = { workspace = true }
+fatherload_simulation = { workspace = true }
 postcard             = { workspace = true }
 serde                = { workspace = true }

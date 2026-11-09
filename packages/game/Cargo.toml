@@ -1,11 +1,11 @@
 [package]
 authors.workspace    = true
 categories           = ["games"]
-description          = "Desktop raylib frontend for Drillgame"
+description          = "Desktop raylib frontend for Fatherload"
 edition.workspace    = true
 keywords             = ["game", "mining", "raylib"]
 license.workspace    = true
-name                 = "drillgame_game"
+name                 = "fatherload_game"
 readme               = "README.md"
 repository.workspace = true
 version.workspace    = true
@@ -13,19 +13,19 @@ version.workspace    = true
 [features]
 default = []
 fail-on-warnings = [
-    "drillgame_netcode/fail-on-warnings",
-    "drillgame_quic_transport/fail-on-warnings",
-    "drillgame_simulation/fail-on-warnings",
+    "fatherload_netcode/fail-on-warnings",
+    "fatherload_quic_transport/fail-on-warnings",
+    "fatherload_simulation/fail-on-warnings",
 ]
 
 [[bin]]
-name = "drillgame"
+name = "fatherload"
 path = "src/main.rs"
 
 [dependencies]
-drillgame_netcode        = { workspace = true }
-drillgame_quic_transport = { workspace = true }
-drillgame_simulation     = { workspace = true }
+fatherload_netcode        = { workspace = true }
+fatherload_quic_transport = { workspace = true }
+fatherload_simulation     = { workspace = true }
 getrandom                = { workspace = true }
 raylib                   = { workspace = true }
 serde                    = { workspace = true }

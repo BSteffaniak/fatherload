@@ -5,7 +5,7 @@
 //! exercises exactly the production input path (including the host's building-zone validation of
 //! service actions).
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     ControlState, PlayerCommand, PlayerId, SessionServiceRequest, TILE_SIZE, WorldState,
     economy::SurfaceZone, surface::SURFACE_BUILDINGS,
 };
@@ -248,9 +248,9 @@ mod tests {
         let column = (bot.dig_site_x() / TILE_SIZE).floor() as i32;
         for y in 7..12 {
             let _ = world.terrain_mut().set_kind(
-                drillgame_simulation::terrain::TilePosition { x: column, y },
-                drillgame_simulation::terrain::TileKind::Ore(
-                    drillgame_simulation::terrain::MineralKind::Copper,
+                fatherload_simulation::terrain::TilePosition { x: column, y },
+                fatherload_simulation::terrain::TileKind::Ore(
+                    fatherload_simulation::terrain::MineralKind::Copper,
                 ),
             );
         }

@@ -7,13 +7,13 @@
 
 use std::{collections::BTreeMap, net::SocketAddr};
 
-use drillgame_netcode::{ClientId, HostSession};
-use drillgame_quic_transport::{
+use fatherload_netcode::{ClientId, HostSession};
+use fatherload_quic_transport::{
     Direction, DisconnectReason, HostConfig as TransportHostConfig, HostDescriptor, LinkStats,
     NetErrorKind, NetEvent, NetHandle,
     lan::{LanDescriptorServer, LanDiscoveryPublisher, LanGameAdvertisement, likely_lan_ip},
 };
-use drillgame_simulation::WorldState;
+use fatherload_simulation::WorldState;
 
 use super::{
     bridge::{self, RateMeter, WorldServerMessage},
@@ -260,7 +260,7 @@ impl Drop for HostNet {
             // transport's close timeout), and the descriptor server joins its thread, so neither
             // runs on the game thread.
             let spawned = std::thread::Builder::new()
-                .name("drillgame-net-stop".to_owned())
+                .name("fatherload-net-stop".to_owned())
                 .spawn(move || drop((lan, net)));
             if let Err(error) = spawned {
                 eprintln!("Could not stop the network thread in the background: {error}");

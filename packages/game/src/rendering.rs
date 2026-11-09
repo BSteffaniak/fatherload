@@ -12,7 +12,7 @@ use std::{cell::RefCell, collections::BTreeMap};
 
 use raylib::{ffi, prelude::*};
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     DiscoveredTiles,
     terrain::{Terrain, TilePosition},
 };

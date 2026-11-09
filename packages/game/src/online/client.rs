@@ -8,12 +8,12 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use drillgame_netcode::{
+use fatherload_netcode::{
     ClientConfig, ClientSession, ReconnectToken, SeatId,
     world::{ActionResolution, WorldEvent, to_sim_player},
 };
-use drillgame_quic_transport::{ConnId, JoinTarget, LinkStats, NetErrorKind, NetEvent, NetHandle};
-use drillgame_simulation::{
+use fatherload_quic_transport::{ConnId, JoinTarget, LinkStats, NetErrorKind, NetEvent, NetHandle};
+use fatherload_simulation::{
     ControlState, PlayerCommand, PlayerId, TILE_SIZE, WorldState,
     terrain::{Tile, TilePosition},
 };
@@ -346,7 +346,8 @@ impl OnlineClient {
     pub const fn finished(&self) -> bool {
         matches!(
             self.session.phase(),
-            drillgame_netcode::ClientPhase::Ended(_) | drillgame_netcode::ClientPhase::Rejected(_)
+            fatherload_netcode::ClientPhase::Ended(_)
+                | fatherload_netcode::ClientPhase::Rejected(_)
         ) || matches!(self.link, ClientLink::Closed(_))
     }
 
@@ -421,7 +422,7 @@ impl Drop for OnlineClient {
             // Shutting down flushes queued reliable messages (e.g. `Leave`) and waits for the
             // host, bounded by the close timeout: never on the game thread.
             let spawned = std::thread::Builder::new()
-                .name("drillgame-net-stop".to_owned())
+                .name("fatherload-net-stop".to_owned())
                 .spawn(move || drop(net));
             if let Err(error) = spawned {
                 eprintln!("Could not stop the network thread in the background: {error}");

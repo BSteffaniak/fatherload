@@ -6,7 +6,7 @@ use std::{fmt, str::FromStr, time::Duration};
 /// Environment variable read by [`LinkConditionerConfig::from_env`].
 ///
 /// Format: `latency=80,jitter=15,loss=2,dup=0[,seed=7]` (milliseconds and percentages).
-pub const NET_SIM_ENV_VAR: &str = "DRILLGAME_NET_SIM";
+pub const NET_SIM_ENV_VAR: &str = "FATHERLOAD_NET_SIM";
 
 /// Upper bound for any single conditioner delay; larger specs are rejected when parsed and
 /// clamped when sampled, so a typo cannot overflow timer arithmetic.
@@ -48,7 +48,7 @@ impl LinkConditionerConfig {
     ///
     /// Returns an error if the variable is set but malformed.
     pub fn from_env() -> Result<Option<Self>, ParseLinkConditionerError> {
-        match std::env::var(NET_SIM_ENV_VAR) {
+        match std::env::var(NET_SIM_ENV_VAR).or_else(|_| std::env::var("DRILLGAME_NET_SIM")) {
             Ok(value) if !value.trim().is_empty() => value.parse().map(Some),
             _ => Ok(None),
         }

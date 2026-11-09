@@ -1,4 +1,4 @@
-//! Tile art for point-of-interest fixtures (see `drillgame_simulation::poi`).
+//! Tile art for point-of-interest fixtures (see `fatherload_simulation::poi`).
 //!
 //! Built things read as built: vault walls are dressed blocks of dark alloy with brass inlay
 //! (the inlay glows in the stratum's accent colour), wreckage is dented, weathered teal-grey
@@ -8,7 +8,7 @@
 //! consoles, doors, seals, switches, relays, the vault cache, lockers) are 16x16 stamps from
 //! `sprites::poi` over one of those bases.
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     poi::{FormationStyle, PoiKind, PoiTile, PoiVariant},
     terrain::{DeepStratum, Terrain, TileKind, TilePosition},
     worldgen::Band,

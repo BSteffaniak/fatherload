@@ -2,7 +2,7 @@
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 #![allow(clippy::multiple_crate_versions)]
 
-//! Sans-IO multiplayer netcode for Drillgame.
+//! Sans-IO multiplayer netcode for Fatherload.
 //!
 //! This crate implements the server-authoritative replication model from
 //! `multiplayer-architecture-plan.md` (sections 5-8, 11.2, 15 and 16):
@@ -22,7 +22,7 @@
 //!
 //! The sessions are generic over the gameplay simulation through the
 //! [`NetSimulation`] trait. [`world`] implements it for the real
-//! `drillgame_simulation::WorldState`; [`toy`] is a tiny stand-in for unit
+//! `fatherload_simulation::WorldState`; [`toy`] is a tiny stand-in for unit
 //! tests.
 //!
 //! No sockets, threads, async runtimes or wall clock are used here: callers

@@ -1,7 +1,7 @@
 //! Quest UI: the quest desk tab at keepers' counters, the per-seat quest log, the tracked
 //! objective on the HUD, quest markers on the minimap and mine map, and the fanfare banner.
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     ActiveQuest, Player,
     quest::{
         BlueprintId, QuestDef, QuestGiver, QuestTier,
@@ -120,13 +120,13 @@ fn desk_about(row: &DeskRow, ui: &UiFrame<'_, '_>) -> String {
                     def.twists
                         .iter()
                         .copied()
-                        .map(drillgame_simulation::quest::Twist::describe)
+                        .map(fatherload_simulation::quest::Twist::describe)
                         .collect()
                 },
                 |posting| {
                     def.active_twists(posting.variant)
                         .into_iter()
-                        .map(drillgame_simulation::quest::Twist::describe)
+                        .map(fatherload_simulation::quest::Twist::describe)
                         .collect()
                 },
             )

@@ -1,7 +1,7 @@
 //! What the game asks to hear: [`SoundCue`]s placed at a source, the cue -> patch table, and the
 //! gameplay event -> cue table. Pure data, no device access.
 
-use drillgame_simulation::{GameplayEventKind, PlayerId, PoiKind};
+use fatherload_simulation::{GameplayEventKind, PlayerId, PoiKind};
 
 use super::patch::Patch;
 use crate::shell::SoundCue;
@@ -137,7 +137,7 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
 
 #[cfg(test)]
 mod tests {
-    use drillgame_simulation::{
+    use fatherload_simulation::{
         BlueprintId, PoiReward, QuestFailure, QuestId, worldgen::FeatureId,
     };
 

@@ -17,7 +17,7 @@ debug/
 *.sqlite
 *.sqlite3
 *.bak
-drillgame-save.json
+fatherload-save.json
 
 # agent/editor state
 .aider*

@@ -2,7 +2,7 @@ mod poi_map;
 
 use raylib::prelude::*;
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     DiscoveredTiles, Player,
     economy::{UpgradeKind, current_level},
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
@@ -57,7 +57,7 @@ pub(super) fn draw_heat_warning_for_view(
     view: &ViewSnapshot<'_>,
 ) {
     let tile = view.player.tile_position(TILE_SIZE);
-    let depth_heat = drillgame_simulation::protection::heat_excess(
+    let depth_heat = fatherload_simulation::protection::heat_excess(
         terrain.band_at(tile),
         view.player.radiator_level,
         view.player.hazard_gear.heat_shield,

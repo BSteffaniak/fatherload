@@ -17,7 +17,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     PlayerId, TILE_SIZE,
     terrain::{TileKind, TilePosition},
 };
@@ -747,7 +747,7 @@ fn spatial(x: f32, y: f32, listeners: &[Listener]) -> Option<(f32, f32, f32)> {
 }
 
 /// Distance in tiles from `(x, y)` to the nearest lava tile within three tiles.
-fn nearest_lava(terrain: &drillgame_simulation::terrain::Terrain, x: f32, y: f32) -> Option<f32> {
+fn nearest_lava(terrain: &fatherload_simulation::terrain::Terrain, x: f32, y: f32) -> Option<f32> {
     let centre_x = (x / TILE_SIZE).floor() as i32;
     let centre_y = (y / TILE_SIZE).floor() as i32;
     let mut nearest: Option<f32> = None;
@@ -768,8 +768,8 @@ fn nearest_lava(terrain: &drillgame_simulation::terrain::Terrain, x: f32, y: f32
 
 #[cfg(test)]
 mod tests {
-    use drillgame_netcode::SeatId;
-    use drillgame_simulation::WorldState;
+    use fatherload_netcode::SeatId;
+    use fatherload_simulation::WorldState;
 
     use super::*;
     use crate::runtime::LocalSeat;

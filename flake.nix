@@ -1,5 +1,5 @@
 {
-  description = "drillgame development environment";
+  description = "fatherload development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -104,7 +104,7 @@
               export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=$SDKROOT -isysroot $SDKROOT ''${BINDGEN_EXTRA_CLANG_ARGS:-}"
             fi
 
-            echo "drillgame development environment loaded"
+            echo "fatherload development environment loaded"
             echo "Available tools:"
             echo "  - cargo ($(cargo --version))"
             echo "  - rustc ($(rustc --version))"

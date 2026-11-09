@@ -6,7 +6,7 @@
 //! objectives offered while other rigs are playing gets two rows: take it as a crew quest, or
 //! take its solo variant; alone, only the solo variant is offered.
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     ActiveQuest, PlayerId, SessionServiceRequest, WorldState,
     economy::SurfaceZone,
     quest::{QuestGiver, QuestId},
@@ -161,7 +161,7 @@ pub fn crew_mode(world: &WorldState, quest: QuestId) -> bool {
     world.player_count() >= 2
         && quest
             .def()
-            .is_some_and(drillgame_simulation::QuestDef::is_coop)
+            .is_some_and(fatherload_simulation::QuestDef::is_coop)
 }
 
 impl SeatUi {

@@ -1,4 +1,4 @@
-//! Online play: the net bridge between `drillgame_netcode` sessions and `quic_transport`, the
+//! Online play: the net bridge between `fatherload_netcode` sessions and `quic_transport`, the
 //! host and client transport adapters, LAN discovery, scripted bots and the headless modes.
 //!
 //! The app uses exactly the same pieces as the headless binary modes and the in-process
@@ -15,18 +15,18 @@ pub mod lan;
 #[cfg(test)]
 mod tests;
 
-use drillgame_quic_transport::NetConfig;
+use fatherload_quic_transport::NetConfig;
 
 /// Default UDP port for hosting.
-pub const DEFAULT_PORT: u16 = drillgame_quic_transport::lan::DEFAULT_GAME_PORT;
+pub const DEFAULT_PORT: u16 = fatherload_quic_transport::lan::DEFAULT_GAME_PORT;
 
-/// Transport configuration: defaults plus the `DRILLGAME_NET_SIM` link conditioner when set.
+/// Transport configuration: defaults plus the `FATHERLOAD_NET_SIM` link conditioner when set.
 #[must_use]
 pub fn net_config() -> NetConfig {
     NetConfig::from_env().unwrap_or_else(|error| {
         eprintln!(
             "Ignoring {}: {error}",
-            drillgame_quic_transport::NET_SIM_ENV_VAR
+            fatherload_quic_transport::NET_SIM_ENV_VAR
         );
         NetConfig::default()
     })
@@ -53,8 +53,9 @@ pub fn random_token_seed() -> u64 {
 /// The display name used when hosting or joining.
 #[must_use]
 pub fn player_name() -> String {
-    std::env::var("DRILLGAME_PLAYER_NAME")
+    std::env::var("FATHERLOAD_PLAYER_NAME")
+        .or_else(|_| std::env::var("DRILLGAME_PLAYER_NAME"))
         .ok()
         .filter(|name| !name.trim().is_empty())
-        .unwrap_or_else(drillgame_quic_transport::lan::local_machine_name)
+        .unwrap_or_else(fatherload_quic_transport::lan::local_machine_name)
 }

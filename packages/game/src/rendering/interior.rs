@@ -29,7 +29,7 @@ use super::{
     prompts::{self, Hint, hint},
     ui_kit::{self, PanelStyle, TextStyle, UiCanvasScope},
 };
-use drillgame_simulation::{PlayerId, economy::SurfaceZone};
+use fatherload_simulation::{PlayerId, economy::SurfaceZone};
 
 mod props;
 

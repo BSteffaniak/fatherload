@@ -1,10 +1,10 @@
-# Drillgame Agent Guidelines
+# Fatherload Agent Guidelines
 
 Guidance for AI coding agents and contributors working in this repository.
 
 ## Product Direction
 
-Drillgame is a Rust-native 2D mining game mechanically inspired by classic drill/mining games such as Motherload, with original names, assets, story, and presentation.
+Fatherload is a Rust-native 2D mining game mechanically inspired by classic drill/mining games such as Motherload, with original names, assets, story, and presentation.
 
 The game should be desktop-first for now, while keeping gameplay state and rules separate from rendering/input enough to avoid locking out future mobile, web, or WASM ports.
 

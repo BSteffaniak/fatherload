@@ -21,7 +21,7 @@ use crate::protocol::{self, ClientMessage, ServerMessage};
 use crate::simulation::NetSimulation;
 use crate::toy::{ToyAction, ToyControls, ToyEvent, ToySim};
 use crate::world::{ActionResolution, WorldEvent};
-use drillgame_simulation::{
+use fatherload_simulation::{
     ControlState, GameplayEventKind, Player, PlayerCommand, SimulationParams, TILE_SIZE,
     WorldImport, WorldState,
     economy::SurfaceZone,
@@ -213,7 +213,7 @@ const WORLD_BOT_CYCLE_FRAMES: u64 = 900;
 
 impl HarnessSim for WorldState {
     fn harness_world(config: &HarnessConfig) -> Self {
-        let first = drillgame_simulation::PlayerId::new(1);
+        let first = fatherload_simulation::PlayerId::new(1);
         let mut import = WorldImport::new_game(first);
         import.terrain = Terrain::new_seeded(
             WORLD_HARNESS_WIDTH_TILES,

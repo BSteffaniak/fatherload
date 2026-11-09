@@ -8,12 +8,12 @@
 
 use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 
-use drillgame_netcode::{
+use fatherload_netcode::{
     ClientPhase, EndReason, HostConfig, HostPhase, HostSession, InterpDelay, LobbyEntry, NetEvent,
     NetTuning, SeatId, SessionParams,
     world::{ActionResolution, WorldEvent, WorldOp, from_sim_player, to_sim_player},
 };
-use drillgame_simulation::{
+use fatherload_simulation::{
     ControlState, GameplayEvent, PlayerCommand, PlayerId, WorldState, terrain::TilePosition,
 };
 
@@ -147,7 +147,7 @@ pub struct LobbyInfo {
     /// One-line transport status.
     pub status: String,
     /// The roster entry that is this app's (first) player.
-    pub local_player: Option<drillgame_netcode::PlayerId>,
+    pub local_player: Option<fatherload_netcode::PlayerId>,
 }
 
 /// The gameplay authority the app runs on.
@@ -757,11 +757,11 @@ fn client_state(client: &OnlineClient) -> ClientState {
     }
 }
 
-const fn reject_text(reason: drillgame_netcode::RejectReason) -> &'static str {
+const fn reject_text(reason: fatherload_netcode::RejectReason) -> &'static str {
     match reason {
-        drillgame_netcode::RejectReason::VersionMismatch { .. } => "game version mismatch",
-        drillgame_netcode::RejectReason::TokenInUse => "that player is already connected",
-        drillgame_netcode::RejectReason::NotAccepting => "the session is not accepting players",
+        fatherload_netcode::RejectReason::VersionMismatch { .. } => "game version mismatch",
+        fatherload_netcode::RejectReason::TokenInUse => "that player is already connected",
+        fatherload_netcode::RejectReason::NotAccepting => "the session is not accepting players",
     }
 }
 
@@ -854,7 +854,7 @@ fn seat_id(index: usize) -> SeatId {
     SeatId(u32::try_from(index).unwrap_or(u32::MAX))
 }
 
-fn to_sim_player_id(player: drillgame_netcode::PlayerId) -> PlayerId {
+fn to_sim_player_id(player: fatherload_netcode::PlayerId) -> PlayerId {
     to_sim_player(player)
 }
 
@@ -881,7 +881,7 @@ fn runtime_event(epoch: u64, event: NetEvent<WorldEvent>) -> RuntimeEvent {
 
 #[cfg(test)]
 mod tests {
-    use drillgame_simulation::SimulationParams;
+    use fatherload_simulation::SimulationParams;
 
     use super::*;
 
@@ -938,12 +938,12 @@ mod tests {
     fn service_actions_away_from_a_building_resolve_as_refused() {
         let mut world = WorldState::new_game(RIG);
         // Well below the surface: no building door here.
-        world.player_mut(RIG).expect("rig").y = 30.0 * drillgame_simulation::TILE_SIZE;
+        world.player_mut(RIG).expect("rig").y = 30.0 * fatherload_simulation::TILE_SIZE;
         world
             .player_mut(RIG)
             .expect("rig")
             .cargo
-            .insert(drillgame_simulation::terrain::MineralKind::Gold, 1);
+            .insert(fatherload_simulation::terrain::MineralKind::Gold, 1);
         let mut runtime = Runtime::local(world, 1);
         let seat = runtime.local_seats()[0].seat;
         runtime.submit(
@@ -951,7 +951,7 @@ mod tests {
             SeatInput {
                 controls: ControlState::default(),
                 actions: vec![PlayerCommand::Service(
-                    drillgame_simulation::SessionServiceRequest::SellCargo,
+                    fatherload_simulation::SessionServiceRequest::SellCargo,
                 )],
             },
         );

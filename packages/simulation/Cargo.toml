@@ -1,11 +1,11 @@
 [package]
 authors.workspace    = true
 categories           = ["games", "simulation"]
-description          = "Deterministic canonical gameplay simulation for Drillgame"
+description          = "Deterministic canonical gameplay simulation for Fatherload"
 edition.workspace    = true
 keywords             = ["game", "mining", "simulation", "deterministic"]
 license.workspace    = true
-name                 = "drillgame_simulation"
+name                 = "fatherload_simulation"
 readme               = "README.md"
 repository.workspace = true
 version.workspace    = true

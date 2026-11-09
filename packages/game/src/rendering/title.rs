@@ -327,7 +327,7 @@ fn draw_rig(
 
 /// The outlined, two-tone logo centred at the top; returns its bottom edge.
 fn draw_logo(draw: &mut impl RaylibDraw, width: i32, top: i32) -> i32 {
-    const TITLE: &str = "DRILLGAME";
+    const TITLE: &str = "FATHERLOAD";
     let canvas = ui_kit::canvas();
     let scale = if canvas.height >= 340 { 4 } else { 3 };
     let text_width = ui_kit::display_text_width(TITLE, scale);

@@ -2,7 +2,7 @@
 //! "Warp to Layer" band list. Each submits a `PlayerCommand::TestMode` action for the seat
 //! driving the menu, so it works the same in split-screen and online.
 
-use drillgame_simulation::{PlayerCommand, TestModeAction, TestModeState, worldgen::Band};
+use fatherload_simulation::{PlayerCommand, TestModeAction, TestModeState, worldgen::Band};
 
 use crate::runtime::OnlineRole;
 

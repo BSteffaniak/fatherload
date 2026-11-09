@@ -8,13 +8,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use drillgame_netcode::{
+use fatherload_netcode::{
     ActionId, ClientPhase, EndReason, HostConfig, HostSession, NetSimulation, NetTuning, PlayerId,
     SessionParams, Tick,
     world::{WorldEvent, to_sim_player},
 };
-use drillgame_quic_transport::JoinTarget;
-use drillgame_simulation::{ControlState, PlayerCommand, WorldState};
+use fatherload_quic_transport::JoinTarget;
+use fatherload_simulation::{ControlState, PlayerCommand, WorldState};
 
 use super::{
     client::{ClientLink, OnlineClient},
@@ -103,7 +103,7 @@ impl Peer {
     fn join(
         addr: SocketAddr,
         name: &str,
-        token: Option<drillgame_netcode::ReconnectToken>,
+        token: Option<fatherload_netcode::ReconnectToken>,
     ) -> Self {
         Self {
             client: OnlineClient::join(JoinTarget::Addr(addr), name, token, headless_world())
@@ -153,7 +153,7 @@ impl Peer {
             && let Some(expected) = host.hashes.get(&(authority.tick(), player))
         {
             assert_eq!(
-                drillgame_netcode::NetSimulation::visible_state_hash(authority, Some(player)),
+                fatherload_netcode::NetSimulation::visible_state_hash(authority, Some(player)),
                 *expected,
                 "client authority diverged from the host at tick {}",
                 authority.tick().0
@@ -301,7 +301,7 @@ fn host_and_two_clients_play_over_real_quic_rejoin_and_end_cleanly() {
 /// Blasts craters and cuts tunnels across the whole terrain (thousands of tiles that differ
 /// from generation, which the welcome keyframe must carry).
 fn excavate(world: &mut WorldState) {
-    use drillgame_simulation::terrain::TilePosition;
+    use fatherload_simulation::terrain::TilePosition;
     let terrain = world.terrain_mut();
     let (width, height) = (terrain.width(), terrain.height());
     for step in 0..(width * height / 60) {

@@ -8,9 +8,9 @@
 //! starts a new session epoch.
 
 mod legacy;
+mod state_directory;
 
 use std::{
-    env,
     error::Error,
     fmt, fs, io,
     path::{Path, PathBuf},
@@ -19,7 +19,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     WorldState, economy::DeepClaimStatus, terrain::TILE_SIZE, worldgen::GeneratorVersion,
 };
 
@@ -186,7 +186,7 @@ impl SaveSlotMetadata {
         Self {
             depth,
             credits: player.map_or(0, |player| player.credits),
-            cargo_used: player.map_or(0, drillgame_simulation::Player::cargo_used),
+            cargo_used: player.map_or(0, fatherload_simulation::Player::cargo_used),
             cargo_capacity: player.map_or(0, |player| player.cargo_capacity),
             contracts_completed: world.progression().contracts.completed,
             play_seconds: save.play_seconds,
@@ -391,25 +391,7 @@ fn latest_save_path() -> Option<PathBuf> {
 }
 
 fn default_state_dir() -> PathBuf {
-    if let Ok(path) = env::var("DRILLGAME_STATE_DIR") {
-        return PathBuf::from(path);
-    }
-    if let Ok(state_home) = env::var("XDG_STATE_HOME") {
-        return PathBuf::from(state_home).join("drillgame");
-    }
-    // Windows: %LOCALAPPDATA%\drillgame (HOME is usually unset, and temp gets cleaned).
-    if cfg!(windows)
-        && let Ok(local_app_data) = env::var("LOCALAPPDATA")
-    {
-        return PathBuf::from(local_app_data).join("drillgame");
-    }
-    if let Ok(home) = env::var("HOME") {
-        return PathBuf::from(home)
-            .join(".local")
-            .join("state")
-            .join("drillgame");
-    }
-    env::temp_dir().join("drillgame")
+    state_directory::default_dir()
 }
 
 /// Save/load failures.
@@ -447,7 +429,7 @@ impl Error for SaveError {}
 
 #[cfg(test)]
 mod tests {
-    use drillgame_simulation::{
+    use fatherload_simulation::{
         PlayerId, SimulationTick,
         terrain::{FullTerrain, MineralKind},
     };
@@ -458,7 +440,7 @@ mod tests {
     const V2: &str = include_str!("fixtures/v2.json");
     const V3: &str = include_str!("fixtures/v3.json");
 
-    fn player(save: &WorldSave) -> &drillgame_simulation::Player {
+    fn player(save: &WorldSave) -> &fatherload_simulation::Player {
         save.world.player(LEGACY_PLAYER_ID).expect("legacy rig")
     }
 
@@ -544,7 +526,7 @@ mod tests {
             play_seconds: 12.5,
         };
         let path = std::env::temp_dir().join(format!(
-            "drillgame-save-roundtrip-{}.json",
+            "fatherload-save-roundtrip-{}.json",
             std::process::id()
         ));
         save_world_to_path(&save, &path).expect("write");
@@ -561,7 +543,7 @@ mod tests {
 
     #[test]
     fn world_settings_survive_a_save_and_older_v5_saves_load_as_legacy_worlds() {
-        use drillgame_simulation::{
+        use fatherload_simulation::{
             SimulationParams,
             worldgen::{GeneratorVersion, HazardIntensity, ResourceRichness, WorldSettings},
         };
@@ -636,7 +618,7 @@ mod tests {
     /// A world after a long scripted dig (drilling, bombs, infrastructure, scanning) plus
     /// hundreds of blast craters and tunnels across the whole map.
     fn heavily_dug_world() -> WorldState {
-        use drillgame_simulation::{
+        use fatherload_simulation::{
             ControlState, PlayerCommand, PlayerTickInput, TickAction, TickInputs,
             terrain::TilePosition,
         };
@@ -671,7 +653,7 @@ mod tests {
             let actions = (0_u32..)
                 .zip(commands)
                 .map(|(sequence, command)| TickAction {
-                    sequence: drillgame_simulation::InputSequence::new(sequence),
+                    sequence: fatherload_simulation::InputSequence::new(sequence),
                     command,
                 })
                 .collect();
@@ -729,7 +711,7 @@ mod tests {
             save.world.simulation_state_hash()
         );
         let path = std::env::temp_dir().join(format!(
-            "drillgame-save-v5-migration-{}.json",
+            "fatherload-save-v5-migration-{}.json",
             std::process::id()
         ));
         save_world_to_path(&migrated, &path).expect("write");

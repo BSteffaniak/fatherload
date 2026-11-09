@@ -6,7 +6,7 @@
 //! shows through. Like the ore stamps they are packed into the atlas for the gallery and tests,
 //! but the terrain reads them CPU-side via [`SpriteDef::color_of`].
 
-use drillgame_simulation::poi::{PoiKind, PoiKnowledge};
+use fatherload_simulation::poi::{PoiKind, PoiKnowledge};
 
 #[allow(
     clippy::wildcard_imports,

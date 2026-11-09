@@ -5,7 +5,7 @@
 //! Every row list mirrors, index for index, the request the shell submits for that menu item
 //! (see `ShellState::handle_modal`), so the labels always describe what Enter actually does.
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     RecipeKind,
     economy::{
         DeepClaimStatus, REFUEL_UNIT_COST, REPAIR_UNIT_COST, TownBuilding, UpgradeKind,
@@ -779,7 +779,7 @@ pub(super) fn draw_headquarters(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
 }
 
 /// Short material names for recipe costs.
-fn material_list(cost: &[(drillgame_simulation::terrain::StrategicResourceKind, u32)]) -> String {
+fn material_list(cost: &[(fatherload_simulation::terrain::StrategicResourceKind, u32)]) -> String {
     cost.iter()
         .map(|(material, count)| format!("{count} {}", material.name()))
         .collect::<Vec<_>>()
@@ -834,7 +834,7 @@ pub(super) fn draw_town_development(draw: &mut RaylibDrawHandle<'_>, ui: &UiFram
     let alloy = ui
         .player
         .materials
-        .get(&drillgame_simulation::terrain::StrategicResourceKind::AncientAlloy)
+        .get(&fatherload_simulation::terrain::StrategicResourceKind::AncientAlloy)
         .copied()
         .unwrap_or(0);
     let offers = TownBuilding::ALL
@@ -1120,7 +1120,7 @@ pub(super) fn draw_receipts(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_
 
 #[cfg(test)]
 mod tests {
-    use drillgame_simulation::{
+    use fatherload_simulation::{
         economy::{REFUEL_UNIT_COST, REPAIR_UNIT_COST, refuel_amount, repair_amount},
         player::Player,
     };

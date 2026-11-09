@@ -7,9 +7,9 @@
 
 use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 
-use drillgame_netcode::ReconnectToken;
-use drillgame_quic_transport::{HostDescriptor, JoinTarget, lan::LanDiscoveredGame};
-use drillgame_simulation::{
+use fatherload_netcode::ReconnectToken;
+use fatherload_quic_transport::{HostDescriptor, JoinTarget, lan::LanDiscoveredGame};
+use fatherload_simulation::{
     GameplayEventKind, PlayerCommand, PlayerId, WorldState, worldgen::WorldSettings,
 };
 
@@ -121,7 +121,7 @@ pub struct FrameReport {
     /// The world was replaced (new game / load): redraw all terrain.
     pub world_replaced: bool,
     /// Terrain tiles changed this frame.
-    pub changed_tiles: Vec<drillgame_simulation::terrain::TilePosition>,
+    pub changed_tiles: Vec<fatherload_simulation::terrain::TilePosition>,
     /// Sounds to play, with where they come from.
     pub sound_cues: Vec<PlacedCue>,
     /// Settings changed and should be persisted.
@@ -377,7 +377,7 @@ impl LocalGame {
     fn announce_quests(&mut self, players: &[PlayerId]) {
         use crate::shell::FanfareKind;
         type Banner = Option<(FanfareKind, String, String)>;
-        use drillgame_simulation::quest::describe::current_lines;
+        use fatherload_simulation::quest::describe::current_lines;
         let world = self.runtime.world();
         let rate = world.timing().rate;
         let mut news: Vec<(usize, Banner, Option<String>)> = Vec::new();
@@ -465,10 +465,10 @@ impl LocalGame {
                 } => {
                     if let Some(seat) = seat_of(player_id) {
                         let unlocks = match blueprint.unlock() {
-                            drillgame_simulation::quest::BlueprintUnlock::Part(part) => {
+                            fatherload_simulation::quest::BlueprintUnlock::Part(part) => {
                                 format!("Unlocked the {} rig part.", part.title())
                             }
-                            drillgame_simulation::quest::BlueprintUnlock::Recipe(recipe) => {
+                            fatherload_simulation::quest::BlueprintUnlock::Recipe(recipe) => {
                                 format!("Recipe filed: {recipe}.")
                             }
                         };
@@ -521,12 +521,12 @@ impl LocalGame {
                     let Some(variant) = world
                         .world_features()
                         .get(feature)
-                        .and_then(drillgame_simulation::worldgen::WorldFeature::poi)
+                        .and_then(fatherload_simulation::worldgen::WorldFeature::poi)
                     else {
                         continue;
                     };
                     let text = match variant {
-                        drillgame_simulation::PoiVariant::Vault(puzzle) => {
+                        fatherload_simulation::PoiVariant::Vault(puzzle) => {
                             format!("Found a sealed vault. {}", puzzle.hint())
                         }
                         other => format!("Found: {}.", other.title()),
@@ -544,7 +544,7 @@ impl LocalGame {
                             vault
                                 .bounds
                                 .expanded(12)
-                                .contains(rig.tile_position(drillgame_simulation::TILE_SIZE))
+                                .contains(rig.tile_position(fatherload_simulation::TILE_SIZE))
                         });
                         if near {
                             messages.push((
@@ -991,7 +991,7 @@ pub fn world_from_settings(settings: &WorldSettings) -> WorldState {
     WorldState::new_game_with_settings(
         save::LEGACY_PLAYER_ID,
         settings,
-        drillgame_simulation::SimulationParams::default(),
+        fatherload_simulation::SimulationParams::default(),
     )
 }
 
@@ -1011,7 +1011,7 @@ mod tests {
     //! Headless app-level tests: scripted input through `LocalGame::frame`, exactly the path the
     //! window drives, with the runtime's `HostSession` as the only gameplay authority.
 
-    use drillgame_simulation::{
+    use fatherload_simulation::{
         economy::SurfaceZone,
         surface::SURFACE_BUILDINGS,
         terrain::{MineralKind, TILE_SIZE},
@@ -1033,7 +1033,7 @@ mod tests {
 
     fn temp_save(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!(
-            "drillgame-local-game-{name}-{}-{}.json",
+            "fatherload-local-game-{name}-{}-{}.json",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1186,13 +1186,13 @@ mod tests {
         assert_eq!(split.add_seat_for_controller(), None, "not from the title");
     }
 
-    fn player(game: &LocalGame, id: PlayerId) -> drillgame_simulation::Player {
+    fn player(game: &LocalGame, id: PlayerId) -> fatherload_simulation::Player {
         game.world().player(id).expect("player exists").clone()
     }
 
     fn rig_at_building(
         zone: SurfaceZone,
-        configure: impl FnOnce(&mut drillgame_simulation::Player),
+        configure: impl FnOnce(&mut fatherload_simulation::Player),
     ) -> WorldState {
         let building = SURFACE_BUILDINGS
             .iter()

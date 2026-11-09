@@ -1,4 +1,4 @@
-//! World statistics for tuning and fairness checks (`drillgame --worldgen-report`).
+//! World statistics for tuning and fairness checks (`fatherload --worldgen-report`).
 
 use std::{collections::BTreeMap, fmt::Write as _};
 

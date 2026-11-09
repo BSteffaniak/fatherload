@@ -47,13 +47,13 @@ impl NetHandle {
     pub fn start(config: NetConfig) -> io::Result<Self> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(config.worker_threads.max(1))
-            .thread_name("drillgame-net-worker")
+            .thread_name("fatherload-net-worker")
             .enable_all()
             .build()?;
         let (command_tx, command_rx) = unbounded_channel();
         let (event_tx, event_rx) = mpsc::channel();
         let thread = thread::Builder::new()
-            .name("drillgame-net".to_owned())
+            .name("fatherload-net".to_owned())
             .spawn(move || {
                 runtime.block_on(Network::new(config, event_tx).run(command_rx));
                 runtime.shutdown_timeout(Duration::from_secs(1));

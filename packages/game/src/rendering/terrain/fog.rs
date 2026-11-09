@@ -14,7 +14,7 @@
     reason = "procedural art mixes small hashed integers and short coordinate names"
 )]
 
-use drillgame_simulation::{DiscoveredTiles, terrain::TilePosition};
+use fatherload_simulation::{DiscoveredTiles, terrain::TilePosition};
 
 use crate::rendering::pixel_art::palette::INK;
 use crate::rendering::pixel_art::shade::{

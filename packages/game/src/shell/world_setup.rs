@@ -2,7 +2,7 @@
 //! Split-Screen" and "Host Online Game"): seed (random by default, re-roll, type or paste),
 //! world size, resource richness, hazard intensity and test mode.
 
-use drillgame_simulation::worldgen::{
+use fatherload_simulation::worldgen::{
     HazardIntensity, ResourceRichness, WorldSettings, WorldSize, format_seed, parse_seed,
 };
 
@@ -63,7 +63,7 @@ pub enum SetupOutcome {
 pub struct WorldSetup {
     pub purpose: SetupPurpose,
     pub settings: WorldSettings,
-    /// Start the world in test mode (see `drillgame_simulation::test_mode`).
+    /// Start the world in test mode (see `fatherload_simulation::test_mode`).
     pub test_mode: bool,
     pub selected: usize,
     /// The seed text being typed, while the seed field is focused.

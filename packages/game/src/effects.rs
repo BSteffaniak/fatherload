@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use drillgame_simulation::{GameplayEventKind, PlayerId, WorldState};
+use fatherload_simulation::{GameplayEventKind, PlayerId, WorldState};
 
 use crate::{
     audio::cues::{PlacedCue, event_cue},
@@ -284,7 +284,7 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
 }
 
 /// Everything in a rig's bay: ore, artifacts and materials.
-fn cargo_total(player: &drillgame_simulation::Player) -> u32 {
+fn cargo_total(player: &fatherload_simulation::Player) -> u32 {
     player
         .cargo
         .values()
@@ -295,7 +295,7 @@ fn cargo_total(player: &drillgame_simulation::Player) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use drillgame_simulation::{GameplayEvent, GameplayEventId, SimulationTick};
+    use fatherload_simulation::{GameplayEvent, GameplayEventId, SimulationTick};
 
     use super::*;
 
@@ -385,7 +385,7 @@ mod tests {
         if let Some(player) = world.player_mut(local) {
             *player
                 .cargo
-                .entry(drillgame_simulation::terrain::MineralKind::Copper)
+                .entry(fatherload_simulation::terrain::MineralKind::Copper)
                 .or_default() += 1;
         }
         assert_eq!(

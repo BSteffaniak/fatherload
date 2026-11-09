@@ -4,13 +4,13 @@
 //! decide what a menu shows or allows, and turns menu choices into [`ShellRequest`]s that the app
 //! carries out through the runtime (service actions, rescue) or the save module.
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     PlayerCommand, PlayerId, RecipeKind, SessionServiceRequest, TestModeState, WorldState,
     economy::{DeepClaimStatus, SurfaceZone, TownBuilding, upgrade_offers, upgrade_tier_name},
     worldgen::WorldSettings,
 };
 
-use drillgame_quic_transport::lan::LanDiscoveredGame;
+use fatherload_quic_transport::lan::LanDiscoveredGame;
 
 use std::collections::BTreeMap;
 
@@ -545,7 +545,7 @@ struct SeatContext<'w> {
 }
 
 impl SeatContext<'_> {
-    fn player(&self) -> Option<&drillgame_simulation::Player> {
+    fn player(&self) -> Option<&fatherload_simulation::Player> {
         self.player.and_then(|player| self.world.player(player))
     }
 
@@ -610,9 +610,9 @@ pub struct SeatUi {
     message_seen: String,
     pending_services: Vec<PendingService>,
     /// The quest the seat tracks on its HUD (`None`: the first active one).
-    pub tracked_quest: Option<drillgame_simulation::quest::QuestId>,
+    pub tracked_quest: Option<fatherload_simulation::quest::QuestId>,
     /// A desk row confirmed once: a second confirm drops that quest.
-    quest_abandon_armed: Option<drillgame_simulation::quest::QuestId>,
+    quest_abandon_armed: Option<fatherload_simulation::quest::QuestId>,
     /// The latest quest banner (completion fanfare, ready, failed, blueprint).
     pub fanfare: Option<Fanfare>,
 }

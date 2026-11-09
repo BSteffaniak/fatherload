@@ -1,17 +1,17 @@
 //! World generation tools:
 //!
-//! - `drillgame --worldgen-report [--seeds N] [--first-seed S] [--size standard|large]
+//! - `fatherload --worldgen-report [--seeds N] [--first-seed S] [--size standard|large]
 //!   [--richness lean|standard|rich] [--hazards calm|standard|brutal] [--legacy]
 //!   [--generator v1|v2|v3|v4]` prints band depths, ore, cave, hazard, artifact and feature
 //!   distributions over many seeds.
-//! - `drillgame --worldgen-preview <seed> <out.png> [--size standard|large] [--richness X]
+//! - `fatherload --worldgen-preview <seed> <out.png> [--size standard|large] [--richness X]
 //!   [--hazards Y] [--generator G] [--scale N] [--columns N] [--no-features]` writes a
 //!   whole-world map PNG (no window opens), with motherlodes, artifact beds, chambers and points
 //!   of interest outlined (POIs also get their map icon). Deep worlds are cut into side-by-side
 //!   columns (top to bottom, left to right) so the image stays viewable; `--columns` overrides
 //!   the count.
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     terrain::{MineralKind, TileKind},
     worldgen::{
         self, Band, FeatureKind, GeneratorVersion, HazardIntensity, HazardKind, ResourceRichness,

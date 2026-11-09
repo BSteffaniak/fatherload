@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const BIN: &str = env!("CARGO_BIN_EXE_drillgame");
+const BIN: &str = env!("CARGO_BIN_EXE_fatherload");
 const DEADLINE: Duration = Duration::from_secs(30);
 
 /// Kills the child if the test panics before it exits.

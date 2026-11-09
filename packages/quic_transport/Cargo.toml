@@ -1,11 +1,11 @@
 [package]
 authors.workspace    = true
 categories           = ["network-programming", "games"]
-description          = "QUIC byte transport (network thread, framing, datagrams, LAN discovery) for Drillgame"
+description          = "QUIC byte transport (network thread, framing, datagrams, LAN discovery) for Fatherload"
 edition.workspace    = true
 keywords             = ["game", "quic", "networking", "transport"]
 license.workspace    = true
-name                 = "drillgame_quic_transport"
+name                 = "fatherload_quic_transport"
 readme               = "README.md"
 repository.workspace = true
 version.workspace    = true

@@ -21,7 +21,7 @@ use crate::rendering::{
     },
     ui_kit::{self, TextStyle},
 };
-use drillgame_simulation::{economy::SurfaceZone, terrain::MineralKind};
+use fatherload_simulation::{economy::SurfaceZone, terrain::MineralKind};
 
 /// What a room's dressing may react to (live prices on the depot board, the clock).
 pub(super) struct RoomContext<'a> {

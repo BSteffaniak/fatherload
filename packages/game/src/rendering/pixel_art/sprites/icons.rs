@@ -1,6 +1,6 @@
 //! 9x9 icons that sit on a text line: rig stats, currency, warnings and every mineral.
 
-use drillgame_simulation::terrain::MineralKind;
+use fatherload_simulation::terrain::MineralKind;
 
 #[allow(
     clippy::wildcard_imports,

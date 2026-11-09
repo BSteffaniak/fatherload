@@ -9,7 +9,7 @@
 //! - [`cues`] — cue -> patch and gameplay event -> cue tables, cue sources.
 //! - [`director`] — continuous sounds, spatialization and alarm logic.
 //! - [`analysis`] — level/spectrum/click measurements used by the tests and the render tool.
-//! - [`render_tool`] — `drillgame --render-audio <dir>`.
+//! - [`render_tool`] — `fatherload --render-audio <dir>`.
 
 pub mod analysis;
 pub mod bank;
@@ -74,7 +74,7 @@ impl AudioBus {
         stream.play();
         let loader = Arc::clone(&mixer);
         std::thread::Builder::new()
-            .name("drillgame-sound-bank".into())
+            .name("fatherload-sound-bank".into())
             .spawn(move || {
                 let bank = Arc::new(SoundBank::render(DEFAULT_BANK_SEED));
                 if let Ok(mut mixer) = loader.lock() {

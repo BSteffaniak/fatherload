@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     PlayerId as SimPlayerId, WorldState,
     terrain::{ChunkPosition, FullTerrain, Terrain, TilePosition},
     worldgen::{WorldSettings, WorldSize},
@@ -85,7 +85,7 @@ fn heavily_dug_world_converges_on_epoch_change_join_and_reconnect() {
 
 #[test]
 fn test_mode_world_converges_with_toggles_warps_and_late_joiners() {
-    use drillgame_simulation::{
+    use fatherload_simulation::{
         InputSequence, PlayerCommand, PlayerTickInput, TestModeAction, TickAction, TickInputs,
         terrain::TILE_SIZE, worldgen::Band,
     };
@@ -167,7 +167,7 @@ fn keyframes_carry_only_tiles_that_differ_from_generation() {
         let fresh = WorldState::new_game_with_settings(
             SimPlayerId::new(1),
             &settings,
-            drillgame_simulation::SimulationParams::default(),
+            fatherload_simulation::SimulationParams::default(),
         );
         let mut dug = fresh.clone();
         excavate(dug.terrain_mut());

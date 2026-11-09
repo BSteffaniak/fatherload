@@ -1,5 +1,5 @@
 //! Raylib/GLFW glue for controllers: samples every connected pad into a [`PadSample`] and
-//! implements `drillgame --list-gamepads`.
+//! implements `fatherload --list-gamepads`.
 
 use std::{
     collections::BTreeMap,
@@ -219,13 +219,13 @@ pub fn wants_list(args: &[String]) -> bool {
     args.iter().any(|arg| arg == "--list-gamepads")
 }
 
-/// `drillgame --list-gamepads`: opens a tiny window for about a second (GLFW only enumerates
+/// `fatherload --list-gamepads`: opens a tiny window for about a second (GLFW only enumerates
 /// joysticks with a window and an event loop, and Bluetooth pads can take a moment), prints
 /// every detected controller and exits.
 pub fn list_gamepads() {
     let (mut raylib, thread) = raylib::init()
         .size(320, 120)
-        .title("Drillgame gamepad check")
+        .title("Fatherload gamepad check")
         .build();
     raylib.set_target_fps(30);
     let start = Instant::now();

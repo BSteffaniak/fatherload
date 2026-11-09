@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Deserializer, de::Error as _};
 use serde_json::Value;
 
-use drillgame_simulation::{
+use fatherload_simulation::{
     ActiveWorldEvent, DrillState, Expedition, FallingBoulder, HazardCloud, PlacedBomb,
     PlacedInfrastructure, Player, PlayerId, RigPartKind, RigSlot, ScanMarker, SideContract,
     SideContractKind, SimulationTick, WorldImport, WorldState,
@@ -133,7 +133,7 @@ pub struct LegacyGame {
     #[serde(default)]
     scan_markers: Vec<ScanMarker>,
     #[serde(default)]
-    collapse_warnings: Vec<drillgame_simulation::terrain::TilePosition>,
+    collapse_warnings: Vec<fatherload_simulation::terrain::TilePosition>,
     #[serde(default)]
     side_contract_active: bool,
     #[serde(default)]
