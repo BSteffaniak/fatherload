@@ -616,6 +616,7 @@ pub(super) fn draw_depth_ruler_for_view(
         Rectangle::new(x as f32, top as f32, 6.0, height as f32),
     );
     let max_depth = terrain.height().max(80);
+    draw_ruler_strata(draw, terrain, view, (x, top, height), max_depth);
     let step = if max_depth > 180 { 50 } else { 20 };
     for marker in (0..=max_depth).step_by(usize::try_from(step).unwrap_or(20)) {
         let y = top + marker * (height - 1) / max_depth;
@@ -627,6 +628,41 @@ pub(super) fn draw_depth_ruler_for_view(
     draw.draw_rectangle(x - 4, marker_y - 3, 11, 7, INK);
     draw.draw_rectangle(x - 3, marker_y - 2, 9, 5, GOLD);
     draw.draw_rectangle(x - 3, marker_y + 1, 9, 1, AMBER);
+}
+
+/// Tints the depth ruler's well with the band colours of the rig's own column, so the wavy
+/// layer boundaries of this world show where the next layer starts.
+fn draw_ruler_strata(
+    draw: &mut RaylibDrawHandle<'_>,
+    terrain: &Terrain,
+    view: &ViewSnapshot<'_>,
+    (x, top, height): (i32, i32, i32),
+    max_depth: i32,
+) {
+    let column = view.player.tile_position(TILE_SIZE).x;
+    let band_at_row = |row: i32| {
+        let tile_y = row * max_depth / (height - 1).max(1);
+        (tile_y > super::terrain::tile_art::SKY_MAX_TILE_Y).then(|| {
+            terrain.band_at(TilePosition {
+                x: column,
+                y: tile_y,
+            })
+        })
+    };
+    let mut start = 0;
+    let mut current = band_at_row(0);
+    for row in 1..=height {
+        let band = if row < height { band_at_row(row) } else { None };
+        if band == current && row < height {
+            continue;
+        }
+        if let Some(band) = current {
+            let color = super::terrain::tile_art::material_color(band.soft_material(), band);
+            draw.draw_rectangle(x + 1, top + start, 4, row - start, color.alpha(0.75));
+        }
+        start = row;
+        current = band;
+    }
 }
 
 pub(super) fn draw_modal(
@@ -889,19 +925,30 @@ fn draw_map_legend(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32, width: i32) 
     }
 }
 
+/// The map footer: depth and the layer the rig is in, deepest depth and distance from the west
+/// edge.
+fn map_footer(ui: &UiFrame<'_, '_>) -> String {
+    let depth = (ui.player.y / TILE_SIZE).max(0.0) as i32;
+    let layer = ui
+        .snapshot
+        .terrain
+        .band_at(ui.player.tile_position(TILE_SIZE));
+    format!(
+        "Depth {depth} m ({}) | deepest {} m | {:.0} m from the west edge",
+        layer.name(),
+        ui.snapshot.progression.deepest_tile_reached,
+        ui.player.x / TILE_SIZE
+    )
+}
+
 /// The mine map: discovered terrain at two art pixels per tile around the rig, with depth
 /// marks, the rig's blinking marker and a legend.
 fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let depth = (ui.player.y / TILE_SIZE).max(0.0) as i32;
     let map_rect = UiLayout::screen(draw).canvas_modal(
         "Mine Map",
         "Discovered terrain only.",
         &[hint(Prompt::Map, ""), hint(Prompt::Back, "close")],
-        &format!(
-            "Depth {depth} m | deepest {} m | {:.0} m from the west edge",
-            ui.snapshot.progression.deepest_tile_reached,
-            ui.player.x / TILE_SIZE
-        ),
+        &map_footer(ui),
     );
     let (_, legend_rows) = map_legend_layout(0, 0, map_rect.width as i32 - 4);
     let legend_height = legend_rows * MAP_LEGEND_ROW + 3;
