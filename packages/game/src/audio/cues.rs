@@ -102,9 +102,11 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::BombPlaced { .. } => Some(SoundCue::BombPlaced),
         GameplayEventKind::InfrastructurePlaced { .. } => Some(SoundCue::InfrastructurePlaced),
         GameplayEventKind::ScannerUsed { .. } => Some(SoundCue::Scanner),
-        GameplayEventKind::EscapeStarted { .. } | GameplayEventKind::DeepRewardGranted { .. } => {
-            Some(SoundCue::Milestone)
-        }
+        // Milestones, including the quest fanfare when a job is ready or paid.
+        GameplayEventKind::EscapeStarted { .. }
+        | GameplayEventKind::DeepRewardGranted { .. }
+        | GameplayEventKind::QuestReady { .. }
+        | GameplayEventKind::QuestCompleted { .. } => Some(SoundCue::Milestone),
         GameplayEventKind::RescueTriggered { .. } => Some(SoundCue::Rescue),
         GameplayEventKind::PlayerDamaged { .. } => Some(SoundCue::Damage),
         GameplayEventKind::BombDetonated => Some(SoundCue::Explosion),
@@ -115,21 +117,18 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::PoiDiscovered { .. } => Some(SoundCue::PoiDiscovered),
         GameplayEventKind::VaultOpened { .. } => Some(SoundCue::VaultOpened),
         GameplayEventKind::VaultLockReset { .. } => Some(SoundCue::VaultReset),
-        // Quests: the fanfare when a job is ready or paid, a tick per finished stage, the error
-        // buzz when a twist fails it, and the upgrade chime for a completed blueprint.
-        GameplayEventKind::QuestReady { .. } | GameplayEventKind::QuestCompleted { .. } => {
-            Some(SoundCue::Milestone)
-        }
+        // Quests: a tick per finished stage, the error buzz when a twist fails a job, and the
+        // upgrade chime for a completed blueprint.
         GameplayEventKind::QuestStageDone { .. } => Some(SoundCue::Ui),
         GameplayEventKind::QuestFailed { .. } => Some(SoundCue::UiError),
         GameplayEventKind::BlueprintCompleted { .. } => Some(SoundCue::Upgrade),
-        // Accepting a quest and test-mode toggles/warps are answered by the counter or menu
-        // that requested them.
-        GameplayEventKind::QuestAccepted { .. } | GameplayEventKind::TestModeChanged { .. } => None,
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
-        // Tunnel edits are terrain changes with no sound of their own.
+        // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
+        // test-mode toggles/warps are answered by the counter or menu that requested them.
         GameplayEventKind::PurchaseCompleted { .. }
+        | GameplayEventKind::QuestAccepted { .. }
+        | GameplayEventKind::TestModeChanged { .. }
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
         | GameplayEventKind::EscapeTunnelChanged => None,
