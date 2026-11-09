@@ -5,7 +5,8 @@
 //! - **Playing alone** (one seat): the keyboard (WASD *and* arrow keys) and *every* connected
 //!   controller drive the rig; prompts follow whichever was used last.
 //! - **Split-screen**: seat 1 is the WASD keyboard, seat 2 the arrow keys, seats 3+ have no
-//!   keyboard. Each seat can also have one controller. Whenever the seat count changes, the
+//!   keyboard. Each seat can also have one controller; while that controller is plugged in it
+//!   drives the seat alone (the seat's keyboard keys are ignored until it is unplugged). Whenever the seat count changes, the
 //!   connected controllers nobody owns fill the seats that have no controller, in this order:
 //!   seats without a keyboard, then the arrow-keys seat, then the WASD seat. A controller that
 //!   is still unassigned (connected later, or more controllers than seats) claims a seat by

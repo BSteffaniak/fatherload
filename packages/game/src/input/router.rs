@@ -168,7 +168,14 @@ impl InputRouter {
             let mut input = PlayerInput::default();
             let mut active = Vec::new();
             let mut fallback = InputDevice::Unassigned;
-            if let Some(layout) = self.roster.keyboard(seat) {
+            // In split-screen a seat whose controller is plugged in is driven by that
+            // controller alone; its keyboard keys take over again only while it is unplugged.
+            let pad_connected = !self.roster.solo()
+                && self
+                    .roster
+                    .pad(seat)
+                    .is_some_and(|pad| frame.pads.contains_key(&pad));
+            if let Some(layout) = self.roster.keyboard(seat).filter(|_| !pad_connected) {
                 let keyboard = match layout {
                     KeyboardLayout::Full | KeyboardLayout::Wasd => frame.keyboard,
                     KeyboardLayout::Arrows => frame.arrow_keys,
@@ -327,6 +334,50 @@ mod tests {
     }
 
     #[test]
+    fn split_screen_controller_seat_ignores_its_keyboard_until_unplugged() {
+        let mut router = InputRouter::new(4);
+        let mut frame = with_pads(&[(0, sample(XBOX, &[]))]);
+        router.route(&frame, 2, DT);
+        frame.arrow_keys.horizontal = 1.0;
+        frame.arrow_keys.confirm = true;
+        let output = router.route(&frame, 2, DT);
+        assert!(
+            output.seats[1].horizontal.abs() < f32::EPSILON && !output.seats[1].confirm,
+            "the arrow keys no longer drive the controller's seat"
+        );
+        assert_eq!(output.devices[1], pad0(), "prompts stay on the controller");
+
+        if let Some(pad) = frame.pads.get_mut(&0) {
+            pad.state.buttons.insert(PadButton::X);
+        }
+        assert!(
+            router.route(&frame, 2, DT).seats[1].interact,
+            "the controller does"
+        );
+
+        let mut unplugged = DeviceFrame::default();
+        unplugged.arrow_keys.horizontal = 1.0;
+        let output = router.route(&unplugged, 2, DT);
+        assert!(
+            (output.seats[1].horizontal - 1.0).abs() < f32::EPSILON,
+            "with the controller unplugged the arrow keys take the seat back"
+        );
+        assert_eq!(
+            output.devices[1],
+            InputDevice::Keyboard(KeyboardLayout::Arrows)
+        );
+    }
+
+    #[test]
+    fn solo_keeps_keyboard_and_controller_together() {
+        let mut router = InputRouter::new(4);
+        let mut frame = with_pads(&[(0, sample(XBOX, &[]))]);
+        frame.keyboard.horizontal = -1.0;
+        let output = router.route(&frame, 1, DT);
+        assert!((output.seats[0].horizontal + 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
     fn stick_noise_never_switches_prompts() {
         let mut router = InputRouter::new(4);
         let mut frame = with_pads(&[(0, sample(XBOX, &[]))]);
@@ -386,11 +437,14 @@ mod tests {
         frame.arrow_keys.horizontal = 1.0;
         let output = router.route(&frame, 2, DT);
         assert!((output.seats[0].horizontal + 1.0).abs() < f32::EPSILON);
-        assert!((output.seats[1].horizontal - 1.0).abs() < f32::EPSILON);
+        assert!(
+            output.seats[1].horizontal.abs() < f32::EPSILON,
+            "the controller's seat ignores the arrow keys"
+        );
         assert_eq!(
             output.devices[1],
-            InputDevice::Keyboard(KeyboardLayout::Arrows),
-            "using the arrow keys switches seat 2's prompts"
+            pad0(),
+            "and keeps the controller prompts"
         );
         frame.arrow_keys.horizontal = 0.0;
         if let Some(pad) = frame.pads.get_mut(&0) {

@@ -74,7 +74,7 @@ Modules:
   - `seats` — the seat policy: solo = keyboard + every pad; split-screen = WASD seat,
     arrow-keys seat, pads fill seats without one (keyboardless, then arrows, then WASD) whenever
     the seat count changes, a spare pad claims a free or new seat with A/Start, a pad keeps its
-    seat while unplugged;
+    seat while unplugged, and a seat's keyboard keys are ignored while its pad is plugged in;
   - `router::InputRouter` — per frame: hot-plug notices (toasts), seat routing, claims and
     each seat's active device (`devices::SeatActivity`: the last device with *new* input, so
     stick noise inside the deadzone or a held button never switches it);

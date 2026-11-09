@@ -93,7 +93,9 @@ Rumble is not available: raylib's desktop GLFW backend does not implement
 Up to four players share the screen, each in their own view. Player 1 uses WASD, player 2 the
 arrow keys, and connected controllers fill seats without one (keyboardless seats first, then
 the arrow-keys seat, then WASD). A spare controller joins with `A` or `Start`, taking a free
-seat or adding one (up to four). Playing alone, the keyboard and every controller drive the rig.
+seat or adding one (up to four). A seat with a plugged-in controller is driven by that controller
+only; its keyboard keys take over again while the controller is unplugged. Playing alone, the
+keyboard and every controller drive the rig.
 
 Every player has their own menus: each walks into any building, uses its counter, reads their
 own inventory or map and leaves again inside their own view (with their own button prompts,
