@@ -16,6 +16,7 @@ use drillgame_simulation::{
     Discovery, PlayerId, SectionKey, SectionPayload, SimulationTick, WorldState,
     economy::SurfaceZone,
     poi::{FormationStyle, LoreId, PoiKnowledge, PoiTile, PoiVariant, VaultPuzzle},
+    quest::{BlueprintId, QuestGiver, QuestId},
     surface::SURFACE_BUILDINGS,
     terrain::{DeepStratum, MineralKind, TILE_SIZE, Terrain, TileKind, TilePosition},
     worldgen::{
@@ -35,7 +36,8 @@ use crate::{
     runtime::{LobbyInfo, LocalSeat, OnlineRole},
     save::SettingsFile,
     shell::{
-        ModalScreen, OnlineScreen, RunMode, SeatUi, SetupPurpose, ShellState, interior_service_x,
+        FanfareKind, ModalScreen, OnlineScreen, RunMode, SeatUi, SetupPurpose, ShellState,
+        interior_service_x,
     },
 };
 
@@ -1827,6 +1829,162 @@ pub const SCENES: &[Scene] = &[
             shell.modal = Some(ModalScreen::Options);
         },
     },
+    Scene {
+        name: "quest_desk",
+        summary: "Kade's quest desk: a job to turn in, one on offer, one running, locked ones",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                quest_history(world, player);
+                accept_for(world, player, QuestId(103));
+                accept_for(world, player, QuestId(102));
+                finish_quest(world, player, QuestId(102));
+                park_at(world, player, SurfaceZone::Depot);
+            });
+            stage.settle(5);
+            put_seat_inside(stage, 0, SurfaceZone::Depot, Some(ModalScreen::QuestDesk));
+            stage.seat(0).selected_menu_item = 1;
+        },
+    },
+    Scene {
+        name: "quest_counter_tab",
+        summary: "The depot counter with its Quests tab and a finished job waiting",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                quest_history(world, player);
+                accept_for(world, player, QuestId(102));
+                finish_quest(world, player, QuestId(102));
+                park_at(world, player, SurfaceZone::Depot);
+                if let Some(rig) = world.player_mut(player) {
+                    load_cargo(rig);
+                }
+            });
+            stage.settle(5);
+            put_seat_inside(stage, 0, SurfaceZone::Depot, Some(ModalScreen::Depot));
+        },
+    },
+    Scene {
+        name: "quest_board",
+        summary: "Director Vale's HQ quest board with today's postings",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                quest_history(world, player);
+                park_at(world, player, SurfaceZone::Headquarters);
+            });
+            stage.settle(5);
+            put_seat_inside(
+                stage,
+                0,
+                SurfaceZone::Headquarters,
+                Some(ModalScreen::QuestDesk),
+            );
+        },
+    },
+    Scene {
+        name: "quest_log",
+        summary: "The quest log: active jobs, the tracked job's objectives, reputation, blueprints",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                quest_history(world, player);
+                accept_for(world, player, QuestId(302));
+                accept_for(world, player, QuestId(501));
+                accept_for(world, player, QuestId(103));
+                sink_rig(world, player, 97, 12);
+            });
+            stage.settle(20);
+            stage.seat(0).modal = Some(ModalScreen::QuestLog);
+            stage.seat(0).selected_menu_item = 0;
+            stage.seat(0).tracked_quest = Some(QuestId(302));
+        },
+    },
+    Scene {
+        name: "quest_hud_tracker",
+        summary: "Underground by Nix's first demolition mark: the HUD tracker and quest markers",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                accept_for(world, player, QuestId(301));
+                let spots = quest_spots(world, player, QuestId(301));
+                let spot = spots[0];
+                sink_rig(world, player, spot.x - 3, spot.y);
+                carve(world, spot.x - 3..spot.x + 1, spot.y..spot.y + 1);
+                reveal(
+                    world,
+                    player,
+                    spot.x - 20..spot.x + 20,
+                    spot.y - 12..spot.y + 12,
+                );
+            });
+            stage.settle(20);
+            stage.seat(0).tracked_quest = Some(QuestId(301));
+        },
+    },
+    Scene {
+        name: "quest_map_markers",
+        summary: "The mine map with quest markers: demolition marks and a supply cache target",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                accept_for(world, player, QuestId(301));
+                accept_for(world, player, QuestId(502));
+                sink_rig(world, player, 97, 24);
+                reveal(world, player, 60..140, 4..48);
+            });
+            stage.settle(10);
+            stage.seat(0).modal = Some(ModalScreen::Map);
+        },
+    },
+    Scene {
+        name: "quest_complete_toast",
+        summary: "The completion fanfare after turning a job in at Kade's desk",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                quest_history(world, player);
+                if let Some(rig) = world.player_mut(player) {
+                    rig.quests.completed.insert(QuestId(103));
+                }
+                park_at(world, player, SurfaceZone::Depot);
+            });
+            stage.settle(5);
+            put_seat_inside(stage, 0, SurfaceZone::Depot, Some(ModalScreen::QuestDesk));
+            let def = QuestId(103).def().expect("quest");
+            stage.seat(0).message = format!("Kade: {}", def.text.complete);
+            stage
+                .shell()
+                .quest_fanfare(0, FanfareKind::Complete, def.title, def.reward.summary());
+            stage.settle(20);
+        },
+    },
+    Scene {
+        name: "split_crew_quest",
+        summary: "Two seats on a crew job: both see the fuse boxes they must light together",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                let (lead, wing) = (seats[0].player, seats[1].player);
+                if let Some(rig) = world.player_mut(lead) {
+                    rig.quests.completed.insert(QuestId(302));
+                    rig.quests.deepest_row = 45;
+                }
+                accept_crew(world, lead, QuestId(305));
+                let spots = quest_spots(world, lead, QuestId(305));
+                for (player, spot) in [(lead, spots[0]), (wing, spots[1])] {
+                    sink_rig(world, player, spot.x - 2, spot.y);
+                    carve(world, spot.x - 2..spot.x + 1, spot.y..spot.y + 1);
+                    reveal(
+                        world,
+                        player,
+                        spot.x - 22..spot.x + 22,
+                        spot.y - 12..spot.y + 12,
+                    );
+                }
+            });
+            stage.settle(20);
+        },
+    },
 ];
 
 /// Enters `zone`'s interior standing at its counter, optionally with a counter panel open.
@@ -1993,6 +2151,98 @@ fn load_cargo(rig: &mut drillgame_simulation::Player) {
     ] {
         rig.cargo.insert(mineral, count);
     }
+}
+
+/// A rig with some quest history: Kade's first job done, a little reputation, a fragment.
+fn quest_history(world: &mut WorldState, player: PlayerId) {
+    if let Some(rig) = world.player_mut(player) {
+        rig.credits = 1_240;
+        rig.scanner_level = 1;
+        let log = &mut rig.quests;
+        log.completed.insert(QuestId(101));
+        log.completed.insert(QuestId(301));
+        log.reputation.insert(QuestGiver::Kade, 13);
+        log.reputation.insert(QuestGiver::Nix, 6);
+        log.reputation.insert(QuestGiver::Pip, 6);
+        log.deepest_row = 34;
+        log.fragments.insert(BlueprintId::HaulerFrame, 1);
+        log.fragments.insert(BlueprintId::DampenerCoil, 2);
+    }
+}
+
+/// Has `player` take `quest` (crew mode when `crew`), standing at the giver's door for one tick
+/// and going back where it was.
+fn accept_quest_as(world: &mut WorldState, player: PlayerId, quest: QuestId, crew: bool) {
+    use drillgame_simulation::{
+        InputSequence, PlayerCommand, PlayerTickInput, TickAction, TickInputs,
+        quest::binding::giver_door, service::SessionServiceRequest,
+    };
+    let Some(def) = quest.def() else {
+        return;
+    };
+    let door = giver_door(def.giver);
+    let Some(home) = world.player(player).map(|rig| (rig.x, rig.y)) else {
+        return;
+    };
+    park_rig(world, player, door.x, door.y);
+    let mut inputs = TickInputs::default();
+    inputs.players.insert(
+        player,
+        PlayerTickInput {
+            controls: None,
+            actions: vec![TickAction {
+                sequence: InputSequence::new(0),
+                command: PlayerCommand::Service(SessionServiceRequest::AcceptQuest { quest, crew }),
+            }],
+        },
+    );
+    let tick = world.simulation_tick();
+    let _output = world.simulate_tick(tick, &inputs);
+    if let Some(rig) = world.player_mut(player) {
+        (rig.x, rig.y) = home;
+    }
+}
+
+fn accept_for(world: &mut WorldState, player: PlayerId, quest: QuestId) {
+    accept_quest_as(world, player, quest, false);
+}
+
+fn accept_crew(world: &mut WorldState, player: PlayerId, quest: QuestId) {
+    accept_quest_as(world, player, quest, true);
+}
+
+/// Marks every stage of `player`'s `quest` done (ready to turn in).
+fn finish_quest(world: &mut WorldState, player: PlayerId, quest: QuestId) {
+    let stages = quest.def().map_or(0, |def| def.stages.len());
+    if let Some(rig) = world.player_mut(player)
+        && let Some(active) = rig
+            .quests
+            .active
+            .iter_mut()
+            .find(|active| active.quest == quest)
+    {
+        for objective in &mut active.objectives {
+            objective.done = true;
+        }
+        active.stage = u8::try_from(stages).unwrap_or(u8::MAX);
+        active.ready = true;
+    }
+}
+
+/// The marked spots of `quest`'s first spotted objective.
+fn quest_spots(world: &WorldState, player: PlayerId, quest: QuestId) -> Vec<TilePosition> {
+    world
+        .visible_quests(player)
+        .into_iter()
+        .find(|active| active.quest == quest)
+        .and_then(|active| {
+            active
+                .objectives
+                .iter()
+                .find(|objective| !objective.spots.is_empty())
+                .map(|objective| objective.spots.clone())
+        })
+        .expect("the quest bound its marked spots")
 }
 
 /// Parks the rig on the surface at `zone`'s door.

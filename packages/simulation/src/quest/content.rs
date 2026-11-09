@@ -119,7 +119,7 @@ pub const QUESTS: &[QuestDef] = &[
         text: text(
             "Someone stashed my assay glassware in a supply hollow. It's thinner than your excuses. Bring it up without a scratch.",
             "Gentle on the thrusters. Every bump is coming out of your pay.",
-            "Not a crack. I'd hug you if you weren't covered in clay.",
+            "Clean as the day it was blown. I'd hug you if you weren't covered in clay.",
         ),
         repeatable: false,
     },
@@ -407,7 +407,7 @@ pub const QUESTS: &[QuestDef] = &[
         text: text(
             "A real demolitionist knows when not to. There's an artifact bed down there. Dig it out gently. If I hear a boom, I'll know.",
             "Drill only. Not one charge.",
-            "Not a single boom. I'm almost disappointed. Almost.",
+            "Zero booms. I'm almost disappointed. Almost.",
         ),
         repeatable: false,
     },

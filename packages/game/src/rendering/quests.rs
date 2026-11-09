@@ -252,7 +252,7 @@ pub(super) fn draw_quest_desk(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
             GOLD,
         ),
         SectionItem::text(giver.personality()),
-        SectionItem::stat("Reputation perk", giver.perk(), MINT),
+        SectionItem::text(format!("Reputation perk: {}.", giver.perk())),
     ];
     let jobs = if items.is_empty() {
         vec![SectionItem::text(if giver == QuestGiver::Vale {
@@ -600,7 +600,11 @@ pub(super) fn draw_fanfare(draw: &mut RaylibDrawHandle<'_>, fanfare: &Fanfare, n
     };
     let mut details = ui_kit::wrap(&fanfare.detail, width - 16, TextStyle::Body);
     details.truncate(2);
-    let height = 32 + i32::try_from(details.len()).unwrap_or(0) * TextStyle::Body.line_height();
+    let heading_height = TextStyle::Title.line_height();
+    let title_y = 5 + heading_height;
+    let details_y = title_y + TextStyle::Bold.line_height();
+    let height =
+        details_y + 4 + i32::try_from(details.len()).unwrap_or(0) * TextStyle::Body.line_height();
     let drop = i32::try_from(12_u64.saturating_sub(age)).unwrap_or(0) * 3;
     let x = (canvas.width - width) / 2;
     let y = 46 - drop;
@@ -622,7 +626,7 @@ pub(super) fn draw_fanfare(draw: &mut RaylibDrawHandle<'_>, fanfare: &Fanfare, n
         draw,
         &ui_kit::truncate(&fanfare.title, width - 16, TextStyle::Bold),
         x + width / 2,
-        y + 18,
+        y + title_y,
         TextStyle::Bold,
         BONE,
     );
@@ -631,7 +635,7 @@ pub(super) fn draw_fanfare(draw: &mut RaylibDrawHandle<'_>, fanfare: &Fanfare, n
             draw,
             line,
             x + width / 2,
-            y + 29 + i32::try_from(index).unwrap_or(0) * TextStyle::Body.line_height(),
+            y + details_y + i32::try_from(index).unwrap_or(0) * TextStyle::Body.line_height(),
             TextStyle::Body,
             MIST,
         );
