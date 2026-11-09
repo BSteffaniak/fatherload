@@ -9,7 +9,9 @@ use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 
 use drillgame_netcode::ReconnectToken;
 use drillgame_quic_transport::{HostDescriptor, JoinTarget, lan::LanDiscoveredGame};
-use drillgame_simulation::{PlayerCommand, PlayerId, WorldState, worldgen::WorldSettings};
+use drillgame_simulation::{
+    GameplayEventKind, PlayerCommand, PlayerId, WorldState, worldgen::WorldSettings,
+};
 
 use crate::{
     effects::{Effects, EventFeed},
@@ -355,6 +357,81 @@ impl LocalGame {
                 applied,
                 shell_context(&self.runtime, &self.save_target, &players, false),
             );
+        }
+        self.announce_points_of_interest(&players);
+    }
+
+    /// Tells each local seat what its rig found or opened at a point of interest, and seats
+    /// near a vault when its lock opens or resets.
+    fn announce_points_of_interest(&mut self, players: &[PlayerId]) {
+        let world = self.runtime.world();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+            match gameplay.kind {
+                GameplayEventKind::PoiOpened {
+                    player_id,
+                    poi,
+                    reward,
+                } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        messages.push((seat, format!("{}: {}.", poi.name(), reward.summary())));
+                    }
+                }
+                GameplayEventKind::PoiDiscovered {
+                    player_id, feature, ..
+                } => {
+                    let Some(seat) = seat_of(player_id) else {
+                        continue;
+                    };
+                    let Some(variant) = world
+                        .world_features()
+                        .get(feature)
+                        .and_then(drillgame_simulation::worldgen::WorldFeature::poi)
+                    else {
+                        continue;
+                    };
+                    let text = match variant {
+                        drillgame_simulation::PoiVariant::Vault(puzzle) => {
+                            format!("Found a sealed vault. {}", puzzle.hint())
+                        }
+                        other => format!("Found: {}.", other.title()),
+                    };
+                    messages.push((seat, text));
+                }
+                GameplayEventKind::VaultOpened { feature }
+                | GameplayEventKind::VaultLockReset { feature } => {
+                    let Some(vault) = world.world_features().get(feature).copied() else {
+                        continue;
+                    };
+                    let opened = matches!(gameplay.kind, GameplayEventKind::VaultOpened { .. });
+                    for (seat, player) in players.iter().enumerate() {
+                        let near = world.player(*player).is_some_and(|rig| {
+                            vault
+                                .bounds
+                                .expanded(12)
+                                .contains(rig.tile_position(drillgame_simulation::TILE_SIZE))
+                        });
+                        if near {
+                            messages.push((
+                                seat,
+                                if opened {
+                                    "The vault's lock gives way: the doors are open!".to_owned()
+                                } else {
+                                    "The vault's lock resets.".to_owned()
+                                },
+                            ));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
         }
     }
 

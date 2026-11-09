@@ -871,6 +871,15 @@ impl SeatUi {
                 self.modal = Some(ModalScreen::Depot);
                 None
             }
+            // The mine map and the collection log flip between each other.
+            ModalScreen::Map => {
+                self.modal = Some(ModalScreen::ResearchLog);
+                None
+            }
+            ModalScreen::ResearchLog => {
+                self.modal = Some(ModalScreen::Map);
+                None
+            }
             ModalScreen::Headquarters => self.confirm_headquarters(ctx, cues),
             ModalScreen::Shop => {
                 self.modal = Some(ModalScreen::ShopConfirm);
@@ -929,10 +938,8 @@ impl SeatUi {
             | ModalScreen::ExitConfirm
             | ModalScreen::UnsavedExitConfirm
             | ModalScreen::WorldSetup
-            | ModalScreen::Map
             | ModalScreen::Help
-            | ModalScreen::Inventory
-            | ModalScreen::ResearchLog => None,
+            | ModalScreen::Inventory => None,
         };
         if let Some(request) = service {
             self.submit_service(request, ctx, requests);

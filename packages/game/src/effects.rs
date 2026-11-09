@@ -158,7 +158,24 @@ impl Effects {
                 {
                     cues.push(SoundCue::Milestone);
                 }
-                GameplayEventKind::ScannerUsed { .. } if local => cues.push(SoundCue::Ui),
+                GameplayEventKind::ScannerUsed { .. } | GameplayEventKind::PoiDiscovered { .. }
+                    if local =>
+                {
+                    cues.push(SoundCue::Ui);
+                }
+                GameplayEventKind::PoiOpened { player_id, poi, .. } => {
+                    if let Some(player) = world.player(player_id) {
+                        self.spawn_sparks(player.x, player.y + 18.0);
+                    }
+                    if local {
+                        cues.push(if poi == drillgame_simulation::PoiKind::SupplyCache {
+                            SoundCue::Ui
+                        } else {
+                            SoundCue::Milestone
+                        });
+                    }
+                }
+                GameplayEventKind::VaultOpened { .. } => cues.push(SoundCue::Milestone),
                 _ => {}
             }
         }
