@@ -76,10 +76,7 @@ fn poi_counts_per_band_stay_in_bounds() {
                 (3 * scale, 6 * scale + 12..=24 * scale)
             };
             let count = world.features.pois().count();
-            assert!(
-                total.contains(&count),
-                "seed {seed} {size:?}: {count} POIs"
-            );
+            assert!(total.contains(&count), "seed {seed} {size:?}: {count} POIs");
             for band in Band::ALL.into_iter().skip(1) {
                 let count = world.features.pois_in_band(band).count();
                 assert!(
