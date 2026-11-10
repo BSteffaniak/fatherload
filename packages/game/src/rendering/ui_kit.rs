@@ -526,6 +526,7 @@ pub fn truncate(text: &str, width: i32, style: TextStyle) -> String {
 }
 
 /// Draws wrapped `text` inside `width` from `(x, y)`; returns the height used.
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn paragraph(
     draw: &mut impl RaylibDraw,
     value: &str,
@@ -927,6 +928,7 @@ pub fn item_row(draw: &mut impl RaylibDraw, rect: Rectangle, row: &ItemRow<'_>) 
 }
 
 /// Draws a row of tabs across the top of `rect`; returns the tab strip height.
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn tabs(draw: &mut impl RaylibDraw, rect: Rectangle, labels: &[&str], selected: usize) -> i32 {
     const TAB_HEIGHT: i32 = 17;
     let mut x = rect.x as i32 + 4;

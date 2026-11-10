@@ -1,3 +1,5 @@
+web/node_modules/
+
 target/
 debug/
 

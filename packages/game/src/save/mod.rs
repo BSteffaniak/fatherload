@@ -364,7 +364,10 @@ fn write_state_file(path: impl AsRef<Path>, contents: String) -> Result<(), Save
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(SaveError::Io)?;
     }
-    fs::write(path, contents).map_err(SaveError::Io)
+    fs::write(path, contents).map_err(SaveError::Io)?;
+    #[cfg(target_os = "emscripten")]
+    crate::browser::persist_saves();
+    Ok(())
 }
 
 fn settings_path() -> PathBuf {

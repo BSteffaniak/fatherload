@@ -1,8 +1,9 @@
 //! Raylib/GLFW glue for controllers: samples every connected pad into a [`PadSample`] and
 //! implements `fatherload --list-gamepads`.
 
+use std::collections::BTreeMap;
+#[cfg(any(test, not(target_os = "emscripten")))]
 use std::{
-    collections::BTreeMap,
     ffi::{CStr, c_char, c_int},
     time::{Duration, Instant},
 };
@@ -18,10 +19,12 @@ use super::{
 pub const MAX_PADS: u8 = 4;
 
 /// How long `--list-gamepads` keeps its window open so GLFW can report Bluetooth pads.
+#[cfg(any(test, not(target_os = "emscripten")))]
 const LIST_WAIT: Duration = Duration::from_millis(1_200);
 
 // GLFW is statically linked into raylib; these read facts raylib does not expose (whether
 // GLFW has a standard gamepad mapping, the raw axis/button counts and the GUID).
+#[cfg(any(test, not(target_os = "emscripten")))]
 unsafe extern "C" {
     fn glfwJoystickIsGamepad(jid: c_int) -> c_int;
     fn glfwGetJoystickAxes(jid: c_int, count: *mut c_int) -> *const f32;
@@ -132,6 +135,7 @@ pub fn sample_pads(raylib: &RaylibHandle) -> BTreeMap<u8, PadSample> {
 
 /// What GLFW knows about one joystick.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub struct PadReport {
     pub index: u8,
     pub name: String,
@@ -144,6 +148,7 @@ pub struct PadReport {
     pub guid: String,
 }
 
+#[cfg(any(test, not(target_os = "emscripten")))]
 impl PadReport {
     /// One line for the terminal.
     #[must_use]
@@ -164,6 +169,7 @@ impl PadReport {
     }
 }
 
+#[cfg(any(test, not(target_os = "emscripten")))]
 fn c_string(pointer: *const c_char) -> Option<String> {
     if pointer.is_null() {
         return None;
@@ -179,6 +185,7 @@ fn c_string(pointer: *const c_char) -> Option<String> {
 
 /// Reports every connected joystick. Call with a live raylib window (GLFW initialized).
 #[must_use]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn report_pads(raylib: &RaylibHandle) -> Vec<PadReport> {
     (0..MAX_PADS)
         .filter(|index| raylib.is_gamepad_available(i32::from(*index)))
@@ -215,6 +222,7 @@ pub fn report_pads(raylib: &RaylibHandle) -> Vec<PadReport> {
 
 /// Whether `args` ask for `--list-gamepads`.
 #[must_use]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn wants_list(args: &[String]) -> bool {
     args.iter().any(|arg| arg == "--list-gamepads")
 }
@@ -222,6 +230,7 @@ pub fn wants_list(args: &[String]) -> bool {
 /// `fatherload --list-gamepads`: opens a tiny window for about a second (GLFW only enumerates
 /// joysticks with a window and an event loop, and Bluetooth pads can take a moment), prints
 /// every detected controller and exits.
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn list_gamepads() {
     let (mut raylib, thread) = raylib::init()
         .size(320, 120)

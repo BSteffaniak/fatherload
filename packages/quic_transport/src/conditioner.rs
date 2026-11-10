@@ -119,11 +119,13 @@ impl FromStr for LinkConditionerConfig {
 
 /// Stateful conditioner owned by the network thread.
 #[derive(Debug)]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub struct LinkConditioner {
     config: LinkConditionerConfig,
     rng: SplitMix64,
 }
 
+#[cfg(any(test, not(target_os = "emscripten")))]
 impl LinkConditioner {
     pub fn new(config: LinkConditionerConfig) -> Self {
         let seed = config.seed.unwrap_or_else(|| {
@@ -168,8 +170,10 @@ impl LinkConditioner {
 
 /// Small deterministic PRNG (`SplitMix64`); good enough for traffic shaping.
 #[derive(Debug)]
+#[cfg(any(test, not(target_os = "emscripten")))]
 struct SplitMix64(u64);
 
+#[cfg(any(test, not(target_os = "emscripten")))]
 impl SplitMix64 {
     const fn next_u64(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);

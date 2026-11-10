@@ -2,7 +2,7 @@
 
 use std::{fmt, net::SocketAddr, time::Duration};
 
-use crate::tls::HostDescriptor;
+use crate::descriptor::HostDescriptor;
 
 /// Identifier for one live QUIC connection, unique for the lifetime of a [`crate::NetHandle`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -43,7 +43,7 @@ pub struct HostConfig {
 impl Default for HostConfig {
     fn default() -> Self {
         Self {
-            server_name: crate::tls::DEFAULT_SERVER_NAME.to_owned(),
+            server_name: crate::DEFAULT_SERVER_NAME.to_owned(),
         }
     }
 }

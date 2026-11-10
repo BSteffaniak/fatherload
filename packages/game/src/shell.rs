@@ -147,7 +147,7 @@ impl PauseOption {
     /// host owns the session save).
     #[must_use]
     pub fn for_role(role: Option<OnlineRole>) -> Vec<Self> {
-        match role {
+        let options = match role {
             None => vec![
                 Self::Resume,
                 Self::Save,
@@ -175,7 +175,13 @@ impl PauseOption {
                 Self::CopySeed,
                 Self::ExitToDesktop,
             ],
-        }
+        };
+        #[cfg(target_os = "emscripten")]
+        let options = options
+            .into_iter()
+            .filter(|option| !matches!(option, Self::OpenOnline | Self::ExitToDesktop))
+            .collect();
+        options
     }
 
     #[must_use]
@@ -243,6 +249,9 @@ impl TitleOption {
             options.push(Self::LoadSlot);
         }
         options.extend([Self::Options, Self::Exit]);
+        #[cfg(target_os = "emscripten")]
+        options
+            .retain(|option| !matches!(option, Self::HostOnline | Self::JoinOnline | Self::Exit));
         options
     }
 }

@@ -5,9 +5,11 @@
 //! integration test (plan §11 rule): [`host::HostNet`] beside a `HostSession`, and
 //! [`client::OnlineClient`] around a `ClientSession`.
 
+#[cfg(not(target_os = "emscripten"))]
 pub mod bots;
 pub mod bridge;
 pub mod client;
+#[cfg(not(target_os = "emscripten"))]
 pub mod headless;
 pub mod host;
 pub mod lan;

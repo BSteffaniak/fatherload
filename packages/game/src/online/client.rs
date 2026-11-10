@@ -416,6 +416,7 @@ impl OnlineClient {
     }
 }
 
+#[cfg(not(target_os = "emscripten"))]
 impl Drop for OnlineClient {
     fn drop(&mut self) {
         if let Some(net) = self.net.take() {

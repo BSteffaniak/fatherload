@@ -1,0 +1,6 @@
+{
+  "name": "fatherload-web-tests",
+  "private": true,
+  "scripts": { "test": "node ../scripts/test-web-storage.cjs && node ../scripts/test-web.cjs" },
+  "devDependencies": { "playwright": "1.65.0" }
+}

@@ -14,11 +14,22 @@ mod render_snapshot;
 mod rendering;
 mod runtime;
 mod save;
+#[cfg(not(target_os = "emscripten"))]
 mod scene_capture;
 mod shell;
 mod window;
+#[cfg(not(target_os = "emscripten"))]
 mod worldgen_tools;
 
+#[cfg(target_os = "emscripten")]
+mod browser;
+
+#[cfg(target_os = "emscripten")]
+fn main() {
+    app::run();
+}
+
+#[cfg(not(target_os = "emscripten"))]
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if input::pads::wants_list(&args) {

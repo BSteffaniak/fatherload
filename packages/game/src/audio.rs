@@ -18,6 +18,7 @@ pub mod director;
 pub mod dsp;
 pub mod mixer;
 pub mod patch;
+#[cfg(not(target_os = "emscripten"))]
 pub mod render_tool;
 
 use std::sync::{Arc, Mutex};
@@ -72,16 +73,26 @@ impl AudioBus {
         })
         .map_err(|error| error.to_string())?;
         stream.play();
-        let loader = Arc::clone(&mixer);
-        std::thread::Builder::new()
-            .name("fatherload-sound-bank".into())
-            .spawn(move || {
-                let bank = Arc::new(SoundBank::render(DEFAULT_BANK_SEED));
-                if let Ok(mut mixer) = loader.lock() {
-                    mixer.set_bank(bank);
-                }
-            })
-            .map_err(|error| error.to_string())?;
+        #[cfg(target_os = "emscripten")]
+        {
+            let bank = Arc::new(SoundBank::render(DEFAULT_BANK_SEED));
+            if let Ok(mut mixer) = mixer.lock() {
+                mixer.set_bank(bank);
+            }
+        }
+        #[cfg(not(target_os = "emscripten"))]
+        {
+            let loader = Arc::clone(&mixer);
+            std::thread::Builder::new()
+                .name("fatherload-sound-bank".into())
+                .spawn(move || {
+                    let bank = Arc::new(SoundBank::render(DEFAULT_BANK_SEED));
+                    if let Ok(mut mixer) = loader.lock() {
+                        mixer.set_bank(bank);
+                    }
+                })
+                .map_err(|error| error.to_string())?;
+        }
         Ok(Self {
             stream,
             mixer,

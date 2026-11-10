@@ -34,6 +34,7 @@ pub fn db_to_gain(db: f32) -> f32 {
 
 /// Converts a linear gain to decibels (floored at -120 dB).
 #[must_use]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn gain_to_db(gain: f32) -> f32 {
     20.0 * gain.max(1e-6).log10()
 }

@@ -94,6 +94,7 @@ pub struct FrameInput {
 
 impl FrameInput {
     #[must_use]
+    #[cfg(any(test, not(target_os = "emscripten")))]
     pub const fn primary(primary: PlayerInput) -> Self {
         Self {
             primary,
@@ -305,6 +306,7 @@ impl LocalGame {
     /// Replaces the session with a fresh local world of `seats` seats, lets `arrange` set up that
     /// world (rig positions, terrain, cargo...) and enters it. Scene capture uses this to build
     /// scripted states; gameplay never calls it.
+    #[cfg(any(test, not(target_os = "emscripten")))]
     pub fn stage_local_world(
         &mut self,
         seats: usize,
@@ -854,10 +856,21 @@ impl LocalGame {
         self.go_online(Runtime::local(new_world(), 1), report);
     }
 
+    /// Best-effort checkpoint on tab suspension; explicit slot saves remain available.
+    #[cfg(target_os = "emscripten")]
+    pub fn save_browser_checkpoint(&mut self) {
+        if self.shell.run_mode != RunMode::Title && self.runtime.can_save() {
+            let result = self.write_save(None);
+            self.report_save(result, "Saved this browser session.");
+        }
+    }
+
     fn autosave(&mut self, delta_seconds: f32) {
         let hosting = self.runtime.online_role() == Some(OnlineRole::Host)
             && self.shell.online.started()
             && !matches!(self.shell.run_mode, RunMode::Title);
+        #[cfg(target_os = "emscripten")]
+        let hosting = hosting || self.shell.run_mode != RunMode::Title;
         if !hosting {
             self.autosave_seconds = 0.0;
             return;

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fatherload</title>
+<link rel="icon" href="data:,">
+<style>
+html,body{margin:0;background:#100e19;color:#eee;font:16px system-ui;text-align:center}
+canvas{display:block;margin:auto;max-width:100%;image-rendering:pixelated;outline:none}
+button{font:inherit;padding:.6rem 1rem;margin:.5rem} #status{min-height:1.5em}
+</style>
+<h1>Fatherload</h1>
+<p>Single-player and local split-screen. Keyboard or controllers. Online play is not available yet. Save through the pause menu before closing this tab.</p>
+<button id="start" disabled>Loading…</button>
+<button onclick="document.getElementById('canvas').requestFullscreen()">Fullscreen</button>
+<div id="status" role="status">Downloading game…</div>
+<canvas id="canvas" width="1280" height="720" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+<script>
+const canvas = document.getElementById('canvas');
+const start = document.getElementById('start');
+var Module = {
+  canvas, noInitialRun:true,
+  setStatus(text) { document.getElementById('status').textContent = text; },
+  printErr:console.error,
+  onRuntimeInitialized() { start.disabled=false; start.textContent='Play'; Module.setStatus('Ready. Saves are stored in this browser.'); },
+  onAbort(reason) { Module.setStatus('Game could not start: '+reason); }
+};
+start.addEventListener('click', () => {
+  start.disabled=true; start.hidden=true; canvas.focus({preventScroll:true});
+  Module.setStatus('Starting…');
+  Module.callMain([]);
+  Module.setStatus('');
+});
+canvas.addEventListener('keydown', event => {
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Tab'].includes(event.code)) event.preventDefault();
+});
+</script>
+<script src="fatherload.js"></script>
+</html>

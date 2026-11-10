@@ -571,6 +571,7 @@ impl Mixer {
 
     /// Renders `seconds` of output offline (tools and tests).
     #[must_use]
+    #[cfg(any(test, not(target_os = "emscripten")))]
     pub fn render_seconds(&mut self, seconds: f32) -> Vec<f32> {
         let mut out = vec![0.0; super::dsp::samples_for(seconds) * 2];
         self.render(&mut out);

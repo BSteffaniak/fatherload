@@ -19,6 +19,55 @@ With Nix:
 nix develop -c cargo run --bin fatherload
 ```
 
+### Web (raylib / Emscripten)
+
+The browser build keeps the Rust simulation, raylib renderer, audio and local split-screen.
+It currently supports **offline single-player and local multiplayer**, not online/LAN play
+or touch controls. No replacement engine or separate JavaScript gameplay is used.
+
+Build using the locked flake's web shell (Emscripten and the Rust target are provided by Nix):
+
+```bash
+nix develop .#web --command bash scripts/build-web.sh
+python3 -m http.server 8080 --bind 127.0.0.1 --directory target/web
+# Open http://localhost:8080 and click Play.
+```
+
+Deploy the contents of `target/web/` together to a static HTTPS host. Serve `.wasm` as
+`application/wasm`. Do not open the HTML directly as a `file://` URL. The web shell is separate
+from the desktop shell to avoid native SDK/linker flags leaking into cross-compilation;
+Emscripten's writable cache stays under `target/`.
+
+The Play click unlocks browser audio. WASD and arrows work as on desktop; in two-player mode,
+WASD controls player 1 and arrows control player 2. Controller support uses raylib's browser
+backend; physical controller mappings still need device/browser testing. Fullscreen is offered
+by the web page, and the canvas render buffer follows the available window size.
+
+Saves/settings live in this site's IndexedDB, not in your desktop save folder. Save through
+the pause menu and wait for **Saved in this browser** before closing. A periodic autosave and
+a best-effort checkpoint on tab suspension help, but abrupt browser/process termination can
+still lose unsaved progress. Hidden tabs stop advancing gameplay. Clearing site data removes
+browser saves; saves are scoped to the site's origin and do not sync between devices. Storage
+restore errors block startup rather than silently starting over; persistence errors remain
+visible and retryable. Private browsing/storage restrictions can prevent persistence.
+
+Browser acceptance checks (Node comes from the same web shell):
+
+```bash
+nix develop .#web
+npm ci --prefix web
+(cd web && npx playwright install chromium)
+npm --prefix web test
+# Or use an installed Chrome:
+# PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome npm --prefix web test
+```
+
+The test serves the built bundle on a temporary loopback port, checks gameplay, exact save
+restoration, resume, suspension checkpoint, two-seat split-screen, resizing and runtime errors.
+Screenshots go to `target/web-test/`. Storage failure/transaction-ordering checks also run.
+Headless audio initialization is checked; audible quality and Safari/Firefox/mobile acceptance
+still require hands-on testing.
+
 ### Windows
 
 Builds natively with the MSVC toolchain (`x86_64-pc-windows-msvc`). raylib is compiled from C

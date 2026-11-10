@@ -11,9 +11,12 @@
               formulas readable"
 )]
 
+#[cfg(any(test, not(target_os = "emscripten")))]
 use std::f32::consts::TAU;
 
-use super::dsp::{FilterMode, SR, Svf, gain_to_db, samples_for};
+use super::dsp::{FilterMode, Svf, samples_for};
+#[cfg(any(test, not(target_os = "emscripten")))]
+use super::dsp::{SR, gain_to_db};
 
 /// Largest absolute sample.
 #[must_use]
@@ -23,6 +26,7 @@ pub fn peak(samples: &[f32]) -> f32 {
 
 /// Root-mean-square level over the whole buffer.
 #[must_use]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn rms(samples: &[f32]) -> f32 {
     if samples.is_empty() {
         return 0.0;
@@ -32,6 +36,7 @@ pub fn rms(samples: &[f32]) -> f32 {
 
 /// Mean sample value.
 #[must_use]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn dc_offset(samples: &[f32]) -> f32 {
     if samples.is_empty() {
         return 0.0;
@@ -64,6 +69,7 @@ pub fn loudness(samples: &[f32]) -> f32 {
 /// divided by the 99.9th percentile of the internal steps. Around 1 or below is seamless; a
 /// click would stand far above it.
 #[must_use]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn seam_ratio(samples: &[f32]) -> f32 {
     if samples.len() < 4 {
         return 0.0;
@@ -82,6 +88,7 @@ pub fn seam_ratio(samples: &[f32]) -> f32 {
 /// Spectral centroid (Hz): the power-weighted mean frequency, averaged over 2048-sample frames
 /// weighted by their energy.
 #[must_use]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn spectral_centroid(samples: &[f32]) -> f32 {
     const FRAME: usize = 2_048;
     let mut weighted = 0.0_f64;
@@ -117,6 +124,7 @@ pub fn spectral_centroid(samples: &[f32]) -> f32 {
 }
 
 /// In-place radix-2 FFT (`real.len()` must be a power of two).
+#[cfg(any(test, not(target_os = "emscripten")))]
 fn fft(real: &mut [f32], imag: &mut [f32]) {
     let n = real.len();
     let mut j = 0;
@@ -154,6 +162,7 @@ fn fft(real: &mut [f32], imag: &mut [f32]) {
 
 /// Everything the render report prints about one buffer.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub struct Measurements {
     pub seconds: f32,
     pub peak_db: f32,
@@ -167,6 +176,7 @@ pub struct Measurements {
     pub seam_ratio: f32,
 }
 
+#[cfg(any(test, not(target_os = "emscripten")))]
 impl Measurements {
     #[must_use]
     pub fn of(samples: &[f32]) -> Self {

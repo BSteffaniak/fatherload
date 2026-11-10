@@ -251,6 +251,7 @@ impl HostNet {
     }
 }
 
+#[cfg(not(target_os = "emscripten"))]
 impl Drop for HostNet {
     fn drop(&mut self) {
         let lan = self.lan.take();

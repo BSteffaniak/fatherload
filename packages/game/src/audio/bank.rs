@@ -1,5 +1,6 @@
 //! Every patch pre-rendered to sample buffers (all variations), so playback only reads memory.
 
+#[cfg(not(target_os = "emscripten"))]
 use std::thread;
 
 use super::patch::{Patch, render_patch, variation_seed};
@@ -23,33 +24,41 @@ impl SoundBank {
     /// Renders just `patches` (others stay empty and play silence).
     #[must_use]
     pub fn render_only(seed: u64, patches: &[Patch]) -> Self {
-        let workers = thread::available_parallelism()
-            .map_or(2, std::num::NonZero::get)
-            .clamp(1, 8);
-        let mut rendered: Vec<Vec<Box<[f32]>>> = vec![Vec::new(); Patch::ALL.len()];
-        let jobs: Vec<Patch> = patches.to_vec();
-        let results: Vec<(Patch, Vec<Box<[f32]>>)> = thread::scope(|scope| {
-            #[allow(
-                clippy::needless_collect,
-                reason = "every worker must be spawned before any is joined"
-            )]
-            let handles: Vec<_> = (0..workers)
-                .map(|worker| {
-                    let jobs = &jobs;
-                    scope.spawn(move || {
-                        jobs.iter()
-                            .skip(worker)
-                            .step_by(workers)
-                            .map(|&patch| (patch, render_variations(seed, patch)))
-                            .collect::<Vec<_>>()
+        let jobs: Vec<_> = patches.to_vec();
+        let mut rendered = vec![Vec::new(); Patch::ALL.len()];
+        #[cfg(target_os = "emscripten")]
+        let results: Vec<_> = jobs
+            .iter()
+            .map(|&patch| (patch, render_variations(seed, patch)))
+            .collect();
+        #[cfg(not(target_os = "emscripten"))]
+        let results: Vec<(Patch, Vec<Box<[f32]>>)> = {
+            let workers = thread::available_parallelism()
+                .map_or(2, std::num::NonZero::get)
+                .clamp(1, 8);
+            thread::scope(|scope| {
+                #[allow(
+                    clippy::needless_collect,
+                    reason = "every worker must be spawned before any is joined"
+                )]
+                let handles: Vec<_> = (0..workers)
+                    .map(|worker| {
+                        let jobs = &jobs;
+                        scope.spawn(move || {
+                            jobs.iter()
+                                .skip(worker)
+                                .step_by(workers)
+                                .map(|&patch| (patch, render_variations(seed, patch)))
+                                .collect::<Vec<_>>()
+                        })
                     })
-                })
-                .collect();
-            handles
-                .into_iter()
-                .flat_map(|handle| handle.join().unwrap_or_default())
-                .collect()
-        });
+                    .collect();
+                handles
+                    .into_iter()
+                    .flat_map(|handle| handle.join().unwrap_or_default())
+                    .collect()
+            })
+        };
         for (patch, variations) in results {
             rendered[patch.index()] = variations;
         }
@@ -76,6 +85,7 @@ impl SoundBank {
 
     /// Total samples held (memory use is four bytes each).
     #[must_use]
+    #[cfg(any(test, not(target_os = "emscripten")))]
     pub fn total_samples(&self) -> usize {
         self.patches
             .iter()

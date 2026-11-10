@@ -55,6 +55,7 @@ impl Category {
     }
 
     #[must_use]
+    #[cfg(any(test, not(target_os = "emscripten")))]
     pub const fn label(self) -> &'static str {
         match self {
             Self::Interface => "interface",
@@ -89,6 +90,7 @@ macro_rules! patches {
 
             /// File-friendly name (`--render-audio` writes `<name>_<variation>.wav`).
             #[must_use]
+#[cfg(any(test, not(target_os = "emscripten")))]
             pub const fn name(self) -> &'static str {
                 match self {
                     $(Self::$variant => $name),+

@@ -303,6 +303,7 @@ pub fn wrapped_height(rows: usize) -> i32 {
     clippy::too_many_lines,
     reason = "a flat reference sheet: device rows, then the glyphs enlarged"
 )]
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub fn draw_prompt_sheet(draw: &mut impl RaylibDraw) {
     use super::pixel_art::sprite::draw_sprite;
     use crate::input::devices::KeyboardLayout;
@@ -439,6 +440,7 @@ pub fn draw_prompt_sheet(draw: &mut impl RaylibDraw) {
 }
 
 /// A prompt's name on the reference sheet.
+#[cfg(any(test, not(target_os = "emscripten")))]
 const fn prompt_name(prompt: Prompt) -> &'static str {
     match prompt {
         Prompt::Navigate => "navigate",

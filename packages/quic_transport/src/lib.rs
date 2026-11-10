@@ -83,9 +83,20 @@
 mod api;
 mod conditioner;
 mod config;
+mod descriptor;
+#[cfg(not(target_os = "emscripten"))]
 mod handle;
+#[cfg(target_os = "emscripten")]
+#[path = "unavailable/handle.rs"]
+mod handle;
+#[cfg(not(target_os = "emscripten"))]
 pub mod lan;
+#[cfg(target_os = "emscripten")]
+#[path = "unavailable/lan.rs"]
+pub mod lan;
+#[cfg(not(target_os = "emscripten"))]
 mod network;
+#[cfg(not(target_os = "emscripten"))]
 mod tls;
 
 pub use api::{
@@ -94,6 +105,11 @@ pub use api::{
 };
 pub use conditioner::{LinkConditionerConfig, NET_SIM_ENV_VAR, ParseLinkConditionerError};
 pub use config::{DEFAULT_MAX_FRAME_BYTES, NetConfig};
+pub use descriptor::HostDescriptor;
 pub use handle::{NetHandle, NetThreadStopped};
+#[cfg(not(target_os = "emscripten"))]
 pub use network::STREAM_MAGIC;
-pub use tls::{ALPN, DEFAULT_SERVER_NAME, HostDescriptor};
+#[cfg(not(target_os = "emscripten"))]
+pub use tls::{ALPN, DEFAULT_SERVER_NAME};
+#[cfg(target_os = "emscripten")]
+pub const DEFAULT_SERVER_NAME: &str = "localhost";

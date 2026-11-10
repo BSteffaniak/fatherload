@@ -27,17 +27,26 @@ pub struct Background<T> {
 impl<T: Send + 'static> Background<T> {
     fn spawn(name: &str, job: impl FnOnce() -> Result<T, String> + Send + 'static) -> Self {
         let (tx, rx) = mpsc::channel();
-        let spawned = std::thread::Builder::new()
-            .name(name.to_owned())
-            .spawn(move || {
-                let _ignored = tx.send(job());
-            });
-        if let Err(error) = spawned {
-            let (tx, failed) = mpsc::channel();
-            let _ignored = tx.send(Err(format!("could not start {name}: {error}")));
-            return Self { rx: failed };
+        #[cfg(target_os = "emscripten")]
+        {
+            let _ = name;
+            let _ignored = tx.send(job());
+            Self { rx }
         }
-        Self { rx }
+        #[cfg(not(target_os = "emscripten"))]
+        {
+            let spawned = std::thread::Builder::new()
+                .name(name.to_owned())
+                .spawn(move || {
+                    let _ignored = tx.send(job());
+                });
+            if let Err(error) = spawned {
+                let (tx, failed) = mpsc::channel();
+                let _ignored = tx.send(Err(format!("could not start {name}: {error}")));
+                return Self { rx: failed };
+            }
+            Self { rx }
+        }
     }
 
     /// The result, once the job finished. Never blocks.

@@ -231,10 +231,12 @@ pub const BUTTON_DISABLED: NineSlice = NineSlice {
     sprite: &BUTTON_DISABLED_SPRITE,
     border: 3,
 };
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub const TAB_ACTIVE: NineSlice = NineSlice {
     sprite: &TAB_ACTIVE_SPRITE,
     border: 3,
 };
+#[cfg(any(test, not(target_os = "emscripten")))]
 pub const TAB_IDLE: NineSlice = NineSlice {
     sprite: &TAB_IDLE_SPRITE,
     border: 3,

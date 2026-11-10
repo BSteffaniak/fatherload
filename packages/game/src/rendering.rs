@@ -18,6 +18,7 @@ use fatherload_simulation::{
 };
 
 mod counters;
+#[cfg(not(target_os = "emscripten"))]
 mod gallery;
 mod interior;
 mod layout;
@@ -29,6 +30,7 @@ mod screen;
 pub mod terrain;
 mod title;
 mod ui_kit;
+#[cfg(not(target_os = "emscripten"))]
 mod ui_sheet;
 mod world;
 
@@ -283,6 +285,7 @@ impl GameRenderer {
     }
 
     /// Forgets dialog focus and scroll (scene captures start each scene fresh).
+    #[cfg(not(target_os = "emscripten"))]
     pub fn reset_ui_state(&self) {
         self.ui_states.borrow_mut().clear();
     }
@@ -520,6 +523,7 @@ impl GameRenderer {
     }
 
     /// Draws the art reference sheet (palette, UI kit, icons, sprites) instead of the game.
+    #[cfg(not(target_os = "emscripten"))]
     pub fn render_art_gallery(&self, draw: &mut RaylibDrawHandle<'_>) {
         sprite::set_current_atlas(self.atlas.as_ref());
         ui_kit::begin_frame(UiCanvas::from_draw(draw), self.font_faces(), 0.0);
@@ -529,6 +533,7 @@ impl GameRenderer {
     }
 
     /// Draws the button-prompt reference sheet instead of the game.
+    #[cfg(not(target_os = "emscripten"))]
     pub fn render_prompt_sheet(&self, draw: &mut RaylibDrawHandle<'_>) {
         sprite::set_current_atlas(self.atlas.as_ref());
         ui_kit::begin_frame(UiCanvas::from_draw(draw), self.font_faces(), 0.0);
@@ -538,6 +543,7 @@ impl GameRenderer {
     }
 
     /// Draws the UI reference sheet (menu icons and interior props) instead of the game.
+    #[cfg(not(target_os = "emscripten"))]
     pub fn render_ui_sheet(&self, draw: &mut RaylibDrawHandle<'_>) {
         sprite::set_current_atlas(self.atlas.as_ref());
         ui_kit::begin_frame(UiCanvas::from_draw(draw), self.font_faces(), 0.0);

@@ -53,6 +53,23 @@
         );
       in
       {
+        devShells.web = pkgs.mkShell {
+          packages = [
+            (rustToolchain.override { targets = [ "wasm32-unknown-emscripten" ]; })
+            pkgs.emscripten
+            pkgs.cmake
+            pkgs.python3
+            pkgs.nodejs
+            pkgs.llvmPackages.libclang
+          ];
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          shellHook = ''
+            # Emscripten's Nix store cache is read-only; keep generated ports local.
+            export EM_CACHE="$PWD/target/emscripten-cache"
+            unset SDKROOT MACOSX_DEPLOYMENT_TARGET RUSTFLAGS CFLAGS CXXFLAGS LDFLAGS BINDGEN_EXTRA_CLANG_ARGS
+            echo "Fatherload web shell: scripts/build-web.sh"
+          '';
+        };
         devShells.default = pkgs.mkShell {
           buildInputs = [
             rustToolchain

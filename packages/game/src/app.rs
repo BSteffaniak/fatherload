@@ -21,6 +21,7 @@ use crate::{
     window::DesktopWindow,
 };
 
+#[cfg(not(target_os = "emscripten"))]
 const TARGET_FPS: u32 = 60;
 
 /// Samples every input device for this frame. Playing alone, the main keyboard reads WASD and
@@ -109,7 +110,10 @@ fn seat_audio(input: &FrameInput, game: &LocalGame) -> Vec<SeatAudio> {
 pub fn run() {
     let settings = load_settings();
     let (mut raylib, thread, mut window) = DesktopWindow::open(settings.window);
+    #[cfg(not(target_os = "emscripten"))]
     raylib.set_target_fps(TARGET_FPS);
+    #[cfg(target_os = "emscripten")]
+    raylib.set_target_fps(0);
     raylib.set_exit_key(None);
 
     let mut saved_window = settings.window;
@@ -126,7 +130,20 @@ pub fn run() {
     let mut router = InputRouter::new(MAX_LOCAL_SEATS);
 
     while !game.should_exit() {
+        #[cfg(target_os = "emscripten")]
+        {
+            crate::browser::yield_frame();
+            if crate::browser::take_suspend_request() {
+                game.save_browser_checkpoint();
+            }
+            if crate::browser::is_hidden() {
+                continue;
+            }
+            crate::browser::resize_canvas(&mut raylib);
+        }
         let delta_seconds = raylib.get_frame_time();
+        #[cfg(target_os = "emscripten")]
+        let delta_seconds = delta_seconds.min(0.1);
         let exit_requested = raylib.window_should_close();
         let mut input = sample_frame_input(
             &mut raylib,
