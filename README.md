@@ -30,7 +30,7 @@ Build using the locked flake's web shell (Emscripten and the Rust target are pro
 ```bash
 nix develop .#web --command bash scripts/build-web.sh
 python3 -m http.server 8080 --bind 127.0.0.1 --directory target/web
-# Open http://localhost:8080 and click Play.
+# Open http://localhost:8080; the original game menu loads automatically.
 ```
 
 Deploy the contents of `target/web/` together to a static HTTPS host. Serve `.wasm` as
@@ -40,7 +40,7 @@ Emscripten's writable cache stays under `target/`.
 
 The browser runs frames through `requestAnimationFrame` (no timer sleeps or Asyncify);
 simulation uses bounded animation timestamps and resets elapsed time after tab suspension.
-The Play click unlocks browser audio. WASD and arrows work as on desktop; in two-player mode,
+The first click or keypress unlocks browser audio. WASD and arrows work as on desktop; in two-player mode,
 WASD controls player 1 and arrows control player 2. Controller support uses raylib's browser
 backend; physical controller mappings still need device/browser testing. Fullscreen is offered
 by the web page, and the canvas render buffer follows the available window size.

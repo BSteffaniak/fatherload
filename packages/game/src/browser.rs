@@ -65,7 +65,11 @@ pub fn run(frame: impl FnMut(f32) -> bool + 'static) {
 /// Background tabs must not simulate missed real time.
 pub fn is_hidden() -> bool {
     // SAFETY: static NUL-terminated script, no borrowed JavaScript values cross the boundary.
-    unsafe { emscripten_run_script_int(c"document.hidden ? 1 : 0".as_ptr()) != 0 }
+    unsafe {
+        emscripten_run_script_int(
+            c"document.hidden || document.getElementById('help-panel')?.open ? 1 : 0".as_ptr(),
+        ) != 0
+    }
 }
 
 /// Request one checkpoint on tab suspension, not one per hidden frame.
@@ -90,8 +94,8 @@ pub fn persist_saves() {
 pub fn resize_canvas(raylib: &mut raylib::RaylibHandle) {
     // SAFETY: browser dimensions are returned as bounded integer pixel counts.
     let (width, height) = unsafe {
-        (emscripten_run_script_int(c"Math.max(320, Math.min(2560, window.innerWidth))".as_ptr()),
-         emscripten_run_script_int(c"Math.max(240, Math.min(1440, document.fullscreenElement ? window.innerHeight : Math.floor(window.innerHeight-(document.getElementById('canvas').getBoundingClientRect().top+window.scrollY))))".as_ptr()))
+        (emscripten_run_script_int(c"Math.max(1, Math.min(2560, Math.floor(document.getElementById('game').clientWidth)))".as_ptr()),
+         emscripten_run_script_int(c"Math.max(1, Math.min(1440, Math.floor(document.getElementById('game').clientHeight)))".as_ptr()))
     };
     if raylib.get_screen_width() != width || raylib.get_screen_height() != height {
         raylib.set_window_size(width, height);

@@ -30,7 +30,7 @@ const server = http.createServer(async (req, res) => {
     browser = await chromium.launch({
       headless: true,
       ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}),
-      args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+      args: ['--autoplay-policy=document-user-activation-required', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
     });
     const context = await browser.newContext({ viewport: { width: 1280, height: 960 } });
     await context.addInitScript(() => {
@@ -52,7 +52,7 @@ const server = http.createServer(async (req, res) => {
       await page.keyboard.up(name); await page.waitForTimeout(120);
     };
     const start = async () => {
-      await page.getByRole('button', { name: 'Play', exact: true }).click({ timeout: 60000 });
+      await page.waitForFunction(() => document.body.classList.contains('playing'), { timeout: 60000 });
       await page.waitForTimeout(5000);
       await page.locator('#canvas').focus();
     };
@@ -66,6 +66,7 @@ const server = http.createServer(async (req, res) => {
     };
     const state = save => save.save.world;
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    assert.equal(await page.locator('#launch, #start').count(), 0, 'no interstitial start screen');
     await page.evaluate(() => {
       window.startupCanvasSizes = [];
       const canvas = document.getElementById('canvas');
@@ -74,9 +75,37 @@ const server = http.createServer(async (req, res) => {
       }).observe(canvas, { attributes: true, attributeFilter: ['width', 'height'] });
     });
     await start(); await shot('title');
+    const assertViewport = async () => {
+      assert.deepEqual(await page.locator('#canvas').evaluate(canvas => {
+        const rect = canvas.getBoundingClientRect();
+        return [rect.x, rect.y, rect.width, rect.height, canvas.width, canvas.height];
+      }), [0, 0, 1280, 960, 1280, 960], 'canvas fills viewport with matching render buffer');
+      assert(await page.evaluate(() => document.documentElement.scrollHeight === innerHeight), 'no page scrolling');
+    };
+    await assertViewport();
+    await page.evaluate(async () => {
+      for (const device of window.miniaudio.devices) {
+        if (device?.webaudio) await device.webaudio.suspend();
+      }
+    });
+    await key('Shift');
+    await page.waitForFunction(() => window.miniaudio?.devices.some(device => device?.webaudio?.state === 'running'));
+    assert(await page.locator('#canvas').isVisible(), 'original title renders without activation');
+    await page.getByRole('button', { name: 'Help', exact: true }).click();
+    await shot('help');
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.waitForFunction(() => document.activeElement === document.getElementById('canvas'));
+    await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+    await page.waitForFunction(() => document.fullscreenElement?.id === 'game');
+    assert(await page.locator('#tools').isVisible(), 'fullscreen retains web controls');
+    await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+    await page.waitForFunction(() => !document.fullscreenElement);
+    await page.waitForTimeout(500);
+    await assertViewport();
     const startupSizes = await page.evaluate(() => [...new Set(window.startupCanvasSizes)]);
     assert(startupSizes.length <= 3, `startup resize feedback loop: ${startupSizes.join(', ')}`);
     await key('Enter');
+    await page.waitForFunction(() => window.miniaudio?.devices.some(device => device?.webaudio?.state === 'running'));
     for (let i = 0; i < 6; i++) await key('ArrowDown');
     await key('Enter'); await page.waitForTimeout(3000); await shot('single-player');
     await page.evaluate(() => { window.frameSamples = []; });
@@ -92,7 +121,7 @@ const server = http.createServer(async (req, res) => {
     const savedText = await page.evaluate(() => FS.readFile('/fatherload/save-slot-1.json', { encoding: 'utf8' }));
     assert((await files()).includes('save-slot-1.json'));
     await page.reload();
-    await page.getByRole('button', { name: 'Play', exact: true }).waitFor({ timeout: 60000 });
+    await page.waitForFunction(() => document.body.classList.contains('playing'), { timeout: 60000 });
     assert.equal(await page.evaluate(() => FS.readFile('/fatherload/save-slot-1.json', { encoding: 'utf8' })), savedText, 'IndexedDB restores the exact save before main');
     await start(); await shot('restored-title');
     await key('Enter'); await page.waitForTimeout(2000); await shot('resumed');
@@ -110,7 +139,7 @@ const server = http.createServer(async (req, res) => {
       await split.keyboard.up(name); await split.waitForTimeout(120);
     };
     await split.goto(page.url());
-    await split.getByRole('button', { name: 'Play', exact: true }).click({ timeout: 60000 });
+    await split.waitForFunction(() => document.body.classList.contains('playing'), { timeout: 60000 });
     await split.waitForTimeout(5000);
     await splitKey('ArrowDown'); await splitKey('Enter');
     for (let i = 0; i < 6; i++) await splitKey('ArrowDown');
@@ -122,6 +151,17 @@ const server = http.createServer(async (req, res) => {
     assert.equal(Object.keys(roster).length, 2, 'split-screen roster');
     await split.setViewportSize({ width: 960, height: 720 }); await split.waitForTimeout(500);
     assert.equal(await split.locator('#canvas').evaluate(canvas => canvas.width), 960, 'render buffer resizes');
+    assert.equal(await split.locator('#canvas').evaluate(canvas => canvas.height), 720, 'render buffer uses full height');
+    await page.evaluate(() => Module.setStatus('Saved in this browser.'));
+    await page.waitForTimeout(3700);
+    assert.equal(await page.locator('#status').textContent(), '', 'save notification dismisses');
+    await page.evaluate(() => Module.setStatus('Could not persist saves. Keep this tab open and retry saving.'));
+    await page.waitForTimeout(3700);
+    assert.match(await page.locator('#status').textContent(), /Could not persist/, 'storage errors stay visible');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(500);
+    assert.deepEqual(await page.locator('#canvas').evaluate(canvas => [canvas.width, canvas.height]), [390, 844], 'portrait viewport fits');
+    await shot('portrait');
     assert.deepEqual(errors, [], 'browser console must not contain runtime errors');
     console.log('PASS: gameplay, audio initialization, exact IndexedDB save/reload, resume, suspension checkpoint, two-seat split-screen and resize.');
     console.log(`Screenshots: ${artifacts}`);

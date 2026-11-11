@@ -1,39 +1,116 @@
 <!doctype html>
 <html lang="en">
+<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#11151a">
 <title>Fatherload</title>
 <link rel="icon" href="data:,">
 <style>
-html,body{margin:0;background:#100e19;color:#eee;font:16px system-ui;text-align:center}
-canvas{display:block;margin:auto;max-width:100%;image-rendering:pixelated;outline:none}
-button{font:inherit;padding:.6rem 1rem;margin:.5rem} #status{min-height:1.5em}
+:root{color-scheme:dark;font:16px system-ui,sans-serif;color:#ede9df;background:#11151a;--gold:#edb95b;--muted:#aab0b4}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}[hidden]{display:none!important}
+#game{position:fixed;inset:0;background:#11151a;isolation:isolate}
+canvas{display:block;width:100%;height:100%;image-rendering:pixelated;outline:none}
+button{font:inherit;cursor:pointer;color:inherit;border:1px solid #ffffff30;background:#1b222b;padding:.65rem 1rem;border-radius:6px}button:hover{background:#303b46}button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:4px}button:disabled{cursor:wait;opacity:.5}
+#tools{position:absolute;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));display:flex;gap:6px;opacity:.3;transition:opacity .2s}#tools:hover,#tools:focus-within{opacity:1}#tools button{background:#111820e8;backdrop-filter:blur(8px);font-size:.8rem;padding:.5rem .7rem}
+#status{position:absolute;left:50%;bottom:max(64px,env(safe-area-inset-bottom));transform:translateX(-50%);max-width:min(90%,560px);padding:.7rem 1rem;border:1px solid #ffffff25;border-radius:6px;background:#171e27f2;color:#eee;text-align:center;font-size:.85rem;pointer-events:none}#status:empty{display:none}#status[data-error="true"]{border-color:#d99062;pointer-events:auto}body:not(.playing) #status{bottom:1.5rem}
+dialog{max-width:min(90vw,560px);max-height:85dvh;overflow:auto;border:1px solid #687079;border-radius:12px;background:#19212b;color:#ede9df;padding:2rem;box-shadow:0 24px 100px #0009}dialog::backdrop{background:#080c12b8;backdrop-filter:blur(6px)}dialog h2{margin-top:0}dialog p{color:#bdc4c9;line-height:1.6}dialog h3{font-size:.9rem;color:var(--gold);margin-top:1.5rem}kbd{font:inherit;color:#fff}#close-help{width:100%;margin-top:1rem}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
-<h1>Fatherload</h1>
-<p>Single-player and local split-screen. Keyboard or controllers. Online play is not available yet. Save through the pause menu before closing this tab.</p>
-<button id="start" disabled>Loading…</button>
-<button onclick="document.getElementById('canvas').requestFullscreen()">Fullscreen</button>
-<div id="status" role="status">Downloading game…</div>
-<canvas id="canvas" width="1280" height="720" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+</head>
+<body>
+<main id="game" aria-label="Fatherload game">
+<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Fatherload. Use keyboard or controller to play." oncontextmenu="event.preventDefault()"></canvas>
+<nav id="tools" aria-label="Game controls" hidden>
+<button id="help" aria-label="Help">Help</button>
+<button id="fullscreen">Fullscreen</button>
+</nav>
+<div id="status" role="status" aria-live="polite">Downloading game…</div>
+<dialog id="help-panel" aria-labelledby="help-title">
+<h2 id="help-title">Before you dig</h2>
+<h3>Your rig, your rules</h3>
+<p>Use a keyboard or connected controller. Choose your bindings in the game's settings. Press <kbd>Escape</kbd> to open the pause menu during play.</p>
+<h3>Bring a friend</h3>
+<p>Choose local split-screen in the game menu to play together on this screen. Online multiplayer is not available in the browser yet.</p>
+<h3>Keep your haul</h3>
+<p>Save through the pause menu and wait for “Saved in this browser” before closing the tab. Saves stay in this browser on this site's address; clearing site data removes them.</p>
+<p>The game is suspended while this help panel is open. Touch controls are not available yet.</p>
+<button id="close-help">Back</button>
+</dialog>
+</main>
 <script>
 const canvas = document.getElementById('canvas');
-const start = document.getElementById('start');
+const tools = document.getElementById('tools');
+const status = document.getElementById('status');
+const helpPanel = document.getElementById('help-panel');
+let playing = false;
+let fatal = false;
+let statusTimer;
 var Module = {
   canvas, noInitialRun:true,
-  setStatus(text) { document.getElementById('status').textContent = text; },
+  setStatus(text) {
+    if (fatal) return;
+    clearTimeout(statusTimer);
+    status.textContent = text;
+    const error = /unavailable|could not|failed|error/i.test(text);
+    status.dataset.error = String(error);
+    if (playing && text && !error && !/saving/i.test(text)) {
+      statusTimer = setTimeout(() => { status.textContent = ''; }, 3500);
+    }
+  },
   printErr:console.error,
-  onRuntimeInitialized() { start.disabled=false; start.textContent='Play'; Module.setStatus('Ready. Saves are stored in this browser.'); },
-  onAbort(reason) { Module.setStatus('Game could not start: '+reason); }
+  onRuntimeInitialized() {
+    if (fatal) return;
+    startGame();
+  },
+  onAbort(reason) { fail('Game could not start: '+reason); }
 };
-start.addEventListener('click', () => {
-  start.disabled=true; start.hidden=true; canvas.focus({preventScroll:true});
+function fail(message) {
+  Module.setStatus(message);
+  fatal = true;
+  clearTimeout(statusTimer);
+}
+function startGame() {
   Module.setStatus('Starting…');
-  Module.callMain([]);
-  Module.setStatus('');
+  try {
+    Module.callMain([]);
+    if (fatal) return;
+    playing = true;
+    document.body.classList.add('playing');
+    tools.hidden=false;
+    canvas.focus({preventScroll:true});
+    // Do not erase a storage error reported synchronously during startup.
+    if (status.dataset.error !== 'true') Module.setStatus('');
+  } catch (error) { fail('Game could not start. Reload to retry.'); console.error(error); }
+}
+// miniaudio handles clicks/touch itself; also unlock for keyboard-only players.
+// Keep the listener until the devices exist, so an early keypress cannot consume it.
+function unlockKeyboardAudio(event) {
+  if (!event.isTrusted || !window.miniaudio?.devices?.some(device => device?.webaudio)) return;
+  window.miniaudio.unlock();
+  document.removeEventListener('keydown', unlockKeyboardAudio, true);
+}
+document.addEventListener('keydown', unlockKeyboardAudio, true);
+function showHelp() { helpPanel.showModal(); }
+document.getElementById('help').addEventListener('click', showHelp);
+document.getElementById('close-help').addEventListener('click', () => helpPanel.close());
+helpPanel.addEventListener('close', () => { if (playing) canvas.focus({preventScroll:true}); });
+const fullscreen = document.getElementById('fullscreen');
+if (!document.fullscreenEnabled) fullscreen.hidden = true;
+fullscreen.addEventListener('click', async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.getElementById('game').requestFullscreen();
+  } catch (_) { Module.setStatus('Fullscreen unavailable. You can keep playing in this window.'); }
+  canvas.focus({preventScroll:true});
+});
+document.addEventListener('fullscreenchange', () => {
+  fullscreen.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
 });
 canvas.addEventListener('keydown', event => {
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Tab'].includes(event.code)) event.preventDefault();
 });
+canvas.addEventListener('pointerdown', () => canvas.focus({preventScroll:true}));
 </script>
-<script src="fatherload.js"></script>
+<script src="fatherload.js" onerror="fail('Game download failed. Reload to retry.')"></script>
+</body>
 </html>
