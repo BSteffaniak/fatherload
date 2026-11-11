@@ -38,6 +38,8 @@ Deploy the contents of `target/web/` together to a static HTTPS host. Serve `.wa
 from the desktop shell to avoid native SDK/linker flags leaking into cross-compilation;
 Emscripten's writable cache stays under `target/`.
 
+The browser runs frames through `requestAnimationFrame` (no timer sleeps or Asyncify);
+simulation uses bounded animation timestamps and resets elapsed time after tab suspension.
 The Play click unlocks browser audio. WASD and arrows work as on desktop; in two-player mode,
 WASD controls player 1 and arrows control player 2. Controller support uses raylib's browser
 backend; physical controller mappings still need device/browser testing. Fullscreen is offered

@@ -33,6 +33,16 @@ const server = http.createServer(async (req, res) => {
       args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
     });
     const context = await browser.newContext({ viewport: { width: 1280, height: 960 } });
+    await context.addInitScript(() => {
+      const requestFrame = window.requestAnimationFrame.bind(window);
+      window.frameSamples = [];
+      window.requestAnimationFrame = callback => requestFrame(timestamp => {
+        const started = performance.now();
+        callback(timestamp);
+        window.frameSamples.push({ timestamp, work: performance.now() - started });
+        if (window.frameSamples.length > 600) window.frameSamples.shift();
+      });
+    });
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
@@ -69,6 +79,13 @@ const server = http.createServer(async (req, res) => {
     await key('Enter');
     for (let i = 0; i < 6; i++) await key('ArrowDown');
     await key('Enter'); await page.waitForTimeout(3000); await shot('single-player');
+    await page.evaluate(() => { window.frameSamples = []; });
+    await page.waitForTimeout(2000);
+    const frames = await page.evaluate(() => window.frameSamples);
+    assert(frames.length >= 10, 'game must keep scheduling animation frames');
+    const intervals = frames.slice(1).map((frame, i) => frame.timestamp - frames[i].timestamp).sort((a,b) => a-b);
+    const work = frames.map(frame => frame.work).sort((a,b) => a-b);
+    console.log(`RAF timing (headless/software GPU): ${frames.length} frames; median interval ${intervals[Math.floor(intervals.length/2)].toFixed(2)} ms; median work ${work[Math.floor(work.length/2)].toFixed(2)} ms`);
     await page.keyboard.down('d'); await page.waitForTimeout(600); await page.keyboard.up('d');
     const original = await save();
     assert.equal(Object.keys(state(original).players).length, 1, 'single-player roster');

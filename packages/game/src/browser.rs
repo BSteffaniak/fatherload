@@ -1,17 +1,64 @@
-//! Emscripten browser integration. Asyncify yields the existing raylib loop to the browser.
+//! Display-synchronized Emscripten browser integration.
 use std::ffi::{c_char, c_int};
 
 unsafe extern "C" {
-    fn emscripten_sleep(milliseconds: u32);
+    fn emscripten_request_animation_frame_loop(
+        callback: unsafe extern "C" fn(f64, *mut std::ffi::c_void) -> c_int,
+        data: *mut std::ffi::c_void,
+    );
     fn emscripten_run_script(script: *const c_char);
     fn emscripten_run_script_int(script: *const c_char) -> c_int;
 }
 
-/// Yield without busy-waiting. Browser builds never use raylib's desktop frame limiter.
-pub fn yield_frame() {
-    // SAFETY: Emscripten supplies this function; Asyncify is enabled in the web build.
+/// Register one owned frame callback. Emscripten invokes it once per animation frame.
+/// The callback owns the app until cancellation; no stack references outlive `main`.
+pub fn run(frame: impl FnMut(f32) -> bool + 'static) {
+    struct Loop {
+        frame: Box<dyn FnMut(f32) -> bool>,
+        previous: Option<f64>,
+    }
+    unsafe extern "C" fn animate(timestamp: f64, data: *mut std::ffi::c_void) -> c_int {
+        // SAFETY: `data` comes from Box::into_raw below. The animation loop is serial and
+        // stops invoking this pointer when we return false. It is freed only on that path.
+        let state = unsafe { &mut *data.cast::<Loop>() };
+        // RAF may stop entirely while hidden, so a pending visibility checkpoint also
+        // resets the clock when the first visible callback arrives.
+        // SAFETY: static script reads only our bootstrap's suspension flag.
+        if unsafe {
+            emscripten_run_script_int(c"Module.fatherloadSuspendRequested ? 1 : 0".as_ptr())
+        } != 0
+        {
+            state.previous = None;
+        }
+        let delta = if is_hidden() {
+            state.previous = None;
+            0.0
+        } else {
+            state
+                .previous
+                .replace(timestamp)
+                .map_or(0.0, |last| (timestamp - last).clamp(0.0, 100.0) / 1000.0)
+        };
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "frame delta is bounded to 0.1 seconds"
+        )]
+        let keep_running = (state.frame)(delta as f32);
+        if !keep_running {
+            // SAFETY: registration transferred this allocation exactly once.
+            unsafe {
+                drop(Box::from_raw(data.cast::<Loop>()));
+            }
+        }
+        c_int::from(keep_running)
+    }
+    let data = Box::into_raw(Box::new(Loop {
+        frame: Box::new(frame),
+        previous: None,
+    }));
+    // SAFETY: the owned state stays valid until animate returns false and releases it.
     unsafe {
-        emscripten_sleep(16);
+        emscripten_request_animation_frame_loop(animate, data.cast());
     }
 }
 
