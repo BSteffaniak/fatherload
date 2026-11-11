@@ -6,13 +6,14 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { chromium } = require('../web/node_modules/playwright');
 
-const root = path.resolve(__dirname, '../target/web');
+const root = path.resolve(__dirname, '..', process.env.FATHERLOAD_WEB_ROOT || 'target/web');
+const remote = process.env.FATHERLOAD_WEB_URL;
 const artifacts = path.resolve(__dirname, '../target/web-test');
 const errors = [];
 const server = http.createServer(async (req, res) => {
   try {
     const name = new URL(req.url, 'http://localhost').pathname;
-    if (!['/', '/index.html', '/fatherload.js', '/fatherload.wasm'].includes(name)) {
+    if (!['/', '/index.html', '/fatherload.js', '/fatherload.wasm'].includes(name) && !/^\/assets\/fatherload\.[a-f0-9]{64}\.(js|wasm)$/.test(name)) {
       res.writeHead(404).end(); return;
     }
     const file = name === '/' ? 'index.html' : name.slice(1);
@@ -26,7 +27,7 @@ const server = http.createServer(async (req, res) => {
   let browser;
   try {
     await fs.mkdir(artifacts, { recursive: true });
-    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    if (!remote) await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     browser = await chromium.launch({
       headless: true,
       ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}),
@@ -65,7 +66,7 @@ const server = http.createServer(async (req, res) => {
       return page.evaluate(() => JSON.parse(FS.readFile('/fatherload/save-slot-1.json', { encoding: 'utf8' })));
     };
     const state = save => save.save.world;
-    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    await page.goto(remote || `http://127.0.0.1:${server.address().port}`);
     assert.equal(await page.locator('#launch, #start').count(), 0, 'no interstitial start screen');
     await page.evaluate(() => {
       window.startupCanvasSizes = [];
@@ -167,6 +168,6 @@ const server = http.createServer(async (req, res) => {
     console.log(`Screenshots: ${artifacts}`);
   } finally {
     if (browser) await browser.close();
-    await new Promise(resolve => server.close(resolve));
+    if (server.listening) await new Promise(resolve => server.close(resolve));
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

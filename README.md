@@ -70,6 +70,13 @@ Screenshots go to `target/web-test/`. Storage failure/transaction-ordering check
 Headless audio initialization is checked; audible quality and Safari/Firefox/mobile acceptance
 still require hands-on testing.
 
+### Production hosting
+
+The CI-built browser release targets `https://fatherload.hyperchad.dev` on Cloudflare
+Pages. See [PRODUCTION.md](PRODUCTION.md) for protected deployment, secret provisioning,
+live smoke tests and rollback. Hosting requires Cloudflare credentials and approval
+of the first deployment.
+
 ### Windows
 
 Builds natively with the MSVC toolchain (`x86_64-pc-windows-msvc`). raylib is compiled from C

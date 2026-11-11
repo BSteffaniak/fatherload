@@ -25,3 +25,6 @@ fatherload-save.json
 .aider*
 .claude/
 .cursor/
+
+# Python deployment tooling
+__pycache__/

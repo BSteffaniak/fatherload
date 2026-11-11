@@ -1,0 +1,87 @@
+name: Web build and production deployment
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+      - uses: cachix/install-nix-action@91f6a0f59e94dfb2cfed0f4000f36a68ead1d20c
+      - uses: actions/setup-node@101b3474143230c3562bd21f0b3c3f8254784571
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build with locked web toolchain and run strict web Clippy
+        run: |
+          nix develop .#web --command bash -c 'source scripts/build-web.sh; cargo clippy --locked -p fatherload_game --target wasm32-unknown-emscripten -- -D warnings'
+      - name: Package versioned release
+        run: python3 scripts/package-web.py --destination target/web-release
+      - run: npm ci --prefix web
+      - run: cd web && npx --no-install playwright install --with-deps chromium
+      - name: Test deployment tooling
+        run: python3 scripts/test-deployment.py
+      - name: Test the exact release artifact in Chromium
+        env:
+          FATHERLOAD_WEB_ROOT: target/web-release
+        run: npm test --prefix web
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: fatherload-web
+          path: target/web-release/
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: browser-test-screenshots
+          path: target/web-test/
+          if-no-files-found: ignore
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: fatherload-production
+      cancel-in-progress: false
+    environment:
+      name: Production
+      url: https://fatherload.hyperchad.dev
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+      - uses: actions/setup-node@101b3474143230c3562bd21f0b3c3f8254784571
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: fatherload-web
+          path: target/web-release
+      - run: npm ci --prefix web
+      - name: Provision Pages and deploy tested artifact
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python3 scripts/configure-pages.py
+          ./web/node_modules/.bin/wrangler pages deploy target/web-release --project-name fatherload --branch master --commit-hash "$GITHUB_SHA"
+          python3 scripts/configure-pages.py --domains
+      - name: Verify live release, headers and asset integrity
+        run: python3 scripts/check-web-release.py https://fatherload.hyperchad.dev --revision "$GITHUB_SHA" --artifact target/web-release --attempts 30
+      - run: cd web && npx --no-install playwright install --with-deps chromium
+      - name: Browser acceptance on the public HTTPS origin
+        env:
+          FATHERLOAD_WEB_URL: https://fatherload.hyperchad.dev
+        run: npm test --prefix web
