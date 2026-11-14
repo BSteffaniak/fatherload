@@ -19,10 +19,12 @@ def configure(domains):
     # List before creation: do not retry an uncertain mutation as a blind create.
     projects = []
     page = 1
+    # Match Wrangler's supported Pages page size (100 is rejected by this API).
+    page_size = 10
     while True:
-        batch = cf.request('GET', root + f'?page={page}&per_page=100')
+        batch = cf.request('GET', root + f'?page={page}&per_page={page_size}')
         projects.extend(batch)
-        if len(batch) < 100:
+        if len(batch) < page_size:
             break
         page += 1
     project = next((p for p in projects if p['name'] == PROJECT), None)

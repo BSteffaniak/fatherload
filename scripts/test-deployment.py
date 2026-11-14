@@ -70,6 +70,21 @@ class ProviderTests(unittest.TestCase):
         for value in ('secret', 'private-account'):
             self.assertNotIn(value, text)
 
+    def test_pages_pagination_uses_supported_size(self):
+        module = load('configure-pages')
+        fake = unittest.mock.Mock()
+        fake.zone.return_value = {'id': 'zone', 'account': {'id': 'account'}}
+        fake.request.side_effect = [
+            [{'name': f'other-{i}', 'production_branch': 'master'} for i in range(10)],
+            [{'name': 'fatherload', 'production_branch': 'master'}],
+        ]
+        with patch.object(module, 'Cloudflare', return_value=fake), patch.dict('os.environ', {'CLOUDFLARE_ACCOUNT_ID': 'account'}):
+            module.configure(False)
+        self.assertEqual(fake.request.call_args_list, [
+            unittest.mock.call('GET', '/accounts/account/pages/projects?page=1&per_page=10'),
+            unittest.mock.call('GET', '/accounts/account/pages/projects?page=2&per_page=10'),
+        ])
+
     def test_conflicting_dns_not_modified(self):
         module = load('configure-pages')
         fake = unittest.mock.Mock()
