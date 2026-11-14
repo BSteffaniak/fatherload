@@ -6,12 +6,27 @@ import json
 from pathlib import Path
 import re
 import time
+import urllib.error
 import urllib.request
+
+
+def failure_reason(error):
+    """Report useful failures without logging response bodies or arbitrary URLs."""
+    if isinstance(error, urllib.error.HTTPError):
+        return f'HTTP {error.code}'
+    if isinstance(error, ValueError):
+        # These messages are fixed checks below; JSON parse errors are generic.
+        return 'Invalid release JSON' if isinstance(error, json.JSONDecodeError) else str(error)
+    if isinstance(error, KeyError):
+        return 'Release manifest is missing a required field'
+    return 'Network/TLS/timeout or local artifact read failure'
 
 
 def verify(origin, revision, local):
     def fetch(name):
-        with urllib.request.urlopen(origin.rstrip('/') + '/' + name, timeout=30) as response:
+        request = urllib.request.Request(origin.rstrip('/') + '/' + name,
+            headers={'User-Agent': 'Fatherload-Release-Check/1.0'})
+        with urllib.request.urlopen(request, timeout=30) as response:
             if not response.url.startswith(origin.rstrip('/') + '/'):
                 raise ValueError('Unexpected cross-origin redirect')
             return response.read(), response.headers
@@ -58,7 +73,10 @@ if __name__ == '__main__':
             verify(args.origin, args.revision, args.artifact)
             print('PASS: live release identity, asset integrity, MIME and headers')
             break
-        except (OSError, ValueError, KeyError):
+        except (OSError, ValueError, KeyError) as error:
+            reason = failure_reason(error)
+            print(f'Verification attempt {attempt + 1}/{args.attempts}: {reason}', flush=True)
             if attempt + 1 == args.attempts:
                 raise SystemExit('Live release verification failed; inspect deployment/DNS/TLS/cache state') from None
+            print('Retrying in 20 seconds…', flush=True)
             time.sleep(20)

@@ -17,6 +17,20 @@ def load(name):
     return module
 
 
+class VerificationTests(unittest.TestCase):
+    def test_explicit_user_agent_and_safe_http_error(self):
+        module = load('check-web-release')
+        error = urllib.error.HTTPError('https://private-url', 403, 'private-response', {}, None)
+        with patch.object(module.urllib.request, 'urlopen', side_effect=error) as opened:
+            with self.assertRaises(urllib.error.HTTPError):
+                module.verify('https://example.com', 'revision', None)
+        request = opened.call_args.args[0]
+        self.assertEqual(request.get_header('User-agent'), 'Fatherload-Release-Check/1.0')
+        self.assertEqual(module.failure_reason(error), 'HTTP 403')
+        self.assertEqual(module.failure_reason(ValueError('HTML integrity mismatch')), 'HTML integrity mismatch')
+        self.assertNotIn('private', module.failure_reason(OSError('private-details')))
+
+
 class PackagingTests(unittest.TestCase):
     def test_package(self):
         module = load('package-web')
