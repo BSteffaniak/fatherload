@@ -56,6 +56,20 @@ class ProviderTests(unittest.TestCase):
                 cf.request('POST', '/user/tokens', {'value': 'secret-body'})
         self.assertNotIn('secret', str(raised.exception))
 
+    def test_http_error_identifies_operation_and_codes_only(self):
+        import io
+        with patch.dict('os.environ', {'CLOUDFLARE_API_TOKEN': 'secret-token'}):
+            cf = Cloudflare()
+        error = urllib.error.HTTPError('https://secret-url', 400, 'secret-response', {},
+            io.BytesIO(b'{"errors":[{"code":1000,"message":"secret-token secret-body"}]}'))
+        with patch('urllib.request.urlopen', side_effect=error):
+            with self.assertRaises(DeploymentError) as raised:
+                cf.request('GET', '/accounts/private-account/pages/projects?secret-query')
+        text = str(raised.exception)
+        self.assertIn('list Pages projects: HTTP 400, codes 1000', text)
+        for value in ('secret', 'private-account'):
+            self.assertNotIn(value, text)
+
     def test_conflicting_dns_not_modified(self):
         module = load('configure-pages')
         fake = unittest.mock.Mock()
