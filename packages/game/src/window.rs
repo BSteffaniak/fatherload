@@ -41,22 +41,34 @@ const TITLE_GRAB: i32 = 48;
 /// `None` when it can already be grabbed. raylib centres new windows using the framebuffer
 /// size, which on Windows with display scaling (seen at 150%) can land the window thousands of
 /// pixels off-screen: it opens, but nothing of it is visible. The fix centres the window on the
-/// monitor, top-left anchored when it does not fit.
+/// monitor, top-left anchored when it does not fit, leaving room above it for the title bar
+/// (window positions are the content area's corner).
 #[must_use]
 pub fn recentred_window_position(window: ScreenRect, monitor: ScreenRect) -> Option<(i32, i32)> {
-    let (x, y, width, height) = window;
     let (mx, my, mw, mh) = monitor;
     if mw <= 0 || mh <= 0 {
         return None;
     }
-    let overlap_x = (x + width).min(mx + mw) - x.max(mx);
-    let title_on_screen = overlap_x >= TITLE_GRAB && y >= my && y + TITLE_GRAB <= my + mh;
+    // Wide arithmetic: raylib has been seen reporting a y of `i32::MAX`.
+    let wide = |rect: ScreenRect| {
+        (
+            i64::from(rect.0),
+            i64::from(rect.1),
+            i64::from(rect.2),
+            i64::from(rect.3),
+        )
+    };
+    let (x, y, width, _) = wide(window);
+    let (left, top, right_span, bottom_span) = wide(monitor);
+    let grab = i64::from(TITLE_GRAB);
+    let overlap_x = (x + width).min(left + right_span) - x.max(left);
+    let title_on_screen = overlap_x >= grab && y >= top && y + grab <= top + bottom_span;
     if title_on_screen {
         return None;
     }
     Some((
-        mx + ((mw - width) / 2).max(0),
-        my + ((mh - height) / 2).max(0),
+        mx + ((mw - window.2) / 2).max(0),
+        my + ((mh - window.3) / 2).max(TITLE_GRAB),
     ))
 }
 
@@ -140,7 +152,7 @@ impl DesktopWindow {
             desktop.settings.height = fit_height;
         }
         #[cfg(not(target_os = "emscripten"))]
-        desktop.keep_on_screen(&mut raylib, scale);
+        Self::keep_on_screen(&mut raylib, scale);
         if saved.maximized {
             raylib.maximize_window();
         }
@@ -195,8 +207,9 @@ impl DesktopWindow {
         }
     }
 
-    /// Records the window's restorable size and maximized state; call once per frame.
-    pub fn track(&mut self, raylib: &RaylibHandle) {
+    /// Records the window's restorable size and maximized state, and keeps a plain window
+    /// grabbable (see [`recentred_window_position`]); call once per frame.
+    pub fn track(&mut self, raylib: &mut RaylibHandle) {
         let observation = WindowObservation {
             screen: Self::screen_size(raylib),
             monitor: self.monitor_size(raylib),
@@ -210,6 +223,13 @@ impl DesktopWindow {
         }
         if !observation.borderless && !observation.minimized {
             self.settings.maximized = observation.maximized;
+        }
+        // GLFW can move the window off-screen after opening (Windows display scaling), so
+        // this is checked every frame rather than once.
+        #[cfg(not(target_os = "emscripten"))]
+        if !observation.borderless && !observation.minimized && !observation.maximized {
+            let scale = self.window_coordinate_scale(raylib);
+            Self::keep_on_screen(raylib, scale);
         }
     }
 
@@ -225,7 +245,7 @@ impl DesktopWindow {
         clippy::cast_possible_truncation,
         reason = "window positions are small integers"
     )]
-    fn keep_on_screen(&self, raylib: &mut RaylibHandle, scale: f32) {
+    fn keep_on_screen(raylib: &mut RaylibHandle, scale: f32) {
         let monitor = window::get_current_monitor();
         if monitor < 0 || monitor >= window::get_monitor_count() {
             return;
@@ -238,11 +258,12 @@ impl DesktopWindow {
             window::get_monitor_height(monitor),
         );
         let position = raylib.get_window_position();
+        let (width, height) = Self::screen_size(raylib);
         let window_rect = (
             position.x.round() as i32,
             position.y.round() as i32,
-            scaled(self.settings.width, scale),
-            scaled(self.settings.height, scale),
+            scaled(width, scale),
+            scaled(height, scale),
         );
         if let Some((x, y)) = recentred_window_position(window_rect, monitor_rect) {
             raylib.set_window_position(x, y);
@@ -397,7 +418,16 @@ mod tests {
         );
         assert_eq!(
             recentred_window_position((0, 5000, 3000, 2000), monitor),
-            Some((0, 0))
+            Some((0, TITLE_GRAB))
+        );
+        // What raylib actually reported on that desktop.
+        assert_eq!(
+            recentred_window_position((0, i32::MAX, 1920, 1050), monitor),
+            Some((0, TITLE_GRAB))
+        );
+        assert_eq!(
+            recentred_window_position((i32::MIN, i32::MIN, 1920, 1050), monitor),
+            Some((0, TITLE_GRAB))
         );
     }
 
