@@ -1197,7 +1197,14 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         {
             let (rx, ry) = (x0 + (tx - origin_x) * pixel, y0 + (ty - origin_y) * pixel);
             draw.draw_rectangle(rx - 2, ry - 2, 6, 6, INK);
-            draw.draw_rectangle(rx - 1, ry - 1, 4, 4, ORANGE);
+            // Each rig in its owner's paint, as on the minimap and name tags.
+            draw.draw_rectangle(
+                rx - 1,
+                ry - 1,
+                4,
+                4,
+                player_accent(remote.player_id, Some(remote.cosmetics)),
+            );
         }
     }
     draw_map_legend(

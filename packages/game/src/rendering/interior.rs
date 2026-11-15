@@ -258,15 +258,17 @@ pub(super) fn draw_interior(
 
     let _canvas = UiCanvasScope::begin(draw);
     let canvas = ui_kit::canvas();
+    // The seat tag in the player's paint, as on the outdoor HUD title.
+    let accent = rig_art::player_accent(view.player_id, view.player.cosmetics);
     if seat.modal.is_some() {
         // A counter panel docked along the bottom of a split-screen view leaves the room's
         // top in view: keep the plate there so the view still says whose it is.
         if area.align_top && player.is_some() {
-            draw_name_plate(draw, surface_zone_label(zone), player);
+            draw_name_plate(draw, surface_zone_label(zone), player, accent);
         }
         return;
     }
-    draw_name_plate(draw, surface_zone_label(zone), player);
+    draw_name_plate(draw, surface_zone_label(zone), player, accent);
     draw_controls_hint(draw, canvas);
     let near_counter = (seat.interior_x - interior_service_x(zone)).abs() <= COUNTER_REACH;
     let at_door = seat.interior_x < DOOR_REACH;
@@ -289,8 +291,14 @@ pub(super) fn draw_interior(
     }
 }
 
-/// The building's name plate (top-left), led by the player's tag in split-screen.
-fn draw_name_plate(draw: &mut RaylibDrawHandle<'_>, title: &str, player: Option<usize>) {
+/// The building's name plate (top-left), led by the player's tag (in their `accent` paint) in
+/// split-screen.
+fn draw_name_plate(
+    draw: &mut RaylibDrawHandle<'_>,
+    title: &str,
+    player: Option<usize>,
+    accent: Color,
+) {
     let tag = player.map(|seat| format!("P{}", seat + 1));
     let tag_width = tag
         .as_deref()
@@ -302,7 +310,7 @@ fn draw_name_plate(draw: &mut RaylibDrawHandle<'_>, title: &str, player: Option<
         PanelStyle::Accent,
     );
     if let Some(tag) = &tag {
-        ui_kit::text(draw, tag, 16, 13, TextStyle::Bold, BONE);
+        ui_kit::text(draw, tag, 16, 13, TextStyle::Bold, accent);
         draw.draw_rectangle(16 + tag_width - 5, 12, 1, 11, palette::with_alpha(BONE, 90));
     }
     ui_kit::text(draw, title, 16 + tag_width, 13, TextStyle::Bold, GOLD);
