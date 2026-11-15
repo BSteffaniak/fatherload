@@ -565,10 +565,19 @@ const fn sticks(bomb: &PlacedBomb) -> bool {
     bomb.kind.sticks() && !bomb.stuck
 }
 
+/// How far towards its surface a stuck charge probes for it. A charge stops within one swept
+/// step (at most two pixels) of what it hit; the extra pixel absorbs quantization so a charge
+/// stopped a full step short is never mistaken for one whose wall is gone.
+const SUPPORT_PROBE: f32 = 3.0;
+
 /// Whether the surface a stuck charge clings to is still there.
 fn supported(terrain: &Terrain, bomb: &PlacedBomb) -> bool {
     let (dx, dy) = bomb.direction_hint();
-    collides(terrain, dx.mul_add(2.0, bomb.x), dy.mul_add(2.0, bomb.y))
+    collides(
+        terrain,
+        dx.mul_add(SUPPORT_PROBE, bomb.x),
+        dy.mul_add(SUPPORT_PROBE, bomb.y),
+    )
 }
 
 impl PlacedBomb {
