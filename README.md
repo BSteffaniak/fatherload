@@ -137,12 +137,22 @@ view shows bedrock past the world's edges and floor, never sky. Depth rules auth
 classic stack (mineral depth curves, heat, deep-run pressure, deep rewards, quest depths) read a
 rig's depth at the same relative place in its layer, so they stretch with the deeper world.
 
+New worlds (generator v5, the current one) are also **endless left and right**: the same deep
+layer stack and bedrock floor, generated 16x16-tile chunk by chunk as rigs travel (caves, ore,
+hazards and points of interest come from overlapping region grids, so chunk borders are
+seamless and nothing depends on the order chunks are visited). The town stays on its flat ground
+in the middle; the minimap scrolls with the rig and the HUD and map say how far, and which way,
+town is. Chunks far from every rig are dropped from memory (dug tiles are kept), saves hold the
+settings plus the changed chunks, and online clients generate chunks themselves while the host
+sends only changes. Worlds and saves from v1-v4 keep loading as the bounded worlds they were.
+
 ### Points of interest
 
 Hand-built places are stamped into every world (generator v2 and later; worlds and saves from
 older generators keep generating exactly as before; v3 adds per-seed layer thicknesses and
-fewer, chunkier deep ore deposits on rich worlds; v4, the current generator, is the deep world
-with stacked placement tiers per thick layer and a bedrock floor):
+fewer, chunkier deep ore deposits on rich worlds; v4 is the deep world with stacked placement
+tiers per thick layer and a bedrock floor; v5, the current generator, places them per region
+along its endless width):
 
 - **Supply caches** (every layer below the topsoil): hollows of crates. Drill a crate open for a
   fuel canister, a bomb or two, or some credits.
@@ -168,6 +178,7 @@ World generation tools (no window opens):
 ```bash
 cargo run --release --bin fatherload -- --worldgen-report --seeds 300 [--size large] [--richness rich] [--hazards brutal] [--generator v2]
 cargo run --release --bin fatherload -- --worldgen-preview D111-6A4E world.png [--size large] [--scale 4]
+cargo run --release --bin fatherload -- --worldgen-preview D111-6A4E strip.png --first-column -400 --width 800  # a window of an endless (v5) world
 ```
 
 The report prints per-layer top row, ore value, ore specks (deposits of 1-3 tiles), cave share, hazard tiles, artifacts and points of
@@ -307,10 +318,11 @@ Files live in `$FATHERLOAD_STATE_DIR`, else `$XDG_STATE_HOME/fatherload`, else
 - A save (format v7) is the host's `WorldState` plus play time. Its terrain is stored as the
   world's generation settings (seed, size, richness, hazards, generator version) and only the
   tiles that differ from freshly generated terrain; loading regenerates the rest and checks a
-  terrain digest. Rigs carry their goods in item containers (cargo bay, block hopper) and live
-  objects (gas clouds, boulders, drops) are entities. v1-v5 saves (which wrote out every tile)
-  and v6 saves (separate cargo maps and hazard lists) are migrated on load and re-saved as v7;
-  saves from before seeded worlds keep their terrain and load as legacy worlds. A save from
+  terrain digest (an endless v5 world stores only its changed chunks, and the map discovery as
+  one compact record per chunk). Rigs carry their goods in item containers (cargo bay, block
+  hopper) and live objects (gas clouds, boulders, drops) are entities. v1-v5 saves (which wrote
+  out every tile) and v6 saves (separate cargo maps and hazard lists) are migrated on load and
+  re-saved as v7; saves from before seeded worlds keep their terrain and load as legacy worlds. A save from
   an unknown generator version is refused with a clear error. Loading starts a new session
   epoch.
 - Slot UI displays depth and credits; the title shows the latest save's depth, credits and playtime.
