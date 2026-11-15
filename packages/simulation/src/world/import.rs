@@ -213,6 +213,7 @@ impl WorldState {
             discovered_tiles: BTreeMap::from([(player_id, DiscoveredTiles::default())]),
             service_transactions: Vec::new(),
             test_mode: None,
+            enemies: crate::enemy::EnemyDirector::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

@@ -422,6 +422,9 @@ impl WorldState {
             PlayerCommand::SetCollectBlocks { enabled } => {
                 self.set_collect_blocks(player_id, enabled)
             }
+            PlayerCommand::SetEnemyDifficulty(difficulty) => {
+                self.apply_enemy_difficulty(difficulty)
+            }
         }
     }
 }

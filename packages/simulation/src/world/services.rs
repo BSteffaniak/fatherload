@@ -32,7 +32,8 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::Rescue
         | PlayerCommand::TestMode(_)
         | PlayerCommand::DumpBlocks { .. }
-        | PlayerCommand::SetCollectBlocks { .. } => None,
+        | PlayerCommand::SetCollectBlocks { .. }
+        | PlayerCommand::SetEnemyDifficulty(_) => None,
     }
 }
 

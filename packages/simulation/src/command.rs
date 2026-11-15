@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    enemy::EnemyDifficulty,
     explosive::{ExplosiveKind, ThrowAim},
     ids::InputSequence,
     item::BlockKind,
@@ -54,6 +55,9 @@ pub enum PlayerCommand {
     SetCollectBlocks {
         enabled: bool,
     },
+    /// Changes the world's enemy setting for everyone (the game offers it to the host or a
+    /// local session; Peaceful clears every hostile).
+    SetEnemyDifficulty(EnemyDifficulty),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

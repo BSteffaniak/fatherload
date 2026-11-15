@@ -14,6 +14,7 @@ pub mod command;
 pub mod contract;
 pub mod cosmetics;
 pub mod economy;
+pub mod enemy;
 pub mod entity;
 pub mod event;
 pub mod explosive;
@@ -45,6 +46,9 @@ pub mod worldgen;
 
 pub use command::{PlayerCommand, TickAction};
 pub use cosmetics::{CosmeticItem, CosmeticUnlocks, RigCosmetics};
+pub use enemy::{
+    Damage, DamageKind, DamageOutcome, DamageSource, EnemyDifficulty, EnemyKind, ShotKind,
+};
 pub use event::{ActionOutcome, GameplayEvent, GameplayEventId, GameplayEventKind, TickOutput};
 pub use explosive::{BlastDirection, ExplosiveKind, ThrowAim};
 pub use hash::SimulationStateHash;

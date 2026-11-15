@@ -55,12 +55,15 @@ const PREVIEW_MILLIS: u64 = 1_600;
 /// One primary detonation this tick: where, what kind, and who set it.
 ///
 /// [`WorldState::push_from_blasts`] pushes rigs and every blast-feeling entity of the entity
-/// store (drops today; enemies and machines later) with it.
+/// store (drops) with it; `WorldState::enemies_feel_blasts` hurts, pushes and stuns enemies
+/// with the same blasts.
 #[derive(Clone, Copy, Debug)]
 pub struct Blast {
     pub kind: ExplosiveKind,
     pub x: f32,
     pub y: f32,
+    /// Who set the charge (kill credit for enemies caught in it).
+    pub owner: Option<PlayerId>,
 }
 
 impl WorldState {
@@ -102,6 +105,7 @@ impl WorldState {
                 kind: bomb.kind,
                 x: bomb.x,
                 y: bomb.y,
+                owner: bomb.owner,
             })
             .collect();
         // Every blast in a tick sees the SAME pre-blast terrain for occlusion. Terrain is
@@ -113,6 +117,8 @@ impl WorldState {
             }
         }
         self.push_from_blasts(&blasts);
+        // Enemies take the same blasts (damage, pushes, EMP stuns) on the same terrain.
+        self.enemies_feel_blasts(&blasts, output);
         let mut spawned = Vec::new();
         for bomb in expiring {
             if let Some(continuing) = self.expire_bomb(bomb, next_tick, notes, output, &mut spawned)

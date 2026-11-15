@@ -199,6 +199,8 @@ impl WorldState {
                 // A critter's motion is a pure function of time (`CritterState::offset_at`);
                 // its population is kept by `advance_critters` (`world/caves.rs`).
                 EntityKind::Critter => {}
+                EntityKind::Enemy => self.advance_enemy(id, next_tick, output),
+                EntityKind::EnemyShot => self.advance_enemy_shot(id, next_tick, output),
             }
         }
         // Merged-away drops (their stacks already moved onto their neighbours).

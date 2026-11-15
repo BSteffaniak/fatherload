@@ -54,6 +54,10 @@ pub enum EntityKind {
     Drop,
     /// A harmless ambient cave critter (WP-CAVES): fireflies, moths, bats, cave fish.
     Critter,
+    /// A hostile creature or machine (WP-ENEMIES, see [`crate::enemy`]).
+    Enemy,
+    /// A projectile an enemy fired (acid, fireballs, bolts).
+    EnemyShot,
 }
 
 /// When in the tick an entity kind updates (`WorldState::simulate_tick` runs each phase at a
@@ -68,14 +72,23 @@ pub enum EntityPhase {
 
 impl EntityKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 4] = [Self::GasCloud, Self::Boulder, Self::Drop, Self::Critter];
+    pub const ALL: [Self; 6] = [
+        Self::GasCloud,
+        Self::Boulder,
+        Self::Drop,
+        Self::Critter,
+        Self::Enemy,
+        Self::EnemyShot,
+    ];
 
     /// The tick phase this kind updates in.
     #[must_use]
     pub const fn phase(self) -> EntityPhase {
         match self {
             Self::GasCloud => EntityPhase::Early,
-            Self::Boulder | Self::Drop | Self::Critter => EntityPhase::Late,
+            Self::Boulder | Self::Drop | Self::Critter | Self::Enemy | Self::EnemyShot => {
+                EntityPhase::Late
+            }
         }
     }
 
@@ -85,7 +98,8 @@ impl EntityKind {
         matches!(self, Self::Drop)
     }
 
-    /// Whether blasts push this kind ([`crate::physics::Blast`]).
+    /// Whether blasts push this kind ([`crate::physics::Blast`]). Enemies are not listed: the
+    /// blast hook pushes and hurts them itself (`WorldState::enemies_feel_blasts`).
     #[must_use]
     pub const fn feels_blasts(self) -> bool {
         matches!(self, Self::Drop)
@@ -264,6 +278,8 @@ pub enum EntityState {
     Boulder(BoulderState),
     Drop(DropState),
     Critter(CritterState),
+    Enemy(crate::enemy::EnemyState),
+    EnemyShot(crate::enemy::EnemyShotState),
 }
 
 impl EntityState {
@@ -274,6 +290,8 @@ impl EntityState {
             Self::Boulder(_) => EntityKind::Boulder,
             Self::Drop(_) => EntityKind::Drop,
             Self::Critter(_) => EntityKind::Critter,
+            Self::Enemy(_) => EntityKind::Enemy,
+            Self::EnemyShot(_) => EntityKind::EnemyShot,
         }
     }
 }

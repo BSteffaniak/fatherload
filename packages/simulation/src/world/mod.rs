@@ -37,6 +37,9 @@ mod drop_economy_tests;
 #[cfg(test)]
 mod drop_tests;
 pub mod drops;
+mod enemies;
+#[cfg(test)]
+mod enemy_tests;
 mod entities;
 #[cfg(test)]
 mod entity_tests;
@@ -274,6 +277,10 @@ pub struct WorldState {
     /// Test-mode toggles; `None` outside a test-mode world (see [`crate::test_mode`]).
     #[serde(default)]
     test_mode: Option<crate::test_mode::TestModeState>,
+    /// Enemy difficulty, rig i-frames, spawn cooldowns and cleared lairs (see
+    /// [`crate::enemy::EnemyDirector`]; the enemies themselves are entities).
+    #[serde(default)]
+    enemies: crate::enemy::EnemyDirector,
 }
 
 impl WorldState {

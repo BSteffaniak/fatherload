@@ -31,6 +31,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// 9 (wave 2, T9 villages): generator V6 in the world settings, `FeatureKind::Village` /
 /// `FeatureDetail::Village`, `SessionServiceRequest::Village`, the player's village journal in
 /// the loadout and events 45-46 (`VillageDiscovered`, `VillageServiceUsed`).
+/// 9 (wave 2, T10 enemies): `EntityState::Enemy` / `EnemyShot` records, the shared
+/// `SectionKey::Enemies` section (difficulty, rig i-frames, spawn cooldowns, cleared lairs),
+/// `PlayerCommand::SetEnemyDifficulty` and the enemy events (`EnemyAlerted` ..
+/// `EnemyDifficultyChanged`).
 pub const PROTOCOL_VERSION: u8 = 9;
 
 /// One client input frame: the controls and actions for exactly one tick.

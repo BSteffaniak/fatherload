@@ -88,6 +88,7 @@ impl WorldState {
             discovered_tiles,
             service_transactions,
             test_mode: _,
+            enemies,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
@@ -108,6 +109,7 @@ impl WorldState {
         // Nobody is left to trigger a departed player's remote charges: they are disarmed.
         bombs.retain(|bomb| !(bomb.owner == Some(player_id) && bomb.awaiting_remote()));
         service_transactions.retain(|transaction| transaction.player_id != player_id);
+        enemies.rig_guard.remove(&player_id);
     }
 
     /// The first spawn slot at least [`SPAWN_SPACING`] away from every rig, or the least crowded

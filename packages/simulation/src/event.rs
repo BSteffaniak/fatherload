@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     cave::{CaveKind, CaveTile},
     command::PlayerCommand,
+    enemy::{EnemyDifficulty, EnemyKind, ShotKind},
     explosive::{BlastDirection, ExplosiveKind},
     ids::{InputSequence, PlayerId, SimulationTick},
     item::{ItemKind, Stowage},
@@ -216,6 +217,59 @@ pub enum GameplayEventKind {
         village: crate::village::VillageId,
         service: crate::village::VillageService,
     },
+    /// An enemy noticed a rig (its tell: a screech, a beep). `x`, `y` in world pixels.
+    EnemyAlerted {
+        entity: u64,
+        kind: EnemyKind,
+        x: i32,
+        y: i32,
+    },
+    /// An enemy started telegraphing an attack (wind-up).
+    EnemyWindup {
+        entity: u64,
+        kind: EnemyKind,
+        x: i32,
+        y: i32,
+    },
+    /// An enemy fired a projectile.
+    EnemyFired {
+        entity: u64,
+        shot: ShotKind,
+        x: i32,
+        y: i32,
+    },
+    /// An enemy took damage and lives.
+    EnemyHurt {
+        entity: u64,
+        kind: EnemyKind,
+        x: i32,
+        y: i32,
+    },
+    /// An enemy died (its loot dropped); `by` is the player credited, if any.
+    EnemyKilled {
+        entity: u64,
+        kind: EnemyKind,
+        x: i32,
+        y: i32,
+        by: Option<PlayerId>,
+    },
+    /// An EMP knocked a machine out.
+    EnemyStunned {
+        entity: u64,
+        kind: EnemyKind,
+        x: i32,
+        y: i32,
+    },
+    /// An enemy (or its shot) hit a rig ([`Self::PlayerDamaged`] follows when hull was lost).
+    RigStruck {
+        player_id: PlayerId,
+        kind: EnemyKind,
+    },
+    /// A player changed the world's enemy setting.
+    EnemyDifficultyChanged {
+        player_id: PlayerId,
+        difficulty: EnemyDifficulty,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -297,5 +351,11 @@ pub(crate) const fn gameplay_event_for_applied_command(
             player_id,
             enabled: *enabled,
         },
+        PlayerCommand::SetEnemyDifficulty(difficulty) => {
+            GameplayEventKind::EnemyDifficultyChanged {
+                player_id,
+                difficulty: *difficulty,
+            }
+        }
     }
 }

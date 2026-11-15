@@ -139,6 +139,15 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::StalactiteFell { .. } => (72, None),
         GameplayEventKind::VillageDiscovered { player_id, .. } => (45, Some(player_id)),
         GameplayEventKind::VillageServiceUsed { player_id, .. } => (46, Some(player_id)),
+        // Enemies (T10): 80-87.
+        GameplayEventKind::EnemyAlerted { .. } => (80, None),
+        GameplayEventKind::EnemyWindup { .. } => (81, None),
+        GameplayEventKind::EnemyFired { .. } => (82, None),
+        GameplayEventKind::EnemyHurt { .. } => (83, None),
+        GameplayEventKind::EnemyKilled { .. } => (84, None),
+        GameplayEventKind::EnemyStunned { .. } => (85, None),
+        GameplayEventKind::RigStruck { player_id, .. } => (86, Some(player_id)),
+        GameplayEventKind::EnemyDifficultyChanged { player_id, .. } => (87, Some(player_id)),
     }
 }
 

@@ -378,6 +378,7 @@ impl WorldState {
             self.advance_deep_run_pressure(player_id, next_tick, &mut output);
         }
         self.trigger_stalactites(&mut output);
+        self.advance_enemy_director(next_tick);
         self.advance_entities(EntityPhase::Late, next_tick, &mut output);
         self.advance_critters(next_tick);
         self.advance_vault_relays(next_tick, &mut output);

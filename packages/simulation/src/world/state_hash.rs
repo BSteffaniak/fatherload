@@ -161,6 +161,10 @@ impl WorldState {
         hash.write_u64(self.next_bomb_id);
         hash.write_u64(self.rng.state());
         hash.write_serialized(&self.test_mode);
+        // Skipped while untouched, so worlds from before enemies hash exactly as they did.
+        if !self.enemies.is_default() {
+            hash.write_serialized(&self.enemies);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);
