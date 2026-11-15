@@ -335,7 +335,8 @@ pub const fn engine_power(level: u8) -> f32 {
 /// Former horizontal speed multiplier cap, kept for API compatibility.
 ///
 /// Horizontal speed now follows the eased drive model (`crate::world::DriveTuning`) and fast
-/// rigs are swept in collision sub-steps, so nothing reads this any more.
+/// rigs are swept in collision sub-steps, so gameplay no longer reads this; a test checks that
+/// no tier of the new top-speed table is slower than this old capped curve.
 pub const ENGINE_HANDLING_CAP: f32 = 2.4;
 /// Climb speed multiplier cap: the top engines lift far more but do not climb faster than this.
 pub const ENGINE_CLIMB_CAP: f32 = 3.0;

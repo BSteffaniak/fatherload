@@ -114,8 +114,9 @@ saved with the player and every co-op or online crewmate sees them.
 
 ### Movement feel
 
-Every engine tier raises the rig's top speed by about an eighth: the top engine is about five
-times faster than stock, and test mode more than doubles that again. Fast rigs ease into their
+Every engine tier raises the rig's top speed (the first upgrades by about two thirds of a tile
+a second each, later ones by about 9 %, and no tier is slower than before the retune): the top
+engine is about five times faster than stock, and test mode more than doubles that again. Fast rigs ease into their
 speed instead of snapping to it (acceleration builds as the rig spools up and tapers off near
 top speed), brake harder the faster they go, and brake harder still when you steer against the
 motion, so stopping and turning stay controllable and a short tap is still a precise nudge.
@@ -130,11 +131,11 @@ Measured on a flat tunnel at 60 Hz (stock parts, empty bay; regenerate with
 | Rig | Top speed (tiles/s) | First move (ms) | To 50 % (s) | To 90 % (s) | Cross 100 tiles (s) | Stop from top (tiles / s) | Reverse (s) | 100 ms tap (px) | Flight top (tiles/s) | Flight stop (tiles) | Climb top (tiles/s) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | Tier 1 | 2.2 | 67 | 0.05 | 0.07 | 44.5 | 0.1 / 0.12 | 0.08 | 7 | 1.9 | 0.1 | 5.9 |
-| Tier 3 | 2.9 | 67 | 0.05 | 0.08 | 35.1 | 0.1 / 0.12 | 0.08 | 9 | 2.4 | 0.1 | 9.3 |
-| Tier 5 | 3.6 | 50 | 0.05 | 0.10 | 27.8 | 0.1 / 0.13 | 0.10 | 11 | 3.1 | 0.1 | 12.6 |
-| Tier 8 | 5.1 | 50 | 0.07 | 0.12 | 19.7 | 0.2 / 0.13 | 0.12 | 13 | 4.3 | 0.2 | 16.1 |
-| Tier 10 | 6.4 | 50 | 0.08 | 0.13 | 15.6 | 0.3 / 0.15 | 0.13 | 14 | 5.5 | 0.3 | 17.8 |
-| Tier 12 | 8.1 | 50 | 0.10 | 0.15 | 12.4 | 0.4 / 0.17 | 0.17 | 15 | 6.9 | 0.4 | 17.8 |
+| Tier 3 | 3.5 | 50 | 0.05 | 0.08 | 28.2 | 0.1 / 0.12 | 0.10 | 10 | 3.0 | 0.1 | 9.3 |
+| Tier 5 | 4.8 | 50 | 0.07 | 0.12 | 20.9 | 0.2 / 0.13 | 0.12 | 13 | 4.1 | 0.2 | 12.6 |
+| Tier 8 | 6.2 | 50 | 0.08 | 0.13 | 16.2 | 0.3 / 0.15 | 0.13 | 14 | 5.3 | 0.3 | 16.1 |
+| Tier 10 | 7.4 | 50 | 0.08 | 0.15 | 13.6 | 0.3 / 0.17 | 0.15 | 15 | 6.3 | 0.4 | 17.8 |
+| Tier 12 | 8.8 | 50 | 0.10 | 0.17 | 11.4 | 0.4 / 0.17 | 0.17 | 15 | 7.5 | 0.5 | 17.8 |
 | Tier 15 | 11.4 | 50 | 0.12 | 0.20 | 8.9 | 0.7 / 0.20 | 0.22 | 15 | 9.7 | 0.7 | 17.8 |
 | God mode | 25.1 | 67 | 0.30 | 0.47 | 4.3 | 2.6 / 0.33 | 0.48 | 8 | 21.3 | 2.6 | 26.7 |
 

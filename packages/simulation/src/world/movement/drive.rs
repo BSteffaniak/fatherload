@@ -1,8 +1,9 @@
 //! The eased drive model: how fast a rig moves along one axis, how it spools up to that speed
 //! and how hard it brakes, per engine tier (WP-FEEL).
 //!
-//! Every engine tier raises the rig's top speed by about an eighth (about five times stock at
-//! the top tier), and test mode ("god mode") more than doubles the top tier again. Fast rigs do
+//! Every engine tier raises the rig's top speed: the first four upgrades by about two thirds of
+//! a tile a second each (never slower than the pre-retune engine curve), every later one by
+//! about 9 % (about five times stock at the top tier), and test mode ("god mode") more than doubles the top tier again. Fast rigs do
 //! not snap to speed: acceleration starts near the stock rig's (so a tap still nudges the rig a
 //! precise few pixels), spools up as the rig gathers speed (ease-in) and tapers off just below
 //! top speed (ease-out). Braking grows with speed (a drag term plus a constant stop term), and
@@ -18,8 +19,12 @@ use crate::{terrain::TILE_SIZE, tick::TickRate};
 
 /// Ground top speed (tiles per second) of a stock rig with an empty bay at each engine tier
 /// (index 0 is tier 1), at full stick.
+///
+/// Every tier is at least as fast as the same tier was before the WP-FEEL retune (stock thrust
+/// times `engine_power`, capped at 2.4x), so no existing rig gets slower: the early tiers keep
+/// their big steps and the later ones, which used to hit the cap at tier 7, keep climbing.
 pub const ENGINE_TOP_SPEED_TILES: [f32; 15] = [
-    2.25, 2.55, 2.85, 3.2, 3.6, 4.05, 4.55, 5.1, 5.75, 6.45, 7.25, 8.15, 9.15, 10.2, 11.4,
+    2.25, 2.9, 3.55, 4.2, 4.8, 5.25, 5.7, 6.2, 6.8, 7.4, 8.05, 8.8, 9.6, 10.45, 11.4,
 ];
 /// Test mode ("god mode") multiplies the rig's horizontal top speed by this.
 pub const GOD_MODE_SPEED_MULTIPLIER: f32 = 2.2;
@@ -164,6 +169,26 @@ mod tests {
         assert!(engine_top_speed_tiles(15) >= engine_top_speed_tiles(1) * 4.5);
         assert!((engine_top_speed_tiles(0) - engine_top_speed_tiles(1)).abs() < f32::EPSILON);
         assert!((engine_top_speed_tiles(200) - engine_top_speed_tiles(15)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn no_engine_tier_is_slower_than_before_the_retune() {
+        use crate::player::{ENGINE_HANDLING_CAP, engine_power};
+        use crate::world::movement::{
+            AUTHORITATIVE_GROUND_DRAG_RATE_PER_SECOND, AUTHORITATIVE_HORIZONTAL_ACCELERATION,
+        };
+        // The old model settled at (ground acceleration / ground drag) x capped engine power.
+        let stock = AUTHORITATIVE_HORIZONTAL_ACCELERATION * 1.35
+            / AUTHORITATIVE_GROUND_DRAG_RATE_PER_SECOND
+            / TILE_SIZE;
+        for level in 1..=15 {
+            let old = stock * engine_power(level).min(ENGINE_HANDLING_CAP);
+            assert!(
+                engine_top_speed_tiles(level) >= old * 0.99,
+                "tier {level}: {} < {old}",
+                engine_top_speed_tiles(level)
+            );
+        }
     }
 
     #[test]
