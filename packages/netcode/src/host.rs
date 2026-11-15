@@ -957,6 +957,7 @@ impl<S: NetSimulation> HostSession<S> {
                 continue;
             };
             let local = matches!(slot.owner, Owner::Local(_));
+            let own_profile = slot.profile;
             let saved = slot
                 .profile
                 .and_then(|profile| self.world.player_for_profile(profile))
@@ -969,10 +970,15 @@ impl<S: NetSimulation> HostSession<S> {
             } else if local
                 || (!taken.contains(&id)
                     && !self.is_parked(id)
-                    && self.world.crew_record(id).is_none())
+                    && self
+                        .world
+                        .crew_record(id)
+                        .is_none_or(|recorded| recorded.is_none() && own_profile.is_none()))
             {
-                // Keep the id: adopt the world's unrecorded rig under it (as before persistence)
-                // or spawn one. A parked or recorded id is someone else's rig: never reused.
+                // Keep the id: adopt the world's unrecorded rig under it (as before persistence),
+                // an anonymous player's own anonymous rig (a world swapped in mid-session), or
+                // spawn one. A parked id or one recorded for a profile is someone else's rig:
+                // never reused.
                 if !self.world.unpark_player(id) {
                     self.world.add_player(id);
                 }

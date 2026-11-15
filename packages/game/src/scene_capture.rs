@@ -9,8 +9,8 @@
 //! [`SCENES`]. `SceneStage` starts on the title screen; `play` enters a staged world, `hold` runs
 //! frames with held input, and `shell` exposes the menu state to open screens directly.
 
-mod enemy_scenes;
 mod crew_scenes;
+mod enemy_scenes;
 mod rig_scenes;
 mod village_scenes;
 

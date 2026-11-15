@@ -50,10 +50,10 @@ pub mod worldgen;
 
 pub use command::{PlayerCommand, TickAction};
 pub use cosmetics::{CosmeticItem, CosmeticUnlocks, RigCosmetics};
+pub use crew::{CrewMember, CrewRoster, ParkedPlayer, ProfileId};
 pub use enemy::{
     Damage, DamageKind, DamageOutcome, DamageSource, EnemyDifficulty, EnemyKind, ShotKind,
 };
-pub use crew::{CrewMember, CrewRoster, ParkedPlayer, ProfileId};
 pub use event::{ActionOutcome, GameplayEvent, GameplayEventId, GameplayEventKind, TickOutput};
 pub use explosive::{BlastDirection, ExplosiveKind, ThrowAim};
 pub use hash::SimulationStateHash;
