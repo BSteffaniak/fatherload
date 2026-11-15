@@ -216,6 +216,8 @@ pub(super) fn draw_view_hud(
     if let Some(bottom) = wallet_bottom {
         clock_hud::draw_clock_badge(draw, snapshot, rect, bottom + 3);
     }
+    // Altitude air, cold and wind while flying a V8 sky (F6).
+    super::sky_hud::draw_sky_gauge(draw, snapshot, view, rect, top + 74);
     draw_view_prompt(draw, shell, view, rect);
 
     // Warning badges.
@@ -732,6 +734,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Cave(tile) => super::terrain::tile_art::cave_color(tile, Band::Stone),
         TileKind::Bedrock => PLUM,
         TileKind::Built(_) => CREAM,
+        TileKind::Sky(tile) => super::terrain::tile_art::sky_color(tile),
     }
 }
 
@@ -866,6 +869,15 @@ pub(super) fn draw_minimap_for_view(
 /// the sky (the sky has no ceiling), where the map keeps the ground under the rig a quarter
 /// of the map above its bottom edge instead of showing nothing but empty sky.
 fn map_focus_row(terrain: &Terrain, tile: TilePosition, rows: i32) -> i32 {
+    // Among a V8 sky's islands the map follows the rig, so the isles around it show.
+    if terrain.settings().generator.has_sky()
+        && tile.y
+            <= fatherload_simulation::worldgen::sky::row_of(
+                fatherload_simulation::worldgen::sky::LOW_ISLES_BOTTOM_ROWS - 40,
+            )
+    {
+        return tile.y;
+    }
     tile.y.max(terrain.surface_row(tile.x) - rows / 4)
 }
 
@@ -1268,6 +1280,12 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 "Boulder Deflector",
                 UpgradeKind::BoulderDeflector,
             ),
+            (
+                &icons::ALTITUDE_INTAKE,
+                "Altitude Intake",
+                UpgradeKind::AltitudeIntake,
+            ),
+            (&icons::DE_ICER, "De-Icer", UpgradeKind::DeIcer),
         ]
         .into_iter()
         .map(

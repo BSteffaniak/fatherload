@@ -110,6 +110,16 @@ impl Material {
             | TileKind::Bedrock
             | TileKind::Built(_) => Self::Hard,
             TileKind::Ore(_) | TileKind::Artifact(_) => Self::Ore,
+            TileKind::Sky(tile) => match tile {
+                fatherload_simulation::sky::SkyTile::Crystal => Self::Ore,
+                fatherload_simulation::sky::SkyTile::Turf(_)
+                | fatherload_simulation::sky::SkyTile::Soil
+                | fatherload_simulation::sky::SkyTile::Roots
+                | fatherload_simulation::sky::SkyTile::Regolith => Self::Soft,
+                fatherload_simulation::sky::SkyTile::Rock(_)
+                | fatherload_simulation::sky::SkyTile::ContinentRock
+                | fatherload_simulation::sky::SkyTile::MoonRock => Self::Hard,
+            },
             TileKind::Cave(tile) => match tile {
                 fatherload_simulation::cave::CaveTile::Crystal
                 | fatherload_simulation::cave::CaveTile::TreasureCache

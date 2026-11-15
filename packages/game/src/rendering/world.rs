@@ -43,6 +43,7 @@ mod lighting;
 mod quest_marks;
 mod rig;
 mod sky;
+pub mod sky_lands;
 mod speed_fx;
 mod surface;
 mod villages;
@@ -206,6 +207,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             },
         ),
     );
+    // The high sky of a V8 world: cloud seas, wind, updrafts and the Moon overhead (F6).
+    sky_lands::draw_sky_backdrop(draw, scene.terrain.settings(), scene.visible, seconds);
     draw_lowered_ground_backdrop(draw, scene.terrain, scene.visible);
     buildings::draw_town(draw, scene.visible, scene.local, seconds);
     villages::draw_villages(

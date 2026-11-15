@@ -304,6 +304,72 @@ pub const PRESSURE_BRACING: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+/// Altitude intake: a ram scoop gulping streaks of thin air.
+pub const ALTITUDE_INTAKE: SpriteDef = SpriteDef {
+    name: "icon_altitude_intake",
+    legend: &[
+        ('o', INK),
+        ('k', STEEL),
+        ('w', STEEL_LIGHT),
+        ('s', SKY_LIGHT),
+        ('i', ICE),
+    ],
+    frames: &[&[
+        "s........",
+        ".s..oooo.",
+        "i..owwwko",
+        ".s.ow..ko",
+        "s..ow..ko",
+        ".i.ow..ko",
+        "s..owwwko",
+        ".s..oooo.",
+        "i........",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// De-icer: a snowflake melting over a warm glow.
+pub const DE_ICER: SpriteDef = SpriteDef {
+    name: "icon_de_icer",
+    legend: &[
+        ('o', INK),
+        ('i', ICE),
+        ('w', BONE),
+        ('a', AMBER),
+        ('g', GOLD),
+    ],
+    frames: &[&[
+        "....i....",
+        ".i..i..i.",
+        "..i.w.i..",
+        "...iwi...",
+        "iiwwwwwii",
+        "...iwi...",
+        "..i.w.i..",
+        ".aagaggaa",
+        "..aagaa..",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Thin air: the air gauge's icon, three wind streaks thinning out.
+pub const AIR: SpriteDef = SpriteDef {
+    name: "icon_air",
+    legend: &[('s', SKY_LIGHT), ('i', ICE), ('f', FOG)],
+    frames: &[&[
+        ".........",
+        "iiiiiis..",
+        "......is.",
+        "..sssss..",
+        ".........",
+        ".ffff.f..",
+        ".....f...",
+        "..f.f....",
+        ".........",
+    ]],
+    frame_seconds: 0.0,
+};
+
 /// Boulder deflector: a sloped plate turning a rock aside.
 pub const BOULDER_DEFLECTOR: SpriteDef = SpriteDef {
     name: "icon_boulder_deflector",

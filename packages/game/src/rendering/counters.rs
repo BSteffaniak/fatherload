@@ -295,6 +295,8 @@ const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
         UpgradeKind::GasScrubber => &icons::GAS_SCRUBBER,
         UpgradeKind::PressureBracing => &icons::PRESSURE_BRACING,
         UpgradeKind::BoulderDeflector => &icons::BOULDER_DEFLECTOR,
+        UpgradeKind::AltitudeIntake => &icons::ALTITUDE_INTAKE,
+        UpgradeKind::DeIcer => &icons::DE_ICER,
     }
 }
 

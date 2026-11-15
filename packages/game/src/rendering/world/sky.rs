@@ -558,13 +558,13 @@ pub fn draw_sky(
         return;
     }
     let horizon = hills_bottom(settings, visible);
-    draw_sky_bands(draw, art, visible, &time.look);
-    draw_stars(draw, visible, seconds, time);
+    draw_sky_bands(draw, art, settings, visible, &time.look);
+    draw_stars(draw, settings, visible, seconds, time);
     draw_horizon_glow(draw, art, visible, horizon, &time.look);
-    draw_moon(draw, visible, time);
+    draw_moon(draw, settings, visible, time);
     draw_sun(draw, visible, horizon, time.clock);
     if let Some(clouds) = &art.clouds {
-        draw_clouds(draw, clouds, visible, seconds, time.look.clouds);
+        draw_clouds(draw, clouds, settings, visible, seconds, time.look.clouds);
     }
     draw_hills(draw, art, settings, visible, &time.look);
 }
@@ -578,8 +578,15 @@ fn band_color(index: usize, look: &DayLook) -> Mix {
     )
 }
 
-/// The flat colour bands of the sky with their dithered steps.
-fn draw_sky_bands(draw: &mut impl RaylibDraw, art: &SkyArt, visible: Rectangle, look: &DayLook) {
+/// The flat colour bands of the sky with their dithered steps (band edges on the classic
+/// altitude scale, stretched over a V8 sky by [`super::sky_lands::world_y_of_gradient`]).
+fn draw_sky_bands(
+    draw: &mut impl RaylibDraw,
+    art: &SkyArt,
+    settings: &WorldSettings,
+    visible: Rectangle,
+    look: &DayLook,
+) {
     let left = snap(visible.x) - ART * 2.0;
     let width = visible.width + ART * 6.0;
     let (top, bottom) = (visible.y - ART, visible.y + visible.height + ART);
@@ -588,6 +595,7 @@ fn draw_sky_bands(draw: &mut impl RaylibDraw, art: &SkyArt, visible: Rectangle, 
     let mut color = Mix::solid(SPACE);
     for (index, (edge, _)) in SKY_BANDS.iter().enumerate() {
         let lower = band_color(index, look);
+        let edge = &super::sky_lands::world_y_of_gradient(settings, *edge);
         // Band `color` spans upper_edge..edge (minus the dither step at its bottom).
         let band_top = upper_edge.max(top);
         let band_bottom = (edge - step * 0.5).min(bottom);
@@ -693,10 +701,17 @@ fn star_share(y: f32) -> f32 {
 
 /// Stars: a field drifting at a tenth of the camera's speed, out high up (toward space) and
 /// everywhere at night, wheeling slowly round a pole above the view (a full turn a day) and
-/// twinkling.
-fn draw_stars(draw: &mut impl RaylibDraw, visible: Rectangle, seconds: f32, time: &SkyTime) {
+/// twinkling. Altitude is read on the classic scale, stretched over a V8 sky.
+fn draw_stars(
+    draw: &mut impl RaylibDraw,
+    settings: &WorldSettings,
+    visible: Rectangle,
+    seconds: f32,
+    time: &SkyTime,
+) {
     const PARALLAX: f32 = 0.1;
     const CELL: f32 = 44.0;
+    let star_share = |y: f32| star_share(super::sky_lands::gradient_y(settings, y));
     let night = time.look.stars;
     if night <= 0.0 && star_share(visible.y + visible.height) <= 0.0 && star_share(visible.y) <= 0.0
     {
@@ -818,8 +833,13 @@ fn moon_disc(visible: Rectangle, moon: MoonAnchor) -> (f32, f32, i32) {
     (cx, cy, radius)
 }
 
-fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle, time: &SkyTime) {
-    let center_y = visible.y + visible.height * 0.5;
+fn draw_moon(
+    draw: &mut impl RaylibDraw,
+    settings: &WorldSettings,
+    visible: Rectangle,
+    time: &SkyTime,
+) {
+    let center_y = super::sky_lands::gradient_y(settings, visible.y + visible.height * 0.5);
     let (cx, cy, radius) = moon_disc(visible, time.moon);
     let r = radius as f32 * ART;
     if cx + r < visible.x
@@ -970,6 +990,7 @@ fn draw_sun(draw: &mut impl RaylibDraw, visible: Rectangle, horizon: f32, clock:
 }
 
 /// One band of clouds: where it floats, how big its clouds are and how it moves.
+#[derive(Clone, Copy)]
 struct CloudBand {
     /// World y of the band's lowest and highest cloud.
     low: f32,
@@ -1030,11 +1051,18 @@ const CLOUD_BANDS: [CloudBand; 3] = [
 fn draw_clouds(
     draw: &mut impl RaylibDraw,
     clouds: &Texture2D,
+    settings: &WorldSettings,
     visible: Rectangle,
     seconds: f32,
     tint: Mix,
 ) {
     for band in &CLOUD_BANDS {
+        // Bands sit on the classic altitude scale, stretched over a V8 sky.
+        let band = &CloudBand {
+            low: super::sky_lands::world_y_of_gradient(settings, band.low),
+            high: super::sky_lands::world_y_of_gradient(settings, band.high),
+            ..*band
+        };
         let height = CLOUD_HEIGHT as f32 * ART * band.scale;
         if band.low < visible.y - height || band.high > visible.y + visible.height + height {
             continue;

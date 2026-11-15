@@ -471,7 +471,10 @@ fn preview_image(
                 FeatureKind::PrefabSlot
                 | FeatureKind::LargeCavern
                 | FeatureKind::HazardCluster
-                | FeatureKind::StratumTransition => continue,
+                | FeatureKind::StratumTransition
+                | FeatureKind::SkyIsland
+                | FeatureKind::SkyContinent
+                | FeatureKind::Moon => continue,
             };
             let bounds = feature.bounds;
             image.draw_rectangle_lines(
@@ -549,7 +552,8 @@ fn tile_color(kind: TileKind, band: Band, y: i32) -> Color {
         | TileKind::Foundation
         | TileKind::Surface(_)
         | TileKind::Bedrock
-        | TileKind::Built(_) => tile_art::material_color(kind, band),
+        | TileKind::Built(_)
+        | TileKind::Sky(_) => tile_art::material_color(kind, band),
         TileKind::HardRock => mix(tile_art::material_color(kind, band), palette::INK, 20),
         TileKind::Ore(mineral) => mineral_color(mineral),
         TileKind::Artifact(_) => palette::PINK,

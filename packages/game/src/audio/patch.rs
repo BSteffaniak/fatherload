@@ -219,6 +219,10 @@ patches! {
     BedDown => "bed_down",
     NightSkip => "night_skip",
     NightLoop => "loop_night",
+    // The sky (F6, T16), appended so every earlier variation seed stays put.
+    SkyBand => "sky_band",
+    UpdraftWhoosh => "updraft_whoosh",
+    IceCrackle => "ice_crackle",
 }
 
 /// Playback metadata of a patch.
@@ -491,6 +495,20 @@ impl Patch {
                     .send(0.3)
                     .jitter(0.01, 0.5)
             }
+            Self::SkyBand => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.5)
+                .jitter(0.0, 0.0)
+                .ducking(0.3),
+            Self::UpdraftWhoosh => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.35)
+                .jitter(0.05, 1.0),
+            Self::IceCrackle => PatchInfo::new(Alarm)
+                .instances(1)
+                .priority(6)
+                .send(0.2)
+                .jitter(0.04, 0.5),
         }
     }
 
@@ -607,6 +625,9 @@ impl Patch {
             Self::BedDown => bed_down(rng),
             Self::NightSkip => night_skip(rng),
             Self::NightLoop => night_loop(rng),
+            Self::SkyBand => sky_band(rng),
+            Self::UpdraftWhoosh => updraft_whoosh(rng),
+            Self::IceCrackle => ice_crackle(rng),
         }
     }
 }
@@ -2844,6 +2865,64 @@ fn uplink_beam(rng: &mut Rng) -> Vec<f32> {
 }
 
 /// Home set: a warm major chord on soft brass.
+/// Climbing into a new sky band: a swell of airy wind under a rising, open bell arpeggio (a
+/// wide fifth over a fourth), with a long echo, like the view opening up.
+fn sky_band(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 500.0, 0.9);
+    let mut out = render(1.8, |t| {
+        let cutoff = 400.0 + 1_400.0 * segments(t, &[(0.0, 0.0), (0.9, 1.0), (1.8, 0.4)]);
+        filter.run(noise.next(), cutoff, 0.9) * segments(t, &[(0.0, 0.0), (0.7, 0.45), (1.8, 0.0)])
+    });
+    let detune = 1.0 + (rng.unit() - 0.5) * 0.004;
+    for (index, (note, gain)) in [
+        (523.25_f32, 0.32),
+        (783.99, 0.28),
+        (1_046.5, 0.26),
+        (1_396.9, 0.22),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        #[allow(clippy::cast_precision_loss, reason = "four notes")]
+        let offset = 0.1 + index as f32 * 0.14;
+        mix_into(&mut out, &bell(note * detune, 3.0, 1.6, 1.0), offset, gain);
+    }
+    let mut echo = Delay::new(0.31).with_damping(0.45);
+    out.resize(out.len() + samples_for(0.4), 0.0);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.35, 0.4) * 0.4;
+    }
+    out
+}
+
+/// Catching an updraft: a rising band-passed rush of air that swoops up and away.
+fn updraft_whoosh(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 300.0, 1.4);
+    let top = 2_600.0 * rng.jitter(0.1);
+    render(0.9, |t| {
+        let cutoff = 250.0 + top * segments(t, &[(0.0, 0.0), (0.6, 1.0), (0.9, 0.7)]);
+        filter.run(noise.next(), cutoff, 1.4) * segments(t, &[(0.0, 0.0), (0.25, 1.0), (0.9, 0.0)])
+    })
+}
+
+/// The hull icing up: a brittle crackle of frost forming, high glassy ticks over a cold hiss.
+fn ice_crackle(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::HighPass, 4_000.0, 0.7);
+    let mut out = render(0.7, |t| {
+        filter.process(noise.next()) * segments(t, &[(0.0, 0.0), (0.05, 0.25), (0.7, 0.0)])
+    });
+    for time in scatter(rng, 12, 0.0, 0.6, 1.0) {
+        let pitch = rng.range(2_500.0, 5_000.0);
+        let tick = clank(rng, pitch, 0.02);
+        let gain = rng.range(0.3, 0.7);
+        mix_into(&mut out, &tick, time, gain);
+    }
+    out
+}
+
 fn home_set(rng: &mut Rng) -> Vec<f32> {
     let mut out = Vec::new();
     for (index, note) in [392.0, 493.88, 587.33, 783.99].into_iter().enumerate() {

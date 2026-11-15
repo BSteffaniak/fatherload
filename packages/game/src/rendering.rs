@@ -32,6 +32,7 @@ mod prompts;
 mod quests;
 pub mod rig_art;
 mod screen;
+mod sky_hud;
 pub mod terrain;
 mod title;
 pub mod touch_controls;

@@ -213,7 +213,7 @@ town is. Chunks far from every rig are dropped from memory (dug tiles are kept),
 settings plus the changed chunks, and online clients generate chunks themselves while the host
 sends only changes. Worlds and saves from v1-v4 keep loading as the bounded worlds they were.
 
-Generator v7 (the current one) gives the endless surface **biomes and a real skyline**:
+Generator v7 gives the endless surface **biomes and a real skyline**:
 plains, forests, desert dunes, badland mesas with cliffs, snowy tundra, tall mountains (granite
 peaks up to 80 tiles above town, snow caps, ledges, caves into the rock and richer ore the
 higher you dig) and wetlands with lakes. Each biome has its own ground and crust, vegetation,
@@ -223,6 +223,39 @@ style of its biome. **There is no flight ceiling**: fly as high as your fuel all
 darkens to stars, a moon and black space far up. The HUD shows depth below the local ground, or
 altitude above it while flying, and the minimap and map follow mountain tops. V5 and v6 worlds
 keep their placeholder surface.
+
+### The sky
+
+Generator v8 (the current one) is v7's ground with **a sky to explore**, the start of the
+game's second act. Fuel is the key: each altitude band is placed at a share of what the fuel
+tank tiers can climb (measured, not guessed), so every bigger tank opens more of the sky:
+
+- **Low isles** (about 220-540 tiles up, a tank around tier 2-4): clusters of small floating
+  islands over the first cloud sea: turf on top, a rock underside in the island's colours
+  (meadow, blossom, frost, amber), roots and sky crystal hanging below. Everything is
+  mineable.
+- **Cloud archipelago** (mid tiers): chains of medium islands stepping across the sky, with
+  more cloud seas, stronger wind layers and **updrafts**: mint columns of rising motes that
+  lift a rig for free.
+- **The dead-air gap**: no islands, strong crosswinds and thin air. Only a near-max tank with
+  high-altitude intakes crosses it.
+- **Sky continents** (near max fuel): huge lands hundreds of tiles wide with slightly lower
+  gravity (their interiors come in a later update).
+- **Orbit and the Moon**: a near-zero-gravity band where rigs drift with heavy inertia, then
+  the Moon itself: one giant landmass about 2,000-2,900 tiles wide hanging still above a fixed
+  column a few thousand tiles from town, grey regolith and craters on top, a rocky underside
+  you can mine from below, and low gravity (gravity bombs arc far, drops float).
+
+**Altitude physics**: the air thins with height, so engines lose thrust and burn fuel faster
+(high-altitude **Altitude Intake** upgrades win it back), and it gets cold: past the
+archipelago an uncovered cold level burns the hull (the **De-Icer** line covers two levels a
+tier). Wind layers carry a coasting rig (steer against them, or ride them), updrafts lift it,
+and gravity is per place: normal up through the islands, lighter on the continents, nearly
+none in orbit, low on the Moon. A **sky gauge** under the wallet shows the band, the air and
+the thrust your intakes keep, the cold against your de-icer, gravity and the wind; the map
+follows the rig among the islands, which show on it. Climbing into a new band, catching an
+updraft and icing up each have their own sound. Older worlds keep an empty sky and standard
+air.
 
 ### Caves
 

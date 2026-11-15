@@ -40,9 +40,11 @@ use crate::rendering::pixel_art::{
 mod built_art;
 mod cave_art;
 mod poi_art;
+mod sky_art;
 
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
 pub use poi_art::poi_color;
+pub use sky_art::sky_color;
 
 /// Art pixels per tile edge (a tile is 32 world pixels at 2 world pixels per art pixel).
 pub const TILE_ART: i32 = 16;
@@ -278,6 +280,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Poi(tile) => return poi_color(tile, band),
         TileKind::Cave(tile) => return cave_color(tile, band),
         TileKind::Built(tile) => built_art::built_ramp(tile)[2],
+        TileKind::Sky(tile) => return sky_art::sky_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -456,7 +459,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::PressurePocket
         | TileKind::Poi(_)
         | TileKind::Cave(_)
-        | TileKind::Built(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Built(_)
+        | TileKind::Sky(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -680,6 +684,21 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             &mut canvas,
             terrain,
             position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    if let TileKind::Sky(tile) = kind {
+        sky_art::paint(
+            &mut canvas,
             tile,
             &strata,
             Edges {
@@ -999,7 +1018,19 @@ fn grass_colors(terrain: &Terrain, x: i32) -> (PaletteIndex, PaletteIndex, Palet
 
 /// Whether `material` grows grass where it meets the sky.
 const fn grows_grass(material: TileKind) -> bool {
-    !matches!(material, TileKind::Surface(_))
+    !matches!(
+        material,
+        TileKind::Surface(_)
+            | TileKind::Sky(
+                fatherload_simulation::sky::SkyTile::Rock(_)
+                    | fatherload_simulation::sky::SkyTile::Soil
+                    | fatherload_simulation::sky::SkyTile::Roots
+                    | fatherload_simulation::sky::SkyTile::Crystal
+                    | fatherload_simulation::sky::SkyTile::ContinentRock
+                    | fatherload_simulation::sky::SkyTile::Regolith
+                    | fatherload_simulation::sky::SkyTile::MoonRock
+            )
+    )
 }
 
 /// What tops ground that meets the sky: biome-tinted grass on soil and rock, a bright crust on
@@ -1094,7 +1125,14 @@ fn paint_grass_blades(
     {
         return;
     }
-    let (lime, leaf, moss) = grass_colors(terrain, position.x);
+    // Sky turf grows its own palette's blades; ground grass follows the biome.
+    let (lime, leaf, moss) = match below.map(|tile| tile.kind) {
+        Some(TileKind::Sky(fatherload_simulation::sky::SkyTile::Turf(biome))) => {
+            let [tips, blades, roots, _] = sky_art::turf_colors(biome);
+            (tips, blades, roots)
+        }
+        _ => grass_colors(terrain, position.x),
+    };
     for px in 0..TILE_ART {
         let h = hash(canvas.origin_x + px, 4, 43);
         match h % 9 {

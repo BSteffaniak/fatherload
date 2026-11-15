@@ -451,6 +451,12 @@ pub enum SoundCue {
     BedDown,
     /// The night skipped: a lullaby, then the morning chord.
     NightSkipped,
+    /// A rig climbed into a new sky band (F6).
+    SkyBand,
+    /// A rig caught an updraft.
+    Updraft,
+    /// A rig's hull started icing up in uncovered cold.
+    Icing,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

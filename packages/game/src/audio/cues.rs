@@ -75,6 +75,9 @@ impl PlacedCue {
 pub const fn cue_patch(cue: SoundCue) -> Patch {
     match cue {
         SoundCue::Drill => Patch::DrillBite,
+        SoundCue::SkyBand => Patch::SkyBand,
+        SoundCue::Updraft => Patch::UpdraftWhoosh,
+        SoundCue::Icing => Patch::IceCrackle,
         SoundCue::Sell => Patch::Coins,
         SoundCue::Upgrade => Patch::Purchase,
         SoundCue::Damage => Patch::HullHit,
@@ -385,6 +388,11 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::GotUp { .. } | GameplayEventKind::SleepRuleChanged { .. } => {
             Some(SoundCue::Ui)
         }
+        // The sky (F6): a swell as the view opens on a new band, a whoosh into an updraft and
+        // frost crackling on a hull its de-icer cannot cover.
+        GameplayEventKind::SkyBandEntered { .. } => Some(SoundCue::SkyBand),
+        GameplayEventKind::UpdraftCaught { .. } => Some(SoundCue::Updraft),
+        GameplayEventKind::RigIcing { .. } => Some(SoundCue::Icing),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -481,6 +489,9 @@ mod tests {
             | GameplayEventKind::NightSkipped { .. }
             | GameplayEventKind::GotUp { .. }
             | GameplayEventKind::SleepRuleChanged { .. } => {}
+            | GameplayEventKind::SkyBandEntered { .. }
+            | GameplayEventKind::UpdraftCaught { .. }
+            | GameplayEventKind::RigIcing { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -727,6 +738,11 @@ mod tests {
                 rule: fatherload_simulation::clock::SleepRule::Anyone,
             },
         ]);
+        for band in fatherload_simulation::sky::SkyBand::ALL {
+            events.push(GameplayEventKind::SkyBandEntered { player_id, band });
+        }
+        events.push(GameplayEventKind::UpdraftCaught { player_id });
+        events.push(GameplayEventKind::RigIcing { player_id });
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
