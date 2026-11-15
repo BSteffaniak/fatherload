@@ -258,7 +258,10 @@ Successful return trips award streak bonuses. Emergency rescue returns the rig t
 - `W` / up arrow / space: thrust upward (with the crown bore, thrusting into a ceiling drills it)
 - `S` / down arrow: drill downward (while resting on the ground)
 - `C`: trigger an active scanner pulse when a scanner is installed
-- `B`: place a purchased timed bomb underground
+- `B`: drop, throw or place the selected explosive (a timed bomb unless you picked another)
+- `Q`: select the next explosive you carry; throws follow the held direction (or your facing),
+  with a dotted arc previewing where the charge will land
+- `F` / `G`: remote detonator: every C4 you placed at once / one after another in placement order
 - `E` / `Enter`: interact with buildings/interior counters, confirm menus, or start game
 - `Backspace` / `Esc`: close menus; `P` pauses/resumes
 - `M`: large mine map with ore, hazard, rescue, and lost-cargo markers
@@ -289,7 +292,10 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 | Pause | `Menu` (Start) | `Esc` / `P` |
 | Inventory | `Y` | `Tab` |
 | Map | `View` (Back) | `M` |
-| Scanner / bomb | `LB` / `RB` | `C` / `B` |
+| Scanner / explosive | `LB` / `RB` | `C` / `B` |
+| Next explosive | `R3` (click the right stick) | `Q` |
+| Aim a throw | Right stick (else the held direction / facing) | `W` `A` `S` `D` |
+| Remote detonator | `LT` tap: all at once; hold: in sequence | `F` / `G` |
 | Previous / next tab or column | `LB` / `RB` in menus | left / right arrows |
 
 The layout lives in one table (`PAD_BINDINGS` in `packages/game/src/input/gamepad.rs`).
@@ -321,7 +327,8 @@ the player who made them.
 | Menu navigation | `W` `S` (adjust `A` `D`) | up / down (adjust left / right) |
 | Pause (shared pause menu) | `Esc` / `P` | `Right Alt` (Right Option) |
 | Inventory / map | `Tab` / `M` | `Numpad 1` / `Numpad 2` |
-| Bomb / scanner | `B` / `C` | `Numpad 0` / `Numpad .` |
+| Explosive / scanner | `B` / `C` | `Numpad 0` / `Numpad .` |
+| Next explosive / detonate / in sequence | `Q` / `F` / `G` | `Numpad 3` / `Numpad 4` / `Numpad 5` |
 | Scroll a dialog | mouse wheel, `Page Up` / `Page Down` | (the selection scrolls it) |
 
 Controllers use their usual buttons (table above) in their own seat, with the right stick
@@ -350,6 +357,13 @@ Press `E` (controller `X`) at a surface building to walk inside its room. Move w
   updates add ways to earn them (test-mode worlds unlock everything).
 - Ore Depot: sells mineral/artifact cargo and shows receipt history
 - HQ: completes contracts, provides named story/radio briefings, and offers/collects debt advances
+- Explosives Shack: bomb packs, plus special charges (the better stocked the shack, the more it
+  sells): flares (light the tunnels and chart the area around them), sticky bombs (stick where
+  they hit), C4 (placed on a surface, fired by the remote detonator all at once or in sequence),
+  cluster bombs (burst into a fan of bomblets), incendiaries (fire that eats dirt and clay),
+  shaped charges (a long, narrow tunnel straight into the surface they stick to), mining charges
+  (a wide blast that leaves ore and relics standing) and EMP charges (for machines). Blasts push
+  rigs and loose charges around, and set off charges nearby.
 - Upgrade Shop: sells drill, fuel tank, cargo bay, engine, hull, radiator, scanner, and bomb-pack upgrades,
   plus the late-game **Drill Mount**: the Gimbal Drill Mount (6,000 cr, on sale once anyone reaches
   the Crystal Faults) drills sideways in flight, and the Crown Bore Mount (24,000 cr, once anyone

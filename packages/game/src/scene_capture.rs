@@ -232,6 +232,8 @@ fn save_framebuffer(
     }
 }
 
+mod explosive_scenes;
+
 /// One capturable scene.
 pub struct Scene {
     /// File name (without `.png`) and `--only` key.
@@ -1545,6 +1547,46 @@ pub const SCENES: &[Scene] = &[
             );
             stage.settle(126);
         },
+    },
+    Scene {
+        name: "explosives_c4_armed",
+        summary: "Five C4 charges stuck to floor, ceiling and wall, waiting for the remote",
+        setup: |stage| explosive_scenes::c4_chain(stage, false),
+    },
+    Scene {
+        name: "explosives_c4_chain",
+        summary: "The remote detonator firing the C4 in sequence, caught mid-chain",
+        setup: |stage| explosive_scenes::c4_chain(stage, true),
+    },
+    Scene {
+        name: "explosives_cluster_split",
+        summary: "A lobbed cluster bomb bursting into its fan of bomblets",
+        setup: |stage| explosive_scenes::cluster_split(stage, false),
+    },
+    Scene {
+        name: "explosives_cluster_pops",
+        summary: "Cluster bomblets landing and popping across the cavern",
+        setup: |stage| explosive_scenes::cluster_split(stage, true),
+    },
+    Scene {
+        name: "explosives_shaped_jet",
+        summary: "A shaped charge's jet cutting straight down into the floor",
+        setup: |stage| explosive_scenes::shaped_tunnel(stage, false),
+    },
+    Scene {
+        name: "explosives_shaped_tunnel",
+        summary: "The narrow tunnel a shaped charge leaves behind",
+        setup: |stage| explosive_scenes::shaped_tunnel(stage, true),
+    },
+    Scene {
+        name: "explosives_throw_preview",
+        summary: "Aiming a sticky bomb: the dotted throw arc and a lit flare lighting the cavern",
+        setup: explosive_scenes::throw_preview,
+    },
+    Scene {
+        name: "explosives_lineup",
+        summary: "Every explosive kind side by side: bomb, sticky, cluster, bomblet, C4, shaped, mining, incendiary, EMP, flare",
+        setup: explosive_scenes::lineup,
     },
     Scene {
         name: "gas_leak",
