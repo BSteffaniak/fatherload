@@ -86,22 +86,30 @@ impl WorldState {
                 continue;
             };
             let position = player.tile_position(TILE_SIZE);
-            // Altitude above the ground below the rig (mountains included), depth below it.
-            let surface = self.terrain.surface_row(position.x);
-            let altitude = (surface - position.y - 1).max(0);
-            let underground = position.y >= surface;
-            let band = if underground {
+            // The heightmap and band lookups run only when a record could move: a row deeper
+            // than the depth record, or flight above the classic surface row (row 0, below
+            // every mountain top) for the altitude record. Most ticks skip both.
+            let records = player.milestones.records;
+            let deeper = position.y > records.deepest_row;
+            let surface = (deeper || position.y < 0).then(|| self.terrain.surface_row(position.x));
+            let underground = surface.is_some_and(|surface| position.y >= surface);
+            let altitude = match surface {
+                Some(surface) if position.y < 0 => (surface - position.y - 1).max(0),
+                _ => 0,
+            };
+            let band = if deeper && underground {
                 u8::try_from(self.terrain.band_at(position).index()).unwrap_or(u8::MAX)
             } else {
                 0
             };
-            let owns_claim = self.bases.claims().any(|claim| claim.owner == player_id);
+            let owns_claim = !player.milestones.has(Milestone::FirstClaim)
+                && self.bases.claims().any(|claim| claim.owner == player_id);
             let Some(player) = self.players.get_mut(&player_id) else {
                 continue;
             };
             let records = &mut player.milestones.records;
             records.highest_altitude = records.highest_altitude.max(altitude);
-            if underground {
+            if deeper && underground {
                 records.deepest_row = records.deepest_row.max(position.y);
                 records.deepest_band =
                     Some(records.deepest_band.map_or(band, |best| best.max(band)));
