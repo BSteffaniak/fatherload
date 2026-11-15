@@ -437,6 +437,18 @@ fn island_edits_survive_saves_and_keyframes() {
     };
     assert!(world.terrain().is_solid_at(position));
     assert!(world.terrain_mut().set_kind(position, TileKind::Air));
+    // A half-drilled sky tile (still sky rock, fewer chips left) is a diff too: its code must
+    // round-trip through saves and keyframes.
+    let chipped = TilePosition {
+        x: island.center_x,
+        y: top + 4,
+    };
+    let fresh = world.terrain().tile(chipped).expect("in the world");
+    assert!(matches!(fresh.kind, TileKind::Sky(_)), "{fresh:?}");
+    let _ = world.terrain_mut().chip(chipped);
+    let chipped_tile = world.terrain().tile(chipped).expect("in the world");
+    assert!(matches!(chipped_tile.kind, TileKind::Sky(_)));
+    assert!(chipped_tile.durability < fresh.durability);
     world
         .player_mut(PLAYER)
         .expect("player")
@@ -448,6 +460,7 @@ fn island_edits_survive_saves_and_keyframes() {
         loaded.terrain().tile(position).map(|tile| tile.kind),
         Some(TileKind::Air)
     );
+    assert_eq!(loaded.terrain().tile(chipped), Some(chipped_tile));
     assert_eq!(
         loaded
             .player(PLAYER)
@@ -468,6 +481,7 @@ fn island_edits_survive_saves_and_keyframes() {
         replica.terrain().tile(position).map(|tile| tile.kind),
         Some(TileKind::Air)
     );
+    assert_eq!(replica.terrain().tile(chipped), Some(chipped_tile));
     // Older saves without the sky gear load with none fitted.
     let gear: crate::protection::HazardGear =
         serde_json::from_str(r#"{"heat_shield":2}"#).expect("old gear");

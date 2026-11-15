@@ -834,6 +834,10 @@ impl Tile {
             0x500..=0x5FF if variant < SurfaceMaterial::ALL.len() => {
                 TileKind::Surface(SurfaceMaterial::ALL[variant])
             }
+            0x600..=0x6FF => match crate::sky::SkyTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Sky(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

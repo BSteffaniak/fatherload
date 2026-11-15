@@ -130,6 +130,20 @@ impl SkyTile {
         }
     }
 
+    /// The tile with code `code` ([`Self::code`]), if any (saves and chunk diffs decode sky
+    /// tiles with it).
+    #[must_use]
+    pub const fn from_code(code: u64) -> Option<Self> {
+        let mut index = 0;
+        while index < Self::ALL.len() {
+            if Self::ALL[index].code() == code {
+                return Some(Self::ALL[index]);
+            }
+            index += 1;
+        }
+        None
+    }
+
     /// Drill strength needed to dig it (the classic ladder: soil like dirt, isle rock like
     /// clay, crystal and moon rock like stone, continent rock like hard rock).
     #[must_use]
@@ -269,6 +283,10 @@ mod tests {
         codes.dedup();
         assert_eq!(codes.len(), SkyTile::ALL.len());
         assert!(codes.iter().all(|code| *code < 0x100));
+        for tile in SkyTile::ALL {
+            assert_eq!(SkyTile::from_code(tile.code()), Some(tile));
+        }
+        assert_eq!(SkyTile::from_code(0xFF), None);
     }
 
     #[test]

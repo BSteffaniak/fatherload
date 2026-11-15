@@ -183,6 +183,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
     );
     kinds.extend(crate::cave::CaveTile::ALL.map(TileKind::Cave));
     kinds.extend(SurfaceMaterial::ALL.map(TileKind::Surface));
+    kinds.extend(crate::sky::SkyTile::ALL.map(TileKind::Sky));
     for material in SurfaceMaterial::ALL {
         assert_eq!(
             SurfaceMaterial::ALL[usize::try_from(material.code()).unwrap_or(99)],
@@ -203,7 +204,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         0x3FF << 8,
         0x40F << 8,
         0x506 << 8,
-        0x600 << 8,
+        0x6FF << 8,
         u64::MAX,
     ] {
         assert_eq!(Tile::from_code(code), None, "code {code:#x}");
