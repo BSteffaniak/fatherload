@@ -487,6 +487,14 @@ impl WorldState {
                     return Err(BuildRefusal::NothingToDo);
                 }
             }
+            ModuleService::Sleep => {
+                if !self.clock().phase().sleepable() {
+                    return Err(BuildRefusal::NotTired);
+                }
+                if self.is_in_bed(player_id) {
+                    return Err(BuildRefusal::NothingToDo);
+                }
+            }
             ModuleService::SetHome => {
                 if self
                     .bases
@@ -699,6 +707,10 @@ impl WorldState {
                 self.bases.set_home(player_id, structure);
                 return;
             }
+            ModuleService::Sleep => {
+                let _outcome = self.lie_down(player_id, crate::clock::BedSpot::Module(structure));
+                return;
+            }
             ModuleService::Craft(kind) => {
                 if let Some(player) = self.players.get_mut(&player_id) {
                     for (block, count) in cost.blocks.iter() {
@@ -790,6 +802,7 @@ impl WorldState {
                     self.progression.total_earnings.saturating_add(value);
             }
             ModuleService::SellCargo
+            | ModuleService::Sleep
             | ModuleService::SetHome
             | ModuleService::CycleAccess
             | ModuleService::Craft(_) => {}

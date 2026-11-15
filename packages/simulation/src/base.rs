@@ -581,13 +581,14 @@ impl ModuleKind {
                 ModuleService::DepositBlocks,
                 ModuleService::WithdrawAll,
             ],
-            Self::Bed => &[ModuleService::SetHome],
+            Self::Bed => &[ModuleService::SetHome, ModuleService::Sleep],
             Self::Generator => &[],
             Self::FuelStation => &[ModuleService::Refuel, ModuleService::OrderSupply],
             Self::RepairBay => &[ModuleService::Repair],
             Self::CargoUplink => &[ModuleService::SellCargo],
             Self::Homestead => &[
                 ModuleService::SetHome,
+                ModuleService::Sleep,
                 ModuleService::DepositCargo,
                 ModuleService::DepositBlocks,
                 ModuleService::WithdrawAll,
@@ -663,6 +664,9 @@ pub enum ModuleService {
     CollectRefined,
     /// Craft one explosive at a workshop ([`workshop_recipe`]).
     Craft(ExplosiveKind),
+    /// Lie down in this bed or homestead for the night (see [`crate::clock`]: once everyone is
+    /// in bed the night is skipped).
+    Sleep,
 }
 
 impl ModuleService {
@@ -684,6 +688,7 @@ impl ModuleService {
             Self::Craft(ExplosiveKind::C4) => "Pack a C4 charge",
             Self::Craft(ExplosiveKind::Mining) => "Pack a mining charge",
             Self::Craft(_) => "Craft",
+            Self::Sleep => "Sleep until dawn",
         }
     }
 }
@@ -907,6 +912,8 @@ pub enum BuildRefusal {
     NeedsBlocks(u32),
     /// The claim would overlap a village (WP-VILLAGE): villages are not for claiming.
     InVillage,
+    /// Beds are for the night: lying down only works at dusk or night (see [`crate::clock`]).
+    NotTired,
 }
 
 impl BuildRefusal {
@@ -938,6 +945,7 @@ impl BuildRefusal {
             Self::NothingToDo => "Nothing to do.".to_owned(),
             Self::NeedsBlocks(count) => format!("Needs {count} building blocks in the hopper."),
             Self::InVillage => "Village land: stake your claim outside the village.".to_owned(),
+            Self::NotTired => "Too early to sleep: beds are for dusk and night.".to_owned(),
         }
     }
 }

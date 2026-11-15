@@ -431,6 +431,7 @@ impl WorldState {
             }
             PlayerCommand::MountWeapon { weapon } => self.mount_weapon(player_id, weapon),
             PlayerCommand::Build(command) => self.apply_build_command(player_id, &command),
+            PlayerCommand::Sleep(command) => self.apply_sleep_command(player_id, command),
         }
     }
 }

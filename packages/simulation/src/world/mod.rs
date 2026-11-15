@@ -31,6 +31,9 @@ mod cave_tests;
 mod caves;
 #[cfg(test)]
 mod charge_equivalence_tests;
+mod clock;
+#[cfg(test)]
+mod clock_tests;
 mod commands;
 mod crew;
 #[cfg(test)]
@@ -302,6 +305,10 @@ pub struct WorldState {
     /// world, never hashed or sent to clients.
     #[serde(default)]
     crew: crate::crew::CrewRoster,
+    /// The world clock's day length, skipped nights and who is in bed (Part II F4, see
+    /// [`crate::clock`]; the time of day itself is derived from the tick).
+    #[serde(default)]
+    clock: crate::clock::ClockState,
 }
 
 impl WorldState {

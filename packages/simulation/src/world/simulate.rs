@@ -379,6 +379,8 @@ impl WorldState {
             }
         }
         self.advance_canonical_day_if_due(next_tick, &mut output);
+        let clock_before = self.clock();
+        self.advance_clock(clock_before, next_tick, &mut output);
         self.advance_escape_sequence(next_tick, &mut output);
         self.advance_progression_depth(&mut output);
         let pressure_player_ids = self.players.keys().copied().collect::<Vec<_>>();

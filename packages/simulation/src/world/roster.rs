@@ -99,6 +99,7 @@ impl WorldState {
             enemies,
             bases: _,
             crew,
+            clock,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
@@ -127,6 +128,7 @@ impl WorldState {
         });
         service_transactions.retain(|transaction| transaction.player_id != player_id);
         enemies.rig_guard.remove(&player_id);
+        clock.sleepers.remove(&player_id);
     }
 
     /// The first spawn slot at least [`SPAWN_SPACING`] away from every rig, or the least crowded

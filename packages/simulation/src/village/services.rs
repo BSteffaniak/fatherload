@@ -125,6 +125,9 @@ pub enum VillageDeal {
     Blessing(BlessingKind),
     /// Buy a round: the regulars point you at the nearest site you do not know of.
     Rumour,
+    /// A room at the inn for the night: puts you in bed (dusk and night only; see
+    /// [`crate::clock`]).
+    Room,
 }
 
 /// A deal and its price (credits; percentage deals price per unit when bought).
@@ -166,6 +169,7 @@ impl VillageOffer {
             VillageDeal::ChartRegion => "Chart the surrounding region".to_owned(),
             VillageDeal::Blessing(kind) => format!("{} ({})", kind.name(), kind.effect()),
             VillageDeal::Rumour => "Buy a round and ask for rumours".to_owned(),
+            VillageDeal::Room => "A room for the night".to_owned(),
         }
     }
 }
@@ -234,6 +238,7 @@ pub fn offers(village: &Village, building: &VillageBuilding) -> Vec<VillageOffer
         VillageService::Inn => vec![
             VillageOffer::flat(VillageDeal::Rumour, 25),
             VillageOffer::metered(VillageDeal::Repair { percent: 150 }),
+            VillageOffer::flat(VillageDeal::Room, crate::clock::INN_ROOM_PRICE),
         ],
         VillageService::Workshop => {
             let mut list = vec![VillageOffer::metered(VillageDeal::Repair {

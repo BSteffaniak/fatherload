@@ -35,7 +35,8 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::SetCollectBlocks { .. }
         | PlayerCommand::SetEnemyDifficulty(_)
         | PlayerCommand::MountWeapon { .. }
-        | PlayerCommand::Build(_) => None,
+        | PlayerCommand::Build(_)
+        | PlayerCommand::Sleep(_) => None,
     }
 }
 

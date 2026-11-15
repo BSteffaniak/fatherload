@@ -151,6 +151,15 @@ impl WorldState {
                 PlayerScopedCommandOutcome::Applied
             }
             VillageDeal::Rumour => self.village_rumour(player_id, &found, deal.price),
+            VillageDeal::Room => {
+                if !self.clock().phase().sleepable()
+                    || self.is_in_bed(player_id)
+                    || !self.charge(player_id, deal.price)
+                {
+                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
+                }
+                self.lie_down(player_id, crate::clock::BedSpot::Inn(village_id))
+            }
         }
     }
 

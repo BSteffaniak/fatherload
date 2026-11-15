@@ -165,6 +165,10 @@ impl WorldState {
         if !self.bases.is_empty() {
             hash.write_serialized(&self.bases);
         }
+        // Skipped while it is a new world's standard clock, so older worlds keep their hashes.
+        if !self.clock.is_default() {
+            hash.write_serialized(&self.clock);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

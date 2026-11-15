@@ -203,6 +203,7 @@ impl WorldState {
             enemies: crate::enemy::EnemyDirector::default(),
             bases: crate::base::Bases::new(),
             crew: crate::crew::CrewRoster::default(),
+            clock: crate::clock::ClockState::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

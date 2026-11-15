@@ -64,6 +64,9 @@ pub enum PlayerCommand {
     },
     /// A base-building action: place, deconstruct or use a module (see [`crate::base`]).
     Build(crate::base::BuildCommand),
+    /// Get out of bed, or change who must be in bed to skip the night (see [`crate::clock`];
+    /// lying down is a bed's own service).
+    Sleep(crate::clock::SleepCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

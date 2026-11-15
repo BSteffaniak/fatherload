@@ -171,6 +171,13 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::BasePlaced { player_id, .. } => (100, Some(player_id)),
         GameplayEventKind::BaseRemoved { player_id, .. } => (101, Some(player_id)),
         GameplayEventKind::BaseServiceUsed { player_id, .. } => (102, Some(player_id)),
+        // World clock (wave 3, T14): 110-115.
+        GameplayEventKind::Dawn { .. } => (110, None),
+        GameplayEventKind::Dusk { .. } => (111, None),
+        GameplayEventKind::NewDay { .. } => (112, None),
+        GameplayEventKind::NightSkipped { .. } => (113, None),
+        GameplayEventKind::GotUp { player_id } => (114, Some(player_id)),
+        GameplayEventKind::SleepRuleChanged { player_id, .. } => (115, Some(player_id)),
     }
 }
 

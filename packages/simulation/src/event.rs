@@ -335,6 +335,31 @@ pub enum GameplayEventKind {
         structure: crate::base::StructureId,
         service: crate::base::ModuleService,
     },
+    /// The sun came up: dawn of day `day` began (see [`crate::clock`]).
+    Dawn {
+        day: u32,
+    },
+    /// Dusk of day `day` began: night is coming.
+    Dusk {
+        day: u32,
+    },
+    /// Midnight passed: day `day` began.
+    NewDay {
+        day: u32,
+    },
+    /// Everyone needed was in bed: the clock jumped to the dawn of day `day`.
+    NightSkipped {
+        day: u32,
+    },
+    /// A player got out of bed (by choice, by driving off, or because morning came).
+    GotUp {
+        player_id: PlayerId,
+    },
+    /// A player changed who must be in bed to skip the night.
+    SleepRuleChanged {
+        player_id: PlayerId,
+        rule: crate::clock::SleepRule,
+    },
 }
 
 /// What a weapon shot struck.
@@ -451,6 +476,15 @@ pub(crate) const fn gameplay_event_for_applied_command(
                 player_id,
                 x: at.x,
                 y: at.y,
+            }
+        }
+        PlayerCommand::Sleep(crate::clock::SleepCommand::GetUp) => {
+            GameplayEventKind::GotUp { player_id }
+        }
+        PlayerCommand::Sleep(crate::clock::SleepCommand::SetRule(rule)) => {
+            GameplayEventKind::SleepRuleChanged {
+                player_id,
+                rule: *rule,
             }
         }
         PlayerCommand::Build(crate::base::BuildCommand::Use { structure, service }) => {

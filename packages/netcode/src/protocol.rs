@@ -45,7 +45,11 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// 10 (expansion wave 2, T8 surface): `GeneratorVersion::V7` biome worlds in the session
 /// settings, `TileKind::Surface` materials (codes 0x500) in tile ops and chunk diffs, terrain
 /// chunks above row 0 (mountains) and no flight ceiling.
-pub const PROTOCOL_VERSION: u8 = 10;
+///
+/// 11 (wave 3, T14 world clock): the `ClockState` world field and `SectionKey::Clock` section,
+/// `PlayerCommand::Sleep`, `ModuleService::Sleep`, `VillageDeal::Room` and the clock events
+/// 110-115.
+pub const PROTOCOL_VERSION: u8 = 11;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///
