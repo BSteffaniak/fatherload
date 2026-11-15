@@ -278,7 +278,9 @@ pub fn draw_villages(
             draw_signpost(draw, terrain, &found, post);
         }
     }
-    if pass == VillagePass::Behind {
+    // Camps stand in front of the surface flora (after the terrain), so a bush never hides the
+    // fire; they are only ever on the surface, so the underground pass has nothing else of theirs.
+    if pass == VillagePass::Front {
         draw_camps(draw, terrain, visible, seconds);
     }
 }
@@ -1491,7 +1493,7 @@ fn draw_milestone(draw: &mut impl RaylibDraw, terrain: &Terrain, post: &Signpost
 
 /// Every wanderers' camp ([`people::camps`]) overlapping `visible`: the campfire and the camp's
 /// props (a trader's wagon, a prospector's tent, a surveyor's tent and tripod, a smuggler's
-/// lean-to and crates), drawn behind the terrain on the camp's flat ground.
+/// lean-to and crates), drawn after the terrain and flora on the camp's flat ground.
 fn draw_camps(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectangle, seconds: f32) {
     let settings = terrain.settings();
     let first = (visible.x / TILE_SIZE).floor() as i32 - 8;
@@ -1616,9 +1618,14 @@ fn draw_wagon(draw: &mut impl RaylibDraw, pen: Pen, variant: u32) {
     // Shaft and wheels.
     pen.rect(draw, x + 48, -14, 12, 1, SOIL_DARK);
     for wheel in [x + 6, x + 32] {
-        pen.rect(draw, wheel, -12, 10, 12, INK);
-        pen.rect(draw, wheel + 1, -11, 8, 10, SOIL);
-        pen.rect(draw, wheel + 3, -9, 4, 6, LOAM);
+        // A rounded rim, spokes and a hub.
+        pen.rect(draw, wheel + 2, -12, 6, 12, INK);
+        pen.rect(draw, wheel, -10, 10, 8, INK);
+        pen.rect(draw, wheel + 1, -11, 8, 10, INK);
+        pen.rect(draw, wheel + 2, -10, 6, 8, SOIL);
+        pen.rect(draw, wheel + 1, -9, 8, 6, SOIL);
+        pen.rect(draw, wheel + 4, -10, 2, 8, LOAM);
+        pen.rect(draw, wheel + 1, -7, 8, 2, LOAM);
         pen.rect(draw, wheel + 4, -7, 2, 2, STEEL_DARK);
     }
     // A lantern on a hook.

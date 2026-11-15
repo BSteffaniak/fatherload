@@ -446,14 +446,14 @@ eyes, brows, nose, ears, the hat or helmet, the collar and garment. People are d
 terrain and before rigs, positioned along their walking leg (`NpcState::x_at`) between the last
 two world ticks; a name tag floats over the person the view's rig would talk to.
 
-**Wanderers' camps** (`world/villages.rs::draw_camps`). Drawn behind the terrain on the camp's
-flat ground, centred on the campfire: a ring of stones, two logs, a three-colour flame that
-sways on a four-frame cycle, a drifting spark and a rounded glow of stacked translucent bands.
-The camp kind sets the props west of the fire (a trader's hooded wagon with painted boards,
-wheels and a lantern; a prospector's cream A-frame tent with a patch, pick and pan; a
-surveyor's teal tent and brass-eyed tripod with a chart case; a smuggler's plank lean-to with
-marked crates), and a bedroll lies east of it. Props sit beyond the spot where wanderers stand
-so people never hide them.
+**Wanderers' camps** (`world/villages.rs::draw_camps`). Drawn after the terrain and flora (so no
+bush hides the fire) on the camp's flat ground, centred on the campfire: a ring of stones, two
+logs, a three-colour flame that sways on a four-frame cycle, a drifting spark and a rounded glow
+of stacked translucent bands. The camp kind sets the props west of the fire (a trader's hooded
+wagon with painted boards, wheels and a lantern; a prospector's cream A-frame tent with a patch,
+pick and pan; a surveyor's teal tent and brass-eyed tripod with a chart case; a smuggler's plank
+lean-to with marked crates), and a bedroll lies east of it. Props sit beyond the spot where
+wanderers stand so people never hide them.
 
 **Effects** (`world/fx.rs`). Sparks are square embers cooling cream to red; drilling throws chips
 of the target's material (plus sparks on rock); `effects::Explosion`s (spawned where a detonated
