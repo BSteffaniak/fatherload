@@ -350,8 +350,14 @@ fn oxygen_runs_out_in_gas_and_comes_back_in_air() {
     out_of_the_rig(&mut world);
     let (x, y) = pilot_pos(&world);
     assert_eq!(world.pilot_air_at(x, y - 40.0), PilotAir::Breathable);
+    // The default (V8) sky decides by air density: still breathable just over the peaks.
     assert_eq!(
         world.pilot_air_at(x, (THIN_AIR_ROW - 4) as f32 * TILE_SIZE),
+        PilotAir::Breathable,
+        "V8 air is full up to 200 rows"
+    );
+    assert_eq!(
+        world.pilot_air_at(x, -2_000.0 * TILE_SIZE),
         PilotAir::Thin,
         "too high to breathe"
     );
@@ -741,4 +747,63 @@ fn rig_services_on_foot_need_the_rig_parked_outside() {
         &PlayerCommand::Service(SessionServiceRequest::SellCargo)
     ));
     assert!(world.command_allowed_here(PLAYER, &contract));
+}
+
+/// A V8 world with the rig parked at the arena's floor and its pilot out, then lifted into open
+/// sky `altitude_rows` up.
+fn pilot_in_the_sky(settings: &crate::worldgen::WorldSettings, altitude_rows: f32) -> WorldState {
+    let mut world = WorldState::new_game_with_settings(PLAYER, settings, SimulationParams::new(60));
+    fill(&mut world, 8..=40, 8..=31, TileKind::Air);
+    fill(&mut world, 8..=40, FLOOR..=FLOOR, TileKind::Bedrock);
+    rest(&mut world, PLAYER, 20.5);
+    out_of_the_rig(&mut world);
+    let id = world.pilot_of(PLAYER).expect("pilot").0;
+    world.edit_pilot(id, |body, _| {
+        body.y = -altitude_rows * TILE_SIZE;
+        body.previous_y = body.y;
+        body.velocity_x = 0.0;
+        body.velocity_y = 0.0;
+    });
+    world
+}
+
+#[test]
+fn the_sky_thins_the_pilots_air_and_lightens_its_fall() {
+    use crate::worldgen::{GeneratorVersion, WorldSettings, sky};
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V8,
+        ..WorldSettings::new(0x0E00_0015)
+    };
+    // Low isles breathe; the high archipelago, orbit and the Moon do not.
+    let world = pilot_in_the_sky(&settings, 300.0);
+    let x = 20.5 * TILE_SIZE;
+    assert_eq!(
+        world.pilot_air_at(x, -300.0 * TILE_SIZE),
+        PilotAir::Breathable
+    );
+    assert_eq!(world.pilot_air_at(x, -1_200.0 * TILE_SIZE), PilotAir::Thin);
+    let moon = sky::moon(&settings).expect("a V8 Moon");
+    let moon_x = (moon.center_x as f32 + 0.5) * TILE_SIZE;
+    let moon_top =
+        moon.surface_row(moon.center_x).expect("the Moon has a top") as f32 * TILE_SIZE - 40.0;
+    assert_eq!(
+        world.pilot_air_at(moon_x, moon_top),
+        PilotAir::Thin,
+        "no air on the Moon"
+    );
+
+    // Free fall for half a second: gravity at 300 rows is the ground's; orbit's is a sliver.
+    let fall = |altitude: f32| {
+        let mut world = pilot_in_the_sky(&settings, altitude);
+        let start = pilot_pos(&world).1;
+        run(&mut world, &TickInputs::default(), 30);
+        pilot_pos(&world).1 - start
+    };
+    let low = fall(300.0);
+    let orbit = fall(sky::ORBIT_BOTTOM_ROWS as f32 + 300.0);
+    assert!(low > 40.0, "falls at full gravity low down: {low}");
+    assert!(
+        orbit > 0.0 && orbit < low * 0.1,
+        "floats in orbit: {orbit} vs {low}"
+    );
 }

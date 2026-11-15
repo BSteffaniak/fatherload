@@ -115,6 +115,11 @@ impl PilotTerrain for PilotView<'_> {
             .map(|(_, top)| *top)
             .min_by(f32::total_cmp)
     }
+    fn gravity_at(&self, x: f32, y: f32) -> f32 {
+        // Read at the feet: the fields are smooth over a pilot's height.
+        crate::environment::environment_at(self.world.terrain.settings(), x, y)
+            .body_gravity(crate::pilot::GRAVITY)
+    }
 }
 
 /// Whether `tile` stops a pilot: solid terrain except vent grates; outside the world's
@@ -212,8 +217,10 @@ impl WorldState {
 
     /// What a pilot breathes at world pixel `(x, y)` (see [`PilotAir`]).
     ///
-    /// Seam for altitude physics (F6) and the Moon (WP-MOON): thin air is a fixed row today
-    /// ([`THIN_AIR_ROW`]); an air-density or airless-region lookup slots in here.
+    /// Altitude physics (F6) and the Moon (WP-MOON): on a V8 sky the air is thin where its
+    /// density falls under [`crate::pilot::PILOT_THIN_AIR_DENSITY`] (the upper archipelago and
+    /// above, and the vacuum of orbit and the Moon); older worlds use the fixed
+    /// [`THIN_AIR_ROW`].
     #[must_use]
     pub fn pilot_air_at(&self, x: f32, y: f32) -> PilotAir {
         let tile = tile_at(x, y);
@@ -238,7 +245,16 @@ impl WorldState {
         if in_cloud || beside_pocket {
             return PilotAir::Gas;
         }
-        if tile.y < THIN_AIR_ROW {
+        // A V8 sky decides by its air density (vacuum in orbit and on the Moon); older worlds
+        // keep the fixed thin-air row.
+        let settings = self.terrain.settings();
+        let thin = if settings.generator.has_sky() {
+            crate::environment::environment_at(settings, x, y).air_density
+                < crate::pilot::PILOT_THIN_AIR_DENSITY
+        } else {
+            tile.y < THIN_AIR_ROW
+        };
+        if thin {
             return PilotAir::Thin;
         }
         PilotAir::Breathable

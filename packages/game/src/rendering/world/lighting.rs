@@ -68,6 +68,8 @@ const ABOVE_ZERO_TILES: f32 = 12.0;
 /// Tiles below the local ground the overlay stays full, and where it has faded out.
 const BELOW_FULL_TILES: f32 = 4.0;
 const BELOW_ZERO_TILES: f32 = 14.0;
+/// Radius of a pilot's helmet lamp pool, in tiles (its beam reaches 1.8 times as far).
+const PILOT_LAMP_TILES: f32 = 2.6;
 /// How far ahead a rig's headlight beam reaches, in rig lamp radii.
 const BEAM_REACH: f32 = 2.1;
 /// Cosine of the beam's half-angle.
@@ -107,6 +109,8 @@ pub(super) struct LightScene<'a> {
     pub visible: Rectangle,
     pub look: &'a DayLook,
     pub players: &'a [PlayerPresentation],
+    /// Pilots on foot (Part II F5): each carries a helmet lamp.
+    pub pilots: &'a [crate::render_snapshot::PilotPresentation],
     pub facings: &'a RigFacings,
     pub bombs: &'a [PlacedBomb],
     pub explosions: &'a [Explosion],
@@ -416,6 +420,30 @@ fn gather_lights(scene: &LightScene<'_>) -> Vec<Light> {
             radius: lamp * BEAM_REACH,
             strength: 1.15,
             beam: Some((bx, by)),
+            warm: true,
+            air: BEAM_AIR,
+        });
+    }
+    // Helmet lamps: a small pool round the pilot's head and a short beam where it faces.
+    for pilot in scene.pilots {
+        let head_y = pilot.y - TILE_SIZE * 1.3;
+        if !near(pilot.x, head_y) || scene.asleep.contains_key(&pilot.player_id) {
+            continue;
+        }
+        let ahead = if pilot.state.facing < 0 { -1.0 } else { 1.0 };
+        lights.push(Light::pool(
+            pilot.x,
+            head_y,
+            PILOT_LAMP_TILES * TILE_SIZE,
+            0.85,
+            false,
+        ));
+        lights.push(Light {
+            x: pilot.x + ahead * TILE_SIZE * 0.3,
+            y: head_y,
+            radius: PILOT_LAMP_TILES * TILE_SIZE * 1.8,
+            strength: 0.9,
+            beam: Some((ahead * 0.97, 0.22)),
             warm: true,
             air: BEAM_AIR,
         });

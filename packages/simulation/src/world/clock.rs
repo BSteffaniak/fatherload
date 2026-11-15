@@ -227,10 +227,10 @@ impl WorldState {
         if !self.clock().phase().sleepable() {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
-        let Some(player) = self.players.get(&player_id) else {
+        // On foot (Part II F5) the pilot is the one lying down, wherever the rig is parked.
+        let Some(rig) = self.actor_tile(player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
-        let rig = player.tile_position(TILE_SIZE);
         self.clock.sleepers.insert(
             player_id,
             Sleeper {
@@ -334,14 +334,12 @@ impl WorldState {
         }
     }
 
-    /// Gets up every sleeper whose rig drifted off its bed, whose bed came down, or who left.
+    /// Gets up every sleeper whose rig (or pilot on foot) drifted off its bed, whose bed came down, or who left.
     fn wake_wanderers(&mut self, output: &mut TickOutput) {
         let mut woken = Vec::new();
         for (player_id, sleeper) in &self.clock.sleepers {
-            let rig = self
-                .players
-                .get(player_id)
-                .map(|player| player.tile_position(TILE_SIZE));
+            // The sleeper's body: the pilot on foot, else the rig.
+            let rig = self.actor_tile(*player_id);
             let bed_stands = match sleeper.bed {
                 BedSpot::Module(structure) => self.bases.module(structure).is_some(),
                 BedSpot::Inn(_) => true,

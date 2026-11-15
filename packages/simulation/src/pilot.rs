@@ -118,9 +118,14 @@ pub const STRIKE_GUARD_SECONDS: f32 = 0.6;
 pub const LAVA_DAMAGE_PER_SECOND: f32 = 45.0;
 /// Rows above this one have air too thin to breathe.
 ///
-/// It sits above the tallest V7 peaks (whose headroom is 96 rows). Altitude physics (F6) may
-/// replace this with an air-density lookup: see `WorldState::pilot_air_at`.
+/// It sits above the tallest V7 peaks (whose headroom is 96 rows). Worlds with a V8 sky use its
+/// air density instead ([`PILOT_THIN_AIR_DENSITY`], see `WorldState::pilot_air_at`).
 pub const THIN_AIR_ROW: i32 = -128;
+
+/// On a V8 sky ([`crate::environment::air_density`]) the pilot's air counts as thin below this
+/// density: about 800 rows up (the upper cloud archipelago), and everywhere in orbit and on the
+/// Moon, where there is no air at all.
+pub const PILOT_THIN_AIR_DENSITY: f32 = 0.5;
 
 /// Hand-pick reach from the pilot's chest (px).
 pub const PICK_REACH: f32 = TILE_SIZE * 1.3;
@@ -477,6 +482,14 @@ pub trait PilotTerrain {
     /// The highest one-way platform top (a parked rig's roof) a body spanning
     /// `left..right` crosses while its feet move down from `from_y` to `to_y`, if any.
     fn platform_top(&self, left: f32, right: f32, from_y: f32, to_y: f32) -> Option<f32>;
+    /// The downward pull (px/s²) on a body whose feet are at world pixel `(x, y)`: [`GRAVITY`]
+    /// by default (and everywhere on the ground); the world scales it by a V8 sky's gravity
+    /// fields and lessens it in updrafts ([`crate::environment::Environment::body_gravity`]),
+    /// so the pilot leaps high on the Moon and floats in orbit. Read once per tick.
+    fn gravity_at(&self, x: f32, y: f32) -> f32 {
+        let _ = (x, y);
+        GRAVITY
+    }
 }
 
 /// Whether a solid tile of `kind` lets a pilot through: vent grates (a crawlway's covers) are
@@ -622,8 +635,9 @@ pub fn step_pilot(
     let mut report = PilotStepReport::default();
     body.previous_x = body.x;
     body.previous_y = body.y;
+    let gravity = world.gravity_at(body.x, body.y);
     for _ in 0..steps {
-        step_once(body, state, world, controls, step, &mut report);
+        step_once(body, state, world, (controls, gravity), step, &mut report);
     }
     report
 }
@@ -636,7 +650,7 @@ fn step_once(
     body: &mut Body,
     state: &mut PilotState,
     world: &impl PilotTerrain,
-    controls: PilotControls,
+    (controls, gravity): (PilotControls, f32),
     dt: f32,
     report: &mut PilotStepReport,
 ) {
@@ -818,7 +832,7 @@ fn step_once(
                 if state.jetpack_fuel <= 0.0 {
                     report.jet_empty = true;
                 }
-                body.velocity_y = (GRAVITY - JETPACK_ACCEL)
+                body.velocity_y = (gravity - JETPACK_ACCEL)
                     .mul_add(dt, body.velocity_y)
                     .max(-JETPACK_MAX_RISE);
             } else if state.grounded && body.velocity_y >= 0.0 {
@@ -827,7 +841,7 @@ fn step_once(
                 body.velocity_y = 0.0;
             } else {
                 state.jetting = false;
-                body.velocity_y = GRAVITY.mul_add(dt, body.velocity_y).min(MAX_FALL_SPEED);
+                body.velocity_y = gravity.mul_add(dt, body.velocity_y).min(MAX_FALL_SPEED);
             }
         }
     }

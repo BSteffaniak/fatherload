@@ -1126,12 +1126,18 @@ Where the wave 2 tracks meet, for the tracks that build on them:
 
 ## Wave 3 seams: the pilot (T15)
 
-- **Clock** (T14): nothing in the pilot reads the clock; a helmet lamp is always on. Night
-  danger, sleep and shop hours can gate on `is_on_foot` / `pilots()`.
-- **Air and gravity** (T16 / F6, WP-MOON): `WorldState::pilot_air_at` is the one place air is
-  decided (thin air is a fixed row today; swap in air density or airless regions there).
-  `pilot::GRAVITY` is a constant: a gravity field multiplies it in `step_once` (and the jump
-  and jetpack constants scale with it).
+- **Clock** (T14): nothing in the pilot reads the clock; its helmet lamp lights the night light
+  map in the game. Night danger and shop hours can gate on `is_on_foot` / `pilots()`.
+- **Air and gravity** (T16 / F6, WP-MOON), wired at integration: `WorldState::pilot_air_at` is
+  the one place air is decided; on a V8 sky the air is thin below
+  `pilot::PILOT_THIN_AIR_DENSITY` of `environment::air_density` (about 800 rows up, and the
+  vacuum of orbit and the Moon), older worlds keep `THIN_AIR_ROW`. `PilotTerrain::gravity_at`
+  (default `pilot::GRAVITY`) is read once per tick; the world answers
+  `environment_at(..).body_gravity(GRAVITY)`, so gravity fields and updrafts pull on the pilot
+  (jump speed stays, so the pilot leaps about three times as high on the Moon and floats in
+  orbit; the jetpack lifts harder). Ground gravity is exactly `GRAVITY`.
+- **Sleep** (T14): beds judge the sleeper's body by `actor_tile`, so a pilot can lie down on
+  foot and gets up by walking off.
 - **People** (T17): NPCs can stand in walk-in rooms; `actor_position` is where a talking player
   is. Quests can require the pilot with `poi::SpaceAccess`.
 - **Rewards** (T18): `PilotGearKind` tiers are purchases like upgrades (`BuyPilotGear`).

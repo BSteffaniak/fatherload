@@ -345,6 +345,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             visible: scene.visible,
             look: &look,
             players: scene.players,
+            pilots: scene.pilots,
             facings: scene.facings,
             bombs: scene.bombs,
             explosions: scene.explosions,
