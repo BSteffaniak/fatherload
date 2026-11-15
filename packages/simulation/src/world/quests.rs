@@ -83,6 +83,13 @@ impl EventFacts {
                 GameplayEventKind::BombPlaced { player_id } => {
                     facts.bombed.insert(player_id);
                 }
+                // Every special charge counts as a bomb for "no bombs" jobs, except a flare
+                // (a light, not an explosive).
+                GameplayEventKind::ExplosiveDeployed { player_id, kind }
+                    if kind != crate::explosive::ExplosiveKind::Flare =>
+                {
+                    facts.bombed.insert(player_id);
+                }
                 GameplayEventKind::RescueTriggered { player_id } => {
                     facts.rescued.insert(player_id);
                 }

@@ -904,3 +904,42 @@ fn quests_play_out_deterministically() {
     };
     assert_eq!(run(), run());
 }
+
+#[test]
+fn special_charges_break_a_no_bombs_job_but_flares_do_not() {
+    use crate::explosive::{ExplosiveKind, ThrowAim};
+    const QUIET: QuestId = QuestId(202);
+    let deploy = |world: &mut WorldState, kind| {
+        world.player_mut(LEAD).expect("rig").add_explosives(kind, 1);
+        let output = step(
+            world,
+            &TickInputs::default().act(
+                LEAD,
+                PlayerCommand::DeployExplosive {
+                    kind,
+                    aim: ThrowAim::UP,
+                },
+            ),
+        );
+        assert!(applied(&output), "{kind:?} was not deployed");
+        output
+            .events
+            .iter()
+            .map(|event| event.kind)
+            .collect::<Vec<_>>()
+    };
+    let failed = |events: &[GameplayEventKind]| {
+        events.contains(&GameplayEventKind::QuestFailed {
+            player_id: LEAD,
+            quest: QUIET,
+            reason: QuestFailure::UsedBombs,
+        })
+    };
+    let mut world = solo_world();
+    unlock(&mut world, LEAD, QUIET);
+    accept(&mut world, LEAD, QUIET, false);
+    assert!(!failed(&deploy(&mut world, ExplosiveKind::Flare)));
+    assert!(active(&world, LEAD, QUIET).is_some());
+    assert!(failed(&deploy(&mut world, ExplosiveKind::C4)));
+    assert!(active(&world, LEAD, QUIET).is_none());
+}
