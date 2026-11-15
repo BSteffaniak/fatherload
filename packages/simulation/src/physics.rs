@@ -76,7 +76,7 @@ pub fn solid_at(terrain: &Terrain, x: f32, y: f32) -> bool {
         x: (x / TILE_SIZE).floor() as i32,
         y: (y / TILE_SIZE).floor() as i32,
     };
-    if position.x < 0 || position.x >= terrain.width() || position.y >= terrain.height() {
+    if !terrain.contains_column(position.x) || position.y >= terrain.height() {
         return true;
     }
     position.y >= 0 && terrain.is_solid_at(position)
@@ -351,8 +351,7 @@ pub fn find_tile_path(
     max_nodes: usize,
 ) -> Option<Vec<TilePosition>> {
     let open = |tile: TilePosition| {
-        tile.x >= 0
-            && tile.x < terrain.width()
+        terrain.contains_column(tile.x)
             && tile.y < terrain.height()
             && (tile.y < 0 || !terrain.is_solid_at(tile))
     };
@@ -494,5 +493,28 @@ mod tests {
         }
         assert!((body.velocity_x - 200.0).abs() < 0.5);
         assert!(body.velocity_y.abs() < f32::EPSILON);
+    }
+
+    /// Endless (V5) worlds extend west of column 0: bodies there see the terrain, not a wall.
+    #[test]
+    fn streamed_worlds_have_no_wall_at_column_zero() {
+        let terrain = Terrain::generate(&crate::worldgen::WorldSettings::new(7));
+        assert!(terrain.is_streamed());
+        let sky_y = -2.0 * TILE_SIZE;
+        assert!(!solid_at(&terrain, px(-40), sky_y), "open sky west of town");
+        let deep = TilePosition { x: -40, y: 200 };
+        assert_eq!(
+            solid_at(&terrain, px(deep.x), px(deep.y)),
+            terrain.is_solid_at(deep)
+        );
+        assert!(
+            find_tile_path(
+                &terrain,
+                TilePosition { x: 2, y: -3 },
+                TilePosition { x: -3, y: -3 },
+                100
+            )
+            .is_some()
+        );
     }
 }
