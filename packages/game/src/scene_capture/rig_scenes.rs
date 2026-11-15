@@ -162,6 +162,11 @@ pub const RIG_SCENES: &[Scene] = &[
         setup: |stage| stage.rig_sheet = Some(RigSheet::Drills),
     },
     Scene {
+        name: "rig_sheet_weapons",
+        summary: "Every hardpoint weapon on a rig: Mk I level, Mk III aimed up, Mk IV aimed back left",
+        setup: |stage| stage.rig_sheet = Some(RigSheet::Weapons),
+    },
+    Scene {
         name: "rig_lineup",
         summary: "Four crew rigs from stock to top tier in different paint jobs, side by side in town",
         setup: |stage| {

@@ -660,7 +660,6 @@ fn arms_offers(player: &fatherload_simulation::Player, shack: u8, credits: u32) 
                             "Hardpoint weapon".to_owned()
                         },
                     )
-                    .tag("ARMS", MINT)
                     .price(weapon.cost(), credits)
                     .unavailable_if(locked)
                     .about(format!(

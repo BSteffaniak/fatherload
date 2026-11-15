@@ -237,6 +237,7 @@ fn save_framebuffer(
 mod drop_scenes;
 mod cave_scenes;
 mod explosive_scenes;
+mod weapon_scenes;
 
 /// One capturable scene.
 pub struct Scene {
@@ -1690,6 +1691,51 @@ pub const SCENES: &[Scene] = &[
         name: "modal_hopper",
         summary: "The inventory's block hopper: fill, the collect toggle and dump rows",
         setup: drop_scenes::hopper_inventory,
+    },
+    Scene {
+        name: "weapon_rivet_gun",
+        summary: "A rivet gun stream hammering practice targets",
+        setup: weapon_scenes::rivet_gun,
+    },
+    Scene {
+        name: "weapon_scatter_blaster",
+        summary: "A scatter blaster's pellet fan hitting two targets",
+        setup: weapon_scenes::scatter_blaster,
+    },
+    Scene {
+        name: "weapon_plasma_cutter",
+        summary: "The plasma cutter's beam slicing into a stone pillar",
+        setup: weapon_scenes::plasma_cutter,
+    },
+    Scene {
+        name: "weapon_rocket_launcher",
+        summary: "A rocket in flight and another bursting against the far wall",
+        setup: weapon_scenes::rocket_launcher,
+    },
+    Scene {
+        name: "weapon_harpoon",
+        summary: "A harpoon flying at a gold nugget to reel it in",
+        setup: weapon_scenes::harpoon,
+    },
+    Scene {
+        name: "weapon_railgun",
+        summary: "A railgun slug piercing two targets and punching through a dirt wall",
+        setup: weapon_scenes::railgun,
+    },
+    Scene {
+        name: "weapon_split_reticles",
+        summary: "Split-screen aim reticles: a free stick crosshair and an auto-aim lock",
+        setup: weapon_scenes::split_reticles,
+    },
+    Scene {
+        name: "weapon_arms_rack",
+        summary: "The Explosives Shack counter's arms rack: weapons, upgrades, capacitor, rockets",
+        setup: weapon_scenes::arms_rack,
+    },
+    Scene {
+        name: "explosives_inventory",
+        summary: "The inventory listing every explosive type, carried or not",
+        setup: weapon_scenes::explosives_inventory,
     },
     Scene {
         name: "gas_leak",

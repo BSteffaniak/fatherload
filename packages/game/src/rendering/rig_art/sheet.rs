@@ -28,6 +28,8 @@ pub enum RigSheet {
     Paints,
     /// Every drill tier (columns) in every drill style (rows).
     Drills,
+    /// Every hardpoint weapon (columns) at each upgrade tier and aim (rows).
+    Weapons,
 }
 
 /// Tiers that start each visual class (plus the top tier).
@@ -147,6 +149,7 @@ pub fn draw_rig_sheet(draw: &mut RaylibDrawHandle<'_>, sheet: RigSheet) {
         RigSheet::Tiers => draw_tiers(draw, canvas.width),
         RigSheet::Paints => draw_paints(draw, canvas.width),
         RigSheet::Drills => draw_drills(draw, canvas.width),
+        RigSheet::Weapons => draw_weapons(draw, canvas.width),
     }
 }
 
@@ -248,6 +251,91 @@ fn draw_paints(draw: &mut RaylibDrawHandle<'_>, width: i32) {
             ..RigPose::idle(30 + index as u64 * 7)
         };
         cell(draw, &look(cosmetics, tiers), &pose, cx, top, scale);
+    }
+}
+
+/// A weapon on a rig drawn at `scale` (body box at `(x, top)`), pivoting on the hardpoint and
+/// pointing along `aim`, with a gold notch per tier above Mk I (as in the world).
+fn mounted_gun(
+    draw: &mut RaylibDrawHandle<'_>,
+    weapon: fatherload_simulation::WeaponKind,
+    mk: u8,
+    (x, top): (i32, i32),
+    scale: f32,
+    aim: (f32, f32),
+) {
+    use crate::rendering::pixel_art::{sprite, sprites::weapons};
+    let (column, row) = super::HARDPOINT;
+    let pivot = (
+        (column as f32 + 0.5).mul_add(scale, x as f32),
+        (row as f32 + 1.0).mul_add(scale, top as f32),
+    );
+    let gun = weapons::mounted(weapon);
+    let reach = (gun.width() as f32).mul_add(0.5, -1.0) * scale;
+    draw.draw_circle(
+        pivot.0 as i32,
+        (pivot.1 + scale) as i32,
+        scale * 2.0,
+        STEEL_DARK,
+    );
+    sprite::draw_sprite_rotated_flipped(
+        draw,
+        gun,
+        0,
+        Vector2::new(aim.0.mul_add(reach, pivot.0), aim.1.mul_add(reach, pivot.1)),
+        scale,
+        aim.1.atan2(aim.0).to_degrees(),
+        aim.0 < 0.0,
+    );
+    for notch in 0..mk {
+        let along = f32::from(notch).mul_add(2.0, 2.0) * scale;
+        let nx = aim.0.mul_add(along, pivot.0);
+        let ny = aim.1.mul_add(along, pivot.1);
+        draw.draw_rectangle(nx as i32, ny as i32, scale as i32, scale as i32, GOLD);
+    }
+}
+
+fn draw_weapons(draw: &mut RaylibDrawHandle<'_>, width: i32) {
+    use fatherload_simulation::WeaponKind;
+    ui_kit::text(draw, "Hardpoint weapons", 8, 6, TextStyle::Bold, GOLD);
+    let rows: [(&str, u8, (f32, f32)); 3] = [
+        ("Mk I, level", 0, (1.0, 0.0)),
+        ("Mk III, up", 2, (0.7, -0.7)),
+        ("Mk IV, left", 3, (-0.94, -0.34)),
+    ];
+    let column_width = (width - 70) / WeaponKind::ALL.len() as i32;
+    let scale = 3;
+    for (column, weapon) in WeaponKind::ALL.into_iter().enumerate() {
+        let cx = 70 + column as i32 * column_width + column_width / 2;
+        let label = weapon.name();
+        let label_width = ui_kit::text_width(label, TextStyle::Bold);
+        ui_kit::text(draw, label, cx - label_width / 2, 22, TextStyle::Bold, BONE);
+        for (row, (name, mk, aim)) in rows.iter().enumerate() {
+            let top = 70 + row as i32 * 80;
+            if column == 0 {
+                ui_kit::text(draw, name, 4, top + 12, TextStyle::Body, MIST);
+            }
+            let rig = look(
+                RigCosmetics::default_for(PlayerId::new(1)),
+                RigTiers::all([3, 9, 14][row]),
+            );
+            let x = cx - super::BODY_WIDTH * scale / 2;
+            let facing_left = aim.0 < 0.0;
+            paint_rig(&rig, &RigPose::idle(12)).draw(
+                draw,
+                Vector2::new(x as f32, top as f32),
+                scale as f32,
+                facing_left,
+            );
+            let pivot_box = if facing_left {
+                // Mirror the hardpoint column for a rig facing left.
+                let (column, _) = super::HARDPOINT;
+                x + (super::BODY_WIDTH - 1 - 2 * column) * scale
+            } else {
+                x
+            };
+            mounted_gun(draw, weapon, *mk, (pivot_box, top), scale as f32, *aim);
+        }
     }
 }
 

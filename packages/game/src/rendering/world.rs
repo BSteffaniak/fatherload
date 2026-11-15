@@ -245,7 +245,13 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     if let Some(drill) = scene.active_drill {
         fx::draw_drill_debris(draw, scene.terrain, drill, scene.ticks);
     }
-    weapons::draw_projectiles(draw, scene.projectiles, scene.bomb_alpha, seconds);
+    weapons::draw_projectiles(
+        draw,
+        scene.projectiles,
+        scene.players,
+        scene.bomb_alpha,
+        seconds,
+    );
     weapons::draw_beams(draw, scene.beams, seconds);
     weapons::draw_shots(draw, scene.shots);
     for cloud in scene.hazards {

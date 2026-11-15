@@ -138,16 +138,16 @@ pub const RAILGUN: SpriteDef = SpriteDef {
 /// A rivet in flight.
 pub const RIVET: SpriteDef = SpriteDef {
     name: "projectile_rivet",
-    legend: &[('o', INK), ('w', STEEL_LIGHT), ('g', GOLD)],
-    frames: &[&["owwg", "owwg"]],
+    legend: &[('o', INK), ('w', STEEL_LIGHT), ('g', GOLD), ('c', CREAM)],
+    frames: &[&[".owwg.", "owwwcc", ".owwg."]],
     frame_seconds: 0.0,
 };
 
 /// A scatter pellet.
 pub const PELLET: SpriteDef = SpriteDef {
     name: "projectile_pellet",
-    legend: &[('a', AMBER), ('c', CREAM)],
-    frames: &[&["ac", "aa"]],
+    legend: &[('a', AMBER), ('c', CREAM), ('g', GOLD)],
+    frames: &[&[".a.", "agc", ".a."]],
     frame_seconds: 0.0,
 };
 

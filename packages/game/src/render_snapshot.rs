@@ -237,6 +237,8 @@ pub struct WeaponPose {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ProjectileView {
     pub weapon: fatherload_simulation::WeaponKind,
+    /// Who fired it (a harpoon's line runs back to their rig).
+    pub owner: PlayerId,
     pub x: f32,
     pub y: f32,
     pub previous_x: f32,
@@ -460,6 +462,7 @@ fn projectile_views(world: &WorldState) -> Vec<ProjectileView> {
         .filter_map(|entity| match entity.state {
             EntityState::Projectile(state) => Some(ProjectileView {
                 weapon: state.weapon,
+                owner: state.owner,
                 x: entity.body.x,
                 y: entity.body.y,
                 previous_x: entity.body.previous_x,

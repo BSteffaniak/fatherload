@@ -52,8 +52,8 @@ pub fn hardpoint(player: &PlayerPresentation, facing_left: bool) -> (f32, f32) {
 fn draw_tier_notches(draw: &mut impl RaylibDraw, pivot: (f32, f32), aim: (f32, f32), mk: u8) {
     for notch in 0..mk {
         let along = f32::from(notch).mul_add(2.0, 2.0) * ART;
-        let x = aim.0.mul_add(along, pivot.0) - aim.1 * 3.0 * ART;
-        let y = aim.1.mul_add(along, pivot.1) + aim.0 * 3.0 * ART;
+        let x = aim.0.mul_add(along, pivot.0);
+        let y = aim.1.mul_add(along, pivot.1);
         draw.draw_rectangle_rec(Rectangle::new(snap(x), snap(y), ART, ART), GOLD);
     }
 }
@@ -90,6 +90,7 @@ pub fn draw_mounted_weapon(
 pub fn draw_projectiles(
     draw: &mut impl RaylibDraw,
     projectiles: &[ProjectileView],
+    players: &[PlayerPresentation],
     alpha: f32,
     seconds: f32,
 ) {
@@ -123,8 +124,8 @@ pub fn draw_projectiles(
                 }
             }
             WeaponKind::RivetGun | WeaponKind::ScatterBlaster => {
-                for step in 1..=3_u8 {
-                    let back = f32::from(step) * 2.5 * ART;
+                for step in 1..=4_u8 {
+                    let back = f32::from(step) * 2.0 * ART;
                     draw.draw_rectangle_rec(
                         Rectangle::new(
                             snap(dx.mul_add(-back, x)),
@@ -132,23 +133,37 @@ pub fn draw_projectiles(
                             ART,
                             ART,
                         ),
-                        with_alpha(AMBER, 160 / step),
+                        with_alpha(if step == 1 { GOLD } else { AMBER }, 220 / step),
                     );
                 }
             }
             WeaponKind::Harpoon => {
-                // The line back toward where it came from.
-                for step in 1..=10_u8 {
-                    let back = f32::from(step) * 3.0 * ART;
-                    let sag = (f32::from(step) * 0.3).sin() * ART;
+                // The line paying out from the shooter's hardpoint, sagging a little.
+                let anchor = players
+                    .iter()
+                    .find(|player| player.player_id == projectile.owner)
+                    .map_or_else(
+                        || (dx.mul_add(-60.0, x), dy.mul_add(-60.0, y)),
+                        |player| {
+                            (
+                                player.x,
+                                player.y - fatherload_simulation::weapon::MUZZLE_RISE,
+                            )
+                        },
+                    );
+                let length = (x - anchor.0).hypot(y - anchor.1);
+                let steps = (length / (ART * 2.0)).ceil().max(1.0) as i32;
+                for step in 0..steps {
+                    let t = step as f32 / steps as f32;
+                    let sag = (t * std::f32::consts::PI).sin() * length * 0.04;
                     draw.draw_rectangle_rec(
                         Rectangle::new(
-                            snap(dx.mul_add(-back, x)),
-                            snap(dy.mul_add(-back, y) + sag),
+                            snap((x - anchor.0).mul_add(t, anchor.0)),
+                            snap((y - anchor.1).mul_add(t, anchor.1) + sag),
                             ART,
                             ART,
                         ),
-                        with_alpha(LOAM, 200 - step * 15),
+                        with_alpha(LOAM, 230),
                     );
                 }
             }
