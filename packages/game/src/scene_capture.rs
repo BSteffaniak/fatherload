@@ -9,6 +9,8 @@
 //! [`SCENES`]. `SceneStage` starts on the title screen; `play` enters a staged world, `hold` runs
 //! frames with held input, and `shell` exposes the menu state to open screens directly.
 
+mod rig_scenes;
+
 use std::path::{Path, PathBuf};
 
 use fatherload_netcode::{LobbyEntry, PlayerId as NetPlayerId};
@@ -101,7 +103,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<CaptureOptions>, String> {
     if let Some(only) = &options.only
         && let Some(unknown) = only
             .iter()
-            .find(|name| SCENES.iter().all(|scene| scene.name != name.as_str()))
+            .find(|name| all_scenes().all(|scene| scene.name != name.as_str()))
     {
         return Err(format!("unknown scene {unknown} (see --list)"));
     }
@@ -127,8 +129,7 @@ fn parse_size(value: &str) -> Result<(i32, i32), String> {
 ///
 /// Returns a message if the output directory cannot be created or a capture is not written.
 pub fn run(options: &CaptureOptions) -> Result<(), String> {
-    let scenes: Vec<&Scene> = SCENES
-        .iter()
+    let scenes: Vec<&Scene> = all_scenes()
         .filter(|scene| {
             options
                 .only
@@ -167,13 +168,15 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             gallery: false,
             ui_sheet: false,
             prompt_sheet: false,
+            rig_sheet: None,
         };
         (scene.setup)(&mut stage);
-        let (report, gallery, ui_sheet, prompt_sheet) = (
+        let (report, gallery, ui_sheet, prompt_sheet, rig_sheet) = (
             stage.report,
             stage.gallery,
             stage.ui_sheet,
             stage.prompt_sheet,
+            stage.rig_sheet,
         );
         let renderer = renderer
             .get_or_insert_with(|| GameRenderer::new(&mut raylib, &thread, game.world().terrain()));
@@ -196,6 +199,8 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 renderer.render_ui_sheet(&mut draw);
             } else if prompt_sheet {
                 renderer.render_prompt_sheet(&mut draw);
+            } else if let Some(sheet) = rig_sheet {
+                renderer.render_rig_sheet(&mut draw, sheet);
             } else {
                 renderer.render(&mut draw, &game.shell, &snapshot);
             }
@@ -247,6 +252,8 @@ pub struct SceneStage<'g> {
     ui_sheet: bool,
     /// Draw the button-prompt sheet instead of the game.
     prompt_sheet: bool,
+    /// Draw a rig reference sheet instead of the game.
+    rig_sheet: Option<crate::rendering::rig_art::sheet::RigSheet>,
 }
 
 impl SceneStage<'_> {
@@ -300,6 +307,11 @@ impl SceneStage<'_> {
         self.report.world_replaced |= report.world_replaced;
         self.report.changed_tiles.extend(report.changed_tiles);
     }
+}
+
+/// Every scene: the main list plus the rig customization scenes.
+fn all_scenes() -> impl Iterator<Item = &'static Scene> {
+    SCENES.iter().chain(rig_scenes::RIG_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
@@ -2610,7 +2622,7 @@ mod tests {
     #[test]
     fn scene_names_are_unique_file_names() {
         let mut names = std::collections::BTreeSet::new();
-        for scene in SCENES {
+        for scene in all_scenes() {
             assert!(names.insert(scene.name), "duplicate scene {}", scene.name);
             assert!(
                 scene
@@ -2629,7 +2641,7 @@ mod tests {
             "fatherload-scene-capture-test-{}.json",
             std::process::id()
         ));
-        for scene in SCENES {
+        for scene in all_scenes() {
             let mut game = LocalGame::new(SettingsFile::default(), SaveTarget::File(path.clone()));
             let mut stage = SceneStage {
                 game: &mut game,
@@ -2637,6 +2649,7 @@ mod tests {
                 gallery: false,
                 ui_sheet: false,
                 prompt_sheet: false,
+                rig_sheet: None,
             };
             (scene.setup)(&mut stage);
             let snapshot = game.snapshot(DEFAULT_SIZE);
