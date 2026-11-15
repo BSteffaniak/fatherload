@@ -39,6 +39,7 @@ impl WorldState {
         let mut player = self.player_template.clone();
         let (x, y) = self.free_spawn_position(player.x, player.y);
         player.x = x;
+        player.x_remainder = 0.0;
         player.y = y;
         self.insert_player(player_id, player);
     }

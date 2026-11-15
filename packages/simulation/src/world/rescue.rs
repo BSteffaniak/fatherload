@@ -77,6 +77,7 @@ impl WorldState {
         }
         player.insured = false;
         player.x = 12.0 * TILE_SIZE;
+        player.x_remainder = 0.0;
         player.y = 4.0 * TILE_SIZE;
         player.velocity_x = 0.0;
         player.velocity_y = 0.0;

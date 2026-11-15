@@ -122,6 +122,7 @@ impl WorldState {
         self.deep_run_states.remove(&player_id);
         if let Some(player) = self.players.get_mut(&player_id) {
             player.x = x;
+            player.x_remainder = 0.0;
             player.y = y;
             player.velocity_x = 0.0;
             player.velocity_y = 0.0;
