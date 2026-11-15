@@ -522,9 +522,21 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
     }
 }
 
-/// Everything in a rig's bay: ore, artifacts and materials.
+/// Everything in a rig's bay that counts as cargo: ore, artifacts and materials (not the
+/// explosives, weapons or ammo it also carries).
 fn cargo_total(player: &fatherload_simulation::Player) -> u32 {
-    player.cargo_bay.total()
+    use fatherload_simulation::item::ItemKind;
+    player
+        .cargo_bay
+        .iter()
+        .filter(|(kind, _)| {
+            matches!(
+                kind,
+                ItemKind::Mineral(_) | ItemKind::Artifact(_) | ItemKind::Material(_)
+            )
+        })
+        .map(|(_, count)| count)
+        .sum()
 }
 
 #[cfg(test)]

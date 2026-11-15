@@ -334,13 +334,16 @@ impl WorldState {
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::PlaceBomb => {
-                if player.bombs == 0 || self.bombs.len() >= super::bombs::MAX_ACTIVE_BOMBS {
+                if player.bombs == 0
+                    || self.entities.count_of(crate::entity::EntityKind::Charge)
+                        >= super::bombs::MAX_ACTIVE_BOMBS
+                {
                     PlayerScopedCommandOutcome::IgnoredUnavailable
                 } else {
                     player.bombs -= 1;
                     let x = player.x;
                     let y = TILE_SIZE.mul_add(0.4, player.y);
-                    self.bombs.push(PlacedBomb {
+                    let bomb = PlacedBomb {
                         id: self.next_bomb_id,
                         x,
                         y,
@@ -358,8 +361,8 @@ impl WorldState {
                         timer_seconds: BOMB_FUSE_SECONDS,
                         owner: Some(player_id),
                         ..PlacedBomb::default()
-                    });
-                    self.next_bomb_id = self.next_bomb_id.saturating_add(1);
+                    };
+                    self.insert_charge(bomb);
                     PlayerScopedCommandOutcome::Applied
                 }
             }

@@ -942,18 +942,33 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 format!("{} cr", ui.player.credits),
                 GOLD,
             ),
-            SectionItem::icon_stat(&icons::BOMB, "Bombs", ui.player.bombs.to_string(), ORANGE),
-        ]
-        .into_iter()
-        .chain(ui.player.explosives.iter().map(|(kind, count)| {
-            SectionItem::icon_stat(
-                explosive_art::icon(*kind),
-                kind.name(),
-                count.to_string(),
-                ORANGE,
-            )
-        }))
-        .collect(),
+        ],
+    ));
+    // Every explosive type, carried or not, so players can see what the shack stocks.
+    sections.push(Section::new(
+        "Explosives",
+        ORANGE,
+        fatherload_simulation::ExplosiveKind::SELECTABLE
+            .into_iter()
+            .map(|kind| {
+                let count = ui.player.explosive_count(kind);
+                let icon = if kind == fatherload_simulation::ExplosiveKind::Bomb {
+                    &icons::BOMB
+                } else {
+                    explosive_art::icon(kind)
+                };
+                SectionItem::icon_stat(
+                    icon,
+                    kind.name(),
+                    if count == 0 {
+                        "none".to_owned()
+                    } else {
+                        format!("x{count}")
+                    },
+                    if count == 0 { MIST } else { ORANGE },
+                )
+            })
+            .collect(),
     ));
     let mineral_items = if ui.player.cargo_bay.has_minerals() {
         ui.player

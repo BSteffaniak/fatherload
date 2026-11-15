@@ -228,7 +228,10 @@ impl ItemKind {
             Self::Module(_) => "Module",
             Self::Weapon(_) => "Weapon",
             Self::Ammo(_) => "Ammo",
-            Self::Explosive(_) => "Explosive",
+            Self::Explosive(id) => match crate::explosive::ExplosiveKind::from_item_id(id) {
+                Some(kind) => kind.name(),
+                None => "Explosive",
+            },
             Self::Cosmetic(_) => "Cosmetic",
             Self::Quest(_) => "Quest Item",
         }

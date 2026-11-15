@@ -415,7 +415,8 @@ pub struct RenderSnapshot<'w> {
     pub terrain: &'w Terrain,
     /// Gas clouds (entities, copied out of the world's entity store).
     pub hazards: Vec<HazardCloud>,
-    pub bombs: &'w [PlacedBomb],
+    /// Live explosive charges (entities, copied out of the world's entity store).
+    pub bombs: Vec<PlacedBomb>,
     /// Presentation fraction between a bomb's previous and current fixed-tick poses.
     pub bomb_alpha: f32,
     pub infrastructure: &'w [PlacedInfrastructure],

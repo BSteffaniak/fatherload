@@ -874,10 +874,17 @@ impl WorldState {
 
     /// A lit flare within lure range of `(x, y)`, if any (bats circle it instead of hunting).
     fn flare_near(&self, x: f32, y: f32) -> Option<(f32, f32)> {
-        self.bombs
-            .iter()
-            .filter(|bomb| bomb.kind == ExplosiveKind::Flare && bomb.burning())
-            .map(|bomb| (bomb.x, bomb.y))
+        // Charges are entities (WP-WEAPONS): read the store directly, no `bombs()` copy.
+        self.entities
+            .of_kind(EntityKind::Charge)
+            .filter_map(|entity| match entity.state {
+                EntityState::Charge(charge)
+                    if charge.kind == ExplosiveKind::Flare && charge.stage > 0 =>
+                {
+                    Some((entity.body.x, entity.body.y))
+                }
+                _ => None,
+            })
             .find(|(fx, fy)| (fx - x).hypot(fy - y) <= FLARE_LURE)
     }
 

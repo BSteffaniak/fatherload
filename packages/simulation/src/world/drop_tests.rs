@@ -385,8 +385,7 @@ fn loaded_blast(kind: ExplosiveKind) -> WorldState {
         .terrain_mut()
         .set_kind(TilePosition { x: 20, y: 20 }, TileKind::Air);
     let (x, y) = (px(20.5), px(20.5));
-    let mut entities = world.live_entities();
-    entities.bombs.push(PlacedBomb {
+    world.insert_charge(PlacedBomb {
         id: 1,
         x,
         y,
@@ -397,7 +396,6 @@ fn loaded_blast(kind: ExplosiveKind) -> WorldState {
         owner: Some(PLAYER),
         ..PlacedBomb::default()
     });
-    world.apply_live_entities(entities);
     world
 }
 

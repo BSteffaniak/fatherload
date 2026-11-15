@@ -66,10 +66,9 @@ fn shared_body_physics_reproduces_bomb_motion_exactly() {
         (px(10.0), px(39.5), -600.0, 0.0),
         (px(24.0), px(29.7), 0.0, 0.0),
     ];
-    let mut entities = world.live_entities();
     let mut bodies = Vec::new();
     for (id, (x, y, vx, vy)) in launches.into_iter().enumerate() {
-        entities.bombs.push(PlacedBomb {
+        world.insert_charge(PlacedBomb {
             id: id as u64,
             x,
             y,
@@ -83,7 +82,6 @@ fn shared_body_physics_reproduces_bomb_motion_exactly() {
         });
         bodies.push(Body::at(x, y).moving(vx, vy));
     }
-    world.apply_live_entities(entities);
     let terrain = world.terrain().clone();
     let dt = world.timing().delta_seconds;
     for step in 0..600 {
@@ -168,8 +166,7 @@ fn bomb_blasts_throw_nearby_drops_but_not_gas_or_boulders() {
         "out of reach"
     );
     // A real bomb in the tick does the same through its detonation event.
-    let mut entities = world.live_entities();
-    entities.bombs.push(PlacedBomb {
+    world.insert_charge(PlacedBomb {
         id: 1,
         x: px(59.5),
         y: px(39.5),
@@ -178,7 +175,6 @@ fn bomb_blasts_throw_nearby_drops_but_not_gas_or_boulders() {
         detonation_tick: world.simulation_tick().next(),
         ..PlacedBomb::default()
     });
-    world.apply_live_entities(entities);
     tick(&mut world);
     let far = world.entities().get(far).expect("far survives");
     assert!(

@@ -453,9 +453,8 @@ fn flares_lure_bats_away_from_rigs() {
     no_spawns(&mut world);
     let bat = world.spawn_enemy(EnemyKind::CaveBat, px(272.0), px(225.0));
     let _ = run(&mut world, 30);
-    let mut entities = world.live_entities();
     let (fx, fy) = (px(277.0), floor_y(6.0));
-    entities.bombs.push(PlacedBomb {
+    world.insert_charge(PlacedBomb {
         id: 900,
         x: fx,
         y: fy,
@@ -467,7 +466,6 @@ fn flares_lure_bats_away_from_rigs() {
         stuck: true,
         ..PlacedBomb::default()
     });
-    world.apply_live_entities(entities);
     let _ = run(&mut world, 180);
     let (body, state) = enemy(&world, bat).expect("bat");
     assert!(state.target.is_none());
@@ -518,10 +516,9 @@ fn resistances_explosives_and_loot() {
     assert!((state.health - (full - 5.0)).abs() < 0.01);
     // A bomb at its feet: explosives crack the shell.
     let drops_before = world.entities().count_of(EntityKind::Drop);
-    let mut entities = world.live_entities();
     let (bx, by) = (px(260.0), floor_y(6.0));
     for id in 0..3 {
-        entities.bombs.push(PlacedBomb {
+        world.insert_charge(PlacedBomb {
             id,
             x: bx,
             y: by,
@@ -533,7 +530,6 @@ fn resistances_explosives_and_loot() {
             ..PlacedBomb::default()
         });
     }
-    world.apply_live_entities(entities);
     let events = run(&mut world, 2);
     assert!(
         events.iter().any(|event| matches!(
@@ -575,10 +571,9 @@ fn emps_stun_and_hurt_machines_but_not_creatures_and_break_shields() {
     assert!((state.health - guardian_health).abs() < f32::EPSILON);
     assert!(state.shield < shield);
     let bat_health = enemy(&world, bat).expect("bat").1.health;
-    let mut entities = world.live_entities();
     let (ex, ey) = (px(264.0), px(218.0));
     assert!(EMP_RADIUS > px(3.0));
-    entities.bombs.push(PlacedBomb {
+    world.insert_charge(PlacedBomb {
         id: 7,
         x: ex,
         y: ey,
@@ -589,7 +584,6 @@ fn emps_stun_and_hurt_machines_but_not_creatures_and_break_shields() {
         detonation_tick: world.simulation_tick().next(),
         ..PlacedBomb::default()
     });
-    world.apply_live_entities(entities);
     let events = run(&mut world, 1);
     assert!(events.iter().any(
         |event| matches!(event, GameplayEventKind::EnemyStunned { entity, .. } if *entity == drone.get())

@@ -107,8 +107,7 @@ fn run(world: &mut WorldState, ticks: u64, script: &[(u64, PlayerId, PlayerComma
         for outcome in &output.action_outcomes {
             let _ = writeln!(trace, "  outcome {:?}", outcome.outcome);
         }
-        let mut bombs = world.bombs().to_vec();
-        bombs.sort_by_key(|bomb| bomb.id);
+        let bombs = world.bombs();
         for bomb in &bombs {
             let _ = writeln!(trace, "  charge {bomb:?}");
         }
@@ -136,7 +135,7 @@ fn run(world: &mut WorldState, ticks: u64, script: &[(u64, PlayerId, PlayerComma
 fn drops(world: &mut WorldState) {
     for index in 0..6_u8 {
         let _ = world.spawn_item_drop(
-            (14.0 + f32::from(index) * 2.5) * TILE_SIZE,
+            f32::from(index).mul_add(2.5, 14.0) * TILE_SIZE,
             31.4 * TILE_SIZE,
             (0.0, 0.0),
             ItemStack::new(ItemKind::Mineral(MineralKind::Copper), 1),
@@ -164,6 +163,7 @@ fn pile_and_chains() -> u64 {
     run(&mut world, 240, &[])
 }
 
+#[allow(clippy::too_many_lines, reason = "one scripted scenario")]
 fn every_kind_deployed() -> u64 {
     let mut world = arena();
     drops(&mut world);

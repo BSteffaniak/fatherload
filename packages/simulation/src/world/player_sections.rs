@@ -9,13 +9,10 @@
 //! [`split_player`] destructures the whole [`Player`] without `..`, so a new player field fails
 //! to compile until it is assigned to one of the parts.
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
     cosmetics::{CosmeticUnlocks, RigCosmetics},
-    explosive::ExplosiveKind,
     item::ItemContainer,
     player::Player,
     poi::PoiJournal,
@@ -82,9 +79,6 @@ pub struct PlayerInventory {
     #[serde(default)]
     pub hazard_gear: HazardGear,
     pub bombs: u32,
-    /// Special explosives carried, by kind.
-    #[serde(default)]
-    pub explosives: BTreeMap<ExplosiveKind, u32>,
     pub loan_debt: u32,
     pub insured: bool,
     pub insurance_tier: u8,
@@ -134,7 +128,6 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         drill_mount_level,
         hazard_gear,
         bombs,
-        explosives,
         loan_debt,
         insured,
         insurance_tier,
@@ -184,7 +177,6 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             credits,
             hazard_gear,
             bombs,
-            explosives,
             loan_debt,
             insured,
             insurance_tier,
@@ -237,7 +229,6 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         credits,
         hazard_gear,
         bombs,
-        explosives,
         loan_debt,
         insured,
         insurance_tier,
@@ -278,7 +269,6 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         drill_mount_level,
         hazard_gear,
         bombs,
-        explosives,
         loan_debt,
         insured,
         insurance_tier,

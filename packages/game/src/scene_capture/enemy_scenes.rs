@@ -360,8 +360,7 @@ fn bomb_fight(stage: &mut SceneStage<'_>, late: bool) {
         );
         let (x, y) = (tile(CAVE_X - 5), tile(floor) - 7.0);
         let now = world.simulation_tick().get();
-        let mut entities = world.live_entities();
-        entities.bombs.push(PlacedBomb {
+        world.insert_charge(PlacedBomb {
             id: 1,
             x,
             y,
@@ -374,8 +373,6 @@ fn bomb_fight(stage: &mut SceneStage<'_>, late: bool) {
             stuck: true,
             ..PlacedBomb::default()
         });
-        entities.next_bomb_id = 2;
-        world.apply_live_entities(entities);
     });
     stage.settle(if late { 75 } else { 42 });
 }
@@ -408,8 +405,7 @@ fn emp_machines(stage: &mut SceneStage<'_>) {
         );
         let (x, y) = (tile(CAVE_X - 3), tile(floor - 4));
         let now = world.simulation_tick().get();
-        let mut entities = world.live_entities();
-        entities.bombs.push(PlacedBomb {
+        world.insert_charge(PlacedBomb {
             id: 1,
             x,
             y,
@@ -420,8 +416,6 @@ fn emp_machines(stage: &mut SceneStage<'_>) {
             owner: Some(player),
             ..PlacedBomb::default()
         });
-        entities.next_bomb_id = 2;
-        world.apply_live_entities(entities);
     });
     stage.settle(30);
 }

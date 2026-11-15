@@ -141,10 +141,9 @@ pub(super) fn dark_cavern(stage: &mut SceneStage<'_>, flares: bool) {
                 }
             })
             .collect();
-        let mut entities = world.live_entities();
-        entities.next_bomb_id = 2;
-        entities.bombs = charges;
-        world.apply_live_entities(entities);
+        for charge in charges {
+            world.insert_charge(charge);
+        }
     });
     stage.settle(70);
 }

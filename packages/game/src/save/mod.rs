@@ -1,12 +1,13 @@
 //! Settings and world saves.
 //!
-//! A save is the host's [`WorldState`] plus a little session metadata (format version 7). The
+//! A save is the host's [`WorldState`] plus a little session metadata (format version 8). The
 //! world's terrain is stored compactly: its generation settings (seed, size, richness, hazards,
 //! generator version), a digest and only the tiles that differ from freshly generated terrain;
 //! loading regenerates the rest and checks the digest. Rigs carry their goods in item containers
 //! (cargo bay, block hopper) and live world objects such as gas clouds and falling boulders are
-//! entities in the world's entity store. Older formats (1-5, which wrote out every tile, and 6,
-//! from before the item and entity models) are migrated on load by [`legacy`]. Loading always hands the runtime a fresh world, which
+//! entities in the world's entity store, explosive charges included. Older formats (1-5, which
+//! wrote out every tile, 6, from before the item and entity models, and 7, with a separate charge
+//! list and explosive count maps) are migrated on load by [`legacy`]. Loading always hands the runtime a fresh world, which
 //! starts a new session epoch.
 
 mod legacy;
@@ -32,15 +33,11 @@ const SAVE_FILE_NAME: &str = "save.json";
 const SAVE_SLOTS: usize = 3;
 /// Current save format.
 ///
-/// 8 (wave 2, T7 drops; the integrator collapses wave 2's bumps into one): drops carry magnet /
-/// dump / "blocked" marks and rigs a `collect_blocks` toggle (serde defaults).
-///
-/// 8 (wave 2, T10 enemies): enemy and enemy-shot entities and the world's enemy director
-/// (difficulty, rig i-frames, spawn cooldowns, cleared lairs). Version 7 files are the same
-/// shape without them (serde defaults) and load unchanged.
+/// 8 (wave 2, one bump for every wave 2 track): explosive charges are entities and special
+/// explosives cargo bay items (T11; version 7 files migrate through `legacy::V7SaveFile`), plus
+/// fields with serde defaults: drop magnet / dump / "blocked" marks and the `collect_blocks`
+/// toggle (T7), enemies and the enemy director (T10), cave and village journals (T13, T9).
 pub const SAVE_VERSION: u32 = 8;
-/// The previous format, read as the current one (its new fields default).
-const PREVIOUS_SAVE_VERSION: u32 = 7;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -295,12 +292,15 @@ fn parse_save(json: &str) -> Result<WorldSave, SaveError> {
 
 fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
     let probe: VersionProbe = serde_json::from_str(json).map_err(SaveError::Serialize)?;
-    if matches!(probe.version, 5 | 6 | PREVIOUS_SAVE_VERSION | SAVE_VERSION) {
+    if matches!(probe.version, 5..=SAVE_VERSION) {
         check_generator(json)?;
     }
     match probe.version {
-        PREVIOUS_SAVE_VERSION | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
+            .map_err(SaveError::Serialize),
+        7 => serde_json::from_str::<legacy::V7SaveFile>(json)
+            .and_then(legacy::V7SaveFile::migrate)
             .map_err(SaveError::Serialize),
         6 => serde_json::from_str::<legacy::V6SaveFile>(json)
             .and_then(legacy::V6SaveFile::migrate)
@@ -550,9 +550,7 @@ mod tests {
     fn save_load_preserves_an_airborne_chain_triggered_bomb_and_its_future() {
         use fatherload_simulation::{PlacedBomb, TickInputs};
         let mut world = fatherload_simulation::WorldState::new_game(LEGACY_PLAYER_ID);
-        let mut entities = world.live_entities();
-        entities.next_bomb_id = 82;
-        entities.bombs.push(PlacedBomb {
+        world.insert_charge(PlacedBomb {
             id: 81,
             x: 500.0,
             y: 50.0,
@@ -566,7 +564,6 @@ mod tests {
             timer_seconds: 0.5,
             ..PlacedBomb::default()
         });
-        world.apply_live_entities(entities);
         let save = WorldSave {
             world,
             play_seconds: 4.0,
@@ -892,6 +889,87 @@ mod tests {
 
     /// A world after a long scripted dig (drilling, bombs, infrastructure, scanning) plus
     /// hundreds of blast craters and tunnels across the whole map.
+    #[test]
+    fn version_seven_charge_lists_and_explosive_maps_migrate_to_entities_and_items() {
+        use fatherload_simulation::{ExplosiveKind, PlacedBomb, entity::EntityKind};
+        let mut world = WorldState::new_game(LEGACY_PLAYER_ID);
+        world.set_simulation_tick(SimulationTick::new(12));
+        let rig = world.player_mut(LEGACY_PLAYER_ID).expect("rig");
+        rig.bombs = 4;
+        rig.add_explosives(ExplosiveKind::C4, 2);
+        rig.add_explosives(ExplosiveKind::Flare, 5);
+        rig.cargo_bay.add(MineralKind::Gold, 1);
+        for (id, kind, x) in [
+            (3_u64, ExplosiveKind::Bomb, 490.0),
+            (5, ExplosiveKind::C4, 550.0),
+        ] {
+            world.insert_charge(PlacedBomb {
+                id,
+                x,
+                y: 60.0,
+                previous_x: 400.0,
+                previous_y: 60.0,
+                velocity_x: 20.0,
+                detonation_tick: SimulationTick::new(90),
+                timer_seconds: 1.2,
+                kind,
+                owner: Some(LEGACY_PLAYER_ID),
+                ..PlacedBomb::default()
+            });
+        }
+        let save = WorldSave {
+            world,
+            play_seconds: 9.0,
+        };
+        // Format 7: charges as a world list, special explosives as a count map per rig.
+        let mut world_json = serde_json::to_value(&save.world).expect("world json");
+        let object = world_json.as_object_mut().expect("object");
+        object.insert("bombs".into(), serde_json::json!(save.world.bombs()));
+        let entities = object.get_mut("entities").expect("entities");
+        entities["entities"] = serde_json::json!(
+            save.world
+                .entities()
+                .iter()
+                .filter(|entity| entity.kind() != EntityKind::Charge)
+                .collect::<Vec<_>>()
+        );
+        let player =
+            &mut object.get_mut("players").expect("players")[LEGACY_PLAYER_ID.get().to_string()];
+        player["cargo_bay"] = serde_json::json!([{ "kind": { "Mineral": "Gold" }, "count": 1 }]);
+        player["explosives"] = serde_json::json!({ "C4": 2, "Flare": 5 });
+        let v7 = serde_json::json!({
+            "version": 7,
+            "save": { "world": world_json, "play_seconds": save.play_seconds },
+        });
+        let migrated = parse_save(&v7.to_string()).expect("v7 migrates");
+        assert_eq!(
+            format!("{:?}", migrated.world.bombs()),
+            format!("{:?}", save.world.bombs()),
+            "charges become entities with their whole state"
+        );
+        let rig = player_of(&migrated);
+        assert_eq!(rig.bombs, 4);
+        assert_eq!(rig.explosive_count(ExplosiveKind::C4), 2);
+        assert_eq!(rig.explosive_count(ExplosiveKind::Flare), 5);
+        assert_eq!(rig.cargo_bay.mineral(MineralKind::Gold), 1);
+        assert_eq!(rig.cargo_used(), 1, "explosives take no cargo slots");
+        // Re-saved as the current format and loaded again: unchanged.
+        let json = serde_json::to_string(&SaveFile {
+            version: SAVE_VERSION,
+            save: migrated.clone(),
+        })
+        .expect("serialize");
+        let again = parse_save(&json).expect("current format");
+        assert_eq!(
+            again.world.simulation_state_hash(),
+            migrated.world.simulation_state_hash()
+        );
+    }
+
+    fn player_of(save: &WorldSave) -> &fatherload_simulation::Player {
+        save.world.player(LEGACY_PLAYER_ID).expect("player")
+    }
+
     fn heavily_dug_world() -> WorldState {
         heavily_dug_world_with(&WorldSettings::bounded(
             fatherload_simulation::worldgen::DEFAULT_WORLD_SEED,

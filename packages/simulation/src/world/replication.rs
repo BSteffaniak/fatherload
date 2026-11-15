@@ -31,7 +31,7 @@ use crate::{
     contract::ContractLog,
     economy::{DeepClaimStatus, TownDevelopment},
     hash::StateHasher,
-    hazard::{PlacedBomb, ScanMarker},
+    hazard::ScanMarker,
     ids::{PlayerId, SimulationTick},
     infrastructure::PlacedInfrastructure,
     progression::{Expedition, LegendaryBlueprint, SideContract, WorldEventKind},
@@ -65,14 +65,14 @@ pub struct PlayerTickState {
     pub deep_run: Option<DeepRunState>,
 }
 
-/// Per-tick live state sent whole every frame: bombs (relevance-filtered) and the id counters.
+/// Per-tick live state sent whole every frame: the id counters.
 ///
-/// The entity store itself replicates incrementally as [`crate::entity::EntityDelta`]s
+/// The entity store itself (explosive charges included) replicates incrementally as [`crate::entity::EntityDelta`]s
 /// ([`WorldState::entity_revisions`], [`WorldState::entity_record`],
 /// [`WorldState::apply_entity_delta`]).
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct LiveEntities {
-    pub bombs: Vec<PlacedBomb>,
+    /// The next explosive charge serial.
     #[serde(default)]
     pub next_bomb_id: u64,
     /// The entity store's next id.
@@ -304,38 +304,27 @@ impl WorldState {
         set_or_remove(&mut self.deep_run_states, player_id, deep_run);
     }
 
-    /// Bombs and entity counters.
+    /// The charge serial and entity counters.
     #[must_use]
-    pub fn live_entities(&self) -> LiveEntities {
-        self.live_entities_where(|_, _| true)
-    }
-
-    /// Bombs whose world position satisfies `relevant(x, y)` (interest management), and the
-    /// entity counters.
-    #[must_use]
-    pub fn live_entities_where(&self, relevant: impl Fn(f32, f32) -> bool) -> LiveEntities {
+    pub const fn live_entities(&self) -> LiveEntities {
         LiveEntities {
-            bombs: self
-                .bombs
-                .iter()
-                .filter(|bomb| relevant(bomb.x, bomb.y))
-                .copied()
-                .collect(),
             next_bomb_id: self.next_bomb_id,
             next_entity_id: self.entities.next_id(),
             next_entity_revision: self.entities.next_revision(),
         }
     }
 
-    /// Replaces the bombs and entity counters with a replicated copy.
-    pub fn apply_live_entities(&mut self, entities: LiveEntities) {
+    /// Replaces the charge serial and entity counters with a replicated copy.
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "replicated sections are handed over by value"
+    )]
+    pub const fn apply_live_entities(&mut self, entities: LiveEntities) {
         let LiveEntities {
-            bombs,
             next_bomb_id,
             next_entity_id,
             next_entity_revision,
         } = entities;
-        self.bombs = bombs;
         self.next_bomb_id = next_bomb_id;
         self.entities
             .set_counters(next_entity_id, next_entity_revision);
@@ -401,7 +390,6 @@ impl WorldState {
             collapse_warnings,
             entities: _,
             terrain,
-            bombs: _,
             infrastructure,
             active_drills: _,
             active_drill_timers: _,

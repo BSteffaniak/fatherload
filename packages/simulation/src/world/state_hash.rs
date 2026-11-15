@@ -130,10 +130,6 @@ impl WorldState {
         for entity in self.entities.iter() {
             hash.write_serialized(entity);
         }
-        hash.write_u64(u64::try_from(self.bombs.len()).unwrap_or(u64::MAX));
-        for bomb in &self.bombs {
-            hash.write_serialized(bomb);
-        }
         hash.write_u64(u64::try_from(self.infrastructure.len()).unwrap_or(u64::MAX));
         for infrastructure in &self.infrastructure {
             hash.write_serialized(&infrastructure.kind);

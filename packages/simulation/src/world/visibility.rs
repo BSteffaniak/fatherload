@@ -64,7 +64,6 @@ impl WorldState {
             collapse_warnings: _,
             entities: _,
             terrain: _,
-            bombs: _,
             infrastructure: _,
             active_drills: _,
             active_drill_timers: _,

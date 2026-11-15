@@ -661,7 +661,7 @@ impl Director {
     /// Bomb fuses tick faster as they burn down (C4 only once its detonator has fired).
     fn fuse_ticks(&mut self, frame: &AudioFrame<'_, '_>, listeners: &[Listener]) {
         let mut seen = BTreeSet::new();
-        for bomb in frame.snapshot.bombs {
+        for bomb in &frame.snapshot.bombs {
             // Remote charges waiting for the detonator and burning flares or fires have no fuse.
             if !bomb.kind.has_audible_fuse() || bomb.awaiting_remote() || bomb.burning() {
                 continue;

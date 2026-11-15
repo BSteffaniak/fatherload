@@ -79,10 +79,9 @@ fn stuck_charge(
 }
 
 fn add_charges(world: &mut WorldState, charges: Vec<PlacedBomb>) {
-    let mut entities = world.live_entities();
-    entities.next_bomb_id = charges.iter().map(|bomb| bomb.id + 1).max().unwrap_or(0);
-    entities.bombs = charges;
-    world.apply_live_entities(entities);
+    for charge in charges {
+        world.insert_charge(charge);
+    }
 }
 
 fn select(stage: &mut SceneStage<'_>, selected: ExplosiveKind) {

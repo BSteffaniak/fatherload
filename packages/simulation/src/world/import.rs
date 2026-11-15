@@ -172,19 +172,6 @@ impl WorldState {
             collapse_warnings: import.collapse_warnings.clone(),
             entities: EntityStore::new(),
             terrain: import.terrain.clone(),
-            bombs: import
-                .placed_bombs
-                .iter()
-                .enumerate()
-                .map(|(index, bomb)| {
-                    let mut bomb = *bomb;
-                    bomb.id = u64::try_from(index).unwrap_or(u64::MAX);
-                    bomb.previous_x = bomb.x;
-                    bomb.previous_y = bomb.y;
-                    bomb.detonation_tick = SimulationTick::new(ticks(bomb.timer_seconds));
-                    bomb
-                })
-                .collect(),
             infrastructure: import.infrastructure.clone(),
             active_drills: import
                 .active_drill
@@ -231,6 +218,14 @@ impl WorldState {
             &warning_deadlines,
             &expiry_ticks,
         );
+        for (index, bomb) in import.placed_bombs.iter().enumerate() {
+            let mut bomb = *bomb;
+            bomb.id = u64::try_from(index).unwrap_or(u64::MAX);
+            bomb.previous_x = bomb.x;
+            bomb.previous_y = bomb.y;
+            bomb.detonation_tick = SimulationTick::new(ticks(bomb.timer_seconds));
+            world.insert_charge(bomb);
+        }
         world
     }
 }

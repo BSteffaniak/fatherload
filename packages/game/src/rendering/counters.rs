@@ -589,9 +589,12 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
             ORANGE,
         ),
     ];
-    for (kind, count) in &ui.player.explosives {
+    for (kind, count) in ui.player.carried_explosives() {
+        if kind == fatherload_simulation::ExplosiveKind::Bomb {
+            continue;
+        }
         status.push(SectionItem::icon_stat(
-            explosive_art::icon(*kind),
+            explosive_art::icon(kind),
             kind.name(),
             count.to_string(),
             ORANGE,

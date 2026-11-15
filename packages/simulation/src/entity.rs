@@ -58,6 +58,9 @@ pub enum EntityKind {
     Enemy,
     /// A projectile an enemy fired (acid, fireballs, bolts).
     EnemyShot,
+    /// A live explosive charge: bombs, sticky bombs, C4, bomblets, burning flares and fires
+    /// (`world/bombs.rs` drives them in its own pass, see [`EntityPhase::Charges`]).
+    Charge,
 }
 
 /// When in the tick an entity kind updates (`WorldState::simulate_tick` runs each phase at a
@@ -68,17 +71,22 @@ pub enum EntityPhase {
     Early,
     /// After drilling, bombs and hazard spawns, before quests read the tick.
     Late,
+    /// The explosives pass (`world/bombs.rs`): charges move, get kicked by blasts, chain and
+    /// detonate there, between hazard damage and drilling. Never visited by the generic entity
+    /// phases.
+    Charges,
 }
 
 impl EntityKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::GasCloud,
         Self::Boulder,
         Self::Drop,
         Self::Critter,
         Self::Enemy,
         Self::EnemyShot,
+        Self::Charge,
     ];
 
     /// The tick phase this kind updates in.
@@ -89,6 +97,7 @@ impl EntityKind {
             Self::Boulder | Self::Drop | Self::Critter | Self::Enemy | Self::EnemyShot => {
                 EntityPhase::Late
             }
+            Self::Charge => EntityPhase::Charges,
         }
     }
 
@@ -271,6 +280,25 @@ impl CritterState {
     }
 }
 
+/// A live explosive charge's per-kind state: everything about a [`crate::PlacedBomb`] but its
+/// motion, which lives in the entity's [`Body`] (see `WorldState::bombs` for the combined view).
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct ChargeState {
+    /// The charge's own serial number (`PlacedBomb::id`, the `bomb_id` of its events): placement
+    /// order, used for chain stagger and remote sequencing. Separate from the entity id so
+    /// charge behaviour does not depend on how many other entities exist.
+    pub serial: u64,
+    pub angle: f32,
+    pub detonation_tick: SimulationTick,
+    pub chain_triggered: bool,
+    pub timer_seconds: f32,
+    pub kind: crate::explosive::ExplosiveKind,
+    pub owner: Option<crate::ids::PlayerId>,
+    pub stuck: bool,
+    pub direction: crate::explosive::BlastDirection,
+    pub stage: u8,
+}
+
 /// Per-kind entity state.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum EntityState {
@@ -280,6 +308,7 @@ pub enum EntityState {
     Critter(CritterState),
     Enemy(crate::enemy::EnemyState),
     EnemyShot(crate::enemy::EnemyShotState),
+    Charge(ChargeState),
 }
 
 impl EntityState {
@@ -292,6 +321,7 @@ impl EntityState {
             Self::Critter(_) => EntityKind::Critter,
             Self::Enemy(_) => EntityKind::Enemy,
             Self::EnemyShot(_) => EntityKind::EnemyShot,
+            Self::Charge(_) => EntityKind::Charge,
         }
     }
 }

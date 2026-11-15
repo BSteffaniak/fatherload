@@ -336,11 +336,9 @@ impl NetSimulation for WorldState {
         }
     }
 
-    fn entities(&self, relevance: &Relevance) -> LiveEntities {
-        if relevance.is_infinite() {
-            return self.live_entities();
-        }
-        self.live_entities_where(|x, y| relevance.contains(x / TILE_SIZE, y / TILE_SIZE))
+    fn entities(&self, _relevance: &Relevance) -> LiveEntities {
+        // Charges are entities now (relevance-filtered entity deltas); only counters remain.
+        self.live_entities()
     }
 
     fn apply_entities(&mut self, entities: LiveEntities) {

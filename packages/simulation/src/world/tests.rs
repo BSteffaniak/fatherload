@@ -1498,10 +1498,10 @@ fn canonical_tick_advances_bombs_and_infrastructure() {
     assert_eq!(world.infrastructure_count(), 1);
     let target = TilePosition { x: 10, y: 10 };
     assert!(world.terrain_mut().set_kind(target, TileKind::Dirt));
-    world.bombs[0].x = 10.0 * TILE_SIZE;
-    world.bombs[0].y = 10.0 * TILE_SIZE;
-    world.bombs[0].timer_seconds = FIXED_DELTA_SECONDS;
-    world.bombs[0].detonation_tick = tick.next().next();
+    world.bombs_mut()[0].x = 10.0 * TILE_SIZE;
+    world.bombs_mut()[0].y = 10.0 * TILE_SIZE;
+    world.bombs_mut()[0].timer_seconds = FIXED_DELTA_SECONDS;
+    world.bombs_mut()[0].detonation_tick = tick.next().next();
 
     let output = world.simulate_tick(tick.next(), &crate::TickInputs::default());
 

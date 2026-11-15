@@ -1,7 +1,17 @@
-//! Deterministic loose-bomb physics, delayed blast cascades and every explosive kind built on
-//! them (see [`crate::explosive`]). No rendering dependencies.
+//! Delayed blast cascades and every explosive kind (see [`crate::explosive`]). No rendering
+//! dependencies.
+//!
+//! Charges live in the entity store as [`EntityKind::Charge`] entities (motion in the entity's
+//! [`crate::entity::Body`], everything else in [`ChargeState`]); [`WorldState::bombs`] views
+//! them as [`PlacedBomb`]s. Their motion is the shared [`physics::step_body`] /
+//! [`physics::step_body_sticky`] with [`BodyParams::BOMB`], and blast kicks use
+//! [`physics::apply_blast`]. The pass runs at its own point in the tick
+//! ([`crate::entity::EntityPhase::Charges`]), never in the generic entity phases.
+
+use std::collections::BTreeSet;
 
 use crate::{
+    entity::{Body, ChargeState, EntityId, EntityKind, EntityState},
     event::{GameplayEventKind, TickOutput},
     explosive::{
         BlastDirection, BlastShape, CLUSTER_BOMBLETS, Deployment, ExplosiveKind,
@@ -10,6 +20,7 @@ use crate::{
     },
     hazard::PlacedBomb,
     ids::{PlayerId, SimulationTick},
+    physics::{self, BodyParams, line_clear},
     quantize::quantize_simulation_scalar as quantize,
     summary::PlayerScopedCommandOutcome,
     terrain::{BlastResult, TILE_SIZE, Terrain, TileKind, TilePosition},
@@ -18,11 +29,8 @@ use crate::{
 use super::{WorldState, commands::bomb_tile_position, quests::QuestNotes};
 
 /// Collision half-size, in world pixels (the fuse is cosmetic).
-pub const BOMB_RADIUS: f32 = 6.0;
-const GRAVITY: f32 = 560.0;
-const MAX_SPEED: f32 = 600.0;
-const BOUNCE: f32 = 0.28;
-const REST_SPEED: f32 = 28.0;
+pub const BOMB_RADIUS: f32 = BodyParams::BOMB.radius;
+const MAX_SPEED: f32 = BodyParams::BOMB.max_speed;
 const IMPACT_SOUND_SPEED: f32 = 90.0;
 /// Small but visible delay: a kicked bomb moves before its secondary explosion.
 const CHAIN_DELAY_MILLIS: u64 = 220;
@@ -73,9 +81,9 @@ impl WorldState {
         notes: &mut QuestNotes,
         output: &mut TickOutput,
     ) {
-        let mut bombs = std::mem::take(&mut self.bombs);
-        bombs.sort_by_key(|bomb| bomb.id);
-        for bomb in &mut bombs {
+        let mut bombs = self.take_charges();
+        bombs.sort_by_key(|(_, bomb)| bomb.id);
+        for (_, bomb) in &mut bombs {
             if bomb.stuck {
                 bomb.previous_x = bomb.x;
                 bomb.previous_y = bomb.y;
@@ -96,12 +104,12 @@ impl WorldState {
         }
         let (expiring, mut survivors): (Vec<_>, Vec<_>) = bombs
             .into_iter()
-            .partition(|bomb| next_tick >= bomb.detonation_tick);
+            .partition(|(_, bomb)| next_tick >= bomb.detonation_tick);
         // Only a charge's first detonation is a blast; a burning fire or flare just ticks on.
         let blasts: Vec<Blast> = expiring
             .iter()
-            .filter(|bomb| !bomb.burning())
-            .map(|bomb| Blast {
+            .filter(|(_, bomb)| !bomb.burning())
+            .map(|(_, bomb)| Blast {
                 kind: bomb.kind,
                 x: bomb.x,
                 y: bomb.y,
@@ -112,7 +120,7 @@ impl WorldState {
         // cleared only after all impulses are resolved, so chain behavior is order-independent.
         let chain_delay = self.timing.rate.ticks_for_millis(CHAIN_DELAY_MILLIS);
         for source in &blasts {
-            for bomb in &mut survivors {
+            for (_, bomb) in &mut survivors {
                 kick_bomb(bomb, source, &self.terrain, next_tick, chain_delay);
             }
         }
@@ -120,15 +128,15 @@ impl WorldState {
         // Enemies take the same blasts (damage, pushes, EMP stuns) on the same terrain.
         self.enemies_feel_blasts(&blasts, output);
         let mut spawned = Vec::new();
-        for bomb in expiring {
+        for (id, bomb) in expiring {
             if let Some(continuing) = self.expire_bomb(bomb, next_tick, notes, output, &mut spawned)
             {
-                survivors.push(continuing);
+                survivors.push((id, continuing));
             }
         }
         let room = MAX_ACTIVE_BOMBS.saturating_sub(survivors.len());
-        survivors.extend(spawned.into_iter().take(room));
-        for bomb in &mut survivors {
+        survivors.extend(spawned.into_iter().take(room).map(|bomb| (None, bomb)));
+        for (_, bomb) in &mut survivors {
             bomb.velocity_x = quantize(bomb.velocity_x.clamp(-MAX_SPEED, MAX_SPEED));
             bomb.velocity_y = quantize(bomb.velocity_y.clamp(-MAX_SPEED, MAX_SPEED));
             bomb.timer_seconds = if bomb.awaiting_remote() {
@@ -139,7 +147,88 @@ impl WorldState {
                     .seconds_until(next_tick, bomb.detonation_tick)
             };
         }
-        self.bombs = survivors;
+        self.store_charges(survivors);
+    }
+
+    /// Every live charge with its entity id (in id order), as [`PlacedBomb`] values for the
+    /// pass to work on; [`Self::store_charges`] writes the outcome back.
+    fn take_charges(&self) -> Vec<(Option<EntityId>, PlacedBomb)> {
+        self.entities
+            .of_kind(EntityKind::Charge)
+            .filter_map(|entity| {
+                charge_view(entity.body, &entity.state).map(|bomb| (Some(entity.id), bomb))
+            })
+            .collect()
+    }
+
+    /// Writes the pass's charges back: changed ones are updated (a fresh revision, so
+    /// replication resends only what moved or ticked), new ones spawned, missing ones
+    /// despawned.
+    fn store_charges(&mut self, charges: Vec<(Option<EntityId>, PlacedBomb)>) {
+        let kept: BTreeSet<EntityId> = charges.iter().filter_map(|(id, _)| *id).collect();
+        let gone: BTreeSet<EntityId> = self
+            .entities
+            .ids_of(EntityKind::Charge)
+            .filter(|id| !kept.contains(id))
+            .collect();
+        let _removed = self.entities.despawn_many(&gone);
+        for (id, bomb) in charges {
+            let (body, state) = charge_parts(&bomb);
+            match id {
+                Some(id) => {
+                    let unchanged = self.entities.get(id).is_some_and(|entity| {
+                        entity.body == body && entity.state == EntityState::Charge(state)
+                    });
+                    if !unchanged {
+                        let _ = self.entities.update(id, |entity| {
+                            entity.body = body;
+                            entity.state = EntityState::Charge(state);
+                        });
+                    }
+                }
+                None => {
+                    let _ = self.entities.spawn(
+                        self.simulation_tick,
+                        body,
+                        EntityState::Charge(state),
+                        None,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Adds a new charge (deployed this tick).
+    fn spawn_charge(&mut self, bomb: &PlacedBomb) -> EntityId {
+        let (body, state) = charge_parts(bomb);
+        self.entities
+            .spawn(self.simulation_tick, body, EntityState::Charge(state), None)
+    }
+
+    /// Adds a charge as-is (building a scenario world before play: tests, capture scenes,
+    /// save migration). Keeps the charge serial counter ahead of it.
+    pub fn insert_charge(&mut self, bomb: PlacedBomb) {
+        self.next_bomb_id = self.next_bomb_id.max(bomb.id.saturating_add(1));
+        let _ = self.spawn_charge(&bomb);
+    }
+
+    /// Every live charge (bombs, sticky bombs, C4, bomblets, burning flares and fires) as a
+    /// [`PlacedBomb`], in placement (serial) order.
+    #[must_use]
+    pub fn bombs(&self) -> Vec<PlacedBomb> {
+        let mut bombs: Vec<PlacedBomb> = self
+            .entities
+            .of_kind(EntityKind::Charge)
+            .filter_map(|entity| charge_view(entity.body, &entity.state))
+            .collect();
+        bombs.sort_by_key(|bomb| bomb.id);
+        bombs
+    }
+
+    /// Number of live charges.
+    #[must_use]
+    pub fn bomb_count(&self) -> usize {
+        self.entities.count_of(EntityKind::Charge)
     }
 
     /// Pushes rigs and blast-feeling entities away from this tick's blasts (line of sight on
@@ -458,7 +547,7 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
-        if player.explosive_count(kind) == 0 || self.bombs.len() >= MAX_ACTIVE_BOMBS {
+        if player.explosive_count(kind) == 0 || self.bomb_count() >= MAX_ACTIVE_BOMBS {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
         let Some(bomb) = self.launch(player_id, kind, aim) else {
@@ -467,7 +556,7 @@ impl WorldState {
         if let Some(player) = self.players.get_mut(&player_id) {
             let _taken = player.take_explosive(kind);
         }
-        self.bombs.push(bomb);
+        let _ = self.spawn_charge(&bomb);
         self.next_bomb_id = self.next_bomb_id.saturating_add(1);
         PlayerScopedCommandOutcome::Applied
     }
@@ -489,18 +578,29 @@ impl WorldState {
             0
         };
         let first = self.simulation_tick.get().saturating_add(1);
-        let mut charges: Vec<&mut PlacedBomb> = self
-            .bombs
-            .iter_mut()
-            .filter(|bomb| bomb.owner == Some(player_id) && bomb.awaiting_remote())
+        let mut charges: Vec<(u64, EntityId)> = self
+            .entities
+            .of_kind(EntityKind::Charge)
+            .filter_map(|entity| match entity.state {
+                EntityState::Charge(state)
+                    if state.owner == Some(player_id) && awaiting_remote(&state) =>
+                {
+                    Some((state.serial, entity.id))
+                }
+                _ => None,
+            })
             .collect();
         if charges.is_empty() {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
-        charges.sort_by_key(|bomb| bomb.id);
-        for (order, bomb) in (0_u64..).zip(charges) {
-            bomb.detonation_tick =
-                SimulationTick::new(first.saturating_add(order.saturating_mul(step)));
+        charges.sort_unstable();
+        for (order, (_, id)) in (0_u64..).zip(charges) {
+            let deadline = SimulationTick::new(first.saturating_add(order.saturating_mul(step)));
+            let _ = self.entities.update(id, |entity| {
+                if let EntityState::Charge(state) = &mut entity.state {
+                    state.detonation_tick = deadline;
+                }
+            });
         }
         PlayerScopedCommandOutcome::Applied
     }
@@ -508,9 +608,12 @@ impl WorldState {
     /// Remote charges `player_id` placed that are still waiting for the detonator.
     #[must_use]
     pub fn waiting_remote_charges(&self, player_id: PlayerId) -> usize {
-        self.bombs
-            .iter()
-            .filter(|bomb| bomb.owner == Some(player_id) && bomb.awaiting_remote())
+        self.entities
+            .of_kind(EntityKind::Charge)
+            .filter(|entity| {
+                matches!(entity.state, EntityState::Charge(state)
+                    if state.owner == Some(player_id) && awaiting_remote(&state))
+            })
             .count()
     }
 
@@ -558,6 +661,64 @@ fn pushed_speed(current: f32, push: f32, max_negative: f32, max_positive: f32) -
     }
 }
 
+/// The [`PlacedBomb`] view of a charge entity (`None` for other kinds).
+const fn charge_view(body: Body, state: &EntityState) -> Option<PlacedBomb> {
+    let EntityState::Charge(charge) = state else {
+        return None;
+    };
+    Some(PlacedBomb {
+        id: charge.serial,
+        x: body.x,
+        y: body.y,
+        velocity_x: body.velocity_x,
+        velocity_y: body.velocity_y,
+        previous_x: body.previous_x,
+        previous_y: body.previous_y,
+        angle: charge.angle,
+        detonation_tick: charge.detonation_tick,
+        chain_triggered: charge.chain_triggered,
+        timer_seconds: charge.timer_seconds,
+        kind: charge.kind,
+        owner: charge.owner,
+        stuck: charge.stuck,
+        direction: charge.direction,
+        stage: charge.stage,
+    })
+}
+
+/// Splits a [`PlacedBomb`] into its entity body and charge state.
+const fn charge_parts(bomb: &PlacedBomb) -> (Body, ChargeState) {
+    (
+        Body {
+            x: bomb.x,
+            y: bomb.y,
+            velocity_x: bomb.velocity_x,
+            velocity_y: bomb.velocity_y,
+            previous_x: bomb.previous_x,
+            previous_y: bomb.previous_y,
+            rest_ticks: 0,
+            asleep: false,
+        },
+        ChargeState {
+            serial: bomb.id,
+            angle: bomb.angle,
+            detonation_tick: bomb.detonation_tick,
+            chain_triggered: bomb.chain_triggered,
+            timer_seconds: bomb.timer_seconds,
+            kind: bomb.kind,
+            owner: bomb.owner,
+            stuck: bomb.stuck,
+            direction: bomb.direction,
+            stage: bomb.stage,
+        },
+    )
+}
+
+/// [`PlacedBomb::awaiting_remote`] for a charge's state.
+fn awaiting_remote(state: &ChargeState) -> bool {
+    state.kind.remote() && state.detonation_tick == REMOTE_FUSE
+}
+
 fn merge(into: &mut BlastResult, blast: BlastResult) {
     into.cleared += blast.cleared;
     into.changed_tiles.extend(blast.changed_tiles);
@@ -588,10 +749,11 @@ const SUPPORT_PROBE: f32 = 3.0;
 /// Whether the surface a stuck charge clings to is still there.
 fn supported(terrain: &Terrain, bomb: &PlacedBomb) -> bool {
     let (dx, dy) = bomb.direction_hint();
-    collides(
+    physics::collides(
         terrain,
         dx.mul_add(SUPPORT_PROBE, bomb.x),
         dy.mul_add(SUPPORT_PROBE, bomb.y),
+        BOMB_RADIUS,
     )
 }
 
@@ -679,30 +841,6 @@ const fn impact_event(bomb: PlacedBomb) -> GameplayEventKind {
     }
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "bounded world coordinates address terrain"
-)]
-fn solid(terrain: &Terrain, x: f32, y: f32) -> bool {
-    let position = TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    };
-    // The sky is open; the side edges and the bottom are not.
-    if !terrain.contains_column(position.x) || position.y >= terrain.height() {
-        return true;
-    }
-    position.y >= 0 && terrain.is_solid_at(position)
-}
-
-fn collides(terrain: &Terrain, x: f32, y: f32) -> bool {
-    [-BOMB_RADIUS, 0.0, BOMB_RADIUS].into_iter().any(|dx| {
-        [-BOMB_RADIUS, 0.0, BOMB_RADIUS]
-            .into_iter()
-            .any(|dy| solid(terrain, x + dx, y + dy))
-    })
-}
-
 /// What one tick of motion did.
 #[derive(Clone, Copy, Debug, Default)]
 struct Motion {
@@ -712,103 +850,41 @@ struct Motion {
     stuck: Option<BlastDirection>,
 }
 
-/// Axis-separated swept steps never travel more than two pixels, even at the speed cap.
-/// Resting bombs are checked each tick: removing their support wakes them automatically.
-/// A `sticky` charge stops dead on its first contact instead of bouncing.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    reason = "bounded physics substep count, at most 128"
-)]
+/// One tick of a loose charge's motion: the shared body physics ([`BodyParams::BOMB`]), sticky
+/// for a charge that sticks on its next contact (it stops dead there and points `direction` at
+/// the surface), plus the cosmetic roll angle. Resting charges are checked each tick, so
+/// removing their support wakes them automatically.
 fn move_bomb(bomb: &mut PlacedBomb, terrain: &Terrain, dt: f32, sticky: bool) -> Motion {
-    bomb.previous_x = bomb.x;
-    bomb.previous_y = bomb.y;
-    if collides(terrain, bomb.x, bomb.y) {
-        // A drop starts at the rig's feet and can slightly overlap the supporting tile.
-        // Only lift out locally; do not teleport bombs through walls or search entire caves.
-        let lift =
-            (1_u8..=32).find(|offset| !collides(terrain, bomb.x, bomb.y - f32::from(*offset)));
-        if let Some(lift) = lift {
-            bomb.y -= f32::from(lift);
-            bomb.previous_y = bomb.y;
-        } else {
-            bomb.velocity_x = 0.0;
-            bomb.velocity_y = 0.0;
-            return Motion::default();
-        }
+    let (mut body, _) = charge_parts(bomb);
+    let report = if sticky {
+        physics::step_body_sticky(&mut body, &BodyParams::BOMB, terrain, dt)
+    } else {
+        physics::step_body(&mut body, &BodyParams::BOMB, terrain, dt)
+    };
+    bomb.x = body.x;
+    bomb.y = body.y;
+    bomb.velocity_x = body.velocity_x;
+    bomb.velocity_y = body.velocity_y;
+    bomb.previous_x = body.previous_x;
+    bomb.previous_y = body.previous_y;
+    if report.wedged {
+        return Motion::default();
     }
-    bomb.velocity_x = bomb.velocity_x.clamp(-MAX_SPEED, MAX_SPEED);
-    bomb.velocity_y = GRAVITY
-        .mul_add(dt, bomb.velocity_y)
-        .clamp(-MAX_SPEED, MAX_SPEED);
-    let steps =
-        ((bomb.velocity_x.abs().max(bomb.velocity_y.abs()) * dt / 2.0).ceil() as u32).clamp(1, 128);
-    let step = dt / steps as f32;
-    let mut impact: f32 = 0.0;
-    let mut stuck = None;
-    for _ in 0..steps {
-        let x = bomb.velocity_x.mul_add(step, bomb.x);
-        if collides(terrain, x, bomb.y) {
-            if sticky {
-                stuck = Some(if bomb.velocity_x < 0.0 {
-                    BlastDirection::Left
-                } else {
-                    BlastDirection::Right
-                });
-                break;
-            }
-            impact = impact.max(bomb.velocity_x.abs());
-            bomb.velocity_x *= -BOUNCE;
-        } else {
-            bomb.x = x;
-        }
-        let y = bomb.velocity_y.mul_add(step, bomb.y);
-        if collides(terrain, bomb.x, y) {
-            if sticky {
-                stuck = Some(if bomb.velocity_y < 0.0 {
-                    BlastDirection::Up
-                } else {
-                    BlastDirection::Down
-                });
-                break;
-            }
-            impact = impact.max(bomb.velocity_y.abs());
-            let hit_floor = bomb.velocity_y > 0.0;
-            bomb.velocity_y = if bomb.velocity_y.abs() < REST_SPEED {
-                0.0
-            } else {
-                -bomb.velocity_y * BOUNCE
-            };
-            // Friction on contact with a floor, not in mid-air.
-            if hit_floor {
-                bomb.velocity_x *= (12.0f32.mul_add(-step, 1.0)).max(0.0);
-                if bomb.velocity_x.abs() < 3.0 {
-                    bomb.velocity_x = 0.0;
-                }
-            }
-        } else {
-            bomb.y = y;
-        }
-    }
-    if let Some(side) = stuck {
-        bomb.velocity_x = 0.0;
-        bomb.velocity_y = 0.0;
+    if let Some(side) = report.stuck {
         bomb.direction = side;
     }
-    bomb.x = quantize(bomb.x);
-    bomb.y = quantize(bomb.y);
-    bomb.velocity_x = quantize(bomb.velocity_x);
-    bomb.velocity_y = quantize(bomb.velocity_y);
     bomb.angle = quantize(
         (bomb.angle + (bomb.x - bomb.previous_x) / BOMB_RADIUS).rem_euclid(std::f32::consts::TAU),
     );
     Motion {
-        impact: impact >= IMPACT_SOUND_SPEED,
-        stuck,
+        impact: report.impact_speed >= IMPACT_SOUND_SPEED,
+        stuck: report.stuck,
     }
 }
 
+/// A blast's effect on another charge: a loose one is pushed ([`physics::apply_blast`], the
+/// same kick every blast-feeling body gets), and one close enough has its fuse cut short
+/// (chain reaction), stuck or not. A rock wall in between blocks both.
 fn kick_bomb(
     bomb: &mut PlacedBomb,
     source: &Blast,
@@ -816,27 +892,19 @@ fn kick_bomb(
     tick: SimulationTick,
     delay: u64,
 ) {
-    let reach = source.kind.push_reach();
-    if reach <= 0.0 {
+    let Some(blast) = physics::Blast::explosive(source.kind, source.x, source.y) else {
         return;
-    }
-    let dx = bomb.x - source.x;
-    let dy = bomb.y - source.y;
-    let distance = dx.hypot(dy);
-    if distance >= reach || !line_clear(terrain, source.x, source.y, bomb.x, bomb.y) {
+    };
+    let distance = (bomb.x - source.x).hypot(bomb.y - source.y);
+    if distance >= blast.reach || !line_clear(terrain, source.x, source.y, bomb.x, bomb.y) {
         return;
     }
     if !bomb.stuck {
-        // Coincident bombs split reproducibly in opposite directions instead of dividing by
-        // zero.
-        let (nx, ny) = if distance < 1.0 {
-            (if bomb.id.is_multiple_of(2) { 0.7 } else { -0.7 }, -0.7)
-        } else {
-            (dx / distance, dy / distance)
-        };
-        let strength = source.kind.push_strength() * (1.0 - distance / reach);
-        bomb.velocity_x = nx.mul_add(strength, bomb.velocity_x);
-        bomb.velocity_y += strength.mul_add(ny, -strength * 0.3);
+        // Coincident charges split reproducibly in opposite directions (by serial parity).
+        let (mut body, _) = charge_parts(bomb);
+        let _ = physics::apply_blast(&mut body, &blast, terrain, !bomb.id.is_multiple_of(2));
+        bomb.velocity_x = body.velocity_x;
+        bomb.velocity_y = body.velocity_y;
     }
     if distance <= source.kind.chain_reach() && bomb.kind.chains() && !bomb.burning() {
         bomb.chain_triggered = true;
@@ -851,29 +919,57 @@ fn kick_bomb(
     }
 }
 
-/// Sample at <= half a collision radius, excluding the source's own tile. A rock wall blocks
-/// the kick/chain trigger even if that rock is about to be removed by this blast.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    reason = "blast rays are bounded to a few tiles"
-)]
-fn line_clear(terrain: &Terrain, x: f32, y: f32, end_x: f32, end_y: f32) -> bool {
-    let distance = (end_x - x).hypot(end_y - y);
-    let steps = (distance / 3.0).ceil().max(1.0) as u32;
-    let origin = (
-        (x / TILE_SIZE).floor() as i32,
-        (y / TILE_SIZE).floor() as i32,
-    );
-    (1..=steps).all(|step| {
-        let t = step as f32 / steps as f32;
-        let px = (end_x - x).mul_add(t, x);
-        let py = (end_y - y).mul_add(t, y);
-        let tile = (
-            (px / TILE_SIZE).floor() as i32,
-            (py / TILE_SIZE).floor() as i32,
-        );
-        tile == origin || !solid(terrain, px, py)
-    })
+/// Test access to the charges as a plain list: edits made through the guard are written back
+/// (matched to their entities by serial) when it drops.
+#[cfg(test)]
+pub struct BombsMut<'w> {
+    world: &'w mut WorldState,
+    bombs: Vec<PlacedBomb>,
+}
+
+#[cfg(test)]
+impl std::ops::Deref for BombsMut<'_> {
+    type Target = Vec<PlacedBomb>;
+    fn deref(&self) -> &Self::Target {
+        &self.bombs
+    }
+}
+
+#[cfg(test)]
+impl std::ops::DerefMut for BombsMut<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.bombs
+    }
+}
+
+#[cfg(test)]
+impl Drop for BombsMut<'_> {
+    fn drop(&mut self) {
+        let by_serial: std::collections::BTreeMap<u64, EntityId> = self
+            .world
+            .entities
+            .of_kind(EntityKind::Charge)
+            .filter_map(|entity| match entity.state {
+                EntityState::Charge(state) => Some((state.serial, entity.id)),
+                _ => None,
+            })
+            .collect();
+        let charges: Vec<(Option<EntityId>, PlacedBomb)> = std::mem::take(&mut self.bombs)
+            .into_iter()
+            .map(|bomb| (by_serial.get(&bomb.id).copied(), bomb))
+            .collect();
+        for (_, bomb) in &charges {
+            self.world.next_bomb_id = self.world.next_bomb_id.max(bomb.id.saturating_add(1));
+        }
+        self.world.store_charges(charges);
+    }
+}
+
+#[cfg(test)]
+impl WorldState {
+    /// The charges as an editable list (tests).
+    pub(crate) fn bombs_mut(&mut self) -> BombsMut<'_> {
+        let bombs = self.bombs();
+        BombsMut { world: self, bombs }
+    }
 }

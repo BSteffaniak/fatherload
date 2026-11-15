@@ -1,4 +1,4 @@
-//! Readers for older save formats (versions 1-6), migrated to a canonical [`WorldState`].
+//! Readers for older save formats (versions 1-7), migrated to a canonical [`WorldState`].
 //!
 //! * v1: `{ version, game }` — the whole legacy single-player `GameState`.
 //! * v2: `{ version, world: { session, world, game, roster... } }` — legacy game plus persisted
@@ -14,6 +14,9 @@
 //!   `cargo` / `artifacts` / `materials` maps (now one `cargo_bay` item container), lost-cargo
 //!   sites carried `minerals` / `artifacts` maps (now `items`), and gas clouds and falling
 //!   boulders were separate world lists (now entities in the world's entity store).
+//! * v7: the current envelope and world, but explosive charges were a separate `bombs` world
+//!   list (now charge entities in the entity store) and each rig carried its special explosives
+//!   in an `explosives` count map (now explosive items in its cargo bay).
 //!
 //! Every pre-v6 terrain is read as a [`FullTerrain`] and converted; re-saving writes the compact
 //! form.
@@ -544,6 +547,21 @@ impl V5SaveFile {
     }
 }
 
+/// v7: the current world, with the charge list and explosive count maps.
+#[derive(Debug, Deserialize)]
+pub struct V7SaveFile {
+    save: V4Save,
+}
+
+impl V7SaveFile {
+    pub fn migrate(self) -> Result<WorldSave, serde_json::Error> {
+        Ok(WorldSave {
+            world: v7_world(self.save.world)?,
+            play_seconds: self.save.play_seconds,
+        })
+    }
+}
+
 /// v6: the current envelope around a world from before the item and entity models.
 #[derive(Debug, Deserialize)]
 pub struct V6SaveFile {
@@ -643,7 +661,7 @@ fn v6_world(mut world: Value) -> Result<WorldState, serde_json::Error> {
             }
         }
     }
-    let mut world: WorldState = serde_json::from_value(world)?;
+    let mut world = v7_world(world)?;
     world.restore_legacy_live_entities(
         live.hazards,
         live.falling_boulders,
@@ -651,6 +669,63 @@ fn v6_world(mut world: Value) -> Result<WorldState, serde_json::Error> {
         &live.boulder_expiry_ticks,
     );
     Ok(world)
+}
+
+/// Reads a world written before charges were entities (v1-v7 JSON shapes of the current
+/// world): moves the `bombs` list onto the entity store as charge entities and each rig's
+/// `explosives` count map into explosive items in its cargo bay, then deserializes.
+fn v7_world(mut world: Value) -> Result<WorldState, serde_json::Error> {
+    let mut bombs: Vec<PlacedBomb> = Vec::new();
+    if let Some(object) = world.as_object_mut() {
+        if let Some(list) = object.remove("bombs")
+            && !list.is_null()
+        {
+            bombs = serde_json::from_value(list)?;
+        }
+        if let Some(template) = object.get_mut("player_template") {
+            migrate_player_explosives(template)?;
+        }
+        if let Some(Value::Object(players)) = object.get_mut("players") {
+            for player in players.values_mut() {
+                migrate_player_explosives(player)?;
+            }
+        }
+    }
+    let next_bomb_id = world
+        .get("next_bomb_id")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let mut world: WorldState = serde_json::from_value(world)?;
+    bombs.sort_by_key(|bomb| bomb.id);
+    for bomb in bombs {
+        world.insert_charge(bomb);
+    }
+    let mut live = world.live_entities();
+    live.next_bomb_id = live.next_bomb_id.max(next_bomb_id);
+    world.apply_live_entities(live);
+    Ok(world)
+}
+
+/// Moves a v7 rig's `explosives` count map into explosive items in its `cargo_bay`.
+fn migrate_player_explosives(player: &mut Value) -> Result<(), serde_json::Error> {
+    let Some(object) = player.as_object_mut() else {
+        return Ok(());
+    };
+    let explosives = take_map::<fatherload_simulation::ExplosiveKind>(object, "explosives")?;
+    if explosives.is_empty() {
+        return Ok(());
+    }
+    let mut bay: ItemContainer = match object.remove("cargo_bay") {
+        None | Some(Value::Null) => ItemContainer::new(),
+        Some(value) => serde_json::from_value(value)?,
+    };
+    for (kind, count) in explosives {
+        if let Some(item) = kind.item() {
+            bay.add(item, count);
+        }
+    }
+    object.insert("cargo_bay".to_owned(), serde_json::to_value(bay)?);
+    Ok(())
 }
 
 /// Reads a v3/v4 world: lifts `authoritative_summary.won_game` to `won_game` and drops the rest

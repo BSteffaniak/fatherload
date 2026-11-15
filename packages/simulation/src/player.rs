@@ -3,8 +3,6 @@
     reason = "player world positions intentionally convert to terrain tile coordinates"
 )]
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -65,11 +63,10 @@ pub struct Player {
     /// boulder deflector).
     #[serde(default)]
     pub hazard_gear: HazardGear,
+    /// Plain bombs carried. Special explosives are [`ItemKind::Explosive`] items in the cargo
+    /// bay ([`ExplosiveKind::item`]; see [`Self::explosive_count`]).
     #[serde(default)]
     pub bombs: u32,
-    /// Special explosives carried, by kind (plain bombs stay in [`Self::bombs`]).
-    #[serde(default)]
-    pub explosives: BTreeMap<ExplosiveKind, u32>,
     #[serde(default)]
     pub loan_debt: u32,
     #[serde(default)]
@@ -142,7 +139,6 @@ impl Player {
             drill_mount_level: 0,
             hazard_gear: HazardGear::default(),
             bombs: 0,
-            explosives: BTreeMap::new(),
             loan_debt: 0,
             insured: false,
             insurance_tier: 0,
@@ -212,23 +208,23 @@ impl Player {
         true
     }
 
-    /// Charges of `kind` carried (plain bombs come from [`Self::bombs`]).
+    /// Charges of `kind` carried (plain bombs come from [`Self::bombs`], the rest are explosive
+    /// items in the cargo bay).
     #[must_use]
     pub fn explosive_count(&self, kind: ExplosiveKind) -> u32 {
         if kind == ExplosiveKind::Bomb {
-            self.bombs
-        } else {
-            self.explosives.get(&kind).copied().unwrap_or(0)
+            return self.bombs;
         }
+        kind.item().map_or(0, |item| self.cargo_bay.count(item))
     }
 
-    /// Adds `count` charges of `kind` (plain bombs go to [`Self::bombs`]).
+    /// Adds `count` charges of `kind` (plain bombs go to [`Self::bombs`], the rest into the
+    /// cargo bay as explosive items, which take no slots).
     pub fn add_explosives(&mut self, kind: ExplosiveKind, count: u32) {
         if kind == ExplosiveKind::Bomb {
             self.bombs = self.bombs.saturating_add(count);
-        } else if count > 0 {
-            let carried = self.explosives.entry(kind).or_default();
-            *carried = carried.saturating_add(count);
+        } else if let Some(item) = kind.item() {
+            self.cargo_bay.add(item, count);
         }
     }
 
@@ -241,15 +237,19 @@ impl Player {
             self.bombs -= 1;
             return true;
         }
-        let Some(carried) = self.explosives.get_mut(&kind) else {
-            return false;
-        };
-        let had = *carried > 0;
-        *carried = carried.saturating_sub(1);
-        if *carried == 0 {
-            self.explosives.remove(&kind);
-        }
-        had
+        kind.item()
+            .is_some_and(|item| self.cargo_bay.remove(item, 1) == 1)
+    }
+
+    /// Every explosive kind carried with its count, in selection order (plain bombs first,
+    /// when any): what the inventory screen lists.
+    #[must_use]
+    pub fn carried_explosives(&self) -> Vec<(ExplosiveKind, u32)> {
+        ExplosiveKind::SELECTABLE
+            .into_iter()
+            .map(|kind| (kind, self.explosive_count(kind)))
+            .filter(|(_, count)| *count > 0)
+            .collect()
     }
 
     pub fn add_material(&mut self, material: StrategicResourceKind, count: u32) {

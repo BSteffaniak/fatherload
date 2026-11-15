@@ -371,6 +371,50 @@ impl ExplosiveKind {
         }
     }
 
+    /// The carried item for this kind (`None` for plain bombs, which stay a rig count, and
+    /// bomblets, which are never carried). Special explosives are
+    /// [`crate::item::ItemKind::Explosive`] items in the rig's cargo bay (no slot cost).
+    #[must_use]
+    pub const fn item(self) -> Option<crate::item::ItemKind> {
+        match self.item_id() {
+            Some(id) => Some(crate::item::ItemKind::Explosive(id)),
+            None => None,
+        }
+    }
+
+    /// The stable item id of this kind (see [`Self::item`]). Ids are saved: never renumber.
+    #[must_use]
+    pub const fn item_id(self) -> Option<crate::item::ExplosiveId> {
+        let id = match self {
+            Self::Bomb | Self::Bomblet => return None,
+            Self::Sticky => 1,
+            Self::Cluster => 2,
+            Self::C4 => 3,
+            Self::Shaped => 4,
+            Self::Mining => 5,
+            Self::Incendiary => 6,
+            Self::Emp => 7,
+            Self::Flare => 8,
+        };
+        Some(crate::item::ExplosiveId(id))
+    }
+
+    /// The kind an explosive item id names (`None` for unknown ids).
+    #[must_use]
+    pub const fn from_item_id(id: crate::item::ExplosiveId) -> Option<Self> {
+        Some(match id.0 {
+            1 => Self::Sticky,
+            2 => Self::Cluster,
+            3 => Self::C4,
+            4 => Self::Shaped,
+            5 => Self::Mining,
+            6 => Self::Incendiary,
+            7 => Self::Emp,
+            8 => Self::Flare,
+            _ => return None,
+        })
+    }
+
     /// Lower-case plural for counts ("3 sticky bombs").
     #[must_use]
     pub const fn plural(self) -> &'static str {

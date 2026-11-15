@@ -341,11 +341,10 @@ fn bomb_cascade_scene(stage: &mut SceneStage<'_>, frames: usize) {
         }
         park_rig(world, seats[0].player, 111, 24);
         reveal(world, seats[0].player, 99..126, 9..30);
-        let mut entities = world.live_entities();
         for id in 0..9_u8 {
             let x = (109.5 + f32::from(id % 5)) * TILE_SIZE;
             let y = (19.0 - f32::from(id / 5)) * TILE_SIZE;
-            entities.bombs.push(fatherload_simulation::PlacedBomb {
+            world.insert_charge(fatherload_simulation::PlacedBomb {
                 id: u64::from(id),
                 x,
                 y,
@@ -360,8 +359,6 @@ fn bomb_cascade_scene(stage: &mut SceneStage<'_>, frames: usize) {
                 ..fatherload_simulation::PlacedBomb::default()
             });
         }
-        entities.next_bomb_id = 9;
-        world.apply_live_entities(entities);
     });
     stage.settle(frames);
 }

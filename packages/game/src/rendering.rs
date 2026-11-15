@@ -630,7 +630,7 @@ impl GameRenderer {
                     sky: &self.sky,
                     infrastructure: snapshot.infrastructure,
                     hazards: &snapshot.hazards,
-                    bombs: snapshot.bombs,
+                    bombs: &snapshot.bombs,
                     bomb_alpha: snapshot.bomb_alpha,
                     boulders: &snapshot.boulders,
                     entities: snapshot.entities,

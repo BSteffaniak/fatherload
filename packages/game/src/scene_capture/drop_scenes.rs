@@ -64,8 +64,7 @@ fn charge_at_seam(world: &mut WorldState, player: PlayerId, kind: ExplosiveKind,
     // A pocket cut into the seam's foot holds the charge, so its blast is mostly rock.
     carve(world, 111..114, 28..29);
     let (x, y) = (TILE_SIZE.mul_add(0.5, tile(113)), tile(29) - 7.0);
-    let mut entities = world.live_entities();
-    entities.bombs.push(PlacedBomb {
+    world.insert_charge(PlacedBomb {
         id: 0,
         x,
         y,
@@ -77,8 +76,6 @@ fn charge_at_seam(world: &mut WorldState, player: PlayerId, kind: ExplosiveKind,
         kind,
         ..PlacedBomb::default()
     });
-    entities.next_bomb_id = 1;
-    world.apply_live_entities(entities);
     place_rig(world, player, 101, 28);
 }
 

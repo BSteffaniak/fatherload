@@ -265,12 +265,15 @@ pub struct WorldState {
     #[serde(default)]
     entities: EntityStore,
     terrain: Terrain,
-    bombs: Vec<PlacedBomb>,
     infrastructure: Vec<PlacedInfrastructure>,
     active_drills: BTreeMap<PlayerId, DrillState>,
     active_drill_timers: BTreeMap<PlayerId, ActiveDrillTimer>,
     scanner_cooldowns: BTreeMap<PlayerId, f32>,
     scanner_cooldown_deadlines: BTreeMap<PlayerId, SimulationTick>,
+    /// Serial number of the next explosive charge (charges are [`EntityKind::Charge`]
+    /// entities; see `world/bombs.rs`).
+    ///
+    /// [`EntityKind::Charge`]: crate::entity::EntityKind::Charge
     #[serde(default)]
     next_bomb_id: u64,
     rng: DeterministicRngState,
@@ -350,11 +353,6 @@ impl WorldState {
     }
 
     #[must_use]
-    pub const fn bomb_count(&self) -> usize {
-        self.bombs.len()
-    }
-
-    #[must_use]
     pub const fn infrastructure_count(&self) -> usize {
         self.infrastructure.len()
     }
@@ -368,18 +366,6 @@ impl WorldState {
     /// gameplay only changes terrain inside [`Self::simulate_tick`].
     pub const fn terrain_mut(&mut self) -> &mut Terrain {
         &mut self.terrain
-    }
-
-    #[must_use]
-    pub fn bombs(&self) -> &[PlacedBomb] {
-        &self.bombs
-    }
-
-    /// Adds a charge as-is (building a scenario world before play: tests, capture scenes).
-    /// Keeps the charge id counter ahead of it.
-    pub fn insert_charge(&mut self, bomb: PlacedBomb) {
-        self.next_bomb_id = self.next_bomb_id.max(bomb.id.saturating_add(1));
-        self.bombs.push(bomb);
     }
 
     #[must_use]
@@ -588,7 +574,9 @@ impl WorldState {
         self.terrain = terrain;
         self.entities = EntityStore::new();
         self.restore_legacy_live_entities(hazards, Vec::new(), &[], &[]);
-        self.bombs = bombs;
+        for bomb in bombs {
+            self.insert_charge(bomb);
+        }
         self.infrastructure = infrastructure;
         self.active_drills = active_drills;
         self.scanner_cooldowns = scanner_cooldowns;

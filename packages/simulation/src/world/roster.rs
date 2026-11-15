@@ -75,9 +75,8 @@ impl WorldState {
             progression,
             scan_markers: _,
             collapse_warnings: _,
-            entities: _,
+            entities,
             terrain: _,
-            bombs,
             infrastructure: _,
             active_drills,
             active_drill_timers,
@@ -107,7 +106,12 @@ impl WorldState {
         scanner_cooldown_deadlines.remove(&player_id);
         discovered_tiles.remove(&player_id);
         // Nobody is left to trigger a departed player's remote charges: they are disarmed.
-        bombs.retain(|bomb| !(bomb.owner == Some(player_id) && bomb.awaiting_remote()));
+        entities.retain(|entity| {
+            !matches!(entity.state, crate::entity::EntityState::Charge(charge)
+                if charge.owner == Some(player_id)
+                    && charge.kind.remote()
+                    && charge.detonation_tick == crate::explosive::REMOTE_FUSE)
+        });
         service_transactions.retain(|transaction| transaction.player_id != player_id);
         enemies.rig_guard.remove(&player_id);
     }

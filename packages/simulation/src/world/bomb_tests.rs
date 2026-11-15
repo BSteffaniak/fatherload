@@ -60,20 +60,20 @@ fn unsupported_bombs_fall_bounce_settle_and_wake_when_support_is_blasted() {
             .terrain_mut()
             .set_kind(TilePosition { x: column, y: 23 }, TileKind::Stone);
     }
-    world.bombs.push(bomb(0, x, y, 10_000));
+    world.bombs_mut().push(bomb(0, x, y, 10_000));
     let events = advance(&mut world, 180);
-    assert!(world.bombs[0].y > y + TILE_SIZE);
-    assert!(world.bombs[0].y < 23.0 * TILE_SIZE);
-    assert!(world.bombs[0].velocity_y.abs() < 1.0);
+    assert!(world.bombs()[0].y > y + TILE_SIZE);
+    assert!(world.bombs()[0].y < 23.0 * TILE_SIZE);
+    assert!(world.bombs()[0].velocity_y.abs() < 1.0);
     assert!(
         events
             .iter()
             .any(|event| matches!(event, GameplayEventKind::BombBounced { .. }))
     );
-    let resting_y = world.bombs[0].y;
+    let resting_y = world.bombs()[0].y;
     let _ = world.detonate_bomb_at(TilePosition { x: 20, y: 23 }, 2);
     advance(&mut world, 60);
-    assert!(world.bombs[0].y > resting_y + TILE_SIZE);
+    assert!(world.bombs()[0].y > resting_y + TILE_SIZE);
 }
 
 #[test]
@@ -87,10 +87,10 @@ fn fast_bombs_cannot_tunnel_through_a_one_tile_wall_or_bedrock_floor() {
     let mut moving = bomb(1, 22.0 * TILE_SIZE, 25.0 * TILE_SIZE, 10_000);
     moving.velocity_x = 10_000.0;
     moving.velocity_y = 10_000.0;
-    world.bombs.push(moving);
+    world.bombs_mut().push(moving);
     advance(&mut world, 240);
-    assert!(world.bombs[0].x < 24.0 * TILE_SIZE);
-    assert!(world.bombs[0].y + super::bombs::BOMB_RADIUS < 32.0 * TILE_SIZE);
+    assert!(world.bombs()[0].x < 24.0 * TILE_SIZE);
+    assert!(world.bombs()[0].y + super::bombs::BOMB_RADIUS < 32.0 * TILE_SIZE);
 }
 
 #[test]
@@ -98,13 +98,13 @@ fn blast_kicks_outwards_and_shortens_fuses_without_instantly_detonating_neighbor
     let mut world = arena();
     let x = 20.5 * TILE_SIZE;
     let y = 20.5 * TILE_SIZE;
-    world.bombs = vec![
+    *world.bombs_mut() = vec![
         bomb(0, x, y, 1),
         bomb(1, x + TILE_SIZE, y, 600),
         bomb(2, x - TILE_SIZE, y, 600),
     ];
     let events = advance(&mut world, 1);
-    assert_eq!(world.bombs.len(), 2);
+    assert_eq!(world.bombs().len(), 2);
     assert_eq!(
         events
             .iter()
@@ -112,16 +112,16 @@ fn blast_kicks_outwards_and_shortens_fuses_without_instantly_detonating_neighbor
             .count(),
         1
     );
-    assert!(world.bombs[0].velocity_x > 0.0);
-    assert!(world.bombs[1].velocity_x < 0.0);
+    assert!(world.bombs()[0].velocity_x > 0.0);
+    assert!(world.bombs()[1].velocity_x < 0.0);
     assert!(
         world
-            .bombs
+            .bombs()
             .iter()
             .all(|bomb| bomb.chain_triggered && bomb.detonation_tick.get() < 60)
     );
     let events = advance(&mut world, 60);
-    assert!(world.bombs.is_empty());
+    assert!(world.bombs().is_empty());
     assert_eq!(
         events
             .iter()
@@ -136,16 +136,16 @@ fn outer_blast_moves_but_does_not_trigger_and_never_extends_a_fuse() {
     let mut world = arena();
     let x = 20.5 * TILE_SIZE;
     let y = 20.5 * TILE_SIZE;
-    world.bombs = vec![
+    *world.bombs_mut() = vec![
         bomb(0, x, y, 1),
         bomb(1, 3.0f32.mul_add(TILE_SIZE, x), y, 600),
         bomb(2, x + TILE_SIZE, y, 2),
     ];
     advance(&mut world, 1);
-    assert!(!world.bombs[0].chain_triggered);
-    assert!(world.bombs[0].velocity_x > 0.0);
-    assert_eq!(world.bombs[0].detonation_tick.get(), 600);
-    assert_eq!(world.bombs[1].detonation_tick.get(), 2);
+    assert!(!world.bombs()[0].chain_triggered);
+    assert!(world.bombs()[0].velocity_x > 0.0);
+    assert_eq!(world.bombs()[0].detonation_tick.get(), 600);
+    assert_eq!(world.bombs()[1].detonation_tick.get(), 2);
 }
 
 #[test]
@@ -157,14 +157,14 @@ fn rock_occludes_impulses_before_the_explosion_removes_it() {
             .terrain_mut()
             .set_kind(TilePosition { x: 21, y: row }, TileKind::Stone);
     }
-    world.bombs = vec![
+    *world.bombs_mut() = vec![
         bomb(0, 20.5 * TILE_SIZE, y, 1),
         bomb(1, 22.5 * TILE_SIZE, y, 600),
     ];
     advance(&mut world, 1);
-    assert!(world.bombs[0].velocity_x.abs() < f32::EPSILON);
-    assert_eq!(world.bombs[0].detonation_tick.get(), 600);
-    assert!(!world.bombs[0].chain_triggered);
+    assert!(world.bombs()[0].velocity_x.abs() < f32::EPSILON);
+    assert_eq!(world.bombs()[0].detonation_tick.get(), 600);
+    assert!(!world.bombs()[0].chain_triggered);
 }
 
 #[test]
@@ -172,13 +172,13 @@ fn simultaneous_blasts_have_identical_results_regardless_of_storage_order() {
     let mut first = arena();
     let x = 20.5 * TILE_SIZE;
     let y = 20.5 * TILE_SIZE;
-    first.bombs = vec![
+    *first.bombs_mut() = vec![
         bomb(0, x, y, 1),
         bomb(1, x + TILE_SIZE, y, 1),
         bomb(2, 2.0f32.mul_add(TILE_SIZE, x), y, 600),
     ];
     let mut second = first.clone();
-    second.bombs.reverse();
+    second.bombs_mut().reverse();
     let first_events = advance(&mut first, 120);
     let second_events = advance(&mut second, 120);
     assert_eq!(first_events, second_events);
@@ -192,16 +192,17 @@ fn simultaneous_blasts_have_identical_results_regardless_of_storage_order() {
 fn in_flight_save_and_live_replication_preserve_the_entire_bomb_state() {
     let mut original = arena();
     original
-        .bombs
+        .bombs_mut()
         .push(bomb(8, 20.5 * TILE_SIZE, 20.5 * TILE_SIZE, 600));
-    original.bombs[0].velocity_x = 120.0;
+    original.bombs_mut()[0].velocity_x = 120.0;
     original.next_bomb_id = 9;
     advance(&mut original, 20);
     let json = serde_json::to_string(&original).expect("save");
     let mut restored: WorldState = serde_json::from_str(&json).expect("load");
     let mut replica = restored.clone();
-    replica.bombs.clear();
+    replica.bombs_mut().clear();
     replica.next_bomb_id = 0;
+    replicate_charges(&original, &mut replica);
     replica.apply_live_entities(original.live_entities());
     assert_eq!(
         original.simulation_state_hash(),
@@ -224,7 +225,7 @@ fn in_flight_save_and_live_replication_preserve_the_entire_bomb_state() {
 fn a_large_coincident_pile_produces_bounded_finite_deterministic_cascades() {
     let mut world = arena();
     for id in 0..u64::try_from(MAX_ACTIVE_BOMBS).unwrap() {
-        world.bombs.push(bomb(
+        world.bombs_mut().push(bomb(
             id,
             20.5 * TILE_SIZE,
             20.5 * TILE_SIZE,
@@ -238,7 +239,7 @@ fn a_large_coincident_pile_produces_bounded_finite_deterministic_cascades() {
         world.simulation_state_hash(),
         replay.simulation_state_hash()
     );
-    assert!(world.bombs.is_empty());
+    assert!(world.bombs().is_empty());
     assert_eq!(
         events
             .iter()
@@ -255,19 +256,34 @@ fn cap_does_not_consume_inventory_and_bomb_identity_does_not_reuse_removed_ids()
     world.next_bomb_id = 42;
     let inputs = TickInputs::default().act(LOCAL_PLAYER_ID, PlayerCommand::PlaceBomb);
     let _ = world.simulate_tick(world.simulation_tick(), &inputs);
-    assert_eq!(world.bombs[0].id, 42);
-    world.bombs.clear();
+    assert_eq!(world.bombs()[0].id, 42);
+    world.bombs_mut().clear();
     let _ = world.simulate_tick(world.simulation_tick(), &inputs);
-    assert_eq!(world.bombs[0].id, 43);
-    while world.bombs.len() < MAX_ACTIVE_BOMBS {
-        world.bombs.push(bomb(
-            u64::try_from(world.bombs.len()).unwrap() + 100,
-            20.5 * TILE_SIZE,
-            20.5 * TILE_SIZE,
-            10_000,
-        ));
+    assert_eq!(world.bombs()[0].id, 43);
+    while world.bombs().len() < MAX_ACTIVE_BOMBS {
+        let serial = u64::try_from(world.bombs().len()).unwrap() + 100;
+        world
+            .bombs_mut()
+            .push(bomb(serial, 20.5 * TILE_SIZE, 20.5 * TILE_SIZE, 10_000));
     }
     let before = world.player(LOCAL_PLAYER_ID).unwrap().bombs;
     let _ = world.simulate_tick(world.simulation_tick(), &inputs);
     assert_eq!(world.player(LOCAL_PLAYER_ID).unwrap().bombs, before);
+}
+
+/// Copies `from`'s charges onto `to` the way replication does: an entity delta with every
+/// charge record (and the despawn of whatever `to` had).
+pub(super) fn replicate_charges(from: &WorldState, to: &mut WorldState) {
+    use crate::entity::{EntityDelta, EntityKind};
+    let despawned = to.entities().ids_of(EntityKind::Charge).collect();
+    let updates = from
+        .entities()
+        .of_kind(EntityKind::Charge)
+        .cloned()
+        .collect();
+    let wire: EntityDelta = postcard::from_bytes(
+        &postcard::to_allocvec(&EntityDelta { updates, despawned }).expect("encode"),
+    )
+    .expect("decode");
+    to.entities_mut().apply_delta(wire);
 }

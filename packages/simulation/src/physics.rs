@@ -106,6 +106,9 @@ pub struct StepReport {
     pub impact_speed: f32,
     /// The body was wedged in rock with no room to lift out, so it was stopped in place.
     pub wedged: bool,
+    /// [`step_body_sticky`] only: the side of the body that touched terrain and stuck (the
+    /// body stopped dead there).
+    pub stuck: Option<crate::explosive::BlastDirection>,
 }
 
 /// Advances a body one fixed step of `dt` seconds under gravity with tile collisions.
@@ -113,14 +116,36 @@ pub struct StepReport {
 /// Axis-separated swept substeps never travel more than two pixels, even at the speed cap. A
 /// body overlapping rock first lifts out up to 32 pixels (a spawn slightly inside its support);
 /// with no room it is stopped in place. Positions and velocities are quantized afterwards.
-/// With [`BodyParams::BOMB`] this is exactly the bomb motion.
+/// With [`BodyParams::BOMB`] this is exactly the original bomb motion.
+pub fn step_body(body: &mut Body, params: &BodyParams, terrain: &Terrain, dt: f32) -> StepReport {
+    step(body, params, terrain, dt, false)
+}
+
+/// [`step_body`] for a body that sticks to the first surface it touches (sticky bombs, C4,
+/// shaped charges): on contact it stops dead and [`StepReport::stuck`] names the side it hit.
+pub fn step_body_sticky(
+    body: &mut Body,
+    params: &BodyParams,
+    terrain: &Terrain,
+    dt: f32,
+) -> StepReport {
+    step(body, params, terrain, dt, true)
+}
+
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
     reason = "bounded physics substep count, at most 128"
 )]
-pub fn step_body(body: &mut Body, params: &BodyParams, terrain: &Terrain, dt: f32) -> StepReport {
+fn step(
+    body: &mut Body,
+    params: &BodyParams,
+    terrain: &Terrain,
+    dt: f32,
+    sticky: bool,
+) -> StepReport {
+    use crate::explosive::BlastDirection;
     let radius = params.radius;
     body.previous_x = body.x;
     body.previous_y = body.y;
@@ -136,6 +161,7 @@ pub fn step_body(body: &mut Body, params: &BodyParams, terrain: &Terrain, dt: f3
             return StepReport {
                 impact_speed: 0.0,
                 wedged: true,
+                stuck: None,
             };
         }
     }
@@ -149,9 +175,18 @@ pub fn step_body(body: &mut Body, params: &BodyParams, terrain: &Terrain, dt: f3
         ((body.velocity_x.abs().max(body.velocity_y.abs()) * dt / 2.0).ceil() as u32).clamp(1, 128);
     let step = dt / steps as f32;
     let mut impact: f32 = 0.0;
+    let mut stuck = None;
     for _ in 0..steps {
         let x = body.velocity_x.mul_add(step, body.x);
         if collides(terrain, x, body.y, radius) {
+            if sticky {
+                stuck = Some(if body.velocity_x < 0.0 {
+                    BlastDirection::Left
+                } else {
+                    BlastDirection::Right
+                });
+                break;
+            }
             impact = impact.max(body.velocity_x.abs());
             body.velocity_x *= -params.bounce;
         } else {
@@ -159,6 +194,14 @@ pub fn step_body(body: &mut Body, params: &BodyParams, terrain: &Terrain, dt: f3
         }
         let y = body.velocity_y.mul_add(step, body.y);
         if collides(terrain, body.x, y, radius) {
+            if sticky {
+                stuck = Some(if body.velocity_y < 0.0 {
+                    BlastDirection::Up
+                } else {
+                    BlastDirection::Down
+                });
+                break;
+            }
             impact = impact.max(body.velocity_y.abs());
             let hit_floor = body.velocity_y > 0.0;
             body.velocity_y = if body.velocity_y.abs() < params.rest_speed {
@@ -177,6 +220,10 @@ pub fn step_body(body: &mut Body, params: &BodyParams, terrain: &Terrain, dt: f3
             body.y = y;
         }
     }
+    if stuck.is_some() {
+        body.velocity_x = 0.0;
+        body.velocity_y = 0.0;
+    }
     body.x = quantize(body.x);
     body.y = quantize(body.y);
     body.velocity_x = quantize(body.velocity_x);
@@ -184,6 +231,7 @@ pub fn step_body(body: &mut Body, params: &BodyParams, terrain: &Terrain, dt: f3
     StepReport {
         impact_speed: impact,
         wedged: false,
+        stuck,
     }
 }
 
