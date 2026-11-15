@@ -213,6 +213,25 @@ fn profile(
     );
     let _ = writeln!(
         out,
+        "   trades (WP-PEOPLE): {}; loves a gift of {}.",
+        super::offers::offers_of(character)
+            .iter()
+            .map(|offer| {
+                let price = if offer.price == 0 {
+                    String::new()
+                } else {
+                    format!(" {}cr", offer.price)
+                };
+                format!("{}{price} [{:?}]", offer.title(), offer.needs)
+            })
+            .collect::<Vec<_>>()
+            .join(", "),
+        super::offers::favourite_mineral(character)
+            .name()
+            .to_lowercase()
+    );
+    let _ = writeln!(
+        out,
         "   traits: O{} C{} E{} A{} N{} ({}). Quirks: {}.",
         p.openness,
         p.conscientiousness,
