@@ -212,6 +212,28 @@ pub fn village_containing(
     None
 }
 
+/// Whether `position` lies within `margin` tiles of a village's area (the surface village or
+/// its underground hall), without building the village itself (enemy safe zones read this
+/// every tick, so it only touches the cheap per-site geometry cache).
+pub fn in_village_area(settings: &WorldSettings, position: TilePosition, margin: i32) -> bool {
+    if !settings.generator.has_villages() {
+        return false;
+    }
+    let ctx = ctx(settings);
+    if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, margin)
+        && let Some(geometry) = geometry(&ctx, site.site)
+        && geometry.surface_area().expanded(margin).contains(position)
+    {
+        return true;
+    }
+    let near = placement::site_index_near(position.x);
+    (near - 2..=near + 2).any(|site| {
+        geometry(&ctx, site)
+            .and_then(|geometry| geometry.hall_area())
+            .is_some_and(|area| area.expanded(margin).contains(position))
+    })
+}
+
 /// The regional features (one per village) of the sites reaching `rect`, unfiltered.
 pub fn layer_features(ctx: &Ctx, rect: &TileRect, out: &mut Vec<WorldFeature>) {
     if !ctx.settings.generator.has_villages() {

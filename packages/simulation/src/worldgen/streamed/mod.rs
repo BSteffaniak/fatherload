@@ -231,6 +231,13 @@ pub fn village_containing(
     villages::village_containing(settings, position)
 }
 
+/// Whether `position` lies within `margin` tiles of any village's area (cheap; see
+/// [`villages::in_village_area`]).
+#[must_use]
+pub fn in_village_area(settings: &WorldSettings, position: TilePosition, margin: i32) -> bool {
+    villages::in_village_area(settings, position, margin)
+}
+
 /// The story-worthy places near village `id` (centre column `center`), memoized.
 #[must_use]
 pub fn village_facts(

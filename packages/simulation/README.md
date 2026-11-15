@@ -557,6 +557,7 @@ open sky with no hazards below, carved halls clear of POIs, the feature index an
 lookups, signposts, facts and story seeds), `village/placement.rs` (spacing, id round trips,
 column lookups, rarity of halls) and `world/village_tests.rs` (discovery, deals validated at
 the door, the assay office, blessings, charting, the journal saved and private).
+
 ## Enemies (`src/enemy.rs`, `src/world/enemies.rs`)
 
 Expansion plan WP-ENEMIES (T10): creatures and machines that live in caves and the deep layers.
@@ -629,9 +630,15 @@ and danger grow with depth, and a Peaceful world has none.
 - **Difficulty**: `EnemyDifficulty` (Peaceful / Normal / Hard) in the `EnemyDirector`, set before
   play with `set_enemy_difficulty` or in play with `PlayerCommand::SetEnemyDifficulty` (event
   `EnemyDifficultyChanged`); Peaceful clears every hostile and spawns none.
-- **Safe zones** (`enemy_safe_zone`): the surface strip, the town and the top of its shafts, and
-  `BASE_SAFE_TILES` around placed infrastructure. This is the one place to add villages and
-  claimed bases.
+- **Safe zones** (`enemy_safe_zone`): the surface strip, the town and the top of its shafts,
+  `BASE_SAFE_TILES` around placed infrastructure, `VILLAGE_SAFE_TILES` around every village and
+  underground hall (`worldgen::streamed::in_village_area`, geometry only) and every claimed
+  base (`Bases::is_safe_zone`, WP-BASE).
+- **Caves** (WP-CAVES, V6): inside a cave ecosystem its `CaveSpawnTags` triple the weight of
+  roster kinds that live there (`cave_habitat_fits`: swarmers / bats, burrowers, nests /
+  spitters and mimics, aquatic / shellbacks, heat / magma wisps, machines in ruins) and its
+  `danger_per_mille` thins spawns below 1000; a chunk centred in a cave with `elite_lair` room
+  is a lair one time in `CAVE_LAIR_ODDS`, on top of the plain hashed caverns.
 - **Events**: `EnemyAlerted`, `EnemyWindup`, `EnemyFired`, `EnemyHurt`, `EnemyKilled`,
   `EnemyStunned`, `RigStruck`, `EnemyDifficultyChanged` (all with world positions for sound).
 - **Replication**: enemies and shots ride the entity deltas (clients interpolate them with

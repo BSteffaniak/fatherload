@@ -80,6 +80,14 @@ const TOWN_SAFE_MARGIN: i32 = 12;
 const TOWN_SAFE_ROWS: i32 = 16;
 /// Tiles around placed infrastructure (outposts, bases) that stay safe.
 pub const BASE_SAFE_TILES: i32 = 7;
+/// Tiles around a village's area (surface village or underground hall, WP-VILLAGE) that stay
+/// safe.
+pub const VILLAGE_SAFE_TILES: i32 = 10;
+/// A chunk centred in a cave with room for an elite lair (WP-CAVES `elite_lair`) is a lair one
+/// time in this many (on top of the plain [`LAIR_ODDS`] caverns).
+const CAVE_LAIR_ODDS: u64 = 3;
+/// A roster kind that fits a cave's spawn tags is this many times as likely there.
+const CAVE_HABITAT_WEIGHT: u32 = 3;
 /// Spawns stay out of every rig's view: at least this many columns or rows away.
 const VIEW_HALF_TILES: (i32, i32) = (21, 12);
 /// Roaming spawns land this far from the rig they spawn for, in tiles.
@@ -308,10 +316,17 @@ impl WorldState {
         {
             return true;
         }
-        self.infrastructure.iter().any(|item| {
+        if self.infrastructure.iter().any(|item| {
             (item.position.x - tile.x).abs() <= BASE_SAFE_TILES
                 && (item.position.y - tile.y).abs() <= BASE_SAFE_TILES
-        })
+        }) {
+            return true;
+        }
+        crate::worldgen::streamed::in_village_area(
+            self.terrain.settings(),
+            tile,
+            VILLAGE_SAFE_TILES,
+        )
     }
 
     /// Spawns an enemy of `kind` centred at world pixel `(x, y)`, at the depth tier of that
@@ -602,15 +617,37 @@ impl WorldState {
             {
                 continue;
             }
+            // WP-CAVES: inside a cave ecosystem its spawn tags favour the kinds that live there
+            // and its danger thins (or keeps) the spawns.
+            let tags = self
+                .terrain
+                .cave_kind_at(tile)
+                .map(crate::cave::CaveKind::spawn_tags);
+            if let Some(tags) = tags
+                && (hash >> 40) % 1000 >= u64::from(tags.danger_per_mille)
+            {
+                continue;
+            }
             let roster = band_roster(self.terrain.band_at(tile));
-            let total: u32 = roster.iter().map(|(_, weight)| weight).sum();
+            let weight_of = |kind: EnemyKind, weight: u32| {
+                if tags.is_some_and(|tags| cave_habitat_fits(kind, tags)) {
+                    weight * CAVE_HABITAT_WEIGHT
+                } else {
+                    weight
+                }
+            };
+            let total: u32 = roster
+                .iter()
+                .map(|(kind, weight)| weight_of(*kind, *weight))
+                .sum();
             if total == 0 {
                 continue;
             }
             let mut pick = u32::try_from((hash >> 16) % u64::from(total)).unwrap_or(0);
             let mut kind = roster[0].0;
             for (candidate, weight) in roster {
-                if pick < *weight {
+                let weight = weight_of(*candidate, *weight);
+                if pick < weight {
                     kind = *candidate;
                     break;
                 }
@@ -677,7 +714,7 @@ impl WorldState {
                     }
                     let chunk = ChunkPosition { x: cx, y: cy };
                     let hash = hash2(seed, SALT_LAIR, cx, cy);
-                    if !hash.is_multiple_of(LAIR_ODDS)
+                    if !(hash.is_multiple_of(LAIR_ODDS) || self.cave_lair_chunk(chunk, hash))
                         || self.enemies.cleared_lairs.contains(&chunk)
                     {
                         continue;
@@ -733,6 +770,22 @@ impl WorldState {
                 }
             }
         }
+    }
+
+    /// Whether `chunk` is a lair because its middle lies in a cave with room for an elite lair
+    /// (WP-CAVES spawn tags; grand caverns, ruins and chasms).
+    fn cave_lair_chunk(&self, chunk: ChunkPosition, hash: u64) -> bool {
+        if !(hash >> 32).is_multiple_of(CAVE_LAIR_ODDS) {
+            return false;
+        }
+        let origin = chunk.origin();
+        let middle = TilePosition {
+            x: origin.x + CHUNK_SIZE_TILES / 2,
+            y: origin.y + CHUNK_SIZE_TILES / 2,
+        };
+        self.terrain
+            .cave_kind_at(middle)
+            .is_some_and(|cave| cave.spawn_tags().elite_lair)
     }
 
     /// A cavern floor in `chunk` for a lair occupant, out of view (every second tile, from a
@@ -1913,5 +1966,23 @@ fn enemy_event(id: EntityId, kind: EnemyKind, body: &Body, shape: EventShape) ->
         EventShape::Windup => GameplayEventKind::EnemyWindup { entity, kind, x, y },
         EventShape::Hurt => GameplayEventKind::EnemyHurt { entity, kind, x, y },
         EventShape::Stunned => GameplayEventKind::EnemyStunned { entity, kind, x, y },
+    }
+}
+
+/// Whether a cave with spawn tags `tags` is home ground for `kind` (WP-CAVES): swarmers roost,
+/// burrowers tunnel soft walls, spitters and mimics nest, heat-lovers live by lava and machines
+/// guard built places.
+const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) -> bool {
+    match kind {
+        EnemyKind::CaveBat => tags.swarmers,
+        EnemyKind::Burrower => tags.burrowers,
+        EnemyKind::AcidSpitter | EnemyKind::RockMimic | EnemyKind::BroodNest => tags.nests,
+        EnemyKind::Shellback => tags.aquatic || tags.burrowers,
+        EnemyKind::MagmaWisp => tags.heat,
+        EnemyKind::MiningDrone
+        | EnemyKind::SentryTurret
+        | EnemyKind::RogueExcavator
+        | EnemyKind::AncientGuardian => tags.machines,
+        EnemyKind::BroodLord => tags.elite_lair,
     }
 }

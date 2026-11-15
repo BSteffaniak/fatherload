@@ -865,3 +865,42 @@ fn enemy_benchmark_report() {
         world.entities().count_of(EntityKind::Enemy)
     );
 }
+
+#[test]
+fn villages_are_safe_zones_and_caves_shape_the_roster() {
+    use crate::{
+        SimulationParams,
+        village::{self, VillageSetting, placement},
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V6,
+        ..WorldSettings::new(0x5AFE)
+    };
+    let world = WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::new(60));
+    // Every underground settlement's hall (deep below the safe surface strip) is safe, and so is
+    // the rock just around it; far below it is not.
+    let mut halls = 0;
+    for site in (1..20).flat_map(|site| [site, -site]) {
+        let Some(found) = village::village(&settings, placement::underground_id(site)) else {
+            continue;
+        };
+        assert_eq!(found.setting, VillageSetting::Underground);
+        let area = found.area();
+        let middle = TilePosition {
+            x: i32::midpoint(area.min.x, area.max.x),
+            y: i32::midpoint(area.min.y, area.max.y),
+        };
+        assert!(world.enemy_safe_zone(middle), "hall {site} at {middle:?}");
+        assert!(world.enemy_safe_zone(TilePosition {
+            x: middle.x,
+            y: area.max.y + 5,
+        }));
+        assert!(!world.enemy_safe_zone(TilePosition {
+            x: middle.x,
+            y: area.max.y + 60,
+        }));
+        halls += 1;
+    }
+    assert!(halls > 0, "some sites have underground settlements");
+}
