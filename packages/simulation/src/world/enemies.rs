@@ -966,16 +966,7 @@ impl WorldState {
         let spec = state.kind.stats();
         let (home_x, home_y) = tile_centre(state.home.0, state.home.1);
         let target = self.rig_position(state.target);
-        let cooldown = {
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                clippy::cast_precision_loss,
-                reason = "bounded milliseconds"
-            )]
-            let millis = (spec.cooldown_millis as f32 * self.enemies.difficulty.cooldown()) as u64;
-            millis
-        };
+        let cooldown = self.attack_cooldown_millis(state.kind);
         match state.mode {
             EnemyMode::Dormant | EnemyMode::Stunned => Intent::default(),
             EnemyMode::Idle => {
@@ -1159,6 +1150,17 @@ impl WorldState {
                 }
             }
         }
+    }
+
+    /// Milliseconds between attacks of `kind` at the world's difficulty.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss,
+        reason = "bounded milliseconds"
+    )]
+    fn attack_cooldown_millis(&self, kind: EnemyKind) -> u64 {
+        (kind.stats().cooldown_millis as f32 * self.enemies.difficulty.cooldown()) as u64
     }
 
     fn start_windup(
@@ -1479,8 +1481,11 @@ impl WorldState {
             return;
         }
         let reach = spec.radius + AUTHORITATIVE_PLAYER_RADIUS + 2.0;
+        // A rig still inside its i-frames doesn't shield a crewmate touching the same enemy.
         let victim = self.players.iter().find_map(|(player_id, player)| {
-            ((player.x - body.x).hypot(player.y - body.y) <= reach).then_some(*player_id)
+            ((player.x - body.x).hypot(player.y - body.y) <= reach
+                && !self.enemies.guarded(*player_id, now))
+            .then_some(*player_id)
         });
         let Some(player_id) = victim else {
             return;
@@ -1495,7 +1500,7 @@ impl WorldState {
             now,
             output,
         ) {
-            state.attack_ready = self.after(now, spec.cooldown_millis);
+            state.attack_ready = self.after(now, self.attack_cooldown_millis(state.kind));
             if state.mode == EnemyMode::Strike {
                 state.mode = EnemyMode::Recover;
                 state.mode_until = self.after(now, RECOVER_MILLIS);

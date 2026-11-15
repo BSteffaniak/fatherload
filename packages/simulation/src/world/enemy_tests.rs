@@ -313,6 +313,33 @@ fn a_bat_chases_bites_with_iframes_and_knocks_the_rig_back() {
 }
 
 #[test]
+fn a_guarded_rig_does_not_shield_a_crewmate_touching_the_same_bat() {
+    let mut world = cavern();
+    no_spawns(&mut world);
+    world.add_player(OTHER);
+    park_on_floor(&mut world, OTHER, 280.5);
+    // The first rig (lower id, found first) is inside long i-frames.
+    world
+        .enemies
+        .rig_guard
+        .insert(PLAYER, SimulationTick::new(u64::MAX));
+    let _bat = world.spawn_enemy(EnemyKind::CaveBat, px(277.0), px(226.0));
+    let events = run(&mut world, 360);
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, GameplayEventKind::RigStruck { player_id, .. } if *player_id == OTHER)),
+        "the crewmate was bitten"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, GameplayEventKind::RigStruck { player_id, .. } if *player_id == PLAYER)),
+        "the guarded rig was not"
+    );
+}
+
+#[test]
 fn god_mode_rigs_take_no_damage_from_anything() {
     let mut world = cavern();
     no_spawns(&mut world);
