@@ -19,7 +19,7 @@
 
 use crate::{
     economy::{UpgradeKind, current_level},
-    milestone::{SKY_GATES, crosses_dead_air, island_capable},
+    milestone::{crosses_dead_air, island_capable},
     player::{
         ENGINE_CLIMB_CAP, Player, cargo_capacity_for_level, drill_bite, drill_speed, engine_power,
         fuel_burn_efficiency, fuel_capacity_for_level, hull_capacity_for_level,
@@ -341,14 +341,20 @@ pub fn preview_between(
                     0,
                     "Crosses the dead-air gap: the sky lands open!".to_owned(),
                 );
-            } else if to >= SKY_GATES.dead_air_tank_level
-                && from < SKY_GATES.dead_air_tank_level
-                && !crosses_dead_air(&upgraded)
-            {
-                changes.push(format!(
-                    "Big enough for the dead-air gap, with a tier {} engine",
-                    SKY_GATES.dead_air_intake_engine_level
-                ));
+            } else if !crosses_dead_air(&upgraded) {
+                // Would this tank carry a top engine and intake over? Say so the first time.
+                let mut kitted = upgraded.clone();
+                kitted.engine_level = crate::economy::MAX_UPGRADE_LEVEL;
+                kitted.hazard_gear.altitude_intake = crate::environment::ALTITUDE_INTAKE_MAX_LEVEL;
+                let mut kitted_now = kitted.clone();
+                kitted_now.fuel_tank_level = from;
+                if crosses_dead_air(&kitted) && !crosses_dead_air(&kitted_now) {
+                    changes.push(
+                        "Big enough for the dead-air gap, with a strong engine and altitude \
+                         intakes"
+                            .to_owned(),
+                    );
+                }
             }
         }
         UpgradeKind::CargoBay => {
@@ -711,8 +717,12 @@ mod tests {
         assert!(20.0f32.mul_add(-speed, ceiling.now).abs() < 1e-3);
         assert!((150.0f32 / 4.75).mul_add(-speed, ceiling.next).abs() < 1e-3);
         let expected = percent(ceiling.now, ceiling.next);
+        // (The headline above it says the first tank reaches the low isles.)
         assert!(
-            preview.changes[0].starts_with(&format!("Climbs {expected}% higher")),
+            preview
+                .changes
+                .iter()
+                .any(|change| change.starts_with(&format!("Climbs {expected}% higher"))),
             "{:?}",
             preview.changes
         );
@@ -721,12 +731,23 @@ mod tests {
     #[test]
     fn the_tank_preview_announces_the_sky_gates() {
         let mut player = rig();
-        player.fuel_tank_level = SKY_GATES.island_tank_level - 1;
+        // The first tank upgrade lifts a stock rig into the low isles (T16's climb table).
+        player.fuel_tank_level = 1;
         let preview = upgrade_preview(&player, UpgradeKind::FuelTank).expect("not maxed");
         assert_eq!(preview.headline(), Some("Reaches the low sky isles!"));
-        player.fuel_tank_level = SKY_GATES.dead_air_tank_level - 1;
-        player.engine_level = SKY_GATES.dead_air_intake_engine_level;
+        // A top engine with tier 6 intakes crosses the dead air from tank 13 (tank 12 cannot).
+        player.fuel_tank_level = 12;
+        player.engine_level = 15;
+        player.hazard_gear.altitude_intake = 6;
         let preview = upgrade_preview(&player, UpgradeKind::FuelTank).expect("not maxed");
+        assert_eq!(
+            preview.headline(),
+            Some("Crosses the dead-air gap: the sky lands open!")
+        );
+        // ... and so does buying the intake tier that a big tank and engine lack (3 -> 4).
+        player.fuel_tank_level = 15;
+        player.hazard_gear.altitude_intake = 3;
+        let preview = upgrade_preview(&player, UpgradeKind::AltitudeIntake).expect("not maxed");
         assert_eq!(
             preview.headline(),
             Some("Crosses the dead-air gap: the sky lands open!")

@@ -1198,12 +1198,17 @@ WP-FEEL part 2 (wave 3, T18). Deterministic rules only; the game draws the momen
   byte what they were.
 - **Purchase moment.** An applied `BuyUpgrade` (command or service) is followed by
   `UpgradeInstalled { player_id, upgrade, level }` (level now fitted; bomb packs report 0).
-- **Sky gates (seam for T16).** `milestone::SKY_GATES`, `island_capable(player)` and
-  `crosses_dead_air(player)` are documented stand-ins (island tank tier 4; dead-air tank tier
-  13 plus an engine tier 12 standing in for the high-altitude intake). They decide the
-  `IslandCapableTank` and `ActTwoUnlocked` (Act I -> II) milestones and the shop's "Reaches the
-  low sky isles!" / "Crosses the dead-air gap" lines. The integrator rewires the two functions
-  to T16's measured bands and intake part; nothing else depends on how they decide.
+- **Sky gates** (wired to T16 at integration). `milestone::climb_reach(player)` reads T16's
+  measured climb table (`climb::reach(tank, engine, intake)`, engine and intake rounded down to
+  the measured tiers); `island_capable` is a reach of `ISLAND_REACH_ROWS` (40 rows into the
+  low isles: tank 2 with a stock engine, or a tier 4 engine on the stock tank) and
+  `crosses_dead_air` a reach of `DEAD_AIR_REACH_ROWS` (the continents' floor: for example tank
+  13 + engine 8 + intake 6, or tank 15 + engine 15 + intake 4; no tank and engine cross without
+  intakes). They decide the `IslandCapableTank` and `ActTwoUnlocked` (Act I -> II) milestones,
+  awarded only on worlds with a sky (`MilestoneFacts::has_sky`), and the shop's "Reaches the
+  low sky isles!" / "Crosses the dead-air gap" lines on the tank, engine and Altitude Intake
+  previews. The shop also previews the Altitude Intake (thin-air thrust) and De-Icer (cold
+  cover) lines.
 - **Replication and saves.** `Player::milestones` is private: it travels in the owner's
   `Loadout` section (`PlayerInventory::milestones`), is saved with the player (serde default:
   old saves load with an unprimed log) and parks with the rig. `PROTOCOL_VERSION` 11.

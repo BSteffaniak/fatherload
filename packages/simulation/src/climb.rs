@@ -72,6 +72,17 @@ pub const fn ceiling(tank: u8, engine: u8, intake: u8) -> i32 {
         [index_of(&INTAKE_TIERS, intake)]
 }
 
+/// The table's ceiling for any loadout (rows above row 0): `tank` clamped to the table, and
+/// `engine` and `intake` rounded **down** to the nearest tier the table measured, so the answer
+/// never overstates a climb. The shop's sky gates read it (`milestone::climb_reach`).
+#[must_use]
+pub fn reach(tank: u8, engine: u8, intake: u8) -> i32 {
+    let floor_tier =
+        |tiers: &[u8], level: u8| tiers.iter().rposition(|tier| *tier <= level).unwrap_or(0);
+    let tank = usize::from(tank.clamp(TANK_TIERS[0], TANK_TIERS[TANK_TIERS.len() - 1]) - 1);
+    CLIMB_CEILINGS[tank][floor_tier(&ENGINE_TIERS, engine)][floor_tier(&INTAKE_TIERS, intake)]
+}
+
 /// `percent` of `rows`, rounded down to a multiple of 10 rows.
 #[must_use]
 pub const fn fraction(rows: i32, percent: i32) -> i32 {

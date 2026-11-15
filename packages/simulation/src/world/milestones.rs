@@ -81,6 +81,7 @@ impl WorldState {
             }
         }
         let player_ids: Vec<PlayerId> = self.players.keys().copied().collect();
+        let has_sky = self.terrain.settings().generator.has_sky();
         for player_id in player_ids {
             let Some(player) = self.players.get(&player_id) else {
                 continue;
@@ -117,6 +118,7 @@ impl WorldState {
             let facts = MilestoneFacts {
                 deepest_band: records.deepest_band.map(usize::from),
                 owns_claim,
+                has_sky,
             };
             let silent = !player.milestones.primed;
             player.milestones.primed = true;
@@ -226,7 +228,8 @@ mod tests {
         assert!(player.milestones.primed);
         // New progress after that is announced.
         world.player_mut(PLAYER).expect("player").engine_level = 5;
-        assert_eq!(earned(&idle(&mut world)), vec![Milestone::EngineTier5]);
+        // (A tier 5 engine also lifts the stock tank into the low isles of the V8 sky.)
+        assert!(earned(&idle(&mut world)).contains(&Milestone::EngineTier5));
     }
 
     #[test]
