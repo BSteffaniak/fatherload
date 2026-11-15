@@ -634,7 +634,9 @@ pub const fn workshop_recipe(kind: ExplosiveKind) -> Option<(u32, u32)> {
     match kind {
         ExplosiveKind::Bomb => Some((3, 6)),
         ExplosiveKind::C4 => Some((5, 15)),
-        ExplosiveKind::Mining => Some((8, 30)),
+        // Balance pass (T19): 8 blocks and 30 cr (a fifth of the shack's price) made crafted
+        // mining charges out-earn drilling.
+        ExplosiveKind::Mining => Some((12, 90)),
         _ => None,
     }
 }

@@ -100,7 +100,8 @@ Modules:
   (`random_world_seed`, 48 bits). `local_game::world_from_setup` builds the world (test mode via
   `WorldState::enable_test_mode`, the enemy setting via `WorldState::set_enemy_difficulty`).
   In play, the local or hosting player's pause menu cycles Enemies (peaceful / normal / hard)
-  with `PlayerCommand::SetEnemyDifficulty`; joined clients do not get the entry.
+  with `PlayerCommand::SetEnemyDifficulty`; joined clients do not get the entry, and the host
+  refuses the command from a remote client anyway (`NetSimulation::host_only_action`).
 - `shell::test_mode` — the pause menu's test-mode entries (Warp to Layer list, invulnerable hull
   and infinite fuel toggles), each a `PlayerCommand::TestMode` action for the seat driving the
   menu; a paused local world applies toggles on resume, so the menu shows the pending choice

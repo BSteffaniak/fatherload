@@ -337,11 +337,15 @@ impl EnemyKind {
                 speed: 70.0,
                 dash_speed: 260.0,
                 sight_tiles: 6.0,
-                hearing_tiles: 16.0,
+                // Balance pass (T19): it heard drills 16 tiles off and lunged every 1.9 s for
+                // 10, the worst threat in every band down to the fossil oceans (about 190 hull
+                // a minute against an unarmed rig in the clay beds). It now hears 10 tiles,
+                // telegraphs longer and bites softer, so a drilling rig has time to react.
+                hearing_tiles: 10.0,
                 leash_tiles: 30.0,
-                contact_damage: 10.0,
-                windup_millis: 650,
-                cooldown_millis: 1_900,
+                contact_damage: 7.0,
+                windup_millis: 850,
+                cooldown_millis: 3_000,
                 attack_range_tiles: 4.0,
                 knockback: 170.0,
                 ..stats("Burrower", Creature, Burrowing, AttackStyle::Lunge)
@@ -424,7 +428,9 @@ impl EnemyKind {
             },
             Self::BroodLord => EnemyStats {
                 radius: 18.0,
-                health: 600.0,
+                // Balance pass (T19): 600 took a minute with a rivet gun and half a minute
+                // with a Mk II cutter at its shallowest lair.
+                health: 420.0,
                 speed: 50.0,
                 dash_speed: 210.0,
                 sight_tiles: 14.0,
@@ -492,8 +498,10 @@ impl EnemyKind {
             },
             Self::AncientGuardian => EnemyStats {
                 radius: 18.0,
-                health: 700.0,
-                shield: 300.0,
+                // Balance pass (T19): 700 + a 300 shield outlasted everything but rockets and
+                // the railgun (40-55 s even with those).
+                health: 480.0,
+                shield: 180.0,
                 speed: 60.0,
                 sight_tiles: 15.0,
                 hearing_tiles: 10.0,
@@ -896,7 +904,7 @@ pub const fn band_roster(band: Band) -> &'static [(EnemyKind, u32)] {
     };
     match band {
         Band::Topsoil => &[],
-        Band::Clay => &[(CaveBat, 6), (Burrower, 3)],
+        Band::Clay => &[(CaveBat, 6), (Burrower, 2)],
         Band::Stone => &[
             (CaveBat, 5),
             (Burrower, 3),

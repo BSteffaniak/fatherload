@@ -4,13 +4,14 @@
 //! A trip: fly to a shaft column in a gap between the town's buildings, drop down the shaft,
 //! drill deeper, and at every new row tunnel sideways to the ore it can see within reach
 //! ([`Strategy::Prospector`] and [`Strategy::Charges`]); the charges strategy also blasts rows
-//! rich in ore with mining charges from a safe distance up the shaft. Hazards below the drill
-//! (lava, gas, pockets, vents) are side-stepped; a band hotter than the rig's cooling, rock the
-//! drill barely scratches, or bedrock end the shaft and the next trip starts a fresh one. The
+//! rich in ore with mining charges from a safe distance up the shaft (pressed at its own
+//! surface workshop from the blocks it hauls). Hazards (lava, gas, pockets, vents) and rock the
+//! drill cannot bite are side-stepped; a band hotter than the rig's cooling, bedrock or no way
+//! around end the shaft and the next trip starts a fresh one. The
 //! bot flies home when the bay is full, the tank holds only the fuel to climb out (measured on
 //! earlier climbs) plus a margin, or the hull is low; in town it sells ore and blocks, buys
 //! upgrades (cheapest weighted line first, keeping a reserve for fuel and repairs), arms itself
-//! with a rivet gun, refuels and repairs. Enemies within reach get auto-aimed fire. A stranded
+//! with a rivet gun (and the boulder deflector once boulders hurt), refuels and repairs. Enemies within reach get auto-aimed fire. A stranded
 //! or wrecked rig calls the rescue, like a player would.
 //!
 //! The bot reads the terrain around its rig (a player sees it on screen and on the scanner)
@@ -126,6 +127,8 @@ enum Phase {
 enum Stop {
     /// The charges strategy's surface claim with a workshop (built once, then crafting).
     Outpost,
+    /// Fuel before the other errands when the tank is low.
+    LowFuel,
     Depot,
     Shop,
     Shack,
@@ -140,7 +143,7 @@ impl Stop {
             Self::Shop => SurfaceZone::Shop,
             Self::Shack => SurfaceZone::Explosives,
             Self::Repair => SurfaceZone::Repair,
-            Self::Fuel => SurfaceZone::Fuel,
+            Self::Fuel | Self::LowFuel => SurfaceZone::Fuel,
         }
     }
 }
@@ -166,6 +169,8 @@ pub struct BotStats {
     pub charges_used: u32,
     /// Hull lost to enemies.
     pub enemy_damage: f64,
+    /// Hull lost to each enemy kind.
+    pub enemy_damage_by_kind: std::collections::BTreeMap<crate::EnemyKind, f64>,
     /// Hull lost to everything else (heat, lava, gas, falls, boulders, blasts).
     pub hazard_damage: f64,
     /// Enemies killed.
@@ -339,11 +344,11 @@ impl MinerBot {
         let Some(rig) = world.player(self.player) else {
             return;
         };
-        let mut struck = false;
+        let mut struck = None;
         for event in &output.events {
             match event.kind {
-                GameplayEventKind::RigStruck { player_id, .. } if player_id == self.player => {
-                    struck = true;
+                GameplayEventKind::RigStruck { player_id, kind } if player_id == self.player => {
+                    struck = Some(kind);
                 }
                 GameplayEventKind::EnemyKilled { by, .. } if by == Some(self.player) => {
                     self.stats.kills += 1;
@@ -353,10 +358,19 @@ impl MinerBot {
         }
         let lost = f64::from((self.hull_before - rig.hull).max(0.0));
         if lost > 0.0 {
-            if struck {
+            if let Some(kind) = struck {
                 self.stats.enemy_damage += lost;
+                *self.stats.enemy_damage_by_kind.entry(kind).or_default() += lost;
             } else {
                 self.stats.hazard_damage += lost;
+                if std::env::var_os("BALANCE_TRACE_HAZARD").is_some() {
+                    eprintln!(
+                        "hazard {lost:.1} at {:?} {:?}: {:?}",
+                        rig.tile_position(TILE_SIZE),
+                        self.phase,
+                        output.events.iter().map(|e| &e.kind).collect::<Vec<_>>()
+                    );
+                }
             }
         }
         if self.pending_sale {
@@ -389,14 +403,7 @@ impl MinerBot {
     }
 
     fn plan_town_stops_after_rescue(&mut self) {
-        self.stops = vec![
-            Stop::Outpost,
-            Stop::Depot,
-            Stop::Shop,
-            Stop::Shack,
-            Stop::Repair,
-            Stop::Fuel,
-        ];
+        self.stops = Self::town_stops();
         self.stop_acted = false;
     }
 
@@ -565,13 +572,12 @@ impl MinerBot {
             self.shaft_done = true;
             return self.start_ascent(rig);
         }
-        if !is_hazard(below_tile.kind) && !diggable(world, rig, below) {
-            // Too hard for this drill: upgrade it, and dig fresh rows meanwhile.
+        let too_hard = !is_hazard(below_tile.kind) && !diggable(world, rig, below);
+        if too_hard {
+            // Too hard for this drill: upgrade it next time; meanwhile try around it.
             self.wants_drill = true;
-            self.shaft_done = true;
-            return self.start_ascent(rig);
         }
-        if is_hazard(below_tile.kind) {
+        if is_hazard(below_tile.kind) || too_hard {
             if let Some(side) = Self::sidestep_side(world, rig, tile) {
                 if let Some(last) = self.route.last_mut() {
                     last.bottom = tile.y;
@@ -746,7 +752,7 @@ impl MinerBot {
                 && terrain.tile(under).is_some_and(|here| {
                     here.kind != TileKind::Air
                         && !is_hazard(here.kind)
-                        && !terrain.is_indestructible_at(under)
+                        && diggable(world, rig, under)
                 })
                 && surface_building_at_tile(x).is_none_or(|_| tile.y > 8)
         })
@@ -855,14 +861,7 @@ impl MinerBot {
             }
         }
         self.stats.trips += 1;
-        self.stops = vec![
-            Stop::Outpost,
-            Stop::Depot,
-            Stop::Shop,
-            Stop::Shack,
-            Stop::Repair,
-            Stop::Fuel,
-        ];
+        self.stops = Self::town_stops();
         self.stop_acted = false;
         self.enter(Phase::Town(0));
         ControlState::new(0.0, true, false)
@@ -926,6 +925,20 @@ impl MinerBot {
         ControlState::default()
     }
 
+    /// The errands of a town visit, in order: sell first (the money pays for the rest); a
+    /// low tank is filled before the trip out to the outpost.
+    fn town_stops() -> Vec<Stop> {
+        vec![
+            Stop::Depot,
+            Stop::LowFuel,
+            Stop::Outpost,
+            Stop::Shop,
+            Stop::Shack,
+            Stop::Repair,
+            Stop::Fuel,
+        ]
+    }
+
     /// Blocks in the hopper.
     fn hopper_blocks(rig: &Player) -> u32 {
         rig.block_hopper
@@ -945,7 +958,7 @@ impl MinerBot {
             crate::base::workshop_recipe(ExplosiveKind::Mining).unwrap_or((8, 30));
         if self.workshop.is_some() {
             return Self::hopper_blocks(rig) >= blocks
-                && rig.credits >= credits + CREDIT_FLOOR
+                && Self::spendable(rig) >= credits
                 && rig.explosive_count(ExplosiveKind::Mining) < CHARGE_STOCK * 2;
         }
         if !self.saving_for_outpost(rig) || Self::spendable(rig) < Self::outpost_price() {
@@ -1008,7 +1021,7 @@ impl MinerBot {
             let room =
                 (CHARGE_STOCK * 2).saturating_sub(rig.explosive_count(ExplosiveKind::Mining));
             let count = (Self::hopper_blocks(rig) / blocks.max(1))
-                .min(rig.credits.saturating_sub(CREDIT_FLOOR) / credits.max(1))
+                .min(Self::spendable(rig) / credits.max(1))
                 .min(room);
             for _ in 0..count {
                 actions.push(PlayerCommand::Build(BuildCommand::Use {
@@ -1080,6 +1093,7 @@ impl MinerBot {
             Stop::Shop => self.next_upgrade(world, rig).is_some(),
             Stop::Shack => self.shack_wish(world, rig).is_some(),
             Stop::Repair => rig.hull < rig.max_hull() * 0.75 && rig.credits > 0,
+            Stop::LowFuel => rig.fuel < rig.fuel_capacity * 0.4 && rig.credits > 0,
             Stop::Fuel => {
                 (rig.fuel < rig.fuel_capacity * 0.7 || rig.fuel < self.shaft_fuel_need(world))
                     && rig.credits > 0
@@ -1112,7 +1126,7 @@ impl MinerBot {
 
     /// How reluctant the bot is to buy `kind` (multiplies its price), or `None` if it never
     /// buys it.
-    const fn weight(&self, kind: UpgradeKind, rig: &Player) -> Option<f32> {
+    fn weight(&self, kind: UpgradeKind, rig: &Player) -> Option<f32> {
         Some(match kind {
             UpgradeKind::Drill => {
                 if self.wants_drill {
@@ -1133,6 +1147,8 @@ impl MinerBot {
                 }
             }
             UpgradeKind::HeatShield if self.wants_cooling => 1.2,
+            // Boulders shaken loose by mining are most of the early hazard damage.
+            UpgradeKind::BoulderDeflector if self.stats.hazard_damage > 150.0 => 1.4,
             UpgradeKind::BoulderDeflector | UpgradeKind::PressureBracing
                 if current_level(rig, UpgradeKind::Drill) >= 6 =>
             {
@@ -1148,7 +1164,7 @@ impl MinerBot {
         let shack_level = world.progression().town_development.explosives_shack_level;
         let budget = Self::spendable(rig);
         if rig.weapon_rack.owned.is_empty()
-            && rig.drill_strength >= 3
+            && (rig.drill_strength >= 3 || self.stats.enemy_damage > 100.0)
             && budget >= WeaponKind::RivetGun.cost() + 300
         {
             return Some(SessionServiceRequest::BuyWeapon {
@@ -1255,7 +1271,7 @@ impl MinerBot {
                 self.stats.upkeep_spend += cost.min(u64::from(rig.credits));
                 actions.push(PlayerCommand::Repair);
             }
-            Stop::Fuel => {
+            Stop::Fuel | Stop::LowFuel => {
                 let cost = (rig.fuel_capacity - rig.fuel).max(0.0).ceil() as u64;
                 self.stats.upkeep_spend += cost.min(u64::from(rig.credits));
                 actions.push(PlayerCommand::Refuel);

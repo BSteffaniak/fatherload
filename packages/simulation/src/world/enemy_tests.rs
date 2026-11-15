@@ -429,8 +429,9 @@ fn burrowers_feel_drilling_through_rock() {
     no_spawns(&mut world);
     // Soft ground under the rig to drill into.
     fill(&mut world, 279..283, FLOOR..FLOOR + 3, TileKind::Dirt);
-    // A burrower in the stone under the floor, 9 tiles off: no line of sight.
-    let burrower = world.spawn_enemy(EnemyKind::Burrower, px(272.0), px(236.5));
+    // A burrower in the stone under the floor, 7 tiles off (inside its 10-tile hearing): no
+    // line of sight.
+    let burrower = world.spawn_enemy(EnemyKind::Burrower, px(274.0), px(236.5));
     let _ = run(&mut world, 60);
     assert!(
         enemy(&world, burrower)

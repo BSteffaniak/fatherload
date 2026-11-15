@@ -651,23 +651,29 @@ full bay now leaves the ore floating instead of losing it.
 
 Economy recheck (`drop_economy_report`, release, 4 seeds, 90 s of a rig drilling straight down
 or bomb-diving: a plain bomb every 3 s at 17 cr each, or a mining charge every 4 s, hoovering
-the loot; base values, charge costs subtracted, per minute):
+the loot; base values, charge costs subtracted, per minute). Before and after the T19 pacing
+pass (mining charges crack hard gems, see below):
 
-| Depth (nominal row) | Drill tier | Drill net | Bombs net | Mining charges net |
-|---|---|---|---|---|
-| 14 | 3 | 158 | -134 | -1,220 |
-| 60 | 5 | 1,125 | 1,189 | 2,755 |
-| 60 | 8 | 2,461 | 1,189 | 2,755 |
-| 120 | 10 | 6,656 | 4,405 | 11,305 |
-| 120 | 14 | 6,802 | 4,405 | 11,305 |
+| Depth (nominal row) | Drill tier | Drill net | Bombs net | Mining charges net (before) | Mining charges net (after) |
+|---|---|---|---|---|---|
+| 14 | 3 | 158 | -134 | -1,220 | -1,210 |
+| 60 | 5 | 1,125 | 1,134 | 2,755 | 2,118 |
+| 60 | 8 | 2,450 | 1,134 | 2,755 | 2,118 |
+| 120 | 10 | 6,276 | 4,457 | 11,305 | 9,100 |
+| 120 | 14 | 6,336 | 4,457 | 11,305 | 9,100 |
 
 Plain bombs are tunnelling tools near the surface, a fast earner for an under-drilled rig in
-the middle strata and behind a strong drill deep down. Mining charges, now the loot tool, were
-repriced from 160 to 300 cr a pair so they pay off only where ore is rich (about 1.1x a tier 8
-drill mid-depth, 1.7x deep, before the real overhead of placing, waiting and trips to the
-surface). `bombing_stays_balanced_against_drilling` pins those ratios. (One mid-depth
-bomb run frees a Star Core, which starts the escape and its cave-ins, just as drilling it would.) Block sales add at most
-a few percent to drilling income.
+the middle strata and behind a strong drill deep down. Mining charges (300 cr a pair at the
+shack, which stocks them from level 2) clear rock three times faster than a drill but their
+soft blast now cracks one hard gem in three (stone-hard ores and up, like any blast) while
+still lifting soft ore out whole (one in six cracks): mid-depth they earn about 0.86x a tier 8
+drill (they used to edge it out at 1.12x), deep down 1.4x (was 1.7x), before the real
+overhead of placing, retreating, waiting and trips to the surface (the economy bot's charges
+strategy measures that loop). A base workshop presses them for 12 blocks and 90 cr (was 8
+and 30, a fifth of the shack price, which made crafted charges the money printer).
+`bombing_stays_balanced_against_drilling` pins both, shack and workshop price. (One mid-depth
+bomb run frees a Star Core, which starts the escape and its cave-ins, just as drilling it
+would.) Block sales add at most a few percent to drilling income.
 
 ### Performance
 
@@ -849,7 +855,13 @@ and danger grow with depth, and a Peaceful world has none.
   smoke screen (`smoke_screens`) is hidden from enemy sight (not from hearing).
 - **Difficulty**: `EnemyDifficulty` (Peaceful / Normal / Hard) in the `EnemyDirector`, set before
   play with `set_enemy_difficulty` or in play with `PlayerCommand::SetEnemyDifficulty` (event
-  `EnemyDifficultyChanged`); Peaceful clears every hostile and spawns none.
+  `EnemyDifficultyChanged`); Peaceful clears every hostile and spawns none. Online only the host may
+  change it (netcode drops a client's command, `NetSimulation::host_only_action`).
+- **Balance pass (T19, measured by the balance harness):** burrowers hear drills 10 tiles off
+  (was 16), wind up for 850 ms (650) and bite for 7 (10) every 3 s (1.9), and weigh 2 (3) in
+  the clay beds' roster: an unarmed rig drilling the clay beds lost about 190 hull a minute to
+  them, now about 30. Brood lords have 420 health (600), ancient guardians 480 plus a 180
+  shield (700 + 300). See the root README's balance section for the numbers.
 - **Safe zones** (`enemy_safe_zone`): the surface strip, the town and the top of its shafts,
   `BASE_SAFE_TILES` around placed infrastructure, `VILLAGE_SAFE_TILES` around every village and
   underground hall (`worldgen::streamed::in_village_area`, geometry only) and every claimed
@@ -1221,6 +1233,51 @@ WP-FEEL part 2 (wave 3, T18). Deterministic rules only; the game draws the momen
 depth bands, sky gates, silent priming, test mode), rewards (each locked item awarded once,
 never sold), persistence (serde, loadout replication, redaction, parking) and stat-delta
 correctness against the formulas.
+
+## Balance harness (`src/balance.rs`, `src/balance/`)
+
+Expansion plan T19: deterministic bot players drive the real tick (held `ControlState`s and
+`PlayerCommand`s only, through `simulate_tick`) across seeds and print a Markdown report.
+Probes may set a scenario up directly (carve an arena, hand a rig a weapon) but never
+shortcut the tick. Same config, same report, on every machine.
+
+- **Report:** `fatherload --balance-report [--seeds N] [--minutes M] [--hz H] [--only
+  economy,progression,combat,exposure,building] [--strategies shaft,prospector,charges]
+  [--threads T]` (release build), or `cargo test --release -p fatherload_simulation
+  balance_report -- --ignored --nocapture` with `BALANCE_SEEDS`, `BALANCE_MINUTES`,
+  `BALANCE_ONLY`. `trace_economy_bot` (ignored; `BALANCE_TRACE=1 BOT_SEED BOT_STRATEGY
+  BOT_MINUTES`, `BALANCE_TRACE_HAZARD=1`) prints one bot's run second by second.
+- **API:** `balance::run_report(&BalanceConfig) -> BalanceReport` (`to_markdown()`,
+  `metrics()`), `run_probes` for a custom probe list, `BalanceConfig::seeds(n)`.
+- **Economy bot** (`bot::MinerBot`, `economy::run_economy(seed, strategy, minutes, hz) ->
+  EconomyRun`): a fresh world, a stock rig, shafts in the gaps between the town's buildings,
+  sideways tunnels to visible ore (`Strategy::Prospector`), mining charges on ore-rich rows
+  pressed at its own surface workshop (`Strategy::Charges`), straight shafts only
+  (`Strategy::Shaft`, the naive baseline: it goes broke), hazard and hard-rock side-steps,
+  fuel reserve measured on earlier climbs, trips home to sell, refuel, repair and buy
+  upgrades (cheapest weighted line, a reserve kept), a rivet gun once affordable, rescues when
+  stranded. `EconomyRun` keeps per-minute samples, purchases, band times, damage by enemy
+  kind and the rescue log.
+- **Progression:** time to each tier of the core lines, depth and earning rate over time, the
+  minute each band was entered.
+- **Combat** (`combat::duel(kind, band, loadout, hz) -> DuelResult`): a sealed arena at a
+  band's depth (bedrock past a stone shell, lair chunks marked cleared through
+  `WorldState::mark_lair_cleared`, the deep reward tile cleared), one enemy, a rig with one of
+  `combat::LOADOUTS` aiming at it. **Exposure** (`combat::exposure(seed, band, seconds, hz)`):
+  an unarmed rig of `band_gear(band)` drilling down from a band's top on Normal; enemy damage
+  by kind per minute. Measuring rigs are topped up to a huge hull every tick and read losses
+  against it.
+- **Building** (`building::run_building(hz)`): two claims of every module in a slate cavern
+  through real `BuildCommand`s; credits, blocks, minutes of income at the unlock band, the fuel
+  station's synthesis per minute.
+- **Pinned tests** (`balance/tests.rs`): the bot mines, sells and upgrades without rescues;
+  early burrowers bite softly; elites fall in set-piece time; armour still matters.
+- **Wave 4 hooks:** implement `balance::BalanceProbe` (`name`, `run(&mut ProbeContext) ->
+  ReportSection`) and add it to `standard_probes()`. `ProbeContext::economy()` shares the
+  economy runs, so a probe can price things in minutes of income; `ReportSection::metric`
+  names numbers for pinned tests. Planned: a sky probe (the F6 climb harness: altitude per
+  fuel-tank and engine tier, time to each island band), a Moon probe and a pilot probe; new
+  `Strategy` variants for new loops (sky hopping, pilot salvage).
 
 ## Wave 2 seams (integration notes)
 

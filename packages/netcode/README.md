@@ -10,6 +10,9 @@ Bytes move through `fatherload_quic_transport` in the app and through `LinkSim` 
 ## Modules
 
 - `simulation`: the `NetSimulation` trait sessions are generic over, plus `Relevance`.
+  `NetSimulation::host_only_action` names session settings only the host's own seats may
+  change (the world: `SetEnemyDifficulty`); the host acknowledges such an action from a remote
+  client but never applies it (`HostClientStats::host_only_refused`).
 - `world`: `NetSimulation` for the real `fatherload_simulation::WorldState` (`WorldOp` op log:
   terrain `Tile` writes and per-player `Discovery`; 16x16 terrain chunks). The keyframe is the
   world itself, whose terrain serializes as generation settings plus the tiles that differ

@@ -1,8 +1,8 @@
 //! Combat probes.
 //!
-//! - **Duels** ([`duel`]): a rig with a weapon loadout parked in a sealed arena at a band's
-//!   depth, one enemy of a kind at that band's tier, the rig aiming straight at it and holding
-//!   the trigger (fresh pulls for semi-automatic guns). Measures time to kill, hull lost and
+//! - **Duels** ([`duel`]): a rig with a weapon loadout in a sealed arena at a band's depth,
+//!   one enemy of a kind at that band's tier, the rig aiming straight at it, holding the
+//!   trigger (fresh pulls for semi-automatic guns) and closing in when the gun is out of reach. Measures time to kill, hull lost and
 //!   shots. The arena is walled with bedrock past a stone shell and its lair chunks are marked
 //!   cleared, so the director adds nobody.
 //! - **Exposure** ([`exposure`]): a band-appropriate unarmed rig drilling down from the top of
@@ -478,7 +478,8 @@ pub fn band_gear(band: Band) -> (u8, u8) {
     let index = u8::try_from(band.index()).unwrap_or(0);
     // A tier past the band's own rock, so the lenses of the next band do not stop it.
     let drill = (index + 2).min(15);
-    let hull = (1 + index).min(15);
+    // The clay beds open on the stock hull; a hull tier per band after that.
+    let hull = index.clamp(1, 15);
     (drill, hull)
 }
 
@@ -501,15 +502,9 @@ fn quiet_column(world: &WorldState) -> i32 {
 }
 
 /// A rig of `band`'s typical gear drills down from the top of `band` on `seed`'s world for
-/// `seconds`; `stock` uses a fresh stock rig instead.
+/// `seconds`.
 #[must_use]
-pub fn exposure(
-    seed: u64,
-    band: Band,
-    seconds: u32,
-    stock: bool,
-    tick_rate_hz: u32,
-) -> Option<ExposureResult> {
+pub fn exposure(seed: u64, band: Band, seconds: u32, tick_rate_hz: u32) -> Option<ExposureResult> {
     let mut world = WorldState::new_game_with_settings(
         BOT_PLAYER,
         &WorldSettings::new(seed),
@@ -539,13 +534,8 @@ pub fn exposure(
         // Only enemies (and falls) may hurt it: hazards have their own counters.
         rig.hazard_gear = HazardGear::MAXED;
         rig.radiator_level = 15;
-        if stock {
-            // The drill a player has when the clay beds open up (stone lenses included).
-            rig.drill_strength = 3;
-        } else {
-            rig.drill_strength = drill;
-            rig.hull_level = hull_level;
-        }
+        rig.drill_strength = drill;
+        rig.hull_level = hull_level;
     }
     let hz = world.tick_rate_hz();
     let mut result = ExposureResult::default();
@@ -603,25 +593,24 @@ impl BalanceProbe for ExposureProbe {
                  drill and hull tiers a player typically has there (`band_gear`), every hazard \
                  counter and radiator maxed (so \"other\" is falls and crashes). Hull loss is per minute; \"wrecks\" is \
                  the share of runs whose enemy damage alone would have wrecked that band's \
-                 typical hull within the run. The first row is a stock rig in the clay beds: \
-                 the early burrower threat."
+                 typical hull within the run. The clay beds row (stock hull) is the early \
+                 burrower threat."
             ),
         );
-        let mut cases: Vec<(Band, bool)> = vec![(Band::Clay, true)];
-        cases.extend(Band::ALL.iter().skip(1).map(|band| (*band, false)));
+        let cases: Vec<Band> = Band::ALL.iter().skip(1).copied().collect();
         let jobs: Vec<_> = cases
             .iter()
-            .flat_map(|(band, stock)| {
+            .flat_map(|band| {
                 seeds
                     .iter()
-                    .map(move |seed| move || exposure(*seed, *band, EXPOSURE_SECONDS, *stock, hz))
+                    .map(move |seed| move || exposure(*seed, *band, EXPOSURE_SECONDS, hz))
             })
             .collect();
         let results = run_parallel(context.config.threads, jobs);
         let mut table = Table::new(
             "Hull lost per minute while drilling:",
             &[
-                "Band (rig)",
+                "Band",
                 "Typical hull",
                 "Enemy loss / min",
                 "Other loss / min",
@@ -632,7 +621,7 @@ impl BalanceProbe for ExposureProbe {
             ],
         );
         let minutes = f64::from(EXPOSURE_SECONDS) / 60.0;
-        for (index, (band, stock)) in cases.iter().enumerate() {
+        for (index, band) in cases.iter().enumerate() {
             let runs: Vec<&ExposureResult> = results
                 [index * seeds.len()..(index + 1) * seeds.len()]
                 .iter()
@@ -641,11 +630,7 @@ impl BalanceProbe for ExposureProbe {
             if runs.is_empty() {
                 continue;
             }
-            let hull = if *stock {
-                hull_capacity_for_level(1)
-            } else {
-                hull_capacity_for_level(band_gear(*band).1)
-            };
+            let hull = hull_capacity_for_level(band_gear(*band).1);
             let enemy = mean(&runs.iter().map(|run| run.enemy()).collect::<Vec<_>>()) / minutes;
             let hazard = mean(&runs.iter().map(|run| run.hazard).collect::<Vec<_>>()) / minutes;
             let mut by_kind: BTreeMap<EnemyKind, f64> = BTreeMap::new();
@@ -675,13 +660,8 @@ impl BalanceProbe for ExposureProbe {
                 .iter()
                 .filter(|run| run.enemy() >= f64::from(hull))
                 .count();
-            let label = if *stock {
-                format!("{} (early rig: drill 3, stock hull)", band.name())
-            } else {
-                band.name().to_owned()
-            };
             table.row(vec![
-                label,
+                band.name().to_owned(),
                 format!("{hull:.0}"),
                 format!("{enemy:.1}"),
                 format!("{hazard:.1}"),
@@ -702,22 +682,16 @@ impl BalanceProbe for ExposureProbe {
                     )
                 ),
             ]);
-            let key = if *stock {
-                "stock_clay".to_owned()
-            } else {
-                band.index().to_string()
-            };
+            let key = band.index();
             section.metric(format!("exposure.{key}.enemy_per_min"), enemy);
             section.metric(
                 format!("exposure.{key}.enemy_share_of_hull_per_min"),
                 enemy / f64::from(hull),
             );
-            if *stock {
-                let burrower = by_kind.get(&EnemyKind::Burrower).copied().unwrap_or(0.0)
-                    / runs.len() as f64
-                    / minutes;
-                section.metric("exposure.stock_clay.burrower_per_min", burrower);
-            }
+            let burrower = by_kind.get(&EnemyKind::Burrower).copied().unwrap_or(0.0)
+                / runs.len() as f64
+                / minutes;
+            section.metric(format!("exposure.{key}.burrower_per_min"), burrower);
         }
         section.tables.push(table);
         section

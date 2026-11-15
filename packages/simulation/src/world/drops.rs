@@ -166,7 +166,11 @@ const fn tile_hash(seed: u64, position: TilePosition, salt: u64) -> u64 {
 /// Whether an ore tile at `position` broken by `kind`'s blast comes out intact.
 ///
 /// A plain blast's heat shatters about one ore tile in three; a mining charge, which breaks
-/// rock cleanly, about one in six. Artifacts and blocks always survive.
+/// rock cleanly, about one soft ore tile in six but still one hard gem (stone-hard and up:
+/// emerald, ruby and the deep ores) in three. Artifacts and blocks always survive.
+///
+/// Balance pass (T19): mining charges used to keep five deep gems in six, out-earning a top
+/// drill by about 1.7x in the deep strata.
 #[must_use]
 pub const fn ore_survives_blast(
     kind: ExplosiveKind,
@@ -174,10 +178,12 @@ pub const fn ore_survives_blast(
     seed: u64,
     position: TilePosition,
 ) -> bool {
-    if !matches!(item, ItemKind::Mineral(_)) {
+    let ItemKind::Mineral(mineral) = item else {
         return true;
-    }
-    let shatter_one_in = if matches!(kind.blast(), BlastShape::LootSafe(_)) {
+    };
+    let shatter_one_in = if matches!(kind.blast(), BlastShape::LootSafe(_))
+        && crate::terrain::tile_hardness(crate::terrain::TileKind::Ore(mineral)) < 3
+    {
         6
     } else {
         3

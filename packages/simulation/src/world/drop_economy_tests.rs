@@ -218,9 +218,23 @@ fn bombing_stays_balanced_against_drilling() {
         bombs > 0.0 && bombs < drill * 1.5,
         "bombs pay but stay in line: {bombs} vs drilling {drill}"
     );
+    // T19 pacing pass: mining charges used to edge out the drill here (2,755 vs 2,461 a
+    // minute, and 1.7x deep down); hard gems now crack under them like under any blast.
     assert!(
-        mining > 0.0 && mining < drill * 2.0,
+        mining > 0.0 && mining < drill * 1.1,
         "mining charges pay but stay in line: {mining} vs drilling {drill}"
+    );
+    // Pressed at a base workshop instead (credits plus blocks the drill would have sold),
+    // they must not become the money printer either.
+    let (blocks, credits) =
+        crate::base::workshop_recipe(ExplosiveKind::Mining).expect("workshop recipe");
+    let crafted_cost = credits as f32 + blocks as f32 * 2.0;
+    let crafted = mining
+        + (Method::MiningCharges.charge_cost() - crafted_cost) * 60.0
+            / Method::MiningCharges.period_seconds() as f32;
+    assert!(
+        crafted < drill * 1.4,
+        "crafted mining charges stay in line: {crafted} vs drilling {drill}"
     );
     let (shallow_drill, ..) = per_minute(&seeds, 14, 3, Method::Drill);
     let (shallow_bombs, ..) = per_minute(&seeds, 14, 3, Method::Bombs);
