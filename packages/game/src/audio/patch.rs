@@ -136,7 +136,6 @@ patches! {
     VaultFanfare => "vault_fanfare",
     Milestone => "milestone",
     Rescue => "rescue",
-    SprayPaint => "spray_paint",
     ThrowWhoosh => "throw_whoosh",
     ChargeStick => "charge_stick",
     Detonator => "detonator",
@@ -148,6 +147,8 @@ patches! {
     FireCrackle => "fire_crackle",
     EmpPulse => "emp_pulse",
     FlareIgnite => "flare_ignite",
+    // After the explosive patches: a patch's variation seeds follow its declaration index.
+    SprayPaint => "spray_paint",
     ThrustLoop => "loop_thrust",
     DrillSoftLoop => "loop_drill_soft",
     DrillHardLoop => "loop_drill_hard",
