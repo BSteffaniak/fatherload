@@ -3,11 +3,11 @@
 
 use fatherload_simulation::{
     EnemyKind, ExplosiveKind, GameplayEventKind, PlayerId, PoiKind, ShotKind, WeaponKind,
+    base::{Buildable, ModuleKind, ModuleService},
     event::ImpactSurface,
     explosive::Deployment,
     item::{ItemCategory, ItemKind},
     village::VillageService,
-    base::{Buildable, ModuleKind, ModuleService},
 };
 
 use super::patch::Patch;
@@ -454,7 +454,7 @@ mod tests {
             | GameplayEventKind::WeaponMounted { .. }
             | GameplayEventKind::ProjectileImpact { .. }
             | GameplayEventKind::EntityDamaged { .. }
-            | GameplayEventKind::EntityDestroyed { .. } => {}
+            | GameplayEventKind::EntityDestroyed { .. }
             | GameplayEventKind::BasePlaced { .. }
             | GameplayEventKind::BaseRemoved { .. }
             | GameplayEventKind::BaseServiceUsed { .. } => {}

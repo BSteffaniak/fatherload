@@ -1240,3 +1240,40 @@ fn home_points_survive_a_save_round_trip() {
     let wired: WorldState = wire(&world);
     assert_eq!(wired.bases(), world.bases());
 }
+
+#[test]
+fn villages_refuse_claims_and_claims_keep_enemies_away() {
+    use crate::{
+        SimulationParams,
+        village::{self, placement},
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
+    // A V6 world: a beacon staked in the middle of the first village is refused.
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V6,
+        ..WorldSettings::new(0xBA5E)
+    };
+    let mut world =
+        WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::new(60));
+    world.player_mut(PLAYER).expect("player").credits = 50_000;
+    let found = (1..20)
+        .flat_map(|site| [site, -site])
+        .find_map(|site| village::village(&settings, placement::surface_id(site)))
+        .expect("a surface village");
+    let column = found.center_column();
+    let row = found.ground_row - 1;
+    park(&mut world, PLAYER, column, row);
+    assert_eq!(
+        refusal(
+            &world,
+            PLAYER,
+            &place(Buildable::Module(ModuleKind::Beacon), tile(column, row))
+        ),
+        BuildRefusal::InVillage
+    );
+    // A claim deep underground is an enemy safe zone; far below it is not.
+    let claimed = claimed();
+    assert!(claimed.enemy_safe_zone(BEACON));
+    assert!(claimed.enemy_safe_zone(tile(BEACON.x + CLAIM_RADIUS, BEACON.y + 3)));
+    assert!(!claimed.enemy_safe_zone(tile(BEACON.x, BEACON.y + 200)));
+}

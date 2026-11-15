@@ -34,8 +34,8 @@ use crate::rendering::pixel_art::{
     sprites::terrain::{VOLATILE_CRYSTAL, artifact_stamp, ore_stamp_in},
 };
 
-mod cave_art;
 mod built_art;
+mod cave_art;
 mod poi_art;
 
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
@@ -379,7 +379,7 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::ExplosivePocket
         | TileKind::PressurePocket
         | TileKind::Poi(_)
-        | TileKind::Cave(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Cave(_)
         | TileKind::Built(_) => base_pixel(host, strata, host, x, y),
     }
 }

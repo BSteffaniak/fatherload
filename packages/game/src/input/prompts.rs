@@ -188,9 +188,10 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
             &["\u{2190}", "\u{2191}", "\u{2192}", "\u{2193}"]
         }
         (Prompt::FireWeapon, Full | Wasd) => &["LMB", "V"],
-        (Prompt::FireWeapon, Arrows) => &["Num6"],
-        (Prompt::CycleWeapon, Full | Wasd) => &["X"],
-        (Prompt::CycleWeapon, Arrows) => &["Num7"],
+        // Build mode shares the weapon keys (weapons hold fire while a seat builds).
+        (Prompt::FireWeapon | Prompt::BuildRemove, Arrows) => &["Num6"],
+        (Prompt::CycleWeapon, Full | Wasd) | (Prompt::BuildRemove, Wasd) => &["X"],
+        (Prompt::CycleWeapon | Prompt::BuildRotate, Arrows) => &["Num7"],
         (Prompt::AimWeapon, Full | Wasd) => &["Mouse"],
         (Prompt::Map, Full | Wasd) => &["M"],
         (Prompt::Inventory, Full | Wasd) => &["Tab"],
@@ -209,10 +210,7 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::BuildMode, Arrows) => &["Num8"],
         (Prompt::BuildPlace, Full) => &["Click", "E"],
         (Prompt::BuildRemove, Full) => &["RClick", "X"],
-        (Prompt::BuildRemove, Wasd) => &["X"],
-        (Prompt::BuildRemove, Arrows) => &["Num6"],
         (Prompt::BuildRotate, Full | Wasd) => &["R"],
-        (Prompt::BuildRotate, Arrows) => &["Num7"],
         (Prompt::BuildCycle, Full | Wasd) => &["Z", "Q"],
         (Prompt::BuildCycle, Arrows) => &["Num9", "Num3"],
         (Prompt::BuildCursor, Full) => &["Mouse", "W", "A", "S", "D"],

@@ -51,6 +51,24 @@ impl BlockKind {
             TileKind::Clay => Some(Self::Clay),
             TileKind::Stone => Some(Self::Stone),
             TileKind::HardRock => Some(Self::HardRock),
+            // Cave rock (WP-CAVES) breaks into the plain block it is closest to; living and
+            // glowing cave tiles, crystal and caches (which pay out their own loot) give none.
+            TileKind::Cave(cave) => match cave {
+                crate::cave::CaveTile::Mycelium | crate::cave::CaveTile::Silt => Some(Self::Dirt),
+                crate::cave::CaveTile::RuinBrick
+                | crate::cave::CaveTile::RuinPillar
+                | crate::cave::CaveTile::RuinGlyph
+                | crate::cave::CaveTile::FossilRib
+                | crate::cave::CaveTile::Stalactite => Some(Self::Stone),
+                crate::cave::CaveTile::Obsidian => Some(Self::HardRock),
+                crate::cave::CaveTile::Crystal
+                | crate::cave::CaveTile::MushroomStem
+                | crate::cave::CaveTile::MushroomCap
+                | crate::cave::CaveTile::GlowCap
+                | crate::cave::CaveTile::GlowAlgae
+                | crate::cave::CaveTile::TreasureCache
+                | crate::cave::CaveTile::RelicCache => None,
+            },
             _ => None,
         }
     }

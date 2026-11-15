@@ -2791,8 +2791,6 @@ fn workshop_craft(rng: &mut Rng) -> Vec<f32> {
     out
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;

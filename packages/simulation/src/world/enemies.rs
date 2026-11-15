@@ -322,11 +322,13 @@ impl WorldState {
         }) {
             return true;
         }
-        crate::worldgen::streamed::in_village_area(
-            self.terrain.settings(),
-            tile,
-            VILLAGE_SAFE_TILES,
-        )
+        // Claimed bases (WP-BASE) and villages (WP-VILLAGE).
+        self.bases.is_safe_zone(tile)
+            || crate::worldgen::streamed::in_village_area(
+                self.terrain.settings(),
+                tile,
+                VILLAGE_SAFE_TILES,
+            )
     }
 
     /// Spawns an enemy of `kind` centred at world pixel `(x, y)`, at the depth tier of that

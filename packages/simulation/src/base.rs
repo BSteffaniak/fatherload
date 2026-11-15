@@ -905,6 +905,8 @@ pub enum BuildRefusal {
     NothingToDo,
     /// A workshop recipe needs this many building blocks in the hopper.
     NeedsBlocks(u32),
+    /// The claim would overlap a village (WP-VILLAGE): villages are not for claiming.
+    InVillage,
 }
 
 impl BuildRefusal {
@@ -935,6 +937,7 @@ impl BuildRefusal {
             Self::NoSuchService => "Not offered here.".to_owned(),
             Self::NothingToDo => "Nothing to do.".to_owned(),
             Self::NeedsBlocks(count) => format!("Needs {count} building blocks in the hopper."),
+            Self::InVillage => "Village land: stake your claim outside the village.".to_owned(),
         }
     }
 }

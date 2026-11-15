@@ -224,6 +224,14 @@ impl WorldState {
                 if overlaps_town {
                     return Err(BuildRefusal::InTown);
                 }
+                // Villages (WP-VILLAGE) stay unclaimed: their area grown by the claim's reach.
+                if crate::worldgen::streamed::in_village_area(
+                    self.terrain.settings(),
+                    at,
+                    CLAIM_RADIUS,
+                ) {
+                    return Err(BuildRefusal::InVillage);
+                }
                 if self.bases.claims().any(|claim| {
                     (claim.center.x - at.x).abs() <= 2 * CLAIM_RADIUS
                         && (claim.center.y - at.y).abs() <= 2 * CLAIM_RADIUS
