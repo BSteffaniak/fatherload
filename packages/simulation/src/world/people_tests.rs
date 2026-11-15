@@ -517,6 +517,54 @@ fn gifts_land_by_taste_and_come_out_of_the_bay() {
 }
 
 #[test]
+fn word_of_a_gift_reaches_family_and_friends() {
+    let (mut world, found) = village_world();
+    let settlement =
+        crate::people::routine::settlement(world.world_settings(), found.id).expect("settlement");
+    // Someone outdoors with family or friends in the village.
+    let (npc, state) = npcs_of(&world, found.id)
+        .into_iter()
+        .filter(|(_, state)| state.inside.is_none())
+        .find(|(_, state)| {
+            !settlement
+                .population
+                .reputation_ripple(state.character, 12)
+                .is_empty()
+        })
+        .expect("someone with a circle outdoors");
+    approach(&mut world, &found, npc);
+    let character =
+        crate::people::routine::character(world.world_settings(), state.character).expect("who");
+    let favourite = ItemKind::Mineral(offers::favourite_mineral(&character));
+    world
+        .player_mut(PLAYER)
+        .expect("rig")
+        .cargo_bay
+        .add(favourite, 1);
+    let output = act(
+        &mut world,
+        PlayerCommand::People(PeopleCommand::Gift {
+            npc,
+            item: favourite,
+        }),
+    );
+    assert_eq!(outcome(&output), PlayerScopedCommandOutcome::Applied);
+    let gained = world.people().affinity(state.character, PLAYER);
+    assert!(gained > 0);
+    let ripple = settlement
+        .population
+        .reputation_ripple(state.character, gained);
+    assert!(!ripple.is_empty());
+    for (other, share) in ripple {
+        assert_eq!(
+            world.people().affinity(other, PLAYER),
+            share,
+            "{other:?} heard about the gift"
+        );
+    }
+}
+
+#[test]
 fn affinity_persists_through_saves_and_parking() {
     let (mut world, found) = village_world();
     let npc = meet_someone(&mut world, &found);
@@ -676,4 +724,51 @@ fn walking_pace_is_tick_rate_safe() {
             .collect::<BTreeSet<_>>()
     };
     assert_eq!(activities(&slow), activities(&fast));
+}
+
+#[test]
+fn wanderers_at_a_camp_appear_and_talk() {
+    let mut world = world_at(60);
+    let settings = *world.world_settings();
+    let span = 40 * crate::people::camps::CAMP_SPACING;
+    let camp = crate::people::camps::camps_between(&settings, -span, span)
+        .into_iter()
+        .min_by_key(|camp| camp.column.abs())
+        .expect("a camp near town");
+    set_time(&mut world, DayTime::at(1, 11, 0));
+    {
+        let rig = world.player_mut(PLAYER).expect("rig");
+        rig.x = column_x(camp.column + 1);
+        #[allow(clippy::cast_precision_loss, reason = "small rows")]
+        {
+            rig.y = (camp.ground_row as f32 - 0.5) * TILE_SIZE;
+        }
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+    }
+    run(&mut world, 40);
+    let wanderers = npcs_of(&world, camp.id);
+    assert_eq!(wanderers.len(), usize::from(camp.size), "{camp:?}");
+    let (npc, _) = wanderers[0];
+    let (x, _) = world.npc_position(npc).expect("npc");
+    world.player_mut(PLAYER).expect("rig").x = x;
+    let output = act(
+        &mut world,
+        PlayerCommand::People(PeopleCommand::Talk {
+            npc,
+            topic: TalkTopic::Chat,
+        }),
+    );
+    assert_eq!(outcome(&output), PlayerScopedCommandOutcome::Applied);
+    let conversation = world.people().conversation(PLAYER).expect("talking");
+    assert!(
+        conversation
+            .lines
+            .iter()
+            .any(|line| line.speaker == Speaker::Them)
+    );
+    // Away from the camp its wanderers leave (rebuilt from the seed next time).
+    world.player_mut(PLAYER).expect("rig").x = column_x(camp.column + 400);
+    run(&mut world, 40);
+    assert!(npcs_of(&world, camp.id).is_empty());
 }

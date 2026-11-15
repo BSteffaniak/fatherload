@@ -227,6 +227,26 @@ impl Settlement {
         )
     }
 
+    /// A wanderers' camp's routine view ([`super::camps`]): no buildings, so its people sleep,
+    /// work and gather around the campfire.
+    #[must_use]
+    pub fn camp(camp: &super::camps::Camp, population: &Population) -> Self {
+        let (first, last) = camp.span();
+        let homes = vec![None; population.characters.len()];
+        let keepers = vec![None; population.characters.len()];
+        Self::assemble(
+            camp.id,
+            camp.ground_row,
+            (first, last),
+            (camp.column - 2, camp.column + 2),
+            Vec::new(),
+            population,
+            &homes,
+            &keepers,
+            false,
+        )
+    }
+
     #[allow(clippy::too_many_arguments, reason = "one internal assembly step")]
     fn assemble(
         village: VillageId,
@@ -506,8 +526,10 @@ fn habits(character: &Character, home: Option<usize>, work: Work, village: Villa
     }
 }
 
-/// The settlement `id` of a world with `settings`: a village (worlds with villages), or the town
-/// ([`TOWN_VILLAGE`], on the same worlds). Memoized per process like villages.
+/// The settlement `id` of a world with `settings`, memoized per process like villages.
+///
+/// A village (worlds with villages), the town ([`TOWN_VILLAGE`], on the same worlds) or a
+/// wanderers' camp ([`super::camps`]).
 #[must_use]
 pub fn settlement(settings: &WorldSettings, id: VillageId) -> Option<Arc<Settlement>> {
     if !settings.generator.has_villages() {
@@ -515,6 +537,12 @@ pub fn settlement(settings: &WorldSettings, id: VillageId) -> Option<Arc<Settlem
     }
     let key = (*settings, id.0.cast_signed(), 0);
     let built = SETTLEMENTS.get_or_compute(key, || {
+        if super::camps::is_camp(id) {
+            return super::camps::camp(settings, id).map(|camp| {
+                let population = super::camps::camp_population(settings.seed, &camp);
+                Arc::new(Settlement::camp(&camp, &population))
+            });
+        }
         if id == TOWN_VILLAGE {
             let population = town_population(settings.seed);
             let ground = crate::worldgen::surface_row(

@@ -32,8 +32,10 @@
 //!
 //! - **Clock seam** ([`clock`]): [`clock::ClockSource`] and the tick-derived default
 //!   [`clock::TickClock`] (48-minute days) until T14's world clock is wired in.
-//! - **Routines** ([`routine`]): a [`routine::Settlement`] (a village or the town) knows each
-//!   resident's home, workplace and habits; [`routine::Settlement::stop_at`] says where they
+//! - **Camps** ([`camps`]): wanderers (traders, prospectors, surveyors, smugglers) camped on
+//!   the open surface between settlements, deterministic per slot of the surface.
+//! - **Routines** ([`routine`]): a [`routine::Settlement`] (a village, the town or a camp)
+//!   knows each resident's home, workplace and habits; [`routine::Settlement::stop_at`] says where they
 //!   should be at any time of day.
 //! - **Offers** ([`offers`]): each person's unique trade list, apprenticeship [`offers::Perk`]s,
 //!   prices by standing and gift tastes.
@@ -45,6 +47,7 @@
 //! Everything is integer-only and hash-seeded ([`PeopleRng`]), so the same seed yields the same
 //! people on every platform, host and client alike.
 
+pub mod camps;
 pub mod character;
 pub mod clock;
 #[cfg(test)]

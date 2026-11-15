@@ -5,7 +5,8 @@
 //!
 //! Every [`PEOPLE_REFRESH_MILLIS`] (and every tick while nobody is about), `advance_people`
 //! spawns the residents of every settlement
-//! (a village, an underground settlement or the town, see [`crate::people::routine`]) that an
+//! (a village, an underground settlement, the town or a wanderers' camp, see
+//! [`crate::people::routine`] and [`crate::people::camps`]) that an
 //! actor ([`WorldState::people_actor_position`]) is within [`SPAWN_MARGIN_COLUMNS`] of, at the
 //! place their routine has them at that moment, and despawns the people of settlements no actor
 //! is within [`DESPAWN_MARGIN_COLUMNS`] of. Characters are regenerated from the seed, so a
@@ -277,6 +278,11 @@ impl WorldState {
                     .iter()
                     .map(|found| found.id)
                     .collect();
+            ids.extend(
+                people::camps::camps_between(&settings, column - reach, column + reach)
+                    .iter()
+                    .map(|camp| camp.id),
+            );
             ids.push(TOWN_VILLAGE);
             for id in ids {
                 if found.contains_key(&id) {
@@ -672,9 +678,33 @@ impl WorldState {
             .hear_about(player_id, amount);
     }
 
+    /// Passes the change in `character`'s affinity for `player_id` since `before` on to their
+    /// circle (family shares half, friends and sweethearts a third, rivals a quarter the other
+    /// way; [`people::Population::reputation_ripple`]): word gets around a settlement. One step
+    /// only, so a rumour never echoes back.
+    fn spread_word(
+        &mut self,
+        player_id: PlayerId,
+        settlement: &Settlement,
+        character: CharacterId,
+        before: i16,
+    ) {
+        let delta = self.people.affinity(character, player_id) - before;
+        if delta == 0 {
+            return;
+        }
+        for (other, share) in settlement.population.reputation_ripple(character, delta) {
+            self.people
+                .characters
+                .entry(other)
+                .or_default()
+                .hear_about(player_id, share);
+        }
+    }
+
     fn talk_context_facts(&self, settlement: &Settlement) -> Arc<Vec<people::WorldFact>> {
         let settings = self.terrain.settings();
-        if settlement.village == TOWN_VILLAGE {
+        if settlement.village == TOWN_VILLAGE || people::camps::is_camp(settlement.village) {
             return Arc::new(Vec::new());
         }
         village::village(settings, settlement.village).map_or_else(
@@ -707,6 +737,7 @@ impl WorldState {
             facts: &facts,
         };
         let before = self.people.standing(id, player_id);
+        let affinity_before = self.people.affinity(id, player_id);
         let first_meeting = before == Standing::Stranger;
         let continuing = self
             .people
@@ -805,6 +836,7 @@ impl WorldState {
             npc: npc.get(),
             first_meeting,
         });
+        self.spread_word(player_id, &settlement, id, affinity_before);
         self.warm(player_id, npc, id, before, events);
         let _ = marked;
         PlayerScopedCommandOutcome::Applied
@@ -866,6 +898,7 @@ impl WorldState {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
         let before = self.people.standing(id, player_id);
+        let affinity_before = self.people.affinity(id, player_id);
         if !offers::standing_allows(before, offer.needs) {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
@@ -890,12 +923,27 @@ impl WorldState {
         let surveyor = usize::from(self.people.has_perk(player_id, Perk::Surveyor));
         let (outcome, note) = match offer.deal {
             PersonDeal::Goods(deal) => {
-                let deal = match deal {
-                    village::VillageDeal::Repair { percent } if before == Standing::Close => {
-                        village::VillageDeal::Repair {
-                            percent: percent * 80 / 100,
-                        }
+                // Metered patch-ups follow the same discounts as priced rows: close friends
+                // get a fifth off, friends a tenth, and a haggler a tenth more.
+                let metered = |percent: u32| {
+                    let percent = match before {
+                        Standing::Close => percent * 80 / 100,
+                        Standing::Friendly => percent * 90 / 100,
+                        _ => percent,
+                    };
+                    if haggler {
+                        percent * offers::HAGGLER_PERCENT / 100
+                    } else {
+                        percent
                     }
+                };
+                let deal = match deal {
+                    village::VillageDeal::Repair { percent } => village::VillageDeal::Repair {
+                        percent: metered(percent),
+                    },
+                    village::VillageDeal::Refuel { percent } => village::VillageDeal::Refuel {
+                        percent: metered(percent),
+                    },
                     other => other,
                 };
                 (self.apply_goods(player_id, deal, price), None)
@@ -1015,6 +1063,7 @@ impl WorldState {
             npc: npc.get(),
             kind: offer.kind,
         });
+        self.spread_word(player_id, &settlement, id, affinity_before);
         self.warm(player_id, npc, id, before, events);
         PlayerScopedCommandOutcome::Applied
     }
@@ -1040,6 +1089,7 @@ impl WorldState {
         }
         let id = character.id;
         let before = self.people.standing(id, player_id);
+        let affinity_before = self.people.affinity(id, player_id);
         let reaction = offers::gift_reaction(&character, item);
         let liked = reaction != GiftReaction::Indifferent;
         let time = self.people_clock();
@@ -1087,6 +1137,7 @@ impl WorldState {
             reaction,
         });
         events.push(GameplayEventKind::CargoChanged { player_id });
+        self.spread_word(player_id, &settlement, id, affinity_before);
         self.warm(player_id, npc, id, before, events);
         PlayerScopedCommandOutcome::Applied
     }

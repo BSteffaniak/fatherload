@@ -1071,7 +1071,7 @@ continuation), replication (redacted keyframes, entity deltas, identical predict
 tick-rate independence; the netcode harness bots climb out, jump, pick and board every cycle
 (zero corrections at zero latency, convergence under loss).
 
-## People in the world (`src/people/{clock,routine,offers,contractor,ledger}.rs`, `src/world/people.rs`)
+## People in the world (`src/people/{clock,routine,camps,offers,contractor,ledger}.rs`, `src/world/people.rs`)
 
 Expansion plan WP-PEOPLE (wave 3, T17), on worlds with villages (`GeneratorVersion::has_villages`,
 V6 and V7). Village residents and the town's folk are `EntityKind::Npc` entities.
@@ -1090,6 +1090,18 @@ V6 and V7). Village residents and the town's folk are `EntityKind::Npc` entities
   day) and a `Place` (`Inside(lot)` or `Outside { column, roam }`). `routine::settlement(settings,
   id)` and `routine::character(settings, CharacterId)` are memoized lookups (the renderer uses
   them too).
+- **Wanderers' camps** (`people::camps`): traders, prospectors, surveyors (travelling
+  scientists) and smugglers met on the open surface. The surface is cut into `CAMP_SPACING`
+  (360) column slots; `camp(settings, camp_id(slot))` tries a few seeded spots per slot and
+  pitches on the first that is flat across the camp, dry, off the mountains and clear of the
+  town, every village and the trail milestones (memoized per slot). A `Camp` has a `CampKind`,
+  a campfire column, a ground row, a culture from the biome and 1-3 wanderers
+  (`camp_population`: the lead has the camp's trade, companions travel with them). Camp ids
+  carry `CAMP_FLAG` (`is_camp`) so they never name a village; `routine::settlement` builds a
+  camp as a `Settlement` with no lots (`Settlement::camp`), so wanderers sleep, work and gather
+  around the fire and talk, trade, take gifts and remember players exactly like residents.
+  `camps_between(settings, first, last)` lists them for population and the renderer. Camps are
+  not enemy safe zones (WP-NIGHT may want to make lit camps safe).
 - **NPC entities** (`world/people.rs`): `NpcState` (character, activity, `inside` lot, target,
   facing, `talking_to`, idle pause). Every `PEOPLE_REFRESH_MILLIS` the residents of every
   settlement an actor is within `SPAWN_MARGIN_COLUMNS` (and `NEAR_ROWS`) of spawn at their
@@ -1106,7 +1118,9 @@ V6 and V7). Village residents and the town's folk are `EntityKind::Npc` entities
   the person outdoors, or at the door of the building they are inside) and resolved by
   `people_command` (before `apply_player_command`). Talking runs `people::talk` / `say` on the
   person's saved `CharacterState`; a chat once a day adds goodwill, and a rumour once a day per
-  person marks the nearest unknown site as an echo. **Actor seam (T15):**
+  person marks the nearest unknown site as an echo. Word gets around: every change in a
+  person's affinity for a player ripples once to their circle (`Population::reputation_ripple`:
+  family half, friends and sweethearts a third, rivals a quarter the other way). **Actor seam (T15):**
   `WorldState::people_actor_position(player)` is the rig's position today; return the pilot's
   while they are on foot.
 - **Offers** (`people::offers`): `offers_of(character)` rolls each person's trade list from their
@@ -1131,10 +1145,11 @@ V6 and V7). Village residents and the town's folk are `EntityKind::Npc` entities
 - **Events** (netcode codes 140-145): `PersonTalked`, `PersonTraded`, `PersonGifted`,
   `AffinityChanged`, `RumourMarked` and the generic `PeopleInteraction`.
 
-Tests: `world/people_tests.rs` (population around rigs and the town, routines by the clock,
+Tests: `world/people_tests.rs` (population around rigs, the town and camps, routines by the clock,
 deterministic walking, reach, dialogue variety and goodwill, trades and their gates, gifts,
-persistence through saves and parking, replication of people and conversations, safety, tick-rate
-safe routines) and the unit tests in the modules above.
+word spreading to family and friends, persistence through saves and parking, replication of
+people and conversations, safety, tick-rate safe routines) and the unit tests in the modules
+above.
 
 ## Wave 3 seams (T17 people)
 
