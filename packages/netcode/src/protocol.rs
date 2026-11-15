@@ -54,7 +54,11 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * T16 sky: `GeneratorVersion::V8` sky worlds in the session settings,
 /// `TileKind::Sky` tiles (codes 0x600) in tile ops and chunk diffs, terrain chunks up to the
 /// Moon, the altitude intake and de-icer tiers in `HazardGear` (loadout), the sky regional
-/// features and the altitude events 116-118.
+/// features and the altitude events 116-118;
+/// * T15 pilot on foot: `ControlState::jump`, `EntityState::Pilot`,
+/// `PlayerCommand::TogglePilot` / `PilotPack`, `SessionServiceRequest::BuyPilotGear`, pilot
+/// gear and the personal pack in `PlayerInventory`, `BuiltTile::VentGrate`, `Fixture::Rope`,
+/// the parked pilot in the crew roster and the pilot events 120-133.
 pub const PROTOCOL_VERSION: u8 = 11;
 
 /// One client input frame: the controls and actions for exactly one tick.

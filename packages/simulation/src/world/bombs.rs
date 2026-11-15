@@ -130,6 +130,8 @@ impl WorldState {
         // every other damageable entity (practice targets) through the combat model.
         self.enemies_feel_blasts(&blasts, output);
         self.damage_from_blasts(&blasts, output);
+        // Pilots on foot are pushed and hurt too (Part II F5).
+        self.pilots_feel_blasts(&blasts, output);
         let mut spawned = Vec::new();
         for (id, bomb) in expiring {
             if let Some(continuing) = self.expire_bomb(bomb, next_tick, notes, output, &mut spawned)
@@ -202,7 +204,7 @@ impl WorldState {
     }
 
     /// Adds a new charge (deployed this tick).
-    fn spawn_charge(&mut self, bomb: &PlacedBomb) -> EntityId {
+    pub(super) fn spawn_charge(&mut self, bomb: &PlacedBomb) -> EntityId {
         let (body, state) = charge_parts(bomb);
         self.entities
             .spawn(self.simulation_tick, body, EntityState::Charge(state), None)
@@ -504,7 +506,7 @@ impl WorldState {
     ) -> Option<PlacedBomb> {
         let player = self.players.get(&player_id)?;
         let (aim_x, aim_y) = aim.vector();
-        let (x, y, velocity_x, velocity_y) = match kind.deployment() {
+        let pose = match kind.deployment() {
             Deployment::Drop => (
                 player.x,
                 TILE_SIZE.mul_add(0.4, player.y),
@@ -524,6 +526,21 @@ impl WorldState {
                 aim_y * kind.launch_speed(),
             ),
         };
+        Some(self.launch_from(player_id, kind, aim, pose))
+    }
+
+    /// A charge of `kind` owned by `player_id` starting at `(x, y)` with velocity
+    /// `(velocity_x, velocity_y)` (`pose`), its fuse lit now. The rig launches from its own
+    /// pose ([`Self::launch`]); a pilot on foot throws from its hands (`world/pilot.rs`).
+    pub(super) fn launch_from(
+        &self,
+        player_id: PlayerId,
+        kind: ExplosiveKind,
+        aim: ThrowAim,
+        pose: (f32, f32, f32, f32),
+    ) -> PlacedBomb {
+        let (aim_x, aim_y) = aim.vector();
+        let (x, y, velocity_x, velocity_y) = pose;
         let fuse = if kind.remote() {
             REMOTE_FUSE
         } else {
@@ -542,7 +559,7 @@ impl WorldState {
         } else {
             kind.fuse_millis() as f32 / 1_000.0
         };
-        Some(PlacedBomb {
+        PlacedBomb {
             id: self.next_bomb_id,
             x: quantize(x),
             y: quantize(y),
@@ -559,7 +576,7 @@ impl WorldState {
             stuck: false,
             direction: BlastDirection::nearest(aim_x, aim_y),
             stage: 0,
-        })
+        }
     }
 
     /// Resolves [`crate::PlayerCommand::DeployExplosive`].

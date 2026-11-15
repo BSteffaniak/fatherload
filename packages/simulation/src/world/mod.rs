@@ -70,6 +70,9 @@ mod movement;
 mod no_clip;
 #[cfg(test)]
 mod persistence_tests;
+pub mod pilot;
+#[cfg(test)]
+mod pilot_tests;
 mod player_sections;
 #[cfg(test)]
 mod poi_tests;

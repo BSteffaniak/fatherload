@@ -209,7 +209,7 @@ const WORLD_HARNESS_HEIGHT_TILES: i32 = 64;
 /// The building the harness bots spawn at, dig under and trade at.
 const WORLD_HARNESS_BUILDING: SurfaceZone = SurfaceZone::Depot;
 /// Bot script cycle in render frames (about ten seconds).
-const WORLD_BOT_CYCLE_FRAMES: u64 = 900;
+const WORLD_BOT_CYCLE_FRAMES: u64 = 1_100;
 
 impl HarnessSim for WorldState {
     fn harness_world(config: &HarnessConfig) -> Self {
@@ -310,6 +310,19 @@ impl HarnessSim for WorldState {
             ),
             560..580 => ControlState::new(0.5, true, false),
             580..600 => ControlState::new(-0.5, true, false),
+            // On foot (Part II F5): walk out and back, jump, swing the hand pick at the
+            // ground (pilots are entities: predicted, replicated and reconciled like rigs).
+            860..900 => ControlState::new(1.0, false, false),
+            900..940 => ControlState::new(-1.0, false, false),
+            950..960 => ControlState::default().with_jump(true),
+            990..1_030 => ControlState::new(0.0, false, true).with_weapon(
+                fatherload_simulation::WeaponControl {
+                    fire: bot.issue_actions,
+                    auto_aim: false,
+                    aim_x: 0,
+                    aim_y: 0,
+                },
+            ),
             _ => ControlState::default(),
         };
         let mut actions = Vec::new();
@@ -332,6 +345,7 @@ impl HarnessSim for WorldState {
                     actions.push(PlayerCommand::BuyUpgrade { index });
                 }
                 820 => actions.push(PlayerCommand::Refuel),
+                840 | 1_060 => actions.push(PlayerCommand::TogglePilot),
                 _ => {}
             }
         }
@@ -360,6 +374,7 @@ impl HarnessSim for WorldState {
                 PlayerCommand::SellCargo => "applied sell",
                 PlayerCommand::BuyUpgrade { .. } => "applied buy",
                 PlayerCommand::Refuel => "applied refuel",
+                PlayerCommand::TogglePilot => "applied toggle pilot",
                 _ => "applied other",
             }),
             WorldEvent::ActionResolved { .. } => Some("ignored action"),
@@ -369,6 +384,10 @@ impl HarnessSim for WorldState {
                 GameplayEventKind::WeaponFired { .. } => Some("weapon fired"),
                 GameplayEventKind::CargoChanged { .. } => Some("cargo changed"),
                 GameplayEventKind::ItemsCollected { .. } => Some("items collected"),
+                GameplayEventKind::PilotExited { .. } => Some("pilot exited"),
+                GameplayEventKind::PilotBoarded { .. } => Some("pilot boarded"),
+                GameplayEventKind::PilotJumped { .. } => Some("pilot jumped"),
+                GameplayEventKind::PickStruck { .. } => Some("pick struck"),
                 _ => None,
             },
         }

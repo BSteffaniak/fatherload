@@ -203,7 +203,11 @@ impl WorldState {
                 // its population is kept by `advance_critters` (`world/caves.rs`). Charges move
                 // in the bomb pass (`EntityPhase::Charges`), never here; practice targets stand
                 // still.
-                EntityKind::Critter | EntityKind::Charge | EntityKind::Target => {}
+                // Pilots move in their own pass with their owners' controls (`world/pilot.rs`).
+                EntityKind::Critter
+                | EntityKind::Charge
+                | EntityKind::Target
+                | EntityKind::Pilot => {}
             }
         }
         // Merged-away drops (their stacks already moved onto their neighbours).

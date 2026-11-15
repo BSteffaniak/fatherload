@@ -41,8 +41,9 @@ impl WorldState {
     /// The single rule for "may this rig use that counter", shared by the shell and the tick.
     #[must_use]
     pub fn player_village_building(&self, player_id: PlayerId) -> Option<(Arc<Village>, usize)> {
-        let player = self.players.get(&player_id)?;
-        village::building_at(self.terrain.settings(), player.x, player.y)
+        // On foot the pilot is the one at the door (Part II F5).
+        let (x, y) = self.actor_position(player_id)?;
+        village::building_at(self.terrain.settings(), x, y)
     }
 
     /// The blessing on `player_id`'s rig right now, if any.

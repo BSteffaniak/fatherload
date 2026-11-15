@@ -126,6 +126,11 @@ impl WorldState {
                     && charge.kind.remote()
                     && charge.detonation_tick == crate::explosive::REMOTE_FUSE)
         });
+        // A departed player's pilot on foot leaves with them (parking keeps it first).
+        entities.retain(|entity| {
+            !matches!(entity.state, crate::entity::EntityState::Pilot(pilot)
+                if pilot.owner == player_id)
+        });
         service_transactions.retain(|transaction| transaction.player_id != player_id);
         enemies.rig_guard.remove(&player_id);
         clock.sleepers.remove(&player_id);

@@ -432,6 +432,10 @@ impl WorldState {
             PlayerCommand::MountWeapon { weapon } => self.mount_weapon(player_id, weapon),
             PlayerCommand::Build(command) => self.apply_build_command(player_id, &command),
             PlayerCommand::Sleep(command) => self.apply_sleep_command(player_id, command),
+            // Resolved inside the tick by `pilot_command` (they emit their own events).
+            PlayerCommand::TogglePilot | PlayerCommand::PilotPack { .. } => {
+                PlayerScopedCommandOutcome::IgnoredUnavailable
+            }
         }
     }
 }

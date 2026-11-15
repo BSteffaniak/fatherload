@@ -848,6 +848,22 @@ impl WorldState {
         let Some(entity) = self.entities.get(id) else {
             return DamageOutcome::Ignored;
         };
+        if let EntityState::Pilot(_) = entity.state {
+            // Pilots on foot have their own health model (`world/pilot.rs`); weapons never
+            // find them (friendly fire is off), but other systems may hurt them here.
+            if damage.amount <= 0.0 || !self.damage_pilot(id, damage.amount, output) {
+                return DamageOutcome::Ignored;
+            }
+            return match self.entities.get(id).map(|entity| entity.state) {
+                Some(EntityState::Pilot(state)) => DamageOutcome::Hurt {
+                    dealt: damage.amount,
+                    remaining: state.health,
+                },
+                _ => DamageOutcome::Destroyed {
+                    dealt: damage.amount,
+                },
+            };
+        }
         if entity.state.health().is_none() || damage.amount <= 0.0 {
             return DamageOutcome::Ignored;
         }

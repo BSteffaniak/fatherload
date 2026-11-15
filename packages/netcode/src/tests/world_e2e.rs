@@ -60,6 +60,11 @@ fn assert_played(harness: &WorldHarness) {
         // authoritative; clients predicted the same pickups, see `assert_converged`).
         "items collected",
         "weapon fired",
+        // Part II F5: every bot climbs out, walks, jumps, picks at the ground and boards again.
+        "pilot exited",
+        "pilot jumped",
+        "pick struck",
+        "pilot boarded",
     ] {
         assert!(
             harness.event_counts.get(label).copied().unwrap_or(0) > 0,

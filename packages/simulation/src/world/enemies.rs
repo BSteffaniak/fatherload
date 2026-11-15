@@ -46,6 +46,7 @@ use crate::{
     explosive::{ExplosiveKind, SCARE_MILLIS, SCARE_RADIUS, blast_impulse},
     ids::{PlayerId, SimulationTick},
     physics::{self, BodyParams},
+    pilot::PILOT_HALF_WIDTH,
     quantize::quantize_simulation_scalar as quantize,
     summary::PlayerScopedCommandOutcome,
     surface::town_span,
@@ -879,12 +880,20 @@ impl WorldState {
             })
         };
         let mut best: Option<(f32, PlayerId)> = None;
-        for (player_id, player) in &self.players {
-            if player.hull <= 0.0 {
-                continue;
-            }
-            let dx = player.x - body.x;
-            let dy = player.y - body.y;
+        // Rigs (parked ones too) and pilots on foot (Part II F5) are both prey; only a
+        // drilling rig is heard through rock.
+        let bodies = self
+            .players
+            .iter()
+            .filter(|(_, player)| player.hull > 0.0)
+            .map(|(id, player)| (*id, player.x, player.y, true))
+            .chain(self.pilots().map(|(_, pilot_body, pilot)| {
+                let (x, y) = pilot.middle(pilot_body);
+                (pilot.owner, x, y, false)
+            }));
+        for (player_id, x, y, is_rig) in bodies {
+            let dx = x - body.x;
+            let dy = y - body.y;
             if dx.abs() > reach || dy.abs() > reach {
                 continue;
             }
@@ -892,17 +901,18 @@ impl WorldState {
             if best.is_some_and(|(nearest, _)| nearest <= distance) {
                 continue;
             }
-            if self.enemy_safe_zone(tile_of(player.x, player.y)) {
+            if self.enemy_safe_zone(tile_of(x, y)) {
                 continue;
             }
-            let heard = distance <= hearing && self.active_drills.contains_key(player_id);
+            let heard =
+                is_rig && distance <= hearing && self.active_drills.contains_key(&player_id);
             let seen = distance <= sight
-                && !hidden(player.x, player.y)
+                && !hidden(x, y)
                 && (matches!(spec.locomotion, Locomotion::Burrowing)
                     && distance <= TILE_SIZE * 3.0
-                    || physics::line_clear(&self.terrain, body.x, body.y, player.x, player.y));
+                    || physics::line_clear(&self.terrain, body.x, body.y, x, y));
             if heard || seen {
-                best = Some((distance, *player_id));
+                best = Some((distance, player_id));
             }
         }
         best.map(|(_, id)| id)
@@ -924,10 +934,26 @@ impl WorldState {
             .find(|(fx, fy)| (fx - x).hypot(fy - y) <= FLARE_LURE)
     }
 
-    fn rig_position(&self, player: Option<PlayerId>) -> Option<(f32, f32)> {
-        player
-            .and_then(|id| self.players.get(&id))
-            .map(|player| (player.x, player.y))
+    /// Where `player` is to an enemy at `from`: the nearer of its rig and its pilot on foot.
+    fn rig_position(&self, player: Option<PlayerId>, from: (f32, f32)) -> Option<(f32, f32)> {
+        let player = player?;
+        let rig = self
+            .players
+            .get(&player)
+            .filter(|rig| rig.hull > 0.0)
+            .map(|rig| (rig.x, rig.y));
+        let pilot = self
+            .pilot_of(player)
+            .map(|(_, body, state)| state.middle(body));
+        let distance = |(x, y): (f32, f32)| (x - from.0).hypot(y - from.1);
+        match (rig, pilot) {
+            (Some(rig), Some(pilot)) => Some(if distance(pilot) < distance(rig) {
+                pilot
+            } else {
+                rig
+            }),
+            (rig, pilot) => rig.or(pilot),
+        }
     }
 
     /// One enemy's tick (see the module docs).
@@ -1026,7 +1052,7 @@ impl WorldState {
                     state.last_seen = now;
                 }
                 let target_safe = self
-                    .rig_position(state.target)
+                    .rig_position(state.target, (body.x, body.y))
                     .is_none_or(|(x, y)| self.enemy_safe_zone(tile_of(x, y)));
                 let forgotten = now.get().saturating_sub(state.last_seen.get())
                     > self.timing.ticks_for_millis(LOSE_TARGET_MILLIS);
@@ -1061,7 +1087,7 @@ impl WorldState {
     ) -> Intent {
         let spec = state.kind.stats();
         let (home_x, home_y) = tile_centre(state.home.0, state.home.1);
-        let target = self.rig_position(state.target);
+        let target = self.rig_position(state.target, (body.x, body.y));
         let cooldown = self.attack_cooldown_millis(state.kind);
         match state.mode {
             EnemyMode::Dormant | EnemyMode::Stunned => Intent::default(),
@@ -1587,19 +1613,27 @@ impl WorldState {
                 && !self.enemies.guarded(*player_id, now))
             .then_some(*player_id)
         });
-        let Some(player_id) = victim else {
+        let damage = spec.contact_damage * tier_scale(state.tier);
+        let landed = if let Some(player_id) = victim {
+            self.strike_rig(
+                player_id,
+                damage,
+                (body.x, body.y),
+                spec.knockback,
+                state.kind,
+                now,
+                output,
+            )
+        } else if let Some((pilot, _)) = self
+            .pilots_near(body.x, body.y, spec.radius + PILOT_HALF_WIDTH + 14.0)
+            .first()
+        {
+            // A pilot on foot is softer: no hull between it and the teeth.
+            self.strike_pilot(*pilot, damage, (body.x, body.y), spec.knockback, output)
+        } else {
             return;
         };
-        let damage = spec.contact_damage * tier_scale(state.tier);
-        if self.strike_rig(
-            player_id,
-            damage,
-            (body.x, body.y),
-            spec.knockback,
-            state.kind,
-            now,
-            output,
-        ) {
+        if landed {
             state.attack_ready = self.after(now, self.attack_cooldown_millis(state.kind));
             if state.mode == EnemyMode::Strike {
                 state.mode = EnemyMode::Recover;
@@ -1787,6 +1821,17 @@ impl WorldState {
                     now,
                     output,
                 );
+                if !self.damage_immune() {
+                    self.entities.despawn(id);
+                    return;
+                }
+            } else if let Some((pilot, _)) = self
+                .pilots_near(body.x, body.y, shot.kind.radius() + PILOT_HALF_WIDTH + 6.0)
+                .first()
+                .copied()
+            {
+                let _landed =
+                    self.strike_pilot(pilot, shot.damage, (body.x, body.y), 120.0, output);
                 if !self.damage_immune() {
                     self.entities.despawn(id);
                     return;

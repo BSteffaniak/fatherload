@@ -7,7 +7,7 @@ use crate::{
     event::{ActionOutcome, GameplayEventKind, TickOutput, gameplay_event_for_applied_command},
     ids::{PlayerId, SimulationTick},
     infrastructure::InfrastructureKind,
-    input::TickInputs,
+    input::{ControlState, TickInputs},
     progression::WorldEventKind,
     protection::{HEAT_DAMAGE_PER_EXCESS_UNIT, heat_excess},
     quantize::quantize_simulation_scalar,
@@ -58,7 +58,16 @@ impl WorldState {
         self.terrain.start_journal();
         let mut quest_notes = QuestNotes::default();
         for (&player_id, input) in &inputs.players {
-            if let Some(controls) = input.controls {
+            // On foot the held controls drive the pilot (`advance_pilots`); the parked rig
+            // gets neutral ones.
+            let on_foot = self.is_on_foot(player_id);
+            if let Some(controls) = input.controls.map(|controls| {
+                if on_foot {
+                    ControlState::default()
+                } else {
+                    controls
+                }
+            }) {
                 let previous_target = self.active_drills.get(&player_id).map(|drill| drill.target);
                 let _drill = self.apply_drill_intent(
                     player_id,
@@ -107,6 +116,10 @@ impl WorldState {
                     // Building services only work at the building (validated here, inside the
                     // authoritative tick, so it holds for remote clients too).
                     PlayerScopedCommandOutcome::IgnoredUnavailable
+                } else if let Some(outcome) =
+                    self.pilot_command(player_id, &action.command, &mut output)
+                {
+                    outcome
                 } else if let Some((outcome, events)) =
                     self.quest_command(player_id, &action.command)
                 {
@@ -122,15 +135,17 @@ impl WorldState {
                     sequence: action.sequence,
                     outcome,
                 });
-                if outcome == PlayerScopedCommandOutcome::Applied {
-                    output.push_event(gameplay_event_for_applied_command(
-                        player_id,
-                        &action.command,
-                    ));
+                if outcome == PlayerScopedCommandOutcome::Applied
+                    && let Some(event) =
+                        gameplay_event_for_applied_command(player_id, &action.command)
+                {
+                    output.push_event(event);
                 }
             }
         }
         let next_tick = tick.next();
+        // Pilots on foot (Part II F5) move with their owners' held controls.
+        self.advance_pilots(inputs, next_tick, &mut output);
         let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in recovery_player_ids {
             if self.recover_lost_cargo_for_player(player_id) {
@@ -411,6 +426,7 @@ impl WorldState {
         self.trigger_stalactites(&mut output);
         self.advance_enemy_director(next_tick);
         self.advance_entities(EntityPhase::Late, next_tick, &mut output);
+        self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);
         self.advance_bases(next_tick);
         self.advance_vault_relays(next_tick, &mut output);
@@ -434,11 +450,20 @@ impl WorldState {
         if !self.terrain.is_streamed() {
             return;
         }
-        let centers: Vec<TilePosition> = self
+        let mut centers: Vec<TilePosition> = self
             .players
             .values()
             .map(|player| player.tile_position(TILE_SIZE))
             .collect();
+        // A pilot walking away from its rig keeps its own surroundings loaded.
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "bounded world pixels address terrain tiles"
+        )]
+        centers.extend(self.pilots().map(|(_, body, _)| TilePosition {
+            x: (body.x / TILE_SIZE).floor() as i32,
+            y: (body.y / TILE_SIZE).floor() as i32,
+        }));
         self.terrain.stream_around(&centers);
     }
 

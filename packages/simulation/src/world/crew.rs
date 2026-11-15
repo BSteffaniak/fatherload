@@ -86,6 +86,8 @@ impl WorldState {
         player.velocity_x = 0.0;
         player.velocity_y = 0.0;
         let member = self.crew.members.remove(&player_id).unwrap_or_default();
+        // A player on foot parks both bodies: the pilot leaves the world with the rig.
+        let pilot = self.take_pilot_for_parking(player_id);
         let parked = ParkedPlayer {
             member,
             player,
@@ -121,6 +123,7 @@ impl WorldState {
                 .cloned()
                 .unwrap_or_default(),
             parked_at: self.simulation_tick,
+            pilot,
         };
         // Parked players keep their placed C4 armed for when they return (remove_player would
         // disarm it). Their bases (claims, home points) stay keyed by their id, and everything
@@ -153,6 +156,7 @@ impl WorldState {
             crew_quests,
             discovered,
             parked_at: _,
+            pilot,
         } = parked;
         if authoritative_player_collides(&self.terrain, player.x, player.y) {
             let (x, y) = self.free_spawn_position(self.player_template.x, self.player_template.y);
@@ -181,6 +185,9 @@ impl WorldState {
         self.progression.crew_quests.active.extend(crew_quests);
         self.discovered_tiles.insert(player_id, discovered);
         self.crew.members.insert(player_id, member);
+        if let Some(pilot) = pilot {
+            self.restore_parked_pilot(pilot);
+        }
         true
     }
 

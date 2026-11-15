@@ -205,10 +205,14 @@ pub enum BuiltTile {
     Glass,
     /// A plank floor or scaffold (bought).
     Plank,
+    /// A vent grate: solid to rigs, drops, charges and enemies, but a pilot on foot crawls
+    /// through it ([`crate::pilot::pilot_passable`]). Capping a 1-tile tunnel with grates
+    /// makes a crawlway, a pilot-only space ([`crate::poi::SpaceAccess::RequiresPilot`]).
+    VentGrate,
 }
 
 impl BuiltTile {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Wall(BlockKind::Dirt),
         Self::Wall(BlockKind::Clay),
         Self::Wall(BlockKind::Stone),
@@ -216,6 +220,7 @@ impl BuiltTile {
         Self::Plating,
         Self::Glass,
         Self::Plank,
+        Self::VentGrate,
     ];
 
     #[must_use]
@@ -228,6 +233,7 @@ impl BuiltTile {
             Self::Plating => "Metal Plating",
             Self::Glass => "Glass Window",
             Self::Plank => "Plank Floor",
+            Self::VentGrate => "Vent Grate",
         }
     }
 
@@ -242,6 +248,7 @@ impl BuiltTile {
             Self::Plating => 4,
             Self::Glass => 5,
             Self::Plank => 6,
+            Self::VentGrate => 7,
         }
     }
 
@@ -256,6 +263,7 @@ impl BuiltTile {
             4 => Self::Plating,
             5 => Self::Glass,
             6 => Self::Plank,
+            7 => Self::VentGrate,
             _ => return None,
         })
     }
@@ -278,10 +286,12 @@ pub enum Fixture {
     Crates,
     /// A workbench table.
     Table,
+    /// A climbing rope: pilots on foot climb it like a ladder (rigs ignore it).
+    Rope,
 }
 
 impl Fixture {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Door,
         Self::Ladder,
         Self::Light,
@@ -289,6 +299,7 @@ impl Fixture {
         Self::Banner,
         Self::Crates,
         Self::Table,
+        Self::Rope,
     ];
 
     #[must_use]
@@ -301,6 +312,7 @@ impl Fixture {
             Self::Banner => "Crew Banner",
             Self::Crates => "Supply Crates",
             Self::Table => "Workbench",
+            Self::Rope => "Climbing Rope",
         }
     }
 
@@ -315,6 +327,7 @@ impl Fixture {
             Self::Banner => 12,
             Self::Crates => 8,
             Self::Table => 14,
+            Self::Rope => 4,
         }
     }
 
@@ -332,7 +345,7 @@ impl Fixture {
             Self::Door | Self::Banner | Self::Table | Self::Plant | Self::Crates => {
                 &[Facing::Right, Facing::Left]
             }
-            Self::Ladder => &[Facing::Right],
+            Self::Ladder | Self::Rope => &[Facing::Right],
         }
     }
 }
@@ -723,7 +736,7 @@ impl BuildGroup {
 
 impl Buildable {
     /// The build menu, in order.
-    pub const PALETTE: [Self; 28] = [
+    pub const PALETTE: [Self; 30] = [
         Self::Module(ModuleKind::Beacon),
         Self::Tile(BuiltTile::Wall(BlockKind::Dirt)),
         Self::Tile(BuiltTile::Wall(BlockKind::Clay)),
@@ -732,12 +745,14 @@ impl Buildable {
         Self::Tile(BuiltTile::Plating),
         Self::Tile(BuiltTile::Glass),
         Self::Tile(BuiltTile::Plank),
+        Self::Tile(BuiltTile::VentGrate),
         Self::BackWall(BlockKind::Dirt),
         Self::BackWall(BlockKind::Clay),
         Self::BackWall(BlockKind::Stone),
         Self::BackWall(BlockKind::HardRock),
         Self::Fixture(Fixture::Door),
         Self::Fixture(Fixture::Ladder),
+        Self::Fixture(Fixture::Rope),
         Self::Fixture(Fixture::Light),
         Self::Fixture(Fixture::Plant),
         Self::Fixture(Fixture::Banner),
@@ -809,6 +824,7 @@ impl Buildable {
             Self::Tile(BuiltTile::Plating) => BuildCost::credits(12),
             Self::Tile(BuiltTile::Glass) => BuildCost::credits(8),
             Self::Tile(BuiltTile::Plank) => BuildCost::credits(4),
+            Self::Tile(BuiltTile::VentGrate) => BuildCost::credits(10),
             Self::Fixture(fixture) => BuildCost::credits(fixture.credits()),
             Self::Module(module) => BuildCost {
                 block: None,

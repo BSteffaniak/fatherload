@@ -65,6 +65,9 @@ pub enum EntityKind {
     Projectile,
     /// A practice target with health: the reference damageable entity ([`crate::combat`]).
     Target,
+    /// A player's pilot on foot (Part II F5, [`crate::pilot`]): moved by its owner's controls
+    /// in its own pass (`world/pilot.rs`), never by the generic entity phases.
+    Pilot,
 }
 
 /// When in the tick an entity kind updates (`WorldState::simulate_tick` runs each phase at a
@@ -83,7 +86,7 @@ pub enum EntityPhase {
 
 impl EntityKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::GasCloud,
         Self::Boulder,
         Self::Drop,
@@ -93,6 +96,7 @@ impl EntityKind {
         Self::Charge,
         Self::Projectile,
         Self::Target,
+        Self::Pilot,
     ];
 
     /// The tick phase this kind updates in.
@@ -106,7 +110,8 @@ impl EntityKind {
             | Self::Enemy
             | Self::EnemyShot
             | Self::Projectile
-            | Self::Target => EntityPhase::Late,
+            | Self::Target
+            | Self::Pilot => EntityPhase::Late,
             Self::Charge => EntityPhase::Charges,
         }
     }
@@ -341,6 +346,8 @@ pub enum EntityState {
     Charge(ChargeState),
     Projectile(ProjectileState),
     Target(TargetState),
+    /// A pilot on foot ([`crate::pilot::PilotState`]).
+    Pilot(crate::pilot::PilotState),
 }
 
 impl EntityState {
@@ -356,6 +363,7 @@ impl EntityState {
             Self::Charge(_) => EntityKind::Charge,
             Self::Projectile(_) => EntityKind::Projectile,
             Self::Target(_) => EntityKind::Target,
+            Self::Pilot(_) => EntityKind::Pilot,
         }
     }
 
@@ -386,7 +394,11 @@ impl EntityState {
             | Self::Critter(_)
             | Self::EnemyShot(_)
             | Self::Charge(_)
-            | Self::Projectile(_) => None,
+            | Self::Projectile(_)
+            // Pilots are hurt through `WorldState::damage_pilot` (reached from
+            // `damage_entity`); reporting no health keeps weapons and auto-aim off crewmates
+            // (friendly fire is off).
+            | Self::Pilot(_) => None,
         }
     }
 
@@ -401,7 +413,8 @@ impl EntityState {
             | Self::Enemy(_)
             | Self::EnemyShot(_)
             | Self::Charge(_)
-            | Self::Projectile(_) => None,
+            | Self::Projectile(_)
+            | Self::Pilot(_) => None,
         }
     }
 }

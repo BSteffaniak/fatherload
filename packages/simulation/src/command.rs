@@ -67,6 +67,17 @@ pub enum PlayerCommand {
     /// Get out of bed, or change who must be in bed to skip the night (see [`crate::clock`];
     /// lying down is a bed's own service).
     Sleep(crate::clock::SleepCommand),
+    /// The one exit / board button (Part II F5): climbs out of a slow rig as a pilot on foot,
+    /// or boards the player's rig when the pilot stands close to it (the personal pack empties
+    /// into the rig). Ignored when neither is possible.
+    TogglePilot,
+    /// Moves up to `count` of `item` between the pilot's personal pack and the rig's cargo bay
+    /// or block hopper (`to_rig`: pack to rig). Only while the pilot is in or beside the rig.
+    PilotPack {
+        item: crate::item::ItemKind,
+        count: u32,
+        to_rig: bool,
+    },
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

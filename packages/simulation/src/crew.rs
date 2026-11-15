@@ -153,6 +153,9 @@ pub struct ParkedPlayer {
     /// World tick when the player was parked.
     #[serde(default)]
     pub parked_at: SimulationTick,
+    /// Their pilot, if they were on foot (Part II F5): it comes back where it stood.
+    #[serde(default)]
+    pub pilot: Option<crate::world::pilot::ParkedPilot>,
 }
 
 /// Identity of every rig in the world plus the parked players (saved with the world, never sent

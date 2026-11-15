@@ -11,7 +11,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     ids::PlayerId,
-    player::Player,
     terrain::{CHUNK_SIZE_TILES, ChunkPosition, TILE_SIZE, Terrain, TilePosition},
 };
 
@@ -268,14 +267,14 @@ impl<'de> Deserialize<'de> for DiscoveredTiles {
 }
 
 /// Reveals the clamped rectangle around a rig.
-fn reveal_around(discovered: &mut DiscoveredTiles, terrain: &Terrain, player: &Player) {
+fn reveal_around(discovered: &mut DiscoveredTiles, terrain: &Terrain, (x, y): (f32, f32)) {
     #[allow(
         clippy::cast_possible_truncation,
         reason = "world positions are converted to terrain tile coordinates"
     )]
     let center = TilePosition {
-        x: (player.x / TILE_SIZE).floor() as i32,
-        y: (player.y / TILE_SIZE).floor() as i32,
+        x: (x / TILE_SIZE).floor() as i32,
+        y: (y / TILE_SIZE).floor() as i32,
     };
     let (radius_x, radius_y) = REVEAL_RADIUS_TILES;
     let x_range =
@@ -319,6 +318,11 @@ impl WorldState {
 
     /// Reveals the area around every rig (once per tick). Allocation-free unless a tile is new.
     pub(super) fn reveal_tiles_near_players(&mut self) {
+        // Pilots on foot reveal the map around themselves too (Part II F5).
+        let pilots: Vec<(PlayerId, (f32, f32))> = self
+            .pilots()
+            .map(|(_, body, state)| (state.owner, state.middle(body)))
+            .collect();
         let Self {
             players,
             discovered_tiles,
@@ -329,8 +333,11 @@ impl WorldState {
             reveal_around(
                 discovered_tiles.entry(*player_id).or_default(),
                 terrain,
-                player,
+                (player.x, player.y),
             );
+        }
+        for (owner, middle) in pilots {
+            reveal_around(discovered_tiles.entry(owner).or_default(), terrain, middle);
         }
     }
 

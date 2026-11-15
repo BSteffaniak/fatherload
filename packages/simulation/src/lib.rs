@@ -32,6 +32,7 @@ pub mod input;
 pub mod item;
 pub mod people;
 pub mod physics;
+pub mod pilot;
 pub mod player;
 pub mod poi;
 pub mod progression;

@@ -17,6 +17,10 @@ pub struct ControlState {
     /// The hardpoint weapon's trigger and aim.
     #[serde(default)]
     pub weapon: WeaponControl,
+    /// The on-foot jump button (Part II F5). In the rig it does nothing; on foot `thrust`
+    /// (up) also jumps where there is nothing to climb, so seats without a jump key can play.
+    #[serde(default)]
+    pub jump: bool,
 }
 
 /// A seat's weapon trigger and aim for one tick (held, so firing is predicted like movement).
@@ -49,7 +53,15 @@ impl ControlState {
             thrust,
             drill_down,
             weapon: WeaponControl::default(),
+            jump: false,
         }
+    }
+
+    /// The same controls with the on-foot jump button `jump`.
+    #[must_use]
+    pub const fn with_jump(mut self, jump: bool) -> Self {
+        self.jump = jump;
+        self
     }
 
     /// The same controls with `weapon` as the weapon trigger and aim.

@@ -36,7 +36,9 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::SetEnemyDifficulty(_)
         | PlayerCommand::MountWeapon { .. }
         | PlayerCommand::Build(_)
-        | PlayerCommand::Sleep(_) => None,
+        | PlayerCommand::Sleep(_)
+        | PlayerCommand::TogglePilot
+        | PlayerCommand::PilotPack { .. } => None,
     }
 }
 
@@ -55,7 +57,9 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
         SessionServiceRequest::CompleteDepotWork => {
             &[SurfaceZone::Depot, SurfaceZone::Headquarters]
         }
-        SessionServiceRequest::BuyUpgrade { .. } => &[SurfaceZone::Shop],
+        SessionServiceRequest::BuyUpgrade { .. } | SessionServiceRequest::BuyPilotGear { .. } => {
+            &[SurfaceZone::Shop]
+        }
         SessionServiceRequest::Finance => &[SurfaceZone::Headquarters, SurfaceZone::Bank],
         SessionServiceRequest::BuyInsurance | SessionServiceRequest::StartSideContract => {
             &[SurfaceZone::Bank]
@@ -107,8 +111,9 @@ impl WorldState {
     /// The surface building zone `player_id`'s rig stands at, if any.
     #[must_use]
     pub fn player_surface_zone(&self, player_id: PlayerId) -> Option<SurfaceZone> {
-        let player = self.players.get(&player_id)?;
-        surface_zone_at(player.x, player.y, TILE_SIZE)
+        // On foot the pilot is the one at the counter (Part II F5).
+        let (x, y) = self.actor_position(player_id)?;
+        surface_zone_at(x, y, TILE_SIZE)
     }
 
     /// Whether `player_id` may issue `command` from where its rig is now.
@@ -147,6 +152,9 @@ impl WorldState {
         }
         if matches!(request, SessionServiceRequest::SellBlocks) {
             return self.sell_blocks(player_id);
+        }
+        if let SessionServiceRequest::BuyPilotGear { gear } = request {
+            return self.buy_pilot_gear(player_id, gear);
         }
         if let SessionServiceRequest::Village {
             village,
@@ -205,6 +213,7 @@ impl WorldState {
         PlayerScopedCommandOutcome::Applied
     }
 
+    #[allow(clippy::too_many_lines, reason = "one arm per shop and board service")]
     fn apply_shop_and_board_service(
         &mut self,
         player_id: PlayerId,
@@ -292,6 +301,7 @@ impl WorldState {
             | SessionServiceRequest::Repair { .. }
             | SessionServiceRequest::SellCargo
             | SessionServiceRequest::SellBlocks
+            | SessionServiceRequest::BuyPilotGear { .. }
             | SessionServiceRequest::BuyUpgrade { .. }
             | SessionServiceRequest::Finance
             | SessionServiceRequest::BuyInsurance

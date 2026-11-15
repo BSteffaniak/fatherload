@@ -374,6 +374,80 @@ pub enum GameplayEventKind {
     RigIcing {
         player_id: PlayerId,
     },
+    // --- The pilot on foot (Part II F5, `world/pilot.rs`) ---------------------------------
+    /// The pilot climbed out of its rig at world pixel `(x, y)` (its feet).
+    PilotExited {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// The pilot boarded its rig; `transferred` items moved from the personal pack into the
+    /// rig on the way in.
+    PilotBoarded {
+        player_id: PlayerId,
+        transferred: u32,
+    },
+    /// The pilot jumped.
+    PilotJumped {
+        player_id: PlayerId,
+    },
+    /// The pilot landed after a fall (`hard`: fast enough to hurt).
+    PilotLanded {
+        player_id: PlayerId,
+        hard: bool,
+    },
+    /// The pilot grabbed a ledge.
+    PilotLedgeGrab {
+        player_id: PlayerId,
+    },
+    /// The pilot went into water.
+    PilotSplashed {
+        player_id: PlayerId,
+    },
+    /// The pilot took `amount` damage at world pixel `(x, y)`.
+    PilotHurt {
+        player_id: PlayerId,
+        amount: u16,
+        x: i32,
+        y: i32,
+    },
+    /// The pilot died at world pixel `(x, y)` (it respawns in its rig or at the home point,
+    /// leaving a small drop of carried items behind).
+    PilotDied {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// The pilot's air ran low (a quarter left) or out (`empty`).
+    PilotOxygenLow {
+        player_id: PlayerId,
+        empty: bool,
+    },
+    /// The jetpack lit.
+    JetpackIgnited {
+        player_id: PlayerId,
+    },
+    /// The jetpack ran dry in the air.
+    JetpackEmpty {
+        player_id: PlayerId,
+    },
+    /// The hand pick chipped tile `(x, y)` (`broke`: it came out and dropped).
+    PickStruck {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+        broke: bool,
+    },
+    /// The hand pick clinked off a tile it cannot break.
+    PickClinked {
+        player_id: PlayerId,
+    },
+    /// Items moved between the personal pack and the rig (`to_rig`: into the rig).
+    PackTransferred {
+        player_id: PlayerId,
+        count: u32,
+        to_rig: bool,
+    },
 }
 
 /// What a weapon shot struck.
@@ -431,8 +505,10 @@ impl TickOutput {
 pub(crate) const fn gameplay_event_for_applied_command(
     player_id: PlayerId,
     command: &PlayerCommand,
-) -> GameplayEventKind {
-    match command {
+) -> Option<GameplayEventKind> {
+    Some(match command {
+        // The pilot's exit / board and pack swaps report their own events (with what moved).
+        PlayerCommand::TogglePilot | PlayerCommand::PilotPack { .. } => return None,
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {
             GameplayEventKind::RigCustomized { player_id }
         }
@@ -508,5 +584,5 @@ pub(crate) const fn gameplay_event_for_applied_command(
                 service: *service,
             }
         }
-    }
+    })
 }

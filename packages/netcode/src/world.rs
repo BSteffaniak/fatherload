@@ -182,6 +182,21 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::SkyBandEntered { player_id, .. } => (116, Some(player_id)),
         GameplayEventKind::UpdraftCaught { player_id } => (117, Some(player_id)),
         GameplayEventKind::RigIcing { player_id } => (118, Some(player_id)),
+        // The pilot on foot (Part II F5): 120-133.
+        GameplayEventKind::PilotExited { player_id, .. } => (120, Some(player_id)),
+        GameplayEventKind::PilotBoarded { player_id, .. } => (121, Some(player_id)),
+        GameplayEventKind::PilotJumped { player_id } => (122, Some(player_id)),
+        GameplayEventKind::PilotLanded { player_id, .. } => (123, Some(player_id)),
+        GameplayEventKind::PilotLedgeGrab { player_id } => (124, Some(player_id)),
+        GameplayEventKind::PilotSplashed { player_id } => (125, Some(player_id)),
+        GameplayEventKind::PilotHurt { player_id, .. } => (126, Some(player_id)),
+        GameplayEventKind::PilotDied { player_id, .. } => (127, Some(player_id)),
+        GameplayEventKind::PilotOxygenLow { player_id, .. } => (128, Some(player_id)),
+        GameplayEventKind::JetpackIgnited { player_id } => (129, Some(player_id)),
+        GameplayEventKind::JetpackEmpty { player_id } => (130, Some(player_id)),
+        GameplayEventKind::PickStruck { player_id, .. } => (131, Some(player_id)),
+        GameplayEventKind::PickClinked { player_id } => (132, Some(player_id)),
+        GameplayEventKind::PackTransferred { player_id, .. } => (133, Some(player_id)),
     }
 }
 
@@ -383,11 +398,23 @@ impl NetSimulation for WorldState {
                 | PlayerCommand::UseScanner
                 | PlayerCommand::PlaceInfrastructure { .. }
                 | PlayerCommand::MountWeapon { .. }
+                | PlayerCommand::TogglePilot
         )
     }
 
     fn player_pose(&self, id: PlayerId) -> Option<Pose> {
         let sim_id = to_sim_player(id);
+        // On foot the pose is the pilot's (relevance and smoothing follow the pilot); getting
+        // in or out changes the mode, so the client snaps instead of smoothing across bodies.
+        if let Some((pilot, _, _)) = self.pilot_of(sim_id) {
+            let (x, y) = self.actor_position(sim_id)?;
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "a distinct non-zero code per pilot entity is enough"
+            )]
+            let mode = 0x8000_0000 | (pilot.get() as u32 & 0x7FFF_FFFF);
+            return Some(Pose::new(x / TILE_SIZE, y / TILE_SIZE, mode));
+        }
         let player = self.player(sim_id)?;
         let mode = self
             .active_drill(sim_id)

@@ -115,6 +115,15 @@ pub struct Player {
     /// Capacitor energy, cooldown and aim (per tick).
     #[serde(default)]
     pub weapon: RigWeaponState,
+    /// The pilot's own gear (jetpack, suit; private, Part II F5). The pilot entity copies it
+    /// when it climbs out ([`crate::pilot::PilotState::gear`], public).
+    #[serde(default)]
+    pub pilot_gear: crate::pilot::PilotGear,
+    /// The pilot's personal pack (private): what the pilot carries on foot. It empties into the
+    /// rig when the pilot boards (whatever fits) and swaps with the rig by hand
+    /// ([`crate::PlayerCommand::PilotPack`]). Capacity: [`crate::pilot::PilotGear::pack_capacity`].
+    #[serde(default)]
+    pub pilot_pack: ItemContainer,
 }
 
 #[allow(
@@ -171,6 +180,8 @@ impl Player {
                 energy: crate::weapon::battery_capacity(0),
                 ..RigWeaponState::default()
             },
+            pilot_gear: crate::pilot::PilotGear::default(),
+            pilot_pack: ItemContainer::new(),
         }
     }
 

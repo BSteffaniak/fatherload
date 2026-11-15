@@ -4,7 +4,7 @@
 //! |---|---|---|
 //! | [`PlayerRig`]: pose, velocity, fuel, hull | per tick | everyone it is relevant to |
 //! | [`RigBuild`]: the upgrade levels drawn on a rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and its cosmetics | on-change [`super::SectionKey::RigBuild`] | everyone |
-//! | [`PlayerInventory`]: cargo bay, block hopper, credits, other upgrades, kits, debt, insurance, POI journal, quest log, cosmetic unlocks, village journal | on-change [`super::SectionKey::Loadout`] | the owner only |
+//! | [`PlayerInventory`]: cargo bay, block hopper, credits, other upgrades, kits, debt, insurance, POI journal, quest log, cosmetic unlocks, village journal, pilot gear and personal pack | on-change [`super::SectionKey::Loadout`] | the owner only |
 //!
 //! [`split_player`] destructures the whole [`Player`] without `..`, so a new player field fails
 //! to compile until it is assigned to one of the parts.
@@ -107,6 +107,12 @@ pub struct PlayerInventory {
     /// Owned weapons and the capacitor level.
     #[serde(default)]
     pub weapon_rack: WeaponRack,
+    /// The pilot's gear (jetpack, suit).
+    #[serde(default)]
+    pub pilot_gear: crate::pilot::PilotGear,
+    /// The pilot's personal pack.
+    #[serde(default)]
+    pub pilot_pack: ItemContainer,
 }
 
 /// Splits a player into its per-tick, public and private parts (exhaustive: every field goes to
@@ -157,6 +163,8 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         weapon_rack,
         mounted_weapon,
         weapon,
+        pilot_gear,
+        pilot_pack,
     } = player.clone();
     (
         PlayerRig {
@@ -207,6 +215,8 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             cosmetic_unlocks,
             villages,
             weapon_rack,
+            pilot_gear,
+            pilot_pack,
         },
     )
 }
@@ -262,6 +272,8 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         cosmetic_unlocks,
         villages,
         weapon_rack,
+        pilot_gear,
+        pilot_pack,
     } = inventory;
     Player {
         x,
@@ -307,6 +319,8 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         weapon_rack,
         mounted_weapon,
         weapon,
+        pilot_gear,
+        pilot_pack,
     }
 }
 
