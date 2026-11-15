@@ -249,7 +249,7 @@ fn unique_given_names(population: &mut Population, rng: &mut PeopleRng) {
             if taken.insert(character.name.given.clone()) {
                 break;
             }
-            character.name.given = names::given_name(culture, rng);
+            character.name.given = names::given_name(culture, Some(character.pronouns), rng);
         }
         if let Some(nickname) = &character.name.nickname
             && !taken.insert(nickname.clone())
@@ -263,12 +263,20 @@ fn unique_given_names(population: &mut Population, rng: &mut PeopleRng) {
                 if taken.insert(person.name.given.clone()) {
                     break;
                 }
-                person.name.given = names::given_name(culture, rng);
+                person.name.given = names::given_name(
+                    culture,
+                    super::character::relation_pronouns(&person.relation),
+                    rng,
+                );
             }
         }
     }
 }
 
+/// Groups some residents into households of two or three (shared surname) and links them as
+/// a coherent family: a parent and child, siblings, a couple, a couple and their child, or a
+/// parent of two siblings. A trio whose ages fit none of those (a grandparent, say) is cut
+/// back to a pair, so nobody ends up with two parents who are siblings.
 fn add_families(population: &mut Population, rng: &mut PeopleRng) {
     let count = population.characters.len();
     let mut order: Vec<usize> = (0..count).collect();
@@ -281,14 +289,29 @@ fn add_families(population: &mut Population, rng: &mut PeopleRng) {
             cursor += 1;
             continue;
         }
-        let size = if cursor + 2 < order.len() && rng.chance(35) {
-            3
-        } else {
-            2
-        };
-        let mut members: Vec<usize> = order[cursor..cursor + size].to_vec();
-        cursor += size;
+        let want_three = cursor + 2 < order.len() && rng.chance(35);
+        let couple_roll = rng.chance(50);
+        let mut members: Vec<usize> =
+            order[cursor..cursor + if want_three { 3 } else { 2 }].to_vec();
         members.sort_by_key(|member| std::cmp::Reverse(population.characters[*member].age));
+        let ages: Vec<u8> = members
+            .iter()
+            .map(|member| population.characters[*member].age)
+            .collect();
+        let links = if want_three { trio_links(&ages) } else { None };
+        let links = if let Some(links) = links {
+            links
+        } else {
+            // A pair: the first two of the group (the third goes back to the pool).
+            members = order[cursor..cursor + 2].to_vec();
+            members.sort_by_key(|member| std::cmp::Reverse(population.characters[*member].age));
+            let (senior, junior) = (
+                population.characters[members[0]].age,
+                population.characters[members[1]].age,
+            );
+            vec![(0, 1, pair_kind(senior, junior, couple_roll))]
+        };
+        cursor += members.len();
         let head = members[0];
         let family = population.characters[head].name.family.clone();
         for member in &members[1..] {
@@ -300,26 +323,56 @@ fn add_families(population: &mut Population, rng: &mut PeopleRng) {
                 }
             }
         }
-        for (position, a) in members.iter().enumerate() {
-            for b in &members[position + 1..] {
-                let (senior, junior) = (*a, *b);
-                let gap = population.characters[senior]
-                    .age
-                    .saturating_sub(population.characters[junior].age);
-                let kind = if gap >= 18 {
-                    RelationshipKind::Child
-                } else if members.len() == 2
-                    && gap <= 10
-                    && population.characters[junior].age >= 22
-                    && rng.chance(50)
-                {
-                    RelationshipKind::Spouse
-                } else {
-                    RelationshipKind::Sibling
-                };
-                population.link(senior, junior, kind);
-            }
+        for (senior, junior, kind) in links {
+            population.link(members[senior], members[junior], kind);
         }
+    }
+}
+
+/// How the older of two household members (`senior`, `junior` ages) relates to the younger.
+const fn pair_kind(senior: u8, junior: u8, couple_roll: bool) -> RelationshipKind {
+    let gap = senior.saturating_sub(junior);
+    if gap >= 18 {
+        RelationshipKind::Child
+    } else if gap <= 10 && junior >= 22 && couple_roll {
+        RelationshipKind::Spouse
+    } else {
+        RelationshipKind::Sibling
+    }
+}
+
+/// Links for a household of three, oldest first (`ages` descending), as (senior, junior,
+/// kind) edges; `None` when their ages make no simple family.
+fn trio_links(ages: &[u8]) -> Option<Vec<(usize, usize, RelationshipKind)>> {
+    let (a, b, c) = (ages[0], ages[1], ages[2]);
+    let (ab, bc, ac) = (a - b, b - c, a - c);
+    if ab >= 18 {
+        // The oldest is the parent of both; the other two are siblings.
+        (bc < 18).then(|| {
+            vec![
+                (0, 1, RelationshipKind::Child),
+                (0, 2, RelationshipKind::Child),
+                (1, 2, RelationshipKind::Sibling),
+            ]
+        })
+    } else if bc >= 18 {
+        // A couple and their child.
+        (ab <= 12).then(|| {
+            vec![
+                (0, 1, RelationshipKind::Spouse),
+                (0, 2, RelationshipKind::Child),
+                (1, 2, RelationshipKind::Child),
+            ]
+        })
+    } else {
+        // Three siblings.
+        (ac < 18).then(|| {
+            vec![
+                (0, 1, RelationshipKind::Sibling),
+                (0, 2, RelationshipKind::Sibling),
+                (1, 2, RelationshipKind::Sibling),
+            ]
+        })
     }
 }
 
@@ -487,6 +540,21 @@ mod tests {
                 }
             }
             for character in &a.characters {
+                // Families are coherent: at most two parents, and two parents are a couple.
+                let parents: Vec<_> = a
+                    .relationships_of(character.id)
+                    .filter(|edge| edge.kind == RelationshipKind::Parent)
+                    .map(|edge| edge.to)
+                    .collect();
+                assert!(parents.len() <= 2, "village {village}: {parents:?}");
+                if let [first, second] = parents[..] {
+                    assert_eq!(
+                        a.relationship(first, second).map(|edge| edge.kind),
+                        Some(RelationshipKind::Spouse),
+                        "village {village}: {} has two parents who are not a couple",
+                        character.name.full()
+                    );
+                }
                 if let WantFocus::Neighbour(id) = character.want_focus {
                     assert!(a.relationship(character.id, id).is_some());
                 }
