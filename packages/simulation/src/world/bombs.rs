@@ -54,9 +54,8 @@ const PREVIEW_MILLIS: u64 = 1_600;
 
 /// One primary detonation this tick: where, what kind, and who set it.
 ///
-/// This is the seam for blast impulses on things other than bombs and rigs: the entities track
-/// should push its entities from [`WorldState::push_from_blasts`] using
-/// [`crate::explosive::blast_impulse`].
+/// [`WorldState::push_from_blasts`] pushes rigs and every blast-feeling entity of the entity
+/// store (drops today; enemies and machines later) with it.
 #[derive(Clone, Copy, Debug)]
 pub struct Blast {
     pub kind: ExplosiveKind,
@@ -137,12 +136,16 @@ impl WorldState {
         self.bombs = survivors;
     }
 
-    /// Pushes rigs away from this tick's blasts (line of sight on the pre-blast terrain).
-    ///
-    /// Integration seam: generic entities (drops, enemies) get pushed here too once they exist,
-    /// with the same [`blast_impulse`] formula.
+    /// Pushes rigs and blast-feeling entities away from this tick's blasts (line of sight on
+    /// the pre-blast terrain). Entities take the same push formula
+    /// ([`crate::physics::Blast::explosive`]), uncapped, and are woken.
     pub(super) fn push_from_blasts(&mut self, blasts: &[Blast]) {
         for blast in blasts {
+            if let Some(entity_blast) =
+                crate::physics::Blast::explosive(blast.kind, blast.x, blast.y)
+            {
+                self.push_entities_with_blast(&entity_blast);
+            }
             for (player_id, player) in &mut self.players {
                 let Some((dx, dy)) = blast_impulse(
                     blast.kind,

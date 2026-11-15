@@ -819,3 +819,28 @@ fn the_preview_follows_the_real_throw() {
     assert!(bomb.stuck);
     assert!((bomb.x - end_x).abs() < 0.01 && (bomb.y - end_y).abs() < 0.01);
 }
+
+#[test]
+fn every_pushing_explosive_throws_loose_drops_but_emp_and_flares_do_not() {
+    use crate::item::{ItemKind, ItemStack};
+    let copper = ItemStack::new(ItemKind::Mineral(MineralKind::Copper), 1);
+    for kind in ExplosiveKind::ALL {
+        let mut world = arena();
+        let drop =
+            world.spawn_item_drop(22.0 * TILE_SIZE, 20.5 * TILE_SIZE, (0.0, 0.0), copper, None);
+        world.bombs = vec![charge(0, kind, 20.5, 20.5, SimulationTick::new(1))];
+        advance(&mut world, 1);
+        let body = world.entities().get(drop).expect("drop").body;
+        if kind.push_reach() > 0.0 {
+            assert!(
+                body.velocity_x > 50.0 && body.velocity_y < 0.0 && !body.asleep,
+                "{kind:?} throws the drop: {body:?}"
+            );
+        } else {
+            assert!(
+                body.velocity_x.abs() < f32::EPSILON,
+                "{kind:?} pushes nothing: {body:?}"
+            );
+        }
+    }
+}

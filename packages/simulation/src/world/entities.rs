@@ -6,9 +6,10 @@
 //! `simulate_tick` runs [`EntityPhase::Early`] right after inputs (gas clouds age before hazard
 //! damage reads them) and [`EntityPhase::Late`] after drilling, bombs and hazard spawns (expiry
 //! first, then boulders and drops). Within a phase, awake entities update in id order.
-//! Detonations push blast-feeling entities ([`EntityKind::feels_blasts`]) right after the bomb
-//! pass. At the end of the tick, every tile the tick changed wakes the sleeping entities around
-//! it, so a drop resting on a dug-out tile falls on the next tick.
+//! Detonations push blast-feeling entities ([`EntityKind::feels_blasts`]) inside the bomb pass
+//! (`push_from_blasts`, with every explosive kind's reach and push). At the end of the tick,
+//! every tile the tick changed wakes the sleeping entities around it, so a drop resting on a
+//! dug-out tile falls on the next tick.
 //!
 //! # Adding a kind (Wave 2)
 //!
@@ -307,25 +308,6 @@ impl WorldState {
             self.entities.update(id, |entity| {
                 physics::apply_blast(&mut entity.body, blast, terrain, id.get() % 2 == 1)
             });
-        }
-    }
-
-    /// Applies a bomb blast to entities for every detonation among `events[from..]`.
-    pub(super) fn push_entities_from_detonations(&mut self, output: &TickOutput, from: usize) {
-        #[allow(clippy::cast_precision_loss, reason = "event pixels are small")]
-        let blasts: Vec<Blast> = output
-            .events
-            .iter()
-            .skip(from)
-            .filter_map(|event| match event.kind {
-                GameplayEventKind::BombDetonated { x, y, .. } => {
-                    Some(Blast::bomb(x as f32, y as f32))
-                }
-                _ => None,
-            })
-            .collect();
-        for blast in &blasts {
-            self.push_entities_with_blast(blast);
         }
     }
 

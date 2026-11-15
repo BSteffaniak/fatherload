@@ -7,9 +7,11 @@
 //! # Integration seams for other tracks
 //!
 //! * [`blast_impulse`] is the one formula for "how hard does a blast at `source` push something
-//!   at `target`". Rigs use it today (bombs use the same numbers); generic entities (drops,
-//!   enemies) get pushed by adding a loop to `WorldState::push_from_blasts` in `world/bombs.rs`,
-//!   which receives every blast of the tick (kind and position) before the terrain is cleared.
+//!   at `target`". Rigs use it (bombs use the same numbers). Entities of the entity store
+//!   whose kind [`crate::entity::EntityKind::feels_blasts`] (drops today; enemies later) are
+//!   pushed by `WorldState::push_from_blasts` in `world/bombs.rs` through
+//!   [`crate::physics::Blast::explosive`], which carries the same reach and peak push. That hook
+//!   receives every blast of the tick (kind and position) before the terrain is cleared.
 //! * [`ExplosiveKind::Emp`] pulses have no target yet: machines (enemy sentries, turrets) should
 //!   react in the same `push_from_blasts` hook (`kind == Emp`) or to
 //!   [`crate::GameplayEventKind::ExplosiveDetonated`] with `kind: Emp`. EMPs have no push

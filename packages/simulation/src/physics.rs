@@ -273,6 +273,21 @@ impl Blast {
             lift: 0.3,
         }
     }
+
+    /// The blast of an explosive of `kind` at `(x, y)`: the same reach and peak push the
+    /// explosives rules give rigs ([`crate::explosive::blast_impulse`]); a plain bomb equals
+    /// [`Self::bomb`]. `None` for kinds that push nothing (EMP, flare).
+    #[must_use]
+    pub fn explosive(kind: crate::explosive::ExplosiveKind, x: f32, y: f32) -> Option<Self> {
+        let reach = kind.push_reach();
+        (reach > 0.0).then(|| Self {
+            x,
+            y,
+            reach,
+            strength: kind.push_strength(),
+            lift: 0.3,
+        })
+    }
 }
 
 /// Pushes `body` away from `blast` if it is in reach with a clear line of sight.

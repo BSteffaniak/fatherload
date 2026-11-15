@@ -248,9 +248,8 @@ impl WorldState {
             }
         }
 
-        let events_before_bombs = output.events.len();
+        // Blasts push rigs and entities inside the bomb pass (`push_from_blasts`).
         self.advance_bombs(next_tick, &mut quest_notes, &mut output);
-        self.push_entities_from_detonations(&output, events_before_bombs);
 
         let active_players: Vec<PlayerId> = self.active_drills.keys().copied().collect();
         for player_id in active_players {

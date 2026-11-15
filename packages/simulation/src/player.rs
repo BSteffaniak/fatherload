@@ -3,6 +3,8 @@
     reason = "player world positions intentionally convert to terrain tile coordinates"
 )]
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
