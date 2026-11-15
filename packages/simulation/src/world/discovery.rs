@@ -37,7 +37,10 @@ pub struct Discovery {
 ///
 /// Stored as [`CHUNK_SIZE_TILES`]-square chunk bitsets: membership and insertion are O(log
 /// chunks) and allocation-free once a chunk exists. Human-readable formats (saves) serialize it as
-/// a list of tile positions; binary formats (keyframes) as the chunk bitsets.
+/// a list of chunk records (`{"chunk":{"x":..,"y":..},"bits":"<64 hex digits>"}`, about 100
+/// bytes per chunk however much of it is revealed, so a long trip across an endless world keeps
+/// the save small); they also read the plain tile-position entries older saves wrote. Binary
+/// formats (keyframes) use the chunk bitsets.
 #[derive(Clone, Debug, Default)]
 pub struct DiscoveredTiles {
     chunks: BTreeMap<ChunkPosition, ChunkBits>,
@@ -174,10 +177,49 @@ impl FromIterator<TilePosition> for DiscoveredTiles {
     }
 }
 
+/// One chunk of a human-readable [`DiscoveredTiles`]: its bitset as 64 hex digits (word 0
+/// first, each word big-endian).
+#[derive(Deserialize, Serialize)]
+struct SavedChunk {
+    chunk: ChunkPosition,
+    bits: String,
+}
+
+/// An entry of a human-readable [`DiscoveredTiles`]: a chunk record, or one tile (older saves).
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum SavedEntry {
+    Tile(TilePosition),
+    Chunk(SavedChunk),
+}
+
+fn bits_to_hex(bits: &ChunkBits) -> String {
+    use std::fmt::Write as _;
+    bits.iter()
+        .fold(String::with_capacity(16 * CHUNK_WORDS), |mut hex, word| {
+            let _ = write!(hex, "{word:016x}");
+            hex
+        })
+}
+
+fn bits_from_hex(hex: &str) -> Option<ChunkBits> {
+    if hex.len() != 16 * CHUNK_WORDS || !hex.is_ascii() {
+        return None;
+    }
+    let mut bits = [0; CHUNK_WORDS];
+    for (index, word) in bits.iter_mut().enumerate() {
+        *word = u64::from_str_radix(&hex[index * 16..(index + 1) * 16], 16).ok()?;
+    }
+    Some(bits)
+}
+
 impl Serialize for DiscoveredTiles {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         if serializer.is_human_readable() {
-            serializer.collect_seq(self.iter())
+            serializer.collect_seq(self.chunks.iter().map(|(chunk, bits)| SavedChunk {
+                chunk: *chunk,
+                bits: bits_to_hex(bits),
+            }))
         } else {
             serializer.collect_seq(&self.chunks)
         }
@@ -187,9 +229,28 @@ impl Serialize for DiscoveredTiles {
 impl<'de> Deserialize<'de> for DiscoveredTiles {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         if deserializer.is_human_readable() {
-            Ok(Vec::<TilePosition>::deserialize(deserializer)?
-                .into_iter()
-                .collect())
+            let mut tiles = Self::default();
+            for entry in Vec::<SavedEntry>::deserialize(deserializer)? {
+                match entry {
+                    SavedEntry::Tile(tile) => {
+                        tiles.insert(tile);
+                    }
+                    SavedEntry::Chunk(SavedChunk { chunk, bits }) => {
+                        let bits = bits_from_hex(&bits).ok_or_else(|| {
+                            serde::de::Error::custom("invalid discovery chunk bits")
+                        })?;
+                        if bits == [0; CHUNK_WORDS] {
+                            continue;
+                        }
+                        let slot = tiles.chunks.entry(chunk).or_insert([0; CHUNK_WORDS]);
+                        for (word, add) in slot.iter_mut().zip(bits) {
+                            tiles.count += (add & !*word).count_ones() as usize;
+                            *word |= add;
+                        }
+                    }
+                }
+            }
+            Ok(tiles)
         } else {
             let chunks = BTreeMap::<ChunkPosition, ChunkBits>::deserialize(deserializer)?;
             let count = chunks
@@ -355,10 +416,34 @@ mod tests {
         assert_eq!(json, tiles);
         assert_eq!(binary, tiles);
         assert_eq!(binary.len(), 40);
-        // Saves keep the plain position list.
-        let list: Vec<TilePosition> =
-            serde_json::from_str(&serde_json::to_string(&tiles).expect("json")).expect("list");
-        assert_eq!(list.len(), 40);
+        // Older saves wrote a plain position list: it still loads (also mixed with chunks).
+        let list: Vec<TilePosition> = tiles.iter().collect();
+        let old: DiscoveredTiles =
+            serde_json::from_str(&serde_json::to_string(&list).expect("json")).expect("old list");
+        assert_eq!(old, tiles);
+        let mixed = r#"[{"x":1,"y":2},{"chunk":{"x":0,"y":0},"bits":"0000000000000006000000000000000000000000000000000000000000000000"}]"#;
+        let mixed: DiscoveredTiles = serde_json::from_str(mixed).expect("mixed");
+        assert_eq!(mixed.len(), 3);
+        assert!(mixed.contains(TilePosition { x: 1, y: 2 }));
+        assert!(mixed.contains(TilePosition { x: 1, y: 0 }));
+        assert!(mixed.contains(TilePosition { x: 2, y: 0 }));
+        assert!(
+            serde_json::from_str::<DiscoveredTiles>(r#"[{"chunk":{"x":0,"y":0},"bits":"zz"}]"#)
+                .is_err()
+        );
+    }
+
+    /// A long trip across an endless world reveals thousands of chunks: the save form costs
+    /// about a hundred bytes per chunk, not per tile.
+    #[test]
+    fn saved_discovery_stays_compact() {
+        let tiles: DiscoveredTiles = (-5_000..5_000)
+            .flat_map(|x| (0..8).map(move |y| TilePosition { x, y }))
+            .collect();
+        let json = serde_json::to_string(&tiles).expect("json");
+        assert!(json.len() < 100_000, "{} bytes", json.len());
+        let back: DiscoveredTiles = serde_json::from_str(&json).expect("json");
+        assert_eq!(back, tiles);
     }
 
     #[test]
