@@ -159,6 +159,10 @@ pub struct RigTiers {
 
 impl RigTiers {
     /// A fresh rig's stock parts.
+    #[cfg_attr(
+        target_os = "emscripten",
+        allow(dead_code, reason = "used by the desktop rig sheets and tests")
+    )]
     pub const STOCK: Self = Self {
         drill: 1,
         engine: 1,
@@ -169,6 +173,10 @@ impl RigTiers {
     };
 
     /// Every line at `tier` (mount at its top tier from tier 2).
+    #[cfg_attr(
+        target_os = "emscripten",
+        allow(dead_code, reason = "used by the desktop rig sheets and tests")
+    )]
     #[must_use]
     pub fn all(tier: u8) -> Self {
         Self {

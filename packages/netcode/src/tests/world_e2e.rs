@@ -355,3 +355,85 @@ fn world_parameter_sweep_report() {
         parameter_sweep::<WorldState>(&[30, 60, 120], &[10, 20, 30, 60], &sweep_links(), 3, 15);
     println!("{}", format_sweep(&rows));
 }
+
+#[test]
+fn world_rig_cosmetics_replicate_to_everyone_and_unlocks_stay_private() {
+    use fatherload_simulation::{
+        CosmeticItem, InputSequence, PlayerCommand, PlayerTickInput, RigCosmetics, TILE_SIZE,
+        TickAction, TickInputs,
+        cosmetics::{Decal, FlameColor, PaintColor},
+        economy::SurfaceZone,
+        service::SessionServiceRequest,
+        surface::SURFACE_BUILDINGS,
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(20, 3, 0.5));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    let mut world = harness.world().clone();
+    let players: Vec<_> = world.player_ids().collect();
+    let painter = players[0];
+    let look = RigCosmetics {
+        primary: PaintColor::Cobalt,
+        trim: PaintColor::Crimson,
+        flame: FlameColor::Blue,
+        decal: Decal::Bolt,
+        ..RigCosmetics::default()
+    };
+    // The painter repaints at the Repair Garage's paint bay inside the fixed tick.
+    let garage = SURFACE_BUILDINGS
+        .iter()
+        .find(|building| building.zone == SurfaceZone::Repair)
+        .expect("repair garage");
+    let rig = world.player_mut(painter).expect("painter");
+    #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+    {
+        rig.x = (garage.tile_x as f32 + 2.5) * TILE_SIZE;
+        rig.y = 4.5 * TILE_SIZE;
+    }
+    rig.unlock_cosmetic(CosmeticItem::Decal(Decal::Crown));
+    let mut inputs = TickInputs::default();
+    inputs.players.insert(
+        painter,
+        PlayerTickInput {
+            controls: None,
+            actions: vec![TickAction {
+                sequence: InputSequence::new(0),
+                command: PlayerCommand::Service(SessionServiceRequest::CustomizeRig {
+                    cosmetics: Some(look),
+                }),
+            }],
+        },
+    );
+    let tick = world.simulation_tick();
+    let output = world.simulate_tick(tick, &inputs);
+    assert!(
+        output.events.iter().any(|event| matches!(
+            event.kind,
+            fatherload_simulation::GameplayEventKind::RigCustomized { .. }
+        )),
+        "the paint job applied"
+    );
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(2));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let me = crate::world::to_sim_player(client.session.player().expect("joined"));
+        let seen = client
+            .session
+            .authority()
+            .expect("in game")
+            .player(painter)
+            .expect("painter replicated");
+        assert_eq!(seen.cosmetics, Some(look), "every client sees the paint");
+        assert_eq!(
+            seen.cosmetic_unlocks
+                .items
+                .contains(&CosmeticItem::Decal(Decal::Crown)),
+            me == painter,
+            "unlocks reach only their owner"
+        );
+    }
+}
