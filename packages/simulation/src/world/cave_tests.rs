@@ -293,3 +293,69 @@ fn a_mushroom_cap_bounces_a_falling_rig() {
     let hull = world.player(PLAYER).expect("rig").hull;
     assert!(hull > 0.0);
 }
+
+/// Two seats in one cave (split-screen or online): each rig finds the cave for its own journal,
+/// the cave keeps one population of critters (not one per rig), and it stays while either rig
+/// is near.
+#[test]
+fn two_rigs_share_a_cave_and_its_critters() {
+    const OTHER: PlayerId = PlayerId::new(2);
+    let mut world = world();
+    world.add_player(OTHER);
+    let cave = find_cave(&world, CaveKind::FungalGrotto);
+    put_rig(&mut world, cave.center);
+    let (x, y) = {
+        let rig = world.player(PLAYER).expect("rig");
+        (rig.x, rig.y)
+    };
+    let other = world.player_mut(OTHER).expect("second rig");
+    other.x = x;
+    other.y = y;
+    other.velocity_x = 0.0;
+    other.velocity_y = 0.0;
+    other.x_remainder = 0.0;
+    other.fuel = 1_000.0;
+    other.fuel_capacity = 1_000.0;
+    let both = || TickInputs::held(PLAYER, idle()).hold(OTHER, idle());
+    let mut found = Vec::new();
+    for _ in 0..40 {
+        let now = world.simulation_tick();
+        found.extend(
+            world
+                .simulate_tick(now, &both())
+                .events
+                .into_iter()
+                .filter_map(|event| match event.kind {
+                    GameplayEventKind::CaveDiscovered { player_id, .. } => Some(player_id),
+                    _ => None,
+                }),
+        );
+    }
+    found.sort();
+    assert_eq!(found, vec![PLAYER, OTHER], "each rig finds the cave once");
+    for player in [PLAYER, OTHER] {
+        assert!(
+            world
+                .player(player)
+                .expect("rig")
+                .journal
+                .caves
+                .contains_key(&cave.id)
+        );
+    }
+    let count = critters_of(&world, &cave);
+    assert!((3..=8).contains(&count), "{count} critters for two rigs");
+    // One rig leaves; the other keeps the cave alive.
+    put_rig(
+        &mut world,
+        TilePosition {
+            x: cave.center.x + 600,
+            y: 6,
+        },
+    );
+    for _ in 0..40 {
+        let now = world.simulation_tick();
+        let _ = world.simulate_tick(now, &both());
+    }
+    assert_eq!(critters_of(&world, &cave), count);
+}
