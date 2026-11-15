@@ -147,6 +147,38 @@ fn module_id(world: &WorldState, kind: ModuleKind) -> Option<StructureId> {
         .map(|module| module.id)
 }
 
+/// A surface homestead claim west of town built through the real tick (for other tracks'
+/// scenes, such as the world clock's sleep vote): `(homestead, its standing column, row)`.
+pub(super) fn homestead_claim(
+    world: &mut WorldState,
+    player: PlayerId,
+) -> (Option<StructureId>, i32, i32) {
+    meadow(world);
+    reveal(world, player, 4..48, 0..GROUND + 8);
+    unlock_depth(world);
+    if let Some(rig) = world.player_mut(player) {
+        rig.credits = 50_000;
+        rig.stow(ItemKind::Block(BlockKind::Stone), 20);
+    }
+    let row = GROUND - 1;
+    build_homestead(world, player, row);
+    (
+        module_id(world, ModuleKind::Homestead),
+        HOME_BEACON + 4,
+        row,
+    )
+}
+
+/// Runs one real tick of `command` from `player` standing at `from` (scenes of other tracks).
+pub(super) fn act_at(
+    world: &mut WorldState,
+    player: PlayerId,
+    from: (i32, i32),
+    command: BuildCommand,
+) {
+    build(world, player, from, command);
+}
+
 /// The surface row of the left meadow (a flat strip west of town).
 const GROUND: i32 = 5;
 /// The surface claim's beacon column.

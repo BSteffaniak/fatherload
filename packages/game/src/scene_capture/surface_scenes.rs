@@ -12,7 +12,7 @@ use crate::input::PlayerInput;
 
 /// The middle of the first run of at least `width` columns of `biome` (searching outward from
 /// the town, east first), away from flat sites.
-fn find_biome(world: &WorldState, biome: Biome, width: i32) -> i32 {
+pub(super) fn find_biome(world: &WorldState, biome: Biome, width: i32) -> i32 {
     let settings = *world.world_settings();
     let matches = |x: i32| {
         (x - width / 2..=x + width / 2)
@@ -39,7 +39,7 @@ fn peak_near(world: &WorldState, x: i32, reach: i32) -> i32 {
 
 /// Hovers the seat's rig `height` rows above column `x`'s ground and reveals the area, so the
 /// surface reads without fog.
-fn hover_over(world: &mut WorldState, player: PlayerId, x: i32, height: i32) {
+pub(super) fn hover_over(world: &mut WorldState, player: PlayerId, x: i32, height: i32) {
     let row = world.terrain().surface_row(x) - height;
     place_rig(world, player, x, row);
     reveal(world, player, x - 40..x + 40, row - 30..row + height + 25);

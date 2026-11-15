@@ -168,6 +168,9 @@ pub enum PauseOption {
     ToggleNoClip,
     /// Host / local: cycle the world's enemies (peaceful, normal, hard).
     EnemyDifficulty,
+    /// Host / local: who must be in bed to skip the night (everyone, or anyone: the host
+    /// allows it). See `fatherload_simulation::clock::SleepRule`.
+    SleepRule,
 }
 
 impl PauseOption {
@@ -183,6 +186,7 @@ impl PauseOption {
                 Self::OpenOnline,
                 Self::Options,
                 Self::EnemyDifficulty,
+                Self::SleepRule,
                 Self::CopySeed,
                 Self::ExitToDesktop,
             ],
@@ -194,6 +198,7 @@ impl PauseOption {
                 Self::EndSession,
                 Self::Options,
                 Self::EnemyDifficulty,
+                Self::SleepRule,
                 Self::CopySeed,
                 Self::ExitToDesktop,
             ],
@@ -232,6 +237,7 @@ impl PauseOption {
             Self::ToggleInfiniteFuel => "Infinite Fuel",
             Self::ToggleNoClip => "No-Clip Flight",
             Self::EnemyDifficulty => "Enemies",
+            Self::SleepRule => "Sleeping",
         }
     }
 }
@@ -1955,7 +1961,11 @@ impl ShellState {
                 self.handle_pause_menu(
                     menu_input,
                     &seed,
-                    (ctx.world.test_mode(), enemies),
+                    (
+                        ctx.world.test_mode(),
+                        enemies,
+                        ctx.world.clock_state().sleep_rule,
+                    ),
                     &mut requests,
                 );
             }
@@ -2364,9 +2374,10 @@ impl ShellState {
         &mut self,
         input: PlayerInput,
         seed: &str,
-        (test_mode, enemies): (
+        (test_mode, enemies, sleep_rule): (
             Option<TestModeState>,
             fatherload_simulation::EnemyDifficulty,
+            fatherload_simulation::clock::SleepRule,
         ),
         requests: &mut Vec<ShellRequest>,
     ) {
@@ -2426,6 +2437,16 @@ impl ShellState {
                     command: PlayerCommand::SetEnemyDifficulty(next),
                 });
                 self.message = format!("Enemies: {} ({}).", next.name(), next.description());
+            }
+            PauseOption::SleepRule => {
+                let next = sleep_rule.next();
+                requests.push(ShellRequest::Action {
+                    seat: self.menu_seat,
+                    command: PlayerCommand::Sleep(
+                        fatherload_simulation::clock::SleepCommand::SetRule(next),
+                    ),
+                });
+                self.message = format!("Sleeping: {}.", next.name());
             }
         }
     }

@@ -34,10 +34,12 @@ use crate::{
 pub(super) mod base;
 mod buildings;
 mod caves;
+pub(super) mod daylight;
 mod drops;
 mod enemies;
 mod explosives;
 mod fx;
+mod lighting;
 mod quest_marks;
 mod rig;
 mod sky;
@@ -129,6 +131,10 @@ pub(super) struct WorldScene<'a> {
     pub shots: &'a [crate::effects::ShotFlash],
     /// The view's weapon reticle.
     pub reticle: Option<crate::weapon_aim::Reticle>,
+    /// The world clock (F4): the sky, the sun and Moon and the night light map follow it.
+    pub clock: fatherload_simulation::clock::WorldClock,
+    /// Where the Moon hangs over the world.
+    pub moon: fatherload_simulation::clock::MoonAnchor,
 }
 
 impl WorldScene<'_> {
@@ -183,12 +189,20 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         visible: scene.visible,
         seconds,
     };
+    let look = daylight::DayLook::at(scene.clock);
     sky::draw_sky(
         draw,
         scene.sky,
         scene.terrain.settings(),
         scene.visible,
-        seconds,
+        (
+            seconds,
+            &sky::SkyTime {
+                clock: scene.clock,
+                look,
+                moon: scene.moon,
+            },
+        ),
     );
     draw_lowered_ground_backdrop(draw, scene.terrain, scene.visible);
     buildings::draw_town(draw, scene.visible, scene.local, seconds);
@@ -299,6 +313,31 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             explosives::draw_blast(draw, explosion);
         }
     }
+    // Night on the surface (and the warm and dusky washes of the day's ends).
+    let settlement_lights = if look.darkness > 0.05 {
+        let mut lights = buildings::town_lights(scene.visible);
+        lights.extend(villages::village_lights(scene.terrain, scene.visible));
+        lights
+    } else {
+        Vec::new()
+    };
+    lighting::draw_light_map(
+        draw,
+        &lighting::LightScene {
+            terrain: scene.terrain,
+            visible: scene.visible,
+            look: &look,
+            players: scene.players,
+            facings: scene.facings,
+            bombs: scene.bombs,
+            explosions: scene.explosions,
+            critters: scene.critters,
+            bases: scene.bases,
+            powered: scene.powered_modules,
+            settlement_lights: &settlement_lights,
+            seconds,
+        },
+    );
     caves::draw_cave_darkness(
         draw,
         &caves::DarknessScene {

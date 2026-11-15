@@ -90,7 +90,7 @@ fn tile_centre(position: TilePosition) -> (f32, f32) {
 }
 
 /// How far a glowing tile lights, in tiles (0: it doesn't).
-const fn tile_light(kind: TileKind) -> f32 {
+pub(super) const fn tile_light(kind: TileKind) -> f32 {
     match kind {
         TileKind::Lava => 3.2,
         TileKind::MagmaVent => 2.2,

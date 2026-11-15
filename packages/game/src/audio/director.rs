@@ -150,6 +150,8 @@ enum SeatLoop {
     Boulders,
     Wind,
     Rain,
+    /// Night crickets on the surface (world clock).
+    Night,
 }
 
 /// Where a local seat hears from.
@@ -661,7 +663,7 @@ impl Director {
             ),
         );
 
-        self.surface_ambience(live, listener, terrain);
+        self.surface_ambience(live, listener, terrain, snapshot.clock);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -671,13 +673,15 @@ impl Director {
     }
 
     /// Biome ambience out on the surface (WP-SURFACE): wind by biome that strengthens and
-    /// rises in pitch with altitude (and thins out to silence in space), rain over wetlands.
-    /// Underground both fade within a few rows.
+    /// rises in pitch with altitude (and thins out to silence in space), rain over wetlands,
+    /// and crickets at night near the ground (world clock), loudest in grass and marsh.
+    /// Underground all of them fade within a few rows.
     fn surface_ambience(
         &mut self,
         live: &mut BTreeSet<LoopKey>,
         listener: &Listener,
         terrain: &fatherload_simulation::terrain::Terrain,
+        clock: fatherload_simulation::clock::WorldClock,
     ) {
         use fatherload_simulation::{
             terrain::TILE_SIZE,
@@ -728,6 +732,39 @@ impl Director {
             Patch::RainLoop,
             (rain * 0.45, 0.0, 1.0, OPEN_CUTOFF),
         );
+        let night = Self::night_share(clock);
+        let chorus = match biome {
+            Biome::Plains | Biome::Wetlands => 1.0,
+            Biome::Forest => 0.85,
+            Biome::Desert | Biome::Badlands => 0.5,
+            Biome::Tundra | Biome::Mountains => 0.25,
+        };
+        let near_ground = (1.0 - height / 24.0).clamp(0.0, 1.0);
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Night,
+            Patch::NightLoop,
+            (
+                night * chorus * open * near_ground * 0.4,
+                0.0,
+                1.0,
+                OPEN_CUTOFF,
+            ),
+        );
+    }
+
+    /// How much of the night chorus is out (0 by day, 1 at night, easing through dusk and dawn).
+    fn night_share(clock: fatherload_simulation::clock::WorldClock) -> f32 {
+        use fatherload_simulation::clock::DayPhase;
+        #[allow(clippy::cast_precision_loss, reason = "permille")]
+        let progress = clock.phase_progress() as f32 / 1_000.0;
+        match clock.phase() {
+            DayPhase::Night => 1.0,
+            DayPhase::Day => 0.0,
+            DayPhase::Dusk => progress,
+            DayPhase::Dawn => 1.0 - progress,
+        }
     }
 
     /// Bomb fuses tick faster as they burn down (C4 only once its detonator has fired).

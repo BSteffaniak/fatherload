@@ -102,6 +102,17 @@ pub struct BaseModuleView {
 }
 
 impl BaseModuleView {
+    /// The value column of a bed's Sleep row.
+    fn sleep_value(world: &WorldState, player_id: PlayerId) -> &'static str {
+        if world.is_in_bed(player_id) {
+            "In bed"
+        } else if world.clock().phase().sleepable() {
+            "Until dawn"
+        } else {
+            "After dusk"
+        }
+    }
+
     /// The menu of module `id` as `player_id` sees it.
     #[must_use]
     pub fn for_module(world: &WorldState, player_id: PlayerId, id: StructureId) -> Option<Self> {
@@ -174,15 +185,7 @@ impl BaseModuleView {
                         module.kind.storage_capacity()
                     ),
                     ModuleService::CollectRefined => format!("{} c ready", module.refined),
-                    ModuleService::Sleep => {
-                        if world.is_in_bed(player_id) {
-                            "In bed".to_owned()
-                        } else if world.clock().phase().sleepable() {
-                            "Until dawn".to_owned()
-                        } else {
-                            "After dusk".to_owned()
-                        }
-                    }
+                    ModuleService::Sleep => Self::sleep_value(world, player_id).to_owned(),
                     ModuleService::Craft(kind) => {
                         workshop_recipe(*kind).map_or_else(String::new, |(blocks, credits)| {
                             format!(

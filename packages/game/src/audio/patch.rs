@@ -323,7 +323,8 @@ impl Patch {
             | Self::CrateOpen
             | Self::SalvageOpen
             | Self::SprayPaint
-            | Self::CacheOpen => PatchInfo::new(Feedback).instances(2).jitter(0.02, 0.5),
+            | Self::CacheOpen
+            | Self::BedDown => PatchInfo::new(Feedback).instances(2).jitter(0.02, 0.5),
             Self::ShrineChime => PatchInfo::new(Feedback)
                 .instances(1)
                 .send(0.45)
@@ -440,7 +441,6 @@ impl Patch {
                 .instances(1)
                 .send(0.55)
                 .jitter(0.0, 0.3),
-            Self::BedDown => PatchInfo::new(Feedback).instances(2).jitter(0.02, 0.5),
             Self::NightSkip => PatchInfo::new(Big)
                 .instances(1)
                 .send(0.45)

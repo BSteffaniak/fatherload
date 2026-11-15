@@ -179,6 +179,7 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::ToggleInfiniteFuel => &icons::FUEL,
         PauseOption::ToggleNoClip => &menu_icons::GHOST,
         PauseOption::EnemyDifficulty => &icons::WARNING,
+        PauseOption::SleepRule => &icons::MOON,
     }
 }
 
@@ -200,13 +201,27 @@ const fn on_off(on: bool) -> (&'static str, Color) {
 fn pause_entry(
     option: PauseOption,
     test_mode: Option<TestModeState>,
-    enemies: fatherload_simulation::EnemyDifficulty,
+    (enemies, sleep_rule): (
+        fatherload_simulation::EnemyDifficulty,
+        fatherload_simulation::clock::SleepRule,
+    ),
 ) -> Entry {
     let entry = Entry::new(pause_icon(option), option.label());
     if option == PauseOption::EnemyDifficulty {
         return entry
             .detail(enemies.description())
             .value(enemies.name(), difficulty_color(enemies));
+    }
+    if option == PauseOption::SleepRule {
+        use fatherload_simulation::clock::SleepRule;
+        return match sleep_rule {
+            SleepRule::Everyone => entry
+                .detail("The night passes once the whole crew is in bed")
+                .value("ALL", LAVENDER),
+            SleepRule::Anyone => entry
+                .detail("One player in bed is enough to skip the night")
+                .value("ANY", GOLD),
+        };
     }
     let toggle = match option {
         PauseOption::ToggleInvulnerable => test_mode.map(|state| state.invulnerable),
@@ -227,7 +242,16 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     let test_mode = ui.shell.shown_test_mode(ui.snapshot.test_mode);
     let entries = PauseOption::for_session(ui.shell.online.role, test_mode.is_some())
         .into_iter()
-        .map(|option| pause_entry(option, test_mode, ui.snapshot.enemy_difficulty))
+        .map(|option| {
+            pause_entry(
+                option,
+                test_mode,
+                (
+                    ui.snapshot.enemy_difficulty,
+                    ui.snapshot.clock_state.sleep_rule,
+                ),
+            )
+        })
         .collect();
     let player = ui.player;
     let hud = ui.view.hud;

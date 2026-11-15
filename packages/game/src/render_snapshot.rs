@@ -588,6 +588,8 @@ pub struct RenderSnapshot<'w> {
     pub clock_state: &'w fatherload_simulation::clock::ClockState,
     /// Seconds until the night is skipped, while everyone needed is in bed (screens fade).
     pub sleep_countdown: Option<f32>,
+    /// Seconds since the last night was skipped (screens fade back in, "Day N" shows).
+    pub since_night_skipped: Option<f32>,
     /// Where the Moon hangs over the world (the sky draws it above this column).
     pub moon: fatherload_simulation::clock::MoonAnchor,
 }
@@ -697,6 +699,7 @@ impl<'w> RenderSnapshot<'w> {
             clock: world.clock(),
             clock_state: world.clock_state(),
             sleep_countdown: world.sleep_countdown_seconds(),
+            since_night_skipped: world.seconds_since_night_skipped(),
             moon: world.moon_anchor(),
         }
     }

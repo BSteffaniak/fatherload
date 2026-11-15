@@ -16,7 +16,7 @@ use super::{Scene, SceneStage, reveal};
 use crate::shell::{ModalScreen, VILLAGE_COUNTER_X, VillageInterior};
 
 /// The first village (from site 1 outward, east and west) accepted by `wanted`.
-fn find_village(world: &WorldState, wanted: impl Fn(&Village) -> bool) -> Arc<Village> {
+pub(super) fn find_village(world: &WorldState, wanted: impl Fn(&Village) -> bool) -> Arc<Village> {
     let settings = *world.world_settings();
     for site in (1..80).flat_map(|site| [site, -site]) {
         for id in [placement::surface_id(site), placement::underground_id(site)] {

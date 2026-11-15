@@ -74,7 +74,7 @@ impl WorldState {
 
     /// Sets the day length of a world before play starts (the world setup dialog): the clock
     /// restarts on the morning of day 1 (or, for a world already past that, the next morning).
-    pub fn set_day_length(&mut self, day_length: DayLength) {
+    pub const fn set_day_length(&mut self, day_length: DayLength) {
         self.clock.day_length = day_length;
         let played = self.tick_millis();
         let mut target = start_offset_millis(day_length);
@@ -87,7 +87,7 @@ impl WorldState {
 
     /// Scenario setup (tests, screenshot scenes) before play: makes the clock read
     /// `world_millis` now (see [`WorldClock::world_millis`]; never earlier than the play time).
-    pub fn set_world_time_millis(&mut self, world_millis: u64) {
+    pub const fn set_world_time_millis(&mut self, world_millis: u64) {
         self.clock.offset_millis = world_millis.saturating_sub(self.tick_millis());
     }
 
@@ -111,6 +111,16 @@ impl WorldState {
             self.timing
                 .rate
                 .seconds_until(self.simulation_tick, deadline)
+        })
+    }
+
+    /// Seconds since the last night was skipped (the screens fade back in after it).
+    #[must_use]
+    pub fn seconds_since_night_skipped(&self) -> Option<f32> {
+        self.clock.last_skip.map(|tick| {
+            self.timing
+                .rate
+                .seconds_for_ticks(self.simulation_tick.get().saturating_sub(tick.get()))
         })
     }
 
@@ -287,6 +297,7 @@ impl WorldState {
                     .saturating_add(now.millis_until_dawn());
                 self.clock.sleepers.clear();
                 self.clock.sleep_deadline = None;
+                self.clock.last_skip = Some(next_tick);
                 output.push_event(GameplayEventKind::NightSkipped {
                     day: self.clock_at(next_tick).day(),
                 });

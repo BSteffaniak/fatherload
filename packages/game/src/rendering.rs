@@ -677,6 +677,8 @@ impl GameRenderer {
                     bases: snapshot.bases,
                     powered_modules: &snapshot.powered_modules,
                     build_preview: view.build_preview.as_ref(),
+                    clock: snapshot.clock,
+                    moon: snapshot.moon,
                 },
             );
         }

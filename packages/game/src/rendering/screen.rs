@@ -1,4 +1,5 @@
 mod cave_map;
+mod clock_hud;
 mod poi_map;
 mod village_map;
 
@@ -204,7 +205,7 @@ pub(super) fn draw_view_hud(
         .iter()
         .filter(|bomb| bomb.owner == Some(view.player_id) && bomb.awaiting_remote())
         .count();
-    draw_wallet_panel(
+    let wallet_bottom = draw_wallet_panel(
         draw,
         view,
         (&shell.seat(view.seat_index).explosives, armed),
@@ -212,6 +213,9 @@ pub(super) fn draw_view_hud(
         left + width + 4,
         top,
     );
+    if let Some(bottom) = wallet_bottom {
+        clock_hud::draw_clock_badge(draw, snapshot, rect, bottom + 3);
+    }
     draw_view_prompt(draw, shell, view, rect);
 
     // Warning badges.
@@ -282,6 +286,7 @@ pub(super) fn draw_view_hud(
             );
         }
     }
+    clock_hud::draw_sleep_overlay(draw, snapshot, view, rect);
 }
 
 /// The view's context prompt under the rig, for its seat's device: how to enter the building
@@ -361,6 +366,8 @@ fn draw_view_prompt(
 
 /// Credits and depth (top-right, clear of the depth ruler), plus the scanner and bomb chips.
 #[allow(clippy::too_many_lines, reason = "one panel, row by row")]
+/// Draws the credits / depth / tools panel at the view's top right and returns its bottom (no
+/// panel when the view is too narrow for it).
 fn draw_wallet_panel(
     draw: &mut RaylibDrawHandle<'_>,
     view: &ViewSnapshot<'_>,
@@ -368,7 +375,7 @@ fn draw_wallet_panel(
     rect: Rectangle,
     min_x: i32,
     top: i32,
-) {
+) -> Option<i32> {
     let hud = view.hud;
     let money = format!("{}", hud.credits);
     // Underground (or on the ground): depth below the local surface; in the air: altitude
@@ -426,7 +433,7 @@ fn draw_wallet_panel(
     let panel_width = panel_width.max(64);
     let x = (rect.x + rect.width) as i32 - 16 - panel_width;
     if x <= min_x {
-        return;
+        return None;
     }
     let weapon_top = if charge_line.is_some() { 56 } else { 45 };
     let height = weapon_top + if weapon_line.is_some() { 13 } else { 0 };
@@ -483,6 +490,7 @@ fn draw_wallet_panel(
             chip_y,
         );
     }
+    Some(top + height)
 }
 
 /// The HUD's weapon row: the mounted gun, its label, its ammo (ammo weapons) or capacitor

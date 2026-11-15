@@ -65,6 +65,32 @@ pub fn draw_town(
     }
 }
 
+/// Where the town's light comes from at night (the light map, `world/lighting.rs`): each
+/// building's lit windows and its doorway, as `(x, y, radius)` in world pixels.
+pub fn town_lights(visible: Rectangle) -> Vec<(f32, f32, f32)> {
+    let top = GROUND_Y - LOT_HEIGHT as f32 * ART;
+    let margin = 8.0 * TILE_SIZE;
+    if visible.y > GROUND_Y + margin || visible.y + visible.height < top - margin {
+        return Vec::new();
+    }
+    let mut lights = Vec::new();
+    for building in SURFACE_BUILDINGS {
+        let x = building.tile_x as f32 * TILE_SIZE;
+        let width = building.tile_width as f32 * TILE_SIZE;
+        if x + width < visible.x - margin || x > visible.x + visible.width + margin {
+            continue;
+        }
+        let center = x + width * 0.5;
+        lights.push((
+            center,
+            top + LOT_HEIGHT as f32 * ART * 0.45,
+            TILE_SIZE * 3.6,
+        ));
+        lights.push((center, GROUND_Y - TILE_SIZE * 0.8, TILE_SIZE * 3.0));
+    }
+    lights
+}
+
 fn at_door(building: &SurfaceBuilding, player: &PlayerPresentation) -> bool {
     let tile_x = (player.x / TILE_SIZE).floor() as i32;
     player.y <= SURFACE_SERVICE_MAX_DEPTH_TILES * TILE_SIZE

@@ -29,6 +29,12 @@
 //! example contractor construction, plan decision 3) must measure time with
 //! [`WorldClock::world_millis`], not ticks.**
 
+#![allow(
+    clippy::cast_possible_truncation,
+    reason = "clock readings are bounded: slices, permille, hours, a day count, and presentation \
+              floats from exact integer times"
+)]
+
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
@@ -309,6 +315,9 @@ pub struct ClockState {
     /// When everyone is in bed: the tick the night is skipped on.
     #[serde(default)]
     pub sleep_deadline: Option<SimulationTick>,
+    /// The tick the last night was skipped on (the screens fade back in from it).
+    #[serde(default)]
+    pub last_skip: Option<SimulationTick>,
 }
 
 const fn default_offset_millis() -> u64 {
@@ -337,6 +346,7 @@ impl ClockState {
             sleep_rule: SleepRule::Everyone,
             sleepers: BTreeMap::new(),
             sleep_deadline: None,
+            last_skip: None,
         }
     }
 
@@ -560,10 +570,11 @@ const fn lunar_offset(seed: u64) -> u32 {
     ((seed ^ (seed >> 29) ^ 0x5DEE_CE66) % LUNAR_CYCLE_DAYS as u64) as u32
 }
 
-/// Where the Moon hangs: the column it sits above and the row of its underside (negative: rows
-/// above the ground). Plan WP-MOON places a real landmass there (track T16/T22, world generator
-/// V8); until that generator supplies its own placement, [`default_moon_anchor`] derives one from
-/// the seed, and the sky draws the Moon above it.
+/// Where the Moon hangs: the column it sits above and the row of its underside.
+///
+/// The row is negative (rows above the ground). Plan WP-MOON places a real landmass there (track
+/// T16/T22, world generator V8); until that generator supplies its own placement,
+/// [`default_moon_anchor`] derives one from the seed, and the sky draws the Moon above it.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct MoonAnchor {
     /// Tile column under the Moon's centre.
@@ -635,7 +646,7 @@ mod tests {
         let phases: Vec<MoonPhase> = (0..u64::from(LUNAR_CYCLE_DAYS))
             .map(|n| WorldClock::from_world_millis(n * day.millis(), day, 0).moon_phase())
             .collect();
-        let mut sorted = phases.clone();
+        let mut sorted = phases;
         sorted.sort();
         assert_eq!(sorted, MoonPhase::ALL.to_vec(), "every phase once a cycle");
     }

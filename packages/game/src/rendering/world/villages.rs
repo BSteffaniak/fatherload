@@ -279,6 +279,35 @@ pub fn draw_villages(
     }
 }
 
+/// Where surface villages' light comes from at night (the light map, `world/lighting.rs`):
+/// each building's lit windows and every street lamp, as `(x, y, radius)` in world pixels.
+/// Underground halls keep their own lamps in the cave darkness.
+pub fn village_lights(terrain: &Terrain, visible: Rectangle) -> Vec<(f32, f32, f32)> {
+    let mut lights = Vec::new();
+    for found in visible_villages(terrain, visible) {
+        if found.setting == VillageSetting::Underground {
+            continue;
+        }
+        let ground = tile_px(found.ground_row);
+        for building in &found.buildings {
+            let height = lot_height(building.kind) as f32 * ART;
+            let center = tile_px(building.first_column) + building.width as f32 * TILE_SIZE * 0.5;
+            let reach = (building.width as f32).mul_add(0.45, 1.8) * TILE_SIZE;
+            lights.push((center, ground - height * 0.5, reach));
+        }
+        for decor in &found.decor {
+            if decor.kind == DecorKind::Lamp {
+                lights.push((
+                    tile_px(decor.column) + 16.0 * ART,
+                    ground - 33.0 * ART,
+                    TILE_SIZE * 4.5,
+                ));
+            }
+        }
+    }
+    lights
+}
+
 /// The residents standing about the villages overlapping `visible` (in front of the terrain).
 pub fn draw_village_people(
     draw: &mut impl RaylibDraw,
