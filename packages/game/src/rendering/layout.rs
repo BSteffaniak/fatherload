@@ -1178,6 +1178,12 @@ pub(super) fn take_last_dialog_rect() -> Option<Rectangle> {
     LAST_DIALOG_RECT.with(std::cell::Cell::take)
 }
 
+/// The panel of the last dialog drawn since [`take_last_dialog_rect`] was last called, without
+/// forgetting it (a dialog's side panels keep clear of it).
+pub(super) fn peek_last_dialog_rect() -> Option<Rectangle> {
+    LAST_DIALOG_RECT.with(std::cell::Cell::get)
+}
+
 /// Where this frame's dialogs sit.
 pub(super) fn set_modal_placement(placement: ModalPlacement) {
     CURRENT_MODAL_PLACEMENT.with(|current| current.set(placement));

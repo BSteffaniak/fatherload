@@ -24,10 +24,12 @@ use crate::{
     save,
 };
 
+mod garage;
 mod quests;
 mod test_mode;
 mod world_setup;
 
+pub use garage::{GARAGE_COUNTER_ROW, GarageDraft, GarageRow, item_available};
 pub use quests::{
     DeskRow, Fanfare, FanfareKind, desk_rows, has_quest_tab, log_quests, tracked_quest,
 };
@@ -95,6 +97,8 @@ pub enum ModalScreen {
     QuestDesk,
     /// The seat's quest log (flips with the mine map and the collection log).
     QuestLog,
+    /// The Repair Garage's paint bay (rig cosmetics); its draft is [`SeatUi::garage`].
+    Garage,
 }
 
 impl ModalScreen {
@@ -286,6 +290,8 @@ pub enum SoundCue {
     SalvageOpened,
     VaultOpened,
     VaultReset,
+    /// A garage paint job (spray can).
+    SprayPaint,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -293,6 +299,8 @@ pub enum SoundCue {
 pub enum ServiceAnimation {
     Fuel,
     Repair,
+    /// A fresh coat from the garage's spray guns.
+    Paint,
 }
 
 /// Something the shell needs the app (runtime / saves) to do.
@@ -625,6 +633,8 @@ pub struct SeatUi {
     quest_abandon_armed: Option<fatherload_simulation::quest::QuestId>,
     /// The latest quest banner (completion fanfare, ready, failed, blueprint).
     pub fanfare: Option<Fanfare>,
+    /// The look being edited while the garage is open (live preview on the rig).
+    pub garage: Option<GarageDraft>,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -656,6 +666,7 @@ impl SeatUi {
             tracked_quest: None,
             quest_abandon_armed: None,
             fanfare: None,
+            garage: None,
         }
     }
 
@@ -680,6 +691,7 @@ impl SeatUi {
         self.service_animation = None;
         self.service_animation_seconds = 0.0;
         self.pending_services.clear();
+        self.garage = None;
     }
 
     fn track_message(&mut self, tick: u64) {
@@ -855,6 +867,10 @@ impl SeatUi {
         let Some(modal) = self.modal else {
             return false;
         };
+        if modal == ModalScreen::Garage {
+            self.handle_garage(input, ctx, cues, requests);
+            return true;
+        }
         if input.backs_out() {
             self.modal = None;
             return true;
@@ -868,7 +884,8 @@ impl SeatUi {
         let progression = ctx.world.progression();
         let max_item = match modal {
             ModalScreen::Depot => 4,
-            ModalScreen::Fuel | ModalScreen::Repair | ModalScreen::Bank => 2,
+            ModalScreen::Fuel | ModalScreen::Bank => 2,
+            ModalScreen::Repair => GARAGE_COUNTER_ROW,
             ModalScreen::Explosives => 3,
             ModalScreen::Salvage => 5,
             ModalScreen::Headquarters => {
@@ -926,6 +943,10 @@ impl SeatUi {
                 Some(SessionServiceRequest::Refuel {
                     menu_item: self.selected_menu_item,
                 })
+            }
+            ModalScreen::Repair if self.selected_menu_item == GARAGE_COUNTER_ROW => {
+                self.open_garage(ctx, cues);
+                None
             }
             ModalScreen::Repair => {
                 self.modal = Some(ModalScreen::RepairConfirm);
@@ -1025,7 +1046,8 @@ impl SeatUi {
             | ModalScreen::WorldSetup
             | ModalScreen::WarpToLayer
             | ModalScreen::Help
-            | ModalScreen::Inventory => None,
+            | ModalScreen::Inventory
+            | ModalScreen::Garage => None,
         };
         if let Some(request) = service {
             self.submit_service(request, ctx, requests);
@@ -1250,6 +1272,18 @@ impl SeatUi {
             SessionServiceRequest::AcceptQuest { .. }
             | SessionServiceRequest::TurnInQuest { .. }
             | SessionServiceRequest::AbandonQuest { .. } => return,
+            SessionServiceRequest::CustomizeRig { cosmetics } => {
+                // The spray can plays from the world's `RigCustomized` event.
+                self.service_animation = Some(ServiceAnimation::Paint);
+                self.service_animation_seconds = 1.4;
+                if cosmetics.is_some() {
+                    "Iona: Fresh paint, still tacky. Try not to scrape it on the first rock."
+                } else {
+                    "Iona: Back in crew colours. Classic."
+                }
+                .clone_into(&mut self.message);
+                return;
+            }
         };
         cues.push(cue);
     }
@@ -2166,6 +2200,9 @@ const fn unavailable_message(request: SessionServiceRequest) -> &'static str {
             "Upgrade unavailable: check credits, tier and depth unlocks."
         }
         SessionServiceRequest::CompleteDepotWork => "No contract is ready to complete.",
+        SessionServiceRequest::CustomizeRig { .. } => {
+            "The paint bay refused that job: a part of it is still locked."
+        }
         _ => "Not enough credits or materials, or the service is locked.",
     }
 }

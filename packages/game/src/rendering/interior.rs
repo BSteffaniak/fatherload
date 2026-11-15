@@ -27,9 +27,10 @@ use super::{
         },
     },
     prompts::{self, Hint, hint},
+    rig_art::{self, BODY_HEIGHT, BODY_WIDTH, RigLook, RigPose},
     ui_kit::{self, PanelStyle, TextStyle, UiCanvasScope},
 };
-use fatherload_simulation::{PlayerId, economy::SurfaceZone};
+use fatherload_simulation::economy::SurfaceZone;
 
 mod props;
 
@@ -251,7 +252,8 @@ pub(super) fn draw_interior(
         draw_counter(&mut room, room_set, counter_x, seconds);
         props::draw_counter_props(&mut room, &context);
         draw_service_animation(&mut room, seat, zone, counter_x);
-        draw_rig(&mut room, seat, view.player_id, seconds);
+        draw_rig(&mut room, seat, view, seconds);
+        draw_paint_mist(&mut room, seat, view);
     }
 
     let _canvas = UiCanvasScope::begin(draw);
@@ -281,8 +283,7 @@ pub(super) fn draw_interior(
     if near_counter || at_door {
         let target_x = if at_door { 28 } else { keeper_x };
         // Just above the rig's roof, so the prompt never hides the rig.
-        let (prompt_x, prompt_y) =
-            placement.to_canvas(canvas, target_x, FLOOR_Y - rig::RIG.height() - 1);
+        let (prompt_x, prompt_y) = placement.to_canvas(canvas, target_x, FLOOR_Y - BODY_HEIGHT - 1);
         let label = if at_door { "Leave" } else { "Use counter" };
         draw_key_prompt(draw, prompt_x, prompt_y, hint(Prompt::Use, label));
     }
@@ -718,23 +719,60 @@ fn draw_service_animation(
     }
 }
 
-/// The player's rig standing on the floor at the seat's `interior_x`.
-fn draw_rig(draw: &mut impl RaylibDraw, seat: &SeatUi, player_id: PlayerId, seconds: f32) {
-    // The player's own paint, the same as outdoors and in other players' views.
-    let body = rig::PLAYER_BODIES[rig::paint_index(player_id.get())];
-    let x = room_pixel_x(seat.interior_x) - body.width() / 2;
-    let y = FLOOR_Y - body.height();
+/// The player's rig standing on the floor at the seat's `interior_x`: the same modular rig and
+/// paint as outdoors, wearing the garage draft while the paint bay is open (live preview).
+fn draw_rig(draw: &mut impl RaylibDraw, seat: &SeatUi, view: &ViewSnapshot<'_>, seconds: f32) {
+    let mut look = RigLook::from_player(view.player_id, view.player);
+    if let Some(preview) = seat.garage_preview() {
+        look = look.wearing(preview);
+    }
+    let x = room_pixel_x(seat.interior_x) - BODY_WIDTH / 2;
+    let y = FLOOR_Y - BODY_HEIGHT;
     draw.draw_rectangle(
         x + 1,
         FLOOR_Y,
-        body.width() - 2,
+        BODY_WIDTH - 2,
         1,
         palette::with_alpha(INK, 120),
     );
+    let ticks = (seconds * 60.0) as u64;
+    let pose = RigPose {
+        // Tracks roll only while the rig is walking (approximated by the animation clock).
+        track_frame: (seconds / 0.08) as usize % 2,
+        beacon: (!(ticks / 40).is_multiple_of(2)).then_some(GOLD),
+        damaged: view.player.hull < view.player.max_hull() * 0.3,
+        ..RigPose::idle(ticks)
+    };
     let flip = seat.interior_facing < 0.0;
-    // Tracks roll only while the rig is walking (approximated by the animation clock).
-    let frame = body.frame_at(seconds);
-    room_sprite(draw, body, frame, x, y, flip);
+    rig_art::paint_rig(&look, &pose).draw(draw, Vector2::new(x as f32, y as f32), 1.0, flip);
+}
+
+/// Spray mist drifting around the rig after a garage paint job, in its new colours.
+fn draw_paint_mist(draw: &mut impl RaylibDraw, seat: &SeatUi, view: &ViewSnapshot<'_>) {
+    if seat.service_animation != Some(ServiceAnimation::Paint) {
+        return;
+    }
+    let look = RigLook::from_player(view.player_id, view.player).cosmetics;
+    let colors = [
+        rig_art::paint_ramp(look.primary).light,
+        rig_art::paint_ramp(look.secondary).body,
+        rig_art::paint_ramp(look.trim).light,
+    ];
+    let step = (seat.service_animation_seconds * 24.0) as i32;
+    let fade = (seat.service_animation_seconds / 1.4).clamp(0.0, 1.0);
+    let rig_x = room_pixel_x(seat.interior_x);
+    for puff in 0..14 {
+        let dx = (puff * 7 + step * 3).rem_euclid(26) - 13;
+        let dy = (puff * 5 + step).rem_euclid(18);
+        let color = colors[(puff % 3) as usize];
+        draw.draw_rectangle(
+            rig_x + dx,
+            FLOOR_Y - 2 - dy,
+            1 + puff % 2,
+            1,
+            palette::with_alpha(color, (220.0 * fade) as u8),
+        );
+    }
 }
 
 fn npc_line(zone: SurfaceZone, view: &ViewSnapshot<'_>) -> &'static str {
@@ -793,8 +831,8 @@ mod tests {
     #[test]
     fn walkable_room_and_counters_fit_inside_the_room() {
         // The shell clamps the rig to 42..598 room units.
-        assert!(room_pixel_x(42.0) - rig::RIG.width() / 2 >= 0);
-        assert!(room_pixel_x(598.0) + rig::RIG.width() / 2 <= ROOM_WIDTH);
+        assert!(room_pixel_x(42.0) - BODY_WIDTH / 2 >= 0);
+        assert!(room_pixel_x(598.0) + BODY_WIDTH / 2 <= ROOM_WIDTH);
         for zone in [
             SurfaceZone::Fuel,
             SurfaceZone::Repair,

@@ -282,7 +282,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::QuestReady { player_id, .. }
         | GameplayEventKind::QuestCompleted { player_id, .. }
         | GameplayEventKind::QuestFailed { player_id, .. }
-        | GameplayEventKind::BlueprintCompleted { player_id, .. } => Some(player_id),
+        | GameplayEventKind::BlueprintCompleted { player_id, .. }
+        | GameplayEventKind::RigCustomized { player_id } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

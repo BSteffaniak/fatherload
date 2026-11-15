@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use fatherload_simulation::{
     ActiveQuest, CanonicalProgressionState, DiscoveredTiles, DrillState, FallingBoulder,
     HazardCloud, InfrastructureKind, PlacedBomb, PlacedInfrastructure, Player, PlayerId,
-    PlayerSurvivalSnapshot, TestModeState, TickRate, WorldEventKind, WorldState,
+    PlayerSurvivalSnapshot, RigCosmetics, TestModeState, TickRate, WorldEventKind, WorldState,
     economy::SurfaceZone,
     poi::RELAY_WINDOW_MILLIS,
     quest::describe::{QuestMarker, quest_markers},
@@ -145,6 +145,56 @@ pub enum DangerLevel {
     Critical,
 }
 
+/// The upgrade tiers a rig shows (drawn by `rendering::rig_art`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RigTiers {
+    pub drill: u8,
+    pub engine: u8,
+    pub cargo: u8,
+    pub hull: u8,
+    pub radiator: u8,
+    /// Drill mount (0 stock, 1 gimbal, 2 crown bore).
+    pub mount: u8,
+}
+
+impl RigTiers {
+    /// A fresh rig's stock parts.
+    pub const STOCK: Self = Self {
+        drill: 1,
+        engine: 1,
+        cargo: 1,
+        hull: 1,
+        radiator: 1,
+        mount: 0,
+    };
+
+    /// Every line at `tier` (mount at its top tier from tier 2).
+    #[must_use]
+    pub fn all(tier: u8) -> Self {
+        Self {
+            drill: tier,
+            engine: tier,
+            cargo: tier,
+            hull: tier,
+            radiator: tier,
+            mount: tier.saturating_sub(1).min(2),
+        }
+    }
+
+    /// The tiers fitted to `player`.
+    #[must_use]
+    pub const fn of(player: &Player) -> Self {
+        Self {
+            drill: player.drill_strength,
+            engine: player.engine_level,
+            cargo: player.cargo_bay_level,
+            hull: player.hull_level,
+            radiator: player.radiator_level,
+            mount: player.drill_mount_level,
+        }
+    }
+}
+
 /// One rig as drawn in the world.
 #[derive(Clone, Debug)]
 pub struct PlayerPresentation {
@@ -157,11 +207,11 @@ pub struct PlayerPresentation {
     pub hull: f32,
     pub max_hull: f32,
     pub scanner_level: u8,
-    pub radiator_level: u8,
-    pub hull_level: u8,
-    /// Drill mount tier (gimbal / crown bore), drawn on the rig's nose and roof.
-    pub drill_mount_level: u8,
     pub active_drill: Option<DrillState>,
+    /// Every visible upgrade tier (drill head, thrusters, cargo pods, plating, radiator, mount).
+    pub tiers: RigTiers,
+    /// The rig's look: the player's garage paint job, or their default.
+    pub cosmetics: RigCosmetics,
 }
 
 impl PlayerPresentation {
@@ -176,10 +226,9 @@ impl PlayerPresentation {
             hull: player.hull,
             max_hull: player.max_hull(),
             scanner_level: player.scanner_level,
-            radiator_level: player.radiator_level,
-            hull_level: player.hull_level,
-            drill_mount_level: player.drill_mount_level,
             active_drill: world.active_drill(player_id).copied(),
+            tiers: RigTiers::of(player),
+            cosmetics: RigCosmetics::resolve(player.cosmetics, player_id),
         }
     }
 

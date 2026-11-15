@@ -88,6 +88,7 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::SalvageOpened => Patch::SalvageOpen,
         SoundCue::VaultOpened => Patch::VaultFanfare,
         SoundCue::VaultReset => Patch::VaultReset,
+        SoundCue::SprayPaint => Patch::SprayPaint,
     }
 }
 
@@ -124,6 +125,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::QuestStageDone { .. } => Some(SoundCue::Ui),
         GameplayEventKind::QuestFailed { .. } => Some(SoundCue::UiError),
         GameplayEventKind::BlueprintCompleted { .. } => Some(SoundCue::Upgrade),
+        // A garage paint job: the spray can, heard from the rig (other players too).
+        GameplayEventKind::RigCustomized { .. } => Some(SoundCue::SprayPaint),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -178,7 +181,8 @@ mod tests {
             | GameplayEventKind::QuestReady { .. }
             | GameplayEventKind::QuestCompleted { .. }
             | GameplayEventKind::QuestFailed { .. }
-            | GameplayEventKind::BlueprintCompleted { .. } => {}
+            | GameplayEventKind::BlueprintCompleted { .. }
+            | GameplayEventKind::RigCustomized { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -225,6 +229,7 @@ mod tests {
                 player_id,
                 blueprint: BlueprintId::HaulerFrame,
             },
+            GameplayEventKind::RigCustomized { player_id },
         ];
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,

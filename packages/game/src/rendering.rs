@@ -20,12 +20,14 @@ use fatherload_simulation::{
 mod counters;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
+mod garage;
 mod interior;
 mod layout;
 mod menus;
 pub mod pixel_art;
 mod prompts;
 mod quests;
+pub mod rig_art;
 mod screen;
 pub mod terrain;
 mod title;
@@ -540,6 +542,20 @@ impl GameRenderer {
         draw.clear_background(palette::NIGHT);
         let _canvas = UiCanvasScope::begin(draw);
         prompts::draw_prompt_sheet(draw);
+    }
+
+    /// Draws a rig reference sheet (tiers, paint jobs or drill heads) instead of the game.
+    #[cfg(not(target_os = "emscripten"))]
+    pub fn render_rig_sheet(
+        &self,
+        draw: &mut RaylibDrawHandle<'_>,
+        sheet: rig_art::sheet::RigSheet,
+    ) {
+        sprite::set_current_atlas(self.atlas.as_ref());
+        ui_kit::begin_frame(UiCanvas::from_draw(draw), self.font_faces(), 0.0);
+        draw.clear_background(palette::NIGHT);
+        let _canvas = UiCanvasScope::begin(draw);
+        rig_art::sheet::draw_rig_sheet(draw, sheet);
     }
 
     /// Draws the UI reference sheet (menu icons and interior props) instead of the game.

@@ -242,13 +242,19 @@ pub(super) fn draw_repair(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>)
         SectionItem::meter("Hull integrity", hud.hull, hud.max_hull, LEAF, RED),
         credits_item(hud.credits),
     ];
-    let offers = service_offers(
+    let mut offers = service_offers(
         &menu_icons::HAMMER,
         ["Patch job", "Half repair", "Full overhaul"],
         "hull",
         hud.max_hull - hud.hull,
         REPAIR_UNIT_COST,
         hud.credits,
+    );
+    // `shell::GARAGE_COUNTER_ROW`: the paint bay.
+    offers.push(
+        Offer::new(&rig::ICON_SPRAY_CAN, "Paint bay", "Paint, flames and attachments")
+            .tag("FREE", LIME)
+            .about("Iona's spray booth: repaint your rig, pick a flame colour, drill style, decal and attachments. Try anything on before you commit."),
     );
     draw_counter(
         ui,

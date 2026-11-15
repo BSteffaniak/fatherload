@@ -136,6 +136,7 @@ patches! {
     VaultFanfare => "vault_fanfare",
     Milestone => "milestone",
     Rescue => "rescue",
+    SprayPaint => "spray_paint",
     ThrustLoop => "loop_thrust",
     DrillSoftLoop => "loop_drill_soft",
     DrillHardLoop => "loop_drill_hard",
@@ -241,9 +242,11 @@ impl Patch {
             }
             Self::UiError => PatchInfo::new(Interface).instances(1).jitter(0.01, 0.5),
             Self::Pickup | Self::DrillGlint => PatchInfo::new(Feedback).jitter(0.05, 1.5),
-            Self::Coins | Self::Purchase | Self::CrateOpen | Self::SalvageOpen => {
-                PatchInfo::new(Feedback).instances(2).jitter(0.02, 0.5)
-            }
+            Self::Coins
+            | Self::Purchase
+            | Self::CrateOpen
+            | Self::SalvageOpen
+            | Self::SprayPaint => PatchInfo::new(Feedback).instances(2).jitter(0.02, 0.5),
             Self::BombArm | Self::Deploy | Self::ThrustIgnite => {
                 PatchInfo::new(Feedback).instances(2)
             }
@@ -327,6 +330,7 @@ impl Patch {
             Self::VaultFanfare => vault_fanfare(rng),
             Self::Milestone => milestone(rng),
             Self::Rescue => rescue(rng),
+            Self::SprayPaint => spray_paint(rng),
             Self::ThrustLoop => thrust_loop(rng),
             Self::DrillSoftLoop => drill_soft_loop(rng),
             Self::DrillHardLoop => drill_hard_loop(rng),
@@ -1246,6 +1250,42 @@ fn rescue(rng: &mut Rng) -> Vec<f32> {
         mix_into(&mut out, &brass(rng, note, 0.3, 0.6), 1.15, 0.25);
     }
     mix_into(&mut out, &bell(1_975.5, 2.0, 1.0, 0.4), 1.15, 0.2);
+    out
+}
+
+/// A garage paint job: the rattle of a shaken spray can, two hissing passes of paint and a
+/// bright "fresh coat" chime.
+fn spray_paint(rng: &mut Rng) -> Vec<f32> {
+    // The cap popping off.
+    let mut out = clank(rng, 620.0, 0.08);
+    // The mixing ball rattling inside the can.
+    for index in 0..5_u8 {
+        let rattle = burst(
+            rng.next_u64(),
+            NoiseColor::Pink,
+            FilterMode::BandPass,
+            2_400.0 * rng.jitter(0.12),
+            3.0,
+            0.03,
+        );
+        mix_into(&mut out, &rattle, 0.08 + f32::from(index) * 0.055, 0.6);
+    }
+    // Two passes of the nozzle: a breathy band of noise that swells and sweeps.
+    for (start, length) in [(0.4, 0.34), (0.8, 0.42)] {
+        let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+        let mut filter = Svf::new(FilterMode::BandPass, 2_600.0, 0.8);
+        let hiss = render(length, |t| {
+            let cutoff = 2_200.0 + 1_400.0 * sine(t, 3.0).abs();
+            filter.run(noise.next(), cutoff, 0.8)
+                * segments(
+                    t,
+                    &[(0.0, 0.0), (0.03, 0.9), (length * 0.7, 0.7), (length, 0.0)],
+                )
+        });
+        mix_into(&mut out, &hiss, start, 0.55);
+    }
+    mix_into(&mut out, &bell(1_046.5, 2.0, 1.0, 0.35), 1.24, 0.2);
+    mix_into(&mut out, &bell(1_567.98, 2.0, 1.0, 0.4), 1.3, 0.18);
     out
 }
 

@@ -138,7 +138,7 @@ pub(super) fn draw_view_hud(
             inner_x,
             y,
             TextStyle::Bold,
-            player_accent(view.player_id),
+            player_accent(view.player_id, view.player.cosmetics),
         );
         y += header;
     }
@@ -634,7 +634,13 @@ pub(super) fn draw_minimap_for_view(
             continue;
         }
         let (map_x, map_y) = to_map(tile_x, tile_y);
-        draw.draw_rectangle(map_x - 1, map_y - 1, 2, 2, player_accent(remote.player_id));
+        draw.draw_rectangle(
+            map_x - 1,
+            map_y - 1,
+            2,
+            2,
+            player_accent(remote.player_id, Some(remote.cosmetics)),
+        );
     }
     if terrain.is_streamed() {
         // Navigation in an endless world: which way, and how far, home is.
@@ -783,6 +789,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::WarpToLayer => menus::draw_warp_layers(draw, ui),
         ModalScreen::QuestDesk => quests::draw_quest_desk(draw, ui),
         ModalScreen::QuestLog => quests::draw_quest_log(draw, ui),
+        ModalScreen::Garage => super::garage::draw_garage(draw, ui),
     }
 }
 

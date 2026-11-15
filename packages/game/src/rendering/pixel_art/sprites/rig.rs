@@ -1,8 +1,9 @@
 //! The mining rig, authored facing right (flip for left), plus its drill heads and flame.
 //!
 //! The body is 16x13 art pixels (32x26 world pixels, one tile wide): a glass cockpit dome, a
-//! beacon mast and exhaust stack, a painted hull and rolling tracks. Remote players' rigs reuse
-//! the same grids with other hull paint (`rig_body!`).
+//! beacon mast and exhaust stack, a painted hull and rolling tracks. These fixed sprites are the
+//! classic rig for the title screen, the art gallery and icons; rigs in play are assembled and
+//! painted by `rendering::rig_art`.
 
 use raylib::prelude::Color;
 
@@ -119,43 +120,6 @@ rig_body!(
     ORANGE,
     RUST
 );
-rig_body!(
-    RIG_TEAL,
-    "rig_teal",
-    BODY_FRAMES,
-    MINT,
-    TEAL,
-    TEAL_DARK,
-    TEAL_DARK
-);
-rig_body!(RIG_ROSE, "rig_rose", BODY_FRAMES, PINK, ROSE, RED, MAROON);
-rig_body!(RIG_LIME, "rig_lime", BODY_FRAMES, LIME, LEAF, MOSS, PINE);
-rig_body!(
-    RIG_VIOLET,
-    "rig_violet",
-    BODY_FRAMES,
-    LAVENDER,
-    VIOLET,
-    PLUM,
-    PLUM
-);
-rig_body!(RIG_SKY, "rig_sky", BODY_FRAMES, ICE, SKY_LIGHT, SKY, OCEAN);
-
-/// Each player's hull paint, chosen by player id (player 1 is the classic yellow rig). A player
-/// has the same paint in every view: their own, a split-screen partner's, a remote client's, and
-/// inside buildings.
-pub const PLAYER_BODIES: [&SpriteDef; 6] =
-    [&RIG, &RIG_TEAL, &RIG_ROSE, &RIG_LIME, &RIG_VIOLET, &RIG_SKY];
-
-/// The accent colour matching each entry of [`PLAYER_BODIES`] (name tags, HUD title, minimap).
-pub const PLAYER_ACCENTS: [Color; 6] = [GOLD, MINT, PINK, LIME, LAVENDER, SKY_LIGHT];
-
-/// Index into [`PLAYER_BODIES`] / [`PLAYER_ACCENTS`] for a player id (ids start at 1).
-#[must_use]
-pub const fn paint_index(player_id: u64) -> usize {
-    (player_id.saturating_sub(1) % PLAYER_BODIES.len() as u64) as usize
-}
-
 const DRILL_LEGEND: &[(char, Color)] = &[
     ('o', INK),
     ('L', STEEL_LIGHT),
@@ -328,3 +292,167 @@ pub const FLAME_SMALL: SpriteDef = SpriteDef {
     ],
     frame_seconds: 0.06,
 };
+
+/// Garage row icons (9x9, like `icons`): paint, parts and attachments.
+macro_rules! garage_icon {
+    ($ident:ident, $name:literal, [$($legend:expr),* $(,)?], [$($row:literal),* $(,)?]) => {
+        pub const $ident: SpriteDef = SpriteDef {
+            name: $name,
+            legend: &[('o', INK), $($legend),*],
+            frames: &[&[$($row),*]],
+            frame_seconds: 0.0,
+        };
+    };
+}
+
+garage_icon!(
+    ICON_SPRAY_CAN,
+    "icon_spray_can",
+    [
+        ('s', STEEL_LIGHT),
+        ('d', STEEL),
+        ('l', CREAM),
+        ('y', GOLD),
+        ('a', AMBER),
+        ('m', MIST)
+    ],
+    [
+        "...oo..m.",
+        "..osso...",
+        "..oddo.m.",
+        ".olllyo..",
+        ".olyyao.m",
+        ".olyyao..",
+        ".olyyao..",
+        ".olaaao..",
+        "..ooooo..",
+    ]
+);
+garage_icon!(
+    ICON_FLAME,
+    "icon_flame",
+    [('r', RED), ('a', ORANGE), ('g', GOLD), ('c', CREAM)],
+    [
+        "....o....",
+        "...oro...",
+        "..orao...",
+        "..oragoo.",
+        ".oragaro.",
+        ".oagcgao.",
+        ".oagccgo.",
+        "..oacgo..",
+        "...ooo...",
+    ]
+);
+garage_icon!(
+    ICON_PATTERN,
+    "icon_pattern",
+    [('l', BONE), ('d', SLATE)],
+    [
+        "ooooooooo",
+        "olldldldo",
+        "olldldldo",
+        "odlldldlo",
+        "odlldldlo",
+        "oldldldlo",
+        "oldldlldo",
+        "odldldllo",
+        "ooooooooo",
+    ]
+);
+garage_icon!(
+    ICON_STAR,
+    "icon_star",
+    [('g', GOLD), ('c', CREAM), ('a', AMBER)],
+    [
+        "....o....",
+        "...oco...",
+        "oooocoooo",
+        "occggggao",
+        ".ocgggao.",
+        "..oggao..",
+        ".oggoaao.",
+        ".ogo.oao.",
+        ".oo...oo.",
+    ]
+);
+garage_icon!(
+    ICON_ANTENNA,
+    "icon_antenna",
+    [('r', RED), ('s', STEEL_LIGHT), ('d', STEEL)],
+    [
+        "...oro...",
+        "....s....",
+        "..osdso..",
+        "....s....",
+        "....s....",
+        "....s....",
+        "..ooooo..",
+        ".osssddo.",
+        "..ooooo..",
+    ]
+);
+garage_icon!(
+    ICON_LAMP,
+    "icon_lamp",
+    [('s', STEEL), ('c', CREAM), ('m', MIST), ('w', BONE)],
+    [
+        ".........",
+        ".oooo..m.",
+        ".ossco...",
+        ".osswcom.",
+        ".osswco..",
+        ".ossco.m.",
+        ".oooo....",
+        "..os.....",
+        ".oooo....",
+    ]
+);
+garage_icon!(
+    ICON_PENNANT,
+    "icon_pennant",
+    [('s', STEEL_LIGHT), ('r', ROSE), ('p', PINK)],
+    [
+        ".so......",
+        ".soooo...",
+        ".soppro..",
+        ".sorrrro.",
+        ".sorrro..",
+        ".sooo....",
+        ".so......",
+        ".so......",
+        "ooooo....",
+    ]
+);
+garage_icon!(
+    ICON_DICE,
+    "icon_dice",
+    [('w', BONE), ('m', MIST), ('d', FOG)],
+    [
+        "ooooooooo",
+        "owwwwwwmo",
+        "owoowwwmo",
+        "owoowwwmo",
+        "owwwoowmo",
+        "owwwoowmo",
+        "owwwwwwmo",
+        "ommmmmmdo",
+        "ooooooooo",
+    ]
+);
+garage_icon!(
+    ICON_CREW,
+    "icon_crew",
+    [('g', GOLD), ('t', TEAL), ('r', ROSE), ('w', ICE)],
+    [
+        ".........",
+        "...ooo...",
+        "..owwo...",
+        ".ooooooo.",
+        ".ogggtto.",
+        ".ogggtto.",
+        ".orrrrro.",
+        ".ooooooo.",
+        ".........",
+    ]
+);
