@@ -484,6 +484,30 @@ fn bombs_spray_loot_and_mining_charges_keep_most_ore() {
 }
 
 #[test]
+fn blasting_the_star_core_free_starts_the_escape() {
+    let mut world = loaded_blast(ExplosiveKind::Mining);
+    let _ = world.terrain_mut().set_kind(
+        TilePosition { x: 21, y: 20 },
+        TileKind::Artifact(ArtifactKind::StarCore),
+    );
+    assert!(world.progression().escape_deadline.is_none());
+    let output = tick(&mut world);
+    assert!(
+        output
+            .events
+            .iter()
+            .any(|event| event.kind == GameplayEventKind::EscapeStarted { player_id: PLAYER }),
+        "freeing the core is no shortcut past the escape"
+    );
+    assert!(world.progression().escape_deadline.is_some());
+    assert_eq!(
+        total_dropped(&world, ItemKind::Artifact(ArtifactKind::StarCore)),
+        1,
+        "the core drops intact"
+    );
+}
+
+#[test]
 fn plain_blasts_shatter_about_a_third_of_their_ore() {
     let seed = arena().terrain().seed();
     let item = ItemKind::Mineral(MineralKind::Gold);

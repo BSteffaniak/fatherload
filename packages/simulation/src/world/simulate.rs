@@ -309,11 +309,7 @@ impl WorldState {
             match result {
                 // Ore and artifacts now drop: the pickup pass reports them (`ItemsCollected`).
                 MineResult::Mined(TileKind::Artifact(ArtifactKind::StarCore)) => {
-                    self.progression.escape_deadline =
-                        Some(SimulationTick::new(next_tick.get().saturating_add(
-                            timing.ticks_for_millis(ESCAPE_DURATION_MILLIS),
-                        )));
-                    output.push_event(GameplayEventKind::EscapeStarted { player_id });
+                    self.start_escape(next_tick, player_id, &mut output);
                 }
                 MineResult::Mined(TileKind::Stone | TileKind::HardRock) => {
                     #[allow(
@@ -404,6 +400,21 @@ impl WorldState {
             .map(|player| player.tile_position(TILE_SIZE))
             .collect();
         self.terrain.stream_around(&centers);
+    }
+
+    /// Breaking the Star Core out of the rock (drilled, or freed by a blast) starts the escape
+    /// countdown.
+    pub(super) fn start_escape(
+        &mut self,
+        next_tick: SimulationTick,
+        player_id: PlayerId,
+        output: &mut TickOutput,
+    ) {
+        self.progression.escape_deadline =
+            Some(SimulationTick::new(next_tick.get().saturating_add(
+                self.timing.ticks_for_millis(ESCAPE_DURATION_MILLIS),
+            )));
+        output.push_event(GameplayEventKind::EscapeStarted { player_id });
     }
 
     pub(super) fn advance_escape_sequence(
