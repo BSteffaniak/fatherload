@@ -278,6 +278,9 @@ pub fn draw_villages(
             draw_signpost(draw, terrain, &found, post);
         }
     }
+    if pass == VillagePass::Behind {
+        draw_camps(draw, terrain, visible, seconds);
+    }
 }
 
 /// Where surface villages' light comes from at night (the light map, `world/lighting.rs`):
@@ -1484,4 +1487,210 @@ fn draw_milestone(draw: &mut impl RaylibDraw, terrain: &Terrain, post: &Signpost
         };
         pen.rect(draw, x, base - 26 + step * 2, span, 2, CLAY);
     }
+}
+
+/// Every wanderers' camp ([`people::camps`]) overlapping `visible`: the campfire and the camp's
+/// props (a trader's wagon, a prospector's tent, a surveyor's tent and tripod, a smuggler's
+/// lean-to and crates), drawn behind the terrain on the camp's flat ground.
+fn draw_camps(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectangle, seconds: f32) {
+    let settings = terrain.settings();
+    let first = (visible.x / TILE_SIZE).floor() as i32 - 8;
+    let last = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 8;
+    for camp in people::camps::camps_between(settings, first, last) {
+        let ground = tile_px(camp.ground_row);
+        if ground + 2.0 * TILE_SIZE < visible.y
+            || ground - 6.0 * TILE_SIZE > visible.y + visible.height
+        {
+            continue;
+        }
+        let centre = (camp.column as f32 + 0.5) * TILE_SIZE;
+        let pen = Pen::at(centre, ground);
+        let variant = camp.id.0;
+        match camp.kind {
+            people::camps::CampKind::Trader => draw_wagon(draw, pen, variant),
+            people::camps::CampKind::Prospector => {
+                draw_tent(draw, pen, -92, (CREAM, BONE), RUST);
+                draw_pick_and_pan(draw, pen, -34);
+            }
+            people::camps::CampKind::Surveyor => {
+                draw_tent(draw, pen, -92, (TEAL, TEAL_DARK), CREAM);
+                draw_tripod(draw, pen, 62, seconds);
+            }
+            people::camps::CampKind::Smuggler => draw_lean_to(draw, pen),
+        }
+        draw_bedroll(draw, pen, 30, variant);
+        draw_campfire(draw, pen, seconds);
+    }
+}
+
+/// A ring of stones, two logs and a flickering fire with its glow, centred on the pen.
+fn draw_campfire(draw: &mut impl RaylibDraw, pen: Pen, seconds: f32) {
+    let frame = (seconds * 9.0) as i32;
+    // A rounded, flickering glow: stacked bands, densest at the fire.
+    let glow = (14 + (frame % 3) * 4) as u8;
+    pen.rect(draw, -16, -7, 32, 7, with_alpha(GOLD, glow));
+    pen.rect(draw, -12, -13, 24, 13, with_alpha(GOLD, glow));
+    pen.rect(draw, -8, -18, 16, 18, with_alpha(GOLD, glow));
+    pen.rect(draw, -4, -21, 8, 21, with_alpha(AMBER, glow));
+    for x in [-7, -3, 2, 6] {
+        pen.rect(draw, x, -2, 3, 2, STONE);
+        pen.px(draw, x, -2, STONE_LIGHT);
+    }
+    pen.rect(draw, -6, -4, 12, 2, SOIL_DARK);
+    pen.rect(draw, -5, -5, 4, 1, SOIL);
+    pen.rect(draw, 1, -5, 4, 1, SOIL);
+    let sway = [0, 1, 0, -1][(frame % 4) as usize];
+    pen.rect(draw, -4, -9, 8, 4, RED);
+    pen.rect(draw, -3 + sway, -12, 6, 4, ORANGE);
+    pen.rect(draw, -1 + sway, -15, 3, 4, AMBER);
+    pen.rect(draw, -1, -8, 2, 3, CREAM);
+    // A spark drifting up.
+    let rise = (frame * 2) % 14;
+    pen.px(
+        draw,
+        sway * 2 + (frame % 5) - 2,
+        -16 - rise,
+        with_alpha(AMBER, 200),
+    );
+}
+
+/// A canvas A-frame tent `x` art pixels from the pen (its west guy peg), in `(canvas, shade)`
+/// with a `patch` sewn on.
+fn draw_tent(
+    draw: &mut impl RaylibDraw,
+    pen: Pen,
+    x: i32,
+    (canvas, shade): (Color, Color),
+    patch: Color,
+) {
+    let height = 30;
+    let mid = x + 30;
+    for row in 0..height {
+        let half = row * 24 / height + 2;
+        let y = -height + row;
+        pen.rect(draw, mid - half - 1, y, 1, 1, INK);
+        pen.rect(draw, mid - half, y, half, 1, canvas);
+        pen.rect(draw, mid, y, half, 1, shade);
+        pen.rect(draw, mid + half, y, 1, 1, INK);
+    }
+    // Seams down each slope and a patch.
+    for row in (4..height).step_by(5) {
+        let half = row * 24 / height + 2;
+        pen.px(draw, mid - half / 2, -height + row, with_alpha(INK, 60));
+        pen.px(draw, mid + half / 2, -height + row, with_alpha(INK, 60));
+    }
+    pen.rect(draw, mid - 13, -9, 5, 4, patch);
+    pen.rect(draw, mid - 13, -9, 5, 1, with_alpha(INK, 80));
+    // The door flap, tied back, and a lamp glowing inside.
+    pen.rect(draw, mid - 4, -15, 8, 15, NIGHT);
+    pen.rect(draw, mid + 3, -15, 3, 15, canvas);
+    pen.rect(draw, mid - 2, -5, 3, 3, with_alpha(AMBER, 170));
+    // Ridge pole and guy lines.
+    pen.rect(draw, mid - 1, -height - 4, 2, 5, SOIL_DARK);
+    for step in 0..8 {
+        pen.px(draw, mid - 27 - step / 2, -8 + step, MIST);
+        pen.px(draw, mid + 27 + step / 2, -8 + step, MIST);
+    }
+    pen.rect(draw, mid - 32, -1, 2, 2, SOIL_DARK);
+    pen.rect(draw, mid + 31, -1, 2, 2, SOIL_DARK);
+}
+
+/// A trader's wagon with a canvas hood, west of the fire.
+fn draw_wagon(draw: &mut impl RaylibDraw, pen: Pen, variant: u32) {
+    let hood = [CREAM, BONE, SAND][(variant % 3) as usize];
+    let paint = [RED, TEAL, OCEAN, MOSS][(variant / 3 % 4) as usize];
+    let x = -90;
+    // Hood hoops.
+    pen.rect(draw, x + 4, -34, 40, 2, INK);
+    pen.rect(draw, x + 2, -32, 44, 12, INK);
+    pen.rect(draw, x + 4, -32, 40, 11, hood);
+    pen.rect(draw, x + 4, -32, 40, 2, CREAM);
+    for hoop in [x + 12, x + 24, x + 36] {
+        pen.rect(draw, hoop, -32, 1, 11, FOG);
+    }
+    // Bed with painted boards.
+    pen.boxed(draw, x, -21, 48, 9, LOAM);
+    pen.rect(draw, x + 1, -20, 46, 2, paint);
+    pen.rect(draw, x + 16, -17, 16, 3, SOIL);
+    pen.text(draw, "$", x + 22, -18, GOLD);
+    // Shaft and wheels.
+    pen.rect(draw, x + 48, -14, 12, 1, SOIL_DARK);
+    for wheel in [x + 6, x + 32] {
+        pen.rect(draw, wheel, -12, 10, 12, INK);
+        pen.rect(draw, wheel + 1, -11, 8, 10, SOIL);
+        pen.rect(draw, wheel + 3, -9, 4, 6, LOAM);
+        pen.rect(draw, wheel + 4, -7, 2, 2, STEEL_DARK);
+    }
+    // A lantern on a hook.
+    pen.rect(draw, x + 46, -38, 1, 6, STEEL_DARK);
+    pen.boxed(draw, x + 44, -32, 5, 5, AMBER);
+    // Goods on the tailboard.
+    pen.boxed(draw, x - 6, -8, 7, 8, LOAM);
+    pen.boxed(draw, x - 4, -14, 6, 6, COPPER);
+}
+
+/// A prospector's pick leaning on a rock and a gold pan, `x` art pixels from the pen.
+fn draw_pick_and_pan(draw: &mut impl RaylibDraw, pen: Pen, x: i32) {
+    pen.rect(draw, x - 2, -5, 8, 5, STONE_DARK);
+    pen.rect(draw, x - 1, -6, 6, 2, STONE);
+    for step in 0..11 {
+        pen.px(draw, x + 2 + step / 3, -6 - step, SOIL);
+    }
+    pen.rect(draw, x + 1, -18, 9, 2, STEEL);
+    pen.px(draw, x + 1, -17, STEEL_LIGHT);
+    pen.rect(draw, x - 10, -2, 8, 2, STEEL_DARK);
+    pen.rect(draw, x - 9, -3, 6, 1, STEEL);
+    pen.px(draw, x - 6, -3, GOLD);
+}
+
+/// A surveyor's instrument on a tripod, its brass eyepiece glinting.
+fn draw_tripod(draw: &mut impl RaylibDraw, pen: Pen, x: i32, seconds: f32) {
+    for step in 0..14 {
+        pen.px(draw, x - step / 3, -1 - step, SOIL_DARK);
+        pen.px(draw, x + 6 + step / 3, -1 - step, SOIL_DARK);
+        pen.px(draw, x + 3, -1 - step, SOIL);
+    }
+    pen.boxed(draw, x - 1, -20, 9, 5, STEEL);
+    pen.rect(draw, x + 7, -19, 3, 3, GOLD);
+    if ((seconds * 0.8) as i32) % 3 == 0 {
+        pen.px(draw, x + 9, -19, CREAM);
+    }
+    // A rolled chart in a case.
+    pen.boxed(draw, x + 12, -6, 12, 6, LOAM);
+    pen.rect(draw, x + 14, -9, 8, 3, BONE);
+}
+
+/// A smuggler's plank lean-to and crates nobody asks about.
+fn draw_lean_to(draw: &mut impl RaylibDraw, pen: Pen) {
+    let x = -92;
+    for row in 0..24 {
+        let reach = 10 + row * 3 / 2;
+        pen.rect(
+            draw,
+            x,
+            -26 + row,
+            reach,
+            1,
+            if row % 4 == 0 { SOIL_DARK } else { SOIL },
+        );
+    }
+    pen.rect(draw, x, -26, 2, 26, SOIL_DARK);
+    pen.rect(draw, x + 44, -8, 2, 8, SOIL_DARK);
+    for (cx, cy, size) in [(x + 8, -10, 10), (x + 19, -10, 10), (x + 13, -19, 9)] {
+        pen.boxed(draw, cx, cy, size, size, LOAM);
+        pen.rect(draw, cx + 1, cy + size / 2, size - 2, 1, SOIL_DARK);
+        pen.px(draw, cx + size / 2, cy + 2, RED);
+    }
+    // A shuttered lamp, turned low.
+    pen.boxed(draw, x + 32, -7, 5, 7, STEEL_DARK);
+    pen.rect(draw, x + 33, -5, 3, 2, with_alpha(AMBER, 160));
+}
+
+/// A bedroll laid out east of the fire.
+fn draw_bedroll(draw: &mut impl RaylibDraw, pen: Pen, x: i32, variant: u32) {
+    let blanket = [MAROON, TEAL_DARK, PLUM, PINE][(variant / 7 % 4) as usize];
+    pen.rect(draw, x, -3, 22, 3, INK);
+    pen.rect(draw, x + 1, -3, 20, 2, blanket);
+    pen.rect(draw, x + 1, -3, 20, 1, with_alpha(CREAM, 60));
+    pen.rect(draw, x + 17, -4, 5, 3, BONE);
 }

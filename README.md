@@ -323,8 +323,12 @@ sites always does). Each village is generated from the world seed:
   secrets, gossip, a smuggled pack of charges, or an apprenticeship that teaches a permanent
   perk) or **give a gift** from the cargo bay (some land far better than others). Goodwill
   grows with every chat, trade and gift, and everyone remembers every player across sessions:
-  friends pay less, some offers need a friendship first, a grudge closes doors. The town has
-  its own folk walking its street. The meeting hall shows the village's prosperity, its trouble
+  friends pay less, some offers need a friendship first, a grudge closes doors, and word of
+  how you treat someone reaches their family and friends (and, the other way, their rivals).
+  The town has its own folk walking its street, and out on the open surface between
+  settlements you will come across **wanderers' camps** around a campfire: a trader's wagon, a
+  prospector's tent, a travelling surveyor or a smuggler's hideout, whose one to three
+  wanderers talk, trade and remember you like anyone else. The meeting hall shows the village's prosperity, its trouble
   and how it gets on with its neighbours.
 - **Every building with a door is enterable** (`E` at its door, as in town): rooms are dressed
   in the village's style and the building's trade. In split-screen each seat uses villages on

@@ -8,7 +8,8 @@ use fatherload_simulation::{
     PlayerId, SimulationTick, WorldState,
     entity::{EntityKind, EntityState},
     people::{
-        Character, Culture, DayTime, TickClock, clock::DEFAULT_DAY_LENGTH_MINUTES, offers, routine,
+        Character, Culture, DayTime, TickClock, camps, clock::DEFAULT_DAY_LENGTH_MINUTES, offers,
+        routine,
     },
     terrain::{MineralKind, TILE_SIZE},
     village::{self, BuildingKind, Village, VillageSetting, placement},
@@ -138,6 +139,36 @@ fn open_talk(stage: &mut SceneStage<'_>, wanted: fn(&Character) -> bool) {
         },
     );
     stage.settle(4);
+}
+
+/// A street scene at the nearest wanderers' camp of `kind` east or west of town, at `time`.
+fn camp_at(stage: &mut SceneStage<'_>, kind: camps::CampKind, time: DayTime) {
+    stage.play(1, |world, seats| {
+        let settings = *world.world_settings();
+        let span = 60 * camps::CAMP_SPACING;
+        let camp = camps::camps_between(&settings, -span, span)
+            .into_iter()
+            .filter(|camp| camp.kind == kind)
+            .min_by_key(|camp| (camp.column.abs(), camp.column))
+            .expect("a camp of that kind within sixty slots");
+        set_time(world, time);
+        park(
+            world,
+            seats[0].player,
+            column_x(camp.column + 6),
+            camp.ground_row,
+        );
+        reveal(
+            world,
+            seats[0].player,
+            camp.column - 40..camp.column + 40,
+            camp.ground_row - 6..camp.ground_row + 6,
+        );
+        world.stream_terrain_near_players();
+    });
+    stage.settle(150);
+    stage.seat(0).village.banner = None;
+    stage.settle(1);
 }
 
 pub const PEOPLE_SCENES: &[Scene] = &[
@@ -347,6 +378,29 @@ pub const PEOPLE_SCENES: &[Scene] = &[
                 park(world, seats[0].player, column_x(112), ground);
             });
             stage.settle(150);
+        },
+    },
+    Scene {
+        name: "people_camp_trader",
+        summary: "A trader's wagon out on the open surface: wanderers around their campfire in the afternoon",
+        setup: |stage| camp_at(stage, camps::CampKind::Trader, DayTime::at(1, 15, 0)),
+    },
+    Scene {
+        name: "people_camp_prospector",
+        summary: "A prospector's camp: tent, pick and pan, the fire going at dusk",
+        setup: |stage| camp_at(stage, camps::CampKind::Prospector, DayTime::at(1, 19, 30)),
+    },
+    Scene {
+        name: "people_camp_surveyor",
+        summary: "A travelling surveyor's tent and tripod in the morning",
+        setup: |stage| camp_at(stage, camps::CampKind::Surveyor, DayTime::at(1, 9, 0)),
+    },
+    Scene {
+        name: "people_camp_smuggler_talk",
+        summary: "Talking to a smuggler at their hideout: the talk panel with a wanderer",
+        setup: |stage| {
+            camp_at(stage, camps::CampKind::Smuggler, DayTime::at(1, 11, 0));
+            open_talk(stage, |_| true);
         },
     },
 ];
