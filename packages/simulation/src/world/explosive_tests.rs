@@ -535,6 +535,50 @@ fn blasts_push_rigs_away_but_not_through_rock() {
 }
 
 #[test]
+fn being_blown_into_a_wall_or_the_floor_never_damages_the_rig() {
+    // Full ticks (movement and collision damage included), the rig holding no controls.
+    let run = |world: &mut WorldState, ticks: u64| {
+        for _ in 0..ticks {
+            let tick = world.simulation_tick();
+            let _ = world.simulate_tick(
+                tick,
+                &TickInputs::held(PLAYER, crate::ControlState::default()),
+            );
+        }
+    };
+    // Point-blank C4 beside a rig parked against a bedrock wall.
+    let mut wall = arena();
+    fill(&mut wall, 25..=25, 8..=31, TileKind::Bedrock);
+    park(&mut wall, PLAYER, 24.5, 31.5);
+    let next = wall.simulation_tick().next();
+    wall.bombs = vec![charge(0, ExplosiveKind::C4, 23.9, 31.5, next)];
+    let hull = wall.player(PLAYER).unwrap().hull;
+    run(&mut wall, 1);
+    let pushed = wall.player(PLAYER).unwrap().velocity_x;
+    assert!(pushed > 0.0, "pushed into the wall: {pushed}");
+    run(&mut wall, 30);
+    assert!(
+        (wall.player(PLAYER).unwrap().hull - hull).abs() < f32::EPSILON,
+        "wall impact from a blast"
+    );
+
+    // A rig already falling fast, with C4 going off just above it.
+    let mut fall = arena();
+    park(&mut fall, PLAYER, 20.5, 30.5);
+    fall.player_mut(PLAYER).unwrap().velocity_y = 280.0;
+    let next = fall.simulation_tick().next();
+    fall.bombs = vec![charge(0, ExplosiveKind::C4, 20.5, 30.2, next)];
+    let hull = fall.player(PLAYER).unwrap().hull;
+    run(&mut fall, 1);
+    assert!(fall.player(PLAYER).unwrap().velocity_y <= 300.0 + 1.0);
+    run(&mut fall, 120);
+    assert!(
+        (fall.player(PLAYER).unwrap().hull - hull).abs() < f32::EPSILON,
+        "crash landing from a blast"
+    );
+}
+
+#[test]
 fn a_stuck_charge_falls_once_the_surface_holding_it_is_blasted() {
     let mut world = arena();
     fill(&mut world, 16..=16, 8..=31, TileKind::Stone);

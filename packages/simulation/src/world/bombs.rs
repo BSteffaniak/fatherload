@@ -30,11 +30,14 @@ const CHAIN_DELAY_MILLIS: u64 = 220;
 pub const MAX_ACTIVE_BOMBS: usize = 256;
 /// Rigs are far heavier than a bomb: they take this share of a blast's push.
 const RIG_PUSH_SCALE: f32 = 0.55;
-/// Largest sideways speed a blast gives a rig.
-const RIG_PUSH_MAX_X: f32 = 300.0;
+/// Largest sideways speed a blast leaves a rig with: under the wall-impact damage threshold
+/// (three quarters of the safe landing speed), so being blown into a wall never hurts.
+const RIG_PUSH_MAX_X: f32 = 230.0;
 /// Largest upward speed a blast gives a rig (kept under the safe landing speed, so a blast on
 /// its own never makes a rig crash-land).
 const RIG_PUSH_MAX_LIFT: f32 = 260.0;
+/// Largest downward speed a blast leaves a rig with (under the safe landing speed).
+const RIG_PUSH_MAX_FALL: f32 = 300.0;
 /// Bomblet launch velocities relative to the cluster bomb: a fan over the top half.
 const BOMBLET_FAN: [(f32, f32); CLUSTER_BOMBLETS] = [
     (-230.0, -160.0),
@@ -152,10 +155,18 @@ impl WorldState {
                 if !line_clear(&self.terrain, blast.x, blast.y, player.x, player.y) {
                     continue;
                 }
-                let push_x = (dx * RIG_PUSH_SCALE).clamp(-RIG_PUSH_MAX_X, RIG_PUSH_MAX_X);
-                let push_y = (dy * RIG_PUSH_SCALE).max(-RIG_PUSH_MAX_LIFT);
-                player.velocity_x = quantize(player.velocity_x + push_x);
-                player.velocity_y = quantize(player.velocity_y + push_y);
+                player.velocity_x = quantize(pushed_speed(
+                    player.velocity_x,
+                    dx * RIG_PUSH_SCALE,
+                    RIG_PUSH_MAX_X,
+                    RIG_PUSH_MAX_X,
+                ));
+                player.velocity_y = quantize(pushed_speed(
+                    player.velocity_y,
+                    dy * RIG_PUSH_SCALE,
+                    RIG_PUSH_MAX_LIFT,
+                    RIG_PUSH_MAX_FALL,
+                ));
             }
         }
     }
@@ -520,6 +531,18 @@ impl WorldState {
             }
         }
         path
+    }
+}
+
+/// `current + push`, except that a push never carries a rig past `max_negative` /
+/// `max_positive` in its direction (a rig already moving faster keeps its own speed): blasts
+/// alone never cause crash or wall damage.
+fn pushed_speed(current: f32, push: f32, max_negative: f32, max_positive: f32) -> f32 {
+    let pushed = current + push;
+    if push > 0.0 {
+        pushed.min(current.max(max_positive))
+    } else {
+        pushed.max(current.min(-max_negative))
     }
 }
 
