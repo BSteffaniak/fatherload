@@ -1074,13 +1074,16 @@ tick-rate independence; the netcode harness bots climb out, jump, pick and board
 ## People in the world (`src/people/{clock,routine,camps,offers,contractor,ledger}.rs`, `src/world/people.rs`)
 
 Expansion plan WP-PEOPLE (wave 3, T17), on worlds with villages (`GeneratorVersion::has_villages`,
-V6 and V7). Village residents and the town's folk are `EntityKind::Npc` entities.
+V6 to V8). Village residents and the town's folk are `EntityKind::Npc` entities.
 
-- **Clock seam** (`people::clock`): `ClockSource` (`day_time() -> DayTime`, `is_night()`), the
-  default `TickClock` (tick, tick rate, `DEFAULT_DAY_LENGTH_MINUTES` = 48; tick 0 is 08:00, night
-  is 20:00 to 06:00) and `TickClock::tick_at(time, hz, day_length)` (its inverse, for tests and
-  scenes). `WorldState::people_clock()` is the only place the simulation asks for the time:
-  **wire T14's world clock there**.
+- **Clock** (`people::clock`): `ClockSource` (`day_time() -> DayTime`, `is_night()`).
+  `WorldState::people_clock()` is the only place people ask the time, and it reads T14's world
+  clock (`clock::WorldClock` implements `ClockSource`: day from 0, minute of its 24-hour face),
+  so routines follow the world's day length and a skipped night wakes everyone at dawn. People's
+  own schedule calls 20:00 to 06:00 night. `TickClock` (tick, tick rate,
+  `DEFAULT_DAY_LENGTH_MINUTES` = 48; tick 0 is 08:00) reads the same as a fresh standard world's
+  clock, and `TickClock::tick_at(time, hz, day_length)` (its inverse) stays for tests and
+  scenes.
 - **Settlements and routines** (`people::routine`): `Settlement` is a village's (or the town's,
   `TOWN_VILLAGE` = `VillageId(0)`, `TOWN_FOLK` frontier residents of `town_population`, homes above
   the shops) routine view: lots, plaza, and per resident a home lot, a `Work` (a counter, an
@@ -1120,9 +1123,9 @@ V6 and V7). Village residents and the town's folk are `EntityKind::Npc` entities
   person's saved `CharacterState`; a chat once a day adds goodwill, and a rumour once a day per
   person marks the nearest unknown site as an echo. Word gets around: every change in a
   person's affinity for a player ripples once to their circle (`Population::reputation_ripple`:
-  family half, friends and sweethearts a third, rivals a quarter the other way). **Actor seam (T15):**
-  `WorldState::people_actor_position(player)` is the rig's position today; return the pilot's
-  while they are on foot.
+  family half, friends and sweethearts a third, rivals a quarter the other way). **Actor:**
+  `WorldState::people_actor_position(player)` is `actor_position`: the pilot's middle while on
+  foot (T15), else the rig, so a pilot talks to people on the street or at a door.
 - **Offers** (`people::offers`): `offers_of(character)` rolls each person's trade list from their
   role offer: `PersonDeal::Goods` (a one-of-a-kind rig part, a patch-up, a tonic that is a timed
   `Blessing`, cosmetics, a pack of charges), `MapSecret`, `Rumour`, `Apprenticeship(Perk)`
@@ -1153,8 +1156,8 @@ above.
 
 ## Wave 3 seams (T17 people)
 
-- **Clock:** `WorldState::people_clock()` returns `TickClock`'s `DayTime`; T14 replaces its body.
-- **Pilot:** `WorldState::people_actor_position()` returns the rig; T15 returns the pilot on foot.
+- **Clock:** wired at integration: `WorldState::people_clock()` reads T14's `WorldClock`.
+- **Pilot:** wired at integration: `WorldState::people_actor_position()` is `actor_position`.
   Interaction is one command (`PeopleCommand::Talk { npc, .. }`) whatever the actor.
 - **Contractors:** `people::contractor` is ready for WP-HOME (T24) to hire.
 - **Formats:** `PROTOCOL_VERSION` 11 (NPC entities, `PlayerCommand::People`, the `People`

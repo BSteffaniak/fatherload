@@ -772,3 +772,38 @@ fn wanderers_at_a_camp_appear_and_talk() {
     run(&mut world, 40);
     assert!(npcs_of(&world, camp.id).is_empty());
 }
+
+#[test]
+fn a_pilot_on_foot_talks_to_people_away_from_the_rig() {
+    let (mut world, found) = village_world();
+    let npc = meet_someone(&mut world, &found);
+    let (x, _) = world.npc_position(npc).expect("npc");
+    // The rig parked well out of reach; the pilot walks up to the person.
+    park_at(&mut world, PLAYER, &found, TILE_SIZE.mul_add(30.0, x));
+    #[allow(clippy::cast_precision_loss, reason = "small rows")]
+    let feet = found.ground_row as f32 * TILE_SIZE;
+    world
+        .place_pilot(PLAYER, TILE_SIZE.mul_add(1.0, x), feet)
+        .expect("pilot placed");
+    let talk = act(
+        &mut world,
+        PlayerCommand::People(PeopleCommand::Talk {
+            npc,
+            topic: TalkTopic::Chat,
+        }),
+    );
+    assert_eq!(outcome(&talk), PlayerScopedCommandOutcome::Applied);
+    assert!(world.people().conversation(PLAYER).is_some());
+}
+
+#[test]
+fn people_live_by_the_world_clock() {
+    use crate::clock::DayLength;
+    let mut world = world_at(60);
+    // A fresh standard world reads the same as the tick clock: 08:00 of the first day.
+    assert_eq!(world.people_clock(), DayTime::at(0, 8, 0));
+    // Jumping the world clock (as a skipped night does) moves people's day with it.
+    let day = DayLength::Standard.millis();
+    world.set_world_time_millis(day + day / 4);
+    assert_eq!(world.people_clock(), DayTime::at(1, 6, 0));
+}

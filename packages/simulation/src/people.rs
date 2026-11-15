@@ -30,8 +30,9 @@
 //!
 //! People in the world (WP-PEOPLE, wave 3) build on these:
 //!
-//! - **Clock seam** ([`clock`]): [`clock::ClockSource`] and the tick-derived default
-//!   [`clock::TickClock`] (48-minute days) until T14's world clock is wired in.
+//! - **Clock** ([`clock`]): [`clock::ClockSource`], implemented by T14's world clock (what
+//!   `WorldState::people_clock` reads) and by the tick-derived [`clock::TickClock`] (48-minute
+//!   days, for tests and scenes).
 //! - **Camps** ([`camps`]): wanderers (traders, prospectors, surveyors, smugglers) camped on
 //!   the open surface between settlements, deterministic per slot of the surface.
 //! - **Routines** ([`routine`]): a [`routine::Settlement`] (a village, the town or a camp)

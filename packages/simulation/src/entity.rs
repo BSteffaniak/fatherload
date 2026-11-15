@@ -115,7 +115,7 @@ impl EntityKind {
             | Self::Projectile
             | Self::Target
             | Self::Pilot => EntityPhase::Late,
-            | Self::Npc => EntityPhase::Late,
+            Self::Npc => EntityPhase::Late,
             Self::Charge => EntityPhase::Charges,
         }
     }
@@ -515,7 +515,7 @@ impl EntityState {
             | Self::Charge(_)
             | Self::Projectile(_)
             | Self::Pilot(_) => None,
-            | Self::Npc(_) => None,
+            Self::Npc(_) => None,
         }
     }
 }

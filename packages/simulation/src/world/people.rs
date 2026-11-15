@@ -42,8 +42,7 @@ use crate::{
     ids::{PlayerId, SimulationTick},
     people::{
         self, CharacterId, ClockSource, DayTime, MemoryFact, PeopleCommand, Standing, TalkContext,
-        TalkTopic, TickClock,
-        clock::DEFAULT_DAY_LENGTH_MINUTES,
+        TalkTopic,
         dialogue::Topic,
         ledger::{Conversation, ConversationLine, Speaker},
         offers::{self, GiftReaction, Perk, PersonDeal},
@@ -93,29 +92,20 @@ impl WorldState {
         &self.people
     }
 
-    /// The time of day people live by.
-    ///
-    /// **Integration seam (T14):** this is the only place the simulation asks the clock. Until
-    /// the world clock lands it is [`TickClock`] over the tick, the tick rate and the default
-    /// 48-minute day; wiring T14 means returning its day and time of day here.
+    /// The time of day people live by: T14's world clock (Part II F4) as a [`DayTime`], so
+    /// routines follow the world's day length and a skipped night wakes the village at dawn.
+    /// This is the only place people ask the clock.
     #[must_use]
     pub fn people_clock(&self) -> DayTime {
-        TickClock::new(
-            self.simulation_tick.get(),
-            self.timing.rate.hz(),
-            DEFAULT_DAY_LENGTH_MINUTES,
-        )
-        .day_time()
+        self.clock().day_time()
     }
 
-    /// Where `player` stands for talking to people, in world pixels (feet-agnostic: the centre
-    /// of what they are in).
-    ///
-    /// **Integration seam (T15):** the rig today. Once the pilot can walk on foot, return the
-    /// pilot's position while they are out of the rig; reach checks and population all follow.
+    /// Where `player` stands for talking to people, in world pixels: the pilot's middle while
+    /// on foot (Part II F5), else the rig ([`Self::actor_position`]). Reach checks and
+    /// population follow it.
     #[must_use]
     pub fn people_actor_position(&self, player: PlayerId) -> Option<(f32, f32)> {
-        self.players.get(&player).map(|rig| (rig.x, rig.y))
+        self.actor_position(player)
     }
 
     /// The person entity `npc`'s state, if it is a person.

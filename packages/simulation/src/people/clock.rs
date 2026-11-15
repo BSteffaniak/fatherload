@@ -8,8 +8,9 @@
 //! replication.
 //!
 //! **Integration:** `WorldState::people_clock` (in `world/people.rs`) is the single place the
-//! simulation asks for the time. Wiring T14's clock means returning its day and time of day as a
-//! [`DayTime`] there (or implementing [`ClockSource`] for it); nothing else changes.
+//! simulation asks for the time; it reads T14's world clock (`crate::clock::WorldClock`
+//! implements [`ClockSource`]), so routines follow the world's day length and skipped nights.
+//! [`TickClock`] stays for tests and for tools that only know a tick.
 
 /// Real minutes in one in-game day by default (plan §11 decision 2: 24 / 48 / 72).
 pub const DEFAULT_DAY_LENGTH_MINUTES: u32 = 48;
@@ -114,6 +115,23 @@ impl ClockSource for TickClock {
             day,
             minute: u16::try_from(minute).unwrap_or(0),
         }
+    }
+}
+
+/// T14's world clock (Part II F4): the day from 0 and the minute of the day on its 24-hour
+/// face. A fresh standard world reads exactly what [`TickClock`] would (both start at 08:00 of
+/// a 48-minute day), and skipped nights and the world's day length carry through.
+impl ClockSource for crate::clock::WorldClock {
+    fn day_time(&self) -> DayTime {
+        let minute = self.millis_into_day() * u64::from(CLOCK_MINUTES_PER_DAY) / self.day_millis();
+        DayTime {
+            day: self.day().saturating_sub(1),
+            minute: u16::try_from(minute).unwrap_or(0),
+        }
+    }
+
+    fn is_night(&self) -> bool {
+        Self::is_night(*self)
     }
 }
 
