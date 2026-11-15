@@ -1,6 +1,7 @@
 //! World clock scenes (Part II F4): dawn, noon, golden hour and dusk over the surface, the town
-//! and a village at night, a rig's headlights on a night in the hills, the Moon overhead, and
-//! the crew going to bed.
+//! and a village at night, a rig's headlights on a night in the hills, the Moon overhead, the
+//! crew going to bed, and the wave 3 tracks together: a village at dusk with its people walking
+//! home, lamps coming on, the pilot out beside the rig and the Moon hanging over its column.
 
 use fatherload_simulation::{
     PlayerId, WorldState,
@@ -93,6 +94,59 @@ fn park_in_village(world: &mut WorldState, player: PlayerId, found: &Village) {
         area.min.x - 20..area.max.x + 20,
         area.min.y - 4..area.max.y + 6,
     );
+}
+
+/// The wave 3 tracks in one view: a lamp-lit surface village (the one nearest the Moon's
+/// column, so the Moon hangs in the sky) at dusk, its people walking home, windows and lamps
+/// coming on, and seat 0's pilot out on foot beside the parked rig.
+fn dusk_village_with_pilot(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        let moon = world.moon_anchor().column;
+        let settings = *world.world_settings();
+        let found = (1..80)
+            .flat_map(|site| [site, -site])
+            .filter_map(|site| {
+                fatherload_simulation::village::village(
+                    &settings,
+                    fatherload_simulation::village::placement::surface_id(site),
+                )
+            })
+            .filter(|found| {
+                found.setting == VillageSetting::Surface
+                    && found
+                        .decor
+                        .iter()
+                        .any(|decor| decor.kind == fatherload_simulation::village::DecorKind::Lamp)
+            })
+            .min_by_key(|found| (i32::midpoint(found.plaza.0, found.plaza.1) - moon).abs())
+            .unwrap_or_else(|| {
+                find_village(world, |found: &Village| {
+                    found.setting == VillageSetting::Surface
+                })
+            });
+        park_in_village(world, player, &found);
+        world.stream_terrain_near_players();
+        let time = time_of(world, 75.5, BRIGHT_MOON);
+        world.set_world_time_millis(time);
+        // The pilot climbs out and stands a couple of tiles toward the plaza.
+        if let Some(rig) = world.player(player) {
+            let (x, y) = (rig.x, rig.y);
+            let feet = (y / fatherload_simulation::TILE_SIZE).floor().mul_add(
+                fatherload_simulation::TILE_SIZE,
+                fatherload_simulation::TILE_SIZE,
+            );
+            let _ = world.place_pilot(
+                player,
+                fatherload_simulation::TILE_SIZE.mul_add(-1.6, x),
+                feet - 0.25,
+            );
+        }
+    });
+    // People spawn on the next refresh and walk their evening legs.
+    stage.settle(150);
+    stage.seat(0).village.banner = None;
+    stage.settle(1);
 }
 
 pub const CLOCK_SCENES: &[Scene] = &[
@@ -207,6 +261,11 @@ pub const CLOCK_SCENES: &[Scene] = &[
             });
             stage.settle(10);
         },
+    },
+    Scene {
+        name: "wave3_dusk_village",
+        summary: "Wave 3 together: a village at dusk with its people heading home, windows and lamps coming on, the pilot on foot beside the parked rig, and the Moon hanging still over its column",
+        setup: dusk_village_with_pilot,
     },
     Scene {
         name: "clock_short_day_hud",

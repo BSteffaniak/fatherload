@@ -435,11 +435,16 @@ mod tests {
     fn install_toasts_name_the_part_and_what_it_changes() {
         let mut player = Player::new(0.0, 0.0);
         player.fuel_tank_level = 2;
+        // The first tank lifts a stock rig into the V8 sky's low isles (T16's climb table).
         let message = install_message(&player, UpgradeKind::FuelTank, 2);
-        assert!(
-            message.starts_with("Bought the Twin Fuel Tank! Climbs "),
+        assert_eq!(
+            message, "Bought the Twin Fuel Tank! Reaches the low sky isles!",
             "{message}"
         );
+        // Past the isles, the toast says how much higher it climbs.
+        player.fuel_tank_level = 3;
+        let message = install_message(&player, UpgradeKind::FuelTank, 3);
+        assert!(message.contains("Climbs "), "{message}");
         assert!(message.contains("% higher on a full tank"), "{message}");
     }
 }
