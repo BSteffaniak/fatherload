@@ -21,6 +21,7 @@ pub mod infrastructure;
 pub mod input;
 pub mod item;
 pub mod physics;
+pub mod people;
 pub mod player;
 pub mod poi;
 pub mod progression;
