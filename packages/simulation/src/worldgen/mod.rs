@@ -36,6 +36,7 @@ pub mod pois;
 pub mod prefabs;
 pub mod report;
 pub mod strata;
+pub mod streamed;
 #[cfg(test)]
 mod tests;
 
@@ -71,26 +72,44 @@ pub enum GeneratorVersion {
     /// transition zones, placement scaled to the bigger bands, and a solid bedrock floor.
     #[default]
     V4,
+    /// Streamed, horizontally unbounded worlds ([`streamed`]): the V4 band stack and bedrock
+    /// floor, generated chunk by chunk from overlapping region grids, with a per-column surface
+    /// heightmap hook. The town stays flat on its classic columns.
+    V5,
 }
 
 impl GeneratorVersion {
     /// The generator new worlds use.
-    pub const CURRENT: Self = Self::V4;
+    pub const CURRENT: Self = Self::V5;
 
     /// Every generator, oldest first.
-    pub const ALL: [Self; 5] = [Self::Legacy, Self::V1, Self::V2, Self::V3, Self::V4];
+    pub const ALL: [Self; 6] = [
+        Self::Legacy,
+        Self::V1,
+        Self::V2,
+        Self::V3,
+        Self::V4,
+        Self::V5,
+    ];
 
     /// Whether this generator stamps points of interest.
     #[must_use]
     pub const fn has_points_of_interest(self) -> bool {
-        matches!(self, Self::V2 | Self::V3 | Self::V4)
+        matches!(self, Self::V2 | Self::V3 | Self::V4 | Self::V5)
     }
 
     /// Whether this generator builds the deep (about four times taller) band stack with a
     /// bedrock floor.
     #[must_use]
     pub const fn is_deep(self) -> bool {
-        matches!(self, Self::V4)
+        matches!(self, Self::V4 | Self::V5)
+    }
+
+    /// Whether worlds of this generator are streamed: unbounded horizontally and generated
+    /// chunk by chunk on demand ([`streamed`]). Older generators build bounded worlds.
+    #[must_use]
+    pub const fn is_streamed(self) -> bool {
+        matches!(self, Self::V5)
     }
 
     #[must_use]
@@ -101,6 +120,7 @@ impl GeneratorVersion {
             Self::V2 => "v2",
             Self::V3 => "v3",
             Self::V4 => "v4",
+            Self::V5 => "v5",
         }
     }
 }
@@ -247,6 +267,16 @@ impl WorldSettings {
         }
     }
 
+    /// Standard settings with the newest bounded generator ([`GeneratorVersion::V4`]): the
+    /// compatibility path test suites written for bounded worlds pin themselves to.
+    #[must_use]
+    pub const fn bounded(seed: u64) -> Self {
+        Self {
+            generator: GeneratorVersion::V4,
+            ..Self::new(seed)
+        }
+    }
+
     /// Settings describing a world built by the original fixed-depth generator.
     #[must_use]
     pub const fn legacy(seed: u64) -> Self {
@@ -330,8 +360,13 @@ pub fn parse_seed(text: &str) -> Option<u64> {
 }
 
 /// A generated world: its tiles (row-major) and feature index.
+///
+/// For a streamed world it is a window of columns starting at `origin_x` (see
+/// [`streamed::generate_window`]); bounded worlds start at column 0.
 #[derive(Clone, Debug)]
 pub struct GeneratedWorld {
+    /// World column of the first tile of each row.
+    pub origin_x: i32,
     pub width: i32,
     pub height: i32,
     pub tiles: Vec<Tile>,
@@ -342,6 +377,9 @@ pub struct GeneratedWorld {
 #[must_use]
 pub fn generate(settings: &WorldSettings) -> GeneratedWorld {
     let (width, height) = (settings.width_tiles(), settings.height_tiles());
+    if settings.generator.is_streamed() {
+        return streamed::generate_window(settings, 0, width);
+    }
     if settings.generator == GeneratorVersion::Legacy {
         let tiles = (0..height)
             .flat_map(|y| (0..width).map(move |x| (x, y)))
@@ -354,6 +392,7 @@ pub fn generate(settings: &WorldSettings) -> GeneratedWorld {
             })
             .collect();
         return GeneratedWorld {
+            origin_x: 0,
             width,
             height,
             tiles,
@@ -378,10 +417,22 @@ pub fn generate(settings: &WorldSettings) -> GeneratedWorld {
         })
         .collect();
     GeneratedWorld {
+        origin_x: 0,
         width,
         height,
         tiles,
         features: canvas.features,
+    }
+}
+
+/// The first ground row of column `x`: the surface heightmap. Flat at the classic surface row
+/// in bounded worlds; streamed worlds read [`streamed::surface_row`].
+#[must_use]
+pub const fn surface_row(settings: &WorldSettings, x: i32) -> i32 {
+    if settings.generator.is_streamed() {
+        streamed::surface_row(settings, x)
+    } else {
+        strata::SKY_ROWS
     }
 }
 
@@ -552,7 +603,7 @@ impl<'s> Canvas<'s> {
 }
 
 /// Rock texture of a band: noise cell size and the share (per mille) of contrasting rock.
-const fn rock_texture(band: Band) -> (i32, i32, u32) {
+pub(crate) const fn rock_texture(band: Band) -> (i32, i32, u32) {
     use crate::terrain::DeepStratum;
     match band {
         Band::Topsoil => (9, 5, 70),

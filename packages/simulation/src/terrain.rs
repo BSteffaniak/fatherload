@@ -3,7 +3,10 @@
     reason = "terrain bounds are validated before indexing"
 )]
 
-use std::sync::{Arc, OnceLock};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, OnceLock},
+};
 
 mod persistence;
 
@@ -12,7 +15,10 @@ use serde::{Deserialize, Serialize};
 use crate::{
     poi::PoiTile,
     surface::building_foundation_at,
-    worldgen::{self, Band, FeatureIndex, WorldSettings},
+    worldgen::{
+        self, Band, FeatureId, FeatureIndex, FeatureKind, TileRect, WorldFeature, WorldSettings,
+        streamed::GeneratedChunk,
+    },
 };
 
 pub use persistence::{
@@ -256,18 +262,6 @@ pub struct TilePosition {
     pub y: i32,
 }
 
-/// The in-bounds tile positions of `chunk` in a `width` x `height` terrain, row-major.
-fn chunk_positions(
-    width: i32,
-    height: i32,
-    chunk: ChunkPosition,
-) -> impl Iterator<Item = TilePosition> {
-    let origin = chunk.origin();
-    let xs = origin.x.max(0)..(origin.x + CHUNK_SIZE_TILES).min(width);
-    (origin.y.max(0)..(origin.y + CHUNK_SIZE_TILES).min(height))
-        .flat_map(move |y| xs.clone().map(move |x| TilePosition { x, y }))
-}
-
 /// Width and height, in tiles, of one terrain chunk (the unit of discovery storage and of
 /// terrain relevance refreshes).
 pub const CHUNK_SIZE_TILES: i32 = 16;
@@ -338,7 +332,7 @@ impl Tile {
     }
 }
 
-/// Order-independent digest contribution of one tile at one index.
+/// Order-independent digest contribution of one tile at one index (bounded terrain).
 const fn tile_digest(index: usize, tile: Tile) -> u64 {
     // splitmix64 finalizer over the index and tile code.
     let mut z = (index as u64)
@@ -349,27 +343,112 @@ const fn tile_digest(index: usize, tile: Tile) -> u64 {
     z ^ (z >> 31)
 }
 
+/// Order-independent digest contribution of one edited tile of a streamed terrain (keyed by
+/// position, so it is the same on 32- and 64-bit targets).
+const fn position_digest(position: TilePosition, tile: Tile) -> u64 {
+    let key = ((position.x as u32 as u64) << 32) | (position.y as u32 as u64);
+    let mut z = key
+        .wrapping_mul(0xA24B_AED4_963E_E407)
+        .wrapping_add(tile.code().wrapping_mul(0x9FB2_1C65_1E98_DF25));
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
 /// A terrain grid with its generation settings.
+///
+/// Two storage models share one API:
+///
+/// * **Bounded** (generators up to V4): a fixed `width` x `height` grid of tiles, the
+///   compatibility path for every older world.
+/// * **Streamed** ([`GeneratorVersion::V5`](worldgen::GeneratorVersion::V5)): unbounded columns
+///   (to [`worldgen::streamed::STREAMED_COLUMN_LIMIT`] either side) and a finite height. Chunks
+///   are generated on demand from the settings; only the tiles players changed are stored
+///   ("edits", per chunk). Chunks near players are kept loaded for fast access
+///   ([`Self::stream_around`]); unloading a chunk keeps its edits, so nothing is lost. Which
+///   chunks are loaded never affects any tile, hash or result.
 ///
 /// Serializes as a [`TerrainSnapshot`]: the settings, the size, a digest and only the tiles
 /// that differ from freshly generated terrain (see [`persistence`]).
 #[derive(Clone, Debug)]
 pub struct Terrain {
-    width: i32,
     height: i32,
     /// How the terrain was generated (seed, size, richness, hazards, generator version).
     settings: WorldSettings,
-    tiles: Vec<Tile>,
-    /// Running sum of [`tile_digest`] over every tile, maintained on each write so hashing the
-    /// world does not walk the whole grid.
+    storage: Storage,
+    /// Bounded: running sum of [`tile_digest`] over every tile. Streamed: running sum of
+    /// [`position_digest`] over every edit. Maintained on each write so hashing the world does
+    /// not walk the tiles.
     digest: u64,
     /// Tile writes recorded while a simulation tick runs (never serialized or hashed).
     journal: Option<Vec<TileChange>>,
-    /// The freshly generated terrain and feature index of `settings` at this size, shared
+}
+
+#[derive(Clone, Debug)]
+enum Storage {
+    Bounded(BoundedTiles),
+    Streamed(StreamedTiles),
+}
+
+#[derive(Clone, Debug)]
+struct BoundedTiles {
+    width: i32,
+    tiles: Vec<Tile>,
+    /// The freshly generated terrain and feature index of the settings at this size, shared
     /// through a per-process cache and computed on first use (never serialized, replicated or
     /// hashed).
     base: OnceLock<Arc<GeneratedBase>>,
 }
+
+#[derive(Clone, Debug, Default)]
+struct StreamedTiles {
+    /// Chunks kept in memory for fast access (a cache: never serialized or hashed).
+    loaded: BTreeMap<ChunkPosition, LoadedChunk>,
+    /// Every tile that differs from generation, by chunk and [`ChunkPosition::local_index`].
+    edits: BTreeMap<ChunkPosition, BTreeMap<u16, Tile>>,
+}
+
+#[derive(Clone, Debug)]
+struct LoadedChunk {
+    base: Arc<GeneratedChunk>,
+    /// The chunk's current tiles once it has edits (copy-on-write; `None` reads `base`).
+    tiles: Option<Arc<Vec<Tile>>>,
+}
+
+impl LoadedChunk {
+    fn new(base: Arc<GeneratedChunk>, edits: Option<&BTreeMap<u16, Tile>>) -> Self {
+        let tiles = edits.filter(|edits| !edits.is_empty()).map(|edits| {
+            let mut tiles = base.tiles().to_vec();
+            for (local, tile) in edits {
+                if let Some(slot) = tiles.get_mut(usize::from(*local)) {
+                    *slot = *tile;
+                }
+            }
+            Arc::new(tiles)
+        });
+        Self { base, tiles }
+    }
+
+    fn tile(&self, local: usize) -> Tile {
+        self.tiles
+            .as_ref()
+            .map_or_else(|| self.base.tile(local), |tiles| tiles[local])
+    }
+}
+
+/// Where a tile lives.
+#[derive(Clone, Copy, Debug)]
+enum Slot {
+    Bounded(usize),
+    Streamed(ChunkPosition, usize),
+}
+
+/// Chunks kept loaded around each centre by [`Terrain::stream_around`]: `(columns, rows)` of
+/// chunks either side (about two screens).
+pub const STREAM_LOAD_RADIUS_CHUNKS: (i32, i32) = (4, 3);
+/// Loaded chunks further than this from every centre are unloaded (hysteresis over
+/// [`STREAM_LOAD_RADIUS_CHUNKS`], so a rig moving back and forth does not thrash).
+pub const STREAM_KEEP_RADIUS_CHUNKS: (i32, i32) = (6, 5);
 
 impl Terrain {
     #[cfg(test)]
@@ -391,9 +470,13 @@ impl Terrain {
         )
     }
 
-    /// Generates the world `settings` describe (see [`crate::worldgen`]).
+    /// Generates the world `settings` describe (see [`crate::worldgen`]): a streamed terrain
+    /// for streamed generators, otherwise the bounded grid.
     #[must_use]
     pub fn generate(settings: &WorldSettings) -> Self {
+        if settings.generator.is_streamed() {
+            return Self::streamed(*settings);
+        }
         let (width, height) = (settings.width_tiles(), settings.height_tiles());
         Self::from_base(
             *settings,
@@ -401,6 +484,17 @@ impl Terrain {
             height,
             generated_base(settings, width, height),
         )
+    }
+
+    /// A streamed terrain holding exactly the generated world (no edits).
+    fn streamed(settings: WorldSettings) -> Self {
+        Self {
+            height: settings.height_tiles(),
+            settings,
+            storage: Storage::Streamed(StreamedTiles::default()),
+            digest: 0,
+            journal: None,
+        }
     }
 
     /// A terrain holding exactly the generated `base`.
@@ -411,23 +505,27 @@ impl Terrain {
         base: Arc<GeneratedBase>,
     ) -> Self {
         let mut terrain = Self::from_tiles(settings, width, height, base.tiles.clone());
-        terrain.base = OnceLock::from(base);
+        if let Storage::Bounded(bounded) = &mut terrain.storage {
+            bounded.base = OnceLock::from(base);
+        }
         terrain
     }
 
-    /// A terrain from explicit tiles (the digest is computed here).
+    /// A bounded terrain from explicit tiles (the digest is computed here).
     fn from_tiles(settings: WorldSettings, width: i32, height: i32, tiles: Vec<Tile>) -> Self {
         let digest = tiles.iter().enumerate().fold(0_u64, |sum, (index, tile)| {
             sum.wrapping_add(tile_digest(index, *tile))
         });
         Self {
-            width,
             height,
             settings,
-            tiles,
+            storage: Storage::Bounded(BoundedTiles {
+                width,
+                tiles,
+                base: OnceLock::new(),
+            }),
             digest,
             journal: None,
-            base: OnceLock::new(),
         }
     }
 
@@ -440,10 +538,63 @@ impl Terrain {
     /// Replaces the generation settings record (replicas following the authority's session
     /// section; the tiles are not regenerated).
     pub fn set_settings(&mut self, settings: WorldSettings) {
-        if self.settings != settings {
-            self.settings = settings;
-            self.base = OnceLock::new();
+        if self.settings == settings {
+            return;
         }
+        if settings.generator.is_streamed() != self.is_streamed() {
+            // A different storage model: start over from the new settings (the authority's
+            // terrain follows through keyframes and chunk refreshes).
+            *self = Self::generate(&settings);
+            return;
+        }
+        self.settings = settings;
+        match &mut self.storage {
+            Storage::Bounded(bounded) => bounded.base = OnceLock::new(),
+            Storage::Streamed(streamed) => streamed.loaded.clear(),
+        }
+    }
+
+    /// Whether this terrain is streamed (unbounded columns, generated on demand).
+    #[must_use]
+    pub const fn is_streamed(&self) -> bool {
+        matches!(self.storage, Storage::Streamed(_))
+    }
+
+    /// The first column of the world (0 for bounded terrain).
+    #[must_use]
+    pub const fn min_x(&self) -> i32 {
+        match &self.storage {
+            Storage::Bounded(_) => 0,
+            Storage::Streamed(_) => -worldgen::streamed::STREAMED_COLUMN_LIMIT,
+        }
+    }
+
+    /// The last column of the world.
+    #[must_use]
+    pub const fn max_x(&self) -> i32 {
+        match &self.storage {
+            Storage::Bounded(bounded) => bounded.width - 1,
+            Storage::Streamed(_) => worldgen::streamed::STREAMED_COLUMN_LIMIT - 1,
+        }
+    }
+
+    /// Whether column `x` is inside the world.
+    #[must_use]
+    pub const fn contains_column(&self, x: i32) -> bool {
+        x >= self.min_x() && x <= self.max_x()
+    }
+
+    /// Whether `position` is inside the world.
+    #[must_use]
+    pub const fn contains(&self, position: TilePosition) -> bool {
+        self.contains_column(position.x) && position.y >= 0 && position.y < self.height
+    }
+
+    /// The first ground row of column `x` (the surface heightmap; see
+    /// [`worldgen::surface_row`]).
+    #[must_use]
+    pub const fn surface_row(&self, x: i32) -> i32 {
+        worldgen::surface_row(&self.settings, x)
     }
 
     /// The band (shallow layer or deep stratum) containing `position`.
@@ -479,26 +630,269 @@ impl Terrain {
         self.band_at(position).deep_stratum()
     }
 
-    /// The generator's notable features (caverns, motherlodes, artifact beds, hazard clusters,
-    /// band transitions, prefab slots). Empty for legacy worlds.
+    /// The generator's whole feature index (caverns, motherlodes, artifact beds, hazard
+    /// clusters, band transitions, prefab slots). Empty for legacy worlds.
+    ///
+    /// A streamed world has no finite index: this is empty for it. Use the regional queries
+    /// that work for every world instead: [`Self::feature`], [`Self::features_in`],
+    /// [`Self::pois_touching`], [`Self::poi_at`] and [`Self::nearest_feature`].
     #[must_use]
     pub fn features(&self) -> &FeatureIndex {
-        &self.base().features
+        static EMPTY: OnceLock<FeatureIndex> = OnceLock::new();
+        match &self.storage {
+            Storage::Bounded(_) => &self.base().features,
+            Storage::Streamed(_) => EMPTY.get_or_init(FeatureIndex::default),
+        }
     }
 
-    /// Order-independent digest of every tile, maintained incrementally.
+    /// The feature with id `id`, in any world.
+    #[must_use]
+    pub fn feature(&self, id: FeatureId) -> Option<WorldFeature> {
+        if self.is_streamed() {
+            worldgen::streamed::feature(&self.settings, id)
+        } else {
+            self.features().get(id).copied()
+        }
+    }
+
+    /// Every feature (of `kinds`, or every kind) whose centre lies in `rect`, in id order.
+    #[must_use]
+    pub fn features_in(&self, rect: &TileRect, kinds: Option<&[FeatureKind]>) -> Vec<WorldFeature> {
+        if self.is_streamed() {
+            return worldgen::streamed::features_in(&self.settings, rect, kinds);
+        }
+        self.features()
+            .all()
+            .iter()
+            .filter(|feature| {
+                rect.contains(feature.center)
+                    && kinds.is_none_or(|kinds| kinds.contains(&feature.kind))
+            })
+            .copied()
+            .collect()
+    }
+
+    /// The points of interest whose bounds overlap `rect`, in id order.
+    #[must_use]
+    pub fn pois_touching(&self, rect: &TileRect) -> Vec<WorldFeature> {
+        if !self.settings.generator.has_points_of_interest() {
+            return Vec::new();
+        }
+        if self.is_streamed() {
+            return worldgen::streamed::pois_touching(&self.settings, rect);
+        }
+        self.features()
+            .pois()
+            .filter(|feature| feature.bounds.intersects(rect))
+            .copied()
+            .collect()
+    }
+
+    /// The point of interest whose bounds contain `position` (lowest id if several overlap).
+    #[must_use]
+    pub fn poi_at(&self, position: TilePosition) -> Option<WorldFeature> {
+        if self.is_streamed() {
+            return self
+                .pois_touching(&TileRect {
+                    min: position,
+                    max: position,
+                })
+                .into_iter()
+                .next();
+        }
+        self.features().poi_at(position).copied()
+    }
+
+    /// The feature of `kind` accepted by `accept` whose centre is nearest `from` (ties: lowest
+    /// id). Streamed worlds search outward at most `max_columns` columns either side; bounded
+    /// worlds search their whole index.
+    pub fn nearest_feature(
+        &self,
+        from: TilePosition,
+        kind: FeatureKind,
+        max_columns: i32,
+        mut accept: impl FnMut(&WorldFeature) -> bool,
+    ) -> Option<WorldFeature> {
+        if self.is_streamed() {
+            return worldgen::streamed::nearest_feature(
+                &self.settings,
+                from,
+                kind,
+                max_columns,
+                accept,
+            );
+        }
+        self.features()
+            .of_kind(kind)
+            .filter(|feature| accept(feature))
+            .min_by_key(|feature| {
+                let dx = i64::from(feature.center.x - from.x);
+                let dy = i64::from(feature.center.y - from.y);
+                (dx * dx + dy * dy, feature.id)
+            })
+            .copied()
+    }
+
+    /// Order-independent digest of the terrain, maintained incrementally: of every tile for
+    /// bounded terrain, of every edit for streamed terrain (whose generated tiles are a pure
+    /// function of the settings, which the world hash covers separately).
     #[must_use]
     pub const fn digest(&self) -> u64 {
         self.digest
     }
 
-    fn write_tile(&mut self, index: usize, position: TilePosition, tile: Tile) {
-        let old = self.tiles[index];
-        self.tiles[index] = tile;
-        self.digest = self
-            .digest
-            .wrapping_sub(tile_digest(index, old))
-            .wrapping_add(tile_digest(index, tile));
+    /// Bounded tiles: how many. Streamed: how many edits (the stored tiles).
+    #[must_use]
+    pub fn stored_tile_count(&self) -> usize {
+        match &self.storage {
+            Storage::Bounded(bounded) => bounded.tiles.len(),
+            Storage::Streamed(streamed) => streamed.edits.values().map(BTreeMap::len).sum(),
+        }
+    }
+
+    /// Chunks currently held in memory (streamed terrain; 0 for bounded terrain).
+    #[must_use]
+    pub fn loaded_chunk_count(&self) -> usize {
+        match &self.storage {
+            Storage::Bounded(_) => 0,
+            Storage::Streamed(streamed) => streamed.loaded.len(),
+        }
+    }
+
+    /// Chunks with at least one edit (streamed terrain; 0 for bounded terrain).
+    #[must_use]
+    pub fn edited_chunk_count(&self) -> usize {
+        match &self.storage {
+            Storage::Bounded(_) => 0,
+            Storage::Streamed(streamed) => streamed.edits.len(),
+        }
+    }
+
+    /// The chunks currently held in memory (streamed terrain).
+    pub fn loaded_chunks(&self) -> impl Iterator<Item = ChunkPosition> + '_ {
+        let loaded = match &self.storage {
+            Storage::Bounded(_) => None,
+            Storage::Streamed(streamed) => Some(streamed.loaded.keys().copied()),
+        };
+        loaded.into_iter().flatten()
+    }
+
+    /// The chunks with edits (streamed terrain).
+    pub fn edited_chunks(&self) -> impl Iterator<Item = ChunkPosition> + '_ {
+        let edited = match &self.storage {
+            Storage::Bounded(_) => None,
+            Storage::Streamed(streamed) => Some(streamed.edits.keys().copied()),
+        };
+        edited.into_iter().flatten()
+    }
+
+    /// Keeps streamed chunks loaded around `centers` (tile positions, e.g. every rig or a
+    /// camera): loads every chunk within [`STREAM_LOAD_RADIUS_CHUNKS`] of a centre and unloads
+    /// loaded chunks beyond [`STREAM_KEEP_RADIUS_CHUNKS`] of every centre. Edits survive
+    /// unloading. Returns how many chunks were loaded. A no-op for bounded terrain.
+    ///
+    /// Purely a performance and memory measure: tiles read the same loaded or not.
+    pub fn stream_around(&mut self, centers: &[TilePosition]) -> usize {
+        let settings = self.settings;
+        let chunk_rows = worldgen::streamed::chunk_rows(&settings);
+        let (min_x, max_x) = (self.min_x(), self.max_x());
+        let Storage::Streamed(streamed) = &mut self.storage else {
+            return 0;
+        };
+        let centers: Vec<ChunkPosition> = centers
+            .iter()
+            .map(|position| {
+                ChunkPosition::of(TilePosition {
+                    x: position.x.clamp(min_x, max_x),
+                    y: position.y,
+                })
+            })
+            .collect();
+        let near = |chunk: &ChunkPosition, (radius_x, radius_y): (i32, i32)| {
+            centers.iter().any(|center| {
+                (chunk.x - center.x).abs() <= radius_x && (chunk.y - center.y).abs() <= radius_y
+            })
+        };
+        streamed
+            .loaded
+            .retain(|chunk, _| near(chunk, STREAM_KEEP_RADIUS_CHUNKS));
+        let (min_chunk, max_chunk) = (
+            ChunkPosition::of(TilePosition { x: min_x, y: 0 }).x,
+            ChunkPosition::of(TilePosition { x: max_x, y: 0 }).x,
+        );
+        let mut loaded = 0;
+        let (radius_x, radius_y) = STREAM_LOAD_RADIUS_CHUNKS;
+        for center in &centers {
+            for y in (center.y - radius_y).max(0)..=(center.y + radius_y).min(chunk_rows - 1) {
+                for x in (center.x - radius_x).max(min_chunk)..=(center.x + radius_x).min(max_chunk)
+                {
+                    let chunk = ChunkPosition { x, y };
+                    if streamed.loaded.contains_key(&chunk) {
+                        continue;
+                    }
+                    let base = worldgen::streamed::generated_chunk(&settings, chunk);
+                    streamed
+                        .loaded
+                        .insert(chunk, LoadedChunk::new(base, streamed.edits.get(&chunk)));
+                    loaded += 1;
+                }
+            }
+        }
+        loaded
+    }
+
+    fn write_tile(&mut self, slot: Slot, position: TilePosition, tile: Tile) {
+        match slot {
+            Slot::Bounded(index) => {
+                let Storage::Bounded(bounded) = &mut self.storage else {
+                    return;
+                };
+                let old = bounded.tiles[index];
+                bounded.tiles[index] = tile;
+                self.digest = self
+                    .digest
+                    .wrapping_sub(tile_digest(index, old))
+                    .wrapping_add(tile_digest(index, tile));
+            }
+            Slot::Streamed(chunk, local) => {
+                let settings = self.settings;
+                let Storage::Streamed(streamed) = &mut self.storage else {
+                    return;
+                };
+                let edits = &mut streamed.edits;
+                let loaded = streamed.loaded.entry(chunk).or_insert_with(|| {
+                    LoadedChunk::new(
+                        worldgen::streamed::generated_chunk(&settings, chunk),
+                        edits.get(&chunk),
+                    )
+                });
+                let generated = loaded.base.tile(local);
+                let old = loaded.tile(local);
+                if loaded.tiles.is_none() {
+                    loaded.tiles = Some(Arc::new(loaded.base.tiles().to_vec()));
+                }
+                if let Some(tiles) = loaded.tiles.as_mut() {
+                    Arc::make_mut(tiles)[local] = tile;
+                }
+                if old != generated {
+                    self.digest = self.digest.wrapping_sub(position_digest(position, old));
+                }
+                if tile != generated {
+                    self.digest = self.digest.wrapping_add(position_digest(position, tile));
+                }
+                let key = u16::try_from(local).unwrap_or(u16::MAX);
+                if tile == generated {
+                    if let Some(chunk_edits) = edits.get_mut(&chunk) {
+                        chunk_edits.remove(&key);
+                        if chunk_edits.is_empty() {
+                            edits.remove(&chunk);
+                        }
+                    }
+                } else {
+                    edits.entry(chunk).or_default().insert(key, tile);
+                }
+            }
+        }
         if let Some(journal) = self.journal.as_mut() {
             journal.push(TileChange { position, tile });
         }
@@ -519,17 +913,27 @@ impl Terrain {
         self.set_tile_from_network(change.position, change.tile.kind, change.tile.durability)
     }
 
-    /// The in-bounds tiles of `chunk`, row-major (refreshes send [`Self::chunk_diffs`] instead).
+    /// The in-world tiles of `chunk`, row-major (refreshes send [`Self::chunk_diffs`] instead).
     #[must_use]
     pub fn chunk_tiles(&self, chunk: ChunkPosition) -> Vec<Tile> {
-        chunk_positions(self.width, self.height, chunk)
+        self.chunk_positions(chunk)
             .filter_map(|position| self.tile(position))
             .collect()
     }
 
+    /// The in-world tile positions of `chunk`, row-major.
+    fn chunk_positions(&self, chunk: ChunkPosition) -> impl Iterator<Item = TilePosition> + use<> {
+        let origin = chunk.origin();
+        let xs = origin.x.max(self.min_x())..(origin.x + CHUNK_SIZE_TILES).min(self.max_x() + 1);
+        (origin.y.max(0)..(origin.y + CHUNK_SIZE_TILES).min(self.height))
+            .flat_map(move |y| xs.clone().map(move |x| TilePosition { x, y }))
+    }
+
+    /// Bounded width in tiles. A streamed terrain reports the span between [`Self::min_x`] and
+    /// [`Self::max_x`]; code that walks or clamps columns should use those instead.
     #[must_use]
     pub const fn width(&self) -> i32 {
-        self.width
+        self.max_x() - self.min_x() + 1
     }
 
     #[must_use]
@@ -537,9 +941,14 @@ impl Terrain {
         self.height
     }
 
+    /// Every tile of a bounded terrain, row-major (`None` for streamed terrain, which has no
+    /// finite grid).
     #[must_use]
-    pub fn tiles(&self) -> &[Tile] {
-        &self.tiles
+    pub fn bounded_tiles(&self) -> Option<&[Tile]> {
+        match &self.storage {
+            Storage::Bounded(bounded) => Some(&bounded.tiles),
+            Storage::Streamed(_) => None,
+        }
     }
 
     #[must_use]
@@ -547,24 +956,53 @@ impl Terrain {
         self.settings.seed
     }
 
-    /// Extends the terrain downwards with freshly generated rows (old saves of shallower worlds).
+    /// Extends a bounded terrain downwards with freshly generated rows (old saves of shallower
+    /// worlds). Streamed terrain always has its full height.
     pub fn ensure_depth(&mut self, minimum_height: i32) {
         if minimum_height <= self.height {
             return;
         }
-        let base = generated_base(&self.settings, self.width, minimum_height);
-        let start = self.tiles.len();
-        self.tiles.extend_from_slice(&base.tiles[start..]);
-        for (index, tile) in self.tiles.iter().enumerate().skip(start) {
+        let settings = self.settings;
+        let Storage::Bounded(bounded) = &mut self.storage else {
+            return;
+        };
+        let base = generated_base(&settings, bounded.width, minimum_height);
+        let start = bounded.tiles.len();
+        bounded.tiles.extend_from_slice(&base.tiles[start..]);
+        for (index, tile) in bounded.tiles.iter().enumerate().skip(start) {
             self.digest = self.digest.wrapping_add(tile_digest(index, *tile));
         }
-        self.base = OnceLock::from(base);
+        bounded.base = OnceLock::from(base);
         self.height = minimum_height;
     }
 
     #[must_use]
     pub fn tile(&self, position: TilePosition) -> Option<Tile> {
-        self.index(position).map(|index| self.tiles[index])
+        self.slot(position).map(|slot| self.read(slot))
+    }
+
+    fn read(&self, slot: Slot) -> Tile {
+        match (&self.storage, slot) {
+            (Storage::Bounded(bounded), Slot::Bounded(index)) => bounded.tiles[index],
+            (Storage::Streamed(streamed), Slot::Streamed(chunk, local)) => {
+                if let Some(loaded) = streamed.loaded.get(&chunk) {
+                    return loaded.tile(local);
+                }
+                let key = u16::try_from(local).unwrap_or(u16::MAX);
+                streamed
+                    .edits
+                    .get(&chunk)
+                    .and_then(|edits| edits.get(&key))
+                    .copied()
+                    .unwrap_or_else(|| {
+                        worldgen::streamed::generated_chunk(&self.settings, chunk).tile(local)
+                    })
+            }
+            _ => Tile {
+                kind: TileKind::Bedrock,
+                durability: 0,
+            },
+        }
     }
 
     #[must_use]
@@ -594,24 +1032,25 @@ impl Terrain {
         kind: TileKind,
         durability: u8,
     ) -> bool {
-        let Some(index) = self.index(position) else {
+        let Some(slot) = self.slot(position) else {
             return false;
         };
-        self.write_tile(index, position, Tile { kind, durability });
+        self.write_tile(slot, position, Tile { kind, durability });
         true
     }
 
     /// Writes a fresh tile of `kind` at `position`. Refused (returns `false`) outside the world
     /// and over unbreakable tiles (the bedrock floor), so no gameplay effect breaches the floor.
     pub fn set_kind(&mut self, position: TilePosition, kind: TileKind) -> bool {
-        let Some(index) = self.index(position) else {
+        let Some(slot) = self.slot(position) else {
             return false;
         };
-        if is_unbreakable(self.tiles[index].kind) && kind != self.tiles[index].kind {
+        let current = self.read(slot).kind;
+        if is_unbreakable(current) && kind != current {
             return false;
         }
         self.write_tile(
-            index,
+            slot,
             position,
             Tile {
                 kind,
@@ -632,13 +1071,14 @@ impl Terrain {
     /// With `unrestricted` (a test-mode rig) building foundations and undrillable vault fixtures
     /// give way too; nothing ever digs an [`is_indestructible`] tile or a tile outside the world.
     pub fn chip_by(&mut self, position: TilePosition, bite: u8, unrestricted: bool) -> MineResult {
-        let Some(index) = self.index(position) else {
+        let Some(slot) = self.slot(position) else {
             return MineResult::Blocked;
         };
-        let mut tile = self.tiles[index];
+        let before = self.read(slot);
+        let mut tile = before;
         let result = Self::chip_tile(&mut tile, bite.max(1), unrestricted);
-        if tile != self.tiles[index] {
-            self.write_tile(index, position, tile);
+        if tile != before {
+            self.write_tile(slot, position, tile);
         }
         result
     }
@@ -705,10 +1145,10 @@ impl Terrain {
                     continue;
                 }
                 let position = TilePosition { x, y };
-                let Some(index) = self.index(position) else {
+                let Some(slot) = self.slot(position) else {
                     continue;
                 };
-                let left = match self.tiles[index].kind {
+                let left = match self.read(slot).kind {
                     TileKind::Air | TileKind::Lava | TileKind::Foundation | TileKind::Bedrock => {
                         continue;
                     }
@@ -728,7 +1168,7 @@ impl Terrain {
                         durability: poi.durability(),
                     },
                 );
-                self.write_tile(index, position, tile);
+                self.write_tile(slot, position, tile);
                 if tile.kind == TileKind::Air {
                     result.cleared += 1;
                 }
@@ -738,13 +1178,30 @@ impl Terrain {
         result
     }
 
-    const fn index(&self, position: TilePosition) -> Option<usize> {
-        if position.x < 0 || position.y < 0 || position.x >= self.width || position.y >= self.height
-        {
+    const fn slot(&self, position: TilePosition) -> Option<Slot> {
+        if position.y < 0 || position.y >= self.height {
             return None;
         }
-
-        Some((position.y * self.width + position.x) as usize)
+        match &self.storage {
+            Storage::Bounded(bounded) => {
+                if position.x < 0 || position.x >= bounded.width {
+                    return None;
+                }
+                Some(Slot::Bounded(
+                    (position.y * bounded.width + position.x) as usize,
+                ))
+            }
+            Storage::Streamed(_) => {
+                let limit = worldgen::streamed::STREAMED_COLUMN_LIMIT;
+                if position.x < -limit || position.x >= limit {
+                    return None;
+                }
+                Some(Slot::Streamed(
+                    ChunkPosition::of(position),
+                    ChunkPosition::local_index(position),
+                ))
+            }
+        }
     }
 }
 

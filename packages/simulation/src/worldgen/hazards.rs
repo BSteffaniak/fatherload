@@ -24,8 +24,8 @@ pub const TOWN_HAZARD_MIN_ROW: i32 = 32;
 /// No hazard lies within this many tiles (Chebyshev) of the spawn point.
 pub const SPAWN_HAZARD_CLEARANCE: i32 = 22;
 
-const SALT_CLUSTER: u64 = 0x4A2A_0001;
-const REGION: (i32, i32) = (24, 16);
+pub(crate) const SALT_CLUSTER: u64 = 0x4A2A_0001;
+pub const REGION: (i32, i32) = (24, 16);
 
 /// Whether a hazard may be placed at `(x, y)`.
 #[must_use]
@@ -44,7 +44,7 @@ pub const fn hazard_allowed(x: i32, y: i32) -> bool {
 
 /// Clusters per 10 000 tiles of a band, and the relative weight of each hazard family
 /// (in [`HazardKind::ALL`] order: gas, lava, magma vent, pressure, explosive).
-const fn band_rules(band: Band) -> (u32, [u32; 5]) {
+pub(crate) const fn band_rules(band: Band) -> (u32, [u32; 5]) {
     match band {
         Band::Topsoil => (0, [0; 5]),
         Band::Clay => (8, [1, 0, 0, 0, 0]),
@@ -67,7 +67,7 @@ const fn band_rules(band: Band) -> (u32, [u32; 5]) {
 }
 
 /// Depth gates per family (the shallowest row each may appear in).
-const fn family_min_row(kind: HazardKind) -> i32 {
+pub(crate) const fn family_min_row(kind: HazardKind) -> i32 {
     match kind {
         HazardKind::Gas => HAZARD_MIN_ROW,
         HazardKind::Explosive => 29,

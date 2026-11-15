@@ -63,7 +63,7 @@ fn poi_counts_per_band_stay_in_bounds() {
         for size in WorldSize::ALL {
             let settings = WorldSettings {
                 size,
-                ..WorldSettings::new(seed)
+                ..WorldSettings::bounded(seed)
             };
             let world = generate(&settings);
             let scale = usize::try_from(settings.width_tiles() / 120).unwrap_or(2);
@@ -113,7 +113,7 @@ fn poi_counts_per_band_stay_in_bounds() {
 fn v1_worlds_have_no_points_of_interest() {
     let world = generate(&WorldSettings {
         generator: GeneratorVersion::V1,
-        ..WorldSettings::new(3)
+        ..WorldSettings::bounded(3)
     });
     assert_eq!(world.features.pois().count(), 0);
     // V1 keeps its own reserved slots (one per band and 120-column segment, minus spawn).
@@ -129,7 +129,7 @@ fn v1_worlds_have_no_points_of_interest() {
 #[test]
 fn pois_are_spaced_and_clear_of_spawn_the_town_and_hazards() {
     for seed in sample_seeds() {
-        let world = generate(&WorldSettings::new(seed));
+        let world = generate(&WorldSettings::bounded(seed));
         let pois: Vec<_> = world.features.pois().copied().collect();
         for (index, poi) in pois.iter().enumerate() {
             let kind = poi.poi_kind().expect("a POI");
@@ -183,7 +183,7 @@ fn pois_are_spaced_and_clear_of_spawn_the_town_and_hazards() {
 #[test]
 fn every_vault_lock_can_be_reached_and_worked() {
     for seed in sample_seeds() {
-        let world = generate(&WorldSettings::new(seed));
+        let world = generate(&WorldSettings::bounded(seed));
         let reachable = reachable_from_spawn(&world);
         let reached = |x: i32, y: i32| {
             x >= 0
@@ -282,7 +282,7 @@ fn every_vault_lock_can_be_reached_and_worked() {
 
 #[test]
 fn feature_queries_find_pois_by_kind_band_region_and_proximity() {
-    let world = generate(&WorldSettings::new(9));
+    let world = generate(&WorldSettings::bounded(9));
     let features = &world.features;
     let vault = features
         .pois_of(PoiKind::Vault)

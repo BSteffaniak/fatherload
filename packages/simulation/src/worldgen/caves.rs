@@ -26,11 +26,11 @@ pub const SPAWN_SHAFT_ROWS: i32 = 28;
 /// Smallest connected open area recorded as a [`FeatureKind::LargeCavern`].
 pub const LARGE_CAVERN_TILES: usize = 90;
 
-const SALT_CAVERN: u64 = 0xCA7E_0001;
-const SALT_CAVERN_DETAIL: u64 = 0xCA7E_0002;
-const SALT_WORM: u64 = 0xCA7E_0100;
-const SALT_CHAMBER: u64 = 0xCA7E_0200;
-const SALT_CHAMBER_EDGE: u64 = 0xCA7E_0201;
+pub(crate) const SALT_CAVERN: u64 = 0xCA7E_0001;
+pub(crate) const SALT_CAVERN_DETAIL: u64 = 0xCA7E_0002;
+pub(crate) const SALT_WORM: u64 = 0xCA7E_0100;
+pub(crate) const SALT_CHAMBER: u64 = 0xCA7E_0200;
+pub(crate) const SALT_CHAMBER_EDGE: u64 = 0xCA7E_0201;
 
 /// Whether caves may open at `(x, y)`.
 #[must_use]
@@ -46,7 +46,7 @@ pub const fn cave_allowed(x: i32, y: i32) -> bool {
 }
 
 /// Share (per mille) of a band that the noise caverns open.
-const fn cavern_share(band: Band) -> u32 {
+pub(crate) const fn cavern_share(band: Band) -> u32 {
     match band {
         Band::Topsoil => 20,
         Band::Clay => 40,
@@ -64,7 +64,7 @@ const fn cavern_share(band: Band) -> u32 {
 /// Cavern noise cell size per band: wide flat galleries shallow, taller voids deep. Deep (V4)
 /// worlds stretch every cell by a quarter, so their thicker bands get roomier cave systems
 /// rather than just more of the same small pockets.
-const fn cavern_cells(band: Band, deep_world: bool) -> (i32, i32) {
+pub(crate) const fn cavern_cells(band: Band, deep_world: bool) -> (i32, i32) {
     let (cell_x, cell_y) = classic_cavern_cells(band);
     if deep_world {
         (cell_x * 5 / 4, cell_y * 5 / 4)
@@ -159,7 +159,7 @@ fn smooth(canvas: &Canvas<'_>, open: &[bool]) -> Vec<bool> {
 
 /// Unit vectors (8.8 fixed point) for 16 headings, starting east and turning clockwise
 /// (screen y grows downwards).
-const HEADINGS: [(i32, i32); 16] = [
+pub(crate) const HEADINGS: [(i32, i32); 16] = [
     (256, 0),
     (237, 98),
     (181, 181),
@@ -179,7 +179,7 @@ const HEADINGS: [(i32, i32); 16] = [
 ];
 
 /// Region size of worm placement.
-const WORM_REGION: (i32, i32) = (40, 26);
+pub const WORM_REGION: (i32, i32) = (40, 26);
 
 /// Worm tunnels: a few per region, wandering mostly sideways.
 fn carve_worms(canvas: &Canvas<'_>, open: &mut [bool]) {
@@ -278,7 +278,7 @@ fn carve_disc(canvas: &Canvas<'_>, open: &mut [bool], cx: i32, cy: i32, radius: 
 }
 
 /// Region size of chamber placement.
-const CHAMBER_REGION: (i32, i32) = (56, 34);
+pub const CHAMBER_REGION: (i32, i32) = (56, 34);
 
 /// Big elliptical chambers with ragged walls, deep strata only.
 fn carve_chambers(canvas: &mut Canvas<'_>, open: &mut [bool]) {

@@ -9,6 +9,15 @@ use crate::{
     worldgen::{GeneratorVersion, WorldSettings, WorldSize},
 };
 
+/// Standard settings with the newest bounded generator (V4): these tests cover the bounded
+/// storage path; streamed terrain has its own tests below.
+const fn bounded(seed: u64) -> WorldSettings {
+    WorldSettings {
+        generator: GeneratorVersion::V4,
+        ..WorldSettings::new(seed)
+    }
+}
+
 /// The binary layout of a [`TerrainSnapshot`] with plain integers for the enums (postcard
 /// encodes an enum variant as its index), to forge unknown variants.
 #[derive(serde::Serialize)]
@@ -27,7 +36,11 @@ struct WireSnapshot {
     height: i32,
     digest: u64,
     diffs: Vec<(u32, Vec<u64>)>,
+    chunks: Vec<WireChunk>,
 }
+
+/// One streamed chunk's diffs on the wire.
+type WireChunk = ((i32, i32), Vec<(u32, Vec<u64>)>);
 
 /// Digs tunnels, blasts craters, chips tiles and plants ore across the whole terrain.
 fn excavate(terrain: &mut Terrain, salt: i32) {
@@ -59,15 +72,18 @@ fn assert_same_tiles(restored: &Terrain, original: &Terrain) {
     assert_eq!(restored.height(), original.height());
     assert_eq!(restored.settings(), original.settings());
     assert_eq!(restored.digest(), original.digest());
-    assert!(restored.tiles() == original.tiles(), "every tile matches");
+    assert!(
+        restored.bounded_tiles() == original.bounded_tiles(),
+        "every tile matches"
+    );
 }
 
 fn settings_cases() -> [WorldSettings; 3] {
     [
-        WorldSettings::new(0x5EED),
+        bounded(0x5EED),
         WorldSettings {
             size: WorldSize::Large,
-            ..WorldSettings::new(0xB16)
+            ..bounded(0xB16)
         },
         WorldSettings::legacy(0x1E6A),
     ]
@@ -224,10 +240,12 @@ fn odd_sized_and_extended_terrain_round_trips() {
     assert_same_tiles(&restored, &small);
 
     // A short v1 world extended to full depth regains exactly the generated rows.
-    let settings = WorldSettings::new(0xACE);
+    let settings = bounded(0xACE);
     let generated = Terrain::generate(&settings);
     let mut short = Terrain::try_from(FullTerrain {
-        tiles: generated.tiles()[..usize::try_from(240 * 100).expect("small")].to_vec(),
+        tiles: generated.bounded_tiles().expect("bounded")
+            [..usize::try_from(240 * 100).expect("small")]
+            .to_vec(),
         height: 100,
         ..FullTerrain::from(&generated)
     })
@@ -265,7 +283,7 @@ fn full_terrain_with_the_wrong_tile_count_or_size_is_rejected() {
 
 #[test]
 fn generation_diffs_apply_in_any_order_and_twice() {
-    let settings = WorldSettings::new(0xD1FF);
+    let settings = bounded(0xD1FF);
     let mut terrain = Terrain::generate(&settings);
     excavate(&mut terrain, 4);
     let diffs = terrain.generation_diffs();
@@ -300,7 +318,7 @@ fn generation_diffs_apply_in_any_order_and_twice() {
 
 #[test]
 fn chunk_diffs_restore_a_stale_chunk_from_generation() {
-    let settings = WorldSettings::new(0xC4C4);
+    let settings = bounded(0xC4C4);
     let fresh = Terrain::generate(&settings);
     let mut dug = fresh.clone();
     excavate(&mut dug, 2);
@@ -335,20 +353,20 @@ fn chunk_diffs_restore_a_stale_chunk_from_generation() {
 
 #[test]
 fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
-    let mut terrain = Terrain::generate(&WorldSettings::new(0xBAD));
+    let mut terrain = Terrain::generate(&bounded(0xBAD));
     excavate(&mut terrain, 5);
     let snapshot = terrain.snapshot();
 
     // A snapshot whose generator produced different base terrain (simulated by relabelling the
     // seed) fails the digest check.
     let foreign = TerrainSnapshot {
-        settings: WorldSettings::new(0xBAD + 1),
+        settings: bounded(0xBAD + 1),
         ..snapshot.clone()
     };
     assert!(matches!(
         Terrain::from_snapshot(foreign),
         Err(TerrainRestoreError::DigestMismatch {
-            generator: GeneratorVersion::CURRENT,
+            generator: GeneratorVersion::V4,
             ..
         })
     ));
@@ -367,7 +385,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
                 durability: 0,
             },
         )]),
-        ..snapshot
+        ..snapshot.clone()
     };
     assert!(matches!(
         Terrain::from_snapshot(out_of_bounds),
@@ -397,13 +415,14 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
             size: 0,
             richness: 1,
             hazards: 1,
-            // `WorldSettings::new` uses the current generator (V4, variant index 4).
+            // `bounded` uses generator V4 (variant index 4).
             generator: 4,
         },
         width: 240,
-        height: WorldSettings::new(0xBAD).height_tiles(),
-        digest: Terrain::generate(&WorldSettings::new(0xBAD)).digest(),
+        height: bounded(0xBAD).height_tiles(),
+        digest: Terrain::generate(&bounded(0xBAD)).digest(),
         diffs: Vec::new(),
+        chunks: Vec::new(),
     };
     let bytes = postcard::to_allocvec(&known).expect("encode");
     assert!(
@@ -412,7 +431,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
     );
     let unknown = WireSnapshot {
         settings: WireSettings {
-            generator: 7,
+            generator: 9,
             ..known.settings
         },
         ..known
@@ -431,7 +450,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
 /// the compact save/keyframe form exactly.
 #[test]
 fn changed_poi_tiles_round_trip_through_snapshots() {
-    let settings = WorldSettings::new(0x9017);
+    let settings = bounded(0x9017);
     let mut terrain = Terrain::generate(&settings);
     let mut changed = 0;
     let poi_tiles: Vec<(TilePosition, PoiTile)> = terrain
@@ -472,14 +491,14 @@ fn changed_poi_tiles_round_trip_through_snapshots() {
 #[ignore = "timing report; run with --ignored --nocapture (in debug and --release)"]
 fn generation_timing_report() {
     for settings in [
-        WorldSettings::new(0x7111),
+        bounded(0x7111),
         WorldSettings {
             size: WorldSize::Large,
-            ..WorldSettings::new(0x7112)
+            ..bounded(0x7112)
         },
         WorldSettings {
             generator: GeneratorVersion::V3,
-            ..WorldSettings::new(0x7111)
+            ..bounded(0x7111)
         },
         WorldSettings::legacy(0x7113),
     ] {

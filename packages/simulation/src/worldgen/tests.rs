@@ -30,7 +30,7 @@ fn sample_seeds() -> impl Iterator<Item = u64> {
 const fn v1(seed: u64) -> WorldSettings {
     WorldSettings {
         generator: GeneratorVersion::V1,
-        ..WorldSettings::new(seed)
+        ..WorldSettings::bounded(seed)
     }
 }
 
@@ -38,7 +38,7 @@ const fn v1(seed: u64) -> WorldSettings {
 const fn v2(seed: u64) -> WorldSettings {
     WorldSettings {
         generator: GeneratorVersion::V2,
-        ..WorldSettings::new(seed)
+        ..WorldSettings::bounded(seed)
     }
 }
 
@@ -46,7 +46,7 @@ const fn v2(seed: u64) -> WorldSettings {
 const fn v3(seed: u64) -> WorldSettings {
     WorldSettings {
         generator: GeneratorVersion::V3,
-        ..WorldSettings::new(seed)
+        ..WorldSettings::bounded(seed)
     }
 }
 
@@ -70,14 +70,14 @@ fn digest(world: &GeneratedWorld) -> u64 {
 #[test]
 fn same_settings_generate_identical_worlds() {
     for seed in [1, 0xD111_6A4E, u64::MAX] {
-        let settings = WorldSettings::new(seed);
+        let settings = WorldSettings::bounded(seed);
         let first = generate(&settings);
         let second = generate(&settings);
         assert_eq!(digest(&first), digest(&second));
         assert_eq!(first.features, second.features);
     }
-    let a = generate(&WorldSettings::new(1));
-    let b = generate(&WorldSettings::new(2));
+    let a = generate(&WorldSettings::bounded(1));
+    let b = generate(&WorldSettings::bounded(2));
     assert_ne!(digest(&a), digest(&b), "different seeds must differ");
 }
 
@@ -188,16 +188,16 @@ fn golden_v3_world_digests_are_pinned() {
 fn golden_v4_world_digests_are_pinned() {
     let cases = [
         (
-            WorldSettings::new(DEFAULT_WORLD_SEED),
+            WorldSettings::bounded(DEFAULT_WORLD_SEED),
             0xe5e0_679b_e30a_e722,
         ),
-        (WorldSettings::new(1), 0xb36d_92b7_c218_99e2),
+        (WorldSettings::bounded(1), 0xb36d_92b7_c218_99e2),
         (
             WorldSettings {
                 size: WorldSize::Large,
                 richness: ResourceRichness::Rich,
                 hazards: HazardIntensity::Brutal,
-                ..WorldSettings::new(0x00C0_FFEE)
+                ..WorldSettings::bounded(0x00C0_FFEE)
             },
             0x99ce_6f8a_b542_d59f,
         ),
@@ -223,7 +223,7 @@ fn legacy_settings_reproduce_the_original_generator() {
     let settings = WorldSettings::legacy(0xD1_11_6A_4E);
     let world = generate(&settings);
     let legacy = Terrain::new_seeded(world.width, world.height, settings.seed);
-    assert_eq!(world.tiles.as_slice(), legacy.tiles());
+    assert_eq!(Some(world.tiles.as_slice()), legacy.bounded_tiles());
     assert!(world.features.is_empty());
 }
 
@@ -240,7 +240,7 @@ fn worlds_have_the_configured_size() {
     for size in WorldSize::ALL {
         let world = generate(&WorldSettings {
             size,
-            ..WorldSettings::new(5)
+            ..WorldSettings::bounded(5)
         });
         assert_eq!(
             (world.width, world.height),
@@ -253,7 +253,7 @@ fn worlds_have_the_configured_size() {
 #[test]
 fn deep_worlds_rest_on_a_solid_bedrock_floor() {
     for seed in sample_seeds().take(8) {
-        let settings = WorldSettings::new(seed);
+        let settings = WorldSettings::bounded(seed);
         let world = generate(&settings);
         for x in 0..world.width {
             let floor = strata::bedrock_top_row(&settings, x).expect("a floor");
@@ -283,7 +283,7 @@ fn deep_worlds_rest_on_a_solid_bedrock_floor() {
 
 #[test]
 fn bedrock_is_unbreakable() {
-    let settings = WorldSettings::new(2);
+    let settings = WorldSettings::bounded(2);
     let mut terrain = Terrain::generate(&settings);
     let x = 40;
     let floor = strata::bedrock_top_row(&settings, x).expect("a floor");
@@ -309,7 +309,7 @@ fn bedrock_is_unbreakable() {
 #[test]
 fn the_surface_and_town_stay_fixed() {
     for seed in sample_seeds().take(8) {
-        let world = generate(&WorldSettings::new(seed));
+        let world = generate(&WorldSettings::bounded(seed));
         for x in 0..world.width {
             for y in 0..SKY_ROWS {
                 assert_eq!(tile_at(&world, x, y), Some(TileKind::Air));
@@ -331,7 +331,7 @@ fn the_surface_and_town_stay_fixed() {
 #[test]
 fn caves_never_open_under_spawn_or_the_town() {
     for seed in sample_seeds() {
-        let world = generate(&WorldSettings::new(seed));
+        let world = generate(&WorldSettings::bounded(seed));
         for y in SKY_ROWS..world.height {
             for x in 0..world.width {
                 if !cave_allowed(x, y) {
@@ -356,7 +356,7 @@ fn no_hazard_sits_near_spawn_or_under_the_town() {
     for seed in sample_seeds() {
         let settings = WorldSettings {
             hazards: HazardIntensity::Brutal,
-            ..WorldSettings::new(seed)
+            ..WorldSettings::bounded(seed)
         };
         let world = generate(&settings);
         for y in 0..world.height {
@@ -387,7 +387,7 @@ fn no_hazard_sits_near_spawn_or_under_the_town() {
 #[test]
 fn hazards_come_in_clusters_not_single_tiles() {
     for seed in sample_seeds().take(16) {
-        let world = generate(&WorldSettings::new(seed));
+        let world = generate(&WorldSettings::bounded(seed));
         for y in 0..world.height {
             for x in 0..world.width {
                 let Some(kind) = tile_at(&world, x, y) else {
@@ -422,7 +422,7 @@ fn hazard_intensity_scales_hazards() {
             .map(|seed| {
                 let world = generate(&WorldSettings {
                     hazards,
-                    ..WorldSettings::new(seed)
+                    ..WorldSettings::bounded(seed)
                 });
                 world.features.count(FeatureKind::HazardCluster)
             })
@@ -449,7 +449,7 @@ fn the_starter_field_always_pays_for_the_first_upgrades() {
         for seed in sample_seeds().take(16) {
             let settings = WorldSettings {
                 richness,
-                ..WorldSettings::new(seed)
+                ..WorldSettings::bounded(seed)
             };
             let world = generate(&settings);
             let stats = WorldStats::measure(&settings, &world);
@@ -468,7 +468,7 @@ fn ore_value_per_band_stays_in_its_target_range() {
         for seed in sample_seeds().take(16) {
             let settings = WorldSettings {
                 richness,
-                ..WorldSettings::new(seed)
+                ..WorldSettings::bounded(seed)
             };
             let world = generate(&settings);
             let stats = WorldStats::measure(&settings, &world);
@@ -503,7 +503,7 @@ fn rich_deep_strata_hold_few_ore_specks() {
                 let settings = WorldSettings {
                     richness: ResourceRichness::Rich,
                     generator,
-                    ..WorldSettings::new(seed)
+                    ..WorldSettings::bounded(seed)
                 };
                 let world = generate(&settings);
                 WorldStats::measure(&settings, &world)
@@ -527,7 +527,7 @@ fn richness_scales_ore() {
             .map(|seed| {
                 let settings = WorldSettings {
                     richness,
-                    ..WorldSettings::new(seed)
+                    ..WorldSettings::bounded(seed)
                 };
                 let world = generate(&settings);
                 WorldStats::measure(&settings, &world)
@@ -557,7 +557,7 @@ fn richness_scales_ore() {
 #[test]
 fn ore_never_needs_a_stronger_drill_than_its_band() {
     for seed in sample_seeds().take(16) {
-        let settings = WorldSettings::new(seed);
+        let settings = WorldSettings::bounded(seed);
         let world = generate(&settings);
         for y in SKY_ROWS..world.height {
             for x in 0..world.width {
@@ -579,7 +579,7 @@ fn ore_never_needs_a_stronger_drill_than_its_band() {
 #[test]
 fn every_band_is_reachable_with_its_own_drill() {
     for seed in sample_seeds() {
-        let settings = WorldSettings::new(seed);
+        let settings = WorldSettings::bounded(seed);
         let world = generate(&settings);
         let passable = |x: i32, y: i32| -> bool {
             let Some(kind) = tile_at(&world, x, y) else {
@@ -630,7 +630,7 @@ fn every_band_is_reachable_with_its_own_drill() {
 #[test]
 fn the_starting_drill_reaches_the_clay_line_from_spawn() {
     for seed in sample_seeds() {
-        let settings = WorldSettings::new(seed);
+        let settings = WorldSettings::bounded(seed);
         let world = generate(&settings);
         let mut y = SKY_ROWS;
         while band_at(&settings, SPAWN_TILE_X, y) == Band::Topsoil {
@@ -644,7 +644,7 @@ fn the_starting_drill_reaches_the_clay_line_from_spawn() {
 #[test]
 fn artifacts_exist_in_every_stratum_below_the_topsoil() {
     for seed in sample_seeds().take(16) {
-        let settings = WorldSettings::new(seed);
+        let settings = WorldSettings::bounded(seed);
         let world = generate(&settings);
         let stats = WorldStats::measure(&settings, &world);
         for band in Band::ALL.into_iter().skip(1) {
@@ -670,7 +670,7 @@ fn the_feature_index_counts_stay_in_bounds() {
         for size in WorldSize::ALL {
             let settings = WorldSettings {
                 size,
-                ..WorldSettings::new(seed)
+                ..WorldSettings::bounded(seed)
             };
             let world = generate(&settings);
             let features = &world.features;
@@ -708,7 +708,7 @@ fn the_feature_index_counts_stay_in_bounds() {
             }
             // Ids are positions and every feature lies inside the world.
             for (index, feature) in features.all().iter().enumerate() {
-                assert_eq!(feature.id.0 as usize, index);
+                assert_eq!(usize::try_from(feature.id.0).ok(), Some(index));
                 assert!(feature.center.x >= 0 && feature.center.x < world.width);
                 assert!(feature.center.y >= 0 && feature.center.y < world.height);
             }
@@ -718,7 +718,7 @@ fn the_feature_index_counts_stay_in_bounds() {
 
 #[test]
 fn feature_queries_filter_by_kind_depth_and_region() {
-    let settings = WorldSettings::new(9);
+    let settings = WorldSettings::bounded(9);
     let world = generate(&settings);
     let features = &world.features;
     let deep: Vec<_> = features.in_depth(100..=219).collect();
@@ -792,7 +792,7 @@ fn a_seed_builds_the_same_world_at_every_tick_rate() {
     use crate::{PlayerId, SimulationParams, WorldState};
     let settings = WorldSettings {
         size: WorldSize::Large,
-        ..WorldSettings::new(0xFEED)
+        ..WorldSettings::bounded(0xFEED)
     };
     let build = |hz| {
         WorldState::new_game_with_settings(PlayerId::new(1), &settings, SimulationParams::new(hz))
@@ -815,7 +815,7 @@ fn replicas_receive_the_world_settings_in_the_session_section() {
     use crate::{PlayerId, SectionKey, SimulationParams, WorldState};
     let settings = WorldSettings {
         hazards: HazardIntensity::Calm,
-        ..WorldSettings::new(42)
+        ..WorldSettings::bounded(42)
     };
     let authority = WorldState::new_game_with_settings(
         PlayerId::new(1),
@@ -843,13 +843,13 @@ fn the_state_hash_covers_the_world_settings() {
     use crate::{PlayerId, SimulationParams, WorldState};
     let plain = WorldState::new_game_with_settings(
         PlayerId::new(1),
-        &WorldSettings::new(5),
+        &WorldSettings::bounded(5),
         SimulationParams::default(),
     );
     let mut relabelled = plain.clone();
     relabelled.terrain_mut().set_settings(WorldSettings {
         richness: ResourceRichness::Rich,
-        ..WorldSettings::new(5)
+        ..WorldSettings::bounded(5)
     });
     assert_ne!(
         plain.simulation_state_hash(),
@@ -859,7 +859,7 @@ fn the_state_hash_covers_the_world_settings() {
 
 #[test]
 fn loaded_terrain_recomputes_the_same_feature_index() {
-    let settings = WorldSettings::new(31);
+    let settings = WorldSettings::bounded(31);
     let terrain = Terrain::generate(&settings);
     let json = serde_json::to_string(&terrain).expect("serialize");
     let loaded: Terrain = serde_json::from_str(&json).expect("deserialize");
@@ -880,7 +880,7 @@ fn print_band_layout_and_timing() {
         for seed in 0..50 {
             let settings = WorldSettings {
                 size,
-                ..WorldSettings::new(seed)
+                ..WorldSettings::bounded(seed)
             };
             let start = std::time::Instant::now();
             let world = generate(&settings);
@@ -898,7 +898,7 @@ fn print_band_layout_and_timing() {
             "{size:?}: height {} generation mean {:?} max {:?}",
             WorldSettings {
                 size,
-                ..WorldSettings::new(0)
+                ..WorldSettings::bounded(0)
             }
             .height_tiles(),
             total / 50,

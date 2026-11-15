@@ -25,8 +25,8 @@ use std::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
 use super::{
-    ArtifactKind, ChunkPosition, MineralKind, Terrain, Tile, TileChange, TileKind, TilePosition,
-    chunk_positions, legacy_tile_kind, tile_durability,
+    ArtifactKind, CHUNK_SIZE_TILES, ChunkPosition, MineralKind, Slot, Storage, Terrain, Tile,
+    TileChange, TileKind, TilePosition, legacy_tile_kind, position_digest, tile_durability,
 };
 use crate::{
     poi::PoiTile,
@@ -226,8 +226,12 @@ pub struct TerrainSnapshot {
     pub height: i32,
     /// [`Terrain::digest`] of the full terrain, checked after the diffs are applied.
     pub digest: u64,
-    /// Tiles that differ from the generated base, by row-major index.
+    /// Tiles that differ from the generated base, by row-major index (bounded terrain).
     pub diffs: TileDiffs,
+    /// Streamed terrain: every chunk with edits and its tiles that differ from generation, by
+    /// [`ChunkPosition::local_index`]. Empty for bounded terrain (and missing in older saves).
+    #[serde(default)]
+    pub chunks: Vec<(ChunkPosition, TileDiffs)>,
 }
 
 /// Why a [`TerrainSnapshot`] could not be restored.
@@ -323,12 +327,22 @@ impl TryFrom<FullTerrain> for Terrain {
 }
 
 impl From<&Terrain> for FullTerrain {
+    /// The full-tile form of a bounded terrain (a streamed terrain has no finite grid: it
+    /// converts to no tiles).
     fn from(terrain: &Terrain) -> Self {
+        let tiles = terrain
+            .bounded_tiles()
+            .map(<[Tile]>::to_vec)
+            .unwrap_or_default();
         Self {
-            width: terrain.width,
+            width: if terrain.is_streamed() {
+                0
+            } else {
+                terrain.width()
+            },
             height: terrain.height,
             seed: terrain.settings.seed,
-            tiles: terrain.tiles.clone(),
+            tiles,
             settings: Some(terrain.settings),
         }
     }
@@ -359,8 +373,36 @@ const fn validate_size(width: i32, height: i32) -> Result<(), TerrainRestoreErro
     Ok(())
 }
 
+/// Chunks whose generated tiles fingerprint a streamed world's generator build (see
+/// [`streamed_generator_probe`]): the town, both sides of it, and the deep strata.
+const STREAMED_PROBE_CHUNKS: [ChunkPosition; 5] = [
+    ChunkPosition { x: 0, y: 0 },
+    ChunkPosition { x: 6, y: 1 },
+    ChunkPosition { x: -9, y: 3 },
+    ChunkPosition { x: 23, y: 12 },
+    ChunkPosition { x: -4, y: 40 },
+];
+
+/// A fingerprint of the generated tiles of a few fixed chunks. A streamed snapshot stores no
+/// generated tiles, so its digest folds this in: restoring it under a generator build that
+/// produces different terrain for the same settings fails instead of silently loading
+/// different terrain.
+fn streamed_generator_probe(settings: &WorldSettings) -> u64 {
+    let mut hash: u64 = 0xCBF2_9CE4_8422_2325;
+    for chunk in STREAMED_PROBE_CHUNKS {
+        for tile in worldgen::streamed::generated_chunk(settings, chunk).tiles() {
+            for byte in tile.code().to_le_bytes() {
+                hash ^= u64::from(byte);
+                hash = hash.wrapping_mul(0x0100_0000_01B3);
+            }
+        }
+    }
+    hash
+}
+
 impl Terrain {
     /// The freshly generated terrain of `settings` at `width` x `height` (no player changes).
+    /// Streamed settings ignore the size (the world has no width and its own height).
     ///
     /// # Errors
     ///
@@ -370,6 +412,9 @@ impl Terrain {
         width: i32,
         height: i32,
     ) -> Result<Self, TerrainRestoreError> {
+        if settings.generator.is_streamed() {
+            return Ok(Self::streamed(*settings));
+        }
         validate_size(width, height)?;
         Ok(Self::from_base(
             *settings,
@@ -382,20 +427,51 @@ impl Terrain {
     /// The compact form: settings, size, digest and the tiles that differ from generation.
     #[must_use]
     pub fn snapshot(&self) -> TerrainSnapshot {
-        let base = self.base();
-        TerrainSnapshot {
-            settings: self.settings,
-            width: self.width,
-            height: self.height,
-            digest: self.digest,
-            diffs: TileDiffs {
-                entries: self
-                    .tiles
+        match &self.storage {
+            Storage::Bounded(bounded) => {
+                let base = self.base();
+                TerrainSnapshot {
+                    settings: self.settings,
+                    width: bounded.width,
+                    height: self.height,
+                    digest: self.digest,
+                    diffs: TileDiffs {
+                        entries: bounded
+                            .tiles
+                            .iter()
+                            .zip(&base.tiles)
+                            .enumerate()
+                            .filter(|(_, (tile, generated))| tile != generated)
+                            .map(|(index, (tile, _))| {
+                                (u32::try_from(index).unwrap_or(u32::MAX), *tile)
+                            })
+                            .collect(),
+                    },
+                    chunks: Vec::new(),
+                }
+            }
+            Storage::Streamed(streamed) => TerrainSnapshot {
+                settings: self.settings,
+                width: 0,
+                height: self.height,
+                digest: self
+                    .digest
+                    .wrapping_add(streamed_generator_probe(&self.settings)),
+                diffs: TileDiffs::default(),
+                chunks: streamed
+                    .edits
                     .iter()
-                    .zip(&base.tiles)
-                    .enumerate()
-                    .filter(|(_, (tile, generated))| tile != generated)
-                    .map(|(index, (tile, _))| (u32::try_from(index).unwrap_or(u32::MAX), *tile))
+                    .map(|(chunk, edits)| {
+                        (
+                            *chunk,
+                            TileDiffs {
+                                entries: edits
+                                    .iter()
+                                    .map(|(local, tile)| (u32::from(*local), *tile))
+                                    .collect(),
+                            },
+                        )
+                    })
                     .collect(),
             },
         }
@@ -415,17 +491,22 @@ impl Terrain {
             height,
             digest,
             diffs,
+            chunks,
         } = snapshot;
+        if settings.generator.is_streamed() {
+            return Self::from_streamed_snapshot(settings, height, digest, chunks);
+        }
         let mut terrain = Self::regenerate(&settings, width, height)?;
+        let tile_count = terrain.stored_tile_count();
         for (index, tile) in diffs.iter() {
             let slot = usize::try_from(index)
                 .ok()
-                .filter(|slot| *slot < terrain.tiles.len())
+                .filter(|slot| *slot < tile_count)
                 .ok_or_else(|| TerrainRestoreError::DiffOutOfBounds {
                     index: u64::from(index),
                 })?;
             let position = terrain.position_of(slot);
-            terrain.write_tile(slot, position, tile);
+            terrain.write_tile(Slot::Bounded(slot), position, tile);
         }
         if terrain.digest != digest {
             return Err(TerrainRestoreError::DigestMismatch {
@@ -437,19 +518,99 @@ impl Terrain {
         Ok(terrain)
     }
 
-    /// Every tile that differs from the freshly generated terrain, in row-major order.
+    /// [`Self::from_snapshot`] for a streamed world: the edits are restored as they are (no
+    /// chunk is generated until it is read), then checked against the digest.
+    fn from_streamed_snapshot(
+        settings: WorldSettings,
+        height: i32,
+        digest: u64,
+        chunks: Vec<(ChunkPosition, TileDiffs)>,
+    ) -> Result<Self, TerrainRestoreError> {
+        if height != settings.height_tiles() {
+            return Err(TerrainRestoreError::InvalidSize { width: 0, height });
+        }
+        let mut terrain = Self::streamed(settings);
+        let limit = worldgen::streamed::STREAMED_COLUMN_LIMIT;
+        let Storage::Streamed(streamed) = &mut terrain.storage else {
+            return Err(TerrainRestoreError::InvalidSize { width: 0, height });
+        };
+        let mut sum = 0_u64;
+        for (chunk, diffs) in chunks {
+            let origin = chunk.origin();
+            if origin.x < -limit || origin.x >= limit || origin.y < 0 || origin.y >= height {
+                return Err(TerrainRestoreError::DiffOutOfBounds {
+                    index: u64::from(chunk.x.unsigned_abs()),
+                });
+            }
+            let edits = streamed.edits.entry(chunk).or_default();
+            for (local, tile) in diffs.iter() {
+                let local_index = u16::try_from(local)
+                    .ok()
+                    .filter(|local| usize::from(*local) < worldgen::streamed::CHUNK_TILES)
+                    .ok_or_else(|| TerrainRestoreError::DiffOutOfBounds {
+                        index: u64::from(local),
+                    })?;
+                let position = TilePosition {
+                    x: origin.x + i32::from(local_index) % CHUNK_SIZE_TILES,
+                    y: origin.y + i32::from(local_index) / CHUNK_SIZE_TILES,
+                };
+                if position.y >= height {
+                    return Err(TerrainRestoreError::DiffOutOfBounds {
+                        index: u64::from(local),
+                    });
+                }
+                if let Some(previous) = edits.insert(local_index, tile) {
+                    sum = sum.wrapping_sub(position_digest(position, previous));
+                }
+                sum = sum.wrapping_add(position_digest(position, tile));
+            }
+            if edits.is_empty() {
+                streamed.edits.remove(&chunk);
+            }
+        }
+        terrain.digest = sum;
+        let actual = sum.wrapping_add(streamed_generator_probe(&settings));
+        if actual != digest {
+            return Err(TerrainRestoreError::DigestMismatch {
+                generator: settings.generator,
+                expected: digest,
+                actual,
+            });
+        }
+        Ok(terrain)
+    }
+
+    /// Every tile that differs from the freshly generated terrain: row-major for bounded
+    /// terrain, chunk by chunk for streamed terrain.
     #[must_use]
     pub fn generation_diffs(&self) -> Vec<TileChange> {
-        self.snapshot()
-            .diffs
-            .iter()
-            .filter_map(|(index, tile)| {
-                usize::try_from(index).ok().map(|slot| TileChange {
-                    position: self.position_of(slot),
-                    tile,
+        match &self.storage {
+            Storage::Bounded(_) => self
+                .snapshot()
+                .diffs
+                .iter()
+                .filter_map(|(index, tile)| {
+                    usize::try_from(index).ok().map(|slot| TileChange {
+                        position: self.position_of(slot),
+                        tile,
+                    })
                 })
-            })
-            .collect()
+                .collect(),
+            Storage::Streamed(streamed) => streamed
+                .edits
+                .iter()
+                .flat_map(|(chunk, edits)| {
+                    let origin = chunk.origin();
+                    edits.iter().map(move |(local, tile)| TileChange {
+                        position: TilePosition {
+                            x: origin.x + i32::from(*local) % CHUNK_SIZE_TILES,
+                            y: origin.y + i32::from(*local) / CHUNK_SIZE_TILES,
+                        },
+                        tile: *tile,
+                    })
+                })
+                .collect(),
+        }
     }
 
     /// Regenerates terrain from settings and applies `diffs` (as [`Self::generation_diffs`]
@@ -477,52 +638,95 @@ impl Terrain {
         Ok(terrain)
     }
 
+    /// The freshly generated tile at an in-world `slot`.
+    fn generated(&self, slot: Slot) -> Tile {
+        match slot {
+            Slot::Bounded(index) => self.base().tiles[index],
+            Slot::Streamed(chunk, local) => match &self.storage {
+                Storage::Streamed(streamed) => streamed.loaded.get(&chunk).map_or_else(
+                    || worldgen::streamed::generated_chunk(&self.settings, chunk).tile(local),
+                    |loaded| loaded.base.tile(local),
+                ),
+                Storage::Bounded(_) => Tile {
+                    kind: TileKind::Bedrock,
+                    durability: 0,
+                },
+            },
+        }
+    }
+
     /// The tiles of `chunk` that differ from generation, by [`ChunkPosition::local_index`]
     /// (refreshing a client that skipped the chunk's op log).
     #[must_use]
     pub fn chunk_diffs(&self, chunk: ChunkPosition) -> TileDiffs {
-        let base = self.base();
-        TileDiffs::new(
-            chunk_positions(self.width, self.height, chunk).filter_map(|position| {
-                let index = self.index(position)?;
-                let tile = self.tiles[index];
-                (tile != base.tiles[index]).then(|| {
-                    (
-                        u32::try_from(ChunkPosition::local_index(position)).unwrap_or(u32::MAX),
-                        tile,
-                    )
-                })
-            }),
-        )
+        if let Storage::Streamed(streamed) = &self.storage {
+            return TileDiffs {
+                entries: streamed
+                    .edits
+                    .get(&chunk)
+                    .map(|edits| {
+                        edits
+                            .iter()
+                            .map(|(local, tile)| (u32::from(*local), *tile))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            };
+        }
+        TileDiffs::new(self.chunk_positions(chunk).filter_map(|position| {
+            let slot = self.slot(position)?;
+            let tile = self.read(slot);
+            (tile != self.generated(slot)).then(|| {
+                (
+                    u32::try_from(ChunkPosition::local_index(position)).unwrap_or(u32::MAX),
+                    tile,
+                )
+            })
+        }))
     }
 
     /// Overwrites `chunk` with its generated tiles plus a [`Self::chunk_diffs`] copy. Diffs
     /// outside the chunk are ignored.
     pub fn apply_chunk_diffs(&mut self, chunk: ChunkPosition, diffs: &TileDiffs) {
-        let base = Arc::clone(self.base());
+        if let Storage::Streamed(streamed) = &self.storage
+            && diffs.is_empty()
+            && !streamed.edits.contains_key(&chunk)
+        {
+            // Nothing edited here and nothing to apply: the chunk is already generation.
+            return;
+        }
         let mut pending = diffs.iter().peekable();
-        let mut positions: Vec<TilePosition> =
-            chunk_positions(self.width, self.height, chunk).collect();
+        let mut positions: Vec<TilePosition> = self.chunk_positions(chunk).collect();
         positions.sort_by_key(|position| ChunkPosition::local_index(*position));
         for position in positions {
-            let Some(index) = self.index(position) else {
+            let Some(slot) = self.slot(position) else {
                 continue;
             };
             let local = u32::try_from(ChunkPosition::local_index(position)).unwrap_or(u32::MAX);
             while pending.next_if(|(diff, _)| *diff < local).is_some() {}
             let tile = pending
                 .next_if(|(diff, _)| *diff == local)
-                .map_or(base.tiles[index], |(_, tile)| tile);
-            if self.tiles[index] != tile {
-                self.write_tile(index, position, tile);
+                .map_or_else(|| self.generated(slot), |(_, tile)| tile);
+            if self.read(slot) != tile {
+                self.write_tile(slot, position, tile);
             }
         }
     }
 
-    /// The generated base terrain of this terrain's settings and size.
+    /// The generated base terrain of this bounded terrain's settings and size.
     pub(super) fn base(&self) -> &Arc<GeneratedBase> {
-        self.base
-            .get_or_init(|| generated_base(&self.settings, self.width, self.height))
+        static EMPTY: OnceLock<Arc<GeneratedBase>> = OnceLock::new();
+        match &self.storage {
+            Storage::Bounded(bounded) => bounded
+                .base
+                .get_or_init(|| generated_base(&self.settings, bounded.width, self.height)),
+            Storage::Streamed(_) => EMPTY.get_or_init(|| {
+                Arc::new(GeneratedBase {
+                    tiles: Vec::new(),
+                    features: FeatureIndex::default(),
+                })
+            }),
+        }
     }
 
     #[allow(
@@ -530,11 +734,15 @@ impl Terrain {
         clippy::cast_possible_wrap,
         reason = "slots index a validated terrain"
     )]
-    const fn position_of(&self, slot: usize) -> TilePosition {
+    fn position_of(&self, slot: usize) -> TilePosition {
+        let width = match &self.storage {
+            Storage::Bounded(bounded) => bounded.width.max(1),
+            Storage::Streamed(_) => 1,
+        };
         let slot = slot as i32;
         TilePosition {
-            x: slot % self.width,
-            y: slot / self.width,
+            x: slot % width,
+            y: slot / width,
         }
     }
 }

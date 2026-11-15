@@ -385,7 +385,7 @@ pub const fn boundary_bases(settings: &WorldSettings) -> [i32; BOUNDARY_COUNT] {
                 band += 1;
             }
         }
-        GeneratorVersion::V4 => {
+        GeneratorVersion::V4 | GeneratorVersion::V5 => {
             let thickness = v4_thicknesses(settings);
             let mut row = SKY_ROWS;
             let mut index = 0;
@@ -455,7 +455,7 @@ const fn v4_thicknesses(settings: &WorldSettings) -> [i32; BAND_COUNT] {
 /// First bedrock row of column `x` in a V4 world (`None` in older worlds, which have no floor).
 #[must_use]
 pub const fn bedrock_top_row(settings: &WorldSettings, x: i32) -> Option<i32> {
-    if !matches!(settings.generator, GeneratorVersion::V4) {
+    if !settings.generator.is_deep() {
         return None;
     }
     let wave = (line_noise(settings.seed, SALT_BEDROCK, x, 9) * 2
@@ -478,7 +478,7 @@ pub const fn is_bedrock(settings: &WorldSettings, x: i32, y: i32) -> bool {
 /// rows either side of that line the two bands interleave (fingers in V1-V3, a transition zone
 /// in V4).
 const fn boundary_shape(settings: &WorldSettings, index: usize) -> (i32, i32) {
-    if matches!(settings.generator, GeneratorVersion::V4) {
+    if settings.generator.is_deep() {
         V4_BOUNDARIES[index]
     } else {
         (BOUNDARIES[index].wave, BOUNDARIES[index].finger)
@@ -489,7 +489,7 @@ const fn boundary_shape(settings: &WorldSettings, index: usize) -> (i32, i32) {
 const fn boundary_wave(settings: &WorldSettings, index: usize, x: i32) -> i32 {
     let seed = settings.seed;
     let salt = SALT_WAVE + index as u64;
-    if matches!(settings.generator, GeneratorVersion::V4) {
+    if settings.generator.is_deep() {
         // Longer, deeper swells for the deeper stack.
         let wave = (line_noise(seed, salt, x, 53) * 2 + line_noise(seed, salt ^ 0xFF, x, 17)) / 3;
         return centred(wave, V4_BOUNDARIES[index].0);
@@ -513,7 +513,7 @@ const fn below_boundary(settings: &WorldSettings, base: i32, index: usize, x: i3
     if matches!(settings.generator, GeneratorVersion::Legacy) {
         return y >= base;
     }
-    if matches!(settings.generator, GeneratorVersion::V4) {
+    if settings.generator.is_deep() {
         return below_v4_boundary(settings, base, index, x, y);
     }
     let spec = BOUNDARIES[index];
@@ -643,7 +643,7 @@ pub const fn band_reached(settings: &WorldSettings, deepest_row: i32, band: Band
 pub const fn band_layout_rows(settings: &WorldSettings, band: Band) -> (i32, i32) {
     let index = band.index();
     let last_band = Band::ALL.len() - 1;
-    if matches!(settings.generator, GeneratorVersion::V4) {
+    if settings.generator.is_deep() {
         let bases = boundary_bases(settings);
         let top = if index == 0 {
             SKY_ROWS
@@ -728,7 +728,7 @@ const fn remap(value: i32, from: &[i32; BAND_COUNT + 1], to: &[i32; BAND_COUNT +
 /// The identity in every world before V4.
 #[must_use]
 pub const fn nominal_row(settings: &WorldSettings, row: i32) -> i32 {
-    if !matches!(settings.generator, GeneratorVersion::V4) {
+    if !settings.generator.is_deep() {
         return row;
     }
     let (world, nominal) = nominal_anchors(settings);
@@ -739,7 +739,7 @@ pub const fn nominal_row(settings: &WorldSettings, row: i32) -> i32 {
 /// nominal row `nominal`. The identity in every world before V4.
 #[must_use]
 pub const fn scaled_row(settings: &WorldSettings, nominal: i32) -> i32 {
-    if !matches!(settings.generator, GeneratorVersion::V4) {
+    if !settings.generator.is_deep() {
         return nominal;
     }
     let (world, nominal_rows) = nominal_anchors(settings);
@@ -758,7 +758,7 @@ pub const fn scaled_row(settings: &WorldSettings, nominal: i32) -> i32 {
 /// the tile size), interpolating between rows.
 #[must_use]
 pub fn nominal_depth(settings: &WorldSettings, rows: f32) -> f32 {
-    if !matches!(settings.generator, GeneratorVersion::V4) {
+    if !settings.generator.is_deep() {
         return rows;
     }
     let (world, nominal) = nominal_anchors(settings);
@@ -787,7 +787,7 @@ pub fn nominal_depth(settings: &WorldSettings, rows: f32) -> f32 {
 /// relay legs and similar distances authored against the classic stack).
 #[must_use]
 pub const fn scaled_span(settings: &WorldSettings, nominal_rows: i32) -> i32 {
-    if !matches!(settings.generator, GeneratorVersion::V4) {
+    if !settings.generator.is_deep() {
         return nominal_rows;
     }
     let world_rows = v4_floor_row(settings) - SKY_ROWS;
@@ -829,14 +829,14 @@ mod tests {
     const fn v3(seed: u64) -> WorldSettings {
         WorldSettings {
             generator: GeneratorVersion::V3,
-            ..WorldSettings::new(seed)
+            ..WorldSettings::bounded(seed)
         }
     }
 
     #[test]
     fn generated_bands_keep_their_order_in_every_column() {
         for seed in 0..40 {
-            for settings in [v3(seed), WorldSettings::new(seed)] {
+            for settings in [v3(seed), WorldSettings::bounded(seed)] {
                 check_band_order(&settings);
             }
         }
@@ -898,7 +898,7 @@ mod tests {
             for size in super::super::WorldSize::ALL {
                 let settings = WorldSettings {
                     size,
-                    ..WorldSettings::new(seed)
+                    ..WorldSettings::bounded(seed)
                 };
                 assert_eq!(settings.generator, GeneratorVersion::V4);
                 assert!(settings.height_tiles() >= 4 * super::super::WORLD_HEIGHT_TILES * 9 / 10);
@@ -939,7 +939,7 @@ mod tests {
 
     #[test]
     fn v4_transitions_interleave_over_many_rows() {
-        let settings = WorldSettings::new(7);
+        let settings = WorldSettings::bounded(7);
         for index in 1..BOUNDARY_COUNT {
             let (shallowest, deepest) = boundary_depth_range(&settings, index);
             let (upper, lower) = (Band::ALL[index], Band::ALL[index + 1]);
@@ -971,7 +971,7 @@ mod tests {
 
     #[test]
     fn v4_worlds_end_in_a_bedrock_floor_and_older_worlds_do_not() {
-        let settings = WorldSettings::new(11);
+        let settings = WorldSettings::bounded(11);
         let height = settings.height_tiles();
         let mut tops = Vec::new();
         for x in 0..settings.width_tiles() {
@@ -990,7 +990,7 @@ mod tests {
     #[test]
     fn nominal_rows_map_bands_onto_the_classic_stack() {
         for seed in 0..20 {
-            let settings = WorldSettings::new(seed);
+            let settings = WorldSettings::bounded(seed);
             for band in Band::ALL {
                 let (top, bottom) = band_layout_rows(&settings, band);
                 let classic_top = nominal_band_top(band);
@@ -1028,7 +1028,7 @@ mod tests {
     fn older_generators_keep_their_boundaries() {
         let v2 = WorldSettings {
             generator: GeneratorVersion::V2,
-            ..WorldSettings::new(9)
+            ..WorldSettings::bounded(9)
         };
         for (index, base) in boundary_bases(&v2).iter().enumerate() {
             let spec = BOUNDARIES[index];

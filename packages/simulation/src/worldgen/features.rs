@@ -16,9 +16,14 @@ use crate::{
 
 use super::strata::Band;
 
-/// Stable id of a feature within one world (its index in generation order).
+/// Stable id of a feature within one world.
+///
+/// In a bounded world it is the feature's index in generation order. In a streamed
+/// ([`super::GeneratorVersion::V5`]) world it encodes the generation region the feature came
+/// from (see [`super::streamed::feature`]), so it stays stable however far the world extends.
+/// Serialized as a varint, so ids saved as 32-bit values load unchanged.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
-pub struct FeatureId(pub u32);
+pub struct FeatureId(pub u64);
 
 /// What a feature is.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -272,7 +277,7 @@ impl FeatureIndex {
         bounds: TileRect,
         size: u32,
     ) -> FeatureId {
-        let id = FeatureId(u32::try_from(self.features.len()).unwrap_or(u32::MAX));
+        let id = FeatureId(u64::try_from(self.features.len()).unwrap_or(u64::MAX));
         self.features.push(WorldFeature {
             id,
             kind,
@@ -303,7 +308,17 @@ impl FeatureIndex {
 
     #[must_use]
     pub fn get(&self, id: FeatureId) -> Option<&WorldFeature> {
-        self.features.get(id.0 as usize)
+        usize::try_from(id.0)
+            .ok()
+            .and_then(|index| self.features.get(index))
+            .filter(|feature| feature.id == id)
+            .or_else(|| self.features.iter().find(|feature| feature.id == id))
+    }
+
+    /// An index holding exactly `features` (ids kept as given, e.g. streamed regional ids).
+    #[must_use]
+    pub const fn from_features(features: Vec<WorldFeature>) -> Self {
+        Self { features }
     }
 
     /// Features of one kind.

@@ -15,17 +15,17 @@ use super::{
     strata::{Band, SKY_ROWS, band_layout_rows},
 };
 
-const SALT_VEIN: u64 = 0x0E0E_0001;
-const SALT_VEIN_MASK: u64 = 0x0E0E_0002;
-const SALT_VEIN_MINERAL: u64 = 0x0E0E_0003;
-const SALT_VEIN_WARP: u64 = 0x0E0E_0004;
-const SALT_CLUSTER: u64 = 0x0E0E_0100;
-const SALT_MOTHERLODE: u64 = 0x0E0E_0200;
-const SALT_TOP_UP: u64 = 0x0E0E_0300;
-const SALT_STARTER: u64 = 0x0E0E_0400;
-const SALT_ARTIFACT_BED: u64 = 0x0E0E_0500;
-const SALT_ARTIFACT_STRAY: u64 = 0x0E0E_0501;
-const SALT_PREFAB: u64 = 0x0E0E_0600;
+pub(crate) const SALT_VEIN: u64 = 0x0E0E_0001;
+pub(crate) const SALT_VEIN_MASK: u64 = 0x0E0E_0002;
+pub(crate) const SALT_VEIN_MINERAL: u64 = 0x0E0E_0003;
+pub(crate) const SALT_VEIN_WARP: u64 = 0x0E0E_0004;
+pub(crate) const SALT_CLUSTER: u64 = 0x0E0E_0100;
+pub(crate) const SALT_MOTHERLODE: u64 = 0x0E0E_0200;
+pub(crate) const SALT_TOP_UP: u64 = 0x0E0E_0300;
+pub(crate) const SALT_STARTER: u64 = 0x0E0E_0400;
+pub(crate) const SALT_ARTIFACT_BED: u64 = 0x0E0E_0500;
+pub(crate) const SALT_ARTIFACT_STRAY: u64 = 0x0E0E_0501;
+pub(crate) const SALT_PREFAB: u64 = 0x0E0E_0600;
 
 /// Every mineral, cheapest first.
 pub const MINERALS: [MineralKind; 10] = [
@@ -62,7 +62,7 @@ const fn depth_curve(mineral: MineralKind) -> (i32, i32, i32, u32) {
 ///
 /// The deepest strata lean on the most valuable minerals so ore value keeps rising with depth
 /// (the reward for braving the worst hazards).
-const fn stratum_signatures(stratum: DeepStratum) -> &'static [(MineralKind, u32)] {
+pub(crate) const fn stratum_signatures(stratum: DeepStratum) -> &'static [(MineralKind, u32)] {
     match stratum {
         DeepStratum::CrystalFaults => &[(MineralKind::Diamond, 24)],
         DeepStratum::FossilOceans => &[(MineralKind::Platinum, 24)],
@@ -116,7 +116,7 @@ pub fn mineral_weights(band: Band, y: i32) -> [u32; 10] {
 }
 
 /// A mineral picked from the depth curves by a hash.
-fn mineral_from_hash(band: Band, y: i32, hash: u64) -> Option<MineralKind> {
+pub(crate) fn mineral_from_hash(band: Band, y: i32, hash: u64) -> Option<MineralKind> {
     let weights = mineral_weights(band, y);
     let total: u64 = weights.iter().map(|weight| u64::from(*weight)).sum();
     if total == 0 {
@@ -278,10 +278,10 @@ fn place_veins(canvas: &mut Canvas<'_>) {
     }
 }
 
-const CLUSTER_REGION: (i32, i32) = (14, 10);
+pub const CLUSTER_REGION: (i32, i32) = (14, 10);
 
 /// Clusters per region (thousandths) by band, before richness.
-const fn cluster_density(band: Band) -> u32 {
+pub(crate) const fn cluster_density(band: Band) -> u32 {
     match band {
         Band::Deep(DeepStratum::VoidGeodeFields) => 2_500,
         Band::Deep(DeepStratum::MantleStormZone) => 2_400,
@@ -383,11 +383,11 @@ fn cluster(
 }
 
 /// Whether `mineral` may sit in `band` without blocking it (hardness within the band's drill).
-const fn mineral_fits(band: Band, mineral: MineralKind) -> bool {
+pub(crate) const fn mineral_fits(band: Band, mineral: MineralKind) -> bool {
     crate::terrain::tile_hardness(TileKind::Ore(mineral)) <= band.required_drill_strength()
 }
 
-const MOTHERLODE_REGION: (i32, i32) = (60, 40);
+pub const MOTHERLODE_REGION: (i32, i32) = (60, 40);
 
 /// Motherlodes: rare, dense deposits of the most valuable mineral at their depth.
 fn place_motherlodes(canvas: &mut Canvas<'_>) {
@@ -592,7 +592,7 @@ fn guarantee_starter_field(canvas: &mut Canvas<'_>) {
 }
 
 /// The artifact kinds that fit a band, with relative weights.
-const fn band_artifacts(band: Band) -> &'static [(ArtifactKind, u32)] {
+pub(crate) const fn band_artifacts(band: Band) -> &'static [(ArtifactKind, u32)] {
     match band {
         Band::Topsoil => &[],
         Band::Clay => &[(ArtifactKind::Fossil, 1)],

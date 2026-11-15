@@ -45,7 +45,8 @@ impl WorldStats {
             width: world.width,
             ..Self::default()
         };
-        let kind_at = |x: i32, y: i32| -> Option<TileKind> {
+        // Window-local coordinates (a streamed window starts at `origin_x`).
+        let local_kind = |x: i32, y: i32| -> Option<TileKind> {
             if x < 0 || y < 0 || x >= world.width || y >= world.height {
                 return None;
             }
@@ -54,8 +55,9 @@ impl WorldStats {
                 .and_then(|index| world.tiles.get(index))
                 .map(|tile| tile.kind)
         };
+        let kind_at = |x: i32, y: i32| local_kind(x - world.origin_x, y);
         for y in super::strata::SKY_ROWS..world.height {
-            for x in 0..world.width {
+            for x in world.origin_x..world.origin_x + world.width {
                 let Some(kind) = kind_at(x, y) else {
                     continue;
                 };
@@ -93,10 +95,10 @@ impl WorldStats {
                 stats.bands[feature.band.index()].pois += 1;
             }
         }
-        for deposit in ore_deposits(world.width, world.height, kind_at, |_, _| true) {
+        for deposit in ore_deposits(world.width, world.height, local_kind, |_, _| true) {
             if deposit.len() <= SPECK_MAX_TILES {
                 let (x, y) = deposit[0];
-                stats.bands[band_at(settings, x, y).index()].ore_specks += 1;
+                stats.bands[band_at(settings, world.origin_x + x, y).index()].ore_specks += 1;
             }
         }
         stats.starter_field_value = starter_field_value(kind_at);

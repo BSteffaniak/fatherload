@@ -52,15 +52,15 @@ pub const POI_MIN_ROW: i32 = CRUST_ROWS;
 const RANDOM_FILL_PER_MILLE: u32 = 250;
 /// [`RANDOM_FILL_PER_MILLE`] in deep worlds, whose stacked tiers would otherwise leave long
 /// stretches of a thick band with nothing to find.
-const DEEP_RANDOM_FILL_PER_MILLE: u32 = 600;
+pub(crate) const DEEP_RANDOM_FILL_PER_MILLE: u32 = 600;
 
 /// Number of derelict logs (fits a `u16`).
 #[allow(clippy::cast_possible_truncation, reason = "a dozen logs")]
-const LORE_COUNT: u16 = LORE.len() as u16;
+pub(crate) const LORE_COUNT: u16 = LORE.len() as u16;
 
-const SALT_POI: u64 = 0x9017_1000;
-const SALT_SPOT: u64 = 0x9017_1001;
-const SALT_FILL: u64 = 0x9017_1002;
+pub(crate) const SALT_POI: u64 = 0x9017_1000;
+pub(crate) const SALT_SPOT: u64 = 0x9017_1001;
+pub(crate) const SALT_FILL: u64 = 0x9017_1002;
 
 /// Kinds every band always tries to place (each in its own region).
 #[must_use]
@@ -81,7 +81,7 @@ pub const fn guaranteed_kinds(band: Band) -> &'static [PoiKind] {
 }
 
 /// Relative weight of each kind (in [`PoiKind::ALL`] order) for random fills in `band`.
-const fn fill_weights(band: Band) -> [u32; 5] {
+pub(crate) const fn fill_weights(band: Band) -> [u32; 5] {
     let mut weights = [6, 3, 1, 3, 2];
     let mut index = 0;
     while index < weights.len() {
@@ -508,7 +508,7 @@ fn stamp(canvas: &mut Canvas<'_>, band: Band, spot: &Spot, rng: &mut RegionRng) 
 }
 
 /// Rich ore for a formation: the band's two most valuable minerals at classic nominal row `y`.
-fn formation_ore(band: Band, y: i32, rng: &mut RegionRng) -> Option<TileKind> {
+pub(crate) fn formation_ore(band: Band, y: i32, rng: &mut RegionRng) -> Option<TileKind> {
     let weights = deposits::mineral_weights(band, y);
     let mut best: Vec<usize> = (0..weights.len())
         .filter(|index| weights[*index] > 0)
