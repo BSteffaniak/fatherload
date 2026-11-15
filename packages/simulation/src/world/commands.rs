@@ -16,7 +16,8 @@ use crate::{
     service::{PlayerServiceTransaction, PlayerTransactionKind},
     summary::PlayerScopedCommandOutcome,
     terrain::{
-        DeepStratum, MineResult, TILE_SIZE, Terrain, TileKind, TilePosition, is_indestructible,
+        DeepStratum, MineResult, SurfaceMaterial, TILE_SIZE, Terrain, TileKind, TilePosition,
+        is_indestructible,
     },
 };
 
@@ -522,6 +523,12 @@ pub(super) fn authoritative_drill_seconds_per_chip(
         | TileKind::MagmaVent => 0.08,
         TileKind::Ore(_) => 0.16,
         TileKind::Artifact(_) => 0.21,
+        TileKind::Surface(material) => match material {
+            SurfaceMaterial::Snow => 0.06,
+            SurfaceMaterial::Sand | SurfaceMaterial::Mud => 0.08,
+            SurfaceMaterial::Sandstone | SurfaceMaterial::RedRock => 0.12,
+            SurfaceMaterial::Granite => 0.15,
+        },
         TileKind::Poi(tile) => match tile {
             crate::poi::PoiTile::SupplyCrate
             | crate::poi::PoiTile::VaultSwitch { .. }
@@ -549,7 +556,9 @@ pub(super) fn authoritative_drill_seconds_per_chip(
     if parts.contains(&RigPartKind::NeedleDrill) {
         seconds *= match kind {
             TileKind::Dirt | TileKind::Clay => 0.72,
-            TileKind::Stone | TileKind::HardRock => 1.25,
+            TileKind::Stone | TileKind::HardRock | TileKind::Surface(SurfaceMaterial::Granite) => {
+                1.25
+            }
             _ => 0.95,
         };
     }

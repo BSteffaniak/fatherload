@@ -55,7 +55,7 @@ pub fn poi_unopened(terrain: &Terrain, feature: &WorldFeature) -> bool {
 pub fn diggable_spot(terrain: &Terrain, position: TilePosition) -> bool {
     if position.x < terrain.min_x() + 2
         || position.x > terrain.max_x() - 2
-        || position.y < SURFACE_ROW + 3
+        || position.y < super::surface_row_at(terrain, position.x).max(SURFACE_ROW) + 3
         || position.y > terrain.height() - 3
     {
         return false;

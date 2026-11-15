@@ -6,10 +6,10 @@
 
 use crate::{
     surface::building_foundation_at,
-    terrain::TileKind,
+    terrain::{SurfaceMaterial, TileKind},
     village::placement::{self, FLATTEN_FADE_COLUMNS},
     worldgen::{
-        TOWN_CLEAN_TOPSOIL_MARGIN, WorldSettings, caves, contrast_threshold,
+        TOWN_CLEAN_TOPSOIL_MARGIN, WorldSettings, biome, caves, contrast_threshold,
         noise::{NOISE_MAX, fractal_noise, line_noise, value_noise},
         pois::TIER_ROWS,
         rock_texture,
@@ -31,16 +31,25 @@ pub const MAX_SURFACE_DIP_ROWS: i32 = 2;
 const SURFACE_FADE_COLUMNS: i32 = 32;
 const SALT_SURFACE: u64 = 0x5_5ACE_0001;
 
+/// The first ground row of column `x` of a streamed world (the surface heightmap).
+///
 /// The first ground row of column `x` of a streamed world (the surface heightmap hook).
 ///
-/// The raw heightmap ([`raw_surface_row`]) with village sites flattened on worlds that have
-/// villages: across a village's span the ground sits at the raw row of the village's centre
-/// column, easing back to the raw heightmap over [`FLATTEN_FADE_COLUMNS`] either side. The rest
-/// of the generator only reads this function, so the town, spawn and villages stay put
-/// whatever the raw heightmap does.
+/// On biome worlds ([`GeneratorVersion::V7`](crate::worldgen::GeneratorVersion::V7)) the
+/// biome heightmap ([`biome::surface_row`]), which already lays every village site
+/// ([`placement::surface_site`]) on a flat shelf and eases its slopes around it.
+///
+/// On older worlds with villages ([`GeneratorVersion::V6`](crate::worldgen::GeneratorVersion::V6))
+/// it is the raw heightmap ([`raw_surface_row`]) with village sites flattened: across a
+/// village's span the ground sits at the raw row of the village's centre column, easing back to
+/// the raw heightmap over [`FLATTEN_FADE_COLUMNS`] either side. The rest of the generator only
+/// reads this function, so the town, spawn and villages stay put whatever the heightmap does.
 #[must_use]
-pub const fn surface_row(settings: &WorldSettings, x: i32) -> i32 {
-    let raw = raw_surface_row(settings, x);
+pub fn surface_row(settings: &WorldSettings, x: i32) -> i32 {
+    if settings.generator.has_biomes() {
+        return biome::surface_row(settings, x);
+    }
+    let raw = placeholder_surface_row(settings, x);
     if !settings.generator.has_villages() {
         return raw;
     }
@@ -56,20 +65,49 @@ pub const fn surface_row(settings: &WorldSettings, x: i32) -> i32 {
 
 /// The ground row of a surface village centred on column `center`.
 ///
-/// The raw heightmap's row there: the village-flattening hook, so a heightmap with hills or
-/// mountains keeps its villages on their own ground level and eases the slopes around them.
+/// On biome worlds the row of the village's flat shelf; on older worlds the raw heightmap's
+/// row there.
 #[must_use]
-pub const fn village_ground_row(settings: &WorldSettings, center: i32) -> i32 {
+pub fn village_ground_row(settings: &WorldSettings, center: i32) -> i32 {
     raw_surface_row(settings, center)
 }
 
-/// The raw surface heightmap of a streamed world, before villages flatten their sites.
-///
-/// Flat at [`SKY_ROWS`] across the town ([`TOWN_FLAT_FIRST_COLUMN`] to
-/// [`TOWN_FLAT_LAST_COLUMN`]); elsewhere a gentle placeholder swell up to
-/// [`MAX_SURFACE_DIP_ROWS`] lower. Surface biomes (wave 2) replace the swell here.
+/// The surface heightmap of a streamed world before V6 villages flatten their sites: the biome
+/// heightmap on biome worlds (its village shelves included), the placeholder swell otherwise.
 #[must_use]
-pub const fn raw_surface_row(settings: &WorldSettings, x: i32) -> i32 {
+pub fn raw_surface_row(settings: &WorldSettings, x: i32) -> i32 {
+    if settings.generator.has_biomes() {
+        return biome::surface_row(settings, x);
+    }
+    placeholder_surface_row(settings, x)
+}
+
+/// The first row of a streamed world: biome worlds keep [`biome::SKY_HEADROOM_ROWS`] above
+/// row 0 for their mountains; older streamed worlds start at row 0.
+#[must_use]
+pub const fn top_row(settings: &WorldSettings) -> i32 {
+    if settings.generator.has_biomes() {
+        -biome::SKY_HEADROOM_ROWS
+    } else {
+        0
+    }
+}
+
+/// The deepest surface row any column of a streamed world can have (rows below it are below
+/// every column's surface).
+#[must_use]
+pub const fn deepest_surface_row(settings: &WorldSettings) -> i32 {
+    if settings.generator.has_biomes() {
+        SKY_ROWS + biome::MAX_DIP_ROWS
+    } else {
+        SKY_ROWS + MAX_SURFACE_DIP_ROWS
+    }
+}
+
+/// The placeholder surface of V5 and V6 worlds: flat at [`SKY_ROWS`] across the town
+/// ([`TOWN_FLAT_FIRST_COLUMN`] to [`TOWN_FLAT_LAST_COLUMN`]); elsewhere a gentle swell up to
+/// [`MAX_SURFACE_DIP_ROWS`] lower.
+const fn placeholder_surface_row(settings: &WorldSettings, x: i32) -> i32 {
     let distance = if x < TOWN_FLAT_FIRST_COLUMN {
         TOWN_FLAT_FIRST_COLUMN - x
     } else if x > TOWN_FLAT_LAST_COLUMN {
@@ -107,6 +145,12 @@ pub struct Ctx {
     pub settings: WorldSettings,
     pub bases: [i32; BOUNDARY_COUNT],
     pub height: i32,
+    /// The world's first row ([`top_row`]).
+    pub top: i32,
+    /// Whether the world has surface biomes.
+    pub biomes: bool,
+    /// [`deepest_surface_row`].
+    pub deepest_surface: i32,
     /// Point-of-interest tiers, top to bottom.
     pub tiers: Vec<Tier>,
 }
@@ -140,6 +184,9 @@ impl Ctx {
             settings: *settings,
             bases: strata::boundary_bases(settings),
             height: settings.height_tiles(),
+            top: top_row(settings),
+            biomes: settings.generator.has_biomes(),
+            deepest_surface: deepest_surface_row(settings),
             tiers,
         }
     }
@@ -160,14 +207,20 @@ impl Ctx {
         }
     }
 
-    pub const fn surface_row(&self, x: i32) -> i32 {
+    pub fn surface_row(&self, x: i32) -> i32 {
         surface_row(&self.settings, x)
+    }
+
+    /// Whether `(x, y)` is above column `x`'s surface (skipping the heightmap for rows below
+    /// every surface).
+    fn above_surface(&self, x: i32, y: i32) -> bool {
+        y <= self.deepest_surface && y < self.surface_row(x)
     }
 
     /// The base tile at `(x, y)`: sky, bedrock, foundations or the band's rock mass (no caves,
     /// hazards, points of interest or deposits yet). `None` outside the world's rows.
     pub fn base_kind(&self, x: i32, y: i32) -> Option<TileKind> {
-        if y < 0 || y >= self.height {
+        if y < self.top || y >= self.height {
             return None;
         }
         Some(self.base_kind_in(x, y, self.band(x, y)))
@@ -176,7 +229,10 @@ impl Ctx {
     /// The sky, bedrock or foundation tile at `(x, y)`, or `None` where the base is the band's
     /// rock (which [`Self::rock_kind`] then picks without the cost of the rock-mass noise).
     pub fn fixed_kind(&self, x: i32, y: i32) -> Option<TileKind> {
-        if y < self.surface_row(x) {
+        if self.above_surface(x, y) {
+            return Some(TileKind::Air);
+        }
+        if self.biomes && biome::mountain_cave(&self.settings, x, y) {
             return Some(TileKind::Air);
         }
         if y >= self.floor_row(x) {
@@ -196,6 +252,12 @@ impl Ctx {
 
     /// The band's soft or hard rock at `(x, y)` (where [`Self::fixed_kind`] is `None`).
     pub fn rock_kind(&self, x: i32, y: i32, band: Band) -> TileKind {
+        if self.biomes
+            && y <= self.deepest_surface + 16
+            && let Some(kind) = biome::ground_kind(&self.settings, x, y)
+        {
+            return kind;
+        }
         let (cell_x, cell_y, contrast_per_mille) = rock_texture(band);
         let mass = fractal_noise(self.seed(), 0x0C0C_0000, x, y, cell_x, cell_y, 3);
         let (town_first, town_last) = town_columns();
@@ -220,10 +282,29 @@ impl Ctx {
         base + (detail - 32_768) / 10 > contrast_threshold(caves::cavern_share(band))
     }
 
-    /// Whether caves may open at `(x, y)`: below the crust (measured from the local surface),
-    /// outside the town's crust and the spawn shaft.
-    pub const fn cave_allowed(&self, x: i32, y: i32) -> bool {
-        y >= self.surface_row(x) + (caves::CRUST_ROWS - SKY_ROWS) && caves::cave_allowed(x, y)
+    /// Whether caves may open at `(x, y)`: below the crust (measured from the local surface;
+    /// in biome worlds from the classic surface where the ground rises above it, since
+    /// mountains carve their own caves), outside the town's crust and the spawn shaft. Biome
+    /// worlds also keep every cave (classic caverns and cave ecosystems) clear of village
+    /// ground and underground halls ([`super::villages::keeps_caves_out`]).
+    pub fn cave_allowed(&self, x: i32, y: i32) -> bool {
+        if !caves::cave_allowed(x, y) {
+            return false;
+        }
+        if self.biomes && super::villages::keeps_caves_out(self, x, y) {
+            return false;
+        }
+        let crust = caves::CRUST_ROWS - SKY_ROWS;
+        if y >= self.deepest_surface + crust {
+            return true;
+        }
+        let surface = self.surface_row(x);
+        let surface = if self.biomes {
+            surface.max(SKY_ROWS)
+        } else {
+            surface
+        };
+        y >= surface + crust
     }
 }
 
@@ -231,6 +312,12 @@ impl Ctx {
 pub const fn is_plain_rock(kind: TileKind) -> bool {
     matches!(
         kind,
-        TileKind::Dirt | TileKind::Clay | TileKind::Stone | TileKind::HardRock
+        TileKind::Dirt
+            | TileKind::Clay
+            | TileKind::Stone
+            | TileKind::HardRock
+            | TileKind::Surface(
+                SurfaceMaterial::Sandstone | SurfaceMaterial::RedRock | SurfaceMaterial::Granite
+            )
     )
 }

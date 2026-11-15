@@ -364,6 +364,76 @@ fn golden_v6_chunk_digests_are_pinned() {
 
 const GOLDEN_V6_DIGEST: u64 = 0x5731_7de3_5f46_e4c6;
 
+#[test]
+fn golden_v7_chunk_digests_are_pinned() {
+    // V7 = V6 caves and villages on the biome heightmap. Pinned once it ships: changing what V7
+    // generates must be a new generator version.
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V7,
+        ..WorldSettings::new(crate::worldgen::DEFAULT_WORLD_SEED)
+    };
+    let mut chunks = vec![
+        // The town, the sky headroom above it, a far-out surface chunk and a deep one.
+        ChunkPosition { x: 0, y: 0 },
+        ChunkPosition { x: 7, y: -3 },
+        ChunkPosition { x: -40, y: -1 },
+        ChunkPosition { x: 3_000, y: 12 },
+    ];
+    // The first villages either side (their flat shelves) and the first underground hall.
+    for site in [-1, 1, -2, 2] {
+        let id = crate::village::placement::surface_id(site);
+        if let Some(found) = crate::village::village(&settings, id) {
+            chunks.push(ChunkPosition::of(crate::terrain::TilePosition {
+                x: found.plaza.0,
+                y: found.ground_row,
+            }));
+        }
+        let hall = crate::village::placement::underground_id(site);
+        if let Some(found) = crate::village::village(&settings, hall) {
+            chunks.push(ChunkPosition::of(crate::terrain::TilePosition {
+                x: found.plaza.0,
+                y: found.ground_row,
+            }));
+        }
+    }
+    chunks.extend(
+        features_in(
+            &settings,
+            &window(&settings, 600),
+            Some(&[FeatureKind::Cave]),
+        )
+        .iter()
+        .take(6)
+        .map(|feature| ChunkPosition::of(feature.center)),
+    );
+    // The highest surface column near town (a mountain, on most seeds).
+    let peak = (-2_000..2_000)
+        .min_by_key(|x| (crate::worldgen::streamed::surface_row(&settings, *x), *x))
+        .expect("columns");
+    chunks.push(ChunkPosition::of(crate::terrain::TilePosition {
+        x: peak,
+        y: crate::worldgen::streamed::surface_row(&settings, peak),
+    }));
+    assert!(chunks.len() > 12, "the window holds villages and caves");
+    let mut combined = 0_u64;
+    for chunk in chunks {
+        let mut hash: u64 = 0xCBF2_9CE4_8422_2325;
+        for tile in generated_chunk(&settings, chunk).tiles() {
+            for byte in tile.code().to_le_bytes() {
+                hash ^= u64::from(byte);
+                hash = hash.wrapping_mul(0x0100_0000_01B3);
+            }
+        }
+        combined = combined.rotate_left(7) ^ hash;
+    }
+    assert_eq!(
+        combined, GOLDEN_V7_DIGEST,
+        "V7 generation changed: {combined:#018x}"
+    );
+}
+
+const GOLDEN_V7_DIGEST: u64 = 0x3d11_988f_1bf0_6b16;
+
 fn v6(seed: u64) -> WorldSettings {
     WorldSettings {
         generator: GeneratorVersion::V6,

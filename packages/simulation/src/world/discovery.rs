@@ -280,7 +280,9 @@ fn reveal_around(discovered: &mut DiscoveredTiles, terrain: &Terrain, player: &P
     let (radius_x, radius_y) = REVEAL_RADIUS_TILES;
     let x_range =
         (center.x - radius_x).max(terrain.min_x())..=(center.x + radius_x).min(terrain.max_x());
-    for y in (center.y - radius_y).max(0)..=(center.y + radius_y).min(terrain.height() - 1) {
+    for y in
+        (center.y - radius_y).max(terrain.min_y())..=(center.y + radius_y).min(terrain.height() - 1)
+    {
         for x in x_range.clone() {
             discovered.reveal(TilePosition { x, y });
         }
@@ -299,12 +301,13 @@ impl WorldState {
         let discovered = self.discovered_tiles.entry(player_id).or_default();
         let before = discovered.len();
         let radius = radius.max(0);
-        let (min_x, max_x, height) = (
+        let (min_x, max_x, min_y, height) = (
             self.terrain.min_x(),
             self.terrain.max_x(),
+            self.terrain.min_y(),
             self.terrain.height(),
         );
-        for y in (center.y - radius).max(0)..=(center.y + radius).min(height - 1) {
+        for y in (center.y - radius).max(min_y)..=(center.y + radius).min(height - 1) {
             for x in (center.x - radius).max(min_x)..=(center.x + radius).min(max_x) {
                 if (x - center.x).abs() + (y - center.y).abs() <= radius {
                     discovered.reveal(TilePosition { x, y });

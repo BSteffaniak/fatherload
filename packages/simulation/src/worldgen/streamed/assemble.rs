@@ -74,13 +74,14 @@ fn vein_mineral(ctx: &Ctx, band: crate::worldgen::Band, x: i32, y: i32) -> Optio
 
 struct ChunkKinds {
     rect: TileRect,
+    top: i32,
     height: i32,
     kinds: Vec<TileKind>,
 }
 
 impl ChunkKinds {
     fn slot(&self, x: i32, y: i32) -> Option<usize> {
-        (self.rect.contains(TilePosition { x, y }) && y >= 0 && y < self.height).then(|| {
+        (self.rect.contains(TilePosition { x, y }) && y >= self.top && y < self.height).then(|| {
             usize::try_from((y - self.rect.min.y) * CHUNK_SIZE_TILES + (x - self.rect.min.x))
                 .unwrap_or(0)
         })
@@ -116,7 +117,8 @@ fn grid(
     span(top, bottom, size.1).flat_map(move |ry| span(left, right, size.0).map(move |rx| (rx, ry)))
 }
 
-/// Generates every tile of `chunk` (rows outside the world read as bedrock).
+/// Generates every tile of `chunk` (rows below the world read as bedrock, rows above it as
+/// air).
 #[must_use]
 pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
     let origin = chunk.origin();
@@ -130,13 +132,27 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
     let mut window = Window::new(ctx, &rect);
     let mut chunk_kinds = ChunkKinds {
         rect,
+        top: ctx.top,
         height: ctx.height,
         kinds: vec![TileKind::Bedrock; CHUNK_TILES],
     };
     for position in rect.positions() {
-        if position.y >= 0 && position.y < ctx.height {
-            let kind = window.kind(position.x, position.y);
-            chunk_kinds.set(position.x, position.y, kind);
+        let local = usize::try_from(
+            (position.y - rect.min.y) * CHUNK_SIZE_TILES + (position.x - rect.min.x),
+        )
+        .unwrap_or(0);
+        if position.y < ctx.top {
+            // Above a biome world: open sky (V5 kept bedrock there, never read).
+            if ctx.biomes {
+                chunk_kinds.kinds[local] = TileKind::Air;
+            }
+        } else if position.y < 0 {
+            // Above row 0 (a biome world's mountains): the base layer alone, no cave layer.
+            if let Some(kind) = ctx.base_kind(position.x, position.y) {
+                chunk_kinds.kinds[local] = kind;
+            }
+        } else if position.y < ctx.height {
+            chunk_kinds.kinds[local] = window.kind(position.x, position.y);
         }
     }
     if rect.max.y >= 0 && rect.min.y < ctx.height {
@@ -158,8 +174,10 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
         place_deposits(ctx, &rect, &mut window, &mut chunk_kinds);
-        // Villages last: hazards near them turn back into rock, then their foundations, paving
-        // and halls go in.
+    }
+    if rect.max.y >= ctx.top && rect.min.y < ctx.height {
+        // Villages last (a biome world's mountain shelves hold villages above row 0): hazards
+        // near them turn back into rock, then their foundations, paving and halls go in.
         for stamp in super::villages::stamps_touching(ctx, &rect) {
             for clear in &stamp.clear {
                 if !clear.intersects(&rect) {

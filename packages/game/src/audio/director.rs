@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use fatherload_simulation::{
     PlayerId, TILE_SIZE,
-    terrain::{TileKind, TilePosition},
+    terrain::{SurfaceMaterial, TileKind, TilePosition},
 };
 
 use super::{
@@ -93,8 +93,15 @@ impl Material {
             | TileKind::Clay
             | TileKind::Gas
             | TileKind::Lava
-            | TileKind::PressurePocket => Self::Soft,
+            | TileKind::PressurePocket
+            | TileKind::Surface(
+                SurfaceMaterial::Sand
+                | SurfaceMaterial::Snow
+                | SurfaceMaterial::Mud
+                | SurfaceMaterial::Sandstone,
+            ) => Self::Soft,
             TileKind::Stone
+            | TileKind::Surface(SurfaceMaterial::Granite | SurfaceMaterial::RedRock)
             | TileKind::HardRock
             | TileKind::Foundation
             | TileKind::ExplosivePocket

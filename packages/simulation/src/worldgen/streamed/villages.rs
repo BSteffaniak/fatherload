@@ -121,6 +121,47 @@ pub fn geometry(ctx: &Ctx, site: i32) -> Option<SiteGeometry> {
     })
 }
 
+/// Tiles every cave keeps from a village's ground and from an underground hall on biome worlds
+/// ([`keeps_caves_out`]).
+const CAVE_KEEP_OUT: i32 = 6;
+
+/// Whether caves must stay shut at `(x, y)` (biome worlds only: older generators keep their
+/// output): under a surface village's ground (down past the cleared rows) and within
+/// [`CAVE_KEEP_OUT`] tiles of an underground hall, so no cave undercuts a village and a hall's
+/// floor never bridges an open cave.
+///
+/// Reads only the site geometry (the hall's slide reads points of interest, which never read
+/// caves), so the cave layer may call it.
+pub fn keeps_caves_out(ctx: &Ctx, x: i32, y: i32) -> bool {
+    if !ctx.biomes || !ctx.settings.generator.has_villages() {
+        return false;
+    }
+    if let Some(site) = placement::surface_site_at(ctx.seed(), x, FLATTEN_FADE_COLUMNS)
+        && y <= super::base::village_ground_row(&ctx.settings, site.center)
+            + CLEAR_ROWS
+            + CAVE_KEEP_OUT
+    {
+        return true;
+    }
+    // A hall slides at most three steps either way from its nominal centre.
+    let slide_reach = 3 * (HALL_WIDTH + 24) + HALL_WIDTH + CAVE_KEEP_OUT;
+    let near = placement::site_index_near(x);
+    (near - 2..=near + 2).any(|site| {
+        let Some(nominal) = placement::underground_site(&ctx.settings, site) else {
+            return false;
+        };
+        if y < nominal.top - CAVE_KEEP_OUT
+            || y > nominal.floor_row() + CAVE_KEEP_OUT
+            || (x - nominal.center).abs() > slide_reach
+        {
+            return false;
+        }
+        geometry(ctx, site)
+            .and_then(|geometry| geometry.hall_area())
+            .is_some_and(|area| area.expanded(CAVE_KEEP_OUT).contains(TilePosition { x, y }))
+    })
+}
+
 /// Slides an underground hall clear of points of interest: its nominal column first, then up
 /// to three steps its preferred way, then three the other way.
 fn resolve_hall(ctx: &Ctx, site: UndergroundSite) -> Option<i32> {

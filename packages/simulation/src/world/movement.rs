@@ -79,7 +79,19 @@ pub const AUTHORITATIVE_CAVE_IN_LIFE_MILLIS: u64 = 4_000;
 pub const AUTHORITATIVE_FUEL_BURN_PER_SECOND: f32 = 5.0;
 pub const AUTHORITATIVE_MAX_FALL_SPEED: f32 = 560.0;
 pub const AUTHORITATIVE_PLAYER_RADIUS: f32 = 10.5;
-pub const AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES: f32 = 12.0;
+/// How high above row 0 a rig's position may go, in tiles: **not a flight ceiling** (fuel is
+/// the natural limit on how high a rig climbs) but the numeric edge of space, as far up as
+/// the world extends sideways ([`STREAMED_COLUMN_LIMIT`]), where `f32` positions still resolve
+/// a fraction of a pixel. No fuel tank or god-mode climb reaches it in practice.
+///
+/// [`STREAMED_COLUMN_LIMIT`]: crate::worldgen::streamed::STREAMED_COLUMN_LIMIT
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "the column limit is a power of two, exact in f32"
+)]
+pub const AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES: f32 =
+    crate::worldgen::streamed::STREAMED_COLUMN_LIMIT as f32;
+/// The highest world pixel row a rig's position may reach ([`AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES`]).
 pub const AUTHORITATIVE_MIN_PLAYER_Y: f32 = -AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES * TILE_SIZE;
 
 /// Drag on a rig in cave water (per second; velocity is divided by `1 + rate * dt` each tick).
@@ -334,7 +346,7 @@ impl WorldState {
                 } else {
                     let clamped = clamp_authoritative_player_y(&self.terrain, next_y);
                     if clamped.to_bits() != next_y.to_bits() {
-                        // Pressed against the sky ceiling (or the world's floor).
+                        // Pressed against the world's floor (or the far edge of space).
                         player.velocity_y = 0.0;
                         blocked_y = true;
                     }

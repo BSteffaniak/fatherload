@@ -15,6 +15,17 @@ fn v6(seed: u64) -> WorldSettings {
     }
 }
 
+/// The generators with villages: V6 (placeholder surface) and V7 (biome heightmap).
+fn village_worlds(seed: u64) -> [WorldSettings; 2] {
+    [
+        v6(seed),
+        WorldSettings {
+            generator: GeneratorVersion::V7,
+            ..WorldSettings::new(seed)
+        },
+    ]
+}
+
 /// Seeds the suite samples (`FATHERLOAD_WORLDGEN_SEEDS` raises the count).
 fn seeds(default: u64) -> impl Iterator<Item = u64> {
     let count = std::env::var("FATHERLOAD_WORLDGEN_SEEDS")
@@ -68,8 +79,7 @@ fn villages_are_deterministic() {
 
 #[test]
 fn every_village_is_laid_out_inside_its_span_with_a_service_and_a_specialty() {
-    for seed in seeds(12) {
-        let settings = v6(seed);
+    for (seed, settings) in seeds(12).flat_map(|seed| village_worlds(seed).map(|s| (seed, s))) {
         for found in sample(&settings, 6) {
             let label = format!("seed {seed:#x} {}", found.describe());
             let span = found.first_column..=found.last_column;
@@ -167,14 +177,13 @@ fn villages_vary_in_culture_size_and_specialty() {
 
 #[test]
 fn surface_villages_stand_on_flat_foundations_under_open_sky() {
-    for seed in seeds(4) {
-        let settings = v6(seed);
+    for (seed, settings) in seeds(4).flat_map(|seed| village_worlds(seed).map(|s| (seed, s))) {
         for site in [-2, -1, 1, 2] {
             let found = village(&settings, placement::surface_id(site)).expect("village");
             let ground = found.ground_row;
             for x in found.first_column..=found.last_column {
                 assert_eq!(crate::worldgen::surface_row(&settings, x), ground, "x {x}");
-                for y in (ground - 8).max(0)..ground {
+                for y in (ground - 8).max(crate::worldgen::streamed::top_row(&settings))..ground {
                     assert_eq!(
                         generated_tile(&settings, TilePosition { x, y }).kind,
                         TileKind::Air,
@@ -192,6 +201,16 @@ fn surface_villages_stand_on_flat_foundations_under_open_sky() {
                         crate::worldgen::HazardKind::of_tile(kind).is_none(),
                         "hazard under the village at ({x}, {y})"
                     );
+                }
+                if settings.generator.has_biomes() {
+                    // No cave undercuts a biome world's village.
+                    for y in ground..ground + 14 {
+                        let kind = generated_tile(&settings, TilePosition { x, y }).kind;
+                        assert!(
+                            kind != TileKind::Air,
+                            "seed {seed:#x} cave under the village at ({x}, {y})"
+                        );
+                    }
                 }
             }
             for building in &found.buildings {
@@ -217,8 +236,7 @@ fn surface_villages_stand_on_flat_foundations_under_open_sky() {
 #[test]
 fn underground_settlements_sit_in_a_carved_hall_clear_of_sites() {
     let mut halls = 0;
-    for seed in seeds(8) {
-        let settings = v6(seed);
+    for (seed, settings) in seeds(8).flat_map(|seed| village_worlds(seed).map(|s| (seed, s))) {
         for site in -8..=8 {
             let Some(found) = village(&settings, placement::underground_id(site)) else {
                 continue;
@@ -255,6 +273,20 @@ fn underground_settlements_sit_in_a_carved_hall_clear_of_sites() {
                     "{position:?}"
                 );
                 assert!(!matches!(kind, TileKind::Poi(_)), "{position:?}");
+            }
+            if settings.generator.has_biomes() {
+                // Biome worlds keep caves away from halls: the walls and the ground under the
+                // floor are solid, so the floor never bridges an open cave.
+                for position in area.expanded(5).positions() {
+                    if area.contains(position) {
+                        continue;
+                    }
+                    let kind = generated_tile(&settings, position).kind;
+                    assert!(
+                        kind != TileKind::Air,
+                        "seed {seed:#x} cave beside the hall at {position:?}"
+                    );
+                }
             }
         }
     }

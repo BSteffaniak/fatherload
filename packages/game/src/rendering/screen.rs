@@ -7,7 +7,7 @@ use raylib::prelude::*;
 use fatherload_simulation::{
     DiscoveredTiles, ExplosiveKind, Player,
     economy::{UpgradeKind, current_level},
-    terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
+    terrain::{SurfaceMaterial, TILE_SIZE, Terrain, TileKind, TilePosition},
     worldgen::Band,
 };
 
@@ -705,6 +705,13 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::ExplosivePocket | TileKind::PressurePocket => RED,
         TileKind::Stone | TileKind::HardRock | TileKind::Foundation => STONE,
         TileKind::Dirt | TileKind::Clay => LOAM,
+        TileKind::Surface(material) => match material {
+            SurfaceMaterial::Sand | SurfaceMaterial::Sandstone => SAND,
+            SurfaceMaterial::RedRock => RUST,
+            SurfaceMaterial::Snow => MIST,
+            SurfaceMaterial::Granite => SLATE_LIGHT,
+            SurfaceMaterial::Mud => SOIL,
+        },
         TileKind::Poi(tile) => super::terrain::tile_art::poi_color(tile, Band::Stone),
         TileKind::Cave(tile) => super::terrain::tile_art::cave_color(tile, Band::Stone),
         TileKind::Bedrock => PLUM,

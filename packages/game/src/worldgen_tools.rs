@@ -543,9 +543,11 @@ fn tile_color(kind: TileKind, band: Band, y: i32) -> Color {
             palette::INK,
             55,
         ),
-        TileKind::Dirt | TileKind::Clay | TileKind::Stone | TileKind::Foundation => {
-            tile_art::material_color(kind, band)
-        }
+        TileKind::Dirt
+        | TileKind::Clay
+        | TileKind::Stone
+        | TileKind::Foundation
+        | TileKind::Surface(_) => tile_art::material_color(kind, band),
         TileKind::HardRock => mix(tile_art::material_color(kind, band), palette::INK, 20),
         TileKind::Ore(mineral) => mineral_color(mineral),
         TileKind::Artifact(_) => palette::PINK,

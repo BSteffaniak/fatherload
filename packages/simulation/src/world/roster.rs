@@ -27,6 +27,9 @@ use super::{
 /// Distance between neighbouring spawn slots (two tiles; more than a rig's diameter).
 pub const SPAWN_SPACING: f32 = 2.0 * TILE_SIZE;
 
+/// How far above the spawn point the slot grid stacks rows of slots, in tiles.
+pub const SPAWN_SKY_ROWS_TILES: f32 = 12.0;
+
 const _: () = assert!(SPAWN_SPACING >= 2.0 * AUTHORITATIVE_PLAYER_RADIUS);
 
 impl WorldState {
@@ -133,7 +136,10 @@ impl WorldState {
         let max_x = clamp_authoritative_player_x(&self.terrain, f32::MAX);
         let right = slot_count(max_x - base_x);
         let left = slot_count(base_x).saturating_sub(1);
-        let rows = slot_count(base_y - AUTHORITATIVE_MIN_PLAYER_Y);
+        // Rows of slots stacked up into the sky above the spawn point (the sky has no ceiling,
+        // so the search height is fixed).
+        let rows = slot_count(SPAWN_SKY_ROWS_TILES * TILE_SIZE)
+            .min(slot_count(base_y - AUTHORITATIVE_MIN_PLAYER_Y));
         let mut best = (base_x, base_y);
         let mut best_clearance = f32::NEG_INFINITY;
         for row in 0..rows {

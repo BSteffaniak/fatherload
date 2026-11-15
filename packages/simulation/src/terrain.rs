@@ -232,6 +232,89 @@ pub enum TileKind {
     /// A solid building piece placed in a claim (WP-BASE, [`crate::base`]): no drill or blast
     /// breaks it; it comes down only by deconstruction.
     Built(crate::base::BuiltTile),
+    /// A surface-biome material (sand, sandstone, red rock, snow, granite, mud): the crusts
+    /// and mountain masses of [`GeneratorVersion::V7`](worldgen::GeneratorVersion::V7) worlds.
+    Surface(SurfaceMaterial),
+}
+
+/// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
+///
+/// Hardness follows the classic ladder: sand, snow and mud dig like dirt, sandstone and red
+/// rock like clay, and mountain granite like stone (an upgraded drill, or fly over).
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+pub enum SurfaceMaterial {
+    /// Desert dunes and beaches.
+    Sand,
+    /// Layered desert crust and mesa bands.
+    Sandstone,
+    /// Badland mesa rock.
+    RedRock,
+    /// Snow caps and tundra ground.
+    Snow,
+    /// The body of a mountain.
+    Granite,
+    /// Wetland lake beds and bogs.
+    Mud,
+}
+
+impl SurfaceMaterial {
+    /// Every material, in code order.
+    pub const ALL: [Self; 6] = [
+        Self::Sand,
+        Self::Sandstone,
+        Self::RedRock,
+        Self::Snow,
+        Self::Granite,
+        Self::Mud,
+    ];
+
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Sand => "sand",
+            Self::Sandstone => "sandstone",
+            Self::RedRock => "red rock",
+            Self::Snow => "snow",
+            Self::Granite => "granite",
+            Self::Mud => "mud",
+        }
+    }
+
+    /// Stable code (part of [`Tile::code`] and so of terrain digests).
+    #[must_use]
+    pub const fn code(self) -> u64 {
+        match self {
+            Self::Sand => 0,
+            Self::Sandstone => 1,
+            Self::RedRock => 2,
+            Self::Snow => 3,
+            Self::Granite => 4,
+            Self::Mud => 5,
+        }
+    }
+
+    /// Drill strength needed to dig it.
+    #[must_use]
+    pub const fn hardness(self) -> u8 {
+        match self {
+            Self::Sand | Self::Snow | Self::Mud => 1,
+            Self::Sandstone | Self::RedRock => 2,
+            Self::Granite => 3,
+        }
+    }
+
+    /// Chips a fresh tile takes.
+    #[must_use]
+    pub const fn durability(self) -> u8 {
+        match self {
+            Self::Snow => 1,
+            Self::Sand => 2,
+            Self::Mud => 3,
+            Self::Sandstone => 4,
+            Self::RedRock => 5,
+            Self::Granite => 8,
+        }
+    }
 }
 
 impl TileKind {
@@ -255,6 +338,7 @@ impl TileKind {
             Self::Bedrock => "bedrock",
             Self::Cave(tile) => tile.name(),
             Self::Built(tile) => tile.name(),
+            Self::Surface(material) => material.name(),
         }
     }
 }
@@ -338,6 +422,7 @@ impl Tile {
             TileKind::Bedrock => 11,
             TileKind::Cave(tile) => 0x400 | tile.code(),
             TileKind::Built(tile) => BUILT_TILE_CODE_BASE | tile.code(),
+            TileKind::Surface(material) => 0x500 | material.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -599,16 +684,28 @@ impl Terrain {
         x >= self.min_x() && x <= self.max_x()
     }
 
+    /// The first row of the world: 0, except for biome worlds
+    /// ([`GeneratorVersion::V7`](worldgen::GeneratorVersion::V7)), whose mountains rise into
+    /// rows above 0 (see [`worldgen::streamed::top_row`]). Rows above it are open sky (no
+    /// tiles), which rigs may fly through without limit.
+    #[must_use]
+    pub const fn min_y(&self) -> i32 {
+        match &self.storage {
+            Storage::Bounded(_) => 0,
+            Storage::Streamed(_) => worldgen::streamed::top_row(&self.settings),
+        }
+    }
+
     /// Whether `position` is inside the world.
     #[must_use]
     pub const fn contains(&self, position: TilePosition) -> bool {
-        self.contains_column(position.x) && position.y >= 0 && position.y < self.height
+        self.contains_column(position.x) && position.y >= self.min_y() && position.y < self.height
     }
 
     /// The first ground row of column `x` (the surface heightmap; see
     /// [`worldgen::surface_row`]).
     #[must_use]
-    pub const fn surface_row(&self, x: i32) -> i32 {
+    pub fn surface_row(&self, x: i32) -> i32 {
         worldgen::surface_row(&self.settings, x)
     }
 
@@ -841,6 +938,7 @@ impl Terrain {
     pub fn stream_around(&mut self, centers: &[TilePosition]) -> usize {
         let settings = self.settings;
         let chunk_rows = worldgen::streamed::chunk_rows(&settings);
+        let first_chunk_row = worldgen::streamed::first_chunk_row(&settings);
         let (min_x, max_x) = (self.min_x(), self.max_x());
         let Storage::Streamed(streamed) = &mut self.storage else {
             return 0;
@@ -869,7 +967,9 @@ impl Terrain {
         let mut loaded = 0;
         let (radius_x, radius_y) = STREAM_LOAD_RADIUS_CHUNKS;
         for center in &centers {
-            for y in (center.y - radius_y).max(0)..=(center.y + radius_y).min(chunk_rows - 1) {
+            for y in (center.y - radius_y).max(first_chunk_row)
+                ..=(center.y + radius_y).min(chunk_rows - 1)
+            {
                 for x in (center.x - radius_x).max(min_chunk)..=(center.x + radius_x).min(max_chunk)
                 {
                     let chunk = ChunkPosition { x, y };
@@ -971,7 +1071,7 @@ impl Terrain {
     fn chunk_positions(&self, chunk: ChunkPosition) -> impl Iterator<Item = TilePosition> + use<> {
         let origin = chunk.origin();
         let xs = origin.x.max(self.min_x())..(origin.x + CHUNK_SIZE_TILES).min(self.max_x() + 1);
-        (origin.y.max(0)..(origin.y + CHUNK_SIZE_TILES).min(self.height))
+        (origin.y.max(self.min_y())..(origin.y + CHUNK_SIZE_TILES).min(self.height))
             .flat_map(move |y| xs.clone().map(move |x| TilePosition { x, y }))
     }
 
@@ -1053,10 +1153,7 @@ impl Terrain {
 
     #[must_use]
     pub fn is_solid_at(&self, position: TilePosition) -> bool {
-        if position.y < 0 {
-            return false;
-        }
-
+        // Above the world is open sky; below it and past its sides is bedrock (no tile).
         self.tile(position)
             .is_some_and(|tile| tile.kind != TileKind::Air)
     }
@@ -1233,7 +1330,7 @@ impl Terrain {
     }
 
     const fn slot(&self, position: TilePosition) -> Option<Slot> {
-        if position.y < 0 || position.y >= self.height {
+        if position.y < self.min_y() || position.y >= self.height {
             return None;
         }
         match &self.storage {
@@ -1519,6 +1616,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         | TileKind::Artifact(ArtifactKind::BuriedIdol | ArtifactKind::StarCore) => 4,
         TileKind::Poi(tile) => tile.hardness(),
         TileKind::Cave(tile) => tile.hardness(),
+        TileKind::Surface(material) => material.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1550,6 +1648,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Poi(tile) => tile.durability(),
         TileKind::Cave(tile) => tile.durability(),
         TileKind::Bedrock | TileKind::Built(_) => u8::MAX,
+        TileKind::Surface(material) => material.durability(),
     }
 }
 

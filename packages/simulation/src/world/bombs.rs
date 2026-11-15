@@ -24,7 +24,7 @@ use crate::{
     physics::{self, BodyParams, line_clear},
     quantize::quantize_simulation_scalar as quantize,
     summary::PlayerScopedCommandOutcome,
-    terrain::{BlastResult, TILE_SIZE, Terrain, TileKind, TilePosition},
+    terrain::{BlastResult, SurfaceMaterial, TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
 use super::{WorldState, commands::bomb_tile_position, quests::QuestNotes};
@@ -425,7 +425,12 @@ impl WorldState {
                     continue;
                 };
                 let reach = match tile.kind {
-                    TileKind::Dirt | TileKind::Clay | TileKind::Gas => 0,
+                    TileKind::Dirt
+                    | TileKind::Clay
+                    | TileKind::Gas
+                    | TileKind::Surface(
+                        SurfaceMaterial::Snow | SurfaceMaterial::Mud | SurfaceMaterial::Sand,
+                    ) => 0,
                     TileKind::ExplosivePocket => 1,
                     _ => continue,
                 };

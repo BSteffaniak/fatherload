@@ -15,7 +15,8 @@ use crate::{
     terrain::MineralKind,
     worldgen::{
         WorldSettings,
-        noise::{NOISE_MAX, line_noise},
+        biome::{self, Biome},
+        noise::{NOISE_MAX, hash2, line_noise},
     },
 };
 
@@ -328,8 +329,28 @@ pub enum VillageRelation {
 }
 
 /// The landscape flavour at column `x` (surface-biome hook; see [`Landscape`]).
+///
+/// On biome worlds ([`crate::worldgen::GeneratorVersion::V7`]) it follows the surface biome
+/// there ([`biome::biome_at`]): plains stay plains, forests and wetlands are forest (riverside
+/// timber), mountains and tundra are hills (highland stone), deserts are mesa (adobe) and
+/// badlands are mesa or scrapland. Older worlds read a coarse noise band along the surface.
 #[must_use]
-pub const fn site_landscape(settings: &WorldSettings, x: i32) -> Landscape {
+pub fn site_landscape(settings: &WorldSettings, x: i32) -> Landscape {
+    if settings.generator.has_biomes() {
+        return match biome::biome_at(settings, x) {
+            Biome::Plains => Landscape::Plains,
+            Biome::Forest | Biome::Wetlands => Landscape::Forest,
+            Biome::Mountains | Biome::Tundra => Landscape::Hills,
+            Biome::Desert => Landscape::Mesa,
+            Biome::Badlands => {
+                if hash2(settings.seed, SALT_LANDSCAPE, x, 1).is_multiple_of(2) {
+                    Landscape::Scrapland
+                } else {
+                    Landscape::Mesa
+                }
+            }
+        };
+    }
     let band = line_noise(settings.seed, SALT_LANDSCAPE, x, 1_400);
     let detail = line_noise(settings.seed, SALT_LANDSCAPE ^ 0xFF, x, 500);
     let value = (band * 3 + detail) / 4;

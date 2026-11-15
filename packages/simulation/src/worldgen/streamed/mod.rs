@@ -47,8 +47,8 @@ use std::sync::Arc;
 
 pub use assemble::CHUNK_TILES;
 pub use base::{
-    MAX_SURFACE_DIP_ROWS, TOWN_FLAT_FIRST_COLUMN, TOWN_FLAT_LAST_COLUMN, raw_surface_row,
-    surface_row, village_ground_row,
+    MAX_SURFACE_DIP_ROWS, TOWN_FLAT_FIRST_COLUMN, TOWN_FLAT_LAST_COLUMN, deepest_surface_row,
+    raw_surface_row, surface_row, top_row, village_ground_row,
 };
 pub use regions::{POI_REGION_WIDTH, TRANSITION_REGION_WIDTH};
 
@@ -107,7 +107,8 @@ pub fn generated_chunk(settings: &WorldSettings, chunk: ChunkPosition) -> Arc<Ge
     })
 }
 
-/// The generated tile at `position` (rows outside the world read as bedrock).
+/// The generated tile at `position` (rows below the world read as bedrock, rows above it as
+/// air).
 #[must_use]
 pub fn generated_tile(settings: &WorldSettings, position: TilePosition) -> Tile {
     generated_chunk(settings, ChunkPosition::of(position))
@@ -122,6 +123,8 @@ pub fn generate_window(settings: &WorldSettings, first_column: i32, width: i32) 
     let height = settings.height_tiles();
     let width = width.max(1);
     let mut tiles = Vec::with_capacity(usize::try_from(width * height).unwrap_or(0));
+    // Rows from 0: a biome world's mountains above row 0 are left out, so windows keep the
+    // classic row numbering previews and reports index by.
     for y in 0..height {
         for x in first_column..first_column + width {
             tiles.push(generated_tile(settings, TilePosition { x, y }));
@@ -256,8 +259,16 @@ pub(crate) fn clear_caches() {
     cave_biomes::clear_caches();
 }
 
-/// The chunk rows a streamed world of `settings` has (its height in chunks, rounded up).
+/// The chunk rows a streamed world of `settings` has below row 0 (its height in chunks,
+/// rounded up).
 #[must_use]
 pub const fn chunk_rows(settings: &WorldSettings) -> i32 {
     (settings.height_tiles() + CHUNK_SIZE_TILES - 1) / CHUNK_SIZE_TILES
+}
+
+/// The first chunk row of a streamed world (negative for biome worlds, whose mountains rise
+/// above row 0).
+#[must_use]
+pub const fn first_chunk_row(settings: &WorldSettings) -> i32 {
+    top_row(settings).div_euclid(CHUNK_SIZE_TILES)
 }

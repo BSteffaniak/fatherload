@@ -546,6 +546,7 @@ fn glyph(kind: TileKind) -> char {
         TileKind::Poi(_) => 'P',
         TileKind::Cave(_) => 'c',
         TileKind::Built(_) => 'B',
+        TileKind::Surface(_) => 's',
     }
 }
 

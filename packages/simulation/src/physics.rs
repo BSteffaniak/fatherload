@@ -79,7 +79,9 @@ pub fn solid_at(terrain: &Terrain, x: f32, y: f32) -> bool {
     if !terrain.contains_column(position.x) || position.y >= terrain.height() {
         return true;
     }
-    position.y >= 0 && terrain.is_solid_at(position)
+    // Above the world (and a mountain's rows above row 0) reads from the terrain: open sky has
+    // no tiles.
+    terrain.is_solid_at(position)
 }
 
 /// Whether a square body of half-size `radius` centred on `(x, y)` overlaps solid terrain
@@ -414,9 +416,7 @@ pub fn find_tile_path(
     max_nodes: usize,
 ) -> Option<Vec<TilePosition>> {
     let open = |tile: TilePosition| {
-        terrain.contains_column(tile.x)
-            && tile.y < terrain.height()
-            && (tile.y < 0 || !terrain.is_solid_at(tile))
+        terrain.contains_column(tile.x) && tile.y < terrain.height() && !terrain.is_solid_at(tile)
     };
     if !open(to) {
         return None;

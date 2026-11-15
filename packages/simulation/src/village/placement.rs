@@ -18,8 +18,13 @@ use crate::{
     worldgen::{WorldSettings, noise::hash2, strata::scaled_row, streamed::STREAMED_COLUMN_LIMIT},
 };
 
-/// Column the site ladder is measured from (the middle of the town's lots).
-pub const TOWN_CENTER_COLUMN: i32 = 115;
+/// Column the site ladder is measured from: the middle of the town's lots
+/// ([`crate::surface::town_span`], rounded up: column 115). Every village site of every world
+/// is measured from it, so the town's lots must not move.
+pub const TOWN_CENTER_COLUMN: i32 = {
+    let (first, last) = crate::surface::town_span();
+    (first + last + 1) / 2
+};
 /// Columns between neighbouring sites' nominal centres.
 pub const SITE_SPACING: i32 = 600;
 /// Columns from the town's centre to the first site's nominal centre (either side).
@@ -331,6 +336,14 @@ mod tests {
             assert!(west.last + FLATTEN_FADE_COLUMNS < -16, "{west:?}");
             assert!(east.center - TOWN_CENTER_COLUMN <= 560);
         }
+    }
+
+    #[test]
+    fn the_site_ladder_is_measured_from_the_town_centre() {
+        // Village sites of saved worlds are measured from here: moving it moves every village.
+        assert_eq!(TOWN_CENTER_COLUMN, 115);
+        let (first, last) = crate::surface::town_span();
+        assert!(first < TOWN_CENTER_COLUMN && TOWN_CENTER_COLUMN < last);
     }
 
     #[test]

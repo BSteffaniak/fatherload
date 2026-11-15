@@ -16,7 +16,8 @@ use crate::{
     quest::{
         ActiveQuest, BlueprintId, BlueprintUnlock, BoardOffer, CrewQuests, MAX_ACTIVE_QUESTS,
         Objective, ObjectiveProgress, Prerequisite, QUESTS, QuestDef, QuestFailure, QuestGiver,
-        QuestId, QuestTarget, SURFACE_ROW, Twist, bind_quest, binding::tile_distance, board_offers,
+        QuestId, QuestTarget, Twist, bind_quest, binding::tile_distance, board_offers,
+        surface_row_at,
     },
     service::SessionServiceRequest,
     summary::PlayerScopedCommandOutcome,
@@ -643,11 +644,12 @@ impl WorldState {
         if !quest.ready && (quest.carrying || !has_parcel) {
             quest.damage_taken = quest.damage_taken.saturating_add(damage);
         }
-        if owner_tile.y > SURFACE_ROW + STAY_DOWN_ARM_ROWS {
+        let owner_surface = surface_row_at(&self.terrain, owner_tile.x);
+        if owner_tile.y > owner_surface + STAY_DOWN_ARM_ROWS {
             quest.descended = true;
         }
         if !quest.ready {
-            check_twists(quest, &twists, tick, owner_tile, facts)?;
+            check_twists(quest, &twists, tick, (owner_tile, owner_surface), facts)?;
         }
         if quest.ready {
             return Ok(());
@@ -850,10 +852,9 @@ impl WorldState {
                 }
             }
             Objective::ReturnToSurface => {
-                if rigs
-                    .iter()
-                    .any(|(id, tile)| *id == quest.owner && tile.y <= SURFACE_ROW)
-                {
+                if rigs.iter().any(|(id, tile)| {
+                    *id == quest.owner && tile.y <= surface_row_at(&self.terrain, tile.x)
+                }) {
                     progress.done = true;
                 }
             }
@@ -1031,7 +1032,7 @@ impl WorldState {
                 let Some(haul) = progress.position else {
                     return;
                 };
-                if haul.y <= SURFACE_ROW {
+                if haul.y <= surface_row_at(&self.terrain, haul.x) {
                     progress.done = true;
                     return;
                 }
@@ -1052,7 +1053,7 @@ impl WorldState {
                     };
                     progress.timer = tick + ticks(u64::from(pace));
                     helpers.extend(near);
-                    progress.done = step.y <= SURFACE_ROW;
+                    progress.done = step.y <= surface_row_at(&self.terrain, step.x);
                 }
             }
             Objective::SplitDelivery {
@@ -1127,7 +1128,7 @@ impl WorldState {
         seen[index(from)?] = true;
         queue.push_back(from);
         while let Some(current) = queue.pop_front() {
-            if current.y <= SURFACE_ROW && current != from {
+            if current.y <= surface_row_at(&self.terrain, current.x) && current != from {
                 let mut step = current;
                 while let Some(previous) = came_from[index(step)?] {
                     if previous == from {
@@ -1172,7 +1173,7 @@ fn check_twists(
     quest: &ActiveQuest,
     twists: &[Twist],
     tick: u64,
-    owner_tile: TilePosition,
+    (owner_tile, owner_surface): (TilePosition, i32),
     facts: &EventFacts,
 ) -> Result<(), QuestFailure> {
     for twist in twists {
@@ -1198,7 +1199,7 @@ fn check_twists(
                 }
             }
             Twist::StayDown => {
-                if quest.descended && owner_tile.y <= SURFACE_ROW {
+                if quest.descended && owner_tile.y <= owner_surface {
                     return Err(QuestFailure::Surfaced);
                 }
             }

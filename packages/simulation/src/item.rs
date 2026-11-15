@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TileKind};
+use crate::terrain::{ArtifactKind, MineralKind, StrategicResourceKind, SurfaceMaterial, TileKind};
 
 /// A building block: what a plain broken tile becomes (WP-DROPS, used by WP-BASE).
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -69,6 +69,13 @@ impl BlockKind {
                 | crate::cave::CaveTile::TreasureCache
                 | crate::cave::CaveTile::RelicCache => None,
             },
+            // Surface-biome materials break into the classic block of the same hardness, so
+            // building (WP-BASE) needs no new block kinds; snow melts away.
+            TileKind::Surface(SurfaceMaterial::Sand | SurfaceMaterial::Mud) => Some(Self::Dirt),
+            TileKind::Surface(SurfaceMaterial::Sandstone | SurfaceMaterial::RedRock) => {
+                Some(Self::Clay)
+            }
+            TileKind::Surface(SurfaceMaterial::Granite) => Some(Self::Stone),
             _ => None,
         }
     }

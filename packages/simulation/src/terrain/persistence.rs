@@ -537,7 +537,9 @@ impl Terrain {
         let mut sum = 0_u64;
         for (chunk, diffs) in chunks {
             let origin = chunk.origin();
-            if origin.x < -limit || origin.x >= limit || origin.y < 0 || origin.y >= height {
+            let top = worldgen::streamed::top_row(&settings).div_euclid(CHUNK_SIZE_TILES)
+                * CHUNK_SIZE_TILES;
+            if origin.x < -limit || origin.x >= limit || origin.y < top || origin.y >= height {
                 return Err(TerrainRestoreError::DiffOutOfBounds {
                     index: u64::from(chunk.x.unsigned_abs()),
                 });

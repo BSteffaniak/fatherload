@@ -18,8 +18,11 @@
 )]
 
 use fatherload_simulation::{
-    terrain::{DeepStratum, Terrain, TileKind, TilePosition},
-    worldgen::{Band, HazardKind},
+    terrain::{DeepStratum, SurfaceMaterial, Terrain, TileKind, TilePosition},
+    worldgen::{
+        Band, HazardKind,
+        biome::{self, Biome},
+    },
 };
 use raylib::prelude::Color;
 
@@ -81,6 +84,77 @@ const BASALT: Ramp = ramp([INK, NIGHT, STONE_DARK, STONE]);
 const FOUNDATION: Ramp = ramp([STONE_DARK, STONE, STONE_LIGHT, MIST]);
 /// The bedrock floor: near-black obsidian slabs with violet facets.
 pub const BEDROCK: Ramp = ramp([INK, NIGHT, SLATE_DARK, PLUM]);
+const SAND_RAMP: Ramp = ramp([LOAM, CLAY, SAND, CREAM]);
+const SANDSTONE_RAMP: Ramp = ramp([SOIL, LOAM, CLAY, SAND]);
+const RED_ROCK_RAMP: Ramp = ramp([MAROON, RUST, COPPER, AMBER]);
+const SNOW_RAMP: Ramp = ramp([FOG, MIST, ICE, BONE]);
+const GRANITE_RAMP: Ramp = ramp([SLATE_DARK, SLATE, SLATE_LIGHT, FOG]);
+const MUD_RAMP: Ramp = ramp([SOIL_DARK, SOIL_DARK, SOIL, LOAM]);
+
+/// The ramp of a surface-biome material (the same at every depth: biomes only colour the
+/// surface).
+const fn surface_ramp(material: SurfaceMaterial) -> Ramp {
+    match material {
+        SurfaceMaterial::Sand => SAND_RAMP,
+        SurfaceMaterial::Sandstone => SANDSTONE_RAMP,
+        SurfaceMaterial::RedRock => RED_ROCK_RAMP,
+        SurfaceMaterial::Snow => SNOW_RAMP,
+        SurfaceMaterial::Granite => GRANITE_RAMP,
+        SurfaceMaterial::Mud => MUD_RAMP,
+    }
+}
+
+/// The pattern step of a surface material at art pixel `(x, y)`.
+fn surface_level(material: SurfaceMaterial, x: i32, y: i32) -> usize {
+    match material {
+        // Fine grains with wind ripples.
+        SurfaceMaterial::Sand => {
+            let ripple = (y * 3 + (noise(x, y, 9, 21) * 7.0) as i32).rem_euclid(9);
+            if hash(x, y, 22).is_multiple_of(37) {
+                1
+            } else if ripple == 0 {
+                3
+            } else if ripple == 5 && noise(x, y, 4, 23) > 0.5 {
+                1
+            } else {
+                2
+            }
+        }
+        SurfaceMaterial::Sandstone => clay_level(x, y).max(1),
+        // Mesa rock: bold horizontal bands broken into slabs.
+        SurfaceMaterial::RedRock => {
+            let band = (y + (noise(x, y, 17, 24) * 4.0) as i32).rem_euclid(12);
+            match band {
+                0 => 3,
+                5 | 6 => 1,
+                _ => slab_level(x, y).max(1),
+            }
+        }
+        // Soft drifts: mostly bright, gently shaded.
+        SurfaceMaterial::Snow => {
+            let value =
+                noise(x, y, 6, 25).mul_add(0.7, noise(x, y, 2, 26) * 0.3) + dither(x, y) * 0.12;
+            if value < 0.28 {
+                1
+            } else if value < 0.78 {
+                2
+            } else {
+                3
+            }
+        }
+        // Speckled grey slabs.
+        SurfaceMaterial::Granite => {
+            if hash(x, y, 27).is_multiple_of(11) {
+                return 3;
+            }
+            if hash(x, y, 28).is_multiple_of(13) {
+                return 0;
+            }
+            slab_level(x, y)
+        }
+        SurfaceMaterial::Mud => dirt_level(x, y),
+    }
+}
 
 const TOPSOIL_BAND: Strata = Strata {
     dirt: DIRT,
@@ -200,6 +274,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Lava => index_of(ORANGE),
         TileKind::Gas => index_of(LEAF),
         TileKind::Air => strata.back[0],
+        TileKind::Surface(material) => surface_ramp(material)[2],
         TileKind::Poi(tile) => return poi_color(tile, band),
         TileKind::Cave(tile) => return cave_color(tile, band),
         TileKind::Built(tile) => built_art::built_ramp(tile)[2],
@@ -373,6 +448,7 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         TileKind::Bedrock => bedrock_pixel(x, y),
         TileKind::Lava => lava_pixel(x, y),
         TileKind::Air => backdrop_pixel(strata, x, y),
+        TileKind::Surface(material) => surface_ramp(material)[surface_level(material, x, y)],
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::Gas
@@ -447,14 +523,16 @@ impl Cell {
 }
 
 fn cell_at(terrain: &Terrain, x: i32, y: i32) -> Cell {
-    if y < 0 {
+    if y < terrain.min_y() {
         return Cell::Sky;
     }
     match terrain.tile(TilePosition { x, y }) {
         Some(tile) if tile.kind == TileKind::Air => {
-            // Open air above the column's ground line is sky (the surface heightmap can lower
-            // the ground below the classic sky rows).
-            if y <= SKY_MAX_TILE_Y || y < terrain.surface_row(x) {
+            // Open air above the column's ground line is sky (the surface heightmap moves the
+            // ground above and below the classic sky rows; in a biome world a mountain's caves
+            // and tunnels dug into it are caves wherever they are).
+            let biomes = terrain.settings().generator.has_biomes();
+            if y < terrain.surface_row(x) || (!biomes && y <= SKY_MAX_TILE_Y) {
                 Cell::Sky
             } else {
                 Cell::Cave
@@ -542,7 +620,10 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         .tile(position)
         .map_or(TileKind::Air, |tile| tile.kind);
     let band = terrain.band_at(position);
-    let (strata, host) = (strata_for(band), host_material(band));
+    let strata = strata_for(band);
+    // Ore and artifacts in a biome's ground sit in that ground (mountain ore in granite).
+    let host = biome::ground_material(terrain.settings(), position.x, position.y)
+        .unwrap_or_else(|| host_material(band));
     let mut canvas = TileCanvas {
         pixels: [TRANSPARENT; TILE_ART_USIZE * TILE_ART_USIZE],
         origin_x: position.x * TILE_ART,
@@ -634,6 +715,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         other => other,
     };
     let lip = match material {
+        TileKind::Surface(surface) => surface_ramp(surface)[3],
         TileKind::Dirt => strata.dirt[3],
         TileKind::Clay => strata.clay[3],
         TileKind::Stone => strata.stone[3],
@@ -643,6 +725,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         _ => strata.hard[3],
     };
     let shade = match material {
+        TileKind::Surface(surface) => surface_ramp(surface)[0],
         TileKind::Dirt => strata.dirt[0],
         TileKind::Clay => strata.clay[0],
         TileKind::Stone => strata.stone[0],
@@ -652,7 +735,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         _ => strata.hard[0],
     };
     if up == Cell::Sky && kind != TileKind::Foundation {
-        paint_grass_top(&mut canvas);
+        paint_surface_top(&mut canvas, terrain, material);
     }
     paint_edges(
         &mut canvas,
@@ -889,9 +972,78 @@ fn paint_fissure(canvas: &mut TileCanvas, seed: u32) {
     }
 }
 
+/// The grass colours (tips, blades, roots) of the biome at column `x`.
+fn grass_colors(terrain: &Terrain, x: i32) -> (PaletteIndex, PaletteIndex, PaletteIndex) {
+    let colors = match biome::biome_at(terrain.settings(), x) {
+        Biome::Plains => (LIME, LEAF, MOSS),
+        Biome::Forest | Biome::Mountains => (LEAF, MOSS, PINE),
+        Biome::Desert | Biome::Badlands => (CREAM, AMBER, LOAM),
+        Biome::Tundra => (ICE, MIST, FOG),
+        Biome::Wetlands => (LEAF, MOSS, TEAL_DARK),
+    };
+    (index_of(colors.0), index_of(colors.1), index_of(colors.2))
+}
+
+/// Whether `material` grows grass where it meets the sky.
+const fn grows_grass(material: TileKind) -> bool {
+    !matches!(material, TileKind::Surface(_))
+}
+
+/// What tops ground that meets the sky: biome-tinted grass on soil and rock, a bright crust on
+/// snow and sand, moss on mud, a lit rim on bare mountain and mesa rock.
+fn paint_surface_top(canvas: &mut TileCanvas, terrain: &Terrain, material: TileKind) {
+    let TileKind::Surface(surface) = material else {
+        paint_grass_top(canvas, grass_colors(terrain, canvas.origin_x / TILE_ART));
+        return;
+    };
+    let ramp = surface_ramp(surface);
+    for px in 0..TILE_ART {
+        let gx = canvas.origin_x + px;
+        let h = hash(gx, 5, 47);
+        match surface {
+            SurfaceMaterial::Snow => {
+                canvas.set(px, 0, ramp[3]);
+                canvas.set(
+                    px,
+                    1,
+                    if h.is_multiple_of(4) {
+                        ramp[2]
+                    } else {
+                        ramp[3]
+                    },
+                );
+                if h.is_multiple_of(5) {
+                    canvas.set(px, 2, ramp[3]);
+                }
+            }
+            SurfaceMaterial::Sand => {
+                canvas.set(px, 0, ramp[3]);
+                if h.is_multiple_of(3) {
+                    canvas.set(px, 1, ramp[3]);
+                }
+            }
+            SurfaceMaterial::Mud => {
+                let moss = index_of(if h.is_multiple_of(3) { LEAF } else { MOSS });
+                canvas.set(px, 0, moss);
+                if !h.is_multiple_of(4) {
+                    canvas.set(px, 1, index_of(MOSS));
+                }
+            }
+            SurfaceMaterial::Granite | SurfaceMaterial::RedRock | SurfaceMaterial::Sandstone => {
+                canvas.set(px, 0, ramp[3]);
+                if h.is_multiple_of(9) {
+                    canvas.set(px, 1, index_of(MOSS));
+                }
+            }
+        }
+    }
+}
+
 /// Grass on ground that meets the sky.
-fn paint_grass_top(canvas: &mut TileCanvas) {
-    let (lime, leaf, moss) = (index_of(LIME), index_of(LEAF), index_of(MOSS));
+fn paint_grass_top(
+    canvas: &mut TileCanvas,
+    (lime, leaf, moss): (PaletteIndex, PaletteIndex, PaletteIndex),
+) {
     for px in 0..TILE_ART {
         let gx = canvas.origin_x + px;
         let h = hash(gx, 5, 41);
@@ -918,10 +1070,18 @@ fn paint_grass_blades(
         x: position.x,
         y: position.y + 1,
     });
-    if down != Cell::Solid || below.is_some_and(|tile| tile.kind == TileKind::Foundation) {
+    if down != Cell::Solid
+        || below.is_some_and(|tile| {
+            tile.kind == TileKind::Foundation
+                || !grows_grass(
+                    biome::ground_material(terrain.settings(), position.x, position.y + 1)
+                        .unwrap_or(tile.kind),
+                )
+        })
+    {
         return;
     }
-    let (lime, leaf, moss) = (index_of(LIME), index_of(LEAF), index_of(MOSS));
+    let (lime, leaf, moss) = grass_colors(terrain, position.x);
     for px in 0..TILE_ART {
         let h = hash(canvas.origin_x + px, 4, 43);
         match h % 9 {

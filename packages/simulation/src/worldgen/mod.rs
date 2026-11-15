@@ -25,6 +25,7 @@
 //! Region-based placement uses [`noise::RegionRng`] seeded per region and purpose, so the
 //! result never depends on iteration order across platforms.
 
+pub mod biome;
 pub mod caves;
 pub mod deposits;
 pub mod features;
@@ -78,18 +79,26 @@ pub enum GeneratorVersion {
     V5,
     /// V5 plus Caves 2.0 ([`crate::cave`]): cave ecosystems (grand caverns, crystal geodes,
     /// flooded caves, lava tubes, fungal grottos, worm burrows, ancient ruins, chasms and cave
-    /// networks) placed per region with their own tiles, light, loot and critters; plus villages ([`crate::village`]): surface villages every ~400-800 columns each way
-    /// from town (on flattened ground, see [`streamed::surface_row`]) and rare underground
-    /// settlements carved into the strata, all regional features ([`FeatureKind::Village`]).
+    /// networks) placed per region with their own tiles, light, loot and critters; plus villages
+    /// ([`crate::village`]): surface villages every ~400-800 columns each way from town (on
+    /// flattened ground, see [`streamed::surface_row`]) and rare underground settlements carved
+    /// into the strata, all regional features ([`FeatureKind::Village`]).
     V6,
+    /// V6 with surface biomes ([`biome`]): a real heightmap (plains, forests, deserts, badland
+    /// mesas, tundra, tall mountains with cliffs and caves, wetlands with lakes), biome crusts
+    /// and surface materials ([`crate::terrain::SurfaceMaterial`]), mountain ore, and a sky
+    /// headroom of rows above row 0 for the peaks ([`streamed::top_row`]). The town and the
+    /// village sites ([`biome::flat_sites_in`]) stay flat, and villages take the look of the
+    /// biome they stand in.
+    V7,
 }
 
 impl GeneratorVersion {
     /// The generator new worlds use.
-    pub const CURRENT: Self = Self::V6;
+    pub const CURRENT: Self = Self::V7;
 
     /// Every generator, oldest first.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Legacy,
         Self::V1,
         Self::V2,
@@ -97,40 +106,52 @@ impl GeneratorVersion {
         Self::V4,
         Self::V5,
         Self::V6,
+        Self::V7,
     ];
 
     /// Whether this generator stamps points of interest.
     #[must_use]
     pub const fn has_points_of_interest(self) -> bool {
-        matches!(self, Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6)
+        matches!(
+            self,
+            Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6 | Self::V7
+        )
     }
 
     /// Whether this generator builds the deep (about four times taller) band stack with a
     /// bedrock floor.
     #[must_use]
     pub const fn is_deep(self) -> bool {
-        matches!(self, Self::V4 | Self::V5 | Self::V6)
+        matches!(self, Self::V4 | Self::V5 | Self::V6 | Self::V7)
     }
 
     /// Whether worlds of this generator are streamed: unbounded horizontally and generated
     /// chunk by chunk on demand ([`streamed`]). Older generators build bounded worlds.
     #[must_use]
     pub const fn is_streamed(self) -> bool {
-        matches!(self, Self::V5 | Self::V6)
+        matches!(self, Self::V5 | Self::V6 | Self::V7)
     }
 
     /// Whether this generator places cave ecosystems ([`crate::cave::CaveKind`]): their
     /// tiles, water, light, loot and critters.
     #[must_use]
     pub const fn has_cave_biomes(self) -> bool {
-        matches!(self, Self::V6)
+        matches!(self, Self::V6 | Self::V7)
     }
 
     /// Whether worlds of this generator have villages ([`crate::village`]). The single switch
     /// for every village rule (placement, flattened ground, stamped tiles, feature index).
     #[must_use]
     pub const fn has_villages(self) -> bool {
-        matches!(self, Self::V6)
+        matches!(self, Self::V6 | Self::V7)
+    }
+
+    /// Whether worlds of this generator have surface biomes and a real heightmap
+    /// ([`biome`]): mountains above row 0, lakes, biome crusts. Older streamed worlds keep the
+    /// placeholder surface.
+    #[must_use]
+    pub const fn has_biomes(self) -> bool {
+        matches!(self, Self::V7)
     }
 
     #[must_use]
@@ -143,6 +164,7 @@ impl GeneratorVersion {
             Self::V4 => "v4",
             Self::V5 => "v5",
             Self::V6 => "v6",
+            Self::V7 => "v7",
         }
     }
 }
@@ -450,7 +472,7 @@ pub fn generate(settings: &WorldSettings) -> GeneratedWorld {
 /// The first ground row of column `x`: the surface heightmap. Flat at the classic surface row
 /// in bounded worlds; streamed worlds read [`streamed::surface_row`].
 #[must_use]
-pub const fn surface_row(settings: &WorldSettings, x: i32) -> i32 {
+pub fn surface_row(settings: &WorldSettings, x: i32) -> i32 {
     if settings.generator.is_streamed() {
         streamed::surface_row(settings, x)
     } else {

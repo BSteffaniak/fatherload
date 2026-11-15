@@ -42,7 +42,10 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return;
         };
-        if player.y < TILE_SIZE * 8.0 {
+        // World-event hazards strike underground only: within three rows of the local surface
+        // (a mountain slope, a lake bed) a rig is still out in the open.
+        let tile = player.tile_position(TILE_SIZE);
+        if tile.y < self.terrain.surface_row(tile.x) + 3 {
             return;
         }
         let (player_x, player_y) = (player.x, player.y);
