@@ -220,3 +220,62 @@ fn streamed_terrain_snapshots_hold_only_edits_and_reject_other_generators() {
         bytes.len()
     );
 }
+
+/// Flies a rig continuously 50,000 tiles out each way (two tiles a tick, a fast god-mode
+/// pace), streaming chunks every tick: prints the mean, 99th-percentile and worst tick times
+/// and checks memory stays bounded the whole way. Run in release:
+/// `cargo test --release -p fatherload_simulation long_flight -- --ignored --nocapture`.
+#[test]
+#[ignore = "timing helper: tens of thousands of ticks; run in release"]
+fn long_flight_keeps_tick_time_and_memory_bounded() {
+    let mut world = streamed_world();
+    let (keep_x, keep_y) = STREAM_KEEP_RADIUS_CHUNKS;
+    let bound = usize::try_from((2 * keep_x + 1) * (2 * keep_y + 1)).expect("small");
+    let step = 2.0 * TILE_SIZE;
+    let ticks = 25_000_usize;
+    let start_x = world.player(PLAYER).expect("rig").x;
+    // Through the sky, then through solid rock deep down (more chunk rows and every deep
+    // region layer in the load window).
+    for (direction, row) in [(1.0_f32, 2.5_f32), (-1.0, 2.5), (1.0, 400.5), (-1.0, 400.5)] {
+        let mut times = Vec::with_capacity(ticks);
+        let mut most_loaded = 0;
+        for index in 0..ticks {
+            {
+                let rig = world.player_mut(PLAYER).expect("rig");
+                #[allow(clippy::cast_precision_loss, reason = "tick counts are small")]
+                let offset = direction * step * (index as f32);
+                rig.x = start_x + offset;
+                rig.x_remainder = 0.0;
+                rig.y = row * TILE_SIZE;
+                rig.velocity_x = 0.0;
+                rig.velocity_y = 0.0;
+                rig.fuel = rig.fuel_capacity;
+                rig.hull = rig.max_hull();
+            }
+            let tick = world.simulation_tick();
+            let begin = std::time::Instant::now();
+            let _ = world.simulate_tick(tick, &TickInputs::default());
+            times.push(begin.elapsed());
+            most_loaded = most_loaded.max(world.terrain().loaded_chunk_count());
+        }
+        times.sort_unstable();
+        let total: std::time::Duration = times.iter().sum();
+        println!(
+            "flight {direction:+} at row {row}: {ticks} ticks over {} tiles: mean {:?}, p99 {:?}, worst {:?}, \
+             most chunks loaded {most_loaded}",
+            ticks * 2,
+            total / u32::try_from(ticks).expect("small"),
+            times[ticks * 99 / 100],
+            times[ticks - 1],
+        );
+        assert!(most_loaded <= bound, "{most_loaded} chunks (bound {bound})");
+    }
+    // What the trip costs a save: the terrain holds no edits, but the crew's discovery map
+    // remembers every chunk they revealed.
+    let json = serde_json::to_string(&world).expect("serialize");
+    println!(
+        "world JSON after 200,000 tiles of flight: {} bytes ({} edited chunks)",
+        json.len(),
+        world.terrain().edited_chunk_count()
+    );
+}
