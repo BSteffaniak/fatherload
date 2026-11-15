@@ -1553,7 +1553,7 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 (Prompt::Navigate, "Select"),
                 (Prompt::Confirm, "Confirm"),
                 (Prompt::Back, "Back / close"),
-                (Prompt::Tab, "Shop columns"),
+                (Prompt::Tab, "Shop columns, garage options"),
                 (Prompt::Scroll, "Scroll"),
                 (Prompt::QuickSave, "Quick save"),
                 (Prompt::QuickLoad, "Quick load"),

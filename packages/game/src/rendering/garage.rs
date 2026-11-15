@@ -134,14 +134,24 @@ pub(super) fn draw_garage(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>)
     UiLayout::screen(draw).modal_with_render_plan(
         "Paint Bay",
         "Iona's spray booth: try anything on, pay nothing.",
-        &ModalContent::new(sections).footer(about).prompts(&[
-            hint(Prompt::Navigate, "select"),
-            hint(Prompt::Adjust, "change"),
-            hint(Prompt::Confirm, ""),
-            hint(Prompt::Back, "counter"),
-        ]),
+        &ModalContent::new(sections)
+            .footer(about)
+            .prompts(&garage_prompts(super::prompts::menu_device().is_gamepad())),
     );
     draw_preview_card(draw, ui, look);
+}
+
+/// The Paint Bay's footer prompts. A controller also changes options with LB/RB (the shell
+/// reads the tab buttons there); on a keyboard those are the same keys as "change".
+fn garage_prompts(gamepad: bool) -> Vec<super::prompts::Hint> {
+    let mut prompts = vec![hint(Prompt::Navigate, "select")];
+    if gamepad {
+        prompts.extend([hint(Prompt::Adjust, ""), hint(Prompt::Tab, "change")]);
+    } else {
+        prompts.push(hint(Prompt::Adjust, "change"));
+    }
+    prompts.extend([hint(Prompt::Confirm, ""), hint(Prompt::Back, "counter")]);
+    prompts
 }
 
 /// The pose the preview card shows at `seconds` (it cycles every two seconds).
