@@ -580,7 +580,9 @@ Files live in `$FATHERLOAD_STATE_DIR`, else `$XDG_STATE_HOME/fatherload`, else
 - `profile.json` holds this install's persistent player id (random, made on first run) and
   display name (edit it there; `FATHERLOAD_PLAYER_NAME` overrides it for one run). It is sent
   when joining so hosts recognize you; in the browser it lives in the site's IndexedDB with the
-  saves.
+  saves. A second game window on the same install (or a client on the host's own install) joins
+  with a fresh rig that is not tied to the profile. Claiming another saved rig while playing your
+  own parks your own rig (it can be claimed back) rather than discarding it.
 - Slot UI displays depth and credits; the title shows the latest save's depth, credits and playtime.
 - Settings are stored in `settings.json` and persist volume/fullscreen preferences and
   the window size/maximized state.

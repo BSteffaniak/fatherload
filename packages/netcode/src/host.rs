@@ -630,9 +630,10 @@ impl<S: NetSimulation> HostSession<S> {
         self.broadcast_lobby();
     }
 
-    /// Approves (or denies) a pending rig claim: on approval the client's current player is
-    /// discarded and it takes over the parked rig, which is rebound to its profile so it is
-    /// recognized automatically next time. Returns whether the claim was granted (`false` too
+    /// Approves (or denies) a pending rig claim: on approval the client takes over the parked
+    /// rig, which is rebound to its profile so it is recognized automatically next time. The
+    /// client's previous player is discarded if it was a fresh stand-in rig, or parked (owned by
+    /// whoever owned it before this client claimed it, else nobody) if it was a saved rig. Returns whether the claim was granted (`false` too
     /// when there was no such claim or the rig is no longer parked; the client is told it was
     /// denied).
     pub fn resolve_claim(&mut self, client: ClientId, approve: bool) -> bool {
