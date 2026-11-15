@@ -799,6 +799,10 @@ impl Tile {
                 Some(tile) => TileKind::Poi(tile),
                 None => return None,
             },
+            0x400..=0x4FF => match crate::cave::CaveTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Cave(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

@@ -180,6 +180,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         ]
         .map(TileKind::Poi),
     );
+    kinds.extend(crate::cave::CaveTile::ALL.map(TileKind::Cave));
     for kind in kinds {
         for durability in [0, 1, 7, 255] {
             let tile = Tile { kind, durability };
@@ -191,7 +192,8 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         0x10A << 8,
         0x20B << 8,
         0x3FF << 8,
-        0x400 << 8,
+        0x40F << 8,
+        0x500 << 8,
         u64::MAX,
     ] {
         assert_eq!(Tile::from_code(code), None, "code {code:#x}");

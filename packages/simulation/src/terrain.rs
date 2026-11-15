@@ -1194,6 +1194,8 @@ impl Terrain {
                         None => continue,
                         Some(left) => left,
                     },
+                    // Cave caches shrug off blasts like POI loot: a bomb has no owner to pay.
+                    TileKind::Cave(cave) if cave.is_cache() => continue,
                     _ => None,
                 };
                 let tile = left.map_or(

@@ -50,7 +50,7 @@ const CELL: f32 = 8.0;
 /// Darkness levels the overlay is quantized to.
 const LEVELS: i32 = 9;
 /// A rig lamp's radius, in tiles, before scanner upgrades.
-pub const RIG_LAMP_TILES: f32 = 4.5;
+pub const RIG_LAMP_TILES: f32 = 5.5;
 /// Lamp radius each scanner tier adds, in tiles.
 pub const RIG_LAMP_TILES_PER_SCANNER: f32 = 0.3;
 /// The colour of cave darkness.

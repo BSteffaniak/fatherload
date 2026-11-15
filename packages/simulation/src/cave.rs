@@ -366,6 +366,19 @@ impl CaveTile {
         }
     }
 
+    /// The tile with code `code` ([`Self::code`]).
+    #[must_use]
+    pub const fn from_code(code: u64) -> Option<Self> {
+        let mut index = 0;
+        while index < Self::ALL.len() {
+            if Self::ALL[index].code() == code {
+                return Some(Self::ALL[index]);
+            }
+            index += 1;
+        }
+        None
+    }
+
     /// Drill strength needed (never above the band a cave of the kind generates in).
     #[must_use]
     pub const fn hardness(self) -> u8 {
