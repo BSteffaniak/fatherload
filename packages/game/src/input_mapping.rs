@@ -62,6 +62,14 @@ impl ExplosiveSelection {
         } else {
             false
         };
+        // Out of the selected kind (the last one just went): fall forward to the next kind
+        // carried, so the bomb button never silently does nothing.
+        if let Some(player) = player
+            && player.explosive_count(self.selected) == 0
+            && self.selected != ExplosiveKind::Bomb
+        {
+            self.selected = next_carried(self.selected, Some(player));
+        }
         self.last_aim = self.aim(input);
         changed
     }
@@ -266,6 +274,24 @@ mod tests {
         assert_eq!(selection.selected, ExplosiveKind::Flare);
         selection.observe(&cycle, Some(&player));
         assert_eq!(selection.selected, ExplosiveKind::Bomb);
+    }
+
+    #[test]
+    fn running_out_of_the_selected_kind_moves_to_the_next_one_carried() {
+        let mut player = Player::new(0.0, 0.0);
+        player.add_explosives(ExplosiveKind::Sticky, 1);
+        player.add_explosives(ExplosiveKind::Flare, 2);
+        let mut selection = ExplosiveSelection {
+            selected: ExplosiveKind::Sticky,
+            ..ExplosiveSelection::new()
+        };
+        assert!(player.take_explosive(ExplosiveKind::Sticky));
+        selection.observe(&PlayerInput::default(), Some(&player));
+        assert_eq!(selection.selected, ExplosiveKind::Flare);
+        // Plain bombs stay selected even with none carried (the HUD shows zero).
+        let mut bombs = ExplosiveSelection::new();
+        bombs.observe(&PlayerInput::default(), Some(&Player::new(0.0, 0.0)));
+        assert_eq!(bombs.selected, ExplosiveKind::Bomb);
     }
 
     #[test]
