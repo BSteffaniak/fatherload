@@ -1051,6 +1051,45 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             })
             .collect(),
     ));
+    // Hardpoint weapons, the capacitor and ammo (once the rig owns any).
+    let rack = &ui.player.weapon_rack;
+    let rockets = ui.player.ammo(fatherload_simulation::AmmoKind::Rocket);
+    if !rack.owned.is_empty() || rockets > 0 {
+        let mounted = ui.player.mounted_weapon.map(|mounted| mounted.kind);
+        let mut items: Vec<SectionItem> = rack
+            .owned
+            .iter()
+            .map(|(weapon, mk)| {
+                SectionItem::icon_stat(
+                    crate::rendering::pixel_art::sprites::weapons::icon(*weapon),
+                    weapon.name(),
+                    if mounted == Some(*weapon) {
+                        format!("{} | mounted", crate::shell::arms::mk_name(*mk))
+                    } else {
+                        crate::shell::arms::mk_name(*mk).to_owned()
+                    },
+                    if mounted == Some(*weapon) { MINT } else { MIST },
+                )
+            })
+            .collect();
+        items.push(SectionItem::icon_stat(
+            &crate::rendering::pixel_art::sprites::weapons::ICON_BATTERY,
+            "Capacitor",
+            format!(
+                "{:.0}/{:.0}",
+                ui.player.weapon.energy,
+                ui.player.battery_capacity()
+            ),
+            MINT,
+        ));
+        items.push(SectionItem::icon_stat(
+            &crate::rendering::pixel_art::sprites::weapons::ICON_ROCKET_AMMO,
+            "Rockets",
+            format!("x{rockets}"),
+            if rockets > 0 { ORANGE } else { MIST },
+        ));
+        sections.push(Section::new("Arms", MINT, items));
+    }
     let mineral_items = if ui.player.cargo_bay.has_minerals() {
         ui.player
             .cargo_bay
@@ -1497,6 +1536,9 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 (Prompt::Bomb, "Explosive"),
                 (Prompt::CycleExplosive, "Next explosive"),
                 (Prompt::Aim, "Aim throws"),
+                (Prompt::FireWeapon, "Fire weapon"),
+                (Prompt::AimWeapon, "Aim weapon"),
+                (Prompt::CycleWeapon, "Next weapon"),
                 (Prompt::Detonate, "Detonate C4"),
                 (Prompt::DetonateSequence, "Detonate in sequence"),
                 (Prompt::Map, "Map"),

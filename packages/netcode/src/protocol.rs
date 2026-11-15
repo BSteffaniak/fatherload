@@ -21,20 +21,20 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// event 44), test-mode no-clip flight (`TestModeState::no_clip`, `TestModeAction::SetNoClip`)
 /// and the explosive kinds (`DeployExplosive`, `RemoteDetonate`, events 33-38).
 ///
-/// 9 (wave 2, T7 drops; the integrator collapses wave 2's bumps into one): `DropState` pull /
-/// dump / blocked marks, `Player::collect_blocks` (`PlayerInventory`), the `DumpBlocks` and
-/// `SetCollectBlocks` commands, `SessionServiceRequest::SellBlocks` and the pickup events
-/// (60-63).
-/// 9 (wave 2, T13 caves; the integrator collapses wave 2 bumps): V6 cave-ecosystem tiles
-/// (`TileKind::Cave`), critter entities (`EntityState::Critter`), found caves in the POI
-/// journal and the cave events 70-72.
-/// 9 (wave 2, T9 villages): generator V6 in the world settings, `FeatureKind::Village` /
-/// `FeatureDetail::Village`, `SessionServiceRequest::Village`, the player's village journal in
-/// the loadout and events 45-46 (`VillageDiscovered`, `VillageServiceUsed`).
-/// 9 (wave 2, T10 enemies): `EntityState::Enemy` / `EnemyShot` records, the shared
-/// `SectionKey::Enemies` section (difficulty, rig i-frames, spawn cooldowns, cleared lairs),
-/// `PlayerCommand::SetEnemyDifficulty` and the enemy events (`EnemyAlerted` ..
-/// `EnemyDifficultyChanged`).
+/// 9 (expansion wave 2, one bump for every track):
+/// * T7 drops: `DropState` pull / dump / blocked marks, `Player::collect_blocks`
+///   (`PlayerInventory`), `DumpBlocks` / `SetCollectBlocks`, `SessionServiceRequest::SellBlocks`
+///   and the pickup events 60-63;
+/// * T13 caves: V6 cave-ecosystem tiles (`TileKind::Cave`), critter entities, found caves in
+///   the POI journal and the cave events 70-72;
+/// * T9 villages: generator V6 in the world settings, `FeatureKind::Village`,
+///   `SessionServiceRequest::Village`, the village journal in the loadout, events 45-46;
+/// * T10 enemies: `EntityState::Enemy` / `EnemyShot`, the `SectionKey::Enemies` section,
+///   `SetEnemyDifficulty` and the enemy events 80-87;
+/// * T11 weapons: explosive charges as entities (`LiveEntities` keeps only the charge serial),
+///   explosive items in the cargo bay, smoke / scare / rocket kinds, weapon controls in
+///   `ControlState`, weapon state in `PlayerTickState` / `RigBuild` / `PlayerInventory`,
+///   `MountWeapon`, the weapon services and events 90-95;
 pub const PROTOCOL_VERSION: u8 = 9;
 
 /// One client input frame: the controls and actions for exactly one tick.

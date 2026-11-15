@@ -344,6 +344,10 @@ Successful return trips award streak bonuses. Emergency rescue returns the rig t
 - `Q`: select the next explosive you carry; throws follow the held direction (or your facing),
   with a dotted arc previewing where the charge will land
 - `F` / `G`: remote detonator: every C4 you placed at once / one after another in placement order
+  (the charges beep for a quarter second while they arm)
+- Hold left mouse button or `V`: fire the hardpoint weapon at the mouse pointer (while the mouse
+  rests for a few seconds, or without one, it auto-aims at the nearest target ahead)
+- `X`: swap the next weapon you own onto the hardpoint
 - `E` / `Enter`: interact with buildings/interior counters, confirm menus, or start game
 - `Backspace` / `Esc`: close menus; `P` pauses/resumes
 - `M`: large mine map with ore, hazard, rescue, and lost-cargo markers
@@ -365,7 +369,10 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 | Action | Controller (Xbox names) | Keyboard |
 | --- | --- | --- |
 | Move / drill sideways | Left stick or d-pad left/right | `A` / `D` |
-| Thrust | `A`, `RT`, or up on stick / d-pad | `W` / Space |
+| Thrust | `A`, or up on stick / d-pad (`RT` too while no weapon is mounted) | `W` / Space |
+| Fire weapon | `RT` (held) | left mouse button / `V` |
+| Aim weapon | Right stick (released: auto-aim at the nearest target ahead) | Mouse |
+| Next weapon | `L3` (click the left stick) | `X` |
 | Drill down | Down on stick / d-pad | `S` |
 | Use building, counter, door | `X` | `E` |
 | Confirm in menus / call rescue | `A` | `Enter` |
@@ -378,7 +385,7 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 | Next explosive | `R3` (click the right stick) | `Q` |
 | Aim a throw | Right stick (else the held direction / facing) | `W` `A` `S` `D` |
 | Remote detonator | `LT` tap: all at once; hold: in sequence | `F` / `G` |
-| Previous / next tab or column | `LB` / `RB` in menus | left / right arrows |
+| Previous / next tab or column (shop columns, quest desks, garage options) | `LB` / `RB` in menus | left / right arrows |
 
 The layout lives in one table (`PAD_BINDINGS` in `packages/game/src/input/gamepad.rs`).
 `fatherload --list-gamepads` lists every detected controller (index, name, axis and button
@@ -411,6 +418,7 @@ the player who made them.
 | Inventory / map | `Tab` / `M` | `Numpad 1` / `Numpad 2` |
 | Explosive / scanner | `B` / `C` | `Numpad 0` / `Numpad .` |
 | Next explosive / detonate / in sequence | `Q` / `F` / `G` | `Numpad 3` / `Numpad 4` / `Numpad 5` |
+| Fire weapon / next weapon | mouse button or `V` / `X` (mouse aim) | `Numpad 6` / `Numpad 7` (auto-aim) |
 | Scroll a dialog | mouse wheel, `Page Up` / `Page Down` | (the selection scrolls it) |
 
 Controllers use their usual buttons (table above) in their own seat, with the right stick
@@ -444,12 +452,41 @@ Press `E` (controller `X`) at a surface building to walk inside its room. Move w
   they hit), C4 (placed on a surface, fired by the remote detonator all at once or in sequence),
   cluster bombs (burst into a fan of bomblets), incendiaries (fire that eats dirt and clay),
   shaped charges (a long, narrow tunnel straight into the surface they stick to), mining charges
-  (a wide blast that leaves ore and relics standing) and EMP charges (for machines). Blasts push
-  rigs and loose charges around, and set off charges nearby.
+  (a wide blast that leaves ore and relics standing), EMP charges (for machines), smoke charges
+  (a lingering screen that hides whatever is inside it from auto-aim and, later, from creatures)
+  and scare charges (a deafening bang that breaks nothing and sends critters running). Blasts push
+  rigs and loose charges around, hurt targets and set off charges nearby. Special charges are
+  carried as items in the cargo bay (they take no slots); the inventory lists every type.
+  The shack's **arms rack** sells and upgrades the hardpoint weapons (see Weapons below), the
+  weapon capacitor and rocket packs.
 - Upgrade Shop: sells drill, fuel tank, cargo bay, engine, hull, radiator, scanner, and bomb-pack upgrades,
   plus the late-game **Drill Mount**: the Gimbal Drill Mount (6,000 cr, on sale once anyone reaches
   the Crystal Faults) drills sideways in flight, and the Crown Bore Mount (24,000 cr, once anyone
   reaches the Pressure Cathedrals) drills up into a ceiling you thrust against
+
+## Weapons
+
+Rigs mount one weapon on the hardpoint on their dome; the gun turns toward your aim, shows a gold
+notch per upgrade tier and fires from the roof:
+
+| Weapon | Shack level | What it does |
+| --- | --- | --- |
+| Rivet Gun (450 cr) | 0 | Fast, light rivets; cheap on energy, chips dirt and clay |
+| Harpoon (900 cr) | 0 | A barbed spear on a line: hurts small targets and reels loose loot in |
+| Scatter Blaster (1,400 cr) | 1 | A close-range fan of seven pellets with a kick |
+| Plasma Cutter (2,400 cr) | 1 | A beam that melts targets and slowly slices through rock |
+| Rocket Launcher (3,600 cr) | 2 | Rockets that burst on impact (rocket ammo, six for 120 cr) |
+| Railgun (7,500 cr) | 3 | An instant slug that ignores armour, pierces targets and punches through soft rock |
+
+Each weapon upgrades from Mk I to Mk IV (harder hits, faster cycling, less energy). Energy
+weapons draw on the rig's capacitor (100 energy, up to 360 with capacitor upgrades), which
+recharges from fuel; the HUD shows the mounted gun, its capacitor gauge or ammo, and an empty
+click tells you it is dry. Shots chip plain soil and rock (ore, relics and vault walls are left
+alone), set off charges they hit, and never hurt crewmates (friendly fire is off). Aim with the
+mouse, a controller's right stick, or let auto-aim pick the nearest target ahead (the
+split-screen arrow-keys seat always auto-aims); each split-screen view draws its own reticle:
+a crosshair for free aim, closing brackets when auto-aim locks on. Test-mode rigs carry every
+weapon at its top tier.
 
 ## Multiplayer Status
 
@@ -472,14 +509,15 @@ Files live in `$FATHERLOAD_STATE_DIR`, else `$XDG_STATE_HOME/fatherload`, else
 `%LOCALAPPDATA%\fatherload` on Windows, else `~/.local/state/fatherload`.
 
 - Quick save: `save.json`; save slots: `save-slot-1.json` through `save-slot-3.json`
-- A save (format v7) is the host's `WorldState` plus play time. Its terrain is stored as the
+- A save (format v8) is the host's `WorldState` plus play time. Its terrain is stored as the
   world's generation settings (seed, size, richness, hazards, generator version) and only the
   tiles that differ from freshly generated terrain; loading regenerates the rest and checks a
   terrain digest (an endless v5 world stores only its changed chunks, and the map discovery as
   one compact record per chunk). Rigs carry their goods in item containers (cargo bay, block
-  hopper) and live objects (gas clouds, boulders, drops) are entities. v1-v5 saves (which wrote
-  out every tile) and v6 saves (separate cargo maps and hazard lists) are migrated on load and
-  re-saved as v7; saves from before seeded worlds keep their terrain and load as legacy worlds. A save from
+  hopper; special explosives are items there too) and live objects (gas clouds, boulders, drops,
+  explosive charges, projectiles) are entities. v1-v5 saves (which wrote out every tile), v6
+  saves (separate cargo maps and hazard lists) and v7 saves (a separate charge list and explosive
+  count maps) are migrated on load and re-saved as v8; saves from before seeded worlds keep their terrain and load as legacy worlds. A save from
   an unknown generator version is refused with a clear error. Loading starts a new session
   epoch.
 - Slot UI displays depth and credits; the title shows the latest save's depth, credits and playtime.

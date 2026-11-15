@@ -78,6 +78,19 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `machine_hurt` | impact | A machine hit: an inharmonic metal clank and a crackle of high-passed sparks. |
 | `machine_death` | impact | A machine destroyed: a low-passed bang over a sub thump, a power-down saw whine and rattling clanks. |
 | `enemy_bite` | impact | A bite or ram on a rig: a crushed, saturated noise crunch, a thump and a hull knock. |
+| `smoke_burst` | impact | A smoke charge: a soft canister pop and a long, swirling low-passed exhale. |
+| `scare_bang` | big | A scare charge: a sharp white-noise crack, a ringing 3.3 kHz whine and a short boom, with a slap of echo. |
+| `rivet_shot` | feedback | A rivet: a tight band-passed snap, a metallic tick and a small thump. |
+| `scatter_shot` | impact | A scatter blast: a high crack, a wide pink-noise burst, a thump and a spray of pellet grains. |
+| `cutter_zap` | feedback | One plasma-cutter pulse: a saw and FM buzz through a wobbling band-pass (back to back they hum). |
+| `rocket_launch` | impact | A rocket: a thump and a roaring band-passed whoosh rising to 2.4 kHz. |
+| `harpoon_shot` | impact | A harpoon: a taut plucked twang and the high whizz of line paying out. |
+| `railgun_shot` | impact | A railgun: a rising capacitor whine, a hard crack, a long inharmonic metal ring and a deep thump. |
+| `weapon_dry` | interface | The empty click of a dry trigger: two small clanks. |
+| `weapon_mount` | interface | A weapon locking onto the hardpoint: two clacks and a servo chirp. |
+| `impact_rock` | feedback | A shot chipping rock: a dusty pink-noise tick with grit. |
+| `impact_hit` | feedback | A shot striking a target: a solid thwack. |
+| `target_destroyed` | impact | A target breaking apart: a thump, a crunch and a clatter of parts. |
 | `fuse_tick` | feedback | 30 ms tick: high-passed noise snap plus a 3.2 kHz blip. The director speeds it up (and raises its pitch) as the fuse burns. |
 | `deploy` | feedback | Six ratchet clicks, a heavy thunk and a metal ping. |
 | `scanner_pulse` | feedback | Sonar ping gliding down, FM shimmer, a band-pass whoosh sweeping up, echoes (180 ms, 45% feedback). |

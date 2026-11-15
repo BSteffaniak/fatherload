@@ -81,8 +81,9 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `simulate` | the tick: inputs, entity phases, hazards, bombs, drilling, day cycle, escape, deep rewards |
 | `drops` | WP-DROPS: drops from broken tiles (drill, blasts, fire, shattering boulders), the pickup pass (nearest rig with room, magnet pulls, "full" warnings), merging, per-cell and per-blast caps, lifetimes, ore shatter, dumping and selling blocks, the collect toggle |
 | `entities` | the world side of the entity store: spawn helpers, the two entity phases and each kind's update (gas clouds, boulders, drops), blasts, waking on terrain changes, entity replication |
-| `enemies` | enemy spawning (the director), AI, attacks on rigs, the `damage_entity` API, blasts on enemies, deaths and loot, safe zones, difficulty (see [Enemies](#enemies-srcenemyrs-srcworldenemiesrs)) |
-| `bombs` | loose-charge physics, chain reactions and every explosive kind (`crate::explosive`): sticking, remote/sequenced detonation, cluster bomblets, shaped tunnels, loot-safe mining blasts, incendiary rings, flare pulses, blast pushes on rigs and blast-feeling entities (`push_from_blasts`) and the throw preview |
+| `enemies` | enemy spawning (the director), AI, attacks on rigs, the enemy damage model (`damage_enemy`, reached through `damage_entity`), blasts and scares on enemies, deaths and loot, safe zones, difficulty (see [Enemies](#enemies-srcenemyrs-srcworldenemiesrs)) |
+| `bombs` | the explosives pass over charge entities: chain reactions and every explosive kind (`crate::explosive`): sticking, remote/sequenced detonation (after a 250 ms arming delay), cluster bomblets, shaped tunnels, loot-safe mining blasts, incendiary rings, flare pulses, smoke screens (`smoke_at`, `smoke_screens`), scare bangs, blast pushes on rigs and blast-feeling entities (`push_from_blasts`), blast damage (`damage_from_blasts`) and the throw preview |
+| `weapons` | hardpoint weapons (`crate::weapon`): each rig's trigger, capacitor and aim per tick (free or auto-aim, `auto_aim_target`), projectiles as entities, hitscan rays (`active_beam`), hits on targets, charges, drops and plain rock, the damage API (`damage_entity`, `crate::combat`), practice targets (`spawn_target_dummy`) and the shack's weapon services |
 | `movement`, `commands`, `services`, `progression`, `hazards`, `rescue` | gameplay rules used by the tick |
 | `quests` | quest services (accept, turn in, abandon at the giver's counter), objectives stepping inside the tick, twists, rewards, reputation rebates, blueprint fragments |
 | `roster` | `add_player` / `remove_player`; spawn placement on an unbounded grid so any number of rigs spawn without overlap |
@@ -325,8 +326,10 @@ Every live world object that moves or expires on its own is an `entity::Entity` 
 an optional expiry tick, a replication `revision` and per-kind `EntityState`. Today's kinds:
 `GasCloud`, `Boulder` (both migrated from ad-hoc world lists without behaviour changes),
 `Drop` (a floating `ItemStack` with magnet / dump / "blocked" marks; see "Drops and pickups"
-below), `Critter` (WP-CAVES ambient life) and `Enemy` / `EnemyShot` (see
-[Enemies](#enemies-srcenemyrs-srcworldenemiesrs)).
+below), `Critter` (WP-CAVES ambient life), `Enemy` / `EnemyShot` (see
+[Enemies](#enemies-srcenemyrs-srcworldenemiesrs)), `Charge` (every live explosive, see
+below), `Projectile` (a weapon shot in flight) and `Target` (a practice target with
+`combat::Health`, the reference damageable kind).
 
 - **Order.** Entities are kept in id order and every pass over them is in id order.
 - **Derived indices** (never saved, hashed or replicated; rebuilt on load): a spatial hash on
@@ -356,10 +359,46 @@ Adding a kind: add an `EntityState` / `EntityKind` variant with its phase, sleep
 rules, add its update to `WorldState::advance_entities`, and a spawn helper. Replication,
 saves, keyframes, hashing, relevance and the spatial index cover it automatically.
 
-Bombs and every other explosive charge still live in their own list (`world/bombs.rs`,
-`PlacedBomb` with a `kind`); the plan moves them onto the store in wave 2. `physics::step_body` with
-`BodyParams::BOMB` already reproduces their motion bit for bit (checked against live bombs by
-`shared_body_physics_reproduces_bomb_motion_exactly`), so that move is a storage change.
+Explosive charges are `EntityKind::Charge` entities: motion in the body, everything else
+(serial, fuse deadline, kind, owner, stuck side, burn stage) in `entity::ChargeState`. They move
+in their own pass (`EntityPhase::Charges`, the bomb pass between hazard damage and drilling)
+with the shared `physics::step_body` / `step_body_sticky` (`BodyParams::BOMB`) and
+`physics::apply_blast` kicks; `WorldState::bombs()` views them as `PlacedBomb`s in serial order
+and `insert_charge` adds one to a scenario. The move kept chain reactions and every explosive
+bit for bit: `world/charge_equivalence_tests.rs` replays scenarios whose traces were recorded
+with the old charge list. Charges replicate as relevance-filtered entity deltas like any other
+entity; only their serial counter rides in `LiveEntities`.
+
+### Weapons and damage (`weapon`, `combat`, `world/weapons.rs`)
+
+WP-WEAPONS part 2. `weapon::WeaponKind` (rivet gun, harpoon, scatter blaster, plasma cutter,
+rocket launcher, railgun) with `stats(mk)` per upgrade tier, prices, shack levels, the
+capacitor curve (`battery_capacity`, `battery_recharge`, recharging from fuel at
+`FUEL_PER_ENERGY`) and `AmmoKind::Rocket`. A rig owns weapons in its private
+`Player::weapon_rack`, mounts one (`Player::mounted_weapon`, public in `RigBuild`) and keeps its
+live `Player::weapon` state (energy, cooldown deadline, aim, trigger) in the per-tick
+`PlayerRig`. Firing is held input: `ControlState::weapon` (`WeaponControl`: trigger, auto-aim
+flag, `i8` aim vector normalized with `sqrt` only), so shots are predicted like movement;
+`PlayerCommand::MountWeapon` swaps weapons and the Explosives Shack services `BuyWeapon`,
+`UpgradeWeapon`, `UpgradeBattery` and `BuyAmmo` sell them. Projectiles fly in the late entity
+phase with swept substeps (damageable entities, live charges, which they set off, harpoon loot
+and terrain); the cutter and railgun are hitscan rays (`cast_ray`: pierce, tunnelling through
+plain tiles). Weapons only break plain soil and rock (`weapon_broke_tile`, the one place they
+change terrain). Shots never collide with rigs: friendly fire is off.
+
+The damage seam: give a new damageable kind's state a `combat::Health` (add its arm to
+`EntityState::health` / `health_mut`). Enemies (T10) report a health view through
+`EntityState::health` (so shots, rays and auto-aim find them) but no `health_mut`:
+`damage_entity` routes them to the enemy model (`damage_enemy`: weapons map to `DamageKind`
+by gun, railgun / harpoon pierce, the cutter burns, rockets blast), and `damage_from_blasts`
+skips them because `enemies_feel_blasts` owns their blast damage, EMP stuns and scares. Then `WorldState::damage_entity(id, Damage, output)`
+(armour, armour piercing, knockback for `feels_blasts` kinds, `EntityDamaged` /
+`EntityDestroyed` events, despawn on death) hurts it, projectiles and rays hit it, auto-aim
+targets it (unless it is inside a smoke screen), explosives damage it by distance
+(`combat::explosive_damage`) and EMP pulses hurt it if `Health::machine`. Scare charges are the
+cue to flee (`explosive::SCARE_RADIUS`, `SCARE_MILLIS`) and `smoke_at` hides the player from
+creature senses. Events: `WeaponFired`, `WeaponDry`, `WeaponMounted`, `ProjectileImpact`,
+`EntityDamaged`, `EntityDestroyed`.
 
 ### Physics helpers (`physics`)
 
@@ -395,7 +434,12 @@ them). An `ItemContainer` holds a count per kind (kind order, no zero counts; se
 list of `ItemStack`s) with typed views (`minerals()`, `artifacts()`, `materials()`,
 `blocks()`, `mineral(kind)`, ...). Each kind names its container (`ItemKind::stowage`) and slot
 cost (`ItemKind::slot_cost`): minerals, artifacts, modules and weapons take a slot; materials,
-ammo, explosives, cosmetics and quest items take none.
+ammo, explosives, cosmetics and quest items take none. Special explosives are
+`ItemKind::Explosive` items (`ExplosiveKind::item`, stable ids) in the cargo bay; plain bombs stay
+the `Player::bombs` count (`Player::explosive_count` / `add_explosives` / `take_explosive` /
+`carried_explosives` cover both). Rocket ammo is `ItemKind::Ammo` (`AmmoKind::item`); weapons
+have stable `ItemKind::Weapon` ids (`WeaponKind::item`) for loot, and a picked-up weapon item
+goes to the rack through `Player::receive_weapon`.
 
 A rig carries a `cargo_bay` (minerals, artifacts, materials, ...; capacity `cargo_capacity`
 slots, so ore and artifacts count exactly as before) and a separate `block_hopper` for
@@ -616,8 +660,9 @@ and danger grow with depth, and a Peaceful world has none.
   rig is knocked back (capped under the safe landing speed), its i-frames start
   (`EnemyDirector::rig_guard`) and it takes the scaled damage. Events: `RigStruck`, then
   `PlayerDamaged`.
-- **Damage API** (`WorldState::damage_entity(id, Damage, &mut TickOutput) -> DamageOutcome`,
-  for WP-WEAPONS): `Damage { amount, kind: DamageKind, source: DamageSource, impulse }` applies
+- **Damage model** (`WorldState::damage_enemy(id, enemy::Damage, &mut TickOutput) ->
+  enemy::DamageOutcome`; weapons reach it through the shared `damage_entity` of
+  `crate::combat`): `Damage { amount, kind: DamageKind, source: DamageSource, impulse }` applies
   resistance, shields (only EMPs break them), EMP stuns, burning, aggro on the attacking player,
   flinch impulses and fleeing; a kill drops `loot` through `spawn_item_drop` (5 minute
   lifetime), clears its lair, counts in `EnemyDirector::kills` and emits `EnemyKilled { by }`.
@@ -626,7 +671,9 @@ and danger grow with depth, and a Peaceful world has none.
   `push_from_blasts` on the same pre-blast terrain): every blast kind hurts enemies in reach
   with a clear line (burrowers through rock) and pushes them; incendiaries set creatures
   alight; EMPs (`EMP_RADIUS`, through rock) stun and hurt machines and drop shields; flares
-  only lure. The `Blast` carries its owner for kill credit.
+  only lure; scare charges send creatures fleeing (`SCARE_RADIUS`, `SCARE_MILLIS`; machines,
+  elites and nests ignore them). The `Blast` carries its owner for kill credit. A rig inside a
+  smoke screen (`smoke_screens`) is hidden from enemy sight (not from hearing).
 - **Difficulty**: `EnemyDifficulty` (Peaceful / Normal / Hard) in the `EnemyDirector`, set before
   play with `set_enemy_difficulty` or in play with `PlayerCommand::SetEnemyDifficulty` (event
   `EnemyDifficultyChanged`); Peaceful clears every hostile and spawns none.
@@ -665,12 +712,12 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 
 | Kind | Contents | Who receives it |
 |---|---|---|
-| Per tick | rig pose, velocity, fuel, hull, drill/scanner timers, deep-run pressure; bombs and the entity id/revision counters (`LiveEntities`) | clients the rig/bomb is relevant to |
-| Per tick, delta | entities (gas clouds, boulders, drops, ...): records of entities new to the client or changed since its last frame (by revision), and despawns (gone or out of relevance) | clients the entity is relevant to |
+| Per tick | rig pose, velocity, fuel, hull, weapon state (capacitor, cooldown, aim, trigger), drill/scanner timers, deep-run pressure; the charge serial and entity id/revision counters (`LiveEntities`) | clients the rig is relevant to |
+| Per tick, delta | entities (gas clouds, boulders, drops, charges, projectiles, targets, ...): records of entities new to the client or changed since its last frame (by revision), and despawns (gone or out of relevance) | clients the entity is relevant to |
 | Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
 | Op log | per-player discovery | the owner only |
-| On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
-| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
+| On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount), the rig's cosmetics and its mounted weapon | everyone |
+| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, weapon rack, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
 | On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | everyone |
 
 Because other players' private state never reaches a client, replica checks compare

@@ -1,7 +1,9 @@
 //! Explosive types: what each charge does, how it is deployed, sold and aimed.
 //!
-//! Every explosive is a [`crate::PlacedBomb`] with an [`ExplosiveKind`]; the loose-bomb physics
-//! and chain reactions in `world::bombs` drive them all. This module is pure data and math
+//! Every live explosive is a charge entity ([`crate::entity::EntityKind::Charge`], viewed as a
+//! [`crate::PlacedBomb`]) with an [`ExplosiveKind`]; the bomb pass in `world::bombs` drives them
+//! all (the shared body physics, chain reactions). Carried special explosives are
+//! [`crate::item::ItemKind::Explosive`] items ([`ExplosiveKind::item`]). This module is pure data and math
 //! (no world access), so the game can read the same tables for its HUD, shop and aim preview.
 //!
 //! # Integration seams for other tracks
