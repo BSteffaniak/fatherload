@@ -101,6 +101,8 @@ fn friends_rejoin_a_reloaded_save_with_all_their_progress() {
         rig.credits = credits;
         rig.cargo_bay.insert(MineralKind::Ruby, 2);
         rig.engine_level = 3;
+        // The engine upgrade's milestone, as the session that fitted it would have earned it.
+        rig.earn_milestone(fatherload_simulation::milestone::Milestone::FirstUpgrade, 1);
     }
     let saved_alex = save.player(to_sim_player(alex)).cloned().expect("alex");
     let saved_sam = save.player(to_sim_player(sam)).cloned().expect("sam");

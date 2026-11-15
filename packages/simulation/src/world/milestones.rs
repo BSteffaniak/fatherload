@@ -86,15 +86,15 @@ impl WorldState {
                 continue;
             };
             let position = player.tile_position(TILE_SIZE);
-            // Altitude is measured only above the classic surface row (mountains included);
-            // below it a rig is underground or on low ground.
-            let altitude = if position.y < 0 {
-                self.terrain.surface_row(position.x) - position.y - 1
+            // Altitude above the ground below the rig (mountains included), depth below it.
+            let surface = self.terrain.surface_row(position.x);
+            let altitude = (surface - position.y - 1).max(0);
+            let underground = position.y >= surface;
+            let band = if underground {
+                u8::try_from(self.terrain.band_at(position).index()).unwrap_or(u8::MAX)
             } else {
                 0
             };
-            let band = u8::try_from(self.terrain.band_at(position).index()).unwrap_or(u8::MAX);
-            let underground = position.y >= self.terrain.surface_row(position.x);
             let owns_claim = self.bases.claims().any(|claim| claim.owner == player_id);
             let Some(player) = self.players.get_mut(&player_id) else {
                 continue;

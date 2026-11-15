@@ -1781,7 +1781,7 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 (Prompt::CycleWeapon, "Next weapon"),
                 (Prompt::Detonate, "Detonate C4"),
                 (Prompt::DetonateSequence, "Detonate in sequence"),
-                (Prompt::Map, "Map"),
+                (Prompt::Map, "Map, logs, milestones"),
                 (Prompt::Inventory, "Inventory"),
                 (Prompt::Infrastructure, "Field kits"),
                 (Prompt::BuildMode, "Build mode"),

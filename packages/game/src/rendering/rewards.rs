@@ -180,6 +180,11 @@ pub(super) fn draw_reward_banner(
     let top = if beside {
         // Below the showcase card, above the toast.
         (canvas.height - height - 48).min(176)
+    } else if let Some(panel) = avoid
+        && panel.y as i32 > height + 50
+    {
+        // A counter panel docked along the bottom: just above it, clear of the top toast.
+        panel.y as i32 - height - 4
     } else if fanfare_clear {
         112
     } else {

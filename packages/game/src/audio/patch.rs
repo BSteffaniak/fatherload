@@ -3672,7 +3672,7 @@ fn act_two_fanfare(rng: &mut Rng) -> Vec<f32> {
     mix_into(&mut out, &rush, 0.0, 0.45);
     let climb = [261.63, 392.0, 523.25, 659.25, 783.99];
     for (index, note) in climb.into_iter().enumerate() {
-        let gate = if index == climb.len() - 1 { 1.4 } else { 0.16 };
+        let gate = if index == climb.len() - 1 { 1.1 } else { 0.16 };
         mix_into(
             &mut out,
             &brass(rng, note, gate, 1.0),
@@ -3681,7 +3681,7 @@ fn act_two_fanfare(rng: &mut Rng) -> Vec<f32> {
         );
     }
     for note in [130.81, 261.63, 329.63, 392.0, 523.25] {
-        mix_into(&mut out, &brass(rng, note, 1.8, 0.8), 1.03, 0.16);
+        mix_into(&mut out, &brass(rng, note, 1.3, 0.8), 1.03, 0.16);
     }
     for (index, note) in [2_093.0, 2_637.0, 3_136.0, 4_186.0, 3_136.0, 4_186.0]
         .into_iter()
@@ -3695,7 +3695,7 @@ fn act_two_fanfare(rng: &mut Rng) -> Vec<f32> {
         );
     }
     let mut echo = Delay::new(0.5).with_damping(0.45);
-    out.resize(out.len() + samples_for(0.9), 0.0);
+    out.resize(out.len() + samples_for(0.4), 0.0);
     for sample in &mut out {
         *sample += echo.process(*sample, 0.36, 0.4) * 0.35;
         *sample = saturate(*sample, 1.2);

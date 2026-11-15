@@ -185,18 +185,18 @@ impl SeatRewards {
 pub fn install_message(player: &Player, upgrade: UpgradeKind, level: u8) -> String {
     let name = fatherload_simulation::economy::upgrade_tier_name(upgrade, level.saturating_sub(1));
     if upgrade == UpgradeKind::BombPack {
-        return format!("{name} packed. You now carry {} bombs.", player.bombs);
+        return format!("Bought a {name}. You now carry {} bombs.", player.bombs);
     }
     let preview = preview_between(player, upgrade, level.saturating_sub(1), level);
     preview.headline().map_or_else(
-        || format!("{name} fitted!"),
+        || format!("Bought the {name}!"),
         |headline| {
             let stop = if headline.ends_with(['!', '.', '?']) {
                 ""
             } else {
                 "."
             };
-            format!("{name} fitted! {headline}{stop}")
+            format!("Bought the {name}! {headline}{stop}")
         },
     )
 }
@@ -298,7 +298,7 @@ mod tests {
         player.fuel_tank_level = 2;
         let message = install_message(&player, UpgradeKind::FuelTank, 2);
         assert!(
-            message.starts_with("Twin Fuel Tank fitted! Climbs "),
+            message.starts_with("Bought the Twin Fuel Tank! Climbs "),
             "{message}"
         );
         assert!(message.contains("% higher on a full tank"), "{message}");
