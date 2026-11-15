@@ -276,8 +276,10 @@ an optional expiry tick, a replication `revision` and per-kind `EntityState`. To
   `spawn_item_drop` are the spawn helpers.
 - **Tick.** `simulate_tick` runs `EntityPhase::Early` right after inputs (gas clouds age before
   hazard damage reads them) and `EntityPhase::Late` after drilling, bombs and hazard spawns
-  (expiries first, then boulders and drops). Only awake entities update. Bomb detonations push
-  blast-feeling kinds (`EntityKind::feels_blasts`) right after the bomb pass. At the end of the
+  (expiries first, then boulders and drops). Only awake entities update. Every explosive's blast
+  pushes blast-feeling kinds (`EntityKind::feels_blasts`) inside the bomb pass
+  (`push_from_blasts`, with `physics::Blast::explosive` for the kind's reach and push, on the
+  same pre-blast terrain as rigs). At the end of the
   tick every changed tile wakes the sleeping entities within 1.5 tiles, so a drop on a dug-out
   tile falls on the next tick.
 - **Sleep.** A sleep-capable kind (`EntityKind::can_sleep`) that rests (motionless and
@@ -288,19 +290,21 @@ Adding a kind: add an `EntityState` / `EntityKind` variant with its phase, sleep
 rules, add its update to `WorldState::advance_entities`, and a spawn helper. Replication,
 saves, keyframes, hashing, relevance and the spatial index cover it automatically.
 
-Bombs still live in their own list (`world/bombs.rs`): the explosives track is reworking them
-in parallel, and the plan moves them onto the store in wave 2. `physics::step_body` with
+Bombs and every other explosive charge still live in their own list (`world/bombs.rs`,
+`PlacedBomb` with a `kind`); the plan moves them onto the store in wave 2. `physics::step_body` with
 `BodyParams::BOMB` already reproduces their motion bit for bit (checked against live bombs by
 `shared_body_physics_reproduces_bomb_motion_exactly`), so that move is a storage change.
 
 ### Physics helpers (`physics`)
 
-Pure functions, no RNG or clocks: `solid_at` (open sky, walled sides and bottom), `collides`
+Pure functions, no RNG or clocks: `solid_at` (open sky, walled bottom, and walled sides at the
+world's first and last column: column 0 and the width for bounded worlds, far beyond reach for
+endless ones), `collides`
 (a square body sampled at corners, edges and centre), `supported`, `step_body` (gravity,
 axis-separated swept substeps of at most two pixels, bounce, floor friction, rest snapping,
 lift-out of an overlapping spawn, quantization; per-kind `BodyParams`, e.g. `BOMB`, `DROP`),
 `settle` (rest counting and sleep), `line_clear`, `Blast` / `apply_blast` (the bomb chain kick
-generalized: linear falloff, line of sight, upward lift, deterministic split of coincident
+generalized; `Blast::explosive` for any explosive kind: linear falloff, line of sight, upward lift, deterministic split of coincident
 bodies), `steer_toward` (accelerate toward a point with a speed cap) and `find_tile_path` (a
 budgeted, deterministic 4-connected BFS over open tiles for creature AI).
 
