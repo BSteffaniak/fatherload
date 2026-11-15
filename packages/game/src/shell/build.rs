@@ -315,5 +315,6 @@ fn service_message(kind: ModuleKind, service: ModuleService) -> String {
         ModuleService::RefineOre => "Ore tipped into the crusher. Leave it to cook.".to_owned(),
         ModuleService::CollectRefined => "Refined value banked.".to_owned(),
         ModuleService::Craft(explosive) => format!("Pressed: one {}.", explosive.name()),
+        ModuleService::Sleep => "You turn in for the night. Sweet dreams.".to_owned(),
     }
 }

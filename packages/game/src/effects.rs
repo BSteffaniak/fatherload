@@ -247,6 +247,14 @@ impl Effects {
         let mut impact_cues = 0;
         let mut pickup_cues: BTreeMap<PlayerId, usize> = BTreeMap::new();
         let mut enemy_cues = 0;
+        // A skipped night already plays its lullaby: no midnight bell on top of it.
+        let night_skipped = events.iter().any(|event| {
+            matches!(
+                &event.event,
+                RuntimeEventKind::Gameplay(gameplay)
+                    if matches!(gameplay.kind, GameplayEventKind::NightSkipped { .. })
+            )
+        });
         for event in events {
             let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
                 continue;
@@ -470,6 +478,28 @@ impl Effects {
                     }
                     continue;
                 }
+                // The world clock: the dawn chorus, dusk crickets and the midnight bell are
+                // heard only by seats whose rig is out under the sky (not deep underground).
+                GameplayEventKind::Dawn { .. }
+                | GameplayEventKind::Dusk { .. }
+                | GameplayEventKind::NewDay { .. } => {
+                    let under_sky = local_players
+                        .iter()
+                        .filter_map(|player| world.player(*player))
+                        .any(|player| {
+                            let tile = player.tile_position(fatherload_simulation::TILE_SIZE);
+                            tile.y < world.terrain().surface_row(tile.x) + CLOCK_CUE_DEPTH_ROWS
+                        });
+                    let bell_during_skip =
+                        night_skipped && matches!(gameplay.kind, GameplayEventKind::NewDay { .. });
+                    if under_sky
+                        && !bell_during_skip
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::interface(cue));
+                    }
+                    continue;
+                }
                 GameplayEventKind::BombBounced { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
                     let (x, y) = (x as f32, y as f32);
@@ -635,7 +665,9 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::WeaponMounted { player_id, .. }
         | GameplayEventKind::BasePlaced { player_id, .. }
         | GameplayEventKind::BaseRemoved { player_id, .. }
-        | GameplayEventKind::BaseServiceUsed { player_id, .. } => Some(player_id),
+        | GameplayEventKind::BaseServiceUsed { player_id, .. }
+        | GameplayEventKind::GotUp { player_id }
+        | GameplayEventKind::SleepRuleChanged { player_id, .. } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
@@ -656,9 +688,16 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::EnemyStunned { .. }
         | GameplayEventKind::ProjectileImpact { .. }
         | GameplayEventKind::EntityDamaged { .. }
-        | GameplayEventKind::EntityDestroyed { .. } => None,
+        | GameplayEventKind::EntityDestroyed { .. }
+        | GameplayEventKind::Dawn { .. }
+        | GameplayEventKind::Dusk { .. }
+        | GameplayEventKind::NewDay { .. }
+        | GameplayEventKind::NightSkipped { .. } => None,
     }
 }
+
+/// Rows under the local ground a rig still hears the day's sounds (dawn, dusk, midnight).
+const CLOCK_CUE_DEPTH_ROWS: i32 = 8;
 
 /// Everything in a rig's bay that counts as cargo: ore, artifacts and materials (not the
 /// explosives, weapons or ammo it also carries).

@@ -435,6 +435,16 @@ pub enum SoundCue {
     /// A crewmate rejoined a resumed world, or this player got their saved rig back
     /// ("Welcome back", WP-PERSIST).
     CrewReturn,
+    /// Dawn: a rooster and the birds waking (world clock).
+    Dawn,
+    /// Dusk: crickets tuning up and an owl.
+    Dusk,
+    /// Midnight: a far-off tower bell (a new day).
+    Midnight,
+    /// Lying down in a bed.
+    BedDown,
+    /// The night skipped: a lullaby, then the morning chord.
+    NightSkipped,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -457,6 +467,8 @@ pub enum ShellRequest {
         test_mode: bool,
         /// The world's enemy setting.
         enemies: fatherload_simulation::EnemyDifficulty,
+        /// Real minutes per in-game day.
+        day_length: fatherload_simulation::clock::DayLength,
     },
     /// Load the most recent save.
     ResumeLatest,
@@ -481,6 +493,8 @@ pub enum ShellRequest {
         test_mode: bool,
         /// The world's enemy setting.
         enemies: fatherload_simulation::EnemyDifficulty,
+        /// Real minutes per in-game day.
+        day_length: fatherload_simulation::clock::DayLength,
     },
     /// Open the running local game to remote players.
     OpenOnline,
@@ -2324,7 +2338,7 @@ impl ShellState {
                 self.modal = None;
                 self.world_setup = None;
             }
-            SetupOutcome::Start(purpose, settings, test_mode, enemies) => {
+            SetupOutcome::Start(purpose, settings, test_mode, enemies, day_length) => {
                 self.modal = None;
                 self.world_setup = None;
                 requests.push(match purpose {
@@ -2333,11 +2347,13 @@ impl ShellState {
                         settings,
                         test_mode,
                         enemies,
+                        day_length,
                     },
                     SetupPurpose::HostOnline => ShellRequest::HostOnline {
                         settings,
                         test_mode,
                         enemies,
+                        day_length,
                     },
                 });
             }

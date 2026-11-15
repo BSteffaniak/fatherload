@@ -507,6 +507,9 @@ pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
                 cycler(setup.enemies.name()),
                 difficulty_color(setup.enemies),
             ),
+        Entry::new(&icons::SUN, "Day Length")
+            .detail(setup.day_length.description())
+            .value(cycler(setup.day_length.name()), GOLD),
         Entry::new(&menu_icons::ROCKET, "Test Mode")
             .detail(if setup.test_mode {
                 "Maxed rig, warps, god toggles; no records"

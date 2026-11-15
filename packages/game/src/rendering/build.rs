@@ -367,6 +367,7 @@ const fn service_icon(service: ModuleService) -> &'static super::pixel_art::spri
         ModuleService::CycleAccess => &icons::SCANNER,
         ModuleService::RefineOre => &icons::HEAT,
         ModuleService::Craft(_) => &icons::BOMB,
+        ModuleService::Sleep => &icons::MOON,
     }
 }
 
@@ -388,6 +389,9 @@ const fn service_about(service: ModuleService) -> &'static str {
         ModuleService::CollectRefined => "Take what the refined ore is worth, in credits.",
         ModuleService::Craft(_) => {
             "Press blocks from the hopper (plus a little credit) into a charge."
+        }
+        ModuleService::Sleep => {
+            "Sleep through the night. In a crew, everyone has to turn in (or the host allows it)."
         }
     }
 }

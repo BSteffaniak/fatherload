@@ -212,6 +212,13 @@ patches! {
     // Surface ambience (WP-SURFACE), after every earlier patch so their seeds stay put.
     WindLoop => "loop_wind",
     RainLoop => "loop_rain",
+    // World clock (wave 3, T14), appended so every earlier patch keeps its variation seeds.
+    DawnChorus => "dawn_chorus",
+    DuskCrickets => "dusk_crickets",
+    MidnightBell => "midnight_bell",
+    BedDown => "bed_down",
+    NightSkip => "night_skip",
+    NightLoop => "loop_night",
 }
 
 /// Playback metadata of a patch.
@@ -423,7 +430,22 @@ impl Patch {
             | Self::LavaSizzleLoop
             | Self::BoulderRumbleLoop
             | Self::WindLoop
-            | Self::RainLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            | Self::RainLoop
+            | Self::NightLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::DawnChorus | Self::DuskCrickets => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.4)
+                .jitter(0.01, 0.5),
+            Self::MidnightBell => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.55)
+                .jitter(0.0, 0.3),
+            Self::BedDown => PatchInfo::new(Feedback).instances(2).jitter(0.02, 0.5),
+            Self::NightSkip => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.0, 0.0)
+                .ducking(0.3),
             // A hoovered spray plays many of these at once: cheap, quiet and well jittered.
             Self::BlockPickup => PatchInfo::new(Feedback)
                 .instances(3)
@@ -582,6 +604,12 @@ impl Patch {
             Self::WorkshopCraft => workshop_craft(rng),
             Self::WindLoop => wind_loop(rng),
             Self::RainLoop => rain_loop(rng),
+            Self::DawnChorus => dawn_chorus(rng),
+            Self::DuskCrickets => dusk_crickets(rng),
+            Self::MidnightBell => midnight_bell(rng),
+            Self::BedDown => bed_down(rng),
+            Self::NightSkip => night_skip(rng),
+            Self::NightLoop => night_loop(rng),
         }
     }
 }
@@ -2869,6 +2897,177 @@ fn workshop_craft(rng: &mut Rng) -> Vec<f32> {
     }
     mix_into(&mut out, &clank(rng, 2_100.0, 0.06), 0.56, 0.35);
     mix_into(&mut out, &bell(1_760.0, 2.0, 0.6, 0.3), 0.62, 0.2);
+    out
+}
+
+/// Dawn: a distant rooster's crow (a buzzy pulse through moving vowel formants, four syllables
+/// with the last one long and falling) and a scatter of songbird chirps waking up.
+fn dawn_chorus(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    let base = 520.0 * rng.jitter(0.04);
+    // (start, length, pitch from, pitch to)
+    let syllables = [
+        (0.0, 0.11, 1.0, 1.25),
+        (0.15, 0.1, 1.2, 1.35),
+        (0.3, 0.12, 1.3, 1.45),
+        (0.47, 0.55, 1.55, 1.05),
+    ];
+    for (start, length, from, to) in syllables {
+        let mut pulse = Osc::new(Wave::Square);
+        pulse.width = 0.3;
+        let mut low = Svf::new(FilterMode::BandPass, 900.0, 3.0);
+        let mut high = Svf::new(FilterMode::BandPass, 2_300.0, 4.0);
+        let voice = render(length, |t| {
+            let progress = t / length;
+            let frequency = base * (from + (to - from) * progress) * (1.0 + 0.02 * sine(t, 23.0));
+            let raw = pulse.next(frequency);
+            let vowel = low.process(raw) + high.process(raw) * (0.4 + 0.5 * progress);
+            saturate(vowel * 1.6, 1.4)
+                * segments(
+                    progress,
+                    &[(0.0, 0.0), (0.12, 1.0), (0.8, 0.85), (1.0, 0.0)],
+                )
+        });
+        mix_into(&mut out, &voice, start, 0.42);
+    }
+    for time in scatter(rng, 7, 0.9, 2.1, 1.0) {
+        let mut osc = Osc::new(Wave::Sine);
+        let top = rng.range(3_200.0, 4_800.0);
+        let chirps = 2 + rng.index(3);
+        for chirp in 0..chirps {
+            let from = top * rng.jitter(0.05);
+            let chirp_voice = render(0.07, |t| {
+                osc.next(glide(t, from, from * 0.72, 0.03)) * perc(t, 0.004, 0.06)
+            });
+            mix_into(&mut out, &chirp_voice, time + chirp as f32 * 0.085, 0.16);
+        }
+    }
+    out
+}
+
+/// Dusk: crickets tuning up (trilled 4.4 kHz chirps in pairs) over a soft low hoot.
+fn dusk_crickets(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for cricket in 0..3 {
+        let pitch = rng.range(4_100.0, 4_900.0);
+        let offset = cricket as f32 * 0.21 + rng.range(0.0, 0.1);
+        for chirp in 0..4 {
+            let mut osc = Osc::new(Wave::Sine);
+            let voice = render(0.16, |t| {
+                let trill = if (t * 32.0).fract() < 0.55 { 1.0 } else { 0.0 };
+                osc.next(pitch)
+                    * trill
+                    * segments(t, &[(0.0, 0.0), (0.02, 1.0), (0.14, 0.8), (0.16, 0.0)])
+            });
+            mix_into(&mut out, &voice, offset + chirp as f32 * 0.42, 0.13);
+        }
+    }
+    // A wood owl somewhere: two soft hoots, the second lower.
+    for (index, frequency) in [380.0, 330.0].into_iter().enumerate() {
+        let mut osc = Osc::new(Wave::Sine);
+        let hoot = render(0.42, |t| {
+            osc.next(frequency * (1.0 + 0.04 * (1.0 - t / 0.42)))
+                * segments(t, &[(0.0, 0.0), (0.06, 1.0), (0.3, 0.7), (0.42, 0.0)])
+        });
+        mix_into(&mut out, &hoot, 0.9 + index as f32 * 0.55, 0.3);
+    }
+    out
+}
+
+/// Midnight: a far-off tower bell tolling twice, long and dark.
+fn midnight_bell(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    let note = 196.0 * rng.jitter(0.005);
+    for strike in 0..2 {
+        mix_into(
+            &mut out,
+            &bell(note, 2.76, 1.6, 2.2),
+            strike as f32 * 1.1,
+            0.5,
+        );
+        mix_into(
+            &mut out,
+            &bell(note * 2.0, 2.0, 0.6, 1.4),
+            strike as f32 * 1.1,
+            0.15,
+        );
+    }
+    out
+}
+
+/// Lying down: a blanket rustle and a sleepy falling two-note hum.
+fn bed_down(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        1_400.0,
+        0.7,
+        0.35,
+    );
+    for (index, note) in [523.25, 392.0].into_iter().enumerate() {
+        let mut osc = Osc::new(Wave::Triangle);
+        let hum = render(0.4, |t| {
+            osc.next(note) * segments(t, &[(0.0, 0.0), (0.05, 1.0), (0.3, 0.6), (0.4, 0.0)])
+        });
+        mix_into(&mut out, &hum, 0.15 + index as f32 * 0.22, 0.32);
+    }
+    out
+}
+
+/// The night skipped: a hushed descending lullaby (bells falling through a G-major arpeggio),
+/// then the morning: a warm rising chord with a high bell.
+fn night_skip(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for (index, note) in [783.99, 587.33, 493.88, 392.0].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &bell(note, 2.0, 0.7, 1.0),
+            index as f32 * 0.22,
+            0.22,
+        );
+    }
+    for (index, note) in [392.0, 493.88, 587.33, 783.99].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &brass(rng, note, 0.7 - index as f32 * 0.1, 0.5),
+            1.1 + index as f32 * 0.08,
+            0.24,
+        );
+    }
+    mix_into(&mut out, &bell(1_567.98, 2.0, 0.8, 1.1), 1.45, 0.2);
+    out
+}
+
+/// Night ambience (looped by the director on the surface at night): a bed of crickets, each
+/// trilling on its own beat, over a faint breeze.
+fn night_loop(rng: &mut Rng) -> Vec<f32> {
+    const SECONDS: f32 = 4.0;
+    let mut out = render(SECONDS, |_| 0.0);
+    let mut breeze = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut breeze_filter = Svf::new(FilterMode::LowPass, 380.0, 0.6);
+    let bed = render(SECONDS, |t| {
+        breeze_filter.process(breeze.next()) * (0.6 + 0.4 * sine(t, 0.25))
+    });
+    mix_into(&mut out, &bed, 0.0, 0.25);
+    for _ in 0..4 {
+        let pitch = rng.range(3_900.0, 5_200.0);
+        // Whole chirps per loop so the seam lines up.
+        let period = SECONDS / (4 + rng.index(4)) as f32;
+        let phase = rng.unit() * period;
+        let mut osc = Osc::new(Wave::Sine);
+        let voice = render(SECONDS, |t| {
+            let local = (t + phase).rem_euclid(period);
+            let trill = if (local * 30.0).fract() < 0.5 {
+                1.0
+            } else {
+                0.0
+            };
+            let gate = segments(local, &[(0.0, 0.0), (0.02, 1.0), (0.18, 0.7), (0.22, 0.0)]);
+            osc.next(pitch) * trill * gate
+        });
+        mix_into(&mut out, &voice, 0.0, 0.1);
+    }
     out
 }
 

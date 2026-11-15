@@ -582,6 +582,14 @@ pub struct RenderSnapshot<'w> {
     pub bases: &'w fatherload_simulation::base::Bases,
     /// The base modules that have power this frame.
     pub powered_modules: std::collections::BTreeSet<fatherload_simulation::base::StructureId>,
+    /// The world clock (F4): time of day, phase, the sun's angle and the Moon's phase.
+    pub clock: fatherload_simulation::clock::WorldClock,
+    /// The clock's saved state: who is in bed and the sleep rule.
+    pub clock_state: &'w fatherload_simulation::clock::ClockState,
+    /// Seconds until the night is skipped, while everyone needed is in bed (screens fade).
+    pub sleep_countdown: Option<f32>,
+    /// Where the Moon hangs over the world (the sky draws it above this column).
+    pub moon: fatherload_simulation::clock::MoonAnchor,
 }
 
 impl<'w> RenderSnapshot<'w> {
@@ -686,6 +694,10 @@ impl<'w> RenderSnapshot<'w> {
                 .filter(|module| world.base_module_powered(module.id))
                 .map(|module| module.id)
                 .collect(),
+            clock: world.clock(),
+            clock_state: world.clock_state(),
+            sleep_countdown: world.sleep_countdown_seconds(),
+            moon: world.moon_anchor(),
         }
     }
 

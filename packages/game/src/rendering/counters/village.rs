@@ -135,6 +135,15 @@ fn quote(snapshot: &RenderSnapshot<'_>, player: &Player, offer: VillageOffer) ->
         VillageDeal::Rumour => Offer::new(&menu_icons::LETTER, "Buy a round", "ask for rumours")
             .about("The regulars always know of something buried nearby.")
             .price(offer.price, credits),
+        VillageDeal::Room => {
+            let row = Offer::new(&icons::MOON, "A room for the night", "sleep until dawn")
+                .about("A warm bed upstairs. In a crew, everyone has to turn in before morning comes.");
+            if snapshot.clock.phase().sleepable() {
+                row.price(offer.price, credits)
+            } else {
+                row.tag("DUSK", LAVENDER).unavailable_if(true)
+            }
+        }
     }
 }
 

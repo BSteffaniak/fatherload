@@ -10,7 +10,7 @@ use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 use fatherload_netcode::ReconnectToken;
 use fatherload_quic_transport::{HostDescriptor, JoinTarget, lan::LanDiscoveredGame};
 use fatherload_simulation::{
-    EnemyDifficulty, GameplayEventKind, PlayerCommand, PlayerId, WorldState,
+    EnemyDifficulty, GameplayEventKind, PlayerCommand, PlayerId, WorldState, clock::DayLength,
     worldgen::WorldSettings,
 };
 
@@ -735,7 +735,8 @@ impl LocalGame {
                 settings,
                 test_mode,
                 enemies,
-            } => self.new_game(seats, &settings, (test_mode, enemies), report),
+                day_length,
+            } => self.new_game(seats, &settings, (test_mode, enemies, day_length), report),
             ShellRequest::ResumeLatest => {
                 let loaded = match &self.save_target {
                     SaveTarget::UserFiles => save::load_latest_world(),
@@ -779,7 +780,8 @@ impl LocalGame {
                 settings,
                 test_mode,
                 enemies,
-            } => self.host_online(&settings, (test_mode, enemies), report),
+                day_length,
+            } => self.host_online(&settings, (test_mode, enemies, day_length), report),
             ShellRequest::OpenOnline => self.open_online(),
             ShellRequest::JoinAddress(text) => match parse_join_addr(&text) {
                 Some(addr) => self.start_join(JoinTarget::Addr(addr), None, report),
@@ -830,11 +832,11 @@ impl LocalGame {
         &mut self,
         seats: usize,
         settings: &WorldSettings,
-        (test_mode, enemies): (bool, EnemyDifficulty),
+        (test_mode, enemies, day_length): (bool, EnemyDifficulty, DayLength),
         report: &mut FrameReport,
     ) {
         self.runtime = Runtime::local_as(
-            world_from_setup(settings, test_mode, enemies),
+            world_from_setup(settings, test_mode, enemies, day_length),
             seats,
             self.identity(),
         );
@@ -962,12 +964,12 @@ impl LocalGame {
     fn host_online(
         &mut self,
         settings: &WorldSettings,
-        (test_mode, enemies): (bool, EnemyDifficulty),
+        (test_mode, enemies, day_length): (bool, EnemyDifficulty, DayLength),
         report: &mut FrameReport,
     ) {
         let identity = self.identity();
         match LocalHost::online(
-            world_from_setup(settings, test_mode, enemies),
+            world_from_setup(settings, test_mode, enemies, day_length),
             1,
             identity.clone(),
             self.host_bind,
@@ -1201,18 +1203,20 @@ pub fn world_from_settings(settings: &WorldSettings) -> WorldState {
 }
 
 /// A brand-new world from the world setup dialog: generated from `settings`, in test mode when
-/// `test_mode` is set, with `enemies` as its enemy setting.
+/// `test_mode` is set, with `enemies` as its enemy setting and `day_length` as its clock's day.
 #[must_use]
 pub fn world_from_setup(
     settings: &WorldSettings,
     test_mode: bool,
     enemies: EnemyDifficulty,
+    day_length: DayLength,
 ) -> WorldState {
     let mut world = world_from_settings(settings);
     if test_mode {
         world.enable_test_mode();
     }
     world.set_enemy_difficulty(enemies);
+    world.set_day_length(day_length);
     world
 }
 
@@ -2516,6 +2520,7 @@ mod tests {
                 settings: WorldSettings::default(),
                 test_mode: false,
                 enemies: EnemyDifficulty::Normal,
+                day_length: DayLength::Standard,
             },
             &mut requests,
             &mut FrameReport::default(),

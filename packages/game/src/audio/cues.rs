@@ -153,6 +153,11 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::RefineryLoad => Patch::RefineryLoad,
         SoundCue::WorkshopCraft => Patch::WorkshopCraft,
         SoundCue::CrewReturn => Patch::CrewReturn,
+        SoundCue::Dawn => Patch::DawnChorus,
+        SoundCue::Dusk => Patch::DuskCrickets,
+        SoundCue::Midnight => Patch::MidnightBell,
+        SoundCue::BedDown => Patch::BedDown,
+        SoundCue::NightSkipped => Patch::NightSkip,
     }
 }
 
@@ -268,6 +273,7 @@ pub const fn service_cue(service: ModuleService) -> SoundCue {
         ModuleService::RefineOre => SoundCue::RefineryLoad,
         ModuleService::CollectRefined => SoundCue::Sell,
         ModuleService::Craft(_) => SoundCue::WorkshopCraft,
+        ModuleService::Sleep => SoundCue::BedDown,
     }
 }
 
@@ -369,6 +375,16 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::BasePlaced { item, .. } => Some(build_cue(*item)),
         GameplayEventKind::BaseRemoved { .. } => Some(SoundCue::BuildRemove),
         GameplayEventKind::BaseServiceUsed { service, .. } => Some(service_cue(*service)),
+        // The world clock: the rooster and birds at dawn, crickets at dusk, a tower bell at
+        // midnight (the effects layer keeps these to seats out under the sky), the lullaby of
+        // a skipped night; getting up and the host's sleep rule tick like a menu confirm.
+        GameplayEventKind::Dawn { .. } => Some(SoundCue::Dawn),
+        GameplayEventKind::Dusk { .. } => Some(SoundCue::Dusk),
+        GameplayEventKind::NewDay { .. } => Some(SoundCue::Midnight),
+        GameplayEventKind::NightSkipped { .. } => Some(SoundCue::NightSkipped),
+        GameplayEventKind::GotUp { .. } | GameplayEventKind::SleepRuleChanged { .. } => {
+            Some(SoundCue::Ui)
+        }
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -458,7 +474,13 @@ mod tests {
             | GameplayEventKind::EntityDestroyed { .. }
             | GameplayEventKind::BasePlaced { .. }
             | GameplayEventKind::BaseRemoved { .. }
-            | GameplayEventKind::BaseServiceUsed { .. } => {}
+            | GameplayEventKind::BaseServiceUsed { .. }
+            | GameplayEventKind::Dawn { .. }
+            | GameplayEventKind::Dusk { .. }
+            | GameplayEventKind::NewDay { .. }
+            | GameplayEventKind::NightSkipped { .. }
+            | GameplayEventKind::GotUp { .. }
+            | GameplayEventKind::SleepRuleChanged { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -686,6 +708,7 @@ mod tests {
             ModuleService::SellCargo,
             ModuleService::SetHome,
             ModuleService::CycleAccess,
+            ModuleService::Sleep,
         ] {
             events.push(GameplayEventKind::BaseServiceUsed {
                 player_id,
@@ -693,6 +716,17 @@ mod tests {
                 service,
             });
         }
+        events.extend([
+            GameplayEventKind::Dawn { day: 2 },
+            GameplayEventKind::Dusk { day: 2 },
+            GameplayEventKind::NewDay { day: 3 },
+            GameplayEventKind::NightSkipped { day: 3 },
+            GameplayEventKind::GotUp { player_id },
+            GameplayEventKind::SleepRuleChanged {
+                player_id,
+                rule: fatherload_simulation::clock::SleepRule::Anyone,
+            },
+        ]);
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
@@ -835,6 +869,11 @@ mod tests {
             SoundCue::RefineryLoad,
             SoundCue::WorkshopCraft,
             SoundCue::CrewReturn,
+            SoundCue::Dawn,
+            SoundCue::Dusk,
+            SoundCue::Midnight,
+            SoundCue::BedDown,
+            SoundCue::NightSkipped,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

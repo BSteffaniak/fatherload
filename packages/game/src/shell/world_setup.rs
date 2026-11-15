@@ -1,10 +1,11 @@
 //! The world setup dialog shown before a new world starts (title "New Game", "Local
 //! Split-Screen" and "Host Online Game"): seed (random by default, re-roll, type or paste),
-//! world size, resource richness, hazard intensity, enemies (peaceful / normal / hard) and test
-//! mode.
+//! world size, resource richness, hazard intensity, enemies (peaceful / normal / hard), day
+//! length (24 / 48 / 72 real minutes, see `fatherload_simulation::clock`) and test mode.
 
 use fatherload_simulation::{
     EnemyDifficulty,
+    clock::DayLength,
     worldgen::{
         HazardIntensity, ResourceRichness, WorldSettings, WorldSize, format_seed, parse_seed,
     },
@@ -36,6 +37,8 @@ pub enum SetupRow {
     Hazards,
     /// Hostile creatures and machines: peaceful, normal or hard.
     Enemies,
+    /// Real minutes per in-game day.
+    DayLength,
     /// Test mode: maxed rigs, crew toggles and band warps for exploring the layers.
     TestMode,
     Start,
@@ -43,13 +46,14 @@ pub enum SetupRow {
 }
 
 impl SetupRow {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Seed,
         Self::Reroll,
         Self::Size,
         Self::Richness,
         Self::Hazards,
         Self::Enemies,
+        Self::DayLength,
         Self::TestMode,
         Self::Start,
         Self::Back,
@@ -62,8 +66,14 @@ pub enum SetupOutcome {
     Stay,
     Close,
     /// Start a world for the purpose with these settings; the flag asks for test mode, the
-    /// difficulty sets the world's enemies.
-    Start(SetupPurpose, WorldSettings, bool, EnemyDifficulty),
+    /// difficulty sets the world's enemies and the day length its clock.
+    Start(
+        SetupPurpose,
+        WorldSettings,
+        bool,
+        EnemyDifficulty,
+        DayLength,
+    ),
 }
 
 /// The dialog's state.
@@ -75,6 +85,8 @@ pub struct WorldSetup {
     pub test_mode: bool,
     /// The world's enemy setting.
     pub enemies: EnemyDifficulty,
+    /// Real minutes per in-game day.
+    pub day_length: DayLength,
     pub selected: usize,
     /// The seed text being typed, while the seed field is focused.
     pub seed_edit: Option<String>,
@@ -107,6 +119,7 @@ impl WorldSetup {
             settings: WorldSettings::new(seed),
             test_mode: false,
             enemies: EnemyDifficulty::Normal,
+            day_length: DayLength::Standard,
             selected: 0,
             seed_edit: None,
         }
@@ -178,6 +191,9 @@ impl WorldSetup {
             SetupRow::Enemies if step != 0 => {
                 self.enemies = cycle(&EnemyDifficulty::ALL, self.enemies, step);
             }
+            SetupRow::DayLength if step != 0 => {
+                self.day_length = cycle(&DayLength::ALL, self.day_length, step);
+            }
             SetupRow::TestMode if step != 0 => self.test_mode = !self.test_mode,
             SetupRow::Seed if input.confirm => self.seed_edit = Some(String::new()),
             SetupRow::Reroll if input.confirm => self.settings.seed = reroll(),
@@ -187,6 +203,7 @@ impl WorldSetup {
                     self.settings,
                     self.test_mode,
                     self.enemies,
+                    self.day_length,
                 );
             }
             SetupRow::Back if input.confirm => return SetupOutcome::Close,
@@ -336,6 +353,11 @@ mod tests {
         press(&mut setup, CONFIRM);
         assert_eq!(setup.enemies, EnemyDifficulty::Hard);
         press(&mut setup, DOWN);
+        assert_eq!(setup.row(), SetupRow::DayLength);
+        assert_eq!(setup.day_length, DayLength::Standard);
+        press(&mut setup, CONFIRM);
+        assert_eq!(setup.day_length, DayLength::Long);
+        press(&mut setup, DOWN);
         assert_eq!(setup.row(), SetupRow::TestMode);
         assert!(!setup.test_mode);
         press(&mut setup, CONFIRM);
@@ -348,7 +370,8 @@ mod tests {
                 SetupPurpose::Local { seats: 2 },
                 setup.settings,
                 true,
-                EnemyDifficulty::Hard
+                EnemyDifficulty::Hard,
+                DayLength::Long
             )
         );
     }

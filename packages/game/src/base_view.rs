@@ -174,6 +174,15 @@ impl BaseModuleView {
                         module.kind.storage_capacity()
                     ),
                     ModuleService::CollectRefined => format!("{} c ready", module.refined),
+                    ModuleService::Sleep => {
+                        if world.is_in_bed(player_id) {
+                            "In bed".to_owned()
+                        } else if world.clock().phase().sleepable() {
+                            "Until dawn".to_owned()
+                        } else {
+                            "After dusk".to_owned()
+                        }
+                    }
                     ModuleService::Craft(kind) => {
                         workshop_recipe(*kind).map_or_else(String::new, |(blocks, credits)| {
                             format!(

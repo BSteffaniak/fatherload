@@ -466,6 +466,10 @@ impl SeatUi {
                     .to_owned(),
                 SoundCue::Ui,
             ),
+            VillageDeal::Room => (
+                format!("{keeper} hands you a key. Sleep well ({spent} credits)."),
+                SoundCue::BedDown,
+            ),
         })
     }
 }

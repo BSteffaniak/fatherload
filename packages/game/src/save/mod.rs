@@ -1,6 +1,6 @@
 //! Settings and world saves.
 //!
-//! A save is the host's [`WorldState`] plus a little session metadata (format version 8). The
+//! A save is the host's [`WorldState`] plus a little session metadata (format version 9). The
 //! world's terrain is stored compactly: its generation settings (seed, size, richness, hazards,
 //! generator version), a digest and only the tiles that differ from freshly generated terrain;
 //! loading regenerates the rest and checks the digest. Rigs carry their goods in item containers
@@ -42,7 +42,11 @@ const SAVE_SLOTS: usize = 3;
 /// fields with serde defaults: drop magnet / dump / "blocked" marks and the `collect_blocks`
 /// toggle (T7), enemies and the enemy director (T10), cave and village journals (T13, T9),
 /// player bases (T12) and the crew roster of parked players and profiles (WP-PERSIST).
-pub const SAVE_VERSION: u32 = 8;
+///
+/// 9 (wave 3): the world clock (T14: day length, skipped nights, the sleep rule and who is in
+/// bed), a field with a serde default, so a version 8 file loads as is with the standard 48
+/// minute day.
+pub const SAVE_VERSION: u32 = 9;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -305,7 +309,7 @@ fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
         check_generator(json)?;
     }
     match probe.version {
-        SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        8 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
         7 => serde_json::from_str::<legacy::V7SaveFile>(json)
@@ -1350,6 +1354,48 @@ mod tests {
             .expect("the director is saved");
         let loaded = parse_save(&v7.to_string()).expect("v7 loads");
         assert_eq!(loaded.world.enemy_difficulty(), EnemyDifficulty::Normal);
+        assert_eq!(
+            loaded.world.simulation_state_hash(),
+            plain.world.simulation_state_hash()
+        );
+    }
+
+    #[test]
+    fn the_world_clock_saves_and_version_eight_files_get_the_standard_day() {
+        use fatherload_simulation::clock::{DayLength, DayPhase};
+        let mut world = WorldState::new_game(PlayerId::new(1));
+        let plain = WorldSave {
+            world: world.clone(),
+            play_seconds: 1.0,
+        };
+        world.set_day_length(DayLength::Short);
+        world.set_world_time_millis(DayLength::Short.millis() * 2 + 1_000);
+        let json = serde_json::to_string(&SaveFile {
+            version: SAVE_VERSION,
+            save: WorldSave {
+                world: world.clone(),
+                play_seconds: 1.0,
+            },
+        })
+        .expect("serialize");
+        let loaded = parse_save(&json).expect("v9 loads");
+        assert_eq!(loaded.world.day_length(), DayLength::Short);
+        assert_eq!(loaded.world.clock(), world.clock());
+        assert_eq!(loaded.world.clock().day(), 3);
+        // A version 8 file has no clock: it loads on the standard day.
+        let mut v8 = serde_json::to_value(&SaveFile {
+            version: 8,
+            save: plain.clone(),
+        })
+        .expect("serialize");
+        let _clock = v8["save"]["world"]
+            .as_object_mut()
+            .expect("world object")
+            .remove("clock")
+            .expect("the clock is saved");
+        let loaded = parse_save(&v8.to_string()).expect("v8 loads");
+        assert_eq!(loaded.world.day_length(), DayLength::Standard);
+        assert_eq!(loaded.world.clock().phase(), DayPhase::Day);
         assert_eq!(
             loaded.world.simulation_state_hash(),
             plain.world.simulation_state_hash()

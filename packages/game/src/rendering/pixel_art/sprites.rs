@@ -61,6 +61,8 @@ pub const ALL: &[&SpriteDef] = &[
     &icons::STONE_BLOCK,
     &icons::HARD_ROCK_BLOCK,
     &icons::MAGNET,
+    &icons::MOON,
+    &icons::SUN,
     &rig::RIG,
     &rig::RIG_DAMAGED,
     &rig::DRILL_DOWN,

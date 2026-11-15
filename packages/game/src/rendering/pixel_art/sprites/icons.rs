@@ -513,3 +513,39 @@ pub const MAGNET: SpriteDef = SpriteDef {
     ]],
     frame_seconds: 0.0,
 };
+
+/// A crescent moon: sleeping, night and the clock's night side.
+pub const MOON: SpriteDef = SpriteDef {
+    name: "icon_moon",
+    legend: &[('o', INK), ('c', CREAM), ('m', MIST), ('b', BONE)],
+    frames: &[&[
+        "...ooo...",
+        "..obbo...",
+        ".obco....",
+        ".obco....",
+        ".obcco...",
+        ".obccmo..",
+        "..obccmo.",
+        "...oooo..",
+        ".........",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A sun: daytime on the clock.
+pub const SUN: SpriteDef = SpriteDef {
+    name: "icon_sun",
+    legend: &[('o', INK), ('g', GOLD), ('c', CREAM), ('a', AMBER)],
+    frames: &[&[
+        "....a....",
+        ".a.ooo.a.",
+        "..ocggo..",
+        ".ocggggo.",
+        "aoggggaoa",
+        ".oggggao.",
+        "..ogaao..",
+        ".a.ooo.a.",
+        "....a....",
+    ]],
+    frame_seconds: 0.0,
+};
