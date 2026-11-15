@@ -4,6 +4,8 @@
 
 mod app;
 mod audio;
+#[cfg(not(target_os = "emscripten"))]
+mod balance_report;
 mod base_view;
 mod camera_lead;
 mod effects;
@@ -58,6 +60,9 @@ fn main() {
             eprintln!("{error}");
             std::process::exit(2);
         }
+    }
+    if balance_report::run_if_asked(&args) {
+        return;
     }
     match story_report::parse_args(&args) {
         Ok(Some(options)) => {

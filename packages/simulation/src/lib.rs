@@ -9,6 +9,7 @@
 //! networking dependencies, so it can run identically on a host, inside client prediction, in
 //! replays, and in tests.
 
+pub mod balance;
 pub mod base;
 pub mod cave;
 pub mod climb;

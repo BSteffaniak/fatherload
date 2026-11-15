@@ -256,6 +256,12 @@ impl WorldState {
         }
     }
 
+    /// Marks lair chunk `chunk` as cleared, so it never gets an occupant (scenario setup: the
+    /// balance harness's sealed duel arenas).
+    pub(crate) fn mark_lair_cleared(&mut self, chunk: ChunkPosition) {
+        self.enemies.cleared_lairs.insert(chunk);
+    }
+
     pub(super) fn apply_enemy_difficulty(
         &mut self,
         difficulty: EnemyDifficulty,
