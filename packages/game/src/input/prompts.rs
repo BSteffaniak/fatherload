@@ -8,6 +8,7 @@
 use super::{
     devices::{InputDevice, KeyboardLayout, PadFamily},
     gamepad::{PadAction, PadAxis, PadButton, SCROLL_AXIS, primary_button},
+    touch::touch_labels,
 };
 
 /// Something the player can do, as shown in a prompt.
@@ -126,6 +127,11 @@ pub fn glyphs(prompt: Prompt, device: InputDevice) -> Vec<Glyph> {
         InputDevice::Gamepad { family, .. } => pad_glyphs(prompt)
             .into_iter()
             .map(|glyph| Glyph::Pad(glyph, family))
+            .collect(),
+        // Touch prompts are words on a keycap; most actions are on-screen buttons instead.
+        InputDevice::Touch => touch_labels(prompt)
+            .iter()
+            .map(|label| Glyph::Key(label))
             .collect(),
         // A seat nobody drives yet shows how a controller joins.
         InputDevice::Unassigned => pad_glyphs(prompt)

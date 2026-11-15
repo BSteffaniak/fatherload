@@ -33,6 +33,7 @@ pub mod rig_art;
 mod screen;
 pub mod terrain;
 mod title;
+pub mod touch_controls;
 mod ui_kit;
 #[cfg(not(target_os = "emscripten"))]
 mod ui_sheet;
@@ -416,6 +417,7 @@ impl GameRenderer {
                 palette::FOG,
             );
         }
+        touch_controls::draw_touch_controls(draw);
         self.end_ui(UiOwner::Global);
     }
 
@@ -673,13 +675,17 @@ impl GameRenderer {
             build::draw_build_bar(draw, view, preview, shell.prompt_device(view.seat_index));
         }
         draw_depth_ruler_for_view(draw, snapshot.terrain, view);
-        draw_minimap_for_view(
-            draw,
-            snapshot.terrain,
-            view,
-            &snapshot.players,
-            &self.explored_drawn,
-        );
+        // The thumb cluster owns the minimap's corner on a touch screen (the map button opens
+        // the full map instead).
+        if !(view.seat_index == 0 && touch_controls::active()) {
+            draw_minimap_for_view(
+                draw,
+                snapshot.terrain,
+                view,
+                &snapshot.players,
+                &self.explored_drawn,
+            );
+        }
     }
 }
 

@@ -2006,7 +2006,7 @@ impl ShellState {
         let orphaned = match self.prompt_device(self.menu_seat) {
             InputDevice::Gamepad { index, .. } => !self.gamepads.contains_key(&index),
             InputDevice::Unassigned => true,
-            InputDevice::Keyboard(_) => false,
+            InputDevice::Keyboard(_) | InputDevice::Touch => false,
         };
         if orphaned {
             self.message = format!(

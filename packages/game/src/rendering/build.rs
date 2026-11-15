@@ -101,9 +101,13 @@ pub(super) fn draw_build_bar(
     device: InputDevice,
 ) {
     let rect = ui_kit::canvas().viewport_rect(view.viewport);
-    // Left of the minimap (bottom-right, `screen::draw_minimap_for_view`).
+    // Left of the minimap (bottom-right, `screen::draw_minimap_for_view`), or beside the thumb
+    // cluster that takes its place on a touch screen.
     let minimap = (rect.width / 6.0).clamp(48.0, 80.0) + 30.0;
-    let room = rect.width - 12.0 - minimap;
+    let (reserved, reserved_on_left) = super::touch_controls::thumb_corner()
+        .filter(|_| device.is_touch())
+        .unwrap_or((minimap, false));
+    let room = (rect.width - 12.0 - reserved).max(120.0);
     let width = room.min(420.0);
     let hints = [
         hint(Prompt::BuildPlace, "place"),
@@ -116,7 +120,7 @@ pub(super) fn draw_build_bar(
     let rows = prompts::wrap_bar(&hints, device, width as i32 - 16);
     let prompt_height = prompts::wrapped_height(rows.len());
     let height = 74.0 + prompt_height as f32;
-    let x = rect.x + 8.0 + (room - width) * 0.5;
+    let x = rect.x + 8.0 + (room - width) * 0.5 + if reserved_on_left { reserved } else { 0.0 };
     let y = rect.y + rect.height - height - 6.0;
     ui_kit::panel(
         draw,

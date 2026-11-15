@@ -30,6 +30,10 @@ pub struct DeviceFrame {
     pub mouse_used: bool,
     /// Connected controllers by index.
     pub pads: BTreeMap<u8, PadSample>,
+    /// The touch screen's input (see [`super::touch`]); it drives the first seat.
+    pub touch: PlayerInput,
+    /// A finger went down this frame.
+    pub touch_used: bool,
 }
 
 /// Something the app should tell the player about.
@@ -199,6 +203,12 @@ impl InputRouter {
                     active.push(device);
                 }
                 input = combine_player_input(input, *pad_input);
+            }
+            if seat == 0 {
+                if frame.touch_used {
+                    active.push(InputDevice::Touch);
+                }
+                input = combine_player_input(input, frame.touch);
             }
             if fallback == InputDevice::Unassigned
                 && let Some(pad) = self.roster.pad(seat)
@@ -521,6 +531,32 @@ mod tests {
                 index: 4,
                 family: PadFamily::PlayStation
             }
+        );
+    }
+
+    #[test]
+    fn the_touch_screen_drives_the_first_seat_and_takes_its_prompts_when_touched() {
+        let mut router = InputRouter::new(4);
+        let mut frame = DeviceFrame::default();
+        frame.touch.scan = true;
+        frame.touch_used = true;
+        let output = router.route(&frame, 2, DT);
+        assert!(output.seats[0].scan && !output.seats[1].scan);
+        assert_eq!(output.devices[0], InputDevice::Touch);
+
+        // A finger resting on the stick keeps steering without re-announcing itself.
+        let mut held = DeviceFrame::default();
+        held.touch.horizontal = 1.0;
+        let output = router.route(&held, 2, DT);
+        assert!((output.seats[0].horizontal - 1.0).abs() < f32::EPSILON);
+        assert_eq!(output.devices[0], InputDevice::Touch);
+
+        let mut keys = DeviceFrame::default();
+        keys.keyboard.confirm = true;
+        assert_eq!(
+            router.route(&keys, 2, DT).devices[0],
+            InputDevice::Keyboard(KeyboardLayout::Wasd),
+            "a key press hands the prompts back"
         );
     }
 }

@@ -3,7 +3,8 @@
 //! [`PlayerInput`] is one seat's frame of intent. Keyboards are read straight from raylib here;
 //! controllers are sampled into [`gamepad::PadState`]s and mapped by [`gamepad::PadMapper`];
 //! [`router::InputRouter`] assigns devices to seats and tracks each seat's active device, which
-//! [`prompts`] turns into keycaps or controller glyphs.
+//! [`prompts`] turns into keycaps or controller glyphs. A touch screen is mapped by
+//! [`touch::TouchInput`] and drives the first seat.
 
 pub mod devices;
 pub mod gamepad;
@@ -12,6 +13,7 @@ pub mod prompts;
 pub mod repeat;
 pub mod router;
 pub mod seats;
+pub mod touch;
 
 use raylib::prelude::*;
 
@@ -260,6 +262,9 @@ impl PlayerInput {
     }
 }
 
+/// The main keyboard's fire key (the left mouse button fires too).
+const FIRE_KEY: KeyboardKey = KeyboardKey::KEY_V;
+
 #[must_use]
 pub fn read_input(raylib: &mut RaylibHandle, exit_requested: bool) -> PlayerInput {
     let mut input = read_primary_keyboard_input(raylib);
@@ -275,6 +280,16 @@ pub fn read_input_with_arrow_aliases(
     let mut input = read_primary_keyboard_input_with_arrow_aliases(raylib);
     input.exit_requested = exit_requested;
     input
+}
+
+/// Drops everything `input` took from the mouse (aim, fire and clicks; the wheel stays): the
+/// touch screen has the pointer, and the mouse events it echoes must not act a second time.
+pub fn release_mouse(input: &mut PlayerInput, raylib: &RaylibHandle) {
+    input.fire = raylib.is_key_down(FIRE_KEY);
+    input.pointer = None;
+    input.build_pointer = None;
+    input.pointer_primary = false;
+    input.pointer_secondary = false;
 }
 
 #[must_use]
@@ -431,7 +446,7 @@ fn read_primary_keyboard_input_with_options(
         aim_x: 0.0,
         aim_y: 0.0,
         fire: raylib.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT)
-            || raylib.is_key_down(KeyboardKey::KEY_V),
+            || raylib.is_key_down(FIRE_KEY),
         fire_thrusts_unarmed: false,
         cycle_weapon: raylib.is_key_pressed(KeyboardKey::KEY_X),
         // Filled in by the app from its mouse tracker (see `crate::input::MouseAim`).

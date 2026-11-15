@@ -173,14 +173,16 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             ui_sheet: false,
             prompt_sheet: false,
             rig_sheet: None,
+            touch_view: crate::input::touch::TouchView::default(),
         };
         (scene.setup)(&mut stage);
-        let (report, gallery, ui_sheet, prompt_sheet, rig_sheet) = (
+        let (report, gallery, ui_sheet, prompt_sheet, rig_sheet, touch_view) = (
             stage.report,
             stage.gallery,
             stage.ui_sheet,
             stage.prompt_sheet,
             stage.rig_sheet,
+            stage.touch_view,
         );
         let renderer = renderer
             .get_or_insert_with(|| GameRenderer::new(&mut raylib, &thread, game.world().terrain()));
@@ -195,6 +197,13 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             } else {
                 FrameReport::default()
             };
+            crate::touch_screen::publish_staged(
+                &game.shell,
+                game.world(),
+                snapshot.views.first(),
+                screen,
+                &touch_view,
+            );
             renderer.sync(&mut raylib, &thread, &snapshot, &frame_report);
             let mut draw = raylib.begin_drawing(&thread);
             if gallery {
@@ -240,6 +249,7 @@ mod base_scenes;
 mod cave_scenes;
 mod drop_scenes;
 mod explosive_scenes;
+mod touch_scenes;
 mod weapon_scenes;
 
 /// One capturable scene.
@@ -264,6 +274,8 @@ pub struct SceneStage<'g> {
     prompt_sheet: bool,
     /// Draw a rig reference sheet instead of the game.
     rig_sheet: Option<crate::rendering::rig_art::sheet::RigSheet>,
+    /// Fingers on the touch controls (drawn when the first seat's device is the touch screen).
+    touch_view: crate::input::touch::TouchView,
 }
 
 impl SceneStage<'_> {
@@ -329,6 +341,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(base_scenes::BASE_SCENES)
         .chain(crew_scenes::CREW_SCENES)
         .chain(surface_scenes::SURFACE_SCENES)
+        .chain(touch_scenes::TOUCH_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
@@ -2963,6 +2976,7 @@ mod tests {
                 ui_sheet: false,
                 prompt_sheet: false,
                 rig_sheet: None,
+                touch_view: crate::input::touch::TouchView::default(),
             };
             (scene.setup)(&mut stage);
             let snapshot = game.snapshot(DEFAULT_SIZE);

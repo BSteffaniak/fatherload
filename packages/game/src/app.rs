@@ -10,7 +10,7 @@ use crate::{
     input::{
         PlayerInput,
         pads::sample_pads,
-        read_input, read_input_with_arrow_aliases, read_secondary_keyboard_input,
+        read_input, read_input_with_arrow_aliases, read_secondary_keyboard_input, release_mouse,
         router::{DeviceFrame, InputRouter},
     },
     local_game::{FrameInput, LocalGame, SaveTarget},
@@ -18,6 +18,7 @@ use crate::{
     runtime::MAX_LOCAL_SEATS,
     save::{load_settings, save_settings},
     shell::RunMode,
+    touch_screen::{TouchDevice, TouchSample},
     window::DesktopWindow,
 };
 
@@ -60,6 +61,7 @@ fn sample_devices(
     seat_count: usize,
     exit_requested: bool,
     pointer: Option<(f32, f32)>,
+    touch: TouchSample,
 ) -> DeviceFrame {
     let solo = seat_count <= 1;
     let mut keyboard = if solo {
@@ -80,25 +82,41 @@ fn sample_devices(
     ]
     .into_iter()
     .any(|button| raylib.is_mouse_button_pressed(button));
+    if touch.owns_pointer {
+        release_mouse(&mut keyboard, raylib);
+    }
     DeviceFrame {
         keyboard,
         arrow_keys,
-        mouse_used,
+        mouse_used: mouse_used && !touch.owns_pointer,
         pads: sample_pads(raylib),
+        touch: touch.input,
+        touch_used: touch.used,
     }
 }
 
 /// Routes this frame's devices to seats, reports controller hot-plug as toasts and adds a
-/// split-screen seat when a spare controller claims one.
+/// split-screen seat when a spare controller claims one. `view` is the first seat's view as
+/// last drawn (touches and the mouse point into it). While the touch screen owns the pointer
+/// the mouse neither aims nor clicks.
 fn sample_frame_input(
     raylib: &mut raylib::RaylibHandle,
     router: &mut InputRouter,
     game: &mut LocalGame,
-    (delta_seconds, mouse): (f32, &mut MouseAim),
+    (delta_seconds, mouse, touch): (f32, &mut MouseAim, &mut TouchDevice),
     exit_requested: bool,
+    view: Option<(PointerView, (f32, f32))>,
 ) -> FrameInput {
-    let pointer = mouse.sample(raylib, delta_seconds);
-    let devices = sample_devices(raylib, game.seats().len(), exit_requested, pointer);
+    let touch = touch.sample(
+        raylib,
+        DesktopWindow::screen(raylib),
+        |x, y| view.and_then(|(view, _)| view.world_at(x, y)),
+        delta_seconds,
+    );
+    let pointer = mouse
+        .sample(raylib, delta_seconds)
+        .filter(|_| !touch.owns_pointer);
+    let devices = sample_devices(raylib, game.seats().len(), exit_requested, pointer, touch);
     let output = router.route(&devices, game.seats().len(), delta_seconds);
     for notice in &output.notices {
         game.shell.message = notice.message();
@@ -114,13 +132,18 @@ fn sample_frame_input(
         );
     }
     let mut seats = output.seats.into_iter();
-    FrameInput {
+    let mut input = FrameInput {
         primary: seats.next().unwrap_or_default(),
         other_seats: seats.collect(),
         clipboard: None,
         devices: output.devices,
         gamepads: router.pad_names().clone(),
+    };
+    if !touch.owns_pointer {
+        let mouse = raylib.get_mouse_position();
+        point_with_mouse(&mut input.primary, view, (mouse.x, mouse.y));
     }
+    input
 }
 
 /// What audio needs from each seat this frame: its thrust, whether it is driving its rig and
@@ -137,6 +160,12 @@ fn seat_audio(input: &FrameInput, game: &LocalGame) -> Vec<SeatAudio> {
             message_tick: game.shell.seat(seat).message_tick,
         })
         .collect()
+}
+
+/// Whether the left mouse button stands in for a finger (`--touch`, a development aid for
+/// trying the touch controls on a desktop).
+fn touch_with_mouse() -> bool {
+    std::env::args().any(|argument| argument == "--touch")
 }
 
 pub fn run() {
@@ -187,6 +216,22 @@ impl PointerView {
     }
 }
 
+/// The mouse points in the main keyboard seat's view when it moves or clicks (build mode's
+/// cursor). `last` is that view as last drawn and where the mouse was then.
+fn point_with_mouse(
+    input: &mut PlayerInput,
+    last: Option<(PointerView, (f32, f32))>,
+    mouse: (f32, f32),
+) {
+    let Some((view, last)) = last else {
+        return;
+    };
+    let moved = (mouse.0 - last.0).abs() + (mouse.1 - last.1).abs() > 0.5;
+    if moved || input.pointer_primary || input.pointer_secondary {
+        input.build_pointer = view.world_at(mouse.0, mouse.1);
+    }
+}
+
 struct App {
     /// The main keyboard seat's view as last drawn, and the mouse position then (build mode
     /// points with the mouse).
@@ -198,6 +243,7 @@ struct App {
     saved_window: crate::save::WindowSettings,
     router: InputRouter,
     mouse: MouseAim,
+    touch: TouchDevice,
     thread: raylib::RaylibThread,
     raylib: raylib::RaylibHandle,
 }
@@ -235,6 +281,7 @@ impl App {
             saved_window,
             router,
             mouse: MouseAim::default(),
+            touch: TouchDevice::new(touch_with_mouse()),
             thread,
             raylib,
         }
@@ -253,6 +300,7 @@ impl App {
             renderer,
             router,
             mouse,
+            touch,
         } = self;
         if game.should_exit() {
             // Remember a resized or (un)maximized window for the next run.
@@ -281,19 +329,18 @@ impl App {
         // raylib's web WindowShouldClose sleeps internally; RAF owns scheduling here.
         #[cfg(target_os = "emscripten")]
         let exit_requested = false;
-        let mut input =
-            sample_frame_input(raylib, router, game, (delta_seconds, mouse), exit_requested);
+        let mut input = sample_frame_input(
+            raylib,
+            router,
+            game,
+            (delta_seconds, mouse, touch),
+            exit_requested,
+            *pointer,
+        );
         if input.primary.paste {
             input.clipboard = raylib.get_clipboard_text().ok();
         }
-        // The mouse points in the main keyboard seat's view when it moves or clicks.
         let mouse = raylib.get_mouse_position();
-        if let Some((view, last)) = *pointer {
-            let moved = (mouse.x - last.0).abs() + (mouse.y - last.1).abs() > 0.5;
-            if moved || input.primary.pointer_primary || input.primary.pointer_secondary {
-                input.primary.build_pointer = view.world_at(mouse.x, mouse.y);
-            }
-        }
         renderer.apply_ui_input(&input.seat_inputs(), &game.shell);
         window.track(raylib);
         game.shell.window = window.settings();
@@ -326,6 +373,7 @@ impl App {
                 (mouse.x, mouse.y),
             )
         });
+        touch.observe(&game.shell, game.world(), snapshot.views.first());
         if let Some(audio) = audio {
             let seats = seat_audio(&input, game);
             let frame = AudioFrame {
@@ -339,6 +387,7 @@ impl App {
             };
             audio.update(&frame, game.shell.master_volume);
         }
+        touch.publish(&game.shell);
         renderer.sync(raylib, thread, &snapshot, &report);
         let mut draw = raylib.begin_drawing(thread);
         renderer.render(&mut draw, &game.shell, &snapshot);

@@ -65,6 +65,8 @@ pub enum InputDevice {
     Keyboard(KeyboardLayout),
     /// A controller by raylib/GLFW index.
     Gamepad { index: u8, family: PadFamily },
+    /// The touch screen and its on-screen controls (see [`super::touch`]).
+    Touch,
     /// A split-screen seat no device drives yet (waiting for a controller to claim it).
     #[default]
     Unassigned,
@@ -78,6 +80,12 @@ impl InputDevice {
     #[must_use]
     pub const fn is_gamepad(self) -> bool {
         matches!(self, Self::Gamepad { .. })
+    }
+
+    /// Whether this is the touch screen.
+    #[must_use]
+    pub const fn is_touch(self) -> bool {
+        matches!(self, Self::Touch)
     }
 
     /// Short description for the F3 overlay.
@@ -94,6 +102,7 @@ impl InputDevice {
                     family.label()
                 )
             }
+            Self::Touch => "touch screen".to_owned(),
             Self::Unassigned => "none (press A or Start on a controller)".to_owned(),
         }
     }
