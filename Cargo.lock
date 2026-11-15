@@ -161,6 +161,7 @@ dependencies = [
  "fatherload_simulation",
  "postcard",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

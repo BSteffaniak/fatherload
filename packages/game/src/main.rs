@@ -12,6 +12,7 @@ mod input_mapping;
 mod local_game;
 mod online;
 mod pixel_scale;
+mod profile;
 mod render_snapshot;
 mod rendering;
 mod runtime;

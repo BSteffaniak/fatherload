@@ -213,7 +213,8 @@ impl App {
         raylib.set_exit_key(None);
 
         let saved_window = settings.window;
-        let game = LocalGame::new(settings, SaveTarget::UserFiles);
+        let mut game = LocalGame::new(settings, SaveTarget::UserFiles);
+        game.set_profile(crate::profile::load_or_create());
         window.set_fullscreen(&mut raylib, game.shell.fullscreen);
         let audio = match AudioBus::new() {
             Ok(audio) => Some(audio),

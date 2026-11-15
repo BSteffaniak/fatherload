@@ -5,9 +5,13 @@
 //! generator version), a digest and only the tiles that differ from freshly generated terrain;
 //! loading regenerates the rest and checks the digest. Rigs carry their goods in item containers
 //! (cargo bay, block hopper) and live world objects such as gas clouds and falling boulders are
-//! entities in the world's entity store, explosive charges included. Older formats (1-5, which
-//! wrote out every tile, 6, from before the item and entity models, and 7, with a separate charge
-//! list and explosive count maps) are migrated on load by [`legacy`]. Loading always hands the runtime a fresh world, which
+//! entities in the world's entity store, explosive charges included. Version 8 also adds the
+//! crew roster (WP-PERSIST): who plays each rig (persistent profile, name, local seat) and the
+//! players parked outside the live world, so a resumed multiplayer save remembers everyone; a v7
+//! save loads with an empty roster and its rigs beyond the host's seats are parked when it is
+//! hosted. Older formats (1-5, which wrote out every tile, 6, from before the item and entity
+//! models, and 7, with a separate charge list and explosive count maps) are migrated on load by
+//! [`legacy`]. Loading always hands the runtime a fresh world, which
 //! starts a new session epoch.
 
 mod legacy;
@@ -37,7 +41,7 @@ const SAVE_SLOTS: usize = 3;
 /// explosives cargo bay items (T11; version 7 files migrate through `legacy::V7SaveFile`), plus
 /// fields with serde defaults: drop magnet / dump / "blocked" marks and the `collect_blocks`
 /// toggle (T7), enemies and the enemy director (T10), cave and village journals (T13, T9),
-/// player bases (T12).
+/// player bases (T12) and the crew roster of parked players and profiles (WP-PERSIST).
 pub const SAVE_VERSION: u32 = 8;
 
 /// Persisted user settings.
@@ -374,7 +378,9 @@ pub const fn save_slot_count() -> usize {
     SAVE_SLOTS
 }
 
-fn write_state_file(path: impl AsRef<Path>, contents: String) -> Result<(), SaveError> {
+/// Writes a file in (or under) the state directory; in the browser it also queues the
+/// `IndexedDB` flush.
+pub fn write_state_file(path: impl AsRef<Path>, contents: String) -> Result<(), SaveError> {
     let path = path.as_ref();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(SaveError::Io)?;
@@ -383,6 +389,16 @@ fn write_state_file(path: impl AsRef<Path>, contents: String) -> Result<(), Save
     #[cfg(target_os = "emscripten")]
     crate::browser::persist_saves();
     Ok(())
+}
+
+/// Path of a file named `name` in the state directory.
+pub fn state_file_path(name: &str) -> PathBuf {
+    state_file_path_in(&default_state_dir(), name)
+}
+
+/// Path of a file named `name` in the state directory `dir`.
+pub fn state_file_path_in(dir: &Path, name: &str) -> PathBuf {
+    dir.join(name)
 }
 
 fn settings_path() -> PathBuf {
@@ -668,6 +684,59 @@ mod tests {
             save.world.simulation_state_hash()
         );
         assert!(loaded.world.player(player).expect("rig").collect_blocks);
+    }
+
+    #[test]
+    fn the_crew_roster_saves_and_v7_saves_load_with_every_rig() {
+        use fatherload_simulation::{CrewMember, ProfileId};
+        let mut world = WorldState::new_game(PlayerId::new(1));
+        world.add_player(PlayerId::new(2));
+        world.add_player(PlayerId::new(3));
+        world.set_crew_member(
+            PlayerId::new(2),
+            CrewMember {
+                profile: Some(ProfileId::new(0xa1e8)),
+                name: "Alex".to_owned(),
+                seat: None,
+            },
+        );
+        world.player_mut(PlayerId::new(2)).expect("alex").credits = 2_222;
+        assert!(world.park_player(PlayerId::new(2)));
+        let save = WorldSave {
+            world,
+            play_seconds: 3.0,
+        };
+        let json = serde_json::to_string(&SaveFile {
+            version: SAVE_VERSION,
+            save,
+        })
+        .expect("serialize");
+        assert!(json.contains("\"crew\""), "the roster is in the file");
+        let loaded = parse_save(&json).expect("v8 loads");
+        let parked = loaded
+            .world
+            .parked_player(PlayerId::new(2))
+            .expect("Alex stays parked in the save");
+        assert_eq!(parked.member.name, "Alex");
+        assert_eq!(parked.player.credits, 2_222);
+        assert_eq!(
+            loaded.world.player_for_profile(ProfileId::new(0xa1e8)),
+            Some(PlayerId::new(2))
+        );
+
+        // A v7 save (no roster) keeps every rig live; hosting it parks the extras.
+        let mut v7: serde_json::Value = serde_json::from_str(&json).expect("json");
+        v7["version"] = serde_json::json!(7);
+        v7["save"]["world"]
+            .as_object_mut()
+            .expect("world object")
+            .remove("crew");
+        let loaded = parse_save(&v7.to_string()).expect("v7 loads");
+        assert!(loaded.world.crew().is_empty());
+        assert_eq!(
+            loaded.world.player_ids().collect::<Vec<_>>(),
+            [PlayerId::new(1), PlayerId::new(3)]
+        );
     }
 
     #[test]
