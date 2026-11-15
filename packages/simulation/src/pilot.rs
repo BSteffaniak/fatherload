@@ -140,6 +140,12 @@ pub const PILOT_PICKUP_RADIUS: f32 = TILE_SIZE * 0.9;
 
 /// A rig must be within this distance (centre to the pilot's middle) to board it.
 pub const BOARD_REACH: f32 = TILE_SIZE * 1.6;
+/// On foot, a counter only services the rig (fuel, repairs, selling its cargo, upgrades) while
+/// it is parked within this distance of the pilot (px, ten tiles: outside the door).
+pub const RIG_SERVICE_REACH: f32 = TILE_SIZE * 10.0;
+/// Credits a pilot on foot pays to radio for a pickup ([`crate::PlayerCommand::Rescue`] on
+/// foot): hauled straight back aboard the rig, wherever it is.
+pub const PILOT_RECALL_FEE: u32 = 25;
 /// A rig moving faster than this (px/s) cannot be left.
 pub const EXIT_MAX_SPEED: f32 = 90.0;
 /// Seconds between two thrown bombs on foot.

@@ -121,6 +121,7 @@ pub use replication::{
 pub use roster::SPAWN_SPACING;
 pub use services::{
     BOMB_BUNDLES, MINING_ROCKETS_COST, MINING_ROCKETS_COUNT, MINING_ROCKETS_SHACK_LEVEL,
+    command_services_rig,
 };
 pub use timing::TickTiming;
 

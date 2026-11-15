@@ -423,8 +423,10 @@ fn a_dead_pilot_drops_part_of_its_pack_and_respawns_in_the_rig() {
     );
     assert!(!world.is_on_foot(PLAYER), "back in the rig");
     let rig = world.player(PLAYER).expect("rig");
+    // What the pack kept goes aboard with the respawned pilot, as when boarding.
+    assert!(rig.pilot_pack.is_empty());
     assert_eq!(
-        rig.pilot_pack.count(ItemKind::Mineral(MineralKind::Silver)),
+        rig.cargo_bay.count(ItemKind::Mineral(MineralKind::Silver)),
         2
     );
     let dropped: u32 = world
@@ -669,4 +671,74 @@ fn walking_and_jumping_on_foot_is_tick_rate_independent() {
     }
     assert_eq!(mode, PilotMode::Free);
     let _ = (ExplosiveKind::Bomb, PILOT_STAND_HEIGHT);
+}
+
+#[test]
+fn radioing_for_a_pickup_hauls_the_pilot_back_aboard() {
+    let mut world = arena();
+    world.player_mut(PLAYER).expect("rig").credits = 100;
+    out_of_the_rig(&mut world);
+    run(&mut world, &walk(1.0), 90);
+    assert!(!world.can_board_rig(PLAYER), "walked away");
+    world
+        .player_mut(PLAYER)
+        .expect("rig")
+        .pilot_pack
+        .add(ItemKind::Mineral(MineralKind::Gold), 2);
+    let events = run(
+        &mut world,
+        &TickInputs::default().act(PLAYER, PlayerCommand::Rescue),
+        1,
+    );
+    assert!(!world.is_on_foot(PLAYER), "hauled aboard: {events:?}");
+    assert!(events.iter().any(|event| matches!(
+        event,
+        GameplayEventKind::PilotBoarded { transferred: 2, .. }
+    )));
+    let rig = world.player(PLAYER).expect("rig");
+    assert_eq!(rig.credits, 100 - crate::pilot::PILOT_RECALL_FEE);
+    assert_eq!(rig.cargo_bay.count(ItemKind::Mineral(MineralKind::Gold)), 2);
+    // A wrecked rig still takes its pilot back (its own rescue follows from the rig).
+    out_of_the_rig(&mut world);
+    world.player_mut(PLAYER).expect("rig").hull = 0.0;
+    assert!(!world.can_board_rig(PLAYER));
+    run(
+        &mut world,
+        &TickInputs::default().act(PLAYER, PlayerCommand::Rescue),
+        1,
+    );
+    assert!(!world.is_on_foot(PLAYER));
+    assert!(
+        world.failure_state(PLAYER).is_some(),
+        "the rig's rescue is next"
+    );
+}
+
+#[test]
+fn rig_services_on_foot_need_the_rig_parked_outside() {
+    let mut world = WorldState::new_game(PLAYER);
+    let depot = crate::surface::SURFACE_BUILDINGS
+        .iter()
+        .find(|building| building.zone == crate::economy::SurfaceZone::Depot)
+        .copied()
+        .expect("depot");
+    let door_x = (depot.tile_x as f32 + 0.5 * depot.tile_width as f32) * TILE_SIZE;
+    let rig_y = world.player(PLAYER).expect("rig").y;
+    world.player_mut(PLAYER).expect("rig").x = door_x;
+    world
+        .place_pilot(PLAYER, door_x, rig_y + 11.0)
+        .expect("pilot");
+    let sell = PlayerCommand::SellCargo;
+    let contract = PlayerCommand::Service(SessionServiceRequest::CompleteDepotWork);
+    assert!(world.command_allowed_here(PLAYER, &sell), "rig outside");
+    assert!(world.command_allowed_here(PLAYER, &contract));
+    // The rig parked far away: the pilot can still do business, but not sell the rig's cargo.
+    world.player_mut(PLAYER).expect("rig").x = door_x + TILE_SIZE * 40.0;
+    assert!(!world.rig_within_service_reach(PLAYER));
+    assert!(!world.command_allowed_here(PLAYER, &sell));
+    assert!(!world.command_allowed_here(
+        PLAYER,
+        &PlayerCommand::Service(SessionServiceRequest::SellCargo)
+    ));
+    assert!(world.command_allowed_here(PLAYER, &contract));
 }

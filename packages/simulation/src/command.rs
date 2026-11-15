@@ -40,6 +40,8 @@ pub enum PlayerCommand {
     Refuel,
     Repair,
     SellCargo,
+    /// Rescue a stranded or wrecked rig. On foot (Part II F5) it radios for a pickup instead:
+    /// the pilot is hauled back aboard its rig for [`crate::pilot::PILOT_RECALL_FEE`].
     Rescue,
     /// A town service transaction (shop, bank, salvage, contracts, expeditions, ...).
     Service(SessionServiceRequest),

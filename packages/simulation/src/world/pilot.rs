@@ -24,10 +24,10 @@ use crate::{
     pilot::{
         BOARD_REACH, EXIT_MAX_SPEED, LAVA_DAMAGE_PER_SECOND, OXYGEN_REFILL_RATE,
         PICK_CLINK_SECONDS, PILOT_CROUCH_HEIGHT, PILOT_HALF_WIDTH, PILOT_PICKUP_RADIUS,
-        PILOT_STAND_HEIGHT, PickProgress, PilotControls, PilotGear, PilotGearKind, PilotMode,
-        PilotState, PilotTerrain, REGEN_AFTER_SECONDS, REGEN_PER_SECOND, STRIKE_GUARD_SECONDS,
-        SUFFOCATION_DAMAGE_PER_SECOND, THIN_AIR_ROW, THROW_COOLDOWN_SECONDS, THROW_SPEED,
-        box_blocked, fall_damage, pick_seconds, pilot_passable, step_pilot,
+        PILOT_RECALL_FEE, PILOT_STAND_HEIGHT, PickProgress, PilotControls, PilotGear,
+        PilotGearKind, PilotMode, PilotState, PilotTerrain, REGEN_AFTER_SECONDS, REGEN_PER_SECOND,
+        STRIKE_GUARD_SECONDS, SUFFOCATION_DAMAGE_PER_SECOND, THIN_AIR_ROW, THROW_COOLDOWN_SECONDS,
+        THROW_SPEED, box_blocked, fall_damage, pick_seconds, pilot_passable, step_pilot,
     },
     quantize::quantize_simulation_scalar as quantize,
     summary::PlayerScopedCommandOutcome,
@@ -342,6 +342,30 @@ impl WorldState {
         });
     }
 
+    /// [`crate::PlayerCommand::Rescue`] on foot: the pilot radios for a pickup and is hauled
+    /// back aboard its rig for [`PILOT_RECALL_FEE`] credits (what they have, if less). The way
+    /// out of a pit the hand pick cannot dig, and back to a rig wrecked or stranded out of
+    /// reach (whose own rescue then follows from the rig as usual).
+    fn recall_pilot(
+        &mut self,
+        player_id: PlayerId,
+        output: &mut TickOutput,
+    ) -> PlayerScopedCommandOutcome {
+        let Some((id, _, _)) = self.pilot_of(player_id) else {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        };
+        if let Some(player) = self.players.get_mut(&player_id) {
+            player.credits -= PILOT_RECALL_FEE.min(player.credits);
+        }
+        let _ = self.entities.despawn(id);
+        let transferred = self.empty_pack_into_rig(player_id);
+        output.push_event(GameplayEventKind::PilotBoarded {
+            player_id,
+            transferred,
+        });
+        PlayerScopedCommandOutcome::Applied
+    }
+
     /// Moves everything from the personal pack that fits into the rig; returns how many items.
     fn empty_pack_into_rig(&mut self, player_id: PlayerId) -> u32 {
         let Some(player) = self.players.get_mut(&player_id) else {
@@ -462,6 +486,7 @@ impl WorldState {
             PlayerCommand::DeployExplosive { kind, aim } => {
                 Some(self.pilot_throw(player_id, kind, Some(aim)))
             }
+            PlayerCommand::Rescue => Some(self.recall_pilot(player_id, output)),
             PlayerCommand::UseScanner | PlayerCommand::PlaceInfrastructure { .. } => {
                 Some(PlayerScopedCommandOutcome::IgnoredUnavailable)
             }
@@ -961,6 +986,10 @@ impl WorldState {
             .players
             .get(&owner)
             .is_none_or(|player| player.hull <= 0.0);
+        if !rig_wrecked {
+            // Back in the rig: what the pack still holds goes aboard, as when boarding.
+            let _moved = self.empty_pack_into_rig(owner);
+        }
         if rig_wrecked && let Some((home_x, home_y)) = self.rescue_home(owner) {
             let gear = self
                 .players

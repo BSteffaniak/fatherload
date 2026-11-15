@@ -101,6 +101,14 @@ impl WorldState {
         if !self.players.contains_key(&player_id) {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         }
+        if matches!(
+            deal.deal,
+            VillageDeal::SellCargo { .. } | VillageDeal::Refuel { .. } | VillageDeal::Repair { .. }
+        ) && !self.rig_within_service_reach(player_id)
+        {
+            // On foot, the rig itself must be parked outside (Part II F5).
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        }
         match deal.deal {
             VillageDeal::SellCargo { percent, only } => self.village_sell(player_id, percent, only),
             VillageDeal::Refuel { percent } => self.village_refuel(player_id, percent),

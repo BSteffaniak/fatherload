@@ -97,6 +97,33 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
     }
 }
 
+/// Whether `command` works on the rig itself (fuel, repairs, paint, selling its cargo or
+/// blocks, installing an upgrade). A pilot on foot at the counter may only order these while
+/// its rig is parked within [`crate::pilot::RIG_SERVICE_REACH`] (Part II F5): walking into the
+/// depot does not sell a cargo bay left at the bottom of a shaft.
+#[must_use]
+pub const fn command_services_rig(command: &PlayerCommand) -> bool {
+    match command {
+        PlayerCommand::Refuel
+        | PlayerCommand::Repair
+        | PlayerCommand::SellCargo
+        | PlayerCommand::BuyUpgrade { .. } => true,
+        PlayerCommand::Service(request) => matches!(
+            request,
+            SessionServiceRequest::Refuel { .. }
+                | SessionServiceRequest::Repair { .. }
+                | SessionServiceRequest::CustomizeRig { .. }
+                | SessionServiceRequest::SellCargo
+                | SessionServiceRequest::SellBlocks
+                | SessionServiceRequest::AutoSortLowGradeCargo
+                | SessionServiceRequest::BuyUpgrade { .. }
+                | SessionServiceRequest::SalvagePatchHull
+                | SessionServiceRequest::SalvageRecoverLostCargo
+        ),
+        _ => false,
+    }
+}
+
 /// Bomb bundles sold by the explosives shack: `(charges, credits)`.
 pub const BOMB_BUNDLES: [(u32, u32); 2] = [(3, 55), (7, 120)];
 /// Price of the shaped-charge mining rocket pack.
@@ -131,9 +158,25 @@ impl WorldState {
                 .player_village_building(player_id)
                 .is_some_and(|(at, index)| at.id == *village && index == usize::from(*building));
         }
+        if command_services_rig(command) && !self.rig_within_service_reach(player_id) {
+            return false;
+        }
         command_service_zones(command).is_none_or(|zones| {
             self.player_surface_zone(player_id)
                 .is_some_and(|zone| zones.contains(&zone))
+        })
+    }
+
+    /// Whether `player_id`'s rig is close enough to be serviced: always in the rig, and on
+    /// foot while the rig is parked within [`crate::pilot::RIG_SERVICE_REACH`] of the pilot.
+    #[must_use]
+    pub fn rig_within_service_reach(&self, player_id: PlayerId) -> bool {
+        let Some((_, body, state)) = self.pilot_of(player_id) else {
+            return true;
+        };
+        let (x, y) = state.middle(body);
+        self.players.get(&player_id).is_some_and(|player| {
+            (player.x - x).hypot(player.y - y) <= crate::pilot::RIG_SERVICE_REACH
         })
     }
 
