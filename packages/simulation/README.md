@@ -1242,7 +1242,7 @@ Probes may set a scenario up directly (carve an arena, hand a rig a weapon) but 
 shortcut the tick. Same config, same report, on every machine.
 
 - **Report:** `fatherload --balance-report [--seeds N] [--minutes M] [--hz H] [--only
-  economy,progression,combat,exposure,building] [--strategies shaft,prospector,charges]
+  economy,progression,combat,exposure,building,climb] [--strategies shaft,prospector,charges]
   [--threads T]` (release build), or `cargo test --release -p fatherload_simulation
   balance_report -- --ignored --nocapture` with `BALANCE_SEEDS`, `BALANCE_MINUTES`,
   `BALANCE_ONLY`. `trace_economy_bot` (ignored; `BALANCE_TRACE=1 BOT_SEED BOT_STRATEGY
@@ -1253,13 +1253,15 @@ shortcut the tick. Same config, same report, on every machine.
   EconomyRun`): a fresh world, a stock rig, shafts in the gaps between the town's buildings,
   sideways tunnels to visible ore (`Strategy::Prospector`), mining charges on ore-rich rows
   pressed at its own surface workshop (`Strategy::Charges`), straight shafts only
-  (`Strategy::Shaft`, the naive baseline: it goes broke), hazard and hard-rock side-steps,
+  (`Strategy::Shaft`, the naive baseline: the stock drill cannot bite clay, topsoil from one
+  shaft barely pays for its fuel, so it never affords drill II and goes broke), hazard and hard-rock side-steps,
   fuel reserve measured on earlier climbs, trips home to sell, refuel, repair and buy
   upgrades (cheapest weighted line, a reserve kept), a rivet gun once affordable, rescues when
   stranded. `EconomyRun` keeps per-minute samples, purchases, band times, damage by enemy
   kind and the rescue log.
-- **Progression:** time to each tier of the core lines, depth and earning rate over time, the
-  minute each band was entered.
+- **Progression:** time to each tier of the core lines (the prospector's runs: the shaft
+  baseline never upgrades and would drag the medians down), depth and earning rate over time,
+  the minute each band was entered.
 - **Combat** (`combat::duel(kind, band, loadout, hz) -> DuelResult`): a sealed arena at a
   band's depth (bedrock past a stone shell, lair chunks marked cleared through
   `WorldState::mark_lair_cleared`, the deep reward tile cleared), one enemy, a rig with one of
@@ -1268,15 +1270,27 @@ shortcut the tick. Same config, same report, on every machine.
   by kind per minute. Measuring rigs are topped up to a huge hull every tick and read losses
   against it.
 - **Building** (`building::run_building(hz)`): two claims of every module in a slate cavern
-  through real `BuildCommand`s; credits, blocks, minutes of income at the unlock band, the fuel
-  station's synthesis per minute.
+  through real `BuildCommand`s from a hopper big enough for all of them, so the credits and
+  blocks columns are each module's real price (a player short of blocks pays their market price
+  on top); minutes of income at the unlock band, the fuel station's synthesis per minute.
+- **Climb** (`climb::climb(seed, tank, engine, hz) -> ClimbResult`, the plan's T19 "climb
+  bots"): a rig of the given fuel-tank and engine tiers holds thrust straight up from the
+  surface until the tank is dry; apex, seconds to it and the turn-back altitude (half the tank
+  burned) per `climb::TANK_TIERS` x `climb::ENGINE_TIERS`, metrics
+  `climb.tank{t}.engine{e}.apex_tiles` / `.turn_back_tiles`. It reads only the tick, so T16's
+  altitude physics (air density, cold, gravity fields) shows up in it on integration; T16's
+  own climb harness stays the authority for sky band placement. At this commit (no air
+  physics yet): stock rig 120 tiles, tank 6 / engine 6 about 2,200, top tank and engine
+  about 27,500.
 - **Pinned tests** (`balance/tests.rs`): the bot mines, sells and upgrades without rescues;
-  early burrowers bite softly; elites fall in set-piece time; armour still matters.
+  early burrowers bite softly; elites fall in set-piece time; armour still matters; bigger
+  tanks and engines climb higher (turn back at about half the apex); the building probe pays
+  list prices.
 - **Wave 4 hooks:** implement `balance::BalanceProbe` (`name`, `run(&mut ProbeContext) ->
   ReportSection`) and add it to `standard_probes()`. `ProbeContext::economy()` shares the
   economy runs, so a probe can price things in minutes of income; `ReportSection::metric`
-  names numbers for pinned tests. Planned: a sky probe (the F6 climb harness: altitude per
-  fuel-tank and engine tier, time to each island band), a Moon probe and a pilot probe; new
+  names numbers for pinned tests. Planned: a sky probe (time to each island band, on top of
+  the climb probe's altitude table), a Moon probe and a pilot probe; new
   `Strategy` variants for new loops (sky hopping, pilot salvage).
 
 ## Wave 2 seams (integration notes)

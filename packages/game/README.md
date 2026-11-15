@@ -81,6 +81,10 @@ Modules:
   shield bars, stun sparks, flames, burrowers churning through rock, hidden in undiscovered
   tiles, interpolated with the bomb alpha) and the red hit flash on rigs inside their
   post-hit i-frames (`RenderSnapshot::rig_guards`).
+- `balance_report` (desktop only) — `fatherload --balance-report [--seeds N] [--minutes M]
+  [--hz H] [--only economy,progression,combat,exposure,building,climb] [--strategies
+  shaft,prospector,charges] [--threads T]` runs `fatherload_simulation::balance` and prints its
+  Markdown report (threads default to every core).
 - `worldgen_tools` — `fatherload --worldgen-report [--seeds N] [--first-seed S] [--size X]
   [--richness X] [--hazards X] [--legacy] [--generator v1|v2|v3]` prints generator distributions over many seeds, and
   `fatherload --worldgen-preview <seed> <out.png> [--size X] [--richness X] [--hazards X]

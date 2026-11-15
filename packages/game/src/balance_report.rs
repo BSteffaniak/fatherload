@@ -1,7 +1,7 @@
 //! `fatherload --balance-report [--seeds N] [--minutes M] [--hz H] [--only a,b]
 //! [--strategies a,b]` runs the balance harness (`fatherload_simulation::balance`): bot players
-//! on fresh worlds across seeds, duels, exposure runs and the building probe, and prints the
-//! Markdown report. Use a release build; runs are spread over every CPU core.
+//! on fresh worlds across seeds, duels, exposure runs, the building probe and the climb bot,
+//! and prints the Markdown report. Use a release build; runs are spread over every CPU core.
 
 use fatherload_simulation::balance::{BalanceConfig, Strategy, run_report, standard_probes};
 
@@ -133,7 +133,7 @@ mod tests {
     fn parses_the_balance_report_flags() {
         assert_eq!(parse_args(&args("--story-report")), Ok(None));
         let options = parse_args(&args(
-            "--balance-report --seeds 5 --minutes 90 --hz 30 --only economy,combat --strategies shaft",
+            "--balance-report --seeds 5 --minutes 90 --hz 30 --only economy,combat,climb --strategies shaft",
         ))
         .expect("valid")
         .expect("present");
@@ -142,7 +142,11 @@ mod tests {
         assert_eq!(options.config.tick_rate_hz, 30);
         assert_eq!(
             options.config.only,
-            Some(vec!["economy".to_owned(), "combat".to_owned()])
+            Some(vec![
+                "economy".to_owned(),
+                "combat".to_owned(),
+                "climb".to_owned()
+            ])
         );
         assert_eq!(options.config.strategies.len(), 1);
         assert!(parse_args(&args("--balance-report --seeds 0")).is_err());

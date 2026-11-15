@@ -20,6 +20,8 @@
 //!   blocks and minutes of income.
 //! - Progression (in [`economy`]): time to each upgrade tier, depth over time and credits per
 //!   minute by strategy.
+//! - [`climb`]: the climb bot (the plan's T19 row): apex and turn-back altitude on one tank
+//!   per fuel-tank and engine tier, through the real tick.
 //!
 //! The report: `fatherload --balance-report [--seeds N] [--minutes M] [--only a,b]` (the game
 //! binary), or `cargo test --release -p fatherload_simulation balance_report -- --ignored
@@ -30,8 +32,8 @@
 //! Implement [`BalanceProbe`] and add it to [`standard_probes`]. A probe gets a
 //! [`ProbeContext`] (the config plus the cached economy runs, so it can express costs in
 //! minutes of income) and returns a [`ReportSection`] of [`Table`]s and named
-//! [`ReportSection::metrics`] that pinned tests can guard. Planned: a sky probe (climb
-//! harness: highest altitude per fuel-tank and engine tier, time to each island band), a Moon
+//! [`ReportSection::metrics`] that pinned tests can guard. Planned: a sky probe (time to each
+//! island band, building on [`climb`]'s altitude table), a Moon
 //! probe (round-trip fuel, low-g combat) and a pilot probe (on-foot time to kill, jetpack
 //! reach). The economy bot's [`bot::MinerBot`] takes new [`Strategy`] variants for new loops.
 
@@ -46,6 +48,7 @@
 
 pub mod bot;
 pub mod building;
+pub mod climb;
 pub mod combat;
 pub mod economy;
 #[cfg(test)]
@@ -275,6 +278,7 @@ pub fn standard_probes() -> Vec<Box<dyn BalanceProbe>> {
         Box::new(combat::CombatProbe),
         Box::new(combat::ExposureProbe),
         Box::new(building::BuildingProbe),
+        Box::new(climb::ClimbProbe),
     ]
 }
 

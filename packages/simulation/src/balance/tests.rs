@@ -123,3 +123,49 @@ fn armour_still_matters() {
         "shellback vs rivet gun: {shellback:?}"
     );
 }
+
+/// The climb probe flies the real tick: a bigger tank and a stronger engine both climb higher,
+/// and half a tank gets about half the apex (the turn-back altitude the sky bands key off).
+#[test]
+fn bigger_tanks_and_engines_climb_higher() {
+    use super::climb::climb;
+    let stock = climb(11, 1, 1, 30).expect("stock climb");
+    let tank = climb(11, 3, 1, 30).expect("tank 3 climb");
+    let engine = climb(11, 1, 6, 30).expect("engine 6 climb");
+    assert!(stock.apex_tiles > 40, "{stock:?}");
+    assert!(
+        tank.apex_tiles > stock.apex_tiles * 2,
+        "{tank:?} vs {stock:?}"
+    );
+    assert!(
+        engine.apex_tiles > stock.apex_tiles * 3 / 2,
+        "{engine:?} vs {stock:?}"
+    );
+    for result in [stock, tank, engine] {
+        let half = result.apex_tiles / 2;
+        assert!(
+            (result.turn_back_tiles - half).abs() <= result.apex_tiles / 8,
+            "{result:?}"
+        );
+    }
+}
+
+/// The building probe places every module through real build commands and pays exactly the
+/// listed price in credits and blocks (no block purchases folded into the credits).
+#[test]
+fn the_building_probe_pays_list_prices() {
+    use crate::base::{ModuleKind, beacon_price};
+    let run = super::building::run_building(30).expect("cavern");
+    assert_eq!(run.results.len(), 10);
+    for result in &run.results {
+        assert_eq!(result.refused, None, "{result:?}");
+        let credits = if result.item == ModuleKind::Beacon {
+            beacon_price(result.nth.saturating_sub(1) as usize)
+        } else {
+            result.item.credits()
+        };
+        assert_eq!(result.credits, credits, "{result:?}");
+        assert_eq!(result.blocks, result.item.blocks(), "{result:?}");
+    }
+    assert!(run.station_fuel_per_minute > 0);
+}

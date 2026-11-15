@@ -260,13 +260,13 @@ air.
 ### Balance
 
 The balance harness (`fatherload --balance-report [--seeds N] [--minutes M] [--only
-economy,progression,combat,exposure,building]`, release build; details in
+economy,progression,combat,exposure,building,climb]`, release build; details in
 [packages/simulation/README.md](packages/simulation/README.md#balance-harness-srcbalancers-srcbalance))
 plays fresh worlds with scripted bots through the real simulation: an economy bot (straight
 shafts, a prospector tunnelling sideways to ore, and a mining-charge miner with its own
 workshop) over an hour of game time per seed, duels of five weapon loadouts against every
-enemy at its depth tiers, unarmed rigs drilling every band on Normal, and a rig building every
-base module. Enemy difficulty is now the host's call online: the host refuses a client's
+enemy at its depth tiers, unarmed rigs drilling every band on Normal, a rig building every
+base module, and a climb bot (altitude on one tank per fuel-tank and engine tier). Enemy difficulty is now the host's call online: the host refuses a client's
 difficulty change.
 
 The T19 pacing pass, before and after (4 seeds, 60 game minutes, 60 Hz):
@@ -296,8 +296,13 @@ their soft blast now cracks hard gems (stone-hard ores and up) one in three like
 and the workshop recipe costs 12 blocks and 90 cr. Still off, for later passes: the deep
 strata are harsh on an unarmed rig (fossil-ocean burrowers about 100 hull a minute, void-geode
 magma wisps about 150), and the early climb is slow (drill tier 3 at about 40 minutes for the
-bot, grey stone at about 50); straight shafts alone do not pay for their fuel (the shaft bot
-goes broke and calls the rescue, by design: ore lies beside the shaft).
+bot, grey stone at about 50); straight shafts alone do not pay for their fuel: the stock drill
+cannot bite clay (hardness 2), so a shaft-only player is held to topsoil copper and iron, earns
+about 37 cr a minute in the first quarter hour, spends it on fuel (and on hopping the rig over
+its own open shafts in town) and never affords drill II at 420 cr; once broke, every rescue
+(fee, half tank, half hull) keeps it broke, about 45 rescues an hour. That is the naive
+baseline and partly the bot (a player would tunnel to the ore beside the shaft, as the
+prospector does), but the rescue's poverty trap is worth a look in a later pass.
 
 ### Caves
 
@@ -434,6 +439,14 @@ the player helps them, and the story seeds their village grows (`packages/simula
 
 ```bash
 cargo run --release --bin fatherload -- --story-report [--seed 7] [--count 30] [--no-world]
+```
+
+Balance review (no window opens): bot players on fresh worlds across seeds, duels, exposure
+runs, the building probe and the climb bot, printed as a Markdown report (about 20 seconds for
+4 seeds and an hour of game time on a multi-core machine; see the Balance section above):
+
+```bash
+cargo run --release --bin fatherload -- --balance-report --seeds 4 --minutes 60 [--only economy,climb] [--threads 8]
 ```
 
 Audio review (no window opens): every sound is generated in code; this writes each one (and its
