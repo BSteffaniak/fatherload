@@ -246,6 +246,12 @@ impl NetSimulation for WorldState {
         Some(Self::tick_rate_hz(self))
     }
 
+    /// The enemy difficulty is a session setting: only the host (and its local seats) may
+    /// change it, whatever a client sends.
+    fn host_only_action(action: &PlayerCommand) -> bool {
+        matches!(action, PlayerCommand::SetEnemyDifficulty(_))
+    }
+
     fn player_ids(&self) -> Vec<PlayerId> {
         Self::player_ids(self).filter_map(from_sim_player).collect()
     }

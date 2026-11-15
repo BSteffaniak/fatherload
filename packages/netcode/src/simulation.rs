@@ -269,6 +269,13 @@ pub trait NetSimulation: Clone + Debug {
     fn tick_rate_hz(&self) -> Option<u32> {
         None
     }
+    /// Whether only the host's own (local) seats may issue `action`: session-wide settings
+    /// such as the enemy difficulty. The host acknowledges such an action from a remote client
+    /// (so it is not resent) but never applies it; the client's prediction is corrected by the
+    /// replicated state.
+    fn host_only_action(_action: &Self::Action) -> bool {
+        false
+    }
     /// Overwrites the current tick (used when applying server frames).
     fn set_tick(&mut self, tick: Tick);
 

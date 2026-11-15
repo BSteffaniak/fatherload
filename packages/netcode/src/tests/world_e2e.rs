@@ -927,3 +927,42 @@ fn world_people_and_conversations_replicate_to_every_client() {
         );
     }
 }
+
+#[test]
+fn world_enemy_difficulty_is_the_hosts_call() {
+    use fatherload_simulation::{EnemyDifficulty, PlayerCommand};
+
+    let mut harness = harness(60, 2, LinkConditions::new(30, 4, 1.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    for client in &mut harness.clients {
+        client.bot.active = false;
+    }
+    assert_eq!(harness.world().enemy_difficulty(), EnemyDifficulty::Normal);
+    // A client (a modified build, or a stale menu) asks for Peaceful: the host acknowledges
+    // the action so it is not resent, but never applies it.
+    harness.clients[0]
+        .queued_actions
+        .push(PlayerCommand::SetEnemyDifficulty(EnemyDifficulty::Peaceful));
+    harness.run_for(Duration::from_secs(2));
+    harness.settle(Duration::from_secs(1));
+    assert_eq!(
+        harness.world().enemy_difficulty(),
+        EnemyDifficulty::Normal,
+        "the host keeps its setting"
+    );
+    let client_id = harness.clients[0].id;
+    assert_eq!(
+        harness
+            .host
+            .client_stats(client_id)
+            .map(|stats| stats.host_only_refused),
+        Some(1)
+    );
+    for client in &harness.clients {
+        assert_eq!(client.session.unacked_actions_len(), 0, "acknowledged");
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(seen.enemy_difficulty(), EnemyDifficulty::Normal);
+    }
+    assert_converged(&harness);
+}

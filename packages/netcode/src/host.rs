@@ -114,6 +114,8 @@ pub struct HostClientStats {
     pub duplicate_actions: u64,
     /// Late actions dropped because the queue was full.
     pub late_actions_dropped: u64,
+    /// Host-only actions (see [`crate::NetSimulation::host_only_action`]) refused.
+    pub host_only_refused: u64,
     /// Server frames sent.
     pub frames_sent: u64,
     /// Most recent reported input margin.
@@ -276,6 +278,7 @@ impl<S: NetSimulation> RemoteClient<S> {
                 frames_too_far_ahead: 0,
                 duplicate_actions: 0,
                 late_actions_dropped: 0,
+                host_only_refused: 0,
                 frames_sent: 0,
                 last_margin: None,
                 max_buffered_inputs: 0,
@@ -1136,6 +1139,11 @@ impl<S: NetSimulation> HostSession<S> {
                     candidates.append(&mut remote.late_actions);
                     for envelope in candidates {
                         if slot.ledger.try_apply(envelope.id) {
+                            if S::host_only_action(&envelope.action) {
+                                // Session settings are the host's call.
+                                remote.stats.host_only_refused += 1;
+                                continue;
+                            }
                             actions.push(envelope);
                         } else {
                             remote.stats.duplicate_actions += 1;
