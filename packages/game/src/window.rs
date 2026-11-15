@@ -31,6 +31,35 @@ pub fn restored_window_size(saved: WindowSettings, monitor: Option<(i32, i32)>) 
     (width.max(MIN_WINDOW_WIDTH), height.max(MIN_WINDOW_HEIGHT))
 }
 
+/// A rectangle in GLFW window/monitor units: `(x, y, width, height)`.
+pub type ScreenRect = (i32, i32, i32, i32);
+
+/// How much of the window's top edge (its title bar) must be on the monitor to drag it.
+const TITLE_GRAB: i32 = 48;
+
+/// Where to move a window whose title bar is not on `monitor` (its work area or bounds), or
+/// `None` when it can already be grabbed. raylib centres new windows using the framebuffer
+/// size, which on Windows with display scaling (seen at 150%) can land the window thousands of
+/// pixels off-screen: it opens, but nothing of it is visible. The fix centres the window on the
+/// monitor, top-left anchored when it does not fit.
+#[must_use]
+pub fn recentred_window_position(window: ScreenRect, monitor: ScreenRect) -> Option<(i32, i32)> {
+    let (x, y, width, height) = window;
+    let (mx, my, mw, mh) = monitor;
+    if mw <= 0 || mh <= 0 {
+        return None;
+    }
+    let overlap_x = (x + width).min(mx + mw) - x.max(mx);
+    let title_on_screen = overlap_x >= TITLE_GRAB && y >= my && y + TITLE_GRAB <= my + mh;
+    if title_on_screen {
+        return None;
+    }
+    Some((
+        mx + ((mw - width) / 2).max(0),
+        my + ((mh - height) / 2).max(0),
+    ))
+}
+
 /// What the window looks like this frame, for deciding whether its size is the one to restore.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WindowObservation {
@@ -110,6 +139,8 @@ impl DesktopWindow {
             desktop.settings.width = fit_width;
             desktop.settings.height = fit_height;
         }
+        #[cfg(not(target_os = "emscripten"))]
+        desktop.keep_on_screen(&mut raylib, scale);
         if saved.maximized {
             raylib.maximize_window();
         }
@@ -186,6 +217,36 @@ impl DesktopWindow {
     #[must_use]
     pub const fn settings(&self) -> WindowSettings {
         self.settings
+    }
+
+    /// Moves the window back onto its monitor when raylib placed it out of reach.
+    #[cfg(not(target_os = "emscripten"))]
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "window positions are small integers"
+    )]
+    fn keep_on_screen(&self, raylib: &mut RaylibHandle, scale: f32) {
+        let monitor = window::get_current_monitor();
+        if monitor < 0 || monitor >= window::get_monitor_count() {
+            return;
+        }
+        let origin = window::get_monitor_position(monitor);
+        let monitor_rect = (
+            origin.x.round() as i32,
+            origin.y.round() as i32,
+            window::get_monitor_width(monitor),
+            window::get_monitor_height(monitor),
+        );
+        let position = raylib.get_window_position();
+        let window_rect = (
+            position.x.round() as i32,
+            position.y.round() as i32,
+            scaled(self.settings.width, scale),
+            scaled(self.settings.height, scale),
+        );
+        if let Some((x, y)) = recentred_window_position(window_rect, monitor_rect) {
+            raylib.set_window_position(x, y);
+        }
     }
 
     /// The current monitor's size in logical points, if raylib can report it.
@@ -296,6 +357,48 @@ mod tests {
         ] {
             assert!(!is_restorable_windowed_size(observation), "{observation:?}");
         }
+    }
+
+    #[test]
+    fn off_screen_windows_are_brought_back_and_visible_ones_left_alone() {
+        let monitor = (0, 0, 1920, 1080);
+        // Seen on a 150% Windows desktop: raylib opened the window 21,845 px down.
+        assert_eq!(
+            recentred_window_position((-7, 21_845, 1295, 737), monitor),
+            Some((312, 171))
+        );
+        assert_eq!(
+            recentred_window_position((-40_000, 100, 1440, 810), monitor),
+            Some((240, 135))
+        );
+        assert_eq!(
+            recentred_window_position((200, -30, 1440, 810), monitor),
+            Some((240, 135)),
+            "a title bar above the screen cannot be grabbed"
+        );
+        assert_eq!(
+            recentred_window_position((240, 135, 1440, 810), monitor),
+            None
+        );
+        assert_eq!(
+            recentred_window_position((1800, 500, 1440, 810), monitor),
+            None,
+            "partly off the side is fine while the title bar can be grabbed"
+        );
+        // A second monitor to the right.
+        assert_eq!(
+            recentred_window_position((-7, 21_845, 1295, 737), (1920, 0, 2560, 1440)),
+            Some((2552, 351))
+        );
+        assert_eq!(
+            recentred_window_position((0, 0, 3000, 2000), monitor),
+            None,
+            "too big but grabbable stays"
+        );
+        assert_eq!(
+            recentred_window_position((0, 5000, 3000, 2000), monitor),
+            Some((0, 0))
+        );
     }
 
     #[test]
