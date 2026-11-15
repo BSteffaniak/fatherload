@@ -348,27 +348,33 @@ pub const LINE_SETS: &[LineSet] = &[
                 "Spent the morning {work}. Same as yesterday. Same as tomorrow.",
                 "Work's work. Today it's {work}.",
                 "Can't stop. I'm {work}. Well, I was.",
+                "Been {work} since sunup. My back's filed a complaint.",
             ],
             cheerful: &[
                 "Busy busy! I've been {work} all day and I love it!",
                 "You'll never guess what I've been doing. {Work}! Okay, you might've guessed.",
                 "Being {a role} is the best job in the world. Today I was {work}!",
+                "Guess what I did today? {Work}! Guess what I'm doing tomorrow? Same! Ha!",
             ],
             nervous: &[
                 "I've been {work}. I think it's going okay? It's hard to tell.",
                 "Oh, work's... it's fine. I'm {work}. Nobody's complained yet. Yet.",
+                "I was {work} and something went clunk. It's probably fine. It's probably fine.",
             ],
             poetic: &[
                 "Today I was {work}. There's a kind of music in it, if you listen.",
                 "{A role}'s life is small and good. This morning: {work}, and watching the light move.",
+                "Hands that spend the day {work} sleep well, and dream of nothing at all.",
             ],
             dry: &[
                 "I've been {work}. Living the dream. Someone's dream.",
                 "Today's thrilling instalment: {work}.",
+                "{Work}. Somebody in {village} has to, and they keep picking me.",
             ],
             earnest: &[
                 "I've been {work}. It's honest work, and somebody has to do it.",
                 "Being {a role} keeps {village} going, in its small way. Today I was {work}.",
+                "Today was {work}. Not glamorous, but people count on it.",
             ],
         },
     },
@@ -379,26 +385,32 @@ pub const LINE_SETS: &[LineSet] = &[
             gruff: &[
                 "What I want? To {want}. Don't make it a thing.",
                 "One thing. I want to {want}. Then I'll sit down for good.",
+                "I mean to {want}. Before my knees give out, ideally.",
             ],
             cheerful: &[
                 "One day I'm going to {want}! Just you watch!",
                 "Can I tell you a secret? I want to {want}! There, I said it!",
+                "Big plans! I'm going to {want}! Then throw a party about it!",
             ],
             nervous: &[
                 "Sometimes I think I'd like to {want}. But what if it goes wrong?",
                 "Don't laugh. I want to {want}. You're not laughing. Thank you.",
+                "I'd like to {want}. Someday. Maybe. If nothing explodes.",
             ],
             poetic: &[
                 "Every heart has a seam it's digging toward. Mine? To {want}.",
                 "I dream of it at night: to {want}. The dream is very patient with me.",
+                "Somewhere under all that rock is the day I finally {want}. I keep digging toward it.",
             ],
             dry: &[
                 "My life's ambition is to {want}. Then maybe a nap.",
                 "I want to {want}. Some people collect stamps.",
+                "Goal for the year: {want}. Goal for today: lunch.",
             ],
             earnest: &[
                 "If I'm honest, more than anything I want to {want}.",
                 "I've never told many people this, but I want to {want}.",
+                "I really want to {want}. Saying it out loud helps, I think.",
             ],
         },
     },
@@ -409,26 +421,32 @@ pub const LINE_SETS: &[LineSet] = &[
             gruff: &[
                 "Scared? Me? ...Fine. {Fear}. Tell anyone and you're walking home.",
                 "Everyone's scared of something. Mine's {fear}. There. Done.",
+                "{Fear}. Don't like it. Don't talk about it. Moving on.",
             ],
             cheerful: &[
                 "I'm not scared of anything! Except {fear}. And geese. Mostly the first one!",
                 "Ha! I laugh at danger! I don't laugh at {fear}, though. Nobody does!",
+                "Fears? Pfft! Well. {Fear}. But I whistle a lot, and that helps!",
             ],
             nervous: &[
                 "Don't say it too loud, but... {fear}. Gets me every time.",
                 "I lie awake thinking about {fear}. Do you? No? Just me then.",
+                "You know what keeps me up? {Fear}. And now I've said it out loud. Great.",
             ],
             poetic: &[
                 "We all carry a shadow. Mine is {fear}.",
                 "There's a cold place in me, and it's shaped like {fear}.",
+                "The lamps flicker, and I think of {fear}. Then they steady, and so do I.",
             ],
             dry: &[
                 "My greatest fear is {fear}. My second greatest is this conversation.",
                 "{Fear}. Not keen. Next question.",
+                "I'm brave about everything except {fear}. And mornings.",
             ],
             earnest: &[
-                "I'll tell you the truth: {fear} frightens me. Always has.",
+                "I'll tell you the truth: I've always been frightened of {fear}.",
                 "Can I be honest? {Fear}. It's silly, maybe, but it's real to me.",
+                "Some nights I can't shake the thought of {fear}. Talking helps.",
             ],
         },
     },
@@ -439,26 +457,32 @@ pub const LINE_SETS: &[LineSet] = &[
             gruff: &[
                 "What matters? {Value}. Everything else is noise.",
                 "You want advice? Hold on to {value}. That's it. That's the advice.",
+                "{Value}. Lose that and you've lost the lot.",
             ],
             cheerful: &[
                 "Know what makes life worth it? {Value}! And pie. But mostly the first thing!",
                 "My motto: {value}, every day, all day!",
+                "Life's simple! {Value}, good company, and something warm to eat!",
             ],
             nervous: &[
                 "I think what matters is... {value}? Is that a silly answer?",
                 "When it all goes wrong, and it does, I hang on to {value}.",
+                "I try to keep hold of {value}. Even when I'm, um, panicking. Especially then.",
             ],
             poetic: &[
                 "Strip away the dust and what's left is {value}. That's the real ore.",
                 "Some dig for gold. I've always dug for {value}.",
+                "Under every stratum is a deeper one. Under all of mine is {value}.",
             ],
             dry: &[
                 "I believe in {value}. Also in locking the shed.",
                 "What matters is {value}. I'd embroider it on a cushion if I could sew.",
+                "{Value}. It's on my list of things I believe in, which is short.",
             ],
             earnest: &[
                 "For me, it comes down to {value}. Always has.",
                 "Whatever else happens, {value}. That's what I try to live by.",
+                "I want to be remembered for {value}. That would be enough.",
             ],
         },
     },

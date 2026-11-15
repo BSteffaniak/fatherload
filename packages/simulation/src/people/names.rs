@@ -372,7 +372,7 @@ const SCRAPPER: NameTable = NameTable {
     ],
     she: &["Juno"],
     he: &["Dex", "Fitz"],
-    onsets: &["D", "J", "K", "R", "V", "Z", "Br", "Sk", "Tr", "Q"],
+    onsets: &["D", "J", "K", "R", "V", "Z", "Br", "Sk", "Tr", "Qu"],
     vowels: &["a", "e", "i", "o", "u"],
     endings: &["x", "z", "ck", "nn", "ss", "tt", "do", "ka"],
     generated_percent: 35,

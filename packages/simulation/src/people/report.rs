@@ -82,7 +82,8 @@ pub fn story_report(seed: u64, count: usize, facts: &[WorldFact]) -> String {
     let villages = report_villages(seed, count);
     let _ = writeln!(
         out,
-        "Fatherload story report: seed {seed}, {count} characters in {} villages, {} world facts\n",
+        "Fatherload story report: seed {}, {count} characters in {} villages, {} world facts\n",
+        crate::worldgen::format_seed(seed),
         villages.len(),
         facts.len()
     );
