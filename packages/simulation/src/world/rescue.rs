@@ -141,10 +141,13 @@ impl WorldState {
         true
     }
 
-    /// Whether rigs take no damage at all: a test-mode world with the invulnerable toggle on.
+    /// Whether rigs take no damage at all: a test-mode world with the invulnerable toggle on,
+    /// or with no-clip flight on (a rig flying through lava, gas pockets or a hot layer's rock
+    /// must not burn while the hull toggle is off).
     #[must_use]
     pub fn damage_immune(&self) -> bool {
-        self.test_mode.is_some_and(|state| state.invulnerable)
+        self.test_mode
+            .is_some_and(|state| state.invulnerable || state.no_clip)
     }
 
     /// Takes `damage` off `player_id`'s hull, returning whether any was taken (nothing in an

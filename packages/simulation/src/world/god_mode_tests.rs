@@ -142,6 +142,10 @@ fn no_clip_flies_through_rock_without_drilling_or_damage() {
         PlayerScopedCommandOutcome::Applied
     );
     assert!(world.no_clip_active());
+    assert!(
+        world.damage_immune(),
+        "no-clip rigs take no damage even with the hull toggle off"
+    );
     fill(&mut world, 60, 40, 12, TileKind::Stone);
     place(&mut world, 60, 40);
     let hull = world.player(PLAYER).expect("player").hull;
@@ -172,8 +176,10 @@ fn turning_no_clip_off_frees_a_rig_left_inside_rock() {
     place(&mut world, 60, 40);
     let rig = world.player(PLAYER).expect("player");
     assert!(authoritative_player_collides(world.terrain(), rig.x, rig.y));
+    let _ = act(&mut world, TestModeAction::SetInvulnerable(false));
     let _ = act(&mut world, TestModeAction::SetNoClip(false));
     assert!(!world.no_clip_active());
+    assert!(!world.damage_immune());
     let rig = world.player(PLAYER).expect("player");
     assert!(!authoritative_player_collides(
         world.terrain(),

@@ -59,7 +59,7 @@ maxes every rig (hazard counters included) and the player template, fills the pa
 grants credits. Test-mode rigs drill any tile but an indestructible one in a single chip,
 ignoring hardness, on the tick the drill touches it (`GOD_MODE_SECONDS_PER_CHIP`), and drive
 `GOD_MODE_SPEED_MULTIPLIER` (2.2x) faster than the top engine (thrust and climb cap
-`GOD_MODE_THRUST_MULTIPLIER`, 1.5x); with the invulnerable toggle on (`WorldState::damage_immune`) no source
+`GOD_MODE_THRUST_MULTIPLIER`, 1.5x); with the invulnerable toggle or no-clip flight on (`WorldState::damage_immune`) no source
 damages a hull (and no damage events fire);
 `PlayerCommand::TestMode` toggles invulnerable hulls / infinite fuel (refilled every tick) /
 no-clip flight (`world/no_clip.rs`: no gravity, collision, damage or drilling; turning it off
