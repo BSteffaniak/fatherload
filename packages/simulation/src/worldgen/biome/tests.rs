@@ -299,6 +299,55 @@ fn flora_grows_by_biome() {
 }
 
 #[test]
+fn every_tree_kind_grows_in_its_biomes() {
+    // Each biome's tree rule fires somewhere (a roll band that can never pass its spacing
+    // check would silently leave a biome bare).
+    let settings = v7(0x0A4E);
+    let mut seen = std::collections::BTreeSet::new();
+    for x in -20_000..20_000 {
+        if let Some(spot) = flora_at(&settings, x)
+            && matches!(
+                spot.flora,
+                Flora::Oak | Flora::Pine | Flora::SnowPine | Flora::Cactus
+            )
+        {
+            seen.insert((biome_at(&settings, x), format!("{:?}", spot.flora)));
+        }
+    }
+    for (biome, tree) in [
+        (Biome::Plains, "Oak"),
+        (Biome::Forest, "Oak"),
+        (Biome::Forest, "Pine"),
+        (Biome::Desert, "Cactus"),
+        (Biome::Badlands, "Cactus"),
+        (Biome::Tundra, "SnowPine"),
+        (Biome::Mountains, "Pine"),
+        (Biome::Wetlands, "Oak"),
+    ] {
+        assert!(
+            seen.contains(&(biome, tree.to_owned())),
+            "no {tree} in {biome:?}: {seen:?}"
+        );
+    }
+}
+
+#[test]
+fn a_starter_rig_can_fly_over_the_tallest_peak() {
+    // Every biome is traversable by a starter rig (WP-SURFACE acceptance): a full starter tank
+    // climbs well past the highest mountain, measured from the lowest lake bed.
+    use crate::world::{AUTHORITATIVE_FUEL_BURN_PER_SECOND, AUTHORITATIVE_MAX_CLIMB_SPEED};
+    let starter = crate::Player::new(0.0, 0.0);
+    let climb_seconds = starter.fuel_capacity / AUTHORITATIVE_FUEL_BURN_PER_SECOND;
+    let climb_rows = climb_seconds * AUTHORITATIVE_MAX_CLIMB_SPEED / crate::terrain::TILE_SIZE;
+    #[allow(clippy::cast_precision_loss, reason = "small row counts")]
+    let tallest = (MAX_ELEVATION_ROWS + MAX_DIP_ROWS) as f32;
+    assert!(
+        climb_rows > tallest * 1.25,
+        "a starter tank climbs {climb_rows} rows; peaks rise {tallest}"
+    );
+}
+
+#[test]
 #[ignore = "calibration helper: prints the skyline of a V7 world"]
 fn print_v7_skyline() {
     let seed = std::env::var("FATHERLOAD_SEED")

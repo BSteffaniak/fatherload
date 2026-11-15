@@ -1113,13 +1113,17 @@ impl WorldState {
         let max_x = (from.x + REACH).min(self.terrain.max_x());
         let max_y = (from.y + 12).min(self.terrain.height() - 1);
         let width = usize::try_from(max_x - min_x + 1).ok()?;
-        let height = usize::try_from(max_y + 1).ok()?;
+        // From the world's first row: a biome world's mountains rise above row 0, and a haul
+        // dug out under one surfaces on its slope.
+        let min_y = self.terrain.min_y();
+        let height = usize::try_from(max_y - min_y + 1).ok()?;
         let index = |position: TilePosition| -> Option<usize> {
-            if position.x < min_x || position.x > max_x || position.y < 0 || position.y > max_y {
+            if position.x < min_x || position.x > max_x || position.y < min_y || position.y > max_y
+            {
                 return None;
             }
             let x = usize::try_from(position.x - min_x).ok()?;
-            let y = usize::try_from(position.y).ok()?;
+            let y = usize::try_from(position.y - min_y).ok()?;
             Some(y * width + x)
         };
         let mut came_from: Vec<Option<TilePosition>> = vec![None; width * height];

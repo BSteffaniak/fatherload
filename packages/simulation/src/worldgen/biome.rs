@@ -1005,7 +1005,15 @@ pub fn flora_at(settings: &WorldSettings, x: i32) -> Option<FloraSpot> {
         Biome::Wetlands => match pick {
             0..380 => spot(Flora::Reeds),
             380..470 => spot(Flora::Bush),
-            470..520 if tree_room(50) => spot(Flora::Oak),
+            // A few lone oaks on the banks (the roll band is offset, so the spacing check
+            // looks at the same band in the neighbours).
+            470..520
+                if (1..=3).all(|step| {
+                    !(470..520).contains(&(hash2(seed, SALT_FLORA, x - step, 0) % 1000))
+                }) =>
+            {
+                spot(Flora::Oak)
+            }
             520..800 => spot(Flora::GrassTuft),
             _ => None,
         },
