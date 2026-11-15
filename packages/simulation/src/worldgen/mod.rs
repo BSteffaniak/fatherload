@@ -36,6 +36,7 @@ mod poi_tests;
 pub mod pois;
 pub mod prefabs;
 pub mod report;
+pub mod sky;
 pub mod strata;
 pub mod streamed;
 #[cfg(test)]
@@ -91,14 +92,21 @@ pub enum GeneratorVersion {
     /// village sites ([`biome::flat_sites_in`]) stay flat, and villages take the look of the
     /// biome they stand in.
     V7,
+    /// V7 with the sky ([`sky`], expansion plan F6): floating low isles, cloud archipelagos,
+    /// a dead-air gap, sky continent footprints and the Moon, one giant landmass hanging above
+    /// a fixed column, all placed per region in altitude bands measured by the climb harness;
+    /// the world's first row moves up to [`sky::SKY_CEILING_ROWS`] above row 0. The ground is
+    /// exactly V7's. V8 worlds also switch on altitude physics ([`crate::environment`]): thin
+    /// air, cold, wind layers, updrafts and gravity fields.
+    V8,
 }
 
 impl GeneratorVersion {
     /// The generator new worlds use.
-    pub const CURRENT: Self = Self::V7;
+    pub const CURRENT: Self = Self::V8;
 
     /// Every generator, oldest first.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Legacy,
         Self::V1,
         Self::V2,
@@ -107,6 +115,7 @@ impl GeneratorVersion {
         Self::V5,
         Self::V6,
         Self::V7,
+        Self::V8,
     ];
 
     /// Whether this generator stamps points of interest.
@@ -114,7 +123,7 @@ impl GeneratorVersion {
     pub const fn has_points_of_interest(self) -> bool {
         matches!(
             self,
-            Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6 | Self::V7
+            Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8
         )
     }
 
@@ -122,28 +131,28 @@ impl GeneratorVersion {
     /// bedrock floor.
     #[must_use]
     pub const fn is_deep(self) -> bool {
-        matches!(self, Self::V4 | Self::V5 | Self::V6 | Self::V7)
+        matches!(self, Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8)
     }
 
     /// Whether worlds of this generator are streamed: unbounded horizontally and generated
     /// chunk by chunk on demand ([`streamed`]). Older generators build bounded worlds.
     #[must_use]
     pub const fn is_streamed(self) -> bool {
-        matches!(self, Self::V5 | Self::V6 | Self::V7)
+        matches!(self, Self::V5 | Self::V6 | Self::V7 | Self::V8)
     }
 
     /// Whether this generator places cave ecosystems ([`crate::cave::CaveKind`]): their
     /// tiles, water, light, loot and critters.
     #[must_use]
     pub const fn has_cave_biomes(self) -> bool {
-        matches!(self, Self::V6 | Self::V7)
+        matches!(self, Self::V6 | Self::V7 | Self::V8)
     }
 
     /// Whether worlds of this generator have villages ([`crate::village`]). The single switch
     /// for every village rule (placement, flattened ground, stamped tiles, feature index).
     #[must_use]
     pub const fn has_villages(self) -> bool {
-        matches!(self, Self::V6 | Self::V7)
+        matches!(self, Self::V6 | Self::V7 | Self::V8)
     }
 
     /// Whether worlds of this generator have surface biomes and a real heightmap
@@ -151,7 +160,15 @@ impl GeneratorVersion {
     /// placeholder surface.
     #[must_use]
     pub const fn has_biomes(self) -> bool {
-        matches!(self, Self::V7)
+        matches!(self, Self::V7 | Self::V8)
+    }
+
+    /// Whether worlds of this generator have the sky ([`sky`]: floating islands, sky
+    /// continents and the Moon) and altitude physics ([`crate::environment`]). Older worlds keep
+    /// an empty sky and standard air and gravity everywhere.
+    #[must_use]
+    pub const fn has_sky(self) -> bool {
+        matches!(self, Self::V8)
     }
 
     #[must_use]
@@ -165,6 +182,7 @@ impl GeneratorVersion {
             Self::V5 => "v5",
             Self::V6 => "v6",
             Self::V7 => "v7",
+            Self::V8 => "v8",
         }
     }
 }

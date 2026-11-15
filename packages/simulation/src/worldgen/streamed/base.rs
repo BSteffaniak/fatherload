@@ -79,11 +79,16 @@ pub fn raw_surface_row(settings: &WorldSettings, x: i32) -> i32 {
     placeholder_surface_row(settings, x)
 }
 
-/// The first row of a streamed world: biome worlds keep [`biome::SKY_HEADROOM_ROWS`] above
-/// row 0 for their mountains; older streamed worlds start at row 0.
+/// The first row of a streamed world.
+///
+/// Sky worlds (V8) reach up to the Moon ([`crate::worldgen::sky::SKY_CEILING_ROWS`]); biome
+/// worlds keep [`biome::SKY_HEADROOM_ROWS`] above row 0 for their mountains; older streamed
+/// worlds start at row 0.
 #[must_use]
 pub const fn top_row(settings: &WorldSettings) -> i32 {
-    if settings.generator.has_biomes() {
+    if settings.generator.has_sky() {
+        -crate::worldgen::sky::SKY_CEILING_ROWS
+    } else if settings.generator.has_biomes() {
         -biome::SKY_HEADROOM_ROWS
     } else {
         0
@@ -144,6 +149,11 @@ pub struct Ctx {
     pub height: i32,
     /// The world's first row ([`top_row`]).
     pub top: i32,
+    /// The first row of the ground layer (mountains): [`top_row`] without the sky. Rows above
+    /// it are the sky generator's ([`crate::worldgen::sky`]) or open air.
+    pub ground_top: i32,
+    /// Whether the world has a sky (V8).
+    pub sky: bool,
     /// Whether the world has surface biomes.
     pub biomes: bool,
     /// [`deepest_surface_row`].
@@ -182,6 +192,12 @@ impl Ctx {
             bases: strata::boundary_bases(settings),
             height: settings.height_tiles(),
             top: top_row(settings),
+            ground_top: if settings.generator.has_biomes() {
+                -biome::SKY_HEADROOM_ROWS
+            } else {
+                0
+            },
+            sky: settings.generator.has_sky(),
             biomes: settings.generator.has_biomes(),
             deepest_surface: deepest_surface_row(settings),
             tiers,

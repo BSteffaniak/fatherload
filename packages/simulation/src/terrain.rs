@@ -235,6 +235,9 @@ pub enum TileKind {
     /// A surface-biome material (sand, sandstone, red rock, snow, granite, mud): the crusts
     /// and mountain masses of [`GeneratorVersion::V7`](worldgen::GeneratorVersion::V7) worlds.
     Surface(SurfaceMaterial),
+    /// A sky-land tile (floating islands, sky continents and the Moon of
+    /// [`GeneratorVersion::V8`](worldgen::GeneratorVersion::V8) worlds; see [`crate::sky`]).
+    Sky(crate::sky::SkyTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -339,6 +342,7 @@ impl TileKind {
             Self::Cave(tile) => tile.name(),
             Self::Built(tile) => tile.name(),
             Self::Surface(material) => material.name(),
+            Self::Sky(tile) => tile.name(),
         }
     }
 }
@@ -423,6 +427,7 @@ impl Tile {
             TileKind::Cave(tile) => 0x400 | tile.code(),
             TileKind::Built(tile) => BUILT_TILE_CODE_BASE | tile.code(),
             TileKind::Surface(material) => 0x500 | material.code(),
+            TileKind::Sky(tile) => 0x600 | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -1617,6 +1622,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Poi(tile) => tile.hardness(),
         TileKind::Cave(tile) => tile.hardness(),
         TileKind::Surface(material) => material.hardness(),
+        TileKind::Sky(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1649,6 +1655,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Cave(tile) => tile.durability(),
         TileKind::Bedrock | TileKind::Built(_) => u8::MAX,
         TileKind::Surface(material) => material.durability(),
+        TileKind::Sky(tile) => tile.durability(),
     }
 }
 

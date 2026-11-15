@@ -158,6 +158,116 @@ surface under mountains, which carve their own caves). **No flight ceiling (R17)
 stacks slots only `SPAWN_SKY_ROWS_TILES` up; reveals, streaming and relevance simply find
 nothing to do in the empty sky.
 
+### The sky and altitude physics (`worldgen/sky.rs`, `sky.rs`, `environment.rs`, `climb.rs`, generator V8)
+
+Expansion plan Part II F6. `GeneratorVersion::V8` (the current generator, `has_sky`) is V7's
+ground exactly (`worldgen::sky::tests::v8_ground_is_exactly_v7_ground`) with a sky; V1-V7 output
+and digests are unchanged and a V8 golden digest
+(`worldgen::sky::tests::chunk_digests_of_v8_skies_are_pinned`) pins the new output.
+
+**The climb table** (`climb.rs`): `CLIMB_CEILINGS[tank][engine][intake]` is the highest
+altitude (rows above row 0) a rig of each fuel tank tier (1-15), engine tier (1, 4, 8, 12, 15)
+and altitude intake tier (0, 2, 4, 6) reaches holding thrust from rest 100 rows up in still
+air (the density profile, standard gravity, no wind or updrafts). `climb::ceiling(t, e, i)` and
+`climb::fraction` define every band; `world::climb_tests::climb_table_matches_the_simulation`
+re-measures a sample against the real movement step, `climb_table_report` (ignored, run in
+release) prints the whole table, and `the_table_unlocks_the_sky_in_order` pins the design
+claims. Rebalancing tanks, engines or the air moves the islands with them (as a new generator
+version: it changes V8 output).
+
+**Bands** (`sky::SkyBand`, `SkyBand::at_altitude` / `at_row`; rows above row 0 in
+`worldgen::sky`): low isles from `LOW_ISLES_BOTTOM_ROWS` (65 % of a tier 2 tank + tier 4 engine,
+about 220), the cloud archipelago from `ARCHIPELAGO_BOTTOM_ROWS` (a tier 4 rig's full reach,
+about 540), the dead-air gap from `DEAD_AIR_BOTTOM_ROWS` (90 % of the best rig without intakes,
+about 4,480), sky continents from `CONTINENTS_BOTTOM_ROWS` (85 % of a tier 13 tank, top engine
+and intakes, about 8,080), orbit from `ORBIT_BOTTOM_ROWS` (about 9,030) and the Moon's underside
+at `MOON_BOTTOM_ROWS` (85 % of a maxed rig, about 10,320). A V8 world's first row is
+`-SKY_CEILING_ROWS` (the Moon plus 700 rows of space, about 11,300; `Terrain::min_y`); rigs may
+fly higher into open space.
+
+**Placement** (`worldgen::sky`): pure integer functions of the settings. Each band has a 2D
+cell grid (column x altitude): low isle cells (`LOW_ISLE_CELL`, 192x100) hold a cluster of up to
+three small isles, archipelago cells (`ARCHIPELAGO_CELL`, 320x176) a chain of two to four medium
+islands, continent cells (`CONTINENT_CELL_COLUMNS`, 1,400 wide, one row) at most one continent
+footprint 320-680 tiles wide; nothing in the dead-air gap or orbit. Every land stays inside its
+cell, so a chunk reads only the cells it overlaps (seamless, order-independent). The Moon
+(`moon`, `moon_column`) is one landmass 2,000-2,900 tiles wide whose underside's lowest point is
+at `MOON_BOTTOM_ROWS`, `MOON_DEPTH_ROWS` (240) thick, above a column 3,200-4,800 tiles from town.
+`SkyLand` describes a land (`kind`, `biome`, `center_x`, `top_row`, `half_width`, `depth`;
+`bounds`, `surface_row(x)`, `tile_at(x, y)`, `feature()`), `lands_touching(settings, rect)` /
+`land(settings, id)` / `tile_at(settings, position)` query them. Shapes: islands are a turf
+top (`SkyTile::Turf(SkyBiome)`), soil, a rock underside in the island's palette
+(`SkyTile::Rock(SkyBiome)`: meadow, blossom, frost, amber) with crystal pockets, and roots and
+crystal hanging below; continents are placeholder `ContinentRock` under turf; the Moon is
+`Regolith` over `MoonRock` with craters and crystal hanging under it (Wave 4 fills continents and
+the Moon with content). Sky tiles are `TileKind::Sky(SkyTile)` (codes `0x600`), mineable on
+the classic hardness ladder, breaking into the matching classic block.
+
+**Streaming**: a chunk above the ground layer that touches no land is the one shared chunk of
+air (`streamed::generated_chunk` never assembles or caches it), so empty sky costs nothing;
+edits in the sky are ordinary streamed edits (saves, keyframes, chunk refreshes).
+
+**Features**: islands, continents and the Moon are regional features (`Layer::Sky`,
+`FeatureKind::SkyIsland` with `FeatureDetail::SkyIsland(biome)`, `SkyContinent`, `Moon`):
+`features_in`, `feature(id)` and `nearest_feature` (which searches a V8 world's whole sky) find
+them.
+
+**Updrafts** (`Updraft`, `updrafts_touching`, `updraft_at`): a cell grid (`UPDRAFT_CELL`,
+144x192) from `UPDRAFT_FLOOR_ROWS` up through the island and continent bands (none in the
+dead-air gap) holds at most one column of rising air 4-9 tiles wide and 80-170 tall, pushing
+560-900 px/s² up (more than a rig's gravity), tapering over its top `UPDRAFT_TAPER_ROWS`.
+
+**Altitude physics** (`environment.rs`): `environment_at(settings, x, y)` gives an
+`Environment` { `gravity` (scale), `air_density`, `cold`, `wind_x` (air velocity px/s),
+`updraft` (px/s² up) }. It is exactly `Environment::STANDARD` on older generators and below
+`STANDARD_BELOW_ROWS` (120 rows up), so ground and underground gameplay is bit for bit what it
+was (the movement step takes the classic path whenever `is_standard()`). Only basic arithmetic
+is used (no transcendental functions), so every platform agrees.
+
+- *Air*: `air_density_profile` (full to `FULL_AIR_ROWS`, then
+  `AIR_SCALE_ROWS / (AIR_SCALE_ROWS + rows above)`), fading to vacuum across the orbit floor
+  (`air_density`). `Environment::thrust_efficiency(intake)` = density + the share of the rest the
+  Altitude Intake tier recovers (`intake_recovery`, up to 48 %). In the movement step the
+  efficiency scales lift, the climb-speed cap (`climb_cap_factor`: less thrust climbs slower,
+  thin air drags less) and fuel burn (`burn_factor`: thin air runs rich); air density scales
+  vertical drag (`drag_retention`) and the drive's coasting brake, and the fall-speed cap rises
+  in thin air (`fall_cap_factor`). Airborne rigs drive relative to the wind
+  (`DriveTuning::in_thin_air`, then `step_tick(v - wind) + wind`), so they coast with it.
+- *Cold*: `cold_level` (0 below the archipelago, rising to 4 at the gap, 7 at the continents,
+  10 on the Moon); `cold_excess(cold, de_icer)` after the De-Icer line's cover (`cold_cover`, 2
+  levels per tier, the insulation hook) burns `COLD_DAMAGE_PER_EXCESS_LEVEL` hull per second per
+  level in the hazard pass.
+- *Wind*: `wind_at` blends per-seed layers every `WIND_LAYER_ROWS` (64) above `WIND_FLOOR_ROWS`,
+  peaking by band (crosswinds of up to 210 px/s in the dead-air gap, none in orbit), with slow
+  gusts along the layer.
+- *Gravity*: `gravity_scale`: 1.0 up through the islands and the gap, `CONTINENT_GRAVITY` (0.85)
+  in the continent band, `ORBIT_GRAVITY` (0.04) above the orbit floor, `MOON_GRAVITY` (0.3) on
+  and around the Moon (fading out over `MOON_HALO_COLUMNS` and `MOON_HALO_ROWS`), blended
+  smoothly. Applied to the rig, drops, charges (gravity bombs), enemies, enemy shots and arcing
+  projectiles (`physics::BodyParams::in_environment` / `at` scale a body's gravity and subtract
+  updrafts; weightless flyers stay weightless). The pilot on foot (T15) reads
+  `Environment::gravity` / `body_gravity` the same way.
+
+**Upgrades**: two shop lines appended after the hazard counters (offer indices 14 and 15,
+`UPGRADE_OFFER_COUNT` 16): `UpgradeKind::AltitudeIntake` (6 tiers) and `UpgradeKind::DeIcer`
+(6 tiers), stored in `HazardGear::altitude_intake` / `de_icer` (serde defaults; private
+loadout). Aether thrusters (a sky-crafted engine part) are reserved for Wave 4.
+
+**Events** (`world/altitude.rs`, stateless edges between a rig's position before and after its
+move): `SkyBandEntered { player_id, band }` climbing into a higher band, `UpdraftCaught` and
+`RigIcing` (crossing into cold the de-icer does not cover); netcode codes 110-112.
+
+**Precision**: the Moon's top is about 11,300 rows up, where an `f32` world y still resolves a
+sixteenth of a pixel (`world::sky_tests::positions_stay_precise_at_moon_height`).
+
+Tests: `worldgen/sky/tests.rs` (bands, determinism, lands in their bands, empty gap and
+orbit, the Moon's size and place, island anatomy, seamless chunks and the shared empty chunk,
+V8 ground = V7 ground, features, updrafts, the golden digest), `environment/tests.rs`
+(standard ground, air, intakes, cold, gravity fields, wind), `world/climb_tests.rs` (the
+harness) and `world/sky_tests.rs` (orbit drift, lunar gravity, bombs and drops in the fields,
+updrafts, wind, cold, reachability by tier in the real sky including flying up into the Moon,
+precision, saves and keyframes of island edits, determinism and tick-rate safety).
+
 ### Compact terrain (`terrain/persistence.rs`)
 
 A `Terrain` serializes as a `TerrainSnapshot`: its `WorldSettings`, size, digest and only the
@@ -906,6 +1016,26 @@ Where the wave 2 tracks meet, for the tracks that build on them:
   90-95, bases 100-102. `PROTOCOL_VERSION` 10 (9 for wave 2, 10 for T8's V7 worlds, surface tiles at codes 0x500 and
   chunks above row 0) and save format 8 (unchanged: an older build rejects a V7 save by its
   unknown generator) cover all of wave 2.
+
+## Wave 3 seams: the sky (T16)
+
+- **Generator V8** is current: V7's ground plus the sky (`has_sky`); `Terrain::min_y` of a V8
+  world is about -11,300 (the Moon plus space). Code that allocates per row from `min_y` must
+  clamp (the escort path search stops at the ground layer's headroom); per-chunk and
+  radius-limited loops need nothing.
+- **Gravity, air and wind are per place** (`environment::environment_at`); new movers should
+  scale their gravity with `Environment::gravity` (or `BodyParams::at`) so they behave in orbit
+  and on the Moon. The pilot (T15) and sky enemies (Wave 4) hook in there.
+- **Sky lands API** for renderers and content: `worldgen::sky::{moon, moon_column,
+  lands_touching, land, updrafts_touching, updraft_at}`, the band constants and
+  `sky::SkyBand`. Wave 4 fills continents (`SkyLandKind::Continent`) and the Moon with content
+  (towns, ores, dungeons) inside their footprints.
+- **T14 (sky rendering)**: draw the Moon backdrop from the ground above `moon_column`; the
+  game's `rendering/world/sky_lands.rs` already draws cloud seas, wind and updraft cues and the
+  Moon looming from the continents up, and stretches the altitude colour bands over V8's bands
+  (`gradient_y` / `world_y_of_gradient`); the old decorative space moon is skipped on V8 worlds.
+- **Event codes** 110-112 (altitude), `PROTOCOL_VERSION` 11; save format unchanged (an older
+  build rejects a V8 save by its unknown generator; `HazardGear` fields default).
 
 ## Replication
 

@@ -144,6 +144,11 @@ pub enum UpgradeKind {
     PressureBracing,
     /// Hazard counter: deflects falling boulders and cave-ins.
     BoulderDeflector,
+    /// Sky gear: high-altitude intakes recover thrust in thin air (expansion plan F6, see
+    /// [`crate::environment`]).
+    AltitudeIntake,
+    /// Sky gear: a de-icer covers the cold high in the sky.
+    DeIcer,
 }
 
 impl UpgradeKind {
@@ -163,6 +168,8 @@ impl UpgradeKind {
         Self::GasScrubber,
         Self::PressureBracing,
         Self::BoulderDeflector,
+        Self::AltitudeIntake,
+        Self::DeIcer,
     ];
 
     /// Highest level this upgrade line reaches.
@@ -176,6 +183,8 @@ impl UpgradeKind {
             Self::GasScrubber => GAS_SCRUBBER_MAX_LEVEL,
             Self::PressureBracing => PRESSURE_BRACING_MAX_LEVEL,
             Self::BoulderDeflector => BOULDER_DEFLECTOR_MAX_LEVEL,
+            Self::AltitudeIntake => crate::environment::ALTITUDE_INTAKE_MAX_LEVEL,
+            Self::DeIcer => crate::environment::DE_ICER_MAX_LEVEL,
             Self::Drill
             | Self::FuelTank
             | Self::CargoBay
@@ -204,7 +213,9 @@ impl UpgradeKind {
             | Self::LavaPlating
             | Self::GasScrubber
             | Self::PressureBracing
-            | Self::BoulderDeflector => 0,
+            | Self::BoulderDeflector
+            | Self::AltitudeIntake
+            | Self::DeIcer => 0,
         }
     }
 
@@ -241,7 +252,7 @@ pub const REFUEL_UNIT_COST: u32 = 1;
 pub const REPAIR_UNIT_COST: u32 = 2;
 
 /// Number of shop upgrade lines (the length of [`upgrade_offers`]).
-pub const UPGRADE_OFFER_COUNT: usize = 14;
+pub const UPGRADE_OFFER_COUNT: usize = 16;
 /// Shop index of the drill mount line.
 pub const DRILL_MOUNT_OFFER_INDEX: usize = 8;
 
@@ -415,6 +426,8 @@ fn apply_upgrade(player: &mut Player, kind: UpgradeKind) {
         UpgradeKind::GasScrubber => gear.gas_scrubber += 1,
         UpgradeKind::PressureBracing => gear.pressure_bracing += 1,
         UpgradeKind::BoulderDeflector => gear.boulder_deflector += 1,
+        UpgradeKind::AltitudeIntake => gear.altitude_intake += 1,
+        UpgradeKind::DeIcer => gear.de_icer += 1,
     }
 }
 
@@ -452,6 +465,8 @@ pub const fn current_level(player: &Player, kind: UpgradeKind) -> u8 {
         UpgradeKind::GasScrubber => gear.gas_scrubber,
         UpgradeKind::PressureBracing => gear.pressure_bracing,
         UpgradeKind::BoulderDeflector => gear.boulder_deflector,
+        UpgradeKind::AltitudeIntake => gear.altitude_intake,
+        UpgradeKind::DeIcer => gear.de_icer,
     }
 }
 
@@ -481,6 +496,8 @@ const fn upgrade_name(kind: UpgradeKind) -> &'static str {
         UpgradeKind::GasScrubber => "Gas Scrubber",
         UpgradeKind::PressureBracing => "Pressure Bracing",
         UpgradeKind::BoulderDeflector => "Boulder Deflector",
+        UpgradeKind::AltitudeIntake => "Altitude Intake",
+        UpgradeKind::DeIcer => "De-Icer",
     }
 }
 
@@ -514,6 +531,14 @@ const fn upgrade_description(kind: UpgradeKind) -> &'static str {
         }
         UpgradeKind::BoulderDeflector => {
             "Deflects falling boulders and cave-ins; the top tier is rockfall-proof"
+        }
+        UpgradeKind::AltitudeIntake => {
+            "Scoops thin air high in the sky so the engine keeps its thrust; crossing the \
+             dead-air gap takes the top tiers"
+        }
+        UpgradeKind::DeIcer => {
+            "Keeps the rig from icing up in the cold high sky; each tier covers two more cold \
+             levels"
         }
     }
 }
@@ -666,6 +691,22 @@ const PRESSURE_BRACING_TIERS: [&str; PRESSURE_BRACING_MAX_LEVEL as usize] = [
     "Vent-Proof Bracing",
     "Bulwark Bracing",
 ];
+const ALTITUDE_INTAKE_TIERS: [&str; crate::environment::ALTITUDE_INTAKE_MAX_LEVEL as usize] = [
+    "Ram Scoop",
+    "Twin Ram Scoop",
+    "Compressor Intake",
+    "Turbo Intake",
+    "Stratospheric Intake",
+    "Edge-of-Space Intake",
+];
+const DE_ICER_TIERS: [&str; crate::environment::DE_ICER_MAX_LEVEL as usize] = [
+    "Wiper Heater",
+    "Heated Skids",
+    "Glycol De-Icer",
+    "Thermal Jacket",
+    "Plasma De-Icer",
+    "Void-Rated De-Icer",
+];
 const BOULDER_DEFLECTOR_TIERS: [&str; BOULDER_DEFLECTOR_MAX_LEVEL as usize] = [
     "Roll Cage",
     "Deflector Plate",
@@ -692,6 +733,8 @@ pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
         UpgradeKind::GasScrubber => &GAS_SCRUBBER_TIERS,
         UpgradeKind::PressureBracing => &PRESSURE_BRACING_TIERS,
         UpgradeKind::BoulderDeflector => &BOULDER_DEFLECTOR_TIERS,
+        UpgradeKind::AltitudeIntake => &ALTITUDE_INTAKE_TIERS,
+        UpgradeKind::DeIcer => &DE_ICER_TIERS,
         UpgradeKind::BombPack => return "Pack of 3 Bombs",
         UpgradeKind::DrillMount => {
             return if level == 0 {
@@ -762,6 +805,17 @@ pub fn upgrade_effect(player: &Player, kind: UpgradeKind) -> Option<String> {
             percent(protection_fraction(level, kind.max_level())),
             percent(protection_fraction(next, kind.max_level()))
         ),
+        UpgradeKind::AltitudeIntake => format!(
+            "Recovers {}% -> {}% of thin air's lost thrust",
+            percent(crate::environment::intake_recovery(level)),
+            percent(crate::environment::intake_recovery(next))
+        ),
+        UpgradeKind::DeIcer => format!(
+            "Covers cold {} -> {} of {}",
+            crate::environment::cold_cover(level).min(crate::environment::MAX_COLD),
+            crate::environment::cold_cover(next).min(crate::environment::MAX_COLD),
+            crate::environment::MAX_COLD
+        ),
         UpgradeKind::Scanner | UpgradeKind::BombPack | UpgradeKind::DrillMount => return None,
     })
 }
@@ -786,6 +840,9 @@ pub fn upgrade_cost(kind: UpgradeKind, level: u8) -> u32 {
         UpgradeKind::GasScrubber => (450, 185),
         UpgradeKind::PressureBracing => (600, 190),
         UpgradeKind::BoulderDeflector => (350, 185),
+        // Sky gear: intakes are an Act II purchase (cheap to try, then steeply more).
+        UpgradeKind::AltitudeIntake => (900, 230),
+        UpgradeKind::DeIcer => (700, 190),
     };
     // Tiers bought on this line so far (the stock part is free).
     let bought = level

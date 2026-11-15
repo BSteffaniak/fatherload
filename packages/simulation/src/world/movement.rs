@@ -147,8 +147,18 @@ impl WorldState {
         let immune = self.damage_immune();
         let god_mode = self.is_test_mode();
         let thrift = self.player_blessing(player_id) == Some(crate::village::BlessingKind::Thrift);
+        let settings = *self.terrain.settings();
         let player = self.players.get_mut(&player_id)?;
         let grounded = authoritative_player_collides(&self.terrain, player.x, player.y + 2.0);
+        // Altitude physics (F6): thin air, wind, updrafts and gravity fields. Standard (and
+        // so the classic path, bit for bit) everywhere but a V8 world's sky.
+        let environment = crate::environment::environment_at(&settings, player.x, player.y);
+        let thin_air = !environment.is_standard();
+        let efficiency = if thin_air {
+            environment.thrust_efficiency(player.hazard_gear.altitude_intake)
+        } else {
+            1.0
+        };
         let mut effective_cargo_capacity = player.cargo_capacity;
         if parts.contains(&RigPartKind::CargoBalloon) {
             effective_cargo_capacity = effective_cargo_capacity.saturating_add(20);
@@ -197,14 +207,22 @@ impl WorldState {
         } else {
             ground_top * AIR_TOP_SPEED_FACTOR
         };
-        player.velocity_x = quantize_simulation_scalar(
-            DriveTuning::new(top, grounded)
-                .step_tick(player.velocity_x, horizontal, timing.rate)
-                .clamp(
-                    -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
-                    AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
-                ),
-        );
+        let tuning = DriveTuning::new(top, grounded);
+        let driven = if thin_air && !grounded {
+            // Airborne in a V8 sky: thrusters push less in thin air, the air brakes less, and
+            // the rig moves relative to the wind (it coasts with it).
+            let air = environment.wind_x;
+            tuning
+                .in_thin_air(environment.air_density, efficiency)
+                .step_tick(player.velocity_x - air, horizontal, timing.rate)
+                + air
+        } else {
+            tuning.step_tick(player.velocity_x, horizontal, timing.rate)
+        };
+        player.velocity_x = quantize_simulation_scalar(driven.clamp(
+            -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+            AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+        ));
         // The top engines lift far more, but climb speed is capped (higher in god mode).
         let climb = engine_multiplier.min(ENGINE_CLIMB_CAP) * god_thrust;
         // A rig only dents itself on a wall when flung into it faster than it can drive.
@@ -221,7 +239,22 @@ impl WorldState {
         } else {
             0.0
         };
-        player.velocity_y = quantize_simulation_scalar(
+        player.velocity_y = quantize_simulation_scalar(if thin_air {
+            // Gravity fields and updrafts pull and push; thin air lifts less, drags less and
+            // lets the rig climb (and fall) faster once it has the thrust.
+            let gravity = environment.body_gravity(AUTHORITATIVE_RIG_GRAVITY);
+            (gravity - lift * efficiency)
+                .mul_add(
+                    timing.vertical_acceleration_gain,
+                    player.velocity_y * environment.drag_retention(timing.vertical_drag_per_tick),
+                )
+                .clamp(
+                    -AUTHORITATIVE_MAX_CLIMB_SPEED
+                        * climb
+                        * environment.climb_cap_factor(efficiency),
+                    AUTHORITATIVE_MAX_FALL_SPEED * environment.fall_cap_factor(),
+                )
+        } else {
             (AUTHORITATIVE_RIG_GRAVITY - lift)
                 .mul_add(
                     timing.vertical_acceleration_gain,
@@ -230,8 +263,8 @@ impl WorldState {
                 .clamp(
                     -AUTHORITATIVE_MAX_CLIMB_SPEED * climb,
                     AUTHORITATIVE_MAX_FALL_SPEED,
-                ),
-        );
+                )
+        });
         // Cave water (flooded caves, V6): buoyant and draggy, so a rig drifts down slowly and
         // swims rather than flies. `1 / (1 + k dt)` keeps the step exact in plain arithmetic.
         if self
@@ -247,6 +280,7 @@ impl WorldState {
             );
         }
         if thrusting {
+            let thrust_efficiency = efficiency;
             let mut efficiency = fuel_burn_efficiency(player.fuel_tank_level);
             if parts.contains(&RigPartKind::BurstEngine) {
                 efficiency *= 1.22;
@@ -259,6 +293,10 @@ impl WorldState {
                 #[allow(clippy::cast_precision_loss, reason = "a small percentage")]
                 let share = crate::village::services::THRIFT_FUEL_PERCENT as f32 / 100.0;
                 efficiency *= share;
+            }
+            if thin_air {
+                // Thin air runs the engine rich.
+                efficiency *= crate::environment::Environment::burn_factor(thrust_efficiency);
             }
             player.fuel = quantize_simulation_scalar(
                 (AUTHORITATIVE_FUEL_BURN_PER_SECOND * efficiency)

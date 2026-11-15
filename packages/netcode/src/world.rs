@@ -178,6 +178,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::NightSkipped { .. } => (113, None),
         GameplayEventKind::GotUp { player_id } => (114, Some(player_id)),
         GameplayEventKind::SleepRuleChanged { player_id, .. } => (115, Some(player_id)),
+        // Altitude (T16, V8 skies): 116-118.
+        GameplayEventKind::SkyBandEntered { player_id, .. } => (116, Some(player_id)),
+        GameplayEventKind::UpdraftCaught { player_id } => (117, Some(player_id)),
+        GameplayEventKind::RigIcing { player_id } => (118, Some(player_id)),
     }
 }
 

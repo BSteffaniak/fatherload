@@ -913,10 +913,12 @@ struct Motion {
 /// removing their support wakes them automatically.
 fn move_bomb(bomb: &mut PlacedBomb, terrain: &Terrain, dt: f32, sticky: bool) -> Motion {
     let (mut body, _) = charge_parts(bomb);
+    // Gravity bombs feel the sky's gravity fields: they float in orbit and arc far on the Moon.
+    let params = BodyParams::BOMB.at(terrain, body.x, body.y);
     let report = if sticky {
-        physics::step_body_sticky(&mut body, &BodyParams::BOMB, terrain, dt)
+        physics::step_body_sticky(&mut body, &params, terrain, dt)
     } else {
-        physics::step_body(&mut body, &BodyParams::BOMB, terrain, dt)
+        physics::step_body(&mut body, &params, terrain, dt)
     };
     bomb.x = body.x;
     bomb.y = body.y;

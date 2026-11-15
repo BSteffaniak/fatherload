@@ -46,9 +46,15 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// settings, `TileKind::Surface` materials (codes 0x500) in tile ops and chunk diffs, terrain
 /// chunks above row 0 (mountains) and no flight ceiling.
 ///
-/// 11 (wave 3, T14 world clock): the `ClockState` world field and `SectionKey::Clock` section,
+/// 11 (expansion wave 3), one bump for all tracks:
+///
+/// * T14 world clock: the `ClockState` world field and `SectionKey::Clock` section,
 /// `PlayerCommand::Sleep`, `ModuleService::Sleep`, `VillageDeal::Room` and the clock events
-/// 110-115.
+///   110-115;
+/// * T16 sky: `GeneratorVersion::V8` sky worlds in the session settings,
+/// `TileKind::Sky` tiles (codes 0x600) in tile ops and chunk diffs, terrain chunks up to the
+/// Moon, the altitude intake and de-icer tiers in `HazardGear` (loadout), the sky regional
+/// features and the altitude events 116-118.
 pub const PROTOCOL_VERSION: u8 = 11;
 
 /// One client input frame: the controls and actions for exactly one tick.

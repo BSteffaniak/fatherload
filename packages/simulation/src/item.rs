@@ -53,15 +53,21 @@ impl BlockKind {
         match kind {
             TileKind::Dirt
             | TileKind::Surface(SurfaceMaterial::Sand | SurfaceMaterial::Mud)
+            | TileKind::Sky(
+                crate::sky::SkyTile::Turf(_)
+                | crate::sky::SkyTile::Soil
+                | crate::sky::SkyTile::Roots
+                | crate::sky::SkyTile::Regolith,
+            )
             | TileKind::Cave(crate::cave::CaveTile::Mycelium | crate::cave::CaveTile::Silt) => {
                 Some(Self::Dirt)
             }
             TileKind::Clay
-            | TileKind::Surface(SurfaceMaterial::Sandstone | SurfaceMaterial::RedRock) => {
-                Some(Self::Clay)
-            }
+            | TileKind::Surface(SurfaceMaterial::Sandstone | SurfaceMaterial::RedRock)
+            | TileKind::Sky(crate::sky::SkyTile::Rock(_)) => Some(Self::Clay),
             TileKind::Stone
             | TileKind::Surface(SurfaceMaterial::Granite)
+            | TileKind::Sky(crate::sky::SkyTile::Crystal | crate::sky::SkyTile::MoonRock)
             | TileKind::Cave(
                 crate::cave::CaveTile::RuinBrick
                 | crate::cave::CaveTile::RuinPillar
@@ -69,9 +75,9 @@ impl BlockKind {
                 | crate::cave::CaveTile::FossilRib
                 | crate::cave::CaveTile::Stalactite,
             ) => Some(Self::Stone),
-            TileKind::HardRock | TileKind::Cave(crate::cave::CaveTile::Obsidian) => {
-                Some(Self::HardRock)
-            }
+            TileKind::HardRock
+            | TileKind::Cave(crate::cave::CaveTile::Obsidian)
+            | TileKind::Sky(crate::sky::SkyTile::ContinentRock) => Some(Self::HardRock),
             _ => None,
         }
     }

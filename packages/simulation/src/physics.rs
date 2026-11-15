@@ -64,6 +64,33 @@ impl BodyParams {
     };
 }
 
+impl BodyParams {
+    /// These constants at a point with environment `environment` (a V8 sky's gravity fields
+    /// and updrafts, see [`crate::environment`]): gravity scaled by the field and lessened by
+    /// any updraft. Bodies without gravity (flyers) stay weightless. Unchanged (bit for bit)
+    /// in the standard environment.
+    #[must_use]
+    pub fn in_environment(self, environment: &crate::environment::Environment) -> Self {
+        if environment.is_standard() || self.gravity == 0.0 {
+            return self;
+        }
+        Self {
+            gravity: environment.body_gravity(self.gravity),
+            ..self
+        }
+    }
+
+    /// [`Self::in_environment`] at world pixel `(x, y)` of `terrain`'s world.
+    #[must_use]
+    pub fn at(self, terrain: &Terrain, x: f32, y: f32) -> Self {
+        self.in_environment(&crate::environment::environment_at(
+            terrain.settings(),
+            x,
+            y,
+        ))
+    }
+}
+
 /// Whether world pixel `(x, y)` is inside solid terrain. The sky above the world is open; the
 /// side edges and the bottom are walls.
 #[must_use]

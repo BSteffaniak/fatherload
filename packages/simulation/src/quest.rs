@@ -457,6 +457,9 @@ impl TargetSpec {
                 FeatureKind::PointOfInterest => "site",
                 FeatureKind::Cave => "cave",
                 FeatureKind::Village => "village",
+                FeatureKind::SkyIsland => "sky island",
+                FeatureKind::SkyContinent => "sky continent",
+                FeatureKind::Moon => "moon",
             },
         }
     }

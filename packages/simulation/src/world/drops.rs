@@ -489,7 +489,7 @@ impl WorldState {
         let landed = self
             .entities
             .update(id, |entity| {
-                let params = BodyParams::DROP;
+                let params = BodyParams::DROP.at(terrain, entity.body.x, entity.body.y);
                 let _report = physics::step_body(&mut entity.body, &params, terrain, delta_seconds);
                 physics::settle(&mut entity.body, &params, terrain, sleep_after);
                 entity.body.rest_ticks == merge_tick

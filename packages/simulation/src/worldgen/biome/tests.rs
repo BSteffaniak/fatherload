@@ -24,8 +24,9 @@ fn sample_seeds(default: u64) -> impl Iterator<Item = u64> {
 }
 
 #[test]
-fn v7_is_the_current_generator_and_has_biomes() {
-    assert_eq!(GeneratorVersion::CURRENT, GeneratorVersion::V7);
+fn the_current_generator_has_biomes() {
+    // V8 (the sky) is V7's ground with a sky on top.
+    assert!(GeneratorVersion::CURRENT.has_biomes());
     assert!(GeneratorVersion::V7.has_biomes());
     assert!(GeneratorVersion::V7.is_streamed());
     assert!(!GeneratorVersion::V5.has_biomes());

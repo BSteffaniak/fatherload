@@ -71,6 +71,10 @@ impl WorldState {
                     output.push_event(GameplayEventKind::DrillStarted { player_id });
                 }
                 let fuel_before = self.players.get(&player_id).map(|player| player.fuel);
+                let position_before = self
+                    .players
+                    .get(&player_id)
+                    .map(|player| (player.x, player.y));
                 let no_clip = self.no_clip_active();
                 let _step = if no_clip {
                     // Test-mode no-clip: thrust flies up, drill flies down.
@@ -84,6 +88,10 @@ impl WorldState {
                         controls.thrust,
                     )
                 };
+                if let Some(before) = position_before {
+                    // Sky bands, updrafts and icing (F6, V8 skies).
+                    self.push_altitude_events(player_id, before, &mut output);
+                }
                 self.update_weapon(player_id, controls.weapon, tick.next(), &mut output);
                 if let Some(fuel_before) = fuel_before
                     && !no_clip
@@ -248,7 +256,19 @@ impl WorldState {
             } else {
                 0.0
             };
-            let total_damage = depth_damage + lava_damage;
+            // Altitude cold (F6, V8 skies): the reverse of band heat, covered by the de-icer.
+            let cold =
+                crate::environment::environment_at(self.terrain.settings(), player_x, player_y)
+                    .cold;
+            let cold_excess = crate::environment::cold_excess(cold, gear.de_icer);
+            let cold_damage = if cold_excess > 0 {
+                crate::environment::COLD_DAMAGE_PER_EXCESS_LEVEL
+                    * f32::from(cold_excess)
+                    * delta_seconds
+            } else {
+                0.0
+            };
+            let total_damage = depth_damage + lava_damage + cold_damage;
             if self.damage_player(player_id, total_damage) {
                 if let Some(player) = self.players.get_mut(&player_id) {
                     player.hull = quantize_simulation_scalar(player.hull);

@@ -360,6 +360,20 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         rule: crate::clock::SleepRule,
     },
+    /// A rig climbed into a higher altitude band of a V8 sky (see [`crate::sky::SkyBand`]).
+    SkyBandEntered {
+        player_id: PlayerId,
+        band: crate::sky::SkyBand,
+    },
+    /// A rig flew into an updraft ([`crate::worldgen::sky::Updraft`]).
+    UpdraftCaught {
+        player_id: PlayerId,
+    },
+    /// A rig flew into cold its de-icer does not cover: the hull starts icing up (see
+    /// [`crate::environment::cold_excess`]).
+    RigIcing {
+        player_id: PlayerId,
+    },
 }
 
 /// What a weapon shot struck.

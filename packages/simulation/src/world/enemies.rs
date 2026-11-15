@@ -1364,8 +1364,8 @@ impl WorldState {
                         dt,
                     );
                 }
-                let _report =
-                    physics::step_body(body, &body_params(state.kind, stunned), &self.terrain, dt);
+                let params = body_params(state.kind, stunned).at(&self.terrain, body.x, body.y);
+                let _report = physics::step_body(body, &params, &self.terrain, dt);
             }
             Locomotion::Walking => self.walk(id, body, state, goal, intent.speed, now),
             Locomotion::Burrowing => self.burrow(body, state, goal, intent.speed),
@@ -1482,6 +1482,7 @@ impl WorldState {
             // Dashes and stuns skid to a halt on the floor.
             body.velocity_x = quantize(body.velocity_x * 6.0f32.mul_add(-dt, 1.0).max(0.0));
         }
+        let params = params.at(&self.terrain, body.x, body.y);
         let _report = physics::step_body(body, &params, &self.terrain, dt);
     }
 
@@ -1528,7 +1529,10 @@ impl WorldState {
                 physics::steer_toward(body, body.x, body.y, speed, speed * 3.0, dt);
             }
         } else if !inside {
-            body.velocity_y = quantize(ENEMY_GRAVITY.mul_add(dt, body.velocity_y).min(480.0));
+            let gravity = ENEMY_GRAVITY
+                * crate::environment::environment_at(self.terrain.settings(), body.x, body.y)
+                    .gravity;
+            body.velocity_y = quantize(gravity.mul_add(dt, body.velocity_y).min(480.0));
         }
         let passable = |x: f32, y: f32| {
             let tile = tile_of(x, y);
@@ -1749,7 +1753,9 @@ impl WorldState {
         let dt = self.timing.delta_seconds;
         body.previous_x = body.x;
         body.previous_y = body.y;
-        body.velocity_y = quantize(shot.kind.gravity().mul_add(dt, body.velocity_y));
+        let gravity = shot.kind.gravity()
+            * crate::environment::environment_at(self.terrain.settings(), body.x, body.y).gravity;
+        body.velocity_y = quantize(gravity.mul_add(dt, body.velocity_y));
         // Substeps of at most four pixels so fast bolts never skip a thin wall or a rig.
         let travel = (body.velocity_x.abs().max(body.velocity_y.abs()) * dt).max(1.0);
         #[allow(

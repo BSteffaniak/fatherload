@@ -97,6 +97,21 @@ impl DriveTuning {
         }
     }
 
+    /// This tuning in thin air (a V8 sky, see [`crate::environment`]): the air's braking
+    /// (coasting drag and the stop term) scales with the air `density`, and the thrusters'
+    /// push (acceleration and steering brake) with the rig's thrust `efficiency`. In vacuum a
+    /// coasting rig drifts on without slowing.
+    #[must_use]
+    pub fn in_thin_air(self, density: f32, efficiency: f32) -> Self {
+        Self {
+            peak_acceleration: self.peak_acceleration * efficiency,
+            coast_rate: self.coast_rate * density,
+            stop_deceleration: self.stop_deceleration * density,
+            turn_rate: self.turn_rate * efficiency,
+            ..self
+        }
+    }
+
     /// Acceleration (px/s²) toward a target speed `target` at current speed `speed` (both
     /// non-negative, `speed < target`).
     fn acceleration(&self, speed: f32, target: f32) -> f32 {

@@ -538,6 +538,12 @@ pub(super) fn authoritative_drill_seconds_per_chip(
             _ => 0.16,
         },
         TileKind::Cave(tile) => tile.base_chip_seconds(),
+        TileKind::Sky(tile) => match tile.hardness() {
+            1 => 0.08,
+            2 => 0.12,
+            3 => 0.15,
+            _ => 0.19,
+        },
     };
     let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
         || parts.contains(&RigPartKind::ResonanceDrill)

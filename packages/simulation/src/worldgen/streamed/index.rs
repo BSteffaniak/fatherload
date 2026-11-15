@@ -40,10 +40,13 @@ pub enum Layer {
     /// Villages ([`crate::village`]): `rx` is the site index, `ry` 0 the surface village and
     /// 1 the underground settlement.
     Village = 9,
+    /// Sky lands ([`crate::worldgen::sky`], V8): `rx` is the cell column, `ry` the band code
+    /// times 1000 plus the cell row, `local` the island in the cell.
+    Sky = 10,
 }
 
 impl Layer {
-    const ALL: [Self; 9] = [
+    const ALL: [Self; 10] = [
         Self::Chamber,
         Self::Hazard,
         Self::Poi,
@@ -53,8 +56,30 @@ impl Layer {
         Self::Cavern,
         Self::Cave,
         Self::Village,
+        Self::Sky,
     ];
 
+    /// The feature kinds of this layer.
+    const fn kinds(self) -> &'static [FeatureKind] {
+        match self {
+            Self::Sky => &[
+                FeatureKind::SkyIsland,
+                FeatureKind::SkyContinent,
+                FeatureKind::Moon,
+            ],
+            Self::Chamber => &[FeatureKind::Chamber],
+            Self::Hazard => &[FeatureKind::HazardCluster],
+            Self::Poi => &[FeatureKind::PointOfInterest],
+            Self::Motherlode => &[FeatureKind::Motherlode],
+            Self::Bed => &[FeatureKind::ArtifactBed],
+            Self::Transition => &[FeatureKind::StratumTransition],
+            Self::Cavern => &[FeatureKind::LargeCavern],
+            Self::Cave => &[FeatureKind::Cave],
+            Self::Village => &[FeatureKind::Village],
+        }
+    }
+
+    #[allow(dead_code, reason = "kept beside `kinds` for single-kind layers")]
     const fn kind(self) -> FeatureKind {
         match self {
             Self::Chamber => FeatureKind::Chamber,
@@ -66,6 +91,7 @@ impl Layer {
             Self::Cavern => FeatureKind::LargeCavern,
             Self::Cave => FeatureKind::Cave,
             Self::Village => FeatureKind::Village,
+            Self::Sky => FeatureKind::SkyIsland,
         }
     }
 }
@@ -117,6 +143,12 @@ pub fn decode(id: FeatureId) -> Option<(Layer, i32, i32, u16)> {
 
 /// Every feature region `(rx, ry)` of `layer` overlapping `rect`, with its features.
 fn layer_features(ctx: &Ctx, layer: Layer, rect: &TileRect, out: &mut Vec<WorldFeature>) {
+    if layer == Layer::Sky {
+        if ctx.sky {
+            crate::worldgen::sky::layer_features(&ctx.settings, rect, out);
+        }
+        return;
+    }
     let rows = (rect.min.y.max(0), rect.max.y.min(ctx.height - 1));
     if rows.0 > rows.1 {
         return;
@@ -184,6 +216,7 @@ fn layer_features(ctx: &Ctx, layer: Layer, rect: &TileRect, out: &mut Vec<WorldF
             }
         }
         Layer::Village => super::villages::layer_features(ctx, rect, out),
+        Layer::Sky => {}
         Layer::Transition => {
             for rx in span(rect.min.x, rect.max.x, TRANSITION_REGION_WIDTH) {
                 for index in 0..BOUNDARY_COUNT {
@@ -233,9 +266,9 @@ fn transition(ctx: &Ctx, rx: i32, index: usize) -> WorldFeature {
 }
 
 fn layers_for(kinds: Option<&[FeatureKind]>) -> impl Iterator<Item = Layer> + '_ {
-    Layer::ALL
-        .into_iter()
-        .filter(move |layer| kinds.is_none_or(|kinds| kinds.contains(&layer.kind())))
+    Layer::ALL.into_iter().filter(move |layer| {
+        kinds.is_none_or(|kinds| layer.kinds().iter().any(|kind| kinds.contains(kind)))
+    })
 }
 
 /// Every feature (of `kinds`, or of every kind) whose centre lies in `rect`, in id order.
@@ -245,7 +278,9 @@ pub fn features_in(ctx: &Ctx, rect: &TileRect, kinds: Option<&[FeatureKind]>) ->
     for layer in layers_for(kinds) {
         layer_features(ctx, layer, rect, &mut found);
     }
-    found.retain(|feature| rect.contains(feature.center));
+    found.retain(|feature| {
+        rect.contains(feature.center) && kinds.is_none_or(|kinds| kinds.contains(&feature.kind))
+    });
     found.sort_by_key(|feature| feature.id);
     found.dedup_by_key(|feature| feature.id);
     found
@@ -288,6 +323,7 @@ pub fn feature(ctx: &Ctx, id: FeatureId) -> Option<WorldFeature> {
             .as_ref()
             .map(|biome| biome.feature),
         Layer::Village => super::villages::feature(ctx, rx, ry),
+        Layer::Sky => crate::worldgen::sky::land(&ctx.settings, id).map(|land| land.feature()),
         Layer::Transition => {
             let index = usize::try_from(ry)
                 .ok()
@@ -317,8 +353,13 @@ pub fn nearest_feature(
     mut accept: impl FnMut(&WorldFeature) -> bool,
 ) -> Option<WorldFeature> {
     let kinds = [kind];
+    // Sky worlds search their whole sky too (older worlds keep searching from row 0).
+    let first_row = if ctx.sky { ctx.top } else { 0 };
     let full_rows = |min_x: i32, max_x: i32| TileRect {
-        min: TilePosition { x: min_x, y: 0 },
+        min: TilePosition {
+            x: min_x,
+            y: first_row,
+        },
         max: TilePosition {
             x: max_x,
             y: ctx.height - 1,

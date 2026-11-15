@@ -346,7 +346,12 @@ fn feature_ids_name_their_region() {
         // V5 has no cave ecosystems or villages (V6 does: `cave_tests`, `village::tests`).
         if matches!(
             kind,
-            FeatureKind::PrefabSlot | FeatureKind::Cave | FeatureKind::Village
+            FeatureKind::PrefabSlot
+                | FeatureKind::Cave
+                | FeatureKind::Village
+                | FeatureKind::SkyIsland
+                | FeatureKind::SkyContinent
+                | FeatureKind::Moon
         ) {
             continue;
         }
@@ -547,6 +552,7 @@ fn glyph(kind: TileKind) -> char {
         TileKind::Cave(_) => 'c',
         TileKind::Built(_) => 'B',
         TileKind::Surface(_) => 's',
+        TileKind::Sky(_) => 'k',
     }
 }
 

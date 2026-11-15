@@ -1113,9 +1113,13 @@ impl WorldState {
         let max_x = (from.x + REACH).min(self.terrain.max_x());
         let max_y = (from.y + 12).min(self.terrain.height() - 1);
         let width = usize::try_from(max_x - min_x + 1).ok()?;
-        // From the world's first row: a biome world's mountains rise above row 0, and a haul
-        // dug out under one surfaces on its slope.
-        let min_y = self.terrain.min_y();
+        // From the world's first ground row: a biome world's mountains rise above row 0, and a
+        // haul dug out under one surfaces on its slope (a V8 world's sky above them is left
+        // out: hauls surface on the ground).
+        let min_y = self
+            .terrain
+            .min_y()
+            .max(-crate::worldgen::biome::SKY_HEADROOM_ROWS);
         let height = usize::try_from(max_y - min_y + 1).ok()?;
         let index = |position: TilePosition| -> Option<usize> {
             if position.x < min_x || position.x > max_x || position.y < min_y || position.y > max_y

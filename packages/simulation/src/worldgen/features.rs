@@ -53,10 +53,17 @@ pub enum FeatureKind {
     /// [`FeatureDetail::Village`]. Only worlds with villages
     /// ([`super::GeneratorVersion::has_villages`]) have them.
     Village,
+    /// A floating sky island ([`crate::worldgen::sky`], V8); its detail is
+    /// [`FeatureDetail::SkyIsland`] and its centre the island's top at its middle column.
+    SkyIsland,
+    /// A sky continent footprint (V8).
+    SkyContinent,
+    /// The Moon (V8): one per world, see [`crate::worldgen::sky::moon`].
+    Moon,
 }
 
 impl FeatureKind {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 13] = [
         Self::LargeCavern,
         Self::Chamber,
         Self::Motherlode,
@@ -67,6 +74,9 @@ impl FeatureKind {
         Self::PointOfInterest,
         Self::Cave,
         Self::Village,
+        Self::SkyIsland,
+        Self::SkyContinent,
+        Self::Moon,
     ];
 
     #[must_use]
@@ -82,6 +92,9 @@ impl FeatureKind {
             Self::PointOfInterest => "point of interest",
             Self::Cave => "cave",
             Self::Village => "village",
+            Self::SkyIsland => "sky island",
+            Self::SkyContinent => "sky continent",
+            Self::Moon => "moon",
         }
     }
 }
@@ -156,6 +169,8 @@ pub enum FeatureDetail {
     Cave(CaveKind),
     /// The village a [`FeatureKind::Village`] feature is.
     Village(crate::people::VillageId),
+    /// The palette of a [`FeatureKind::SkyIsland`].
+    SkyIsland(crate::sky::SkyBiome),
 }
 
 impl FeatureDetail {

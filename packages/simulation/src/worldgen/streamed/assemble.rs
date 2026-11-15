@@ -130,6 +130,11 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
         },
     };
     let mut window = Window::new(ctx, &rect);
+    let sky_lands = if ctx.sky && rect.min.y < ctx.ground_top {
+        crate::worldgen::sky::lands_touching(&ctx.settings, &rect)
+    } else {
+        Vec::new()
+    };
     let mut chunk_kinds = ChunkKinds {
         rect,
         top: ctx.top,
@@ -146,6 +151,12 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             if ctx.biomes {
                 chunk_kinds.kinds[local] = TileKind::Air;
             }
+        } else if position.y < ctx.ground_top {
+            // A sky world's sky (V8): the sky lands, else open air.
+            chunk_kinds.kinds[local] = sky_lands
+                .iter()
+                .find_map(|land| land.tile_at(position.x, position.y))
+                .unwrap_or(TileKind::Air);
         } else if position.y < 0 {
             // Above row 0 (a biome world's mountains): the base layer alone, no cave layer.
             if let Some(kind) = ctx.base_kind(position.x, position.y) {

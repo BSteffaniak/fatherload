@@ -10,6 +10,8 @@
 //! | Gas Scrubber | gas clouds |
 //! | Pressure Bracing | pressure pockets, explosive pockets and magma vents |
 //! | Boulder Deflector | falling boulders and cave-ins |
+//! | Altitude Intake | thin air high in the sky (see [`crate::environment::intake_recovery`]) |
+//! | De-Icer | cold high in the sky (see [`crate::environment::cold_cover`]) |
 //!
 //! Heat is modelled per band rather than per row, so it follows the world's strata whatever
 //! their depth: each band has a heat level ([`band_heat_level`]) and the rig's cooling
@@ -54,6 +56,12 @@ pub struct HazardGear {
     pub pressure_bracing: u8,
     #[serde(default)]
     pub boulder_deflector: u8,
+    /// High-altitude intakes: recover thrust in thin air ([`crate::environment`]).
+    #[serde(default)]
+    pub altitude_intake: u8,
+    /// De-icer: covers altitude cold ([`crate::environment::cold_cover`]).
+    #[serde(default)]
+    pub de_icer: u8,
 }
 
 impl HazardGear {
@@ -64,6 +72,8 @@ impl HazardGear {
         gas_scrubber: GAS_SCRUBBER_MAX_LEVEL,
         pressure_bracing: PRESSURE_BRACING_MAX_LEVEL,
         boulder_deflector: BOULDER_DEFLECTOR_MAX_LEVEL,
+        altitude_intake: crate::environment::ALTITUDE_INTAKE_MAX_LEVEL,
+        de_icer: crate::environment::DE_ICER_MAX_LEVEL,
     };
 
     /// `damage` from a lava burn after the plating.

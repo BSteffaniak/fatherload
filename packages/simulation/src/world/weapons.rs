@@ -385,7 +385,10 @@ impl WorldState {
         let dt = self.timing.delta_seconds;
         body.previous_x = body.x;
         body.previous_y = body.y;
-        body.velocity_y = quantize(spec.gravity.mul_add(dt, body.velocity_y));
+        // Arcing shots feel the sky's gravity fields (exactly 1.0 on the ground).
+        let gravity = spec.gravity
+            * crate::environment::environment_at(self.terrain.settings(), body.x, body.y).gravity;
+        body.velocity_y = quantize(gravity.mul_add(dt, body.velocity_y));
         let speed = body.velocity_x.hypot(body.velocity_y);
         #[allow(
             clippy::cast_possible_truncation,

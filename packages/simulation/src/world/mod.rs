@@ -20,6 +20,7 @@ use crate::{
     terrain::{MineralKind, Terrain, TilePosition},
 };
 
+mod altitude;
 #[cfg(test)]
 mod base_tests;
 mod bases;
@@ -34,6 +35,8 @@ mod charge_equivalence_tests;
 mod clock;
 #[cfg(test)]
 mod clock_tests;
+#[cfg(test)]
+mod climb_tests;
 mod commands;
 mod crew;
 #[cfg(test)]
@@ -82,6 +85,8 @@ mod rescue;
 mod roster;
 mod services;
 mod simulate;
+#[cfg(test)]
+mod sky_tests;
 mod state_hash;
 #[cfg(test)]
 mod streaming_tests;

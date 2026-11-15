@@ -99,9 +99,49 @@ fn ctx(settings: &WorldSettings) -> Arc<Ctx> {
     CONTEXTS.get_or_compute((*settings, 0, 0), || Ctx::new(settings))
 }
 
-/// The freshly generated tiles of `chunk` (memoized per process).
+/// The one shared chunk of open air every empty sky chunk of a V8 world reads from.
+fn empty_sky_chunk() -> Arc<GeneratedChunk> {
+    static EMPTY: std::sync::OnceLock<Arc<GeneratedChunk>> = std::sync::OnceLock::new();
+    Arc::clone(EMPTY.get_or_init(|| {
+        Arc::new(GeneratedChunk {
+            tiles: vec![
+                Tile {
+                    kind: crate::terrain::TileKind::Air,
+                    durability: 0,
+                };
+                CHUNK_TILES
+            ],
+        })
+    }))
+}
+
+/// Whether `chunk` lies wholly in a sky world's sky (above its ground rows) and touches no sky
+/// land: open air, generated for free.
+fn is_empty_sky_chunk(settings: &WorldSettings, chunk: ChunkPosition) -> bool {
+    if !settings.generator.has_sky() {
+        return false;
+    }
+    let origin = chunk.origin();
+    if origin.y + CHUNK_SIZE_TILES > -super::biome::SKY_HEADROOM_ROWS {
+        return false;
+    }
+    let rect = TileRect {
+        min: origin,
+        max: TilePosition {
+            x: origin.x + CHUNK_SIZE_TILES - 1,
+            y: origin.y + CHUNK_SIZE_TILES - 1,
+        },
+    };
+    super::sky::chunk_is_empty(settings, &rect)
+}
+
+/// The freshly generated tiles of `chunk` (memoized per process). Empty sky chunks of V8
+/// worlds share one chunk of air and are never cached or assembled.
 #[must_use]
 pub fn generated_chunk(settings: &WorldSettings, chunk: ChunkPosition) -> Arc<GeneratedChunk> {
+    if is_empty_sky_chunk(settings, chunk) {
+        return empty_sky_chunk();
+    }
     CHUNKS.get_or_compute((*settings, chunk.x, chunk.y), || GeneratedChunk {
         tiles: assemble::assemble(&ctx(settings), chunk),
     })
