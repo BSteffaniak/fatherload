@@ -757,13 +757,14 @@ pub(super) fn draw_minimap_for_view(
     let player_tile = view.player.tile_position(TILE_SIZE);
     // A bounded world fits across the minimap; an endless one scrolls with the rig. Rows
     // follow the rig between the world's first row (mountain tops) and its floor; high in the
-    // sky the minimap keeps showing the top of the world below the rig.
+    // sky the minimap keeps the ground below the rig in view (see `map_focus_row`).
     let (origin_x, visible_width) = minimap_columns(terrain, player_tile.x);
     let top_row = terrain.min_y();
     let world_rows = terrain_height - top_row;
     let visible_height = world_rows.min(80);
     let origin_y = if world_rows > visible_height {
-        (player_tile.y - visible_height / 2).clamp(top_row, terrain_height - visible_height)
+        (map_focus_row(terrain, player_tile, visible_height) - visible_height / 2)
+            .clamp(top_row, terrain_height - visible_height)
     } else {
         top_row
     };
@@ -848,6 +849,13 @@ pub(super) fn draw_minimap_for_view(
     let blink = (ui_kit::seconds() * 2.0) as i32 % 2 == 0;
     draw.draw_rectangle(map_x - 1, map_y - 1, 3, 3, INK);
     draw.draw_rectangle(map_x, map_y, 1, 1, if blink { BONE } else { SKY_LIGHT });
+}
+
+/// The row a map `rows` tall centres on for a rig at `tile`: the rig itself, except high in
+/// the sky (the sky has no ceiling), where the map keeps the ground under the rig a quarter
+/// of the map above its bottom edge instead of showing nothing but empty sky.
+fn map_focus_row(terrain: &Terrain, tile: TilePosition, rows: i32) -> i32 {
+    tile.y.max(terrain.surface_row(tile.x) - rows / 4)
 }
 
 /// The map colour of `position`: open sky above the column's ground always shows, the rest
@@ -1465,10 +1473,11 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         (terrain.max_x() + 1 - columns).max(terrain.min_x()),
     );
     // Centred on the rig, kept between the world's first row (a biome world's mountain tops)
-    // and its floor; a rig high in the sky sees the top of the world, its marker pinned to
-    // the map's top edge.
+    // and its floor; a rig high in the sky sees the ground below it, its marker pinned to the
+    // map's top edge.
     let top_row = terrain.min_y();
-    let origin_y = (player.y - rows / 2).clamp(top_row, (terrain_height - rows).max(top_row));
+    let origin_y = (map_focus_row(terrain, player, rows) - rows / 2)
+        .clamp(top_row, (terrain_height - rows).max(top_row));
     for row in 0..rows.min(terrain_height - origin_y) {
         let tile_y = origin_y + row;
         for column in 0..columns.min(terrain.max_x() + 1 - origin_x) {

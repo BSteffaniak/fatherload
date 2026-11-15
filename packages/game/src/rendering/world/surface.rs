@@ -620,12 +620,13 @@ pub fn draw_weather(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
                 {
                     continue;
                 }
-                // Not inside the ground.
+                // Not inside the ground, nor under it: mountain caves and dug tunnels stay
+                // dry (the generated ground line is the roof weather stops at).
                 let tile = TilePosition {
                     x: (x / TILE_SIZE).floor() as i32,
                     y: (y / TILE_SIZE).floor() as i32,
                 };
-                if terrain.is_solid_at(tile) {
+                if tile.y >= terrain.surface_row(tile.x) || terrain.is_solid_at(tile) {
                     continue;
                 }
                 let color = weather.colors[(h >> 30) as usize % 2];
