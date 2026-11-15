@@ -18,7 +18,7 @@ use crate::{
 
 /// Blasts craters and cuts tunnels across the whole terrain.
 fn excavate(terrain: &mut Terrain) {
-    let (width, height) = (terrain.width(), terrain.height());
+    let (width, height) = (terrain.width().min(240), terrain.height());
     for step in 0..(width * height / 60) {
         let x = (step * 37).rem_euclid(width);
         let y = 6 + (step * 53).rem_euclid(height - 6);
@@ -155,12 +155,12 @@ fn test_mode_world_converges_with_toggles_warps_and_late_joiners() {
 fn keyframes_carry_only_tiles_that_differ_from_generation() {
     let mut report = Vec::new();
     for (label, settings) in [
-        ("standard", WorldSettings::new(0x5EED)),
+        ("standard", WorldSettings::bounded(0x5EED)),
         (
             "large",
             WorldSettings {
                 size: WorldSize::Large,
-                ..WorldSettings::new(0x5EED)
+                ..WorldSettings::bounded(0x5EED)
             },
         ),
     ] {

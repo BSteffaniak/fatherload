@@ -316,3 +316,73 @@ fn world_entities_spawn_change_and_despawn_per_client_relevance() {
     assert_eq!(held(&pair), vec![near, far]);
     assert_eq!(pair.authority().entities(), pair.host.world().entities());
 }
+
+/// An endless (V5) world: a digger far out (thousands of tiles from spawn) works on chunks the
+/// client never generated; the client only learns the diffs of chunks in its relevance, its
+/// keyframe never carried generated terrain, and once relevance is lifted the far chunks'
+/// diffs stream in and the terrain converges.
+#[test]
+fn streamed_world_streams_far_chunk_diffs_to_clients() {
+    let params = SessionParams::new(60);
+    let sim_digger = fatherload_simulation::PlayerId::new(0);
+    let mut world = WorldState::new_game_with_params(
+        sim_digger,
+        fatherload_simulation::SimulationParams::new(params.tick_rate_hz),
+    );
+    assert!(world.terrain().is_streamed());
+    let far_column: i16 = -3_000;
+    {
+        let digger = world.player_mut(sim_digger).expect("digger");
+        digger.x = (f32::from(far_column) + 0.5) * TILE_SIZE;
+        digger.y = 4.5 * TILE_SIZE;
+        digger.velocity_x = 0.0;
+        digger.velocity_y = 0.0;
+    }
+    let keyframe_bytes = postcard::to_allocvec(world.terrain())
+        .expect("encode")
+        .len();
+    assert!(
+        keyframe_bytes < 256,
+        "an untouched endless world's terrain keyframe is {keyframe_bytes} bytes"
+    );
+    let digger = PlayerId(0);
+    let mut pair = Pair::new(world, finite_tuning(8.0), params, |host| {
+        assert!(host.adopt_local_player(SeatId(0), digger));
+    });
+    let idle = ControlState::default();
+    for _ in 0..30 {
+        pair.step(&idle);
+    }
+    assert_eq!(pair.client.phase(), ClientPhase::InGame);
+    pair.host
+        .submit_local_input(digger, ControlState::new(0.0, false, true), Vec::new());
+    for _ in 0..60 * 6 {
+        pair.step(&idle);
+    }
+    pair.host.submit_local_input(digger, idle, Vec::new());
+    for _ in 0..10 {
+        pair.step(&idle);
+    }
+    let dug: Vec<ChunkPosition> = pair.host.world().terrain().edited_chunks().collect();
+    assert!(
+        dug.iter()
+            .any(|chunk| chunk.x * 16 < i32::from(far_column) + 32),
+        "the digger dug far out: {dug:?}"
+    );
+    assert!(
+        dug.iter().any(|chunk| !pair.chunk_matches(chunk)),
+        "the client skipped the far chunks' diffs"
+    );
+    pair.set_radius(None);
+    for _ in 0..10 {
+        pair.step(&idle);
+    }
+    for chunk in &dug {
+        assert!(pair.chunk_matches(chunk), "chunk {chunk:?} streamed in");
+    }
+    assert_eq!(
+        pair.authority().terrain().digest(),
+        pair.host.world().terrain().digest(),
+        "terrain fully converged"
+    );
+}

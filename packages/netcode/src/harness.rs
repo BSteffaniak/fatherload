@@ -335,12 +335,23 @@ impl HarnessSim for WorldState {
     }
 
     fn play_progress(&self) -> usize {
-        self.terrain()
-            .tiles()
-            .iter()
-            .skip(usize::try_from(5 * self.terrain().width()).unwrap_or(0))
-            .filter(|tile| tile.kind == TileKind::Air)
-            .count()
+        let terrain = self.terrain();
+        terrain.bounded_tiles().map_or_else(
+            || {
+                terrain
+                    .generation_diffs()
+                    .iter()
+                    .filter(|change| change.position.y >= 5 && change.tile.kind == TileKind::Air)
+                    .count()
+            },
+            |tiles| {
+                tiles
+                    .iter()
+                    .skip(usize::try_from(5 * terrain.width()).unwrap_or(0))
+                    .filter(|tile| tile.kind == TileKind::Air)
+                    .count()
+            },
+        )
     }
 }
 
