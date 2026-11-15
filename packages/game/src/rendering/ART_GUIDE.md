@@ -432,6 +432,20 @@ ahead of each rig's headlight; nothing is drawn by day. HUD: a half-disc sun dia
 Moon by night) with `DAY n` and the time under the wallet panel; the in-bed banner; the fade to
 dark while the crew falls asleep and the `DAY n` card as the morning fades in.
 
+**People** (`people_art.rs`, `world/villages.rs::draw_village_people`, WP-PEOPLE). A villager
+is a procedural figure about 18 art pixels tall, feet on the street row, assembled from the
+character's `Appearance` seed: build (width and height), skin (cooler, paler tones for
+Deepfolk), hair colour and one of five styles (beards on some adults), the culture's cloth
+(`cloth`: frontier plaid, highland tartan skirts and wool scarves, mesa ponchos with zigzag bands,
+riverside linen sashes, scrapper patches and rivets, deepfolk hoods) under the trade's garb
+(aprons, braces, waistcoats, long coats, robes, satchels, badges, tool belts, straw hats) and the
+accessory. Walking is a four-frame step with swinging arms; standing people breathe and blink;
+the mouth moves while they talk; elders lean on a stick. The talk panel's portrait
+(`draw_portrait`, 32x32 art pixels at 4x beside the panel) repeats the same seed in detail:
+eyes, brows, nose, ears, the hat or helmet, the collar and garment. People are drawn after the
+terrain and before rigs, positioned along their walking leg (`NpcState::x_at`) between the last
+two world ticks; a name tag floats over the person the view's rig would talk to.
+
 **Effects** (`world/fx.rs`). Sparks are square embers cooling cream to red; drilling throws chips
 of the target's material (plus sparks on rock); `effects::Explosion`s (spawned where a detonated
 bomb was) flash, burn as a stepped fireball and roll smoke; bombs blink faster as the fuse runs
