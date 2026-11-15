@@ -347,7 +347,10 @@ fn draw_wallet_panel(
     // A third row names a special charge and counts C4 waiting for the detonator.
     let charge_line = (selected != ExplosiveKind::Bomb || armed > 0).then(|| {
         let name = selected.name().to_uppercase();
-        if armed > 0 {
+        if armed > 0 && selected == ExplosiveKind::Bomb {
+            // "BOMB  1 ARMED" reads as if a bomb were armed: name the waiting charges instead.
+            format!("{armed} C4 ARMED")
+        } else if armed > 0 {
             format!("{name}  {armed} ARMED")
         } else {
             name
