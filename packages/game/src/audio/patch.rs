@@ -285,7 +285,8 @@ impl Patch {
             | Self::LandMedium
             | Self::WallBump
             | Self::BreakSoft
-            | Self::MushroomBounce => PatchInfo::new(Impact).instances(2).jitter(0.05, 1.0),
+            | Self::MushroomBounce
+            | Self::BlockDump => PatchInfo::new(Impact).instances(2).jitter(0.05, 1.0),
             Self::LandHeavy | Self::HullHit | Self::BreakHard => PatchInfo::new(Impact)
                 .instances(2)
                 .jitter(0.04, 1.0)
@@ -352,7 +353,6 @@ impl Patch {
                 .send(0.25)
                 .jitter(0.015, 0.5),
             Self::StowageFull => PatchInfo::new(Interface).instances(1).jitter(0.0, 0.3),
-            Self::BlockDump => PatchInfo::new(Impact).instances(2).jitter(0.05, 1.0),
         }
     }
 

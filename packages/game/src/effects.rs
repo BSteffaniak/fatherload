@@ -469,7 +469,7 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::ItemsCollected { player_id, .. }
         | GameplayEventKind::PickupBlocked { player_id, .. }
         | GameplayEventKind::BlocksDumped { player_id }
-        | GameplayEventKind::CollectBlocksToggled { player_id, .. } => Some(player_id),
+        | GameplayEventKind::CollectBlocksToggled { player_id, .. }
         | GameplayEventKind::CaveDiscovered { player_id, .. }
         | GameplayEventKind::CaveCacheOpened { player_id, .. } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged

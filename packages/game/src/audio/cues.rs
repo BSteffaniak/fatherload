@@ -275,7 +275,7 @@ mod tests {
             | GameplayEventKind::ItemsCollected { .. }
             | GameplayEventKind::PickupBlocked { .. }
             | GameplayEventKind::BlocksDumped { .. }
-            | GameplayEventKind::CollectBlocksToggled { .. } => {}
+            | GameplayEventKind::CollectBlocksToggled { .. }
             | GameplayEventKind::CaveDiscovered { .. }
             | GameplayEventKind::CaveCacheOpened { .. }
             | GameplayEventKind::StalactiteFell { .. } => {}
