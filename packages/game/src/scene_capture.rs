@@ -10,6 +10,7 @@
 //! frames with held input, and `shell` exposes the menu state to open screens directly.
 
 mod rig_scenes;
+mod village_scenes;
 
 use std::path::{Path, PathBuf};
 
@@ -315,7 +316,10 @@ impl SceneStage<'_> {
 
 /// Every scene: the main list plus the rig customization scenes.
 fn all_scenes() -> impl Iterator<Item = &'static Scene> {
-    SCENES.iter().chain(rig_scenes::RIG_SCENES)
+    SCENES
+        .iter()
+        .chain(rig_scenes::RIG_SCENES)
+        .chain(village_scenes::VILLAGE_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

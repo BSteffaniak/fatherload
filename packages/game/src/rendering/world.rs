@@ -40,6 +40,7 @@ mod quest_marks;
 mod rig;
 mod sky;
 mod speed_fx;
+mod villages;
 
 pub use rig::{RigFacings, player_accent};
 pub use sky::SkyArt;
@@ -141,8 +142,24 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     sky::draw_sky(draw, scene.sky, scene.visible, seconds);
     draw_lowered_ground_backdrop(draw, scene.terrain, scene.visible);
     buildings::draw_town(draw, scene.visible, scene.local, seconds);
+    villages::draw_villages(
+        draw,
+        (scene.terrain, scene.explored),
+        scene.visible,
+        scene.local,
+        seconds,
+        villages::VillagePass::Behind,
+    );
     draw_world_edges(draw, scene.terrain, scene.visible);
     scene.terrain_renderer.draw(draw, scene.visible);
+    villages::draw_villages(
+        draw,
+        (scene.terrain, scene.explored),
+        scene.visible,
+        scene.local,
+        seconds,
+        villages::VillagePass::Front,
+    );
     fx::draw_lava_glow(draw, scene.terrain, scene.explored, scene.visible, seconds);
     caves::draw_cave_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
     caves::draw_critters(draw, scene.critters, scene.players, scene.visible, seconds);
@@ -164,6 +181,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     for boulder in scene.boulders {
         fx::draw_boulder(draw, boulder, seconds);
     }
+    villages::draw_village_people(draw, scene.terrain, scene.visible, scene.explored, seconds);
     drops::draw_drops(draw, scene);
     quest_marks::draw_quest_markers(draw, scene.quest_markers, seconds);
     if let Some(local) = scene.local {

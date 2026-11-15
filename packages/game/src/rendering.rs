@@ -24,6 +24,7 @@ mod garage;
 mod interior;
 mod layout;
 mod menus;
+mod people_art;
 pub mod pixel_art;
 mod prompts;
 mod quests;
@@ -34,6 +35,7 @@ mod title;
 mod ui_kit;
 #[cfg(not(target_os = "emscripten"))]
 mod ui_sheet;
+mod village_hud;
 mod world;
 
 use interior::{RoomArea, draw_interior};
@@ -420,6 +422,10 @@ impl GameRenderer {
     /// the seat's own dialog (docked at the counter inside a building), rescue prompt and toast.
     /// In split-screen everything lands inside the seat's viewport, on a UI canvas covering just
     /// that viewport ([`UiCanvas::for_viewport`]), with the seat's own device prompts.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one seat's world or room, then its dialogs, toasts and banners, in order"
+    )]
     fn render_seat(
         &self,
         draw: &mut RaylibDrawHandle<'_>,
@@ -470,14 +476,26 @@ impl GameRenderer {
                 area.align_top
                     .then(|| interior::floor_canvas_y(area) as f32),
             );
-            draw_interior(
-                draw,
-                seat,
-                view,
-                &snapshot.market,
-                area,
-                split.then_some(view.seat_index),
-            );
+            if let Some(village) = seat.village.interior {
+                interior::draw_village_interior(
+                    draw,
+                    seat,
+                    view,
+                    snapshot.terrain.settings(),
+                    area,
+                    split.then_some(view.seat_index),
+                    village,
+                );
+            } else {
+                draw_interior(
+                    draw,
+                    seat,
+                    view,
+                    &snapshot.market,
+                    area,
+                    split.then_some(view.seat_index),
+                );
+            }
         } else {
             self.render_world(draw, shell, snapshot, view);
         }
@@ -510,6 +528,13 @@ impl GameRenderer {
                 && let Some((message, age)) = toast_message(shell, seat)
             {
                 draw_toast(draw, message, age, docked);
+            }
+            if !shell.global_overlay()
+                && !seat.inside()
+                && seat.modal.is_none()
+                && let Some(banner) = &seat.village.banner
+            {
+                village_hud::draw_village_banner(draw, banner, shell.update_ticks);
             }
             if !shell.global_overlay()
                 && let Some(fanfare) = &seat.fanfare

@@ -164,10 +164,15 @@ impl Village {
             VillageSetting::Surface => self.size.name(),
             VillageSetting::Underground => "settlement",
         };
+        let style = self.style.name();
+        let article = if style.starts_with(['a', 'e', 'i', 'o', 'u']) {
+            "an"
+        } else {
+            "a"
+        };
         format!(
-            "{}, a {} {kind} ({})",
+            "{}, {article} {style} {kind} ({})",
             self.name,
-            self.style.name(),
             self.specialty.name()
         )
     }

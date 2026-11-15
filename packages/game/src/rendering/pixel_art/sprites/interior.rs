@@ -411,6 +411,58 @@ interior_set!(
     accent: LIME,
 );
 
+// Village rooms, one per building style (WP-VILLAGE); residents stand in for the keeper sprite.
+interior_set!(
+    village_timber, "village_timber",
+    wall: PANEL_WALL_GRID (SAND, CLAY, LOAM, SOIL),
+    plank: (CLAY, SOIL_DARK, LOAM, SOIL, SOIL_DARK),
+    floor: (LOAM, SOIL, SOIL_DARK),
+    counter: (CLAY, LOAM, SOIL, SOIL_DARK),
+    keeper: (MOSS, LEAF, CLAY, RUST),
+    shadow: SOIL_DARK,
+    accent: GOLD,
+);
+interior_set!(
+    village_stone, "village_stone",
+    wall: STONE_WALL_GRID (MIST, STONE_LIGHT, STONE, STONE_DARK),
+    plank: (CLAY, SOIL_DARK, LOAM, SOIL, SOIL_DARK),
+    floor: (SLATE_LIGHT, SLATE, SLATE_DARK),
+    counter: (STONE_LIGHT, STONE, STONE_DARK, INK),
+    keeper: (OCEAN, SKY, STONE, STONE_DARK),
+    shadow: STONE_DARK,
+    accent: SKY_LIGHT,
+);
+interior_set!(
+    village_adobe, "village_adobe",
+    wall: MARBLE_WALL_GRID (CREAM, SAND, CLAY, CLAY),
+    plank: (TEAL, TEAL_DARK, TEAL, TEAL_DARK, PINE),
+    floor: (CLAY, RUST, MAROON),
+    counter: (SAND, CLAY, TEAL, TEAL_DARK),
+    keeper: (TEAL, MINT, CLAY, RUST),
+    shadow: RUST,
+    accent: MINT,
+);
+interior_set!(
+    village_scrap, "village_scrap",
+    wall: METAL_WALL_GRID (STEEL_LIGHT, STEEL, STEEL_DARK, SLATE_DARK),
+    plank: (COPPER, SOIL_DARK, RUST, MAROON, SOIL_DARK),
+    floor: (STONE, STONE_DARK, INK),
+    counter: (STEEL, STEEL_DARK, RUST, MAROON),
+    keeper: (AMBER, GOLD, STEEL, STEEL_DARK),
+    shadow: SLATE_DARK,
+    accent: AMBER,
+);
+interior_set!(
+    village_carved, "village_carved",
+    wall: STONE_WALL_GRID (SLATE_LIGHT, SLATE, SLATE_DARK, NIGHT),
+    plank: (STONE, NIGHT, STONE_DARK, STONE_DARK, INK),
+    floor: (STONE, STONE_DARK, INK),
+    counter: (SLATE_LIGHT, SLATE, PLUM, NIGHT),
+    keeper: (LAVENDER, MINT, SLATE, NIGHT),
+    shadow: NIGHT,
+    accent: MINT,
+);
+
 /// Door frame (9-slice, border 3) around a door panel; the panel and window are drawn inside.
 pub const DOOR_FRAME_SPRITE: SpriteDef = SpriteDef {
     name: "interior_door_frame",

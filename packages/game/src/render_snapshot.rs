@@ -300,6 +300,9 @@ pub struct ViewSnapshot<'w> {
     pub deep_instability: f32,
     /// The surface building the rig stands at (its door prompt).
     pub surface_zone: Option<SurfaceZone>,
+    /// The village building whose door the rig stands at, as its door prompt ("Enter the
+    /// Trading Post").
+    pub village_door: Option<String>,
     /// The quests this player sees: their own solo quests, then the crew's.
     pub quests: Vec<&'w ActiveQuest>,
     /// Markers of those quests' current objectives (map, minimap and world).
@@ -681,6 +684,21 @@ fn view_snapshot(
             .deep_run_state(player_id)
             .map_or(0.0, |state| state.instability),
         surface_zone: world.player_surface_zone(player_id),
+        village_door: world
+            .player_village_building(player_id)
+            .map(|(found, building)| {
+                let lot = &found.buildings[building];
+                if lot.kind == fatherload_simulation::village::BuildingKind::House {
+                    let family = lot
+                        .residents
+                        .first()
+                        .and_then(|index| found.population.characters.get(usize::from(*index)))
+                        .map_or("a", |who| who.name.family.as_str());
+                    format!("Visit the {family} home")
+                } else {
+                    format!("Enter the {}", lot.kind.label())
+                }
+            }),
         quests: world.visible_quests(player_id),
         quest_markers: world
             .visible_quests(player_id)

@@ -33,6 +33,9 @@ use super::{
 use fatherload_simulation::economy::SurfaceZone;
 
 mod props;
+mod village;
+
+pub(super) use village::draw_village_interior;
 
 use crate::{
     input::prompts::Prompt,
@@ -553,6 +556,11 @@ fn draw_counter(draw: &mut impl RaylibDraw, set: &InteriorSet, counter_x: i32, s
         keeper_y,
         false,
     );
+    draw_counter_body(draw, set, counter_x);
+}
+
+/// The counter itself (without a keeper): its shadow, the counter and the floor shadow.
+fn draw_counter_body(draw: &mut impl RaylibDraw, set: &InteriorSet, counter_x: i32) {
     // Shadow on the wall behind the counter.
     draw.draw_rectangle(
         counter_x + 2,

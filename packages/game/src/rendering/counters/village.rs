@@ -31,6 +31,7 @@ fn prosperity(found: &Village) -> String {
 }
 
 /// What a village and its counter know about the rig, for pricing rows.
+#[allow(clippy::too_many_lines, reason = "one arm per kind of deal")]
 fn quote(snapshot: &RenderSnapshot<'_>, player: &Player, offer: VillageOffer) -> Offer {
     let credits = player.credits;
     match offer.deal {

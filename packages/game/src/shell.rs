@@ -37,8 +37,8 @@ pub use quests::{
 };
 pub use test_mode::WARP_BANDS;
 pub use village::{
-    BANNER_TICKS, SeatVillage, TalkView, VILLAGE_COUNTER_X, VillageBanner, VillageInterior,
-    building_title, counter_rows, interior_village, room_residents,
+    BANNER_TICKS, SeatVillage, VILLAGE_COUNTER_X, VILLAGE_REACH, VillageBanner, VillageInterior,
+    building_title, interior_village, room_residents,
 };
 
 pub use world_setup::{SetupOutcome, SetupPurpose, WorldSetup, random_world_seed};

@@ -393,6 +393,7 @@ impl LocalGame {
             );
         }
         self.announce_points_of_interest(&players);
+        self.announce_villages(&players);
         self.announce_quests(&players);
     }
 
@@ -518,6 +519,29 @@ impl LocalGame {
             if let Some(message) = message {
                 self.shell.seat_mut(seat).message = message;
             }
+        }
+    }
+
+    /// Raises the discovery banner for each local seat whose rig entered a village for the
+    /// first time this frame.
+    fn announce_villages(&mut self, players: &[PlayerId]) {
+        let found: Vec<(usize, fatherload_simulation::village::VillageId)> = self
+            .frame_events
+            .iter()
+            .filter_map(|event| match &event.event {
+                RuntimeEventKind::Gameplay(gameplay) => match gameplay.kind {
+                    GameplayEventKind::VillageDiscovered { player_id, village } => players
+                        .iter()
+                        .position(|other| *other == player_id)
+                        .map(|seat| (seat, village)),
+                    _ => None,
+                },
+                RuntimeEventKind::ActionResolved { .. } => None,
+            })
+            .collect();
+        for (seat, village) in found {
+            self.shell
+                .village_discovered(seat, self.runtime.world(), village);
         }
     }
 

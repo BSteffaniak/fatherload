@@ -269,7 +269,12 @@ pub const fn underground_site(settings: &WorldSettings, site: i32) -> Option<Und
     if site != near_side && roll % 100 >= 25 {
         return None;
     }
-    let side = if (roll >> 8).is_multiple_of(2) { -1 } else { 1 };
+    // The first sites' halls lie beyond them, away from town (never under its flat ground).
+    let side = if site.abs() == 1 || (roll >> 8).is_multiple_of(2) {
+        site.signum()
+    } else {
+        -site.signum()
+    };
     #[allow(
         clippy::cast_possible_truncation,
         reason = "the rolls are reduced to a few hundred"

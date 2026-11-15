@@ -149,7 +149,7 @@ pub fn building_title(found: &Village, building: usize) -> String {
                     .first()
                     .and_then(|index| found.population.characters.get(usize::from(*index)))
                     .map_or("A", |character| character.name.family.as_str());
-                format!("The {family} House, {}", found.name)
+                format!("The {family} home, {}", found.name)
             } else {
                 format!("{}, {}", lot.kind.label(), found.name)
             }
@@ -305,7 +305,8 @@ impl SeatUi {
         let mut about = String::with_capacity(role.len() + 8);
         about.push_str(&role[..1].to_uppercase());
         about.push_str(&role[1..]);
-        about.push_str(&format!(", {}", character.age));
+        about.push_str(", ");
+        about.push_str(&character.age.to_string());
         self.village.talk = Some(TalkView {
             speaker: character.id,
             name: character.name.full(),
@@ -475,18 +476,19 @@ fn banner_for(found: &Village, first_visit: bool, tick: u64) -> VillageBanner {
         VillageSetting::Surface => found.size.name(),
         VillageSetting::Underground => "deep settlement",
     };
-    let mut subtitle = format!(
-        "{} {kind} · known for its {}",
-        capitalized(found.style.name()),
-        found.specialty.name()
-    );
-    if let village::Specialty::MineralBuyer(mineral) = found.specialty {
-        subtitle = format!(
-            "{} {kind} · the assayer pays top price for {}",
+    let subtitle = if let village::Specialty::MineralBuyer(mineral) = found.specialty {
+        format!(
+            "{} {kind} - the assayer pays top price for {}",
             capitalized(found.style.name()),
             mineral.name()
-        );
-    }
+        )
+    } else {
+        format!(
+            "{} {kind} - known for its {}",
+            capitalized(found.style.name()),
+            found.specialty.name()
+        )
+    };
     VillageBanner {
         village: found.id,
         title: found.name.clone(),

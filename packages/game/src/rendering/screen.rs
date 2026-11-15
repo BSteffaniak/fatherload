@@ -1,5 +1,6 @@
 mod cave_map;
 mod poi_map;
+mod village_map;
 
 use raylib::prelude::*;
 
@@ -309,6 +310,13 @@ fn draw_view_prompt(
             format!("Enter {}", surface_zone_label(zone)),
             true,
         )
+    } else if shell.run_mode == RunMode::Playing
+        && shell.modal.is_none()
+        && shell.seat(view.seat_index).modal.is_none()
+        && view.failure.is_none()
+        && let Some(door) = &view.village_door
+    {
+        (Prompt::Use, door.clone(), true)
     } else {
         return;
     };
@@ -616,7 +624,7 @@ const fn minimap_color(kind: TileKind) -> Color {
 /// Bottom-right minimap of the explored mine around the rig (left of the depth ruler).
 #[allow(
     clippy::too_many_lines,
-    reason = "one pass over the minimap: tiles, then each marker layer"
+    reason = "terrain, then every kind of marker, then the rig, in draw order"
 )]
 pub(super) fn draw_minimap_for_view(
     draw: &mut RaylibDrawHandle<'_>,
@@ -691,6 +699,13 @@ pub(super) fn draw_minimap_for_view(
     cave_map::draw_minimap_markers(
         draw,
         &cave_map::markers(terrain, view.player),
+        |tile_x, tile_y| on_map(tile_x, tile_y).then(|| to_map(tile_x, tile_y)),
+    );
+    village_map::draw_minimap_villages(
+        draw,
+        terrain,
+        view.player,
+        (origin_x, origin_x + visible_width),
         |tile_x, tile_y| on_map(tile_x, tile_y).then(|| to_map(tile_x, tile_y)),
     );
     quests::draw_minimap_quest_markers(draw, &view.quest_markers, |tile_x, tile_y| {
@@ -1298,6 +1313,7 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         (origin_x, origin_y),
         pixel,
     );
+    village_map::draw_map_villages(draw, terrain, ui.player, clip, (origin_x, origin_y), pixel);
     quests::draw_map_quest_markers(
         draw,
         &ui.view.quest_markers,
