@@ -116,7 +116,7 @@ fn clay_bats(stage: &mut SceneStage<'_>) {
                 tile(floor + dy),
             );
         }
-        // A burrower in the clay below the floor, rumbling toward the rig.
+        // A burrower digging its tunnel up through the clay below the floor.
         let _ = spawn(
             world,
             EnemyKind::Burrower,
@@ -466,6 +466,104 @@ fn split_screen_fight(stage: &mut SceneStage<'_>) {
     );
 }
 
+/// Sets an enemy hunting `player` (its next attack ready now).
+fn hunt(world: &mut WorldState, id: EntityId, player: PlayerId) {
+    let now = world.simulation_tick();
+    world.entities_mut().update(id, |entity| {
+        if let EntityState::Enemy(state) = &mut entity.state {
+            state.mode = EnemyMode::Chase;
+            state.target = Some(player);
+            state.last_seen = now;
+            state.attack_ready = now;
+        }
+    });
+}
+
+/// Enemies pressing in on the rig stop at contact: bats, a drone and a woken mimic dropped
+/// right on top of the rig are pushed out to touching (they still bite), never drawn inside it.
+fn contact(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        let floor = band_row(world, Band::Stone, CAVE_X, 10);
+        cavern(world, player, CAVE_X, floor, 30, 8);
+        place_rig(world, player, CAVE_X, floor - 1);
+        let Some((x, y)) = world.player(player).map(|rig| (rig.x, rig.y)) else {
+            return;
+        };
+        let pressing = [
+            (EnemyKind::CaveBat, 4.0, -3.0),
+            (EnemyKind::CaveBat, -6.0, -8.0),
+            (EnemyKind::CaveBat, 1.0, -12.0),
+            (EnemyKind::MiningDrone, -9.0, 2.0),
+        ];
+        for (kind, dx, dy) in pressing {
+            let id = spawn(world, kind, x + dx, y + dy);
+            hunt(world, id, player);
+        }
+        let mimic = spawn(
+            world,
+            EnemyKind::RockMimic,
+            x + 14.0,
+            on_floor(EnemyKind::RockMimic, floor),
+        );
+        hunt(world, mimic, player);
+    });
+    stage.settle(8);
+}
+
+/// Rock stops every enemy the way it stops the rig: a bat pack and a drone hunting the rig from
+/// behind a stone wall pile up against it, and a burrower digs a real tunnel through the soft
+/// clay toward it instead of ghosting through.
+fn blocked_by_rock(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        let floor = band_row(world, Band::Clay, CAVE_X, 10);
+        cavern(world, player, CAVE_X, floor, 34, 9);
+        // A sealed stone wall down the middle of the cavern.
+        for row in floor - 10..floor {
+            for column in CAVE_X..CAVE_X + 2 {
+                let _ = world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x: column, y: row }, TileKind::Stone);
+            }
+        }
+        // A clay bank west of the rig with a burrower lurking in a pocket at its far side.
+        for row in floor - 5..floor {
+            for column in CAVE_X - 16..CAVE_X - 8 {
+                let _ = world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x: column, y: row }, TileKind::Clay);
+            }
+        }
+        carve(world, CAVE_X - 15..CAVE_X - 14, floor - 2..floor - 1);
+        place_rig(world, player, CAVE_X - 3, floor - 1);
+        for (dx, dy) in [(4, -3), (5, -5), (3, -6), (6, -2), (4, -7)] {
+            let id = spawn(
+                world,
+                EnemyKind::CaveBat,
+                tile(CAVE_X + dx),
+                tile(floor + dy),
+            );
+            hunt(world, id, player);
+        }
+        let drone = spawn(
+            world,
+            EnemyKind::MiningDrone,
+            tile(CAVE_X + 6),
+            tile(floor - 4),
+        );
+        hunt(world, drone, player);
+        let burrower = spawn(
+            world,
+            EnemyKind::Burrower,
+            TILE_SIZE.mul_add(0.5, tile(CAVE_X - 15)),
+            TILE_SIZE.mul_add(0.5, tile(floor - 2)),
+        );
+        hunt(world, burrower, player);
+    });
+    stage.settle(70);
+}
+
 /// Every kind side by side in the town's safe shaft (they idle there, nobody is hunted).
 fn lineup(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
@@ -515,7 +613,7 @@ pub const ENEMY_SCENES: &[Scene] = &[
     },
     Scene {
         name: "enemies_clay_bats",
-        summary: "Clay caves: a bat swarm, a burrower rumbling under the floor and one bursting out",
+        summary: "Clay caves: a bat swarm, a burrower dug in under the floor and one bursting out",
         setup: clay_bats,
     },
     Scene {
@@ -562,6 +660,16 @@ pub const ENEMY_SCENES: &[Scene] = &[
         name: "enemies_fight_after",
         summary: "Just after the blast: the survivors scatter and the spitter turns on the rig",
         setup: |stage| bomb_fight(stage, true),
+    },
+    Scene {
+        name: "enemies_contact",
+        summary: "Bats, a drone and a mimic pressing on the rig stop at contact, never inside it",
+        setup: contact,
+    },
+    Scene {
+        name: "enemies_blocked_by_rock",
+        summary: "Bats and a drone held back by a stone wall; a burrower digs a real tunnel to the rig",
+        setup: blocked_by_rock,
     },
     Scene {
         name: "enemies_emp",

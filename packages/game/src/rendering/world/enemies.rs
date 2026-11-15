@@ -5,7 +5,8 @@
 //! a boulder while dormant, a spitter puffs up for its wind-up, a burrower opens its jaws to
 //! lunge). Tells are drawn on top: a blinking "!" and a growing glow during wind-ups, sparks
 //! while stunned, flames while burning, a shield bubble on guardians, and a health bar once an
-//! enemy is hurt or hunting. Burrowers swimming through rock show only cracks and dust. Enemies
+//! enemy is hurt or hunting. Burrowers dig open tunnels, so they are drawn whole; one somehow
+//! left inside rock (an old save, for a tick) shows only cracks and dust. Enemies
 //! in tiles the view's player has not discovered stay hidden in the fog.
 
 use raylib::prelude::*;
