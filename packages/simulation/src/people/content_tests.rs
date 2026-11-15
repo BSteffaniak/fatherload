@@ -518,6 +518,26 @@ fn every_arc_gets_seeded_and_seeds_render() {
             *seeded.entry(seed.arc.0).or_default() += 1;
             assert_eq!(seed.bindings.len(), seed.template().slots.len());
             let giver = population.get(seed.giver).unwrap();
+            // A want about a person seeds an arc about that person.
+            if let (super::SeedSource::Want(_), Some(focus)) =
+                (&seed.source, giver.focus_name(Some(&population)))
+            {
+                let people: Vec<&String> = seed
+                    .bindings
+                    .iter()
+                    .filter_map(|binding| match binding {
+                        super::SlotBinding::Absent { name, .. }
+                        | super::SlotBinding::Neighbour { name, .. } => Some(name),
+                        super::SlotBinding::Place(_) => None,
+                    })
+                    .collect();
+                assert!(
+                    people.is_empty() || people.contains(&&focus),
+                    "{} wants something about {focus} but \"{}\" binds {people:?}",
+                    giver.name.full(),
+                    seed.template().title
+                );
+            }
             for text in [
                 seed.pitch(giver, &population.village_name, "Rook"),
                 seed.thanks(giver, &population.village_name, "Rook"),

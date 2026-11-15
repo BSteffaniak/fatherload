@@ -519,11 +519,14 @@ fn best_trigger(
     population: &Population,
     problems: &[VillageProblem],
     history: &[MemoryFact],
+    allow_want: bool,
 ) -> Option<(u32, SeedSource)> {
     let mut best: Option<(u32, SeedSource)> = None;
     for trigger in template.triggers {
         let source = match *trigger {
-            Trigger::Want(want) if character.want == want => Some(SeedSource::Want(want)),
+            Trigger::Want(want) if allow_want && character.want == want => {
+                Some(SeedSource::Want(want))
+            }
             Trigger::Fear(fear) if character.fear == fear => Some(SeedSource::Fear(fear)),
             Trigger::Value(value) if character.values.contains(&value) => {
                 Some(SeedSource::Value(value))
@@ -565,6 +568,26 @@ fn best_trigger(
     best
 }
 
+/// Whether `bindings` involve the person `character`'s want is about (always true for a want
+/// about nobody in particular, or an arc with no person slot).
+fn binds_want_focus(
+    character: &Character,
+    population: &Population,
+    bindings: &[SlotBinding],
+) -> bool {
+    let Some(focus) = character.focus_name(Some(population)) else {
+        return true;
+    };
+    let mut people = bindings
+        .iter()
+        .filter_map(|binding| match binding {
+            SlotBinding::Absent { name, .. } | SlotBinding::Neighbour { name, .. } => Some(name),
+            SlotBinding::Place(_) => None,
+        })
+        .peekable();
+    people.peek().is_none() || people.any(|name| *name == focus)
+}
+
 const fn neighbour_fallback(kind: RelationshipKind) -> Option<AbsentFate> {
     match kind {
         RelationshipKind::Rival => Some(AbsentFate::OldRival),
@@ -586,7 +609,16 @@ fn bind_slots(
     for slot in template.slots {
         let binding = match *slot {
             Slot::Absent(fate) => {
-                let person = character.absent.iter().find(|person| person.fate == fate)?;
+                // The want's own focus first, then anyone absent with that fate.
+                let focused = match character.want_focus {
+                    WantFocus::Absent(index) => character
+                        .absent
+                        .get(usize::from(index))
+                        .filter(|person| person.fate == fate),
+                    _ => None,
+                };
+                let person = focused
+                    .or_else(|| character.absent.iter().find(|person| person.fate == fate))?;
                 SlotBinding::Absent {
                     name: person.name.short().to_owned(),
                     relation: person.relation.clone(),
@@ -685,8 +717,8 @@ pub fn story_seeds(
     let mut candidates = Vec::new();
     for character in &population.characters {
         for template in ARC_TEMPLATES {
-            let Some((weight, source)) =
-                best_trigger(template, character, population, problems, history)
+            let Some((mut weight, mut source)) =
+                best_trigger(template, character, population, problems, history, true)
             else {
                 continue;
             };
@@ -700,6 +732,18 @@ pub fn story_seeds(
             else {
                 continue;
             };
+            if matches!(source, SeedSource::Want(_))
+                && !binds_want_focus(character, population, &bindings)
+            {
+                // A want about someone only seeds an arc that is about that person ("make
+                // amends with my sister" is not a boundary feud with the neighbour).
+                let Some(other) =
+                    best_trigger(template, character, population, problems, history, false)
+                else {
+                    continue;
+                };
+                (weight, source) = other;
+            }
             let role_fit = if template.roles.contains(&character.role) {
                 8
             } else {
