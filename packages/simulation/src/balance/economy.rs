@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use super::{
     BalanceConfig, BalanceProbe, ProbeContext, ReportSection, Table,
-    bot::{BotStats, MinerBot, Strategy},
+    bot::{BotStats, MinerBot, Strategy, TripEnd, TripRecord},
     grouped, mean, median, run_parallel,
 };
 use crate::{
@@ -247,6 +247,72 @@ fn runs_of(runs: &[EconomyRun], strategy: Strategy) -> Vec<&EconomyRun> {
     runs.iter().filter(|run| run.strategy == strategy).collect()
 }
 
+/// The `share` quantile (0..=1) of `values` (0 when empty), nearest rank.
+fn quantile(values: &[f64], share: f64) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let rank = ((sorted.len() - 1) as f64 * share).round() as usize;
+    sorted[rank.min(sorted.len() - 1)]
+}
+
+/// Fuel per trip by the tank tier it was flown with, over `runs`: how much of the tank an
+/// everyday trip (shaft mouth back to town) burns. Records the metrics
+/// `fuel.tank{t}.median_tank_percent`, `fuel.tank{t}.p90_tank_percent` and
+/// `fuel.tank{t}.fuel_turn_percent` (share of trips that turned home on fuel).
+fn trip_fuel_table(runs: &[&EconomyRun], section: &mut ReportSection) -> Table {
+    let mut by_tank: BTreeMap<u8, Vec<TripRecord>> = BTreeMap::new();
+    for record in runs.iter().flat_map(|run| &run.stats.trip_log) {
+        by_tank.entry(record.tank_level).or_default().push(*record);
+    }
+    let mut table = Table::new(
+        "Fuel per trip (shaft mouth back to town) by the fuel tank flown:",
+        &[
+            "Tank (fuel)",
+            "Trips",
+            "Median fuel",
+            "Median % of tank",
+            "90th pct % of tank",
+            "Median depth (rows)",
+            "Median trip (min)",
+            "Turned home on fuel",
+        ],
+    );
+    for (tank, records) in by_tank {
+        let collect = |f: &dyn Fn(&TripRecord) -> f64| records.iter().map(f).collect::<Vec<_>>();
+        let shares = collect(&|r| f64::from(r.fuel_used / r.fuel_capacity.max(1.0)) * 100.0);
+        let fuel = collect(&|r| f64::from(r.fuel_used));
+        let depth = collect(&|r| f64::from(r.depth_rows));
+        let minutes = collect(&|r| f64::from(r.seconds) / 60.0);
+        let capacity = records.iter().map(|r| r.fuel_capacity).fold(0.0, f32::max);
+        let on_fuel = records.iter().filter(|r| r.end == TripEnd::Fuel).count() as f64
+            / records.len() as f64
+            * 100.0;
+        section.metric(
+            format!("fuel.tank{tank}.median_tank_percent"),
+            median(&shares),
+        );
+        section.metric(
+            format!("fuel.tank{tank}.p90_tank_percent"),
+            quantile(&shares, 0.9),
+        );
+        section.metric(format!("fuel.tank{tank}.fuel_turn_percent"), on_fuel);
+        table.row(vec![
+            format!("Tier {tank} ({capacity:.0})"),
+            records.len().to_string(),
+            format!("{:.0}", median(&fuel)),
+            format!("{:.0} %", median(&shares)),
+            format!("{:.0} %", quantile(&shares, 0.9)),
+            format!("{:.0}", median(&depth)),
+            format!("{:.1}", median(&minutes)),
+            format!("{on_fuel:.0} %"),
+        ]);
+    }
+    table
+}
+
 /// The economy section: credits per minute by strategy and where the money went.
 pub struct EconomyProbe;
 
@@ -439,6 +505,8 @@ impl BalanceProbe for ProgressionProbe {
             tiers.row(row);
         }
         section.tables.push(tiers);
+        let trips = trip_fuel_table(&tier_runs, &mut section);
+        section.tables.push(trips);
 
         let mut headers = vec!["Minute".to_owned()];
         headers.extend(

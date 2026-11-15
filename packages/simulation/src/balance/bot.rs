@@ -185,6 +185,43 @@ pub struct BotStats {
     pub purchases: Vec<(f32, UpgradeKind, u8)>,
     /// Why each rescue was called: `(seconds, what the bot was doing, wrecked/stranded/stuck)`.
     pub rescue_log: Vec<(f32, String, &'static str)>,
+    /// Every completed trip (shaft mouth back to town), in order.
+    pub trip_log: Vec<TripRecord>,
+}
+
+/// Why the bot turned for home.
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Hash)]
+pub enum TripEnd {
+    /// The bay was full.
+    CargoFull,
+    /// The tank held only the fuel to climb out (plus a margin).
+    Fuel,
+    /// The hull was low.
+    Hull,
+    /// The trip ran past the bot's time limit.
+    Timeout,
+    /// The shaft ended (bedrock, heat, hardness) or the bot gave up on it.
+    #[default]
+    ShaftDone,
+}
+
+/// One completed trip: what it cost in fuel against the tank it was flown with.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TripRecord {
+    /// Seconds into the run the rig was back in town.
+    pub end_seconds: f32,
+    /// Seconds from the shaft mouth back to town.
+    pub seconds: f32,
+    /// Fuel tank tier flown.
+    pub tank_level: u8,
+    /// Tank size flown.
+    pub fuel_capacity: f32,
+    /// Fuel burned (fuel at the shaft mouth minus fuel back in town).
+    pub fuel_used: f32,
+    /// Deepest point of the trip, in rows below the surface.
+    pub depth_rows: i32,
+    /// Why the bot turned for home.
+    pub end: TripEnd,
 }
 
 /// The scripted miner of one rig.
@@ -229,6 +266,9 @@ pub struct MinerBot {
     /// Where the charges strategy stakes its claim.
     outpost_site: Option<i32>,
     pending_sale: bool,
+    /// Fuel at the shaft mouth and the deepest row of the trip under way.
+    trip_fuel: Option<(f32, i32)>,
+    trip_end: TripEnd,
     stats: BotStats,
 }
 
@@ -263,6 +303,8 @@ impl MinerBot {
             workshop: None,
             outpost_site: None,
             pending_sale: false,
+            trip_fuel: None,
+            trip_end: TripEnd::default(),
             stats: BotStats::default(),
         }
     }
@@ -378,6 +420,9 @@ impl MinerBot {
         }
         let tile = rig.tile_position(TILE_SIZE);
         self.stats.deepest_row = self.stats.deepest_row.max(tile.y);
+        if let Some((_, deepest)) = &mut self.trip_fuel {
+            *deepest = (*deepest).max(tile.y);
+        }
         self.find_workshop(world);
     }
 
@@ -398,6 +443,7 @@ impl MinerBot {
         self.route.clear();
         self.shaft_done = true;
         self.climb_from = None;
+        self.trip_fuel = None;
         self.plan_town_stops_after_rescue();
         self.enter(Phase::Town(0));
     }
@@ -470,6 +516,8 @@ impl MinerBot {
         let dx = target_x - rig.x;
         if dx.abs() < TILE_SIZE * 0.12 && rig.velocity_x.abs() < TILE_SIZE * 0.3 {
             self.trip_started = self.clock;
+            self.trip_fuel = Some((rig.fuel, rig.tile_position(TILE_SIZE).y));
+            self.trip_end = TripEnd::ShaftDone;
             self.enter(Phase::Descend(0));
             return ControlState::new(0.0, false, false);
         }
@@ -527,7 +575,8 @@ impl MinerBot {
         if let Some(last) = self.route.last_mut() {
             last.bottom = last.bottom.max(tile.y);
         }
-        if self.should_go_home(world, rig, tile) {
+        if let Some(end) = self.go_home_reason(world, rig, tile) {
+            self.trip_end = end;
             return self.start_ascent(rig);
         }
         if tile.x != segment.col {
@@ -611,19 +660,24 @@ impl MinerBot {
         ControlState::new(horizontal, false, true)
     }
 
-    fn should_go_home(&self, world: &WorldState, rig: &Player, tile: TilePosition) -> bool {
+    fn go_home_reason(
+        &self,
+        world: &WorldState,
+        rig: &Player,
+        tile: TilePosition,
+    ) -> Option<TripEnd> {
         if !rig.has_cargo_space() {
-            return true;
+            return Some(TripEnd::CargoFull);
         }
         if rig.hull < rig.max_hull() * HULL_RETURN_FRACTION {
-            return true;
+            return Some(TripEnd::Hull);
         }
         if self.clock - self.trip_started > MAX_TRIP_SECONDS {
-            return true;
+            return Some(TripEnd::Timeout);
         }
         let rows = (tile.y - world.terrain().surface_row(tile.x)).max(0) as f32
             + self.route.len() as f32 * 2.0;
-        rig.fuel < rows * self.fuel_per_row * 1.35 + 12.0
+        (rig.fuel < rows * self.fuel_per_row * 1.35 + 12.0).then_some(TripEnd::Fuel)
     }
 
     fn start_ascent(&mut self, rig: &Player) -> ControlState {
@@ -861,6 +915,18 @@ impl MinerBot {
             }
         }
         self.stats.trips += 1;
+        if let Some((fuel, deepest)) = self.trip_fuel.take() {
+            let surface = world.terrain().surface_row(rig.tile_position(TILE_SIZE).x);
+            self.stats.trip_log.push(TripRecord {
+                end_seconds: self.clock,
+                seconds: self.clock - self.trip_started,
+                tank_level: rig.fuel_tank_level,
+                fuel_capacity: rig.fuel_capacity,
+                fuel_used: (fuel - rig.fuel).max(0.0),
+                depth_rows: (deepest - surface).max(0),
+                end: self.trip_end,
+            });
+        }
         self.stops = Self::town_stops();
         self.stop_acted = false;
         self.enter(Phase::Town(0));
