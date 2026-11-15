@@ -122,6 +122,71 @@ pub fn collides(terrain: &Terrain, x: f32, y: f32, radius: f32) -> bool {
     })
 }
 
+/// Eight unit directions tried by [`free_spot_near`], up first, then the
+/// sides, the upper diagonals, the lower diagonals and down: a body pressed into rock prefers to
+/// pop out upward (where it most often came from) but never through a wall it cannot pass.
+const UNSTICK_DIRECTIONS: [(f32, f32); 8] = [
+    (0.0, -1.0),
+    (-1.0, 0.0),
+    (1.0, 0.0),
+    (
+        -std::f32::consts::FRAC_1_SQRT_2,
+        -std::f32::consts::FRAC_1_SQRT_2,
+    ),
+    (
+        std::f32::consts::FRAC_1_SQRT_2,
+        -std::f32::consts::FRAC_1_SQRT_2,
+    ),
+    (
+        -std::f32::consts::FRAC_1_SQRT_2,
+        std::f32::consts::FRAC_1_SQRT_2,
+    ),
+    (
+        std::f32::consts::FRAC_1_SQRT_2,
+        std::f32::consts::FRAC_1_SQRT_2,
+    ),
+    (0.0, 1.0),
+];
+
+/// The nearest point to `(x, y)` where a square body of half-size `radius` is out of rock.
+///
+/// Searched on rings two pixels apart out to `max_distance` pixels in the fixed direction order
+/// of [`UNSTICK_DIRECTIONS`]. `Some((x, y))` unchanged when the body is already free; `None`
+/// when there is no room within reach.
+///
+/// Used to resolve creatures out of rock after a terrain change (a boulder landing on them, a
+/// tile built over them) or a bad spawn, moving them the shortest way instead of lifting them
+/// through a floor.
+#[must_use]
+pub fn free_spot_near(
+    terrain: &Terrain,
+    x: f32,
+    y: f32,
+    radius: f32,
+    max_distance: f32,
+) -> Option<(f32, f32)> {
+    if !collides(terrain, x, y, radius) {
+        return Some((x, y));
+    }
+    let mut ring = 1_u16;
+    loop {
+        let distance = f32::from(ring) * 2.0;
+        if distance > max_distance {
+            return None;
+        }
+        for (dx, dy) in UNSTICK_DIRECTIONS {
+            let (cx, cy) = (
+                quantize(dx.mul_add(distance, x)),
+                quantize(dy.mul_add(distance, y)),
+            );
+            if !collides(terrain, cx, cy, radius) {
+                return Some((cx, cy));
+            }
+        }
+        ring = ring.saturating_add(1);
+    }
+}
+
 /// Whether the body rests on something: solid terrain one pixel below it.
 #[must_use]
 pub fn supported(terrain: &Terrain, body: &Body, params: &BodyParams) -> bool {

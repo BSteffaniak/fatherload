@@ -837,7 +837,7 @@ and danger grow with depth, and a Peaceful world has none.
 | Kind | Family | Moves | Attack (tell) | Counter |
 |---|---|---|---|---|
 | Cave bat | creature | flies in packs | bites on contact | anything; a lit flare lures the swarm |
-| Burrower | creature | swims through soft rock | lunges (rumble, glinting eyes) | stop drilling (it hears drills through rock), bombs |
+| Burrower | creature | digs real tunnels through soft rock (never ore) | lunges (rumble, glinting eyes) | stop drilling (it hears drills through rock), bombs |
 | Acid spitter | creature | walks | lobbed acid (puffs up) | close in or break line of sight |
 | Rock mimic | creature, armoured | dormant boulder, then walks | lunge (wakes when you come close) | explosives |
 | Shellback | creature, armoured | slow walker | charge (wind-up) | explosives, armour piercing |
@@ -868,7 +868,8 @@ and danger grow with depth, and a Peaceful world has none.
   world's `HazardIntensity`) in a chunk on a ring 22-30 tiles out, which then cools down for
   40 s (less on Hard). The spot must be out of every rig's view, in the dark, outside safe
   zones and fit the kind (flyers and walkers need a cave around them, walkers a floor,
-  burrowers soft rock); bats come in packs. Every two seconds lair chunks (one in seven, in
+  burrowers an open pocket against a soft wall) with the body in open space; bats come in
+  packs. Every two seconds lair chunks (one in seven, in
   bands with lairs, holding a cavern) near a rig get their occupant (nests, turret pairs,
   elites with escorts) unless the lair was cleared (`EnemyDirector::cleared_lairs`).
   Everything is hashed from the seed, the tick and positions: no RNG state.
@@ -880,6 +881,32 @@ and danger grow with depth, and a Peaceful world has none.
   stationary) and, when the way is blocked, `physics::find_tile_path` (360 tiles, at most one
   search per enemy every `PATH_SLOT_TICKS` ticks, staggered by id, cutting corners to the
   farthest visible path tile).
+- **Bodies (playtest fix: enemies obey terrain and never overlap the rig)**: every enemy
+  collides with exactly the tiles a rig does (`Terrain::is_solid_at`: rock, built pieces,
+  closed vault doors, everything but air) with swept `physics::step_body` motion; nothing
+  ghosts through rock. Burrowers dig real tunnels instead: clinging to rock (solid within
+  `CLING_PIXELS`) they crawl without gravity and bite the soft rock just ahead out of the
+  terrain (`diggable`: dirt, clay, stone, hard rock; never ore, fixtures, built pieces or
+  bedrock, never in a safe zone; the tiles go through the terrain journal like the rogue
+  excavator's), fall in open air, and lurk instead of wandering while idle. Spawns land only in
+  open space (`site_fits` checks the body; `spawn_enemy_with` moves an overlapping spot to the
+  nearest open one with `physics::free_spot_near`), and an enemy left inside rock by a terrain
+  change (a boulder, a built piece, an old save) is resolved out the shortest way at the start
+  of its tick (`free_from_rock`, up to a tile; a burrower with no room digs a pocket);
+  knockback and blasts only change velocity, so they cannot embed one. Stationary fixtures
+  never move. Enemies touch rigs and pilots on foot but never overlap them
+  (`keep_off_bodies`, after movement): an overlapping body is pushed out along the shallower
+  axis to exactly touching the rig's collision square or the pilot's box (never into rock) and
+  its velocity into the body is cancelled. Contact attacks reach `CONTACT_MARGIN` (2 px)
+  beyond touching (box test), a landed hit springs the attacker back (`RECOIL_SPEED`), and
+  melee enemies waiting for their next attack hang back `STANDOFF_PIXELS` out of contact;
+  ranged ones keep their distance as before. Other code moving enemies must keep these
+  invariants (go through `step_body`, call `free_from_rock` after teleporting one).
+- **Point-blank shots** (`world/weapons.rs`): an enemy touching the rig can sit between the
+  hardpoint and the muzzle, where a shot spawned at the muzzle never meets it. Each projectile
+  pellet first sweeps the hardpoint-to-muzzle stretch of the aim line and hits what it finds
+  there (a spent pellet never spawns); hitscan rays test the same stretch before marching out
+  from the muzzle. The muzzle offset itself is unchanged.
 - **Hitting rigs**: contact (live during a lunge or for swarmers when the attack is ready) and
   shots go through `strike_rig`: no hit in safe zones, on disabled rigs, in god mode (test-mode
   invulnerability or no-clip) or inside the rig's i-frames (`RIG_GUARD_MILLIS`); otherwise the

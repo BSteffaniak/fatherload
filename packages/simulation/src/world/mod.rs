@@ -53,6 +53,8 @@ mod drop_tests;
 pub mod drops;
 mod enemies;
 #[cfg(test)]
+mod enemy_body_tests;
+#[cfg(test)]
 mod enemy_tests;
 mod entities;
 #[cfg(test)]

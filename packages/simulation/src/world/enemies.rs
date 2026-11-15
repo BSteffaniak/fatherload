@@ -13,9 +13,19 @@
 //!   (sight with line of sight, drilling vibration through rock, flares luring bats) every
 //!   [`THINK_MILLIS`], a small state machine ([`EnemyMode`]: idle, chase, wind-up, strike,
 //!   recover, return home on the leash, flee, EMP stun, dormant mimics), movement by
-//!   locomotion (flying, walking with step hops, burrowing through soft rock, stationary) with
-//!   budgeted path searches ([`physics::find_tile_path`], at most one per enemy every
-//!   [`PATH_SLOT_TICKS`] ticks, staggered by id) and contact attacks.
+//!   locomotion (flying, walking with step hops, burrowing by digging real tunnels through soft
+//!   rock, stationary) with budgeted path searches ([`physics::find_tile_path`], at most one per
+//!   enemy every [`PATH_SLOT_TICKS`] ticks, staggered by id) and contact attacks.
+//!
+//! # Bodies
+//!
+//! Enemies collide with exactly the tiles a rig does (swept [`physics::step_body`] motion):
+//! nothing passes through rock, built pieces or closed doors. Burrowers dig the soft rock they
+//! move through out of the terrain instead of ghosting. Spawns land in open space, and an enemy
+//! left in rock by a terrain change is resolved out the shortest way at the start of its tick.
+//! Enemies touch rigs and pilots on foot but are pushed out of them to exactly touching after
+//! moving; contact attacks reach `CONTACT_MARGIN` beyond that, a landed hit springs the
+//! attacker back and melee enemies hang back between attacks.
 //! * Shots ([`WorldState::advance_enemy_shot`]) fly, fall (acid) and hit rock or rigs.
 //!
 //! # Fairness
@@ -24,7 +34,7 @@
 //! its shafts, around infrastructure and bases) are never targeted or hurt by contact, nothing
 //! spawns there or in view of a rig, and a rig that was hit is invulnerable for
 //! [`RIG_GUARD_MILLIS`] (i-frames) while it is knocked back. Test-mode invulnerability and
-//! no-clip (god mode) make rigs immune: enemies pass through harmlessly.
+//! no-clip (god mode) make rigs immune: enemies touch them harmlessly.
 //!
 //! # Damage API (for WP-WEAPONS)
 //!
@@ -137,6 +147,22 @@ const HOP_SPEED: f32 = 250.0;
 const RIG_KNOCKBACK_MAX: f32 = 260.0;
 /// How often an excavator bites a tile out of its way.
 const DIG_MILLIS: u64 = 350;
+/// A burrower clings to rock (no gravity) while solid terrain is within this many pixels of its
+/// body: anywhere inside a tunnel it dug (whole tiles around a smaller body), not in a cavern.
+const CLING_PIXELS: f32 = 8.0;
+/// How far ahead of its body a burrower bites rock out of its way, pixels.
+const DIG_LEAD_PIXELS: f32 = 3.0;
+/// Farthest an enemy left inside rock is moved out of it, pixels.
+const UNSTICK_PIXELS: f32 = TILE_SIZE;
+/// Half extents of a rig's contact box (its drawn body, a little wider than its terrain square),
+/// pixels: enemies are pushed out of it to exactly touching.
+pub const RIG_CONTACT_HALF: (f32, f32) = (15.0, 13.0);
+/// Contact reach beyond touching (bodies are pushed apart to exactly touching), pixels.
+const CONTACT_MARGIN: f32 = 2.0;
+/// Speed an enemy springs back off a body it just hit, pixels per second.
+const RECOIL_SPEED: f32 = 150.0;
+/// A melee enemy waiting for its next attack hangs back this far beyond touching, pixels.
+const STANDOFF_PIXELS: f32 = TILE_SIZE * 1.5;
 
 /// `(cos, sin)` turns of a three-shot volley's spread (about ±10°), no trigonometry.
 const VOLLEY_TURNS: [(f32, f32); 3] = [(0.984_808, -0.173_648), (1.0, 0.0), (0.984_808, 0.173_648)];
@@ -199,15 +225,8 @@ fn direction(from: (f32, f32), to: (f32, f32)) -> ((f32, f32), f32) {
     }
 }
 
-/// Rock a burrower swims through.
-const fn burrowable(kind: TileKind) -> bool {
-    matches!(
-        kind,
-        TileKind::Dirt | TileKind::Clay | TileKind::Stone | TileKind::HardRock | TileKind::Ore(_)
-    )
-}
-
-/// Rock an excavator bites away.
+/// Rock an excavator bites away and a burrower tunnels through (never ore: a creature does not
+/// eat a rig's prize).
 const fn diggable(kind: TileKind) -> bool {
     matches!(
         kind,
@@ -363,6 +382,15 @@ impl WorldState {
         parent: Option<EntityId>,
     ) -> EntityId {
         let now = self.simulation_tick;
+        // Nothing appears inside rock: a spot that overlaps it (a brood hatching against a
+        // ceiling, an escort above a lair floor, a scripted spawn) moves to the nearest open
+        // space. Stationary fixtures stay where they were placed.
+        let (x, y) = if matches!(kind.stats().locomotion, Locomotion::Stationary) {
+            (x, y)
+        } else {
+            physics::free_spot_near(&self.terrain, x, y, kind.stats().radius, UNSTICK_PIXELS)
+                .unwrap_or((x, y))
+        };
         let home = tile_of(x, y);
         let seed = u32::try_from(
             hash2(
@@ -558,8 +586,16 @@ impl WorldState {
         })
     }
 
-    /// Whether an enemy of `kind` can appear at `tile`.
+    /// Whether an enemy of `kind` can appear at `tile`: the habitat fits and its body is in
+    /// open space there (nothing spawns inside rock).
     fn site_fits(&self, kind: EnemyKind, tile: TilePosition) -> bool {
+        let (x, y) = Self::spawn_point(kind, tile);
+        self.habitat_fits(kind, tile)
+            && !physics::collides(&self.terrain, x, y, kind.stats().radius)
+    }
+
+    /// Whether the ground around `tile` suits an enemy of `kind`.
+    fn habitat_fits(&self, kind: EnemyKind, tile: TilePosition) -> bool {
         let spec = kind.stats();
         let big = spec.radius > TILE_SIZE * 0.5;
         let above = TilePosition {
@@ -571,9 +607,25 @@ impl WorldState {
             y: tile.y + 1,
         };
         match spec.locomotion {
-            Locomotion::Burrowing => self.terrain.tile(tile).is_some_and(|t| {
-                matches!(t.kind, TileKind::Dirt | TileKind::Clay | TileKind::Stone)
-            }),
+            // A burrower lies in wait in an open pocket against a soft wall it can dig into.
+            Locomotion::Burrowing => {
+                self.air(tile)
+                    && [(0, -1), (1, 0), (0, 1), (-1, 0)]
+                        .into_iter()
+                        .any(|(dx, dy)| {
+                            self.terrain
+                                .tile(TilePosition {
+                                    x: tile.x + dx,
+                                    y: tile.y + dy,
+                                })
+                                .is_some_and(|t| {
+                                    matches!(
+                                        t.kind,
+                                        TileKind::Dirt | TileKind::Clay | TileKind::Stone
+                                    )
+                                })
+                        })
+            }
             Locomotion::Flying => {
                 self.air(tile) && self.open_area(tile) >= if big { 20 } else { 12 }
             }
@@ -989,8 +1041,10 @@ impl WorldState {
         if (now.get() + id.get()).is_multiple_of(think_ticks) {
             self.think(id, &body, &mut state, now, output);
         }
+        self.free_from_rock(&mut body, state.kind);
         let intent = self.behave(id, &mut body, &mut state, now, output);
         self.move_enemy(id, &mut body, &mut state, intent, now);
+        self.keep_off_bodies(id, &mut body, &state);
         self.contact_attack(&mut body, &mut state, now, output);
         if body != start_body || state != start_state {
             self.entities.update(id, |entity| {
@@ -1175,8 +1229,18 @@ impl WorldState {
                             self.start_windup(id, body, state, now, output);
                             return Intent::default();
                         }
+                        // Between attacks a melee enemy hangs back just out of contact instead
+                        // of grinding on the rig.
+                        let standoff =
+                            state.kind.contact_half().0 + RIG_CONTACT_HALF.0 + STANDOFF_PIXELS;
+                        let goal = if !ready && distance < standoff {
+                            let ((nx, ny), _) = direction((tx, ty), (body.x, body.y));
+                            (nx.mul_add(standoff, tx), ny.mul_add(standoff, ty))
+                        } else {
+                            (tx, ty)
+                        };
                         Intent {
-                            goal: Some((tx, ty)),
+                            goal: Some(goal),
                             speed: spec.speed,
                         }
                     }
@@ -1233,7 +1297,7 @@ impl WorldState {
                         state.mode_until = self.after(now, RECOVER_MILLIS);
                     }
                     (AttackStyle::Lunge, Some((tx, ty))) => {
-                        let ((nx, ny), _) = direction((body.x, body.y), (tx, ty));
+                        let ((nx, ny), distance) = direction((body.x, body.y), (tx, ty));
                         let dash = spec.dash_speed;
                         if matches!(spec.locomotion, Locomotion::Walking) {
                             body.velocity_x = quantize(nx.signum() * dash);
@@ -1247,14 +1311,22 @@ impl WorldState {
                             body.velocity_y = quantize(ny * dash);
                         }
                         state.mode = EnemyMode::Strike;
-                        state.mode_until = self.after(
-                            now,
-                            if matches!(spec.locomotion, Locomotion::Burrowing) {
-                                STRIKE_MILLIS + 250
-                            } else {
-                                STRIKE_MILLIS
-                            },
-                        );
+                        // The dash lasts long enough to carry it to contact (plus a little), so
+                        // a lunge from the edge of its range still lands.
+                        let gap =
+                            (distance - state.kind.contact_half().0 - RIG_CONTACT_HALF.0).max(0.0);
+                        #[allow(
+                            clippy::cast_possible_truncation,
+                            clippy::cast_sign_loss,
+                            reason = "a dash lasts a fraction of a second"
+                        )]
+                        let reach_millis = (gap / dash.max(1.0) * 1_000.0) as u64 + 120;
+                        let base = if matches!(spec.locomotion, Locomotion::Burrowing) {
+                            STRIKE_MILLIS + 250
+                        } else {
+                            STRIKE_MILLIS
+                        };
+                        state.mode_until = self.after(now, base.max(reach_millis.min(1_200)));
                     }
                     _ => state.mode = EnemyMode::Idle,
                 }
@@ -1347,7 +1419,9 @@ impl WorldState {
             (((hash >> 8) % 5) as f32 - 2.0) * TILE_SIZE,
         );
         match spec.locomotion {
-            Locomotion::Stationary => Intent::default(),
+            // A burrower lurks where it is until something draws it: wandering would riddle the
+            // ground with tunnels nobody asked for.
+            Locomotion::Stationary | Locomotion::Burrowing => Intent::default(),
             Locomotion::Walking => {
                 if hash.is_multiple_of(3) {
                     return Intent::default();
@@ -1359,7 +1433,7 @@ impl WorldState {
                     speed: spec.speed * 0.4,
                 }
             }
-            Locomotion::Flying | Locomotion::Burrowing => Intent {
+            Locomotion::Flying => Intent {
                 goal: Some((home_x + ox, home_y + oy)),
                 speed: spec.speed * 0.45,
             },
@@ -1483,6 +1557,10 @@ impl WorldState {
             state.mode,
             EnemyMode::Strike | EnemyMode::Stunned | EnemyMode::Dormant
         );
+        if state.mode == EnemyMode::Recover && grounded && body.velocity_x.abs() > spec.speed {
+            // Done dashing: skid off the dash's speed before backing off.
+            body.velocity_x = quantize(body.velocity_x * 6.0f32.mul_add(-dt, 1.0).max(0.0));
+        }
         if controlled {
             let desired = goal.map_or(0.0, |(gx, _)| {
                 let dx = gx - body.x;
@@ -1510,8 +1588,8 @@ impl WorldState {
                     }
                 }
             }
-        } else if grounded {
-            // Dashes and stuns skid to a halt on the floor.
+        } else if grounded && state.mode != EnemyMode::Strike {
+            // Stuns skid to a halt on the floor (a dash keeps its speed until it lands or ends).
             body.velocity_x = quantize(body.velocity_x * 6.0f32.mul_add(-dt, 1.0).max(0.0));
         }
         let params = params.at(&self.terrain, body.x, body.y);
@@ -1543,59 +1621,190 @@ impl WorldState {
         }
     }
 
-    /// Burrowing: swim through soft rock toward the goal; in open air (a lunge, a cave) fall
-    /// back down.
-    fn burrow(&self, body: &mut Body, state: &EnemyState, goal: Option<(f32, f32)>, speed: f32) {
+    /// Burrowing: a burrower digs real tunnels. Clinging to rock (any solid tile within a few
+    /// pixels of its body) it crawls toward the goal without gravity, biting the soft rock right
+    /// ahead of it out of the terrain ([`diggable`]: never ore, fixtures, built pieces or
+    /// bedrock, never inside a safe zone); in open air (a lunge, a cave) it falls. Its body
+    /// collides with everything it has not dug, like any other enemy: nothing ghosts through
+    /// rock.
+    fn burrow(
+        &mut self,
+        body: &mut Body,
+        state: &EnemyState,
+        goal: Option<(f32, f32)>,
+        speed: f32,
+    ) {
         let dt = self.timing.delta_seconds;
-        body.previous_x = body.x;
-        body.previous_y = body.y;
-        let inside = self
-            .terrain
-            .tile(tile_of(body.x, body.y))
-            .is_some_and(|tile| burrowable(tile.kind));
+        let radius = state.kind.stats().radius;
+        let clinging = physics::collides(&self.terrain, body.x, body.y, radius + CLING_PIXELS);
         let striking = state.mode == EnemyMode::Strike;
-        if inside && !striking {
-            if let Some((gx, gy)) = goal {
-                physics::steer_toward(body, gx, gy, speed, speed * 3.0, dt);
-            } else {
-                physics::steer_toward(body, body.x, body.y, speed, speed * 3.0, dt);
-            }
-        } else if !inside {
-            let gravity = ENEMY_GRAVITY
-                * crate::environment::environment_at(self.terrain.settings(), body.x, body.y)
-                    .gravity;
-            body.velocity_y = quantize(gravity.mul_add(dt, body.velocity_y).min(480.0));
+        let controlled = !matches!(
+            state.mode,
+            EnemyMode::Strike | EnemyMode::Stunned | EnemyMode::Dormant
+        );
+        if clinging && controlled {
+            // Crawling, it goes where it means to (a fall's leftover speed is soaked up at once).
+            let (gx, gy) = goal.unwrap_or((body.x, body.y));
+            physics::steer_toward(body, gx, gy, speed, speed * 20.0, dt);
         }
-        let passable = |x: f32, y: f32| {
-            let tile = tile_of(x, y);
-            if tile.y < self.terrain.min_y() {
-                return true;
-            }
-            self.terrain.contains(tile)
-                && self
-                    .terrain
-                    .tile(tile)
-                    .is_some_and(|t| t.kind == TileKind::Air || burrowable(t.kind))
+        // Dig the rock just ahead along the way it means to go (toward the goal, or along a
+        // lunge): one step at its speed plus a short lead, so it opens its way from rest too.
+        // Falling through open air digs nothing (it would bore through the floor it lands on).
+        let heading = if striking {
+            let ((nx, ny), _) = direction((0.0, 0.0), (body.velocity_x, body.velocity_y));
+            let step = body.velocity_x.hypot(body.velocity_y) * dt;
+            Some((nx, ny, step))
+        } else if controlled && clinging {
+            goal.and_then(|goal| {
+                let ((nx, ny), distance) = direction((body.x, body.y), goal);
+                (distance >= 1.0).then_some((nx, ny, speed * dt))
+            })
+        } else {
+            None
         };
-        let next_x = body.velocity_x.mul_add(dt, body.x);
-        if passable(next_x, body.y) {
-            body.x = next_x;
-        } else {
-            body.velocity_x = 0.0;
+        if let Some((nx, ny, step)) = heading {
+            let ahead = (
+                nx.mul_add(step + DIG_LEAD_PIXELS, body.x),
+                ny.mul_add(step + DIG_LEAD_PIXELS, body.y),
+            );
+            let _dug = self.dig_box(ahead, radius);
         }
-        let next_y = body.velocity_y.mul_add(dt, body.y);
-        if passable(body.x, next_y) {
-            body.y = next_y;
-        } else {
-            body.velocity_y = 0.0;
+        let params = BodyParams {
+            radius,
+            gravity: if clinging { 0.0 } else { ENEMY_GRAVITY },
+            max_speed: 480.0,
+            bounce: 0.0,
+            rest_speed: 60.0,
+            floor_friction: if clinging { 0.0 } else { 4.0 },
+            stop_speed: 0.0,
         }
-        body.x = quantize(body.x);
-        body.y = quantize(body.y);
-        body.velocity_x = quantize(body.velocity_x);
-        body.velocity_y = quantize(body.velocity_y);
+        .at(&self.terrain, body.x, body.y);
+        let _report = physics::step_body(body, &params, &self.terrain, dt);
     }
 
-    /// Bites, rams and charges: touching a rig hurts while the attack is live.
+    /// Digs out every [`diggable`] tile a square body of half-size `radius` centred on
+    /// `(x, y)` overlaps (outside safe zones). Returns whether a tile was dug.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "world pixels saturate into tile coordinates"
+    )]
+    fn dig_box(&mut self, (x, y): (f32, f32), radius: f32) -> bool {
+        let low = tile_of(x - radius, y - radius);
+        let high = tile_of(x + radius, y + radius);
+        let mut dug = false;
+        for ty in low.y..=high.y {
+            for tx in low.x..=high.x {
+                let position = TilePosition { x: tx, y: ty };
+                if self
+                    .terrain
+                    .tile(position)
+                    .is_some_and(|tile| diggable(tile.kind))
+                    && !self.enemy_safe_zone(position)
+                {
+                    dug |= self.terrain.set_kind(position, TileKind::Air);
+                }
+            }
+        }
+        dug
+    }
+
+    /// Resolves an enemy left overlapping rock (a boulder or a built piece landed on it, an old
+    /// save, a scripted spawn) out of it the shortest way ([`physics::free_spot_near`], at most
+    /// [`UNSTICK_PIXELS`]) instead of letting it pass through. A burrower with no room nearby
+    /// digs itself a pocket (its mechanic); anything else stays wedged until there is room.
+    /// Stationary enemies (turrets, nests) are fixtures and never move.
+    fn free_from_rock(&mut self, body: &mut Body, kind: EnemyKind) {
+        let spec = kind.stats();
+        if matches!(spec.locomotion, Locomotion::Stationary)
+            || !physics::collides(&self.terrain, body.x, body.y, spec.radius)
+        {
+            return;
+        }
+        if let Some((x, y)) =
+            physics::free_spot_near(&self.terrain, body.x, body.y, spec.radius, UNSTICK_PIXELS)
+        {
+            body.x = x;
+            body.y = y;
+            body.previous_x = x;
+            body.previous_y = y;
+        } else if matches!(spec.locomotion, Locomotion::Burrowing) {
+            let _dug = self.dig_box((body.x, body.y), spec.radius);
+        }
+    }
+
+    /// The bodies enemies may touch but never overlap: every live rig ([`RIG_CONTACT_HALF`])
+    /// and every pilot on foot (its standing or crouching box), as `(centre, half extents)`.
+    fn prey_boxes(&self) -> Vec<((f32, f32), (f32, f32))> {
+        self.players
+            .values()
+            .filter(|player| player.hull > 0.0)
+            .map(|player| ((player.x, player.y), RIG_CONTACT_HALF))
+            .chain(self.pilots().map(|(_, body, pilot)| {
+                (pilot.middle(body), (PILOT_HALF_WIDTH, pilot.height() * 0.5))
+            }))
+            .collect()
+    }
+
+    /// Enemies touch rigs and pilots but never sit on top of or inside them: an enemy whose
+    /// contact box ([`EnemyKind::contact_half`]) overlaps one is pushed out along the shallower
+    /// axis to exactly touching (only into open space: rock wins over the push), and its
+    /// velocity into that body is cancelled. Melee attacks reach [`CONTACT_MARGIN`] beyond
+    /// touching, so a pressed enemy still bites.
+    fn keep_off_bodies(&self, id: EntityId, body: &mut Body, state: &EnemyState) {
+        let radius = state.kind.stats().radius;
+        if matches!(state.kind.stats().locomotion, Locomotion::Stationary) {
+            return;
+        }
+        let (own_w, own_h) = state.kind.contact_half();
+        // Coincident centres split by id so a swarm fans out to both sides.
+        let tie = if id.get().is_multiple_of(2) {
+            1.0
+        } else {
+            -1.0
+        };
+        for ((cx, cy), (half_w, half_h)) in self.prey_boxes() {
+            let (dx, dy) = (body.x - cx, body.y - cy);
+            let reach_x = own_w + half_w;
+            let reach_y = own_h + half_h;
+            let (depth_x, depth_y) = (reach_x - dx.abs(), reach_y - dy.abs());
+            if depth_x <= 0.0 || depth_y <= 0.0 {
+                continue;
+            }
+            let side_x = if dx.abs() < 0.01 { tie } else { dx.signum() };
+            let side_y = if dy.abs() < 0.01 { -1.0 } else { dy.signum() };
+            let along_x = (quantize(side_x.mul_add(reach_x, cx)), body.y);
+            let along_y = (body.x, quantize(side_y.mul_add(reach_y, cy)));
+            let tries = if depth_x <= depth_y {
+                [(along_x, true), (along_y, false)]
+            } else {
+                [(along_y, false), (along_x, true)]
+            };
+            for ((x, y), horizontal) in tries {
+                if physics::collides(&self.terrain, x, y, radius) {
+                    continue;
+                }
+                body.x = x;
+                body.y = y;
+                if horizontal && body.velocity_x * side_x < 0.0 {
+                    body.velocity_x = 0.0;
+                } else if !horizontal && body.velocity_y * side_y < 0.0 {
+                    body.velocity_y = 0.0;
+                }
+                break;
+            }
+        }
+    }
+
+    /// Whether an enemy contact box with half extents `own` at `body` touches the box centred
+    /// on `centre` with half extents `half` (within [`CONTACT_MARGIN`]).
+    fn touching(body: &Body, own: (f32, f32), centre: (f32, f32), half: (f32, f32)) -> bool {
+        (body.x - centre.0).abs() <= own.0 + half.0 + CONTACT_MARGIN
+            && (body.y - centre.1).abs() <= own.1 + half.1 + CONTACT_MARGIN
+    }
+
+    /// Bites, rams and charges: touching a rig (or a pilot on foot) hurts while the attack is
+    /// live. A hit springs the attacker back off its victim (lunges then recover, swarmers circle
+    /// until their next bite), so nothing keeps grinding on a rig inside its i-frames.
     fn contact_attack(
         &mut self,
         body: &mut Body,
@@ -1612,16 +1821,16 @@ impl WorldState {
         if !live {
             return;
         }
-        let reach = spec.radius + AUTHORITATIVE_PLAYER_RADIUS + 2.0;
+        let own = state.kind.contact_half();
         // A rig still inside its i-frames doesn't shield a crewmate touching the same enemy.
         let victim = self.players.iter().find_map(|(player_id, player)| {
-            ((player.x - body.x).hypot(player.y - body.y) <= reach
+            (Self::touching(body, own, (player.x, player.y), RIG_CONTACT_HALF)
                 && !self.enemies.guarded(*player_id, now))
-            .then_some(*player_id)
+            .then_some((*player_id, (player.x, player.y)))
         });
         let damage = spec.contact_damage * tier_scale(state.tier);
-        let landed = if let Some(player_id) = victim {
-            self.strike_rig(
+        let (landed, from) = if let Some((player_id, at)) = victim {
+            let landed = self.strike_rig(
                 player_id,
                 damage,
                 (body.x, body.y),
@@ -1629,13 +1838,28 @@ impl WorldState {
                 state.kind,
                 now,
                 output,
-            )
-        } else if let Some((pilot, _)) = self
+            );
+            (landed, at)
+        } else if let Some((pilot, middle)) = self
             .pilots_near(body.x, body.y, spec.radius + PILOT_HALF_WIDTH + 14.0)
             .first()
+            .copied()
+            .or_else(|| {
+                self.pilots().find_map(|(pilot, pilot_body, pilot_state)| {
+                    let middle = pilot_state.middle(pilot_body);
+                    Self::touching(
+                        body,
+                        own,
+                        middle,
+                        (PILOT_HALF_WIDTH, pilot_state.height() * 0.5),
+                    )
+                    .then_some((pilot, middle))
+                })
+            })
         {
             // A pilot on foot is softer: no hull between it and the teeth.
-            self.strike_pilot(*pilot, damage, (body.x, body.y), spec.knockback, output)
+            let landed = self.strike_pilot(pilot, damage, (body.x, body.y), spec.knockback, output);
+            (landed, middle)
         } else {
             return;
         };
@@ -1644,8 +1868,20 @@ impl WorldState {
             if state.mode == EnemyMode::Strike {
                 state.mode = EnemyMode::Recover;
                 state.mode_until = self.after(now, RECOVER_MILLIS);
-                body.velocity_x = quantize(-body.velocity_x * 0.3);
-                body.velocity_y = quantize(-body.velocity_y * 0.3);
+            }
+            // Recoil off the victim.
+            let ((nx, ny), _) = direction(from, (body.x, body.y));
+            let recoil = RECOIL_SPEED.max(spec.speed);
+            if matches!(spec.locomotion, Locomotion::Walking) {
+                body.velocity_x = quantize(if nx.abs() < 0.05 {
+                    f32::from(state.facing.signum()) * -recoil
+                } else {
+                    nx.signum() * recoil
+                });
+                body.velocity_y = quantize(body.velocity_y.min(-90.0));
+            } else {
+                body.velocity_x = quantize(nx * recoil);
+                body.velocity_y = quantize(ny * recoil);
             }
         }
     }

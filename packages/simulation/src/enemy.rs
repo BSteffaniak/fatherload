@@ -71,7 +71,7 @@ pub enum Locomotion {
     Flying,
     /// Walks on floors under gravity and hops one-tile steps.
     Walking,
-    /// Swims through soft rock; falls back into it when it leaves the ground.
+    /// Digs real tunnels through soft rock (never ore) while clinging to it; falls in open air.
     Burrowing,
     /// Never moves (turrets, nests).
     Stationary,
@@ -525,6 +525,33 @@ impl EnemyKind {
     #[must_use]
     pub const fn name(self) -> &'static str {
         self.stats().name
+    }
+
+    /// Half extents `(width, height)` of the body's contact box, pixels: how close it comes to
+    /// a rig or pilot (it is pushed out to exactly touching) and how far its bites reach (plus a
+    /// small margin). Roughly the drawn body, so an enemy pressed against a rig is seen touching
+    /// it, not sitting on it. Wider than the terrain box ([`EnemyStats::radius`]), which stays
+    /// small so enemies fit the tunnels a rig fits; shots hit the terrain box.
+    #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "one row per kind, like the stat table"
+    )]
+    pub const fn contact_half(self) -> (f32, f32) {
+        match self {
+            Self::CaveBat => (11.0, 8.0),
+            Self::Burrower => (12.0, 8.0),
+            Self::AcidSpitter => (13.0, 10.0),
+            Self::RockMimic => (16.0, 12.0),
+            Self::Shellback => (20.0, 12.0),
+            Self::MagmaWisp => (9.0, 10.0),
+            Self::BroodNest => (17.0, 14.0),
+            Self::BroodLord => (26.0, 20.0),
+            Self::MiningDrone => (10.0, 8.0),
+            Self::SentryTurret => (12.0, 11.0),
+            Self::RogueExcavator => (21.0, 14.0),
+            Self::AncientGuardian => (22.0, 19.0),
+        }
     }
 
     #[must_use]
