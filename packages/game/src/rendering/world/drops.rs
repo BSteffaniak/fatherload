@@ -111,6 +111,8 @@ pub(super) fn draw_drops(draw: &mut impl RaylibDraw, scene: &WorldScene<'_>) {
             && let Some((rx, ry)) = rig_position(scene, puller)
         {
             draw_magnet_pull(draw, (x, y), (rx, ry), seconds + phase(id.get()));
+            // A cold shimmer around a drop in the magnet's grip.
+            disc(draw, x, y - ART * 3.0, 6, with_alpha(ICE, 70));
         }
         draw_drop(
             draw,
@@ -222,7 +224,7 @@ fn draw_magnet_pull(draw: &mut impl RaylibDraw, from: (f32, f32), to: (f32, f32)
     let crawl = (seconds * 6.0).rem_euclid(1.0);
     for step in 0..steps {
         let t = (step as f32 + crawl) / steps as f32;
-        let alpha = (t * 150.0 + 40.0).min(200.0) as u8;
+        let alpha = t.mul_add(120.0, 110.0).min(230.0) as u8;
         let color = if step % 2 == 0 { SKY_LIGHT } else { ICE };
         draw.draw_rectangle_rec(
             Rectangle::new(
@@ -336,9 +338,6 @@ pub(super) fn draw_full_tag(draw: &mut impl RaylibDraw, scene: &WorldScene<'_>) 
     let Some(stowage) = turned_away(scene.entities, local.x, local.y) else {
         return;
     };
-    if (scene.seconds() * 2.5) as i32 % 3 == 2 {
-        return;
-    }
     let text = match stowage {
         Stowage::CargoBay => "BAY FULL",
         Stowage::BlockHopper => "HOPPER FULL",
@@ -353,7 +352,13 @@ pub(super) fn draw_full_tag(draw: &mut impl RaylibDraw, scene: &WorldScene<'_>) 
         12,
         with_alpha(INK, 210),
     );
-    pen.rect(draw, -width / 2 - 3, 9, width + 6, 1, RED);
+    // The underline pulses so the tag reads as an alert without hiding the text.
+    let pulse = if (scene.seconds() * 3.0) as i32 % 2 == 0 {
+        RED
+    } else {
+        MAROON
+    };
+    pen.rect(draw, -width / 2 - 3, 9, width + 6, 1, pulse);
     pen.text(
         draw,
         text,

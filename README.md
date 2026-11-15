@@ -249,6 +249,16 @@ variations) to WAV with a level report and a `showcase.wav` tour through the in-
 cargo run --release --bin fatherload -- --render-audio target/audio-review
 ```
 
+**Drops and loot.** Every tile you break drops: ore and artifacts as floating items, plain dirt,
+clay, stone and hard rock as building blocks. Fly near them and your rig's magnet pulls them in
+(a bigger cargo bay reaches further); ore and artifacts go to the cargo bay, blocks to the
+separate block hopper, so dirt never crowds out ore. A full bay or hopper leaves drops floating
+(and says so over the rig). Bombs and every other explosive spray their loot out of the blast:
+a plain blast shatters about a third of the ore it breaks, a mining charge only about a sixth.
+Resting drops merge into stacks; blocks vanish after 45 s, ore after 10 minutes, artifacts
+never. Open the inventory (`Tab` / `Y`) to switch **Collect blocks** off or dump blocks; the
+depot buys the hopper. In co-op the nearest rig with room gets each drop.
+
 Successful return trips award streak bonuses. Emergency rescue returns the rig to the surface for a fee, drops part of the cargo at the rescue site, and records a depot invoice; lost cargo can be recovered later if there is cargo space.
 
 ## Controls

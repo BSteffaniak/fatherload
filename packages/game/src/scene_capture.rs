@@ -232,6 +232,7 @@ fn save_framebuffer(
     }
 }
 
+mod drop_scenes;
 mod explosive_scenes;
 
 /// One capturable scene.
@@ -1587,6 +1588,31 @@ pub const SCENES: &[Scene] = &[
         name: "explosives_lineup",
         summary: "Every explosive kind side by side: bomb, sticky, cluster, bomblet, C4, shaped, mining, incendiary, EMP, flare",
         setup: explosive_scenes::lineup,
+    },
+    Scene {
+        name: "drops_bomb_spray",
+        summary: "A C4 blast in an ore seam: gold, gems, an idol and blocks fountaining out as drops",
+        setup: drop_scenes::bomb_spray,
+    },
+    Scene {
+        name: "drops_bomb_loot",
+        summary: "A mining charge's loot: every ore tile popped out intact, landed and stacked in the crater",
+        setup: drop_scenes::bomb_loot,
+    },
+    Scene {
+        name: "drops_magnet_pickup",
+        summary: "The rig's magnet pulling a field of drops in, collected ones flying into the hatch",
+        setup: drop_scenes::magnet_pickup,
+    },
+    Scene {
+        name: "drops_bay_full",
+        summary: "A full cargo bay: ore in reach stays put and marked, BAY FULL over the rig",
+        setup: drop_scenes::bay_full,
+    },
+    Scene {
+        name: "modal_hopper",
+        summary: "The inventory's block hopper: fill, the collect toggle and dump rows",
+        setup: drop_scenes::hopper_inventory,
     },
     Scene {
         name: "gas_leak",

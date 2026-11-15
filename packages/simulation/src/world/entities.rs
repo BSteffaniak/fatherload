@@ -198,6 +198,8 @@ impl WorldState {
                 EntityKind::Drop => self.advance_drop(id, &mut merged),
             }
         }
+        // Merged-away drops (their stacks already moved onto their neighbours).
+        self.entities.despawn_many(&merged);
         if phase == EntityPhase::Late {
             // WP-DROPS: magnets, pickups and "full" feedback (`world/drops.rs`).
             self.advance_drop_pickups(output);

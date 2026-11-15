@@ -699,6 +699,42 @@ impl EntityStore {
         ids
     }
 
+    /// The entity nearest to `(x, y)` within `radius` pixels that `accept` takes (ties: the
+    /// lower id), found without allocating: one pass over the overlapping cells. The answer
+    /// does not depend on the order entities sit in the index (WP-DROPS merging runs it for
+    /// every drop that lands).
+    #[must_use]
+    pub fn nearest_in_radius(
+        &self,
+        x: f32,
+        y: f32,
+        radius: f32,
+        accept: impl Fn(&Entity) -> bool,
+    ) -> Option<EntityId> {
+        let mut best: Option<(f32, EntityId)> = None;
+        for id in self
+            .cells_in_rect(x - radius, y - radius, x + radius, y + radius)
+            .flatten()
+        {
+            let Some(entity) = self.get(*id) else {
+                continue;
+            };
+            let dx = entity.body.x - x;
+            let dy = entity.body.y - y;
+            let distance = dx.mul_add(dx, dy * dy);
+            if distance > radius * radius {
+                continue;
+            }
+            let better = best.is_none_or(|(best_distance, best_id)| {
+                distance < best_distance || (distance <= best_distance && *id < best_id)
+            });
+            if better && accept(entity) {
+                best = Some((distance, *id));
+            }
+        }
+        best.map(|(_, id)| id)
+    }
+
     /// Wakes every sleeping entity within `reach` pixels (a square) of world pixel `(x, y)` (a
     /// tile changed under it, a blast went off); returns how many woke.
     pub fn wake_around(&mut self, x: f32, y: f32, reach: f32) -> usize {

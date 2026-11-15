@@ -79,6 +79,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | Module | Owns |
 |---|---|
 | `simulate` | the tick: inputs, entity phases, hazards, bombs, drilling, day cycle, escape, deep rewards |
+| `drops` | WP-DROPS: drops from broken tiles (drill, blasts, fire, shattering boulders), the pickup pass (nearest rig with room, magnet pulls, "full" warnings), merging, per-cell and per-blast caps, lifetimes, ore shatter, dumping and selling blocks, the collect toggle |
 | `entities` | the world side of the entity store: spawn helpers, the two entity phases and each kind's update (gas clouds, boulders, drops), blasts, waking on terrain changes, entity replication |
 | `bombs` | loose-charge physics, chain reactions and every explosive kind (`crate::explosive`): sticking, remote/sequenced detonation, cluster bomblets, shaped tunnels, loot-safe mining blasts, incendiary rings, flare pulses, blast pushes on rigs and blast-feeling entities (`push_from_blasts`) and the throw preview |
 | `movement`, `commands`, `services`, `progression`, `hazards`, `rescue` | gameplay rules used by the tick |
@@ -260,7 +261,8 @@ Every live world object that moves or expires on its own is an `entity::Entity` 
 (position, velocity, previous position for interpolation, rest counter, `asleep`), a spawn tick,
 an optional expiry tick, a replication `revision` and per-kind `EntityState`. Today's kinds:
 `GasCloud`, `Boulder` (both migrated from ad-hoc world lists without behaviour changes) and
-`Drop` (a floating `ItemStack`; WP-DROPS adds pickup and merging).
+`Drop` (a floating `ItemStack` with magnet / dump / "blocked" marks; see "Drops and pickups"
+below).
 
 - **Order.** Entities are kept in id order and every pass over them is in id order.
 - **Derived indices** (never saved, hashed or replicated; rebuilt on load): a spatial hash on
@@ -339,6 +341,57 @@ the bay. `Player::stow(kind, count)` routes an item to its container and takes o
 migrates the old per-rig `cargo` / `artifacts` / `materials` maps, lost-cargo maps and the old
 gas cloud / boulder lists on load.
 
+### Drops and pickups (WP-DROPS, `world/drops.rs`)
+
+Every broken tile drops (`WorldState::spawn_tile_drop`, `ItemKind::from_tile`): the drill's
+drop pops toward the rig, a blast's drops fountain out of the crater (`blast_spray_velocity`),
+incendiary fire bakes the soft ground it burns into blocks and a boulder shattering on rock
+leaves a stone block. Drilling semantics are unchanged: the drilled tile's drop lands inside
+`DROP_COLLECT_RADIUS` (1.6 tiles), so the pickup pass at the end of the same tick stows it; a
+full bay now leaves the ore floating instead of losing it.
+
+- **Pickup pass** (end of the Late entity phase, host and predicting clients alike): each drop
+  within a rig's magnet reach (`magnet_radius`: 3 tiles stock, +0.25 per cargo bay tier, line
+  of sight to start a pull) goes to the nearest rig with room (ties: lower player id), which
+  collects it inside the collect radius (`GameplayEventKind::ItemsCollected` with the drop's
+  position) or pulls it in (`DropState::pulled_by`: free flight, `MAGNET_PULL_SPEED`). A drop in
+  a rig's collect radius that does not fit is marked `blocked` and the rig hears
+  `PickupBlocked { stowage }` once per stack that appears.
+- **Stowage**: `Player::stow` routes ore, artifacts and materials to the cargo bay and blocks
+  to the block hopper, whose capacity grows with the cargo bay (`block_hopper_capacity_for_level`:
+  60 + 20 per tier). `Player::collect_blocks` (private loadout, `PlayerCommand::SetCollectBlocks`)
+  makes the magnet ignore blocks. `PlayerCommand::DumpBlocks` tips blocks out as drops the
+  dumping rig never auto-collects (`DropState::ignored_by`, 20 s lifetime);
+  `SessionServiceRequest::SellBlocks` sells the hopper at the depot (`block_sale_value`: 1-4 cr).
+- **Clutter**: a drop that comes to rest merges into a resting same-kind stack within
+  `DROP_MERGE_RADIUS`; lifetimes are 45 s for blocks, 10 min for ore and materials, none for
+  artifacts (`drop_lifetime_millis`); a 16x16-tile cell holds at most `DROPS_PER_CELL_CAP` (40)
+  drops (a new one joins a same-kind stack, else the oldest same-kind pair merges, else the
+  oldest block stack goes; ore is never deleted); one blast sprays at most
+  `MAX_DROPS_PER_BLAST` (24) separate drops; resting drops sleep.
+- **Blast loot**: `ore_survives_blast` shatters about one ore tile in three for plain blasts and
+  one in six for mining charges (`BlastShape::LootSafe` now breaks ore instead of leaving it);
+  artifacts always survive. `Terrain::blast_radius` reports what it broke (`BlastResult::broken`).
+
+Economy recheck (`drop_economy_report`, release, 4 seeds, 90 s of a rig drilling straight down
+or bomb-diving: a plain bomb every 3 s at 17 cr each, or a mining charge every 4 s, hoovering
+the loot; base values, charge costs subtracted, per minute):
+
+| Depth (nominal row) | Drill tier | Drill net | Bombs net | Mining charges net |
+|---|---|---|---|---|
+| 14 | 3 | 158 | -134 | -1,220 |
+| 60 | 5 | 1,125 | 1,494 | 3,268 |
+| 60 | 8 | 2,461 | 1,494 | 3,268 |
+| 120 | 10 | 6,656 | 4,405 | 11,305 |
+| 120 | 14 | 6,802 | 4,405 | 11,305 |
+
+Plain bombs are tunnelling tools near the surface, a fast earner for an under-drilled rig in
+the middle strata and behind a strong drill deep down. Mining charges, now the loot tool, were
+repriced from 160 to 300 cr a pair so they pay off only where ore is rich (about 1.3x a tier 8
+drill mid-depth, 1.7x deep, before the real overhead of placing, waiting and trips to the
+surface). `bombing_stays_balanced_against_drilling` pins those ratios. Block sales add at most
+a few percent to drilling income.
+
 ### Performance
 
 `entity_benchmark_report` (`cargo test -p fatherload_simulation entity_benchmark_report --
@@ -353,7 +406,11 @@ plus the host's per-client relevance scan (20-tile radius, about 2,900 entities 
 | Debug | 22 µs | 4.5 ms / 149 ms | 4.5 ms | 5.2 ms | 199 KB |
 
 The worst tick is the first one, when all 5,000 drops are still awake; steady state is the
-mean. Sleeping drops cost an index entry and nothing per tick; the per-tick cost follows the
+mean. (Measured before WP-DROPS. With drop merging the cave's 5,000 piled drops collapse into
+about 330 stacks within their first 300 ms, the merges spread over several ticks and found with
+the allocation-free `EntityStore::nearest_in_radius`; the same benchmark on a heavily loaded
+machine, where the entity-free tick ran 9x slower than above, measured a 355 µs mean and a
+32 ms worst tick, the merge burst.) Sleeping drops cost an index entry and nothing per tick; the per-tick cost follows the
 awake count. The browser build has no networking, so the relevance scan only runs on desktop
 hosts (release). A snapshot is about 37 bytes per entity; WP-DROPS stack merging keeps counts
 low. Removing half the store at once (2,683 entities) takes about 0.9 ms with `despawn_many`

@@ -178,8 +178,8 @@ pub(super) fn draw_view_hud(
         BarColors::CARGO,
         0.0,
     );
-    // WP-DROPS: the block hopper fills separately from the bay ("BLOCKS OFF" when the rig's
-    // collect toggle is off).
+    // WP-DROPS: the block hopper fills separately from the bay ("OFF" when the rig's collect
+    // toggle is off).
     ui_kit::stat_bar(
         draw,
         inner_x,
@@ -187,9 +187,9 @@ pub(super) fn draw_view_hud(
         inner_width,
         &icons::STONE_BLOCK,
         if view.player.collect_blocks {
-            "BLOCKS"
+            "BLOCK"
         } else {
-            "BLOCKS OFF"
+            "OFF"
         },
         view.player.block_hopper.total() as f32,
         view.player.block_hopper_capacity as f32,

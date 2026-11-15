@@ -30,6 +30,8 @@ mod discovery;
 #[cfg(test)]
 mod drill_tests;
 #[cfg(test)]
+mod drop_economy_tests;
+#[cfg(test)]
 mod drop_tests;
 pub mod drops;
 mod entities;

@@ -17,8 +17,8 @@
 //!   [`crate::GameplayEventKind::ExplosiveDetonated`] with `kind: Emp`. EMPs have no push
 //!   reach, so `push_from_blasts` must check the kind before calling [`blast_impulse`].
 //! * [`ExplosiveKind::Mining`] breaks ore and artifacts cleanly (see [`BlastShape::LootSafe`]):
-//!   every tile pops out intact as a drop, where a plain blast shatters about a third of the
-//!   ore it breaks (`world::drops::ore_survives_blast`).
+//!   they pop out as drops and only about one ore tile in six shatters, where a plain blast
+//!   shatters about a third (`world::drops::ore_survives_blast`).
 
 use serde::{Deserialize, Serialize};
 
@@ -73,8 +73,8 @@ pub enum BlastShape {
     None,
     /// A diamond (Manhattan radius) around the charge, like the original bomb.
     Diamond(i32),
-    /// A diamond that breaks ore and artifact tiles cleanly: every one drops intact (WP-DROPS),
-    /// where a plain blast shatters some ore.
+    /// A diamond that breaks ore and artifact tiles cleanly: they drop as loot with little
+    /// shattered (WP-DROPS), where a plain blast shatters a third of the ore.
     LootSafe(i32),
     /// A straight tunnel `length` tiles long and `2 * half_width + 1` tiles wide, starting at
     /// the charge and running along its [`BlastDirection`]. Each lane stops at the first tile
@@ -287,7 +287,9 @@ pub const EXPLOSIVE_OFFERS: [ExplosiveOffer; 8] = [
     ExplosiveOffer {
         kind: ExplosiveKind::Mining,
         count: 2,
-        cost: 160,
+        // WP-DROPS: a mining charge is now a loot tool (its ore pops out nearly intact), priced
+        // so bomb-diving with them stays in line with drilling (`world/drop_economy_tests.rs`).
+        cost: 300,
         shack_level: 2,
     },
     ExplosiveOffer {

@@ -46,11 +46,12 @@
 //!
 //! # Blasts and loot
 //!
-//! A blast throws its drops outward from the charge ([`blast_spray_velocity`]). The heat of a
-//! plain blast shatters a share of the ore it breaks ([`ore_survives_blast`]: about one tile
-//! in three, decided per tile from the world seed); mining charges
-//! ([`crate::explosive::BlastShape::LootSafe`]) break ore cleanly, so every tile pops out intact.
-//! Artifacts always survive.
+//! A blast throws its drops outward from the charge and up in a fountain
+//! ([`blast_spray_velocity`]). The heat of a plain blast shatters about one ore tile in three
+//! ([`ore_survives_blast`], decided per tile from the world seed); mining charges
+//! ([`crate::explosive::BlastShape::LootSafe`]) break ore cleanly and lose only about one in
+//! six. Artifacts always survive. The shatter rates and charge prices were tuned against
+//! drilling with `world/drop_economy_tests.rs` (numbers in the crate README).
 //!
 //! # Seams for other tracks
 //!
@@ -164,8 +165,8 @@ const fn tile_hash(seed: u64, position: TilePosition, salt: u64) -> u64 {
 
 /// Whether an ore tile at `position` broken by `kind`'s blast comes out intact.
 ///
-/// A plain blast's heat shatters about one ore tile in three; mining charges keep every one.
-/// Artifacts and blocks always survive.
+/// A plain blast's heat shatters about one ore tile in three; a mining charge, which breaks
+/// rock cleanly, about one in six. Artifacts and blocks always survive.
 #[must_use]
 pub const fn ore_survives_blast(
     kind: ExplosiveKind,
@@ -176,10 +177,12 @@ pub const fn ore_survives_blast(
     if !matches!(item, ItemKind::Mineral(_)) {
         return true;
     }
-    if matches!(kind.blast(), BlastShape::LootSafe(_)) {
-        return true;
-    }
-    !tile_hash(seed, position, 0x5ba7).is_multiple_of(3)
+    let shatter_one_in = if matches!(kind.blast(), BlastShape::LootSafe(_)) {
+        6
+    } else {
+        3
+    };
+    !tile_hash(seed, position, 0x5ba7).is_multiple_of(shatter_one_in)
 }
 
 /// Launch velocity of the drop of a tile at `position` thrown by a blast at `(x, y)` (world
@@ -193,7 +196,7 @@ pub fn blast_spray_velocity(x: f32, y: f32, position: TilePosition, seed: u64) -
     let (cx, cy) = tile_centre(position);
     let hash = tile_hash(seed, position, 0x0d0b);
     let wobble = ((hash & 0xff) as f32 / 255.0).mul_add(2.0, -1.0);
-    let launch = (((hash >> 8) & 0xff) as f32 / 255.0).mul_add(90.0, 130.0);
+    let launch = (((hash >> 8) & 0xff) as f32 / 255.0).mul_add(110.0, 140.0);
     let (dx, dy) = (cx - x, cy - y);
     let distance = dx.hypot(dy);
     let (nx, ny) = if distance < 1.0 {
@@ -203,7 +206,8 @@ pub fn blast_spray_velocity(x: f32, y: f32, position: TilePosition, seed: u64) -
     };
     (
         quantize(wobble.mul_add(40.0, nx * launch)),
-        quantize(ny.mul_add(launch, -150.0).max(-420.0)),
+        // A fountain: everything pops upward, so loot thrown at rock bounces out over the rim.
+        quantize(ny.mul_add(launch, -210.0).max(-440.0)),
     )
 }
 
@@ -325,7 +329,8 @@ impl WorldState {
             if let Some((partner, ..)) = drops[index + 1..].iter().find(|(_, other, ..)| {
                 other.stack.kind == drop.stack.kind && other.ignored_by == drop.ignored_by
             }) {
-                self.merge_drop_into(*id, *partner);
+                self.transfer_drop(*id, *partner);
+                self.entities.despawn(*id);
                 return None;
             }
         }
@@ -339,9 +344,9 @@ impl WorldState {
         None
     }
 
-    /// Moves drop `from`'s stack onto drop `into` and removes `from`. Valuables keep the later
-    /// of the two expiries; blocks keep `into`'s.
-    fn merge_drop_into(&mut self, from: EntityId, into: EntityId) {
+    /// Moves drop `from`'s stack onto drop `into` (the caller removes `from`, batched where
+    /// many merge at once). Valuables keep the later of the two expiries; blocks keep `into`'s.
+    fn transfer_drop(&mut self, from: EntityId, into: EntityId) {
         let Some((count, expiry)) = self
             .entities
             .get(from)
@@ -363,7 +368,6 @@ impl WorldState {
                 }
             }
         });
-        self.entities.despawn(from);
     }
 
     /// The drop the drill just broke out of `target`, popping gently toward the rig.
@@ -425,7 +429,7 @@ impl WorldState {
 
     /// A drop's step: pulled in by a magnet (free flight toward the rig), or falling, bouncing
     /// and sliding under [`BodyParams::DROP`]. A drop that comes to rest merges into a resting
-    /// same-kind neighbour (recorded in `merged` for one batched removal).
+    /// same-kind neighbour (recorded in `merged`; the phase removes them in one batch).
     pub(super) fn advance_drop(&mut self, id: EntityId, merged: &mut BTreeSet<EntityId>) {
         if merged.contains(&id) {
             return;
@@ -469,6 +473,10 @@ impl WorldState {
                 }
             });
         }
+        // A resting drop looks for a stack to join once, on a resting tick spread by id over
+        // the time before it sleeps, so a landing spray does not do all its merges at once.
+        let spread = (sleep_after / 2).clamp(1, 8);
+        let merge_tick = 1 + u16::try_from(id.get() % u64::from(spread)).unwrap_or(0);
         let terrain = &self.terrain;
         let landed = self
             .entities
@@ -476,12 +484,13 @@ impl WorldState {
                 let params = BodyParams::DROP;
                 let _report = physics::step_body(&mut entity.body, &params, terrain, delta_seconds);
                 physics::settle(&mut entity.body, &params, terrain, sleep_after);
-                entity.body.rest_ticks == 1
+                entity.body.rest_ticks == merge_tick
             })
             .unwrap_or(false);
         if landed && let Some(partner) = self.merge_partner(id, drop, merged) {
-            self.merge_drop_into(id, partner);
-            // `merge_drop_into` already removed it; remember it so no one merges into it.
+            self.transfer_drop(id, partner);
+            // Removed in one batch after the phase (a landing spray merges dozens at once);
+            // until then nothing merges into it or advances it.
             merged.insert(id);
         }
     }
@@ -497,23 +506,17 @@ impl WorldState {
         let entity = self.entities.get(id)?;
         let (x, y) = (entity.body.x, entity.body.y);
         self.entities
-            .ids_in_radius(x, y, DROP_MERGE_RADIUS)
-            .into_iter()
-            .filter(|other| *other != id && !merged.contains(other))
-            .filter_map(|other| {
-                let candidate = self.entities.get(other)?;
+            .nearest_in_radius(x, y, DROP_MERGE_RADIUS, |candidate| {
                 let EntityState::Drop(other_drop) = candidate.state else {
-                    return None;
+                    return false;
                 };
-                let resting = candidate.body.asleep || candidate.body.rest_ticks > 0;
-                (resting
+                candidate.id != id
+                    && !merged.contains(&candidate.id)
+                    && (candidate.body.asleep || candidate.body.rest_ticks > 0)
                     && other_drop.pulled_by.is_none()
                     && other_drop.stack.kind == drop.stack.kind
-                    && other_drop.ignored_by == drop.ignored_by)
-                    .then(|| ((candidate.body.x - x).hypot(candidate.body.y - y), other))
+                    && other_drop.ignored_by == drop.ignored_by
             })
-            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
-            .map(|(_, other)| other)
     }
 
     /// The pickup pass at the end of the Late entity phase (see the module docs): nearest-rig

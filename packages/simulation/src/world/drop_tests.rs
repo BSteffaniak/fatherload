@@ -398,7 +398,7 @@ fn gold_tiles_in_shape(world: &WorldState, kind: ExplosiveKind) -> (u32, u32) {
 }
 
 #[test]
-fn bombs_spray_loot_and_mining_charges_keep_every_ore() {
+fn bombs_spray_loot_and_mining_charges_keep_most_ore() {
     for kind in [
         ExplosiveKind::Bomb,
         ExplosiveKind::C4,
@@ -427,7 +427,10 @@ fn bombs_spray_loot_and_mining_charges_keep_every_ore() {
             "{kind:?}: plain ground drops blocks"
         );
         if kind == ExplosiveKind::Mining {
-            assert_eq!(intact, total, "mining charges never shatter ore");
+            assert!(
+                intact * 6 >= total * 4,
+                "mining charges shatter little: {intact}/{total}"
+            );
         } else {
             assert!(intact < total, "{kind:?}: {intact}/{total}");
         }
@@ -466,6 +469,14 @@ fn plain_blasts_shatter_about_a_third_of_their_ore() {
     assert!(
         (2_200..=2_600).contains(&intact),
         "{intact} of 3600 survive"
+    );
+    let gentle = (0..60)
+        .flat_map(|y| (-30..30).map(move |x| TilePosition { x, y }))
+        .filter(|tile| ore_survives_blast(ExplosiveKind::Mining, item, seed, *tile))
+        .count();
+    assert!(
+        (2_850..=3_150).contains(&gentle),
+        "{gentle} of 3600 survive a mining charge"
     );
     assert!(ore_survives_blast(
         ExplosiveKind::Bomb,
