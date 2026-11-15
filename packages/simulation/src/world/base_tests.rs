@@ -1006,3 +1006,237 @@ fn building_is_deterministic() {
     assert_ne!(run(), bare.simulation_state_hash());
     let _ = SimulationTick::new(0);
 }
+
+#[test]
+fn the_refinery_refines_ore_for_more_than_the_market_pays() {
+    let mut world = claimed();
+    world.progression.deepest_tile_reached = 400;
+    applied(
+        &mut world,
+        PLAYER,
+        place(
+            Buildable::Module(ModuleKind::Generator),
+            tile(BEACON.x - 3, FLOOR - 1),
+        ),
+    );
+    applied(
+        &mut world,
+        PLAYER,
+        place(
+            Buildable::Module(ModuleKind::Refinery),
+            tile(BEACON.x + 2, FLOOR - 1),
+        ),
+    );
+    let refinery = module_of(&world, ModuleKind::Refinery);
+    park(&mut world, PLAYER, BEACON.x + 2, FLOOR - 1);
+    assert!(world.base_module_powered(refinery));
+    assert_eq!(
+        refusal(
+            &world,
+            PLAYER,
+            &use_module(refinery, ModuleService::CollectRefined)
+        ),
+        BuildRefusal::NothingToDo
+    );
+    let player = world.player_mut(PLAYER).expect("player");
+    player.cargo_bay.add(MineralKind::Silver, 4);
+    player.stow(ItemKind::Block(BlockKind::Dirt), 3);
+    let market = world.mineral_market_value(MineralKind::Silver);
+    applied(
+        &mut world,
+        PLAYER,
+        use_module(refinery, ModuleService::RefineOre),
+    );
+    let player = world.player(PLAYER).expect("player");
+    assert!(!player.cargo_bay.has_minerals(), "the ore went in");
+    assert_eq!(player.block_hopper.count(BlockKind::Dirt), 3, "blocks stay");
+    // A refinery with ore in it or value waiting does not come down.
+    assert_eq!(
+        refusal(&world, PLAYER, &remove(tile(BEACON.x + 2, FLOOR - 1))),
+        BuildRefusal::NotEmpty
+    );
+    // Four lumps at one lump every 3 s: run well past 12 s.
+    for _ in 0..(60 * 15) {
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(tick, &TickInputs::default());
+    }
+    let module = world.bases().module(refinery).expect("refinery");
+    assert!(module.storage.is_empty(), "all refined");
+    assert_eq!(module.refined, market * 140 / 100 * 4);
+    let credits = world.player(PLAYER).expect("player").credits;
+    applied(
+        &mut world,
+        PLAYER,
+        use_module(refinery, ModuleService::CollectRefined),
+    );
+    let player = world.player(PLAYER).expect("player");
+    assert_eq!(player.credits - credits, market * 140 / 100 * 4);
+    assert!(
+        player.credits - credits > market * 4,
+        "better than selling raw"
+    );
+    assert_eq!(world.bases().module(refinery).expect("refinery").refined, 0);
+}
+
+#[test]
+fn an_unpowered_refinery_holds_its_ore() {
+    let mut world = claimed();
+    world.progression.deepest_tile_reached = 400;
+    // No generator: the beacon's single cell cannot run a refinery.
+    applied(
+        &mut world,
+        PLAYER,
+        place(
+            Buildable::Module(ModuleKind::Refinery),
+            tile(BEACON.x + 2, FLOOR - 1),
+        ),
+    );
+    let refinery = module_of(&world, ModuleKind::Refinery);
+    park(&mut world, PLAYER, BEACON.x + 2, FLOOR - 1);
+    assert!(!world.base_module_powered(refinery));
+    world
+        .player_mut(PLAYER)
+        .expect("player")
+        .cargo_bay
+        .add(MineralKind::Copper, 2);
+    applied(
+        &mut world,
+        PLAYER,
+        use_module(refinery, ModuleService::RefineOre),
+    );
+    for _ in 0..(60 * 10) {
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(tick, &TickInputs::default());
+    }
+    let module = world.bases().module(refinery).expect("refinery");
+    assert_eq!(module.storage.mineral(MineralKind::Copper), 2);
+    assert_eq!(module.refined, 0);
+}
+
+#[test]
+fn the_workshop_presses_blocks_into_explosives() {
+    use crate::explosive::ExplosiveKind;
+    let mut world = claimed();
+    applied(
+        &mut world,
+        PLAYER,
+        place(
+            Buildable::Module(ModuleKind::Workshop),
+            tile(BEACON.x + 2, FLOOR - 1),
+        ),
+    );
+    let workshop = module_of(&world, ModuleKind::Workshop);
+    park(&mut world, PLAYER, BEACON.x + 2, FLOOR - 1);
+    // Blocks must be on hand: credits do not stand in for them.
+    assert_eq!(
+        refusal(
+            &world,
+            PLAYER,
+            &use_module(workshop, ModuleService::Craft(ExplosiveKind::C4))
+        ),
+        BuildRefusal::NeedsBlocks(5)
+    );
+    // Not every explosive is on the workshop's list.
+    assert_eq!(
+        refusal(
+            &world,
+            PLAYER,
+            &use_module(workshop, ModuleService::Craft(ExplosiveKind::Emp))
+        ),
+        BuildRefusal::NoSuchService
+    );
+    let player = world.player_mut(PLAYER).expect("player");
+    player.stow(ItemKind::Block(BlockKind::Dirt), 2);
+    player.stow(ItemKind::Block(BlockKind::Stone), 6);
+    let credits = player.credits;
+    let c4 = player.explosive_count(ExplosiveKind::C4);
+    applied(
+        &mut world,
+        PLAYER,
+        use_module(workshop, ModuleService::Craft(ExplosiveKind::C4)),
+    );
+    let player = world.player(PLAYER).expect("player");
+    assert_eq!(player.explosive_count(ExplosiveKind::C4), c4 + 1);
+    assert_eq!(player.credits, credits - 15);
+    assert_eq!(
+        player.block_hopper.count(BlockKind::Dirt),
+        0,
+        "cheapest first"
+    );
+    assert_eq!(player.block_hopper.count(BlockKind::Stone), 3);
+    let bombs = player.bombs;
+    applied(
+        &mut world,
+        PLAYER,
+        use_module(workshop, ModuleService::Craft(ExplosiveKind::Bomb)),
+    );
+    let player = world.player(PLAYER).expect("player");
+    assert_eq!(player.bombs, bombs + 1);
+    assert_eq!(player.block_hopper.total(), 0);
+}
+
+#[test]
+fn floors_holding_up_modules_or_fixtures_stay_put() {
+    let mut world = claimed();
+    // A plank shelf in mid air with a chest and a fern on it.
+    let shelf_y = FLOOR - 4;
+    for x in BEACON.x + 1..=BEACON.x + 3 {
+        applied(
+            &mut world,
+            PLAYER,
+            place(Buildable::Tile(BuiltTile::Plank), tile(x, shelf_y)),
+        );
+    }
+    applied(
+        &mut world,
+        PLAYER,
+        place(
+            Buildable::Module(ModuleKind::Storage),
+            tile(BEACON.x + 1, shelf_y - 1),
+        ),
+    );
+    applied(
+        &mut world,
+        PLAYER,
+        place(
+            Buildable::Fixture(Fixture::Plant),
+            tile(BEACON.x + 2, shelf_y - 1),
+        ),
+    );
+    assert_eq!(
+        refusal(&world, PLAYER, &remove(tile(BEACON.x + 1, shelf_y))),
+        BuildRefusal::Supporting
+    );
+    assert_eq!(
+        refusal(&world, PLAYER, &remove(tile(BEACON.x + 2, shelf_y))),
+        BuildRefusal::Supporting
+    );
+    // The bare end of the shelf comes down; so does the middle once the fern is gone.
+    applied(&mut world, PLAYER, remove(tile(BEACON.x + 3, shelf_y)));
+    applied(&mut world, PLAYER, remove(tile(BEACON.x + 2, shelf_y - 1)));
+    applied(&mut world, PLAYER, remove(tile(BEACON.x + 2, shelf_y)));
+}
+
+#[test]
+fn home_points_survive_a_save_round_trip() {
+    let mut world = claimed();
+    applied(
+        &mut world,
+        PLAYER,
+        place(
+            Buildable::Module(ModuleKind::Bed),
+            tile(BEACON.x + 1, FLOOR - 1),
+        ),
+    );
+    let bed = module_of(&world, ModuleKind::Bed);
+    applied(&mut world, PLAYER, use_module(bed, ModuleService::SetHome));
+    let json = serde_json::to_string(&world).expect("json");
+    let loaded: WorldState = serde_json::from_str(&json).expect("load");
+    assert_eq!(
+        loaded.bases().home_of(PLAYER).map(|home| home.id),
+        Some(bed)
+    );
+    assert_eq!(loaded.rescue_home(PLAYER), world.rescue_home(PLAYER));
+    let wired: WorldState = wire(&world);
+    assert_eq!(wired.bases(), world.bases());
+}

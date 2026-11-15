@@ -7,6 +7,7 @@ use fatherload_simulation::{
     base::{
         BuildCommand, BuildRefusal, Buildable, Claim, FUEL_STATION_CAPACITY, ModuleKind,
         ModuleService, PlacedModule, PowerBudget, StructureId, UPLINK_FEE_PERCENT, origin_for,
+        workshop_recipe,
     },
     economy::REPAIR_UNIT_COST,
     terrain::{TILE_SIZE, TilePosition},
@@ -167,6 +168,20 @@ impl BaseModuleView {
                         }
                     }
                     ModuleService::CycleAccess => claim.access.name().to_owned(),
+                    ModuleService::RefineOre => format!(
+                        "{} / {} waiting",
+                        module.storage.total(),
+                        module.kind.storage_capacity()
+                    ),
+                    ModuleService::CollectRefined => format!("{} c ready", module.refined),
+                    ModuleService::Craft(kind) => {
+                        workshop_recipe(*kind).map_or_else(String::new, |(blocks, credits)| {
+                            format!(
+                                "{blocks} blocks + {credits} c (have {})",
+                                player.explosive_count(*kind)
+                            )
+                        })
+                    }
                 };
                 ModuleRow {
                     service: *service,

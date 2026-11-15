@@ -7,9 +7,9 @@ use crate::{
         CLAIM_RADIUS, Claim, ClaimAccess, FUEL_STATION_CAPACITY, FUEL_STATION_STARTING_FUEL,
         FUEL_SYNTH_PER_PERIOD, FUEL_SYNTH_PERIOD_MILLIS, Facing, LIFT_CLIMB_SPEED,
         LIFT_SLIDE_SPEED, MAX_CLAIMS, MODULE_REFUND_PERCENT, ModuleKind, ModuleService,
-        PlacedModule, PowerBudget, SUPPLY_BASE_FEE, SUPPLY_UNIT_PRICE, StructureId,
-        UPLINK_FEE_PERCENT, beacon_price, block_credit_price, claim_limit, footprint_tiles,
-        origin_for,
+        PlacedModule, PowerBudget, REFINE_PER_PERIOD, REFINERY_BONUS_PERCENT, SUPPLY_BASE_FEE,
+        SUPPLY_UNIT_PRICE, StructureId, UPLINK_FEE_PERCENT, beacon_price, block_credit_price,
+        claim_limit, footprint_tiles, origin_for, workshop_recipe,
     },
     economy::{REPAIR_UNIT_COST, repair_amount},
     ids::PlayerId,
@@ -314,7 +314,7 @@ impl WorldState {
         }
         let mut refund = BuildPayment::default();
         if let Some(module) = self.bases.module_at(at) {
-            if !module.storage.is_empty() {
+            if !module.storage.is_empty() || module.refined > 0 {
                 return Err(BuildRefusal::NotEmpty);
             }
             if module.kind == ModuleKind::Beacon && !self.claim_is_bare(claim) {
@@ -323,6 +323,9 @@ impl WorldState {
             refund.credits = module.paid_credits.saturating_mul(MODULE_REFUND_PERCENT) / 100;
             refund.blocks = module.paid_blocks.clone();
         } else if let Some(TileKind::Built(tile)) = self.terrain.tile(at).map(|tile| tile.kind) {
+            if self.supports_something(at) {
+                return Err(BuildRefusal::Supporting);
+            }
             match tile {
                 BuiltTile::Wall(block) => refund.blocks.add(block, 1),
                 other => {
@@ -343,6 +346,22 @@ impl WorldState {
             cost: BuildPayment::default(),
             refund,
         })
+    }
+
+    /// Whether a module or a fixture that needs a floor stands on the tile at `at`.
+    fn supports_something(&self, at: TilePosition) -> bool {
+        let above = TilePosition {
+            x: at.x,
+            y: at.y - 1,
+        };
+        self.bases
+            .module_at(above)
+            .is_some_and(|module| module.anchor().y == above.y)
+            || self
+                .bases
+                .fixtures_at(above)
+                .front
+                .is_some_and(|(fixture, _)| fixture.needs_floor())
     }
 
     /// Whether only the beacon is left in `claim` (no other module, piece or fixture).
@@ -474,6 +493,37 @@ impl WorldState {
                     return Err(BuildRefusal::NotPermitted);
                 }
             }
+            ModuleService::RefineOre => {
+                let any = player.cargo_bay.iter().any(|(kind, _)| {
+                    matches!(kind, ItemKind::Mineral(_))
+                        && module.storage.accepts(kind, 1, capacity) > 0
+                });
+                if !any {
+                    return Err(BuildRefusal::NothingToDo);
+                }
+            }
+            ModuleService::CollectRefined => {
+                if module.refined == 0 {
+                    return Err(BuildRefusal::NothingToDo);
+                }
+            }
+            ModuleService::Craft(kind) => {
+                let (blocks, credits) = workshop_recipe(kind).ok_or(BuildRefusal::NoSuchService)?;
+                let on_hand: u32 = BlockKind::ALL
+                    .into_iter()
+                    .map(|block| player.block_hopper.count(block))
+                    .sum();
+                if on_hand < blocks {
+                    return Err(BuildRefusal::NeedsBlocks(blocks));
+                }
+                if player.credits < credits {
+                    return Err(BuildRefusal::CannotAfford);
+                }
+                quote.cost = BuildPayment {
+                    blocks: blocks_from_hopper(player, blocks),
+                    credits,
+                };
+            }
         }
         Ok(quote)
     }
@@ -497,7 +547,7 @@ impl WorldState {
             }
             BuildCommand::Remove { at } => self.apply_remove(player_id, at, &quote.refund),
             BuildCommand::Use { structure, service } => {
-                self.apply_use(player_id, structure, service);
+                self.apply_use(player_id, structure, service, &quote.cost);
             }
         }
         PlayerScopedCommandOutcome::Applied
@@ -537,6 +587,7 @@ impl WorldState {
                         0
                     },
                     storage: ItemContainer::new(),
+                    refined: 0,
                 };
                 if kind == ModuleKind::Beacon {
                     let surface = at.y < self.terrain.surface_row(at.x) + 4;
@@ -606,7 +657,13 @@ impl WorldState {
         clippy::too_many_lines,
         reason = "one arm per module service keeps the services together"
     )]
-    fn apply_use(&mut self, player_id: PlayerId, structure: StructureId, service: ModuleService) {
+    fn apply_use(
+        &mut self,
+        player_id: PlayerId,
+        structure: StructureId,
+        service: ModuleService,
+        cost: &BuildPayment,
+    ) {
         let offer = self.supply_drop_offer(
             structure,
             self.players
@@ -632,6 +689,16 @@ impl WorldState {
             }
             ModuleService::SetHome => {
                 self.bases.set_home(player_id, structure);
+                return;
+            }
+            ModuleService::Craft(kind) => {
+                if let Some(player) = self.players.get_mut(&player_id) {
+                    for (block, count) in cost.blocks.iter() {
+                        player.block_hopper.remove(block, count);
+                    }
+                    player.credits = player.credits.saturating_sub(cost.credits);
+                    player.add_explosives(kind, 1);
+                }
                 return;
             }
             ModuleService::CycleAccess => {
@@ -698,11 +765,31 @@ impl WorldState {
                     .storage
                     .update_counts(|kind, count| count - player.stow(kind, count));
             }
-            ModuleService::SellCargo | ModuleService::SetHome | ModuleService::CycleAccess => {}
+            ModuleService::RefineOre => {
+                player.cargo_bay.update_counts(|kind, count| {
+                    if !matches!(kind, ItemKind::Mineral(_)) {
+                        return count;
+                    }
+                    let stored = module.storage.accepts(kind, count, capacity);
+                    module.storage.add(kind, stored);
+                    count - stored
+                });
+            }
+            ModuleService::CollectRefined => {
+                let value = std::mem::take(&mut module.refined);
+                player.credits = player.credits.saturating_add(value);
+                self.progression.total_earnings =
+                    self.progression.total_earnings.saturating_add(value);
+            }
+            ModuleService::SellCargo
+            | ModuleService::SetHome
+            | ModuleService::CycleAccess
+            | ModuleService::Craft(_) => {}
         }
     }
 
-    /// Per-tick base upkeep: powered fuel stations synthesize fuel on a fixed schedule.
+    /// Per-tick base upkeep, on a fixed schedule: powered fuel stations synthesize fuel and
+    /// powered refineries refine their ore (the first kind in item order, a unit at a time).
     pub(super) fn advance_bases(&mut self, next_tick: crate::ids::SimulationTick) {
         if self.bases.is_empty()
             || !self
@@ -724,6 +811,33 @@ impl WorldState {
         for id in filling {
             if let Some(module) = self.bases.module_mut(id) {
                 module.fuel = (module.fuel + FUEL_SYNTH_PER_PERIOD).min(FUEL_STATION_CAPACITY);
+            }
+        }
+        let refining: Vec<StructureId> = self
+            .bases
+            .modules()
+            .filter(|module| module.kind == ModuleKind::Refinery && !module.storage.is_empty())
+            .map(|module| module.id)
+            .filter(|id| self.base_module_powered(*id))
+            .collect();
+        for id in refining {
+            for _ in 0..REFINE_PER_PERIOD {
+                let Some(mineral) = self.bases.module(id).and_then(|module| {
+                    module.storage.iter().find_map(|(kind, _)| match kind {
+                        ItemKind::Mineral(mineral) => Some(mineral),
+                        _ => None,
+                    })
+                }) else {
+                    break;
+                };
+                let value = self
+                    .canonical_mineral_market_value(mineral)
+                    .saturating_mul(100 + REFINERY_BONUS_PERCENT)
+                    / 100;
+                if let Some(module) = self.bases.module_mut(id) {
+                    module.storage.remove(ItemKind::Mineral(mineral), 1);
+                    module.refined = module.refined.saturating_add(value);
+                }
             }
         }
     }
@@ -777,7 +891,24 @@ pub fn payment_for(player: &Player, cost: BuildCost) -> BuildPayment {
             payment.credits = payment.credits.saturating_add(block_credit_price(block));
         }
     }
-    let mut needed = cost.any_blocks;
+    let needed = take_blocks(player, &mut payment.blocks, cost.any_blocks);
+    payment.credits = payment
+        .credits
+        .saturating_add(needed.saturating_mul(block_credit_price(BlockKind::Dirt)));
+    payment
+}
+
+/// Up to `count` blocks of any kind from `player`'s hopper, cheapest kind first.
+fn blocks_from_hopper(player: &Player, count: u32) -> ItemContainer {
+    let mut blocks = ItemContainer::new();
+    let _missing = take_blocks(player, &mut blocks, count);
+    blocks
+}
+
+/// Adds up to `count` blocks from `player`'s hopper (cheapest kind first, minus what `taken`
+/// already holds) to `taken`; returns how many were missing.
+fn take_blocks(player: &Player, taken: &mut ItemContainer, count: u32) -> u32 {
+    let mut needed = count;
     for block in BlockKind::ALL {
         if needed == 0 {
             break;
@@ -785,15 +916,12 @@ pub fn payment_for(player: &Player, cost: BuildCost) -> BuildPayment {
         let available = player
             .block_hopper
             .count(block)
-            .saturating_sub(payment.blocks.count(block));
-        let taken = available.min(needed);
-        if taken > 0 {
-            payment.blocks.add(block, taken);
-            needed -= taken;
+            .saturating_sub(taken.count(block));
+        let take = available.min(needed);
+        if take > 0 {
+            taken.add(block, take);
+            needed -= take;
         }
     }
-    payment.credits = payment
-        .credits
-        .saturating_add(needed.saturating_mul(block_credit_price(BlockKind::Dirt)));
-    payment
+    needed
 }

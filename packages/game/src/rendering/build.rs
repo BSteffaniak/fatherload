@@ -352,9 +352,11 @@ const fn service_icon(service: ModuleService) -> &'static super::pixel_art::spri
         ModuleService::DepositCargo | ModuleService::DepositBlocks | ModuleService::WithdrawAll => {
             &icons::CARGO
         }
-        ModuleService::SellCargo => &icons::CREDITS,
+        ModuleService::SellCargo | ModuleService::CollectRefined => &icons::CREDITS,
         ModuleService::SetHome => &icons::DEPTH,
         ModuleService::CycleAccess => &icons::SCANNER,
+        ModuleService::RefineOre => &icons::HEAT,
+        ModuleService::Craft(_) => &icons::BOMB,
     }
 }
 
@@ -370,5 +372,12 @@ const fn service_about(service: ModuleService) -> &'static str {
         ModuleService::SellCargo => "Sell the bay's ore and relics at today's prices, less 15%.",
         ModuleService::SetHome => "The rescue crew will drop you here instead of in town.",
         ModuleService::CycleAccess => "Who may build here and use the claim's modules.",
+        ModuleService::RefineOre => {
+            "Leave the bay's ore here. Powered, it refines a lump every 3 s, worth 40% more."
+        }
+        ModuleService::CollectRefined => "Take what the refined ore is worth, in credits.",
+        ModuleService::Craft(_) => {
+            "Press blocks from the hopper (plus a little credit) into a charge."
+        }
     }
 }

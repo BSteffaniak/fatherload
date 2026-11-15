@@ -360,7 +360,10 @@ when something does not fit.
   at today's prices from anywhere, less a 15 % fee. **Storage chest**: stores cargo and blocks,
   shared with the crew. **Crew quarters** and the surface-only **homestead** (a house with a
   pantry, a trophy shelf and a cutaway interior when you step inside): set either as home and the
-  rescue crew drops you there instead of in town.
+  rescue crew drops you there instead of in town. **Ore refinery** (grey stone): leave ore in it
+  and, while powered, it refines a lump every few seconds into credits worth 40 % more than the
+  market pays; collect them from its menu. **Workshop**: presses building blocks from the hopper
+  (plus a few credits) into bombs, C4 and mining charges.
 
 Walk up to a module and press use (`E` / `X`) for its menu. Claims belong to whoever staked them:
 by default the whole crew builds and uses them, and the beacon's menu lets the owner allow only

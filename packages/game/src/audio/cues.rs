@@ -150,6 +150,8 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::StorageStow => Patch::StorageStow,
         SoundCue::UplinkBeam => Patch::UplinkBeam,
         SoundCue::HomeSet => Patch::HomeSet,
+        SoundCue::RefineryLoad => Patch::RefineryLoad,
+        SoundCue::WorkshopCraft => Patch::WorkshopCraft,
     }
 }
 
@@ -262,6 +264,9 @@ pub const fn service_cue(service: ModuleService) -> SoundCue {
         ModuleService::SellCargo => SoundCue::UplinkBeam,
         ModuleService::SetHome => SoundCue::HomeSet,
         ModuleService::CycleAccess => SoundCue::Ui,
+        ModuleService::RefineOre => SoundCue::RefineryLoad,
+        ModuleService::CollectRefined => SoundCue::Sell,
+        ModuleService::Craft(_) => SoundCue::WorkshopCraft,
     }
 }
 
@@ -826,6 +831,8 @@ mod tests {
             SoundCue::StorageStow,
             SoundCue::UplinkBeam,
             SoundCue::HomeSet,
+            SoundCue::RefineryLoad,
+            SoundCue::WorkshopCraft,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

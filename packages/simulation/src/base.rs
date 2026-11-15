@@ -13,7 +13,8 @@
 //!   passable fixtures: doors, lift ladders, lights and decorations ([`Fixture`]).
 //! - **Modules** ([`ModuleKind`]): multi-tile structures with services: the claim beacon itself,
 //!   storage chests, a bed (home point), a generator (power), the **underground fuel station**,
-//!   a repair bay, a cargo uplink and the surface homestead (a house).
+//!   a repair bay, a cargo uplink, a refinery (ore refined at the base is worth more), a
+//!   workshop (crafts explosives from building blocks) and the surface homestead (a house).
 //!
 //! Every build action is a [`BuildCommand`] inside [`crate::PlayerCommand::Build`], validated by
 //! the host inside the fixed tick (`WorldState::check_build` gives the same verdict to the
@@ -47,6 +48,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    explosive::ExplosiveKind,
     ids::PlayerId,
     item::{BlockKind, ItemContainer},
     terrain::TilePosition,
@@ -75,6 +77,11 @@ pub const SUPPLY_UNIT_PRICE: u32 = 2;
 pub const SUPPLY_BASE_FEE: u32 = 40;
 /// Share of the sale value a cargo uplink keeps as its fee.
 pub const UPLINK_FEE_PERCENT: u32 = 15;
+/// Extra value (percent of the market price) ore gains in a refinery.
+pub const REFINERY_BONUS_PERCENT: u32 = 40;
+/// Ore units a powered refinery refines each [`FUEL_SYNTH_PERIOD_MILLIS`] (it shares the fuel
+/// stations' schedule).
+pub const REFINE_PER_PERIOD: u32 = 1;
 /// Share of a module's credit price refunded on deconstruction.
 pub const MODULE_REFUND_PERCENT: u32 = 75;
 /// Credits per building block a piece costs when the hopper has none of the right kind.
@@ -402,10 +409,15 @@ pub enum ModuleKind {
     CargoUplink,
     /// A surface house: a home point with a pantry chest and a trophy shelf.
     Homestead,
+    /// Refines ore left in it while powered; the refined value is worth
+    /// [`REFINERY_BONUS_PERCENT`] more than selling the raw ore.
+    Refinery,
+    /// A crafting bench: presses building blocks (plus a little credit) into explosives.
+    Workshop,
 }
 
 impl ModuleKind {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 10] = [
         Self::Beacon,
         Self::Storage,
         Self::Bed,
@@ -414,6 +426,8 @@ impl ModuleKind {
         Self::RepairBay,
         Self::CargoUplink,
         Self::Homestead,
+        Self::Refinery,
+        Self::Workshop,
     ];
 
     #[must_use]
@@ -427,6 +441,8 @@ impl ModuleKind {
             Self::RepairBay => "Repair Bay",
             Self::CargoUplink => "Cargo Uplink",
             Self::Homestead => "Homestead",
+            Self::Refinery => "Ore Refinery",
+            Self::Workshop => "Workshop",
         }
     }
 
@@ -442,6 +458,8 @@ impl ModuleKind {
             Self::RepairBay => "Patches hulls at town prices while powered.",
             Self::CargoUplink => "Beams your cargo to the depot for a 15% fee.",
             Self::Homestead => "A house on the surface: home point, pantry, trophy shelf.",
+            Self::Refinery => "Leave ore here: refined while powered, worth 40% more.",
+            Self::Workshop => "Presses building blocks into bombs and charges.",
         }
     }
 
@@ -452,8 +470,8 @@ impl ModuleKind {
             Self::Beacon => (1, 2),
             Self::Storage => (1, 1),
             Self::Bed => (2, 1),
-            Self::Generator => (2, 2),
-            Self::FuelStation | Self::RepairBay => (3, 3),
+            Self::Generator | Self::Workshop => (2, 2),
+            Self::FuelStation | Self::RepairBay | Self::Refinery => (3, 3),
             Self::CargoUplink => (2, 3),
             Self::Homestead => (7, 5),
         }
@@ -472,6 +490,8 @@ impl ModuleKind {
             Self::RepairBay => 1_200,
             Self::CargoUplink => 2_400,
             Self::Homestead => 1_500,
+            Self::Refinery => 1_800,
+            Self::Workshop => 500,
         }
     }
 
@@ -482,11 +502,12 @@ impl ModuleKind {
         match self {
             Self::Beacon => 4,
             Self::Storage => 6,
-            Self::Bed => 8,
+            Self::Bed | Self::Workshop => 8,
             Self::Generator => 10,
             Self::FuelStation | Self::RepairBay => 16,
             Self::CargoUplink => 20,
             Self::Homestead => 30,
+            Self::Refinery => 18,
         }
     }
 
@@ -495,8 +516,13 @@ impl ModuleKind {
     pub const fn power_draw(self) -> u32 {
         match self {
             Self::FuelStation => 1,
-            Self::RepairBay | Self::CargoUplink => 2,
-            Self::Beacon | Self::Storage | Self::Bed | Self::Generator | Self::Homestead => 0,
+            Self::RepairBay | Self::CargoUplink | Self::Refinery => 2,
+            Self::Beacon
+            | Self::Storage
+            | Self::Bed
+            | Self::Generator
+            | Self::Homestead
+            | Self::Workshop => 0,
         }
     }
 
@@ -516,7 +542,7 @@ impl ModuleKind {
     pub const fn unlock_band(self) -> Option<Band> {
         match self {
             Self::FuelStation => Some(Band::Clay),
-            Self::RepairBay => Some(Band::Stone),
+            Self::RepairBay | Self::Refinery => Some(Band::Stone),
             Self::CargoUplink => Some(Band::Slate),
             _ => None,
         }
@@ -534,6 +560,7 @@ impl ModuleKind {
         match self {
             Self::Storage => 80,
             Self::Homestead => 40,
+            Self::Refinery => 60,
             _ => 0,
         }
     }
@@ -565,7 +592,27 @@ impl ModuleKind {
                 ModuleService::DepositBlocks,
                 ModuleService::WithdrawAll,
             ],
+            Self::Refinery => &[ModuleService::RefineOre, ModuleService::CollectRefined],
+            Self::Workshop => &[
+                ModuleService::Craft(ExplosiveKind::Bomb),
+                ModuleService::Craft(ExplosiveKind::C4),
+                ModuleService::Craft(ExplosiveKind::Mining),
+            ],
         }
+    }
+}
+
+/// What a workshop charges to craft one `kind`: `(building blocks of any kind, credits)`.
+///
+/// `None` when the workshop cannot make it. Blocks must be on hand (they are the point); about
+/// half the explosives shack's price once T7 drops fill the hopper.
+#[must_use]
+pub const fn workshop_recipe(kind: ExplosiveKind) -> Option<(u32, u32)> {
+    match kind {
+        ExplosiveKind::Bomb => Some((3, 6)),
+        ExplosiveKind::C4 => Some((5, 15)),
+        ExplosiveKind::Mining => Some((8, 30)),
+        _ => None,
     }
 }
 
@@ -610,6 +657,12 @@ pub enum ModuleService {
     SetHome,
     /// The beacon owner cycles who may build and use the claim.
     CycleAccess,
+    /// Leave the cargo bay's ore in a refinery to be refined.
+    RefineOre,
+    /// Take the credits a refinery's refined ore is worth.
+    CollectRefined,
+    /// Craft one explosive at a workshop ([`workshop_recipe`]).
+    Craft(ExplosiveKind),
 }
 
 impl ModuleService {
@@ -625,6 +678,12 @@ impl ModuleService {
             Self::SellCargo => "Uplink cargo to depot",
             Self::SetHome => "Make this home",
             Self::CycleAccess => "Claim access",
+            Self::RefineOre => "Load ore to refine",
+            Self::CollectRefined => "Collect refined value",
+            Self::Craft(ExplosiveKind::Bomb) => "Press a bomb",
+            Self::Craft(ExplosiveKind::C4) => "Pack a C4 charge",
+            Self::Craft(ExplosiveKind::Mining) => "Pack a mining charge",
+            Self::Craft(_) => "Craft",
         }
     }
 }
@@ -659,7 +718,7 @@ impl BuildGroup {
 
 impl Buildable {
     /// The build menu, in order.
-    pub const PALETTE: [Self; 26] = [
+    pub const PALETTE: [Self; 28] = [
         Self::Module(ModuleKind::Beacon),
         Self::Tile(BuiltTile::Wall(BlockKind::Dirt)),
         Self::Tile(BuiltTile::Wall(BlockKind::Clay)),
@@ -686,6 +745,8 @@ impl Buildable {
         Self::Module(ModuleKind::RepairBay),
         Self::Module(ModuleKind::CargoUplink),
         Self::Module(ModuleKind::Homestead),
+        Self::Module(ModuleKind::Workshop),
+        Self::Module(ModuleKind::Refinery),
     ];
 
     #[must_use]
@@ -831,6 +892,8 @@ pub enum BuildRefusal {
     CannotAfford,
     /// A beacon with structures left in its claim, or a chest with things in it.
     NotEmpty,
+    /// A floor tile a module or a standing fixture rests on.
+    Supporting,
     NothingThere,
     /// The module needs power.
     Unpowered,
@@ -840,6 +903,8 @@ pub enum BuildRefusal {
     NoSuchService,
     /// Nothing to do (tank full, bay empty, ...).
     NothingToDo,
+    /// A workshop recipe needs this many building blocks in the hopper.
+    NeedsBlocks(u32),
 }
 
 impl BuildRefusal {
@@ -863,11 +928,13 @@ impl BuildRefusal {
             Self::LeavesClaim => "It has to fit inside the claim.".to_owned(),
             Self::CannotAfford => "Not enough credits.".to_owned(),
             Self::NotEmpty => "Empty it first.".to_owned(),
+            Self::Supporting => "Something stands on it: take that down first.".to_owned(),
             Self::NothingThere => "Nothing to take down here.".to_owned(),
             Self::Unpowered => "No power: build a generator.".to_owned(),
             Self::NotAtModule => "Stand at the module.".to_owned(),
             Self::NoSuchService => "Not offered here.".to_owned(),
             Self::NothingToDo => "Nothing to do.".to_owned(),
+            Self::NeedsBlocks(count) => format!("Needs {count} building blocks in the hopper."),
         }
     }
 }
@@ -892,9 +959,12 @@ pub struct PlacedModule {
     /// A fuel station's reserve.
     #[serde(default)]
     pub fuel: u32,
-    /// A chest's or homestead's contents.
+    /// A chest's or homestead's contents (a refinery's ore waiting to be refined).
     #[serde(default)]
     pub storage: ItemContainer,
+    /// Credits a refinery's refined ore is worth, waiting to be collected.
+    #[serde(default)]
+    pub refined: u32,
 }
 
 impl PlacedModule {

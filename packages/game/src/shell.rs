@@ -424,6 +424,10 @@ pub enum SoundCue {
     UplinkBeam,
     /// A home point set.
     HomeSet,
+    /// Ore tipped into a base refinery's crusher.
+    RefineryLoad,
+    /// A workshop pressing blocks into a charge.
+    WorkshopCraft,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

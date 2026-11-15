@@ -272,6 +272,17 @@ pub(in crate::rendering) fn draw_base_lights(draw: &mut impl RaylibDraw, scene: 
             {
                 disc(draw, cx, cy, 26, with_alpha(MINT, 10));
             }
+            ModuleKind::Refinery if powered && !module.storage.is_empty() => {
+                // The furnace mouth glows while ore cooks.
+                let throb = ((scene.seconds * 3.0).sin() * 0.5 + 0.5) * 8.0;
+                disc(
+                    draw,
+                    cx,
+                    cy + TILE_SIZE * 0.6,
+                    24 + throb as i32,
+                    with_alpha(ORANGE, 22),
+                );
+            }
             _ => {}
         }
     }
@@ -453,6 +464,10 @@ fn draw_module(draw: &mut impl RaylibDraw, scene: &BaseScene<'_>, module: &Place
             });
             homestead(draw, &ctx, inside, !module.storage.is_empty());
         }
+        ModuleKind::Refinery => {
+            refinery(draw, &ctx, !module.storage.is_empty(), module.refined > 0);
+        }
+        ModuleKind::Workshop => workshop(draw, &ctx),
     }
 }
 
@@ -730,6 +745,168 @@ fn repair_bay(draw: &mut impl RaylibDraw, art: &ModuleArt) {
     }
 }
 
+/// The ore refinery: a hopper over a crusher feeding a furnace, molten ore running down a
+/// channel into ingot moulds; a chimney. `loaded`: ore is waiting (the crusher turns and the
+/// furnace roars while powered); `stocked`: refined value is waiting (ingots stacked).
+fn refinery(draw: &mut impl RaylibDraw, art: &ModuleArt, loaded: bool, stocked: bool) {
+    let w = 3 * T;
+    let r = |d: &mut _, x, y, ww, hh, c| art.rect(d, w, x, y, ww, hh, c);
+    let working = loaded && art.powered;
+    // Brick plinth.
+    r(draw, 0, 42, 48, 6, INK);
+    r(draw, 1, 43, 46, 4, MAROON);
+    for x in (1..46).step_by(5) {
+        r(draw, x, 45, 4, 1, RUST);
+    }
+    // Chimney with smoke while working.
+    r(draw, 36, 0, 8, 22, INK);
+    r(draw, 37, 1, 6, 21, STEEL_DARK);
+    r(draw, 37, 1, 1, 21, STEEL);
+    for y in (5..20).step_by(4) {
+        r(draw, 37, y, 6, 1, RUST);
+    }
+    if working {
+        for i in 0..2 {
+            let puff = (art.seconds * 0.9 + i as f32 * 0.5).fract();
+            let py = -(puff * 10.0) as i32;
+            r(
+                draw,
+                38 + (puff * 3.0) as i32,
+                py - 3,
+                4 + i,
+                3,
+                with_alpha(FOG, (140.0 * (1.0 - puff)) as u8),
+            );
+        }
+    }
+    // Ore hopper on stilts.
+    r(draw, 1, 4, 18, 3, INK);
+    r(draw, 2, 6, 16, 8, INK);
+    r(draw, 3, 7, 14, 6, STEEL);
+    r(draw, 3, 7, 14, 1, STEEL_LIGHT);
+    r(draw, 6, 13, 8, 4, INK);
+    r(draw, 7, 13, 6, 3, STEEL_DARK);
+    if loaded {
+        // Ore heaped in the hopper.
+        r(draw, 4, 4, 4, 3, STONE);
+        r(draw, 8, 3, 4, 4, STONE_LIGHT);
+        r(draw, 12, 4, 4, 3, STONE);
+        r(draw, 9, 4, 1, 1, GOLD);
+        r(draw, 5, 5, 1, 1, SKY);
+        r(draw, 13, 5, 1, 1, ORANGE);
+    }
+    // Crusher drum, its teeth turning while working.
+    r(draw, 3, 17, 14, 10, INK);
+    r(draw, 4, 18, 12, 8, SLATE_DARK);
+    let turn = if working {
+        (art.seconds * 8.0) as i32 % 3
+    } else {
+        0
+    };
+    for i in 0..4 {
+        r(
+            draw,
+            5 + i * 3 + turn % 2,
+            19 + (i + turn) % 3 * 2,
+            2,
+            2,
+            STEEL,
+        );
+    }
+    // Furnace body.
+    r(draw, 18, 14, 22, 29, INK);
+    r(draw, 19, 15, 20, 27, STONE);
+    r(draw, 19, 15, 20, 2, STONE_LIGHT);
+    for (y, x0) in [(20, 19), (25, 23), (30, 19), (35, 23)] {
+        r(draw, x0, y, 16, 1, SLATE);
+    }
+    // Furnace mouth.
+    r(draw, 23, 26, 12, 10, INK);
+    let fire = if working {
+        if art.blink(6.0, 0.0) { ORANGE } else { GOLD }
+    } else if art.powered {
+        MAROON
+    } else {
+        NIGHT
+    };
+    r(draw, 24, 27, 10, 8, fire);
+    if working {
+        r(draw, 26, 30, 6, 4, CREAM);
+    }
+    // Feed chute from crusher to furnace.
+    r(draw, 15, 22, 5, 3, INK);
+    r(draw, 16, 23, 4, 1, STEEL_DARK);
+    // Molten channel to the moulds.
+    r(draw, 2, 36, 22, 3, INK);
+    let melt = if working { ORANGE } else { RUST };
+    r(draw, 3, 37, 20, 1, melt);
+    if working {
+        let drip = (art.seconds * 4.0).fract();
+        r(draw, 3 + (drip * 18.0) as i32, 37, 2, 1, GOLD);
+    }
+    // Ingot moulds; ingots stacked when refined value waits.
+    r(draw, 2, 39, 16, 3, SLATE_DARK);
+    if stocked {
+        for x in [3, 8, 13] {
+            r(draw, x, 39, 4, 2, GOLD);
+            r(draw, x, 39, 4, 1, CREAM);
+        }
+        r(draw, 5, 37, 4, 2, GOLD);
+    }
+    // Power light and owner's band.
+    r(draw, 20, 16, 18, 2, art.accent);
+    r(draw, 36, 38, 2, 2, art.power_light());
+}
+
+/// The workshop: a sturdy bench with a vice, a pegboard of tools, an anvil and a stack of
+/// pressed charges.
+fn workshop(draw: &mut impl RaylibDraw, art: &ModuleArt) {
+    let w = 2 * T;
+    let r = |d: &mut _, x, y, ww, hh, c| art.rect(d, w, x, y, ww, hh, c);
+    // Pegboard with tools.
+    r(draw, 2, 1, 26, 14, INK);
+    r(draw, 3, 2, 24, 12, LOAM);
+    for y in [4, 8, 12] {
+        for x in (5..26).step_by(4) {
+            r(draw, x, y, 1, 1, SOIL_DARK);
+        }
+    }
+    // Hammer, wrench and saw.
+    r(draw, 5, 3, 2, 9, SOIL_DARK);
+    r(draw, 4, 3, 4, 2, STEEL);
+    r(draw, 11, 4, 2, 8, STEEL);
+    r(draw, 10, 3, 4, 2, STEEL_LIGHT);
+    r(draw, 17, 4, 7, 4, STEEL_LIGHT);
+    r(draw, 17, 7, 7, 1, STEEL_DARK);
+    r(draw, 23, 4, 2, 5, SOIL);
+    // Owner's banner strip.
+    r(draw, 3, 2, 24, 1, art.accent);
+    // Bench top and legs.
+    r(draw, 0, 17, 32, 4, INK);
+    r(draw, 1, 18, 30, 2, SOIL);
+    r(draw, 1, 18, 30, 1, LOAM);
+    r(draw, 2, 21, 3, 11, SOIL_DARK);
+    r(draw, 27, 21, 3, 11, SOIL_DARK);
+    r(draw, 5, 26, 22, 2, SOIL_DARK);
+    // Vice on the bench.
+    r(draw, 3, 13, 7, 5, INK);
+    r(draw, 4, 14, 5, 3, STEEL_DARK);
+    r(draw, 9, 15, 3, 1, STEEL);
+    // A charge being packed, its fuse light blinking.
+    r(draw, 14, 13, 6, 5, INK);
+    r(draw, 15, 14, 4, 3, RED);
+    let fuse = if art.blink(2.0, 0.0) { GOLD } else { AMBER };
+    r(draw, 16, 12, 2, 1, fuse);
+    // Anvil under the bench and a crate of finished charges.
+    r(draw, 8, 28, 10, 4, INK);
+    r(draw, 9, 28, 8, 2, STEEL);
+    r(draw, 11, 30, 4, 2, STEEL_DARK);
+    r(draw, 20, 25, 7, 7, INK);
+    r(draw, 21, 26, 5, 5, SOIL);
+    r(draw, 22, 26, 1, 1, RED);
+    r(draw, 24, 26, 1, 1, RED);
+}
+
 fn uplink(draw: &mut impl RaylibDraw, art: &ModuleArt) {
     let w = 2 * T;
     let r = |d: &mut _, x, y, ww, hh, c| art.rect(d, w, x, y, ww, hh, c);
@@ -986,6 +1163,8 @@ pub(in crate::rendering) fn draw_build_ghost(
                 ModuleKind::RepairBay => repair_bay(draw, &art),
                 ModuleKind::CargoUplink => uplink(draw, &art),
                 ModuleKind::Homestead => homestead(draw, &art, false, false),
+                ModuleKind::Refinery => refinery(draw, &art, false, false),
+                ModuleKind::Workshop => workshop(draw, &art),
             }
         }
     }
@@ -1124,5 +1303,7 @@ fn draw_module_icon(draw: &mut impl RaylibDraw, art: &ModuleArt, kind: ModuleKin
         ModuleKind::RepairBay => repair_bay(draw, art),
         ModuleKind::CargoUplink => uplink(draw, art),
         ModuleKind::Homestead => homestead(draw, art, false, false),
+        ModuleKind::Refinery => refinery(draw, art, true, true),
+        ModuleKind::Workshop => workshop(draw, art),
     }
 }

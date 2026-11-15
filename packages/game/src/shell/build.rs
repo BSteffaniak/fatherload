@@ -312,5 +312,8 @@ fn service_message(kind: ModuleKind, service: ModuleService) -> String {
             "Home sweet home. The rescue crew will bring you here.".to_owned()
         }
         ModuleService::CycleAccess => "Claim access changed.".to_owned(),
+        ModuleService::RefineOre => "Ore tipped into the crusher. Leave it to cook.".to_owned(),
+        ModuleService::CollectRefined => "Refined value banked.".to_owned(),
+        ModuleService::Craft(explosive) => format!("Pressed: one {}.", explosive.name()),
     }
 }

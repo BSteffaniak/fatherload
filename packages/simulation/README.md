@@ -724,12 +724,19 @@ terrain tiles.
   back wall and a passable front `Fixture` (door, lift ladder, lamp, decorations).
 - **Modules** (`ModuleKind`, `PlacedModule`): footprints placed by their bottom-left tile, open
   tiles on solid ground, inside one claim. Storage chest, crew quarters, generator, fuel station,
-  repair bay, cargo uplink and the surface-only homestead; later ones unlock by band
+  repair bay, cargo uplink, refinery, workshop and the surface-only homestead; later ones unlock by band
   (`ModuleKind::unlock_band`). Each claim's power (`Bases::power`, `WorldState::claim_power`) is
   its beacon's cell plus generators (geothermal: more in hotter bands); modules draw power in
   placement order (`WorldState::base_module_powered`). Powered fuel stations synthesize fuel on a
   fixed schedule (`advance_bases`, every `FUEL_SYNTH_PERIOD_MILLIS`); refuelling from a station
-  is free, supply drops cost credits (`supply_drop_offer`).
+  is free, supply drops cost credits (`supply_drop_offer`). Powered refineries refine the ore
+  left in them on the same schedule (`REFINE_PER_PERIOD` lumps, each worth
+  `REFINERY_BONUS_PERCENT` more than the market pays) into credits collected with
+  `CollectRefined`; workshops press hopper blocks plus a few credits into explosives
+  (`ModuleService::Craft`, `workshop_recipe`: bomb, C4, mining charge). A floor tile holding up a
+  module or a standing fixture does not come down (`BuildRefusal::Supporting`). Not built yet
+  (plan §7 core list): the turret (waits for WP-ENEMIES targets), the garage module (the paint bay
+  lives in the town's Repair Garage interior) and the teleport pad (later).
 - **Commands.** `PlayerCommand::Build(BuildCommand)`: `Place { item, at, facing }`,
   `Remove { at }` (module, else solid piece, else front fixture, else back wall, with refunds:
   blocks back to the hopper and spilled as item drops when it is full, 75 % of a module's

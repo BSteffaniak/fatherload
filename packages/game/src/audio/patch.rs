@@ -205,6 +205,8 @@ patches! {
     StorageStow => "storage_stow",
     UplinkBeam => "uplink_beam",
     HomeSet => "home_set",
+    RefineryLoad => "refinery_load",
+    WorkshopCraft => "workshop_craft",
 }
 
 /// Playback metadata of a patch.
@@ -450,9 +452,12 @@ impl Patch {
             Self::BuildPlace | Self::BuildRemove => {
                 PatchInfo::new(Impact).instances(3).jitter(0.06, 1.0)
             }
-            Self::ModuleBuilt | Self::StorageStow | Self::FuelPump | Self::RepairWeld => {
-                PatchInfo::new(Feedback).instances(2).jitter(0.03, 0.5)
-            }
+            Self::ModuleBuilt
+            | Self::StorageStow
+            | Self::FuelPump
+            | Self::RepairWeld
+            | Self::RefineryLoad
+            | Self::WorkshopCraft => PatchInfo::new(Feedback).instances(2).jitter(0.03, 0.5),
             Self::ClaimStake | Self::SupplyDrop | Self::UplinkBeam | Self::HomeSet => {
                 PatchInfo::new(Feedback)
                     .instances(1)
@@ -564,6 +569,8 @@ impl Patch {
             Self::StorageStow => storage_stow(rng),
             Self::UplinkBeam => uplink_beam(rng),
             Self::HomeSet => home_set(rng),
+            Self::RefineryLoad => refinery_load(rng),
+            Self::WorkshopCraft => workshop_craft(rng),
         }
     }
 }
@@ -2740,6 +2747,50 @@ fn home_set(rng: &mut Rng) -> Vec<f32> {
     mix_into(&mut out, &bell(1_567.98, 2.0, 0.8, 0.8), 0.25, 0.2);
     out
 }
+
+/// Ore tipped into a refinery: a rattling slide of rocks, the crusher's grinding bite and a
+/// furnace whoomph.
+fn refinery_load(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for time in scatter(rng, 10, 0.0, 0.35, 1.0) {
+        let pitch = rng.range(500.0, 1_100.0);
+        let rock = clank(rng, pitch, 0.05);
+        let gain = rng.range(0.2, 0.45);
+        mix_into(&mut out, &rock, time, gain);
+    }
+    let mut saw = Osc::new(Wave::Saw);
+    let mut filter = Svf::new(FilterMode::LowPass, 600.0, 1.2);
+    let grind = render(0.45, |t| {
+        filter.process(saw.next(70.0 + 8.0 * (t * 40.0).sin()))
+            * segments(t, &[(0.0, 0.0), (0.05, 0.5), (0.35, 0.4), (0.45, 0.0)])
+    });
+    mix_into(&mut out, &grind, 0.3, 0.55);
+    let whoomph = burst(
+        rng.next_u64(),
+        NoiseColor::Brown,
+        FilterMode::LowPass,
+        420.0,
+        0.8,
+        0.3,
+    );
+    mix_into(&mut out, &whoomph, 0.7, 0.7);
+    out
+}
+
+/// A workshop press: three hammer strikes on an anvil and a satisfied latch.
+fn workshop_craft(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for strike in 0..3_u8 {
+        let time = f32::from(strike) * 0.16;
+        let pitch = 1_480.0 * rng.jitter(0.03);
+        mix_into(&mut out, &clank(rng, pitch, 0.18), time, 0.6);
+        mix_into(&mut out, &thump(260.0, 170.0, 0.06, 1.5), time, 0.5);
+    }
+    mix_into(&mut out, &clank(rng, 2_100.0, 0.06), 0.56, 0.35);
+    mix_into(&mut out, &bell(1_760.0, 2.0, 0.6, 0.3), 0.62, 0.2);
+    out
+}
+
 
 
 #[cfg(test)]

@@ -53,6 +53,16 @@ pub const BASE_SCENES: &[Scene] = &[
         setup: claim_preview,
     },
     Scene {
+        name: "base_refinery_workshop",
+        summary: "An underground works: a refinery cooking ore beside two generators, and a workshop bench",
+        setup: |stage| works(stage, false),
+    },
+    Scene {
+        name: "base_workshop_menu",
+        summary: "The workshop's menu: pressing hopper blocks into bombs, C4 and mining charges",
+        setup: |stage| works(stage, true),
+    },
+    Scene {
         name: "base_coop_split",
         summary: "Two crewmates in split-screen: one building walls in build mode, one at the generator",
         setup: coop_split,
@@ -482,6 +492,135 @@ fn build_outpost(world: &mut WorldState, player: PlayerId) {
             },
         );
     }
+}
+
+/// A second underground claim fitted out for industry: two generators run a refinery that is
+/// cooking a load of ore, next to a workshop bench; `menu` opens the workshop's menu.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the works are laid out piece by piece"
+)]
+fn works(stage: &mut SceneStage<'_>, menu: bool) {
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        for y in FLOOR - 10..FLOOR + 3 {
+            for x in ROOM_LEFT - 4..ROOM_RIGHT + 5 {
+                let _ = world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x, y }, TileKind::Stone);
+            }
+        }
+        carve(world, ROOM_LEFT + 2..ROOM_RIGHT - 1, FLOOR - 6..FLOOR);
+        reveal(
+            world,
+            player,
+            ROOM_LEFT - 8..ROOM_RIGHT + 8,
+            FLOOR - 12..FLOOR + 4,
+        );
+        unlock_depth(world);
+        if let Some(rig) = world.player_mut(player) {
+            rig.credits = 50_000;
+            rig.stow(ItemKind::Block(BlockKind::Stone), 60);
+            rig.cargo_bay
+                .add(fatherload_simulation::terrain::MineralKind::Gold, 6);
+            rig.cargo_bay
+                .add(fatherload_simulation::terrain::MineralKind::Silver, 4);
+        }
+        let row = FLOOR - 1;
+        build(
+            world,
+            player,
+            (107, row),
+            place(Buildable::Module(ModuleKind::Beacon), 107, row),
+        );
+        for y in FLOOR - 5..FLOOR {
+            for x in ROOM_LEFT + 3..ROOM_RIGHT - 2 {
+                let block = if y == FLOOR - 5 {
+                    BlockKind::HardRock
+                } else {
+                    BlockKind::Clay
+                };
+                build(
+                    world,
+                    player,
+                    (x, row),
+                    place(Buildable::BackWall(block), x, y),
+                );
+            }
+        }
+        let steps = [
+            (
+                (101, row),
+                place(Buildable::Module(ModuleKind::Generator), 99, row),
+            ),
+            (
+                (103, row),
+                place(Buildable::Module(ModuleKind::Generator), 101, row),
+            ),
+            (
+                (110, row),
+                place(Buildable::Module(ModuleKind::Refinery), 109, row),
+            ),
+            (
+                (113, row),
+                place(Buildable::Module(ModuleKind::Workshop), 113, row),
+            ),
+            (
+                (106, row),
+                place(Buildable::Fixture(Fixture::Crates), 105, row),
+            ),
+            (
+                (104, row - 2),
+                place_facing(
+                    Buildable::Fixture(Fixture::Light),
+                    104,
+                    FLOOR - 6,
+                    Facing::Up,
+                ),
+            ),
+            (
+                (110, row - 2),
+                place_facing(
+                    Buildable::Fixture(Fixture::Light),
+                    111,
+                    FLOOR - 6,
+                    Facing::Up,
+                ),
+            ),
+            (
+                (106, row),
+                place(Buildable::Fixture(Fixture::Banner), 107, FLOOR - 4),
+            ),
+        ];
+        for (from, command) in steps {
+            build(world, player, from, command);
+        }
+        if let Some(refinery) = module_id(world, ModuleKind::Refinery) {
+            build(
+                world,
+                player,
+                (110, row),
+                BuildCommand::Use {
+                    structure: refinery,
+                    service: fatherload_simulation::base::ModuleService::RefineOre,
+                },
+            );
+        }
+        // Let a few lumps cook so ingots stack in the moulds.
+        for _ in 0..(60 * 7) {
+            let tick = world.simulation_tick();
+            let _ = world.simulate_tick(tick, &TickInputs::default());
+        }
+        stand(world, player, if menu { 114 } else { 107 }, row);
+    });
+    if menu {
+        let workshop = module_id(stage.game.world(), ModuleKind::Workshop);
+        let seat = stage.seat(0);
+        seat.base_module = workshop;
+        seat.modal = Some(ModalScreen::BaseModule);
+        seat.selected_menu_item = 1;
+    }
+    stage.settle(50);
 }
 
 /// The claim beacon selected on open meadow: the claim it would stake.
