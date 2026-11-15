@@ -528,12 +528,21 @@ fn tone_filter(character: &Character, tone: Tone, text: &str, rng: &mut PeopleRn
     }
 }
 
-/// "Well..." becomes "W-well...".
+/// "Well..." becomes "W-well...", "I think" becomes "I-I think"; a line that already
+/// stammers is left alone.
 fn stammer(text: &str) -> String {
     let mut chars = text.chars();
-    match chars.next() {
-        Some(first) if first.is_ascii_alphabetic() && !text.starts_with("H-") => {
-            format!("{first}-{}{}", first.to_ascii_lowercase(), chars.as_str())
+    let first = chars.next();
+    let rest = chars.as_str();
+    match first {
+        Some(first) if first.is_ascii_alphabetic() && !rest.starts_with('-') => {
+            let pronoun_i = first == 'I' && !rest.starts_with(|c: char| c.is_ascii_alphabetic());
+            let repeat = if pronoun_i {
+                first
+            } else {
+                first.to_ascii_lowercase()
+            };
+            format!("{first}-{repeat}{rest}")
         }
         _ => text.to_owned(),
     }
@@ -653,5 +662,8 @@ mod tests {
     fn stammer_doubles_the_first_letter() {
         assert_eq!(stammer("Well, hello."), "W-well, hello.");
         assert_eq!(stammer("*hums*"), "*hums*");
+        assert_eq!(stammer("I've been busy."), "I-I've been busy.");
+        assert_eq!(stammer("Ideas, mostly."), "I-ideas, mostly.");
+        assert_eq!(stammer("O-oh, hi."), "O-oh, hi.");
     }
 }

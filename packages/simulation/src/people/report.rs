@@ -204,10 +204,10 @@ fn profile(
     );
     let _ = writeln!(
         out,
-        "   look: {}. Voice: {} (with a {} streak). Offers {}.",
+        "   look: {}. Voice: {} (with {} streak). Offers {}.",
         character.appearance.describe(),
         character.tone.name(),
-        character.secondary_tone.name(),
+        super::dialogue::grammar::with_article(character.secondary_tone.name()),
         character.offer.name()
     );
     let _ = writeln!(

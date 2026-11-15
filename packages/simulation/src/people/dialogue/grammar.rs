@@ -52,6 +52,12 @@ fn article(word: &str) -> &'static str {
     if vowel_sound { "an" } else { "a" }
 }
 
+/// `word` with its indefinite article ("an earnest", "a gruff").
+#[must_use]
+pub fn with_article(word: &str) -> String {
+    format!("{} {word}", article(word))
+}
+
 /// One `{...}` reference: (variable, capitalise, article).
 fn parse_ref(inner: &str) -> (&str, bool, Option<bool>) {
     let (article, name) = match (inner.strip_prefix("a "), inner.strip_prefix("A ")) {
