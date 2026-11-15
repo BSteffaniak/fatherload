@@ -40,12 +40,16 @@ pub mod index;
 mod regions;
 #[cfg(test)]
 mod tests;
+mod villages;
 mod window;
 
 use std::sync::Arc;
 
 pub use assemble::CHUNK_TILES;
-pub use base::{MAX_SURFACE_DIP_ROWS, TOWN_FLAT_FIRST_COLUMN, TOWN_FLAT_LAST_COLUMN, surface_row};
+pub use base::{
+    MAX_SURFACE_DIP_ROWS, TOWN_FLAT_FIRST_COLUMN, TOWN_FLAT_LAST_COLUMN, raw_surface_row,
+    surface_row, village_ground_row,
+};
 pub use regions::{POI_REGION_WIDTH, TRANSITION_REGION_WIDTH};
 
 pub use cave_biomes::{BiomeCell, CAVE_REGION, CaveBiome, CaveRegion};
@@ -197,6 +201,44 @@ pub fn cave_at(settings: &WorldSettings, position: TilePosition) -> Option<CaveS
 #[must_use]
 pub fn caves_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<Arc<CaveRegion>> {
     cave_biomes::caves_in(&ctx(settings), rect)
+}
+
+/// The village `id` of a streamed world with villages (see [`crate::village::village`]).
+#[must_use]
+pub fn village(
+    settings: &WorldSettings,
+    id: crate::people::VillageId,
+) -> Option<Arc<crate::village::Village>> {
+    villages::village(settings, id)
+}
+
+/// Every village whose centre column lies in `first..=last` (unordered).
+#[must_use]
+pub fn villages_between(
+    settings: &WorldSettings,
+    first: i32,
+    last: i32,
+) -> Vec<Arc<crate::village::Village>> {
+    villages::villages_between(settings, first, last)
+}
+
+/// The village whose area contains `position`.
+#[must_use]
+pub fn village_containing(
+    settings: &WorldSettings,
+    position: TilePosition,
+) -> Option<Arc<crate::village::Village>> {
+    villages::village_containing(settings, position)
+}
+
+/// The story-worthy places near village `id` (centre column `center`), memoized.
+#[must_use]
+pub fn village_facts(
+    settings: &WorldSettings,
+    id: crate::people::VillageId,
+    center: i32,
+) -> Arc<Vec<crate::people::WorldFact>> {
+    villages::village_facts(settings, id, center)
 }
 
 /// Forgets every memoized region and chunk (tests).

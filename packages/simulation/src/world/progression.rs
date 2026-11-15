@@ -206,7 +206,8 @@ impl WorldState {
         let payout = mineral_payout.saturating_add(artifact_payout);
         let payout = payout.saturating_add(
             payout.saturating_mul(
-                self.quest_rebate_percent(player_id, crate::quest::QuestGiver::Kade),
+                self.quest_rebate_percent(player_id, crate::quest::QuestGiver::Kade)
+                    + self.sale_bonus_percent(player_id),
             ) / 100,
         );
         if payout == 0 {

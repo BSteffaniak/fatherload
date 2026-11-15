@@ -862,6 +862,8 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::QuestDesk => quests::draw_quest_desk(draw, ui),
         ModalScreen::QuestLog => quests::draw_quest_log(draw, ui),
         ModalScreen::Garage => super::garage::draw_garage(draw, ui),
+        ModalScreen::VillageCounter => counters::draw_village_counter(draw, ui),
+        ModalScreen::VillageTalk => counters::draw_village_talk(draw, ui),
     }
 }
 

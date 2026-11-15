@@ -133,6 +133,7 @@ impl WorldState {
         let mechanic_level = self.mechanic_levels.get(&player_id).copied().unwrap_or(0);
         let immune = self.damage_immune();
         let god_mode = self.is_test_mode();
+        let thrift = self.player_blessing(player_id) == Some(crate::village::BlessingKind::Thrift);
         let player = self.players.get_mut(&player_id)?;
         let grounded = authoritative_player_collides(&self.terrain, player.x, player.y + 2.0);
         let mut effective_cargo_capacity = player.cargo_capacity;
@@ -239,6 +240,12 @@ impl WorldState {
             }
             if parts.contains(&RigPartKind::TitanDrill) {
                 efficiency *= 1.08;
+            }
+            if thrift {
+                // A shrine's Blessing of Thrift.
+                #[allow(clippy::cast_precision_loss, reason = "a small percentage")]
+                let share = crate::village::services::THRIFT_FUEL_PERCENT as f32 / 100.0;
+                efficiency *= share;
             }
             player.fuel = quantize_simulation_scalar(
                 (AUTHORITATIVE_FUEL_BURN_PER_SECOND * efficiency)

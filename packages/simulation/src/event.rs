@@ -205,6 +205,17 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    /// A player's rig entered a village for the first time.
+    VillageDiscovered {
+        player_id: PlayerId,
+        village: crate::village::VillageId,
+    },
+    /// A player bought something at a village counter.
+    VillageServiceUsed {
+        player_id: PlayerId,
+        village: crate::village::VillageId,
+        service: crate::village::VillageService,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -255,6 +266,15 @@ pub(crate) const fn gameplay_event_for_applied_command(
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {
             GameplayEventKind::RigCustomized { player_id }
         }
+        PlayerCommand::Service(crate::service::SessionServiceRequest::Village {
+            village,
+            service,
+            ..
+        }) => GameplayEventKind::VillageServiceUsed {
+            player_id,
+            village: *village,
+            service: *service,
+        },
         PlayerCommand::Refuel
         | PlayerCommand::Repair
         | PlayerCommand::BuyUpgrade { .. }

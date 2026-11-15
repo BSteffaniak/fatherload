@@ -446,6 +446,7 @@ impl TargetSpec {
                 FeatureKind::PrefabSlot => "quiet hollow",
                 FeatureKind::PointOfInterest => "site",
                 FeatureKind::Cave => "cave",
+                FeatureKind::Village => "village",
             },
         }
     }

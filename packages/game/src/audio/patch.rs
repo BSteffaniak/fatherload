@@ -165,6 +165,9 @@ patches! {
     StalactiteCrack => "stalactite_crack",
     CacheOpen => "cache_open",
     MushroomBounce => "mushroom_bounce",
+    // Wave 2 (villages): appended so earlier patches keep their variation seeds.
+    VillageArrival => "village_arrival",
+    ShrineChime => "shrine_chime",
 }
 
 /// Playback metadata of a patch.
@@ -270,6 +273,10 @@ impl Patch {
             | Self::SalvageOpen
             | Self::SprayPaint
             | Self::CacheOpen => PatchInfo::new(Feedback).instances(2).jitter(0.02, 0.5),
+            Self::ShrineChime => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.0, 0.3),
             Self::BombArm | Self::Deploy | Self::ThrustIgnite => {
                 PatchInfo::new(Feedback).instances(2)
             }
@@ -310,12 +317,14 @@ impl Patch {
                 .instances(2)
                 .send(0.35)
                 .jitter(0.06, 1.0),
-            Self::PoiDiscovered | Self::VaultFanfare | Self::Milestone | Self::Rescue => {
-                PatchInfo::new(Big)
-                    .instances(1)
-                    .jitter(0.0, 0.0)
-                    .ducking(0.35)
-            }
+            Self::PoiDiscovered
+            | Self::VaultFanfare
+            | Self::Milestone
+            | Self::Rescue
+            | Self::VillageArrival => PatchInfo::new(Big)
+                .instances(1)
+                .jitter(0.0, 0.0)
+                .ducking(0.35),
             Self::ThrowWhoosh | Self::ChargeStick | Self::FireCrackle => {
                 PatchInfo::new(Feedback).instances(3).jitter(0.06, 1.0)
             }
@@ -397,6 +406,8 @@ impl Patch {
             Self::Milestone => milestone(rng),
             Self::Rescue => rescue(rng),
             Self::SprayPaint => spray_paint(rng),
+            Self::VillageArrival => village_arrival(rng),
+            Self::ShrineChime => shrine_chime(rng),
             Self::ThrowWhoosh => throw_whoosh(rng),
             Self::ChargeStick => charge_stick(rng),
             Self::Detonator => detonator(rng),
@@ -1507,6 +1518,40 @@ fn cave_discovered(rng: &mut Rng) -> Vec<f32> {
     out
 }
 
+/// Arriving in a village: a warm plucked major arpeggio over a soft reed pad, with a
+/// welcoming bell on top (friendlier and rounder than the POI discovery).
+fn village_arrival(rng: &mut Rng) -> Vec<f32> {
+    let gate = 0.9;
+    let env = Adsr::new(0.12, 0.4, 0.6, 0.9);
+    let pad_notes = [196.0, 246.94, 293.66];
+    let mut pads: Vec<Osc> = pad_notes
+        .iter()
+        .map(|_| Osc::new(Wave::Triangle).with_phase(rng.unit()))
+        .collect();
+    let mut filter = Svf::new(FilterMode::LowPass, 1_400.0, 0.7);
+    let mut out = render(gate + 1.0, |t| {
+        let raw: f32 = pads
+            .iter_mut()
+            .zip(pad_notes)
+            .map(|(osc, note)| osc.next(note) * env.level(t, gate))
+            .sum::<f32>()
+            / 3.0;
+        filter.run(raw, 900.0 + 300.0 * sine(t, 0.5).abs(), 0.7)
+    });
+    for (index, note) in [392.0_f32, 493.88, 587.33, 783.99].into_iter().enumerate() {
+        #[allow(clippy::cast_precision_loss, reason = "four notes")]
+        let offset = index as f32 * 0.11;
+        mix_into(&mut out, &bell(note, 2.0, 1.2, 0.9), offset, 0.32);
+    }
+    mix_into(&mut out, &bell(1_174.7, 3.5, 1.4, 1.6), 0.5, 0.22);
+    let mut echo = Delay::new(0.32).with_damping(0.5);
+    out.resize(out.len() + samples_for(0.5), 0.0);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.25, 0.3) * 0.3;
+    }
+    out
+}
+
 /// A stalactite breaking off: a sharp stony crack, grit trickling and a short ring.
 fn stalactite_crack(rng: &mut Rng) -> Vec<f32> {
     let mut out = burst(
@@ -1555,6 +1600,26 @@ fn mushroom_bounce(rng: &mut Rng) -> Vec<f32> {
         osc.next(frequency) * perc(t, 0.004, 0.32)
     });
     mix_into(&mut out, &boing, 0.01, 0.55);
+    out
+}
+
+/// A shrine blessing: three high, slow temple bells, shimmering into a long echo.
+fn shrine_chime(rng: &mut Rng) -> Vec<f32> {
+    let mut out = vec![0.0; samples_for(2.4)];
+    let detune = 1.0 + (rng.unit() - 0.5) * 0.004;
+    for (index, (note, gain)) in [(1_046.5_f32, 0.4), (1_318.5, 0.32), (1_568.0, 0.28)]
+        .into_iter()
+        .enumerate()
+    {
+        #[allow(clippy::cast_precision_loss, reason = "three notes")]
+        let offset = index as f32 * 0.22;
+        mix_into(&mut out, &bell(note * detune, 3.5, 1.8, 1.8), offset, gain);
+    }
+    let mut echo = Delay::new(0.41).with_damping(0.35);
+    out.resize(out.len() + samples_for(0.8), 0.0);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.4, 0.35) * 0.4;
+    }
     out
 }
 

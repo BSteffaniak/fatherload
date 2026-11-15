@@ -28,6 +28,7 @@ mod garage;
 pub mod hopper;
 mod quests;
 mod test_mode;
+mod village;
 mod world_setup;
 
 pub use garage::{GARAGE_COUNTER_ROW, GarageDraft, GarageRow, item_available};
@@ -35,6 +36,10 @@ pub use quests::{
     DeskRow, Fanfare, FanfareKind, desk_rows, has_quest_tab, log_quests, tracked_quest,
 };
 pub use test_mode::WARP_BANDS;
+pub use village::{
+    BANNER_TICKS, SeatVillage, TalkView, VILLAGE_COUNTER_X, VillageBanner, VillageInterior,
+    building_title, counter_rows, interior_village, room_residents,
+};
 
 pub use world_setup::{SetupOutcome, SetupPurpose, WorldSetup, random_world_seed};
 
@@ -100,6 +105,11 @@ pub enum ModalScreen {
     QuestLog,
     /// The Repair Garage's paint bay (rig cosmetics); its draft is [`SeatUi::garage`].
     Garage,
+    /// A village building's counter: its deals and a word with the keeper
+    /// ([`SeatUi::village`]).
+    VillageCounter,
+    /// A conversation with a village resident ([`SeatVillage::talk`]).
+    VillageTalk,
 }
 
 impl ModalScreen {
@@ -332,6 +342,10 @@ pub enum SoundCue {
     StalactiteCrack,
     /// A cave cache drilled open.
     CacheOpened,
+    /// A rig arrived in a village for the first time.
+    VillageArrival,
+    /// A shrine blessing took hold.
+    ShrineBlessing,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -677,6 +691,8 @@ pub struct SeatUi {
     pub garage: Option<GarageDraft>,
     /// The explosive the seat's bomb button deploys, and which way its rig faces for throws.
     pub explosives: crate::input_mapping::ExplosiveSelection,
+    /// The village building the seat is inside, its conversation and arrival banner.
+    pub village: SeatVillage,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -710,13 +726,14 @@ impl SeatUi {
             fanfare: None,
             garage: None,
             explosives: crate::input_mapping::ExplosiveSelection::new(),
+            village: SeatVillage::new(),
         }
     }
 
     /// Whether the seat is inside a building.
     #[must_use]
     pub const fn inside(&self) -> bool {
-        self.interior_zone.is_some()
+        self.interior_zone.is_some() || self.village.interior.is_some()
     }
 
     /// Whether a transaction from this seat is waiting for its tick.
@@ -730,6 +747,8 @@ impl SeatUi {
     fn reset_outdoors(&mut self) {
         self.modal = None;
         self.interior_zone = None;
+        self.village.interior = None;
+        self.village.talk = None;
         self.selected_menu_item = 0;
         self.service_animation = None;
         self.service_animation_seconds = 0.0;
@@ -805,7 +824,7 @@ impl SeatUi {
         if input.interact {
             if let Some(zone) = ctx.current_zone() {
                 self.enter_interior(zone, ctx.device, cues);
-            } else {
+            } else if !self.try_enter_village(ctx, cues) {
                 "No surface service here.".clone_into(&mut self.message);
             }
         }
@@ -837,6 +856,9 @@ impl SeatUi {
     ) -> bool {
         if self.handle_modal(input, ctx, cues, requests) {
             return false;
+        }
+        if self.village.interior.is_some() {
+            return self.handle_village_interior(input, delta_seconds, ctx, cues);
         }
         if input.pause {
             return true;
@@ -916,6 +938,13 @@ impl SeatUi {
         };
         if modal == ModalScreen::Garage {
             self.handle_garage(input, ctx, cues, requests);
+            return true;
+        }
+        if matches!(
+            modal,
+            ModalScreen::VillageCounter | ModalScreen::VillageTalk
+        ) {
+            self.handle_village_modal(modal, input, ctx, cues, requests);
             return true;
         }
         if input.backs_out() {
@@ -1103,7 +1132,9 @@ impl SeatUi {
             | ModalScreen::WorldSetup
             | ModalScreen::WarpToLayer
             | ModalScreen::Help
-            | ModalScreen::Garage => None,
+            | ModalScreen::Garage
+            | ModalScreen::VillageCounter
+            | ModalScreen::VillageTalk => None,
             ModalScreen::Inventory => {
                 // The hopper rows (WP-DROPS): toggle collecting, dump blocks.
                 if let Some(player) = ctx.player()
@@ -1229,6 +1260,11 @@ impl SeatUi {
         };
         let spent = pending.credits.saturating_sub(player.credits);
         let earned = player.credits.saturating_sub(pending.credits);
+        if let Some((message, cue)) = self.village_resolved(request, ctx, spent, earned) {
+            self.message = message;
+            cues.push(cue);
+            return;
+        }
         let mut cue = SoundCue::Upgrade;
         self.message = match request {
             SessionServiceRequest::Refuel { .. } => {
@@ -1367,7 +1403,8 @@ impl SeatUi {
             }
             SessionServiceRequest::AcceptQuest { .. }
             | SessionServiceRequest::TurnInQuest { .. }
-            | SessionServiceRequest::AbandonQuest { .. } => return,
+            | SessionServiceRequest::AbandonQuest { .. }
+            | SessionServiceRequest::Village { .. } => return,
             SessionServiceRequest::CustomizeRig { cosmetics } => {
                 // The spray can plays from the world's `RigCustomized` event.
                 self.service_animation = Some(ServiceAnimation::Paint);
@@ -1703,6 +1740,7 @@ impl ShellState {
                 for seat in 0..self.seats.len() {
                     let input = inputs.get(seat).copied().unwrap_or_default();
                     let seat_ctx = ctx.seat(seat, self.prompt_device(seat));
+                    self.seats[seat].track_village(seat_ctx, self.update_ticks);
                     let paused = self.seats[seat].update(
                         input,
                         delta_seconds,
@@ -2301,6 +2339,9 @@ const fn unavailable_message(request: SessionServiceRequest) -> &'static str {
         SessionServiceRequest::SellBlocks => "The block hopper is empty.",
         SessionServiceRequest::CustomizeRig { .. } => {
             "The paint bay refused that job: a part of it is still locked."
+        }
+        SessionServiceRequest::Village { .. } => {
+            "Not today: short of credits, nothing they'll take, or nothing new to offer."
         }
         _ => "Not enough credits or materials, or the service is locked.",
     }

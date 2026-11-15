@@ -39,6 +39,7 @@ pub mod surface;
 pub mod terrain;
 pub mod test_mode;
 pub mod tick;
+pub mod village;
 pub mod world;
 pub mod worldgen;
 

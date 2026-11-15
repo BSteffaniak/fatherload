@@ -462,6 +462,7 @@ fn preview_image(
                 FeatureKind::Motherlode => palette::GOLD,
                 FeatureKind::ArtifactBed => palette::PINK,
                 FeatureKind::Chamber => palette::ICE,
+                FeatureKind::Village => palette::LIME,
                 FeatureKind::PointOfInterest => feature.poi_kind().map_or(palette::BONE, poi_color),
                 FeatureKind::Cave => feature
                     .detail

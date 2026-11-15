@@ -7,6 +7,7 @@
 use crate::{
     surface::building_foundation_at,
     terrain::TileKind,
+    village::placement::{self, FLATTEN_FADE_COLUMNS},
     worldgen::{
         TOWN_CLEAN_TOPSOIL_MARGIN, WorldSettings, caves, contrast_threshold,
         noise::{NOISE_MAX, fractal_noise, line_noise, value_noise},
@@ -32,12 +33,43 @@ const SALT_SURFACE: u64 = 0x5_5ACE_0001;
 
 /// The first ground row of column `x` of a streamed world (the surface heightmap hook).
 ///
-/// Flat at [`SKY_ROWS`] across the town ([`TOWN_FLAT_FIRST_COLUMN`] to
-/// [`TOWN_FLAT_LAST_COLUMN`]); elsewhere a gentle placeholder swell up to
-/// [`MAX_SURFACE_DIP_ROWS`] lower. Surface biomes (wave 2) replace the swell; the rest of the
-/// generator only reads this function, so the town and spawn stay fixed whatever it returns.
+/// The raw heightmap ([`raw_surface_row`]) with village sites flattened on worlds that have
+/// villages: across a village's span the ground sits at the raw row of the village's centre
+/// column, easing back to the raw heightmap over [`FLATTEN_FADE_COLUMNS`] either side. The rest
+/// of the generator only reads this function, so the town, spawn and villages stay put
+/// whatever the raw heightmap does.
 #[must_use]
 pub const fn surface_row(settings: &WorldSettings, x: i32) -> i32 {
+    let raw = raw_surface_row(settings, x);
+    if !settings.generator.has_villages() {
+        return raw;
+    }
+    match placement::surface_site_at(settings.seed, x, FLATTEN_FADE_COLUMNS) {
+        Some(site) => {
+            let ground = village_ground_row(settings, site.center);
+            let distance = site.distance(x);
+            ground + (raw - ground) * distance / (FLATTEN_FADE_COLUMNS + 1)
+        }
+        None => raw,
+    }
+}
+
+/// The ground row of a surface village centred on column `center`.
+///
+/// The raw heightmap's row there: the village-flattening hook, so a heightmap with hills or
+/// mountains keeps its villages on their own ground level and eases the slopes around them.
+#[must_use]
+pub const fn village_ground_row(settings: &WorldSettings, center: i32) -> i32 {
+    raw_surface_row(settings, center)
+}
+
+/// The raw surface heightmap of a streamed world, before villages flatten their sites.
+///
+/// Flat at [`SKY_ROWS`] across the town ([`TOWN_FLAT_FIRST_COLUMN`] to
+/// [`TOWN_FLAT_LAST_COLUMN`]); elsewhere a gentle placeholder swell up to
+/// [`MAX_SURFACE_DIP_ROWS`] lower. Surface biomes (wave 2) replace the swell here.
+#[must_use]
+pub const fn raw_surface_row(settings: &WorldSettings, x: i32) -> i32 {
     let distance = if x < TOWN_FLAT_FIRST_COLUMN {
         TOWN_FLAT_FIRST_COLUMN - x
     } else if x > TOWN_FLAT_LAST_COLUMN {

@@ -40,6 +40,9 @@ use crate::{
     shell::hopper::{HopperRow, hopper_rows},
 };
 
+mod village;
+pub(super) use village::{draw_village_counter, draw_village_talk};
+
 /// One counter row before it becomes a [`SectionItem`]: what it is, what it costs and why it
 /// may be unavailable.
 struct Offer {

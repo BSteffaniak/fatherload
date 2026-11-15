@@ -49,10 +49,14 @@ pub enum FeatureKind {
     /// A cave ecosystem ([`crate::cave::CaveKind`], [`super::GeneratorVersion::V6`]); its
     /// detail is [`FeatureDetail::Cave`] and its centre an open tile inside it.
     Cave,
+    /// A village or underground settlement ([`crate::village`]); its detail is
+    /// [`FeatureDetail::Village`]. Only worlds with villages
+    /// ([`super::GeneratorVersion::has_villages`]) have them.
+    Village,
 }
 
 impl FeatureKind {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::LargeCavern,
         Self::Chamber,
         Self::Motherlode,
@@ -62,6 +66,7 @@ impl FeatureKind {
         Self::PrefabSlot,
         Self::PointOfInterest,
         Self::Cave,
+        Self::Village,
     ];
 
     #[must_use]
@@ -76,6 +81,7 @@ impl FeatureKind {
             Self::PrefabSlot => "prefab slot",
             Self::PointOfInterest => "point of interest",
             Self::Cave => "cave",
+            Self::Village => "village",
         }
     }
 }
@@ -142,9 +148,14 @@ pub enum FeatureDetail {
     Mineral(MineralKind),
     Artifact(ArtifactKind),
     Hazard(HazardKind),
-    Transition { upper: Band, lower: Band },
+    Transition {
+        upper: Band,
+        lower: Band,
+    },
     Poi(PoiVariant),
     Cave(CaveKind),
+    /// The village a [`FeatureKind::Village`] feature is.
+    Village(crate::people::VillageId),
 }
 
 impl FeatureDetail {
@@ -273,6 +284,15 @@ impl WorldFeature {
         match self.detail.poi() {
             Some(variant) => Some(variant.kind()),
             None => None,
+        }
+    }
+
+    /// The village, if this feature is one.
+    #[must_use]
+    pub const fn village(&self) -> Option<crate::people::VillageId> {
+        match self.detail {
+            FeatureDetail::Village(id) => Some(id),
+            _ => None,
         }
     }
 }

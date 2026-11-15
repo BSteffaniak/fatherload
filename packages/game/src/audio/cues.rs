@@ -5,6 +5,7 @@ use fatherload_simulation::{
     ExplosiveKind, GameplayEventKind, PlayerId, PoiKind,
     explosive::Deployment,
     item::{ItemCategory, ItemKind},
+    village::VillageService,
 };
 
 use super::patch::Patch;
@@ -111,6 +112,8 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::CaveDiscovered => Patch::CaveDiscovered,
         SoundCue::StalactiteCrack => Patch::StalactiteCrack,
         SoundCue::CacheOpened => Patch::CacheOpen,
+        SoundCue::VillageArrival => Patch::VillageArrival,
+        SoundCue::ShrineBlessing => Patch::ShrineChime,
     }
 }
 
@@ -209,6 +212,14 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::CaveDiscovered { .. } => Some(SoundCue::CaveDiscovered),
         GameplayEventKind::CaveCacheOpened { .. } => Some(SoundCue::CacheOpened),
         GameplayEventKind::StalactiteFell { .. } => Some(SoundCue::StalactiteCrack),
+        // Villages: a welcome on the first visit; at a counter, the shrine's bells and the
+        // cartographer's chart pulse (other deals get the shell's coins / purchase chime).
+        GameplayEventKind::VillageDiscovered { .. } => Some(SoundCue::VillageArrival),
+        GameplayEventKind::VillageServiceUsed { service, .. } => match service {
+            VillageService::Shrine => Some(SoundCue::ShrineBlessing),
+            VillageService::Cartographer => Some(SoundCue::Scanner),
+            _ => None,
+        },
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -278,7 +289,9 @@ mod tests {
             | GameplayEventKind::CollectBlocksToggled { .. }
             | GameplayEventKind::CaveDiscovered { .. }
             | GameplayEventKind::CaveCacheOpened { .. }
-            | GameplayEventKind::StalactiteFell { .. } => {}
+            | GameplayEventKind::StalactiteFell { .. }
+            | GameplayEventKind::VillageDiscovered { .. }
+            | GameplayEventKind::VillageServiceUsed { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -337,6 +350,20 @@ mod tests {
                 credits: 100,
             },
             GameplayEventKind::StalactiteFell { x: 0, y: 0 },
+            GameplayEventKind::VillageDiscovered {
+                player_id,
+                village: fatherload_simulation::village::VillageId(2),
+            },
+            GameplayEventKind::VillageServiceUsed {
+                player_id,
+                village: fatherload_simulation::village::VillageId(2),
+                service: VillageService::Shrine,
+            },
+            GameplayEventKind::VillageServiceUsed {
+                player_id,
+                village: fatherload_simulation::village::VillageId(2),
+                service: VillageService::TradingPost,
+            },
         ];
         events.push(GameplayEventKind::RemoteDetonation { player_id });
         for item in [
@@ -420,6 +447,11 @@ mod tests {
                     player_id: PlayerId::new(1),
                     quest: QuestId(101)
                 },
+                GameplayEventKind::VillageServiceUsed {
+                    player_id: PlayerId::new(1),
+                    village: fatherload_simulation::village::VillageId(2),
+                    service: VillageService::TradingPost,
+                },
             ]
         );
     }
@@ -477,6 +509,8 @@ mod tests {
             SoundCue::CaveDiscovered,
             SoundCue::StalactiteCrack,
             SoundCue::CacheOpened,
+            SoundCue::VillageArrival,
+            SoundCue::ShrineBlessing,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

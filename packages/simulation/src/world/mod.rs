@@ -81,6 +81,9 @@ mod tests;
 #[cfg(test)]
 mod tick_rate_tests;
 mod timing;
+#[cfg(test)]
+mod village_tests;
+mod villages;
 mod visibility;
 
 pub use discovery::{DiscoveredTiles, Discovery};

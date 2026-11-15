@@ -169,6 +169,15 @@ pub enum SessionServiceRequest {
     CustomizeRig {
         cosmetics: Option<RigCosmetics>,
     },
+    /// A deal at a village building's counter ([`crate::village`]): offer `offer` of building
+    /// `building` of `village`. Valid only while the rig stands at that building's door;
+    /// `service` names what the building is (for the event and its sound) and must match it.
+    Village {
+        village: crate::village::VillageId,
+        building: u8,
+        offer: u8,
+        service: crate::village::VillageService,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

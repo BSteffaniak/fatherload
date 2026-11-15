@@ -6,7 +6,7 @@ use crate::{
     },
     worldgen::{
         deposits::{self, mineral_fits, mineral_from_hash},
-        features::TileRect,
+        features::{HazardKind, TileRect},
         noise::{NOISE_MAX, centred, fractal_noise, hash2, ridge, value_noise},
         strata::{SKY_ROWS, nominal_row, scaled_row},
     },
@@ -158,6 +158,31 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
         place_deposits(ctx, &rect, &mut window, &mut chunk_kinds);
+        // Villages last: hazards near them turn back into rock, then their foundations, paving
+        // and halls go in.
+        for stamp in super::villages::stamps_touching(ctx, &rect) {
+            for clear in &stamp.clear {
+                if !clear.intersects(&rect) {
+                    continue;
+                }
+                for position in rect.positions() {
+                    if !clear.contains(position) {
+                        continue;
+                    }
+                    let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                        continue;
+                    };
+                    let kind = chunk_kinds.kinds[slot];
+                    if HazardKind::of_tile(kind).is_some() || matches!(kind, TileKind::Poi(_)) {
+                        chunk_kinds.kinds[slot] =
+                            window.band(position.x, position.y).soft_material();
+                    }
+                }
+            }
+            for &(x, y, kind) in &stamp.cells {
+                chunk_kinds.set(x, y, kind);
+            }
+        }
     }
     chunk_kinds
         .kinds

@@ -166,8 +166,16 @@ impl WorldState {
         damage: f32,
     ) -> Option<PlayerSurvivalSnapshot> {
         let immune = self.damage_immune();
+        let warded = self.player_blessing(player_id) == Some(crate::village::BlessingKind::Ward);
         let player = self.players.get_mut(&player_id)?;
         if !immune {
+            // A shrine's Blessing of the Ward softens every hit.
+            #[allow(clippy::cast_precision_loss, reason = "a small percentage")]
+            let damage = if warded {
+                damage * (crate::village::services::WARD_DAMAGE_PERCENT as f32 / 100.0)
+            } else {
+                damage
+            };
             player.hull = (player.hull - damage.max(0.0)).max(0.0);
         }
         Some(PlayerSurvivalSnapshot {

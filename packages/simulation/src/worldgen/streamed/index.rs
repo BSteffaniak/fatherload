@@ -37,10 +37,13 @@ pub enum Layer {
     Transition = 6,
     Cavern = 7,
     Cave = 8,
+    /// Villages ([`crate::village`]): `rx` is the site index, `ry` 0 the surface village and
+    /// 1 the underground settlement.
+    Village = 9,
 }
 
 impl Layer {
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 9] = [
         Self::Chamber,
         Self::Hazard,
         Self::Poi,
@@ -49,6 +52,7 @@ impl Layer {
         Self::Transition,
         Self::Cavern,
         Self::Cave,
+        Self::Village,
     ];
 
     const fn kind(self) -> FeatureKind {
@@ -61,6 +65,7 @@ impl Layer {
             Self::Transition => FeatureKind::StratumTransition,
             Self::Cavern => FeatureKind::LargeCavern,
             Self::Cave => FeatureKind::Cave,
+            Self::Village => FeatureKind::Village,
         }
     }
 }
@@ -178,6 +183,7 @@ fn layer_features(ctx: &Ctx, layer: Layer, rect: &TileRect, out: &mut Vec<WorldF
                 }
             }
         }
+        Layer::Village => super::villages::layer_features(ctx, rect, out),
         Layer::Transition => {
             for rx in span(rect.min.x, rect.max.x, TRANSITION_REGION_WIDTH) {
                 for index in 0..BOUNDARY_COUNT {
@@ -281,6 +287,7 @@ pub fn feature(ctx: &Ctx, id: FeatureId) -> Option<WorldFeature> {
             .biome
             .as_ref()
             .map(|biome| biome.feature),
+        Layer::Village => super::villages::feature(ctx, rx, ry),
         Layer::Transition => {
             let index = usize::try_from(ry)
                 .ok()

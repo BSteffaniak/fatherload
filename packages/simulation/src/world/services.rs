@@ -71,6 +71,8 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
         | SessionServiceRequest::AcceptExpedition { .. }
         | SessionServiceRequest::AbandonExpedition { .. } => &[SurfaceZone::Headquarters],
         // Every quest giver's counter; the quest's own giver is checked when it resolves.
+        // Village counters, not town buildings (validated by `command_allowed_here`).
+        SessionServiceRequest::Village { .. } => &[],
         SessionServiceRequest::AcceptQuest { .. }
         | SessionServiceRequest::TurnInQuest { .. }
         | SessionServiceRequest::AbandonQuest { .. } => &[
@@ -109,6 +111,14 @@ impl WorldState {
     /// cannot buy, sell or refuel from anywhere in the world.
     #[must_use]
     pub fn command_allowed_here(&self, player_id: PlayerId, command: &PlayerCommand) -> bool {
+        if let PlayerCommand::Service(SessionServiceRequest::Village {
+            village, building, ..
+        }) = command
+        {
+            return self
+                .player_village_building(player_id)
+                .is_some_and(|(at, index)| at.id == *village && index == usize::from(*building));
+        }
         command_service_zones(command).is_none_or(|zones| {
             self.player_surface_zone(player_id)
                 .is_some_and(|zone| zones.contains(&zone))
@@ -129,6 +139,15 @@ impl WorldState {
         }
         if matches!(request, SessionServiceRequest::SellBlocks) {
             return self.sell_blocks(player_id);
+        }
+        if let SessionServiceRequest::Village {
+            village,
+            building,
+            offer,
+            service,
+        } = request
+        {
+            return self.apply_village_deal(player_id, village, building, offer, service);
         }
         let direct = match request {
             SessionServiceRequest::Refuel { .. } => Some(PlayerCommand::Refuel),
@@ -252,7 +271,8 @@ impl WorldState {
                 }
             }
             // Handled by `apply_service_request` or the canonical progression/salvage services.
-            SessionServiceRequest::Refuel { .. }
+            SessionServiceRequest::Village { .. }
+            | SessionServiceRequest::Refuel { .. }
             | SessionServiceRequest::Repair { .. }
             | SessionServiceRequest::SellCargo
             | SessionServiceRequest::SellBlocks

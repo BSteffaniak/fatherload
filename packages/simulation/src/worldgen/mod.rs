@@ -78,7 +78,9 @@ pub enum GeneratorVersion {
     V5,
     /// V5 plus Caves 2.0 ([`crate::cave`]): cave ecosystems (grand caverns, crystal geodes,
     /// flooded caves, lava tubes, fungal grottos, worm burrows, ancient ruins, chasms and cave
-    /// networks) placed per region with their own tiles, light, loot and critters.
+    /// networks) placed per region with their own tiles, light, loot and critters; plus villages ([`crate::village`]): surface villages every ~400-800 columns each way
+    /// from town (on flattened ground, see [`streamed::surface_row`]) and rare underground
+    /// settlements carved into the strata, all regional features ([`FeatureKind::Village`]).
     V6,
 }
 
@@ -121,6 +123,13 @@ impl GeneratorVersion {
     /// tiles, water, light, loot and critters.
     #[must_use]
     pub const fn has_cave_biomes(self) -> bool {
+        matches!(self, Self::V6)
+    }
+
+    /// Whether worlds of this generator have villages ([`crate::village`]). The single switch
+    /// for every village rule (placement, flattened ground, stamped tiles, feature index).
+    #[must_use]
+    pub const fn has_villages(self) -> bool {
         matches!(self, Self::V6)
     }
 

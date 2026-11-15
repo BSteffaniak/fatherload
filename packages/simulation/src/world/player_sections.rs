@@ -4,7 +4,7 @@
 //! |---|---|---|
 //! | [`PlayerRig`]: pose, velocity, fuel, hull | per tick | everyone it is relevant to |
 //! | [`RigBuild`]: the upgrade levels drawn on a rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and its cosmetics | on-change [`super::SectionKey::RigBuild`] | everyone |
-//! | [`PlayerInventory`]: cargo bay, block hopper, credits, other upgrades, kits, debt, insurance, POI journal, quest log, cosmetic unlocks | on-change [`super::SectionKey::Loadout`] | the owner only |
+//! | [`PlayerInventory`]: cargo bay, block hopper, credits, other upgrades, kits, debt, insurance, POI journal, quest log, cosmetic unlocks, village journal | on-change [`super::SectionKey::Loadout`] | the owner only |
 //!
 //! [`split_player`] destructures the whole [`Player`] without `..`, so a new player field fails
 //! to compile until it is assigned to one of the parts.
@@ -21,6 +21,7 @@ use crate::{
     poi::PoiJournal,
     protection::HazardGear,
     quest::QuestLog,
+    village::VillageJournal,
 };
 
 /// The per-tick parts of a [`Player`].
@@ -99,6 +100,9 @@ pub struct PlayerInventory {
     /// Cosmetic items earned on top of the starter set.
     #[serde(default)]
     pub cosmetic_unlocks: CosmeticUnlocks,
+    /// Villages visited and charted, and an active shrine blessing.
+    #[serde(default)]
+    pub villages: VillageJournal,
 }
 
 /// Splits a player into its per-tick, public and private parts (exhaustive: every field goes to
@@ -146,6 +150,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         quests,
         cosmetics,
         cosmetic_unlocks,
+        villages,
     } = player.clone();
     (
         PlayerRig {
@@ -193,6 +198,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             journal,
             quests,
             cosmetic_unlocks,
+            villages,
         },
     )
 }
@@ -245,6 +251,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         journal,
         quests,
         cosmetic_unlocks,
+        villages,
     } = inventory;
     Player {
         x,
@@ -287,6 +294,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         quests,
         cosmetics,
         cosmetic_unlocks,
+        villages,
     }
 }
 

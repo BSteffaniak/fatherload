@@ -385,6 +385,7 @@ impl WorldState {
         self.track_cave_discoveries(&mut output);
         self.advance_quests(next_tick, &quest_notes, &mut output);
         self.reveal_tiles_near_players();
+        self.discover_villages(&mut output);
         self.apply_test_mode_refills();
         output.terrain_ops = self.terrain.finish_journal();
         self.wake_entities_near(&output.terrain_ops);

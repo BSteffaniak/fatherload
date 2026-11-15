@@ -137,6 +137,8 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::CaveDiscovered { player_id, .. } => (70, Some(player_id)),
         GameplayEventKind::CaveCacheOpened { player_id, .. } => (71, Some(player_id)),
         GameplayEventKind::StalactiteFell { .. } => (72, None),
+        GameplayEventKind::VillageDiscovered { player_id, .. } => (45, Some(player_id)),
+        GameplayEventKind::VillageServiceUsed { player_id, .. } => (46, Some(player_id)),
     }
 }
 

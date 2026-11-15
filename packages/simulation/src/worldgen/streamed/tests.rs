@@ -343,8 +343,11 @@ fn feature_ids_name_their_region() {
     let area = rect(-300, 0, 300, settings.height_tiles() - 1);
     let features = features_in(&settings, &area, None);
     for kind in FeatureKind::ALL {
-        // V5 has no cave ecosystems (V6 does, see `cave_tests`).
-        if matches!(kind, FeatureKind::PrefabSlot | FeatureKind::Cave) {
+        // V5 has no cave ecosystems or villages (V6 does: `cave_tests`, `village::tests`).
+        if matches!(
+            kind,
+            FeatureKind::PrefabSlot | FeatureKind::Cave | FeatureKind::Village
+        ) {
             continue;
         }
         assert!(

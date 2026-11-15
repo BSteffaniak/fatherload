@@ -28,6 +28,9 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// 9 (wave 2, T13 caves; the integrator collapses wave 2 bumps): V6 cave-ecosystem tiles
 /// (`TileKind::Cave`), critter entities (`EntityState::Critter`), found caves in the POI
 /// journal and the cave events 70-72.
+/// 9 (wave 2, T9 villages): generator V6 in the world settings, `FeatureKind::Village` /
+/// `FeatureDetail::Village`, `SessionServiceRequest::Village`, the player's village journal in
+/// the loadout and events 45-46 (`VillageDiscovered`, `VillageServiceUsed`).
 pub const PROTOCOL_VERSION: u8 = 9;
 
 /// One client input frame: the controls and actions for exactly one tick.

@@ -464,6 +464,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::QuestFailed { player_id, .. }
         | GameplayEventKind::BlueprintCompleted { player_id, .. }
         | GameplayEventKind::RigCustomized { player_id }
+        | GameplayEventKind::VillageDiscovered { player_id, .. }
+        | GameplayEventKind::VillageServiceUsed { player_id, .. }
         | GameplayEventKind::ExplosiveDeployed { player_id, .. }
         | GameplayEventKind::RemoteDetonation { player_id }
         | GameplayEventKind::ItemsCollected { player_id, .. }

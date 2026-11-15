@@ -105,6 +105,9 @@ pub struct Player {
     /// Cosmetic items earned on top of the starter set (private).
     #[serde(default)]
     pub cosmetic_unlocks: CosmeticUnlocks,
+    /// Villages visited and charted, and an active shrine blessing (private).
+    #[serde(default)]
+    pub villages: crate::village::VillageJournal,
 }
 
 #[allow(
@@ -155,6 +158,7 @@ impl Player {
             quests: QuestLog::default(),
             cosmetics: None,
             cosmetic_unlocks: CosmeticUnlocks::default(),
+            villages: crate::village::VillageJournal::default(),
         }
     }
 
