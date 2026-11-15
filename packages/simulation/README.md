@@ -1175,7 +1175,10 @@ WP-FEEL part 2 (wave 3, T18). Deterministic rules only; the game draws the momen
   tick's own formulas: `dig_seconds` (base chip seconds, `drill_speed`, `drill_bite`,
   `MIN_DRILL_SECONDS_PER_CHIP`), `thrust_seconds` / `climb_speed_tiles` /
   `climb_ceiling_tiles` (tank size, burn efficiency, capped climb speed), `cooled_band`,
-  `protection_fraction`, `engine_top_speed_tiles`. Stock parts, empty bay, sea-level air. The
+  `protection_fraction`, `engine_top_speed_tiles`; the "Dig speed" bar is
+  `dig_speed_multiplier` (the measured hard-rock speed-up over a stock drill, flat where a tier
+  adds nothing). The game's first-use drill toast also reads `dig_seconds`. Stock parts, empty
+  bay, sea-level air. The
   base chip table moved to `world::base_drill_seconds_per_chip` so the preview and the drill
   share it. Tiers that change nothing on common rock (the chip-rate floor, e.g. drill 9 -> 10)
   say so instead of inventing a gain.
@@ -1204,7 +1207,10 @@ WP-FEEL part 2 (wave 3, T18). Deterministic rules only; the game draws the momen
 - **Replication and saves.** `Player::milestones` is private: it travels in the owner's
   `Loadout` section (`PlayerInventory::milestones`), is saved with the player (serde default:
   old saves load with an unprimed log) and parks with the rig. `PROTOCOL_VERSION` 11.
-- **Events.** `UpgradeInstalled` 180 and `MilestoneEarned` 181 (netcode codes).
+- **Events.** `UpgradeInstalled` 180 and `MilestoneEarned` 181 (netcode codes). Online, a
+  predicting client also runs `advance_milestones` on its predicted world, so it can present a
+  milestone twice (predicted, then authoritative a few ticks apart): the game drops a repeat of
+  the same milestone within 20 s (banner and fanfare).
 
 `milestone.rs`, `upgrade_preview.rs` and `world/milestones.rs` test the unlock rules (tiers,
 depth bands, sky gates, silent priming, test mode), rewards (each locked item awarded once,
