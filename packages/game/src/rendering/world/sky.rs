@@ -617,6 +617,21 @@ fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle) {
     let cy = snap((1.0 - share).mul_add(visible.height * 0.9, rest));
     for row in -radius..=radius {
         let half = (((radius * radius - row * row) as f32).sqrt()).round() as i32;
+        // Runs of one colour along the row draw as one rectangle (a few hundred quads per
+        // frame instead of one per moon pixel: the browser build feels every draw call).
+        let mut run: Option<(i32, Color)> = None;
+        let flush = |draw: &mut dyn FnMut(Rectangle, Color), start: i32, end: i32, color| {
+            draw(
+                Rectangle::new(
+                    (start as f32).mul_add(ART, cx),
+                    (row as f32).mul_add(ART, cy),
+                    (end - start) as f32 * ART,
+                    ART,
+                ),
+                color,
+            );
+        };
+        let mut paint = |rect: Rectangle, color: Color| draw.draw_rectangle_rec(rect, color);
         for column in -half..=half {
             // Lit from the sun's side (right), with a soft terminator and craters.
             let lit = column as f32 + row as f32 * 0.3 > -(radius as f32) * 0.35;
@@ -648,15 +663,17 @@ fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle) {
             } else {
                 ICE
             };
-            draw.draw_rectangle_rec(
-                Rectangle::new(
-                    (column as f32).mul_add(ART, cx),
-                    (row as f32).mul_add(ART, cy),
-                    ART,
-                    ART,
-                ),
-                color,
-            );
+            match run {
+                Some((_, run_color)) if run_color == color => {}
+                Some((start, run_color)) => {
+                    flush(&mut paint, start, column, run_color);
+                    run = Some((column, color));
+                }
+                None => run = Some((column, color)),
+            }
+        }
+        if let Some((start, run_color)) = run {
+            flush(&mut paint, start, half + 1, run_color);
         }
     }
 }
