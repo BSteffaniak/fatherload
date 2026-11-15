@@ -37,6 +37,7 @@
 
 pub mod layout;
 pub mod placement;
+pub mod report;
 pub mod services;
 #[cfg(test)]
 mod tests;

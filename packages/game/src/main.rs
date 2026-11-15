@@ -20,6 +20,7 @@ mod scene_capture;
 mod shell;
 #[cfg(not(target_os = "emscripten"))]
 mod story_report;
+mod village_report;
 mod window;
 #[cfg(not(target_os = "emscripten"))]
 mod worldgen_tools;
@@ -56,6 +57,20 @@ fn main() {
     match story_report::parse_args(&args) {
         Ok(Some(options)) => {
             if let Err(error) = story_report::run(&options, &mut std::io::stdout()) {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+            return;
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    }
+    match village_report::parse_args(&args) {
+        Ok(Some(options)) => {
+            if let Err(error) = village_report::run(&options, &mut std::io::stdout()) {
                 eprintln!("{error}");
                 std::process::exit(1);
             }

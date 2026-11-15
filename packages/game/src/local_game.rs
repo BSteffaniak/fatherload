@@ -1119,6 +1119,7 @@ mod tests {
     mod quest_tests;
     mod split_seat_tests;
     mod test_mode_tests;
+    mod village_tests;
 
     const DT: f32 = 1.0 / 60.0;
     const PLAYER: PlayerId = save::LEGACY_PLAYER_ID;

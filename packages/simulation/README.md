@@ -146,7 +146,7 @@ seed is bit-identical everywhere:
 | `deposits` | per-mineral depth curves (classic nominal rows), veins / pods / motherlodes, per-band ore budgets, the starter field, artifact beds (V4: more per band, spread through it), prefab slot reservation (V1); V3+ rich worlds thin deep ore specks into fewer, chunkier deposits |
 | `prefabs` | hand-authored POI rooms as char grids with a shared legend (size limits, random fills, switch slots) |
 | `pois` | V2+: POI placement in a per-band region grid (guaranteed kinds, random fills, depth windows, spacing, hazard clearance, spawn/town exclusion; V4 stacks a row of regions per tier of about 22 rows, fills more of them at random, and adds an extra supply cache per tier, keeping the classic POI density per row) and stamping (flips, shuffled lock orders, band ore/artifacts/guardian hazards); empty regions become reserved prefab slots |
-| `features` | `FeatureIndex`: caverns, chambers, motherlodes, artifact beds, hazard clusters, stratum transitions, prefab slots and points of interest, queryable by kind, band, depth, region or proximity, plus POI queries (`pois`, `pois_of(kind)`, `pois_in_band`, `poi_at(position)`, `nearest_poi(position, kind)`) for quests to bind to (`WorldState::world_features`, recomputed from settings and cached per settings, never replicated) |
+| `features` | `FeatureIndex`: caverns, chambers, motherlodes, artifact beds, hazard clusters, stratum transitions, prefab slots, points of interest and (V6) villages, queryable by kind, band, depth, region or proximity, plus POI queries (`pois`, `pois_of(kind)`, `pois_in_band`, `poi_at(position)`, `nearest_poi(position, kind)`) for quests to bind to (`WorldState::world_features`, recomputed from settings and cached per settings, never replicated) |
 | `report` | `WorldStats` and the distribution report behind `--worldgen-report` |
 | `noise` | integer value / fractal / ridge noise and `RegionRng` |
 
@@ -478,6 +478,78 @@ awake count. The browser build has no networking, so the relevance scan only run
 hosts (release). A snapshot is about 37 bytes per entity; WP-DROPS stack merging keeps counts
 low. Removing half the store at once (2,683 entities) takes about 0.9 ms with `despawn_many`
 versus about 18 ms one `despawn` at a time (release), so bulk removals should batch.
+
+## Villages (`src/village.rs`, `src/village/`, `src/world/villages.rs`, `src/worldgen/streamed/villages.rs`)
+
+Expansion plan WP-VILLAGE, on [`GeneratorVersion::V6`] worlds
+(`GeneratorVersion::has_villages`, the single switch; V5 and older generate exactly as before
+and the V5 golden digest is unchanged). A village is a pure function of `(WorldSettings, site)`:
+nothing about it is saved or replicated except what players did there.
+
+- **Placement** (`village::placement`, const and integer-only): surface site `n` (`n > 0` east,
+  `n < 0` west, never 0) is centred `450 + (|n| - 1) * 600` columns from the town's centre
+  (column 115), jittered by up to 100, so neighbours are 400-800 columns apart and the first
+  ones are a short trip out. Size (hamlet / village / town: 64 / 88 / 112 columns) is a hash of
+  the site; `surface_site_at(seed, x, margin)` answers "which village is column x in" in O(1).
+  About one site in four (and always one of the two second sites) has an underground settlement:
+  a 60-column, 10-row hall 40-120 nominal rows down (`strata::scaled_row`), 150-270 columns from
+  the surface village (away from town for the first sites), slid in steps until it is 6 tiles
+  clear of every point of interest (`streamed::villages::resolve_hall`).
+- **Ids**: `VillageId` (the people framework's) = zigzag(site) << 1, | 1 for the underground
+  settlement (`placement::surface_id`, `underground_id`, `decode_id`). `CharacterId`s of
+  residents name their village, so a resident is found from an id alone.
+- **Feature index**: villages are a regional layer (`index::Layer::Village`, `rx` = site, `ry` 0
+  surface / 1 underground) of kind `FeatureKind::Village` with `FeatureDetail::Village(id)`
+  (`WorldFeature::village()`), so `Terrain::features_in`, `Terrain::nearest_feature` and
+  `Terrain::feature` find them anywhere; `village::nearest_village` wraps the outward search.
+- **Terrain hooks**: `streamed::surface_row` = `raw_surface_row` (the heightmap; the
+  surface-biome track replaces it) flattened across each village span to
+  `village_ground_row(settings, centre)` (the raw row at the village's centre), easing back over
+  `FLATTEN_FADE_COLUMNS` (16). Chunk assembly then runs the village stamps last
+  (`streamed::villages::stamps_touching`): hazard and POI tiles under the village (8 rows) and
+  around a hall (3 tiles) turn back into the band's soft rock, building lots get two rows of
+  foundation plus a staggered third, the plaza and landing pad are paved, and halls are carved
+  with a two-row foundation floor.
+- **Layout grammar** (`village::layout::build`): landscape (`site_landscape`, a coarse noise band
+  along the surface until biomes exist: the second hook for the surface track) -> culture ->
+  `BuildingStyle`; a `Specialty`, prosperity 1-5, an optional `VillageProblem`; 4-12 residents
+  from `people::generate_population`; then the street: hall and market flank the plaza, the
+  specialty's building, inn and workshop alternate outward with houses, farms / towers / mine
+  heads take the ends, spare columns widen the gaps, decorations fill them, the landing pad takes
+  one end and signposts stand outside both edges. Keepers are residents picked by role, homes
+  are dealt in family order, the eldest lives at the hall. `Village::area` is the rectangle a rig
+  counts as "in the village" in; `Village::building_at_pixel` the door rule (in the lot's columns,
+  on or up to 3 tiles above the village ground).
+- **Lookups** (memoized per process like streamed regions; a miss only costs time):
+  `village::village(settings, id)`, `villages_between`, `village_at(position)`,
+  `building_at(x, y)`, `nearest_village`, `village_identity` (name and culture without building
+  the village), and `village_facts` (the story-worthy `WorldFact`s within 160 columns, cached
+  per village; `Village::story_seeds` feeds them to `people::story_seeds` with the village's
+  problem).
+- **Services** (`village::services`, `world/villages.rs`): `Village::offers(building)` lists a
+  counter's `VillageOffer`s (a `VillageDeal` and a flat price, or 0 for metered deals). They are
+  bought with `SessionServiceRequest::Village { village, building, offer, service }`, validated
+  in `command_allowed_here` (the rig must stand at that building's door, `service` must match
+  the building) and resolved inside the tick (`apply_village_deal`): selling at a percentage of
+  the market price (an assay office: one mineral only, well over the depot price), metered
+  refuelling and repairs at a percentage of the town's unit prices, a rare part into the shared
+  `rig_part_inventory`, a cosmetic unlock, a pack of special charges with no shack-level gate,
+  charting (the nearest 3 unknown POIs within 420 columns learned as identified with a map reveal
+  around each, and neighbouring villages charted), a timed `Blessing` (Ward: 70 % of hull damage
+  in `apply_hazard_damage`; Thrift: 75 % of thruster fuel in movement; Fortune: +10 % on every
+  cargo sale) and a rumour (the nearest unknown POI within 320 columns as an echo).
+- **State**: `Player::villages` (`VillageJournal`: visited and charted villages, the active
+  blessing) rides in the private `Loadout` section and saves with the player (serde defaults).
+  Every tick, after map reveals, a rig entering a village for the first time is recorded with
+  `GameplayEventKind::VillageDiscovered`; a bought deal emits `VillageServiceUsed`.
+- **Report**: `village::report::village_report` behind `fatherload --village-report`.
+
+Tests: `village/tests.rs` (determinism, layout inside the span with a service and a specialty
+in every village, housing, variety across cultures / sizes / specialties, flat foundations under
+open sky with no hazards below, carved halls clear of POIs, the feature index and position
+lookups, signposts, facts and story seeds), `village/placement.rs` (spacing, id round trips,
+column lookups, rarity of halls) and `world/village_tests.rs` (discovery, deals validated at
+the door, the assay office, blessings, charting, the journal saved and private).
 
 ## Replication
 

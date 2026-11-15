@@ -849,9 +849,17 @@ fn assign_residents(population: &crate::people::Population, buildings: &mut [Vil
     if houses.is_empty() {
         return;
     }
-    let per_house = order.len().div_ceil(houses.len()).max(1);
+    // The eldest lives at the hall when there is one; everyone else is dealt into the houses
+    // in family order, in balanced blocks, so no house stands empty.
+    let at_hall = buildings
+        .iter()
+        .any(|building| building.kind == BuildingKind::Hall)
+        .then_some(eldest)
+        .flatten();
+    order.retain(|resident| Some(*resident) != at_hall);
+    let count = order.len().max(1);
     for (position, resident) in order.into_iter().enumerate() {
-        let house = houses[(position / per_house).min(houses.len() - 1)];
+        let house = houses[(position * houses.len() / count).min(houses.len() - 1)];
         buildings[house]
             .residents
             .push(u16::try_from(resident).unwrap_or(0));

@@ -211,6 +211,56 @@ ember moths). Entering a cave for the first time says what you found ("Found: Cr
 and marks it on the minimap and the mine map; the collection log counts the kinds found.
 Older worlds keep their caves as they were.
 
+Generator v6 worlds also have **villages** (see below); v5 worlds keep generating exactly as
+before.
+
+### Villages
+
+Out along the endless surface, every 400 to 800 m either side of town, stand villages, the
+first ones a short drive from town; about one site in four also has an underground settlement
+in a carved hall a few hundred metres further out and 40 to 120 m down (one of the two second
+sites always does). Each village is generated from the world seed:
+
+- **Culture and style** follow the landscape it stands in (plains, forest, hills, mesa,
+  scrapland; surface biomes will pick these later): Frontier and Riverside villages are built of
+  timber, Highland ones of dry stone, Mesa towns of adobe, Scrapper camps of scrap metal, and
+  the Deepfolk cut their settlements into the rock. Names come from the culture's generator.
+- **Layout**: a hamlet, village or town on flattened ground: a meeting hall and a trading post
+  flank the plaza (well, statue, fountain, totem, bonfire or crystals), with the specialty's
+  building, an inn, a workshop, houses, farms, lookouts and old mine heads along the street,
+  lamps, trees, carts and banners between them, a landing pad at one end and signposts at both
+  edges naming the next village (or town) and how far it is.
+- **Specialty**, the reason to come back: an assay office paying well over the depot price for
+  one mineral, a workshop selling rare rig parts for the crew's parts locker, a paint-and-trim
+  shop selling garage looks that are otherwise locked, a smithy selling bigger packs of special
+  charges whatever the town shack stocks, a fuel depot with cheap fuel and repairs, a
+  cartographer who charts the nearest unknown sites and neighbouring villages onto your map,
+  or a shrine whose blessings last ten minutes (30 % less hull damage, 25 % less thruster fuel,
+  or 10 % more for cargo).
+- **Services everywhere**: every trading post buys cargo (at a little under the depot price)
+  and pumps fuel (a little dearer than town); inns sell a round for a rumour (an echo of the
+  nearest unknown site marked on your map) and patch hulls.
+- **People**: 4 to 12 residents with families, relationships, wants and fears (the people
+  framework), housed in the houses and the hall, keeping the counters, and standing about the
+  plaza. Walk up to someone indoors and press `E` to talk (their lines follow their personality
+  and change with repeat visits); the counter's last row talks to the keeper. The meeting hall
+  shows the village's prosperity, its trouble and how it gets on with its neighbours.
+- **Every building with a door is enterable** (`E` at its door, as in town): rooms are dressed
+  in the village's style and the building's trade. In split-screen each seat uses villages on
+  its own.
+
+Driving into a village raises a banner with its name, style and specialty ("NEW VILLAGE
+DISCOVERED" the first time, "WELCOME BACK TO" later). Villages show on the minimap and the
+mine map: gold with their name once visited, blue once charted, a dim outline for surface
+villages not reached yet; underground settlements stay hidden until visited or charted.
+
+Village review (no window opens): street layout, every counter's deals, residents and the
+stories each village grows, nearest town first:
+
+```bash
+cargo run --release --bin fatherload -- --village-report [--seed 7] [--count 8]
+```
+
 ### Points of interest
 
 Hand-built places are stamped into every world (generator v2 and later; worlds and saves from
