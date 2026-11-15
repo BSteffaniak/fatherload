@@ -411,6 +411,25 @@ fn entity_benchmark_report() {
             .count();
     }
     let diff = start.elapsed() / 100;
+    // A burst of removals (a mass expiry of plain-block drops, a magnet sweep): every other
+    // entity, in one compacting pass versus one shift per entity.
+    let burst: std::collections::BTreeSet<EntityId> = world
+        .entities()
+        .iter()
+        .step_by(2)
+        .map(|entity| entity.id)
+        .collect();
+    let mut batch_store = world.entities().clone();
+    let start = Instant::now();
+    let removed = batch_store.despawn_many(&burst).len();
+    let batch_burst = start.elapsed();
+    let mut single_store = world.entities().clone();
+    let start = Instant::now();
+    for id in &burst {
+        single_store.despawn(*id);
+    }
+    let single_burst = start.elapsed();
+    assert_eq!(batch_store, single_store);
     let record_bytes = postcard::to_stdvec(&world.full_entity_delta())
         .expect("encode")
         .len();
@@ -435,5 +454,8 @@ fn entity_benchmark_report() {
         baseline.len()
     );
     println!("  ({changed} changed since the previous frame in that scan)");
+    println!(
+        "  burst despawn of {removed} entities: {batch_burst:?} batched ({single_burst:?} one by one)"
+    );
     println!("  full entity snapshot (keyframe share): {record_bytes} bytes");
 }

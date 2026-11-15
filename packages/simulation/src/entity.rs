@@ -589,7 +589,39 @@ impl EntityStore {
             .take_while(|(expiry, _)| *expiry <= tick)
             .map(|(_, id)| *id)
             .collect();
-        due.into_iter().filter_map(|id| self.despawn(id)).collect()
+        let mut removed = self.despawn_many(&due.iter().copied().collect());
+        // `despawn_many` returns id order; callers get (expiry, id) order.
+        removed.sort_by_key(|entity| (entity.expires_at, entity.id));
+        removed
+    }
+
+    /// Removes every entity in `ids` in one compacting pass (a burst of expiries or pickups
+    /// costs one walk over the store, not one shift per entity) and returns them in id order.
+    pub fn despawn_many(&mut self, ids: &BTreeSet<EntityId>) -> Vec<Entity> {
+        if ids.is_empty() {
+            return Vec::new();
+        }
+        if ids.len() == 1 {
+            return ids.iter().filter_map(|id| self.despawn(*id)).collect();
+        }
+        let mut removed = Vec::new();
+        let entities = std::mem::take(&mut self.entities);
+        let cells = std::mem::take(&mut self.indices.cell_of);
+        self.entities
+            .reserve(entities.len().saturating_sub(ids.len()));
+        self.indices
+            .cell_of
+            .reserve(cells.len().saturating_sub(ids.len()));
+        for (entity, cell) in entities.into_iter().zip(cells) {
+            if ids.contains(&entity.id) {
+                self.indices.remove(&entity, cell);
+                removed.push(entity);
+            } else {
+                self.entities.push(entity);
+                self.indices.cell_of.push(cell);
+            }
+        }
+        removed
     }
 
     /// Cells overlapping the pixel rectangle.
@@ -686,9 +718,7 @@ impl EntityStore {
     /// Applies a replicated delta: inserts or replaces each update, removes each despawn.
     pub fn apply_delta(&mut self, delta: EntityDelta) {
         let EntityDelta { updates, despawned } = delta;
-        for id in despawned {
-            self.despawn(id);
-        }
+        self.despawn_many(&despawned.into_iter().collect());
         for entity in updates {
             self.next_id = self.next_id.max(entity.id.0.saturating_add(1));
             self.next_revision = self.next_revision.max(entity.revision.saturating_add(1));
@@ -713,15 +743,13 @@ impl EntityStore {
 
     /// Keeps only the entities `keep` accepts (a replica dropping what left relevance).
     pub fn retain(&mut self, mut keep: impl FnMut(&Entity) -> bool) {
-        let gone: Vec<EntityId> = self
+        let gone: BTreeSet<EntityId> = self
             .entities
             .iter()
             .filter(|entity| !keep(entity))
             .map(|entity| entity.id)
             .collect();
-        for id in gone {
-            self.despawn(id);
-        }
+        self.despawn_many(&gone);
     }
 
     /// Presentation positions interpolated between two snapshots of the store (for example
@@ -880,6 +908,18 @@ mod tests {
                     let first = store.iter().next().map(|entity| entity.id);
                     if let Some(id) = first {
                         store.despawn(id);
+                    }
+                    // A burst removal of a few scattered entities (one compacting pass).
+                    if store.len() > 3 {
+                        let burst: BTreeSet<EntityId> = (0..3)
+                            .filter_map(|_| {
+                                let pick = usize::try_from(next()).unwrap_or(0) % store.len();
+                                store.iter().nth(pick).map(|entity| entity.id)
+                            })
+                            .collect();
+                        let removed = store.despawn_many(&burst);
+                        assert_eq!(removed.len(), burst.len());
+                        assert!(burst.iter().all(|id| !store.contains(*id)));
                     }
                 }
             }

@@ -228,6 +228,9 @@ impl WorldState {
         }) else {
             return;
         };
+        // Interpolation hook: the step starts here (gas clouds and hanging boulders keep still).
+        body.previous_x = body.x;
+        body.previous_y = body.y;
         if next_tick >= state.expiry_tick {
             self.entities.despawn(id);
             return;

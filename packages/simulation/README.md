@@ -261,7 +261,10 @@ an optional expiry tick, a replication `revision` and per-kind `EntityState`. To
   awake set, per-kind sets (`ids_of`, `of_kind`, `count_of`) and an expiry queue
   (`take_expired`).
 - **Mutation** goes through `EntityStore::update(id, |entity| ...)`, which assigns a fresh
-  revision and keeps every index in step; `spawn` and `despawn` likewise. Inside the crate,
+  revision and keeps every index in step; `spawn` and `despawn` likewise. Removing many
+  entities at once (a magnet sweep, a merge pass, a mass expiry) should use
+  `despawn_many(&ids)`: one compacting pass instead of one shift of the id-ordered store per
+  entity (`take_expired` and replicated despawns already do). Inside the crate,
   `WorldState::spawn_entity`, `spawn_gas_cloud`, `spawn_boulder` and the public
   `spawn_item_drop` are the spawn helpers.
 - **Tick.** `simulate_tick` runs `EntityPhase::Early` right after inputs (gas clouds age before
