@@ -38,8 +38,6 @@ pub const CRITTER_SPAWN_RANGE: (i32, i32) = (40, 28);
 pub const CRITTER_DESPAWN_RANGE: f32 = 64.0;
 /// Most critters one cave holds.
 pub const MAX_CRITTERS_PER_CAVE: usize = 8;
-/// Seconds a cache's loot lingers as drops before it fades (valuable, so a long while).
-const CACHE_LOOT_LIFETIME_MILLIS: u64 = 600_000;
 
 const SALT_CRITTER: u64 = 0xC217_7E25;
 
@@ -152,13 +150,8 @@ impl WorldState {
         for (index, stack) in loot.items.iter().enumerate() {
             #[allow(clippy::cast_precision_loss, reason = "a handful of stacks")]
             let spread = (index as f32 - 0.5) * 60.0;
-            let _ = self.spawn_item_drop(
-                x,
-                y,
-                (spread, -150.0),
-                *stack,
-                Some(CACHE_LOOT_LIFETIME_MILLIS),
-            );
+            // Through the drop rules (WP-DROPS): the kind's lifetime and the per-cell cap.
+            let _ = self.spawn_loot(x, y, (spread, -150.0), *stack, None);
         }
         output.push_event(GameplayEventKind::CaveCacheOpened {
             player_id,

@@ -31,7 +31,7 @@
 //! [`WorldState::damage_enemy`] applies a [`Damage`] (amount, [`DamageKind`], source,
 //! impulse) to an entity and returns a [`DamageOutcome`]. It applies the target's resistance,
 //! shields, EMP stuns, burning, aggro toward the attacking player, flinch and fleeing, and on a
-//! kill drops the loot (`spawn_item_drop`), clears the lair and emits
+//! kill drops the loot (`spawn_loot`, WP-DROPS' rules), clears the lair and emits
 //! [`GameplayEventKind::EnemyKilled`]. Call it from inside the tick (projectiles, melee, beams);
 //! [`WorldState::enemies_near`] finds targets.
 
@@ -128,8 +128,6 @@ const FLEE_MILLIS: u64 = 2_000;
 const FLARE_LURE: f32 = TILE_SIZE * 10.0;
 /// Most bats a nest keeps alive.
 const NEST_BROOD: usize = 4;
-/// Loot drops last this long.
-const LOOT_LIFETIME_MILLIS: u64 = 300_000;
 /// Gravity on walkers, falling flyers and burrowers in open air.
 const ENEMY_GRAVITY: f32 = 560.0;
 /// Speed a walker hops a one-tile step with.
@@ -1890,12 +1888,13 @@ impl WorldState {
         );
         for (index, stack) in (0_u8..).zip(loot(state.kind, state.tier, roll)) {
             let spread = (f32::from(index % 5) - 2.0) * 45.0;
-            let _drop = self.spawn_item_drop(
+            // Through the drop rules (WP-DROPS): the kind's lifetime and the per-cell cap.
+            let _drop = self.spawn_loot(
                 body.x,
                 body.y,
                 (spread, -150.0 - f32::from(index % 3) * 30.0),
                 stack,
-                Some(LOOT_LIFETIME_MILLIS),
+                None,
             );
         }
         if let Some(lair) = state.lair {

@@ -212,7 +212,9 @@ player's `PoiJournal::caves` and fires `CaveDiscovered`. A `CaveTile::Stalactite
 between it and a rig up to 7 rows below breaks off (`StalactiteFell`) as a falling boulder (fast,
 0.45 s warning; the boulder deflector counters it). Drilling a `TreasureCache` / `RelicCache` pays
 `cave::cache_loot` (credits by depth tier, plus gems or a relic) and spills the items as drops via
-`spawn_item_drop` (WP-DROPS collects them) with `CaveCacheOpened`. Movement: in cave water a rig is
+WP-DROPS' `spawn_loot` (kind lifetimes, cell cap; the magnet collects them) with
+`CaveCacheOpened`. Other cave rock (mycelium, silt, ruin brick, fossil ribs, stalactites,
+obsidian) breaks into the nearest plain building block (`BlockKind::from_tile`). Movement: in cave water a rig is
 buoyed (80 % of gravity) and dragged (`1 / (1 + 3 dt)` per tick); landing on a `MushroomCap` faster
 than 120 px/s bounces it back at 85 % (at least 300 px/s) with no landing damage.
 
@@ -666,8 +668,8 @@ and danger grow with depth, and a Peaceful world has none.
   enemy::DamageOutcome`; weapons reach it through the shared `damage_entity` of
   `crate::combat`): `Damage { amount, kind: DamageKind, source: DamageSource, impulse }` applies
   resistance, shields (only EMPs break them), EMP stuns, burning, aggro on the attacking player,
-  flinch impulses and fleeing; a kill drops `loot` through `spawn_item_drop` (5 minute
-  lifetime), clears its lair, counts in `EnemyDirector::kills` and emits `EnemyKilled { by }`.
+  flinch impulses and fleeing; a kill drops `loot` through WP-DROPS' `spawn_loot` (each
+  kind's lifetime, the per-cell cap), clears its lair, counts in `EnemyDirector::kills` and emits `EnemyKilled { by }`.
   `enemies_near(x, y, radius)` finds targets. Call it inside the tick.
 - **Explosives** (`enemies_feel_blasts`, called from the bomb pass right after
   `push_from_blasts` on the same pre-blast terrain): every blast kind hurts enemies in reach
@@ -761,6 +763,31 @@ terrain tiles.
 station refuelling a stranded rig at depth, synthesis and supply drops, power order, storage,
 the uplink, lift ladders, home points, access, claim limits, save round trips, replication
 through terrain ops and the section, and determinism.
+
+## Wave 2 seams (integration notes)
+
+Where the wave 2 tracks meet, for the tracks that build on them:
+
+- **One generator, V6:** caves (`has_cave_biomes`) and villages (`has_villages`) both switch on
+  with `GeneratorVersion::V6`; the V6 golden digest pins caves and villages together. The
+  surface track (T8, not integrated yet) still has to replace `raw_surface_row` and feed
+  `site_landscape`; the feature layers are `Cave = 8`, `Village = 9`.
+- **Damage:** `WorldState::damage_entity` (`crate::combat`) is the one entry point. Enemies
+  report a `Health` view and are routed to `damage_enemy`; blasts reach enemies only through
+  `enemies_feel_blasts` (scares and EMPs included) and other damageable kinds through
+  `damage_from_blasts`.
+- **Safe zones:** `enemy_safe_zone` = surface strip, town, infrastructure, every claim
+  (`Bases::is_safe_zone`) and every village or hall (`streamed::in_village_area`). Claims may
+  not overlap a village (`BuildRefusal::InVillage`).
+- **Loot:** enemy kills and cave caches spill through `spawn_loot` (the drop rules); weapons
+  drop the blocks they shoot out (`weapon_broke_tile`); every broken tile drops, cave rock
+  included.
+- **Persistence:** every per-player field the tracks added lives inside `Player` (hopper,
+  collect toggle, weapon rack and mount, explosive items, village journal, found caves,
+  cosmetics) and so parks and unparks with the rig; claims and home points stay keyed by the
+  player id; parked players keep their armed C4 (`remove_player_with`).
+- **Event codes** (netcode): drops 60-63, caves 70-72, villages 45-46, enemies 80-87, weapons
+  90-95, bases 100-102. `PROTOCOL_VERSION` 9 and save format 8 cover all of wave 2.
 
 ## Replication
 
