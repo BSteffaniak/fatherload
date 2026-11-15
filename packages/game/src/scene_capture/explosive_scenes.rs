@@ -227,12 +227,56 @@ pub(super) fn throw_preview(stage: &mut SceneStage<'_>) {
     );
 }
 
+/// A smoke screen billowing in a chamber with the rig hiding at its edge, and a scare charge
+/// going off further along.
+pub(super) fn smoke_and_scare(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        chamber(world, player, 98..123, 21..29);
+        place_rig(world, player, 102, 28);
+        let now = world.simulation_tick().get();
+        let smoke_x = TILE_SIZE.mul_add(0.5, tile(106));
+        let scare_x = TILE_SIZE.mul_add(0.5, tile(117));
+        let floor = tile(29) - CHARGE_RADIUS - 1.0;
+        add_charges(
+            world,
+            vec![
+                PlacedBomb {
+                    id: 0,
+                    x: smoke_x,
+                    y: floor,
+                    previous_x: smoke_x,
+                    previous_y: floor,
+                    detonation_tick: SimulationTick::new(now + 2),
+                    kind: ExplosiveKind::Smoke,
+                    owner: Some(player),
+                    ..PlacedBomb::default()
+                },
+                PlacedBomb {
+                    id: 1,
+                    x: scare_x,
+                    y: floor,
+                    previous_x: scare_x,
+                    previous_y: floor,
+                    detonation_tick: SimulationTick::new(now + 140),
+                    timer_seconds: 2.0,
+                    kind: ExplosiveKind::Scare,
+                    owner: Some(player),
+                    ..PlacedBomb::default()
+                },
+            ],
+        );
+    });
+    stage.settle(146);
+}
+
 /// One of every charge resting in a row (stuck ones on the floor), for reviewing the art.
 pub(super) fn lineup(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
         let player = seats[0].player;
         chamber(world, player, 98..123, 23..29);
-        place_rig(world, player, 100, 28);
+        // The rig in the middle, six charges either side of it (all in view).
+        place_rig(world, player, 110, 28);
         let now = world.simulation_tick().get();
         let later = SimulationTick::new(now + 2_000);
         let kinds = [
@@ -246,12 +290,15 @@ pub(super) fn lineup(stage: &mut SceneStage<'_>) {
             ExplosiveKind::Incendiary,
             ExplosiveKind::Emp,
             ExplosiveKind::Flare,
+            ExplosiveKind::Smoke,
+            ExplosiveKind::Scare,
         ];
         let charges = kinds
             .into_iter()
             .zip(0_u64..)
             .map(|(kind, id)| {
-                let column = 103 + i32::try_from(id).unwrap_or(0) * 2;
+                let slot = i32::try_from(id).unwrap_or(0);
+                let column = 98 + slot * 2 + if slot >= 6 { 2 } else { 0 };
                 let fuse = if kind == ExplosiveKind::C4 {
                     REMOTE_FUSE
                 } else {

@@ -1664,7 +1664,7 @@ pub const SCENES: &[Scene] = &[
     },
     Scene {
         name: "explosives_lineup",
-        summary: "Every explosive kind side by side: bomb, sticky, cluster, bomblet, C4, shaped, mining, incendiary, EMP, flare",
+        summary: "Every explosive kind side by side: bomb, sticky, cluster, bomblet, C4, shaped, mining, incendiary, EMP, flare, smoke, scare",
         setup: explosive_scenes::lineup,
     },
     Scene {
@@ -1691,6 +1691,11 @@ pub const SCENES: &[Scene] = &[
         name: "modal_hopper",
         summary: "The inventory's block hopper: fill, the collect toggle and dump rows",
         setup: drop_scenes::hopper_inventory,
+    },
+    Scene {
+        name: "explosives_smoke_scare",
+        summary: "A smoke screen billowing over the rig and a scare charge's bang further along",
+        setup: explosive_scenes::smoke_and_scare,
     },
     Scene {
         name: "weapon_rivet_gun",

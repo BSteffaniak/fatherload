@@ -165,8 +165,27 @@ fn draw_burning(draw: &mut impl RaylibDraw, bomb: &PlacedBomb, x: f32, y: f32, s
             }
             disc(draw, x, y, 10, with_alpha(ORANGE, 90));
         }
-        ExplosiveKind::Smoke => draw_smoke_screen(draw, bomb, x, y, seconds),
+        // Smoke screens draw over the rigs (`draw_smoke_screens`), so they hide what is inside.
         _ => {}
+    }
+}
+
+/// Every burning smoke screen among `bombs`, drawn after the rigs so it hides them.
+pub fn draw_smoke_screens(
+    draw: &mut impl RaylibDraw,
+    bombs: &[PlacedBomb],
+    seconds: f32,
+    alpha: f32,
+) {
+    for bomb in bombs {
+        if bomb.kind != ExplosiveKind::Smoke || !bomb.burning() {
+            continue;
+        }
+        let x = (bomb.x - bomb.previous_x).mul_add(alpha, bomb.previous_x);
+        let y = (bomb.y - bomb.previous_y).mul_add(alpha, bomb.previous_y);
+        // Smoke billows up from the canister rather than sinking into the floor.
+        let rise = fatherload_simulation::explosive::smoke_radius(bomb.stage) * 0.4;
+        draw_smoke_screen(draw, bomb, x, y - rise, seconds);
     }
 }
 
@@ -188,11 +207,12 @@ pub fn draw_smoke_screen(
     if radius <= 0.0 {
         return;
     }
-    // Two rings of drifting puffs plus a dense core.
+    // Rings of drifting puffs around a dense core (puff sizes in art pixels; positions in
+    // world pixels). Puffs rise and wobble slowly so the screen churns.
     for (ring, count, reach, size, alpha) in [
-        (0_u32, 9_u32, 0.72_f32, 0.42_f32, 150_u8),
-        (1, 6, 0.38, 0.5, 175),
-        (2, 3, 0.1, 0.55, 190),
+        (0_u32, 11_u32, 0.74_f32, 0.3_f32, 120_u8),
+        (1, 8, 0.45, 0.34, 150),
+        (2, 4, 0.15, 0.38, 175),
     ] {
         for index in 0..count {
             let seed = (bomb.id as f32).mul_add(1.37, (ring * 31 + index) as f32);
@@ -202,12 +222,24 @@ pub fn draw_smoke_screen(
             );
             let wobble = (seconds * 0.7 + seed).sin() * 0.08;
             let px = angle.cos().mul_add(radius * (reach + wobble), x);
-            let py = angle.sin().mul_add(radius * (reach + wobble) * 0.8, y)
+            let py = angle.sin().mul_add(radius * (reach + wobble) * 0.75, y)
                 - (seconds * 0.4 + seed).sin().abs() * 4.0;
-            let puff = (radius * size) as i32;
-            let shade = if (index + ring) % 2 == 0 { FOG } else { MIST };
-            disc(draw, px, py + 3.0, puff, with_alpha(SLATE_LIGHT, alpha / 3));
+            let puff = ((radius * size) / ART).round().max(2.0) as i32;
+            let shade = match (index + ring) % 3 {
+                0 => FOG,
+                1 => MIST,
+                _ => STEEL_LIGHT,
+            };
+            disc(draw, px, py + ART * 2.0, puff, with_alpha(SLATE, alpha / 3));
             disc(draw, px, py, puff, with_alpha(shade, alpha));
+            // A brighter cap on each puff.
+            disc(
+                draw,
+                px - ART,
+                py - ART * 2.0,
+                (puff / 2).max(1),
+                with_alpha(BONE, alpha / 3),
+            );
         }
     }
 }

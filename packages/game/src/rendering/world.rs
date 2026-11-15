@@ -257,6 +257,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     for cloud in scene.hazards {
         fx::draw_gas_cloud(draw, cloud, seconds);
     }
+    explosives::draw_smoke_screens(draw, scene.bombs, seconds, scene.bomb_alpha);
     fx::draw_sparks(draw, scene.sparks);
     drops::draw_pickup_flights(draw, scene);
     for explosion in scene.explosions {
