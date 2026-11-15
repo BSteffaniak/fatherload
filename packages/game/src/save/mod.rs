@@ -52,6 +52,9 @@ pub struct SettingsFile {
     /// Windowed size and maximized state; missing in settings written before it existed.
     #[serde(default)]
     pub window: WindowSettings,
+    /// Touch control preferences; missing in settings written before they existed.
+    #[serde(default)]
+    pub touch: crate::input::touch::TouchSettings,
 }
 
 impl Default for SettingsFile {
@@ -60,6 +63,7 @@ impl Default for SettingsFile {
             master_volume: 0.8,
             fullscreen: false,
             window: WindowSettings::default(),
+            touch: crate::input::touch::TouchSettings::default(),
         }
     }
 }

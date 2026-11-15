@@ -313,19 +313,39 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
 }
 
 pub(super) fn draw_options(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    use crate::shell::options::OptionsRow;
     let volume = (ui.shell.master_volume * 100.0).round() as i32;
-    let entries = vec![
-        Entry::new(&menu_icons::SPEAKER, "Master volume")
-            .detail(adjust_detail())
-            .value(format!("\u{2190} {volume}% \u{2192}"), GOLD),
-        Entry::new(&menu_icons::SCREEN, "Fullscreen")
-            .detail(fullscreen_detail())
-            .value(
-                if ui.shell.fullscreen { "ON" } else { "OFF" },
-                if ui.shell.fullscreen { LIME } else { FOG },
-            ),
-        Entry::new(&menu_icons::BACK, "Back"),
-    ];
+    let on_off = |on: bool| (if on { "ON" } else { "OFF" }, if on { LIME } else { FOG });
+    let touch = ui.shell.touch;
+    let entries = ui
+        .shell
+        .options_rows()
+        .into_iter()
+        .map(|row| match row {
+            OptionsRow::Volume => Entry::new(&menu_icons::SPEAKER, "Master volume")
+                .detail(adjust_detail())
+                .value(format!("\u{2190} {volume}% \u{2192}"), GOLD),
+            OptionsRow::Fullscreen => {
+                let (text, color) = on_off(ui.shell.fullscreen);
+                Entry::new(&menu_icons::SCREEN, "Fullscreen")
+                    .detail(fullscreen_detail())
+                    .value(text, color)
+            }
+            OptionsRow::TouchSize => Entry::new(&menu_icons::SCREEN, "Touch buttons")
+                .detail("Size of the on-screen controls")
+                .value(ui.shell.touch_size_label(), GOLD),
+            OptionsRow::TouchHand => Entry::new(&menu_icons::SCREEN, "Stick side")
+                .detail("Which thumb steers")
+                .value(if touch.left_handed { "RIGHT" } else { "LEFT" }, GOLD),
+            OptionsRow::TouchThrust => {
+                let (text, color) = on_off(touch.thrust_button);
+                Entry::new(&menu_icons::SCREEN, "Thrust button")
+                    .detail("Hold to fly, as well as pushing up")
+                    .value(text, color)
+            }
+            OptionsRow::Back => Entry::new(&menu_icons::BACK, "Back"),
+        })
+        .collect();
     UiLayout::screen(draw).modal_with_render_plan(
         "Options",
         "",

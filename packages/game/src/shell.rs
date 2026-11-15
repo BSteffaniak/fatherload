@@ -29,6 +29,7 @@ mod build;
 mod crew;
 mod garage;
 pub mod hopper;
+pub mod options;
 mod pointer;
 mod quests;
 mod test_mode;
@@ -1653,6 +1654,10 @@ pub struct ShellState {
     pub fullscreen: bool,
     /// Windowed size/maximized state, kept current by the desktop app and persisted with settings.
     pub window: save::WindowSettings,
+    /// Touch control preferences (Options; persisted with settings).
+    pub touch: crate::input::touch::TouchSettings,
+    /// A touch screen has driven the first seat this run (Options then shows its rows).
+    pub touch_seen: bool,
     pub settings_dirty: bool,
     pub save_dirty: bool,
     pub request_exit: bool,
@@ -1704,6 +1709,8 @@ impl ShellState {
             master_volume: settings.master_volume,
             fullscreen: settings.fullscreen,
             window: settings.window,
+            touch: settings.touch,
+            touch_seen: false,
             settings_dirty: false,
             save_dirty: false,
             request_exit: false,
@@ -1789,6 +1796,7 @@ impl ShellState {
             master_volume: self.master_volume,
             fullscreen: self.fullscreen,
             window: self.window,
+            touch: self.touch,
         }
     }
 
@@ -1845,6 +1853,7 @@ impl ShellState {
         delta_seconds: f32,
         ctx: ShellContext<'_>,
     ) -> Vec<ShellRequest> {
+        self.touch_seen |= self.prompt_device(0).is_touch();
         // A tapped or clicked row becomes "that row is selected and confirmed".
         let inputs = self.take_menu_picks(inputs);
         let inputs = inputs.as_slice();
@@ -2415,17 +2424,21 @@ impl ShellState {
             return true;
         }
         let max_item = match modal {
-            ModalScreen::Options => 2,
+            ModalScreen::Options => self.options_rows().len() - 1,
             ModalScreen::WarpToLayer => test_mode::WARP_BANDS.len() - 1,
             ModalScreen::SaveSlots | ModalScreen::LoadSlots => save::save_slot_count() - 1,
             _ => 0,
         };
         self.move_selection(input, max_item);
-        if modal == ModalScreen::Options && self.selected_menu_item == 0 {
-            if input.menu_left || input.tab_previous {
-                self.adjust_volume(-0.1);
-            } else if input.menu_right || input.tab_next {
-                self.adjust_volume(0.1);
+        if modal == ModalScreen::Options {
+            let step = i32::from(input.menu_right || input.tab_next)
+                - i32::from(input.menu_left || input.tab_previous);
+            let row = self.options_row();
+            if row == options::OptionsRow::Volume && step != 0 {
+                #[allow(clippy::cast_precision_loss, reason = "a step of one")]
+                self.adjust_volume(0.1 * step as f32);
+            } else if step != 0 {
+                self.step_touch_option(row, step);
             }
         }
         if input.confirm {
@@ -2514,9 +2527,10 @@ impl ShellState {
     /// Confirm on an options row (the rows `menus::draw_options` lists): volume steps up,
     /// fullscreen toggles, back closes.
     fn confirm_options(&mut self) {
-        match self.selected_menu_item {
-            0 => self.adjust_volume(0.1),
-            1 => {
+        use options::OptionsRow;
+        match self.options_row() {
+            OptionsRow::Volume => self.adjust_volume(0.1),
+            OptionsRow::Fullscreen => {
                 self.fullscreen = !self.fullscreen;
                 let mode = if self.fullscreen {
                     "Fullscreen"
@@ -2530,7 +2544,10 @@ impl ShellState {
                 self.settings_dirty = true;
                 self.sound_cues.push(SoundCue::Ui);
             }
-            _ => self.modal = None,
+            OptionsRow::Back => self.modal = None,
+            row => {
+                self.step_touch_option(row, 1);
+            }
         }
     }
 

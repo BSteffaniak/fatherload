@@ -192,8 +192,9 @@ impl TouchContext {
     }
 }
 
-/// Player preferences for the touch controls.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// Player preferences for the touch controls (saved with the settings).
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 pub struct TouchSettings {
     /// Button size multiplier.
     pub scale: f32,

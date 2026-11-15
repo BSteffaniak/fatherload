@@ -75,10 +75,12 @@ impl TouchDevice {
     pub fn sample(
         &mut self,
         raylib: &raylib::RaylibHandle,
+        settings: TouchSettings,
         screen: ScreenSize,
         world_at: impl Fn(f32, f32) -> Option<(f32, f32)>,
         delta_seconds: f32,
     ) -> TouchSample {
+        self.settings = settings;
         let points = self.points(raylib);
         let screen = touch_screen(screen);
         let layout =
@@ -209,7 +211,7 @@ pub fn publish_staged(
         TouchOverlay {
             layout: TouchLayout::compute(
                 touch_screen(screen),
-                TouchSettings::default(),
+                shell.touch,
                 context,
                 view.tools_open,
             ),

@@ -112,6 +112,7 @@ fn sample_frame_input(
 ) -> FrameInput {
     let touch = touch.sample(
         raylib,
+        game.shell.touch,
         DesktopWindow::screen(raylib),
         |x, y| view.and_then(|(view, _)| view.world_at(x, y)),
         delta_seconds,
