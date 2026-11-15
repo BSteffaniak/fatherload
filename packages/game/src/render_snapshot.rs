@@ -306,6 +306,8 @@ pub struct ViewSnapshot<'w> {
     pub quest_markers: Vec<QuestMarker>,
     /// The quest desk of the keeper whose door the rig stands at (empty elsewhere).
     pub quest_desk: Vec<crate::shell::DeskRow>,
+    /// The seat's throw aim preview (set by the game loop from the seat's selection).
+    pub aim_preview: Option<AimPreview>,
 }
 
 impl ViewSnapshot<'_> {
@@ -369,6 +371,36 @@ pub struct WorldEventView {
     pub kind: WorldEventKind,
     pub severity: u32,
     pub days_remaining: u32,
+}
+
+/// A seat's throw aim preview: the path its selected charge would fly, one point per tick.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AimPreview {
+    pub path: Vec<(f32, f32)>,
+    /// The charge sticks where the path ends (sticky bombs, C4, shaped charges).
+    pub sticks: bool,
+}
+
+impl AimPreview {
+    /// The preview for `player_id` deploying `selection` in `world`, if the selected kind is
+    /// thrown or placed and the rig carries one.
+    #[must_use]
+    pub fn for_selection(
+        world: &WorldState,
+        player_id: PlayerId,
+        selection: crate::input_mapping::ExplosiveSelection,
+    ) -> Option<Self> {
+        let kind = selection.selected;
+        if kind.deployment() == fatherload_simulation::explosive::Deployment::Drop
+            || world.player(player_id)?.explosive_count(kind) == 0
+        {
+            return None;
+        }
+        Some(Self {
+            path: world.preview_explosive_path(player_id, kind, selection.last_aim),
+            sticks: kind.sticks(),
+        })
+    }
 }
 
 /// Everything rendering needs for one frame.
@@ -609,6 +641,7 @@ fn view_snapshot(
     )]
     let depth = (player.y / TILE_SIZE).max(0.0) as i32;
     Some(ViewSnapshot {
+        aim_preview: None,
         seat_index,
         player_id,
         viewport,

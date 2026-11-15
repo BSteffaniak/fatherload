@@ -365,6 +365,23 @@ impl ExplosiveKind {
         }
     }
 
+    /// Lower-case plural for counts ("3 sticky bombs").
+    #[must_use]
+    pub const fn plural(self) -> &'static str {
+        match self {
+            Self::Bomb => "bombs",
+            Self::Sticky => "sticky bombs",
+            Self::Cluster => "cluster bombs",
+            Self::Bomblet => "bomblets",
+            Self::C4 => "C4 charges",
+            Self::Shaped => "shaped charges",
+            Self::Mining => "mining charges",
+            Self::Incendiary => "incendiaries",
+            Self::Emp => "EMP charges",
+            Self::Flare => "flares",
+        }
+    }
+
     /// One line on what the charge does (shop rows, the selection HUD).
     #[must_use]
     pub const fn description(self) -> &'static str {
@@ -502,10 +519,11 @@ impl ExplosiveKind {
         !matches!(self, Self::Flare)
     }
 
-    /// Whether it ticks audibly while its fuse burns (remote charges and flares do not).
+    /// Whether it ticks audibly while its fuse burns (flares do not; a remote charge only once
+    /// its detonator has fired, see [`crate::PlacedBomb::awaiting_remote`]).
     #[must_use]
     pub const fn has_audible_fuse(self) -> bool {
-        !matches!(self, Self::C4 | Self::Flare)
+        !matches!(self, Self::Flare)
     }
 }
 

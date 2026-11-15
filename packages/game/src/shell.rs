@@ -914,7 +914,7 @@ impl SeatUi {
             ModalScreen::Depot => 4,
             ModalScreen::Fuel | ModalScreen::Bank => 2,
             ModalScreen::Repair => GARAGE_COUNTER_ROW,
-            ModalScreen::Explosives => 3,
+            ModalScreen::Explosives => 3 + fatherload_simulation::explosive::EXPLOSIVE_OFFERS.len(),
             ModalScreen::Salvage => 5,
             ModalScreen::Headquarters => {
                 if ctx.deep_claim_unlocked() {
@@ -1037,7 +1037,13 @@ impl SeatUi {
                     cost: 120,
                 },
                 2 => SessionServiceRequest::BuyMiningRockets,
-                _ => SessionServiceRequest::ClaimFreeTestCharge,
+                3 => SessionServiceRequest::ClaimFreeTestCharge,
+                // The special charges follow, in the shack's offer order.
+                item => SessionServiceRequest::BuyExplosives {
+                    kind: fatherload_simulation::explosive::EXPLOSIVE_OFFERS[(item - 4)
+                        .min(fatherload_simulation::explosive::EXPLOSIVE_OFFERS.len() - 1)]
+                    .kind,
+                },
             }),
             ModalScreen::Salvage => Some(match self.selected_menu_item {
                 0 => SessionServiceRequest::SalvageRecoverLostCargo,
@@ -1223,8 +1229,8 @@ impl SeatUi {
                 format!("Nix packed your charges. You now carry {}.", player.bombs)
             }
             SessionServiceRequest::BuyExplosives { kind } => format!(
-                "Nix packed your {}s. You now carry {}.",
-                kind.name().to_lowercase(),
+                "Nix packed your {}. You now carry {}.",
+                kind.plural(),
                 player.explosive_count(kind)
             ),
             SessionServiceRequest::SalvagePatchHull => format!(

@@ -262,7 +262,7 @@ impl LocalGame {
                             .sound_cues
                             .push(PlacedCue::interface(crate::shell::SoundCue::UiMove));
                     }
-                    seat_input_with(sampled, selection)
+                    seat_input_with(sampled, *selection)
                 }
                 _ => SeatInput::default(),
             };
@@ -316,6 +316,15 @@ impl LocalGame {
         snapshot.bomb_alpha = self.runtime.interpolation_alpha();
         snapshot.apply_pose_overrides(&self.runtime.pose_overrides());
         snapshot.apply_camera_leads(&self.camera_leads);
+        for view in &mut snapshot.views {
+            if self.shell.gameplay_input_enabled(view.seat_index) {
+                view.aim_preview = crate::render_snapshot::AimPreview::for_selection(
+                    self.runtime.world(),
+                    view.player_id,
+                    self.shell.seat(view.seat_index).explosives,
+                );
+            }
+        }
         snapshot
     }
 

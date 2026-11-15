@@ -32,6 +32,7 @@ use crate::{
 };
 
 mod buildings;
+mod explosives;
 mod fx;
 mod quest_marks;
 mod rig;
@@ -91,6 +92,8 @@ pub(super) struct WorldScene<'a> {
     pub explored: Option<&'a DiscoveredTiles>,
     /// Shell ticks (60 per second); drives every animation deterministically.
     pub ticks: u64,
+    /// The view's throw aim preview, if its seat has a throwable charge selected.
+    pub aim_preview: Option<&'a crate::render_snapshot::AimPreview>,
 }
 
 impl WorldScene<'_> {
@@ -142,7 +145,11 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     }
     fx::draw_relay_countdowns(draw, scene.terrain, scene.relay_countdowns, seconds);
     for bomb in scene.bombs {
-        fx::draw_bomb(draw, bomb, seconds, scene.bomb_alpha);
+        if bomb.kind == fatherload_simulation::ExplosiveKind::Bomb {
+            fx::draw_bomb(draw, bomb, seconds, scene.bomb_alpha);
+        } else {
+            explosives::draw_charge(draw, bomb, seconds, scene.bomb_alpha);
+        }
     }
     for boulder in scene.boulders {
         fx::draw_boulder(draw, boulder, seconds);
@@ -166,7 +173,14 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     }
     fx::draw_sparks(draw, scene.sparks);
     for explosion in scene.explosions {
-        fx::draw_explosion(draw, explosion);
+        if explosion.kind == fatherload_simulation::ExplosiveKind::Bomb {
+            fx::draw_explosion(draw, explosion);
+        } else {
+            explosives::draw_blast(draw, explosion);
+        }
+    }
+    if let Some(preview) = scene.aim_preview {
+        explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);
     }
     for player in scene.players {
         let is_local = scene

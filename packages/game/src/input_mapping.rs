@@ -26,6 +26,8 @@ pub struct ExplosiveSelection {
     pub selected: ExplosiveKind,
     /// -1 facing left, 1 facing right.
     pub facing: i8,
+    /// The aim the latest frame's input gave the selected kind (drawn as the aim preview).
+    pub last_aim: ThrowAim,
 }
 
 impl Default for ExplosiveSelection {
@@ -41,6 +43,7 @@ impl ExplosiveSelection {
         Self {
             selected: ExplosiveKind::Bomb,
             facing: 1,
+            last_aim: ThrowAim::from_digital(0, 0, 1),
         }
     }
 
@@ -51,12 +54,15 @@ impl ExplosiveSelection {
         if input.horizontal.abs() > 0.2 {
             self.facing = if input.horizontal < 0.0 { -1 } else { 1 };
         }
-        if !input.cycle_explosive {
-            return false;
-        }
-        let next = next_carried(self.selected, player);
-        let changed = next != self.selected;
-        self.selected = next;
+        let changed = if input.cycle_explosive {
+            let next = next_carried(self.selected, player);
+            let changed = next != self.selected;
+            self.selected = next;
+            changed
+        } else {
+            false
+        };
+        self.last_aim = self.aim(input);
         changed
     }
 
@@ -64,7 +70,7 @@ impl ExplosiveSelection {
     /// when pushed, otherwise the held directions and facing. Placed charges go straight at
     /// the nearest surface: down when drilling down, up when thrusting, else ahead.
     #[must_use]
-    pub fn aim(&self, input: &PlayerInput) -> ThrowAim {
+    pub fn aim(self, input: &PlayerInput) -> ThrowAim {
         let stick = ThrowAim::from_vector(input.aim_x, input.aim_y);
         if self.selected.deployment() == Deployment::Place {
             if let Some(stick) = stick {
@@ -96,7 +102,7 @@ impl ExplosiveSelection {
         })
     }
 
-    fn facing(&self, input: &PlayerInput) -> i8 {
+    fn facing(self, input: &PlayerInput) -> i8 {
         if input.horizontal.abs() > 0.2 {
             if input.horizontal < 0.0 { -1 } else { 1 }
         } else {
@@ -106,7 +112,7 @@ impl ExplosiveSelection {
 
     /// The command the bomb button sends for the selected kind.
     #[must_use]
-    pub fn deploy_command(&self, input: &PlayerInput) -> PlayerCommand {
+    pub fn deploy_command(self, input: &PlayerInput) -> PlayerCommand {
         if self.selected == ExplosiveKind::Bomb {
             PlayerCommand::PlaceBomb
         } else {
@@ -149,10 +155,7 @@ fn cardinal(x: f32, y: f32) -> ThrowAim {
 /// One-shot gameplay actions pressed this frame (scanner, explosives, the remote detonator,
 /// infrastructure kits).
 #[must_use]
-pub fn gameplay_actions(
-    input: &PlayerInput,
-    explosives: &ExplosiveSelection,
-) -> Vec<PlayerCommand> {
+pub fn gameplay_actions(input: &PlayerInput, explosives: ExplosiveSelection) -> Vec<PlayerCommand> {
     let mut actions = Vec::new();
     if input.scan {
         actions.push(PlayerCommand::UseScanner);
@@ -184,12 +187,12 @@ pub fn gameplay_actions(
 #[must_use]
 #[cfg(test)]
 pub fn seat_input(input: &PlayerInput) -> SeatInput {
-    seat_input_with(input, &ExplosiveSelection::new())
+    seat_input_with(input, ExplosiveSelection::new())
 }
 
 /// A seat's full gameplay input, deploying the seat's selected explosive.
 #[must_use]
-pub fn seat_input_with(input: &PlayerInput, explosives: &ExplosiveSelection) -> SeatInput {
+pub fn seat_input_with(input: &PlayerInput, explosives: ExplosiveSelection) -> SeatInput {
     SeatInput {
         controls: gameplay_controls(input),
         actions: gameplay_actions(input, explosives),
@@ -210,7 +213,7 @@ mod tests {
         };
         let controls = gameplay_controls(&input);
         assert_eq!(controls, ControlState::new(1.0, true, true));
-        assert!(gameplay_actions(&input, &ExplosiveSelection::new()).is_empty());
+        assert!(gameplay_actions(&input, ExplosiveSelection::new()).is_empty());
     }
 
     #[test]
@@ -234,7 +237,7 @@ mod tests {
             ..PlayerInput::default()
         };
         assert_eq!(
-            gameplay_actions(&input, &ExplosiveSelection::new()),
+            gameplay_actions(&input, ExplosiveSelection::new()),
             vec![
                 PlayerCommand::UseScanner,
                 PlayerCommand::PlaceBomb,
@@ -270,13 +273,14 @@ mod tests {
         let selection = ExplosiveSelection {
             selected: ExplosiveKind::Sticky,
             facing: -1,
+            ..ExplosiveSelection::new()
         };
         let throw = PlayerInput {
             bomb: true,
             ..PlayerInput::default()
         };
         assert_eq!(
-            gameplay_actions(&throw, &selection),
+            gameplay_actions(&throw, selection),
             vec![PlayerCommand::DeployExplosive {
                 kind: ExplosiveKind::Sticky,
                 aim: ThrowAim::from_digital(0, 0, -1),
@@ -291,7 +295,7 @@ mod tests {
         assert_eq!(selection.aim(&stick), ThrowAim::DOWN);
         let c4 = ExplosiveSelection {
             selected: ExplosiveKind::C4,
-            facing: 1,
+            ..ExplosiveSelection::new()
         };
         let drill = PlayerInput {
             drill_down: true,
@@ -304,7 +308,7 @@ mod tests {
             ..PlayerInput::default()
         };
         assert_eq!(
-            gameplay_actions(&detonate, &selection),
+            gameplay_actions(&detonate, selection),
             vec![PlayerCommand::RemoteDetonate { sequenced: false }]
         );
         let sequence = PlayerInput {
@@ -312,7 +316,7 @@ mod tests {
             ..PlayerInput::default()
         };
         assert_eq!(
-            gameplay_actions(&sequence, &selection),
+            gameplay_actions(&sequence, selection),
             vec![PlayerCommand::RemoteDetonate { sequenced: true }]
         );
     }

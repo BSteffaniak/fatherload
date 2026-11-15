@@ -2,6 +2,7 @@
 //! atlas packs them (the tests fail for a sprite that is drawn but missing here only at runtime,
 //! so keep groups' lists complete).
 
+pub mod explosives;
 pub mod icons;
 pub mod interior;
 pub mod menu_icons;
@@ -70,6 +71,23 @@ pub const ALL: &[&SpriteDef] = &[
     &rig::ICON_CREW,
     &world::BOULDER,
     &world::BOMB,
+    &explosives::STICKY,
+    &explosives::CLUSTER,
+    &explosives::BOMBLET,
+    &explosives::C4,
+    &explosives::SHAPED,
+    &explosives::MINING,
+    &explosives::INCENDIARY,
+    &explosives::EMP,
+    &explosives::FLARE,
+    &explosives::ICON_STICKY,
+    &explosives::ICON_CLUSTER,
+    &explosives::ICON_C4,
+    &explosives::ICON_SHAPED,
+    &explosives::ICON_MINING,
+    &explosives::ICON_INCENDIARY,
+    &explosives::ICON_EMP,
+    &explosives::ICON_FLARE,
     &world::CARGO_CRATE,
     &world::MARKER_ARROW,
     &world::SIGNAL_RELAY,

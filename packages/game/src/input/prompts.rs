@@ -28,7 +28,16 @@ pub enum Prompt {
     Thrust,
     Drill,
     Scan,
+    /// Drop, throw or place the selected explosive.
     Bomb,
+    /// Select the next carried explosive.
+    CycleExplosive,
+    /// Fire the remote detonator: every waiting C4 at once.
+    Detonate,
+    /// Fire the remote detonator in sequence (a controller holds the detonate button).
+    DetonateSequence,
+    /// Aim a throw freely (a controller's right stick; keyboards aim with the movement keys).
+    Aim,
     /// Previous/next tab or column.
     Tab,
     Pause,
@@ -150,6 +159,14 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::Scan, Arrows) => &["Num."],
         (Prompt::Bomb, Full | Wasd) => &["B"],
         (Prompt::Bomb, Arrows) => &["Num0"],
+        (Prompt::CycleExplosive, Full | Wasd) => &["Q"],
+        (Prompt::CycleExplosive, Arrows) => &["Num3"],
+        (Prompt::Detonate, Full | Wasd) => &["F"],
+        (Prompt::Detonate, Arrows) => &["Num4"],
+        (Prompt::DetonateSequence, Full | Wasd) => &["G"],
+        (Prompt::DetonateSequence, Arrows) => &["Num5"],
+        (Prompt::Aim, Full | Wasd) => &["W", "A", "S", "D"],
+        (Prompt::Aim, Arrows) => &["\u{2190}", "\u{2191}", "\u{2192}", "\u{2193}"],
         (Prompt::Map, Full | Wasd) => &["M"],
         (Prompt::Inventory, Full | Wasd) => &["Tab"],
         (Prompt::Help, Full | Wasd) => &["H"],
@@ -203,6 +220,12 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
         Prompt::Thrust => button(PadAction::Thrust).into_iter().collect(),
         Prompt::Scan => button(PadAction::Scan).into_iter().collect(),
         Prompt::Bomb => button(PadAction::Bomb).into_iter().collect(),
+        Prompt::CycleExplosive => button(PadAction::CycleExplosive).into_iter().collect(),
+        // A tap fires everything; holding the same button fires the sequence.
+        Prompt::Detonate | Prompt::DetonateSequence => {
+            button(PadAction::Detonate).into_iter().collect()
+        }
+        Prompt::Aim => vec![PadGlyph::RightStick],
         Prompt::Tab => both(PadAction::TabPrevious, PadAction::TabNext),
         Prompt::Pause => button(PadAction::Pause).into_iter().collect(),
         Prompt::Map => button(PadAction::Map).into_iter().collect(),

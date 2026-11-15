@@ -3,7 +3,7 @@ mod poi_map;
 use raylib::prelude::*;
 
 use fatherload_simulation::{
-    DiscoveredTiles, Player,
+    DiscoveredTiles, ExplosiveKind, Player,
     economy::{UpgradeKind, current_level},
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
     worldgen::Band,
@@ -21,7 +21,7 @@ use super::{
     pixel_art::{
         palette,
         sprite::SpriteDef,
-        sprites::{icons, menu_icons, rig},
+        sprites::{explosives as explosive_art, icons, menu_icons, rig},
     },
     prompts::{self, hint},
     quests,
@@ -179,7 +179,19 @@ pub(super) fn draw_view_hud(
         0.0,
     );
 
-    draw_wallet_panel(draw, view, rect, left + width + 4, top);
+    let armed = snapshot
+        .bombs
+        .iter()
+        .filter(|bomb| bomb.owner == Some(view.player_id) && bomb.awaiting_remote())
+        .count();
+    draw_wallet_panel(
+        draw,
+        view,
+        (&shell.seat(view.seat_index).explosives, armed),
+        rect,
+        left + width + 4,
+        top,
+    );
     draw_view_prompt(draw, shell, view, rect);
 
     // Warning badges.
@@ -315,6 +327,7 @@ fn draw_view_prompt(
 fn draw_wallet_panel(
     draw: &mut RaylibDrawHandle<'_>,
     view: &ViewSnapshot<'_>,
+    (explosives, armed): (&crate::input_mapping::ExplosiveSelection, usize),
     rect: Rectangle,
     min_x: i32,
     top: i32,
@@ -328,7 +341,18 @@ fn draw_wallet_panel(
     } else {
         "READY".to_owned()
     };
-    let bombs = format!("{}", view.player.bombs);
+    let selected = explosives.selected;
+    let carried = view.player.explosive_count(selected);
+    let bombs = format!("{carried}");
+    // A third row names a special charge and counts C4 waiting for the detonator.
+    let charge_line = (selected != ExplosiveKind::Bomb || armed > 0).then(|| {
+        let name = selected.name().to_uppercase();
+        if armed > 0 {
+            format!("{name}  {armed} ARMED")
+        } else {
+            name
+        }
+    });
     let chips_width = ui_kit::text_width(&bombs, TextStyle::Bold)
         + icons::ICON_SIZE
         + 3
@@ -341,13 +365,16 @@ fn draw_wallet_panel(
         .max(ui_kit::text_width(&depth, TextStyle::Bold))
         + icons::ICON_SIZE
         + 6;
-    let panel_width = value_width.max(chips_width) + ui_kit::PANEL_PADDING * 2;
+    let line_width = charge_line
+        .as_ref()
+        .map_or(0, |line| ui_kit::text_width(line, TextStyle::Body));
+    let panel_width = value_width.max(chips_width).max(line_width) + ui_kit::PANEL_PADDING * 2;
     let panel_width = panel_width.max(64);
     let x = (rect.x + rect.width) as i32 - 16 - panel_width;
     if x <= min_x {
         return;
     }
-    let height = 45;
+    let height = if charge_line.is_some() { 56 } else { 45 };
     ui_kit::panel(
         draw,
         Rectangle::new(x as f32, top as f32, panel_width as f32, height as f32),
@@ -361,15 +388,25 @@ fn draw_wallet_panel(
     ui_kit::divider(draw, x + 4, top + 28, panel_width - 8);
     // Tool chips: bombs on the left, the scanner's cooldown on the right.
     let chip_y = top + 32;
-    ui_kit::icon(draw, &icons::BOMB, x + 6, chip_y);
+    ui_kit::icon(draw, explosive_art::icon(selected), x + 6, chip_y);
     ui_kit::text(
         draw,
         &bombs,
         x + 6 + icons::ICON_SIZE + 2,
         chip_y + 1,
         TextStyle::Bold,
-        if view.player.bombs > 0 { ORANGE } else { FOG },
+        if carried > 0 { ORANGE } else { FOG },
     );
+    if let Some(line) = &charge_line {
+        ui_kit::text(
+            draw,
+            line,
+            x + 6,
+            chip_y + 12,
+            TextStyle::Body,
+            if armed > 0 { ROSE } else { MIST },
+        );
+    }
     if has_scanner {
         let ready = scan == "READY";
         let scan_width = ui_kit::text_width(&scan, TextStyle::Bold);
@@ -852,7 +889,17 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 GOLD,
             ),
             SectionItem::icon_stat(&icons::BOMB, "Bombs", ui.player.bombs.to_string(), ORANGE),
-        ],
+        ]
+        .into_iter()
+        .chain(ui.player.explosives.iter().map(|(kind, count)| {
+            SectionItem::icon_stat(
+                explosive_art::icon(*kind),
+                kind.name(),
+                count.to_string(),
+                ORANGE,
+            )
+        }))
+        .collect(),
     ));
     let mineral_items = if ui.player.cargo_bay.has_minerals() {
         ui.player
@@ -1263,7 +1310,11 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
             GOLD,
             &[
                 (Prompt::Scan, "Scanner"),
-                (Prompt::Bomb, "Bomb"),
+                (Prompt::Bomb, "Explosive"),
+                (Prompt::CycleExplosive, "Next explosive"),
+                (Prompt::Aim, "Aim throws"),
+                (Prompt::Detonate, "Detonate C4"),
+                (Prompt::DetonateSequence, "Detonate in sequence"),
                 (Prompt::Map, "Map"),
                 (Prompt::Inventory, "Inventory"),
                 (Prompt::Infrastructure, "Field kits"),

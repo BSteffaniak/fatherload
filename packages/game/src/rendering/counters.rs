@@ -6,11 +6,12 @@
 //! (see `ShellState::handle_modal`), so the labels always describe what Enter actually does.
 
 use fatherload_simulation::{
-    RecipeKind,
+    ExplosiveKind, RecipeKind,
     economy::{
         DeepClaimStatus, REFUEL_UNIT_COST, REPAIR_UNIT_COST, TownBuilding, UpgradeKind,
         upgrade_effect, upgrade_locked_by, upgrade_maxed, upgrade_offers, upgrade_tier_name,
     },
+    explosive::EXPLOSIVE_OFFERS,
     terrain::MineralKind,
     world::{BOMB_BUNDLES, MINING_ROCKETS_COST, MINING_ROCKETS_COUNT, MINING_ROCKETS_SHACK_LEVEL},
 };
@@ -25,7 +26,7 @@ use super::{
     layout::{ItemEntry, ModalContent, Section, SectionItem, UiLayout},
     pixel_art::{
         sprite::SpriteDef,
-        sprites::{icons, menu_icons, rig},
+        sprites::{explosives as explosive_art, icons, menu_icons, rig},
     },
     prompts::{Hint, hint},
     screen::UiFrame,
@@ -569,7 +570,7 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
     )
     .tag("FREE", LIME)
     .about("Nix hands out a sample charge to anyone who asks nicely.");
-    let status = vec![
+    let mut status = vec![
         credits_item(credits),
         SectionItem::icon_stat(
             &icons::BOMB,
@@ -578,6 +579,21 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
             ORANGE,
         ),
     ];
+    for (kind, count) in &ui.player.explosives {
+        status.push(SectionItem::icon_stat(
+            explosive_art::icon(*kind),
+            kind.name(),
+            count.to_string(),
+            ORANGE,
+        ));
+    }
+    let mut offers = vec![
+        bundle("Small bomb pack", small_count, small_cost),
+        bundle("Standard bomb pack", big_count, big_cost),
+        rockets,
+        test,
+    ];
+    offers.extend(special_offers(shack, credits, &bomb_key));
     draw_counter(
         ui,
         draw,
@@ -585,13 +601,42 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         COUNTER_HELP,
         status,
         "For sale",
-        vec![
-            bundle("Small bomb pack", small_count, small_cost),
-            bundle("Standard bomb pack", big_count, big_cost),
-            rockets,
-            test,
-        ],
+        offers,
     );
+}
+
+/// The shack's special charge packs (C4, sticky bombs, flares...), locked below their level.
+fn special_offers(shack: u8, credits: u32, bomb_key: &str) -> Vec<Offer> {
+    let cycle_key =
+        crate::input::prompts::inline_text(Prompt::CycleExplosive, super::prompts::menu_device())
+            .unwrap_or_else(|| "the next-charge button".to_owned());
+    let detonate_key =
+        crate::input::prompts::inline_text(Prompt::Detonate, super::prompts::menu_device())
+            .unwrap_or_else(|| "the detonator".to_owned());
+    EXPLOSIVE_OFFERS
+        .iter()
+        .map(|offer| {
+        let locked = shack < offer.shack_level;
+        let how = match offer.kind {
+            ExplosiveKind::C4 => format!(
+                " Press {cycle_key} to select it, {bomb_key} to place it and {detonate_key} to fire every charge."
+            ),
+            _ => format!(" Press {cycle_key} to select it and {bomb_key} to use it."),
+        };
+        Offer::new(
+            explosive_art::icon(offer.kind),
+            format!("{} pack", offer.kind.name()),
+            if locked {
+                format!("Shack level {} needed", offer.shack_level)
+            } else {
+                format!("+{} {}", offer.count, offer.kind.plural())
+            },
+        )
+        .price(offer.cost, credits)
+        .unavailable_if(locked)
+        .about(format!("{}{how}", offer.kind.description()))
+        })
+        .collect()
 }
 
 pub(super) fn draw_salvage(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {

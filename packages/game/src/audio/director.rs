@@ -624,10 +624,14 @@ impl Director {
         *self.seat_state(listener.seat) = state;
     }
 
-    /// Bomb fuses tick faster as they burn down.
+    /// Bomb fuses tick faster as they burn down (C4 only once its detonator has fired).
     fn fuse_ticks(&mut self, frame: &AudioFrame<'_, '_>, listeners: &[Listener]) {
         let mut seen = BTreeSet::new();
         for bomb in frame.snapshot.bombs {
+            // Remote charges waiting for the detonator and burning flares or fires have no fuse.
+            if !bomb.kind.has_audible_fuse() || bomb.awaiting_remote() || bomb.burning() {
+                continue;
+            }
             let key = (bomb.x.round() as i32, bomb.y.round() as i32);
             seen.insert(key);
             let timer = self.fuses.entry(key).or_insert(0.0);

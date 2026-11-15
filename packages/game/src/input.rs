@@ -103,6 +103,10 @@ impl PlayerInput {
     /// Whether the input shows deliberate use of its device (any key, button or movement),
     /// for switching a seat's prompts to it. Closing the window does not count.
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the exhaustive destructure is what keeps every new input counted"
+    )]
     pub fn has_activity(&self) -> bool {
         let Self {
             horizontal,

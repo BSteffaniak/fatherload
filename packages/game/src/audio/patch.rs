@@ -1385,8 +1385,8 @@ fn emp_pulse(rng: &mut Rng) -> Vec<f32> {
     render(1.1, |t| {
         let frequency = glide(t, start, 90.0, 0.18);
         let zap = crush.process(saw.next(frequency), 6.0) * perc(t, 0.001, 0.45);
-        let ring = fm.next(frequency * 0.5, 1.41, 2.0 * decay(t, 0.3)) * perc(t, 0.005, 0.7);
-        let dry = filter.run(zap * 0.6 + ring * 0.5, glide(t, 8_000.0, 900.0, 0.3), 1.4);
+        let tail = fm.next(frequency * 0.5, 1.41, 2.0 * decay(t, 0.3)) * perc(t, 0.005, 0.7);
+        let dry = filter.run(zap * 0.6 + tail * 0.5, glide(t, 8_000.0, 900.0, 0.3), 1.4);
         dry + echo.process(dry, 0.11, 0.4) * 0.4
     })
 }

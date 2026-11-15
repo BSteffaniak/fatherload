@@ -80,6 +80,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 |---|---|
 | `simulate` | the tick: inputs, entity phases, hazards, bombs, drilling, day cycle, escape, deep rewards |
 | `entities` | the world side of the entity store: spawn helpers, the two entity phases and each kind's update (gas clouds, boulders, drops), blasts, waking on terrain changes, entity replication |
+| `bombs` | loose-charge physics, chain reactions and every explosive kind (`crate::explosive`): sticking, remote/sequenced detonation, cluster bomblets, shaped tunnels, loot-safe mining blasts, incendiary rings, flare pulses, blast pushes on rigs (`push_from_blasts` is the seam for other entities) and the throw preview |
 | `movement`, `commands`, `services`, `progression`, `hazards`, `rescue` | gameplay rules used by the tick |
 | `quests` | quest services (accept, turn in, abandon at the giver's counter), objectives stepping inside the tick, twists, rewards, reputation rebates, blueprint fragments |
 | `roster` | `add_player` / `remove_player`; spawn placement on an unbounded grid so any number of rigs spawn without overlap |

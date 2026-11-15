@@ -307,7 +307,7 @@ pub fn wrapped_height(rows: usize) -> i32 {
 pub fn draw_prompt_sheet(draw: &mut impl RaylibDraw) {
     use super::pixel_art::sprite::draw_sprite;
     use crate::input::devices::KeyboardLayout;
-    const ALL: [Prompt; 22] = [
+    const ALL: [Prompt; 26] = [
         Prompt::Navigate,
         Prompt::Adjust,
         Prompt::Confirm,
@@ -318,6 +318,10 @@ pub fn draw_prompt_sheet(draw: &mut impl RaylibDraw) {
         Prompt::Drill,
         Prompt::Scan,
         Prompt::Bomb,
+        Prompt::CycleExplosive,
+        Prompt::Detonate,
+        Prompt::DetonateSequence,
+        Prompt::Aim,
         Prompt::Tab,
         Prompt::Pause,
         Prompt::Map,
@@ -453,6 +457,10 @@ const fn prompt_name(prompt: Prompt) -> &'static str {
         Prompt::Drill => "drill",
         Prompt::Scan => "scan",
         Prompt::Bomb => "bomb",
+        Prompt::CycleExplosive => "next charge",
+        Prompt::Detonate => "detonate",
+        Prompt::DetonateSequence => "in sequence",
+        Prompt::Aim => "aim",
         Prompt::Tab => "tab",
         Prompt::Pause => "pause",
         Prompt::Map => "map",

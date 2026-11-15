@@ -145,6 +145,10 @@ impl Effects {
     /// Turns freshly presented events into placed sound cues and particles. Events of
     /// `local_players` (or world-wide events) make sound; see `audio::cues::event_cue` for the
     /// event -> cue table.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one dispatch over every presented gameplay event"
+    )]
     pub fn apply(
         &mut self,
         events: &[RuntimeEvent],

@@ -193,6 +193,7 @@ mod tests {
 
     /// One of every event kind (the match below must stay exhaustive, so adding a kind breaks
     /// this test until it is listed).
+    #[allow(clippy::too_many_lines, reason = "one sample of every event kind")]
     fn every_event() -> Vec<GameplayEventKind> {
         let player_id = PlayerId::new(1);
         let feature = FeatureId(0);

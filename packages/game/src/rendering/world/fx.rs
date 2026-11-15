@@ -33,7 +33,7 @@ use crate::{
 use super::{ART, Pen, draw_world_sprite, snap};
 
 /// A filled pixel disc of radius `radius` art pixels centred on world `(x, y)`.
-fn disc(draw: &mut impl RaylibDraw, x: f32, y: f32, radius: i32, color: Color) {
+pub(super) fn disc(draw: &mut impl RaylibDraw, x: f32, y: f32, radius: i32, color: Color) {
     let (cx, cy) = (snap(x), snap(y));
     for row in -radius..=radius {
         let half = (((radius * radius - row * row) as f32).sqrt() + 0.3).floor() as i32;
