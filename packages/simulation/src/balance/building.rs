@@ -24,8 +24,10 @@ use crate::{
 const BUILD_BAND: Band = Band::Slate;
 /// Column of the cavern's first claim beacon.
 const CAVERN_X: i32 = 330;
-/// Blocks in the hopper at the start (a typical haul).
-const STARTING_BLOCKS: u32 = 40;
+/// Blocks in the hopper at the start: enough for every module, so each one is paid for in
+/// blocks plus its list price and the two columns stay separate (a short hopper would buy the
+/// missing blocks and fold them into the credits).
+const STARTING_BLOCKS: u32 = 200;
 
 /// One placement's outcome.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,6 +81,7 @@ pub fn run_building(tick_rate_hz: u32) -> Option<BuildingRun> {
     {
         let rig = world.player_mut(BOT_PLAYER)?;
         rig.credits = 100_000;
+        rig.block_hopper_capacity = STARTING_BLOCKS;
         let _ = rig.stow(ItemKind::Block(BlockKind::Stone), STARTING_BLOCKS);
     }
     // Reaching the band unlocks its modules and claims; the rig walks there in the tick.
@@ -144,6 +147,13 @@ pub fn run_building(tick_rate_hz: u32) -> Option<BuildingRun> {
             refused,
         });
     }
+    run.station_fuel_per_minute = station_fuel_per_minute(&mut world);
+    Some(run)
+}
+
+/// Fuel `world`'s fuel stations synthesize in one game minute of ticks (a station starts with
+/// a part-full tank, so the minute is measured as a difference).
+fn station_fuel_per_minute(world: &mut WorldState) -> u32 {
     let station_fuel = |world: &WorldState| {
         world
             .bases()
@@ -152,8 +162,7 @@ pub fn run_building(tick_rate_hz: u32) -> Option<BuildingRun> {
             .map(|module| module.fuel)
             .sum::<u32>()
     };
-    // The station starts with a part-full tank: let it work for a game minute.
-    let before = station_fuel(&world);
+    let before = station_fuel(world);
     let ticks = world.tick_rate_hz() * 60;
     for _ in 0..ticks {
         let _ = world.simulate_tick(
@@ -161,8 +170,7 @@ pub fn run_building(tick_rate_hz: u32) -> Option<BuildingRun> {
             &inputs_for(BOT_PLAYER, ControlState::default(), Vec::new()),
         );
     }
-    run.station_fuel_per_minute = station_fuel(&world).saturating_sub(before);
-    Some(run)
+    station_fuel(world).saturating_sub(before)
 }
 
 /// Median credits per minute the prospector earned around the minute it first reached band
@@ -201,8 +209,8 @@ impl BalanceProbe for BuildingProbe {
             "Building",
             format!(
                 "A rig with {STARTING_BLOCKS} stone blocks in its hopper stakes two claims in a \
-                 cavern in the {} and places every module through real build commands (missing \
-                 blocks are bought). \"Minutes of income\" divides the price by what the \
+                 cavern in the {} and places every module through real build commands (a player \
+                 short of blocks pays their market price on top). \"Minutes of income\" divides the price by what the \
                  prospector bot was earning per minute when it first reached the module's \
                  unlock band (the clay beds when it has none).",
                 BUILD_BAND.name()

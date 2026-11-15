@@ -393,9 +393,18 @@ impl BalanceProbe for ProgressionProbe {
         let mut section = ReportSection::new(
             "Progression",
             "When the economy bot reached each tier of the core lines (median game minute over \
-             seeds and strategies; the share of runs that got there in brackets when not all \
-             did), how deep it was over time, and when it first entered each band.",
+             the seeds of the reference strategy, the prospector, or of every strategy run when \
+             it is not; the share of runs that got there in brackets when not all did), how \
+             deep it was over time, and when it first entered each band.",
         );
+        // The time-to-tier table follows the reference player: mixing in the shaft-only
+        // baseline, which never affords an upgrade, would drag every median down.
+        let reference = runs_of(runs, Strategy::Prospector);
+        let tier_runs: Vec<&EconomyRun> = if reference.is_empty() {
+            runs.iter().collect()
+        } else {
+            reference
+        };
         let mut headers = vec!["Line".to_owned()];
         headers.extend(REPORTED_TIERS.iter().map(|tier| format!("Tier {tier}")));
         let mut tiers = Table {
@@ -406,16 +415,21 @@ impl BalanceProbe for ProgressionProbe {
         for kind in CORE_LINES {
             let mut row = vec![format!("{kind:?}")];
             for tier in REPORTED_TIERS {
-                let reached: Vec<f64> = runs
+                let reached: Vec<f64> = tier_runs
                     .iter()
                     .filter_map(|run| run.minute_of_tier(kind, tier).map(f64::from))
                     .collect();
                 let cell = if reached.is_empty() {
                     "-".to_owned()
-                } else if reached.len() == runs.len() {
+                } else if reached.len() == tier_runs.len() {
                     format!("{:.1}", median(&reached))
                 } else {
-                    format!("{:.1} ({}/{})", median(&reached), reached.len(), runs.len())
+                    format!(
+                        "{:.1} ({}/{})",
+                        median(&reached),
+                        reached.len(),
+                        tier_runs.len()
+                    )
                 };
                 if kind == UpgradeKind::Drill && !reached.is_empty() {
                     section.metric(format!("progression.drill{tier}_minute"), median(&reached));
