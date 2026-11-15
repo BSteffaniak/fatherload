@@ -668,8 +668,8 @@ pub(super) fn draw_minimap_for_view(
         .iter()
         .filter(|other| other.player_id != view.player_id)
     {
-        let tile_x = (remote.x / TILE_SIZE) as i32;
-        let tile_y = (remote.y / TILE_SIZE) as i32;
+        let tile_x = (remote.x / TILE_SIZE).floor() as i32;
+        let tile_y = (remote.y / TILE_SIZE).floor() as i32;
         if !on_map(tile_x, tile_y) {
             continue;
         }
@@ -1153,6 +1153,41 @@ fn town_heading(column: f32) -> String {
     }
 }
 
+/// The other rigs on the mine map, each in its owner's paint (as on the minimap and name tags).
+fn draw_map_other_rigs(
+    draw: &mut RaylibDrawHandle<'_>,
+    ui: &UiFrame<'_, '_>,
+    (x0, y0): (i32, i32),
+    (origin_x, origin_y): (i32, i32),
+    (columns, rows): (i32, i32),
+    pixel: i32,
+) {
+    for remote in ui
+        .snapshot
+        .players
+        .iter()
+        .filter(|other| other.player_id != ui.view.player_id)
+    {
+        // Floor, not truncation: endless worlds have negative columns.
+        let (tx, ty) = (
+            (remote.x / TILE_SIZE).floor() as i32,
+            (remote.y / TILE_SIZE).floor() as i32,
+        );
+        if (origin_x..origin_x + columns).contains(&tx) && (origin_y..origin_y + rows).contains(&ty)
+        {
+            let (rx, ry) = (x0 + (tx - origin_x) * pixel, y0 + (ty - origin_y) * pixel);
+            draw.draw_rectangle(rx - 2, ry - 2, 6, 6, INK);
+            draw.draw_rectangle(
+                rx - 1,
+                ry - 1,
+                4,
+                4,
+                player_accent(remote.player_id, Some(remote.cosmetics)),
+            );
+        }
+    }
+}
+
 /// The mine map: discovered terrain at two art pixels per tile around the rig, with depth
 /// marks, the rig's blinking marker and a legend.
 fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
@@ -1235,28 +1270,14 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         if blink { BONE } else { SKY_LIGHT },
     );
     draw.draw_rectangle(marker_x - 1, marker_y - 1, 4, 4, OCEAN);
-    // Other rigs.
-    for remote in ui
-        .snapshot
-        .players
-        .iter()
-        .filter(|other| other.player_id != ui.view.player_id)
-    {
-        let (tx, ty) = ((remote.x / TILE_SIZE) as i32, (remote.y / TILE_SIZE) as i32);
-        if (origin_x..origin_x + columns).contains(&tx) && (origin_y..origin_y + rows).contains(&ty)
-        {
-            let (rx, ry) = (x0 + (tx - origin_x) * pixel, y0 + (ty - origin_y) * pixel);
-            draw.draw_rectangle(rx - 2, ry - 2, 6, 6, INK);
-            // Each rig in its owner's paint, as on the minimap and name tags.
-            draw.draw_rectangle(
-                rx - 1,
-                ry - 1,
-                4,
-                4,
-                player_accent(remote.player_id, Some(remote.cosmetics)),
-            );
-        }
-    }
+    draw_map_other_rigs(
+        draw,
+        ui,
+        (x0, y0),
+        (origin_x, origin_y),
+        (columns, rows),
+        pixel,
+    );
     draw_map_legend(
         draw,
         well.x as i32 + 2,
