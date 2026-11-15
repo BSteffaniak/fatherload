@@ -112,6 +112,36 @@ tag, their split-screen HUD title and their minimap marker. Players who never vi
 keep distinct default colours (player 1 yellow, 2 teal, 3 rose, 4 lime, ...). Paint jobs are
 saved with the player and every co-op or online crewmate sees them.
 
+### Movement feel
+
+Every engine tier raises the rig's top speed by about an eighth: the top engine is about five
+times faster than stock, and test mode more than doubles that again. Fast rigs ease into their
+speed instead of snapping to it (acceleration builds as the rig spools up and tapers off near
+top speed), brake harder the faster they go, and brake harder still when you steer against the
+motion, so stopping and turning stay controllable and a short tap is still a precise nudge.
+At speed the camera leads ahead of the rig (more the faster it goes; slow rigs stay centred)
+and speed lines and wake motes stream behind it. The drive model is integrated at a fixed
+internal 240 Hz step and fast rigs are swept in half-tile collision steps, so the feel is the
+same at every session tick rate and nothing tunnels through walls.
+
+Measured on a flat tunnel at 60 Hz (stock parts, empty bay; regenerate with
+`cargo test -p fatherload_simulation feel_report -- --ignored --nocapture`):
+
+| Rig | Top speed (tiles/s) | First move (ms) | To 50 % (s) | To 90 % (s) | Cross 100 tiles (s) | Stop from top (tiles / s) | Reverse (s) | 100 ms tap (px) | Flight top (tiles/s) | Flight stop (tiles) | Climb top (tiles/s) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Tier 1 | 2.2 | 67 | 0.05 | 0.07 | 44.5 | 0.1 / 0.12 | 0.08 | 7 | 1.9 | 0.1 | 5.9 |
+| Tier 3 | 2.9 | 67 | 0.05 | 0.08 | 35.1 | 0.1 / 0.12 | 0.08 | 9 | 2.4 | 0.1 | 9.3 |
+| Tier 5 | 3.6 | 50 | 0.05 | 0.10 | 27.8 | 0.1 / 0.13 | 0.10 | 11 | 3.1 | 0.1 | 12.6 |
+| Tier 8 | 5.1 | 50 | 0.07 | 0.12 | 19.7 | 0.2 / 0.13 | 0.12 | 13 | 4.3 | 0.2 | 16.1 |
+| Tier 10 | 6.4 | 50 | 0.08 | 0.13 | 15.6 | 0.3 / 0.15 | 0.13 | 14 | 5.5 | 0.3 | 17.8 |
+| Tier 12 | 8.1 | 50 | 0.10 | 0.15 | 12.4 | 0.4 / 0.17 | 0.17 | 15 | 6.9 | 0.4 | 17.8 |
+| Tier 15 | 11.4 | 50 | 0.12 | 0.20 | 8.9 | 0.7 / 0.20 | 0.22 | 15 | 9.7 | 0.7 | 17.8 |
+| God mode | 25.1 | 67 | 0.30 | 0.47 | 4.3 | 2.6 / 0.33 | 0.48 | 8 | 21.3 | 2.6 | 26.7 |
+
+"First move" is the time until the rig has visibly moved (one art pixel); "Stop from top" is
+coasting from top speed with the stick released; "Reverse" is from full speed one way to half
+speed the other way.
+
 ### Worlds
 
 Every new game is a different world. "New Game", "Local Split-Screen" and "Host Online Game"
@@ -123,10 +153,14 @@ the host's settings define the session.
 
 **Test mode** is for exploring the layers quickly (a god mode): every rig starts with every
 upgrade and hazard counter maxed (drill mount included), every rig part in the locker and
-1,000,000 credits, and drills through anything except bedrock (including lava, foundations and
-vault walls) near-instantly. The
+1,000,000 credits, and is tuned to feel like the game is beaten: rigs drive more than twice as
+fast as the top engine tier (about 25 tiles a second), climb half again faster, and drill
+through anything except bedrock (including lava, foundations and vault walls) the instant the
+drill touches it. The
 pause menu adds **Warp to Layer** (drops your rig into a safe carved pocket at the top of any
-layer), **Invulnerable Hull** and **Infinite Fuel** (for the whole crew). Depth records and
+layer), **Invulnerable Hull**, **Infinite Fuel** and **No-Clip Flight** (for the whole crew;
+no-clip rigs fly through solid rock with no gravity, collision or drilling: thrust flies up,
+drill flies down, and turning it off frees any rig left inside rock). Depth records and
 deep-reward milestones do not count. Test-mode worlds are marked on the HUD, the pause menu,
 save slots and the title's last-save line; it works in split-screen and online (the host
 chooses it).
