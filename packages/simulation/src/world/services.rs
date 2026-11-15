@@ -37,7 +37,9 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
 pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [SurfaceZone] {
     match request {
         SessionServiceRequest::Refuel { .. } => &[SurfaceZone::Fuel],
-        SessionServiceRequest::Repair { .. } => &[SurfaceZone::Repair],
+        SessionServiceRequest::Repair { .. } | SessionServiceRequest::CustomizeRig { .. } => {
+            &[SurfaceZone::Repair]
+        }
         SessionServiceRequest::SellCargo
         | SessionServiceRequest::AutoSortLowGradeCargo
         | SessionServiceRequest::SellScanData => &[SurfaceZone::Depot],
@@ -115,6 +117,9 @@ impl WorldState {
     ) -> PlayerScopedCommandOutcome {
         if !self.players.contains_key(&player_id) {
             return PlayerScopedCommandOutcome::UnknownPlayer;
+        }
+        if let SessionServiceRequest::CustomizeRig { cosmetics } = request {
+            return self.apply_rig_customization(player_id, cosmetics);
         }
         let direct = match request {
             SessionServiceRequest::Refuel { .. } => Some(PlayerCommand::Refuel),
@@ -230,7 +235,8 @@ impl WorldState {
             | SessionServiceRequest::AutoSortLowGradeCargo
             | SessionServiceRequest::AcceptQuest { .. }
             | SessionServiceRequest::TurnInQuest { .. }
-            | SessionServiceRequest::AbandonQuest { .. } => {
+            | SessionServiceRequest::AbandonQuest { .. }
+            | SessionServiceRequest::CustomizeRig { .. } => {
                 PlayerScopedCommandOutcome::IgnoredUnavailable
             }
         }

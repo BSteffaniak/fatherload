@@ -79,7 +79,8 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `quests` | quest services (accept, turn in, abandon at the giver's counter), objectives stepping inside the tick, twists, rewards, reputation rebates, blueprint fragments |
 | `roster` | `add_player` / `remove_player`; spawn placement on an unbounded grid so any number of rigs spawn without overlap |
 | `discovery` | `DiscoveredTiles` (16x16 chunk bitsets; positions in JSON saves, bitsets in binary keyframes), clamped allocation-free reveals, `Discovery` op-log entries |
-| `player_sections` | how a `Player` splits into per-tick `PlayerRig`, public `RigBuild` and private `PlayerInventory` |
+| `player_sections` | how a `Player` splits into per-tick `PlayerRig`, public `RigBuild` (visible tiers and cosmetics) and private `PlayerInventory` |
+| `garage` | the paint bay service (`SessionServiceRequest::CustomizeRig`, validated against the player's cosmetic unlocks; free) and `rig_cosmetics` |
 | `replication` | per-tick state, live entities, op log and on-change sections (`SectionKey` / `SectionPayload`) |
 | `visibility` | what one client may see: `SectionKey::visible_to`, `redacted_for`, `visible_state_hash` |
 | `state_hash` | the stable world hash (`simulation_state_hash`) and the client-visible variant |
@@ -359,8 +360,8 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | Per tick, delta | entities (gas clouds, boulders, drops, ...): records of entities new to the client or changed since its last frame (by revision), and despawns (gone or out of relevance) | clients the entity is relevant to |
 | Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
 | Op log | per-player discovery | the owner only |
-| On change | `RigBuild(player)`: upgrade levels drawn on the rig | everyone |
-| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions | the owner only |
+| On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
+| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
 | On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests | everyone |
 
 Because other players' private state never reaches a client, replica checks compare

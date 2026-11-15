@@ -3,8 +3,8 @@
 //! | Part | Section | Seen by |
 //! |---|---|---|
 //! | [`PlayerRig`]: pose, velocity, fuel, hull | per tick | everyone it is relevant to |
-//! | [`RigBuild`]: the upgrade levels drawn on a rig (hull, radiator, scanner, bulkheads, drill mount) | on-change [`super::SectionKey::RigBuild`] | everyone |
-//! | [`PlayerInventory`]: cargo bay, block hopper, credits, other upgrades, kits, debt, insurance, POI journal, quest log | on-change [`super::SectionKey::Loadout`] | the owner only |
+//! | [`RigBuild`]: the upgrade levels drawn on a rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and its cosmetics | on-change [`super::SectionKey::RigBuild`] | everyone |
+//! | [`PlayerInventory`]: cargo bay, block hopper, credits, other upgrades, kits, debt, insurance, POI journal, quest log, cosmetic unlocks | on-change [`super::SectionKey::Loadout`] | the owner only |
 //!
 //! [`split_player`] destructures the whole [`Player`] without `..`, so a new player field fails
 //! to compile until it is assigned to one of the parts.
@@ -12,7 +12,12 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    item::ItemContainer, player::Player, poi::PoiJournal, protection::HazardGear, quest::QuestLog,
+    cosmetics::{CosmeticUnlocks, RigCosmetics},
+    item::ItemContainer,
+    player::Player,
+    poi::PoiJournal,
+    protection::HazardGear,
+    quest::QuestLog,
 };
 
 /// The per-tick parts of a [`Player`].
@@ -30,9 +35,15 @@ pub struct PlayerRig {
 }
 
 /// The public on-change parts of a [`Player`]: what other players' rendering shows of a rig
-/// (its hull bar maximum and visible upgrades).
+/// (its hull bar maximum, visible upgrades and cosmetics).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RigBuild {
+    /// Drill tier (the drill head drawn on the rig).
+    pub drill_strength: u8,
+    /// Engine tier (the thrusters drawn on the rig).
+    pub engine_level: u8,
+    /// Cargo bay tier (the cargo pods drawn on the rig).
+    pub cargo_bay_level: u8,
     pub hull_level: u8,
     pub radiator_level: u8,
     pub scanner_level: u8,
@@ -41,6 +52,9 @@ pub struct RigBuild {
     /// depends on it).
     #[serde(default)]
     pub drill_mount_level: u8,
+    /// The garage paint job and attachments (`None`: the player's default look).
+    #[serde(default)]
+    pub cosmetics: Option<RigCosmetics>,
 }
 
 /// The private on-change parts of a [`Player`]: inventory, credits, upgrades and kits.
@@ -56,10 +70,7 @@ pub struct PlayerInventory {
     pub block_hopper: ItemContainer,
     pub block_hopper_capacity: u32,
     pub fuel_tank_level: u8,
-    pub cargo_bay_level: u8,
     pub credits: u32,
-    pub drill_strength: u8,
-    pub engine_level: u8,
     /// Hazard counter tiers.
     #[serde(default)]
     pub hazard_gear: HazardGear,
@@ -76,6 +87,9 @@ pub struct PlayerInventory {
     pub ore_processor_kits: u32,
     pub journal: PoiJournal,
     pub quests: QuestLog,
+    /// Cosmetic items earned on top of the starter set.
+    #[serde(default)]
+    pub cosmetic_unlocks: CosmeticUnlocks,
 }
 
 /// Splits a player into its per-tick, public and private parts (exhaustive: every field goes to
@@ -119,6 +133,8 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         ore_processor_kits,
         journal,
         quests,
+        cosmetics,
+        cosmetic_unlocks,
     } = player.clone();
     (
         PlayerRig {
@@ -131,11 +147,15 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             hull,
         },
         RigBuild {
+            drill_strength,
+            engine_level,
+            cargo_bay_level,
             hull_level,
             radiator_level,
             scanner_level,
             crafted_bulkheads,
             drill_mount_level,
+            cosmetics,
         },
         PlayerInventory {
             fuel_capacity,
@@ -144,10 +164,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             block_hopper,
             block_hopper_capacity,
             fuel_tank_level,
-            cargo_bay_level,
             credits,
-            drill_strength,
-            engine_level,
             hazard_gear,
             bombs,
             loan_debt,
@@ -162,6 +179,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             ore_processor_kits,
             journal,
             quests,
+            cosmetic_unlocks,
         },
     )
 }
@@ -179,11 +197,15 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         hull,
     } = rig;
     let RigBuild {
+        drill_strength,
+        engine_level,
+        cargo_bay_level,
         hull_level,
         radiator_level,
         scanner_level,
         crafted_bulkheads,
         drill_mount_level,
+        cosmetics,
     } = build;
     let PlayerInventory {
         fuel_capacity,
@@ -192,10 +214,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         block_hopper,
         block_hopper_capacity,
         fuel_tank_level,
-        cargo_bay_level,
         credits,
-        drill_strength,
-        engine_level,
         hazard_gear,
         bombs,
         loan_debt,
@@ -210,6 +229,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         ore_processor_kits,
         journal,
         quests,
+        cosmetic_unlocks,
     } = inventory;
     Player {
         x,
@@ -248,5 +268,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         ore_processor_kits,
         journal,
         quests,
+        cosmetics,
+        cosmetic_unlocks,
     }
 }

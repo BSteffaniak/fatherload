@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{economy::TownBuilding, ids::PlayerId, quest::QuestId, terrain::StrategicResourceKind};
+use crate::{
+    cosmetics::RigCosmetics, economy::TownBuilding, ids::PlayerId, quest::QuestId,
+    terrain::StrategicResourceKind,
+};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum RecipeKind {
@@ -154,6 +157,11 @@ pub enum SessionServiceRequest {
     /// Drop an active quest at its giver's counter.
     AbandonQuest {
         quest: QuestId,
+    },
+    /// Repaint and refit the rig in the Repair Garage's paint bay (free). `None` restores the
+    /// player's default look. Refused if the look uses a cosmetic the player has not unlocked.
+    CustomizeRig {
+        cosmetics: Option<RigCosmetics>,
     },
 }
 

@@ -122,6 +122,7 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::QuestCompleted { player_id, .. } => (22, Some(player_id)),
         GameplayEventKind::QuestFailed { player_id, .. } => (23, Some(player_id)),
         GameplayEventKind::BlueprintCompleted { player_id, .. } => (24, Some(player_id)),
+        GameplayEventKind::RigCustomized { player_id } => (44, Some(player_id)),
     }
 }
 

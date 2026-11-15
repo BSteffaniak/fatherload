@@ -11,6 +11,7 @@
 
 pub mod command;
 pub mod contract;
+pub mod cosmetics;
 pub mod economy;
 pub mod entity;
 pub mod event;
@@ -40,6 +41,7 @@ pub mod world;
 pub mod worldgen;
 
 pub use command::{PlayerCommand, TickAction};
+pub use cosmetics::{CosmeticItem, CosmeticUnlocks, RigCosmetics};
 pub use event::{ActionOutcome, GameplayEvent, GameplayEventId, GameplayEventKind, TickOutput};
 pub use hash::SimulationStateHash;
 pub use hazard::{FallingBoulder, HazardCloud, PlacedBomb, ScanMarker};

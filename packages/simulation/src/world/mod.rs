@@ -34,6 +34,7 @@ mod entities;
 mod entity_tests;
 #[cfg(test)]
 mod flight_tests;
+mod garage;
 #[cfg(test)]
 mod hazard_counter_tests;
 mod hazards;

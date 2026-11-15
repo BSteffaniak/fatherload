@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    cosmetics::{CosmeticItem, CosmeticUnlocks, RigCosmetics},
     item::{ItemContainer, ItemKind, Stowage},
     poi::PoiJournal,
     protection::HazardGear,
@@ -86,6 +87,13 @@ pub struct Player {
     /// Side quests: active solo quests, history, reputation and blueprint fragments.
     #[serde(default)]
     pub quests: QuestLog,
+    /// The paint job and attachments chosen at the garage (`None`: the player's default look,
+    /// see [`RigCosmetics::default_for`]). Public: everyone sees a rig's look.
+    #[serde(default)]
+    pub cosmetics: Option<RigCosmetics>,
+    /// Cosmetic items earned on top of the starter set (private).
+    #[serde(default)]
+    pub cosmetic_unlocks: CosmeticUnlocks,
 }
 
 #[allow(
@@ -132,7 +140,15 @@ impl Player {
             ore_processor_kits: 0,
             journal: PoiJournal::default(),
             quests: QuestLog::default(),
+            cosmetics: None,
+            cosmetic_unlocks: CosmeticUnlocks::default(),
         }
+    }
+
+    /// Unlocks a cosmetic item for this player (quest rewards, milestones, shops). Returns
+    /// `true` if it was newly unlocked. Call it only from inside the fixed tick.
+    pub fn unlock_cosmetic(&mut self, item: CosmeticItem) -> bool {
+        self.cosmetic_unlocks.unlock(item)
     }
 
     #[must_use]

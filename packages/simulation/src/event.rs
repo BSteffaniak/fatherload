@@ -118,6 +118,10 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         blueprint: BlueprintId,
     },
+    /// A player repainted or refitted their rig at the garage.
+    RigCustomized {
+        player_id: PlayerId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -165,6 +169,9 @@ pub(crate) const fn gameplay_event_for_applied_command(
     command: &PlayerCommand,
 ) -> GameplayEventKind {
     match command {
+        PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {
+            GameplayEventKind::RigCustomized { player_id }
+        }
         PlayerCommand::Refuel
         | PlayerCommand::Repair
         | PlayerCommand::BuyUpgrade { .. }
