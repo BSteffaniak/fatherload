@@ -15,7 +15,11 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 
 /// Version byte prefixed to every encoded message.
 ///
-/// 8: test-mode no-clip flight (`TestModeState::no_clip`, `TestModeAction::SetNoClip`).
+/// 8 (expansion wave 1, one bump for every track): entity-store deltas and item containers
+/// (`LiveEntities`, cargo bay / block hopper), streamed V5 terrain (chunk diffs, settings-only
+/// keyframes, `x_remainder`), rig cosmetics and the garage (`RigBuild` tiers and paint,
+/// event 44), test-mode no-clip flight (`TestModeState::no_clip`, `TestModeAction::SetNoClip`)
+/// and the explosive kinds (`DeployExplosive`, `RemoteDetonate`, events 33-38).
 pub const PROTOCOL_VERSION: u8 = 8;
 
 /// One client input frame: the controls and actions for exactly one tick.
