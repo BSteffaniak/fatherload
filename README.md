@@ -184,7 +184,7 @@ view shows bedrock past the world's edges and floor, never sky. Depth rules auth
 classic stack (mineral depth curves, heat, deep-run pressure, deep rewards, quest depths) read a
 rig's depth at the same relative place in its layer, so they stretch with the deeper world.
 
-New worlds (generator v5, the current one) are also **endless left and right**: the same deep
+New worlds (generator v5) are also **endless left and right**: the same deep
 layer stack and bedrock floor, generated 16x16-tile chunk by chunk as rigs travel (caves, ore,
 hazards and points of interest come from overlapping region grids, so chunk borders are
 seamless and nothing depends on the order chunks are visited). The town stays on its flat ground
@@ -192,6 +192,24 @@ in the middle; the minimap scrolls with the rig and the HUD and map say how far,
 town is. Chunks far from every rig are dropped from memory (dug tiles are kept), saves hold the
 settings plus the changed chunks, and online clients generate chunks themselves while the host
 sends only changes. Worlds and saves from v1-v4 keep loading as the bounded worlds they were.
+
+### Caves
+
+New worlds (generator v6, the current one) add **cave ecosystems**, each with its own rock,
+light, loot and life: echoing **grand caverns** hung with stalactites, glowing **crystal
+geodes** lined with gems, **flooded caves** (underground lakes with a silt bed, glowing algae and
+cave fish; rigs float and drift slowly in the water), **lava tubes** with obsidian walls and lava
+pooling on the floor, **fungal grottos** with giant mushrooms whose caps bounce a falling rig
+back up, glowcaps and spore-gas pockets, **worm burrows** ribbed with old bone, **ancient
+ruins** (brick halls with pillars, glowing glyphs and a relic cache), tall **chasms** and **cave
+networks** of chambers strung together by tunnels. Most caves hide a treasure cache (drill it
+open for credits and loot) or a rare gem vein. Caves are dark: chasms and burrows are pitch
+black, geodes, grottos and lava tubes are lit by their own glow, and every rig carries a lamp
+(wider with better scanners), so flares really light the way. Stalactites crack and fall when a
+rig passes beneath them. Harmless critters live in caves (fireflies, glow moths, bats, cave fish,
+ember moths). Entering a cave for the first time says what you found ("Found: Crystal Geode")
+and marks it on the minimap and the mine map; the collection log counts the kinds found.
+Older worlds keep their caves as they were.
 
 ### Points of interest
 
@@ -225,7 +243,7 @@ World generation tools (no window opens):
 ```bash
 cargo run --release --bin fatherload -- --worldgen-report --seeds 300 [--size large] [--richness rich] [--hazards brutal] [--generator v2]
 cargo run --release --bin fatherload -- --worldgen-preview D111-6A4E world.png [--size large] [--scale 4]
-cargo run --release --bin fatherload -- --worldgen-preview D111-6A4E strip.png --first-column -400 --width 800  # a window of an endless (v5) world
+cargo run --release --bin fatherload -- --worldgen-preview D111-6A4E strip.png --first-column -400 --width 800  # a window of an endless (v6) world, cave ecosystems outlined
 ```
 
 The report prints per-layer top row, ore value, ore specks (deposits of 1-3 tiles), cave share, hazard tiles, artifacts and points of
