@@ -348,6 +348,37 @@ fn binding_worlds() -> Vec<WorldSettings> {
     worlds
 }
 
+/// Prints how long accepting each quest takes on a fresh endless world (binding runs inside the
+/// simulation tick that accepts it, so a slow first binding is a hitch). Run in release:
+/// `cargo test --release -p fatherload_simulation quest_binding_timings -- --ignored --nocapture`.
+#[test]
+#[ignore = "timing helper"]
+fn print_quest_binding_timings() {
+    let origin = TilePosition {
+        x: SPAWN_TILE_X,
+        y: 4,
+    };
+    let journal = PoiJournal::default();
+    for seed in [11_u64, 12, 13] {
+        let terrain = Terrain::generate(&WorldSettings::new(seed));
+        let mut worst = (std::time::Duration::ZERO, "");
+        let mut total = std::time::Duration::ZERO;
+        for def in all() {
+            let start = std::time::Instant::now();
+            let _ = bind_quest(def, &terrain, origin, &journal, 0, &BTreeSet::new());
+            let elapsed = start.elapsed();
+            total += elapsed;
+            if elapsed > worst.0 {
+                worst = (elapsed, def.title);
+            }
+        }
+        println!(
+            "seed {seed}: every quest bound in {total:?}; slowest first binding {:?} ({})",
+            worst.0, worst.1
+        );
+    }
+}
+
 #[test]
 fn every_quest_binds_on_many_seeds() {
     let origin = TilePosition {
