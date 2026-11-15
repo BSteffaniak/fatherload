@@ -16,6 +16,10 @@ use crate::{
 
 const PRESENTED_EVENT_HISTORY: usize = 4_096;
 const DAMAGE_CUE_COOLDOWN_SECONDS: f32 = 0.5;
+/// Least time between two of one rig's sky cues of a kind (band swell, updraft whoosh, icing
+/// crackle): a rig hovering on a band's floor or skimming an updraft's edge crosses it over and
+/// over, and each crossing is an event.
+const SKY_CUE_COOLDOWN_SECONDS: f32 = 4.0;
 const SPARK_LIFE_SECONDS: f32 = 0.45;
 /// How long a bomb blast stays on screen.
 pub const EXPLOSION_SECONDS: f32 = 0.7;
@@ -156,6 +160,8 @@ pub struct Effects {
     pickups: Vec<PickupFlight>,
     shots: Vec<ShotFlash>,
     damage_cooldowns: BTreeMap<PlayerId, f32>,
+    /// Per rig and sky cue kind (0 band, 1 updraft, 2 icing): seconds until it may play again.
+    sky_cue_cooldowns: BTreeMap<(PlayerId, u8), f32>,
     /// Items in each local player's bay last frame (a pickup is growth).
     cargo_totals: BTreeMap<PlayerId, u32>,
     spawn_counter: u32,
@@ -197,6 +203,7 @@ impl Effects {
         self.presented_blasts.clear();
         self.blast_order.clear();
         self.damage_cooldowns.clear();
+        self.sky_cue_cooldowns.clear();
         self.cargo_totals.clear();
     }
 
@@ -227,6 +234,10 @@ impl Effects {
             *cooldown -= delta_seconds;
         }
         self.damage_cooldowns.retain(|_, cooldown| *cooldown > 0.0);
+        for cooldown in self.sky_cue_cooldowns.values_mut() {
+            *cooldown -= delta_seconds;
+        }
+        self.sky_cue_cooldowns.retain(|_, cooldown| *cooldown > 0.0);
     }
 
     /// Turns freshly presented events into placed sound cues and particles. Events of
@@ -529,6 +540,22 @@ impl Effects {
                         continue;
                     }
                 }
+                GameplayEventKind::SkyBandEntered { player_id, .. }
+                | GameplayEventKind::UpdraftCaught { player_id }
+                | GameplayEventKind::RigIcing { player_id } => {
+                    let kind = match gameplay.kind {
+                        GameplayEventKind::SkyBandEntered { .. } => 0,
+                        GameplayEventKind::UpdraftCaught { .. } => 1,
+                        _ => 2,
+                    };
+                    if let std::collections::btree_map::Entry::Vacant(entry) =
+                        self.sky_cue_cooldowns.entry((player_id, kind))
+                    {
+                        entry.insert(SKY_CUE_COOLDOWN_SECONDS);
+                    } else {
+                        continue;
+                    }
+                }
                 GameplayEventKind::CargoChanged { player_id } => {
                     // Selling empties the bay (coins play for that); only growth is a pickup.
                     let total = world.player(player_id).map_or(0, cargo_total);
@@ -782,6 +809,44 @@ mod tests {
             effects.apply(&burst, &world, &[local]),
             vec![PlacedCue::player(SoundCue::Damage, local)]
         );
+    }
+
+    #[test]
+    fn sky_cues_are_throttled_per_rig_and_kind() {
+        // A rig hovering on a band's floor or an updraft's edge crosses it every few ticks.
+        let local = PlayerId::new(1);
+        let world = WorldState::new_game(local);
+        let mut effects = Effects::default();
+        let crossings: Vec<RuntimeEvent> = (0..6)
+            .flat_map(|tick| {
+                [
+                    event(
+                        tick,
+                        local,
+                        GameplayEventKind::SkyBandEntered {
+                            player_id: local,
+                            band: fatherload_simulation::sky::SkyBand::LowIsles,
+                        },
+                    ),
+                    event(
+                        tick,
+                        local,
+                        GameplayEventKind::UpdraftCaught { player_id: local },
+                    ),
+                ]
+            })
+            .collect();
+        assert_eq!(
+            effects.apply(&crossings, &world, &[local]),
+            vec![
+                PlacedCue::player(SoundCue::SkyBand, local),
+                PlacedCue::player(SoundCue::Updraft, local)
+            ]
+        );
+        effects.update(1.0);
+        assert!(effects.apply(&crossings, &world, &[local]).is_empty());
+        effects.update(SKY_CUE_COOLDOWN_SECONDS);
+        assert_eq!(effects.apply(&crossings, &world, &[local]).len(), 2);
     }
 
     #[test]
