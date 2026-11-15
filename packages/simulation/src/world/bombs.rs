@@ -16,8 +16,8 @@ use crate::{
     explosive::{
         BlastDirection, BlastShape, CLUSTER_BOMBLETS, Deployment, ExplosiveKind,
         FLARE_PULSE_MILLIS, FLARE_PULSES, FLARE_REVEAL_RADIUS, INCENDIARY_RING_MILLIS,
-        INCENDIARY_RINGS, REMOTE_FUSE, SEQUENCE_STEP_MILLIS, SMOKE_PULSE_MILLIS, SMOKE_PULSES,
-        ThrowAim, blast_impulse, smoke_radius,
+        INCENDIARY_RINGS, REMOTE_ARMING_MILLIS, REMOTE_FUSE, SEQUENCE_STEP_MILLIS,
+        SMOKE_PULSE_MILLIS, SMOKE_PULSES, ThrowAim, blast_impulse, smoke_radius,
     },
     hazard::PlacedBomb,
     ids::{PlayerId, SimulationTick},
@@ -579,7 +579,8 @@ impl WorldState {
     }
 
     /// Resolves [`crate::PlayerCommand::RemoteDetonate`]: arms every remote charge `player_id`
-    /// placed that is still waiting, all on the next tick or [`SEQUENCE_STEP_MILLIS`] apart in
+    /// placed that is still waiting: after [`REMOTE_ARMING_MILLIS`], all at once or
+    /// [`SEQUENCE_STEP_MILLIS`] apart in
     /// placement order.
     pub(super) fn remote_detonate(
         &mut self,
@@ -594,7 +595,10 @@ impl WorldState {
         } else {
             0
         };
-        let first = self.simulation_tick.get().saturating_add(1);
+        let first = self
+            .simulation_tick
+            .get()
+            .saturating_add(self.timing.ticks_for_millis(REMOTE_ARMING_MILLIS).max(1));
         let mut charges: Vec<(u64, EntityId)> = self
             .entities
             .of_kind(EntityKind::Charge)

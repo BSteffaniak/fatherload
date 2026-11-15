@@ -303,9 +303,12 @@ fn entity_store_charges_reproduce_the_original_bomb_traces() {
     assert_eq!(digests, GOLDEN, "{digests:#x?}");
 }
 
-/// Recorded with the original `Vec<PlacedBomb>` charges.
+/// Recorded with the original `Vec<PlacedBomb>` charges. The second scenario (which fires the
+/// remote detonator) was re-recorded when the detonator gained its arming delay
+/// (`REMOTE_ARMING_MILLIS`), a deliberate behaviour change after the move; the others are the
+/// original recordings.
 const GOLDEN: [u64; 3] = [
     0x0061_6a47_494e_3417,
-    0x6cc2_f62a_2434_54ac,
+    0x3905_8a11_9ecb_234b,
     0xe701_07ea_06e3_40c5,
 ];

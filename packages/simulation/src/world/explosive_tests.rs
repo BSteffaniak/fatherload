@@ -202,8 +202,21 @@ fn c4_waits_for_the_remote_and_every_charge_goes_off_at_once() {
     assert!(events.contains(&GameplayEventKind::RemoteDetonation { player_id: PLAYER }));
     assert_eq!(
         detonations(&events, ExplosiveKind::C4),
+        0,
+        "the charges arm first"
+    );
+    assert!(world.bombs().iter().all(|bomb| !bomb.awaiting_remote()));
+    let arming = world
+        .timing
+        .ticks_for_millis(crate::explosive::REMOTE_ARMING_MILLIS);
+    // The command's own tick counts toward the arming delay.
+    let events = advance(&mut world, arming - 2);
+    assert_eq!(detonations(&events, ExplosiveKind::C4), 0, "still arming");
+    let events = advance(&mut world, 1);
+    assert_eq!(
+        detonations(&events, ExplosiveKind::C4),
         3,
-        "all in the same tick"
+        "all in the same tick, once armed"
     );
     assert!(world.bombs().is_empty());
     assert_eq!(world.waiting_remote_charges(PLAYER), 0);
@@ -261,11 +274,12 @@ fn only_the_owner_can_trigger_c4_and_a_departing_owner_disarms_it() {
         charge(1, ExplosiveKind::C4, 28.5, 31.0, REMOTE_FUSE),
     ];
     world.next_bomb_id = 2;
-    let events = act(
+    let mut events = act(
         &mut world,
         PLAYER,
         PlayerCommand::RemoteDetonate { sequenced: false },
     );
+    events.extend(advance(&mut world, 30));
     assert_eq!(detonations(&events, ExplosiveKind::C4), 1);
     assert_eq!(world.bombs().len(), 1);
     assert_eq!(world.bombs()[0].owner, Some(OTHER));

@@ -339,6 +339,16 @@ pub fn explosive_offer(kind: ExplosiveKind) -> Option<ExplosiveOffer> {
 pub const REMOTE_FUSE: crate::SimulationTick = crate::SimulationTick::new(u64::MAX);
 /// Gap between charges when a remote detonator fires them in sequence.
 pub const SEQUENCE_STEP_MILLIS: u64 = 300;
+/// Arming delay between the remote detonator's click and the first charge going off (the
+/// charges beep while they arm).
+///
+/// Besides the anticipation, this keeps online play smooth: a detonation is decided by one
+/// player's action, which every other client (and, when its input arrives late, the player's
+/// own client) only learns about from the host a round trip later. A blast that went off on
+/// the very next tick would push rigs before their clients knew about it and show up as a
+/// correction; with the arming delay the armed charges' deadlines replicate before the blast,
+/// so every client predicts the push exactly.
+pub const REMOTE_ARMING_MILLIS: u64 = 250;
 /// Bomblets released by one cluster bomb.
 pub const CLUSTER_BOMBLETS: usize = 6;
 /// Fire rings an incendiary burns after its blast (ring `n` burns at Manhattan radius `n`).
