@@ -210,6 +210,7 @@ pub const ALL: &[&SpriteDef] = &[
     &menu_icons::SPLIT,
     &menu_icons::DICE,
     &menu_icons::GEAR,
+    &menu_icons::GHOST,
     &prompts::KEYCAP_SPRITE,
     &prompts::XBOX_A,
     &prompts::XBOX_B,
