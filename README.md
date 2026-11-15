@@ -100,6 +100,18 @@ Drill below the surface, gather minerals and artifacts, manage fuel/hull/cargo/d
 
 The upgrade shop sells long upgrade lines (up to 15 tiers: endgame bays of ~300 slots, tanks of ~3,000 fuel, hulls of ~2,500, drills that plow through the hardest rock) and a hazard counter for every danger: Heat Shielding (each layer runs hotter; radiator and shielding together decide how deep you stay cool), Lava Plating (lava is drillable but burns; the top tier is lava-proof), Gas Scrubber, Pressure Bracing (pressure pockets, explosive pockets, magma vents) and Boulder Deflector.
 
+### Rigs
+
+Every rig is drawn from layered parts that show its upgrades: a drill head per drill tier (steel,
+carbide, tempered, diamond, plasma ... star, each in its own metal, longer and wider at higher
+tiers), thruster nacelles and nozzles that grow with the engine, cargo crates and containers
+on the rear deck that grow with the cargo bay, radiator fins, armour plating, the drill mount and
+an empty weapon hardpoint on the dome. A player's garage paint job (see the Repair Garage below)
+replaces their default crew colour everywhere: the rig outdoors and inside buildings, their name
+tag, their split-screen HUD title and their minimap marker. Players who never visit the garage
+keep distinct default colours (player 1 yellow, 2 teal, 3 rose, 4 lime, ...). Paint jobs are
+saved with the player and every co-op or online crewmate sees them.
+
 ### Worlds
 
 Every new game is a different world. "New Game", "Local Split-Screen" and "Host Online Game"
@@ -294,7 +306,13 @@ is not saved: after loading, everyone starts outdoors.
 Press `E` (controller `X`) at a surface building to walk inside its room. Move with `A`/`D` or the stick, use the service counter with `E`/`X`, and leave through the door or `Backspace`/`Esc` (controller `B`). In split-screen each player enters and uses buildings on their own (see above).
 
 - Fuel Station: refills fuel in partial or full service increments
-- Repair Garage: repairs hull in partial or full service increments
+- Repair Garage: repairs hull in partial or full service increments, and runs Iona's **paint
+  bay** (the counter's last row; free): paint the hull, chassis and trim from 17 colours, pick a
+  thruster flame colour, drill style (standard, serrated, auger, twin bit, crusher), hull pattern,
+  decal and roof / nose / tail attachments. The rig in the room and a preview card wear the job
+  live before you apply it; Back returns to the counter without applying. A few items (stealth
+  paint, prism flame, spire drill, circuit pattern, crown decal, halo) are locked until later
+  updates add ways to earn them (test-mode worlds unlock everything).
 - Ore Depot: sells mineral/artifact cargo and shows receipt history
 - HQ: completes contracts, provides named story/radio briefings, and offers/collects debt advances
 - Upgrade Shop: sells drill, fuel tank, cargo bay, engine, hull, radiator, scanner, and bomb-pack upgrades,

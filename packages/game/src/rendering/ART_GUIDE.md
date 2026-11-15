@@ -355,15 +355,59 @@ the top three ground rows are capped so the surface stays readable) is interpola
 centres and applied per art pixel as a Bayer-dithered walk down each colour's ramp
 (`shade::darker`) ending in `INK`. Chunks cache their art; exploration only recomposites.
 
-**Rig** (`sprites/rig.rs`, `world/rig.rs`). 16x13 body facing right (flipped for left, and a
-stopped rig keeps its last facing); tracks roll while driving; a nose drill at the front, the
-spinning bit below while drilling down, a side bit while drilling sideways, the bit on the roof
-pointing up while the crown bore drills a ceiling (`DRILL_UP`), one-pixel drilling shake; a drill
-mount shows as a brass gimbal ring at the nose (glowing while drilling sideways in flight) and,
-for the crown bore, a steel collar on the roof; a long climb flame or short hover flame; exhaust puffs, thick smoke and sparks under 35%
-hull, scorched paint under 30%, a fast red beacon under 15%. Other players' rigs use another hull
-paint by player id (`PLAYER_BODIES`, player 1 yellow; the same paint in every view and inside buildings) and carry a name tag with fuel/hull pips whose border turns
-amber (warning) or blinks red (critical).
+**Rig** (`rig_art.rs` + `rig_art/{parts,drill,paint,sheet}.rs`, posed by `world/rig.rs`). Rigs
+in play are assembled each frame from layered parts into a `RigCanvas` (art pixels around the
+16x13 body box, authored facing right, mirrored for left; a stopped rig keeps its last facing),
+then drawn at any scale with one rectangle per run of a colour: world space (2 world px per art
+px), interior rooms (1 room px) and UI previews (garage card, rig sheets). Back to front:
+
+- *Flames*: a belly lift jet plus one flame per nacelle nozzle (long while climbing, short while
+  hovering), in the cosmetic flame colour (`paint::flame_ramp`; the prism flame cycles). Engine
+  tiers 10+ get a bigger belly jet.
+- *Drill head* (`drill.rs`): procedural per drill tier: Steel, Carbide, Tempered (copper with a
+  blue-tempered tip), Diamond (ice tip), Plasma (violet, glowing pink tip), Twin-Bit (gold
+  rings), Sonic (teal, ice rings), Thermite (glowing orange), Graphene (slate, mint glints),
+  Resonant (brass, rust rings), Fusion (white-hot, mint tip), Quantum (teal-violet), Singularity
+  (plum and night, pink tip), Nova (gold, cream tip), Star (bone-gold, ice tip). Length grows every
+  few tiers (5, 6, 7, 8 rows) and tiers 12+ are wider. The cosmetic drill style sets the
+  silhouette: standard cone, serrated teeth, auger flighting, twin bit, blunt crusher with studs,
+  long spire. A collar in the trim paint joins it to the rig. A spinning glint band runs down it
+  while it drills. Poses: on the nose (driving / sideways), below (drilling down), on the roof
+  (crown bore).
+- *Hull*: primary paint (lit row, body, shade column), the secondary chassis band, the stripe row
+  repainted by the hull pattern (solid, racing stripe in trim, two-tone, checker band, camo
+  blotches, hazard chevrons, circuit traces), glass dome, tracks rolling while driving. Decals
+  (star, lightning bolt, hot-rod flames, crossed picks, the player's number, crown) sit on the
+  flank in trim colours. Scorch marks, a cracked dome and a dead headlight under 30% hull.
+- *Tier parts* (`parts::class` groups 15 tiers into five classes: 1-2, 3-5, 6-9, 10-12,
+  13-15): radiator fins low on the nose (copper, liquid teal, cryo ice, then pulsing mint; more
+  fins and a second row), armour (a riveted track skirt, then a nose plate, a dome cage, a roof
+  plate with gold rivets), cargo on the rear deck (none, a strapped crate, a bigger crate, a
+  ribbed container, a hazard-banded container with lifting eyes), thruster nacelles on the tail
+  (rounded, lit on the tail side, intake ring glowing in the flame colour while burning, a swept
+  fin and twin nozzles at the top classes). The drill mount's gimbal ring and crown-bore collar
+  and the empty weapon hardpoint (`rig_art::HARDPOINT`, a bolted plate on the dome) sit on top.
+- *Mast and attachments*: the mast stands on the deck with the beacon (slow gold blink, fast red
+  when critical) and the exhaust stack beside it; roof options replace it (whip antenna, radar
+  dish, rotating siren, light bar, floating halo), nose options (floodlamp, bumper), tail options
+  (spoiler, waving pennant, chrome stacks).
+
+Exhaust puffs leave the stack, thick smoke and sparks come out under 35% hull, track dust kicks
+up behind the nacelles, and other players' rigs carry a name tag with fuel/hull pips (lifted over
+tall cargo and roof attachments) whose border turns amber (warning) or blinks red (critical).
+
+*Player colours*: a rig wears its player's garage paint job, or the per-player default
+(`RigCosmetics::default_for`: 1 gold, 2 teal, 3 rose, 4 lime, 5 violet, 6 sky, cycling). The
+primary paint's accent (`rig_art::paint_accent`, `world::player_accent`) is the player's colour on
+name tags, the split-screen HUD title and minimap markers, so identity stays consistent
+everywhere, inside buildings included. The fixed `sprites::rig::RIG` sprites are only the
+classic rig for the title, the gallery and icons.
+
+**Garage** (`garage.rs`): the paint bay counter panel (rows per cosmetic slot, paint names in
+their accent, locked items tagged `LOCKED` in red, the apply row `FREE` / `FITTED`) and a preview
+card beside it (when the view has room) that shows the draft rig at 4x cycling parked, climbing
+and drilling poses. The rig in the room wears the draft too, and a paint job ends with spray mist
+in its new colours. Garage row icons live in `sprites/rig.rs` (`ICON_*`).
 
 **Surface** (`world/sky.rs`, `world/buildings.rs`). The sky is a startup texture of flat bands
 with 5-row dithered steps; far snowy mountains (parallax 0.18), near pine hills (0.42) and
@@ -413,7 +457,10 @@ no panel open, `toast_receipt`, `hud_low_fuel`, `hud_low_hull`, `pause_menu`,
 controller prompts
 (`pad_title`, `pad_interior_shop`, `pad_room`, `pad_pause`, `pad_hud`, `pad_help`,
 `pad_split_screen`, `pad_split_join`, `pad_playstation_counter`, `pad_nintendo_options`) and
-`keyboard_hud`. Scenes choose prompt devices with `SceneStage::use_devices`. Check UI changes at 1280x720, 1920x1080 and the
+`keyboard_hud`, and the rig customization scenes (`scene_capture/rig_scenes.rs`):
+`rig_sheet_tiers`, `rig_sheet_paints`, `rig_sheet_drills`, `rig_lineup`, `rig_flight_custom`,
+`garage_counter`, `garage_paint_bay`, `garage_paint_bay_pad`, `split_garage`,
+`coop_custom_paints`, `coop_custom_underground`. Scenes choose prompt devices with `SceneStage::use_devices`. Check UI changes at 1280x720, 1920x1080 and the
 960x540 minimum.
 
 Adding a scene: append a `Scene { name, summary, setup }` to `scene_capture::SCENES`. `setup`
