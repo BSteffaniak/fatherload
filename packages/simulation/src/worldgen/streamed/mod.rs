@@ -32,7 +32,7 @@
 
 mod assemble;
 mod base;
-mod cache;
+pub(crate) mod cache;
 pub mod cave_biomes;
 #[cfg(test)]
 mod cave_tests;

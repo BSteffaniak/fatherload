@@ -58,7 +58,9 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * T15 pilot on foot: `ControlState::jump`, `EntityState::Pilot`,
 /// `PlayerCommand::TogglePilot` / `PilotPack`, `SessionServiceRequest::BuyPilotGear`, pilot
 /// gear and the personal pack in `PlayerInventory`, `BuiltTile::VentGrate`, `Fixture::Rope`,
-/// the parked pilot in the crew roster and the pilot events 120-133.
+/// the parked pilot in the crew roster and the pilot events 120-133;
+/// * T17 people in the world: `EntityState::Npc` entities, `PlayerCommand::People`, the
+///   `People` section (`PeopleLedger`) and people events 140-145.
 pub const PROTOCOL_VERSION: u8 = 11;
 
 /// One client input frame: the controls and actions for exactly one tick.

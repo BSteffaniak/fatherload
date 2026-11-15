@@ -7,7 +7,7 @@
 //! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); bombs and entity counters ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
 //! | Per-tick delta | entities (gas clouds, falling boulders, drops, ...): relevance-filtered spawns, changes (by [`crate::entity::Entity::revision`]) and despawns ([`crate::entity::EntityDelta`]) against each receiver's baseline | [`WorldState::entity_revisions`], [`WorldState::entity_record`], [`WorldState::apply_entity_delta`] |
 //! | Op log | terrain tiles (shared; a client outside a chunk's relevance skips its ops and gets [`WorldState::terrain_chunk`] (the chunk's diffs from generation) when it approaches); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
-//! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, quest log, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants, test-mode toggles, crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs), bases (claims, modules, fixtures), the world clock (day length, skipped nights, sleepers) | [`WorldState::section`], [`WorldState::apply_section`] |
+//! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, quest log, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants, test-mode toggles, crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs), bases (claims, modules, fixtures), the world clock (day length, skipped nights, sleepers), people (character memories, conversations, perks) | [`WorldState::section`], [`WorldState::apply_section`] |
 //!
 //! Private state (a player's [`PlayerLoadout`] and discovery) is replicated only to its owner;
 //! see [`super::visibility`] for the client-visible state hash and keyframe redaction.
@@ -189,6 +189,9 @@ pub enum SectionKey {
     /// The world clock: day length, skipped nights, the sleep rule and who is in bed (F4; the
     /// time of day itself follows the tick, so this only changes when someone sleeps).
     Clock,
+    /// What players did with people: characters' memories of players, conversations, bought
+    /// offers and perks (WP-PEOPLE; the people themselves are entities).
+    People,
 }
 
 impl SectionKey {
@@ -208,7 +211,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 15] = [
+    pub const SHARED: [Self; 16] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -224,6 +227,7 @@ impl SectionKey {
         Self::Enemies,
         Self::Bases,
         Self::Clock,
+        Self::People,
     ];
 }
 
@@ -247,6 +251,7 @@ pub enum SectionPayload {
     Enemies(Box<crate::enemy::EnemyDirector>),
     Bases(Box<crate::base::Bases>),
     Clock(Box<crate::clock::ClockState>),
+    People(Box<crate::people::PeopleLedger>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -419,6 +424,7 @@ impl WorldState {
             bases,
             crew: _,
             clock,
+            people,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -510,6 +516,7 @@ impl WorldState {
             SectionKey::Enemies => SectionPayload::Enemies(Box::new(enemies.clone())),
             SectionKey::Bases => SectionPayload::Bases(Box::new(bases.clone())),
             SectionKey::Clock => SectionPayload::Clock(Box::new(clock.clone())),
+            SectionKey::People => SectionPayload::People(Box::new(people.clone())),
         })
     }
 
@@ -655,6 +662,9 @@ impl WorldState {
             }
             (SectionKey::Enemies, SectionPayload::Enemies(enemies)) => {
                 self.enemies = *enemies;
+            }
+            (SectionKey::People, SectionPayload::People(people)) => {
+                self.people = *people;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

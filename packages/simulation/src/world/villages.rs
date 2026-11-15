@@ -109,13 +109,59 @@ impl WorldState {
             // On foot, the rig itself must be parked outside (Part II F5).
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
+        // An apprenticed haggler (WP-PEOPLE) pays less at every counter.
+        let haggler = self
+            .people
+            .has_perk(player_id, crate::people::offers::Perk::Haggler);
+        let price = if haggler {
+            (deal.price * crate::people::offers::HAGGLER_PERCENT).div_ceil(100)
+        } else {
+            deal.price
+        };
+        let metered = |percent: u32| {
+            if haggler {
+                percent * crate::people::offers::HAGGLER_PERCENT / 100
+            } else {
+                percent
+            }
+        };
         match deal.deal {
             VillageDeal::SellCargo { percent, only } => self.village_sell(player_id, percent, only),
+            VillageDeal::Refuel { percent } => self.village_refuel(player_id, metered(percent)),
+            VillageDeal::Repair { percent } => self.village_repair(player_id, metered(percent)),
+            VillageDeal::ChartRegion => self.village_chart(player_id, &found, price),
+            VillageDeal::Rumour => self.village_rumour(player_id, &found, price),
+            VillageDeal::Room => {
+                if !self.clock().phase().sleepable()
+                    || self.is_in_bed(player_id)
+                    || !self.charge(player_id, price)
+                {
+                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
+                }
+                self.lie_down(player_id, crate::clock::BedSpot::Inn(village_id))
+            }
+            goods @ (VillageDeal::Part(_)
+            | VillageDeal::Cosmetic(_)
+            | VillageDeal::Explosives { .. }
+            | VillageDeal::Blessing(_)) => self.apply_goods(player_id, goods, price),
+        }
+    }
+
+    /// Resolves a deal that needs no particular counter (a part, a cosmetic, a pack of charges,
+    /// a blessing, or metered fuel and repairs at `percent`) for `price` credits: village
+    /// counters and people's trade lists (WP-PEOPLE) share it.
+    pub(super) fn apply_goods(
+        &mut self,
+        player_id: PlayerId,
+        deal: VillageDeal,
+        price: u32,
+    ) -> PlayerScopedCommandOutcome {
+        match deal {
             VillageDeal::Refuel { percent } => self.village_refuel(player_id, percent),
             VillageDeal::Repair { percent } => self.village_repair(player_id, percent),
             VillageDeal::Part(part) => {
                 if self.progression.rig_part_inventory.contains(&part)
-                    || !self.charge(player_id, deal.price)
+                    || !self.charge(player_id, price)
                 {
                     return PlayerScopedCommandOutcome::IgnoredUnavailable;
                 }
@@ -127,7 +173,7 @@ impl WorldState {
                     .players
                     .get(&player_id)
                     .is_some_and(|player| player.cosmetic_unlocks.has(item));
-                if owned || !self.charge(player_id, deal.price) {
+                if owned || !self.charge(player_id, price) {
                     return PlayerScopedCommandOutcome::IgnoredUnavailable;
                 }
                 if let Some(player) = self.players.get_mut(&player_id) {
@@ -136,7 +182,7 @@ impl WorldState {
                 PlayerScopedCommandOutcome::Applied
             }
             VillageDeal::Explosives { kind, count } => {
-                if !self.charge(player_id, deal.price) {
+                if !self.charge(player_id, price) {
                     return PlayerScopedCommandOutcome::IgnoredUnavailable;
                 }
                 if let Some(player) = self.players.get_mut(&player_id) {
@@ -144,9 +190,8 @@ impl WorldState {
                 }
                 PlayerScopedCommandOutcome::Applied
             }
-            VillageDeal::ChartRegion => self.village_chart(player_id, &found, deal.price),
             VillageDeal::Blessing(kind) => {
-                if !self.charge(player_id, deal.price) {
+                if !self.charge(player_id, price) {
                     return PlayerScopedCommandOutcome::IgnoredUnavailable;
                 }
                 let until = crate::ids::SimulationTick::new(
@@ -159,21 +204,16 @@ impl WorldState {
                 }
                 PlayerScopedCommandOutcome::Applied
             }
-            VillageDeal::Rumour => self.village_rumour(player_id, &found, deal.price),
-            VillageDeal::Room => {
-                if !self.clock().phase().sleepable()
-                    || self.is_in_bed(player_id)
-                    || !self.charge(player_id, deal.price)
-                {
-                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
-                }
-                self.lie_down(player_id, crate::clock::BedSpot::Inn(village_id))
-            }
+            // A room is the inn's own counter (`apply_village_deal`), never a trade-list row.
+            VillageDeal::SellCargo { .. }
+            | VillageDeal::ChartRegion
+            | VillageDeal::Rumour
+            | VillageDeal::Room => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 
     /// Takes `price` credits from `player_id` if they have them.
-    fn charge(&mut self, player_id: PlayerId, price: u32) -> bool {
+    pub(super) fn charge(&mut self, player_id: PlayerId, price: u32) -> bool {
         let Some(player) = self.players.get_mut(&player_id) else {
             return false;
         };
@@ -320,7 +360,7 @@ impl WorldState {
 
     /// The points of interest near `around` (within `radius` columns, any depth) that
     /// `player_id` does not know yet, nearest first.
-    fn unknown_sites_near(
+    pub(super) fn unknown_sites_near(
         &self,
         player_id: PlayerId,
         around: TilePosition,

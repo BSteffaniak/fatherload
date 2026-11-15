@@ -80,6 +80,9 @@ pub enum PlayerCommand {
         count: u32,
         to_rig: bool,
     },
+    /// Talk to, trade with or give a gift to a person (WP-PEOPLE, see
+    /// [`crate::people::PeopleCommand`]).
+    People(crate::people::PeopleCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

@@ -197,6 +197,13 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::PickStruck { player_id, .. } => (131, Some(player_id)),
         GameplayEventKind::PickClinked { player_id } => (132, Some(player_id)),
         GameplayEventKind::PackTransferred { player_id, .. } => (133, Some(player_id)),
+        // People in the world (WP-PEOPLE, wave 3 T17): 140-145.
+        GameplayEventKind::PersonTalked { player_id, .. } => (140, Some(player_id)),
+        GameplayEventKind::PersonTraded { player_id, .. } => (141, Some(player_id)),
+        GameplayEventKind::PersonGifted { player_id, .. } => (142, Some(player_id)),
+        GameplayEventKind::AffinityChanged { player_id, .. } => (143, Some(player_id)),
+        GameplayEventKind::RumourMarked { player_id, .. } => (144, Some(player_id)),
+        GameplayEventKind::PeopleInteraction { player_id } => (145, Some(player_id)),
     }
 }
 

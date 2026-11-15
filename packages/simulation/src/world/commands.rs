@@ -436,6 +436,8 @@ impl WorldState {
             PlayerCommand::TogglePilot | PlayerCommand::PilotPack { .. } => {
                 PlayerScopedCommandOutcome::IgnoredUnavailable
             }
+            // Resolved earlier in the tick by `people_command` (`world/people.rs`).
+            PlayerCommand::People(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 }

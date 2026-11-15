@@ -127,6 +127,14 @@ impl WorldState {
                         output.push_event(event);
                     }
                     outcome
+                } else if let Some((outcome, events)) =
+                    self.people_command(player_id, &action.command)
+                {
+                    // WP-PEOPLE: talk, trade and gifts (`world/people.rs`).
+                    for event in events {
+                        output.push_event(event);
+                    }
+                    outcome
                 } else {
                     self.apply_player_command(player_id, &action.command)
                 };
@@ -428,6 +436,7 @@ impl WorldState {
         self.advance_entities(EntityPhase::Late, next_tick, &mut output);
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);
+        self.advance_people(next_tick);
         self.advance_bases(next_tick);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);

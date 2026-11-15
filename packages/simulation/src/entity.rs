@@ -68,6 +68,8 @@ pub enum EntityKind {
     /// A player's pilot on foot (Part II F5, [`crate::pilot`]): moved by its owner's controls
     /// in its own pass (`world/pilot.rs`), never by the generic entity phases.
     Pilot,
+    /// A person walking about a village or the town (WP-PEOPLE, see `world/people.rs`).
+    Npc,
 }
 
 /// When in the tick an entity kind updates (`WorldState::simulate_tick` runs each phase at a
@@ -86,7 +88,7 @@ pub enum EntityPhase {
 
 impl EntityKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::GasCloud,
         Self::Boulder,
         Self::Drop,
@@ -97,6 +99,7 @@ impl EntityKind {
         Self::Projectile,
         Self::Target,
         Self::Pilot,
+        Self::Npc,
     ];
 
     /// The tick phase this kind updates in.
@@ -112,6 +115,7 @@ impl EntityKind {
             | Self::Projectile
             | Self::Target
             | Self::Pilot => EntityPhase::Late,
+            | Self::Npc => EntityPhase::Late,
             Self::Charge => EntityPhase::Charges,
         }
     }
@@ -334,6 +338,30 @@ pub struct TargetState {
     pub health: crate::combat::Health,
 }
 
+/// A person's per-kind state (WP-PEOPLE): who they are and where their routine is taking them.
+///
+/// The body stands on the street (its `y` is the ground under their feet); `world/people.rs`
+/// walks it toward `target_x` and hides it indoors (`inside`) while they are in a building.
+/// People have no health: weapons, blasts and enemies never touch them.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct NpcState {
+    pub character: crate::people::CharacterId,
+    /// What their routine has them doing.
+    pub activity: crate::people::routine::Activity,
+    /// The building lot (an index into the settlement's lots) they are inside, if any.
+    pub inside: Option<u8>,
+    /// The lot their routine wants them inside when they reach `target_x`, if any.
+    pub going_inside: Option<u8>,
+    /// Where they are walking to (world pixels).
+    pub target_x: f32,
+    /// -1 facing left, 1 facing right.
+    pub facing: i8,
+    /// The player they are talking to (they stop and face them).
+    pub talking_to: Option<PlayerId>,
+    /// They stand still until this tick (idle pauses between strolls).
+    pub idle_until: SimulationTick,
+}
+
 /// Per-kind entity state.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum EntityState {
@@ -348,6 +376,7 @@ pub enum EntityState {
     Target(TargetState),
     /// A pilot on foot ([`crate::pilot::PilotState`]).
     Pilot(crate::pilot::PilotState),
+    Npc(NpcState),
 }
 
 impl EntityState {
@@ -364,6 +393,7 @@ impl EntityState {
             Self::Projectile(_) => EntityKind::Projectile,
             Self::Target(_) => EntityKind::Target,
             Self::Pilot(_) => EntityKind::Pilot,
+            Self::Npc(_) => EntityKind::Npc,
         }
     }
 
@@ -399,6 +429,7 @@ impl EntityState {
             // `damage_entity`); reporting no health keeps weapons and auto-aim off crewmates
             // (friendly fire is off).
             | Self::Pilot(_) => None,
+            | Self::Npc(_) => None,
         }
     }
 
@@ -415,6 +446,7 @@ impl EntityState {
             | Self::Charge(_)
             | Self::Projectile(_)
             | Self::Pilot(_) => None,
+            | Self::Npc(_) => None,
         }
     }
 }

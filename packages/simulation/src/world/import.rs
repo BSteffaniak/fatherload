@@ -204,6 +204,7 @@ impl WorldState {
             bases: crate::base::Bases::new(),
             crew: crate::crew::CrewRoster::default(),
             clock: crate::clock::ClockState::default(),
+            people: crate::people::PeopleLedger::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

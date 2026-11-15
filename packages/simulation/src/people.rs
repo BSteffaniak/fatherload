@@ -28,17 +28,36 @@
 //! - **Report** ([`report`]): [`report::story_report`] prints sampled characters, dialogue
 //!   samples and story seeds for review (`fatherload --story-report`).
 //!
+//! People in the world (WP-PEOPLE, wave 3) build on these:
+//!
+//! - **Clock seam** ([`clock`]): [`clock::ClockSource`] and the tick-derived default
+//!   [`clock::TickClock`] (48-minute days) until T14's world clock is wired in.
+//! - **Routines** ([`routine`]): a [`routine::Settlement`] (a village or the town) knows each
+//!   resident's home, workplace and habits; [`routine::Settlement::stop_at`] says where they
+//!   should be at any time of day.
+//! - **Offers** ([`offers`]): each person's unique trade list, apprenticeship [`offers::Perk`]s,
+//!   prices by standing and gift tastes.
+//! - **Contractors** ([`contractor`]): the building trade as a person role, with quotes and a
+//!   hire record for WP-HOME.
+//! - **Ledger** ([`ledger`]): the world's saved, replicated memory of what players did with
+//!   people, and the [`ledger::PeopleCommand`]s players act with.
+//!
 //! Everything is integer-only and hash-seeded ([`PeopleRng`]), so the same seed yields the same
 //! people on every platform, host and client alike.
 
 pub mod character;
+pub mod clock;
 #[cfg(test)]
 mod content_tests;
+pub mod contractor;
 pub mod dialogue;
+pub mod ledger;
 pub mod memory;
 pub mod names;
+pub mod offers;
 pub mod population;
 pub mod report;
+pub mod routine;
 pub mod story;
 pub mod traits;
 
@@ -57,6 +76,9 @@ pub use story::{
     WorldFactKind, story_seeds,
 };
 pub use traits::{Fear, Personality, Quirk, Tone, Value, Want};
+
+pub use clock::{ClockSource, DayTime, TickClock};
+pub use ledger::{PeopleCommand, PeopleLedger, TalkTopic};
 
 use crate::worldgen::noise::hash2;
 

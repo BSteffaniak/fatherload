@@ -219,6 +219,42 @@ pub enum GameplayEventKind {
         village: crate::village::VillageId,
         service: crate::village::VillageService,
     },
+    /// A player spoke to a person (WP-PEOPLE). `npc` is the person's entity id.
+    PersonTalked {
+        player_id: PlayerId,
+        npc: u64,
+        /// The first time this person met this player.
+        first_meeting: bool,
+    },
+    /// A player bought something from a person's trade list.
+    PersonTraded {
+        player_id: PlayerId,
+        npc: u64,
+        kind: crate::people::OfferKind,
+    },
+    /// A player handed a person a gift.
+    PersonGifted {
+        player_id: PlayerId,
+        npc: u64,
+        reaction: crate::people::offers::GiftReaction,
+    },
+    /// How a person regards a player moved to a new standing (`warmer`: up, else down).
+    AffinityChanged {
+        player_id: PlayerId,
+        npc: u64,
+        standing: crate::people::Standing,
+        warmer: bool,
+    },
+    /// A person's rumour marked a site on a player's map.
+    RumourMarked {
+        player_id: PlayerId,
+        npc: u64,
+        feature: FeatureId,
+    },
+    /// Any applied people command (the specific events above carry the detail).
+    PeopleInteraction {
+        player_id: PlayerId,
+    },
     /// An enemy noticed a rig (its tell: a screech, a beep). `x`, `y` in world pixels.
     EnemyAlerted {
         entity: u64,
@@ -577,6 +613,7 @@ pub(crate) const fn gameplay_event_for_applied_command(
                 rule: *rule,
             }
         }
+        PlayerCommand::People(_) => GameplayEventKind::PeopleInteraction { player_id },
         PlayerCommand::Build(crate::base::BuildCommand::Use { structure, service }) => {
             GameplayEventKind::BaseServiceUsed {
                 player_id,

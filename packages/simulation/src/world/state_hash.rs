@@ -169,6 +169,10 @@ impl WorldState {
         if !self.clock.is_default() {
             hash.write_serialized(&self.clock);
         }
+        // Absent until someone talks to a person, so worlds without people keep their hashes.
+        if !self.people.is_empty() {
+            hash.write_serialized(&self.people);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

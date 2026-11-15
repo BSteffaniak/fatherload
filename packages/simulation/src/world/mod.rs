@@ -68,6 +68,9 @@ mod hazards;
 mod import;
 mod movement;
 mod no_clip;
+mod people;
+#[cfg(test)]
+mod people_tests;
 #[cfg(test)]
 mod persistence_tests;
 pub mod pilot;
@@ -111,6 +114,10 @@ mod weapons;
 
 pub use bases::{BuildQuote, TOWN_NO_BUILD_MARGIN, TOWN_NO_BUILD_ROWS, payment_for};
 pub use discovery::{DiscoveredTiles, Discovery};
+pub use people::{
+    DEFAULT_PLAYER_NAME, DESPAWN_MARGIN_COLUMNS, PEOPLE_REFRESH_MILLIS, SPAWN_MARGIN_COLUMNS,
+    TALK_REACH_TILES,
+};
 pub use player_sections::{PlayerInventory, PlayerRig, RigBuild, join_player, split_player};
 pub use quests::{QuestAvailability, QuestOffer};
 pub use replication::{
@@ -318,6 +325,11 @@ pub struct WorldState {
     /// [`crate::clock`]; the time of day itself is derived from the tick).
     #[serde(default)]
     clock: crate::clock::ClockState,
+    /// What players did with people: every character's memory of every player, and each
+    /// player's conversation, bought offers and perks (WP-PEOPLE, see `world/people.rs`). The
+    /// people themselves are [`crate::entity::EntityKind::Npc`] entities.
+    #[serde(default)]
+    people: crate::people::PeopleLedger,
 }
 
 impl WorldState {
