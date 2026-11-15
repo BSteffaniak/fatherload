@@ -261,6 +261,7 @@ fn host_never_advances_on_packet_arrival() {
         client,
         ClientMessage::Hello {
             token: None,
+            profile: None,
             name: "a".into(),
             version: PROTOCOL_VERSION,
         },
@@ -299,6 +300,7 @@ fn welcomed_host(params: SessionParams) -> (HostSession<ToySim>, ClientId, Playe
         client,
         ClientMessage::Hello {
             token: None,
+            profile: None,
             name: "a".into(),
             version: PROTOCOL_VERSION,
         },
@@ -438,6 +440,7 @@ fn host_rejects_wrong_protocol_version() {
         ClientId(1),
         ClientMessage::Hello {
             token: None,
+            profile: None,
             name: "old".into(),
             version: PROTOCOL_VERSION + 1,
         },

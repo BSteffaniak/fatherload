@@ -87,6 +87,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `movement`, `commands`, `services`, `progression`, `hazards`, `rescue` | gameplay rules used by the tick |
 | `quests` | quest services (accept, turn in, abandon at the giver's counter), objectives stepping inside the tick, twists, rewards, reputation rebates, blueprint fragments |
 | `roster` | `add_player` / `remove_player`; spawn placement on an unbounded grid so any number of rigs spawn without overlap |
+| `crew` | persistent crew identity (WP-PERSIST, types in `crate::crew`): `set_crew_member` / `crew_member` (profile, name, local seat per rig), `player_for_profile`, `park_player` / `unpark_player` (a player and all per-player state leave the live world into the saved `CrewRoster` and come back exactly under the same id), `parked_players`, `all_player_ids`. The roster saves with the world, is not hashed, and `redacted_for` strips it from client keyframes |
 | `discovery` | `DiscoveredTiles` (16x16 chunk bitsets; positions in JSON saves, bitsets in binary keyframes), clamped allocation-free reveals, `Discovery` op-log entries |
 | `player_sections` | how a `Player` splits into per-tick `PlayerRig`, public `RigBuild` (visible tiers and cosmetics) and private `PlayerInventory` |
 | `bases` | base building (WP-BASE): `check_build` / `apply_build_command` for every `BuildCommand`, fuel station synthesis, lift ladders, rescue home points (see Base building below) |

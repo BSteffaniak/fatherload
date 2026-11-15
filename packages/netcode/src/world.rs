@@ -22,16 +22,16 @@
 //!   relevance radius) are expressed in tiles.
 
 use fatherload_simulation::{
-    ControlState, Discovery, GameplayEvent, GameplayEventKind, InputSequence, LiveEntities,
-    PlayerCommand, PlayerScopedCommandOutcome, PlayerTickState, SectionKey, SectionPayload,
-    SimulationTick, TILE_SIZE, TickAction, TileChange, WorldState,
+    ControlState, CrewMember, Discovery, GameplayEvent, GameplayEventKind, InputSequence,
+    LiveEntities, PlayerCommand, PlayerScopedCommandOutcome, PlayerTickState, SectionKey,
+    SectionPayload, SimulationTick, TILE_SIZE, TickAction, TileChange, WorldState,
     entity::{Entity, EntityDelta, EntityId},
     input,
     terrain::{CHUNK_SIZE_TILES, ChunkPosition, TileDiffs},
 };
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{ActionId, PlayerId, Tick};
+use crate::ids::{ActionId, PlayerId, ProfileId, Tick};
 use crate::simulation::{NetSimulation, Pose, Relevance, TickEvent, TickInputs, TickOutput};
 
 /// Event kind discriminants for [`TickEvent::kind`].
@@ -86,6 +86,18 @@ pub fn to_sim_player(id: PlayerId) -> fatherload_simulation::PlayerId {
 #[must_use]
 pub fn from_sim_player(id: fatherload_simulation::PlayerId) -> Option<PlayerId> {
     u32::try_from(id.get()).ok().map(PlayerId)
+}
+
+/// Converts a netcode profile id to the simulation's.
+#[must_use]
+pub const fn to_sim_profile(id: ProfileId) -> fatherload_simulation::ProfileId {
+    fatherload_simulation::ProfileId::new(id.0)
+}
+
+/// Converts a simulation profile id to netcode's.
+#[must_use]
+pub const fn from_sim_profile(id: fatherload_simulation::ProfileId) -> ProfileId {
+    ProfileId(id.get())
 }
 
 /// Builds held controls from analog input.
@@ -204,6 +216,48 @@ impl NetSimulation for WorldState {
 
     fn remove_player(&mut self, id: PlayerId) {
         Self::remove_player(self, to_sim_player(id));
+    }
+
+    fn identify_player(
+        &mut self,
+        id: PlayerId,
+        profile: Option<ProfileId>,
+        name: &str,
+        seat: Option<u32>,
+    ) {
+        self.set_crew_member(
+            to_sim_player(id),
+            CrewMember {
+                profile: profile.map(to_sim_profile),
+                name: name.to_owned(),
+                seat,
+            },
+        );
+    }
+
+    fn crew_record(&self, id: PlayerId) -> Option<Option<ProfileId>> {
+        self.crew_member(to_sim_player(id))
+            .map(|member| member.profile.map(from_sim_profile))
+    }
+
+    fn player_for_profile(&self, profile: ProfileId) -> Option<PlayerId> {
+        Self::player_for_profile(self, to_sim_profile(profile)).and_then(from_sim_player)
+    }
+
+    fn park_player(&mut self, id: PlayerId) -> bool {
+        Self::park_player(self, to_sim_player(id))
+    }
+
+    fn unpark_player(&mut self, id: PlayerId) -> bool {
+        Self::unpark_player(self, to_sim_player(id))
+    }
+
+    fn parked_players(&self) -> Vec<(PlayerId, String)> {
+        Self::parked_players(self)
+            .filter_map(|(id, parked)| {
+                from_sim_player(id).map(|net| (net, parked.member.display_name(id)))
+            })
+            .collect()
     }
 
     fn simulate_tick(

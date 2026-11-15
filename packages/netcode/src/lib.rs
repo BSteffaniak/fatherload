@@ -50,12 +50,18 @@ pub mod toy;
 mod tests;
 
 pub use client::{
-    ClientConfig, ClientPhase, ClientSession, ClientStats, ClientView, EventSource, PresentedEvent,
+    ClientConfig, ClientPhase, ClientSession, ClientStats, ClientView, EventSource, IdentityNotice,
+    PresentedEvent,
 };
 pub use clock::{ClientClock, ClockSpeed, MarginResponse};
 pub use hashing::{StableHasher, stable_hash};
-pub use host::{HostClientStats, HostConfig, HostOutput, HostPhase, HostSession, HostStats};
-pub use ids::{ActionId, ClientId, InputSeq, PlayerId, ReconnectToken, SeatId, SessionEpoch, Tick};
+pub use host::{
+    ClaimRequest, CrewNotice, HostClientStats, HostConfig, HostOutput, HostPhase, HostSession,
+    HostStats,
+};
+pub use ids::{
+    ActionId, ClientId, InputSeq, PlayerId, ProfileId, ReconnectToken, SeatId, SessionEpoch, Tick,
+};
 pub use interpolation::{InterpTimeline, SnapshotBuffer, VisualOffset};
 pub use ledger::ActionLedger;
 pub use link::{DetRng, LinkConditions, LinkSim, LinkStats};

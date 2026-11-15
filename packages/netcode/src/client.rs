@@ -6,12 +6,14 @@ use std::time::Duration;
 
 use crate::clock::{ClientClock, MarginResponse};
 use crate::host::tag_events;
-use crate::ids::{ActionId, ClientId, InputSeq, PlayerId, ReconnectToken, SessionEpoch, Tick};
+use crate::ids::{
+    ActionId, ClientId, InputSeq, PlayerId, ProfileId, ReconnectToken, SessionEpoch, Tick,
+};
 use crate::interpolation::{InterpTimeline, SnapshotBuffer, VisualOffset};
 use crate::params::{NetTuning, SessionParams};
 use crate::protocol::{
     self, ClientMessage, CodecError, EndReason, InputFrame, LobbyEntry, NetEvent, PROTOCOL_VERSION,
-    PlayerMarker, RejectReason, ServerFrame, ServerMessage, TaggedAction, Welcome,
+    PlayerMarker, Reassigned, RejectReason, ServerFrame, ServerMessage, TaggedAction, Welcome,
 };
 use crate::simulation::{ActionEnvelope, NetSimulation, PlayerTickInput, Pose, TickInputs};
 
@@ -22,6 +24,9 @@ pub struct ClientConfig {
     pub name: String,
     /// Token from a previous session to reclaim the same player.
     pub reconnect_token: Option<ReconnectToken>,
+    /// Persistent install identity sent in `Hello`, so a host whose world saved this player's
+    /// rig hands it back (WP-PERSIST).
+    pub profile: Option<ProfileId>,
     /// Initial round-trip estimate (e.g. Quinn's `connection.rtt()`), used to
     /// pick the initial run-ahead lead.
     pub initial_rtt: Option<Duration>,
@@ -40,6 +45,20 @@ pub enum ClientPhase {
     Rejected(RejectReason),
     /// The session ended (or the client left).
     Ended(EndReason),
+}
+
+/// What the host did with this client's identity (WP-PERSIST), for the app's toasts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IdentityNotice {
+    /// Joined and got a saved rig back ("Welcome back").
+    WelcomeBack,
+    /// The host approved a rig claim: this client now plays that rig.
+    ClaimApproved,
+    /// The host turned a rig claim down.
+    ClaimDenied {
+        /// The rig that was asked for.
+        player: PlayerId,
+    },
 }
 
 /// Where a presented event came from.
@@ -171,6 +190,9 @@ pub struct ClientSession<S: NetSimulation> {
     stats: ClientStats,
     rtt: Option<Duration>,
     newest_server_tick: Tick,
+    /// Parked player this client asked the host for, until answered.
+    pending_claim: Option<PlayerId>,
+    identity_notices: Vec<IdentityNotice>,
 }
 
 impl<S: NetSimulation> ClientSession<S> {
@@ -179,6 +201,7 @@ impl<S: NetSimulation> ClientSession<S> {
     pub fn new(config: ClientConfig) -> Self {
         let hello = ClientMessage::Hello {
             token: config.reconnect_token,
+            profile: config.profile,
             name: config.name.clone(),
             version: PROTOCOL_VERSION,
         };
@@ -216,7 +239,29 @@ impl<S: NetSimulation> ClientSession<S> {
             stats: ClientStats::default(),
             rtt,
             newest_server_tick: Tick(0),
+            pending_claim: None,
+            identity_notices: Vec::new(),
         }
+    }
+
+    /// Asks the host to hand over a parked (saved, offline) player's rig. The answer arrives as
+    /// an [`IdentityNotice`]; until then [`Self::pending_claim`] names the rig.
+    pub fn claim_rig(&mut self, player: PlayerId) {
+        if self.player.is_some() {
+            self.pending_claim = Some(player);
+            self.outbox.push(ClientMessage::ClaimRig { player });
+        }
+    }
+
+    /// The parked player this client asked for and the host has not answered yet.
+    #[must_use]
+    pub const fn pending_claim(&self) -> Option<PlayerId> {
+        self.pending_claim
+    }
+
+    /// Identity news since the last call (welcome back, claim answers).
+    pub fn take_identity_notices(&mut self) -> Vec<IdentityNotice> {
+        std::mem::take(&mut self.identity_notices)
     }
 
     // ----- accessors -------------------------------------------------------
@@ -395,6 +440,53 @@ impl<S: NetSimulation> ClientSession<S> {
             ServerMessage::TuningChanged { tuning } => self.tuning = tuning,
             ServerMessage::Rejected { reason } => self.phase = ClientPhase::Rejected(reason),
             ServerMessage::SessionEnded { reason } => self.phase = ClientPhase::Ended(reason),
+            ServerMessage::Reassigned(reassigned) => self.handle_reassigned(*reassigned),
+            ServerMessage::ClaimDenied { player } => {
+                if self.pending_claim == Some(player) {
+                    self.pending_claim = None;
+                }
+                self.identity_notices
+                    .push(IdentityNotice::ClaimDenied { player });
+            }
+        }
+    }
+
+    fn handle_reassigned(&mut self, reassigned: Reassigned<S>) {
+        if self.authority.is_none() || reassigned.epoch < self.epoch {
+            self.stats.stale_frames += 1;
+            return;
+        }
+        let claimed = self.pending_claim.take() == Some(reassigned.player);
+        self.player = Some(reassigned.player);
+        self.token = Some(reassigned.token);
+        let world = S::from_keyframe(reassigned.keyframe);
+        self.stats.keyframes_received += 1;
+        self.epoch = reassigned.epoch;
+        self.replace_world(reassigned.tick, world);
+        if claimed {
+            self.identity_notices.push(IdentityNotice::ClaimApproved);
+        } else if reassigned.returning {
+            self.identity_notices.push(IdentityNotice::WelcomeBack);
+        }
+    }
+
+    /// Replaces the whole world (a new epoch, or a new player): everything predicted or
+    /// buffered for the previous one is void.
+    fn replace_world(&mut self, tick: Tick, world: S) {
+        self.pending.clear();
+        self.unacked_actions.clear();
+        self.queued_actions.clear();
+        self.predicted_events.clear();
+        self.remote.clear();
+        self.interp.reset();
+        self.smoothing.reset();
+        self.newest_server_tick = tick;
+        self.cur_pose = self.player.and_then(|p| world.player_pose(p));
+        self.prev_pose = self.cur_pose;
+        self.predicted = Some(world.clone());
+        self.authority = Some(world);
+        if self.phase == ClientPhase::InGame {
+            self.clock.start(tick.plus(self.initial_lead()));
         }
     }
 
@@ -415,6 +507,9 @@ impl<S: NetSimulation> ClientSession<S> {
         self.predicted = Some(authority.clone());
         self.authority = Some(authority);
         self.stats.keyframes_received += 1;
+        if welcome.returning {
+            self.identity_notices.push(IdentityNotice::WelcomeBack);
+        }
         if welcome.started {
             self.phase = ClientPhase::InGame;
             self.clock
@@ -434,21 +529,8 @@ impl<S: NetSimulation> ClientSession<S> {
         if epoch > self.epoch {
             // New world: everything from the previous epoch is void.
             self.epoch = epoch;
-            self.pending.clear();
-            self.unacked_actions.clear();
-            self.queued_actions.clear();
-            self.predicted_events.clear();
-            self.remote.clear();
-            self.interp.reset();
-            self.smoothing.reset();
-            self.newest_server_tick = tick;
-            self.cur_pose = self.player.and_then(|p| world.player_pose(p));
-            self.prev_pose = self.cur_pose;
-            self.predicted = Some(world.clone());
-            self.authority = Some(world);
-            if self.phase == ClientPhase::InGame {
-                self.clock.start(tick.plus(self.initial_lead()));
-            }
+            self.pending_claim = None;
+            self.replace_world(tick, world);
             return;
         }
         if self.authority.as_ref().is_some_and(|a| tick < a.tick()) {

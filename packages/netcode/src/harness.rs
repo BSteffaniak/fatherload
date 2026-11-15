@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use crate::client::{ClientConfig, ClientPhase, ClientSession, ClientStats};
 use crate::host::{HostConfig, HostSession};
-use crate::ids::{ActionId, ClientId, PlayerId, ReconnectToken, Tick};
+use crate::ids::{ActionId, ClientId, PlayerId, ProfileId, ReconnectToken, Tick};
 use crate::link::{DetRng, LinkConditions, LinkSim};
 use crate::params::{NetTuning, SessionParams};
 use crate::protocol::{self, ClientMessage, ServerMessage};
@@ -533,6 +533,18 @@ impl<S: HarnessSim> Harness<S> {
     /// Connects a new client (optionally reclaiming a player with `token`).
     /// Returns its index in `clients`.
     pub fn add_client(&mut self, token: Option<ReconnectToken>) -> usize {
+        let name = format!("bot-{}", self.next_client);
+        self.add_client_as(token, None, &name)
+    }
+
+    /// Connects a new client with a persistent `profile` and display `name` (WP-PERSIST).
+    /// Returns its index in `clients`.
+    pub fn add_client_as(
+        &mut self,
+        token: Option<ReconnectToken>,
+        profile: Option<ProfileId>,
+        name: &str,
+    ) -> usize {
         let id = ClientId(self.next_client);
         self.next_client += 1;
         let seed = self
@@ -542,8 +554,9 @@ impl<S: HarnessSim> Harness<S> {
             .wrapping_add(id.0 * 7919);
         let rtt = self.config.uplink.latency + self.config.downlink.latency;
         let session = ClientSession::new(ClientConfig {
-            name: format!("bot-{}", id.0),
+            name: name.to_owned(),
             reconnect_token: token,
+            profile,
             initial_rtt: self.config.provide_rtt.then_some(rtt),
         });
         let mut client = HarnessClient {
@@ -579,6 +592,23 @@ impl<S: HarnessSim> Harness<S> {
         client.up_unreliable.clear();
         client.down.clear();
         self.host.client_disconnected(client.id);
+    }
+
+    /// Quits the host and starts a new one on `world` (e.g. a reloaded save): every client's
+    /// transport drops, and players the new host does not own are parked
+    /// ([`HostSession::park_unowned_players`]) until they rejoin.
+    pub fn restart_host(&mut self, world: S) {
+        for index in 0..self.clients.len() {
+            if self.clients[index].connected {
+                self.disconnect(index);
+            }
+        }
+        let config = self.host.config().clone();
+        self.host = HostSession::new(world, config);
+        self.host.park_unowned_players();
+        self.host_hashes.clear();
+        // Rejoining clients start a new client session, whose action ids restart at 1.
+        self.applied_actions.clear();
     }
 
     /// Advances by one render frame of seeded random length.

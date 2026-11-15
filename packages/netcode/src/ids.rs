@@ -74,6 +74,14 @@ id_newtype!(
     ReconnectToken(u64)
 );
 
+id_newtype!(
+    /// A persistent player identity, random per install (WP-PERSIST).
+    ///
+    /// Sent in `Hello` so a host recognizes a returning player across sessions. Unlike a
+    /// [`ReconnectToken`] it outlives the session; it is never sent to other clients.
+    ProfileId(u64)
+);
+
 impl Tick {
     /// Returns this tick advanced by `n` ticks.
     #[must_use]

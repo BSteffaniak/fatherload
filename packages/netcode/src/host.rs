@@ -4,13 +4,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use crate::ids::{
-    ActionId, ClientId, InputSeq, PlayerId, ReconnectToken, SeatId, SessionEpoch, Tick,
+    ActionId, ClientId, InputSeq, PlayerId, ProfileId, ReconnectToken, SeatId, SessionEpoch, Tick,
 };
 use crate::ledger::ActionLedger;
 use crate::params::{NetTuning, SessionParams};
 use crate::protocol::{
     self, ClientMessage, CodecError, EndReason, InputFrame, LobbyEntry, NetEvent, PROTOCOL_VERSION,
-    PlayerMarker, RejectReason, ServerFrame, ServerMessage, TaggedAction, Welcome,
+    PlayerMarker, Reassigned, RejectReason, ServerFrame, ServerMessage, TaggedAction, Welcome,
 };
 use crate::simulation::{
     ActionEnvelope, NetSimulation, PlayerTickInput, Relevance, TickEvent, TickInputs,
@@ -135,6 +135,44 @@ pub struct HostStats {
     pub catch_up_clamps: u64,
 }
 
+/// Crew news for the host app (WP-PERSIST): who joined, left or asks for a saved rig.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CrewNotice {
+    /// A remote player joined (or rejoined).
+    Joined {
+        /// Their player.
+        player: PlayerId,
+        /// Display name.
+        name: String,
+        /// Their saved rig was handed back (recognized by profile).
+        returning: bool,
+    },
+    /// A remote player is gone for this session.
+    Left {
+        /// Their player.
+        player: PlayerId,
+        /// Display name.
+        name: String,
+        /// Their rig is parked for them (it saves with the world) rather than removed.
+        parked: bool,
+    },
+    /// A client asks to take over a parked rig (see [`HostSession::resolve_claim`]).
+    ClaimRequested(ClaimRequest),
+}
+
+/// A pending "claim a saved rig" request.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClaimRequest {
+    /// The asking client.
+    pub client: ClientId,
+    /// The asking client's display name.
+    pub name: String,
+    /// The parked player asked for.
+    pub target: PlayerId,
+    /// That player's saved name.
+    pub target_name: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Owner {
     Local(SeatId),
@@ -147,6 +185,8 @@ struct PlayerSlot<S: NetSimulation> {
     owner: Owner,
     name: String,
     token: ReconnectToken,
+    /// Persistent identity, if the player sent one (local seats: set by the app).
+    profile: Option<ProfileId>,
     ready: bool,
     last_controls: S::Controls,
     last_input_tick: Option<Tick>,
@@ -161,6 +201,7 @@ impl<S: NetSimulation> PlayerSlot<S> {
             owner,
             name,
             token,
+            profile: None,
             ready: false,
             last_controls: S::Controls::default(),
             last_input_tick: None,
@@ -280,6 +321,9 @@ pub struct HostSession<S: NetSimulation> {
     token_mint: TokenMint,
     outbox: Vec<(ClientId, ServerMessage<S>)>,
     stats: HostStats,
+    /// Pending rig claims: asking client -> parked player.
+    claims: BTreeMap<ClientId, PlayerId>,
+    crew_notices: Vec<CrewNotice>,
 }
 
 impl<S: NetSimulation> HostSession<S> {
@@ -292,12 +336,7 @@ impl<S: NetSimulation> HostSession<S> {
     #[must_use]
     pub fn new(world: S, config: HostConfig) -> Self {
         assert_world_rate(&world, config.params);
-        let next_player = world
-            .player_ids()
-            .iter()
-            .map(|id| id.0.saturating_add(1))
-            .max()
-            .unwrap_or(0);
+        let next_player = first_free_player(&world);
         let phase = if config.start_in_lobby {
             HostPhase::Lobby
         } else {
@@ -318,6 +357,8 @@ impl<S: NetSimulation> HostSession<S> {
             token_mint,
             outbox: Vec::new(),
             stats: HostStats::default(),
+            claims: BTreeMap::new(),
+            crew_notices: Vec::new(),
         }
     }
 
@@ -390,6 +431,9 @@ impl<S: NetSimulation> HostSession<S> {
 
     /// Lobby roster.
     #[must_use]
+    ///
+    /// Live players first (in id order), then the parked players of the world: saved players
+    /// who are offline and waiting to rejoin (`parked`).
     pub fn roster(&self) -> Vec<LobbyEntry> {
         self.players
             .iter()
@@ -399,8 +443,57 @@ impl<S: NetSimulation> HostSession<S> {
                 ready: slot.ready,
                 connected: !matches!(slot.owner, Owner::Reserved { .. }),
                 local: matches!(slot.owner, Owner::Local(_)),
+                parked: false,
             })
+            .chain(
+                self.world
+                    .parked_players()
+                    .into_iter()
+                    .map(|(player, name)| LobbyEntry {
+                        player,
+                        name,
+                        ready: false,
+                        connected: false,
+                        local: false,
+                        parked: true,
+                    }),
+            )
             .collect()
+    }
+
+    /// Pending "claim a saved rig" requests, in client order.
+    #[must_use]
+    pub fn claim_requests(&self) -> Vec<ClaimRequest> {
+        self.claims
+            .iter()
+            .map(|(client, target)| self.claim_request(*client, *target))
+            .collect()
+    }
+
+    fn claim_request(&self, client: ClientId, target: PlayerId) -> ClaimRequest {
+        let name = self
+            .client_player(client)
+            .and_then(|player| self.players.get(&player))
+            .map(|slot| slot.name.clone())
+            .unwrap_or_default();
+        let target_name = self
+            .world
+            .parked_players()
+            .into_iter()
+            .find(|(player, _)| *player == target)
+            .map(|(_, name)| name)
+            .unwrap_or_default();
+        ClaimRequest {
+            client,
+            name,
+            target,
+            target_name,
+        }
+    }
+
+    /// Crew news since the last call (joins, departures, claim requests).
+    pub fn take_crew_notices(&mut self) -> Vec<CrewNotice> {
+        std::mem::take(&mut self.crew_notices)
     }
 
     /// Buffered future input frames for a client.
@@ -445,15 +538,16 @@ impl<S: NetSimulation> HostSession<S> {
     }
 
     /// Binds a local seat to a player that already exists in the world (for example the rig of
-    /// a loaded save), instead of spawning a new one.
+    /// a loaded save, restored first if it is parked), instead of spawning a new one.
     ///
     /// Returns `false` (and changes nothing) if the seat is already bound, the world has no such
-    /// player, or another seat or client already owns it.
+    /// player (live or parked), or another seat or client already owns it.
     pub fn adopt_local_player(&mut self, seat: SeatId, player: PlayerId) -> bool {
-        if self.seats.contains_key(&seat)
-            || self.players.contains_key(&player)
-            || !self.world.player_ids().contains(&player)
-        {
+        if self.seats.contains_key(&seat) || self.players.contains_key(&player) {
+            return false;
+        }
+        // A parked (saved, offline) rig is restored for the seat.
+        if !self.world.player_ids().contains(&player) && !self.world.unpark_player(player) {
             return false;
         }
         self.next_player = self.next_player.max(player.0.saturating_add(1));
@@ -478,12 +572,156 @@ impl<S: NetSimulation> HostSession<S> {
 
     /// Renames a local seat's player in the lobby roster (e.g. the host's display name).
     pub fn set_local_player_name(&mut self, seat: SeatId, name: impl Into<String>) {
-        let Some(player) = self.seats.get(&seat) else {
+        let profile = self
+            .seats
+            .get(&seat)
+            .and_then(|player| self.players.get(player))
+            .and_then(|slot| slot.profile);
+        self.set_local_identity(seat, profile, name);
+    }
+
+    /// Names a local seat's player and records its persistent identity in the world (so the
+    /// seat gets the same rig back when the world is loaded again).
+    pub fn set_local_identity(
+        &mut self,
+        seat: SeatId,
+        profile: Option<ProfileId>,
+        name: impl Into<String>,
+    ) {
+        let Some(player) = self.seats.get(&seat).copied() else {
             return;
         };
-        if let Some(slot) = self.players.get_mut(player) {
-            slot.name = name.into();
+        let name = name.into();
+        if let Some(slot) = self.players.get_mut(&player) {
+            slot.name.clone_from(&name);
+            slot.profile = profile;
+            self.world
+                .identify_player(player, profile, &name, Some(seat.0));
             self.broadcast_lobby();
+        }
+    }
+
+    /// Parks every world player that no seat or client owns (for example the rigs of friends in
+    /// a loaded save): they leave the live world but are kept, listed in the roster as parked
+    /// and handed back when they rejoin. Players the simulation cannot park are removed.
+    pub fn park_unowned_players(&mut self) {
+        let unowned: Vec<PlayerId> = self
+            .world
+            .player_ids()
+            .into_iter()
+            .filter(|player| !self.players.contains_key(player))
+            .collect();
+        if unowned.is_empty() {
+            return;
+        }
+        for player in unowned {
+            if !self.world.park_player(player) {
+                self.world.remove_player(player);
+            }
+        }
+        self.broadcast_lobby();
+    }
+
+    /// Approves (or denies) a pending rig claim: on approval the client's current player is
+    /// discarded and it takes over the parked rig, which is rebound to its profile so it is
+    /// recognized automatically next time. Returns whether the claim was granted (`false` too
+    /// when there was no such claim or the rig is no longer parked; the client is told it was
+    /// denied).
+    pub fn resolve_claim(&mut self, client: ClientId, approve: bool) -> bool {
+        let Some(target) = self.claims.remove(&client) else {
+            return false;
+        };
+        let deny = |host: &mut Self| {
+            host.outbox
+                .push((client, ServerMessage::ClaimDenied { player: target }));
+            false
+        };
+        let Some(old) = self.client_player(client) else {
+            return deny(self);
+        };
+        if !approve || !self.is_parked(target) {
+            return deny(self);
+        }
+        let Some(mut slot) = self.players.remove(&old) else {
+            return deny(self);
+        };
+        if !self.world.unpark_player(target) {
+            self.players.insert(old, slot);
+            return deny(self);
+        }
+        self.world.remove_player(old);
+        self.world
+            .identify_player(target, slot.profile, &slot.name, None);
+        slot.token = self.new_token();
+        slot.last_input_tick = None;
+        slot.last_controls = S::Controls::default();
+        self.players.insert(target, slot);
+        // Anyone else waiting on the same rig is turned down.
+        let losers: Vec<ClientId> = self
+            .claims
+            .iter()
+            .filter(|(_, wanted)| **wanted == target)
+            .map(|(other, _)| *other)
+            .collect();
+        for other in losers {
+            self.claims.remove(&other);
+            self.outbox
+                .push((other, ServerMessage::ClaimDenied { player: target }));
+        }
+        self.reassign(client, target, true);
+        self.broadcast_lobby();
+        true
+    }
+
+    fn is_parked(&self, player: PlayerId) -> bool {
+        self.world
+            .parked_players()
+            .iter()
+            .any(|(parked, _)| *parked == player)
+    }
+
+    /// Points a client at another player and sends it that player's world.
+    fn reassign(&mut self, client: ClientId, player: PlayerId, returning: bool) {
+        let token = self
+            .players
+            .get(&player)
+            .map_or(ReconnectToken(0), |slot| slot.token);
+        let Some(remote) = self.clients.get_mut(&client) else {
+            return;
+        };
+        remote.player = Some(player);
+        remote.clear_inputs();
+        remote.reset_baseline(&self.world);
+        remote.pending_events.clear();
+        self.outbox.push((
+            client,
+            ServerMessage::Reassigned(Box::new(Reassigned {
+                player,
+                token,
+                epoch: self.epoch,
+                tick: self.world.tick(),
+                keyframe: self.world.keyframe_for(Some(player)),
+                returning,
+            })),
+        ));
+    }
+
+    /// A player leaves for this session: parked if it has a persistent identity (and the
+    /// simulation parks), otherwise removed.
+    fn drop_player(&mut self, player: PlayerId) {
+        let Some(slot) = self.players.remove(&player) else {
+            return;
+        };
+        let parked = slot.profile.is_some() && self.world.park_player(player);
+        if !parked {
+            self.world.remove_player(player);
+        }
+        if !matches!(slot.owner, Owner::Local(_)) {
+            self.crew_notices.push(CrewNotice::Left {
+                player,
+                name: slot.name,
+                parked,
+            });
         }
     }
 
@@ -569,13 +807,15 @@ impl<S: NetSimulation> HostSession<S> {
         match message {
             ClientMessage::Hello {
                 token,
+                profile,
                 name,
                 version,
             } => {
                 if !joined {
-                    self.handle_hello(client, token, name, version);
+                    self.handle_hello(client, token, profile, name, version);
                 }
             }
+            ClientMessage::ClaimRig { player } if joined => self.request_claim(client, player),
             ClientMessage::Inputs {
                 epoch,
                 frames,
@@ -648,28 +888,105 @@ impl<S: NetSimulation> HostSession<S> {
             }
         }
         self.epoch = self.epoch.next();
-        let max_world = self
-            .world
-            .player_ids()
-            .iter()
-            .map(|id| id.0.saturating_add(1))
-            .max()
-            .unwrap_or(0);
-        self.next_player = self.next_player.max(max_world);
-        for player in self.players.keys() {
-            self.world.add_player(*player);
-        }
+        self.next_player = self.next_player.max(first_free_player(&self.world));
+        let moved = self.seat_players_in_new_world();
         for slot in self.players.values_mut() {
             slot.last_input_tick = None;
             slot.last_controls = S::Controls::default();
+        }
+        // Rig claims named parked players of the old world.
+        for (client, target) in std::mem::take(&mut self.claims) {
+            self.outbox
+                .push((client, ServerMessage::ClaimDenied { player: target }));
         }
         let clients: Vec<ClientId> = self.clients.keys().copied().collect();
         for client in clients {
             if let Some(remote) = self.clients.get_mut(&client) {
                 remote.clear_inputs();
             }
-            self.send_keyframe(client);
+            match self
+                .client_player(client)
+                .and_then(|player| moved.get(&player))
+            {
+                Some(returning) => {
+                    let player = self.client_player(client).unwrap_or_default();
+                    self.reassign(client, player, *returning);
+                }
+                None => self.send_keyframe(client),
+            }
         }
+        self.broadcast_lobby();
+    }
+
+    /// Puts every session player into a freshly loaded world: a player whose profile owns a rig
+    /// there gets that rig back (unparked, possibly under another id); others keep their id when
+    /// it is free, else get a new one, with a fresh rig. Returns the players whose client must
+    /// be reassigned (new id, or a saved rig handed back), with whether they got a saved rig.
+    fn seat_players_in_new_world(&mut self) -> BTreeMap<PlayerId, bool> {
+        let mut taken: BTreeSet<PlayerId> = BTreeSet::new();
+        let mut moves: Vec<(PlayerId, PlayerId, bool)> = Vec::new();
+        let ids: Vec<PlayerId> = self.players.keys().copied().collect();
+        for id in ids {
+            let Some(slot) = self.players.get(&id) else {
+                continue;
+            };
+            let local = matches!(slot.owner, Owner::Local(_));
+            let saved = slot
+                .profile
+                .and_then(|profile| self.world.player_for_profile(profile))
+                .filter(|target| {
+                    !taken.contains(target) && (*target == id || !self.players.contains_key(target))
+                });
+            let target = if let Some(target) = saved {
+                let _unparked = self.world.unpark_player(target);
+                target
+            } else if local
+                || (!taken.contains(&id)
+                    && !self.is_parked(id)
+                    && self.world.crew_record(id).is_none())
+            {
+                // Keep the id: adopt the world's unrecorded rig under it (as before persistence)
+                // or spawn one. A parked or recorded id is someone else's rig: never reused.
+                if !self.world.unpark_player(id) {
+                    self.world.add_player(id);
+                }
+                id
+            } else {
+                let fresh = self.allocate_player();
+                self.world.add_player(fresh);
+                fresh
+            };
+            taken.insert(target);
+            if target != id || saved.is_some() {
+                moves.push((id, target, saved.is_some()));
+            }
+        }
+        let mut reassigned = BTreeMap::new();
+        for (from, to, returning) in moves {
+            if from != to
+                && let Some(slot) = self.players.remove(&from)
+            {
+                self.players.insert(to, slot);
+                for remote in self.clients.values_mut() {
+                    if remote.player == Some(from) {
+                        remote.player = Some(to);
+                    }
+                }
+            }
+            // A saved rig under the same id needs no reassignment (the keyframe carries it).
+            if from != to {
+                reassigned.insert(to, returning);
+            }
+        }
+        for (id, slot) in &self.players {
+            let seat = match slot.owner {
+                Owner::Local(seat) => Some(seat.0),
+                _ => None,
+            };
+            self.world
+                .identify_player(*id, slot.profile, &slot.name, seat);
+        }
+        reassigned
     }
 
     /// Fraction of a fixed tick accumulated, for presentation-only interpolation.
@@ -877,18 +1194,33 @@ impl<S: NetSimulation> HostSession<S> {
             return;
         }
         for player in expired {
-            self.players.remove(&player);
-            self.world.remove_player(player);
+            self.drop_player(player);
         }
         self.broadcast_lobby();
     }
 
+    fn request_claim(&mut self, client: ClientId, target: PlayerId) {
+        if !self.is_parked(target) {
+            self.outbox
+                .push((client, ServerMessage::ClaimDenied { player: target }));
+            return;
+        }
+        self.claims.insert(client, target);
+        let request = self.claim_request(client, target);
+        self.crew_notices.push(CrewNotice::ClaimRequested(request));
+    }
+
     // ----- message handling ------------------------------------------------
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "token, profile and fresh joins share one validation and welcome path"
+    )]
     fn handle_hello(
         &mut self,
         client: ClientId,
         token: Option<ReconnectToken>,
+        profile: Option<ProfileId>,
         name: String,
         version: u8,
     ) {
@@ -910,32 +1242,69 @@ impl<S: NetSimulation> HostSession<S> {
             self.players
                 .iter()
                 .find(|(_, slot)| slot.token == token)
-                .map(|(player, slot)| (*player, slot.owner))
+                .map(|(player, slot)| (*player, Some(slot.owner)))
         });
-        let player = match reclaimed {
-            Some((player, Owner::Reserved { .. })) => {
+        // Not a session reconnect: a returning player's profile finds their saved rig (live
+        // while reserved, or parked from an earlier session).
+        let recognized = if reclaimed.is_none() {
+            profile
+                .and_then(|profile| self.world.player_for_profile(profile))
+                .map(|player| (player, self.players.get(&player).map(|slot| slot.owner)))
+        } else {
+            None
+        };
+        let returning = recognized.is_some();
+        let player = match reclaimed.or(recognized) {
+            Some((player, Some(Owner::Reserved { .. }))) => {
                 if let Some(slot) = self.players.get_mut(&player) {
                     slot.owner = Owner::Remote(client);
-                    slot.name = name;
+                    slot.name.clone_from(&name);
                     slot.last_input_tick = None;
                     // A new client session restarts action ids at 1.
                     slot.ledger = ActionLedger::new();
                 }
                 player
             }
-            Some(_) => {
+            Some((_, Some(_))) => {
                 self.reject(client, RejectReason::TokenInUse);
                 return;
+            }
+            Some((player, None)) => {
+                // A saved rig nobody holds: bring it back into the live world.
+                if !self.world.unpark_player(player) && !self.world.player_ids().contains(&player) {
+                    self.world.add_player(player);
+                }
+                self.next_player = self.next_player.max(player.0.saturating_add(1));
+                let token = self.new_token();
+                self.players.insert(
+                    player,
+                    PlayerSlot::new(Owner::Remote(client), name.clone(), token),
+                );
+                player
             }
             None => {
                 let player = self.allocate_player();
                 self.world.add_player(player);
                 let token = self.new_token();
-                self.players
-                    .insert(player, PlayerSlot::new(Owner::Remote(client), name, token));
+                self.players.insert(
+                    player,
+                    PlayerSlot::new(Owner::Remote(client), name.clone(), token),
+                );
                 player
             }
         };
+        if let Some(slot) = self.players.get_mut(&player) {
+            if profile.is_some() {
+                slot.profile = profile;
+            }
+            let profile = slot.profile;
+            self.world.identify_player(player, profile, &name, None);
+        }
+        self.crew_notices.push(CrewNotice::Joined {
+            player,
+            name,
+            returning,
+        });
         let Some(remote) = self.clients.get_mut(&client) else {
             return;
         };
@@ -957,6 +1326,7 @@ impl<S: NetSimulation> HostSession<S> {
             session_params: self.config.params,
             tuning: remote.tuning,
             keyframe: self.world.keyframe_for(Some(player)),
+            returning,
         };
         self.outbox
             .push((client, ServerMessage::Welcome(Box::new(welcome))));
@@ -1039,6 +1409,7 @@ impl<S: NetSimulation> HostSession<S> {
     }
 
     fn remove_client(&mut self, client: ClientId, leaving: bool) {
+        self.claims.remove(&client);
         let Some(remote) = self.clients.remove(&client) else {
             return;
         };
@@ -1046,8 +1417,7 @@ impl<S: NetSimulation> HostSession<S> {
             return;
         };
         if leaving || self.config.reconnect_grace.is_zero() {
-            self.players.remove(&player);
-            self.world.remove_player(player);
+            self.drop_player(player);
         } else if let Some(slot) = self.players.get_mut(&player) {
             let grace = self
                 .config
@@ -1100,7 +1470,9 @@ impl<S: NetSimulation> HostSession<S> {
         }
     }
 
-    const fn allocate_player(&mut self) -> PlayerId {
+    /// A fresh player id, never one in use by a live or parked player.
+    fn allocate_player(&mut self) -> PlayerId {
+        self.next_player = self.next_player.max(first_free_player(&self.world));
         let player = PlayerId(self.next_player);
         self.next_player = self.next_player.saturating_add(1);
         player
@@ -1109,6 +1481,17 @@ impl<S: NetSimulation> HostSession<S> {
     fn new_token(&mut self) -> ReconnectToken {
         self.token_mint.next()
     }
+}
+
+/// The lowest id above every live and parked player of `world`.
+fn first_free_player<S: NetSimulation>(world: &S) -> u32 {
+    world
+        .player_ids()
+        .into_iter()
+        .chain(world.parked_players().into_iter().map(|(player, _)| player))
+        .map(|id| id.0.saturating_add(1))
+        .max()
+        .unwrap_or(0)
 }
 
 /// Reconnect token generator: a keyed hash of a counter under the secret seed.

@@ -43,7 +43,7 @@ use std::fmt::Debug;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{ActionId, PlayerId, Tick};
+use crate::ids::{ActionId, PlayerId, ProfileId, Tick};
 
 /// Presentation pose of a player, in world units.
 ///
@@ -278,6 +278,49 @@ pub trait NetSimulation: Clone + Debug {
     fn add_player(&mut self, id: PlayerId);
     /// Removes a player and all of its per-player state. Idempotent.
     fn remove_player(&mut self, id: PlayerId);
+
+    // ----- persistent identity (WP-PERSIST); defaults: no persistence -------------------
+
+    /// Records who plays `id`: their persistent profile, display name and, for a host's local
+    /// split-screen seat, the seat index. Saved with the world by simulations that persist.
+    fn identify_player(
+        &mut self,
+        _id: PlayerId,
+        _profile: Option<ProfileId>,
+        _name: &str,
+        _seat: Option<u32>,
+    ) {
+    }
+
+    /// The identity record of a live player: `None` when it has none (a fresh id, or a rig from
+    /// before persistent identities), `Some(profile)` when someone's rig (`profile` may itself be
+    /// `None` for an anonymous local seat). A session never hands a recorded rig to another
+    /// player.
+    fn crew_record(&self, _id: PlayerId) -> Option<Option<ProfileId>> {
+        None
+    }
+
+    /// The player (live or parked) that belongs to `profile`.
+    fn player_for_profile(&self, _profile: ProfileId) -> Option<PlayerId> {
+        None
+    }
+
+    /// Moves a live player out of the live world but keeps them (and all their state) to
+    /// restore later. Returns `false` when the simulation does not park (the host then removes
+    /// the player instead).
+    fn park_player(&mut self, _id: PlayerId) -> bool {
+        false
+    }
+
+    /// Restores a parked player into the live world. Returns `false` if `id` is not parked.
+    fn unpark_player(&mut self, _id: PlayerId) -> bool {
+        false
+    }
+
+    /// Parked players with their display names, in id order. Their ids are never reused.
+    fn parked_players(&self) -> Vec<(PlayerId, String)> {
+        Vec::new()
+    }
 
     /// Runs exactly one fixed tick.
     fn simulate_tick(

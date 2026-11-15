@@ -9,7 +9,9 @@ use std::fmt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{ActionId, ClientId, InputSeq, PlayerId, ReconnectToken, SessionEpoch, Tick};
+use crate::ids::{
+    ActionId, ClientId, InputSeq, PlayerId, ProfileId, ReconnectToken, SessionEpoch, Tick,
+};
 use crate::params::{NetTuning, SessionParams};
 use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 
@@ -37,6 +39,8 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `MountWeapon`, the weapon services and events 90-95;
 /// * T12 base building: `PlayerCommand::Build`, built terrain tiles (`TileKind::Built`), the
 ///   `Bases` world field and section, and base events 100-102;
+/// * WP-PERSIST: persistent profiles in `Hello`, `ClaimRig`, parked lobby entries,
+///   `Welcome::returning`, `Reassigned` and `ClaimDenied`.
 pub const PROTOCOL_VERSION: u8 = 9;
 
 /// One client input frame: the controls and actions for exactly one tick.
@@ -76,6 +80,9 @@ pub enum ClientMessage<S: NetSimulation> {
     Hello {
         /// Token from a previous `Welcome`, to reclaim the same player.
         token: Option<ReconnectToken>,
+        /// Persistent install identity: a host whose world holds a rig for this profile (live,
+        /// reserved or parked from an earlier session) hands it back.
+        profile: Option<ProfileId>,
         /// Display name.
         name: String,
         /// Must equal [`PROTOCOL_VERSION`].
@@ -102,8 +109,14 @@ pub enum ClientMessage<S: NetSimulation> {
         /// Current epoch.
         epoch: SessionEpoch,
     },
-    /// Leave the session for good (no reconnect reservation).
+    /// Leave the session (no reconnect reservation; a player with a profile is parked).
     Leave,
+    /// Ask the host to hand over a parked (saved, offline) player's rig (playing from a new
+    /// machine or after clearing storage). The host approves or denies.
+    ClaimRig {
+        /// The parked player to claim.
+        player: PlayerId,
+    },
 }
 
 impl<S: NetSimulation> ClientMessage<S> {
@@ -115,6 +128,7 @@ impl<S: NetSimulation> ClientMessage<S> {
 }
 
 /// Lobby roster entry.
+#[allow(clippy::struct_excessive_bools, reason = "independent roster flags")]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LobbyEntry {
     /// The player.
@@ -127,6 +141,9 @@ pub struct LobbyEntry {
     pub connected: bool,
     /// Whether the player is a local seat on the host.
     pub local: bool,
+    /// A saved player who is not connected: their rig is parked outside the live world, waiting
+    /// for them to rejoin (or be claimed).
+    pub parked: bool,
 }
 
 /// Position-only data for players outside the relevance radius (minimap).
@@ -204,6 +221,27 @@ pub struct Welcome<S: NetSimulation> {
     pub tuning: NetTuning,
     /// Full world at `host_tick`.
     pub keyframe: S::Keyframe,
+    /// The player is a returning one whose saved rig the host restored.
+    pub returning: bool,
+}
+
+/// The host moved this client to another player (an approved rig claim, or a loaded save that
+/// holds this client's saved rig under another id). Replaces the client's world like a keyframe.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound = "")]
+pub struct Reassigned<S: NetSimulation> {
+    /// The client's player from now on.
+    pub player: PlayerId,
+    /// Token to reclaim `player` after a disconnect.
+    pub token: ReconnectToken,
+    /// Epoch of `keyframe` (the current one, or a new one after a load).
+    pub epoch: SessionEpoch,
+    /// Tick of `keyframe`.
+    pub tick: Tick,
+    /// Full world as `player` sees it.
+    pub keyframe: S::Keyframe,
+    /// The player got a saved rig back.
+    pub returning: bool,
 }
 
 /// Host to client, per frame (plan §7).
@@ -296,6 +334,13 @@ pub enum ServerMessage<S: NetSimulation> {
     SessionEnded {
         /// Why.
         reason: EndReason,
+    },
+    /// This client now plays another player (see [`Reassigned`]).
+    Reassigned(Box<Reassigned<S>>),
+    /// The host turned down this client's [`ClientMessage::ClaimRig`].
+    ClaimDenied {
+        /// The rig that was asked for.
+        player: PlayerId,
     },
 }
 
