@@ -195,8 +195,10 @@ cosmetic_enum! {
     }
 }
 
-/// A rig's full cosmetic loadout.
+/// A rig's full cosmetic loadout. Missing fields load as their defaults, so saves keep
+/// loading when later waves add slots.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(default)]
 pub struct RigCosmetics {
     /// Main hull paint (also the player's colour on name tags, the HUD and the minimap).
     pub primary: PaintColor,
@@ -331,6 +333,7 @@ impl CosmeticItem {
 
 /// The cosmetic items a player earned on top of the starter set.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
 pub struct CosmeticUnlocks {
     pub items: BTreeSet<CosmeticItem>,
 }
@@ -421,5 +424,16 @@ mod tests {
         };
         let json = serde_json::to_string(&look).unwrap();
         assert_eq!(serde_json::from_str::<RigCosmetics>(&json).unwrap(), look);
+    }
+
+    #[test]
+    fn looks_saved_with_fewer_slots_still_load() {
+        let partial = r#"{"primary":"Cobalt","decal":"Bolt"}"#;
+        let look: RigCosmetics = serde_json::from_str(partial).unwrap();
+        assert_eq!(look.primary, PaintColor::Cobalt);
+        assert_eq!(look.decal, Decal::Bolt);
+        assert_eq!(look.roof, RoofAttachment::None);
+        let unlocks: CosmeticUnlocks = serde_json::from_str("{}").unwrap();
+        assert!(unlocks.items.is_empty());
     }
 }
