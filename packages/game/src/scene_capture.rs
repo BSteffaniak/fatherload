@@ -1611,6 +1611,37 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "endless_west_of_town",
+        summary: "An endless world: the ground runs on past the town's west end (no world edge), the minimap scrolling with the rig",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let x = -40;
+                let row = world.terrain().surface_row(x) - 1;
+                place_rig(world, player, x, row);
+                carve(world, x + 6..x + 9, row + 1..row + 9);
+                reveal(world, player, x - 70..x + 90, 0..row + 30);
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "endless_far_out",
+        summary: "Fifty thousand tiles east of town: streamed chunks, the surface swell, a dug shaft and the scrolling minimap",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let x = 50_000;
+                let surface = world.terrain().surface_row(x);
+                sink_rig(world, player, x, surface + 14);
+                carve(world, x - 6..x + 7, surface + 12..surface + 15);
+                reveal(world, player, x - 70..x + 70, 0..surface + 40);
+                world.stream_terrain_near_players();
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
         name: "new_world_setup",
         summary: "New World dialog over the title: seed, size, resources and hazards",
         setup: |stage| {
@@ -1645,8 +1676,7 @@ pub const SCENES: &[Scene] = &[
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
                 // The default world's first gas cluster below the clay beds.
-                let (x, y) = world
-                    .world_features()
+                let (x, y) = home_features(world)
                     .of_kind(FeatureKind::HazardCluster)
                     .find(|feature| feature.detail == FeatureDetail::Hazard(HazardKind::Gas))
                     .map_or((110, 40), |feature| (feature.center.x, feature.center.y));
@@ -1662,8 +1692,7 @@ pub const SCENES: &[Scene] = &[
         setup: |stage| {
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
-                let (x, y) = world
-                    .world_features()
+                let (x, y) = home_features(world)
                     .of_kind(FeatureKind::StratumTransition)
                     .find(|feature| {
                         matches!(
@@ -1675,7 +1704,7 @@ pub const SCENES: &[Scene] = &[
                         )
                     })
                     .map_or((120, 90), |feature| (feature.center.x, feature.center.y));
-                let x = x.clamp(30, world.terrain().width() - 30);
+                let x = x.clamp(world.terrain().min_x() + 30, world.terrain().max_x() - 30);
                 sink_rig(world, player, x, y - 3);
                 carve(world, x - 12..x + 13, y - 3..y - 2);
                 reveal(world, player, x - 24..x + 25, y - 12..y + 12);
@@ -2213,8 +2242,7 @@ fn stage_poi(world: &mut WorldState, wanted: fn(PoiVariant) -> bool) -> WorldFea
         .find_map(|offset| {
             let terrain =
                 Terrain::generate(&WorldSettings::new(DEFAULT_WORLD_SEED.wrapping_add(offset)));
-            let poi = terrain
-                .features()
+            let poi = terrain_home_features(&terrain)
                 .pois()
                 .find(|poi| poi.poi().is_some_and(wanted))
                 .copied()?;
@@ -2287,7 +2315,7 @@ fn start_relay_countdown(world: &mut WorldState, vault: &WorldFeature, millis: u
 /// A mid-depth rig with a tier-2 scanner (live echoes), a few visited and identified sites in
 /// its journal and three recovered logs.
 fn stage_poi_contacts(world: &mut WorldState, player: PlayerId) {
-    let pois: Vec<WorldFeature> = world.world_features().pois().copied().collect();
+    let pois: Vec<WorldFeature> = home_features(world).pois().copied().collect();
     let anchor = pois
         .iter()
         .find(|poi| poi.band == Band::Slate)
@@ -2449,6 +2477,7 @@ fn place_rig(world: &mut WorldState, player: PlayerId, x: i32, y: i32) {
         rig.y = tile_centre(y);
         rig.velocity_x = 0.0;
         rig.velocity_y = 0.0;
+        rig.x_remainder = 0.0;
     }
 }
 
@@ -2501,13 +2530,49 @@ fn reveal(
     });
 }
 
+/// Columns scenes search for places: a bounded world's columns (less a margin), or the classic
+/// span around the town in an endless world.
+const fn scene_columns(terrain: &Terrain) -> std::ops::Range<i32> {
+    if terrain.is_streamed() {
+        8..232
+    } else {
+        terrain.min_x() + 8..terrain.max_x() - 7
+    }
+}
+
+/// The features of the scene columns ([`scene_columns`]) of `terrain`, as an index (a bounded
+/// world's whole index).
+fn terrain_home_features(terrain: &Terrain) -> fatherload_simulation::worldgen::FeatureIndex {
+    if !terrain.is_streamed() {
+        return terrain.features().clone();
+    }
+    let columns = scene_columns(terrain);
+    fatherload_simulation::worldgen::FeatureIndex::from_features(terrain.features_in(
+        &fatherload_simulation::worldgen::TileRect {
+            min: TilePosition {
+                x: columns.start,
+                y: 0,
+            },
+            max: TilePosition {
+                x: columns.end - 1,
+                y: terrain.height() - 1,
+            },
+        },
+        None,
+    ))
+}
+
+fn home_features(world: &WorldState) -> fatherload_simulation::worldgen::FeatureIndex {
+    terrain_home_features(world.terrain())
+}
+
 fn find_tile(
     world: &WorldState,
     ys: std::ops::Range<i32>,
     matches: impl Fn(TileKind) -> bool,
 ) -> Option<TilePosition> {
     let terrain = world.terrain();
-    ys.flat_map(|y| (8..terrain.width() - 8).map(move |x| TilePosition { x, y }))
+    ys.flat_map(|y| scene_columns(terrain).map(move |x| TilePosition { x, y }))
         .find(|tile| terrain.tile(*tile).is_some_and(|tile| matches(tile.kind)))
 }
 

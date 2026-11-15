@@ -295,7 +295,7 @@ fn relay_countdowns(world: &WorldState) -> Vec<RelayCountdown> {
         .vault_relay_deadlines
         .iter()
         .filter_map(|(feature, deadline)| {
-            let vault = world.world_features().get(*feature)?;
+            let vault = world.world_feature(*feature)?;
             let left = deadline.get().saturating_sub(now).min(window);
             Some(RelayCountdown {
                 bounds: vault.bounds,

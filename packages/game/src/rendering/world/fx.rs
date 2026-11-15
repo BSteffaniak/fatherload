@@ -575,7 +575,10 @@ pub fn draw_poi_scanner_marks(
     };
     let range = scanner_poi_range(player.scanner_level, false);
     let pulse = (seconds * 2.0) as i32 % 2 == 0;
-    for poi in terrain.features().pois() {
+    let nearby = terrain.pois_touching(&fatherload_simulation::worldgen::TileRect::around(
+        center, range, range,
+    ));
+    for poi in &nearby {
         let Some(kind) = poi.poi_kind() else {
             continue;
         };

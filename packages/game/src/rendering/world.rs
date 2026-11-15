@@ -152,7 +152,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
 /// the world's last row, so the view never shows sky past the floor (deep worlds end in their
 /// own bedrock rows, which this continues).
 fn draw_world_edges(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectangle) {
-    let world_right = terrain.width() as f32 * TILE_SIZE;
+    let world_left = terrain.min_x() as f32 * TILE_SIZE;
+    let world_right = (terrain.max_x() + 1) as f32 * TILE_SIZE;
     let world_bottom = terrain.height() as f32 * TILE_SIZE;
     let top = GROUND_Y.max(visible.y);
     let bottom = visible.y + visible.height + ART;
@@ -192,15 +193,18 @@ fn draw_world_edges(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
             bottom - rows_top,
         ));
     };
-    if visible.x < 0.0 {
+    if visible.x < world_left {
         fill(
             &mut |rect| {
                 sprite::draw_tiled(draw, &props::BEDROCK, 0, rect, ART, Color::WHITE);
             },
             visible.x - ART,
-            0.0,
+            world_left,
         );
-        draw.draw_rectangle_rec(Rectangle::new(-ART, top, ART, bottom - top), palette::INK);
+        draw.draw_rectangle_rec(
+            Rectangle::new(world_left - ART, top, ART, bottom - top),
+            palette::INK,
+        );
     }
     let right = visible.x + visible.width + ART;
     if right > world_right {

@@ -4,7 +4,9 @@
 //! A chunk keeps its tile art as palette indices on the CPU ([`tile_art`]); a terrain change
 //! repaints just the changed tile and its neighbours (their edges depend on it). Exploration only
 //! changes the darkness ([`fog`]), which is recomputed and composited over the cached art. Chunks
-//! are only painted once they come near a view, so a new world costs nothing up front.
+//! are only created and painted once they come near a view, and dropped (textures freed) once
+//! every view is far away, so a new world costs nothing up front and an endless (streamed) world
+//! keeps a bounded number of textures.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -29,6 +31,8 @@ use tile_art::TILE_ART;
 pub(super) const TERRAIN_CHUNK_SIZE_TILES: i32 = 32;
 /// Chunks within this many world pixels of a view are painted ahead of time (one per frame).
 const PAINT_MARGIN_WORLD: f32 = 512.0;
+/// Chunks further than this many world pixels from every view are dropped.
+const DROP_MARGIN_WORLD: f32 = 2_048.0;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ChunkPosition {
@@ -38,8 +42,8 @@ struct ChunkPosition {
 
 pub(super) struct TerrainRenderer {
     chunks: BTreeMap<ChunkPosition, TerrainChunk>,
-    terrain_width: i32,
-    terrain_height: i32,
+    /// The terrain's columns (first, last) and height the chunks were cut for.
+    bounds: (i32, i32, i32),
 }
 
 /// What a chunk must redo before it is drawn.
@@ -77,14 +81,15 @@ struct TerrainChunk {
 }
 
 impl TerrainRenderer {
-    pub(super) fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, terrain: &Terrain) -> Self {
-        let mut renderer = Self {
+    pub(super) const fn new(
+        _raylib: &mut RaylibHandle,
+        _thread: &RaylibThread,
+        terrain: &Terrain,
+    ) -> Self {
+        Self {
             chunks: BTreeMap::new(),
-            terrain_width: terrain.width(),
-            terrain_height: terrain.height(),
-        };
-        renderer.recreate_chunks(raylib, thread, terrain);
-        renderer
+            bounds: terrain_bounds(terrain),
+        }
     }
 
     pub(super) fn mark_all_dirty(&mut self) {
@@ -118,12 +123,11 @@ impl TerrainRenderer {
         }
     }
 
+    /// The chunk holding `position`, if it exists (chunks not yet created are painted whole
+    /// when they are).
     fn chunk_for_tile_mut(&mut self, position: TilePosition) -> Option<&mut TerrainChunk> {
-        if position.x < 0
-            || position.y < 0
-            || position.x >= self.terrain_width
-            || position.y >= self.terrain_height
-        {
+        let (first, last, height) = self.bounds;
+        if position.x < first || position.y < 0 || position.x > last || position.y >= height {
             return None;
         }
         self.chunks.get_mut(&chunk_position_for_tile(position))
@@ -138,20 +142,31 @@ impl TerrainRenderer {
         explored: &DiscoveredTiles,
         views: &[Rectangle],
     ) {
-        if self.terrain_width != terrain.width() || self.terrain_height != terrain.height() {
-            self.recreate_chunks(raylib, thread, terrain);
+        if self.bounds != terrain_bounds(terrain) {
+            self.chunks.clear();
+            self.bounds = terrain_bounds(terrain);
         }
+        let grow = |view: &Rectangle, margin: f32| {
+            Rectangle::new(
+                view.x - margin,
+                view.y - margin,
+                margin.mul_add(2.0, view.width),
+                margin.mul_add(2.0, view.height),
+            )
+        };
         let near: Vec<Rectangle> = views
             .iter()
-            .map(|view| {
-                Rectangle::new(
-                    view.x - PAINT_MARGIN_WORLD,
-                    view.y - PAINT_MARGIN_WORLD,
-                    PAINT_MARGIN_WORLD.mul_add(2.0, view.width),
-                    PAINT_MARGIN_WORLD.mul_add(2.0, view.height),
-                )
-            })
+            .map(|view| grow(view, PAINT_MARGIN_WORLD))
             .collect();
+        let keep: Vec<Rectangle> = views
+            .iter()
+            .map(|view| grow(view, DROP_MARGIN_WORLD))
+            .collect();
+        self.chunks
+            .retain(|_, chunk| keep.iter().any(|view| chunk.overlaps(*view)));
+        for view in &near {
+            self.create_chunks_in(raylib, thread, terrain, *view);
+        }
         // Chunks on screen are always brought up to date; a full paint of an off-screen chunk
         // near a view costs a few milliseconds, so only one is painted ahead per frame.
         let mut ahead_budget = 1;
@@ -185,25 +200,38 @@ impl TerrainRenderer {
         }
     }
 
-    fn recreate_chunks(
+    /// Creates (unpainted) every missing chunk overlapping `view` (world pixels).
+    fn create_chunks_in(
         &mut self,
         raylib: &mut RaylibHandle,
         thread: &RaylibThread,
         terrain: &Terrain,
+        view: Rectangle,
     ) {
-        self.chunks.clear();
-        self.terrain_width = terrain.width();
-        self.terrain_height = terrain.height();
-        for y in 0..chunk_count(self.terrain_height) {
-            for x in 0..chunk_count(self.terrain_width) {
+        let (first, last, height) = self.bounds;
+        let tile = |value: f32| (value / TILE_SIZE).floor() as i32;
+        let min = chunk_position_for_tile(TilePosition {
+            x: tile(view.x).max(first),
+            y: tile(view.y).max(0),
+        });
+        let max = chunk_position_for_tile(TilePosition {
+            x: tile(view.x + view.width).min(last),
+            y: tile(view.y + view.height).min(height - 1),
+        });
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
                 let position = ChunkPosition { x, y };
-                self.chunks.insert(
-                    position,
-                    TerrainChunk::new(raylib, thread, position, terrain),
-                );
+                self.chunks
+                    .entry(position)
+                    .or_insert_with(|| TerrainChunk::new(raylib, thread, position, terrain));
             }
         }
     }
+}
+
+/// The columns (first, last) and height of `terrain`.
+const fn terrain_bounds(terrain: &Terrain) -> (i32, i32, i32) {
+    (terrain.min_x(), terrain.max_x(), terrain.height())
 }
 
 impl TerrainChunk {
@@ -213,9 +241,10 @@ impl TerrainChunk {
         position: ChunkPosition,
         terrain: &Terrain,
     ) -> Self {
-        let tile_min_x = position.x * TERRAIN_CHUNK_SIZE_TILES;
+        let tile_min_x = (position.x * TERRAIN_CHUNK_SIZE_TILES).max(terrain.min_x());
         let tile_min_y = position.y * TERRAIN_CHUNK_SIZE_TILES;
-        let tile_max_x = (tile_min_x + TERRAIN_CHUNK_SIZE_TILES).min(terrain.width());
+        let tile_max_x = (position.x * TERRAIN_CHUNK_SIZE_TILES + TERRAIN_CHUNK_SIZE_TILES)
+            .min(terrain.max_x() + 1);
         let tile_max_y = (tile_min_y + TERRAIN_CHUNK_SIZE_TILES).min(terrain.height());
         let art_width = (tile_max_x - tile_min_x) * TILE_ART;
         let art_height = (tile_max_y - tile_min_y) * TILE_ART;
@@ -369,14 +398,10 @@ fn rects_overlap(a: Rectangle, b: Rectangle) -> bool {
     a.x + a.width >= b.x && a.x <= b.x + b.width && a.y + a.height >= b.y && a.y <= b.y + b.height
 }
 
-const fn chunk_count(tile_count: i32) -> i32 {
-    (tile_count + TERRAIN_CHUNK_SIZE_TILES - 1) / TERRAIN_CHUNK_SIZE_TILES
-}
-
 const fn chunk_position_for_tile(position: TilePosition) -> ChunkPosition {
     ChunkPosition {
-        x: position.x / TERRAIN_CHUNK_SIZE_TILES,
-        y: position.y / TERRAIN_CHUNK_SIZE_TILES,
+        x: position.x.div_euclid(TERRAIN_CHUNK_SIZE_TILES),
+        y: position.y.div_euclid(TERRAIN_CHUNK_SIZE_TILES),
     }
 }
 

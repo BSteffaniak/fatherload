@@ -424,7 +424,11 @@ pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
             .value(seed_value, if setup.typing() { LIME } else { GOLD }),
         Entry::new(&menu_icons::DICE, "Re-roll Seed").detail("Draw a new random world"),
         Entry::new(&menu_icons::GLOBE, "World Size")
-            .detail(format!("{} tiles wide", settings.width_tiles()))
+            .detail(if settings.generator.is_streamed() {
+                format!("Endless, {} tiles deep", settings.height_tiles())
+            } else {
+                format!("{} tiles wide", settings.width_tiles())
+            })
             .value(cycler(settings.size.name()), SKY_LIGHT),
         Entry::new(&icons::CREDITS, "Resources")
             .detail(match settings.richness {

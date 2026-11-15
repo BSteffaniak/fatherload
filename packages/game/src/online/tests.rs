@@ -303,7 +303,7 @@ fn host_and_two_clients_play_over_real_quic_rejoin_and_end_cleanly() {
 fn excavate(world: &mut WorldState) {
     use fatherload_simulation::terrain::TilePosition;
     let terrain = world.terrain_mut();
-    let (width, height) = (terrain.width(), terrain.height());
+    let (width, height) = (terrain.width().min(240), terrain.height());
     for step in 0..(width * height / 60) {
         let x = (step * 37).rem_euclid(width);
         let y = 6 + (step * 53).rem_euclid(height - 6);

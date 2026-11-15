@@ -251,7 +251,7 @@ pub(super) fn paint_geode_lining(
     if !terrain.settings().generator.has_points_of_interest() {
         return;
     }
-    let in_geode = terrain.features().poi_at(position).is_some_and(|poi| {
+    let in_geode = terrain.poi_at(position).is_some_and(|poi| {
         // Only the hollow: the ring of tiles just inside the bounds is shell or outside rock.
         poi.poi() == Some(PoiVariant::Formation(FormationStyle::Geode))
             && poi.bounds.expanded(-2).contains(position)
@@ -319,7 +319,7 @@ pub(super) fn paint_geode_lining(
 /// Whether the open tile at `position` lies inside a vault (its rooms and antechambers).
 pub(super) fn inside_vault(terrain: &Terrain, position: TilePosition) -> bool {
     terrain.settings().generator.has_points_of_interest()
-        && terrain.features().poi_at(position).is_some_and(|poi| {
+        && terrain.poi_at(position).is_some_and(|poi| {
             poi.poi_kind() == Some(PoiKind::Vault) && poi.bounds.expanded(-1).contains(position)
         })
 }

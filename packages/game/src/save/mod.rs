@@ -450,8 +450,9 @@ impl Error for SaveError {}
 #[cfg(test)]
 mod tests {
     use fatherload_simulation::{
-        PlayerId, SimulationTick,
+        PlayerId, SimulationParams, SimulationTick,
         terrain::{FullTerrain, MineralKind},
+        worldgen::WorldSettings,
     };
 
     use super::*;
@@ -606,14 +607,13 @@ mod tests {
 
     #[test]
     fn world_settings_survive_a_save_and_older_v5_saves_load_as_legacy_worlds() {
-        use fatherload_simulation::{
-            SimulationParams,
-            worldgen::{GeneratorVersion, HazardIntensity, ResourceRichness, WorldSettings},
+        use fatherload_simulation::worldgen::{
+            GeneratorVersion, HazardIntensity, ResourceRichness,
         };
         let settings = WorldSettings {
             richness: ResourceRichness::Lean,
             hazards: HazardIntensity::Brutal,
-            ..WorldSettings::new(0x5EED_CAFE)
+            ..WorldSettings::bounded(0x5EED_CAFE)
         };
         let world = WorldState::new_game_with_settings(
             PlayerId::new(1),
@@ -826,12 +826,19 @@ mod tests {
     /// A world after a long scripted dig (drilling, bombs, infrastructure, scanning) plus
     /// hundreds of blast craters and tunnels across the whole map.
     fn heavily_dug_world() -> WorldState {
+        heavily_dug_world_with(&WorldSettings::bounded(
+            fatherload_simulation::worldgen::DEFAULT_WORLD_SEED,
+        ))
+    }
+
+    fn heavily_dug_world_with(settings: &WorldSettings) -> WorldState {
         use fatherload_simulation::{
             ControlState, PlayerCommand, PlayerTickInput, TickAction, TickInputs,
             terrain::TilePosition,
         };
         let id = PlayerId::new(1);
-        let mut world = WorldState::new_game(id);
+        let mut world =
+            WorldState::new_game_with_settings(id, settings, SimulationParams::default());
         let rig = world.player_mut(id).expect("rig");
         rig.credits = 5_000;
         rig.bombs = 40;
@@ -876,7 +883,7 @@ mod tests {
             let _output = world.simulate_tick(SimulationTick::new(tick), &inputs);
         }
         let terrain = world.terrain_mut();
-        let (width, height) = (terrain.width(), terrain.height());
+        let (width, height) = (terrain.width().min(240), terrain.height());
         for step in 0..400_i32 {
             let x = (step * 37).rem_euclid(width);
             let y = 6 + (step * 53).rem_euclid(height - 6);
@@ -889,6 +896,51 @@ mod tests {
             }
         }
         world
+    }
+
+    /// A streamed (V5) world saves only its settings and the edited chunks' diffs, loads back
+    /// identical, and stays small however far apart the digging was.
+    #[test]
+    fn streamed_worlds_save_settings_and_edited_chunks_only() {
+        use fatherload_simulation::terrain::{TileKind, TilePosition};
+        let mut world = heavily_dug_world_with(&WorldSettings::new(0x0005_5AFE));
+        assert!(world.terrain().is_streamed());
+        for x in [-50_000, -1_234, 7_777, 50_000] {
+            for dx in 0..20 {
+                let _ = world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x: x + dx, y: 300 }, TileKind::Air);
+            }
+        }
+        let edited_chunks = world.terrain().edited_chunk_count();
+        let save = WorldSave {
+            world,
+            play_seconds: 12.0,
+        };
+        let json = v6_json(&save);
+        let loaded = parse_save(&json).expect("v6 streamed save loads");
+        assert_eq!(
+            loaded.world.simulation_state_hash(),
+            save.world.simulation_state_hash()
+        );
+        assert_eq!(loaded.world.terrain().edited_chunk_count(), edited_chunks);
+        assert_eq!(
+            loaded.world.terrain().generation_diffs(),
+            save.world.terrain().generation_diffs()
+        );
+        for x in [-50_000, 50_019, 3] {
+            let position = TilePosition { x, y: 300 };
+            assert_eq!(
+                loaded.world.terrain().tile(position),
+                save.world.terrain().tile(position)
+            );
+        }
+        // Settings plus edits: far smaller than one bounded world's tiles.
+        assert!(
+            json.len() < 400_000,
+            "streamed save is {} bytes",
+            json.len()
+        );
     }
 
     #[test]
@@ -908,7 +960,10 @@ mod tests {
             loaded.world.simulation_state_hash(),
             save.world.simulation_state_hash()
         );
-        assert_eq!(loaded.world.terrain().tiles(), save.world.terrain().tiles());
+        assert_eq!(
+            loaded.world.terrain().bounded_tiles(),
+            save.world.terrain().bounded_tiles()
+        );
 
         // A v5 save of the same world (full tiles) migrates to the same world, and re-saving
         // writes v6.
@@ -1014,7 +1069,11 @@ mod tests {
     #[test]
     fn save_size_report() {
         let fresh = WorldSave {
-            world: WorldState::new_game(PlayerId::new(1)),
+            world: WorldState::new_game_with_settings(
+                PlayerId::new(1),
+                &WorldSettings::bounded(fatherload_simulation::worldgen::DEFAULT_WORLD_SEED),
+                SimulationParams::default(),
+            ),
             play_seconds: 0.0,
         };
         let dug = WorldSave {

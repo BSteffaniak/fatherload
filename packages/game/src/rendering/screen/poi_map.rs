@@ -7,8 +7,8 @@
 use fatherload_simulation::{
     Player,
     poi::{PoiKind, PoiKnowledge, PoiTile, PoiVariant, poi_reading},
-    terrain::{TILE_SIZE, Terrain, TileKind},
-    worldgen::WorldFeature,
+    terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
+    worldgen::{TileRect, WorldFeature},
 };
 use raylib::prelude::*;
 
@@ -55,9 +55,8 @@ pub(super) fn markers(terrain: &Terrain, player: &Player) -> Vec<PoiMarker> {
         return Vec::new();
     }
     let center = player.tile_position(TILE_SIZE);
-    terrain
-        .features()
-        .pois()
+    candidate_pois(terrain, player, center)
+        .iter()
         .filter_map(|feature| {
             let kind = feature.poi_kind()?;
             let knowledge = poi_reading(
@@ -75,6 +74,32 @@ pub(super) fn markers(terrain: &Terrain, player: &Player) -> Vec<PoiMarker> {
             })
         })
         .collect()
+}
+
+/// Columns either side of the rig an endless world looks for live scanner readings in (wider
+/// than any scanner's range).
+const STREAMED_LIVE_COLUMNS: i32 = 64;
+
+/// The points of interest a player could see: every one of a bounded world; in an endless
+/// (streamed) world the ones in their journal plus those near the rig.
+fn candidate_pois(terrain: &Terrain, player: &Player, center: TilePosition) -> Vec<WorldFeature> {
+    if !terrain.is_streamed() {
+        return terrain.features().pois().copied().collect();
+    }
+    let mut found: Vec<WorldFeature> = player
+        .journal
+        .known
+        .keys()
+        .filter_map(|id| terrain.feature(*id))
+        .collect();
+    found.extend(terrain.pois_touching(&TileRect::around(
+        center,
+        STREAMED_LIVE_COLUMNS,
+        STREAMED_LIVE_COLUMNS,
+    )));
+    found.sort_by_key(|feature| feature.id);
+    found.dedup_by_key(|feature| feature.id);
+    found
 }
 
 /// Whether the echo marker is in its lit phase.
@@ -175,10 +200,13 @@ pub(super) fn collection_sections(terrain: &Terrain, player: &Player) -> Vec<Sec
         .iter()
         .filter(|marker| marker.knowledge == PoiKnowledge::Echo)
         .count();
-    let total = if terrain.settings().generator.has_points_of_interest() {
-        terrain.features().pois().count()
-    } else {
+    let total = if !terrain.settings().generator.has_points_of_interest() {
         0
+    } else if terrain.is_streamed() {
+        // An endless world has no total: count the sites the crew knows of.
+        markers.len()
+    } else {
+        terrain.features().pois().count()
     };
     let mut sites = vec![SectionItem::icon_stat(
         &ICON_ECHO,

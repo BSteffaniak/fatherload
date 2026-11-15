@@ -522,8 +522,8 @@ impl LocalGame {
                         continue;
                     };
                     let Some(variant) = world
-                        .world_features()
-                        .get(feature)
+                        .world_feature(feature)
+                        .as_ref()
                         .and_then(fatherload_simulation::worldgen::WorldFeature::poi)
                     else {
                         continue;
@@ -538,7 +538,7 @@ impl LocalGame {
                 }
                 GameplayEventKind::VaultOpened { feature }
                 | GameplayEventKind::VaultLockReset { feature } => {
-                    let Some(vault) = world.world_features().get(feature).copied() else {
+                    let Some(vault) = world.world_feature(feature) else {
                         continue;
                     };
                     let opened = matches!(gameplay.kind, GameplayEventKind::VaultOpened { .. });

@@ -575,9 +575,10 @@ pub(super) fn draw_minimap_for_view(
     );
     draw.draw_rectangle(x, y, width, height, NIGHT);
 
-    let terrain_width = terrain.width().max(1);
     let terrain_height = terrain.height().max(1);
     let player_tile = view.player.tile_position(TILE_SIZE);
+    // A bounded world fits across the minimap; an endless one scrolls with the rig.
+    let (origin_x, visible_width) = minimap_columns(terrain, player_tile.x);
     let visible_height = terrain_height.min(80);
     let origin_y = if terrain_height > visible_height {
         (player_tile.y - visible_height / 2).clamp(0, terrain_height - visible_height)
@@ -588,7 +589,7 @@ pub(super) fn draw_minimap_for_view(
         let tile_y = origin_y + py * visible_height / height;
         for px in 0..width {
             let position = TilePosition {
-                x: px * terrain_width / width,
+                x: origin_x + px * visible_width / width,
                 y: tile_y,
             };
             let sky = tile_y <= 4;
@@ -605,20 +606,23 @@ pub(super) fn draw_minimap_for_view(
     }
     let to_map = |tile_x: i32, tile_y: i32| {
         (
-            x + tile_x * width / terrain_width,
+            x + (tile_x - origin_x) * width / visible_width,
             y + (tile_y - origin_y) * height / visible_height,
         )
+    };
+    let on_map = |tile_x: i32, tile_y: i32| {
+        tile_y >= origin_y
+            && tile_y < origin_y + visible_height
+            && tile_x >= origin_x
+            && tile_x < origin_x + visible_width
     };
     poi_map::draw_minimap_markers(
         draw,
         &poi_map::markers(terrain, view.player),
-        |tile_x, tile_y| {
-            (tile_y >= origin_y && tile_y < origin_y + visible_height)
-                .then(|| to_map(tile_x, tile_y))
-        },
+        |tile_x, tile_y| on_map(tile_x, tile_y).then(|| to_map(tile_x, tile_y)),
     );
     quests::draw_minimap_quest_markers(draw, &view.quest_markers, |tile_x, tile_y| {
-        (tile_y >= origin_y && tile_y < origin_y + visible_height).then(|| to_map(tile_x, tile_y))
+        on_map(tile_x, tile_y).then(|| to_map(tile_x, tile_y))
     });
     for remote in players
         .iter()
@@ -626,16 +630,47 @@ pub(super) fn draw_minimap_for_view(
     {
         let tile_x = (remote.x / TILE_SIZE) as i32;
         let tile_y = (remote.y / TILE_SIZE) as i32;
-        if tile_y < origin_y || tile_y >= origin_y + visible_height {
+        if !on_map(tile_x, tile_y) {
             continue;
         }
         let (map_x, map_y) = to_map(tile_x, tile_y);
         draw.draw_rectangle(map_x - 1, map_y - 1, 2, 2, player_accent(remote.player_id));
     }
+    if terrain.is_streamed() {
+        // Navigation in an endless world: which way, and how far, home is.
+        let heading = town_heading(view.player.x / TILE_SIZE);
+        if heading != "in town" {
+            let label_width = ui_kit::text_width(&heading, TextStyle::Body);
+            draw.draw_rectangle(
+                x + width + 4 - label_width - 4,
+                y - 20,
+                label_width + 8,
+                14,
+                INK,
+            );
+            ui_kit::text_right(draw, &heading, x + width + 4, y - 18, TextStyle::Body, BONE);
+        }
+    }
     let (map_x, map_y) = to_map(player_tile.x, player_tile.y);
     let blink = (ui_kit::seconds() * 2.0) as i32 % 2 == 0;
     draw.draw_rectangle(map_x - 1, map_y - 1, 3, 3, INK);
     draw.draw_rectangle(map_x, map_y, 1, 1, if blink { BONE } else { SKY_LIGHT });
+}
+
+/// Columns the minimap spans in an endless world (about the width of a classic bounded world).
+const MINIMAP_STREAMED_COLUMNS: i32 = 240;
+
+/// The minimap's first column and how many columns it spans: the whole of a bounded world, or a
+/// window centred on the rig's column `player_x` in an endless (streamed) one.
+fn minimap_columns(terrain: &Terrain, player_x: i32) -> (i32, i32) {
+    if terrain.is_streamed() {
+        (
+            player_x - MINIMAP_STREAMED_COLUMNS / 2,
+            MINIMAP_STREAMED_COLUMNS,
+        )
+    } else {
+        (terrain.min_x(), terrain.width().max(1))
+    }
 }
 
 /// Depth gauge down the view's right edge with a marker at the rig's depth.
@@ -1032,12 +1067,33 @@ fn map_footer(ui: &UiFrame<'_, '_>) -> String {
         .snapshot
         .terrain
         .band_at(ui.player.tile_position(TILE_SIZE));
+    let terrain = ui.snapshot.terrain;
+    let column = ui.player.x / TILE_SIZE;
+    let across = if terrain.is_streamed() {
+        // An endless world has no edge: say how far the town is, and which way.
+        town_heading(column)
+    } else {
+        format!("{column:.0} m from the west edge")
+    };
     format!(
-        "Depth {depth} m ({}) | deepest {} m | {:.0} m from the west edge",
+        "Depth {depth} m ({}) | deepest {} m | {across}",
         layer.name(),
         ui.snapshot.progression.deepest_tile_reached,
-        ui.player.x / TILE_SIZE
     )
+}
+
+/// How far, and which way, the town lies from a rig at column `column` (a fractional tile).
+fn town_heading(column: f32) -> String {
+    let (first, last) = fatherload_simulation::surface::town_span();
+    #[allow(clippy::cast_precision_loss, reason = "town columns are small")]
+    let (first, last) = (first as f32, last as f32 + 1.0);
+    if column < first {
+        format!("town {:.0} m east", first - column)
+    } else if column > last {
+        format!("town {:.0} m west", column - last)
+    } else {
+        "in town".to_owned()
+    }
 }
 
 /// The mine map: discovered terrain at two art pixels per tile around the rig, with depth
@@ -1069,15 +1125,19 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     }
     draw.draw_rectangle(x0, y0, width, height, NIGHT);
     let terrain = ui.snapshot.terrain;
-    let (terrain_width, terrain_height) = (terrain.width().max(1), terrain.height().max(1));
+    let terrain_height = terrain.height().max(1);
     let pixel = 2;
     let (columns, rows) = (width / pixel, height / pixel);
     let player = ui.player.tile_position(TILE_SIZE);
-    let origin_x = (player.x - columns / 2).clamp(0, (terrain_width - columns).max(0));
+    // Centred on the rig, kept inside a bounded world's columns (an endless world scrolls).
+    let origin_x = (player.x - columns / 2).clamp(
+        terrain.min_x(),
+        (terrain.max_x() + 1 - columns).max(terrain.min_x()),
+    );
     let origin_y = (player.y - rows / 2).clamp(0, (terrain_height - rows).max(0));
     for row in 0..rows.min(terrain_height - origin_y) {
         let tile_y = origin_y + row;
-        for column in 0..columns.min(terrain_width - origin_x) {
+        for column in 0..columns.min(terrain.max_x() + 1 - origin_x) {
             let position = TilePosition {
                 x: origin_x + column,
                 y: tile_y,

@@ -9,7 +9,8 @@
 //!   whole-world map PNG (no window opens), with motherlodes, artifact beds, chambers and points
 //!   of interest outlined (POIs also get their map icon). Deep worlds are cut into side-by-side
 //!   columns (top to bottom, left to right) so the image stays viewable; `--columns` overrides
-//!   the count.
+//!   the count. Endless (V5, the default) worlds preview a window of columns: `--first-column X`
+//!   (default: centred on spawn) and `--width N` (default 480).
 
 use fatherload_simulation::{
     terrain::{MineralKind, TileKind},
@@ -45,6 +46,9 @@ pub enum WorldgenCommand {
         features: bool,
         /// Side-by-side columns the world is cut into (`None`: picked from the world's depth).
         columns: Option<i32>,
+        /// Endless worlds: the first column and width of the previewed window (`None`: the
+        /// default window around spawn). Ignored for bounded worlds.
+        window: Option<(i32, i32)>,
     },
 }
 
@@ -62,6 +66,8 @@ pub fn parse_args(args: &[String]) -> Result<Option<WorldgenCommand>, String> {
     let mut scale = 4;
     let mut features = true;
     let mut columns = None;
+    let mut first_column = None;
+    let mut window_width = None;
     let (mut skip, mut positional) = (Vec::new(), Vec::new());
     match (report, preview) {
         (None, None) => return Ok(None),
@@ -106,20 +112,28 @@ pub fn parse_args(args: &[String]) -> Result<Option<WorldgenCommand>, String> {
             "--richness" => settings.richness = parse_richness(&value("--richness")?)?,
             "--hazards" => settings.hazards = parse_hazards(&value("--hazards")?)?,
             "--scale" => {
-                scale = value("--scale")?
-                    .parse()
-                    .ok()
-                    .filter(|scale| (1..=8).contains(scale))
-                    .ok_or("--scale needs 1 to 8")?;
+                scale = bounded_i32(&value("--scale")?, 1..=8, "--scale needs 1 to 8")?;
             }
             "--columns" => {
-                columns = Some(
-                    value("--columns")?
-                        .parse()
-                        .ok()
-                        .filter(|columns| (1..=8).contains(columns))
-                        .ok_or("--columns needs 1 to 8")?,
-                );
+                columns = Some(bounded_i32(
+                    &value("--columns")?,
+                    1..=8,
+                    "--columns needs 1 to 8",
+                )?);
+            }
+            "--first-column" => {
+                first_column = Some(bounded_i32(
+                    &value("--first-column")?,
+                    -131_071..=131_071,
+                    "--first-column needs a column within 131071 of the town",
+                )?);
+            }
+            "--width" => {
+                window_width = Some(bounded_i32(
+                    &value("--width")?,
+                    16..=8_192,
+                    "--width needs 16 to 8192 columns",
+                )?);
             }
             "--legacy" => settings.generator = GeneratorVersion::Legacy,
             "--generator" => settings.generator = parse_generator(&value("--generator")?)?,
@@ -141,14 +155,42 @@ pub fn parse_args(args: &[String]) -> Result<Option<WorldgenCommand>, String> {
         scale,
         features,
         columns,
+        window: preview_window(first_column, window_width),
     }))
+}
+
+/// `text` as an integer inside `range`, or `message`.
+fn bounded_i32(
+    text: &str,
+    range: std::ops::RangeInclusive<i32>,
+    message: &str,
+) -> Result<i32, String> {
+    text.parse::<i32>()
+        .ok()
+        .filter(|value| range.contains(value))
+        .ok_or_else(|| message.to_owned())
+}
+
+/// Default width in columns of an endless world's preview window.
+const DEFAULT_WINDOW_WIDTH: i32 = 480;
+
+/// The previewed window `(first column, width)`, when either flag was given.
+fn preview_window(first_column: Option<i32>, width: Option<i32>) -> Option<(i32, i32)> {
+    if first_column.is_none() && width.is_none() {
+        return None;
+    }
+    let width = width.unwrap_or(DEFAULT_WINDOW_WIDTH);
+    Some((
+        first_column.unwrap_or(worldgen::SPAWN_TILE_X - width / 2),
+        width,
+    ))
 }
 
 fn parse_generator(text: &str) -> Result<GeneratorVersion, String> {
     GeneratorVersion::ALL
         .into_iter()
         .find(|generator| generator.name().eq_ignore_ascii_case(text))
-        .ok_or_else(|| format!("unknown generator {text} (legacy, v1, v2, v3, v4)"))
+        .ok_or_else(|| format!("unknown generator {text} (legacy, v1, v2, v3, v4, v5)"))
 }
 
 fn parse_size(text: &str) -> Result<WorldSize, String> {
@@ -193,8 +235,17 @@ pub fn run(command: &WorldgenCommand, out: &mut impl std::io::Write) -> Result<(
             scale,
             features,
             columns,
+            window,
         } => {
-            let world = worldgen::generate(settings);
+            let world = if settings.generator.is_streamed() {
+                let (first, width) = window.unwrap_or((
+                    worldgen::SPAWN_TILE_X - DEFAULT_WINDOW_WIDTH / 2,
+                    DEFAULT_WINDOW_WIDTH,
+                ));
+                worldgen::streamed::generate_window(settings, first, width)
+            } else {
+                worldgen::generate(settings)
+            };
             let stats = WorldStats::measure(settings, &world);
             let image = preview_image(settings, &world, *scale, *features);
             let columns = columns.unwrap_or_else(|| auto_columns(world.height));
@@ -202,12 +253,13 @@ pub fn run(command: &WorldgenCommand, out: &mut impl std::io::Write) -> Result<(
             image.export_png(path)?;
             writeln!(
                 out,
-                "wrote {path}: seed {} ({}, generator {}), {}x{} tiles in {columns} column(s), {} features, caves {} per mille, starter field {}",
+                "wrote {path}: seed {} ({}, generator {}), {}x{} tiles from column {} in {columns} column(s), {} features, caves {} per mille, starter field {}",
                 settings.seed_text(),
                 settings.size.name(),
                 settings.generator.name(),
                 world.width,
                 world.height,
+                world.origin_x,
                 world.features.len(),
                 stats.cave_per_mille(),
                 stats.starter_field_value,
@@ -356,7 +408,7 @@ fn preview_image(
     };
     for y in 0..world.height {
         // Band legend: each row's band at the world's middle column.
-        let band = band_at(settings, world.width / 2, y);
+        let band = band_at(settings, world.origin_x + world.width / 2, y);
         image.draw_rectangle(0, y * scale, legend - 1, scale, legend_color(band, y));
         if y > 0 && y % PREVIEW_DEPTH_TICK_ROWS == 0 {
             // A depth tick every fifty rows (longer every hundred).
@@ -371,7 +423,7 @@ fn preview_image(
             let Some(kind) = kind_at(x, y) else {
                 continue;
             };
-            let band = band_at(settings, x, y);
+            let band = band_at(settings, world.origin_x + x, y);
             let mut color = tile_color(kind, band, y);
             // Tell-tale stain: rock near a hazard pocket takes on the pocket's colour, as the
             // game's tile art stains it, so the preview shows what a player can read.
@@ -416,7 +468,7 @@ fn preview_image(
             };
             let bounds = feature.bounds;
             image.draw_rectangle_lines(
-                legend + (bounds.min.x - 1) * scale,
+                legend + (bounds.min.x - world.origin_x - 1) * scale,
                 (bounds.min.y - 1) * scale,
                 (bounds.width() + 2) * scale,
                 (bounds.height() + 2) * scale,
@@ -430,7 +482,8 @@ fn preview_image(
                 continue;
             };
             let icon = poi_icon(kind);
-            let x = legend + poi.center.x * scale + scale / 2 - icon.width() * icon_scale / 2;
+            let x = legend + (poi.center.x - world.origin_x) * scale + scale / 2
+                - icon.width() * icon_scale / 2;
             let y = poi.center.y * scale + scale / 2 - icon.height() * icon_scale / 2;
             image.draw_sprite(icon, x, y, icon_scale);
         }

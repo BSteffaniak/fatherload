@@ -54,6 +54,8 @@ pub struct OnlineClient {
     counted_corrections: u64,
     drawn_key: Option<(u64, u64)>,
     drawn_tiles: Vec<Tile>,
+    /// Streamed worlds: the edits (tiles that differ from generation) last drawn.
+    drawn_edits: std::collections::BTreeMap<TilePosition, Tile>,
     unsent: Vec<bridge::WorldClientMessage>,
     notices: Vec<String>,
 }
@@ -94,6 +96,7 @@ impl OnlineClient {
             counted_corrections: 0,
             drawn_key: None,
             drawn_tiles: Vec::new(),
+            drawn_edits: std::collections::BTreeMap::new(),
             unsent: Vec::new(),
             notices: Vec::new(),
         })
@@ -396,7 +399,32 @@ impl OnlineClient {
         }
         let epoch_changed = self.drawn_key.is_none_or(|(epoch, _)| epoch != key.0);
         self.drawn_key = Some(key);
-        let tiles = terrain.tiles();
+        let Some(tiles) = terrain.bounded_tiles() else {
+            // A streamed world has no finite grid: compare its edits instead (generated tiles
+            // never change).
+            let edits: std::collections::BTreeMap<TilePosition, Tile> = terrain
+                .generation_diffs()
+                .into_iter()
+                .map(|change| (change.position, change.tile))
+                .collect();
+            if epoch_changed {
+                self.drawn_edits = edits;
+                return (Vec::new(), true);
+            }
+            let mut changed: Vec<TilePosition> = edits
+                .iter()
+                .filter(|(position, tile)| self.drawn_edits.get(position) != Some(tile))
+                .map(|(position, _)| *position)
+                .collect();
+            changed.extend(
+                self.drawn_edits
+                    .keys()
+                    .filter(|position| !edits.contains_key(position))
+                    .copied(),
+            );
+            self.drawn_edits = edits;
+            return (changed, false);
+        };
         if epoch_changed || tiles.len() != self.drawn_tiles.len() {
             self.drawn_tiles = tiles.to_vec();
             return (Vec::new(), true);
