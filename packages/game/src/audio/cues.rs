@@ -72,6 +72,7 @@ impl PlacedCue {
 
 /// The designed patch each cue plays.
 #[must_use]
+#[allow(clippy::too_many_lines, reason = "one arm per cue")]
 pub const fn cue_patch(cue: SoundCue) -> Patch {
     match cue {
         SoundCue::Drill => Patch::DrillBite,
@@ -563,11 +564,11 @@ mod tests {
             | GameplayEventKind::NewDay { .. }
             | GameplayEventKind::NightSkipped { .. }
             | GameplayEventKind::GotUp { .. }
-            | GameplayEventKind::SleepRuleChanged { .. } => {}
-            GameplayEventKind::SkyBandEntered { .. }
+            | GameplayEventKind::SleepRuleChanged { .. }
+            | GameplayEventKind::SkyBandEntered { .. }
             | GameplayEventKind::UpdraftCaught { .. }
-            | GameplayEventKind::RigIcing { .. } => {}
-            GameplayEventKind::PilotExited { .. }
+            | GameplayEventKind::RigIcing { .. }
+            | GameplayEventKind::PilotExited { .. }
             | GameplayEventKind::PilotBoarded { .. }
             | GameplayEventKind::PilotJumped { .. }
             | GameplayEventKind::PilotLanded { .. }
@@ -580,8 +581,8 @@ mod tests {
             | GameplayEventKind::JetpackEmpty { .. }
             | GameplayEventKind::PickStruck { .. }
             | GameplayEventKind::PickClinked { .. }
-            | GameplayEventKind::PackTransferred { .. } => {}
-            GameplayEventKind::PersonTalked { .. }
+            | GameplayEventKind::PackTransferred { .. }
+            | GameplayEventKind::PersonTalked { .. }
             | GameplayEventKind::PersonTraded { .. }
             | GameplayEventKind::PersonGifted { .. }
             | GameplayEventKind::AffinityChanged { .. }
@@ -1008,6 +1009,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines, reason = "the list names every cue")]
     fn every_cue_has_a_distinct_rendered_patch() {
         let cues = [
             SoundCue::Drill,

@@ -122,6 +122,10 @@ pub struct PlayerInventory {
 /// Splits a player into its per-tick, public and private parts (exhaustive: every field goes to
 /// exactly one).
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one exhaustive destructure, field by field"
+)]
 pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
     let Player {
         x,

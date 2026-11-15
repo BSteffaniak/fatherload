@@ -343,7 +343,7 @@ pub fn preview_between(
                 );
             } else if !crosses_dead_air(&upgraded) {
                 // Would this tank carry a top engine and intake over? Say so the first time.
-                let mut kitted = upgraded.clone();
+                let mut kitted = upgraded;
                 kitted.engine_level = crate::economy::MAX_UPGRADE_LEVEL;
                 kitted.hazard_gear.altitude_intake = crate::environment::ALTITUDE_INTAKE_MAX_LEVEL;
                 let mut kitted_now = kitted.clone();

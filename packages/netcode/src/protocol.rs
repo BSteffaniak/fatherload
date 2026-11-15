@@ -49,16 +49,16 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// 11 (expansion wave 3), one bump for all tracks:
 ///
 /// * T14 world clock: the `ClockState` world field and `SectionKey::Clock` section,
-/// `PlayerCommand::Sleep`, `ModuleService::Sleep`, `VillageDeal::Room` and the clock events
+///   `PlayerCommand::Sleep`, `ModuleService::Sleep`, `VillageDeal::Room` and the clock events
 ///   110-115;
-/// * T16 sky: `GeneratorVersion::V8` sky worlds in the session settings,
-/// `TileKind::Sky` tiles (codes 0x600) in tile ops and chunk diffs, terrain chunks up to the
-/// Moon, the altitude intake and de-icer tiers in `HazardGear` (loadout), the sky regional
-/// features and the altitude events 116-118;
+/// * T16 sky: `GeneratorVersion::V8` sky worlds in the session settings, `TileKind::Sky` tiles
+///   (codes 0x600) in tile ops and chunk diffs, terrain chunks up to the Moon, the altitude
+///   intake and de-icer tiers in `HazardGear` (loadout), the sky regional features and the
+///   altitude events 116-118;
 /// * T15 pilot on foot: `ControlState::jump`, `EntityState::Pilot`,
-/// `PlayerCommand::TogglePilot` / `PilotPack`, `SessionServiceRequest::BuyPilotGear`, pilot
-/// gear and the personal pack in `PlayerInventory`, `BuiltTile::VentGrate`, `Fixture::Rope`,
-/// the parked pilot in the crew roster and the pilot events 120-133;
+///   `PlayerCommand::TogglePilot` / `PilotPack`, `SessionServiceRequest::BuyPilotGear`, pilot
+///   gear and the personal pack in `PlayerInventory`, `BuiltTile::VentGrate`, `Fixture::Rope`,
+///   the parked pilot in the crew roster and the pilot events 120-133;
 /// * T17 people in the world: `EntityState::Npc` entities, `PlayerCommand::People`, the
 ///   `People` section (`PeopleLedger`) and people events 140-145;
 /// * T18 upgrade reward moments: the milestone log in the loadout

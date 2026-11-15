@@ -114,8 +114,8 @@ impl EntityKind {
             | Self::EnemyShot
             | Self::Projectile
             | Self::Target
-            | Self::Pilot => EntityPhase::Late,
-            Self::Npc => EntityPhase::Late,
+            | Self::Pilot
+            | Self::Npc => EntityPhase::Late,
             Self::Charge => EntityPhase::Charges,
         }
     }
@@ -497,7 +497,8 @@ impl EntityState {
             // Pilots are hurt through `WorldState::damage_pilot` (reached from
             // `damage_entity`); reporting no health keeps weapons and auto-aim off crewmates
             // (friendly fire is off).
-            | Self::Pilot(_) => None,
+            | Self::Pilot(_)
+            // People have no health (WP-PEOPLE).
             | Self::Npc(_) => None,
         }
     }
@@ -514,8 +515,8 @@ impl EntityState {
             | Self::EnemyShot(_)
             | Self::Charge(_)
             | Self::Projectile(_)
-            | Self::Pilot(_) => None,
-            Self::Npc(_) => None,
+            | Self::Pilot(_)
+            | Self::Npc(_) => None,
         }
     }
 }

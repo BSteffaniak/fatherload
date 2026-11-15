@@ -72,9 +72,11 @@ pub const fn ceiling(tank: u8, engine: u8, intake: u8) -> i32 {
         [index_of(&INTAKE_TIERS, intake)]
 }
 
-/// The table's ceiling for any loadout (rows above row 0): `tank` clamped to the table, and
-/// `engine` and `intake` rounded **down** to the nearest tier the table measured, so the answer
-/// never overstates a climb. The shop's sky gates read it (`milestone::climb_reach`).
+/// The table's ceiling for any loadout, in rows above row 0.
+///
+/// `tank` is clamped to the table, and `engine` and `intake` are rounded **down** to the nearest
+/// tier the table measured, so the answer never overstates a climb. The shop's sky gates read
+/// it (`milestone::climb_reach`).
 #[must_use]
 pub fn reach(tank: u8, engine: u8, intake: u8) -> i32 {
     let floor_tier =

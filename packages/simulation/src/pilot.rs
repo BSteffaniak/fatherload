@@ -122,9 +122,10 @@ pub const LAVA_DAMAGE_PER_SECOND: f32 = 45.0;
 /// air density instead ([`PILOT_THIN_AIR_DENSITY`], see `WorldState::pilot_air_at`).
 pub const THIN_AIR_ROW: i32 = -128;
 
-/// On a V8 sky ([`crate::environment::air_density`]) the pilot's air counts as thin below this
-/// density: about 800 rows up (the upper cloud archipelago), and everywhere in orbit and on the
-/// Moon, where there is no air at all.
+/// The air density under which a pilot's air counts as thin on a V8 sky.
+///
+/// See [`crate::environment::air_density`]: about 800 rows up (the upper cloud archipelago),
+/// and everywhere in orbit and on the Moon, where there is no air at all.
 pub const PILOT_THIN_AIR_DENSITY: f32 = 0.5;
 
 /// Hand-pick reach from the pilot's chest (px).
