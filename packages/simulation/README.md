@@ -81,6 +81,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `simulate` | the tick: inputs, entity phases, hazards, bombs, drilling, day cycle, escape, deep rewards |
 | `drops` | WP-DROPS: drops from broken tiles (drill, blasts, fire, shattering boulders), the pickup pass (nearest rig with room, magnet pulls, "full" warnings), merging, per-cell and per-blast caps, lifetimes, ore shatter, dumping and selling blocks, the collect toggle |
 | `entities` | the world side of the entity store: spawn helpers, the two entity phases and each kind's update (gas clouds, boulders, drops), blasts, waking on terrain changes, entity replication |
+| `enemies` | enemy spawning (the director), AI, attacks on rigs, the `damage_entity` API, blasts on enemies, deaths and loot, safe zones, difficulty (see [Enemies](#enemies-srcenemyrs-srcworldenemiesrs)) |
 | `bombs` | loose-charge physics, chain reactions and every explosive kind (`crate::explosive`): sticking, remote/sequenced detonation, cluster bomblets, shaped tunnels, loot-safe mining blasts, incendiary rings, flare pulses, blast pushes on rigs and blast-feeling entities (`push_from_blasts`) and the throw preview |
 | `movement`, `commands`, `services`, `progression`, `hazards`, `rescue` | gameplay rules used by the tick |
 | `quests` | quest services (accept, turn in, abandon at the giver's counter), objectives stepping inside the tick, twists, rewards, reputation rebates, blueprint fragments |
@@ -322,9 +323,10 @@ Every live world object that moves or expires on its own is an `entity::Entity` 
 `EntityStore` (`WorldState::entities()`): a stable `EntityId` (never reused), a `Body`
 (position, velocity, previous position for interpolation, rest counter, `asleep`), a spawn tick,
 an optional expiry tick, a replication `revision` and per-kind `EntityState`. Today's kinds:
-`GasCloud`, `Boulder` (both migrated from ad-hoc world lists without behaviour changes) and
+`GasCloud`, `Boulder` (both migrated from ad-hoc world lists without behaviour changes),
 `Drop` (a floating `ItemStack` with magnet / dump / "blocked" marks; see "Drops and pickups"
-below).
+below), `Critter` (WP-CAVES ambient life) and `Enemy` / `EnemyShot` (see
+[Enemies](#enemies-srcenemyrs-srcworldenemiesrs)).
 
 - **Order.** Entities are kept in id order and every pass over them is in id order.
 - **Derived indices** (never saved, hashed or replicated; rebuilt on load): a spatial hash on
@@ -555,6 +557,99 @@ open sky with no hazards below, carved halls clear of POIs, the feature index an
 lookups, signposts, facts and story seeds), `village/placement.rs` (spacing, id round trips,
 column lookups, rarity of halls) and `world/village_tests.rs` (discovery, deals validated at
 the door, the assay office, blessings, charting, the journal saved and private).
+## Enemies (`src/enemy.rs`, `src/world/enemies.rs`)
+
+Expansion plan WP-ENEMIES (T10): creatures and machines that live in caves and the deep layers.
+They are a reason to arm up, not constant harassment: the surface and the town are safe, density
+and danger grow with depth, and a Peaceful world has none.
+
+| Kind | Family | Moves | Attack (tell) | Counter |
+|---|---|---|---|---|
+| Cave bat | creature | flies in packs | bites on contact | anything; a lit flare lures the swarm |
+| Burrower | creature | swims through soft rock | lunges (rumble, glinting eyes) | stop drilling (it hears drills through rock), bombs |
+| Acid spitter | creature | walks | lobbed acid (puffs up) | close in or break line of sight |
+| Rock mimic | creature, armoured | dormant boulder, then walks | lunge (wakes when you come close) | explosives |
+| Shellback | creature, armoured | slow walker | charge (wind-up) | explosives, armour piercing |
+| Magma wisp | creature | flies (mantle) | fireballs (glow) | kinetic and explosives; fire-proof |
+| Brood nest | creature | stationary (lairs) | hatches bats while a rig is near | destroy it |
+| Brood lord | creature, elite | walks (lairs) | acid volleys and charges | explosives, keep moving |
+| Mining drone | machine | flies | ram (beep) | EMP |
+| Sentry turret | machine | stationary | energy bolts (charge glow) | EMP, explosives |
+| Rogue excavator | machine | walks, chews through soft rock | charge (engine rev) | EMP, explosives |
+| Ancient guardian | machine, elite | hovers (lairs) | bolt volleys; shielded | EMP drops the shield, then explosives |
+
+- **Data** (`enemy.rs`): `EnemyKind::stats` (family, locomotion, attack style, radius, health,
+  shield, speeds, sight / hearing / leash, contact damage, wind-up and cooldown, range,
+  knockback), `resistance(DamageKind)` (armour folds to explosives, machines feel EMPs,
+  creatures burn), `band_roster(band)` (what roams each band, weighted), `lair_occupant`,
+  `loot(kind, tier, roll)` and `ShotKind` (acid lobs, fireballs, bolts). Health and damage
+  scale with the depth tier the enemy spawned at (`tier_scale`, the band index), the crew size
+  (+30 % health per extra rig) and the difficulty.
+- **Entities**: an enemy is `EntityState::Enemy(EnemyState)` (mode, deadlines, target, home
+  tile, path waypoint, facing, hurt / burn timers, lair, parent nest, seed, last attacker); a
+  projectile is `EntityState::EnemyShot` with an expiry. Both update in the late entity phase,
+  never sleep, and replicate, save and hash through the entity store; an enemy that did not
+  change in a tick keeps its revision.
+- **Director** (`advance_enemy_director`, before the late phase): each second it despawns
+  enemies more than `DESPAWN_TILES` from every rig, and for each rig deeper than
+  `MIN_SPAWN_DEPTH_ROWS` below the surface and outside a safe zone, under a per-rig cap (3 +
+  tier / 2, +3 on Hard) and a world cap, rolls a spawn (chance by tier, difficulty and the
+  world's `HazardIntensity`) in a chunk on a ring 22-30 tiles out, which then cools down for
+  40 s (less on Hard). The spot must be out of every rig's view, in the dark, outside safe
+  zones and fit the kind (flyers and walkers need a cave around them, walkers a floor,
+  burrowers soft rock); bats come in packs. Every two seconds lair chunks (one in seven, in
+  bands with lairs, holding a cavern) near a rig get their occupant (nests, turret pairs,
+  elites with escorts) unless the lair was cleared (`EnemyDirector::cleared_lairs`).
+  Everything is hashed from the seed, the tick and positions: no RNG state.
+- **AI** (`advance_enemy`): perception every `THINK_MILLIS` (sight with `physics::line_clear`,
+  drilling rigs heard through rock, flares luring bats, rigs in safe zones ignored), then a mode
+  machine (`EnemyMode`: idle wander, dormant, chase, wind-up, strike, recover, return home
+  healing when leashed or the target is lost for 4 s, flee when badly hurt, EMP stun).
+  Movement by locomotion (flying with `steer_toward`, walking with step hops, burrowing,
+  stationary) and, when the way is blocked, `physics::find_tile_path` (360 tiles, at most one
+  search per enemy every `PATH_SLOT_TICKS` ticks, staggered by id, cutting corners to the
+  farthest visible path tile).
+- **Hitting rigs**: contact (live during a lunge or for swarmers when the attack is ready) and
+  shots go through `strike_rig`: no hit in safe zones, on disabled rigs, in god mode (test-mode
+  invulnerability or no-clip) or inside the rig's i-frames (`RIG_GUARD_MILLIS`); otherwise the
+  rig is knocked back (capped under the safe landing speed), its i-frames start
+  (`EnemyDirector::rig_guard`) and it takes the scaled damage. Events: `RigStruck`, then
+  `PlayerDamaged`.
+- **Damage API** (`WorldState::damage_entity(id, Damage, &mut TickOutput) -> DamageOutcome`,
+  for WP-WEAPONS): `Damage { amount, kind: DamageKind, source: DamageSource, impulse }` applies
+  resistance, shields (only EMPs break them), EMP stuns, burning, aggro on the attacking player,
+  flinch impulses and fleeing; a kill drops `loot` through `spawn_item_drop` (5 minute
+  lifetime), clears its lair, counts in `EnemyDirector::kills` and emits `EnemyKilled { by }`.
+  `enemies_near(x, y, radius)` finds targets. Call it inside the tick.
+- **Explosives** (`enemies_feel_blasts`, called from the bomb pass right after
+  `push_from_blasts` on the same pre-blast terrain): every blast kind hurts enemies in reach
+  with a clear line (burrowers through rock) and pushes them; incendiaries set creatures
+  alight; EMPs (`EMP_RADIUS`, through rock) stun and hurt machines and drop shields; flares
+  only lure. The `Blast` carries its owner for kill credit.
+- **Difficulty**: `EnemyDifficulty` (Peaceful / Normal / Hard) in the `EnemyDirector`, set before
+  play with `set_enemy_difficulty` or in play with `PlayerCommand::SetEnemyDifficulty` (event
+  `EnemyDifficultyChanged`); Peaceful clears every hostile and spawns none.
+- **Safe zones** (`enemy_safe_zone`): the surface strip, the town and the top of its shafts, and
+  `BASE_SAFE_TILES` around placed infrastructure. This is the one place to add villages and
+  claimed bases.
+- **Events**: `EnemyAlerted`, `EnemyWindup`, `EnemyFired`, `EnemyHurt`, `EnemyKilled`,
+  `EnemyStunned`, `RigStruck`, `EnemyDifficultyChanged` (all with world positions for sound).
+- **Replication**: enemies and shots ride the entity deltas (clients interpolate them with
+  `Body::lerp_position` and predict them like any entity); the director is the shared
+  `SectionKey::Enemies` section. The state hash skips an untouched director, so worlds from
+  before enemies hash as they did.
+
+Performance (`enemy_benchmark_report`, `cargo test --release -p fatherload_simulation
+enemy_benchmark_report -- --ignored --nocapture`): the world cap of 64 mixed enemies hunting two
+rigs in a big cavern costs about 34 µs per tick on top of a 12 µs quiet tick (worst tick about
+0.65 ms, when many path searches land together); an enemy that holds still keeps its revision,
+so dormant mimics and idle turrets cost no replication.
+
+`world/enemy_tests.rs` covers spawn rules (dark caves, out of view, caps, safe zones, Hard vs
+Normal, Peaceful), AI (chase and bite with i-frames and knockback, spitter wind-up and acid,
+dormant mimics, leash, burrowers hearing drills, flares, nests, step hops, paths through gaps),
+damage (armour, bombs, EMP and shields, fire, loot, cleared lairs), god mode, determinism, saves
+and replication.
 
 ## Replication
 
@@ -569,7 +664,7 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | Op log | per-player discovery | the owner only |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
 | On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests | everyone |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | everyone |
 
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is

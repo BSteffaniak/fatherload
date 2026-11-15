@@ -2065,12 +2065,12 @@ fn acid_spit(rng: &mut Rng) -> Vec<f32> {
     let spray = burst(
         rng.next_u64(),
         NoiseColor::White,
-        FilterMode::HighPass,
-        rng.range(3_500.0, 5_000.0),
+        FilterMode::BandPass,
+        rng.range(2_200.0, 3_200.0),
         0.8,
         0.22,
     );
-    mix_into(&mut out, &spray, 0.02, 0.5);
+    mix_into(&mut out, &spray, 0.02, 0.35);
     for time in scatter(rng, 6, 0.04, 0.25, 1.5) {
         let bubble = burst(
             rng.next_u64(),

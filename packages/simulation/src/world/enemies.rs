@@ -1294,18 +1294,21 @@ impl WorldState {
         if matches!(
             spec.locomotion,
             Locomotion::Burrowing | Locomotion::Stationary
-        ) || physics::line_clear(&self.terrain, body.x, body.y, goal.0, goal.1)
-        {
-            state.waypoint = None;
+        ) {
             return goal;
         }
+        // Follow a waypoint until it is reached or goes stale (no line test per tick while
+        // pathing).
         let here = tile_of(body.x, body.y);
         if let Some(waypoint) = state.waypoint {
-            if waypoint == (here.x, here.y) {
+            if waypoint == (here.x, here.y) || now >= state.next_path {
                 state.waypoint = None;
             } else {
                 return tile_centre(waypoint.0, waypoint.1);
             }
+        }
+        if physics::line_clear(&self.terrain, body.x, body.y, goal.0, goal.1) {
+            return goal;
         }
         if (now.get() + id.get()).is_multiple_of(PATH_SLOT_TICKS) && now >= state.next_path {
             state.next_path = self.after(now, PATH_RETRY_MILLIS);

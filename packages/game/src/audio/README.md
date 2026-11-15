@@ -67,6 +67,17 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `fire_crackle` | feedback | Fire spreading: a pink-noise breath with dry high-passed pops. |
 | `emp_pulse` | impact | EMP: a bit-crushed saw zap gliding down to 90 Hz, an FM ring and a short echo. |
 | `flare_ignite` | feedback | A flare striking: a high-passed scratch fluttering like a sputter, and a small pop. |
+| `creature_screech` | alarm | A creature noticing a rig: a warbling FM screech rising then falling, with a band-passed breath. |
+| `creature_hiss` | feedback | A creature winding up: a swelling band-passed hiss over a low-passed growling saw. |
+| `acid_spit` | feedback | Acid launched: a wet glottal sine pop, a high-passed spray and bubbling pops. |
+| `creature_hurt` | impact | A creature hit: a falling FM yelp and a pink-noise squelch. |
+| `creature_death` | impact | A creature dying: a long falling FM wail, a wet crunch and a low thump. |
+| `machine_alert` | alarm | A machine locking on: two quick low-passed square beeps, the second a third higher. |
+| `machine_charge` | feedback | A machine charging a shot or a dash: a resonant saw whine rising with quickening tremolo. |
+| `machine_zap` | feedback | An energy bolt: a bit-crushed saw zap gliding down from 2.4-3 kHz. |
+| `machine_hurt` | impact | A machine hit: an inharmonic metal clank and a crackle of high-passed sparks. |
+| `machine_death` | impact | A machine destroyed: a low-passed bang over a sub thump, a power-down saw whine and rattling clanks. |
+| `enemy_bite` | impact | A bite or ram on a rig: a crushed, saturated noise crunch, a thump and a hull knock. |
 | `fuse_tick` | feedback | 30 ms tick: high-passed noise snap plus a 3.2 kHz blip. The director speeds it up (and raises its pitch) as the fuse burns. |
 | `deploy` | feedback | Six ratchet clicks, a heavy thunk and a metal ping. |
 | `scanner_pulse` | feedback | Sonar ping gliding down, FM shimmer, a band-pass whoosh sweeping up, echoes (180 ms, 45% feedback). |

@@ -781,3 +781,60 @@ fn departed_players_lose_their_iframes_and_old_worlds_hash_unchanged() {
     world.remove_player(OTHER);
     assert!(world.enemy_director().rig_guard.is_empty());
 }
+
+/// Tick cost with a full house of enemies (the world cap) hunting two rigs in the arena:
+/// `cargo test -p fatherload_simulation enemy_benchmark_report -- --ignored --nocapture`
+/// (add `--release`).
+#[test]
+#[ignore = "benchmark report"]
+fn enemy_benchmark_report() {
+    use std::time::{Duration, Instant};
+
+    let mut world = cavern();
+    world.add_player(OTHER);
+    park_on_floor(&mut world, OTHER, 300.0);
+    no_spawns(&mut world);
+    let kinds = [
+        EnemyKind::CaveBat,
+        EnemyKind::CaveBat,
+        EnemyKind::MiningDrone,
+        EnemyKind::AcidSpitter,
+        EnemyKind::Shellback,
+        EnemyKind::RogueExcavator,
+        EnemyKind::Burrower,
+        EnemyKind::SentryTurret,
+    ];
+    for index in 0..64_u16 {
+        let kind = kinds[usize::from(index) % kinds.len()];
+        let column = 236.0 + f32::from(index % 32) * 2.8;
+        let y = match kind.stats().locomotion {
+            crate::enemy::Locomotion::Walking | crate::enemy::Locomotion::Stationary => {
+                floor_y(kind.stats().radius)
+            }
+            crate::enemy::Locomotion::Burrowing => px(236.5),
+            crate::enemy::Locomotion::Flying => px(206.0 + f32::from(index % 5) * 4.0),
+        };
+        let _ = world.spawn_enemy(kind, px(column), y);
+    }
+    let quiet = {
+        let mut empty = cavern();
+        let start = Instant::now();
+        for _ in 0..600 {
+            let _ = tick(&mut empty);
+        }
+        start.elapsed() / 600
+    };
+    let mut worst = Duration::ZERO;
+    let start = Instant::now();
+    for _ in 0..600 {
+        let begin = Instant::now();
+        let _ = tick(&mut world);
+        worst = worst.max(begin.elapsed());
+    }
+    let mean = start.elapsed() / 600;
+    println!(
+        "enemy benchmark: {} enemies left, tick without enemies {quiet:?}, with enemies mean \
+         {mean:?} / worst {worst:?}",
+        world.entities().count_of(EntityKind::Enemy)
+    );
+}

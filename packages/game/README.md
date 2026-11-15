@@ -73,7 +73,14 @@ Modules:
   seed `D111-6A4E`); scenes that need a particular place (`hazard_telltales`,
   `strata_boundary`) find it through the world's feature index rather than fixed coordinates,
   and the `poi_*` scenes swap in the first world from the default seed on that holds the POI
-  they show (`stage_poi`).
+  they show (`stage_poi`). The `enemies_*` scenes (`scene_capture/enemy_scenes.rs`) dig a
+  cavern in each family's habitat band east of the town and show every kind (`enemies_lineup`),
+  their tells, a bite, a bomb fight, an EMP and a split-screen fight.
+- `rendering::world::enemies` — enemies and enemy shots (sprites in
+  `pixel_art/sprites/enemies.rs`, one per kind; mode-driven frames, wind-up tells, health and
+  shield bars, stun sparks, flames, burrowers churning through rock, hidden in undiscovered
+  tiles, interpolated with the bomb alpha) and the red hit flash on rigs inside their
+  post-hit i-frames (`RenderSnapshot::rig_guards`).
 - `worldgen_tools` — `fatherload --worldgen-report [--seeds N] [--first-seed S] [--size X]
   [--richness X] [--hazards X] [--legacy] [--generator v1|v2|v3]` prints generator distributions over many seeds, and
   `fatherload --worldgen-preview <seed> <out.png> [--size X] [--richness X] [--hazards X]
@@ -88,15 +95,18 @@ Modules:
   failed job or a completed blueprint (`LocalGame::announce_quests`). `rendering::quests` draws
   the desk, the log, the HUD tracker, the fanfare and map/minimap markers;
   `rendering/world/quest_marks.rs` draws them in the world.
-- `shell::world_setup` — the New World dialog (seed, size, richness, hazards, test mode) opened
-  by every "new world" title entry; the seed comes from OS randomness (`random_world_seed`, 48
-  bits). `local_game::world_from_setup` builds the world (test mode via
-  `WorldState::enable_test_mode`).
+- `shell::world_setup` — the New World dialog (seed, size, richness, hazards, enemies, test
+  mode) opened by every "new world" title entry; the seed comes from OS randomness
+  (`random_world_seed`, 48 bits). `local_game::world_from_setup` builds the world (test mode via
+  `WorldState::enable_test_mode`, the enemy setting via `WorldState::set_enemy_difficulty`).
+  In play, the local or hosting player's pause menu cycles Enemies (peaceful / normal / hard)
+  with `PlayerCommand::SetEnemyDifficulty`; joined clients do not get the entry.
 - `shell::test_mode` — the pause menu's test-mode entries (Warp to Layer list, invulnerable hull
   and infinite fuel toggles), each a `PlayerCommand::TestMode` action for the seat driving the
   menu; a paused local world applies toggles on resume, so the menu shows the pending choice
   (`ShellState::pending_test_mode`) until the world catches up.
-- `save` — format v7 (`WorldState` + play time; the terrain as generation settings plus tile
+- `save` — format v8 (`WorldState` + play time; v8 adds enemies and the enemy director, v7
+  files load as is with their defaults; the terrain as generation settings plus tile
   diffs, rigs' item containers and the entity store, see the simulation README);
   `save::legacy` migrates v1-v6 (v1-v5 terrain wrote out every tile and is read as
   `FullTerrain`; v3/v4 worlds carried a derived summary whose `won_game` flag is lifted into

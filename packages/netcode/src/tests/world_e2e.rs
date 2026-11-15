@@ -447,3 +447,77 @@ fn world_rig_cosmetics_replicate_to_everyone_and_unlocks_stay_private() {
         );
     }
 }
+
+#[test]
+fn world_enemies_replicate_under_latency_and_hit_rigs() {
+    use fatherload_simulation::{
+        EnemyKind, TILE_SIZE,
+        entity::EntityKind,
+        terrain::{TileKind, TilePosition},
+    };
+
+    // 80 ms +/- 10 ms with a little loss: enemies chase the rigs and replicate as entities.
+    let mut harness = harness(60, 2, LinkConditions::new(80, 10, 1.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    let mut world = harness.world().clone();
+    let players: Vec<_> = world.player_ids().collect();
+    // An arena deep east of the town: the rigs on its floor with a swarm, a spitter and a drone.
+    let (x0, floor) = (260, 120);
+    for y in floor - 8..floor {
+        for x in x0 - 12..x0 + 12 {
+            let _ = world
+                .terrain_mut()
+                .set_kind(TilePosition { x, y }, TileKind::Air);
+        }
+    }
+    #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+    let px = |tile: i32| tile as f32 * TILE_SIZE;
+    for (index, player) in (0_i32..).zip(&players) {
+        let rig = world.player_mut(*player).expect("rig");
+        rig.x = px(x0 - 4 + index * 3);
+        rig.y = px(floor) - 11.0;
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+    }
+    for dx in [-8, -6, 5, 7] {
+        let _ = world.spawn_enemy(EnemyKind::CaveBat, px(x0 + dx), px(floor - 5));
+    }
+    let _ = world.spawn_enemy(EnemyKind::MiningDrone, px(x0 + 9), px(floor - 6));
+    let _ = world.spawn_enemy(
+        EnemyKind::AcidSpitter,
+        px(x0 + 10),
+        px(floor) - EnemyKind::AcidSpitter.stats().radius - 1.0,
+    );
+    let hull_before: Vec<f32> = players
+        .iter()
+        .map(|player| world.player(*player).expect("rig").hull)
+        .collect();
+    harness.host.new_epoch(world);
+    // The bots soon fly off (and the enemies left behind despawn), so watch the replicas as the
+    // fight happens.
+    let mut seen = vec![0_usize; harness.clients.len()];
+    for _ in 0..60 {
+        harness.run_for(Duration::from_millis(100));
+        for (count, client) in seen.iter_mut().zip(&harness.clients) {
+            if let Some(replica) = client.session.authority() {
+                *count = (*count).max(replica.entities().count_of(EntityKind::Enemy));
+            }
+        }
+    }
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    assert_bounded(&harness);
+    let host = harness.world();
+    assert!(
+        players
+            .iter()
+            .zip(&hull_before)
+            .any(|(player, before)| host.player(*player).is_some_and(|rig| rig.hull < *before)),
+        "the enemies hurt a rig"
+    );
+    for (client, count) in harness.clients.iter().zip(seen) {
+        assert_eq!(client.hash_mismatches, 0);
+        assert!(count > 0, "enemies near the rig reach the client");
+    }
+}
