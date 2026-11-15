@@ -532,8 +532,20 @@ mod tests {
         // seat's input mapping decides, see `weapon_aim::trigger_thrusts`).
         let trigger = mapper.map(&pad(&[PadButton::RightTrigger]), DT);
         assert!(trigger.fire && trigger.fire_thrusts_unarmed && !trigger.thrust);
-        let cycle = mapper.map(&pad(&[PadButton::LeftStick]), DT);
-        assert!(cycle.cycle_weapon);
+        // L3: a tap cycles weapons on release; a hold toggles build mode once instead.
+        let pressed = mapper.map(&pad(&[PadButton::LeftStick]), DT);
+        assert!(!pressed.cycle_weapon && !pressed.build_mode);
+        let cycle = mapper.map(&PadState::default(), DT);
+        assert!(cycle.cycle_weapon && !cycle.build_mode);
+        let mut built = 0;
+        for _ in 0..40 {
+            built += usize::from(mapper.map(&pad(&[PadButton::LeftStick]), DT).build_mode);
+        }
+        assert_eq!(built, 1, "a hold toggles build mode once");
+        assert!(
+            !mapper.map(&PadState::default(), DT).cycle_weapon,
+            "and does not cycle"
+        );
         assert!(mapper.map(&pad(&[PadButton::DPadUp]), DT).thrust);
         assert!(mapper.map(&stick(0.0, -0.9), DT).thrust);
         let down = mapper.map(&stick(0.0, 0.9), DT);
