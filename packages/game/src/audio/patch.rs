@@ -2255,7 +2255,9 @@ fn rain_loop(rng: &mut Rng) -> Vec<f32> {
     for time in scatter(rng, loop_events(3.0), 0.0, loop_length() - 0.1, 1.0) {
         let mut osc = Osc::new(Wave::Sine);
         let base = rng.range(900.0, 1_500.0);
-        let drip = render(0.04, |t| osc.next(base * (1.0 + t * 12.0)) * perc(t, 0.002, 0.03));
+        let drip = render(0.04, |t| {
+            osc.next(base * (1.0 + t * 12.0)) * perc(t, 0.002, 0.03)
+        });
         mix_into(&mut out, &drip, time, 0.18);
     }
     out

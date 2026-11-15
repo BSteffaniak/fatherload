@@ -679,11 +679,11 @@ impl Director {
         listener: &Listener,
         terrain: &fatherload_simulation::terrain::Terrain,
     ) {
-        use fatherload_simulation::{terrain::TILE_SIZE, worldgen::biome::{self, Biome}};
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "world pixels to tiles"
-        )]
+        use fatherload_simulation::{
+            terrain::TILE_SIZE,
+            worldgen::biome::{self, Biome},
+        };
+        #[allow(clippy::cast_possible_truncation, reason = "world pixels to tiles")]
         let column = (listener.x / TILE_SIZE).floor() as i32;
         #[allow(clippy::cast_precision_loss, reason = "surface rows are small")]
         let ground = terrain.surface_row(column) as f32 * TILE_SIZE;

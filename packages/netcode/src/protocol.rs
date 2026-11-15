@@ -41,7 +41,11 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `Bases` world field and section, and base events 100-102;
 /// * WP-PERSIST: persistent profiles in `Hello`, `ClaimRig`, parked lobby entries,
 ///   `Welcome::returning`, `Reassigned` and `ClaimDenied`.
-pub const PROTOCOL_VERSION: u8 = 9;
+///
+/// 10 (expansion wave 2, T8 surface): `GeneratorVersion::V7` biome worlds in the session
+/// settings, `TileKind::Surface` materials (codes 0x500) in tile ops and chunk diffs, terrain
+/// chunks above row 0 (mountains) and no flight ceiling.
+pub const PROTOCOL_VERSION: u8 = 10;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

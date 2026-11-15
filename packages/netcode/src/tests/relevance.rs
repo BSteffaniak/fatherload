@@ -324,6 +324,75 @@ fn world_entities_spawn_change_and_despawn_per_client_relevance() {
     assert_eq!(pair.authority().entities(), pair.host.world().entities());
 }
 
+/// R17, no flight ceiling: a client's rig ten thousand tiles above a biome world's surface
+/// keeps climbing under its own thrust, its prediction agrees with the host, nothing streams
+/// for the empty sky, and the terrain stays converged.
+#[test]
+fn rig_far_above_the_surface_flies_online() {
+    let params = SessionParams::new(60);
+    let sim_host = fatherload_simulation::PlayerId::new(0);
+    let mut world = WorldState::new_game_with_params(
+        sim_host,
+        fatherload_simulation::SimulationParams::new(params.tick_rate_hz),
+    );
+    assert!(world.world_settings().generator.has_biomes());
+    // New rigs (the client's) spawn ten thousand tiles up.
+    let altitude = 10_000.0 * TILE_SIZE;
+    let mut template = world.player_template().clone();
+    template.y = -altitude;
+    world.set_player_template(template);
+    let host_player = PlayerId(0);
+    let mut pair = Pair::new(world, finite_tuning(12.0), params, |host| {
+        assert!(host.adopt_local_player(SeatId(0), host_player));
+    });
+    let idle = ControlState::default();
+    for _ in 0..30 {
+        pair.step(&idle);
+    }
+    assert_eq!(pair.client.phase(), ClientPhase::InGame);
+    let me = crate::world::to_sim_player(pair.me());
+    let start = pair.host.world().player(me).expect("client rig").y;
+    assert!(
+        start < -altitude + 13.0 * TILE_SIZE,
+        "spawned up high: {start}"
+    );
+
+    let climb = ControlState::new(0.3, true, false);
+    for _ in 0..60 * 3 {
+        pair.step(&climb);
+    }
+    for _ in 0..20 {
+        pair.step(&idle);
+    }
+    let host_rig = pair.host.world().player(me).expect("host copy").clone();
+    assert!(
+        host_rig.y < start - 10.0 * TILE_SIZE,
+        "the rig climbed past where any ceiling stood: {start} -> {}",
+        host_rig.y
+    );
+    let authority = pair.authority().player(me).expect("client authority");
+    assert!(
+        (authority.y - host_rig.y).abs() < 0.01 && (authority.x - host_rig.x).abs() < 0.01,
+        "the client agrees on its rig high in the sky"
+    );
+    let predicted = pair
+        .client
+        .predicted()
+        .and_then(|world| world.player(me))
+        .expect("prediction");
+    assert!(
+        (predicted.y - host_rig.y).abs() < TILE_SIZE,
+        "prediction tracks the authority: {} vs {}",
+        predicted.y,
+        host_rig.y
+    );
+    assert_eq!(
+        pair.authority().terrain().digest(),
+        pair.host.world().terrain().digest(),
+        "terrain converged"
+    );
+}
+
 /// An endless (V5) world: a digger far out (thousands of tiles from spawn) works on chunks the
 /// client never generated; the client only learns the diffs of chunks in its relevance, its
 /// keyframe never carried generated terrain, and once relevance is lifted the far chunks'

@@ -25,8 +25,9 @@ use std::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
 use super::{
-    ArtifactKind, CHUNK_SIZE_TILES, ChunkPosition, MineralKind, Slot, Storage, Terrain, Tile,
-    TileChange, TileKind, TilePosition, legacy_tile_kind, position_digest, tile_durability,
+    ArtifactKind, CHUNK_SIZE_TILES, ChunkPosition, MineralKind, Slot, Storage, SurfaceMaterial,
+    Terrain, Tile, TileChange, TileKind, TilePosition, legacy_tile_kind, position_digest,
+    tile_durability,
 };
 use crate::{
     poi::PoiTile,
@@ -809,6 +810,9 @@ impl Tile {
                 Some(tile) => TileKind::Built(tile),
                 None => return None,
             },
+            0x500..=0x5FF if variant < SurfaceMaterial::ALL.len() => {
+                TileKind::Surface(SurfaceMaterial::ALL[variant])
+            }
             _ => return None,
         };
         Some(Self { kind, durability })

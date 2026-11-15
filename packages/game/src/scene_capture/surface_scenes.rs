@@ -231,12 +231,7 @@ pub const SURFACE_SCENES: &[Scene] = &[
                 let player = seats[0].player;
                 let row = world.terrain().surface_row(peak) - 6;
                 place_rig(world, player, peak - 14, row);
-                reveal(
-                    world,
-                    player,
-                    peak - 50..peak + 30,
-                    row..row + 60,
-                );
+                reveal(world, player, peak - 50..peak + 30, row..row + 60);
                 let _ = TilePosition { x: peak, y: row };
                 world.stream_terrain_near_players();
             });

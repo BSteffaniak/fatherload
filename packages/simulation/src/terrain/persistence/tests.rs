@@ -1,7 +1,8 @@
 use std::time::Instant;
 
 use super::super::{
-    ArtifactKind, ChunkPosition, MineralKind, Terrain, Tile, TileChange, TileKind, TilePosition,
+    ArtifactKind, ChunkPosition, MineralKind, SurfaceMaterial, Terrain, Tile, TileChange, TileKind,
+    TilePosition,
 };
 use super::{FullTerrain, TerrainRestoreError, TerrainSnapshot, TileDiffs};
 use crate::{
@@ -181,6 +182,14 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         .map(TileKind::Poi),
     );
     kinds.extend(crate::cave::CaveTile::ALL.map(TileKind::Cave));
+    kinds.extend(SurfaceMaterial::ALL.map(TileKind::Surface));
+    for material in SurfaceMaterial::ALL {
+        assert_eq!(
+            SurfaceMaterial::ALL[usize::try_from(material.code()).unwrap_or(99)],
+            material,
+            "surface codes index ALL"
+        );
+    }
     for kind in kinds {
         for durability in [0, 1, 7, 255] {
             let tile = Tile { kind, durability };
@@ -193,7 +202,8 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         0x20B << 8,
         0x3FF << 8,
         0x40F << 8,
-        0x500 << 8,
+        0x506 << 8,
+        0x600 << 8,
         u64::MAX,
     ] {
         assert_eq!(Tile::from_code(code), None, "code {code:#x}");

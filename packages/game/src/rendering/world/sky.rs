@@ -190,9 +190,24 @@ fn far_tops(biome: Biome) -> Vec<i32> {
     (0..w)
         .map(|x| {
             let lift = match biome {
-                Biome::Plains => ridge(x, w, 30.0, &[(2.0, 12.0, 0.4), (5.0, 6.0, 1.3), (11.0, 2.5, 2.0)]),
-                Biome::Forest => ridge(x, w, 28.0, &[(3.0, 8.0, 1.1), (7.0, 4.0, 0.3), (17.0, 1.5, 2.2)]),
-                Biome::Desert => ridge(x, w, 16.0, &[(2.0, 5.0, 0.7), (5.0, 4.0, 2.1), (9.0, 1.0, 0.2)]),
+                Biome::Plains => ridge(
+                    x,
+                    w,
+                    30.0,
+                    &[(2.0, 12.0, 0.4), (5.0, 6.0, 1.3), (11.0, 2.5, 2.0)],
+                ),
+                Biome::Forest => ridge(
+                    x,
+                    w,
+                    28.0,
+                    &[(3.0, 8.0, 1.1), (7.0, 4.0, 0.3), (17.0, 1.5, 2.2)],
+                ),
+                Biome::Desert => ridge(
+                    x,
+                    w,
+                    16.0,
+                    &[(2.0, 5.0, 0.7), (5.0, 4.0, 2.1), (9.0, 1.0, 0.2)],
+                ),
                 Biome::Badlands => {
                     // Flat-topped buttes: a stepped profile.
                     let raw = ridge(x, w, 20.0, &[(3.0, 14.0, 0.9), (7.0, 6.0, 2.4)]);
@@ -289,12 +304,26 @@ fn near_tops(biome: Biome) -> Vec<i32> {
     (0..w)
         .map(|x| {
             let lift = match biome {
-                Biome::Plains => ridge(x, w, 16.0, &[(3.0, 6.0, 0.9), (7.0, 3.0, 0.2), (13.0, 1.5, 1.1)]),
-                Biome::Forest => ridge(x, w, 20.0, &[(2.0, 7.0, 0.3), (5.0, 4.0, 2.0), (23.0, 1.2, 0.4)]),
+                Biome::Plains => ridge(
+                    x,
+                    w,
+                    16.0,
+                    &[(3.0, 6.0, 0.9), (7.0, 3.0, 0.2), (13.0, 1.5, 1.1)],
+                ),
+                Biome::Forest => ridge(
+                    x,
+                    w,
+                    20.0,
+                    &[(2.0, 7.0, 0.3), (5.0, 4.0, 2.0), (23.0, 1.2, 0.4)],
+                ),
                 Biome::Desert => {
                     // Dunes: steep lee faces, long windward slopes.
                     let phase = (x as f32 / w as f32 * 4.0).fract();
-                    let dune = if phase < 0.7 { phase / 0.7 } else { (1.0 - phase) / 0.3 };
+                    let dune = if phase < 0.7 {
+                        phase / 0.7
+                    } else {
+                        (1.0 - phase) / 0.3
+                    };
                     (dune.mul_add(14.0, 6.0) + (x as f32 * 0.11).sin() * 2.0).round() as i32
                 }
                 Biome::Badlands => {
@@ -326,19 +355,24 @@ fn near_image(biome: Biome) -> Image {
         Biome::Mountains => (SLATE_LIGHT, SLATE, SLATE_DARK),
         Biome::Wetlands => (LEAF, MOSS, TEAL_DARK),
     };
-    let mut image = silhouette(NEAR_WIDTH, NEAR_HEIGHT + NEAR_SKIRT, &tops, |x, y, depth| {
-        if depth == 0 {
-            edge
-        } else if biome == Biome::Badlands && (y + 1) % 7 == 0 {
-            MAROON
-        } else if biome == Biome::Mountains && y - depth < 14 && depth < 4 {
-            BONE
-        } else if depth > 10 && bayer4(x, y) < ((depth - 10) * 2).min(16) as u8 {
-            deep
-        } else {
-            body
-        }
-    });
+    let mut image = silhouette(
+        NEAR_WIDTH,
+        NEAR_HEIGHT + NEAR_SKIRT,
+        &tops,
+        |x, y, depth| {
+            if depth == 0 {
+                edge
+            } else if biome == Biome::Badlands && (y + 1) % 7 == 0 {
+                MAROON
+            } else if biome == Biome::Mountains && y - depth < 14 && depth < 4 {
+                BONE
+            } else if depth > 10 && bayer4(x, y) < ((depth - 10) * 2).min(16) as u8 {
+                deep
+            } else {
+                body
+            }
+        },
+    );
     match biome {
         Biome::Plains => pines_along(&mut image, &tops, 5, 51, (MOSS, PINE)),
         Biome::Forest => pines_along(&mut image, &tops, 3, 52, (MOSS, PINE)),
@@ -501,7 +535,12 @@ fn draw_sky_bands(draw: &mut impl RaylibDraw, art: &SkyArt, visible: Rectangle) 
     }
     if bottom > upper_edge {
         draw.draw_rectangle_rec(
-            Rectangle::new(left, upper_edge.max(top), width, bottom - upper_edge.max(top)),
+            Rectangle::new(
+                left,
+                upper_edge.max(top),
+                width,
+                bottom - upper_edge.max(top),
+            ),
             color,
         );
     }
@@ -580,12 +619,22 @@ fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle) {
         for column in -half..=half {
             // Lit from the sun's side (right), with a soft terminator and craters.
             let lit = column as f32 + row as f32 * 0.3 > -(radius as f32) * 0.35;
-            let crater = [(-8, -6, 5), (7, 4, 6), (-2, 12, 4), (12, -10, 3), (-14, 8, 3)]
-                .iter()
-                .any(|(x, y, r)| (column - x) * (column - x) + (row - y) * (row - y) <= r * r);
+            let crater = [
+                (-8, -6, 5),
+                (7, 4, 6),
+                (-2, 12, 4),
+                (12, -10, 3),
+                (-14, 8, 3),
+            ]
+            .iter()
+            .any(|(x, y, r)| (column - x) * (column - x) + (row - y) * (row - y) <= r * r);
             let rim = half - column.abs() <= 1 && column > 0;
             let color = if !lit {
-                if bayer4(column, row) < 3 { SLATE } else { SLATE_DARK }
+                if bayer4(column, row) < 3 {
+                    SLATE
+                } else {
+                    SLATE_DARK
+                }
             } else if rim {
                 BONE
             } else if crater {
@@ -611,7 +660,8 @@ fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle) {
 /// A pixel sun high in the sky, almost fixed to the screen.
 fn draw_sun(draw: &mut impl RaylibDraw, visible: Rectangle) {
     let cx = snap(visible.x + visible.width * 0.8);
-    let cy = snap(visible.y + visible.height * 0.18 + ((visible.y + 200.0) * 0.04).clamp(-40.0, 120.0));
+    let cy =
+        snap(visible.y + visible.height * 0.18 + ((visible.y + 200.0) * 0.04).clamp(-40.0, 120.0));
     let rings = [(11, with_alpha(CREAM, 70)), (8, GOLD), (6, CREAM)];
     for (radius, color) in rings {
         for row in -radius..=radius {
@@ -784,4 +834,3 @@ pub fn hills_bottom(settings: &WorldSettings, visible: Rectangle) -> f32 {
     }
     snap((sum / weights.max(1.0)).mul_add(TILE_SIZE, ART * 2.0))
 }
-

@@ -221,6 +221,62 @@ fn streamed_terrain_snapshots_hold_only_edits_and_reject_other_generators() {
     );
 }
 
+#[test]
+fn biome_worlds_save_mountain_edits_above_row_zero() {
+    // A V6 world's mountains rise into rows above 0: digging into one, writing surface
+    // materials and streaming those chunks out and back all survive snapshots and keyframes.
+    let settings = WorldSettings::new(0x0B10_3E5A);
+    assert!(settings.generator.has_biomes());
+    let mut terrain = Terrain::generate(&settings);
+    let peak = (-12_000..12_000)
+        .min_by_key(|x| terrain.surface_row(*x))
+        .expect("columns");
+    let top = terrain.surface_row(peak);
+    assert!(top < -20, "a mountain rises above row 0 (row {top})");
+    assert!(terrain.min_y() < top);
+    let peak_tile = TilePosition { x: peak, y: top };
+    assert!(terrain.is_solid_at(peak_tile));
+    assert!(!terrain.is_solid_at(TilePosition {
+        x: peak,
+        y: top - 1
+    }));
+    // Open sky above the world's first row: no tile, not solid.
+    assert!(
+        terrain
+            .tile(TilePosition {
+                x: peak,
+                y: terrain.min_y() - 1
+            })
+            .is_none()
+    );
+    assert!(terrain.set_kind(peak_tile, TileKind::Air));
+    let snow = TilePosition {
+        x: peak + 1,
+        y: top - 1,
+    };
+    assert!(terrain.set_kind(
+        snow,
+        TileKind::Surface(crate::terrain::SurfaceMaterial::Snow)
+    ));
+    terrain.stream_around(&[TilePosition { x: 0, y: 40 }]);
+    let restored = Terrain::from_snapshot(terrain.snapshot()).expect("restores");
+    assert_eq!(restored.digest(), terrain.digest());
+    assert_eq!(
+        restored.tile(peak_tile).map(|tile| tile.kind),
+        Some(TileKind::Air)
+    );
+    let bytes = postcard::to_allocvec(&terrain).expect("encode");
+    let decoded: Terrain = postcard::from_bytes(&bytes).expect("decode");
+    assert_eq!(decoded.digest(), terrain.digest());
+    assert_eq!(
+        decoded.tile(snow).map(|tile| tile.kind),
+        Some(TileKind::Surface(crate::terrain::SurfaceMaterial::Snow))
+    );
+    let json = serde_json::to_string(&terrain).expect("json");
+    let from_json: Terrain = serde_json::from_str(&json).expect("json decode");
+    assert_eq!(from_json.digest(), terrain.digest());
+}
+
 /// Flies a rig continuously 50,000 tiles out each way (two tiles a tick, a fast god-mode
 /// pace), streaming chunks every tick: prints the mean, 99th-percentile and worst tick times
 /// and checks memory stays bounded the whole way. Run in release:

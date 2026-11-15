@@ -65,7 +65,9 @@ impl SurfaceArt {
 
     fn sprite(&self, flora: Flora, variant: usize) -> Option<&Texture2D> {
         let kind = FLORA.iter().position(|f| *f == flora)?;
-        self.sprites.get(kind * VARIANTS + variant % VARIANTS)?.as_ref()
+        self.sprites
+            .get(kind * VARIANTS + variant % VARIANTS)?
+            .as_ref()
     }
 }
 
@@ -153,7 +155,11 @@ fn flora_image(flora: Flora, variant: usize) -> Image {
             let mut canvas = Canvas::new(9, 6);
             for (x, tall) in [(1, 2), (2, 4), (3, 3), (4, 5), (5, 3), (6, 4), (7, 2)] {
                 for row in 0..tall {
-                    canvas.px(x, 5 - row, if row == tall - 1 { colors.0 } else { colors.1 });
+                    canvas.px(
+                        x,
+                        5 - row,
+                        if row == tall - 1 { colors.0 } else { colors.1 },
+                    );
                 }
             }
             canvas.image
@@ -304,7 +310,13 @@ fn flora_image(flora: Flora, variant: usize) -> Image {
         }
         Flora::Reeds => {
             let mut canvas = Canvas::new(10, 14);
-            for (x, tall, cattail) in [(1, 8, false), (3, 12, true), (5, 9, false), (7, 11, true), (8, 6, false)] {
+            for (x, tall, cattail) in [
+                (1, 8, false),
+                (3, 12, true),
+                (5, 9, false),
+                (7, 11, true),
+                (8, 6, false),
+            ] {
                 for row in 0..tall {
                     canvas.px(x, 13 - row, if row % 3 == 0 { LEAF } else { MOSS });
                 }
@@ -351,7 +363,12 @@ fn ground_intact(terrain: &Terrain, x: i32, row: i32) -> bool {
 }
 
 /// Draws the plants and props standing on the visible surface.
-pub fn draw_flora(draw: &mut impl RaylibDraw, art: &SurfaceArt, terrain: &Terrain, visible: Rectangle) {
+pub fn draw_flora(
+    draw: &mut impl RaylibDraw,
+    art: &SurfaceArt,
+    terrain: &Terrain,
+    visible: Rectangle,
+) {
     let settings = terrain.settings();
     if !settings.generator.has_biomes() {
         return;
@@ -403,7 +420,12 @@ pub fn draw_flora(draw: &mut impl RaylibDraw, art: &SurfaceArt, terrain: &Terrai
         draw.draw_texture_pro(
             texture,
             Rectangle::new(0.0, 0.0, source_width, texture.height() as f32),
-            Rectangle::new(snap(center - width * 0.5), snap(bottom - height), width, height),
+            Rectangle::new(
+                snap(center - width * 0.5),
+                snap(bottom - height),
+                width,
+                height,
+            ),
             Vector2::zero(),
             0.0,
             Color::WHITE,
@@ -434,7 +456,12 @@ pub fn draw_water(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectan
         draw.draw_rectangle_rec(Rectangle::new(left, water_top, TILE_SIZE, depth), body);
         if depth > TILE_SIZE * 2.0 {
             draw.draw_rectangle_rec(
-                Rectangle::new(left, water_top + TILE_SIZE * 1.5, TILE_SIZE, depth - TILE_SIZE * 1.5),
+                Rectangle::new(
+                    left,
+                    water_top + TILE_SIZE * 1.5,
+                    TILE_SIZE,
+                    depth - TILE_SIZE * 1.5,
+                ),
                 deep,
             );
         }
@@ -582,7 +609,11 @@ pub fn draw_weather(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
                     + tile_x as f32 * PERIOD.0;
                 let y = (base_y + weather.fall * speed * seconds).rem_euclid(PERIOD.1)
                     + tile_y as f32 * PERIOD.1;
-                if x < visible.x || x > visible.x + visible.width || y < visible.y || y > visible.y + visible.height {
+                if x < visible.x
+                    || x > visible.x + visible.width
+                    || y < visible.y
+                    || y > visible.y + visible.height
+                {
                     continue;
                 }
                 // Not inside the ground.
