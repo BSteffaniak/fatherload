@@ -887,8 +887,6 @@ mod tests {
         );
     }
 
-    /// A world after a long scripted dig (drilling, bombs, infrastructure, scanning) plus
-    /// hundreds of blast craters and tunnels across the whole map.
     #[test]
     fn version_seven_charge_lists_and_explosive_maps_migrate_to_entities_and_items() {
         use fatherload_simulation::{ExplosiveKind, PlacedBomb, entity::EntityKind};
@@ -970,6 +968,8 @@ mod tests {
         save.world.player(LEGACY_PLAYER_ID).expect("player")
     }
 
+    /// A world after a long scripted dig (drilling, bombs, infrastructure, scanning) plus
+    /// hundreds of blast craters and tunnels across the whole map.
     fn heavily_dug_world() -> WorldState {
         heavily_dug_world_with(&WorldSettings::bounded(
             fatherload_simulation::worldgen::DEFAULT_WORLD_SEED,
