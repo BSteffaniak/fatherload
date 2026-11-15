@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{PeopleRng, salt};
+use super::{PeopleRng, character::Pronouns, salt};
 
 /// A naming and building culture. Villages and their residents share one.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -110,6 +110,10 @@ impl PersonName {
 /// A culture's naming material.
 pub(crate) struct NameTable {
     pub given: &'static [&'static str],
+    /// Names in `given` that read as feminine; only she/they characters get them.
+    pub she: &'static [&'static str],
+    /// Names in `given` that read as masculine; only he/they characters get them.
+    pub he: &'static [&'static str],
     /// Syllable generator: onsets, vowels and endings.
     pub onsets: &'static [&'static str],
     pub vowels: &'static [&'static str],
@@ -158,6 +162,25 @@ const FRONTIER: NameTable = NameTable {
         "Dottie",
         "Augustin",
         "Nell",
+    ],
+    she: &[
+        "Juniper",
+        "Clementine",
+        "Della",
+        "Opal",
+        "Mae",
+        "Hattie",
+        "Josie",
+        "Pearl",
+        "Etta",
+        "Birdie",
+        "Loretta",
+        "Dottie",
+        "Nell",
+    ],
+    he: &[
+        "Hollis", "Otis", "Amos", "Silas", "Rufus", "Jebediah", "Cyrus", "Ezra", "Lyle", "Abner",
+        "Virgil", "Homer", "Gus", "Augustin",
     ],
     onsets: &[
         "B", "C", "D", "G", "H", "J", "L", "M", "N", "R", "T", "W", "Cl", "Fr",
@@ -223,6 +246,12 @@ const HIGHLAND: NameTable = NameTable {
         "Hamish", "Orla", "Duncan", "Elspet", "Callum", "Morven", "Struan", "Kenna", "Iver",
         "Senga",
     ],
+    she: &[
+        "Isla", "Maeve", "Ailsa", "Brisa", "Orla", "Elspet", "Morven", "Kenna", "Senga",
+    ],
+    he: &[
+        "Bram", "Torin", "Euan", "Corran", "Fergal", "Hamish", "Duncan", "Callum", "Struan", "Iver",
+    ],
     onsets: &[
         "B", "C", "D", "F", "G", "K", "M", "R", "S", "T", "Br", "Dr", "Gr",
     ],
@@ -267,6 +296,12 @@ const MESA: NameTable = NameTable {
         "Solene", "Amaru", "Ines", "Tavio", "Luzia", "Rafa", "Itzel", "Benito", "Marisol", "Cosme",
         "Paloma", "Teo", "Araceli", "Joaco", "Nayeli", "Dario", "Ofelia", "Ramiro",
     ],
+    she: &[
+        "Solene", "Ines", "Luzia", "Itzel", "Marisol", "Paloma", "Araceli", "Nayeli", "Ofelia",
+    ],
+    he: &[
+        "Amaru", "Tavio", "Rafa", "Benito", "Cosme", "Teo", "Joaco", "Dario", "Ramiro",
+    ],
     onsets: &[
         "S", "M", "L", "R", "T", "N", "C", "V", "Al", "Es", "Ar", "Ix",
     ],
@@ -297,6 +332,10 @@ const RIVERSIDE: NameTable = NameTable {
         "Rowan", "Tamsin", "Fenn", "Briony", "Hob", "Linnet", "Barnaby", "Sorrel", "Ottilie",
         "Perrin", "Hazel", "Edmund", "Clover", "Jory", "Mabyn", "Tobin", "Willa", "Alder",
     ],
+    she: &[
+        "Tamsin", "Briony", "Linnet", "Ottilie", "Hazel", "Clover", "Willa",
+    ],
+    he: &["Hob", "Barnaby", "Perrin", "Edmund", "Jory", "Tobin"],
     onsets: &["B", "F", "H", "L", "M", "P", "R", "T", "W", "Th", "El"],
     vowels: &["a", "e", "i", "o", "y", "ie"],
     endings: &["wen", "lin", "ny", "ra", "son", "beth", "ric", "let", "ow"],
@@ -331,6 +370,8 @@ const SCRAPPER: NameTable = NameTable {
         "Dex", "Kit", "Moss", "Tam", "Jinx", "Rook", "Vee", "Cass", "Zed", "Nim", "Bo", "Lux",
         "Pax", "Remy", "Juno", "Fitz",
     ],
+    she: &["Juno"],
+    he: &["Dex", "Fitz"],
     onsets: &["D", "J", "K", "R", "V", "Z", "Br", "Sk", "Tr", "Q"],
     vowels: &["a", "e", "i", "o", "u"],
     endings: &["x", "z", "ck", "nn", "ss", "tt", "do", "ka"],
@@ -365,6 +406,8 @@ const DEEPFOLK: NameTable = NameTable {
         "Ilvo", "Thessaly", "Oru", "Ysmay", "Lio", "Vaela", "Ossery", "Nuin", "Aule", "Mirelle",
         "Thren", "Eluan", "Saphi", "Ondo",
     ],
+    she: &["Thessaly", "Ysmay", "Mirelle", "Vaela"],
+    he: &[],
     onsets: &["Th", "L", "V", "N", "S", "Y", "O", "E", "A", "Ul", "Il"],
     vowels: &["a", "e", "i", "o", "u", "ae", "ui"],
     endings: &["n", "l", "ra", "ve", "th", "sa", "lo", "rin"],
@@ -395,18 +438,58 @@ const DEEPFOLK: NameTable = NameTable {
     ],
 };
 
-/// A given name from `culture`.
-pub(crate) fn given_name(culture: Culture, rng: &mut PeopleRng) -> String {
+/// A given name from `culture` that suits `pronouns` (`None` or `They`: any name).
+///
+/// Curated names listed in a culture's `she` / `he` tables only go to matching (or they/them)
+/// people, and generated names with a strongly gendered ending are re-rolled, so a village
+/// never introduces "Edmund (she/her)" next to "Ottilie (he/him)".
+pub(crate) fn given_name(
+    culture: Culture,
+    pronouns: Option<Pronouns>,
+    rng: &mut PeopleRng,
+) -> String {
     let table = culture.table();
     if rng.chance(table.generated_percent) {
         for _ in 0..8 {
             let name = syllable_name(table, rng);
-            if pronounceable(&name) {
+            if pronounceable(&name) && generated_suits(&name, pronouns) {
                 return name;
             }
         }
     }
-    (*rng.pick(table.given)).to_owned()
+    let options: Vec<&str> = table
+        .given
+        .iter()
+        .copied()
+        .filter(|name| name_suits(table, name, pronouns))
+        .collect();
+    if options.is_empty() {
+        (*rng.pick(table.given)).to_owned()
+    } else {
+        (*rng.pick(&options)).to_owned()
+    }
+}
+
+/// Whether curated `name` may go to someone with `pronouns`.
+fn name_suits(table: &NameTable, name: &str, pronouns: Option<Pronouns>) -> bool {
+    match pronouns {
+        Some(Pronouns::She) => !table.he.contains(&name),
+        Some(Pronouns::He) => !table.she.contains(&name),
+        Some(Pronouns::They) | None => true,
+    }
+}
+
+/// Whether a generated name's ending suits `pronouns` (endings like "-beth" or "-ita" read as
+/// feminine, "-son" or "-ric" as masculine).
+fn generated_suits(name: &str, pronouns: Option<Pronouns>) -> bool {
+    const FEMININE: &[&str] = &["a", "ie", "beth", "ee", "lie", "wen"];
+    const MASCULINE: &[&str] = &["o", "son", "ric", "ard", "ton", "ford", "ock", "dan"];
+    let lower = name.to_ascii_lowercase();
+    match pronouns {
+        Some(Pronouns::He) => !FEMININE.iter().any(|ending| lower.ends_with(ending)),
+        Some(Pronouns::She) => !MASCULINE.iter().any(|ending| lower.ends_with(ending)),
+        Some(Pronouns::They) | None => true,
+    }
 }
 
 fn syllable_name(table: &NameTable, rng: &mut PeopleRng) -> String {
@@ -490,13 +573,15 @@ pub fn village_name(seed: u64, village: u32, culture: Culture) -> String {
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::{Culture, PeopleRng, given_name, pronounceable, surname, village_name};
+    use super::{Culture, PeopleRng, Pronouns, given_name, pronounceable, surname, village_name};
 
     #[test]
     fn every_culture_names_plenty_of_distinct_people() {
         for culture in Culture::ALL {
             let mut rng = PeopleRng::new(11, 0, culture as u64, 0);
-            let given: BTreeSet<String> = (0..300).map(|_| given_name(culture, &mut rng)).collect();
+            let given: BTreeSet<String> = (0..300)
+                .map(|_| given_name(culture, None, &mut rng))
+                .collect();
             let families: BTreeSet<String> = (0..300).map(|_| surname(culture, &mut rng)).collect();
             assert!(
                 given.len() >= 40,
@@ -513,6 +598,29 @@ mod tests {
                     name.chars().next().is_some_and(char::is_uppercase),
                     "{name}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn names_suit_pronouns() {
+        for culture in Culture::ALL {
+            let table = culture.table();
+            for name in table.she.iter().chain(table.he) {
+                assert!(
+                    table.given.contains(name),
+                    "{culture:?}: {name} not in given"
+                );
+            }
+            assert!(table.she.iter().all(|name| !table.he.contains(name)));
+            let mut rng = PeopleRng::new(3, 0, culture as u64, 0);
+            for _ in 0..300 {
+                let she = given_name(culture, Some(Pronouns::She), &mut rng);
+                let he = given_name(culture, Some(Pronouns::He), &mut rng);
+                assert!(!table.he.contains(&she.as_str()), "{she} for she/her");
+                assert!(!table.she.contains(&he.as_str()), "{he} for he/him");
+                let curated = table.given.contains(&he.as_str());
+                assert!(curated || !he.ends_with("beth"), "{he} for he/him");
             }
         }
     }

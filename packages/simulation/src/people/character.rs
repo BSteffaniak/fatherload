@@ -561,12 +561,12 @@ pub fn generate_character(seed: u64, id: CharacterId, culture: Culture) -> Chara
     let age = u8::try_from(rng.range(i32::from(youngest), i32::from(oldest))).unwrap_or(30);
     let personality = Personality::roll(&mut rng, role.bias());
     let (tone, secondary_tone) = personality.tones();
+    let pronouns = *rng.weighted(&[(Pronouns::She, 46), (Pronouns::He, 46), (Pronouns::They, 8)]);
     let name = PersonName {
-        given: names::given_name(culture, &mut rng),
+        given: names::given_name(culture, Some(pronouns), &mut rng),
         family: names::surname(culture, &mut rng),
         nickname: names::nickname(culture, &mut rng),
     };
-    let pronouns = *rng.weighted(&[(Pronouns::She, 46), (Pronouns::He, 46), (Pronouns::They, 8)]);
     let appearance = Appearance::roll(rng.next_u64(), age);
 
     let mut quirks = vec![*rng.pick(&Quirk::ALL)];
@@ -687,6 +687,16 @@ fn pick_want(role: Role, values: &[Value], rng: &mut PeopleRng) -> Want {
     *rng.weighted(&weights)
 }
 
+/// The pronouns a family word implies ("brother" is a he), if any.
+#[must_use]
+pub fn relation_pronouns(relation: &str) -> Option<Pronouns> {
+    match relation {
+        "brother" | "father" | "son" | "uncle" | "nephew" | "husband" => Some(Pronouns::He),
+        "sister" | "mother" | "daughter" | "aunt" | "niece" | "wife" => Some(Pronouns::She),
+        _ => None,
+    }
+}
+
 fn absent_person(
     culture: Culture,
     relation: String,
@@ -707,9 +717,10 @@ fn absent_person(
             | "nephew"
             | "niece"
     );
-    let mut given = names::given_name(culture, rng);
+    let pronouns = relation_pronouns(&relation);
+    let mut given = names::given_name(culture, pronouns, rng);
     if given == of.given {
-        given = names::given_name(culture, rng);
+        given = names::given_name(culture, pronouns, rng);
     }
     let family = if blood {
         of.family.clone()
