@@ -7,6 +7,9 @@
 //! - **Milestone banners** ([`RewardBanner`]): one per `MilestoneEarned`, queued and shown one
 //!   at a time across the top of the seat's view for [`BANNER_TICKS`] (the Act I -> II unlock
 //!   gets a bigger, longer one).
+//! - **First-use toast** ([`FirstUse`]): after a drill upgrade, the first tile the rig drills
+//!   that the new bit cuts faster (or could not cut before) gets a toast measured from the real
+//!   dig formulas ("Your Diamond Drill chews through hard rock 1.6x faster!").
 //! - **Fresh unlocks**: cosmetics a milestone just unlocked, tagged NEW in the paint bay until
 //!   the seat closes it.
 //! - The progression screen's selected row ([`SeatUi::selected_menu_item`]) needs nothing
@@ -15,11 +18,14 @@
 //! Nothing here is saved or replicated: the simulation owns milestones and unlocks
 //! ([`fatherload_simulation::milestone`]); this only decides what each local view shows.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use fatherload_simulation::{
-    CosmeticItem, Player, economy::UpgradeKind, milestone::Milestone,
-    upgrade_preview::preview_between,
+    CosmeticItem, Player,
+    economy::{UpgradeKind, upgrade_tier_name},
+    milestone::Milestone,
+    terrain::TileKind,
+    upgrade_preview::{dig_seconds, preview_between},
 };
 
 use super::{SeatUi, ShellState};
@@ -32,6 +38,42 @@ pub const BANNER_TICKS: u64 = 300;
 pub const ACT_TWO_BANNER_TICKS: u64 = 480;
 /// Most banners waiting their turn (a burst of milestones keeps the newest).
 const MAX_QUEUED_BANNERS: usize = 6;
+/// How long (shell ticks) a milestone's banner stays claimed. A predicting online client can be
+/// handed the same milestone twice (predicted, then authoritative a few ticks apart); a
+/// milestone is earned once per rig, so a repeat inside this window is always that duplicate.
+pub const MILESTONE_REPEAT_TICKS: u64 = 1_200;
+/// Smallest speed-up a first-use toast reports (smaller gains are not worth a toast).
+const FIRST_USE_MIN_RATIO: f32 = 1.05;
+
+/// A drill upgrade waiting for its first-use toast.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FirstUse {
+    /// The tier before the purchase.
+    pub from_level: u8,
+    /// The tier fitted (the toast is dropped once the rig carries another tier).
+    pub to_level: u8,
+}
+
+impl FirstUse {
+    /// The toast for drilling a fresh `kind` tile, if the new bit cuts it faster than the old
+    /// one did (or cuts what the old one could not).
+    #[must_use]
+    pub fn message(self, kind: TileKind) -> Option<String> {
+        let name = upgrade_tier_name(UpgradeKind::Drill, self.to_level.saturating_sub(1));
+        let next = dig_seconds(kind, self.to_level).filter(|seconds| *seconds > 0.0)?;
+        let tile = kind.name();
+        match dig_seconds(kind, self.from_level) {
+            None => Some(format!(
+                "Your {name} cuts {tile}: the old bit just bounced off it!"
+            )),
+            Some(now) if now > 0.0 && now / next >= FIRST_USE_MIN_RATIO => Some(format!(
+                "Your {name} chews through {tile} {:.1}x faster!",
+                now / next
+            )),
+            Some(_) => None,
+        }
+    }
+}
 
 /// The purchase moment of one upgrade.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -95,6 +137,10 @@ pub struct SeatRewards {
     pub banners: VecDeque<RewardBanner>,
     /// Cosmetics unlocked since the paint bay was last closed (tagged NEW there).
     pub fresh_unlocks: BTreeSet<CosmeticItem>,
+    /// A drill upgrade waiting for its first-use toast.
+    pub first_use: Option<FirstUse>,
+    /// When each milestone's banner was last queued ([`MILESTONE_REPEAT_TICKS`]).
+    pub announced: BTreeMap<Milestone, u64>,
     /// `ShellState::update_ticks` at the last [`Self::advance`] (the clock the room's purchase
     /// moment plays on).
     pub clock: u64,
@@ -108,24 +154,47 @@ impl SeatRewards {
             install: None,
             banners: VecDeque::new(),
             fresh_unlocks: BTreeSet::new(),
+            first_use: None,
+            announced: BTreeMap::new(),
             clock: 0,
         }
     }
 
     /// Starts the purchase moment for `upgrade`, now fitted at `level`.
     pub fn installed(&mut self, upgrade: UpgradeKind, level: u8, now: u64) {
+        let from_level = level
+            .saturating_sub(1)
+            .max(upgrade.starting_level().min(level));
         self.install = Some(InstallMoment {
             upgrade,
-            from_level: level
-                .saturating_sub(1)
-                .max(upgrade.starting_level().min(level)),
+            from_level,
             to_level: level,
             tick: now,
         });
+        if upgrade == UpgradeKind::Drill {
+            // Chained purchases compare against the bit the rig last drilled with.
+            let from_level = self
+                .first_use
+                .map_or(from_level, |pending| pending.from_level.min(from_level));
+            self.first_use = Some(FirstUse {
+                from_level,
+                to_level: level,
+            });
+        }
     }
 
-    /// Queues `milestone`'s banner and tags its rewards NEW.
-    pub fn earned(&mut self, milestone: Milestone) {
+    /// Queues `milestone`'s banner and tags its rewards NEW (a repeat of a milestone queued in
+    /// the last [`MILESTONE_REPEAT_TICKS`] is a duplicate and is ignored). Returns whether it was
+    /// queued.
+    pub fn earned(&mut self, milestone: Milestone, now: u64) -> bool {
+        if self
+            .announced
+            .get(&milestone)
+            .is_some_and(|at| now.saturating_sub(*at) < MILESTONE_REPEAT_TICKS)
+        {
+            return false;
+        }
+        self.announced.insert(milestone, now);
         self.fresh_unlocks
             .extend(milestone.rewards().iter().copied());
         if self.banners.len() >= MAX_QUEUED_BANNERS {
@@ -140,6 +209,7 @@ impl SeatRewards {
             milestone,
             shown_at: None,
         });
+        true
     }
 
     /// Retires finished moments and raises the next banner (once a frame).
@@ -220,8 +290,29 @@ impl ShellState {
 
     /// Raises `milestone`'s banner in seat `seat`'s view and tags its unlocks NEW.
     pub fn milestone_earned(&mut self, seat: usize, milestone: Milestone) {
+        let now = self.update_ticks;
         if let Some(state) = self.seats.get_mut(seat) {
-            state.rewards.earned(milestone);
+            state.rewards.earned(milestone, now);
+        }
+    }
+
+    /// Shows seat `seat`'s first-use toast if its rig (fitted with `drill_level`) is drilling a
+    /// fresh `drilling` tile the new bit cuts faster. The toast is dropped once the rig carries
+    /// another drill tier than the one bought.
+    pub fn drill_first_use(&mut self, seat: usize, drill_level: u8, drilling: Option<TileKind>) {
+        let Some(state) = self.seats.get_mut(seat) else {
+            return;
+        };
+        let Some(pending) = state.rewards.first_use else {
+            return;
+        };
+        if pending.to_level != drill_level {
+            state.rewards.first_use = None;
+            return;
+        }
+        if let Some(message) = drilling.and_then(|kind| pending.message(kind)) {
+            state.message = message;
+            state.rewards.first_use = None;
         }
     }
 
@@ -248,8 +339,8 @@ mod tests {
     #[test]
     fn banners_show_one_at_a_time_in_order() {
         let mut rewards = SeatRewards::new();
-        rewards.earned(Milestone::FirstUpgrade);
-        rewards.earned(Milestone::DrillTier5);
+        rewards.earned(Milestone::FirstUpgrade, 0);
+        rewards.earned(Milestone::DrillTier5, 0);
         rewards.advance(10);
         assert_eq!(
             rewards.banner(10).map(|(b, _)| b.milestone),
@@ -273,7 +364,7 @@ mod tests {
     #[test]
     fn the_act_two_banner_stays_up_longer() {
         let mut rewards = SeatRewards::new();
-        rewards.earned(Milestone::ActTwoUnlocked);
+        rewards.earned(Milestone::ActTwoUnlocked, 0);
         rewards.advance(0);
         assert!(rewards.banner(BANNER_TICKS + 10).is_some());
         assert!(rewards.banner(ACT_TWO_BANNER_TICKS).is_none());
@@ -290,6 +381,54 @@ mod tests {
         // Lines that start uninstalled go from 0 to 1.
         rewards.installed(UpgradeKind::Scanner, 1, 0);
         assert_eq!(rewards.install.as_ref().map(|m| m.from_level), Some(0));
+    }
+
+    #[test]
+    fn a_repeated_milestone_is_a_duplicate_not_a_second_banner() {
+        let mut rewards = SeatRewards::new();
+        assert!(rewards.earned(Milestone::ReachedStone, 100));
+        assert!(
+            !rewards.earned(Milestone::ReachedStone, 104),
+            "predicted then authoritative"
+        );
+        rewards.advance(104);
+        assert_eq!(rewards.banners.len(), 1);
+        assert!(rewards.earned(Milestone::ReachedStone, 100 + MILESTONE_REPEAT_TICKS));
+    }
+
+    #[test]
+    fn first_use_toasts_measure_the_new_bit_on_the_tile_it_drills() {
+        let mut rewards = SeatRewards::new();
+        rewards.installed(UpgradeKind::Drill, 4, 0);
+        let pending = rewards.first_use.expect("waiting for a tile");
+        assert_eq!((pending.from_level, pending.to_level), (3, 4));
+        // Hard rock was out of reach for tier 3.
+        let message = pending.message(TileKind::HardRock).expect("new rock");
+        assert!(
+            message.starts_with("Your Diamond Drill cuts hard rock"),
+            "{message}"
+        );
+        // Clay digs faster; the ratio is the real dig-time ratio.
+        let ratio =
+            dig_seconds(TileKind::Clay, 3).unwrap() / dig_seconds(TileKind::Clay, 4).unwrap();
+        assert_eq!(
+            pending.message(TileKind::Clay),
+            Some(format!(
+                "Your Diamond Drill chews through clay {ratio:.1}x faster!"
+            ))
+        );
+        // Nothing to say about air or bedrock.
+        assert_eq!(pending.message(TileKind::Air), None);
+        assert_eq!(pending.message(TileKind::Bedrock), None);
+        // A second purchase before drilling compares against the bit last used.
+        rewards.installed(UpgradeKind::Drill, 5, 10);
+        assert_eq!(
+            rewards.first_use,
+            Some(FirstUse {
+                from_level: 3,
+                to_level: 5
+            })
+        );
     }
 
     #[test]

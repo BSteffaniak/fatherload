@@ -9,9 +9,9 @@ use fatherload_simulation::{
         Decal, DrillStyle, FlameColor, FrontAttachment, HullPattern, PaintColor, RearAttachment,
         RoofAttachment,
     },
-    economy::SurfaceZone,
+    economy::{SurfaceZone, UpgradeKind},
     milestone::Milestone,
-    terrain::DeepStratum,
+    terrain::{DeepStratum, TileKind, TilePosition},
     worldgen::Band,
 };
 
@@ -224,6 +224,41 @@ pub const REWARD_SCENES: &[Scene] = &[
                 }
             });
             stage.settle(24);
+        },
+    },
+    Scene {
+        name: "reward_first_use",
+        summary: "The first-use toast: a freshly fitted diamond drill biting into hard rock it bounced off before",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let row = band_row(world, Band::Stone, 4);
+                sink_rig(world, player, 120, row);
+                for x in 116..125 {
+                    for y in row + 1..row + 4 {
+                        world
+                            .terrain_mut()
+                            .set_kind(TilePosition { x, y }, TileKind::HardRock);
+                    }
+                }
+                reveal(world, player, 104..137, row - 8..row + 10);
+                if let Some(rig) = world.player_mut(player) {
+                    fit(rig, 4);
+                    earn_met(rig);
+                    earn(rig, &[Milestone::ReachedStone]);
+                }
+            });
+            stage.settle(5);
+            // The drill was just bought (tier 3 -> 4); the rig now digs down.
+            stage.seat(0).rewards.installed(UpgradeKind::Drill, 4, 0);
+            stage.seat(0).rewards.install = None;
+            stage.hold(
+                12,
+                PlayerInput {
+                    drill_down: true,
+                    ..PlayerInput::default()
+                },
+            );
         },
     },
     Scene {
