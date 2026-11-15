@@ -74,6 +74,38 @@ struct RayCast {
     charges: Vec<(EntityId, f32, f32)>,
 }
 
+/// Points along the hardpoint-to-muzzle segment, hardpoint first, muzzle last, at most
+/// [`RAY_STEP`] apart.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    reason = "the muzzle sits a few pixels out: a handful of samples"
+)]
+fn point_blank_samples(origin: (f32, f32), muzzle: (f32, f32)) -> impl Iterator<Item = (f32, f32)> {
+    let length = (muzzle.0 - origin.0).hypot(muzzle.1 - origin.1);
+    let steps = ((length / RAY_STEP).ceil() as u32).max(1);
+    (0..=steps).map(move |step| {
+        let t = step as f32 / steps as f32;
+        (
+            (muzzle.0 - origin.0).mul_add(t, origin.0),
+            (muzzle.1 - origin.1).mul_add(t, origin.1),
+        )
+    })
+}
+
+/// Distance from `point` to the segment `from`-`to`.
+fn segment_distance(point: (f32, f32), from: (f32, f32), to: (f32, f32)) -> f32 {
+    let (sx, sy) = (to.0 - from.0, to.1 - from.1);
+    let length_sq = sx.mul_add(sx, sy * sy);
+    let t = if length_sq > 0.0 {
+        ((point.0 - from.0).mul_add(sx, (point.1 - from.1) * sy) / length_sq).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (sx.mul_add(t, from.0) - point.0).hypot(sy.mul_add(t, from.1) - point.1)
+}
+
 /// Whether a weapon can break `kind`: plain soil and rock only (ore, artifacts, POI fixtures,
 /// hazards and bedrock are left alone).
 /// Upward pop (pixels per second) of the block a weapon shot out of the rock.
@@ -288,11 +320,10 @@ impl WorldState {
             Delivery::Projectile => {
                 self.launch_projectiles(
                     player_id,
-                    mounted.kind,
-                    mounted.mk,
-                    muzzle,
-                    aim,
+                    (mounted.kind, mounted.mk),
+                    (muzzle, aim),
                     next_tick,
+                    output,
                 );
                 (
                     aim.0.mul_add(TILE_SIZE, muzzle.0),
@@ -318,14 +349,18 @@ impl WorldState {
         });
     }
 
+    /// Spawns the shot's projectiles at the muzzle. Point blank first: an enemy touching the
+    /// rig can sit between the hardpoint and the muzzle (or around the muzzle itself), where a
+    /// projectile spawned at the muzzle and flying outward would never meet it, so each pellet
+    /// first sweeps the hardpoint-to-muzzle stretch of the aim line ([`Self::point_blank`]) and
+    /// hits what it finds there; a spent pellet never spawns.
     fn launch_projectiles(
         &mut self,
         player_id: PlayerId,
-        weapon: WeaponKind,
-        mk: u8,
-        muzzle: (f32, f32),
-        aim: (f32, f32),
+        (weapon, mk): (WeaponKind, u8),
+        (muzzle, aim): ((f32, f32), (f32, f32)),
         next_tick: SimulationTick,
+        output: &mut TickOutput,
     ) {
         let spec = weapon.stats(mk);
         let lifetime_millis = {
@@ -342,24 +377,51 @@ impl WorldState {
                 .get()
                 .saturating_add(self.timing.ticks_for_millis(lifetime_millis).max(1)),
         );
+        let origin = (
+            aim.0.mul_add(-MUZZLE_REACH, muzzle.0),
+            aim.1.mul_add(-MUZZLE_REACH, muzzle.1),
+        );
         for index in 0..spec.pellets.max(1) {
             let (dx, dy) = pellet_direction(aim, index, spec.pellets);
             // Outer pellets fly a touch slower, so a spread reads as a cone, not a line.
             let offset = (f32::from(index) - f32::from(spec.pellets.saturating_sub(1)) / 2.0).abs();
             let speed = spec.speed * 0.04f32.mul_add(-offset, 1.0);
+            let mut state = ProjectileState {
+                weapon,
+                mk,
+                owner: player_id,
+                travelled: 0.0,
+                pierce_left: spec.pierce,
+                last_hit: None,
+            };
+            let candidates = self.point_blank(origin, muzzle);
+            let mut spent = false;
+            if !candidates.is_empty() {
+                for point in point_blank_samples(origin, muzzle) {
+                    if self.projectile_hits_entities(
+                        &mut state,
+                        &spec,
+                        point,
+                        (dx, dy),
+                        &candidates,
+                        next_tick,
+                        output,
+                    ) == Some(true)
+                    {
+                        spent = true;
+                        break;
+                    }
+                }
+            }
+            if spent {
+                continue;
+            }
             let body = Body::at(quantize(muzzle.0), quantize(muzzle.1))
                 .moving(quantize(dx * speed), quantize(dy * speed));
             let _ = self.entities.spawn(
                 self.simulation_tick,
                 body,
-                EntityState::Projectile(ProjectileState {
-                    weapon,
-                    mk,
-                    owner: player_id,
-                    travelled: 0.0,
-                    pierce_left: spec.pierce,
-                    last_hit: None,
-                }),
+                EntityState::Projectile(state),
                 Some(expires_at),
             );
         }
@@ -682,22 +744,49 @@ impl WorldState {
             .collect()
     }
 
+    /// Damageable entities whose hit circle the hardpoint-to-muzzle segment `origin`-`muzzle`
+    /// passes through (point-blank targets: an enemy touching the rig), in id order.
+    fn point_blank(&self, origin: (f32, f32), muzzle: (f32, f32)) -> Vec<EntityId> {
+        self.entities
+            .ids_in_radius(origin.0, origin.1, MUZZLE_REACH + MAX_HIT_RADIUS)
+            .into_iter()
+            .filter(|id| {
+                self.entities.get(*id).is_some_and(|entity| {
+                    entity.state.health().is_some_and(|health| {
+                        segment_distance((entity.body.x, entity.body.y), origin, muzzle)
+                            <= health.radius
+                    })
+                })
+            })
+            .collect()
+    }
+
     /// Marches a hitscan ray from `muzzle` along `aim` (read-only): through damageable entities
     /// (up to the weapon's pierce), through plain tiles it can tunnel (railgun), stopping at
     /// anything else or at its range.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one march: point blank, then out to range"
+    )]
     fn cast_ray(&self, muzzle: (f32, f32), aim: (f32, f32), spec: &WeaponStats) -> RayCast {
         let range = spec.range;
         let far = (
             aim.0.mul_add(range, muzzle.0),
             aim.1.mul_add(range, muzzle.1),
         );
+        // The hardpoint behind the muzzle: point-blank targets between it and the muzzle are hit
+        // first (see `launch_projectiles`).
+        let origin = (
+            aim.0.mul_add(-MUZZLE_REACH, muzzle.0),
+            aim.1.mul_add(-MUZZLE_REACH, muzzle.1),
+        );
         let candidates: Vec<(EntityId, f32, f32, f32)> = self
             .entities
             .ids_in_rect(
-                muzzle.0.min(far.0) - MAX_HIT_RADIUS,
-                muzzle.1.min(far.1) - MAX_HIT_RADIUS,
-                muzzle.0.max(far.0) + MAX_HIT_RADIUS,
-                muzzle.1.max(far.1) + MAX_HIT_RADIUS,
+                origin.0.min(far.0) - MAX_HIT_RADIUS,
+                origin.1.min(far.1) - MAX_HIT_RADIUS,
+                origin.0.max(far.0) + MAX_HIT_RADIUS,
+                origin.1.max(far.1) + MAX_HIT_RADIUS,
             )
             .into_iter()
             .filter_map(|id| {
@@ -718,7 +807,23 @@ impl WorldState {
         )]
         let steps = (range / RAY_STEP).ceil() as u32;
         let mut end = muzzle;
+        for point in point_blank_samples(origin, muzzle) {
+            for (id, x, y, radius) in &candidates {
+                let (dx, dy) = (x - point.0, y - point.1);
+                if !hit.contains(id)
+                    && ray.hits.len() <= usize::from(spec.pierce)
+                    && dx.mul_add(dx, dy * dy) <= radius * radius
+                {
+                    hit.insert(*id);
+                    ray.hits.push(RayHit::Target(*id, point.0, point.1));
+                }
+            }
+        }
+        let point_blank_spent = ray.hits.len() > usize::from(spec.pierce);
         for step in 1..=steps {
+            if point_blank_spent {
+                break;
+            }
             #[allow(clippy::cast_precision_loss, reason = "bounded step count")]
             let along = (step as f32 * RAY_STEP).min(range);
             let point = (
