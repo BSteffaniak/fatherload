@@ -480,6 +480,25 @@ fn repair_props(draw: &mut impl RaylibDraw, ctx: &RoomContext<'_>) {
     }
     floor_shadow(draw, right, 26);
     tyres(draw, right + 30, 4);
+    // The paint bay's spray cans on a shelf over the chest, in crew colours.
+    let shelf_y = FLOOR_Y - 50;
+    fill(draw, right - 4, shelf_y, 44, 3, LOAM);
+    fill(draw, right - 4, shelf_y, 44, 1, SAND);
+    fill(draw, right - 4, shelf_y + 3, 44, 1, INK);
+    for (index, (light, body)) in (0_i32..).zip([
+        (CREAM, GOLD),
+        (MINT, TEAL),
+        (PINK, ROSE),
+        (LIME, LEAF),
+        (LAVENDER, VIOLET),
+        (ICE, SKY_LIGHT),
+    ]) {
+        let can_x = right - 1 + index * 7;
+        fill(draw, can_x, shelf_y - 9, 5, 9, INK);
+        fill(draw, can_x + 1, shelf_y - 7, 3, 6, body);
+        fill(draw, can_x + 1, shelf_y - 7, 1, 6, light);
+        fill(draw, can_x + 2, shelf_y - 11, 1, 2, STEEL_LIGHT);
+    }
 }
 
 /// A dark pegboard hung with wrenches and hammers.

@@ -784,6 +784,9 @@ fn npc_line(zone: SurfaceZone, view: &ViewSnapshot<'_>) -> &'static str {
         SurfaceZone::Repair if view.rescue_count > 0 => {
             "Iona: I patched your rescue dents. The drill keeps receipts."
         }
+        SurfaceZone::Repair if view.player.cosmetics.is_none() => {
+            "Iona: Tired of crew colours? The paint bay is free. Ask at the counter."
+        }
         SurfaceZone::Repair => "Iona: Slow landings are cheaper than heroic ones.",
         SurfaceZone::Depot => "Kade: Market's twitchy. Sell jackpots before the buyers blink.",
         SurfaceZone::Headquarters => "Director Vale: Bring contracts, not ghost stories.",
