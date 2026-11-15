@@ -199,7 +199,9 @@ feature id, interior, water), `Terrain::cave_kind_at(tile)`, `Terrain::water_at(
 `danger_per_mille`), e.g. `terrain.cave_kind_at(tile).map(CaveKind::spawn_tags)`;
 `CaveKind::light()` says whether a cave is dark. Caves are regional features
 (`FeatureKind::Cave`, `FeatureDetail::Cave(kind)`, id layer 8), so quests and stories bind to them
-through `features_in` / `nearest_feature`.
+through `features_in` / `nearest_feature`: a quest target `TargetSpec::Feature { kind:
+FeatureKind::Cave, .. }` binds to a cave's open centre (falling back to a large cavern on worlds
+without caves), and caves are `WorldFactKind::CaveSystem` story facts (`WorldFact::near`).
 
 **Gameplay (`world/caves.rs`, all in the tick).** Entering a cave's interior records it in the
 player's `PoiJournal::caves` and fires `CaveDiscovered`. A `CaveTile::Stalactite` with open air
@@ -276,7 +278,7 @@ quest is dropped and counted; the giver offers it again.
   the feature index (unvisited first, then nearest; places other active quests use are
   avoided) and lays out marked spots; same world, player and quest bind the same places. A
   feature target with nothing in its bands falls back to the nearest bands that have one, then
-  to a stand-in kind (an artifact bed for a motherlode, a cavern for a chamber); a row of marks
+  to a stand-in kind (an artifact bed for a motherlode, a cavern for a chamber or a cave); a row of marks
   that doesn't fit slides inward or stands as a column.
   Board postings (`board_offers`: three a day from the seed and the market day) carry a twist
   pick and a binding salt so they spread over different places.
