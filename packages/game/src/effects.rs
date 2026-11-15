@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use fatherload_simulation::{
     BlastDirection, ExplosiveKind, GameplayEventKind, PlayerId, WeaponKind, WorldState,
-    event::ImpactSurface, item::ItemKind,
+    event::ImpactSurface, item::ItemKind, milestone::Milestone,
 };
 
 use crate::{
@@ -20,6 +20,10 @@ const DAMAGE_CUE_COOLDOWN_SECONDS: f32 = 0.5;
 /// crackle): a rig hovering on a band's floor or skimming an updraft's edge crosses it over and
 /// over, and each crossing is an event.
 const SKY_CUE_COOLDOWN_SECONDS: f32 = 4.0;
+/// How long a milestone's fanfare stays claimed: a predicting client can be handed the same
+/// milestone twice (predicted, then authoritative a few ticks apart), and a milestone is earned
+/// only once per rig, so a repeat inside this window is always that duplicate.
+pub const MILESTONE_REPEAT_SECONDS: f32 = 20.0;
 const SPARK_LIFE_SECONDS: f32 = 0.45;
 /// How long a bomb blast stays on screen.
 pub const EXPLOSION_SECONDS: f32 = 0.7;
@@ -152,6 +156,36 @@ impl PickupFlight {
     }
 }
 
+/// Keeps at most one reward fanfare per rig in a frame: buying a tier that earns a milestone
+/// fires both events on the same tick, and two brass fanfares on top of each other are noise.
+/// The Act II fanfare beats the upgrade fanfare, which beats a milestone's.
+fn one_fanfare_per_rig(cues: &mut Vec<PlacedCue>) {
+    const fn rank(cue: SoundCue) -> Option<u8> {
+        match cue {
+            SoundCue::ActTwoFanfare => Some(3),
+            SoundCue::UpgradeFanfare => Some(2),
+            SoundCue::MilestoneFanfare => Some(1),
+            _ => None,
+        }
+    }
+    let mut best: BTreeMap<PlayerId, u8> = BTreeMap::new();
+    for cue in cues.iter() {
+        if let (Some(rank), crate::audio::cues::SoundSource::Player(player)) =
+            (rank(cue.cue), cue.source)
+        {
+            let entry = best.entry(player).or_insert(rank);
+            *entry = (*entry).max(rank);
+        }
+    }
+    let mut kept: BTreeSet<PlayerId> = BTreeSet::new();
+    cues.retain(|cue| match (rank(cue.cue), cue.source) {
+        (Some(rank), crate::audio::cues::SoundSource::Player(player)) => {
+            best.get(&player) == Some(&rank) && kept.insert(player)
+        }
+        _ => true,
+    });
+}
+
 /// Transient presentation effects.
 #[derive(Clone, Debug, Default)]
 pub struct Effects {
@@ -162,6 +196,8 @@ pub struct Effects {
     damage_cooldowns: BTreeMap<PlayerId, f32>,
     /// Per rig and sky cue kind (0 band, 1 updraft, 2 icing): seconds until it may play again.
     sky_cue_cooldowns: BTreeMap<(PlayerId, u8), f32>,
+    /// Milestones whose fanfare played recently ([`MILESTONE_REPEAT_SECONDS`]).
+    milestone_cooldowns: BTreeMap<(PlayerId, Milestone), f32>,
     /// Items in each local player's bay last frame (a pickup is growth).
     cargo_totals: BTreeMap<PlayerId, u32>,
     spawn_counter: u32,
@@ -204,6 +240,7 @@ impl Effects {
         self.blast_order.clear();
         self.damage_cooldowns.clear();
         self.sky_cue_cooldowns.clear();
+        self.milestone_cooldowns.clear();
         self.cargo_totals.clear();
     }
 
@@ -238,6 +275,11 @@ impl Effects {
             *cooldown -= delta_seconds;
         }
         self.sky_cue_cooldowns.retain(|_, cooldown| *cooldown > 0.0);
+        for cooldown in self.milestone_cooldowns.values_mut() {
+            *cooldown -= delta_seconds;
+        }
+        self.milestone_cooldowns
+            .retain(|_, cooldown| *cooldown > 0.0);
     }
 
     /// Turns freshly presented events into placed sound cues and particles. Events of
@@ -556,6 +598,18 @@ impl Effects {
                         continue;
                     }
                 }
+                GameplayEventKind::MilestoneEarned {
+                    player_id,
+                    milestone,
+                } => {
+                    if self
+                        .milestone_cooldowns
+                        .insert((player_id, milestone), MILESTONE_REPEAT_SECONDS)
+                        .is_some()
+                    {
+                        continue;
+                    }
+                }
                 GameplayEventKind::CargoChanged { player_id } => {
                     // Selling empties the bay (coins play for that); only growth is a pickup.
                     let total = world.player(player_id).map_or(0, cargo_total);
@@ -576,6 +630,7 @@ impl Effects {
                 self.cargo_totals.insert(*player_id, cargo_total(player));
             }
         }
+        one_fanfare_per_rig(&mut cues);
         cues
     }
 
@@ -869,6 +924,79 @@ mod tests {
         assert!(effects.apply(&crossings, &world, &[local]).is_empty());
         effects.update(SKY_CUE_COOLDOWN_SECONDS);
         assert_eq!(effects.apply(&crossings, &world, &[local]).len(), 2);
+    }
+
+    #[test]
+    fn reward_fanfares_play_once_per_rig_and_milestones_never_repeat() {
+        use fatherload_simulation::economy::UpgradeKind;
+        let local = PlayerId::new(1);
+        let world = WorldState::new_game(local);
+        let mut effects = Effects::default();
+        // Buying a tier that earns a milestone: one fanfare, the upgrade's.
+        let purchase = [
+            event(
+                3,
+                local,
+                GameplayEventKind::UpgradeInstalled {
+                    player_id: local,
+                    upgrade: UpgradeKind::Drill,
+                    level: 5,
+                },
+            ),
+            event(
+                3,
+                local,
+                GameplayEventKind::MilestoneEarned {
+                    player_id: local,
+                    milestone: Milestone::DrillTier5,
+                },
+            ),
+        ];
+        assert_eq!(
+            effects.apply(&purchase, &world, &[local]),
+            vec![PlacedCue::player(SoundCue::UpgradeFanfare, local)]
+        );
+        // The Act II unlock beats the upgrade fanfare.
+        let act_two = [
+            event(
+                9,
+                local,
+                GameplayEventKind::UpgradeInstalled {
+                    player_id: local,
+                    upgrade: UpgradeKind::FuelTank,
+                    level: 13,
+                },
+            ),
+            event(
+                9,
+                local,
+                GameplayEventKind::MilestoneEarned {
+                    player_id: local,
+                    milestone: Milestone::ActTwoUnlocked,
+                },
+            ),
+        ];
+        assert_eq!(
+            effects.apply(&act_two, &world, &[local]),
+            vec![PlacedCue::player(SoundCue::ActTwoFanfare, local)]
+        );
+        // A predicting client handed the same milestone again a few ticks later stays quiet.
+        let depth = |tick| {
+            [event(
+                tick,
+                local,
+                GameplayEventKind::MilestoneEarned {
+                    player_id: local,
+                    milestone: Milestone::ReachedStone,
+                },
+            )]
+        };
+        assert_eq!(
+            effects.apply(&depth(20), &world, &[local]),
+            vec![PlacedCue::player(SoundCue::MilestoneFanfare, local)]
+        );
+        effects.update(0.1);
+        assert!(effects.apply(&depth(23), &world, &[local]).is_empty());
     }
 
     #[test]
