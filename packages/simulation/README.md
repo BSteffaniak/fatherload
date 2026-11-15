@@ -494,7 +494,7 @@ Every live world object that moves or expires on its own is an `entity::Entity` 
 an optional expiry tick, a replication `revision` and per-kind `EntityState`. Today's kinds:
 `GasCloud`, `Boulder` (both migrated from ad-hoc world lists without behaviour changes),
 `Drop` (a floating `ItemStack` with magnet / dump / "blocked" marks; see "Drops and pickups"
-below), `Critter` (WP-CAVES ambient life), `Enemy` / `EnemyShot` (see
+below), `Critter` (WP-CAVES ambient life), `Npc` (WP-PEOPLE, see "People in the world"), `Enemy` / `EnemyShot` (see
 [Enemies](#enemies-srcenemyrs-srcworldenemiesrs)), `Charge` (every live explosive, see
 below), `Projectile` (a weapon shot in flight) and `Target` (a practice target with
 `combat::Health`, the reference damageable kind).
@@ -1071,6 +1071,80 @@ continuation), replication (redacted keyframes, entity deltas, identical predict
 tick-rate independence; the netcode harness bots climb out, jump, pick and board every cycle
 (zero corrections at zero latency, convergence under loss).
 
+## People in the world (`src/people/{clock,routine,offers,contractor,ledger}.rs`, `src/world/people.rs`)
+
+Expansion plan WP-PEOPLE (wave 3, T17), on worlds with villages (`GeneratorVersion::has_villages`,
+V6 and V7). Village residents and the town's folk are `EntityKind::Npc` entities.
+
+- **Clock seam** (`people::clock`): `ClockSource` (`day_time() -> DayTime`, `is_night()`), the
+  default `TickClock` (tick, tick rate, `DEFAULT_DAY_LENGTH_MINUTES` = 48; tick 0 is 08:00, night
+  is 20:00 to 06:00) and `TickClock::tick_at(time, hz, day_length)` (its inverse, for tests and
+  scenes). `WorldState::people_clock()` is the only place the simulation asks for the time:
+  **wire T14's world clock there**.
+- **Settlements and routines** (`people::routine`): `Settlement` is a village's (or the town's,
+  `TOWN_VILLAGE` = `VillageId(0)`, `TOWN_FOLK` frontier residents of `town_population`, homes above
+  the shops) routine view: lots, plaza, and per resident a home lot, a `Work` (a counter, an
+  outdoor spot by their trade, or roaming) and habits rolled from personality (`offset` -45..45
+  minutes, `homebody`, `night_owl`, walking `pace`). `Settlement::stop_at(index, DayTime)` is pure:
+  `Activity` (sleeping, morning, working, lunch, unwinding, at the inn, resting on every seventh
+  day) and a `Place` (`Inside(lot)` or `Outside { column, roam }`). `routine::settlement(settings,
+  id)` and `routine::character(settings, CharacterId)` are memoized lookups (the renderer uses
+  them too).
+- **NPC entities** (`world/people.rs`): `NpcState` (character, activity, `inside` lot, target,
+  facing, `talking_to`, idle pause). Every `PEOPLE_REFRESH_MILLIS` the residents of every
+  settlement an actor is within `SPAWN_MARGIN_COLUMNS` (and `NEAR_ROWS`) of spawn at their
+  routine's place; settlements with no actor within `DESPAWN_MARGIN_COLUMNS` empty out
+  (`despawn_many`). Every tick each person walks toward their stop at their pace, steps inside
+  at a door (hidden) and out again when the routine moves on, potters within the stop's roam with
+  pauses, and stands still facing a player who is talking to them. An entity is updated only when
+  something changed, so resting people cost no replication; walking people replicate as entity
+  deltas and interpolate (`Body::lerp_position`). People have no health and do not feel blasts;
+  every settlement is an enemy safe zone.
+- **Actions**: `PlayerCommand::People(PeopleCommand)`: `Talk { npc, topic: TalkTopic }` (chat,
+  rumours, life, building work), `Trade { npc, offer }`, `Gift { npc, item }`, `Goodbye`, each
+  naming the NPC entity. Validated in the tick by `can_reach_npc` (within `TALK_REACH_TILES` of
+  the person outdoors, or at the door of the building they are inside) and resolved by
+  `people_command` (before `apply_player_command`). Talking runs `people::talk` / `say` on the
+  person's saved `CharacterState`; a chat once a day adds goodwill, and a rumour once a day per
+  person marks the nearest unknown site as an echo. **Actor seam (T15):**
+  `WorldState::people_actor_position(player)` is the rig's position today; return the pilot's
+  while they are on foot.
+- **Offers** (`people::offers`): `offers_of(character)` rolls each person's trade list from their
+  role offer: `PersonDeal::Goods` (a one-of-a-kind rig part, a patch-up, a tonic that is a timed
+  `Blessing`, cosmetics, a pack of charges), `MapSecret`, `Rumour`, `Apprenticeship(Perk)`
+  (`Haggler`: 90 % prices at village counters and with people; `Surveyor`: one more site per
+  rumour or secret; `Charmer`: goodwill half again). `price_for` scales by standing (grudge
+  125 %, friends 90 %, close 80 %), `standing_allows` gates rows, `gift_reaction` and
+  `favourite_mineral` judge gifts. Goods resolve through `apply_goods` (shared with village
+  counters).
+- **Contractors** (`people::contractor`): `contractor_profile(character)` (builders' trades only):
+  `ContractorStyle`, speed / quality / price; `ContractorProfile::quote(BuildJob)`,
+  `ContractorHire` (with `progress_per_mille(now)`, world time only) for WP-HOME to keep, and
+  `pitch` for the talk panel.
+- **Ledger** (`people::ledger`): `WorldState::people()` is the `PeopleLedger`: a `CharacterState`
+  per character (each character's memory of each player: reputation is the affinity,
+  `-100..=100`, banded into a `Standing`) and a `PersonJournal` per player (the open
+  `Conversation`, so every peer shows the same lines; one-of-a-kind purchases; perks; daily
+  rumour and chat marks). Player ids survive parking and rejoining, so everyone remembers a
+  returning player. Saved with the world (serde default), replicated as the public `People`
+  section, hashed only once non-empty (worlds without people keep their hashes).
+- **Events** (netcode codes 140-145): `PersonTalked`, `PersonTraded`, `PersonGifted`,
+  `AffinityChanged`, `RumourMarked` and the generic `PeopleInteraction`.
+
+Tests: `world/people_tests.rs` (population around rigs and the town, routines by the clock,
+deterministic walking, reach, dialogue variety and goodwill, trades and their gates, gifts,
+persistence through saves and parking, replication of people and conversations, safety, tick-rate
+safe routines) and the unit tests in the modules above.
+
+## Wave 3 seams (T17 people)
+
+- **Clock:** `WorldState::people_clock()` returns `TickClock`'s `DayTime`; T14 replaces its body.
+- **Pilot:** `WorldState::people_actor_position()` returns the rig; T15 returns the pilot on foot.
+  Interaction is one command (`PeopleCommand::Talk { npc, .. }`) whatever the actor.
+- **Contractors:** `people::contractor` is ready for WP-HOME (T24) to hire.
+- **Formats:** `PROTOCOL_VERSION` 11 (NPC entities, `PlayerCommand::People`, the `People`
+  section, events 140-145) and save format 9 (the `people` ledger; version 8 files load).
+
 ## Wave 2 seams (integration notes)
 
 Where the wave 2 tracks meet, for the tracks that build on them:
@@ -1165,7 +1239,7 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | everyone |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
 | On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes), the world clock (`SectionKey::Clock`: day length, skipped nights, sleep rule, sleepers) | everyone |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes), the world clock (`SectionKey::Clock`: day length, skipped nights, sleep rule, sleepers), people (character memories, conversations, perks) | everyone |
 
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is

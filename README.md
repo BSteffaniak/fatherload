@@ -309,10 +309,23 @@ sites always does). Each village is generated from the world seed:
   and pumps fuel (a little dearer than town); inns sell a round for a rumour (an echo of the
   nearest unknown site marked on your map) and patch hulls.
 - **People**: 4 to 12 residents with families, relationships, wants and fears (the people
-  framework), housed in the houses and the hall, keeping the counters, and standing about the
-  plaza. Walk up to someone indoors and press `E` to talk (their lines follow their personality
-  and change with repeat visits); the counter's last row talks to the keeper. The meeting hall
-  shows the village's prosperity, its trouble and how it gets on with its neighbours.
+  framework) who live out their day by the world clock (a 48-minute day): home and asleep at
+  night, out by their doors at dawn, at work by day (keepers behind their counters, smiths by
+  the smithy, farmers in the fields, couriers up and down the street), on the plaza at lunch,
+  strolling after work and at the inn in the evening (homebodies go home, night owls stay late),
+  with a rest day every seventh day. Each one is a procedural figure in their culture's cloth
+  and their trade's garb. Walk the rig up to someone (on the street or in a room) and press
+  `E` to talk; the counter's last row talks to the keeper when they are in. The talk panel
+  shows their portrait, how they see you (standing and today's mood) and what you can say:
+  chat, ask about rumours (once a day each person may mark a site on your map), ask about their
+  life, ask a contractor about building work, see their **trade list** (each person's unique
+  offer: a one-of-a-kind rig part, a recipe that works as a timed blessing, cosmetics, map
+  secrets, gossip, a smuggled pack of charges, or an apprenticeship that teaches a permanent
+  perk) or **give a gift** from the cargo bay (some land far better than others). Goodwill
+  grows with every chat, trade and gift, and everyone remembers every player across sessions:
+  friends pay less, some offers need a friendship first, a grudge closes doors. The town has
+  its own folk walking its street. The meeting hall shows the village's prosperity, its trouble
+  and how it gets on with its neighbours.
 - **Every building with a door is enterable** (`E` at its door, as in town): rooms are dressed
   in the village's style and the building's trade. In split-screen each seat uses villages on
   its own.
@@ -492,8 +505,9 @@ On foot you are slow vertically and weak at digging, but you fit where the rig c
 - `X`: swap the next weapon you own onto the hardpoint
 - `N`: build mode (see Bases): mouse or `W` `A` `S` `D` aim, click / `E` place, right click / `X`
   take down, `R` rotate, `Z` / `Q` or the wheel pick a piece (weapons hold fire while building)
-- `E` / `Enter`: interact with buildings/interior counters, confirm menus, or start game;
-  with nothing else to use, climb out of the rig (and board it again on foot, see On foot)
+- `E` / `Enter`: interact with buildings/interior counters, talk to the person beside you
+  ("Talk to Mara"), confirm menus, or start game; with nothing else to use, climb out of the
+  rig (and board it again on foot, see On foot)
 - `Space`: on foot, jump (held in the air: the jetpack)
 - `Backspace` / `Esc`: close menus; `P` pauses/resumes
 - `M`: large mine map with ore, hazard, rescue, and lost-cargo markers

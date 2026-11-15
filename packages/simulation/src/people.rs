@@ -1,8 +1,8 @@
 //! People and narrative framework (expansion plan §3 F3): procedural characters, the dialogue
 //! system and story seeds.
 //!
-//! This is a pure, deterministic data + logic layer. Nothing here is placed in the world yet
-//! (NPC entities and villages arrive in Waves 2/3); later tracks build on these APIs:
+//! This is a pure, deterministic data + logic layer; villages place the people (WP-VILLAGE) and
+//! `world/people.rs` walks them as NPC entities (WP-PEOPLE). The APIs:
 //!
 //! - **Characters** ([`character`]): [`generate_character`] builds a [`Character`] from
 //!   `(world seed, CharacterId, Culture)` alone: a culture-flavoured name ([`names`]), an

@@ -28,8 +28,8 @@
 //! - **Residents and facts**: [`Village::population`] holds 4-12 residents with families and
 //!   relationships; [`village_facts`] caches the story-worthy places near a village
 //!   ([`crate::people::WorldFact`]) for dialogue rumours and story seeds
-//!   ([`Village::story_seeds`]). NPC entities and routines are WP-PEOPLE's (wave 3); until then
-//!   residents stand still and talk through the dialogue system (presentation side).
+//!   ([`Village::story_seeds`]). The residents walk the street as NPC entities with daily
+//!   routines (WP-PEOPLE, [`crate::people::routine`] and `world/people.rs`).
 //!
 //! Lookups ([`village`], [`villages_between`], [`village_at`], [`building_at`]) are memoized per
 //! process like streamed regions: the first call for a village builds it (well under a
@@ -95,7 +95,8 @@ pub struct Village {
     /// How this village gets on with its neighbours along the ladder (west, east).
     pub relations: Vec<(VillageId, VillageRelation)>,
     pub population: Population,
-    /// Residents standing about outdoors: `(resident index, column)`.
+    /// Residents standing about outdoors: `(resident index, column)`. Layout data only: the
+    /// people themselves are NPC entities that follow their routines (WP-PEOPLE).
     pub loiterers: Vec<(u16, i32)>,
 }
 
