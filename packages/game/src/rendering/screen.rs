@@ -593,6 +593,9 @@ pub(super) fn draw_toast(
         } else {
             bottom = canvas.height - 10;
         }
+    } else if let Some(controls_top) = super::touch_controls::upright_controls_top() {
+        // A phone held upright has the stick and buttons along the bottom: sit above them.
+        bottom = bottom.min(controls_top - 4);
     }
     let max_width = (area - 24).min(300);
     if max_width < 80 {

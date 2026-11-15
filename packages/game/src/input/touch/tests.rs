@@ -8,6 +8,7 @@ const PHONE: TouchScreen = TouchScreen {
     height: 390.0,
     insets: [47.0, 0.0, 47.0, 21.0],
     points_per_ui_pixel: 1.6,
+    unit: 1.0,
 };
 
 const PLAY: TouchContext = TouchContext {
@@ -577,6 +578,15 @@ const SCREENS: &[TouchScreen] = &[
         height: 844.0,
         insets: [0.0, 47.0, 0.0, 34.0],
         points_per_ui_pixel: 1.6,
+        unit: 1.0,
+    },
+    // That phone in a browser, measured in device pixels (three per point).
+    TouchScreen {
+        width: 2532.0,
+        height: 1170.0,
+        insets: [141.0, 0.0, 141.0, 63.0],
+        points_per_ui_pixel: 5.0,
+        unit: 3.0,
     },
     // A small phone, both ways.
     TouchScreen::new(667.0, 375.0),
@@ -621,7 +631,7 @@ fn buttons_are_big_enough_to_hit() {
         for (name, layout) in layouts(*screen) {
             for (control, rect) in &layout.controls {
                 assert!(
-                    rect.w >= 18.0 && rect.h >= 18.0,
+                    rect.w >= 18.0 * screen.unit && rect.h >= 18.0 * screen.unit,
                     "{control:?} is {}x{} on {screen:?}: {name}",
                     rect.w,
                     rect.h

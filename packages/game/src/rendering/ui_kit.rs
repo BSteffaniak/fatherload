@@ -99,6 +99,25 @@ impl UiCanvas {
         }
     }
 
+    /// This canvas shrunk by `insets` (logical points: left, top, right, bottom), at the same
+    /// scale: the area clear of a phone's notch, rounded corners and home indicator.
+    #[must_use]
+    pub fn inset(self, insets: [f32; 4]) -> Self {
+        let pixel = self.pixel.max(1);
+        let art = |points: f32| ((points.max(0.0) * self.density) / pixel as f32).ceil() as i32;
+        let [left, top, right, bottom] = insets.map(art);
+        if left + top + right + bottom == 0 {
+            return self;
+        }
+        Self {
+            width: (self.width - left - right).max(1),
+            height: (self.height - top - bottom).max(1),
+            origin_x: self.origin_x + left * pixel,
+            origin_y: self.origin_y + top * pixel,
+            ..self
+        }
+    }
+
     /// `viewport` (logical points) in whole physical framebuffer pixels: x, y, width, height.
     #[must_use]
     pub fn physical_rect(self, viewport: Viewport) -> (i32, i32, i32, i32) {
@@ -132,15 +151,21 @@ impl UiCanvas {
         Rectangle::new(0.0, 0.0, self.width as f32, self.height as f32)
     }
 
-    /// A viewport (logical points) in canvas art pixels, shrunk to whole art pixels inside it.
+    /// A viewport (logical points) in canvas art pixels, shrunk to whole art pixels inside it
+    /// and to the canvas itself (a canvas inset for a phone's safe area is smaller than the
+    /// view it draws over).
     #[must_use]
     pub fn viewport_rect(self, viewport: Viewport) -> Rectangle {
         let scale = self.points_per_pixel();
         let (origin_x, origin_y) = self.origin_points();
-        let x0 = ((viewport.x as f32 - origin_x) / scale).ceil();
-        let y0 = ((viewport.y as f32 - origin_y) / scale).ceil();
-        let x1 = (((viewport.x + viewport.width) as f32 - origin_x) / scale).floor();
-        let y1 = (((viewport.y + viewport.height) as f32 - origin_y) / scale).floor();
+        let x0 = ((viewport.x as f32 - origin_x) / scale).ceil().max(0.0);
+        let y0 = ((viewport.y as f32 - origin_y) / scale).ceil().max(0.0);
+        let x1 = (((viewport.x + viewport.width) as f32 - origin_x) / scale)
+            .floor()
+            .min(self.width as f32);
+        let y1 = (((viewport.y + viewport.height) as f32 - origin_y) / scale)
+            .floor()
+            .min(self.height as f32);
         Rectangle::new(x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0))
     }
 
@@ -244,6 +269,21 @@ thread_local! {
             seconds: 0.0,
         })
     };
+}
+
+thread_local! {
+    static SAFE_INSETS: Cell<[f32; 4]> = const { Cell::new([0.0; 4]) };
+}
+
+/// Sets the screen's safe-area insets (logical points: left, top, right, bottom).
+pub fn set_safe_insets(insets: [f32; 4]) {
+    SAFE_INSETS.with(|current| current.set(insets));
+}
+
+/// The screen's safe-area insets (logical points: left, top, right, bottom).
+#[must_use]
+pub fn safe_insets() -> [f32; 4] {
+    SAFE_INSETS.with(Cell::get)
 }
 
 /// Sets this frame's canvas, fonts and animation clock (call once at the start of a frame).

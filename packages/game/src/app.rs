@@ -172,6 +172,40 @@ fn seat_audio(input: &FrameInput, game: &LocalGame) -> Vec<SeatAudio> {
         .collect()
 }
 
+/// Keeps the page in step with the game (see `browser::set_page_state`) and, while the game
+/// wants text on a touch screen, types from the page's text field instead of the keyboard.
+#[cfg(target_os = "emscripten")]
+fn page_text_entry(game: &LocalGame, input: &mut PlayerInput) {
+    use crate::browser::{TypedKey, set_page_state, take_typed_key};
+    use std::cell::Cell;
+    thread_local! {
+        static LAST: Cell<Option<(bool, bool)>> = const { Cell::new(None) };
+    }
+    let shell = &game.shell;
+    let last = LAST.with(Cell::get);
+    // Once the field is up it stays up until the game stops wanting text: an on-screen
+    // keyboard's key events look like a keyboard taking over from the touch screen.
+    let was_typing = last.is_some_and(|(_, typing)| typing);
+    let typing = shell.text_entry() && (was_typing || shell.prompt_device(0).is_touch());
+    let menu = shell.global_overlay() || shell.seat(0).modal.is_some();
+    if last != Some((menu, typing)) {
+        LAST.with(|last| last.set(Some((menu, typing))));
+        set_page_state(menu, typing);
+    }
+    if !typing {
+        return;
+    }
+    // The field's own events are the text; key events it also causes would type twice.
+    input.text_input = None;
+    input.text_backspace = false;
+    match take_typed_key() {
+        Some(TypedKey::Char(character)) => input.text_input = Some(character),
+        Some(TypedKey::Backspace) => input.text_backspace = true,
+        Some(TypedKey::Done) => input.confirm = true,
+        None => {}
+    }
+}
+
 /// Whether the left mouse button stands in for a finger (`--touch`, a development aid for
 /// trying the touch controls on a desktop).
 fn touch_with_mouse() -> bool {
@@ -350,6 +384,8 @@ impl App {
         if input.primary.paste {
             input.clipboard = raylib.get_clipboard_text().ok();
         }
+        #[cfg(target_os = "emscripten")]
+        page_text_entry(game, &mut input.primary);
         let mouse = raylib.get_mouse_position();
         renderer.apply_ui_input(&input.seat_inputs(), &game.shell);
         window.track(raylib);

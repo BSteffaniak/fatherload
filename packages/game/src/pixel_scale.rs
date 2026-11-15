@@ -70,6 +70,30 @@ pub const COMPACT_UI_POINTS_PER_PIXEL: f32 = 1.6;
 /// already fit in.
 pub const MIN_COMPACT_UI_CANVAS: (i32, i32) = (232, 160);
 
+/// Framebuffer pixels per point that the window system does not report as density: a browser
+/// canvas is sized in device pixels, so its "screen" is already physical and the page's device
+/// pixel ratio arrives here instead. 1 everywhere else.
+static DISPLAY_SCALE: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(1.0_f32.to_bits());
+
+/// Sets the display scale (see [`display_scale`]).
+#[cfg_attr(not(target_os = "emscripten"), allow(dead_code))]
+pub fn set_display_scale(scale: f32) {
+    let scale = if scale.is_finite() {
+        scale.clamp(0.25, 8.0)
+    } else {
+        1.0
+    };
+    DISPLAY_SCALE.store(scale.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Screen units per point beyond the reported density: the browser's device pixel ratio, 1 on
+/// native windows. Sizes meant in points (a finger-sized button) are multiplied by it.
+#[must_use]
+pub fn display_scale() -> f32 {
+    f32::from_bits(DISPLAY_SCALE.load(std::sync::atomic::Ordering::Relaxed))
+}
+
 /// Whether a `width` x `height`-point screen is a phone (see [`COMPACT_SHORT_SIDE_POINTS`]).
 #[must_use]
 pub fn is_compact(width: i32, height: i32) -> bool {
@@ -81,6 +105,7 @@ pub fn is_compact(width: i32, height: i32) -> bool {
 /// `physical height / REFERENCE_ART_HEIGHT`, at least 1. Phones zoom in (see the module docs).
 #[must_use]
 pub fn world_art_pixel_size(physical_width: i32, physical_height: i32, density: f32) -> i32 {
+    let density = density.max(1.0) * display_scale();
     let (width, height) = points((physical_width, physical_height), density);
     if !is_compact(width, height) {
         return nearest_pixel_size(physical_height, REFERENCE_ART_HEIGHT);
@@ -117,6 +142,7 @@ pub fn world_scale(screen_width: i32, screen_height: i32, density: f32) -> f32 {
 /// `density` physical pixels per point.
 #[must_use]
 pub fn ui_pixel_size(physical_width: i32, physical_height: i32, density: f32) -> i32 {
+    let density = density.max(1.0) * display_scale();
     let (width, height) = points((physical_width, physical_height), density);
     if is_compact(width, height) {
         return compact_ui_pixel_size(physical_width, physical_height, density);
@@ -135,7 +161,7 @@ fn compact_ui_pixel_size(physical_width: i32, physical_height: i32, density: f32
         reason = "a pixel size is a tiny integer"
     )]
     let mut pixel =
-        ((COMPACT_UI_POINTS_PER_PIXEL * density.max(1.0)).round() as i32).clamp(1, MAX_PIXEL_SIZE);
+        ((COMPACT_UI_POINTS_PER_PIXEL * density).round() as i32).clamp(1, MAX_PIXEL_SIZE);
     let (min_width, min_height) = MIN_COMPACT_UI_CANVAS;
     while pixel > 1 && (physical_width / pixel < min_width || physical_height / pixel < min_height)
     {
@@ -182,7 +208,7 @@ fn nearest_pixel_size(physical: i32, art_pixels: f32) -> i32 {
     reason = "screen sizes are small integers"
 )]
 fn points(physical: (i32, i32), density: f32) -> (i32, i32) {
-    let density = density.max(1.0);
+    let density = density.max(0.25);
     (
         (physical.0 as f32 / density).round() as i32,
         (physical.1 as f32 / density).round() as i32,

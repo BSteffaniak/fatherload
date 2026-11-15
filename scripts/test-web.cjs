@@ -31,7 +31,11 @@ const server = http.createServer(async (req, res) => {
     browser = await chromium.launch({
       headless: true,
       ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}),
-      args: ['--autoplay-policy=document-user-activation-required', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+      // FATHERLOAD_WEB_GPU=1 renders on the machine's GPU (local runs: software rendering can
+      // be too slow to hold key presses across frames); CI uses software rendering.
+      args: ['--autoplay-policy=document-user-activation-required', ...(process.env.FATHERLOAD_WEB_GPU
+        ? ['--enable-gpu', '--ignore-gpu-blocklist']
+        : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])],
     });
     const context = await browser.newContext({ viewport: { width: 1280, height: 960 } });
     await context.addInitScript(() => {

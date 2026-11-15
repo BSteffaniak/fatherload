@@ -73,6 +73,15 @@ impl DesktopWindow {
     #[must_use]
     pub fn open(saved: WindowSettings) -> (RaylibHandle, RaylibThread, Self) {
         let (width, height) = restored_window_size(saved, None);
+        // In a browser the page sizes the canvas (in device pixels) every frame, see
+        // `browser::resize_canvas`: raylib's own resize handling and its half-finished web
+        // high-DPI mode would fight that.
+        #[cfg(target_os = "emscripten")]
+        let (mut raylib, thread) = raylib::init()
+            .size(width, height)
+            .title(WINDOW_TITLE)
+            .build();
+        #[cfg(not(target_os = "emscripten"))]
         let (mut raylib, thread) = raylib::init()
             .size(width, height)
             .resizable()
@@ -89,6 +98,8 @@ impl DesktopWindow {
             },
         };
         let scale = desktop.window_coordinate_scale(&raylib);
+        // A phone's browser is smaller than the desktop minimum.
+        #[cfg(not(target_os = "emscripten"))]
         raylib.set_window_min_size(
             scaled(MIN_WINDOW_WIDTH, scale),
             scaled(MIN_WINDOW_HEIGHT, scale),

@@ -122,6 +122,9 @@ pub struct TouchScreen {
     pub insets: [f32; 4],
     /// Screen points per UI art pixel (turns a drag into dialog scroll notches).
     pub points_per_ui_pixel: f32,
+    /// Screen units per point (a browser canvas is measured in device pixels, see
+    /// `pixel_scale::display_scale`): finger-sized lengths are multiplied by it.
+    pub unit: f32,
 }
 
 impl TouchScreen {
@@ -134,6 +137,7 @@ impl TouchScreen {
             height,
             insets: [0.0; 4],
             points_per_ui_pixel: 2.0,
+            unit: 1.0,
         }
     }
 
@@ -306,7 +310,8 @@ impl TouchLayout {
         let safe = screen.safe();
         let share = if screen.portrait() { 0.15 } else { 0.17 };
         // Never so large that the cluster, the top row and the stick stop fitting.
-        let button = ((safe.w.min(safe.h) * share).clamp(44.0, 84.0)
+        let unit = screen.unit.max(0.25);
+        let button = ((safe.w.min(safe.h) * share).clamp(44.0 * unit, 84.0 * unit)
             * settings.scale.clamp(0.7, 1.4))
         .min(safe.h / 4.6)
         .min(safe.w / 6.0);
@@ -665,7 +670,10 @@ impl TouchInput {
                     *aimed |= aiming;
                 }
                 if let Grab::Pointer { start, dragging } = &mut finger.grab {
-                    if !*dragging && (point.x - start.0).hypot(point.y - start.1) > TAP_SLOP {
+                    if !*dragging
+                        && (point.x - start.0).hypot(point.y - start.1)
+                            > TAP_SLOP * screen.unit.max(0.25)
+                    {
                         *dragging = true;
                     }
                     if *dragging && (dx.abs() > 0.0 || dy.abs() > 0.0) {

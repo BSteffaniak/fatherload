@@ -4,22 +4,35 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#11151a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fatherload">
 <title>Fatherload</title>
 <link rel="icon" href="data:,">
 <style>
 :root{color-scheme:dark;font:16px system-ui,sans-serif;color:#ede9df;background:#11151a;--gold:#edb95b;--muted:#aab0b4}
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}[hidden]{display:none!important}
 #game{position:fixed;inset:0;background:#11151a;isolation:isolate}
-canvas{display:block;width:100%;height:100%;image-rendering:pixelated;outline:none}
+canvas{display:block;width:100%;height:100%;image-rendering:pixelated;outline:none;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+html,body{overscroll-behavior:none;-webkit-text-size-adjust:100%}
+#safe-area{position:fixed;inset:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 button{font:inherit;cursor:pointer;color:inherit;border:1px solid #ffffff30;background:#1b222b;padding:.65rem 1rem;border-radius:6px}button:hover{background:#303b46}button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:4px}button:disabled{cursor:wait;opacity:.5}
 #tools{position:absolute;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));display:flex;gap:6px;opacity:.3;transition:opacity .2s}#tools:hover,#tools:focus-within{opacity:1}#tools button{background:#111820e8;backdrop-filter:blur(8px);font-size:.8rem;padding:.5rem .7rem}
+body.touch #tools{top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));bottom:auto;opacity:.75}body.touch.playing:not(.menu) #tools{display:none}
+#text-entry{position:absolute;left:50%;top:max(8px,env(safe-area-inset-top));transform:translateX(-50%);display:flex;gap:6px;width:min(92%,420px);z-index:2}#text-entry input{flex:1;min-width:0;font:inherit;font-size:16px;color:#ede9df;background:#111820f2;border:1px solid var(--gold);border-radius:6px;padding:.6rem .8rem}
 #status{position:absolute;left:50%;bottom:max(64px,env(safe-area-inset-bottom));transform:translateX(-50%);max-width:min(90%,560px);padding:.7rem 1rem;border:1px solid #ffffff25;border-radius:6px;background:#171e27f2;color:#eee;text-align:center;font-size:.85rem;pointer-events:none}#status:empty{display:none}#status[data-error="true"]{border-color:#d99062;pointer-events:auto}body:not(.playing) #status{bottom:1.5rem}
 dialog{max-width:min(90vw,560px);max-height:85dvh;overflow:auto;border:1px solid #687079;border-radius:12px;background:#19212b;color:#ede9df;padding:2rem;box-shadow:0 24px 100px #0009}dialog::backdrop{background:#080c12b8;backdrop-filter:blur(6px)}dialog h2{margin-top:0}dialog p{color:#bdc4c9;line-height:1.6}dialog h3{font-size:.9rem;color:var(--gold);margin-top:1.5rem}kbd{font:inherit;color:#fff}#close-help{width:100%;margin-top:1rem}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 <main id="game" aria-label="Fatherload game">
-<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Fatherload. Use keyboard or controller to play." oncontextmenu="event.preventDefault()"></canvas>
+<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Fatherload. Use keyboard, controller or touch to play." oncontextmenu="event.preventDefault()"></canvas>
+<div id="safe-area"></div>
+<form id="text-entry" hidden>
+<input id="text-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" maxlength="64" placeholder="Tap here to type" aria-label="Type here">
+<button id="text-done" type="submit">Done</button>
+</form>
 <nav id="tools" aria-label="Game controls" hidden>
 <button id="help" aria-label="Help">Help</button>
 <button id="fullscreen">Fullscreen</button>
@@ -28,12 +41,14 @@ dialog{max-width:min(90vw,560px);max-height:85dvh;overflow:auto;border:1px solid
 <dialog id="help-panel" aria-labelledby="help-title">
 <h2 id="help-title">Before you dig</h2>
 <h3>Your rig, your rules</h3>
-<p>Use a keyboard or connected controller. Choose your bindings in the game's settings. Press <kbd>Escape</kbd> to open the pause menu during play.</p>
+<p>Use a keyboard, a connected controller or a touch screen. Press <kbd>Escape</kbd> to open the pause menu during play.</p>
+<h3>On a phone or tablet</h3>
+<p>Steer with your left thumb anywhere on the left of the screen: push up to fly, down to drill. Buttons for what you can use right now appear under your right thumb; drag the bomb or fire button to aim. Tap menu rows directly. Button size and stick side are in Options. On an iPhone, add this page to your Home Screen to play full screen.</p>
 <h3>Bring a friend</h3>
 <p>Choose local split-screen in the game menu to play together on this screen. Online multiplayer is not available in the browser yet.</p>
 <h3>Keep your haul</h3>
 <p>Save through the pause menu and wait for “Saved in this browser” before closing the tab. Saves stay in this browser on this site's address; clearing site data removes them.</p>
-<p>The game is suspended while this help panel is open. Touch controls are not available yet.</p>
+<p>The game is suspended while this help panel is open.</p>
 <button id="close-help">Back</button>
 </dialog>
 </main>
@@ -109,7 +124,55 @@ document.addEventListener('fullscreenchange', () => {
 canvas.addEventListener('keydown', event => {
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Tab'].includes(event.code)) event.preventDefault();
 });
-canvas.addEventListener('pointerdown', () => canvas.focus({preventScroll:true}));
+canvas.addEventListener('pointerdown', event => {
+  if (event.pointerType === 'touch') document.body.classList.add('touch');
+  // The text field keeps the keyboard up while the game wants text.
+  if (textForm.hidden) canvas.focus({preventScroll:true});
+});
+if (window.matchMedia && matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
+// How many fingers are really down: a touch the system cancels (a notification pull, an edge
+// swipe) would otherwise stay held in the game.
+Module.fatherloadTouches = 0;
+for (const type of ['touchstart','touchend','touchcancel']) {
+  canvas.addEventListener(type, event => { Module.fatherloadTouches = event.touches.length; }, {capture:true, passive:true});
+}
+// Pinch and double-tap zoom would fight the controls.
+for (const type of ['gesturestart','gesturechange','gestureend']) document.addEventListener(type, event => event.preventDefault());
+// Safe-area insets (notch, rounded corners, home indicator) in CSS pixels: left, top, right, bottom.
+const safeArea = document.getElementById('safe-area');
+Module.fatherloadInset = side => {
+  const style = getComputedStyle(safeArea);
+  return Math.round(parseFloat([style.paddingLeft, style.paddingTop, style.paddingRight, style.paddingBottom][side]) || 0);
+};
+// On a touch screen the game asks for typed text through this field, which raises the keyboard.
+const textForm = document.getElementById('text-entry');
+const textInput = document.getElementById('text-input');
+let typed = '';
+Module.fatherloadTextQueue = [];
+Module.fatherloadPageState = (menu, textEntry) => {
+  document.body.classList.toggle('menu', menu);
+  const show = textEntry && document.body.classList.contains('touch');
+  if (textForm.hidden === !show) return;
+  textForm.hidden = !show;
+  textInput.value = typed = '';
+  Module.fatherloadTextQueue.length = 0;
+  if (!show) { textInput.blur(); if (playing) canvas.focus({preventScroll:true}); }
+};
+// Send the difference between what the field held and holds now: works with every keyboard,
+// including ones that compose or autocorrect whole words.
+textInput.addEventListener('input', () => {
+  const now = textInput.value;
+  let same = 0;
+  while (same < typed.length && same < now.length && typed[same] === now[same]) same++;
+  for (const _ of Array.from(typed.slice(same))) Module.fatherloadTextQueue.push(8);
+  for (const character of Array.from(now.slice(same))) Module.fatherloadTextQueue.push(character.codePointAt(0));
+  typed = now;
+});
+textForm.addEventListener('submit', event => {
+  event.preventDefault();
+  Module.fatherloadTextQueue.push(10);
+  textInput.blur();
+});
 </script>
 <script src="fatherload.js" onerror="fail('Game download failed. Reload to retry.')"></script>
 </body>

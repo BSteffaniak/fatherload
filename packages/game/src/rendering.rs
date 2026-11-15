@@ -49,6 +49,7 @@ use screen::{
     draw_modal, draw_toast, draw_view_hud, toast_message,
 };
 use terrain::TerrainRenderer;
+pub use ui_kit::set_safe_insets;
 use ui_kit::{TextStyle, UiCanvas, UiCanvasScope, UiFontFaces};
 use world::{RigFacings, SkyArt, WorldScene, draw_world_scene, world_camera};
 
@@ -448,6 +449,10 @@ impl GameRenderer {
         let seat = shell.seat(view.seat_index);
         let canvas = if split {
             UiCanvas::for_viewport(screen, view.viewport)
+        } else if !seat.inside() {
+            // The HUD keeps clear of a phone's notch and rounded corners; the world behind it
+            // still fills the screen.
+            screen.inset(ui_kit::safe_insets())
         } else {
             screen
         };

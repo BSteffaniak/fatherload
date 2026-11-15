@@ -22,8 +22,9 @@ nix develop -c cargo run --bin fatherload
 ### Web (raylib / Emscripten)
 
 The browser build keeps the Rust simulation, raylib renderer, audio and local split-screen.
-It currently supports **offline single-player and local multiplayer**, not online/LAN play
-or touch controls. No replacement engine or separate JavaScript gameplay is used.
+It currently supports **offline single-player and local multiplayer**, not online/LAN play.
+It plays on phones and tablets with touch controls (see Controls), drawn at the device's
+pixel density. No replacement engine or separate JavaScript gameplay is used.
 
 Build using the locked flake's web shell (Emscripten and the Rust target are provided by Nix):
 
@@ -448,6 +449,32 @@ The layout lives in one table (`PAD_BINDINGS` in `packages/game/src/input/gamepa
 counts, whether GLFW has a standard mapping); without a mapping a pad's buttons cannot be read.
 Rumble is not available: raylib's desktop GLFW backend does not implement
 `SetGamepadVibration`.
+
+### Touch screens
+
+A touch screen drives the first seat (other seats still join with controllers). The controls
+appear when the screen is touched and go away when a key or controller button is pressed.
+
+| Action | Touch |
+| --- | --- |
+| Drive, thrust, drill | Left thumb anywhere on the left: a stick appears under it (up flies, down drills) |
+| Bomb | Tap `BOMB` to drop; drag it and let go to throw that way; drag back onto it to cancel |
+| Next explosive / next weapon | `NEXT` / `GUN` |
+| Fire the weapon | Hold `FIRE` (auto-aims); drag it to aim |
+| Detonate | `DET` (shown while charges wait): tap for all, hold for one after another |
+| Scanner | `SCAN` |
+| Infrastructure kits, build mode | `KIT` opens them |
+| Enter / use / call rescue | Tap the prompt under the rig |
+| Inventory, pause, map | `BAG`, `II`, `MAP` along the top |
+| Menus | Tap a row; drag to scroll; `BACK` and `<` `>` (adjust a row, switch tabs); tap outside a dialog to close it |
+| Build mode | Tap a tile to point, tap it again or `PLACE` to build; `DEL`, `TURN`, `<` `>`, `DONE` |
+
+Options gains button size, stick side and an optional hold-to-thrust button once a touch
+screen has been used. Phones (a short side under 520 points) zoom the world in and enlarge the
+UI; held upright the view is a tall slice of the shaft. `fatherload --touch` makes the left
+mouse button a finger on a desktop, and the `touch_*` scenes of `--screenshot-scenes` show the
+controls (`--size 844x390`, `--size 390x844`). The layout and mapping live in
+`packages/game/src/input/touch.rs`.
 
 ### Local split-screen
 

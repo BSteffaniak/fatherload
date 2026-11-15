@@ -44,6 +44,11 @@ pub struct TouchSample {
     pub owns_pointer: bool,
 }
 
+/// How often the safe-area insets are read again (frames): they only change when the device
+/// is turned.
+#[cfg(target_os = "emscripten")]
+const INSET_REFRESH_FRAMES: u32 = 30;
+
 /// The touch screen. Keep one for the app.
 #[derive(Debug, Default)]
 pub struct TouchDevice {
@@ -57,15 +62,25 @@ pub struct TouchDevice {
     announce: bool,
     /// Seconds since a finger was last down (`None`: never).
     quiet_seconds: Option<f32>,
+    /// Safe-area insets in points: left, top, right, bottom.
+    insets: [f32; 4],
+    /// Frames until the insets are read again.
+    #[cfg(target_os = "emscripten")]
+    inset_countdown: u32,
     overlay: TouchOverlay,
 }
 
 impl TouchDevice {
     #[must_use]
     pub fn new(mouse_is_finger: bool) -> Self {
+        // A phone or tablet browser shows the touch controls before the first touch.
+        #[cfg(target_os = "emscripten")]
+        let touch_first = crate::browser::touch_first();
+        #[cfg(not(target_os = "emscripten"))]
+        let touch_first = false;
         Self {
             mouse_is_finger,
-            announce: mouse_is_finger,
+            announce: mouse_is_finger || touch_first,
             ..Self::default()
         }
     }
@@ -81,8 +96,10 @@ impl TouchDevice {
         delta_seconds: f32,
     ) -> TouchSample {
         self.settings = settings;
+        self.refresh_insets();
         let points = self.points(raylib);
-        let screen = touch_screen(screen);
+        let screen = touch_screen(screen, self.insets);
+        ui_kit_insets(screen);
         let layout =
             TouchLayout::compute(screen, self.settings, self.context, self.input.tools_open());
         let frame = self
@@ -125,6 +142,10 @@ impl TouchDevice {
             self.quiet_seconds
                 .map(|seconds| seconds + delta_seconds.max(0.0))
         };
+        #[cfg(target_os = "emscripten")]
+        if frame.used && !frame.view.held.is_empty() {
+            crate::browser::vibrate();
+        }
         // The layout may have changed with this frame's presses (the tools fan).
         self.overlay = TouchOverlay {
             layout: TouchLayout::compute(
@@ -168,6 +189,23 @@ impl TouchDevice {
         );
     }
 
+    /// Reads the platform's safe-area insets now and then.
+    #[cfg_attr(not(target_os = "emscripten"), allow(clippy::unused_self))]
+    #[cfg_attr(
+        not(target_os = "emscripten"),
+        allow(clippy::missing_const_for_fn, clippy::needless_pass_by_ref_mut)
+    )]
+    fn refresh_insets(&mut self) {
+        #[cfg(target_os = "emscripten")]
+        {
+            if self.inset_countdown == 0 {
+                self.insets = crate::browser::safe_insets();
+                self.inset_countdown = INSET_REFRESH_FRAMES;
+            }
+            self.inset_countdown -= 1;
+        }
+    }
+
     fn points(&self, raylib: &raylib::RaylibHandle) -> Vec<TouchPoint> {
         let mut points: Vec<TouchPoint> = (0..raylib.get_touch_point_count())
             .map(|index| {
@@ -179,6 +217,10 @@ impl TouchDevice {
                 }
             })
             .collect();
+        #[cfg(target_os = "emscripten")]
+        if !points.is_empty() && crate::browser::active_touches() == 0 {
+            points.clear();
+        }
         if self.mouse_is_finger
             && points.is_empty()
             && raylib.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT)
@@ -210,7 +252,7 @@ pub fn publish_staged(
         let context = touch_context(shell, seat_view, waiting);
         TouchOverlay {
             layout: TouchLayout::compute(
-                touch_screen(screen),
+                touch_screen(screen, [0.0; 4]),
                 shell.touch,
                 context,
                 view.tools_open,
@@ -222,8 +264,15 @@ pub fn publish_staged(
     crate::rendering::touch_controls::set_overlay(overlay);
 }
 
-/// The layout's screen for a window of `screen` points.
-fn touch_screen(screen: ScreenSize) -> TouchScreen {
+/// Tells the HUD where the safe area is (it keeps its panels inside it).
+fn ui_kit_insets(screen: TouchScreen) {
+    crate::rendering::set_safe_insets(screen.insets);
+}
+
+/// The layout's screen for a window of `screen` points with `insets` (points: left, top,
+/// right, bottom).
+fn touch_screen(screen: ScreenSize, insets: [f32; 4]) -> TouchScreen {
+    let unit = pixel_scale::display_scale();
     let density = screen.density.max(1.0);
     #[allow(
         clippy::cast_precision_loss,
@@ -239,8 +288,9 @@ fn touch_screen(screen: ScreenSize) -> TouchScreen {
     TouchScreen {
         width: screen.width as f32,
         height: screen.height as f32,
-        insets: [0.0; 4],
+        insets: insets.map(|inset| inset * unit),
         points_per_ui_pixel: ui_pixel / density,
+        unit,
     }
 }
 

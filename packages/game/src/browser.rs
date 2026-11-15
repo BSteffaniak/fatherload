@@ -90,14 +90,141 @@ pub fn persist_saves() {
     }
 }
 
-/// Fit the actual render buffer, not only CSS; split-screen layouts use this size.
+/// Largest render buffer, long side by short side, in device pixels.
+const MAX_RENDER_SIZE: (f32, f32) = (2560.0, 1440.0);
+
+/// The render buffer for a `width` x `height` CSS-pixel page at `ratio` device pixels per CSS
+/// pixel: device pixels, scaled down evenly if that would exceed [`MAX_RENDER_SIZE`]. Returns
+/// the buffer size and the device pixels per CSS pixel actually used.
+#[must_use]
+pub fn render_size(width: f32, height: f32, ratio: f32) -> ((i32, i32), f32) {
+    let (width, height) = (width.max(1.0), height.max(1.0));
+    let scale = ratio
+        .max(0.25)
+        .min(MAX_RENDER_SIZE.0 / width.max(height))
+        .min(MAX_RENDER_SIZE.1 / width.min(height));
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "bounded by MAX_RENDER_SIZE"
+    )]
+    let size = (
+        ((width * scale).floor() as i32).max(1),
+        ((height * scale).floor() as i32).max(1),
+    );
+    (size, scale)
+}
+
+/// Fit the actual render buffer to the page in device pixels, not only CSS (sharp on phones
+/// and Retina screens); split-screen layouts use this size. The scaling policy is told the
+/// device pixel ratio so sizes meant in points stay finger-sized.
 pub fn resize_canvas(raylib: &mut raylib::RaylibHandle) {
-    // SAFETY: browser dimensions are returned as bounded integer pixel counts.
-    let (width, height) = unsafe {
-        (emscripten_run_script_int(c"Math.max(1, Math.min(2560, Math.floor(document.getElementById('game').clientWidth)))".as_ptr()),
-         emscripten_run_script_int(c"Math.max(1, Math.min(1440, Math.floor(document.getElementById('game').clientHeight)))".as_ptr()))
+    // SAFETY: browser dimensions are returned as bounded integer counts.
+    let (width, height, ratio) = unsafe {
+        (
+            emscripten_run_script_int(
+                c"Math.max(1, Math.min(8192, Math.floor(document.getElementById('game').clientWidth)))".as_ptr(),
+            ),
+            emscripten_run_script_int(
+                c"Math.max(1, Math.min(8192, Math.floor(document.getElementById('game').clientHeight)))".as_ptr(),
+            ),
+            emscripten_run_script_int(
+                c"Math.max(250, Math.min(8000, Math.round((window.devicePixelRatio || 1) * 1000)))".as_ptr(),
+            ),
+        )
     };
+    #[allow(clippy::cast_precision_loss, reason = "page sizes are small integers")]
+    let ((width, height), scale) = render_size(width as f32, height as f32, ratio as f32 / 1000.0);
+    crate::pixel_scale::set_display_scale(scale);
     if raylib.get_screen_width() != width || raylib.get_screen_height() != height {
         raylib.set_window_size(width, height);
+    }
+}
+
+/// The page's safe-area insets (notch, rounded corners, home indicator) in CSS pixels: left,
+/// top, right, bottom.
+#[must_use]
+pub fn safe_insets() -> [f32; 4] {
+    // SAFETY: static scripts returning small bounded integers.
+    let inset = |script: &std::ffi::CStr| unsafe {
+        #[allow(clippy::cast_precision_loss, reason = "an inset is a small integer")]
+        let value = emscripten_run_script_int(script.as_ptr()) as f32;
+        value.clamp(0.0, 400.0)
+    };
+    [
+        inset(c"Module.fatherloadInset ? Module.fatherloadInset(0) : 0"),
+        inset(c"Module.fatherloadInset ? Module.fatherloadInset(1) : 0"),
+        inset(c"Module.fatherloadInset ? Module.fatherloadInset(2) : 0"),
+        inset(c"Module.fatherloadInset ? Module.fatherloadInset(3) : 0"),
+    ]
+}
+
+/// Whether the device's main pointer is a finger (a phone or tablet): touch is then the input
+/// to show before anything has been pressed.
+#[must_use]
+pub fn touch_first() -> bool {
+    // SAFETY: static script returning 0 or 1.
+    unsafe {
+        emscripten_run_script_int(
+            c"window.matchMedia && matchMedia('(pointer: coarse)').matches ? 1 : 0".as_ptr(),
+        ) != 0
+    }
+}
+
+/// Tells the page whether a menu covers the game (its own buttons only show then on a touch
+/// screen) and whether the game wants typed text (the page then offers a text field that
+/// raises the on-screen keyboard).
+pub fn set_page_state(menu: bool, text_entry: bool) {
+    let script = match (menu, text_entry) {
+        (false, false) => c"Module.fatherloadPageState && Module.fatherloadPageState(false, false)",
+        (true, false) => c"Module.fatherloadPageState && Module.fatherloadPageState(true, false)",
+        (false, true) => c"Module.fatherloadPageState && Module.fatherloadPageState(false, true)",
+        (true, true) => c"Module.fatherloadPageState && Module.fatherloadPageState(true, true)",
+    };
+    // SAFETY: static script, valid until the synchronous JS call returns.
+    unsafe { emscripten_run_script(script.as_ptr()) };
+}
+
+/// A character typed into the page's text field.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TypedKey {
+    Char(char),
+    Backspace,
+    /// Done / Enter on the on-screen keyboard.
+    Done,
+}
+
+/// The next key typed into the page's text field, oldest first.
+#[must_use]
+pub fn take_typed_key() -> Option<TypedKey> {
+    // SAFETY: static script returning one queued code point (0 when empty).
+    let code = unsafe {
+        emscripten_run_script_int(
+            c"Module.fatherloadTextQueue && Module.fatherloadTextQueue.length ? Module.fatherloadTextQueue.shift() : 0".as_ptr(),
+        )
+    };
+    match u32::try_from(code).ok()? {
+        0 => None,
+        8 => Some(TypedKey::Backspace),
+        10 | 13 => Some(TypedKey::Done),
+        code => char::from_u32(code)
+            .filter(|character| !character.is_control())
+            .map(TypedKey::Char),
+    }
+}
+
+/// How many fingers the page says are on the canvas. raylib keeps a cancelled touch (a system
+/// gesture took it over) as if it were still down; the page's own count is the truth.
+#[must_use]
+pub fn active_touches() -> usize {
+    // SAFETY: static script returning a small count.
+    let count = unsafe { emscripten_run_script_int(c"Module.fatherloadTouches | 0".as_ptr()) };
+    usize::try_from(count).unwrap_or(0)
+}
+
+/// A short buzz under the finger, where the browser has one.
+pub fn vibrate() {
+    // SAFETY: static script, valid until the synchronous JS call returns.
+    unsafe {
+        emscripten_run_script(c"navigator.vibrate && navigator.vibrate(8)".as_ptr());
     }
 }

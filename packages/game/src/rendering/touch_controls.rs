@@ -66,6 +66,27 @@ pub fn thumb_corner() -> Option<(f32, bool)> {
     })
 }
 
+/// On a screen taller than it is wide, the top of the thumb cluster in the current canvas's
+/// art pixels (toasts rest above it). `None` sideways or without touch controls.
+#[must_use]
+pub fn upright_controls_top() -> Option<i32> {
+    OVERLAY.with(|current| {
+        let current = current.borrow();
+        let overlay = current.as_ref()?;
+        let canvas = ui_kit::canvas();
+        let top = overlay
+            .layout
+            .controls
+            .iter()
+            .filter(|(control, _)| !is_top_row(*control) && *control != TouchControl::Prompt)
+            .map(|(_, rect)| rect.y)
+            .reduce(f32::min)?;
+        let upright = canvas.height > canvas.width;
+        upright
+            .then(|| ((top * canvas.density - canvas.origin_y as f32) / canvas.pixel as f32) as i32)
+    })
+}
+
 const fn is_top_row(control: TouchControl) -> bool {
     matches!(
         control,

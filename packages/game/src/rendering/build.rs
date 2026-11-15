@@ -104,9 +104,15 @@ pub(super) fn draw_build_bar(
     // Left of the minimap (bottom-right, `screen::draw_minimap_for_view`), or beside the thumb
     // cluster that takes its place on a touch screen.
     let minimap = (rect.width / 6.0).clamp(48.0, 80.0) + 30.0;
-    let (reserved, reserved_on_left) = super::touch_controls::thumb_corner()
-        .filter(|_| device.is_touch())
-        .unwrap_or((minimap, false));
+    // Upright, the buttons take the whole bottom edge and the bar sits above them instead.
+    let above_controls =
+        super::touch_controls::upright_controls_top().filter(|_| device.is_touch());
+    let (reserved, reserved_on_left) = match above_controls {
+        Some(_) => (0.0, false),
+        None => super::touch_controls::thumb_corner()
+            .filter(|_| device.is_touch())
+            .unwrap_or((minimap, false)),
+    };
     let room = (rect.width - 12.0 - reserved).max(120.0);
     let width = room.min(420.0);
     let hints = [
@@ -121,7 +127,7 @@ pub(super) fn draw_build_bar(
     let prompt_height = prompts::wrapped_height(rows.len());
     let height = 74.0 + prompt_height as f32;
     let x = rect.x + 8.0 + (room - width) * 0.5 + if reserved_on_left { reserved } else { 0.0 };
-    let y = rect.y + rect.height - height - 6.0;
+    let y = above_controls.map_or(rect.y + rect.height, |top| top as f32) - height - 6.0;
     ui_kit::panel(
         draw,
         Rectangle::new(x, y, width, height),
