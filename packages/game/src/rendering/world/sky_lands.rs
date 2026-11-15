@@ -58,12 +58,12 @@ fn y_of(altitude_rows: i32) -> f32 {
 const fn gradient_knots() -> [(i32, f32); 7] {
     [
         (0, 0.0),
-        (LOW_ISLES_BOTTOM_ROWS, -2_000.0),
-        (ARCHIPELAGO_BOTTOM_ROWS, -3_600.0),
-        (DEAD_AIR_BOTTOM_ROWS, -7_000.0),
-        (CONTINENTS_BOTTOM_ROWS, -12_500.0),
-        (ORBIT_BOTTOM_ROWS, -20_500.0),
-        (MOON_BOTTOM_ROWS, -24_500.0),
+        (LOW_ISLES_BOTTOM_ROWS, -900.0),
+        (ARCHIPELAGO_BOTTOM_ROWS, -1_800.0),
+        (DEAD_AIR_BOTTOM_ROWS, -3_900.0),
+        (CONTINENTS_BOTTOM_ROWS, -10_500.0),
+        (ORBIT_BOTTOM_ROWS, -17_000.0),
+        (MOON_BOTTOM_ROWS, -22_000.0),
     ]
 }
 
@@ -211,13 +211,23 @@ fn draw_cloud_seas(draw: &mut impl RaylibDraw, visible: Rectangle, seconds: f32)
         for index in first..=last {
             let h = hash(index, sea.top_rows, sea.salt);
             let cx = origin + index as f32 * PUFF_STEP + (h % 40) as f32;
-            let radius = 10 + (h >> 8) as i32 % 14;
+            let radius = 18 + (h >> 8) as i32 % 18;
             // A bright puffed top...
             draw_puff(
                 draw,
                 cx,
                 top + ART * 2.0,
                 radius,
+                (sea.light, sea.body),
+                true,
+            );
+            // A smaller puff between, so the top rolls instead of standing in a row.
+            let small = 8 + (h >> 12) as i32 % 10;
+            draw_puff(
+                draw,
+                cx + PUFF_STEP * 0.5,
+                top + ART * 2.0,
+                small,
                 (sea.light, sea.body),
                 true,
             );
@@ -293,13 +303,13 @@ fn draw_wind(
             let last = ((visible.x + visible.width - offset) / STREAK_CELL.0).ceil() as i32;
             for cell in first..=last {
                 let h = hash(cell, row, 611);
-                if (h % 100) as f32 >= strength * 70.0 {
+                if (h % 100) as f32 >= strength * 45.0 {
                     continue;
                 }
                 let x = offset + cell as f32 * STREAK_CELL.0 + (h >> 8) as f32 % STREAK_CELL.0;
                 #[allow(clippy::cast_precision_loss, reason = "rows are small integers")]
                 let y = (row as f32).mul_add(TILE_SIZE, ((h >> 16) % 24) as f32);
-                let length = (8.0 + 30.0 * strength) * ART;
+                let length = (4.0 + 30.0 * strength) * ART * (0.5 + ((h >> 24) % 8) as f32 / 8.0);
                 let alpha = (60.0 + 120.0 * strength) as u8;
                 draw.draw_rectangle_rec(
                     Rectangle::new(snap(x), snap(y), snap(length), ART),
@@ -357,14 +367,14 @@ fn draw_updrafts(
             );
         }
         // Rising motes: each lane loops from the bottom to the top at its own speed.
-        let lanes = ((right - left) / (ART * 6.0)) as i32;
+        let lanes = ((right - left) / (ART * 4.0)) as i32;
         let height = bottom - top;
         for lane in 0..lanes.max(1) {
             let h = hash(updraft.rect.min.x, lane, 613);
             let speed = 90.0 + (h % 80) as f32 + updraft.strength as f32 * 0.05;
-            for mote in 0..3 {
+            for mote in 0..6 {
                 let phase =
-                    ((seconds * speed + (h >> 8) as f32 % height + mote as f32 * height / 3.0)
+                    ((seconds * speed + (h >> 8) as f32 % height + mote as f32 * height / 6.0)
                         % height)
                         .abs();
                 let y = bottom - phase;
@@ -372,7 +382,7 @@ fn draw_updrafts(
                     continue;
                 }
                 let x =
-                    left + (lane as f32 + 0.5) * ART * 6.0 + ((h >> (mote * 4)) % 3) as f32 * ART;
+                    left + (lane as f32 + 0.5) * ART * 4.0 + ((h >> (mote * 4)) % 3) as f32 * ART;
                 let alpha = if y < top + fade { 70 } else { 150 };
                 draw.draw_rectangle_rec(
                     Rectangle::new(snap(x), snap(y), ART, ART * 3.0),
@@ -442,22 +452,32 @@ fn draw_moon_from_below(draw: &mut impl RaylibDraw, settings: &WorldSettings, vi
         if half < ART {
             continue;
         }
-        let rim = row == 0;
-        let color = if rim {
-            MIST
-        } else if t > 0.85 {
-            SLATE_DARK
-        } else if hash(row, 0, 617).is_multiple_of(5) {
-            SLATE_LIGHT
-        } else {
-            SLATE
-        };
+        let color = if t > 0.9 { SLATE_DARK } else { SLATE };
         let left = snap(apparent_x - half).max(visible.x - ART);
         let right = snap(apparent_x + half).min(visible.x + visible.width + ART);
         draw.draw_rectangle_rec(
             Rectangle::new(left, snap(y), right - left, ART),
             with_alpha(color, alpha),
         );
+        // Blotches of lighter and darker rock, anchored to the lens (craters seen from below).
+        let span = right - left;
+        for blotch in 0..4 {
+            let h = hash(row / 3, blotch, 617);
+            if !h.is_multiple_of(3) {
+                continue;
+            }
+            let bx = left + (h >> 8) as f32 % span.max(1.0);
+            let width = ART * (3 + (h >> 20) % 10) as f32 * (1.0 + scale * 6.0);
+            let shade = if h & 0x40 == 0 {
+                SLATE_LIGHT
+            } else {
+                SLATE_DARK
+            };
+            draw.draw_rectangle_rec(
+                Rectangle::new(snap(bx), snap(y), snap(width.min(right - bx)), ART),
+                with_alpha(shade, alpha),
+            );
+        }
         // A lit lower-right edge: the sun catching the underside's curve.
         draw.draw_rectangle_rec(
             Rectangle::new(right - ART * 2.0, snap(y), ART * 2.0, ART),

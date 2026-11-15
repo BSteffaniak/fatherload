@@ -101,11 +101,13 @@ pub const SKY_SCENES: &[Scene] = &[
                     ARCHIPELAGO_BOTTOM_ROWS,
                 );
                 let group = best_group(world, &area, SkyLandKind::Isle);
-                let (x, row) = group.first().map_or((100, -300), |isle| {
-                    let mid = group.iter().map(|isle| isle.center_x).sum::<i32>()
-                        / i32::try_from(group.len()).unwrap_or(1);
-                    (mid, isle.top_row - 4)
-                });
+                // Just off the cluster's westmost isle, level with its top.
+                let (x, row) = group
+                    .iter()
+                    .min_by_key(|isle| isle.center_x)
+                    .map_or((100, -300), |isle| {
+                        (isle.center_x - isle.half_width - 4, isle.top_row - 2)
+                    });
                 hover_at(world, player, x, row);
             });
             hang(stage, 12);
@@ -192,7 +194,7 @@ pub const SKY_SCENES: &[Scene] = &[
                 fit(world, player, 6, 6);
                 let settings = *world.world_settings();
                 let x = sky::moon_column(&settings).unwrap_or(4_000) + 300;
-                hover_at(world, player, x, sky::row_of(MOON_BOTTOM_ROWS - 300));
+                hover_at(world, player, x, sky::row_of(MOON_BOTTOM_ROWS - 1_200));
             });
             hang(stage, 12);
         },
@@ -225,11 +227,37 @@ pub const SKY_SCENES: &[Scene] = &[
                 fit(world, player, 6, 6);
                 let settings = *world.world_settings();
                 let moon = sky::moon(&settings).expect("V8 has a moon");
-                let x = moon.center_x - 300;
+                // A level stretch of regolith near the middle.
+                let level = |x: i32| {
+                    (x - 12..=x + 12)
+                        .map(|column| moon.surface_row(column).unwrap_or(moon.top_row))
+                        .fold((i32::MAX, i32::MIN), |(low, high), row| {
+                            (low.min(row), high.max(row))
+                        })
+                };
+                let x = (0..600)
+                    .map(|step| moon.center_x - 300 + step * 2)
+                    .find(|x| {
+                        let (low, high) = level(*x);
+                        high - low <= 1
+                    })
+                    .unwrap_or(moon.center_x);
                 let surface = moon.surface_row(x).unwrap_or(moon.top_row);
                 hover_at(world, player, x, surface - 1);
             });
             stage.settle(20);
+        },
+    },
+    Scene {
+        name: "sky_cloud_sea",
+        summary: "Skimming the first cloud sea just under the low isles: puffed tops drifting in parallax",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                fit(world, player, 0, 0);
+                hover_at(world, player, 100, sky::row_of(LOW_ISLES_BOTTOM_ROWS - 4));
+            });
+            hang(stage, 12);
         },
     },
     Scene {

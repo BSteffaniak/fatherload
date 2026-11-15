@@ -272,13 +272,13 @@ pub fn gravity_scale(settings: &WorldSettings, x: i32, altitude_rows: f32) -> f3
             CONTINENT_GRAVITY,
             (altitude_rows - (continents - 120.0)) / 120.0,
         )
-    } else if altitude_rows < orbit - 80.0 {
+    } else if altitude_rows < orbit {
         CONTINENT_GRAVITY
     } else {
         lerp(
             CONTINENT_GRAVITY,
             ORBIT_GRAVITY,
-            (altitude_rows - (orbit - 80.0)) / 160.0,
+            (altitude_rows - orbit) / 160.0,
         )
     };
     let moon_floor = (MOON_BOTTOM_ROWS - MOON_HALO_ROWS) as f32;

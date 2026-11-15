@@ -411,4 +411,4 @@ fn chunk_digests_of_v8_skies_are_pinned() {
     );
 }
 
-const GOLDEN_V8_DIGEST: u64 = 0x6e2e_dcad_36a9_f577;
+const GOLDEN_V8_DIGEST: u64 = 0x4d09_93ad_a72c_3523;

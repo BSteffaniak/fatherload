@@ -39,7 +39,7 @@ pub const fn rock_ramp(biome: SkyBiome) -> Ramp {
         SkyBiome::Meadow => ramp([SLATE_DARK, SLATE, SLATE_LIGHT, FOG]),
         SkyBiome::Blossom => ramp([PLUM, VIOLET, LAVENDER, PINK]),
         SkyBiome::Frost => ramp([SLATE, FOG, MIST, ICE]),
-        SkyBiome::Amber => ramp([SOIL, LOAM, CLAY, SAND]),
+        SkyBiome::Amber => ramp([MAROON, RUST, COPPER, SAND]),
     }
 }
 
@@ -93,20 +93,21 @@ fn body_pixel(tile: SkyTile, x: i32, y: i32) -> PaletteIndex {
             }]
         }
         SkyTile::Crystal => {
-            if hash(x, y, 63).is_multiple_of(3) {
-                CRYSTAL[3]
+            // Big faceted crystal faces with the odd sparkle.
+            if hash(x, y, 63).is_multiple_of(53) {
+                index_of(BONE)
             } else {
-                CRYSTAL[1 + (hash(x, y, 64) % 2) as usize]
+                CRYSTAL[slab_level(x, y)]
             }
         }
         SkyTile::ContinentRock => CONTINENT[slab_level(x, y)],
         SkyTile::Regolith => {
             let h = hash(x, y, 65);
-            if h.is_multiple_of(17) {
+            if h.is_multiple_of(41) {
                 REGOLITH[0]
-            } else if h.is_multiple_of(5) {
+            } else if h.is_multiple_of(29) {
                 REGOLITH[3]
-            } else if noise(x, y, 5, 66) > 0.6 {
+            } else if noise(x, y, 6, 66) > 0.62 {
                 REGOLITH[1]
             } else {
                 REGOLITH[2]
@@ -126,7 +127,8 @@ fn body_pixel(tile: SkyTile, x: i32, y: i32) -> PaletteIndex {
 pub(super) fn paint(canvas: &mut TileCanvas, tile: SkyTile, strata: &Strata, edges: Edges) {
     let seed = hash(canvas.origin_x, canvas.origin_y, 431);
     // Hanging pieces (roots, a crystal shard under the rock) dangle over open sky.
-    let hanging = edges.left.is_open() && edges.right.is_open() && edges.down.is_open();
+    let dangling = edges.left.is_open() && edges.right.is_open();
+    let hanging = dangling && edges.down.is_open();
     match tile {
         SkyTile::Roots => {
             paint_roots(canvas, seed, edges.up == Cell::Solid);
@@ -134,6 +136,10 @@ pub(super) fn paint(canvas: &mut TileCanvas, tile: SkyTile, strata: &Strata, edg
         }
         SkyTile::Crystal if hanging => {
             paint_shard(canvas, seed);
+            return;
+        }
+        SkyTile::Crystal if dangling => {
+            paint_shaft(canvas);
             return;
         }
         _ => {}
@@ -171,7 +177,7 @@ pub(super) fn paint(canvas: &mut TileCanvas, tile: SkyTile, strata: &Strata, edg
 /// A turf top: thick grass (snow, golden grass) over the soil, with flowers on blossom isles.
 fn paint_turf(canvas: &mut TileCanvas, biome: SkyBiome, open_above: bool) {
     let [tips, blades, roots, flower] = turf_colors(biome);
-    let depth = if open_above { 6 } else { 3 };
+    let depth = if open_above { 11 } else { 6 };
     for px in 0..TILE_ART {
         let gx = canvas.origin_x + px;
         let h = hash(gx, canvas.origin_y, 433);
@@ -222,12 +228,33 @@ fn paint_roots(canvas: &mut TileCanvas, seed: u32, from_above: bool) {
     }
 }
 
+/// The upper part of a hanging crystal: a faceted column (its tip is [`paint_shard`]).
+fn paint_shaft(canvas: &mut TileCanvas) {
+    let ink = index_of(INK);
+    let center = 8;
+    for py in 0..TILE_ART {
+        for px in center - 6..=center + 6 {
+            let edge = px == center - 6 || px == center + 6;
+            let color = if edge {
+                ink
+            } else if px < center - 1 {
+                CRYSTAL[3]
+            } else if px <= center + 1 {
+                CRYSTAL[2]
+            } else {
+                CRYSTAL[1]
+            };
+            canvas.set(px, py, color);
+        }
+    }
+}
+
 /// A sky-crystal shard hanging point-down.
 fn paint_shard(canvas: &mut TileCanvas, seed: u32) {
-    let center = 6 + (seed % 4) as i32;
+    let center = 8 + (seed % 2) as i32 - 1;
     let ink = index_of(INK);
     for py in 0..TILE_ART {
-        let half = ((TILE_ART - py) / 3).max(0);
+        let half = ((TILE_ART - py) * 5 / 16).max(0);
         for px in center - half - 1..=center + half + 1 {
             let edge = px == center - half - 1 || px == center + half + 1;
             let color = if edge {

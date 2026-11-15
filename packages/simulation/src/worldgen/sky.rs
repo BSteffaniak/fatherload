@@ -440,7 +440,7 @@ const fn band_rows(id_band: i32) -> (i32, i32) {
     match id_band {
         ID_LOW => (LOW_ISLES_BOTTOM_ROWS + 8, ARCHIPELAGO_BOTTOM_ROWS - 8),
         ID_ARCHIPELAGO => (ARCHIPELAGO_BOTTOM_ROWS + 8, DEAD_AIR_BOTTOM_ROWS - 24),
-        _ => (CONTINENTS_BOTTOM_ROWS + 16, ORBIT_BOTTOM_ROWS - 16),
+        _ => (CONTINENTS_BOTTOM_ROWS + 16, ORBIT_BOTTOM_ROWS - 60),
     }
 }
 

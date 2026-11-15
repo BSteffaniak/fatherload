@@ -71,6 +71,9 @@ pub const fn town_span() -> (i32, i32) {
 /// Deepest rig position (in tiles, measured at the rig's centre) that still counts as standing at
 /// a surface building's door.
 pub const SURFACE_SERVICE_MAX_DEPTH_TILES: f32 = 5.5;
+/// How high above row 0 a rig still counts as at a town building (the old flight ceiling's
+/// height): a rig flying over the town far up in the sky is not at its doors.
+pub const SURFACE_SERVICE_MAX_HEIGHT_TILES: f32 = 16.0;
 
 /// The surface building zone whose door a rig centred at world pixel `(x, y)` stands at, if any.
 ///
@@ -78,7 +81,9 @@ pub const SURFACE_SERVICE_MAX_DEPTH_TILES: f32 = 5.5;
 /// whether `E` opens an interior, and the simulation uses it to validate service actions.
 #[must_use]
 pub fn surface_zone_at(x: f32, y: f32, tile_size: f32) -> Option<SurfaceZone> {
-    if y > SURFACE_SERVICE_MAX_DEPTH_TILES * tile_size {
+    if y > SURFACE_SERVICE_MAX_DEPTH_TILES * tile_size
+        || y < -SURFACE_SERVICE_MAX_HEIGHT_TILES * tile_size
+    {
         return None;
     }
     #[allow(
