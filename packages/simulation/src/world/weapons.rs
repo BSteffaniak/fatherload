@@ -69,6 +69,8 @@ struct RayCast {
     tunnelled: Vec<TilePosition>,
     /// The tile that stopped it, if any.
     stopped_by: Option<TilePosition>,
+    /// Live chaining charges the ray passed close to (it sets them off), in order.
+    charges: Vec<(EntityId, f32, f32)>,
 }
 
 /// Whether a weapon can break `kind`: plain soil and rock only (ore, artifacts, POI fixtures,
@@ -192,9 +194,13 @@ impl WorldState {
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
-        // Recharge from fuel.
+        // Recharge from fuel (only a rig that owns a weapon has a capacitor worth charging, so
+        // unarmed rigs never pay fuel for it).
         let capacity = player.battery_capacity();
-        if player.weapon.energy < capacity && player.fuel > 0.0 {
+        if !player.weapon_rack.owned.is_empty()
+            && player.weapon.energy < capacity
+            && player.fuel > 0.0
+        {
             let charge = (battery_recharge(player.weapon_rack.battery_level) * dt)
                 .min(capacity - player.weapon.energy)
                 .min(player.fuel / FUEL_PER_ENERGY);
@@ -208,6 +214,10 @@ impl WorldState {
         if !control.fire {
             player.weapon.pull_spent = false;
         }
+        let Some(mounted) = mounted else {
+            // Nothing on the hardpoint: no aim to resolve (and no auto-aim search each tick).
+            return;
+        };
         // Resolve the aim: free aim, or auto-aim around the facing.
         let requested = aim_vector(control.aim_x, control.aim_y);
         let aim = if control.auto_aim {
@@ -234,9 +244,6 @@ impl WorldState {
             player.weapon.aim_y = y;
         }
         let aim = player.weapon.aim();
-        let Some(mounted) = mounted else {
-            return;
-        };
         if !control.fire
             || next_tick < player.weapon.ready_tick
             || (!mounted.kind.automatic() && player.weapon.pull_spent)
@@ -288,7 +295,14 @@ impl WorldState {
                     aim.1.mul_add(TILE_SIZE, muzzle.1),
                 )
             }
-            Delivery::Hitscan => self.fire_ray(player_id, mounted.kind, &spec, muzzle, aim, output),
+            Delivery::Hitscan => self.fire_ray(
+                player_id,
+                mounted.kind,
+                &spec,
+                (muzzle, aim),
+                next_tick,
+                output,
+            ),
         };
         output.push_event(GameplayEventKind::WeaponFired {
             player_id,
@@ -533,12 +547,7 @@ impl WorldState {
                         && charge.stage == 0 =>
                 {
                     // Shooting a charge sets it off.
-                    let _ = self.entities.update(*other, |entity| {
-                        if let EntityState::Charge(charge) = &mut entity.state {
-                            charge.chain_triggered = true;
-                            charge.detonation_tick = charge.detonation_tick.min(next_tick);
-                        }
-                    });
+                    self.trigger_charge(*other, next_tick);
                     output.push_event(GameplayEventKind::ProjectileImpact {
                         weapon: state.weapon,
                         x: px(at.0),
@@ -570,6 +579,16 @@ impl WorldState {
             }
         }
         None
+    }
+
+    /// Sets off live charge `id` in the next bomb pass (a shot, beam or slug hit it).
+    fn trigger_charge(&mut self, id: EntityId, next_tick: SimulationTick) {
+        let _ = self.entities.update(id, |entity| {
+            if let EntityState::Charge(charge) = &mut entity.state {
+                charge.chain_triggered = true;
+                charge.detonation_tick = charge.detonation_tick.min(next_tick);
+            }
+        });
     }
 
     /// A velocity of `speed` from `from` toward `owner`'s rig (a harpoon reeling in).
@@ -624,6 +643,29 @@ impl WorldState {
             )
     }
 
+    /// Live chaining charges (ones a hit would set off) near the box spanned by `from` and
+    /// `to`: `(id, x, y)`.
+    fn live_charges_between(&self, from: (f32, f32), to: (f32, f32)) -> Vec<(EntityId, f32, f32)> {
+        self.entities
+            .ids_in_rect(
+                from.0.min(to.0) - CHARGE_HIT_RADIUS,
+                from.1.min(to.1) - CHARGE_HIT_RADIUS,
+                from.0.max(to.0) + CHARGE_HIT_RADIUS,
+                from.1.max(to.1) + CHARGE_HIT_RADIUS,
+            )
+            .into_iter()
+            .filter_map(|id| {
+                let entity = self.entities.get(id)?;
+                match entity.state {
+                    EntityState::Charge(charge) if charge.kind.chains() && charge.stage == 0 => {
+                        Some((id, entity.body.x, entity.body.y))
+                    }
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+
     /// Marches a hitscan ray from `muzzle` along `aim` (read-only): through damageable entities
     /// (up to the weapon's pierce), through plain tiles it can tunnel (railgun), stopping at
     /// anything else or at its range.
@@ -648,6 +690,7 @@ impl WorldState {
                 Some((id, entity.body.x, entity.body.y, health.radius))
             })
             .collect();
+        let charges = self.live_charges_between(muzzle, far);
         let mut ray = RayCast::default();
         let mut hit: BTreeSet<EntityId> = BTreeSet::new();
         let mut tunnel_left = spec.tunnel;
@@ -685,6 +728,14 @@ impl WorldState {
                 ray.stopped_by = Some(tile);
                 break;
             }
+            for (id, x, y) in &charges {
+                let (dx, dy) = (x - point.0, y - point.1);
+                if dx.mul_add(dx, dy * dy) <= CHARGE_HIT_RADIUS * CHARGE_HIT_RADIUS
+                    && !ray.charges.iter().any(|(other, ..)| other == id)
+                {
+                    ray.charges.push((*id, point.0, point.1));
+                }
+            }
             let mut spent = false;
             for (id, x, y, radius) in &candidates {
                 if hit.contains(id) {
@@ -715,11 +766,21 @@ impl WorldState {
         player_id: PlayerId,
         weapon: WeaponKind,
         spec: &WeaponStats,
-        muzzle: (f32, f32),
-        aim: (f32, f32),
+        (muzzle, aim): ((f32, f32), (f32, f32)),
+        next_tick: SimulationTick,
         output: &mut TickOutput,
     ) -> (f32, f32) {
         let ray = self.cast_ray(muzzle, aim, spec);
+        for (id, x, y) in &ray.charges {
+            // A beam or slug through a charge sets it off, like a shot does.
+            self.trigger_charge(*id, next_tick);
+            output.push_event(GameplayEventKind::ProjectileImpact {
+                weapon,
+                x: px(*x),
+                y: px(*y),
+                surface: ImpactSurface::Charge,
+            });
+        }
         for hit in &ray.hits {
             let RayHit::Target(id, x, y) = *hit;
             let _ = self.damage_entity(

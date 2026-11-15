@@ -194,6 +194,17 @@ fn the_capacitor_drains_clicks_dry_and_recharges_from_fuel() {
     player.fuel = 0.0;
     let _ = hold(&mut dry, trigger(false, (127, 0)), 60);
     assert!(dry.player(PLAYER).expect("player").weapon.energy.abs() < f32::EPSILON);
+    // A rig that owns no weapon (an old save's empty capacitor) never pays fuel for one.
+    let mut unarmed = range(WeaponKind::RivetGun);
+    let player = unarmed.player_mut(PLAYER).expect("player");
+    player.weapon_rack.owned.clear();
+    player.mounted_weapon = None;
+    player.weapon.energy = 0.0;
+    let fuel_before = player.fuel;
+    let _ = hold(&mut unarmed, trigger(true, (127, 0)), 60);
+    let player = unarmed.player(PLAYER).expect("player");
+    assert!((player.fuel - fuel_before).abs() < f32::EPSILON);
+    assert!(player.weapon.energy.abs() < f32::EPSILON);
 }
 
 #[test]
@@ -451,6 +462,40 @@ fn shooting_a_charge_sets_it_off() {
         ..PlacedBomb::default()
     });
     let events = hold(&mut world, trigger(true, (127, 8)), 40);
+    assert!(events.iter().any(|event| matches!(
+        event,
+        GameplayEventKind::ExplosiveDetonated {
+            kind: ExplosiveKind::C4,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn a_railgun_slug_sets_off_a_charge_on_its_line() {
+    let mut world = range(WeaponKind::Railgun);
+    // A C4 charge stuck level with the muzzle, six tiles out.
+    let y = 31.5f32.mul_add(TILE_SIZE, -crate::weapon::MUZZLE_RISE);
+    world.insert_charge(PlacedBomb {
+        id: 1,
+        x: 18.5 * TILE_SIZE,
+        y,
+        previous_x: 18.5 * TILE_SIZE,
+        previous_y: y,
+        detonation_tick: crate::explosive::REMOTE_FUSE,
+        kind: ExplosiveKind::C4,
+        stuck: true,
+        owner: Some(PLAYER),
+        ..PlacedBomb::default()
+    });
+    let events = hold(&mut world, trigger(true, (127, 0)), 10);
+    assert!(events.iter().any(|event| matches!(
+        event,
+        GameplayEventKind::ProjectileImpact {
+            surface: ImpactSurface::Charge,
+            ..
+        }
+    )));
     assert!(events.iter().any(|event| matches!(
         event,
         GameplayEventKind::ExplosiveDetonated {
