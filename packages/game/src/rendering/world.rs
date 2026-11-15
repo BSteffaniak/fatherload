@@ -33,6 +33,7 @@ use crate::{
 
 mod buildings;
 mod drops;
+mod caves;
 mod explosives;
 mod fx;
 mod quest_marks;
@@ -99,6 +100,8 @@ pub(super) struct WorldScene<'a> {
     pub ticks: u64,
     /// The view's throw aim preview, if its seat has a throwable charge selected.
     pub aim_preview: Option<&'a crate::render_snapshot::AimPreview>,
+    /// Cave critters (WP-CAVES).
+    pub critters: &'a [crate::render_snapshot::CritterPresentation],
 }
 
 impl WorldScene<'_> {
@@ -141,6 +144,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     draw_world_edges(draw, scene.terrain, scene.visible);
     scene.terrain_renderer.draw(draw, scene.visible);
     fx::draw_lava_glow(draw, scene.terrain, scene.explored, scene.visible, seconds);
+    caves::draw_cave_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
+    caves::draw_critters(draw, scene.critters, scene.players, scene.visible, seconds);
     fx::draw_infrastructure(draw, scene.infrastructure, seconds);
     if let Some(drill) = scene.active_drill {
         fx::draw_drill_damage(draw, scene.terrain, drill, scene.ticks);
@@ -186,6 +191,19 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             explosives::draw_blast(draw, explosion);
         }
     }
+    caves::draw_cave_darkness(
+        draw,
+        &caves::DarknessScene {
+            terrain: scene.terrain,
+            visible: scene.visible,
+            players: scene.players,
+            facings: scene.facings,
+            bombs: scene.bombs,
+            explosions: scene.explosions,
+            critters: scene.critters,
+            seconds,
+        },
+    );
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);
     }

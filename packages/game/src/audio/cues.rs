@@ -108,6 +108,9 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::FireCrackle => Patch::FireCrackle,
         SoundCue::EmpPulse => Patch::EmpPulse,
         SoundCue::FlareIgnite => Patch::FlareIgnite,
+        SoundCue::CaveDiscovered => Patch::CaveDiscovered,
+        SoundCue::StalactiteCrack => Patch::StalactiteCrack,
+        SoundCue::CacheOpened => Patch::CacheOpen,
     }
 }
 
@@ -201,6 +204,11 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::ItemsCollected { item, .. } => Some(pickup_cue(*item)),
         GameplayEventKind::PickupBlocked { .. } => Some(SoundCue::StowageFull),
         GameplayEventKind::BlocksDumped { .. } => Some(SoundCue::BlocksDumped),
+        // Caves: the echoing discovery chime, the cache's lid and coins, the stalactite's crack
+        // (placed in the world by the effects layer).
+        GameplayEventKind::CaveDiscovered { .. } => Some(SoundCue::CaveDiscovered),
+        GameplayEventKind::CaveCacheOpened { .. } => Some(SoundCue::CacheOpened),
+        GameplayEventKind::StalactiteFell { .. } => Some(SoundCue::StalactiteCrack),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -268,6 +276,9 @@ mod tests {
             | GameplayEventKind::PickupBlocked { .. }
             | GameplayEventKind::BlocksDumped { .. }
             | GameplayEventKind::CollectBlocksToggled { .. } => {}
+            | GameplayEventKind::CaveDiscovered { .. }
+            | GameplayEventKind::CaveCacheOpened { .. }
+            | GameplayEventKind::StalactiteFell { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -315,6 +326,17 @@ mod tests {
                 blueprint: BlueprintId::HaulerFrame,
             },
             GameplayEventKind::RigCustomized { player_id },
+            GameplayEventKind::CaveDiscovered {
+                player_id,
+                feature,
+                cave: fatherload_simulation::cave::CaveKind::CrystalGeode,
+            },
+            GameplayEventKind::CaveCacheOpened {
+                player_id,
+                tile: fatherload_simulation::cave::CaveTile::TreasureCache,
+                credits: 100,
+            },
+            GameplayEventKind::StalactiteFell { x: 0, y: 0 },
         ];
         events.push(GameplayEventKind::RemoteDetonation { player_id });
         for item in [
@@ -452,6 +474,9 @@ mod tests {
             SoundCue::FireCrackle,
             SoundCue::EmpPulse,
             SoundCue::FlareIgnite,
+            SoundCue::CaveDiscovered,
+            SoundCue::StalactiteCrack,
+            SoundCue::CacheOpened,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

@@ -320,6 +320,20 @@ impl Effects {
                     }
                     continue;
                 }
+                GameplayEventKind::StalactiteFell { x, y } => {
+                    // Tile coordinates: crack at the tile's centre.
+                    #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
+                    let (x, y) = (
+                        (x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                        (y as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                    );
+                    self.spawn_sparks(x, y);
+                    if impact_cues < 4 {
+                        cues.push(PlacedCue::world(SoundCue::StalactiteCrack, x, y));
+                        impact_cues += 1;
+                    }
+                    continue;
+                }
                 GameplayEventKind::BombBounced { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
                     let (x, y) = (x as f32, y as f32);
@@ -456,6 +470,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::PickupBlocked { player_id, .. }
         | GameplayEventKind::BlocksDumped { player_id }
         | GameplayEventKind::CollectBlocksToggled { player_id, .. } => Some(player_id),
+        | GameplayEventKind::CaveDiscovered { player_id, .. }
+        | GameplayEventKind::CaveCacheOpened { player_id, .. } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
@@ -466,7 +482,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::ClusterSplit { .. }
         | GameplayEventKind::FireSpread { .. }
         | GameplayEventKind::VaultOpened { .. }
-        | GameplayEventKind::VaultLockReset { .. } => None,
+        | GameplayEventKind::VaultLockReset { .. }
+        | GameplayEventKind::StalactiteFell { .. } => None,
     }
 }
 

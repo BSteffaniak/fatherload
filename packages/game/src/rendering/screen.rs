@@ -1,3 +1,4 @@
+mod cave_map;
 mod poi_map;
 
 use raylib::prelude::*;
@@ -607,11 +608,16 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Stone | TileKind::HardRock | TileKind::Foundation => STONE,
         TileKind::Dirt | TileKind::Clay => LOAM,
         TileKind::Poi(tile) => super::terrain::tile_art::poi_color(tile, Band::Stone),
+        TileKind::Cave(tile) => super::terrain::tile_art::cave_color(tile, Band::Stone),
         TileKind::Bedrock => PLUM,
     }
 }
 
 /// Bottom-right minimap of the explored mine around the rig (left of the depth ruler).
+#[allow(
+    clippy::too_many_lines,
+    reason = "one pass over the minimap: tiles, then each marker layer"
+)]
 pub(super) fn draw_minimap_for_view(
     draw: &mut RaylibDrawHandle<'_>,
     terrain: &Terrain,
@@ -680,6 +686,11 @@ pub(super) fn draw_minimap_for_view(
     poi_map::draw_minimap_markers(
         draw,
         &poi_map::markers(terrain, view.player),
+        |tile_x, tile_y| on_map(tile_x, tile_y).then(|| to_map(tile_x, tile_y)),
+    );
+    cave_map::draw_minimap_markers(
+        draw,
+        &cave_map::markers(terrain, view.player),
         |tile_x, tile_y| on_map(tile_x, tile_y).then(|| to_map(tile_x, tile_y)),
     );
     quests::draw_minimap_quest_markers(draw, &view.quest_markers, |tile_x, tile_y| {
@@ -857,6 +868,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
 /// The collection log: sites visited, scanner contacts, recovered logs and mining intelligence.
 fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let mut sections = poi_map::collection_sections(ui.snapshot.terrain, ui.player);
+    sections.extend(cave_map::collection_section(ui.snapshot.terrain, ui.player));
     sections.push(Section::new(
         "Discoveries",
         PINK,
@@ -1277,6 +1289,13 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let clip = Rectangle::new(x0 as f32, y0 as f32, width as f32, height as f32);
     let markers = poi_map::markers(terrain, ui.player);
     poi_map::draw_map_markers(draw, &markers, clip, (origin_x, origin_y), pixel);
+    cave_map::draw_map_markers(
+        draw,
+        &cave_map::markers(terrain, ui.player),
+        clip,
+        (origin_x, origin_y),
+        pixel,
+    );
     quests::draw_map_quest_markers(
         draw,
         &ui.view.quest_markers,

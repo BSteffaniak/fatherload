@@ -160,6 +160,10 @@ patches! {
     ArtifactPickup => "pickup_artifact",
     StowageFull => "stowage_full",
     BlockDump => "block_dump",
+    // Caves 2.0 (wave 2): appended so every earlier patch keeps its variation seeds.
+    CaveDiscovered => "cave_discovered",
+    StalactiteCrack => "stalactite_crack",
+    CacheOpen => "cache_open",
 }
 
 /// Playback metadata of a patch.
@@ -263,7 +267,8 @@ impl Patch {
             | Self::Purchase
             | Self::CrateOpen
             | Self::SalvageOpen
-            | Self::SprayPaint => PatchInfo::new(Feedback).instances(2).jitter(0.02, 0.5),
+            | Self::SprayPaint
+            | Self::CacheOpen => PatchInfo::new(Feedback).instances(2).jitter(0.02, 0.5),
             Self::BombArm | Self::Deploy | Self::ThrustIgnite => {
                 PatchInfo::new(Feedback).instances(2)
             }
@@ -292,6 +297,15 @@ impl Patch {
                 .jitter(0.06, 1.0)
                 .ducking(0.55)
                 .priority(9),
+            Self::CaveDiscovered => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.0, 0.0)
+                .ducking(0.25),
+            Self::StalactiteCrack => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.35)
+                .jitter(0.06, 1.0),
             Self::PoiDiscovered | Self::VaultFanfare | Self::Milestone | Self::Rescue => {
                 PatchInfo::new(Big)
                     .instances(1)
@@ -401,6 +415,9 @@ impl Patch {
             Self::ArtifactPickup => artifact_pickup(rng),
             Self::StowageFull => stowage_full(rng),
             Self::BlockDump => block_dump(rng),
+            Self::CaveDiscovered => cave_discovered(rng),
+            Self::StalactiteCrack => stalactite_crack(rng),
+            Self::CacheOpen => cache_open(rng),
         }
     }
 }
@@ -1462,6 +1479,65 @@ fn poi_discovered(rng: &mut Rng) -> Vec<f32> {
     for sample in &mut out {
         *sample += echo.process(*sample, 0.3, 0.35) * 0.35;
     }
+    out
+}
+
+/// Finding a cave: a soft low drone opening into a glassy two-note chime that rings out in a
+/// long cavern echo.
+fn cave_discovered(rng: &mut Rng) -> Vec<f32> {
+    let mut drone = Osc::new(Wave::Triangle).with_phase(rng.unit());
+    let mut filter = Svf::new(FilterMode::LowPass, 500.0, 0.7);
+    let mut out = render(1.6, |t| {
+        filter.process(drone.next(110.0 * (1.0 + 0.004 * sine(t, 3.0))))
+            * segments(t, &[(0.0, 0.0), (0.3, 0.5), (1.0, 0.35), (1.6, 0.0)])
+    });
+    let root = if rng.unit() < 0.5 { 659.25 } else { 587.33 };
+    mix_into(&mut out, &bell(root, 2.0, 1.2, 1.6), 0.08, 0.45);
+    mix_into(&mut out, &bell(root * 1.5, 2.0, 1.0, 1.4), 0.34, 0.35);
+    mix_into(&mut out, &bell(root * 2.0, 3.0, 0.8, 1.0), 0.6, 0.18);
+    let mut echo = Delay::new(0.7).with_damping(0.55);
+    out.resize(out.len() + samples_for(1.0), 0.0);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.42, 0.45) * 0.45;
+    }
+    out
+}
+
+/// A stalactite breaking off: a sharp stony crack, grit trickling and a short ring.
+fn stalactite_crack(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        2_400.0,
+        0.8,
+        0.05,
+    );
+    mix_into(&mut out, &clank(rng, 620.0, 0.18), 0.0, 0.5);
+    grains(rng, &mut out, 14, (0.04, 0.5), (1_500.0, 4_000.0), 0.4);
+    mix_into(&mut out, &thump(180.0, 90.0, 0.12, 1.4), 0.01, 0.4);
+    out
+}
+
+/// A cave cache opening: an old lid grinding, then coins and a bright glint.
+fn cache_open(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        700.0,
+        1.4,
+        0.25,
+    );
+    mix_into(
+        &mut out,
+        &thump(110.0 * rng.jitter(0.05), 70.0, 0.15, 1.5),
+        0.2,
+        0.8,
+    );
+    mix_into(&mut out, &coins(rng), 0.24, 0.6);
+    mix_into(&mut out, &bell(1_760.0, 2.0, 1.0, 0.3), 0.3, 0.3);
+    mix_into(&mut out, &bell(2_349.3, 2.0, 1.0, 0.35), 0.38, 0.25);
     out
 }
 

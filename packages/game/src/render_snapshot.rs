@@ -441,6 +441,8 @@ pub struct RenderSnapshot<'w> {
     pub test_mode: Option<TestModeState>,
     /// Gameplay events presented for the first time this frame (audio/particles).
     pub events: &'w [RuntimeEvent],
+    /// Cave critters (entities, copied out of the world's entity store).
+    pub critters: Vec<CritterPresentation>,
 }
 
 impl<'w> RenderSnapshot<'w> {
@@ -476,6 +478,7 @@ impl<'w> RenderSnapshot<'w> {
             boulders: world.falling_boulders(),
             entities: world.entities(),
             pickups: &[],
+            critters: critters_of(world),
             sparks,
             explosions,
             relay_countdowns: relay_countdowns(world),
@@ -881,4 +884,33 @@ mod tests {
             ]
         );
     }
+}
+
+/// The world's cave critters (WP-CAVES), in id order.
+fn critters_of(world: &WorldState) -> Vec<CritterPresentation> {
+    world
+        .entities()
+        .of_kind(fatherload_simulation::entity::EntityKind::Critter)
+        .filter_map(|entity| match entity.state {
+            fatherload_simulation::entity::EntityState::Critter(state) => {
+                Some(CritterPresentation {
+                    id: entity.id.get(),
+                    home_x: entity.body.x,
+                    home_y: entity.body.y,
+                    state,
+                })
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// A cave critter as presentation sees it: its home and state (its position now is
+/// `state.offset_at(seconds)` from home).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CritterPresentation {
+    pub id: u64,
+    pub home_x: f32,
+    pub home_y: f32,
+    pub state: fatherload_simulation::entity::CritterState,
 }

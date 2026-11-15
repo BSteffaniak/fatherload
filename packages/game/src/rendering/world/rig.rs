@@ -52,7 +52,7 @@ impl RigFacings {
         self.left.clear();
     }
 
-    fn facing_left(&self, player: &PlayerPresentation) -> bool {
+    pub(super) fn facing_left(&self, player: &PlayerPresentation) -> bool {
         wanted_facing_left(player)
             .or_else(|| self.left.get(&player.player_id).copied())
             .unwrap_or(false)

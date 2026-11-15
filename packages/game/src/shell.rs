@@ -326,6 +326,12 @@ pub enum SoundCue {
     EmpPulse,
     /// A flare lighting up.
     FlareIgnite,
+    /// A rig found a cave ecosystem ("Found: Crystal Geode").
+    CaveDiscovered,
+    /// A stalactite cracking off a cave ceiling.
+    StalactiteCrack,
+    /// A cave cache drilled open.
+    CacheOpened,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

@@ -34,8 +34,10 @@ use crate::rendering::pixel_art::{
     sprites::terrain::{VOLATILE_CRYSTAL, artifact_stamp, ore_stamp_in},
 };
 
+mod cave_art;
 mod poi_art;
 
+pub use cave_art::{cave_color, cave_glow, cave_kind_color};
 pub use poi_art::poi_color;
 
 /// Art pixels per tile edge (a tile is 32 world pixels at 2 world pixels per art pixel).
@@ -198,6 +200,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Gas => index_of(LEAF),
         TileKind::Air => strata.back[0],
         TileKind::Poi(tile) => return poi_color(tile, band),
+        TileKind::Cave(tile) => return cave_color(tile, band),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -373,7 +376,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Gas
         | TileKind::ExplosivePocket
         | TileKind::PressurePocket
-        | TileKind::Poi(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Poi(_)
+        | TileKind::Cave(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -526,6 +530,10 @@ pub fn paint_tile(
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one tile's paint order: air, fixtures, cave tiles, rock, stamps and edges"
+)]
 fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     let kind = terrain
         .tile(position)
@@ -546,7 +554,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     if kind == TileKind::Air {
         if cell_at(terrain, x, y) == Cell::Sky {
             paint_grass_blades(&mut canvas, terrain, position, down);
-        } else {
+        } else if !cave_art::paint_cave_air(&mut canvas, terrain, position, &strata, band, up) {
             paint_cave(&mut canvas, &strata, up, left, right);
             if poi_art::inside_vault(terrain, position) {
                 paint_vault_room(&mut canvas, &strata, up, left, right);
@@ -562,6 +570,24 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             position,
             tile,
             &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    if let TileKind::Cave(tile) = kind {
+        cave_art::paint(
+            &mut canvas,
+            terrain,
+            position,
+            tile,
+            &strata,
+            band,
             Edges {
                 up,
                 down,

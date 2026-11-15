@@ -102,6 +102,18 @@ impl Material {
             | TileKind::Poi(_)
             | TileKind::Bedrock => Self::Hard,
             TileKind::Ore(_) | TileKind::Artifact(_) => Self::Ore,
+            TileKind::Cave(tile) => match tile {
+                fatherload_simulation::cave::CaveTile::Crystal
+                | fatherload_simulation::cave::CaveTile::TreasureCache
+                | fatherload_simulation::cave::CaveTile::RelicCache => Self::Ore,
+                fatherload_simulation::cave::CaveTile::MushroomStem
+                | fatherload_simulation::cave::CaveTile::MushroomCap
+                | fatherload_simulation::cave::CaveTile::GlowCap
+                | fatherload_simulation::cave::CaveTile::Mycelium
+                | fatherload_simulation::cave::CaveTile::GlowAlgae
+                | fatherload_simulation::cave::CaveTile::Silt => Self::Soft,
+                _ => Self::Hard,
+            },
         }
     }
 

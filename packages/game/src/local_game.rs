@@ -562,6 +562,32 @@ impl LocalGame {
                     };
                     messages.push((seat, text));
                 }
+                GameplayEventKind::CaveDiscovered {
+                    player_id, cave, ..
+                } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        messages.push((seat, format!("Found: {}! {}.", cave.name(), cave.blurb())));
+                    }
+                }
+                GameplayEventKind::CaveCacheOpened {
+                    player_id,
+                    tile,
+                    credits,
+                } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        messages.push((
+                            seat,
+                            format!(
+                                "{}: +{credits} credits, and loot spills out!",
+                                if tile == fatherload_simulation::cave::CaveTile::RelicCache {
+                                    "Relic cache"
+                                } else {
+                                    "Treasure cache"
+                                }
+                            ),
+                        ));
+                    }
+                }
                 GameplayEventKind::VaultOpened { feature }
                 | GameplayEventKind::VaultLockReset { feature } => {
                     let Some(vault) = world.world_feature(feature) else {

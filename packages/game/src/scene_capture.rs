@@ -233,6 +233,7 @@ fn save_framebuffer(
 }
 
 mod drop_scenes;
+mod cave_scenes;
 mod explosive_scenes;
 
 /// One capturable scene.
@@ -1583,6 +1584,79 @@ pub const SCENES: &[Scene] = &[
         name: "explosives_throw_preview",
         summary: "Aiming a sticky bomb: the dotted throw arc and a lit flare lighting the cavern",
         setup: explosive_scenes::throw_preview,
+    },
+    Scene {
+        name: "cave_grand_cavern",
+        summary: "A rig in a grand cavern: stalactites, stalagmites, bats and the dark",
+        setup: |stage| {
+            cave_scenes::cave_of_kind(stage, fatherload_simulation::cave::CaveKind::GrandCavern);
+        },
+    },
+    Scene {
+        name: "cave_crystal_geode",
+        summary: "A glowing crystal geode lined with gems, glow moths drifting",
+        setup: |stage| {
+            cave_scenes::cave_of_kind(stage, fatherload_simulation::cave::CaveKind::CrystalGeode);
+        },
+    },
+    Scene {
+        name: "cave_flooded",
+        summary: "A flooded cave: an underground lake with a silt bed, glowing algae and cave fish",
+        setup: |stage| {
+            cave_scenes::cave_of_kind(stage, fatherload_simulation::cave::CaveKind::FloodedCave);
+        },
+    },
+    Scene {
+        name: "cave_lava_tube",
+        summary: "A lava tube: obsidian walls, lava pooling on the floor, ember moths",
+        setup: |stage| {
+            cave_scenes::cave_of_kind(stage, fatherload_simulation::cave::CaveKind::LavaTube);
+        },
+    },
+    Scene {
+        name: "cave_fungal_grotto",
+        summary: "A fungal grotto: giant bouncy mushrooms, glowcaps and fireflies",
+        setup: |stage| {
+            cave_scenes::cave_of_kind(stage, fatherload_simulation::cave::CaveKind::FungalGrotto);
+        },
+    },
+    Scene {
+        name: "cave_worm_burrows",
+        summary: "Worm burrows ribbed with old bone, bats in the dark",
+        setup: |stage| {
+            cave_scenes::cave_of_kind(stage, fatherload_simulation::cave::CaveKind::WormBurrows);
+        },
+    },
+    Scene {
+        name: "cave_ancient_ruins",
+        summary: "Ancient ruins: a brick hall with pillars, glowing glyphs and a relic cache",
+        setup: |stage| {
+            cave_scenes::cave_of_kind(stage, fatherload_simulation::cave::CaveKind::AncientRuins);
+        },
+    },
+    Scene {
+        name: "cave_chasm",
+        summary: "A chasm: a tall dark crack with ledges and stalactites",
+        setup: |stage| {
+            cave_scenes::cave_of_kind(stage, fatherload_simulation::cave::CaveKind::Chasm);
+        },
+    },
+    Scene {
+        name: "cave_network",
+        summary: "A cave network: small chambers strung together by tunnels",
+        setup: |stage| {
+            cave_scenes::cave_of_kind(stage, fatherload_simulation::cave::CaveKind::CaveNetwork);
+        },
+    },
+    Scene {
+        name: "cave_dark_lamp",
+        summary: "A pitch-dark grand cavern lit only by the rig's lamp",
+        setup: |stage| cave_scenes::dark_cavern(stage, false),
+    },
+    Scene {
+        name: "cave_dark_flares",
+        summary: "The same dark cavern lit by two flares thrown across the floor",
+        setup: |stage| cave_scenes::dark_cavern(stage, true),
     },
     Scene {
         name: "explosives_lineup",

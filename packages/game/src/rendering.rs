@@ -625,6 +625,7 @@ impl GameRenderer {
                     explored: Some(&self.explored_drawn),
                     ticks: shell.update_ticks,
                     aim_preview: view.aim_preview.as_ref(),
+                    critters: &snapshot.critters,
                 },
             );
         }

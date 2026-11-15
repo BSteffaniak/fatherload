@@ -190,7 +190,7 @@ fn parse_generator(text: &str) -> Result<GeneratorVersion, String> {
     GeneratorVersion::ALL
         .into_iter()
         .find(|generator| generator.name().eq_ignore_ascii_case(text))
-        .ok_or_else(|| format!("unknown generator {text} (legacy, v1, v2, v3, v4, v5)"))
+        .ok_or_else(|| format!("unknown generator {text} (legacy, v1, v2, v3, v4, v5, v6)"))
 }
 
 fn parse_size(text: &str) -> Result<WorldSize, String> {
@@ -253,7 +253,7 @@ pub fn run(command: &WorldgenCommand, out: &mut impl std::io::Write) -> Result<(
             image.export_png(path)?;
             writeln!(
                 out,
-                "wrote {path}: seed {} ({}, generator {}), {}x{} tiles from column {} in {columns} column(s), {} features, caves {} per mille, starter field {}",
+                "wrote {path}: seed {} ({}, generator {}), {}x{} tiles from column {} in {columns} column(s), {} features, caves {} per mille, {} cave ecosystems ({} caches), starter field {}",
                 settings.seed_text(),
                 settings.size.name(),
                 settings.generator.name(),
@@ -262,6 +262,8 @@ pub fn run(command: &WorldgenCommand, out: &mut impl std::io::Write) -> Result<(
                 world.origin_x,
                 world.features.len(),
                 stats.cave_per_mille(),
+                stats.caves.values().sum::<u64>(),
+                stats.cave_caches,
                 stats.starter_field_value,
             )
             .map_err(|error| error.to_string())
@@ -461,6 +463,10 @@ fn preview_image(
                 FeatureKind::ArtifactBed => palette::PINK,
                 FeatureKind::Chamber => palette::ICE,
                 FeatureKind::PointOfInterest => feature.poi_kind().map_or(palette::BONE, poi_color),
+                FeatureKind::Cave => feature
+                    .detail
+                    .cave()
+                    .map_or(palette::MINT, tile_art::cave_kind_color),
                 FeatureKind::PrefabSlot
                 | FeatureKind::LargeCavern
                 | FeatureKind::HazardCluster
@@ -548,6 +554,7 @@ fn tile_color(kind: TileKind, band: Band, y: i32) -> Color {
         TileKind::PressurePocket => palette::SKY,
         TileKind::ExplosivePocket => palette::AMBER,
         TileKind::Poi(tile) => tile_art::poi_color(tile, band),
+        TileKind::Cave(tile) => tile_art::cave_color(tile, band),
         TileKind::Bedrock => tile_art::material_color(kind, band),
     }
 }
