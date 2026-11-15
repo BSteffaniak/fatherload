@@ -1364,10 +1364,10 @@ fn fire_crackle(rng: &mut Rng) -> Vec<f32> {
         let pop = burst(
             rng.next_u64(),
             NoiseColor::White,
-            FilterMode::HighPass,
-            rng.range(2_000.0, 5_000.0),
-            0.8,
-            0.006,
+            FilterMode::BandPass,
+            rng.range(1_200.0, 3_200.0),
+            1.2,
+            0.008,
         );
         mix_into(&mut out, &pop, time, rng.range(0.4, 0.9));
     }
@@ -1393,8 +1393,8 @@ fn emp_pulse(rng: &mut Rng) -> Vec<f32> {
 
 /// A flare striking: a scratch, a pop and a sputtering hiss.
 fn flare_ignite(rng: &mut Rng) -> Vec<f32> {
-    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
-    let mut filter = Svf::new(FilterMode::HighPass, 2_500.0, 0.7);
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 2_200.0, 0.9);
     let sputter_rate = rng.range(18.0, 26.0);
     let mut out = render(0.9, |t| {
         let flutter = 0.6 + 0.4 * sine(t, sputter_rate).abs();

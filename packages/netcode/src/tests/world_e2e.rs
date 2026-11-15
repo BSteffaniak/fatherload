@@ -49,6 +49,9 @@ fn assert_played(harness: &WorldHarness) {
         "applied infrastructure",
         "applied bomb",
         "bomb detonated",
+        "applied explosive",
+        "applied detonator",
+        "explosive detonated",
     ] {
         assert!(
             harness.event_counts.get(label).copied().unwrap_or(0) > 0,

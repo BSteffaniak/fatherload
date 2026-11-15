@@ -194,6 +194,9 @@ mod tests {
                 | Patch::Deploy
                 | Patch::ThrustIgnite
                 | Patch::Explosion
+                | Patch::SmallBlast
+                | Patch::DeepBlast
+                | Patch::ChargeStick
                 | Patch::ThrustLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)

@@ -252,6 +252,7 @@ impl HarnessSim for WorldState {
         let mut template = Player::new(spawn_tile_x * TILE_SIZE, 4.0 * TILE_SIZE);
         template.credits = 600;
         template.bombs = 6;
+        template.add_explosives(fatherload_simulation::ExplosiveKind::C4, 6);
         template.survey_drone_kits = 3;
         world.set_player_template(template);
         // Loose item drops along the surface (falling, settling, sleeping, then woken and
@@ -268,8 +269,8 @@ impl HarnessSim for WorldState {
         world
     }
 
-    /// Dig down (placing a bomb, scanning and deploying a survey drone on the
-    /// way), fly up out of the shaft, hop and land back at the depot door, then
+    /// Dig down (placing a bomb and a C4 charge, scanning and deploying a survey
+    /// drone on the way; the C4 is fired by the remote), fly up out of the shaft, hop and land back at the depot door, then
     /// sell, try to buy an upgrade and try to refuel while idle. The bots stand at
     /// the depot, so the host applies the sale and refuses the shop and fuel
     /// transactions (service actions only work at their building).
@@ -291,6 +292,13 @@ impl HarnessSim for WorldState {
                 100 => actions.push(PlayerCommand::UseScanner),
                 120 => actions.push(PlayerCommand::PlaceInfrastructure { slot: 1 }),
                 200 => actions.push(PlayerCommand::PlaceBomb),
+                // A C4 charge dropped down the shaft after the bomb went off, fired by the
+                // remote once the rig is well clear of it.
+                350 => actions.push(PlayerCommand::DeployExplosive {
+                    kind: fatherload_simulation::ExplosiveKind::C4,
+                    aim: fatherload_simulation::ThrowAim::DOWN,
+                }),
+                540 => actions.push(PlayerCommand::RemoteDetonate { sequenced: false }),
                 760 => actions.push(PlayerCommand::SellCargo),
                 790 => {
                     let index = usize::try_from(bot.rng().below(8)).unwrap_or(0);
@@ -320,6 +328,8 @@ impl HarnessSim for WorldState {
                 PlayerCommand::UseScanner => "applied scanner",
                 PlayerCommand::PlaceInfrastructure { .. } => "applied infrastructure",
                 PlayerCommand::PlaceBomb => "applied bomb",
+                PlayerCommand::DeployExplosive { .. } => "applied explosive",
+                PlayerCommand::RemoteDetonate { .. } => "applied detonator",
                 PlayerCommand::SellCargo => "applied sell",
                 PlayerCommand::BuyUpgrade { .. } => "applied buy",
                 PlayerCommand::Refuel => "applied refuel",
@@ -328,6 +338,7 @@ impl HarnessSim for WorldState {
             WorldEvent::ActionResolved { .. } => Some("ignored action"),
             WorldEvent::Gameplay(event) => match event.kind {
                 GameplayEventKind::BombDetonated { .. } => Some("bomb detonated"),
+                GameplayEventKind::ExplosiveDetonated { .. } => Some("explosive detonated"),
                 GameplayEventKind::CargoChanged { .. } => Some("cargo changed"),
                 _ => None,
             },
