@@ -139,6 +139,15 @@ fn interior(
             &found,
             found.buildings[building].first_column + 2,
         );
+        if kind == BuildingKind::House {
+            // Early, before anyone leaves for work: the family is at home (WP-PEOPLE routines).
+            let tick = fatherload_simulation::people::TickClock::tick_at(
+                fatherload_simulation::people::DayTime::at(1, 5, 30),
+                world.tick_rate_hz(),
+                fatherload_simulation::people::clock::DEFAULT_DAY_LENGTH_MINUTES,
+            );
+            world.set_simulation_tick(fatherload_simulation::SimulationTick::new(tick));
+        }
         chosen = Some((found, building));
     });
     stage.settle(5);
