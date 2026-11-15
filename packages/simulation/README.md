@@ -34,7 +34,8 @@ drill mount stays at `DRILL_MOUNT_OFFER_INDEX` 8). The core lines (drill, fuel t
 engine, hull, radiator) run to tier 15, the scanner to 10, each hazard counter to 6-8. Prices
 grow geometrically per tier from a cheap first purchase (`upgrade_cost`); stat curves live in
 `player.rs` (`cargo_capacity_for_level` ~300 at the top, `fuel_capacity_for_level` ~3,000,
-`hull_capacity_for_level` ~2,500, `engine_power` ~4x with handling/climb speed capped).
+`hull_capacity_for_level` ~2,500, `engine_power` ~4x thrust with climb speed capped; horizontal
+top speed follows `world::engine_top_speed_tiles`, ~5x stock at the top tier).
 Capacities are stored, so a save from the old five-tier curves keeps its levels; loading it
 (`WorldState::catch_up_capacity_curves`, run by the game's save loader) lifts the tank and bay
 onto the new curve for the fitted tiers, keeping bonuses earned on top. Levels load whatever
@@ -56,9 +57,13 @@ bite, so a top drill loosens no more boulders per minute than a tier 5 one).
 Test mode (`test_mode.rs`, `world/test_mode.rs`): `WorldState::enable_test_mode` (before play)
 maxes every rig (hazard counters included) and the player template, fills the parts locker and
 grants credits. Test-mode rigs drill any tile but an indestructible one in a single chip,
-ignoring hardness; with the invulnerable toggle on (`WorldState::damage_immune`) no source
+ignoring hardness, on the tick the drill touches it (`GOD_MODE_SECONDS_PER_CHIP`), and drive
+`GOD_MODE_SPEED_MULTIPLIER` (2.2x) faster than the top engine (thrust and climb cap
+`GOD_MODE_THRUST_MULTIPLIER`, 1.5x); with the invulnerable toggle on (`WorldState::damage_immune`) no source
 damages a hull (and no damage events fire);
-`PlayerCommand::TestMode` toggles invulnerable hulls / infinite fuel (refilled every tick) or
+`PlayerCommand::TestMode` toggles invulnerable hulls / infinite fuel (refilled every tick) /
+no-clip flight (`world/no_clip.rs`: no gravity, collision, damage or drilling; turning it off
+frees rigs left in rock) or
 warps the acting rig into a carved, hazard-free pocket at the top of a band. Depth records and
 deep-reward milestones are skipped. The toggles replicate as the shared `SectionKey::TestMode`
 section and save with the world.

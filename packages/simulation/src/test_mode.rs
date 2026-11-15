@@ -1,10 +1,12 @@
-//! Test mode: a world setting for exploring the layers quickly.
+//! Test mode ("god mode"): a world setting for exploring the layers quickly.
 //!
 //! A test-mode world starts every rig with every upgrade maxed (the drill mount included), every
-//! rig part in the shared parts locker and a large credit balance. While it is on, any player may
-//! toggle an invulnerable hull and infinite fuel for the whole crew, and warp their own rig to
-//! the top of any band. Depth records and deep-reward milestones do not count in a test-mode
-//! world.
+//! rig part in the shared parts locker and a large credit balance. It is tuned to feel like the
+//! game is beaten: rigs drive and climb well above the top engine tier (see
+//! [`crate::world::DriveTuning`]) and drill anything but bedrock instantly. While it is on,
+//! any player may toggle an invulnerable hull, infinite fuel and no-clip flight for the whole
+//! crew, and warp their own rig to the top of any band. Depth records and deep-reward milestones
+//! do not count in a test-mode world.
 //!
 //! The setting is chosen when the world is created (the host's choice online) and is part of the
 //! world: it replicates as its own shared section and is saved with the world.
@@ -23,6 +25,10 @@ pub struct TestModeState {
     pub invulnerable: bool,
     /// Fuel tanks never run dry (refilled every tick).
     pub infinite_fuel: bool,
+    /// Rigs fly freely through solid rock: no gravity, no collision, no drilling (thrust flies
+    /// up, drill flies down). Turning it off frees any rig left inside rock.
+    #[serde(default)]
+    pub no_clip: bool,
 }
 
 /// A test-mode action submitted as [`crate::PlayerCommand::TestMode`]. Ignored outside a
@@ -35,4 +41,6 @@ pub enum TestModeAction {
     SetInfiniteFuel(bool),
     /// Move the submitting rig into a freshly carved, safe pocket at the top of `Band`.
     WarpToBand(Band),
+    /// Turn the crew's no-clip flight on or off.
+    SetNoClip(bool),
 }

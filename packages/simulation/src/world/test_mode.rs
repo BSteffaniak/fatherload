@@ -49,6 +49,7 @@ impl WorldState {
         self.test_mode.get_or_insert(TestModeState {
             invulnerable: true,
             infinite_fuel: true,
+            no_clip: false,
         });
         equip_for_testing(&mut self.player_template);
         for player in self.players.values_mut() {
@@ -69,6 +70,18 @@ impl WorldState {
             TestModeAction::SetInvulnerable(on) => state.invulnerable = on,
             TestModeAction::SetInfiniteFuel(on) => state.infinite_fuel = on,
             TestModeAction::WarpToBand(band) => return self.warp_to_band(player_id, band),
+            TestModeAction::SetNoClip(on) => {
+                let was_on = state.no_clip;
+                state.no_clip = on;
+                if was_on && !on {
+                    self.free_rigs_from_rock();
+                }
+                if on {
+                    // Flight takes over: any drill in progress stops.
+                    self.active_drills.clear();
+                    self.active_drill_timers.clear();
+                }
+            }
         }
         self.apply_test_mode_refills();
         PlayerScopedCommandOutcome::Applied

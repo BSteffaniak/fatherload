@@ -316,8 +316,11 @@ pub const fn hull_capacity_for_level(level: u8) -> f32 {
     (100 + 40 * n + 10 * n * n.saturating_sub(1)) as f32
 }
 
-/// Thrust and handling multiplier of an engine at `level`: +0.28 per tier up to tier 5, then
-/// +0.2 per tier (about 4x stock at the top tier).
+/// Thrust multiplier of an engine at `level`: +0.28 per tier up to tier 5, then +0.2 per tier
+/// (about 4x stock at the top tier).
+///
+/// Horizontal top speed has its own, steeper curve (`crate::world::engine_top_speed_tiles`,
+/// about 5x stock at the top tier).
 #[must_use]
 #[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
 pub const fn engine_power(level: u8) -> f32 {
@@ -329,10 +332,12 @@ pub const fn engine_power(level: u8) -> f32 {
     }
 }
 
-/// Horizontal speed multiplier cap: the top engines lift far more but do not skate faster
-/// than this (keeps steps well under a tile per tick at every supported tick rate).
+/// Former horizontal speed multiplier cap, kept for API compatibility.
+///
+/// Horizontal speed now follows the eased drive model (`crate::world::DriveTuning`) and fast
+/// rigs are swept in collision sub-steps, so nothing reads this any more.
 pub const ENGINE_HANDLING_CAP: f32 = 2.4;
-/// Climb speed multiplier cap (as [`ENGINE_HANDLING_CAP`], for climbing).
+/// Climb speed multiplier cap: the top engines lift far more but do not climb faster than this.
 pub const ENGINE_CLIMB_CAP: f32 = 3.0;
 
 /// Fuel burned per second of thrust relative to stock, for a fuel tank at `level` (better

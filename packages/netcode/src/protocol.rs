@@ -14,6 +14,8 @@ use crate::params::{NetTuning, SessionParams};
 use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 
 /// Version byte prefixed to every encoded message.
+///
+/// 8: test-mode no-clip flight (`TestModeState::no_clip`, `TestModeAction::SetNoClip`).
 pub const PROTOCOL_VERSION: u8 = 8;
 
 /// One client input frame: the controls and actions for exactly one tick.

@@ -2,15 +2,28 @@
 
 use crate::{
     ids::PlayerId,
-    player::{
-        ENGINE_CLIMB_CAP, ENGINE_HANDLING_CAP, drill_bite, engine_power, fuel_burn_efficiency,
-    },
+    player::{ENGINE_CLIMB_CAP, drill_bite, engine_power, fuel_burn_efficiency},
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
     terrain::{TILE_SIZE, Terrain, TilePosition},
 };
 
 use super::WorldState;
+
+pub mod drive;
+#[cfg(test)]
+mod feel_report;
+
+pub use drive::{
+    AIR_TOP_SPEED_FACTOR, DRIVE_STEP_SECONDS, DriveTuning, ENGINE_TOP_SPEED_TILES,
+    GOD_MODE_SPEED_MULTIPLIER, GOD_MODE_THRUST_MULTIPLIER, engine_top_speed_tiles,
+};
+
+/// Hard cap on a rig's speed along either axis (px/s), whatever flings it.
+pub const AUTHORITATIVE_ABSOLUTE_MAX_SPEED: f32 = 1_200.0;
+/// Longest collision sub-step (px): a fast rig is swept in steps this long, so it can never skip
+/// over a tile however fast it moves or however low the tick rate.
+pub const AUTHORITATIVE_COLLISION_STEP: f32 = TILE_SIZE * 0.5;
 
 pub const AUTHORITATIVE_HORIZONTAL_SPEED: f32 = 140.0;
 pub const AUTHORITATIVE_HORIZONTAL_ACCELERATION: f32 = 900.0;
@@ -98,6 +111,7 @@ impl WorldState {
             .unwrap_or_default();
         let mechanic_level = self.mechanic_levels.get(&player_id).copied().unwrap_or(0);
         let immune = self.damage_immune();
+        let god_mode = self.is_test_mode();
         let player = self.players.get_mut(&player_id)?;
         let grounded = authoritative_player_collides(&self.terrain, player.x, player.y + 2.0);
         let mut effective_cargo_capacity = player.cargo_capacity;
@@ -133,28 +147,33 @@ impl WorldState {
         if parts.contains(&RigPartKind::CargoBalloon) {
             engine_multiplier *= 0.88;
         }
-        let horizontal_acceleration = if grounded {
-            AUTHORITATIVE_HORIZONTAL_ACCELERATION * 1.35
+        // Top speed, spool-up and braking all scale with the engine tier (see `drive`); rig
+        // parts and the cargo load scale the tier's top speed as they scale its thrust.
+        let drive_modifier = engine_multiplier / engine_power(player.engine_level);
+        let (god_speed, god_thrust) = if god_mode {
+            (GOD_MODE_SPEED_MULTIPLIER, GOD_MODE_THRUST_MULTIPLIER)
         } else {
-            AUTHORITATIVE_HORIZONTAL_ACCELERATION * 0.65
+            (1.0, 1.0)
         };
-        let (drag, gain) = if grounded {
-            (timing.ground_drag_per_tick, timing.ground_acceleration_gain)
+        let ground_top =
+            engine_top_speed_tiles(player.engine_level) * drive_modifier * god_speed * TILE_SIZE;
+        let top = if grounded {
+            ground_top
         } else {
-            (timing.air_drag_per_tick, timing.air_acceleration_gain)
+            ground_top * AIR_TOP_SPEED_FACTOR
         };
-        // The top engines lift far more, but handling and climb speed are capped so a step
-        // stays well under a tile per tick.
-        let handling = engine_multiplier.min(ENGINE_HANDLING_CAP);
-        let climb = engine_multiplier.min(ENGINE_CLIMB_CAP);
         player.velocity_x = quantize_simulation_scalar(
-            (horizontal.clamp(-1.0, 1.0) * horizontal_acceleration * handling)
-                .mul_add(gain, player.velocity_x * drag),
-        )
-        .clamp(
-            -AUTHORITATIVE_MAX_HORIZONTAL_SPEED * handling,
-            AUTHORITATIVE_MAX_HORIZONTAL_SPEED * handling,
+            DriveTuning::new(top, grounded)
+                .step_tick(player.velocity_x, horizontal, timing.rate)
+                .clamp(
+                    -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+                    AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+                ),
         );
+        // The top engines lift far more, but climb speed is capped (higher in god mode).
+        let climb = engine_multiplier.min(ENGINE_CLIMB_CAP) * god_thrust;
+        // A rig only dents itself on a wall when flung into it faster than it can drive.
+        let wall_crash_speed = (AUTHORITATIVE_SAFE_LANDING_SPEED * 0.75).max(ground_top * 1.1);
         let thrusting = thrust && player.fuel > 0.0;
         // Exact integration of dv/dt = a - k v over the tick (positive y is down).
         let lift = if thrusting {
@@ -163,7 +182,7 @@ impl WorldState {
             } else {
                 1.0
             };
-            AUTHORITATIVE_THRUST_ACCELERATION * engine_multiplier * brake
+            AUTHORITATIVE_THRUST_ACCELERATION * engine_multiplier * brake * god_thrust
         } else {
             0.0
         };
@@ -193,61 +212,82 @@ impl WorldState {
             );
         }
 
+        let mut mitigation = (f32::from(mechanic_level) * 0.08).min(0.32);
+        if parts.contains(&RigPartKind::ImpactHull) {
+            mitigation += 0.22;
+        }
+        if parts.contains(&RigPartKind::ThermalHull) {
+            mitigation -= 0.10;
+        }
+        let mitigated = |damage: f32| damage * (1.0 - mitigation.clamp(0.0, 0.55));
+
         let delta_x = quantize_simulation_scalar(player.velocity_x * delta_seconds);
         let delta_y = quantize_simulation_scalar(player.velocity_y * delta_seconds);
-        let (next_x, next_remainder) = integrate_x(player.x, player.x_remainder, delta_x);
-        let next_y = quantize_simulation_scalar(player.y + delta_y);
-
-        if authoritative_player_collides(&self.terrain, next_x, player.y) {
-            let impact_speed = player.velocity_x.abs();
-            if impact_speed > AUTHORITATIVE_SAFE_LANDING_SPEED * 0.75 {
-                let damage = AUTHORITATIVE_SAFE_LANDING_SPEED.mul_add(-0.75, impact_speed)
-                    * AUTHORITATIVE_CRASH_DAMAGE_SCALE
-                    * 0.5;
-                let mut mitigation = (f32::from(mechanic_level) * 0.08).min(0.32);
-                if parts.contains(&RigPartKind::ImpactHull) {
-                    mitigation += 0.22;
-                }
-                if parts.contains(&RigPartKind::ThermalHull) {
-                    mitigation -= 0.10;
-                }
-                let damage = damage * (1.0 - mitigation.clamp(0.0, 0.55));
-                if !immune {
-                    player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
-                }
-            }
-            player.velocity_x = 0.0;
+        // A fast rig is swept in short sub-steps (a slow one takes the whole tick in one).
+        let steps = collision_steps(delta_x, delta_y);
+        let (step_x, step_y) = if steps == 1 {
+            (delta_x, delta_y)
         } else {
-            let clamped = clamp_authoritative_player_x(&self.terrain, next_x);
-            if clamped.to_bits() == next_x.to_bits() {
-                player.x = next_x;
-                player.x_remainder = next_remainder;
-            } else {
-                player.x = quantize_simulation_scalar(clamped);
-                player.x_remainder = 0.0;
+            #[allow(clippy::cast_precision_loss, reason = "a handful of sub-steps")]
+            let steps = steps as f32;
+            (
+                quantize_simulation_scalar(delta_x / steps),
+                quantize_simulation_scalar(delta_y / steps),
+            )
+        };
+        let (mut blocked_x, mut blocked_y) = (false, false);
+        for _ in 0..steps {
+            if !blocked_x {
+                let (next_x, next_remainder) = integrate_x(player.x, player.x_remainder, step_x);
+                if authoritative_player_collides(&self.terrain, next_x, player.y) {
+                    let impact_speed = player.velocity_x.abs();
+                    if impact_speed > wall_crash_speed && !immune {
+                        let damage = (impact_speed - wall_crash_speed)
+                            * AUTHORITATIVE_CRASH_DAMAGE_SCALE
+                            * 0.5;
+                        player.hull =
+                            quantize_simulation_scalar((player.hull - mitigated(damage)).max(0.0));
+                    }
+                    player.velocity_x = 0.0;
+                    blocked_x = true;
+                } else {
+                    let clamped = clamp_authoritative_player_x(&self.terrain, next_x);
+                    if clamped.to_bits() == next_x.to_bits() {
+                        player.x = next_x;
+                        player.x_remainder = next_remainder;
+                    } else {
+                        // Pressed against the world's edge: no speed left to carry.
+                        player.velocity_x = 0.0;
+                        blocked_x = true;
+                        player.x = quantize_simulation_scalar(clamped);
+                        player.x_remainder = 0.0;
+                    }
+                }
             }
-        }
-
-        if authoritative_player_collides(&self.terrain, player.x, next_y) {
-            if delta_y > 0.0 && player.velocity_y > AUTHORITATIVE_SAFE_LANDING_SPEED {
-                let damage = (player.velocity_y - AUTHORITATIVE_SAFE_LANDING_SPEED)
-                    * AUTHORITATIVE_CRASH_DAMAGE_SCALE;
-                let mut mitigation = (f32::from(mechanic_level) * 0.08).min(0.32);
-                if parts.contains(&RigPartKind::ImpactHull) {
-                    mitigation += 0.22;
-                }
-                if parts.contains(&RigPartKind::ThermalHull) {
-                    mitigation -= 0.10;
-                }
-                let damage = damage * (1.0 - mitigation.clamp(0.0, 0.55));
-                if !immune {
-                    player.hull = quantize_simulation_scalar((player.hull - damage).max(0.0));
+            if !blocked_y {
+                let next_y = quantize_simulation_scalar(player.y + step_y);
+                if authoritative_player_collides(&self.terrain, player.x, next_y) {
+                    if delta_y > 0.0 && player.velocity_y > AUTHORITATIVE_SAFE_LANDING_SPEED {
+                        let damage = (player.velocity_y - AUTHORITATIVE_SAFE_LANDING_SPEED)
+                            * AUTHORITATIVE_CRASH_DAMAGE_SCALE;
+                        if !immune {
+                            player.hull = quantize_simulation_scalar(
+                                (player.hull - mitigated(damage)).max(0.0),
+                            );
+                        }
+                    }
+                    player.velocity_y = 0.0;
+                    blocked_y = true;
+                } else {
+                    let clamped = clamp_authoritative_player_y(&self.terrain, next_y);
+                    if clamped.to_bits() != next_y.to_bits() {
+                        // Pressed against the sky ceiling (or the world's floor).
+                        player.velocity_y = 0.0;
+                        blocked_y = true;
+                    }
+                    player.y = quantize_simulation_scalar(clamped);
                 }
             }
-            player.velocity_y = 0.0;
-        } else {
-            player.y =
-                quantize_simulation_scalar(clamp_authoritative_player_y(&self.terrain, next_y));
         }
 
         Some(AuthoritativeMovementStep {
@@ -281,6 +321,23 @@ pub fn integrate_x(x: f32, remainder: f32, delta_x: f32) -> (f32, f32) {
     #[allow(clippy::cast_possible_truncation, reason = "a sub-ulp remainder")]
     let rest = (exact - f64::from(next)) as f32;
     (next, rest)
+}
+
+/// Collision sub-steps for a move of `(delta_x, delta_y)` px: one for any move shorter than
+/// [`AUTHORITATIVE_COLLISION_STEP`] on both axes (every pre-retune speed), more for fast rigs.
+#[must_use]
+pub fn collision_steps(delta_x: f32, delta_y: f32) -> u32 {
+    let longest = delta_x.abs().max(delta_y.abs());
+    if longest.is_nan() || longest <= AUTHORITATIVE_COLLISION_STEP {
+        return 1;
+    }
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a capped speed covers a handful of sub-steps per tick"
+    )]
+    let steps = (longest / AUTHORITATIVE_COLLISION_STEP).ceil().min(64.0) as u32;
+    steps.max(1)
 }
 
 pub(super) fn authoritative_player_collides(terrain: &Terrain, x: f32, y: f32) -> bool {

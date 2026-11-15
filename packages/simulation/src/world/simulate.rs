@@ -70,11 +70,18 @@ impl WorldState {
                 if target.is_some() && target != previous_target {
                     output.push_event(GameplayEventKind::DrillStarted { player_id });
                 }
-                let _step = self.step_authoritative_movement(
-                    player_id,
-                    controls.horizontal(),
-                    controls.thrust,
-                );
+                let _step = if self.no_clip_active() {
+                    // Test-mode no-clip: thrust flies up, drill flies down.
+                    let vertical =
+                        f32::from(i8::from(controls.drill_down) - i8::from(controls.thrust));
+                    self.step_no_clip_flight(player_id, controls.horizontal(), vertical)
+                } else {
+                    self.step_authoritative_movement(
+                        player_id,
+                        controls.horizontal(),
+                        controls.thrust,
+                    )
+                };
             }
             for action in &input.actions {
                 let outcome = if !self.players.contains_key(&player_id) {

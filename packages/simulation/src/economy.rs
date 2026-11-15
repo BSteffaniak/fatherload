@@ -729,9 +729,11 @@ pub fn upgrade_effect(player: &Player, kind: UpgradeKind) -> Option<String> {
             cargo_capacity_for_level(next)
         ),
         UpgradeKind::Engine => format!(
-            "Thrust x{:.2} -> x{:.2}",
+            "Thrust x{:.2} -> x{:.2}, top speed {:.1} -> {:.1} tiles/s",
             engine_power(level),
-            engine_power(next)
+            engine_power(next),
+            crate::world::engine_top_speed_tiles(level),
+            crate::world::engine_top_speed_tiles(next)
         ),
         UpgradeKind::Hull => format!(
             "Plating {:.0} -> {:.0} hull",

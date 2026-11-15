@@ -36,10 +36,13 @@ mod entity_tests;
 mod flight_tests;
 mod garage;
 #[cfg(test)]
+mod god_mode_tests;
+#[cfg(test)]
 mod hazard_counter_tests;
 mod hazards;
 mod import;
 mod movement;
+mod no_clip;
 #[cfg(test)]
 mod persistence_tests;
 mod player_sections;
@@ -103,6 +106,13 @@ pub use movement::{
     AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES, AUTHORITATIVE_THRUST_ACCELERATION,
     AUTHORITATIVE_VERTICAL_DRAG_RATE_PER_SECOND, AuthoritativeMovementStep, integrate_x,
 };
+// Movement feel (WP-FEEL): the eased drive model, per-tier top speeds and god-mode tuning.
+pub use movement::{
+    AIR_TOP_SPEED_FACTOR, AUTHORITATIVE_ABSOLUTE_MAX_SPEED, AUTHORITATIVE_COLLISION_STEP,
+    DRIVE_STEP_SECONDS, DriveTuning, ENGINE_TOP_SPEED_TILES, GOD_MODE_SPEED_MULTIPLIER,
+    GOD_MODE_THRUST_MULTIPLIER, collision_steps, engine_top_speed_tiles,
+};
+pub use no_clip::NO_CLIP_SPEED;
 /// Tick deadline of a rig's next drill chip.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub struct ActiveDrillTimer {

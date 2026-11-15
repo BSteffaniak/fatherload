@@ -26,6 +26,9 @@ use super::{WorldState, movement::authoritative_player_collides, record_service_
 /// deeper per chip instead (see [`drill_bite`]), which keeps the dig pace the same at every tick
 /// rate.
 pub const MIN_DRILL_SECONDS_PER_CHIP: f32 = 0.045;
+/// Chip period in test mode ("god mode"): shorter than a tick at any supported tick rate, so a
+/// tile (anything but bedrock, in one chip) falls the very tick the drill touches it.
+pub const GOD_MODE_SECONDS_PER_CHIP: f32 = 0.001;
 /// Hull damage from drilling into a lava tile (before lava plating).
 pub const LAVA_DRILL_DAMAGE: f32 = 6.0;
 /// Hull damage from drilling into a pressure pocket (before pressure bracing).
@@ -162,6 +165,11 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
+        if self.no_clip_active() {
+            // No-clip flight passes through rock instead of drilling it.
+            self.set_active_drill(player_id, None);
+            return PlayerScopedCommandOutcome::Applied;
+        }
         let contact = DrillContact::of(&self.terrain, player);
         let intent = DrillIntent {
             horizontal,
@@ -196,7 +204,7 @@ impl WorldState {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;
             }
-            // Test mode drills anything but the world's floor, near-instantly.
+            // Test mode drills anything but the world's floor, instantly.
             let unrestricted = self.is_test_mode();
             let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
                 || parts.contains(&RigPartKind::ResonanceDrill)
@@ -216,7 +224,7 @@ impl WorldState {
             }
             let initial_durability = tile.durability.max(1);
             let seconds_per_chip = if unrestricted {
-                MIN_DRILL_SECONDS_PER_CHIP
+                GOD_MODE_SECONDS_PER_CHIP
             } else {
                 authoritative_drill_seconds_per_chip(
                     tile.kind,
