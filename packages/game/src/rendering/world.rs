@@ -42,6 +42,7 @@ mod quest_marks;
 mod rig;
 mod sky;
 mod speed_fx;
+mod surface;
 mod villages;
 mod weapons;
 
@@ -136,11 +137,15 @@ impl WorldScene<'_> {
     }
 }
 
-/// Continues the hills backdrop down to the ground wherever the surface heightmap lowers a
-/// column's ground below the classic ground line (open sky there, not a dark tunnel).
+/// Continues the hills backdrop down to the ground wherever a V5 world's placeholder surface
+/// lowers a column's ground below the classic ground line (open sky there, not a dark tunnel).
+/// Biome worlds' near hills carry their own skirt down past their anchor instead.
 fn draw_lowered_ground_backdrop(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectangle) {
-    let hills_bottom = GROUND_Y + ART * 2.0;
-    if !terrain.is_streamed() || visible.y > hills_bottom + 4.0 * TILE_SIZE {
+    let hills_bottom = sky::hills_bottom(terrain.settings(), visible);
+    if !terrain.is_streamed()
+        || terrain.settings().generator.has_biomes()
+        || visible.y > hills_bottom + 4.0 * TILE_SIZE
+    {
         return;
     }
     let first = (visible.x / TILE_SIZE).floor() as i32;
@@ -178,7 +183,13 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         visible: scene.visible,
         seconds,
     };
-    sky::draw_sky(draw, scene.sky, scene.visible, seconds);
+    sky::draw_sky(
+        draw,
+        scene.sky,
+        scene.terrain.settings(),
+        scene.visible,
+        seconds,
+    );
     draw_lowered_ground_backdrop(draw, scene.terrain, scene.visible);
     buildings::draw_town(draw, scene.visible, scene.local, seconds);
     villages::draw_villages(
@@ -197,6 +208,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     );
     draw_world_edges(draw, scene.terrain, scene.visible);
     scene.terrain_renderer.draw(draw, scene.visible);
+    surface::draw_flora(draw, &scene.sky.surface, scene.terrain, scene.visible);
+    surface::draw_water(draw, scene.terrain, scene.visible, scene.ticks);
     base::draw_back_walls(draw, &base_scene);
     villages::draw_trails(
         draw,
@@ -311,6 +324,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         let accent = player_accent(local.player_id, Some(local.cosmetics));
         weapons::draw_reticle(draw, &reticle, accent, seconds);
     }
+    surface::draw_weather(draw, scene.terrain, scene.visible, scene.ticks);
     for player in scene.players {
         let is_local = scene
             .local

@@ -230,13 +230,22 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
         .map(|option| pause_entry(option, test_mode, ui.snapshot.enemy_difficulty))
         .collect();
     let player = ui.player;
+    let hud = ui.view.hud;
+    let height = hud.altitude.map_or_else(
+        || {
+            SectionItem::icon_stat(
+                &icons::DEPTH,
+                "Depth",
+                format!("{} m", hud.depth),
+                SKY_LIGHT,
+            )
+        },
+        |altitude| {
+            SectionItem::icon_stat(&icons::ALTITUDE, "Altitude", format!("{altitude} m"), MINT)
+        },
+    );
     let mut rig = vec![
-        SectionItem::icon_stat(
-            &icons::DEPTH,
-            "Depth",
-            format!("{} m", (player.y / TILE_SIZE).max(0.0) as i32),
-            SKY_LIGHT,
-        ),
+        height,
         SectionItem::icon_stat(&icons::CREDITS, "Credits", player.credits.to_string(), GOLD),
         SectionItem::icon_stat(
             &icons::HULL,

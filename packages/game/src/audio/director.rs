@@ -148,6 +148,8 @@ enum SeatLoop {
     Lava,
     Gas,
     Boulders,
+    Wind,
+    Rain,
 }
 
 /// Where a local seat hears from.
@@ -659,11 +661,73 @@ impl Director {
             ),
         );
 
+        self.surface_ambience(live, listener, terrain);
+
         state.initialized = true;
         state.velocity_x = velocity_x;
         state.velocity_y = velocity_y;
         state.airborne = airborne;
         *self.seat_state(listener.seat) = state;
+    }
+
+    /// Biome ambience out on the surface (WP-SURFACE): wind by biome that strengthens and
+    /// rises in pitch with altitude (and thins out to silence in space), rain over wetlands.
+    /// Underground both fade within a few rows.
+    fn surface_ambience(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        terrain: &fatherload_simulation::terrain::Terrain,
+    ) {
+        use fatherload_simulation::{terrain::TILE_SIZE, worldgen::biome::{self, Biome}};
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "world pixels to tiles"
+        )]
+        let column = (listener.x / TILE_SIZE).floor() as i32;
+        #[allow(clippy::cast_precision_loss, reason = "surface rows are small")]
+        let ground = terrain.surface_row(column) as f32 * TILE_SIZE;
+        // Tiles above (positive) or below (negative) the column's ground.
+        let height = (ground - listener.y) / TILE_SIZE;
+        let open = ((height + 4.0) / 4.0).clamp(0.0, 1.0);
+        let settings = terrain.settings();
+        let biome = biome::biome_at(settings, column);
+        let base = match biome {
+            Biome::Tundra => 0.45,
+            Biome::Mountains => 0.35,
+            Biome::Desert | Biome::Badlands => 0.3,
+            Biome::Wetlands => 0.12,
+            Biome::Plains => 0.1,
+            Biome::Forest => 0.06,
+        };
+        // Stronger wind higher up, peaking a couple of hundred tiles up, then thinning air.
+        let climb = (height / 200.0).clamp(0.0, 1.0);
+        let thin = (1.0 - (height - 300.0) / 400.0).clamp(0.0, 1.0);
+        let wind = (base + climb * 0.5).min(1.0) * open * thin;
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Wind,
+            Patch::WindLoop,
+            (
+                wind * 0.55,
+                0.0,
+                0.9 + climb * 0.35,
+                1_800.0 + 10_000.0 * climb,
+            ),
+        );
+        let rain = if biome == Biome::Wetlands && settings.generator.has_biomes() {
+            open * (1.0 - height / 40.0).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Rain,
+            Patch::RainLoop,
+            (rain * 0.45, 0.0, 1.0, OPEN_CUTOFF),
+        );
     }
 
     /// Bomb fuses tick faster as they burn down (C4 only once its detonator has fired).

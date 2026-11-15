@@ -309,8 +309,30 @@ pub struct HudValues {
     pub credits: u32,
     pub cargo_used: u32,
     pub cargo_capacity: u32,
+    /// Metres (rows) below the ground of the rig's own column (0 at or above it): the surface
+    /// heightmap moves the ground, so depth counts from wherever it is.
     pub depth: i32,
+    /// Metres above the ground of the rig's column while flying above it (`None` on the
+    /// ground and underground). The sky has no ceiling, so this can be very large.
+    pub altitude: Option<i32>,
+    /// The rig's tile row (absolute: depth rules such as heat read classic nominal rows).
+    pub row: i32,
     pub scanner_cooldown_seconds: f32,
+}
+
+/// Depth below and altitude above column ground at `surface_row` for a rig whose centre is
+/// in tile row `row`: a rig resting on the ground (centre in the row above it) reads 0 m
+/// either way.
+#[must_use]
+pub fn depth_and_altitude(row: i32, surface_row: i32) -> (i32, Option<i32>) {
+    let resting_row = surface_row - 1;
+    if row > resting_row {
+        (row - resting_row, None)
+    } else if row < resting_row {
+        (0, Some(resting_row - row))
+    } else {
+        (0, None)
+    }
 }
 
 /// Camera position (top-left of the view, world pixels).
@@ -793,11 +815,8 @@ fn view_snapshot(
 ) -> Option<ViewSnapshot<'_>> {
     let player = world.player(player_id)?;
     let camera = camera_for(viewport, world_scale, player.x, player.y);
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "bounded world depth is displayed in whole tiles"
-    )]
-    let depth = (player.y / TILE_SIZE).max(0.0) as i32;
+    let tile = player.tile_position(TILE_SIZE);
+    let (depth, altitude) = depth_and_altitude(tile.y, world.terrain().surface_row(tile.x));
     Some(ViewSnapshot {
         aim_preview: None,
         reticle: None,
@@ -821,6 +840,8 @@ fn view_snapshot(
             cargo_used: player.cargo_used(),
             cargo_capacity: player.cargo_capacity,
             depth,
+            altitude,
+            row: tile.y,
             scanner_cooldown_seconds: world.scanner_cooldown_seconds(player_id).unwrap_or(0.0),
         },
         active_drill: world.active_drill(player_id).copied(),

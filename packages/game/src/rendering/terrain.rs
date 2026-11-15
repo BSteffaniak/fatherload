@@ -42,8 +42,8 @@ struct ChunkPosition {
 
 pub(super) struct TerrainRenderer {
     chunks: BTreeMap<ChunkPosition, TerrainChunk>,
-    /// The terrain's columns (first, last) and height the chunks were cut for.
-    bounds: (i32, i32, i32),
+    /// The terrain's columns (first, last), first row and height the chunks were cut for.
+    bounds: (i32, i32, i32, i32),
 }
 
 /// What a chunk must redo before it is drawn.
@@ -126,8 +126,8 @@ impl TerrainRenderer {
     /// The chunk holding `position`, if it exists (chunks not yet created are painted whole
     /// when they are).
     fn chunk_for_tile_mut(&mut self, position: TilePosition) -> Option<&mut TerrainChunk> {
-        let (first, last, height) = self.bounds;
-        if position.x < first || position.y < 0 || position.x > last || position.y >= height {
+        let (first, last, top, height) = self.bounds;
+        if position.x < first || position.y < top || position.x > last || position.y >= height {
             return None;
         }
         self.chunks.get_mut(&chunk_position_for_tile(position))
@@ -208,15 +208,23 @@ impl TerrainRenderer {
         terrain: &Terrain,
         view: Rectangle,
     ) {
-        let (first, last, height) = self.bounds;
+        let (first, last, top, height) = self.bounds;
         let tile = |value: f32| (value / TILE_SIZE).floor() as i32;
+        let (top_row, bottom_row) = (
+            tile(view.y).max(top),
+            tile(view.y + view.height).min(height - 1),
+        );
+        if bottom_row < top_row {
+            // All sky (or all below the floor): no terrain to cut.
+            return;
+        }
         let min = chunk_position_for_tile(TilePosition {
             x: tile(view.x).max(first),
-            y: tile(view.y).max(0),
+            y: top_row,
         });
         let max = chunk_position_for_tile(TilePosition {
             x: tile(view.x + view.width).min(last),
-            y: tile(view.y + view.height).min(height - 1),
+            y: bottom_row,
         });
         for y in min.y..=max.y {
             for x in min.x..=max.x {
@@ -229,9 +237,14 @@ impl TerrainRenderer {
     }
 }
 
-/// The columns (first, last) and height of `terrain`.
-const fn terrain_bounds(terrain: &Terrain) -> (i32, i32, i32) {
-    (terrain.min_x(), terrain.max_x(), terrain.height())
+/// The columns (first, last), first row and height of `terrain`.
+const fn terrain_bounds(terrain: &Terrain) -> (i32, i32, i32, i32) {
+    (
+        terrain.min_x(),
+        terrain.max_x(),
+        terrain.min_y(),
+        terrain.height(),
+    )
 }
 
 impl TerrainChunk {
@@ -242,7 +255,7 @@ impl TerrainChunk {
         terrain: &Terrain,
     ) -> Self {
         let tile_min_x = (position.x * TERRAIN_CHUNK_SIZE_TILES).max(terrain.min_x());
-        let tile_min_y = position.y * TERRAIN_CHUNK_SIZE_TILES;
+        let tile_min_y = (position.y * TERRAIN_CHUNK_SIZE_TILES).max(terrain.min_y());
         let tile_max_x = (position.x * TERRAIN_CHUNK_SIZE_TILES + TERRAIN_CHUNK_SIZE_TILES)
             .min(terrain.max_x() + 1);
         let tile_max_y = (tile_min_y + TERRAIN_CHUNK_SIZE_TILES).min(terrain.height());

@@ -371,7 +371,12 @@ fn draw_wallet_panel(
 ) {
     let hud = view.hud;
     let money = format!("{}", hud.credits);
-    let depth = format!("{} m", hud.depth);
+    // Underground (or on the ground): depth below the local surface; in the air: altitude
+    // above it.
+    let (depth, depth_icon, depth_color) = hud.altitude.map_or_else(
+        || (format!("{} m", hud.depth), &icons::DEPTH, SKY_LIGHT),
+        |altitude| (format!("{altitude} m"), &icons::ALTITUDE, MINT),
+    );
     let has_scanner = view.player.scanner_level > 0;
     let scan = if hud.scanner_cooldown_seconds > 0.05 {
         format!("{:.0}s", hud.scanner_cooldown_seconds.ceil())
@@ -433,8 +438,8 @@ fn draw_wallet_panel(
     let right = x + panel_width - ui_kit::PANEL_PADDING;
     ui_kit::icon(draw, &icons::CREDITS, x + 6, top + 6);
     ui_kit::text_right(draw, &money, right, top + 7, TextStyle::Bold, GOLD);
-    ui_kit::icon(draw, &icons::DEPTH, x + 6, top + 17);
-    ui_kit::text_right(draw, &depth, right, top + 18, TextStyle::Bold, SKY_LIGHT);
+    ui_kit::icon(draw, depth_icon, x + 6, top + 17);
+    ui_kit::text_right(draw, &depth, right, top + 18, TextStyle::Bold, depth_color);
     ui_kit::divider(draw, x + 4, top + 28, panel_width - 8);
     // Tool chips: bombs on the left, the scanner's cooldown on the right.
     let chip_y = top + 32;
@@ -681,7 +686,7 @@ fn hud_warnings(
         warnings.push(("HOPPER FULL", &icons::STONE_BLOCK));
     }
     // Warning depths are classic nominal rows (deep worlds stretch them with their bands).
-    let depth = snapshot.terrain.nominal_row(view.hud.depth);
+    let depth = snapshot.terrain.nominal_row(view.hud.row.max(0));
     if depth >= 60 {
         warnings.push(("HEAT", &icons::HEAT));
     }
@@ -750,13 +755,17 @@ pub(super) fn draw_minimap_for_view(
 
     let terrain_height = terrain.height().max(1);
     let player_tile = view.player.tile_position(TILE_SIZE);
-    // A bounded world fits across the minimap; an endless one scrolls with the rig.
+    // A bounded world fits across the minimap; an endless one scrolls with the rig. Rows
+    // follow the rig between the world's first row (mountain tops) and its floor; high in the
+    // sky the minimap keeps showing the top of the world below the rig.
     let (origin_x, visible_width) = minimap_columns(terrain, player_tile.x);
-    let visible_height = terrain_height.min(80);
-    let origin_y = if terrain_height > visible_height {
-        (player_tile.y - visible_height / 2).clamp(0, terrain_height - visible_height)
+    let top_row = terrain.min_y();
+    let world_rows = terrain_height - top_row;
+    let visible_height = world_rows.min(80);
+    let origin_y = if world_rows > visible_height {
+        (player_tile.y - visible_height / 2).clamp(top_row, terrain_height - visible_height)
     } else {
-        0
+        top_row
     };
     for py in 0..height {
         let tile_y = origin_y + py * visible_height / height;
@@ -765,16 +774,9 @@ pub(super) fn draw_minimap_for_view(
                 x: origin_x + px * visible_width / width,
                 y: tile_y,
             };
-            let sky = tile_y <= 4 || tile_y < terrain.surface_row(position.x);
-            if !sky && !explored.contains(position) {
-                continue;
+            if let Some(color) = map_tile_color(terrain, position, explored.contains(position)) {
+                draw.draw_rectangle(x + px, y + py, 1, 1, color);
             }
-            let color = match terrain.tile(position) {
-                Some(tile) if tile.kind == TileKind::Air && sky => DEEP_BLUE,
-                Some(tile) => minimap_color(tile.kind),
-                None => continue,
-            };
-            draw.draw_rectangle(x + px, y + py, 1, 1, color);
         }
     }
     let to_map = |tile_x: i32, tile_y: i32| {
@@ -842,10 +844,27 @@ pub(super) fn draw_minimap_for_view(
             ui_kit::text_right(draw, &heading, x + width + 4, y - 18, TextStyle::Body, BONE);
         }
     }
-    let (map_x, map_y) = to_map(player_tile.x, player_tile.y);
+    let (map_x, map_y) = to_map(player_tile.x, player_tile.y.max(origin_y));
     let blink = (ui_kit::seconds() * 2.0) as i32 % 2 == 0;
     draw.draw_rectangle(map_x - 1, map_y - 1, 3, 3, INK);
     draw.draw_rectangle(map_x, map_y, 1, 1, if blink { BONE } else { SKY_LIGHT });
+}
+
+/// The map colour of `position`: open sky above the column's ground always shows, the rest
+/// only once explored (`None`: leave the map's background).
+fn map_tile_color(terrain: &Terrain, position: TilePosition, explored: bool) -> Option<Color> {
+    let biomes = terrain.settings().generator.has_biomes();
+    let surface = terrain.surface_row(position.x);
+    let sky = position.y < surface || (!biomes && position.y <= 4);
+    if !sky && !explored {
+        return None;
+    }
+    match terrain.tile(position) {
+        Some(tile) if tile.kind == TileKind::Air && sky => Some(DEEP_BLUE),
+        Some(tile) => Some(minimap_color(tile.kind)),
+        None if sky => Some(DEEP_BLUE),
+        None => None,
+    }
 }
 
 /// Columns the minimap spans in an endless world (about the width of a classic bounded world).
@@ -891,10 +910,16 @@ pub(super) fn draw_depth_ruler_for_view(
     }
     let depth = (view.player.y / TILE_SIZE).max(0.0);
     let marker_y = top + ((depth / max_depth as f32).clamp(0.0, 1.0) * (height - 1) as f32) as i32;
-    // A left-pointing marker: ink outline around a gold arrow.
+    // A left-pointing marker: ink outline around a gold arrow (mint while flying above the
+    // ground, pinned to the top: the sky has no end to show).
+    let (body, shade) = if view.hud.altitude.is_some() {
+        (MINT, TEAL)
+    } else {
+        (GOLD, AMBER)
+    };
     draw.draw_rectangle(x - 4, marker_y - 3, 11, 7, INK);
-    draw.draw_rectangle(x - 3, marker_y - 2, 9, 5, GOLD);
-    draw.draw_rectangle(x - 3, marker_y + 1, 9, 1, AMBER);
+    draw.draw_rectangle(x - 3, marker_y - 2, 9, 5, body);
+    draw.draw_rectangle(x - 3, marker_y + 1, 9, 1, shade);
 }
 
 /// Tints the depth ruler's well with the band colours of the rig's own column, so the wavy
@@ -1328,7 +1353,11 @@ fn draw_map_legend(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32, width: i32) 
 /// The map footer: depth and the layer the rig is in, deepest depth and distance from the west
 /// edge.
 fn map_footer(ui: &UiFrame<'_, '_>) -> String {
-    let depth = (ui.player.y / TILE_SIZE).max(0.0) as i32;
+    let hud = ui.view.hud;
+    let height = hud.altitude.map_or_else(
+        || format!("Depth {} m", hud.depth),
+        |altitude| format!("Altitude {altitude} m"),
+    );
     let layer = ui
         .snapshot
         .terrain
@@ -1342,7 +1371,7 @@ fn map_footer(ui: &UiFrame<'_, '_>) -> String {
         format!("{column:.0} m from the west edge")
     };
     format!(
-        "Depth {depth} m ({}) | deepest {} m | {across}",
+        "{height} ({}) | deepest {} m | {across}",
         layer.name(),
         ui.snapshot.progression.deepest_tile_reached,
     )
@@ -1435,7 +1464,11 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         terrain.min_x(),
         (terrain.max_x() + 1 - columns).max(terrain.min_x()),
     );
-    let origin_y = (player.y - rows / 2).clamp(0, (terrain_height - rows).max(0));
+    // Centred on the rig, kept between the world's first row (a biome world's mountain tops)
+    // and its floor; a rig high in the sky sees the top of the world, its marker pinned to
+    // the map's top edge.
+    let top_row = terrain.min_y();
+    let origin_y = (player.y - rows / 2).clamp(top_row, (terrain_height - rows).max(top_row));
     for row in 0..rows.min(terrain_height - origin_y) {
         let tile_y = origin_y + row;
         for column in 0..columns.min(terrain.max_x() + 1 - origin_x) {
@@ -1443,14 +1476,9 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 x: origin_x + column,
                 y: tile_y,
             };
-            let sky = tile_y <= 4 || tile_y < terrain.surface_row(position.x);
-            if !sky && !ui.view.is_explored(position) {
+            let Some(color) = map_tile_color(terrain, position, ui.view.is_explored(position))
+            else {
                 continue;
-            }
-            let color = match terrain.tile(position) {
-                Some(tile) if tile.kind == TileKind::Air && sky => DEEP_BLUE,
-                Some(tile) => minimap_color(tile.kind),
-                None => continue,
             };
             draw.draw_rectangle(x0 + column * pixel, y0 + row * pixel, pixel, pixel, color);
         }
@@ -1476,7 +1504,7 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     );
     // The rig: an ink-ringed marker that blinks.
     let marker_x = x0 + (player.x - origin_x) * pixel;
-    let marker_y = y0 + (player.y - origin_y) * pixel;
+    let marker_y = y0 + (player.y - origin_y).max(1) * pixel;
     let blink = (ui_kit::seconds() * 2.0) as i32 % 2 == 0;
     draw.draw_rectangle(marker_x - 3, marker_y - 3, 8, 8, INK);
     draw.draw_rectangle(
@@ -1512,7 +1540,7 @@ fn draw_map_depth_scale(
     pixel: i32,
 ) {
     let step = if rows > 60 { 20 } else { 10 };
-    let first = (origin_y + step - 1) / step * step;
+    let first = (origin_y + step - 1).div_euclid(step) * step;
     for mark in (first..origin_y + rows).step_by(usize::try_from(step).unwrap_or(10)) {
         let y = y0 + (mark - origin_y) * pixel;
         if y - 4 < y0 {

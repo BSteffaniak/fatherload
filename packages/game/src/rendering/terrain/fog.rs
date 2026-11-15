@@ -108,9 +108,6 @@ impl DarknessGrid {
         let at = |x: i32, y: i32| (y * field_width + x) as usize;
         for y in 0..field_height {
             let tile_y = field_y + y;
-            if tile_y < 0 {
-                continue;
-            }
             for x in 0..field_width {
                 if explored.contains(TilePosition {
                     x: field_x + x,
@@ -150,7 +147,10 @@ impl DarknessGrid {
             for (x, surface) in (0..grid_width).zip(surfaces.iter().copied()) {
                 let tile_y = (grid_y + y).min(terrain_height - 1);
                 let d = distance[at(x + margin, y + margin)];
-                values.push(tile_darkness(tile_y, d == 0 || tile_y < surface, d));
+                // Depth darkness counts from the local ground where it rises above the classic
+                // surface (a mountain's heart is as dark as the ground that deep below a plain).
+                let depth_row = tile_y + (GRADIENT_START_TILE_Y - surface).max(0);
+                values.push(tile_darkness(depth_row, d == 0 || tile_y < surface, d));
             }
         }
         Self {

@@ -36,6 +36,7 @@ pub const ALL: &[&SpriteDef] = &[
     &icons::CARGO,
     &icons::CREDITS,
     &icons::DEPTH,
+    &icons::ALTITUDE,
     &icons::WARNING,
     &icons::HEAT,
     &icons::BOMB,

@@ -13,6 +13,7 @@ mod crew_scenes;
 mod enemy_scenes;
 mod rig_scenes;
 mod village_scenes;
+mod surface_scenes;
 
 use std::path::{Path, PathBuf};
 
@@ -327,6 +328,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(enemy_scenes::ENEMY_SCENES)
         .chain(base_scenes::BASE_SCENES)
         .chain(crew_scenes::CREW_SCENES)
+        .chain(surface_scenes::SURFACE_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

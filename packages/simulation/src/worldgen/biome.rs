@@ -392,7 +392,7 @@ fn biome_elevation(seed: u64, biome: Biome, x: i32, start: i32, end: i32) -> i64
             // Ledges: part of the height snaps to steps, leaving short cliffs between them.
             let step = 6 * ONE;
             let ledge = height.div_euclid(step) * step;
-            (height * 2 + ledge * 3) / 5 + wave(seed, salt + 2, x, 9) * 2
+            (height * 3 + ledge * 2) / 5 + wave(seed, salt + 2, x, 9) * 2
         }
         Biome::Wetlands => {
             let basin = (wave(seed, salt, x, 44) - ONE * 3 / 10).max(0) * 10 / 7;
@@ -717,7 +717,8 @@ pub fn ground_material(settings: &WorldSettings, x: i32, y: i32) -> Option<TileK
             }
         }
         Biome::Badlands => {
-            if depth == 0 && hash2(seed, SALT_MATERIAL + 2, x, y) % 3 == 0 {
+            // Drifted sand only on the low ground between the mesas.
+            if depth == 0 && y >= SKY_ROWS - 1 {
                 return surface(SurfaceMaterial::Sand);
             }
             if y >= SKY_ROWS + 6 {
@@ -924,15 +925,16 @@ pub fn flora_at(settings: &WorldSettings, x: i32) -> Option<FloraSpot> {
             _ => None,
         },
         Biome::Forest => {
-            if tree_room(330) {
+            let dense_room = hash2(seed, SALT_FLORA, x - 1, 0) % 1000 >= 420;
+            if pick < 420 && dense_room {
                 spot(if pick % 3 == 0 {
                     Flora::Pine
                 } else {
                     Flora::Oak
                 })
-            } else if pick < 500 {
+            } else if (420..540).contains(&pick) {
                 spot(Flora::Bush)
-            } else if pick < 750 {
+            } else if pick < 820 {
                 spot(Flora::GrassTuft)
             } else {
                 None

@@ -620,10 +620,23 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         .tile(position)
         .map_or(TileKind::Air, |tile| tile.kind);
     let band = terrain.band_at(position);
-    let strata = strata_for(band);
+    let ground = biome::ground_material(terrain.settings(), position.x, position.y);
+    let mut strata = strata_for(band);
+    // Caves and tunnels in a biome's own rock show that rock's back wall.
+    match ground {
+        Some(TileKind::Surface(SurfaceMaterial::Granite) | TileKind::Stone) => {
+            strata.back = [index_of(SLATE_DARK), index_of(NIGHT)];
+        }
+        Some(TileKind::Surface(SurfaceMaterial::RedRock | SurfaceMaterial::Sandstone)) => {
+            strata.back = [index_of(RUST), index_of(MAROON)];
+        }
+        Some(TileKind::Surface(SurfaceMaterial::Sand)) => {
+            strata.back = [index_of(LOAM), index_of(SOIL)];
+        }
+        _ => {}
+    }
     // Ore and artifacts in a biome's ground sit in that ground (mountain ore in granite).
-    let host = biome::ground_material(terrain.settings(), position.x, position.y)
-        .unwrap_or_else(|| host_material(band));
+    let host = ground.unwrap_or_else(|| host_material(band));
     let mut canvas = TileCanvas {
         pixels: [TRANSPARENT; TILE_ART_USIZE * TILE_ART_USIZE],
         origin_x: position.x * TILE_ART,

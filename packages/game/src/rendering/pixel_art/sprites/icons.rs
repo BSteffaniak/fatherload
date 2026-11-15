@@ -115,6 +115,24 @@ pub const DEPTH: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+/// Height above the ground (the HUD readout while flying above the surface).
+pub const ALTITUDE: SpriteDef = SpriteDef {
+    name: "icon_altitude",
+    legend: &[('o', INK), ('m', MINT), ('d', TEAL)],
+    frames: &[&[
+        "....o....",
+        "...odo...",
+        "..ommdo..",
+        ".ommmmdo.",
+        "ooomdmooo",
+        "...omo...",
+        "...omo...",
+        "...omo...",
+        "...ooo...",
+    ]],
+    frame_seconds: 0.0,
+};
+
 pub const WARNING: SpriteDef = SpriteDef {
     name: "icon_warning",
     legend: &[('o', INK), ('g', GOLD), ('a', AMBER), ('r', ORANGE)],

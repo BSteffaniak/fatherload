@@ -209,6 +209,9 @@ patches! {
     WorkshopCraft => "workshop_craft",
     // WP-PERSIST (appended: variation seeds follow declaration order).
     CrewReturn => "crew_return",
+    // Surface ambience (WP-SURFACE), after every earlier patch so their seeds stay put.
+    WindLoop => "loop_wind",
+    RainLoop => "loop_rain",
 }
 
 /// Playback metadata of a patch.
@@ -418,7 +421,9 @@ impl Patch {
             | Self::DrillHardLoop
             | Self::GasHissLoop
             | Self::LavaSizzleLoop
-            | Self::BoulderRumbleLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            | Self::BoulderRumbleLoop
+            | Self::WindLoop
+            | Self::RainLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
             // A hoovered spray plays many of these at once: cheap, quiet and well jittered.
             Self::BlockPickup => PatchInfo::new(Feedback)
                 .instances(3)
@@ -575,6 +580,8 @@ impl Patch {
             Self::HomeSet => home_set(rng),
             Self::RefineryLoad => refinery_load(rng),
             Self::WorkshopCraft => workshop_craft(rng),
+            Self::WindLoop => wind_loop(rng),
+            Self::RainLoop => rain_loop(rng),
         }
     }
 }
@@ -2201,6 +2208,57 @@ fn drill_hard_loop(rng: &mut Rng) -> Vec<f32> {
         let metal = (squeal_a.next(3_100.0 * pitch) + squeal_b.next(4_700.0 * pitch) * 0.6) * 0.04;
         motor * 0.3 + grinding * 0.5 + metal
     })
+}
+
+/// Wind over open ground: pink noise through a band-pass whose centre wanders slowly (the
+/// howl), with gusts swelling the level, and a low brown-noise buffeting underneath.
+fn wind_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut low = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut howl = Svf::new(FilterMode::BandPass, 600.0, 2.2);
+    let mut whistle = Svf::new(FilterMode::BandPass, 1_400.0, 6.0);
+    let mut buffet = Svf::new(FilterMode::LowPass, 180.0, 0.7);
+    let mut wander = flutter(rng, 0.25, 0.6);
+    let mut gust = flutter(rng, 0.4, 0.55);
+    render(loop_length(), |_| {
+        let center = 600.0 * wander();
+        howl.set(center.clamp(220.0, 1_500.0), 2.2);
+        whistle.set((center * 2.3).clamp(600.0, 3_800.0), 6.0);
+        let pink = noise.next();
+        let level = gust();
+        (howl.process(pink) * 0.9 + whistle.process(pink) * 0.25 * level) * level
+            + buffet.process(low.next()) * 0.5
+    })
+}
+
+/// Rain: a soft high-passed hiss and many tiny droplet ticks, a few heavier drips.
+fn rain_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut hiss = Svf::new(FilterMode::HighPass, 3_200.0, 0.7);
+    let mut body = Svf::new(FilterMode::BandPass, 1_100.0, 0.5);
+    let mut swell = flutter(rng, 0.6, 0.2);
+    let mut out = render(loop_length(), |_| {
+        let white = noise.next();
+        (hiss.process(white) * 0.35 + body.process(white) * 0.2) * swell()
+    });
+    for time in scatter(rng, loop_events(70.0), 0.0, loop_length() - 0.02, 1.0) {
+        let tick = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            rng.range(2_500.0, 7_500.0),
+            3.0,
+            0.004,
+        );
+        mix_into(&mut out, &tick, time, rng.range(0.1, 0.45));
+    }
+    for time in scatter(rng, loop_events(3.0), 0.0, loop_length() - 0.1, 1.0) {
+        let mut osc = Osc::new(Wave::Sine);
+        let base = rng.range(900.0, 1_500.0);
+        let drip = render(0.04, |t| osc.next(base * (1.0 + t * 12.0)) * perc(t, 0.002, 0.03));
+        mix_into(&mut out, &drip, time, 0.18);
+    }
+    out
 }
 
 fn gas_hiss_loop(rng: &mut Rng) -> Vec<f32> {
