@@ -248,10 +248,15 @@ impl CharacterState {
             mentioned: false,
         });
         if memory.events.len() > MEMORY_EVENTS {
-            // Forget the oldest event, but never the first meeting while others remain.
-            let oldest =
-                usize::from(memory.events.len() > 1 && memory.events[0].fact == MemoryFact::Met);
-            memory.events.remove(oldest);
+            // Forget routine events (trades, later meetings) before memorable ones, oldest
+            // first, and never the first meeting.
+            let keeps_first = usize::from(memory.events[0].fact == MemoryFact::Met);
+            let forget = memory.events[keeps_first..]
+                .iter()
+                .position(|event| !event.fact.is_memorable())
+                .unwrap_or(0)
+                + keeps_first;
+            memory.events.remove(forget);
         }
     }
 
@@ -259,7 +264,7 @@ impl CharacterState {
     /// [`super::Population::reputation_ripple`]).
     pub fn hear_about(&mut self, player: PlayerId, delta: i16) {
         let memory = self.players.entry(player).or_default();
-        memory.reputation = (memory.reputation + delta).clamp(-100, 100);
+        memory.reputation = memory.reputation.saturating_add(delta).clamp(-100, 100);
     }
 
     /// The mood shift left on `day`.
@@ -331,6 +336,28 @@ mod tests {
         let memory = state.memory(player);
         assert_eq!(memory.events.len(), MEMORY_EVENTS);
         assert_eq!(memory.events[0].fact, MemoryFact::Met);
+        // Routine trades never push out what mattered.
+        assert!(
+            memory
+                .events
+                .iter()
+                .any(|event| matches!(event.fact, MemoryFact::FoundPerson { .. }))
+        );
+        assert_eq!(
+            memory
+                .events
+                .iter()
+                .filter(|event| event.fact == MemoryFact::Slighted)
+                .count(),
+            3
+        );
+        for day in 0..40 {
+            state.remember(player, 80 + day, MemoryFact::HelpedVillage);
+        }
+        let memory = state.memory(player);
+        assert_eq!(memory.events.len(), MEMORY_EVENTS);
+        assert_eq!(memory.events[0].fact, MemoryFact::Met);
+        assert_eq!(memory.events[MEMORY_EVENTS - 1].day, 119);
     }
 
     #[test]
