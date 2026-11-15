@@ -314,7 +314,13 @@ impl Settlement {
             } else {
                 Activity::Working
             }
-        } else if minute < hm(7, 30) {
+        } else if minute
+            < if matches!(resident.work, Work::Counter(_)) {
+                hm(7, 0)
+            } else {
+                hm(7, 30)
+            }
+        {
             Activity::Morning
         } else if minute >= hm(19, 0) {
             if resident.homebody {

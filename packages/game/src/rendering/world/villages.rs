@@ -20,7 +20,8 @@ use raylib::prelude::*;
 
 use fatherload_simulation::{
     DiscoveredTiles,
-    people::Culture,
+    entity::{EntityId, EntityState, EntityStore},
+    people::{self, Character, Culture},
     terrain::{TILE_SIZE, Terrain, TilePosition},
     village::{
         self, BuildingKind, BuildingStyle, Decor, DecorKind, SignTarget, Signpost, Village,
@@ -308,41 +309,100 @@ pub fn village_lights(terrain: &Terrain, visible: Rectangle) -> Vec<(f32, f32, f
     lights
 }
 
-/// The residents standing about the villages overlapping `visible` (in front of the terrain).
+/// The people (WP-PEOPLE NPC entities) on the streets overlapping `visible`, in front of the
+/// terrain: interpolated between ticks with `alpha`, walking with a step cycle, facing the way
+/// they go (or the player they talk to), with a name tag over whoever `near` names (the person
+/// the view's rig would talk to). People indoors are drawn in their rooms instead. Underground
+/// settlements only show their people once the hall is explored.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one draw pass over the scene's parts"
+)]
 pub fn draw_village_people(
     draw: &mut impl RaylibDraw,
     terrain: &Terrain,
+    entities: &EntityStore,
     visible: Rectangle,
     explored: Option<&DiscoveredTiles>,
+    alpha: f32,
+    near: Option<EntityId>,
     seconds: f32,
 ) {
-    for found in visible_villages(terrain, visible) {
-        let ground = tile_px(found.ground_row);
-        let plaza_center = i32::midpoint(found.plaza.0, found.plaza.1);
-        for &(resident, column) in &found.loiterers {
-            let Some(character) = found.population.characters.get(usize::from(resident)) else {
-                continue;
-            };
-            if found.setting == VillageSetting::Underground
-                && !explored.is_some_and(|tiles| {
-                    tiles.contains(TilePosition {
-                        x: column,
-                        y: found.ground_row - 1,
-                    })
+    let settings = terrain.settings();
+    if !settings.generator.has_villages() {
+        return;
+    }
+    let margin = 2.0 * TILE_SIZE;
+    for id in entities.ids_in_rect(
+        visible.x - margin,
+        visible.y - margin,
+        visible.x + visible.width + margin,
+        visible.y + visible.height + margin,
+    ) {
+        let Some(entity) = entities.get(id) else {
+            continue;
+        };
+        let EntityState::Npc(state) = entity.state else {
+            continue;
+        };
+        if state.inside.is_some() {
+            continue;
+        }
+        let Some(settlement) = people::routine::settlement(settings, state.character.village)
+        else {
+            continue;
+        };
+        let Some(character) = settlement
+            .population
+            .characters
+            .get(usize::from(state.character.index))
+        else {
+            continue;
+        };
+        let (x, y) = entity.body.lerp_position(alpha);
+        if settlement.underground
+            && !explored.is_some_and(|tiles| {
+                tiles.contains(TilePosition {
+                    x: (x / TILE_SIZE).floor() as i32,
+                    y: settlement.ground_row - 1,
                 })
-            {
-                continue;
-            }
-            let facing = if column < plaza_center { 1 } else { -1 };
-            let offset = i32::from(resident % 3) * 3;
-            let pen = PersonPen {
-                x: super::snap(tile_px(column) + offset as f32 * ART),
-                y: ground,
-                pixel: ART,
-            };
-            people_art::draw_person(draw, pen, character, facing, seconds);
+            })
+        {
+            continue;
+        }
+        let walking = entity.body.velocity_x.abs() > 1.0;
+        let pen = PersonPen {
+            x: super::snap(x),
+            y: super::snap(y),
+            pixel: ART,
+        };
+        let pose = people_art::Pose {
+            facing: i32::from(state.facing),
+            stride: walking.then_some(x),
+            talking: state.talking_to.is_some() && ((seconds * 0.7) as i32) % 2 == 0,
+        };
+        people_art::draw_person_posed(draw, pen, character, pose, seconds);
+        if near == Some(id) {
+            draw_name_tag(draw, pen, character);
         }
     }
+}
+
+/// A small name plate over a person's head (the one the view's rig can talk to).
+fn draw_name_tag(draw: &mut impl RaylibDraw, pen: PersonPen, character: &Character) {
+    let name = character.name.short();
+    // Clear of a rig hovering beside them.
+    let height = people_art::person_height(character) + 16;
+    let width = text_art_width(name) + 6;
+    let tag = Pen::at(
+        pen.x - (width / 2) as f32 * ART,
+        pen.y - height as f32 * ART,
+    );
+    tag.rect(draw, 0, 0, width, 9, with_alpha(INK, 210));
+    tag.rect(draw, 0, 8, width, 1, GOLD);
+    tag.text(draw, name, 3, 2, CREAM);
+    // A little pointer down at their head.
+    tag.rect(draw, width / 2 - 1, 9, 2, 1, GOLD);
 }
 
 const fn is_backdrop(kind: DecorKind) -> bool {

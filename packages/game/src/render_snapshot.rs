@@ -420,6 +420,9 @@ pub struct ViewSnapshot<'w> {
     /// The village building whose door the rig stands at, as its door prompt ("Enter the
     /// Trading Post").
     pub village_door: Option<String>,
+    /// The person the rig can talk to (the nearest within reach) and their short name, for the
+    /// "Talk to Mara" prompt and the name tag (WP-PEOPLE).
+    pub talk_target: Option<(fatherload_simulation::entity::EntityId, String)>,
     /// The quests this player sees: their own solo quests, then the crew's.
     pub quests: Vec<&'w ActiveQuest>,
     /// Markers of those quests' current objectives (map, minimap and world).
@@ -639,6 +642,10 @@ pub struct RenderSnapshot<'w> {
     pub enemy_difficulty: fatherload_simulation::EnemyDifficulty,
     /// Claims, base modules and fixtures (WP-BASE).
     pub bases: &'w fatherload_simulation::base::Bases,
+    /// What players did with people: memories, conversations, perks (WP-PEOPLE).
+    pub people: &'w fatherload_simulation::people::PeopleLedger,
+    /// The world day people live by (mood in the talk panel).
+    pub people_day: u32,
     /// The base modules that have power this frame.
     pub powered_modules: std::collections::BTreeSet<fatherload_simulation::base::StructureId>,
     /// The world clock (F4): time of day, phase, the sun's angle and the Moon's phase.
@@ -750,6 +757,8 @@ impl<'w> RenderSnapshot<'w> {
                 .collect(),
             enemy_difficulty: world.enemy_difficulty(),
             bases: world.bases(),
+            people: world.people(),
+            people_day: world.people_clock().day,
             powered_modules: world
                 .bases()
                 .modules()
@@ -898,6 +907,18 @@ fn camera_for(viewport: Viewport, world_scale: f32, x: f32, y: f32) -> CameraPos
     }
 }
 
+/// The person `player_id`'s rig can talk to, with their short name.
+fn talk_target(
+    world: &WorldState,
+    player_id: PlayerId,
+) -> Option<(fatherload_simulation::entity::EntityId, String)> {
+    let npc = crate::shell::talk_target(world, player_id)?;
+    let (_, state) = world.npc(npc)?;
+    let character =
+        fatherload_simulation::people::routine::character(world.world_settings(), state.character)?;
+    Some((npc, character.name.short().to_owned()))
+}
+
 fn view_snapshot(
     world: &WorldState,
     seat_index: usize,
@@ -960,6 +981,7 @@ fn view_snapshot(
             .deep_run_state(player_id)
             .map_or(0.0, |state| state.instability),
         surface_zone: world.player_surface_zone(player_id),
+        talk_target: talk_target(world, player_id),
         village_door: world
             .player_village_building(player_id)
             .map(|(found, building)| {

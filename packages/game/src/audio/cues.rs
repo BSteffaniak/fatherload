@@ -176,6 +176,10 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::PickClink => Patch::PickClink,
         SoundCue::Splash => Patch::Splash,
         SoundCue::LedgeGrab => Patch::LedgeGrab,
+        SoundCue::PersonGreet => Patch::PersonGreet,
+        SoundCue::GiftGiven => Patch::GiftGiven,
+        SoundCue::AffinityUp => Patch::AffinityUp,
+        SoundCue::RumourHeard => Patch::RumourHeard,
     }
 }
 
@@ -425,6 +429,18 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::PickStruck { broke: true, .. } => Some(SoundCue::PickBreak),
         GameplayEventKind::PickClinked { .. } => Some(SoundCue::PickClink),
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
+        // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
+        // warm chime when someone warms to you (a cooler standing gets the back blip), a hush
+        // when a rumour marks your map. The command's generic event is silent.
+        GameplayEventKind::PersonTalked { .. } => Some(SoundCue::PersonGreet),
+        GameplayEventKind::PersonTraded { .. } => Some(SoundCue::Sell),
+        GameplayEventKind::PersonGifted { .. } => Some(SoundCue::GiftGiven),
+        GameplayEventKind::AffinityChanged { warmer, .. } => Some(if *warmer {
+            SoundCue::AffinityUp
+        } else {
+            SoundCue::UiBack
+        }),
+        GameplayEventKind::RumourMarked { .. } => Some(SoundCue::RumourHeard),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -433,6 +449,7 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         | GameplayEventKind::EntityDamaged { .. }
         | GameplayEventKind::QuestAccepted { .. }
         | GameplayEventKind::TestModeChanged { .. }
+        | GameplayEventKind::PeopleInteraction { .. }
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
         | GameplayEventKind::EscapeTunnelChanged => None,
@@ -538,6 +555,12 @@ mod tests {
             | GameplayEventKind::PickStruck { .. }
             | GameplayEventKind::PickClinked { .. }
             | GameplayEventKind::PackTransferred { .. } => {}
+            GameplayEventKind::PersonTalked { .. }
+            | GameplayEventKind::PersonTraded { .. }
+            | GameplayEventKind::PersonGifted { .. }
+            | GameplayEventKind::AffinityChanged { .. }
+            | GameplayEventKind::RumourMarked { .. }
+            | GameplayEventKind::PeopleInteraction { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -846,6 +869,35 @@ mod tests {
                 to_rig: true,
             },
         ]);
+        events.push(GameplayEventKind::PersonTalked {
+            player_id,
+            npc: 1,
+            first_meeting: true,
+        });
+        events.push(GameplayEventKind::PersonTraded {
+            player_id,
+            npc: 1,
+            kind: fatherload_simulation::people::OfferKind::Rumours,
+        });
+        events.push(GameplayEventKind::PersonGifted {
+            player_id,
+            npc: 1,
+            reaction: fatherload_simulation::people::offers::GiftReaction::Loved,
+        });
+        for warmer in [true, false] {
+            events.push(GameplayEventKind::AffinityChanged {
+                player_id,
+                npc: 1,
+                standing: fatherload_simulation::people::Standing::Friendly,
+                warmer,
+            });
+        }
+        events.push(GameplayEventKind::RumourMarked {
+            player_id,
+            npc: 1,
+            feature,
+        });
+        events.push(GameplayEventKind::PeopleInteraction { player_id });
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
@@ -881,6 +933,9 @@ mod tests {
                     player_id: PlayerId::new(1),
                     village: fatherload_simulation::village::VillageId(2),
                     service: VillageService::TradingPost,
+                },
+                GameplayEventKind::PeopleInteraction {
+                    player_id: PlayerId::new(1)
                 },
             ]
         );
@@ -1008,6 +1063,10 @@ mod tests {
             SoundCue::PickClink,
             SoundCue::Splash,
             SoundCue::LedgeGrab,
+            SoundCue::PersonGreet,
+            SoundCue::GiftGiven,
+            SoundCue::AffinityUp,
+            SoundCue::RumourHeard,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

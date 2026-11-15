@@ -36,6 +36,7 @@ mod buildings;
 mod caves;
 pub(super) mod daylight;
 mod drops;
+pub(super) use drops::drop_sprite;
 mod enemies;
 mod explosives;
 mod fx;
@@ -141,6 +142,8 @@ pub(super) struct WorldScene<'a> {
     pub moon: fatherload_simulation::clock::MoonAnchor,
     /// The clock's state: who is in bed (a sleeping rig's lamps are off).
     pub clock_state: &'a fatherload_simulation::clock::ClockState,
+    /// The person the view's rig would talk to (name tag), if any (WP-PEOPLE).
+    pub talk_target: Option<fatherload_simulation::entity::EntityId>,
 }
 
 impl WorldScene<'_> {
@@ -269,7 +272,16 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     for boulder in scene.boulders {
         fx::draw_boulder(draw, boulder, seconds);
     }
-    villages::draw_village_people(draw, scene.terrain, scene.visible, scene.explored, seconds);
+    villages::draw_village_people(
+        draw,
+        scene.terrain,
+        scene.entities,
+        scene.visible,
+        scene.explored,
+        scene.bomb_alpha,
+        scene.talk_target,
+        seconds,
+    );
     drops::draw_drops(draw, scene);
     weapons::draw_targets(draw, scene.targets, seconds);
     quest_marks::draw_quest_markers(draw, scene.quest_markers, seconds);

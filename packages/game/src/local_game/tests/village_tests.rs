@@ -132,7 +132,15 @@ fn a_seat_sells_at_a_trading_post_and_talks_to_the_keeper() {
     press_seat(&mut game, 0, confirm_input());
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::VillageTalk));
     let talk = game.shell.seat(0).village.talk.clone().expect("talk");
-    assert!(!talk.lines.is_empty());
+    idle(&mut game, 3);
+    // The keeper's lines come back from the world's people ledger.
+    let conversation = game
+        .world()
+        .people()
+        .conversation(FIRST)
+        .expect("a conversation");
+    assert_eq!(conversation.npc, talk.npc);
+    assert!(!conversation.lines.is_empty());
     // Back returns to the counter, again closes it, again leaves the building.
     press_seat(&mut game, 0, back_input());
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::VillageCounter));

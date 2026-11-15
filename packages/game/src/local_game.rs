@@ -446,6 +446,15 @@ impl LocalGame {
         report
     }
 
+    /// Edits the running local world in place (scene capture: nudging a rig mid-scene, after
+    /// the world has run a while). Gameplay never calls it.
+    #[cfg(any(test, not(target_os = "emscripten")))]
+    pub fn edit_world(&mut self, edit: impl FnOnce(&mut WorldState)) {
+        let mut world = self.runtime.world().clone();
+        edit(&mut world);
+        let _ = self.runtime.load_world(world);
+    }
+
     /// The current world as a save.
     #[must_use]
     pub fn world_save(&self) -> WorldSave {

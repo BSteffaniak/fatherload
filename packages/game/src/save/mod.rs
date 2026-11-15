@@ -49,7 +49,9 @@ const SAVE_SLOTS: usize = 3;
 /// * T14: the world clock (day length, skipped nights, the sleep rule and who is in bed),
 ///   loading as the standard 48 minute day;
 /// * T15 pilot on foot: pilot entities in the entity store, pilot gear and the personal pack on
-///   players, parked pilots in the crew roster, vent grates and ropes.
+///   players, parked pilots in the crew roster, vent grates and ropes;
+/// * T17 people in the world: NPC entities and the world's people ledger (every character's
+///   memory of every player, conversations, bought offers, perks).
 pub const SAVE_VERSION: u32 = 9;
 
 /// Persisted user settings.
@@ -750,6 +752,88 @@ mod tests {
             loaded.world.player_ids().collect::<Vec<_>>(),
             [PlayerId::new(1), PlayerId::new(3)]
         );
+    }
+
+    #[test]
+    fn people_memories_survive_a_save_and_v8_saves_load_without_them() {
+        use fatherload_simulation::{
+            PlayerCommand, SimulationParams, SimulationTick, TickInputs,
+            entity::{EntityKind, EntityState},
+            people::{DayTime, PeopleCommand, TalkTopic, TickClock},
+            village::{self, placement},
+            worldgen::GeneratorVersion,
+        };
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V7,
+            ..WorldSettings::new(0x5EED_0017)
+        };
+        let player = PlayerId::new(1);
+        let mut world =
+            WorldState::new_game_with_settings(player, &settings, SimulationParams::new(60));
+        let found = village::village(&settings, placement::surface_id(1)).expect("village");
+        let tick = TickClock::tick_at(DayTime::at(1, 10, 0), 60, 48);
+        world.set_simulation_tick(SimulationTick::new(tick));
+        {
+            let rig = world.player_mut(player).expect("rig");
+            #[allow(clippy::cast_precision_loss, reason = "small tiles")]
+            {
+                rig.x = (i32::midpoint(found.plaza.0, found.plaza.1) as f32 + 0.5)
+                    * fatherload_simulation::TILE_SIZE;
+                rig.y = (found.ground_row as f32 - 0.5) * fatherload_simulation::TILE_SIZE;
+            }
+        }
+        for _ in 0..40 {
+            let tick = world.simulation_tick();
+            let _ = world.simulate_tick(tick, &TickInputs::default());
+        }
+        let (npc, x) = world
+            .entities()
+            .of_kind(EntityKind::Npc)
+            .find_map(|entity| match entity.state {
+                EntityState::Npc(state) if state.inside.is_none() => {
+                    Some((entity.id, entity.body.x))
+                }
+                _ => None,
+            })
+            .expect("someone outdoors");
+        world.player_mut(player).expect("rig").x = x;
+        let mut inputs = TickInputs::default();
+        inputs.players.entry(player).or_default().actions.push(
+            fatherload_simulation::command::TickAction {
+                sequence: fatherload_simulation::InputSequence::new(0),
+                command: PlayerCommand::People(PeopleCommand::Talk {
+                    npc,
+                    topic: TalkTopic::Chat,
+                }),
+            },
+        );
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(tick, &inputs);
+        assert!(!world.people().is_empty(), "the talk was remembered");
+        let save = WorldSave {
+            world,
+            play_seconds: 9.0,
+        };
+        let json = serde_json::to_string(&SaveFile {
+            version: SAVE_VERSION,
+            save,
+        })
+        .expect("serialize");
+        let loaded = parse_save(&json).expect("v9 loads");
+        let original: serde_json::Value = serde_json::from_str(&json).expect("json");
+        assert_eq!(
+            serde_json::to_value(loaded.world.people()).expect("people"),
+            original["save"]["world"]["people"]
+        );
+        // A version 8 file has no people: it loads with nobody remembering anything.
+        let mut v8 = original;
+        v8["version"] = serde_json::json!(8);
+        v8["save"]["world"]
+            .as_object_mut()
+            .expect("world object")
+            .remove("people");
+        let loaded = parse_save(&v8.to_string()).expect("v8 loads");
+        assert!(loaded.world.people().is_empty());
     }
 
     #[test]

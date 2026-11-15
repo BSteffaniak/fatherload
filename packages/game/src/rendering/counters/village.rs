@@ -1,4 +1,4 @@
-//! Village counters (a building's deals and a word with the keeper) and conversations.
+//! Village counters (a building's deals and a word with the keeper).
 
 use fatherload_simulation::{
     Player,
@@ -17,12 +17,11 @@ use super::{
     super::{
         layout::{ModalContent, Section, SectionItem, UiLayout},
         pixel_art::sprites::{explosives as explosive_art, icons, menu_icons},
-        prompts::hint,
         screen::UiFrame,
     },
     COUNTER_HELP, Offer, credits_item, offer_items,
 };
-use crate::{input::prompts::Prompt, render_snapshot::RenderSnapshot, shell};
+use crate::{render_snapshot::RenderSnapshot, shell};
 
 /// Stars for a prosperity of 1..=5.
 fn prosperity(found: &Village) -> String {
@@ -240,28 +239,4 @@ fn village_news(settings: &WorldSettings, found: &Village) -> Vec<SectionItem> {
         items.push(SectionItem::stat(name, word, SKY_LIGHT));
     }
     items
-}
-
-/// Draws seat `ui.seat`'s open conversation.
-pub(in crate::rendering) fn draw_village_talk(
-    draw: &mut RaylibDrawHandle<'_>,
-    ui: &UiFrame<'_, '_>,
-) {
-    let Some(talk) = &ui.seat.village.talk else {
-        return;
-    };
-    let lines: Vec<SectionItem> = talk
-        .lines
-        .iter()
-        .map(|line| SectionItem::text(format!("\"{line}\"")))
-        .collect();
-    let hints = [
-        hint(Prompt::Confirm, "keep talking"),
-        hint(Prompt::Back, "goodbye"),
-    ];
-    UiLayout::screen(draw).modal_with_render_plan(
-        &talk.name,
-        &talk.about,
-        &ModalContent::new(vec![Section::new("", GOLD, lines)]).prompts(&hints),
-    );
 }

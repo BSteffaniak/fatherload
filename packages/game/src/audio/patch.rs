@@ -238,6 +238,11 @@ patches! {
     PickClink => "pick_clink",
     Splash => "splash",
     LedgeGrab => "ledge_grab",
+    // People in the world (WP-PEOPLE), appended so every earlier patch keeps its seeds.
+    PersonGreet => "person_greet",
+    GiftGiven => "gift_given",
+    AffinityUp => "affinity_up",
+    RumourHeard => "rumour_heard",
 }
 
 /// Playback metadata of a patch.
@@ -543,6 +548,21 @@ impl Patch {
                 .instances(2)
                 .send(0.2)
                 .jitter(0.05, 1.0),
+            // People: a friendly murmur per greeting (well varied, so voices differ), a
+            // sparkle for a gift, a warm chime when someone warms to you, a hush for rumours.
+            Self::PersonGreet => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.12)
+                .jitter(0.12, 1.5),
+            Self::GiftGiven | Self::RumourHeard => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.3)
+                .jitter(0.02, 0.5),
+            Self::AffinityUp => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.35)
+                .jitter(0.0, 0.0)
+                .ducking(0.15),
         }
     }
 
@@ -601,6 +621,10 @@ impl Patch {
             Self::EmpPulse => emp_pulse(rng),
             Self::FlareIgnite => flare_ignite(rng),
             Self::CrewReturn => crew_return(rng),
+            Self::PersonGreet => person_greet(rng),
+            Self::GiftGiven => gift_given(rng),
+            Self::AffinityUp => affinity_up(rng),
+            Self::RumourHeard => rumour_heard(rng),
             Self::ThrustLoop => thrust_loop(rng),
             Self::DrillSoftLoop => drill_soft_loop(rng),
             Self::DrillHardLoop => drill_hard_loop(rng),
@@ -2136,6 +2160,94 @@ fn milestone(rng: &mut Rng) -> Vec<f32> {
             0.18,
         );
     }
+    out
+}
+
+/// A person greeting you: two soft voiced syllables ("mm-hm") through a vowel-like band, the
+/// pitch rolled per variation so a street of people never sounds like one voice.
+fn person_greet(rng: &mut Rng) -> Vec<f32> {
+    let base = 150.0 + rng.unit() * 120.0;
+    let rise = if rng.unit() < 0.5 { 1.12 } else { 1.26 };
+    let mut voice = Osc::new(Wave::Saw).with_phase(rng.unit());
+    let mut formant = Svf::new(FilterMode::BandPass, 700.0, 2.5);
+    let mut warmth = Svf::new(FilterMode::LowPass, 1_800.0, 0.7);
+    render(0.42, |t| {
+        let (note, env) = if t < 0.17 {
+            (
+                base,
+                segments(t, &[(0.0, 0.0), (0.03, 1.0), (0.13, 0.8), (0.17, 0.0)]),
+            )
+        } else {
+            (
+                base * rise,
+                segments(t, &[(0.19, 0.0), (0.23, 1.0), (0.34, 0.7), (0.42, 0.0)]),
+            )
+        };
+        let vibrato = 1.0 + 0.012 * sine(t, 5.5);
+        let raw = voice.next(note * vibrato);
+        let vowel = 650.0 + 250.0 * (t / 0.42);
+        warmth.run(formant.run(raw, vowel, 2.5), 1_800.0, 0.7) * env * 0.9
+    })
+}
+
+/// A gift handed over: a little rising sparkle of bells over a paper rustle.
+fn gift_given(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::HighPass,
+        3_000.0,
+        0.7,
+        0.12,
+    );
+    for (index, note) in [783.99_f32, 987.77, 1_174.7, 1_567.98]
+        .into_iter()
+        .enumerate()
+    {
+        let offset = 0.05 + index as f32 * 0.07;
+        mix_into(
+            &mut out,
+            &bell(note * rng.jitter(0.003), 3.0, 1.2, 0.6),
+            offset,
+            0.3,
+        );
+    }
+    out
+}
+
+/// Someone warmed to you: a soft major third rising into a warm held chord.
+fn affinity_up(rng: &mut Rng) -> Vec<f32> {
+    let mut out = vec![0.0; samples_for(1.2)];
+    let detune = rng.jitter(0.003);
+    for (index, (note, gain)) in [(523.25_f32, 0.32), (659.25, 0.3), (783.99, 0.26)]
+        .into_iter()
+        .enumerate()
+    {
+        let offset = index as f32 * 0.09;
+        mix_into(&mut out, &bell(note * detune, 2.0, 0.8, 0.9), offset, gain);
+    }
+    let mut pad = Osc::new(Wave::Triangle).with_phase(rng.unit());
+    let env = Adsr::new(0.15, 0.3, 0.5, 0.5);
+    let hum = render(1.0, |t| pad.next(261.63) * env.level(t, 0.5) * 0.18);
+    mix_into(&mut out, &hum, 0.1, 1.0);
+    out
+}
+
+/// A rumour: a hushed whisper of noise and two low, curious notes.
+fn rumour_heard(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        2_200.0,
+        1.4,
+        0.35,
+    );
+    for sample in &mut out {
+        *sample *= 0.5;
+    }
+    mix_into(&mut out, &bell(293.66, 1.5, 1.4, 0.8), 0.12, 0.35);
+    mix_into(&mut out, &bell(349.23, 1.5, 1.4, 1.0), 0.34, 0.32);
     out
 }
 

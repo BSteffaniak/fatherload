@@ -45,8 +45,9 @@ pub use quests::{
 };
 pub use test_mode::WARP_BANDS;
 pub use village::{
-    BANNER_TICKS, SeatVillage, VILLAGE_COUNTER_X, VILLAGE_REACH, VillageBanner, VillageInterior,
-    building_title, interior_village, room_residents,
+    BANNER_TICKS, SeatVillage, TalkChoice, VILLAGE_COUNTER_X, VILLAGE_REACH, VillageBanner,
+    VillageInterior, building_title, gift_items, interior_village, keeper_inside, room_residents,
+    talk_choices, talk_target,
 };
 
 pub use world_setup::{SetupOutcome, SetupPurpose, WorldSetup, random_world_seed};
@@ -116,8 +117,13 @@ pub enum ModalScreen {
     /// A village building's counter: its deals and a word with the keeper
     /// ([`SeatUi::village`]).
     VillageCounter,
-    /// A conversation with a village resident ([`SeatVillage::talk`]).
+    /// A conversation with a person ([`SeatVillage::talk`]; WP-PEOPLE).
     VillageTalk,
+    /// The trade list of the person the seat is talking to.
+    PersonTrade,
+    /// The gift list (the cargo bay's ore, relics and materials) for the person the seat is
+    /// talking to.
+    PersonGift,
     /// A base module's service menu (WP-BASE); the module is [`SeatUi::base_module`].
     BaseModule,
 }
@@ -489,6 +495,14 @@ pub enum SoundCue {
     Splash,
     /// Gloves catching a ledge.
     LedgeGrab,
+    /// A person greeting you (WP-PEOPLE).
+    PersonGreet,
+    /// A gift handed to a person.
+    GiftGiven,
+    /// A person warmed to you (a better standing).
+    AffinityUp,
+    /// A rumour marked a site on your map.
+    RumourHeard,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -1057,7 +1071,8 @@ impl SeatUi {
             }
             if let Some(zone) = ctx.current_zone() {
                 self.enter_interior(zone, ctx.device, cues);
-            } else if !self.try_enter_village(ctx, cues)
+            } else if !self.try_talk_outdoors(ctx, cues, requests)
+                && !self.try_enter_village(ctx, cues)
                 && !self.open_base_module(ctx, cues)
                 && !self.try_exit(ctx, requests)
             {
@@ -1098,7 +1113,7 @@ impl SeatUi {
             return false;
         }
         if self.village.interior.is_some() {
-            return self.handle_village_interior(input, delta_seconds, ctx, cues);
+            return self.handle_village_interior(input, delta_seconds, ctx, cues, requests);
         }
         if input.pause {
             return true;
@@ -1191,7 +1206,10 @@ impl SeatUi {
         }
         if matches!(
             modal,
-            ModalScreen::VillageCounter | ModalScreen::VillageTalk
+            ModalScreen::VillageCounter
+                | ModalScreen::VillageTalk
+                | ModalScreen::PersonTrade
+                | ModalScreen::PersonGift
         ) {
             self.handle_village_modal(modal, input, ctx, cues, requests);
             return true;
@@ -1393,6 +1411,8 @@ impl SeatUi {
             | ModalScreen::Garage
             | ModalScreen::VillageCounter
             | ModalScreen::VillageTalk
+            | ModalScreen::PersonTrade
+            | ModalScreen::PersonGift
             | ModalScreen::BaseModule => None,
             ModalScreen::Inventory => {
                 // The hopper rows (WP-DROPS): toggle collecting, dump blocks.

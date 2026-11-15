@@ -711,7 +711,13 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::JetpackEmpty { player_id }
         | GameplayEventKind::PickStruck { player_id, .. }
         | GameplayEventKind::PickClinked { player_id }
-        | GameplayEventKind::PackTransferred { player_id, .. } => Some(player_id),
+        | GameplayEventKind::PackTransferred { player_id, .. }
+        | GameplayEventKind::PersonTalked { player_id, .. }
+        | GameplayEventKind::PersonTraded { player_id, .. }
+        | GameplayEventKind::PersonGifted { player_id, .. }
+        | GameplayEventKind::AffinityChanged { player_id, .. }
+        | GameplayEventKind::RumourMarked { player_id, .. }
+        | GameplayEventKind::PeopleInteraction { player_id } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

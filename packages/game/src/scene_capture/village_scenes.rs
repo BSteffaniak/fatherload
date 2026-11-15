@@ -345,9 +345,9 @@ pub const VILLAGE_SCENES: &[Scene] = &[
                 BuildingKind::House,
                 None,
             );
-            let x = crate::shell::room_residents(&found, building)
+            let x = crate::shell::room_residents(stage.world().entities(), &found, building)
                 .first()
-                .map_or(200.0, |(_, x)| *x);
+                .map_or(200.0, |person| person.x);
             stage.seat(0).interior_x = x - 20.0;
             stage.hold(
                 1,

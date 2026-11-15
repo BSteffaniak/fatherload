@@ -1,16 +1,24 @@
 //! Villages in the shell: walking into a village building, its counter (the building's deals,
-//! bought as [`SessionServiceRequest::Village`]), talking to residents, and the arrival banner.
+//! bought as [`SessionServiceRequest::Village`]), talking to people, and the arrival banner.
 //!
-//! Talking is a placeholder until WP-PEOPLE's NPC entities: residents stand still in their
-//! rooms (and outdoors), and a conversation runs [`fatherload_simulation::people::talk`] against
-//! a per-seat [`CharacterState`] that lives only in this session (it is not simulated, saved or
-//! replicated yet), so repeat visits still vary sensibly.
+//! People are the simulation's NPC entities (WP-PEOPLE). Talking, trading and giving gifts are
+//! [`PeopleCommand`]s the seat sends for its player, naming the NPC entity: on the street (the
+//! nearest person within reach, see [`talk_target`]), in a building's room (whoever is inside),
+//! or at a counter (its keeper, when they are in). The conversation itself lives in the world's
+//! people ledger, so every peer shows the same lines and the person remembers the player across
+//! sessions; the seat only keeps which person it is talking to ([`TalkView`]).
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use fatherload_simulation::{
-    PlayerId, SessionServiceRequest,
-    people::{CharacterId, CharacterState, TalkContext, talk},
+    PlayerCommand, PlayerId, SessionServiceRequest, WorldState,
+    entity::{EntityId, EntityStore, NpcState},
+    people::{
+        CharacterId, PeopleCommand, TalkTopic,
+        contractor::contractor_profile,
+        offers::{self, giftable},
+        routine,
+    },
     village::{
         self, BuildingKind, Village, VillageDeal, VillageId, VillageService, VillageSetting,
     },
@@ -27,8 +35,9 @@ pub const VILLAGE_REACH: f32 = 60.0;
 const DOOR_REACH: f32 = 74.0;
 /// How long the arrival banner stays up, in shell ticks (60 per second).
 pub const BANNER_TICKS: u64 = 300;
-/// What residents call a player in conversation (the sim has no player names yet).
-const PLAYER_NAME: &str = "Driller";
+/// How close (tiles) a person must be for the talk key to prefer them over a building door the
+/// rig also stands at.
+const TALK_OVER_DOOR_TILES: f32 = 1.5;
 
 /// The village building a seat is inside.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -37,16 +46,129 @@ pub struct VillageInterior {
     pub building: u8,
 }
 
-/// An open conversation.
+/// An open conversation: who the seat is talking to. What was said lives in the world's people
+/// ledger ([`WorldState::people`]).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TalkView {
+    /// The NPC entity.
+    pub npc: EntityId,
     pub speaker: CharacterId,
     pub name: String,
     /// "Trader, 34" style line.
     pub about: String,
-    pub lines: Vec<String>,
     /// Opened from the counter menu (Back returns to it).
     pub from_counter: bool,
+}
+
+/// What a seat can say or do in a conversation (the talk panel's rows, in order).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TalkChoice {
+    Topic(TalkTopic),
+    /// Open their trade list.
+    Trade,
+    /// Open the gift list (the cargo bay's ore, relics and materials).
+    Gift,
+    Goodbye,
+}
+
+impl TalkChoice {
+    /// The row label.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Topic(TalkTopic::Chat) => "Chat",
+            Self::Topic(TalkTopic::Rumours) => "Ask about rumours",
+            Self::Topic(TalkTopic::Life) => "Ask about their life",
+            Self::Topic(TalkTopic::BuildingWork) => "Ask about building work",
+            Self::Trade => "What do you have for me?",
+            Self::Gift => "Give a gift",
+            Self::Goodbye => "Goodbye",
+        }
+    }
+}
+
+/// The talk panel's rows for `speaker` (a contractor also takes building questions).
+#[must_use]
+pub fn talk_choices(speaker: Option<&fatherload_simulation::people::Character>) -> Vec<TalkChoice> {
+    let mut choices = vec![
+        TalkChoice::Topic(TalkTopic::Chat),
+        TalkChoice::Topic(TalkTopic::Rumours),
+        TalkChoice::Topic(TalkTopic::Life),
+    ];
+    if speaker.is_some_and(|character| contractor_profile(character).is_some()) {
+        choices.push(TalkChoice::Topic(TalkTopic::BuildingWork));
+    }
+    choices.extend([TalkChoice::Trade, TalkChoice::Gift, TalkChoice::Goodbye]);
+    choices
+}
+
+/// The cargo a player can hand over as gifts, in bay order.
+#[must_use]
+pub fn gift_items(
+    player: &fatherload_simulation::Player,
+) -> Vec<(fatherload_simulation::item::ItemKind, u32)> {
+    player
+        .cargo_bay
+        .iter()
+        .filter(|(kind, count)| giftable(*kind) && *count > 0)
+        .collect()
+}
+
+/// The person `player`'s rig would talk to with the talk key: the nearest person within reach,
+/// unless the rig stands at a building door and they are more than
+/// [`TALK_OVER_DOOR_TILES`] away (then the key enters the building).
+#[must_use]
+pub fn talk_target(world: &WorldState, player: PlayerId) -> Option<EntityId> {
+    let npc = *world.npcs_in_reach(player).first()?;
+    if world.player_village_building(player).is_some() {
+        let (x, _) = world.people_actor_position(player)?;
+        let (entity, _) = world.npc(npc)?;
+        if (entity.body.x - x).abs() > TALK_OVER_DOOR_TILES * fatherload_simulation::TILE_SIZE {
+            return None;
+        }
+    }
+    Some(npc)
+}
+
+/// The people inside lot `lot` of `village` (the keeper excluded when they are behind the
+/// counter), in resident order.
+#[must_use]
+pub fn people_inside(
+    entities: &EntityStore,
+    village: VillageId,
+    lot: usize,
+    keeper: Option<u16>,
+) -> Vec<(EntityId, NpcState)> {
+    let mut found: Vec<(EntityId, NpcState)> = entities
+        .of_kind(fatherload_simulation::entity::EntityKind::Npc)
+        .filter_map(|entity| match entity.state {
+            fatherload_simulation::entity::EntityState::Npc(state)
+                if state.character.village == village
+                    && state.inside.map(usize::from) == Some(lot)
+                    && Some(state.character.index) != keeper =>
+            {
+                Some((entity.id, state))
+            }
+            _ => None,
+        })
+        .collect();
+    found.sort_by_key(|(_, state)| state.character.index);
+    found
+}
+
+/// The keeper of `lot`, if they are in (behind their counter).
+#[must_use]
+pub fn keeper_inside(entities: &EntityStore, found: &Village, lot: usize) -> Option<EntityId> {
+    let keeper = found.buildings.get(lot)?.keeper?;
+    entities
+        .of_kind(fatherload_simulation::entity::EntityKind::Npc)
+        .find(|entity| {
+            matches!(entity.state, fatherload_simulation::entity::EntityState::Npc(state)
+                if state.character.village == found.id
+                    && state.character.index == keeper
+                    && state.inside.map(usize::from) == Some(lot))
+        })
+        .map(|entity| entity.id)
 }
 
 /// The arrival banner.
@@ -69,14 +191,12 @@ impl VillageBanner {
     }
 }
 
-/// A seat's village state: where it is inside, its open conversation, its arrival banner and
-/// what residents remember of this session's conversations.
+/// A seat's village state: where it is inside, its open conversation and its arrival banner.
 #[derive(Clone, Debug, Default)]
 pub struct SeatVillage {
     pub interior: Option<VillageInterior>,
     pub talk: Option<TalkView>,
     pub banner: Option<VillageBanner>,
-    talk_states: BTreeMap<CharacterId, CharacterState>,
     /// The village the rig was in on the previous frame.
     last_village: Option<VillageId>,
 }
@@ -88,29 +208,42 @@ impl SeatVillage {
             interior: None,
             talk: None,
             banner: None,
-            talk_states: BTreeMap::new(),
             last_village: None,
         }
     }
 }
 
-/// Where the residents of `building` stand in its room (room units), with their indices. The
-/// keeper stands behind the counter and is reached through the counter menu.
+/// One person standing in a building's room.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RoomPerson {
+    pub npc: EntityId,
+    /// Their resident index in the village.
+    pub resident: u16,
+    /// Where they stand (room units, 0..640).
+    pub x: f32,
+}
+
+/// Where the people inside `building` stand in its room (room units). The keeper stands behind
+/// the counter and is reached through the counter menu; everyone else gets a spot along the
+/// floor (an inn on a busy evening fills up).
 #[must_use]
-pub fn room_residents(found: &Village, building: usize) -> Vec<(u16, f32)> {
+pub fn room_residents(entities: &EntityStore, found: &Village, building: usize) -> Vec<RoomPerson> {
     let Some(lot) = found.buildings.get(building) else {
         return Vec::new();
     };
     let spots: &[f32] = if lot.keeper.is_some() {
-        &[230.0, 310.0]
+        &[170.0, 230.0, 290.0, 345.0, 540.0, 595.0, 140.0, 520.0]
     } else {
-        &[200.0, 300.0, 400.0, 500.0]
+        &[190.0, 260.0, 330.0, 400.0, 470.0, 540.0, 150.0, 595.0]
     };
-    lot.residents
-        .iter()
-        .filter(|resident| Some(**resident) != lot.keeper)
+    people_inside(entities, found.id, building, lot.keeper)
+        .into_iter()
         .zip(spots)
-        .map(|(resident, x)| (*resident, *x))
+        .map(|((npc, state), x)| RoomPerson {
+            npc,
+            resident: state.character.index,
+            x: *x,
+        })
         .collect()
 }
 
@@ -225,6 +358,7 @@ impl SeatUi {
         delta_seconds: f32,
         ctx: SeatContext<'_>,
         cues: &mut Vec<SoundCue>,
+        requests: &mut Vec<ShellRequest>,
     ) -> bool {
         if input.pause {
             return true;
@@ -271,11 +405,11 @@ impl SeatUi {
             cues.push(SoundCue::Ui);
             return false;
         }
-        let near = room_residents(&found, building)
+        let near = room_residents(ctx.world.entities(), &found, building)
             .into_iter()
-            .find(|(_, x)| (self.interior_x - x).abs() <= VILLAGE_REACH * 0.7);
-        if let Some((resident, _)) = near {
-            self.start_talk(ctx, &found, resident, false);
+            .find(|person| (self.interior_x - person.x).abs() <= VILLAGE_REACH * 0.7);
+        if let Some(person) = near {
+            self.start_talk(ctx, person.npc, false, requests);
             cues.push(SoundCue::Ui);
         } else if lot.keeper.is_some() {
             "Walk to the counter, someone to talk to, or the door.".clone_into(&mut self.message);
@@ -285,45 +419,211 @@ impl SeatUi {
         false
     }
 
-    /// Opens a conversation with resident `resident` of `found`.
-    fn start_talk(
+    /// Opens a conversation with the person `npc` (on the street, in a room or at a counter):
+    /// sends the opening chat for the seat's player and shows the talk panel.
+    pub(super) fn start_talk(
         &mut self,
         ctx: SeatContext<'_>,
-        found: &Village,
-        resident: u16,
+        npc: EntityId,
         from_counter: bool,
+        requests: &mut Vec<ShellRequest>,
     ) {
-        let Some(character) = found.population.characters.get(usize::from(resident)) else {
+        let Some((_, state)) = ctx.world.npc(npc) else {
             return;
         };
-        let facts = village::village_facts(ctx.world.world_settings(), found);
-        let talk_ctx = TalkContext {
-            seed: ctx.world.world_settings().seed,
-            day: ctx.world.progression().town_event_day,
-            player: ctx.player.unwrap_or(PlayerId::new(1)),
-            player_name: PLAYER_NAME,
-            population: Some(&found.population),
-            facts: &facts,
+        let Some(character) = routine::character(ctx.world.world_settings(), state.character)
+        else {
+            return;
         };
-        let state = self.village.talk_states.entry(character.id).or_default();
-        let lines = talk(character, state, &talk_ctx)
-            .into_iter()
-            .map(|line| line.text)
-            .collect();
         let role = character.role.name();
         let mut about = String::with_capacity(role.len() + 8);
         about.push_str(&role[..1].to_uppercase());
         about.push_str(&role[1..]);
         about.push_str(", ");
         about.push_str(&character.age.to_string());
+        if contractor_profile(&character).is_some() {
+            about.push_str(" - takes building work");
+        }
         self.village.talk = Some(TalkView {
+            npc,
             speaker: character.id,
             name: character.name.full(),
             about,
-            lines,
             from_counter,
         });
+        self.selected_menu_item = 0;
         self.modal = Some(ModalScreen::VillageTalk);
+        Self::send_people(
+            ctx,
+            PeopleCommand::Talk {
+                npc,
+                topic: TalkTopic::Chat,
+            },
+            requests,
+        );
+    }
+
+    /// Sends a people command for the seat's player.
+    fn send_people(ctx: SeatContext<'_>, command: PeopleCommand, requests: &mut Vec<ShellRequest>) {
+        if ctx.player.is_some() {
+            requests.push(ShellRequest::Action {
+                seat: ctx.seat,
+                command: PlayerCommand::People(command),
+            });
+        }
+    }
+
+    /// Talks to the person the seat's rig is near on the street, if any. Returns whether a
+    /// conversation opened.
+    pub(super) fn try_talk_outdoors(
+        &mut self,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+        requests: &mut Vec<ShellRequest>,
+    ) -> bool {
+        let Some(npc) = ctx.player.and_then(|player| talk_target(ctx.world, player)) else {
+            return false;
+        };
+        self.start_talk(ctx, npc, false, requests);
+        cues.push(SoundCue::Ui);
+        true
+    }
+
+    /// Ends the seat's conversation: tells the world, then back to the counter when the talk
+    /// started there.
+    fn end_talk(&mut self, ctx: SeatContext<'_>, requests: &mut Vec<ShellRequest>) {
+        let from_counter = self
+            .village
+            .talk
+            .take()
+            .is_some_and(|talk| talk.from_counter);
+        Self::send_people(ctx, PeopleCommand::Goodbye, requests);
+        self.selected_menu_item = 0;
+        self.modal = from_counter.then_some(ModalScreen::VillageCounter);
+    }
+
+    /// The talk panel, the trade list and the gift list.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the three people panels share their guards and read best together"
+    )]
+    fn handle_people_modal(
+        &mut self,
+        modal: ModalScreen,
+        input: PlayerInput,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+        requests: &mut Vec<ShellRequest>,
+    ) {
+        let Some(talk) = self.village.talk.clone() else {
+            self.modal = None;
+            return;
+        };
+        let speaker = routine::character(ctx.world.world_settings(), talk.speaker);
+        // The person walked off (despawned) or the world forgot them: close quietly.
+        if ctx.world.npc(talk.npc).is_none() {
+            self.village.talk = None;
+            self.modal = None;
+            return;
+        }
+        match modal {
+            ModalScreen::VillageTalk => {
+                if input.backs_out() {
+                    self.end_talk(ctx, requests);
+                    cues.push(SoundCue::UiBack);
+                    return;
+                }
+                let choices = talk_choices(speaker.as_ref());
+                self.move_selection(input, choices.len().saturating_sub(1));
+                if !(input.confirm || input.interact) {
+                    return;
+                }
+                match choices.get(self.selected_menu_item).copied() {
+                    Some(TalkChoice::Topic(topic)) => {
+                        Self::send_people(
+                            ctx,
+                            PeopleCommand::Talk {
+                                npc: talk.npc,
+                                topic,
+                            },
+                            requests,
+                        );
+                        cues.push(SoundCue::Ui);
+                    }
+                    Some(TalkChoice::Trade) => {
+                        self.selected_menu_item = 0;
+                        self.modal = Some(ModalScreen::PersonTrade);
+                        cues.push(SoundCue::Ui);
+                    }
+                    Some(TalkChoice::Gift) => {
+                        let any = ctx
+                            .player()
+                            .is_some_and(|player| !gift_items(player).is_empty());
+                        if any {
+                            self.selected_menu_item = 0;
+                            self.modal = Some(ModalScreen::PersonGift);
+                            cues.push(SoundCue::Ui);
+                        } else {
+                            "Nothing in the bay to give: bring ore or a relic."
+                                .clone_into(&mut self.message);
+                            cues.push(SoundCue::UiError);
+                        }
+                    }
+                    Some(TalkChoice::Goodbye) | None => {
+                        self.end_talk(ctx, requests);
+                        cues.push(SoundCue::UiBack);
+                    }
+                }
+            }
+            ModalScreen::PersonTrade => {
+                if input.backs_out() {
+                    self.selected_menu_item = 0;
+                    self.modal = Some(ModalScreen::VillageTalk);
+                    return;
+                }
+                let list = speaker.as_ref().map_or_else(Vec::new, offers::offers_of);
+                self.move_selection(input, list.len().saturating_sub(1));
+                if (input.confirm || input.interact) && self.selected_menu_item < list.len() {
+                    Self::send_people(
+                        ctx,
+                        PeopleCommand::Trade {
+                            npc: talk.npc,
+                            offer: u8::try_from(self.selected_menu_item).unwrap_or(u8::MAX),
+                        },
+                        requests,
+                    );
+                    // Back to the conversation to hear how it went.
+                    self.selected_menu_item = 0;
+                    self.modal = Some(ModalScreen::VillageTalk);
+                    cues.push(SoundCue::Ui);
+                }
+            }
+            ModalScreen::PersonGift => {
+                if input.backs_out() {
+                    self.selected_menu_item = 0;
+                    self.modal = Some(ModalScreen::VillageTalk);
+                    return;
+                }
+                let items = ctx.player().map_or_else(Vec::new, gift_items);
+                self.move_selection(input, items.len().saturating_sub(1));
+                if (input.confirm || input.interact)
+                    && let Some((item, _)) = items.get(self.selected_menu_item).copied()
+                {
+                    Self::send_people(
+                        ctx,
+                        PeopleCommand::Gift {
+                            npc: talk.npc,
+                            item,
+                        },
+                        requests,
+                    );
+                    self.selected_menu_item = 0;
+                    self.modal = Some(ModalScreen::VillageTalk);
+                    cues.push(SoundCue::Ui);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// The village counter and conversation panels. Returns `true` while one is open.
@@ -335,31 +635,17 @@ impl SeatUi {
         cues: &mut Vec<SoundCue>,
         requests: &mut Vec<ShellRequest>,
     ) {
+        if matches!(
+            modal,
+            ModalScreen::VillageTalk | ModalScreen::PersonTrade | ModalScreen::PersonGift
+        ) {
+            self.handle_people_modal(modal, input, ctx, cues, requests);
+            return;
+        }
         let interior = self
             .village
             .interior
             .and_then(|interior| interior_village(ctx.world.world_settings(), interior));
-        if modal == ModalScreen::VillageTalk {
-            if input.backs_out() {
-                // Back to the counter when the talk started there.
-                let from_counter = self
-                    .village
-                    .talk
-                    .take()
-                    .is_some_and(|talk| talk.from_counter);
-                self.modal = from_counter.then_some(ModalScreen::VillageCounter);
-                return;
-            }
-            if (input.confirm || input.interact)
-                && let (Some((found, _)), Some(talk)) = (&interior, &self.village.talk)
-            {
-                let (resident, from_counter) = (talk.speaker.index, talk.from_counter);
-                let found = Arc::clone(found);
-                self.start_talk(ctx, &found, resident, from_counter);
-                cues.push(SoundCue::Ui);
-            }
-            return;
-        }
         let Some((found, building)) = interior else {
             self.modal = None;
             return;
@@ -387,9 +673,14 @@ impl SeatUi {
             };
             self.submit_service(request, ctx, requests);
             cues.push(SoundCue::Ui);
-        } else if let Some(keeper) = lot.keeper {
-            self.start_talk(ctx, &found, keeper, true);
-            cues.push(SoundCue::Ui);
+        } else if lot.keeper.is_some() {
+            if let Some(npc) = keeper_inside(ctx.world.entities(), &found, building) {
+                self.start_talk(ctx, npc, true, requests);
+                cues.push(SoundCue::Ui);
+            } else {
+                self.message = keeper_away(ctx.world, &found, building);
+                cues.push(SoundCue::UiError);
+            }
         }
     }
 
@@ -515,6 +806,32 @@ impl SeatUi {
                 SoundCue::BedDown,
             ),
         })
+    }
+}
+
+/// Where the keeper of `lot` is when they are not behind their counter ("Mara is at the inn.").
+fn keeper_away(world: &WorldState, found: &Village, lot: usize) -> String {
+    let Some(keeper) = found.buildings.get(lot).and_then(|lot| lot.keeper) else {
+        return "Nobody minds this counter.".to_owned();
+    };
+    let name = found
+        .population
+        .characters
+        .get(usize::from(keeper))
+        .map_or_else(
+            || "The keeper".to_owned(),
+            |who| who.name.short().to_owned(),
+        );
+    let character = CharacterId {
+        village: found.id,
+        index: keeper,
+    };
+    match world.npc_of(character).and_then(|npc| world.npc(npc)) {
+        Some((_, state)) => format!(
+            "{name} is out ({}). Try again later.",
+            state.activity.phrase()
+        ),
+        None => format!("{name} is out. Try again later."),
     }
 }
 

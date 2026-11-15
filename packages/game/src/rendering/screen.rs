@@ -448,6 +448,13 @@ fn draw_view_prompt(
         && shell.modal.is_none()
         && shell.seat(view.seat_index).modal.is_none()
         && view.failure.is_none()
+        && let Some((_, name)) = &view.talk_target
+    {
+        (Prompt::Use, format!("Talk to {name}"), true)
+    } else if shell.run_mode == RunMode::Playing
+        && shell.modal.is_none()
+        && shell.seat(view.seat_index).modal.is_none()
+        && view.failure.is_none()
         && let Some(door) = &view.village_door
     {
         (Prompt::Use, door.clone(), true)
@@ -1168,6 +1175,8 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Garage => super::garage::draw_garage(draw, ui),
         ModalScreen::VillageCounter => counters::draw_village_counter(draw, ui),
         ModalScreen::VillageTalk => counters::draw_village_talk(draw, ui),
+        ModalScreen::PersonTrade => counters::draw_person_trade(draw, ui),
+        ModalScreen::PersonGift => counters::draw_person_gift(draw, ui),
         ModalScreen::BaseModule => super::build::draw_base_module(draw, ui),
     }
 }

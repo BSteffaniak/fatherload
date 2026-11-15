@@ -253,6 +253,7 @@ mod drop_scenes;
 mod explosive_scenes;
 mod touch_scenes;
 mod pilot_scenes;
+mod people_scenes;
 mod weapon_scenes;
 
 /// One capturable scene.
@@ -318,6 +319,16 @@ impl SceneStage<'_> {
         &mut self.game.shell
     }
 
+    /// The world being shown.
+    fn world(&self) -> &WorldState {
+        self.game.world()
+    }
+
+    /// Edits the running world in place (after it has run a while).
+    fn play_on(&mut self, edit: impl FnOnce(&mut WorldState)) {
+        self.game.edit_world(edit);
+    }
+
     /// Seat `seat`'s own menus (interior, counter panel, dialogs, messages).
     fn seat(&mut self, seat: usize) -> &mut SeatUi {
         self.game.shell.seat_mut(seat)
@@ -340,6 +351,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .iter()
         .chain(rig_scenes::RIG_SCENES)
         .chain(village_scenes::VILLAGE_SCENES)
+        .chain(people_scenes::PEOPLE_SCENES)
         .chain(enemy_scenes::ENEMY_SCENES)
         .chain(base_scenes::BASE_SCENES)
         .chain(crew_scenes::CREW_SCENES)

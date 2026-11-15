@@ -15,6 +15,7 @@
 use raylib::prelude::*;
 
 use fatherload_simulation::{
+    entity::{EntityState, EntityStore},
     village::{BuildingKind, BuildingStyle, Village},
     worldgen::WorldSettings,
 };
@@ -58,7 +59,7 @@ pub(in crate::rendering) fn draw_village_interior(
     draw: &mut RaylibDrawHandle<'_>,
     seat: &SeatUi,
     view: &ViewSnapshot<'_>,
-    settings: &WorldSettings,
+    (settings, entities): (&WorldSettings, &EntityStore),
     area: RoomArea,
     player: Option<usize>,
     interior: VillageInterior,
@@ -81,49 +82,79 @@ pub(in crate::rendering) fn draw_village_interior(
         ),
     }
     let counter_x = room_pixel_x(VILLAGE_COUNTER_X) - COUNTER_WIDTH / 2;
+    // The keeper stands behind the counter only while they are in (their routine, WP-PEOPLE).
+    let keeper_npc = shell::keeper_inside(entities, &found, building);
     let keeper = lot
         .keeper
+        .filter(|_| keeper_npc.is_some())
         .and_then(|index| found.population.characters.get(usize::from(index)));
+    let has_counter = lot.keeper.is_some();
+    let talking = |npc| {
+        entities.get(npc).is_some_and(|entity| {
+            matches!(entity.state, EntityState::Npc(state) if state.talking_to == Some(view.player_id))
+        })
+    };
     {
         let mut room = draw.begin_mode2D(placement.camera());
         super::draw_room_shell(&mut room, room_set, placement);
         draw_door(&mut room);
         draw_dressing(&mut room, &found, lot.kind, counter_x, seconds);
-        draw_village_lamps(&mut room, counter_x, keeper.is_some());
-        if let Some(keeper) = keeper {
-            let keeper_x = counter_x + COUNTER_WIDTH / 2;
-            people_art::draw_person(
-                &mut room,
-                PersonPen {
-                    x: keeper_x as f32,
-                    y: (FLOOR_Y - COUNTER_HEIGHT + 2) as f32,
-                    pixel: 1.0,
-                },
-                keeper,
-                -1,
-                seconds,
-            );
+        draw_village_lamps(&mut room, counter_x, has_counter);
+        if has_counter {
+            if let Some(keeper) = keeper {
+                let keeper_x = counter_x + COUNTER_WIDTH / 2;
+                people_art::draw_person_posed(
+                    &mut room,
+                    PersonPen {
+                        x: keeper_x as f32,
+                        y: (FLOOR_Y - COUNTER_HEIGHT + 2) as f32,
+                        pixel: 1.0,
+                    },
+                    keeper,
+                    people_art::Pose {
+                        facing: -1,
+                        stride: None,
+                        talking: keeper_npc.is_some_and(talking),
+                    },
+                    seconds,
+                );
+            }
             draw_counter_body(&mut room, room_set, counter_x);
             draw_counter_goods(&mut room, lot.kind, counter_x, seconds);
+            if keeper.is_none() {
+                draw_back_soon(&mut room, counter_x);
+            }
         }
-        for (resident, x) in shell::room_residents(&found, building) {
-            let Some(character) = found.population.characters.get(usize::from(resident)) else {
+        for person in shell::room_residents(entities, &found, building) {
+            let Some(character) = found
+                .population
+                .characters
+                .get(usize::from(person.resident))
+            else {
                 continue;
             };
-            let facing = if room_pixel_x(seat.interior_x) < room_pixel_x(x) {
+            // People potter on the spot: a slow sway, each on their own beat.
+            let beat = f32::from(person.resident).mul_add(1.7, seconds * 0.35);
+            let sway = (beat.sin() * 7.0).round();
+            let x = room_pixel_x(person.x) as f32 + sway;
+            let facing = if (room_pixel_x(seat.interior_x) as f32) < x {
                 -1
             } else {
                 1
             };
-            people_art::draw_person(
+            people_art::draw_person_posed(
                 &mut room,
                 PersonPen {
-                    x: room_pixel_x(x) as f32,
+                    x,
                     y: FLOOR_Y as f32,
                     pixel: 1.0,
                 },
                 character,
-                facing,
+                people_art::Pose {
+                    facing,
+                    stride: None,
+                    talking: talking(person.npc),
+                },
                 seconds,
             );
         }
@@ -144,10 +175,10 @@ pub(in crate::rendering) fn draw_village_interior(
     draw_controls_hint(draw, canvas);
     let at_door = seat.interior_x < 74.0;
     let near_counter =
-        keeper.is_some() && (seat.interior_x - VILLAGE_COUNTER_X).abs() <= shell::VILLAGE_REACH;
-    let near_resident = shell::room_residents(&found, building)
+        has_counter && (seat.interior_x - VILLAGE_COUNTER_X).abs() <= shell::VILLAGE_REACH;
+    let near_resident = shell::room_residents(entities, &found, building)
         .into_iter()
-        .find(|(_, x)| (seat.interior_x - x).abs() <= shell::VILLAGE_REACH * 0.7);
+        .find(|person| (seat.interior_x - person.x).abs() <= shell::VILLAGE_REACH * 0.7);
     if let Some(keeper) = keeper {
         let keeper_x = counter_x + COUNTER_WIDTH / 2;
         let (bubble_x, bubble_y) =
@@ -160,13 +191,25 @@ pub(in crate::rendering) fn draw_village_interior(
     } else if near_counter {
         Some((counter_x + COUNTER_WIDTH / 2, "Use counter"))
     } else {
-        near_resident.map(|(_, x)| (room_pixel_x(x), "Talk"))
+        near_resident.map(|person| (room_pixel_x(person.x), "Talk"))
     };
     if let Some((target_x, label)) = prompt {
         let (prompt_x, prompt_y) =
             placement.to_canvas(canvas, target_x, FLOOR_Y - rig_art::BODY_HEIGHT - 8);
         draw_key_prompt(draw, prompt_x, prompt_y, hint(Prompt::Use, label));
     }
+}
+
+/// A "back soon" card on an unattended counter (the keeper's routine has them elsewhere).
+fn draw_back_soon(draw: &mut impl RaylibDraw, counter_x: i32) {
+    let x = counter_x + COUNTER_WIDTH / 2 - 14;
+    let y = FLOOR_Y - COUNTER_HEIGHT - 14;
+    draw.draw_rectangle(x + 13, y - 4, 2, 4, SOIL_DARK);
+    draw.draw_rectangle(x - 1, y - 1, 30, 14, INK);
+    draw.draw_rectangle(x, y, 28, 12, CREAM);
+    draw.draw_rectangle(x + 3, y + 3, 22, 1, LOAM);
+    draw.draw_rectangle(x + 3, y + 6, 16, 1, LOAM);
+    draw.draw_rectangle(x + 3, y + 9, 19, 1, LOAM);
 }
 
 /// The keeper's greeting over the counter.

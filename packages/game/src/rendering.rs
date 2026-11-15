@@ -498,7 +498,7 @@ impl GameRenderer {
                     draw,
                     seat,
                     view,
-                    snapshot.terrain.settings(),
+                    (snapshot.terrain.settings(), snapshot.entities),
                     area,
                     split.then_some(view.seat_index),
                     village,
@@ -686,6 +686,7 @@ impl GameRenderer {
                     clock: snapshot.clock,
                     moon: snapshot.moon,
                     clock_state: snapshot.clock_state,
+                    talk_target: view.talk_target.as_ref().map(|(npc, _)| *npc),
                 },
             );
         }

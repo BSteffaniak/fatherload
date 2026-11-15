@@ -40,8 +40,10 @@ use crate::{
     shell::hopper::{HopperRow, hopper_rows},
 };
 
+mod people;
 mod village;
-pub(super) use village::{draw_village_counter, draw_village_talk};
+pub(super) use people::{draw_person_gift, draw_person_trade, draw_village_talk};
+pub(super) use village::draw_village_counter;
 
 /// One counter row before it becomes a [`SectionItem`]: what it is, what it costs and why it
 /// may be unavailable.
