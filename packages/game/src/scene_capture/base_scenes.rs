@@ -63,6 +63,11 @@ pub const BASE_SCENES: &[Scene] = &[
         setup: |stage| works(stage, true),
     },
     Scene {
+        name: "wave2_outpost_skirmish",
+        summary: "Every wave 2 system at once: an underground outpost, its rig outside the door firing a rivet gun at cave bats and a spitter, blasted loot drops on the floor",
+        setup: outpost_skirmish,
+    },
+    Scene {
         name: "base_coop_split",
         summary: "Two crewmates in split-screen: one building walls in build mode, one at the generator",
         setup: coop_split,
@@ -670,4 +675,93 @@ fn coop_split(stage: &mut SceneStage<'_>) {
         pointed: None,
     });
     stage.settle(40);
+}
+
+/// Wave 2 together: the fuel-station outpost (WP-BASE) with a dug-out gallery west of its door,
+/// loot drops (WP-DROPS) lying where a blast threw them, and the rig at the door firing its rivet
+/// gun (WP-WEAPONS) at cave bats and an acid spitter (WP-ENEMIES) coming up the gallery.
+fn outpost_skirmish(stage: &mut SceneStage<'_>) {
+    use fatherload_simulation::{
+        AmmoKind, EnemyKind, WeaponKind,
+        item::ItemStack,
+        terrain::{ArtifactKind, MineralKind},
+        weapon::MAX_BATTERY_LEVEL,
+    };
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        build_outpost(world, player);
+        let row = FLOOR - 1;
+        // The gallery west of the door, with a lumpy roof.
+        for x in ROOM_LEFT - 30..=ROOM_LEFT {
+            let roof =
+                FLOOR - 7 + i32::from(x.rem_euclid(7) == 3) + i32::from(x.rem_euclid(11) == 5);
+            for y in FLOOR - 12..FLOOR + 2 {
+                let kind = if (roof..FLOOR).contains(&y) {
+                    TileKind::Air
+                } else {
+                    TileKind::Stone
+                };
+                let _ = world.terrain_mut().set_kind(TilePosition { x, y }, kind);
+            }
+        }
+        reveal(
+            world,
+            player,
+            ROOM_LEFT - 36..ROOM_RIGHT + 8,
+            FLOOR - 16..FLOOR + 16,
+        );
+        stand(world, player, ROOM_LEFT - 3, row);
+        if let Some(rig) = world.player_mut(player) {
+            let _ = rig.receive_weapon(WeaponKind::RivetGun);
+            rig.weapon_rack.battery_level = MAX_BATTERY_LEVEL;
+            rig.weapon.energy = rig.battery_capacity();
+            rig.cargo_bay.add(AmmoKind::Rocket.item(), 4);
+        }
+        // Loot on the gallery floor: what a charge further in threw out.
+        let floor_y = TILE_SIZE.mul_add(f32::from(i16::try_from(FLOOR).unwrap_or(0)), -7.0);
+        for (index, stack) in [
+            ItemStack::new(ItemKind::Mineral(MineralKind::Gold), 3),
+            ItemStack::new(ItemKind::Mineral(MineralKind::Emerald), 1),
+            ItemStack::new(ItemKind::Block(BlockKind::Stone), 4),
+            ItemStack::new(ItemKind::Artifact(ArtifactKind::Fossil), 1),
+            ItemStack::new(ItemKind::Mineral(MineralKind::Silver), 2),
+            ItemStack::new(ItemKind::Block(BlockKind::Dirt), 6),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let column = ROOM_LEFT - 19 + 2 * i32::try_from(index).unwrap_or(0);
+            let _ = world.spawn_item_drop(tile_centre(column), floor_y, (0.0, 0.0), stack, None);
+        }
+        // The hostiles coming up the gallery.
+        for (column, height) in [
+            (ROOM_LEFT - 12, 4),
+            (ROOM_LEFT - 15, 5),
+            (ROOM_LEFT - 18, 3),
+        ] {
+            let _ = world.spawn_enemy(
+                EnemyKind::CaveBat,
+                tile_centre(column),
+                tile_centre(FLOOR - height),
+            );
+        }
+        let spitter = EnemyKind::AcidSpitter;
+        let _ = world.spawn_enemy(
+            spitter,
+            tile_centre(ROOM_LEFT - 20),
+            TILE_SIZE.mul_add(
+                f32::from(i16::try_from(FLOOR).unwrap_or(0)),
+                -spitter.stats().radius,
+            ) - 1.0,
+        );
+    });
+    stage.use_devices(&[XBOX]);
+    stage.settle(6);
+    let firing = crate::input::PlayerInput {
+        fire: true,
+        aim_x: -1.0,
+        aim_y: -0.12,
+        ..crate::input::PlayerInput::default()
+    };
+    stage.hold(22, firing);
 }
