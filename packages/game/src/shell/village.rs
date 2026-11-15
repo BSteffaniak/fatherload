@@ -384,6 +384,41 @@ impl SeatUi {
         }
     }
 
+    /// Why an inn room was refused (`None` for every other deal, which keep the generic
+    /// message): rooms are let from dusk, you are already in bed, or you are short of credits.
+    pub(super) fn village_room_refusal(
+        request: SessionServiceRequest,
+        ctx: SeatContext<'_>,
+    ) -> Option<String> {
+        let SessionServiceRequest::Village {
+            village: id,
+            building,
+            offer,
+            ..
+        } = request
+        else {
+            return None;
+        };
+        let found = village::village(ctx.world.world_settings(), id)?;
+        let deal = found
+            .offers(usize::from(building))
+            .get(usize::from(offer))?
+            .deal;
+        if deal != VillageDeal::Room {
+            return None;
+        }
+        Some(if !ctx.world.clock().phase().sleepable() {
+            "No rooms till dusk: come back when the sun goes down.".to_owned()
+        } else if ctx.player.is_some_and(|player| ctx.world.is_in_bed(player)) {
+            "You already have a room for the night.".to_owned()
+        } else {
+            format!(
+                "A room is {} credits for the night.",
+                fatherload_simulation::clock::INN_ROOM_PRICE
+            )
+        })
+    }
+
     /// The message (and cue) for a village deal that went through.
     pub(super) fn village_resolved(
         &mut self,

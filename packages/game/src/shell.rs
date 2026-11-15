@@ -1428,9 +1428,13 @@ impl SeatUi {
         };
         let pending = self.pending_services.remove(index);
         if !applied {
-            quests::quest_unavailable_message(request)
-                .unwrap_or_else(|| unavailable_message(request))
-                .clone_into(&mut self.message);
+            if let Some(message) = Self::village_room_refusal(request, ctx) {
+                self.message = message;
+            } else {
+                quests::quest_unavailable_message(request)
+                    .unwrap_or_else(|| unavailable_message(request))
+                    .clone_into(&mut self.message);
+            }
             cues.push(SoundCue::UiError);
             return;
         }
