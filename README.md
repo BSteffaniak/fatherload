@@ -257,6 +257,48 @@ follows the rig among the islands, which show on it. Climbing into a new band, c
 updraft and icing up each have their own sound. Older worlds keep an empty sky and standard
 air.
 
+### Balance
+
+The balance harness (`fatherload --balance-report [--seeds N] [--minutes M] [--only
+economy,progression,combat,exposure,building]`, release build; details in
+[packages/simulation/README.md](packages/simulation/README.md#balance-harness-srcbalancers-srcbalance))
+plays fresh worlds with scripted bots through the real simulation: an economy bot (straight
+shafts, a prospector tunnelling sideways to ore, and a mining-charge miner with its own
+workshop) over an hour of game time per seed, duels of five weapon loadouts against every
+enemy at its depth tiers, unarmed rigs drilling every band on Normal, and a rig building every
+base module. Enemy difficulty is now the host's call online: the host refuses a client's
+difficulty change.
+
+The T19 pacing pass, before and after (4 seeds, 60 game minutes, 60 Hz):
+
+| Measure | Before | After |
+|---|---|---|
+| Enemy hull loss drilling the clay beds unarmed (stock 100-hull rig), per minute | 192 (burrowers 192) | 29 (burrowers 29) |
+| Enemy hull loss drilling grey stone unarmed, per minute (burrowers) | 152 (109) | 56 (the worst is now cave bats, 26) |
+| Prospector bot: hull lost to enemies per minute / upkeep (fuel and repairs) | 13.0 / 4,738 cr | 6.3 / 3,993 cr |
+| Prospector bot: credits earned per minute, whole hour / last half hour | 148 / 143 | 179 / 196 |
+| Prospector bot: upgrades bought in an hour / reached grey stone | 8.8 / 0 of 4 runs | 13.0 / 3 of 4 runs (minute 52) |
+| Brood lord at its shallowest lair (fossil oceans): rivet gun I / cutter II / railgun III | 63 / 29 / 18 s | 44 / 20 / 12 s |
+| Ancient guardian in the machine layer: rivet gun I / rockets III / railgun III | stalemate / 50 / 41 s | 100 / 34 / 26 s |
+| Mining charges vs a tier 8 drill mid-depth (stationary benchmark, shack price) | 1.12x | 0.86x |
+| Mining charges vs a tier 14 drill deep down (same) | 1.66x | 1.44x |
+| Workshop-crafted mining charge (cost to the player) | 8 blocks + 30 cr (a fifth of the shack) | 12 blocks + 90 cr |
+| Mining-charge bot vs prospector bot, whole loop | 0.81x | 0.59x |
+
+What changed, and why: burrowers heard drills 16 tiles away and lunged every 1.9 s, the worst
+threat in every band down to the fossil oceans and the largest cost of an early run (repairs);
+they now hear 10 tiles, telegraph for 850 ms, bite for 7 every 3 s and are rarer in the clay
+beds. Elites took a minute or more with a fitting weapon (the guardian's shield stalled
+everything but rockets and the railgun); brood lords now have 420 health (600) and guardians
+480 plus a 180 shield (700 + 300). Mining charges cleared rock three times faster than a drill
+and kept five deep gems in six, and the workshop pressed them for a fifth of the shack price;
+their soft blast now cracks hard gems (stone-hard ores and up) one in three like any blast,
+and the workshop recipe costs 12 blocks and 90 cr. Still off, for later passes: the deep
+strata are harsh on an unarmed rig (fossil-ocean burrowers about 100 hull a minute, void-geode
+magma wisps about 150), and the early climb is slow (drill tier 3 at about 40 minutes for the
+bot, grey stone at about 50); straight shafts alone do not pay for their fuel (the shaft bot
+goes broke and calls the rescue, by design: ore lies beside the shaft).
+
 ### Caves
 
 Worlds from generator v6 on add **cave ecosystems**, each with its own rock,
