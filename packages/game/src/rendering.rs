@@ -537,7 +537,10 @@ impl GameRenderer {
                 && shell.modal.is_none()
                 && !seat.inside()
                 && view.failure.is_some()
+                && view.pilot.is_none()
             {
+                // On foot the rescue dialog waits: the pilot walks, and use radios for a
+                // pickup (the "Radio for a pickup" prompt) back into the failed rig.
                 draw_rescue(draw, &ui);
             }
             let docked = layout::take_last_dialog_rect().filter(|_| seat.inside());

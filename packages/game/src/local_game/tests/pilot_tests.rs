@@ -186,3 +186,25 @@ fn a_split_screen_seat_walks_while_the_other_drives() {
     assert!(snapshot.views[0].pilot.is_some());
     assert!(snapshot.views[1].pilot.is_none());
 }
+
+#[test]
+fn pressing_use_twice_away_from_the_rig_radios_for_a_pickup() {
+    let mut world = super::super::new_world();
+    cavern(&mut world, PLAYER, 24);
+    world.player_mut(PLAYER).expect("rig").credits = 500;
+    let mut game = playing(world, 1, "pilot-pickup");
+    idle(&mut game, 10);
+    press(&mut game, interact());
+    hold(&mut game, 60, walk(1.0));
+    assert!(!game.world().can_board_rig(PLAYER), "walked away");
+    // The first press explains and arms the radio; the second calls the pickup.
+    press(&mut game, interact());
+    assert!(game.world().is_on_foot(PLAYER));
+    press(&mut game, interact());
+    idle(&mut game, 2);
+    assert!(!game.world().is_on_foot(PLAYER), "back aboard");
+    assert_eq!(
+        game.world().player(PLAYER).expect("rig").credits,
+        500 - fatherload_simulation::pilot::PILOT_RECALL_FEE
+    );
+}

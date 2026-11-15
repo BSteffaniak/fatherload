@@ -430,6 +430,9 @@ fn draw_view_prompt(
     } else if idle && view.pilot.is_some() && view.village_door.is_some() {
         let door = view.village_door.clone().unwrap_or_default();
         (Prompt::Climb, door.replacen("Enter", "Walk into", 1), true)
+    } else if idle && view.pilot.is_some() && view.failure.is_some() {
+        // On foot with the rig wrecked or dry: use (twice) radios for a pickup.
+        (Prompt::Use, "Radio for a pickup".to_owned(), true)
     } else if shell.run_mode == RunMode::Playing
         && shell.modal.is_none()
         && shell.seat(view.seat_index).modal.is_none()

@@ -882,6 +882,9 @@ pub struct SeatUi {
     /// Seconds the seat has been walking across a room (0 standing): the pilot's walk cycle
     /// inside buildings.
     pub interior_stride: f32,
+    /// On foot: seconds left to press use again and radio for a pickup (see
+    /// `shell/pilot.rs`); 0 when not armed.
+    pub pickup_armed: f32,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -921,6 +924,7 @@ impl SeatUi {
             base_module: None,
             door_latch: false,
             interior_stride: 0.0,
+            pickup_armed: 0.0,
         }
     }
 
@@ -980,6 +984,7 @@ impl SeatUi {
             self.modal.is_none_or(|modal| !modal.is_global()),
             "global dialogs live in ShellState::modal"
         );
+        self.pickup_armed = (self.pickup_armed - delta_seconds).max(0.0);
         if self.build.is_some() {
             return self.handle_build(input, ctx, cues, requests);
         }
@@ -1057,7 +1062,7 @@ impl SeatUi {
                 && !self.try_exit(ctx, requests)
             {
                 if ctx.on_foot() {
-                    "Walk up to your rig to board it.".clone_into(&mut self.message);
+                    self.radio_pickup(ctx, requests);
                 } else {
                     "No surface service here.".clone_into(&mut self.message);
                 }
@@ -1505,13 +1510,29 @@ impl SeatUi {
         };
         let pending = self.pending_services.remove(index);
         if !applied {
+            // An inn room says why it was refused (it needs no rig at the door).
             if let Some(message) = Self::village_room_refusal(request, ctx) {
                 self.message = message;
-            } else {
-                quests::quest_unavailable_message(request)
-                    .unwrap_or_else(|| unavailable_message(request))
-                    .clone_into(&mut self.message);
+                cues.push(SoundCue::UiError);
+                return;
             }
+            let rig_far = ctx.player.is_some_and(|player| {
+                !ctx.world.rig_within_service_reach(player)
+                    && (matches!(request, SessionServiceRequest::Village { .. })
+                        || fatherload_simulation::world::command_services_rig(
+                            &PlayerCommand::Service(request),
+                        ))
+            });
+            if rig_far {
+                // On foot (Part II F5): rig services need the rig parked outside.
+                "Bring your rig to the door: on foot, this counter only works on a rig parked outside."
+                    .clone_into(&mut self.message);
+                cues.push(SoundCue::UiError);
+                return;
+            }
+            quests::quest_unavailable_message(request)
+                .unwrap_or_else(|| unavailable_message(request))
+                .clone_into(&mut self.message);
             cues.push(SoundCue::UiError);
             return;
         }

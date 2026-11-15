@@ -97,8 +97,10 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
     }
 }
 
-/// Whether `command` works on the rig itself (fuel, repairs, paint, selling its cargo or
-/// blocks, installing an upgrade). A pilot on foot at the counter may only order these while
+/// Whether `command` works on the rig itself.
+///
+/// That is fuel, repairs, paint, selling its cargo or blocks and installing an upgrade. A
+/// pilot on foot at the counter may only order these while
 /// its rig is parked within [`crate::pilot::RIG_SERVICE_REACH`] (Part II F5): walking into the
 /// depot does not sell a cargo bay left at the bottom of a shaft.
 #[must_use]
