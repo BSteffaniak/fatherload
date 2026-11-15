@@ -52,6 +52,7 @@ const MENU_ICONS: &[&SpriteDef] = &[
     &menu_icons::SPLIT,
     &menu_icons::DICE,
     &menu_icons::GEAR,
+    &menu_icons::GHOST,
 ];
 
 /// Interior props, in sheet order.

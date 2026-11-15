@@ -500,6 +500,100 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "max_tier_speed",
+        summary: "Top-tier engine at full speed down a long tunnel: light speed lines, a little \
+                  camera lead",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                speed_tunnel(world, seats[0].player);
+                if let Some(rig) = world.player_mut(seats[0].player) {
+                    rig.engine_level = fatherload_simulation::economy::MAX_UPGRADE_LEVEL;
+                }
+            });
+            stage.settle(10);
+            stage.hold(
+                60,
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+            );
+        },
+    },
+    Scene {
+        name: "god_mode_speed",
+        summary: "God mode at full speed down a long tunnel: dense speed lines and wake, the \
+                  camera leading well ahead",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                world.enable_test_mode();
+                speed_tunnel(world, seats[0].player);
+            });
+            stage.settle(10);
+            stage.hold(
+                60,
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+            );
+        },
+    },
+    Scene {
+        name: "god_mode_flight",
+        summary: "God mode climbing fast over town: speed lines along the flight path",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                world.enable_test_mode();
+                park_rig(world, seats[0].player, 60, 4);
+            });
+            stage.settle(10);
+            stage.hold(
+                20,
+                PlayerInput {
+                    thrust: true,
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+            );
+        },
+    },
+    Scene {
+        name: "no_clip_flight",
+        summary: "Test-mode no-clip flight diving straight through solid rock",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                world.enable_test_mode();
+                let player = seats[0].player;
+                sink_rig(world, player, 97, 30);
+                reveal(world, player, 80..115, 20..60);
+                let tick = world.simulation_tick();
+                let mut inputs = fatherload_simulation::TickInputs::default();
+                inputs.players.insert(
+                    player,
+                    fatherload_simulation::PlayerTickInput {
+                        controls: None,
+                        actions: vec![fatherload_simulation::TickAction {
+                            sequence: fatherload_simulation::InputSequence::new(0),
+                            command: fatherload_simulation::PlayerCommand::TestMode(
+                                fatherload_simulation::TestModeAction::SetNoClip(true),
+                            ),
+                        }],
+                    },
+                );
+                let _ = world.simulate_tick(tick, &inputs);
+            });
+            stage.hold(
+                40,
+                PlayerInput {
+                    drill_down: true,
+                    horizontal: 0.3,
+                    ..PlayerInput::default()
+                },
+            );
+        },
+    },
+    Scene {
         name: "shallow_dig",
         summary: "Rig drilling down a few tiles under the surface",
         setup: |stage| {
@@ -1384,6 +1478,7 @@ pub const SCENES: &[Scene] = &[
             shell.pending_test_mode = Some(fatherload_simulation::TestModeState {
                 invulnerable: true,
                 infinite_fuel: false,
+                no_clip: true,
             });
             shell.run_mode = RunMode::Paused;
             shell.selected_pause_item = 2;
@@ -2514,6 +2609,19 @@ fn sink_rig(world: &mut WorldState, player: PlayerId, x: i32, y: i32) {
     }
     place_rig(world, player, x, y);
     reveal(world, player, x - 4..x + 5, 4..y + 4);
+}
+
+/// A long, explored tunnel two tiles tall at rows 28..30 (floor of stone below), with `player`
+/// resting at its west end: room to reach top speed.
+fn speed_tunnel(world: &mut WorldState, player: PlayerId) {
+    carve(world, 20..220, 28..30);
+    for x in 20..220 {
+        world
+            .terrain_mut()
+            .set_kind(TilePosition { x, y: 30 }, TileKind::Stone);
+    }
+    place_rig(world, player, 24, 29);
+    reveal(world, player, 14..226, 22..36);
 }
 
 fn carve(world: &mut WorldState, xs: std::ops::Range<i32>, ys: std::ops::Range<i32>) {

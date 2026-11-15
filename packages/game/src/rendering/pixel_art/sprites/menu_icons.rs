@@ -622,3 +622,20 @@ menu_icon!(
         "...ooo...",
     ]
 );
+
+menu_icon!(
+    GHOST,
+    "menu_ghost",
+    [('w', BONE), ('m', MIST), ('k', SKY)],
+    [
+        "..ooooo..",
+        ".owwwwmo.",
+        "owwkwkwmo",
+        "owwkwkwmo",
+        "owwwwwwmo",
+        "owwwwwwmo",
+        "owwwwwmmo",
+        "owmowmomo",
+        "oo.oo.oo.",
+    ]
+);

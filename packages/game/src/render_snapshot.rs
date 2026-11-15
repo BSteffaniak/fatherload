@@ -19,6 +19,7 @@ use fatherload_simulation::{
 };
 
 use crate::{
+    camera_lead::CameraLeads,
     effects::{Explosion, SparkParticle},
     runtime::LocalSeat,
     runtime::RuntimeEvent,
@@ -492,6 +493,18 @@ impl<'w> RenderSnapshot<'w> {
             if let Some(&(x, y)) = poses.get(&view.player_id) {
                 view.camera = camera_for(view.viewport, view.world_scale, x, y);
             }
+        }
+    }
+
+    /// Shifts each view's camera by its rig's speed-scaled lead (see [`crate::camera_lead`]):
+    /// zero for slow rigs, ahead of the travel direction for fast ones. Call after
+    /// [`Self::apply_pose_overrides`].
+    pub fn apply_camera_leads(&mut self, leads: &CameraLeads) {
+        for view in &mut self.views {
+            let visible = visible_world_size(view.viewport, view.world_scale);
+            let (x, y) = leads.offset(view.player_id, visible);
+            view.camera.x += x;
+            view.camera.y += y;
         }
     }
 

@@ -15,6 +15,7 @@ use fatherload_simulation::{
 
 use crate::{
     audio::cues::PlacedCue,
+    camera_lead::CameraLeads,
     effects::{Effects, EventFeed},
     input::{PlayerInput, devices::InputDevice},
     input_mapping::seat_input,
@@ -138,6 +139,8 @@ pub struct LocalGame {
     runtime: Runtime,
     events: EventFeed,
     effects: Effects,
+    /// Speed-scaled camera lead of each local seat (presentation only).
+    camera_leads: CameraLeads,
     frame_events: Vec<RuntimeEvent>,
     save_target: SaveTarget,
     /// Where the last join went and the token to reclaim the player there.
@@ -158,6 +161,7 @@ impl LocalGame {
             runtime: Runtime::local(new_world(), 1),
             events: EventFeed::default(),
             effects: Effects::default(),
+            camera_leads: CameraLeads::default(),
             frame_events: Vec::new(),
             save_target,
             last_join: None,
@@ -270,6 +274,8 @@ impl LocalGame {
         self.observe_events();
         let local_players = self.local_players();
         self.effects.update(delta_seconds);
+        self.camera_leads
+            .update(delta_seconds, self.runtime.world(), &local_players);
         let effect_cues =
             self.effects
                 .apply(&self.frame_events, self.runtime.world(), &local_players);
@@ -300,6 +306,7 @@ impl LocalGame {
         // same transform) and remote rigs where interpolation puts them.
         snapshot.bomb_alpha = self.runtime.interpolation_alpha();
         snapshot.apply_pose_overrides(&self.runtime.pose_overrides());
+        snapshot.apply_camera_leads(&self.camera_leads);
         snapshot
     }
 
@@ -946,6 +953,7 @@ impl LocalGame {
     fn reset_presentation(&mut self, report: &mut FrameReport) {
         self.shell.set_seat_count(self.runtime.local_seats().len());
         self.effects.clear();
+        self.camera_leads.clear();
         self.events = EventFeed::default();
         self.frame_events.clear();
         report.world_replaced = true;

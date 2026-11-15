@@ -177,6 +177,7 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::WarpToLayer => &menu_icons::ROCKET,
         PauseOption::ToggleInvulnerable => &icons::HULL,
         PauseOption::ToggleInfiniteFuel => &icons::FUEL,
+        PauseOption::ToggleNoClip => &menu_icons::GHOST,
     }
 }
 
@@ -191,6 +192,7 @@ fn pause_entry(option: PauseOption, test_mode: Option<TestModeState>) -> Entry {
     let toggle = match option {
         PauseOption::ToggleInvulnerable => test_mode.map(|state| state.invulnerable),
         PauseOption::ToggleInfiniteFuel => test_mode.map(|state| state.infinite_fuel),
+        PauseOption::ToggleNoClip => test_mode.map(|state| state.no_clip),
         _ => None,
     };
     match toggle {

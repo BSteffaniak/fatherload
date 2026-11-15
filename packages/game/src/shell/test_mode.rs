@@ -1,6 +1,6 @@
-//! The pause menu's test-mode entries: the invulnerable hull and infinite fuel toggles and the
-//! "Warp to Layer" band list. Each submits a `PlayerCommand::TestMode` action for the seat
-//! driving the menu, so it works the same in split-screen and online.
+//! The pause menu's test-mode entries: the invulnerable hull, infinite fuel and no-clip flight
+//! toggles and the "Warp to Layer" band list. Each submits a `PlayerCommand::TestMode` action for
+//! the seat driving the menu, so it works the same in split-screen and online.
 
 use fatherload_simulation::{PlayerCommand, TestModeAction, TestModeState, worldgen::Band};
 
@@ -24,6 +24,7 @@ impl PauseOption {
                     Self::WarpToLayer,
                     Self::ToggleInvulnerable,
                     Self::ToggleInfiniteFuel,
+                    Self::ToggleNoClip,
                 ],
             );
         }
@@ -68,6 +69,11 @@ impl ShellState {
                 let on = state.infinite_fuel;
                 (TestModeAction::SetInfiniteFuel(on), "Infinite fuel", on)
             }
+            PauseOption::ToggleNoClip => {
+                state.no_clip = !state.no_clip;
+                let on = state.no_clip;
+                (TestModeAction::SetNoClip(on), "No-clip flight", on)
+            }
             _ => return,
         };
         self.pending_test_mode = Some(state);
@@ -101,12 +107,13 @@ mod tests {
         assert_eq!(normal, PauseOption::for_role(None));
         let test = PauseOption::for_session(Some(OnlineRole::Client), true);
         assert_eq!(
-            &test[..4],
+            &test[..5],
             &[
                 PauseOption::Resume,
                 PauseOption::WarpToLayer,
                 PauseOption::ToggleInvulnerable,
                 PauseOption::ToggleInfiniteFuel,
+                PauseOption::ToggleNoClip,
             ]
         );
     }
@@ -118,12 +125,21 @@ mod tests {
         let mut requests = Vec::new();
         shell.toggle_test_mode(PauseOption::ToggleInvulnerable, world, &mut requests);
         shell.toggle_test_mode(PauseOption::ToggleInfiniteFuel, world, &mut requests);
+        shell.toggle_test_mode(PauseOption::ToggleNoClip, world, &mut requests);
         let wanted = TestModeState {
             invulnerable: true,
             infinite_fuel: true,
+            no_clip: true,
         };
         assert_eq!(shell.shown_test_mode(world), Some(wanted));
-        assert_eq!(requests.len(), 2);
+        assert_eq!(requests.len(), 3);
+        assert!(matches!(
+            requests[2],
+            ShellRequest::Action {
+                command: PlayerCommand::TestMode(TestModeAction::SetNoClip(true)),
+                ..
+            }
+        ));
         shell.sync_pending_test_mode(world);
         assert_eq!(shell.shown_test_mode(world), Some(wanted), "still pending");
         shell.sync_pending_test_mode(Some(wanted));

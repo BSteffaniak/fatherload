@@ -36,6 +36,7 @@ mod fx;
 mod quest_marks;
 mod rig;
 mod sky;
+mod speed_fx;
 
 pub use rig::{RigFacings, player_accent};
 pub use sky::SkyArt;
@@ -150,6 +151,9 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
         fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);
+    }
+    for player in scene.players {
+        speed_fx::draw_speed_lines(draw, player, scene.ticks);
     }
     for player in scene.players {
         rig::draw_rig(draw, scene.terrain, player, scene.facings, scene.ticks);

@@ -144,6 +144,8 @@ pub enum PauseOption {
     ToggleInvulnerable,
     /// Test mode: toggle the crew's infinite fuel.
     ToggleInfiniteFuel,
+    /// Test mode: toggle the crew's no-clip flight (through rock, no gravity).
+    ToggleNoClip,
 }
 
 impl PauseOption {
@@ -204,6 +206,7 @@ impl PauseOption {
             Self::WarpToLayer => "Warp to Layer",
             Self::ToggleInvulnerable => "Invulnerable Hull",
             Self::ToggleInfiniteFuel => "Infinite Fuel",
+            Self::ToggleNoClip => "No-Clip Flight",
         }
     }
 }
@@ -2035,7 +2038,9 @@ impl ShellState {
             }
             PauseOption::ExitToDesktop => self.request_exit_or_prompt(),
             PauseOption::WarpToLayer => self.open_modal(ModalScreen::WarpToLayer),
-            PauseOption::ToggleInvulnerable | PauseOption::ToggleInfiniteFuel => {
+            PauseOption::ToggleInvulnerable
+            | PauseOption::ToggleInfiniteFuel
+            | PauseOption::ToggleNoClip => {
                 self.toggle_test_mode(options[self.selected_pause_item], test_mode, requests);
             }
         }
