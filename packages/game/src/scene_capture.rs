@@ -1484,6 +1484,64 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "entity_hazards",
+        summary: "Gas clouds and boulders (hanging and falling) as entities beside the rig",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let (x, y) = (110, 40);
+                sink_rig(world, player, x, y);
+                carve(world, x - 9..x + 10, y - 6..y + 1);
+                reveal(world, player, x - 14..x + 15, y - 8..y + 9);
+                // World pixels `dx`, `dy` tiles from the rig's tile.
+                #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+                let at =
+                    |dx: f32, dy: f32| ((x as f32 + dx) * TILE_SIZE, (y as f32 + dy) * TILE_SIZE);
+                let (gas_a, gas_b) = (at(-5.0, -2.0), at(-7.0, -4.0));
+                let (rock_a, rock_b) = (at(4.5, -5.5), at(7.5, -5.5));
+                let now = world.simulation_tick().get();
+                world.restore_legacy_live_entities(
+                    vec![
+                        fatherload_simulation::HazardCloud {
+                            x: gas_a.0,
+                            y: gas_a.1,
+                            life: 5.0,
+                            radius: 26.0,
+                        },
+                        fatherload_simulation::HazardCloud {
+                            x: gas_b.0,
+                            y: gas_b.1,
+                            life: 7.5,
+                            radius: 16.0,
+                        },
+                    ],
+                    vec![
+                        fatherload_simulation::FallingBoulder {
+                            x: rock_a.0,
+                            y: rock_a.1,
+                            velocity_y: 0.0,
+                            warning_seconds: 2.0,
+                            life: 6.0,
+                        },
+                        fatherload_simulation::FallingBoulder {
+                            x: rock_b.0,
+                            y: rock_b.1,
+                            velocity_y: 0.0,
+                            warning_seconds: 0.0,
+                            life: 6.0,
+                        },
+                    ],
+                    &[SimulationTick::new(now + 600), SimulationTick::new(now)],
+                    &[
+                        SimulationTick::new(now + 900),
+                        SimulationTick::new(now + 900),
+                    ],
+                );
+            });
+            stage.settle(12);
+        },
+    },
+    Scene {
         name: "deep_crystal_faults",
         summary: "The Crystal Faults stratum far below the surface",
         setup: |stage| {

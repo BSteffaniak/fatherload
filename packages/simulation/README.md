@@ -73,7 +73,8 @@ are authored per second and derived per tick once at world creation (`TickTiming
 
 | Module | Owns |
 |---|---|
-| `simulate` | the tick: inputs, hazards, bombs, drilling, day cycle, escape, deep rewards |
+| `simulate` | the tick: inputs, entity phases, hazards, bombs, drilling, day cycle, escape, deep rewards |
+| `entities` | the world side of the entity store: spawn helpers, the two entity phases and each kind's update (gas clouds, boulders, drops), blasts, waking on terrain changes, entity replication |
 | `movement`, `commands`, `services`, `progression`, `hazards`, `rescue` | gameplay rules used by the tick |
 | `quests` | quest services (accept, turn in, abandon at the giver's counter), objectives stepping inside the tick, twists, rewards, reputation rebates, blueprint fragments |
 | `roster` | `add_player` / `remove_player`; spawn placement on an unbounded grid so any number of rigs spawn without overlap |
@@ -240,6 +241,109 @@ once failed (`FATHERLOAD_QUEST_SEEDS` for more seeds).
 `world/quest_tests.rs` plays quests through the tick: solo and crew completions, twists,
 rewards, the board, rebates, replication, saves and determinism.
 
+## Entities, physics and items (`src/entity.rs`, `src/physics.rs`, `src/item.rs`, `src/world/entities.rs`)
+
+Expansion plan §3 F1. Wave 2 tracks (drops, enemies, projectiles, NPCs, structures) build on
+this API.
+
+### The entity store
+
+Every live world object that moves or expires on its own is an `entity::Entity` in the world's
+`EntityStore` (`WorldState::entities()`): a stable `EntityId` (never reused), a `Body`
+(position, velocity, previous position for interpolation, rest counter, `asleep`), a spawn tick,
+an optional expiry tick, a replication `revision` and per-kind `EntityState`. Today's kinds:
+`GasCloud`, `Boulder` (both migrated from ad-hoc world lists without behaviour changes) and
+`Drop` (a floating `ItemStack`; WP-DROPS adds pickup and merging).
+
+- **Order.** Entities are kept in id order and every pass over them is in id order.
+- **Derived indices** (never saved, hashed or replicated; rebuilt on load): a spatial hash on
+  the terrain chunk grid (`SpatialCell`, 16x16 tiles; `ids_in_rect`, `ids_in_radius`), the
+  awake set, per-kind sets (`ids_of`, `of_kind`, `count_of`) and an expiry queue
+  (`take_expired`).
+- **Mutation** goes through `EntityStore::update(id, |entity| ...)`, which assigns a fresh
+  revision and keeps every index in step; `spawn` and `despawn` likewise. Inside the crate,
+  `WorldState::spawn_entity`, `spawn_gas_cloud`, `spawn_boulder` and the public
+  `spawn_item_drop` are the spawn helpers.
+- **Tick.** `simulate_tick` runs `EntityPhase::Early` right after inputs (gas clouds age before
+  hazard damage reads them) and `EntityPhase::Late` after drilling, bombs and hazard spawns
+  (expiries first, then boulders and drops). Only awake entities update. Bomb detonations push
+  blast-feeling kinds (`EntityKind::feels_blasts`) right after the bomb pass. At the end of the
+  tick every changed tile wakes the sleeping entities within 1.5 tiles, so a drop on a dug-out
+  tile falls on the next tick.
+- **Sleep.** A sleep-capable kind (`EntityKind::can_sleep`) that rests (motionless and
+  supported) for `ENTITY_SLEEP_AFTER_MILLIS` (300 ms, tick-rate independent) falls asleep:
+  it is skipped by the tick and, since its revision stops changing, by replication.
+
+Adding a kind: add an `EntityState` / `EntityKind` variant with its phase, sleep and blast
+rules, add its update to `WorldState::advance_entities`, and a spawn helper. Replication,
+saves, keyframes, hashing, relevance and the spatial index cover it automatically.
+
+Bombs still live in their own list (`world/bombs.rs`): the explosives track is reworking them
+in parallel, and the plan moves them onto the store in wave 2. `physics::step_body` with
+`BodyParams::BOMB` already reproduces their motion bit for bit (checked against live bombs by
+`shared_body_physics_reproduces_bomb_motion_exactly`), so that move is a storage change.
+
+### Physics helpers (`physics`)
+
+Pure functions, no RNG or clocks: `solid_at` (open sky, walled sides and bottom), `collides`
+(a square body sampled at corners, edges and centre), `supported`, `step_body` (gravity,
+axis-separated swept substeps of at most two pixels, bounce, floor friction, rest snapping,
+lift-out of an overlapping spawn, quantization; per-kind `BodyParams`, e.g. `BOMB`, `DROP`),
+`settle` (rest counting and sleep), `line_clear`, `Blast` / `apply_blast` (the bomb chain kick
+generalized: linear falloff, line of sight, upward lift, deterministic split of coincident
+bodies), `steer_toward` (accelerate toward a point with a speed cap) and `find_tile_path` (a
+budgeted, deterministic 4-connected BFS over open tiles for creature AI).
+
+### Replication of entities
+
+Entities replicate per client as deltas: the host keeps each client's `(EntityId, revision)`
+list and every frame sends the records of relevant entities that are new or changed, and the
+ids of entities that are gone or left relevance (`WorldState::entity_revisions(center,
+radius)`, `entity_record`, `apply_entity_delta`; netcode's `NetSimulation::entity_revisions` /
+`entity_record` / `apply_entity_delta`). The id and revision counters ride in `LiveEntities`.
+Keyframes and saves carry the whole store. For presentation, `Body::lerp_position(alpha)`
+interpolates between ticks and `EntityStore::interpolated_positions(previous, alpha)` between
+two replicated snapshots.
+
+### Items and inventory (`item`)
+
+`ItemKind` covers minerals, artifacts, strategic materials, building blocks (`BlockKind`:
+dirt, clay, stone, hard rock; `BlockKind::from_tile`, `ItemKind::from_tile`), modules,
+weapons, ammo, explosives, cosmetics and quest items (the open-ended categories are small
+stable id newtypes, `ModuleId`, `WeaponId`, ..., whose tables belong to the tracks that add
+them). An `ItemContainer` holds a count per kind (kind order, no zero counts; serialized as a
+list of `ItemStack`s) with typed views (`minerals()`, `artifacts()`, `materials()`,
+`blocks()`, `mineral(kind)`, ...). Each kind names its container (`ItemKind::stowage`) and slot
+cost (`ItemKind::slot_cost`): minerals, artifacts, modules and weapons take a slot; materials,
+ammo, explosives, cosmetics and quest items take none.
+
+A rig carries a `cargo_bay` (minerals, artifacts, materials, ...; capacity `cargo_capacity`
+slots, so ore and artifacts count exactly as before) and a separate `block_hopper` for
+building blocks (capacity `block_hopper_capacity`, 60 stock) so dirt never crowds ore out of
+the bay. `Player::stow(kind, count)` routes an item to its container and takes only what fits
+(`room_for`, `carried`). Lost-cargo sites hold an `ItemContainer` too. The game's save format 7
+migrates the old per-rig `cargo` / `artifacts` / `materials` maps, lost-cargo maps and the old
+gas cloud / boulder lists on load.
+
+### Performance
+
+`entity_benchmark_report` (`cargo test -p fatherload_simulation entity_benchmark_report --
+--ignored --nocapture`, add `--release`): a cave with 5,000 drops resting on ledges (asleep
+after their first 300 ms), 300 drops kept bouncing by repeated blasts, 60 gas clouds and a
+stream of boulders, about 5,365 entities with about 510 awake on average, 600 ticks at 60 Hz,
+plus the host's per-client relevance scan (20-tile radius, about 2,900 entities in range):
+
+| Profile | Tick without entities | Tick with entities (mean / worst) | Entity cost per tick | Per-client relevance scan | Full entity snapshot |
+|---|---|---|---|---|---|
+| Release | 1.4 µs | 91 µs / 1.5 ms | 89 µs | 106 µs | 199 KB |
+| Debug | 22 µs | 4.5 ms / 149 ms | 4.5 ms | 5.2 ms | 199 KB |
+
+The worst tick is the first one, when all 5,000 drops are still awake; steady state is the
+mean. Sleeping drops cost an index entry and nothing per tick; the per-tick cost follows the
+awake count. The browser build has no networking, so the relevance scan only runs on desktop
+hosts (release). A snapshot is about 37 bytes per entity; WP-DROPS stack merging keeps counts
+low.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
@@ -247,11 +351,12 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 
 | Kind | Contents | Who receives it |
 |---|---|---|
-| Per tick | rig pose, velocity, fuel, hull, drill/scanner timers, deep-run pressure; gas clouds, boulders, bombs | clients the rig/entity is relevant to |
+| Per tick | rig pose, velocity, fuel, hull, drill/scanner timers, deep-run pressure; bombs and the entity id/revision counters (`LiveEntities`) | clients the rig/bomb is relevant to |
+| Per tick, delta | entities (gas clouds, boulders, drops, ...): records of entities new to the client or changed since its last frame (by revision), and despawns (gone or out of relevance) | clients the entity is relevant to |
 | Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
 | Op log | per-player discovery | the owner only |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig | everyone |
-| On change | `Loadout(player)`: inventory, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions | the owner only |
+| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions | the owner only |
 | On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests | everyone |
 
 Because other players' private state never reaches a client, replica checks compare

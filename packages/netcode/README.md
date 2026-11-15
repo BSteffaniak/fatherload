@@ -23,7 +23,7 @@ Bytes move through `fatherload_quic_transport` in the app and through `LinkSim` 
 - `client`: `ClientSession`: authority + predicted worlds, pending inputs, reconciliation and
   smoothing, clock sync (`clock`), remote interpolation (`interpolation`), event de-duplication.
 - `protocol`: `ClientMessage` / `ServerMessage` and the versioned postcard codec
-  (`PROTOCOL_VERSION` 6).
+  (`PROTOCOL_VERSION` 8).
 - `params`: `SessionParams` (tick rate) and live `NetTuning`.
 - `link`, `harness` (feature `harness`), `toy`: deterministic lossy link, the end-to-end
   harness with scripted bots, and a small toy simulation for unit tests.
@@ -33,7 +33,13 @@ Bytes move through `fatherload_quic_transport` in the app and through `LinkSim` 
 Each frame is built for one client from its `Relevance` (its player, position and
 `relevance_radius`, infinite by default):
 
-- per-tick state of relevant players and entities, low-rate markers for the rest;
+- per-tick state of relevant players and per-tick entities (bombs, id counters), low-rate
+  markers for the rest;
+- incremental entities (`entity_revisions` / `entity_record` / `apply_entity_delta`): the host
+  keeps each client's `(key, revision)` baseline and sends only the records of relevant
+  entities that are new or changed, plus the keys of entities that are gone or left relevance
+  (`entity_updates`, `entity_despawns`); a keyframe resets the baseline to every entity, so
+  resting (sleeping) entities cost nothing per frame;
 - op-log entries the client may see (`op_relevant`, e.g. only its own discovery) and, with a
   finite radius, only in relevant chunks (`op_chunk` / `chunk_relevant`); chunks whose ops were
   skipped are refreshed (`chunk_snapshot`) in `chunk_refreshes` once relevant again;

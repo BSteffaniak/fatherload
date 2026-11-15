@@ -96,10 +96,12 @@ Modules:
   and infinite fuel toggles), each a `PlayerCommand::TestMode` action for the seat driving the
   menu; a paused local world applies toggles on resume, so the menu shows the pending choice
   (`ShellState::pending_test_mode`) until the world catches up.
-- `save` — format v6 (`WorldState` + play time; the terrain as generation settings plus tile
-  diffs, see the simulation README); `save::legacy` migrates v1-v5 (v1-v5 terrain wrote out
-  every tile and is read as `FullTerrain`; v3/v4 worlds carried a derived summary whose
-  `won_game` flag is lifted into the world). A save naming an unknown generator version fails
+- `save` — format v7 (`WorldState` + play time; the terrain as generation settings plus tile
+  diffs, rigs' item containers and the entity store, see the simulation README);
+  `save::legacy` migrates v1-v6 (v1-v5 terrain wrote out every tile and is read as
+  `FullTerrain`; v3/v4 worlds carried a derived summary whose `won_game` flag is lifted into
+  the world; v1-v6 rigs carried separate cargo / artifact / material maps, moved into the cargo
+  bay, and v1-v6 worlds kept gas clouds and boulders in lists, moved into entities). A save naming an unknown generator version fails
   with `SaveError::UnknownGenerator`. A fresh world's save is ~3.4 KB (v5: ~1.8 MB), a heavily
   dug one ~43 KB (v5: ~1.8 MB).
 - `input` — devices to per-seat `PlayerInput`:

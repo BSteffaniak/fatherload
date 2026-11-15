@@ -304,11 +304,13 @@ Files live in `$FATHERLOAD_STATE_DIR`, else `$XDG_STATE_HOME/fatherload`, else
 `%LOCALAPPDATA%\fatherload` on Windows, else `~/.local/state/fatherload`.
 
 - Quick save: `save.json`; save slots: `save-slot-1.json` through `save-slot-3.json`
-- A save (format v6) is the host's `WorldState` plus play time. Its terrain is stored as the
+- A save (format v7) is the host's `WorldState` plus play time. Its terrain is stored as the
   world's generation settings (seed, size, richness, hazards, generator version) and only the
   tiles that differ from freshly generated terrain; loading regenerates the rest and checks a
-  terrain digest. v1-v5 saves (which wrote out every tile) are migrated on load and re-saved as
-  v6; saves from before seeded worlds keep their terrain and load as legacy worlds. A save from
+  terrain digest. Rigs carry their goods in item containers (cargo bay, block hopper) and live
+  objects (gas clouds, boulders, drops) are entities. v1-v5 saves (which wrote out every tile)
+  and v6 saves (separate cargo maps and hazard lists) are migrated on load and re-saved as v7;
+  saves from before seeded worlds keep their terrain and load as legacy worlds. A save from
   an unknown generator version is refused with a clear error. Loading starts a new session
   epoch.
 - Slot UI displays depth and credits; the title shows the latest save's depth, credits and playtime.
