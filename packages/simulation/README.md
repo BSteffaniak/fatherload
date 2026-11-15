@@ -345,7 +345,8 @@ The worst tick is the first one, when all 5,000 drops are still awake; steady st
 mean. Sleeping drops cost an index entry and nothing per tick; the per-tick cost follows the
 awake count. The browser build has no networking, so the relevance scan only runs on desktop
 hosts (release). A snapshot is about 37 bytes per entity; WP-DROPS stack merging keeps counts
-low.
+low. Removing half the store at once (2,683 entities) takes about 0.9 ms with `despawn_many`
+versus about 18 ms one `despawn` at a time (release), so bulk removals should batch.
 
 ## Replication
 
