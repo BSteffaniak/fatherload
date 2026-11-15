@@ -563,6 +563,8 @@ const fn blast_proof(kind: TileKind) -> bool {
     match kind {
         TileKind::Foundation | TileKind::Bedrock => true,
         TileKind::Poi(poi) => poi.after_blast().is_none(),
+        // Cave caches shrug off blasts (`Terrain::blast_radius` skips them), so lanes stop too.
+        TileKind::Cave(cave) => cave.is_cache(),
         _ => false,
     }
 }
