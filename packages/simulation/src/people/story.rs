@@ -65,10 +65,12 @@ pub enum WorldFactKind {
     Motherlode,
     ArtifactBed,
     HazardPocket,
+    /// A cave ecosystem (V6 worlds, [`crate::cave`]): a geode, flooded cave, fungal grotto...
+    CaveSystem,
 }
 
 impl WorldFactKind {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Derelict,
         Self::SealedVault,
         Self::Formation,
@@ -79,6 +81,7 @@ impl WorldFactKind {
         Self::Motherlode,
         Self::ArtifactBed,
         Self::HazardPocket,
+        Self::CaveSystem,
     ];
 
     /// How people describe it (no article; templates add one with `{a place}`).
@@ -107,6 +110,11 @@ impl WorldFactKind {
             Self::Motherlode => &["motherlode", "seam fat with ore"],
             Self::ArtifactBed => &["bed of old relics", "nest of strange artifacts"],
             Self::HazardPocket => &["gas pocket", "nasty hazard pocket"],
+            Self::CaveSystem => &[
+                "cave nobody's charted",
+                "cave that glitters in the dark",
+                "hollow full of strange stone",
+            ],
         }
     }
 
@@ -124,6 +132,7 @@ impl WorldFactKind {
             (FeatureKind::Motherlode, None) => Some(Self::Motherlode),
             (FeatureKind::ArtifactBed, None) => Some(Self::ArtifactBed),
             (FeatureKind::HazardCluster, None) => Some(Self::HazardPocket),
+            (FeatureKind::Cave, None) => Some(Self::CaveSystem),
             _ => None,
         }
     }

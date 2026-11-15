@@ -527,3 +527,70 @@ fn the_board_posts_distinct_templates_each_day() {
         .collect();
     assert!(days.len() > 3, "the board rotates");
 }
+
+/// Caves bind as quest targets (WP-CAVES acceptance): a quest naming
+/// [`crate::worldgen::FeatureKind::Cave`] binds to a cave ecosystem's open centre on V6 worlds,
+/// and to its large-cavern stand-in on worlds without caves.
+#[test]
+fn cave_targets_bind_on_cave_worlds_and_fall_back_elsewhere() {
+    use crate::worldgen::{FeatureKind, GeneratorVersion};
+    const CAVE_SURVEY: QuestDef = QuestDef {
+        id: QuestId(9_999),
+        title: "Cave Survey",
+        giver: QuestGiver::Vale,
+        tier: super::QuestTier::Shallow,
+        hook: "test",
+        prerequisites: &[],
+        targets: &[super::TargetSpec::Feature {
+            kind: FeatureKind::Cave,
+            bands: (1, 4),
+        }],
+        stages: &[&[Objective::Reach { target: 0 }]],
+        twists: &[],
+        reward: super::QuestReward::credits(100, 1),
+        text: super::QuestText {
+            offer: "o",
+            progress: "p",
+            complete: "c",
+        },
+        repeatable: false,
+    };
+    let origin = TilePosition {
+        x: SPAWN_TILE_X,
+        y: 4,
+    };
+    for seed in 0..6 {
+        for (generator, wanted) in [
+            (GeneratorVersion::V6, FeatureKind::Cave),
+            (GeneratorVersion::V5, FeatureKind::LargeCavern),
+            (GeneratorVersion::V4, FeatureKind::LargeCavern),
+        ] {
+            let terrain = Terrain::generate(&WorldSettings {
+                generator,
+                ..WorldSettings::new(seed)
+            });
+            let (targets, _) = bind_quest(
+                &CAVE_SURVEY,
+                &terrain,
+                origin,
+                &PoiJournal::default(),
+                0,
+                &BTreeSet::new(),
+            )
+            .unwrap_or_else(|| panic!("seed {seed} {generator:?}: cave quest did not bind"));
+            let feature = targets[0]
+                .feature
+                .and_then(|id| terrain.feature(id))
+                .expect("bound feature");
+            assert_eq!(feature.kind, wanted, "seed {seed} {generator:?}");
+            if wanted == FeatureKind::Cave {
+                assert!(
+                    terrain
+                        .cave_at(feature.center)
+                        .is_some_and(|sample| sample.interior),
+                    "seed {seed}: a cave target's centre lies inside the cave"
+                );
+            }
+        }
+    }
+}
