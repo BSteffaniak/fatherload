@@ -160,7 +160,37 @@ pub fn run() {
     }
 }
 
+/// Where the main keyboard seat's view was last drawn, to turn the mouse into a world point.
+#[derive(Clone, Copy, Debug)]
+struct PointerView {
+    viewport: crate::render_snapshot::Viewport,
+    world_scale: f32,
+    camera: crate::render_snapshot::CameraPosition,
+}
+
+impl PointerView {
+    /// The world pixel under logical screen point `(x, y)`, if it is inside the view.
+    fn world_at(self, x: f32, y: f32) -> Option<(f32, f32)> {
+        let v = self.viewport;
+        #[allow(clippy::cast_precision_loss, reason = "screen sizes are small")]
+        let inside = x >= v.x as f32
+            && y >= v.y as f32
+            && x < (v.x + v.width) as f32
+            && y < (v.y + v.height) as f32;
+        #[allow(clippy::cast_precision_loss, reason = "screen sizes are small")]
+        inside.then(|| {
+            (
+                (x - v.x as f32) / self.world_scale + self.camera.x,
+                (y - v.y as f32) / self.world_scale + self.camera.y,
+            )
+        })
+    }
+}
+
 struct App {
+    /// The main keyboard seat's view as last drawn, and the mouse position then (build mode
+    /// points with the mouse).
+    pointer: Option<(PointerView, (f32, f32))>,
     renderer: GameRenderer,
     audio: Option<AudioBus>,
     game: LocalGame,
@@ -196,6 +226,7 @@ impl App {
         let router = InputRouter::new(MAX_LOCAL_SEATS);
 
         Self {
+            pointer: None,
             renderer,
             audio,
             game,
@@ -211,6 +242,7 @@ impl App {
     /// One complete frame; only the desktop loop blocks between frames.
     fn frame(&mut self, browser_delta: Option<f32>) -> bool {
         let Self {
+            pointer,
             raylib,
             thread,
             window,
@@ -253,6 +285,14 @@ impl App {
         if input.primary.paste {
             input.clipboard = raylib.get_clipboard_text().ok();
         }
+        // The mouse points in the main keyboard seat's view when it moves or clicks.
+        let mouse = raylib.get_mouse_position();
+        if let Some((view, last)) = *pointer {
+            let moved = (mouse.x - last.0).abs() + (mouse.y - last.1).abs() > 0.5;
+            if moved || input.primary.pointer_primary || input.primary.pointer_secondary {
+                input.primary.build_pointer = view.world_at(mouse.x, mouse.y);
+            }
+        }
         renderer.apply_ui_input(&input.seat_inputs(), &game.shell);
         window.track(raylib);
         game.shell.window = window.settings();
@@ -275,6 +315,16 @@ impl App {
         // Laid out against this frame's real size: the window may have been resized,
         // maximized or switched to fullscreen since the last frame.
         let snapshot = game.snapshot(DesktopWindow::screen(raylib));
+        *pointer = snapshot.views.first().map(|view| {
+            (
+                PointerView {
+                    viewport: view.viewport,
+                    world_scale: view.world_scale,
+                    camera: view.camera,
+                },
+                (mouse.x, mouse.y),
+            )
+        });
         if let Some(audio) = audio {
             let seats = seat_audio(&input, game);
             let frame = AudioFrame {

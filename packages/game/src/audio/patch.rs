@@ -194,6 +194,17 @@ patches! {
     ImpactRock => "impact_rock",
     ImpactHit => "impact_hit",
     TargetDestroyed => "target_destroyed",
+    // Base building (WP-BASE), after every earlier patch so their variation seeds stay put.
+    BuildPlace => "build_place",
+    ModuleBuilt => "module_built",
+    BuildRemove => "build_remove",
+    ClaimStake => "claim_stake",
+    FuelPump => "fuel_pump",
+    SupplyDrop => "supply_drop",
+    RepairWeld => "repair_weld",
+    StorageStow => "storage_stow",
+    UplinkBeam => "uplink_beam",
+    HomeSet => "home_set",
 }
 
 /// Playback metadata of a patch.
@@ -436,6 +447,18 @@ impl Patch {
                 .instances(2)
                 .jitter(0.06, 1.0)
                 .ducking(0.2),
+            Self::BuildPlace | Self::BuildRemove => {
+                PatchInfo::new(Impact).instances(3).jitter(0.06, 1.0)
+            }
+            Self::ModuleBuilt | Self::StorageStow | Self::FuelPump | Self::RepairWeld => {
+                PatchInfo::new(Feedback).instances(2).jitter(0.03, 0.5)
+            }
+            Self::ClaimStake | Self::SupplyDrop | Self::UplinkBeam | Self::HomeSet => {
+                PatchInfo::new(Feedback)
+                    .instances(1)
+                    .send(0.3)
+                    .jitter(0.01, 0.5)
+            }
         }
     }
 
@@ -531,6 +554,16 @@ impl Patch {
             Self::ImpactRock => impact_rock(rng),
             Self::ImpactHit => impact_hit(rng),
             Self::TargetDestroyed => target_destroyed(rng),
+            Self::BuildPlace => build_place(rng),
+            Self::ModuleBuilt => module_built(rng),
+            Self::BuildRemove => build_remove(rng),
+            Self::ClaimStake => claim_stake(rng),
+            Self::FuelPump => fuel_pump(rng),
+            Self::SupplyDrop => supply_drop(rng),
+            Self::RepairWeld => repair_weld(rng),
+            Self::StorageStow => storage_stow(rng),
+            Self::UplinkBeam => uplink_beam(rng),
+            Self::HomeSet => home_set(rng),
         }
     }
 }
@@ -2510,6 +2543,204 @@ fn enemy_bite(rng: &mut Rng) -> Vec<f32> {
     mix_into(&mut out, &knock, 0.01, 0.4);
     out
 }
+
+// ---------------------------------------------------------------------------------------------
+// Base building (WP-BASE)
+// ---------------------------------------------------------------------------------------------
+
+/// A block set in place: a gritty scrape, a dense knock and a little settle of grit.
+fn build_place(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        1_400.0 * rng.jitter(0.1),
+        1.2,
+        0.05,
+    );
+    let knock = thump(240.0 * rng.jitter(0.06), 150.0, 0.09, 2.0);
+    mix_into(&mut out, &knock, 0.03, 0.9);
+    let pitch = 820.0 * rng.jitter(0.05);
+    mix_into(&mut out, &clank(rng, pitch, 0.07), 0.035, 0.35);
+    for time in scatter(rng, 4, 0.06, 0.2, 1.5) {
+        let grit = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            3_200.0 * rng.jitter(0.2),
+            2.5,
+            0.012,
+        );
+        mix_into(&mut out, &grit, time, 0.25);
+    }
+    out
+}
+
+/// A module bolted down: a heavy clunk, an air-tool rattle and a ready chime.
+fn module_built(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(180.0, 110.0, 0.16, 2.0);
+    mix_into(&mut out, &clank(rng, 520.0, 0.3), 0.0, 0.6);
+    for index in 0..6_u8 {
+        let rattle = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            2_000.0 * rng.jitter(0.08),
+            3.0,
+            0.02,
+        );
+        mix_into(&mut out, &rattle, 0.18 + f32::from(index) * 0.035, 0.45);
+    }
+    mix_into(&mut out, &bell(1_318.5, 2.0, 1.0, 0.35), 0.42, 0.3);
+    mix_into(&mut out, &bell(1_975.5, 2.0, 0.8, 0.4), 0.5, 0.28);
+    out
+}
+
+/// Deconstruction: a ratchet unwinding, then the piece popping free.
+fn build_remove(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for click in 0..4_u8 {
+        let tick = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            (2_600.0 - f32::from(click) * 250.0) * rng.jitter(0.05),
+            3.0,
+            0.014,
+        );
+        mix_into(&mut out, &tick, f32::from(click) * 0.035, 0.6);
+    }
+    mix_into(&mut out, &thump(300.0, 190.0, 0.08, 1.5), 0.15, 0.7);
+    mix_into(&mut out, &clank(rng, 700.0, 0.09), 0.15, 0.3);
+    out
+}
+
+/// A claim staked: the beacon's spike driven in, then a bright rising call sign.
+fn claim_stake(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(200.0, 120.0, 0.12, 2.5);
+    mix_into(&mut out, &clank(rng, 980.0, 0.25), 0.0, 0.5);
+    for (index, note) in [783.99, 1_046.5, 1_567.98].into_iter().enumerate() {
+        let voice = brass(rng, note, 0.09, 0.8);
+        mix_into(&mut out, &voice, 0.16 + index as f32 * 0.09, 0.4);
+    }
+    mix_into(&mut out, &bell(2_093.0, 2.0, 1.2, 0.6), 0.44, 0.3);
+    let mut echo = Delay::new(0.4).with_damping(0.4);
+    out.resize(out.len() + samples_for(0.3), 0.0);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.16, 0.3) * 0.35;
+    }
+    out
+}
+
+/// Fuel flowing from a station: a nozzle clunk and a run of gurgling bubbles.
+fn fuel_pump(rng: &mut Rng) -> Vec<f32> {
+    let mut out = clank(rng, 460.0, 0.1);
+    let mut time = 0.08;
+    for _ in 0..9 {
+        let start = rng.range(380.0, 620.0);
+        let mut osc = Osc::new(Wave::Sine);
+        let length = rng.range(0.05, 0.09);
+        let bubble = render(length, |t| {
+            osc.next(glide(t, start, start * 1.6, length)) * perc(t, 0.004, length)
+        });
+        mix_into(&mut out, &bubble, time, rng.range(0.3, 0.5));
+        time += rng.range(0.05, 0.09);
+    }
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 900.0, 1.0);
+    let flow = render(time, |t| {
+        filter.process(noise.next()) * segments(t, &[(0.0, 0.0), (0.05, 0.25), (time, 0.0)])
+    });
+    mix_into(&mut out, &flow, 0.06, 0.6);
+    out
+}
+
+/// A supply drop: a descending whistle and the canister thudding home.
+fn supply_drop(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Triangle);
+    let start = 1_800.0 * rng.jitter(0.02);
+    let mut out = render(0.5, |t| {
+        osc.next(glide(t, start, start * 0.45, 0.5))
+            * segments(t, &[(0.0, 0.0), (0.05, 0.3), (0.5, 0.15)])
+    });
+    mix_into(&mut out, &thump(140.0, 90.0, 0.18, 2.5), 0.5, 1.0);
+    mix_into(&mut out, &clank(rng, 380.0, 0.3), 0.5, 0.55);
+    mix_into(&mut out, &bell(1_174.7, 2.0, 1.0, 0.35), 0.7, 0.25);
+    out
+}
+
+/// The repair bay at work: arcing crackle and a servo whirr.
+fn repair_weld(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for time in scatter(rng, 14, 0.0, 0.5, 1.0) {
+        let length = rng.range(0.008, 0.03);
+        let spark = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::HighPass,
+            3_500.0 * rng.jitter(0.2),
+            1.0,
+            length,
+        );
+        let gain = rng.range(0.3, 0.7);
+        mix_into(&mut out, &spark, time, gain);
+    }
+    let mut saw = Osc::new(Wave::Saw);
+    let mut filter = Svf::new(FilterMode::LowPass, 1_400.0, 1.0);
+    let whirr = render(0.6, |t| {
+        filter.process(saw.next(glide(t, 180.0, 320.0, 0.4)))
+            * segments(t, &[(0.0, 0.0), (0.08, 0.4), (0.5, 0.3), (0.6, 0.0)])
+    });
+    mix_into(&mut out, &whirr, 0.0, 0.5);
+    mix_into(&mut out, &bell(1_568.0, 2.0, 0.8, 0.3), 0.6, 0.2);
+    out
+}
+
+/// Stowing in a chest: a wooden lid thunk and a latch.
+fn storage_stow(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(160.0 * rng.jitter(0.04), 110.0, 0.12, 1.5);
+    let body = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        700.0,
+        1.0,
+        0.08,
+    );
+    mix_into(&mut out, &body, 0.0, 0.6);
+    mix_into(&mut out, &clank(rng, 1_250.0, 0.08), 0.14, 0.4);
+    mix_into(&mut out, &clank(rng, 1_650.0, 0.06), 0.19, 0.3);
+    out
+}
+
+/// The cargo uplink: a rising charge-up and a shimmering beam away.
+fn uplink_beam(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Sine);
+    let mut shimmer = Fm::default();
+    let base = 420.0 * rng.jitter(0.01);
+    let mut out = render(0.9, |t| {
+        let frequency = glide(t, base, base * 4.0, 0.7);
+        (osc.next(frequency) + shimmer.next(frequency * 1.5, 2.0, 0.6) * 0.3)
+            * segments(t, &[(0.0, 0.0), (0.1, 0.4), (0.65, 0.8), (0.9, 0.0)])
+    });
+    for time in scatter(rng, 5, 0.6, 0.95, 1.0) {
+        let note = SPARKLE_NOTES[rng.index(SPARKLE_NOTES.len())];
+        mix_into(&mut out, &bell(note, 2.0, 1.0, 0.25), time, 0.18);
+    }
+    out
+}
+
+/// Home set: a warm major chord on soft brass.
+fn home_set(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for (index, note) in [392.0, 493.88, 587.33, 783.99].into_iter().enumerate() {
+        let voice = brass(rng, note, 0.5, 0.6);
+        mix_into(&mut out, &voice, index as f32 * 0.05, 0.35);
+    }
+    mix_into(&mut out, &bell(1_567.98, 2.0, 0.8, 0.8), 0.25, 0.2);
+    out
+}
+
 
 #[cfg(test)]
 mod tests {

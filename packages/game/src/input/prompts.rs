@@ -68,6 +68,18 @@ pub enum Prompt {
     Join,
     /// Scroll a dialog whose content is taller than it (wheel, Page Up/Down, right stick).
     Scroll,
+    /// Enter or leave build mode.
+    BuildMode,
+    /// Build mode: place the selected piece.
+    BuildPlace,
+    /// Build mode: deconstruct what the cursor is on.
+    BuildRemove,
+    /// Build mode: rotate the selected piece.
+    BuildRotate,
+    /// Build mode: previous / next piece.
+    BuildCycle,
+    /// Build mode: move the cursor.
+    BuildCursor,
 }
 
 /// A controller glyph: a button or a direction cluster.
@@ -191,6 +203,21 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::Details, Full | Wasd) => &["Ctrl+Tab"],
         (Prompt::NetOverlay, Full | Wasd) => &["F3"],
         (Prompt::Scroll, Full | Wasd) => &["PgUp", "PgDn"],
+        (Prompt::BuildMode, Full | Wasd) => &["N"],
+        (Prompt::BuildMode, Arrows) => &["Num8"],
+        (Prompt::BuildPlace, Full) => &["Click", "E"],
+        (Prompt::BuildPlace, Wasd) => &["E"],
+        (Prompt::BuildPlace, Arrows) => &["RCtrl"],
+        (Prompt::BuildRemove, Full) => &["RClick", "X"],
+        (Prompt::BuildRemove, Wasd) => &["X"],
+        (Prompt::BuildRemove, Arrows) => &["Num6"],
+        (Prompt::BuildRotate, Full | Wasd) => &["R"],
+        (Prompt::BuildRotate, Arrows) => &["Num7"],
+        (Prompt::BuildCycle, Full | Wasd) => &["Z", "Q"],
+        (Prompt::BuildCycle, Arrows) => &["Num9", "Num3"],
+        (Prompt::BuildCursor, Full) => &["Mouse", "W", "A", "S", "D"],
+        (Prompt::BuildCursor, Wasd) => &["W", "A", "S", "D"],
+        (Prompt::BuildCursor, Arrows) => &["\u{2190}", "\u{2191}", "\u{2192}", "\u{2193}"],
         // The arrow-keys seat leaves the global hotkeys and scrolling to the main keyboard,
         // and keyboards never "join".
         (
@@ -244,6 +271,13 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
         Prompt::Pause => button(PadAction::Pause).into_iter().collect(),
         Prompt::Map => button(PadAction::Map).into_iter().collect(),
         Prompt::Inventory => button(PadAction::Inventory).into_iter().collect(),
+        Prompt::BuildMode => button(PadAction::BuildMode).into_iter().collect(),
+        Prompt::BuildPlace => button(PadAction::Confirm).into_iter().collect(),
+        // In build mode the use button deconstructs.
+        Prompt::BuildRemove => button(PadAction::Interact).into_iter().collect(),
+        Prompt::BuildRotate => button(PadAction::BuildRotate).into_iter().collect(),
+        Prompt::BuildCycle => both(PadAction::TabPrevious, PadAction::TabNext),
+        Prompt::BuildCursor => vec![PadGlyph::DPadVertical, PadGlyph::DPadHorizontal],
         // Keyboard-only: no controller binding.
         Prompt::Help
         | Prompt::Fullscreen

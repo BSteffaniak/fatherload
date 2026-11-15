@@ -317,6 +317,15 @@ fn draw_view_prompt(
         && let Some(door) = &view.village_door
     {
         (Prompt::Use, door.clone(), true)
+    } else if shell.run_mode == RunMode::Playing
+        && shell.modal.is_none()
+        && shell.seat(view.seat_index).modal.is_none()
+        && shell.seat(view.seat_index).build.is_none()
+        && (view.failure.is_none()
+            || view.nearby_module == Some(fatherload_simulation::base::ModuleKind::FuelStation))
+        && let Some(module) = view.nearby_module
+    {
+        (Prompt::Use, format!("Use {}", module.name()), true)
     } else {
         return;
     };
@@ -699,6 +708,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Poi(tile) => super::terrain::tile_art::poi_color(tile, Band::Stone),
         TileKind::Cave(tile) => super::terrain::tile_art::cave_color(tile, Band::Stone),
         TileKind::Bedrock => PLUM,
+        TileKind::Built(_) => CREAM,
     }
 }
 
@@ -960,6 +970,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Garage => super::garage::draw_garage(draw, ui),
         ModalScreen::VillageCounter => counters::draw_village_counter(draw, ui),
         ModalScreen::VillageTalk => counters::draw_village_talk(draw, ui),
+        ModalScreen::BaseModule => super::build::draw_base_module(draw, ui),
     }
 }
 

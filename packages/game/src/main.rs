@@ -4,6 +4,7 @@
 
 mod app;
 mod audio;
+mod base_view;
 mod camera_lead;
 mod effects;
 mod input;

@@ -368,6 +368,24 @@ impl LocalGame {
                         crate::weapon_aim::reticle(self.runtime.world(), view.player_id, aim);
                 }
             }
+            let seat = self.shell.seat(view.seat_index);
+            view.build_preview = seat.build.as_ref().and_then(|draft| {
+                crate::base_view::BuildPreview::for_draft(
+                    self.runtime.world(),
+                    view.player_id,
+                    draft,
+                )
+            });
+            view.base_module = seat
+                .base_module
+                .filter(|_| seat.modal == Some(crate::shell::ModalScreen::BaseModule))
+                .and_then(|id| {
+                    crate::base_view::BaseModuleView::for_module(
+                        self.runtime.world(),
+                        view.player_id,
+                        id,
+                    )
+                });
         }
         drop(anchors);
         snapshot.shots = self.effects.shots();

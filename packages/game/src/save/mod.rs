@@ -36,7 +36,8 @@ const SAVE_SLOTS: usize = 3;
 /// 8 (wave 2, one bump for every wave 2 track): explosive charges are entities and special
 /// explosives cargo bay items (T11; version 7 files migrate through `legacy::V7SaveFile`), plus
 /// fields with serde defaults: drop magnet / dump / "blocked" marks and the `collect_blocks`
-/// toggle (T7), enemies and the enemy director (T10), cave and village journals (T13, T9).
+/// toggle (T7), enemies and the enemy director (T10), cave and village journals (T13, T9),
+/// player bases (T12).
 pub const SAVE_VERSION: u32 = 8;
 
 /// Persisted user settings.

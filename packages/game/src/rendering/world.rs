@@ -31,6 +31,7 @@ use crate::{
     render_snapshot::{PlayerPresentation, RelayCountdown},
 };
 
+pub(super) mod base;
 mod buildings;
 mod caves;
 mod drops;
@@ -103,6 +104,12 @@ pub(super) struct WorldScene<'a> {
     pub ticks: u64,
     /// The view's throw aim preview, if its seat has a throwable charge selected.
     pub aim_preview: Option<&'a crate::render_snapshot::AimPreview>,
+    /// Claims, base modules and fixtures (WP-BASE).
+    pub bases: &'a fatherload_simulation::base::Bases,
+    /// The base modules with power.
+    pub powered_modules: &'a std::collections::BTreeSet<fatherload_simulation::base::StructureId>,
+    /// The view's build-mode preview, while its seat is building.
+    pub build_preview: Option<&'a crate::base_view::BuildPreview>,
     /// Cave critters (WP-CAVES).
     pub critters: &'a [crate::render_snapshot::CritterPresentation],
     /// Enemies and enemy shots (entities copied out of the world).
@@ -161,6 +168,16 @@ fn draw_lowered_ground_backdrop(draw: &mut impl RaylibDraw, terrain: &Terrain, v
 )]
 pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_>) {
     let seconds = scene.seconds();
+    let base_scene = base::BaseScene {
+        bases: scene.bases,
+        terrain: scene.terrain,
+        powered: scene.powered_modules,
+        players: scene.players,
+        local: scene.local,
+        explored: scene.explored,
+        visible: scene.visible,
+        seconds,
+    };
     sky::draw_sky(draw, scene.sky, scene.visible, seconds);
     draw_lowered_ground_backdrop(draw, scene.terrain, scene.visible);
     buildings::draw_town(draw, scene.visible, scene.local, seconds);
@@ -180,6 +197,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     );
     draw_world_edges(draw, scene.terrain, scene.visible);
     scene.terrain_renderer.draw(draw, scene.visible);
+    base::draw_back_walls(draw, &base_scene);
     villages::draw_trails(
         draw,
         scene.terrain,
@@ -219,6 +237,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     drops::draw_drops(draw, scene);
     weapons::draw_targets(draw, scene.targets, seconds);
     quest_marks::draw_quest_markers(draw, scene.quest_markers, seconds);
+    base::draw_structures(draw, &base_scene);
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
         fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);
@@ -282,6 +301,11 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     );
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);
+    }
+    base::draw_base_lights(draw, &base_scene);
+    if let Some(preview) = scene.build_preview {
+        base::draw_claims(draw, &base_scene, preview.claim.as_ref());
+        base::draw_build_ghost(draw, &base_scene, preview);
     }
     if let (Some(reticle), Some(local)) = (scene.reticle, scene.local) {
         let accent = player_accent(local.player_id, Some(local.cosmetics));

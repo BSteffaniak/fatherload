@@ -103,6 +103,22 @@ pub struct PlayerInput {
     pub scroll_end: bool,
     /// Ctrl+V: paste the clipboard into the focused text field.
     pub paste: bool,
+    /// Pressed: enter or leave build mode (WP-BASE).
+    pub build_mode: bool,
+    /// Pressed (build mode): deconstruct what the cursor is on.
+    pub build_remove: bool,
+    /// Pressed (build mode): rotate the selected piece.
+    pub build_rotate: bool,
+    /// Pressed (build mode): the previous piece (the next one is `cycle_explosive` / `tab_next`).
+    pub build_previous: bool,
+    /// Where the mouse points in the seat's view, in world pixels, when it moved or clicked
+    /// this frame (the main keyboard seat only; build mode's cursor, WP-BASE). Separate from
+    /// [`Self::pointer`], the weapon aim's screen-space mouse.
+    pub build_pointer: Option<(f32, f32)>,
+    /// Left mouse button pressed.
+    pub pointer_primary: bool,
+    /// Right mouse button pressed.
+    pub pointer_secondary: bool,
 }
 
 impl PlayerInput {
@@ -175,6 +191,13 @@ impl PlayerInput {
             scroll_home,
             scroll_end,
             paste,
+            build_mode,
+            build_remove,
+            build_rotate,
+            build_previous,
+            build_pointer: _,
+            pointer_primary,
+            pointer_secondary,
         } = *self;
         horizontal.abs() > f32::EPSILON
             || ui_scroll.abs() > f32::EPSILON
@@ -225,6 +248,12 @@ impl PlayerInput {
                 scroll_home,
                 scroll_end,
                 paste,
+                build_mode,
+                build_remove,
+                build_rotate,
+                build_previous,
+                pointer_primary,
+                pointer_secondary,
             ]
             .into_iter()
             .any(|pressed| pressed)
@@ -322,6 +351,13 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         scroll_home: primary.scroll_home || secondary.scroll_home,
         scroll_end: primary.scroll_end || secondary.scroll_end,
         paste: primary.paste || secondary.paste,
+        build_mode: primary.build_mode || secondary.build_mode,
+        build_remove: primary.build_remove || secondary.build_remove,
+        build_rotate: primary.build_rotate || secondary.build_rotate,
+        build_previous: primary.build_previous || secondary.build_previous,
+        build_pointer: primary.build_pointer.or(secondary.build_pointer),
+        pointer_primary: primary.pointer_primary || secondary.pointer_primary,
+        pointer_secondary: primary.pointer_secondary || secondary.pointer_secondary,
     }
 }
 
@@ -421,6 +457,15 @@ fn read_primary_keyboard_input_with_options(
         scroll_home: raylib.is_key_pressed(KeyboardKey::KEY_HOME),
         scroll_end: raylib.is_key_pressed(KeyboardKey::KEY_END),
         paste: ctrl_down && raylib.is_key_pressed(KeyboardKey::KEY_V),
+        // V fires the weapon; build mode is N (X / R / Z inside it; weapons hold fire there).
+        build_mode: raylib.is_key_pressed(KeyboardKey::KEY_N),
+        build_remove: raylib.is_key_pressed(KeyboardKey::KEY_X),
+        build_rotate: raylib.is_key_pressed(KeyboardKey::KEY_R),
+        build_previous: raylib.is_key_pressed(KeyboardKey::KEY_Z),
+        // The app fills the build pointer in from the mouse and the last frame's camera.
+        build_pointer: None,
+        pointer_primary: raylib.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT),
+        pointer_secondary: raylib.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_RIGHT),
     }
 }
 
@@ -438,6 +483,8 @@ fn read_primary_keyboard_input_with_options(
 /// | Bomb, scanner | Numpad 0, Numpad . |
 /// | Next explosive, detonate, detonate in sequence | Numpad 3, Numpad 4, Numpad 5 |
 /// | Fire the weapon (auto-aimed), next weapon | Numpad 6, Numpad 7 |
+/// | Build mode | Numpad 8 |
+/// | In build mode: remove, rotate, previous piece (next piece: Numpad 3) | Numpad 6, Numpad 7, Numpad 9 |
 ///
 /// Right Shift is a gamepad-style Back: it closes dialogs and leaves buildings but never
 /// pauses. The mouse wheel and Page Up/Down stay with the main keyboard (seat 1).
@@ -472,6 +519,11 @@ pub fn read_secondary_keyboard_input(raylib: &RaylibHandle) -> PlayerInput {
         fire: raylib.is_key_down(KeyboardKey::KEY_KP_6),
         cycle_weapon: raylib.is_key_pressed(KeyboardKey::KEY_KP_7),
         auto_aim: true,
+        // Build mode shares the weapon keys (weapons hold fire while a seat builds).
+        build_mode: raylib.is_key_pressed(KeyboardKey::KEY_KP_8),
+        build_remove: raylib.is_key_pressed(KeyboardKey::KEY_KP_6),
+        build_rotate: raylib.is_key_pressed(KeyboardKey::KEY_KP_7),
+        build_previous: raylib.is_key_pressed(KeyboardKey::KEY_KP_9),
         ..PlayerInput::default()
     }
 }

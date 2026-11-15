@@ -25,6 +25,7 @@ use crate::{
 };
 
 pub mod arms;
+mod build;
 mod garage;
 pub mod hopper;
 mod quests;
@@ -32,6 +33,7 @@ mod test_mode;
 mod village;
 mod world_setup;
 
+pub use build::{BuildDraft, module_at_rig};
 pub use garage::{GARAGE_COUNTER_ROW, GarageDraft, GarageRow, item_available};
 pub use quests::{
     DeskRow, Fanfare, FanfareKind, desk_rows, has_quest_tab, log_quests, tracked_quest,
@@ -111,6 +113,8 @@ pub enum ModalScreen {
     VillageCounter,
     /// A conversation with a village resident ([`SeatVillage::talk`]).
     VillageTalk,
+    /// A base module's service menu (WP-BASE); the module is [`SeatUi::base_module`].
+    BaseModule,
 }
 
 impl ModalScreen {
@@ -400,6 +404,26 @@ pub enum SoundCue {
     ImpactHit,
     /// A target destroyed.
     TargetDestroyed,
+    /// A building piece or fixture placed (WP-BASE).
+    BuildPlace,
+    /// A base module placed.
+    ModuleBuilt,
+    /// A piece, fixture or module deconstructed.
+    BuildRemove,
+    /// A claim beacon staked.
+    ClaimStaked,
+    /// Refuelling at a base fuel station.
+    FuelPump,
+    /// A supply drop filling a fuel station.
+    SupplyDrop,
+    /// A base repair bay at work.
+    RepairWeld,
+    /// Stowing in or taking from base storage.
+    StorageStow,
+    /// Cargo beamed away by an uplink.
+    UplinkBeam,
+    /// A home point set.
+    HomeSet,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -751,6 +775,12 @@ pub struct SeatUi {
     pub explosives: crate::input_mapping::ExplosiveSelection,
     /// The village building the seat is inside, its conversation and arrival banner.
     pub village: SeatVillage,
+    /// Build mode (WP-BASE): the selected piece and cursor while it is on.
+    pub build: Option<BuildDraft>,
+    /// The draft build mode had when it was last left (reopens where it was).
+    pub last_build: Option<BuildDraft>,
+    /// The base module whose menu is open ([`ModalScreen::BaseModule`]).
+    pub base_module: Option<fatherload_simulation::base::StructureId>,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -785,6 +815,9 @@ impl SeatUi {
             garage: None,
             explosives: crate::input_mapping::ExplosiveSelection::new(),
             village: SeatVillage::new(),
+            build: None,
+            last_build: None,
+            base_module: None,
         }
     }
 
@@ -812,6 +845,8 @@ impl SeatUi {
         self.service_animation_seconds = 0.0;
         self.pending_services.clear();
         self.garage = None;
+        self.build = None;
+        self.base_module = None;
     }
 
     fn track_message(&mut self, tick: u64) {
@@ -842,6 +877,9 @@ impl SeatUi {
             self.modal.is_none_or(|modal| !modal.is_global()),
             "global dialogs live in ShellState::modal"
         );
+        if self.build.is_some() {
+            return self.handle_build(input, ctx, cues, requests);
+        }
         if input.inventory && self.modal != Some(ModalScreen::Inventory) {
             // The inventory's hopper rows start at the top.
             self.selected_menu_item = 0;
@@ -853,6 +891,23 @@ impl SeatUi {
             return self.handle_interior(input, delta_seconds, ctx, cues, requests);
         }
         if ctx.failed() {
+            // A stranded rig at a base fuel station can still refuel there.
+            if self.modal == Some(ModalScreen::BaseModule) {
+                self.handle_base_module(input, ctx, cues, requests);
+                return false;
+            }
+            if self.modal.is_none()
+                && input.interact
+                && ctx.player().is_some_and(|player| player.hull > 0.0)
+                && build::module_at_rig(ctx.world, ctx.player).is_some_and(|module| {
+                    ctx.world.bases().module(module).is_some_and(|module| {
+                        module.kind == fatherload_simulation::base::ModuleKind::FuelStation
+                    })
+                })
+                && self.open_base_module(ctx, cues)
+            {
+                return false;
+            }
             if self.modal.is_some() {
                 // A dialog opened before (or while) the rig was stranded hides the rescue
                 // prompt: Back closes it first, and nothing else reaches the hidden prompt.
@@ -879,10 +934,14 @@ impl SeatUi {
         if input.pause || input.cancel {
             return true;
         }
+        if input.build_mode {
+            self.open_build(ctx, cues);
+            return false;
+        }
         if input.interact {
             if let Some(zone) = ctx.current_zone() {
                 self.enter_interior(zone, ctx.device, cues);
-            } else if !self.try_enter_village(ctx, cues) {
+            } else if !self.try_enter_village(ctx, cues) && !self.open_base_module(ctx, cues) {
                 "No surface service here.".clone_into(&mut self.message);
             }
         }
@@ -1003,6 +1062,10 @@ impl SeatUi {
             ModalScreen::VillageCounter | ModalScreen::VillageTalk
         ) {
             self.handle_village_modal(modal, input, ctx, cues, requests);
+            return true;
+        }
+        if modal == ModalScreen::BaseModule {
+            self.handle_base_module(input, ctx, cues, requests);
             return true;
         }
         if input.backs_out() {
@@ -1197,7 +1260,8 @@ impl SeatUi {
             | ModalScreen::Help
             | ModalScreen::Garage
             | ModalScreen::VillageCounter
-            | ModalScreen::VillageTalk => None,
+            | ModalScreen::VillageTalk
+            | ModalScreen::BaseModule => None,
             ModalScreen::Inventory => {
                 // The hopper rows (WP-DROPS): toggle collecting, dump blocks.
                 if let Some(player) = ctx.player()
@@ -1701,6 +1765,7 @@ impl ShellState {
             && self.modal.is_none()
             && seat.modal.is_none()
             && !seat.inside()
+            && seat.build.is_none()
     }
 
     /// Whether the local host should tick: while the game runs and at least one local seat is

@@ -99,8 +99,13 @@ pub enum PadAction {
     TabNext,
     /// Held: fire the hardpoint weapon (a rig without one thrusts instead, as before).
     FireWeapon,
-    /// Pressed: swap the next owned weapon onto the hardpoint.
+    /// Tapped: swap the next owned weapon onto the hardpoint (shares its button with
+    /// [`Self::BuildMode`]: a tap cycles, a hold builds).
     CycleWeapon,
+    /// Held past [`BUILD_HOLD_SECONDS`]: enter or leave build mode (WP-BASE).
+    BuildMode,
+    /// Pressed (build mode): rotate the selected piece.
+    BuildRotate,
 }
 
 /// The controller layout: every `(action, button)` pair. An action may have several buttons
@@ -122,11 +127,15 @@ pub const PAD_BINDINGS: &[(PadAction, PadButton)] = &[
     (PadAction::CycleExplosive, PadButton::RightStick),
     (PadAction::TabPrevious, PadButton::LeftBumper),
     (PadAction::TabNext, PadButton::RightBumper),
+    (PadAction::BuildMode, PadButton::LeftStick),
+    (PadAction::BuildRotate, PadButton::Y),
 ];
 
 /// How long the detonator button is held before it fires charges in sequence (a shorter tap
 /// fires them all at once, on release).
 pub const DETONATE_HOLD_SECONDS: f32 = 0.4;
+/// Holding the weapon-cycle button this long toggles build mode instead (a tap cycles).
+pub const BUILD_HOLD_SECONDS: f32 = 0.4;
 
 /// The first button bound to `action` (what prompts show).
 #[must_use]
@@ -275,6 +284,10 @@ pub struct PadMapper {
     detonate_held: Option<f32>,
     /// The current hold already fired the sequenced detonator.
     detonate_sequenced: bool,
+    /// How long the weapon-cycle / build button has been held (`None`: not held).
+    cycle_held: Option<f32>,
+    /// The current hold already toggled build mode.
+    cycle_built: bool,
 }
 
 impl PadMapper {
@@ -282,6 +295,10 @@ impl PadMapper {
     pub fn map(&mut self, state: &PadState, delta_seconds: f32) -> PlayerInput {
         let (detonate, detonate_sequence) =
             self.detonator(state.action_held(PadAction::Detonate), delta_seconds);
+        let (cycle_weapon, build_mode) = self.cycle_or_build(
+            state.action_held(PadAction::CycleWeapon) || state.action_held(PadAction::BuildMode),
+            delta_seconds,
+        );
         let previous = &self.previous;
         let pressed = |action| state.action_pressed_since(previous, action);
         let vertical = state.vertical_direction();
@@ -324,12 +341,14 @@ impl PadMapper {
             tab_next: pressed(PadAction::TabNext),
             fire: state.action_held(PadAction::FireWeapon),
             fire_thrusts_unarmed: true,
-            cycle_weapon: pressed(PadAction::CycleWeapon),
+            cycle_weapon,
             menu_up: vertical_step < 0,
             menu_down: vertical_step > 0,
             menu_left: horizontal_step < 0,
             menu_right: horizontal_step > 0,
             ui_scroll: state.scroll_notches(delta_seconds),
+            build_mode,
+            build_rotate: pressed(PadAction::BuildRotate),
             ..PlayerInput::default()
         };
         self.previous.clone_from(state);
@@ -357,6 +376,32 @@ impl PadMapper {
             (false, Some(_)) => {
                 self.detonate_held = None;
                 (!self.detonate_sequenced, false)
+            }
+            (false, None) => (false, false),
+        }
+    }
+
+    /// The shared weapon-cycle / build button: a tap cycles weapons on release; a hold past
+    /// [`BUILD_HOLD_SECONDS`] toggles build mode once. Returns `(cycle, build)`.
+    fn cycle_or_build(&mut self, held: bool, delta_seconds: f32) -> (bool, bool) {
+        match (held, self.cycle_held) {
+            (true, None) => {
+                self.cycle_held = Some(0.0);
+                self.cycle_built = false;
+                (false, false)
+            }
+            (true, Some(seconds)) => {
+                let seconds = seconds + delta_seconds.max(0.0);
+                self.cycle_held = Some(seconds);
+                if seconds >= BUILD_HOLD_SECONDS && !self.cycle_built {
+                    self.cycle_built = true;
+                    return (false, true);
+                }
+                (false, false)
+            }
+            (false, Some(_)) => {
+                self.cycle_held = None;
+                (!self.cycle_built, false)
             }
             (false, None) => (false, false),
         }

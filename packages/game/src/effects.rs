@@ -453,6 +453,23 @@ impl Effects {
                     continue;
                 }
                 GameplayEventKind::EntityDamaged { .. } => continue,
+                // Base building (WP-BASE): heard where the piece went, by the whole crew.
+                GameplayEventKind::BasePlaced { x, y, .. }
+                | GameplayEventKind::BaseRemoved { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
+                    let (x, y) = (
+                        (x as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                        (y as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                    );
+                    self.spawn_sparks(x, y + 8.0);
+                    if impact_cues < 4
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::world(cue, x, y));
+                        impact_cues += 1;
+                    }
+                    continue;
+                }
                 GameplayEventKind::BombBounced { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
                     let (x, y) = (x as f32, y as f32);
@@ -615,7 +632,10 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::EnemyDifficultyChanged { player_id, .. }
         | GameplayEventKind::WeaponFired { player_id, .. }
         | GameplayEventKind::WeaponDry { player_id, .. }
-        | GameplayEventKind::WeaponMounted { player_id, .. } => Some(player_id),
+        | GameplayEventKind::WeaponMounted { player_id, .. }
+        | GameplayEventKind::BasePlaced { player_id, .. }
+        | GameplayEventKind::BaseRemoved { player_id, .. }
+        | GameplayEventKind::BaseServiceUsed { player_id, .. } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

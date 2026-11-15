@@ -358,6 +358,12 @@ pub struct ViewSnapshot<'w> {
     pub aim_preview: Option<AimPreview>,
     /// The seat's weapon aim reticle (set by the game loop from the seat's aim).
     pub reticle: Option<crate::weapon_aim::Reticle>,
+    /// The seat's build-mode preview (set by the game loop while build mode is on).
+    pub build_preview: Option<crate::base_view::BuildPreview>,
+    /// The module menu the seat has open (set by the game loop).
+    pub base_module: Option<crate::base_view::BaseModuleView>,
+    /// The base module the rig stands at (its use prompt).
+    pub nearby_module: Option<fatherload_simulation::base::ModuleKind>,
 }
 
 impl ViewSnapshot<'_> {
@@ -549,6 +555,10 @@ pub struct RenderSnapshot<'w> {
     pub rig_guards: Vec<(PlayerId, f32)>,
     /// The world's enemy setting (pause menu).
     pub enemy_difficulty: fatherload_simulation::EnemyDifficulty,
+    /// Claims, base modules and fixtures (WP-BASE).
+    pub bases: &'w fatherload_simulation::base::Bases,
+    /// The base modules that have power this frame.
+    pub powered_modules: std::collections::BTreeSet<fatherload_simulation::base::StructureId>,
 }
 
 impl<'w> RenderSnapshot<'w> {
@@ -646,6 +656,13 @@ impl<'w> RenderSnapshot<'w> {
                 .filter(|(_, seconds)| *seconds > 0.0)
                 .collect(),
             enemy_difficulty: world.enemy_difficulty(),
+            bases: world.bases(),
+            powered_modules: world
+                .bases()
+                .modules()
+                .filter(|module| world.base_module_powered(module.id))
+                .map(|module| module.id)
+                .collect(),
         }
     }
 
@@ -784,6 +801,11 @@ fn view_snapshot(
     Some(ViewSnapshot {
         aim_preview: None,
         reticle: None,
+        build_preview: None,
+        base_module: None,
+        nearby_module: crate::shell::module_at_rig(world, Some(player_id))
+            .and_then(|id| world.bases().module(id))
+            .map(|module| module.kind),
         seat_index,
         player_id,
         viewport,

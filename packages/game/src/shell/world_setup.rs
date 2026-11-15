@@ -291,6 +291,13 @@ mod tests {
         scroll_home: false,
         scroll_end: false,
         paste: false,
+        build_mode: false,
+        build_remove: false,
+        build_rotate: false,
+        build_previous: false,
+        build_pointer: None,
+        pointer_primary: false,
+        pointer_secondary: false,
     };
     const DOWN: PlayerInput = PlayerInput {
         menu_down: true,

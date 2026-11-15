@@ -35,6 +35,7 @@ use crate::rendering::pixel_art::{
 };
 
 mod cave_art;
+mod built_art;
 mod poi_art;
 
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
@@ -201,6 +202,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Air => strata.back[0],
         TileKind::Poi(tile) => return poi_color(tile, band),
         TileKind::Cave(tile) => return cave_color(tile, band),
+        TileKind::Built(tile) => built_art::built_ramp(tile)[2],
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -378,6 +380,7 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::PressurePocket
         | TileKind::Poi(_)
         | TileKind::Cave(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Built(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -561,6 +564,21 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             }
             poi_art::paint_geode_lining(&mut canvas, terrain, position, band);
         }
+        return canvas;
+    }
+    if let TileKind::Built(tile) = kind {
+        built_art::paint(
+            &mut canvas,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+            (x, y),
+        );
         return canvas;
     }
     if let TileKind::Poi(tile) = kind {

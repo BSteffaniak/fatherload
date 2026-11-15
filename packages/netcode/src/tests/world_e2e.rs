@@ -522,3 +522,88 @@ fn world_enemies_replicate_under_latency_and_hit_rigs() {
         assert!(count > 0, "enemies near the rig reach the client");
     }
 }
+
+#[test]
+fn world_bases_replicate_to_every_client() {
+    use fatherload_simulation::{
+        InputSequence, PlayerCommand, PlayerTickInput, TILE_SIZE, TickAction, TickInputs,
+        base::{BuildCommand, Buildable, BuiltTile, Facing, ModuleKind},
+        terrain::{TileKind, TilePosition},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(20, 3, 0.5));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    let mut world = harness.world().clone();
+    let builder = world.player_ids().next().expect("a player");
+    // A claim deep under the west meadow: a pocket with a stone floor, the rig on it.
+    let floor = 60;
+    for y in floor - 6..=floor {
+        for x in 10..=30 {
+            let kind = if y == floor {
+                TileKind::Stone
+            } else {
+                TileKind::Air
+            };
+            let _ = world.terrain_mut().set_kind(TilePosition { x, y }, kind);
+        }
+    }
+    let rig = world.player_mut(builder).expect("builder");
+    #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+    {
+        rig.x = 20.5 * TILE_SIZE;
+        rig.y = (floor as f32 - 0.5) * TILE_SIZE;
+    }
+    rig.credits = 10_000;
+    let place = |item, x| {
+        PlayerCommand::Build(BuildCommand::Place {
+            item,
+            at: TilePosition { x, y: floor - 1 },
+            facing: Facing::Right,
+        })
+    };
+    for command in [
+        place(Buildable::Module(ModuleKind::Beacon), 18),
+        place(Buildable::Module(ModuleKind::Storage), 22),
+        place(Buildable::Tile(BuiltTile::Plating), 24),
+    ] {
+        let mut inputs = TickInputs::default();
+        inputs.players.insert(
+            builder,
+            PlayerTickInput {
+                controls: None,
+                actions: vec![TickAction {
+                    sequence: InputSequence::new(0),
+                    command,
+                }],
+            },
+        );
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(tick, &inputs);
+    }
+    assert_eq!(world.bases().modules().count(), 2, "beacon and chest built");
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(2));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(
+            seen.bases().claims().count(),
+            1,
+            "every client sees the claim"
+        );
+        assert_eq!(seen.bases().modules().count(), 2);
+        assert_eq!(
+            seen.terrain()
+                .tile(TilePosition {
+                    x: 24,
+                    y: floor - 1
+                })
+                .map(|tile| tile.kind),
+            Some(TileKind::Built(BuiltTile::Plating)),
+            "built tiles travel with the terrain"
+        );
+    }
+}

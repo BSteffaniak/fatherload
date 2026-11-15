@@ -7,6 +7,7 @@ use fatherload_simulation::{
     explosive::Deployment,
     item::{ItemCategory, ItemKind},
     village::VillageService,
+    base::{Buildable, ModuleKind, ModuleService},
 };
 
 use super::patch::Patch;
@@ -139,6 +140,16 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::ImpactRock => Patch::ImpactRock,
         SoundCue::ImpactHit => Patch::ImpactHit,
         SoundCue::TargetDestroyed => Patch::TargetDestroyed,
+        SoundCue::BuildPlace => Patch::BuildPlace,
+        SoundCue::ModuleBuilt => Patch::ModuleBuilt,
+        SoundCue::BuildRemove => Patch::BuildRemove,
+        SoundCue::ClaimStaked => Patch::ClaimStake,
+        SoundCue::FuelPump => Patch::FuelPump,
+        SoundCue::SupplyDrop => Patch::SupplyDrop,
+        SoundCue::RepairWeld => Patch::RepairWeld,
+        SoundCue::StorageStow => Patch::StorageStow,
+        SoundCue::UplinkBeam => Patch::UplinkBeam,
+        SoundCue::HomeSet => Patch::HomeSet,
     }
 }
 
@@ -224,6 +235,33 @@ pub const fn pickup_cue(item: ItemKind) -> SoundCue {
         | ItemCategory::Explosive
         | ItemCategory::Cosmetic
         | ItemCategory::Quest => SoundCue::Pickup,
+    }
+}
+
+/// The sound of placing `item` (WP-BASE): a claim beacon's call sign, a module bolting down, or
+/// a block set in place.
+#[must_use]
+pub const fn build_cue(item: Buildable) -> SoundCue {
+    match item {
+        Buildable::Module(ModuleKind::Beacon) => SoundCue::ClaimStaked,
+        Buildable::Module(_) => SoundCue::ModuleBuilt,
+        Buildable::Tile(_) | Buildable::BackWall(_) | Buildable::Fixture(_) => SoundCue::BuildPlace,
+    }
+}
+
+/// The sound of a base module service (exhaustive: a new service needs a sound).
+#[must_use]
+pub const fn service_cue(service: ModuleService) -> SoundCue {
+    match service {
+        ModuleService::Refuel => SoundCue::FuelPump,
+        ModuleService::OrderSupply => SoundCue::SupplyDrop,
+        ModuleService::Repair => SoundCue::RepairWeld,
+        ModuleService::DepositCargo | ModuleService::DepositBlocks | ModuleService::WithdrawAll => {
+            SoundCue::StorageStow
+        }
+        ModuleService::SellCargo => SoundCue::UplinkBeam,
+        ModuleService::SetHome => SoundCue::HomeSet,
+        ModuleService::CycleAccess => SoundCue::Ui,
     }
 }
 
@@ -320,6 +358,11 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::WeaponMounted { .. } => Some(SoundCue::WeaponMount),
         GameplayEventKind::ProjectileImpact { surface, .. } => Some(impact_cue(*surface)),
         GameplayEventKind::EntityDestroyed { .. } => Some(SoundCue::TargetDestroyed),
+        // Base building: placed where the piece went (the whole crew hears it), services from
+        // the rig at the module.
+        GameplayEventKind::BasePlaced { item, .. } => Some(build_cue(*item)),
+        GameplayEventKind::BaseRemoved { .. } => Some(SoundCue::BuildRemove),
+        GameplayEventKind::BaseServiceUsed { service, .. } => Some(service_cue(*service)),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -407,6 +450,9 @@ mod tests {
             | GameplayEventKind::ProjectileImpact { .. }
             | GameplayEventKind::EntityDamaged { .. }
             | GameplayEventKind::EntityDestroyed { .. } => {}
+            | GameplayEventKind::BasePlaced { .. }
+            | GameplayEventKind::BaseRemoved { .. }
+            | GameplayEventKind::BaseServiceUsed { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -611,6 +657,36 @@ mod tests {
             y: 0,
             by: Some(player_id),
         });
+        for item in Buildable::PALETTE {
+            events.push(GameplayEventKind::BasePlaced {
+                player_id,
+                item,
+                x: 0,
+                y: 0,
+            });
+        }
+        events.push(GameplayEventKind::BaseRemoved {
+            player_id,
+            x: 0,
+            y: 0,
+        });
+        for service in [
+            ModuleService::Refuel,
+            ModuleService::OrderSupply,
+            ModuleService::Repair,
+            ModuleService::DepositCargo,
+            ModuleService::DepositBlocks,
+            ModuleService::WithdrawAll,
+            ModuleService::SellCargo,
+            ModuleService::SetHome,
+            ModuleService::CycleAccess,
+        ] {
+            events.push(GameplayEventKind::BaseServiceUsed {
+                player_id,
+                structure: fatherload_simulation::base::StructureId(0),
+                service,
+            });
+        }
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
@@ -740,6 +816,16 @@ mod tests {
             SoundCue::ImpactRock,
             SoundCue::ImpactHit,
             SoundCue::TargetDestroyed,
+            SoundCue::BuildPlace,
+            SoundCue::ModuleBuilt,
+            SoundCue::BuildRemove,
+            SoundCue::ClaimStaked,
+            SoundCue::FuelPump,
+            SoundCue::SupplyDrop,
+            SoundCue::RepairWeld,
+            SoundCue::StorageStow,
+            SoundCue::UplinkBeam,
+            SoundCue::HomeSet,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

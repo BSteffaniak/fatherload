@@ -100,7 +100,8 @@ impl Material {
             | TileKind::ExplosivePocket
             | TileKind::MagmaVent
             | TileKind::Poi(_)
-            | TileKind::Bedrock => Self::Hard,
+            | TileKind::Bedrock
+            | TileKind::Built(_) => Self::Hard,
             TileKind::Ore(_) | TileKind::Artifact(_) => Self::Ore,
             TileKind::Cave(tile) => match tile {
                 fatherload_simulation::cave::CaveTile::Crystal

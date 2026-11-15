@@ -17,6 +17,7 @@ use fatherload_simulation::{
     terrain::{Terrain, TilePosition},
 };
 
+mod build;
 mod counters;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
@@ -659,12 +660,18 @@ impl GameRenderer {
                     beams: &snapshot.beams,
                     shots: snapshot.shots,
                     reticle: view.reticle,
+                    bases: snapshot.bases,
+                    powered_modules: &snapshot.powered_modules,
+                    build_preview: view.build_preview.as_ref(),
                 },
             );
         }
         let _canvas = UiCanvasScope::begin(draw);
         draw_heat_warning_for_view(draw, snapshot.terrain, view);
         draw_view_hud(draw, shell, snapshot, view);
+        if let Some(preview) = &view.build_preview {
+            build::draw_build_bar(draw, view, preview, shell.prompt_device(view.seat_index));
+        }
         draw_depth_ruler_for_view(draw, snapshot.terrain, view);
         draw_minimap_for_view(
             draw,

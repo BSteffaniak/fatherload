@@ -483,5 +483,11 @@ const fn prompt_name(prompt: Prompt) -> &'static str {
         Prompt::NetOverlay => "network",
         Prompt::Join => "join",
         Prompt::Scroll => "scroll",
+        Prompt::BuildMode => "build",
+        Prompt::BuildPlace => "place",
+        Prompt::BuildRemove => "take down",
+        Prompt::BuildRotate => "rotate",
+        Prompt::BuildCycle => "piece",
+        Prompt::BuildCursor => "cursor",
     }
 }
