@@ -852,3 +852,91 @@ fn every_pushing_explosive_throws_loose_drops_but_emp_and_flares_do_not() {
         }
     }
 }
+
+#[test]
+fn smoke_screens_billow_hide_points_inside_and_clear_up() {
+    let mut world = arena();
+    *world.bombs_mut() = vec![charge(
+        0,
+        ExplosiveKind::Smoke,
+        20.5,
+        31.5,
+        SimulationTick::new(1),
+    )];
+    let tiles_before = world.terrain().digest();
+    let events = advance(&mut world, 2);
+    assert_eq!(detonations(&events, ExplosiveKind::Smoke), 1);
+    assert_eq!(
+        world.terrain().digest(),
+        tiles_before,
+        "smoke breaks nothing"
+    );
+    let ticks_per_pulse = world
+        .timing()
+        .ticks_for_millis(crate::explosive::SMOKE_PULSE_MILLIS);
+    advance(&mut world, ticks_per_pulse * 4);
+    let (x, y) = (20.5 * TILE_SIZE, 31.5 * TILE_SIZE);
+    assert!(world.smoke_at(x + 2.0 * TILE_SIZE, y));
+    assert!(!world.smoke_at(x + 8.0 * TILE_SIZE, y));
+    assert_eq!(world.smoke_screens().len(), 1);
+    advance(
+        &mut world,
+        ticks_per_pulse * u64::from(crate::explosive::SMOKE_PULSES),
+    );
+    assert!(world.bombs().is_empty(), "the screen thins out and is gone");
+    assert!(!world.smoke_at(x, y));
+}
+
+#[test]
+fn scare_charges_bang_and_shove_without_breaking_rock_or_setting_off_charges() {
+    let mut world = arena();
+    fill(&mut world, 22..=22, 28..=31, TileKind::Dirt);
+    *world.bombs_mut() = vec![
+        charge(0, ExplosiveKind::Scare, 20.5, 31.5, SimulationTick::new(1)),
+        charge(
+            1,
+            ExplosiveKind::Bomb,
+            19.0,
+            31.5,
+            SimulationTick::new(5_000),
+        ),
+    ];
+    let drop = world.spawn_item_drop(
+        18.5 * TILE_SIZE,
+        31.5 * TILE_SIZE,
+        (0.0, 0.0),
+        crate::item::ItemStack::new(crate::item::ItemKind::Mineral(MineralKind::Copper), 1),
+        None,
+    );
+    let events = advance(&mut world, 2);
+    assert_eq!(detonations(&events, ExplosiveKind::Scare), 1);
+    assert_eq!(kind_at(&world, 22, 31), TileKind::Dirt, "no terrain damage");
+    let bombs = world.bombs();
+    assert_eq!(bombs.len(), 1);
+    assert!(!bombs[0].chain_triggered, "a scare never sets off charges");
+    assert!(bombs[0].velocity_x < 0.0, "but it shoves them");
+    let body = world.entities().get(drop).expect("drop").body;
+    assert!(
+        body.velocity_x < 0.0 && body.velocity_y < 0.0,
+        "drops hop away"
+    );
+}
+
+#[test]
+fn smoke_and_scare_charges_are_sold_carried_as_items_and_thrown() {
+    for kind in [ExplosiveKind::Smoke, ExplosiveKind::Scare] {
+        let offer = explosive_offer(kind).expect("sold");
+        assert_eq!(kind.deployment(), crate::explosive::Deployment::Throw);
+        let item = kind.item().expect("an item");
+        assert_eq!(
+            crate::explosive::ExplosiveKind::from_item_id(kind.item_id().expect("id")),
+            Some(kind)
+        );
+        let mut player = crate::Player::new(0.0, 0.0);
+        player.add_explosives(kind, offer.count);
+        assert_eq!(player.cargo_bay.count(item), offer.count);
+        assert_eq!(player.cargo_used(), 0);
+    }
+    assert!(!ExplosiveKind::Smoke.counts_as_bomb());
+    assert!(ExplosiveKind::Scare.counts_as_bomb());
+}

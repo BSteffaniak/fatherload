@@ -247,6 +247,108 @@ pub const FLARE: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+/// A smoke canister: a squat grey can with vent holes and a pull ring.
+pub const SMOKE: SpriteDef = SpriteDef {
+    name: "world_smoke",
+    legend: &[
+        ('o', INK),
+        ('s', STEEL_DARK),
+        ('S', STEEL),
+        ('w', STEEL_LIGHT),
+        ('f', FOG),
+        ('m', MIST),
+        ('g', GOLD),
+    ],
+    frames: &[&[
+        "...gg...", //
+        "..g..g..", //
+        ".oooooo.", //
+        "oSwwwSso", //
+        "osfofoso", //
+        "oSSSSSso", //
+        "osfofoso", //
+        "oSmmmSso", //
+        "osssssso", //
+        ".oooooo.", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A scare charge: a fat red banger in yellow hazard stripes with a short wick.
+pub const SCARE: SpriteDef = SpriteDef {
+    name: "world_scare",
+    legend: &[
+        ('o', INK),
+        ('R', RED),
+        ('M', MAROON),
+        ('y', GOLD),
+        ('a', AMBER),
+        ('c', CREAM),
+        ('k', SLATE_DARK),
+    ],
+    frames: &[&[
+        "....c...", //
+        "....k...", //
+        "..oooo..", //
+        ".oRRRMo.", //
+        ".oyyyao.", //
+        ".oRRRMo.", //
+        ".oyyyao.", //
+        ".oRRRMo.", //
+        ".oyyyao.", //
+        ".oRRRMo.", //
+        "..oooo..", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_SMOKE: SpriteDef = SpriteDef {
+    name: "icon_smoke",
+    legend: &[
+        ('o', INK),
+        ('s', STEEL_DARK),
+        ('S', STEEL),
+        ('f', FOG),
+        ('m', MIST),
+        ('b', BONE),
+    ],
+    frames: &[&[
+        "...mbm...", //
+        "..mbbfm..", //
+        "...mfm...", //
+        "..ooooo..", //
+        ".oSSSSso.", //
+        ".osfofso.", //
+        ".oSSSSso.", //
+        ".osfofso.", //
+        "..ooooo..", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_SCARE: SpriteDef = SpriteDef {
+    name: "icon_scare",
+    legend: &[
+        ('o', INK),
+        ('R', RED),
+        ('M', MAROON),
+        ('y', GOLD),
+        ('c', CREAM),
+    ],
+    frames: &[&[
+        "c...c...c", //
+        ".c..c..c.", //
+        "...ooo...", //
+        "..oRRMo..", //
+        "..oyyyo..", //
+        "..oRRMo..", //
+        "..oyyyo..", //
+        "..oRRMo..", //
+        "...ooo...", //
+    ]],
+    frame_seconds: 0.0,
+};
+
 pub const ICON_STICKY: SpriteDef = SpriteDef {
     name: "icon_sticky_bomb",
     legend: &[
@@ -441,5 +543,7 @@ pub const fn icon(kind: fatherload_simulation::ExplosiveKind) -> &'static Sprite
         ExplosiveKind::Incendiary => &ICON_INCENDIARY,
         ExplosiveKind::Emp => &ICON_EMP,
         ExplosiveKind::Flare => &ICON_FLARE,
+        ExplosiveKind::Smoke => &ICON_SMOKE,
+        ExplosiveKind::Scare => &ICON_SCARE,
     }
 }

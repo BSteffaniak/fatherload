@@ -373,6 +373,10 @@ pub enum SoundCue {
     MachineDeath,
     /// An enemy biting, ramming or shooting a rig.
     EnemyBite,
+    /// A smoke charge bursting into its screen.
+    SmokeBurst,
+    /// A scare charge's deafening bang.
+    ScareBang,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

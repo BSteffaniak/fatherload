@@ -43,7 +43,7 @@ use crate::{
     },
     entity::{Body, Entity, EntityId, EntityKind, EntityState},
     event::{GameplayEventKind, TickOutput},
-    explosive::{ExplosiveKind, blast_impulse},
+    explosive::{ExplosiveKind, SCARE_MILLIS, SCARE_RADIUS, blast_impulse},
     ids::{PlayerId, SimulationTick},
     physics::{self, BodyParams},
     quantize::quantize_simulation_scalar as quantize,
@@ -772,6 +772,33 @@ impl WorldState {
         }
     }
 
+    /// A scare charge's bang (WP-WEAPONS): every creature within [`SCARE_RADIUS`] that can
+    /// move runs from the blast for [`SCARE_MILLIS`] (machines and nests don't care).
+    fn scare_creatures(&mut self, blast: &Blast) {
+        let now = self.simulation_tick;
+        let until = self.after(now, SCARE_MILLIS);
+        for id in self.enemies_near(blast.x, blast.y, SCARE_RADIUS) {
+            let Some((_, mut state)) = self.enemy_parts(id) else {
+                continue;
+            };
+            let spec = state.kind.stats();
+            if state.kind.is_machine()
+                || spec.elite
+                || matches!(spec.locomotion, Locomotion::Stationary)
+                || state.mode == EnemyMode::Stunned
+            {
+                continue;
+            }
+            state.mode = EnemyMode::Flee;
+            state.mode_until = until;
+            state.target = state.target.or(blast.owner);
+            state.waypoint = None;
+            self.entities.update(id, |entity| {
+                entity.state = EntityState::Enemy(state);
+            });
+        }
+    }
+
     /// Whether `chunk` is a lair because its middle lies in a cave with room for an elite lair
     /// (WP-CAVES spawn tags; grand caverns, ruins and chasms).
     fn cave_lair_chunk(&self, chunk: ChunkPosition, hash: u64) -> bool {
@@ -843,6 +870,14 @@ impl WorldState {
             // A lit flare is irresistible: bats see nothing else.
             return None;
         }
+        // Smoke screens (WP-WEAPONS) hide rigs inside them from sight (not from hearing).
+        let smoke = self.smoke_screens();
+        let hidden = |x: f32, y: f32| {
+            smoke.iter().any(|&(sx, sy, radius)| {
+                let (dx, dy) = (x - sx, y - sy);
+                dx.mul_add(dx, dy * dy) <= radius * radius
+            })
+        };
         let mut best: Option<(f32, PlayerId)> = None;
         for (player_id, player) in &self.players {
             if player.hull <= 0.0 {
@@ -862,6 +897,7 @@ impl WorldState {
             }
             let heard = distance <= hearing && self.active_drills.contains_key(player_id);
             let seen = distance <= sight
+                && !hidden(player.x, player.y)
                 && (matches!(spec.locomotion, Locomotion::Burrowing)
                     && distance <= TILE_SIZE * 3.0
                     || physics::line_clear(&self.terrain, body.x, body.y, player.x, player.y));
@@ -1894,6 +1930,10 @@ impl WorldState {
                 }
                 continue;
             }
+            if blast.kind == ExplosiveKind::Scare {
+                self.scare_creatures(blast);
+                continue;
+            }
             let Some(base) = blast_damage(blast.kind) else {
                 continue;
             };
@@ -1949,7 +1989,9 @@ pub const fn blast_damage(kind: ExplosiveKind) -> Option<f32> {
         ExplosiveKind::Shaped => 45.0,
         ExplosiveKind::Mining => 50.0,
         ExplosiveKind::Incendiary => 28.0,
-        ExplosiveKind::Emp | ExplosiveKind::Flare => return None,
+        ExplosiveKind::Emp | ExplosiveKind::Flare | ExplosiveKind::Smoke | ExplosiveKind::Scare => {
+            return None;
+        }
     })
 }
 

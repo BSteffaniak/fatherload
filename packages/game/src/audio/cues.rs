@@ -125,6 +125,8 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::MachineHurt => Patch::MachineHurt,
         SoundCue::MachineDeath => Patch::MachineDeath,
         SoundCue::EnemyBite => Patch::EnemyBite,
+        SoundCue::SmokeBurst => Patch::SmokeBurst,
+        SoundCue::ScareBang => Patch::ScareBang,
     }
 }
 
@@ -156,6 +158,8 @@ pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
         ExplosiveKind::Incendiary => SoundCue::FireWhoosh,
         ExplosiveKind::Emp => SoundCue::EmpPulse,
         ExplosiveKind::Flare => SoundCue::FlareIgnite,
+        ExplosiveKind::Smoke => SoundCue::SmokeBurst,
+        ExplosiveKind::Scare => SoundCue::ScareBang,
     }
 }
 
@@ -629,6 +633,8 @@ mod tests {
             SoundCue::MachineHurt,
             SoundCue::MachineDeath,
             SoundCue::EnemyBite,
+            SoundCue::SmokeBurst,
+            SoundCue::ScareBang,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

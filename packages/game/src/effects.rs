@@ -263,8 +263,10 @@ impl Effects {
                             direction,
                         });
                         match kind {
-                            ExplosiveKind::Emp => {}
-                            ExplosiveKind::Flare | ExplosiveKind::Incendiary => {
+                            ExplosiveKind::Emp | ExplosiveKind::Smoke => {}
+                            ExplosiveKind::Flare
+                            | ExplosiveKind::Incendiary
+                            | ExplosiveKind::Scare => {
                                 self.spawn_sparks(x, y);
                             }
                             _ => self.spawn_blast_debris(x, y),

@@ -33,6 +33,8 @@ pub const fn charge_sprite(kind: ExplosiveKind) -> Option<&'static SpriteDef> {
         ExplosiveKind::Incendiary => &art::INCENDIARY,
         ExplosiveKind::Emp => &art::EMP,
         ExplosiveKind::Flare => &art::FLARE,
+        ExplosiveKind::Smoke => &art::SMOKE,
+        ExplosiveKind::Scare => &art::SCARE,
     })
 }
 
@@ -163,7 +165,50 @@ fn draw_burning(draw: &mut impl RaylibDraw, bomb: &PlacedBomb, x: f32, y: f32, s
             }
             disc(draw, x, y, 10, with_alpha(ORANGE, 90));
         }
+        ExplosiveKind::Smoke => draw_smoke_screen(draw, bomb, x, y, seconds),
         _ => {}
+    }
+}
+
+/// A smoke screen: overlapping grey puffs that billow out to the screen's radius and drift,
+/// thick enough to hide a rig inside.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "animation phases from bounded clock values"
+)]
+pub fn draw_smoke_screen(
+    draw: &mut impl RaylibDraw,
+    bomb: &PlacedBomb,
+    x: f32,
+    y: f32,
+    seconds: f32,
+) {
+    let radius = fatherload_simulation::explosive::smoke_radius(bomb.stage);
+    if radius <= 0.0 {
+        return;
+    }
+    // Two rings of drifting puffs plus a dense core.
+    for (ring, count, reach, size, alpha) in [
+        (0_u32, 9_u32, 0.72_f32, 0.42_f32, 150_u8),
+        (1, 6, 0.38, 0.5, 175),
+        (2, 3, 0.1, 0.55, 190),
+    ] {
+        for index in 0..count {
+            let seed = (bomb.id as f32).mul_add(1.37, (ring * 31 + index) as f32);
+            let angle = (index as f32 / count as f32).mul_add(
+                std::f32::consts::TAU,
+                seconds * 0.12 * (ring as f32 + 1.0) + seed,
+            );
+            let wobble = (seconds * 0.7 + seed).sin() * 0.08;
+            let px = angle.cos().mul_add(radius * (reach + wobble), x);
+            let py = angle.sin().mul_add(radius * (reach + wobble) * 0.8, y)
+                - (seconds * 0.4 + seed).sin().abs() * 4.0;
+            let puff = (radius * size) as i32;
+            let shade = if (index + ring) % 2 == 0 { FOG } else { MIST };
+            disc(draw, px, py + 3.0, puff, with_alpha(SLATE_LIGHT, alpha / 3));
+            disc(draw, px, py, puff, with_alpha(shade, alpha));
+        }
     }
 }
 
@@ -292,6 +337,59 @@ fn draw_pulse(draw: &mut impl RaylibDraw, explosion: &Explosion, t: f32) -> bool
             }
             if t < 0.2 {
                 disc(draw, x, y, 10, with_alpha(ICE, 160));
+            }
+            true
+        }
+        ExplosiveKind::Smoke => {
+            // A puff of grey bursting from the canister (the screen itself is the burning
+            // charge).
+            let radius = (t * 2.0).min(1.0) * TILE_SIZE * 2.0;
+            disc(
+                draw,
+                x,
+                y,
+                radius as i32,
+                with_alpha(MIST, (160.0 * (1.0 - t)) as u8),
+            );
+            true
+        }
+        ExplosiveKind::Scare => {
+            // A white flash and twin shock rings, with "bang" streaks flying off.
+            if t < 0.15 {
+                disc(draw, x, y, 16, with_alpha(CREAM, 230));
+            }
+            for (delay, color) in [(0.0, CREAM), (0.12, GOLD)] {
+                let local = ((t - delay) / (1.0 - delay)).clamp(0.0, 1.0);
+                if local <= 0.0 {
+                    continue;
+                }
+                let radius = local * 4.0 * TILE_SIZE;
+                let alpha = (220.0 * (1.0 - local)) as u8;
+                let segments = 40;
+                for index in 0..segments {
+                    let angle = index as f32 / segments as f32 * std::f32::consts::TAU;
+                    draw.draw_rectangle_rec(
+                        Rectangle::new(
+                            snap(angle.cos().mul_add(radius, x)),
+                            snap(angle.sin().mul_add(radius, y)),
+                            ART * 2.0,
+                            ART * 2.0,
+                        ),
+                        with_alpha(color, alpha),
+                    );
+                }
+            }
+            for streak in 0..8_u8 {
+                let angle = f32::from(streak) * std::f32::consts::FRAC_PI_4 + 0.3;
+                let near = t.mul_add(30.0, 10.0);
+                let far = near + 10.0;
+                let alpha = (240.0 * (1.0 - t)) as u8;
+                draw.draw_line_ex(
+                    Vector2::new(angle.cos().mul_add(near, x), angle.sin().mul_add(near, y)),
+                    Vector2::new(angle.cos().mul_add(far, x), angle.sin().mul_add(far, y)),
+                    ART,
+                    with_alpha(GOLD, alpha),
+                );
             }
             true
         }

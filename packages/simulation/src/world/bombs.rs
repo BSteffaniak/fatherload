@@ -16,7 +16,8 @@ use crate::{
     explosive::{
         BlastDirection, BlastShape, CLUSTER_BOMBLETS, Deployment, ExplosiveKind,
         FLARE_PULSE_MILLIS, FLARE_PULSES, FLARE_REVEAL_RADIUS, INCENDIARY_RING_MILLIS,
-        INCENDIARY_RINGS, REMOTE_FUSE, SEQUENCE_STEP_MILLIS, ThrowAim, blast_impulse,
+        INCENDIARY_RINGS, REMOTE_FUSE, SEQUENCE_STEP_MILLIS, SMOKE_PULSE_MILLIS, SMOKE_PULSES,
+        ThrowAim, blast_impulse, smoke_radius,
     },
     hazard::PlacedBomb,
     ids::{PlayerId, SimulationTick},
@@ -308,6 +309,14 @@ impl WorldState {
                     bomb.detonation_tick = schedule(self, FLARE_PULSE_MILLIS);
                     return Some(bomb);
                 }
+                ExplosiveKind::Smoke => {
+                    if bomb.stage >= SMOKE_PULSES {
+                        return None;
+                    }
+                    bomb.stage += 1;
+                    bomb.detonation_tick = schedule(self, SMOKE_PULSE_MILLIS);
+                    return Some(bomb);
+                }
                 _ => return None,
             }
         }
@@ -352,6 +361,12 @@ impl WorldState {
                 bomb.stage = 1;
                 bomb.chain_triggered = false;
                 bomb.detonation_tick = schedule(self, FLARE_PULSE_MILLIS);
+                Some(bomb)
+            }
+            ExplosiveKind::Smoke => {
+                bomb.stage = 1;
+                bomb.chain_triggered = false;
+                bomb.detonation_tick = schedule(self, SMOKE_PULSE_MILLIS);
                 Some(bomb)
             }
             _ => None,
@@ -603,6 +618,37 @@ impl WorldState {
             });
         }
         PlayerScopedCommandOutcome::Applied
+    }
+
+    /// Live smoke screens as `(x, y, radius)` in world pixels, in placement order.
+    #[must_use]
+    pub fn smoke_screens(&self) -> Vec<(f32, f32, f32)> {
+        let mut screens: Vec<(u64, f32, f32, f32)> = self
+            .entities
+            .of_kind(EntityKind::Charge)
+            .filter_map(|entity| match entity.state {
+                EntityState::Charge(state) if state.kind == ExplosiveKind::Smoke => {
+                    let radius = smoke_radius(state.stage);
+                    (radius > 0.0).then_some((state.serial, entity.body.x, entity.body.y, radius))
+                }
+                _ => None,
+            })
+            .collect();
+        screens.sort_by_key(|screen| screen.0);
+        screens
+            .into_iter()
+            .map(|(_, x, y, radius)| (x, y, radius))
+            .collect()
+    }
+
+    /// Whether world point `(x, y)` is hidden inside a smoke screen (creature senses, line of
+    /// sight and auto-aim check this).
+    #[must_use]
+    pub fn smoke_at(&self, x: f32, y: f32) -> bool {
+        self.smoke_screens().into_iter().any(|(sx, sy, radius)| {
+            let (dx, dy) = (x - sx, y - sy);
+            dx.mul_add(dx, dy * dy) <= radius * radius
+        })
     }
 
     /// Remote charges `player_id` placed that are still waiting for the detonator.

@@ -19,6 +19,14 @@
 //! * [`ExplosiveKind::Mining`] breaks ore and artifacts cleanly (see [`BlastShape::LootSafe`]):
 //!   they pop out as drops and only about one ore tile in six shatters, where a plain blast
 //!   shatters about a third (`world::drops::ore_survives_blast`).
+//! * [`ExplosiveKind::Scare`] is a loud concussion with a light push and no terrain damage.
+//!   Creatures (WP-ENEMIES) should flee from it: react in `push_from_blasts` (`kind == Scare`)
+//!   or to [`crate::GameplayEventKind::ExplosiveDetonated`] with `kind: Scare`, within
+//!   [`SCARE_RADIUS`] of the blast, for [`SCARE_MILLIS`].
+//! * [`ExplosiveKind::Smoke`] bursts into a smoke screen that lingers where it landed:
+//!   `WorldState::smoke_at(x, y)` answers whether a point is hidden (creature senses and line of
+//!   sight should check it; auto-aim already does), and `WorldState::smoke_screens()` lists the
+//!   live screens with their radius for presentation.
 
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +61,11 @@ pub enum ExplosiveKind {
     Emp,
     /// Thrown; burns bright for a while and charts the area around it.
     Flare,
+    /// Thrown; bursts into a lingering smoke screen that hides what is inside it.
+    Smoke,
+    /// Thrown; a deafening bang with a light shove and no terrain damage that sends creatures
+    /// running.
+    Scare,
 }
 
 /// How a rig deploys an explosive.
@@ -247,12 +260,24 @@ pub struct ExplosiveOffer {
 ///
 /// Prices sit around the plain bomb's ~18 credits a charge, scaled by what each charge is worth:
 /// flares are cheap utility, specialist charges cost two to three bombs, the big ones more.
-pub const EXPLOSIVE_OFFERS: [ExplosiveOffer; 8] = [
+pub const EXPLOSIVE_OFFERS: [ExplosiveOffer; 10] = [
     ExplosiveOffer {
         kind: ExplosiveKind::Flare,
         count: 5,
         cost: 40,
         shack_level: 0,
+    },
+    ExplosiveOffer {
+        kind: ExplosiveKind::Smoke,
+        count: 4,
+        cost: 48,
+        shack_level: 0,
+    },
+    ExplosiveOffer {
+        kind: ExplosiveKind::Scare,
+        count: 3,
+        cost: 54,
+        shack_level: 1,
     },
     ExplosiveOffer {
         kind: ExplosiveKind::Sticky,
@@ -326,10 +351,32 @@ pub const FLARE_PULSE_MILLIS: u64 = 1_000;
 pub const FLARE_REVEAL_RADIUS: i32 = 6;
 /// Light radius of a lit flare, in world pixels (presentation).
 pub const FLARE_LIGHT_RADIUS: f32 = TILE_SIZE * 7.0;
+/// Pulses a smoke screen lingers for after it bursts.
+pub const SMOKE_PULSES: u8 = 24;
+/// Time between a smoke screen's pulses (it grows, holds, then thins out).
+pub const SMOKE_PULSE_MILLIS: u64 = 500;
+/// Widest a smoke screen gets, in world pixels.
+pub const SMOKE_MAX_RADIUS: f32 = TILE_SIZE * 4.5;
+/// How far a scare charge's bang carries for creatures, in world pixels.
+pub const SCARE_RADIUS: f32 = TILE_SIZE * 10.0;
+/// How long creatures flee from a scare charge's bang.
+pub const SCARE_MILLIS: u64 = 6_000;
+
+/// Radius of a smoke screen at pulse `stage` (1 right after the burst): it billows out over the
+/// first pulses, holds, and thins over the last few. 0 before it bursts and once it is gone.
+#[must_use]
+pub fn smoke_radius(stage: u8) -> f32 {
+    if stage == 0 || stage > SMOKE_PULSES {
+        return 0.0;
+    }
+    let grow = (f32::from(stage) / 4.0).min(1.0);
+    let fade = (f32::from(SMOKE_PULSES + 1 - stage) / 4.0).min(1.0);
+    SMOKE_MAX_RADIUS * grow.sqrt() * fade.sqrt()
+}
 
 impl ExplosiveKind {
     /// Every kind a rig can carry and select, in the selection cycle's order.
-    pub const SELECTABLE: [Self; 9] = [
+    pub const SELECTABLE: [Self; 11] = [
         Self::Bomb,
         Self::Sticky,
         Self::Cluster,
@@ -339,10 +386,12 @@ impl ExplosiveKind {
         Self::Incendiary,
         Self::Emp,
         Self::Flare,
+        Self::Smoke,
+        Self::Scare,
     ];
 
     /// Every kind, bomblets included.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 12] = [
         Self::Bomb,
         Self::Sticky,
         Self::Cluster,
@@ -353,6 +402,8 @@ impl ExplosiveKind {
         Self::Incendiary,
         Self::Emp,
         Self::Flare,
+        Self::Smoke,
+        Self::Scare,
     ];
 
     #[must_use]
@@ -368,6 +419,8 @@ impl ExplosiveKind {
             Self::Incendiary => "Incendiary",
             Self::Emp => "EMP charge",
             Self::Flare => "Flare",
+            Self::Smoke => "Smoke charge",
+            Self::Scare => "Scare charge",
         }
     }
 
@@ -395,6 +448,8 @@ impl ExplosiveKind {
             Self::Incendiary => 6,
             Self::Emp => 7,
             Self::Flare => 8,
+            Self::Smoke => 9,
+            Self::Scare => 10,
         };
         Some(crate::item::ExplosiveId(id))
     }
@@ -411,6 +466,8 @@ impl ExplosiveKind {
             6 => Self::Incendiary,
             7 => Self::Emp,
             8 => Self::Flare,
+            9 => Self::Smoke,
+            10 => Self::Scare,
             _ => return None,
         })
     }
@@ -429,6 +486,8 @@ impl ExplosiveKind {
             Self::Incendiary => "incendiaries",
             Self::Emp => "EMP charges",
             Self::Flare => "flares",
+            Self::Smoke => "smoke charges",
+            Self::Scare => "scare charges",
         }
     }
 
@@ -456,6 +515,10 @@ impl ExplosiveKind {
             Self::Flare => {
                 "Thrown. Burns bright for forty seconds and charts the tunnels around it."
             }
+            Self::Smoke => "Thrown. Bursts into a smoke screen that hides you for a dozen seconds.",
+            Self::Scare => {
+                "Thrown. A deafening bang that breaks nothing but sends critters running."
+            }
         }
     }
 
@@ -464,9 +527,13 @@ impl ExplosiveKind {
     pub const fn deployment(self) -> Deployment {
         match self {
             Self::Bomb | Self::Bomblet | Self::Mining => Deployment::Drop,
-            Self::Sticky | Self::Cluster | Self::Incendiary | Self::Emp | Self::Flare => {
-                Deployment::Throw
-            }
+            Self::Sticky
+            | Self::Cluster
+            | Self::Incendiary
+            | Self::Emp
+            | Self::Flare
+            | Self::Smoke
+            | Self::Scare => Deployment::Throw,
             Self::C4 | Self::Shaped => Deployment::Place,
         }
     }
@@ -495,6 +562,8 @@ impl ExplosiveKind {
             Self::Mining => 3_000,
             Self::Incendiary | Self::Emp => 1_500,
             Self::Flare => 350,
+            Self::Smoke => 900,
+            Self::Scare => 1_200,
         }
     }
 
@@ -520,7 +589,7 @@ impl ExplosiveKind {
                 half_width: 1,
             },
             Self::Mining => BlastShape::LootSafe(4),
-            Self::Emp | Self::Flare => BlastShape::None,
+            Self::Emp | Self::Flare | Self::Smoke | Self::Scare => BlastShape::None,
         }
     }
 
@@ -529,11 +598,11 @@ impl ExplosiveKind {
     pub const fn push_reach(self) -> f32 {
         match self {
             Self::Bomb | Self::Sticky => TILE_SIZE * 4.0,
-            Self::Cluster | Self::Incendiary | Self::Shaped => TILE_SIZE * 3.0,
+            Self::Cluster | Self::Incendiary | Self::Shaped | Self::Scare => TILE_SIZE * 3.0,
             Self::Bomblet => TILE_SIZE * 2.0,
             Self::C4 => TILE_SIZE * 5.0,
             Self::Mining => TILE_SIZE * 6.0,
-            Self::Emp | Self::Flare => 0.0,
+            Self::Emp | Self::Flare | Self::Smoke => 0.0,
         }
     }
 
@@ -546,7 +615,8 @@ impl ExplosiveKind {
             Self::Bomblet => 220.0,
             Self::C4 => 540.0,
             Self::Mining => 420.0,
-            Self::Emp | Self::Flare => 0.0,
+            Self::Scare => 200.0,
+            Self::Emp | Self::Flare | Self::Smoke => 0.0,
         }
     }
 
@@ -559,21 +629,28 @@ impl ExplosiveKind {
             }
             Self::Bomblet => TILE_SIZE * 1.5,
             Self::C4 | Self::Mining => TILE_SIZE * 3.0,
-            Self::Emp | Self::Flare => 0.0,
+            Self::Emp | Self::Flare | Self::Smoke | Self::Scare => 0.0,
         }
     }
 
-    /// Whether another blast can set it off early (a lit flare just gets knocked about).
+    /// Whether another blast can set it off early (a lit flare or a smoke canister just gets
+    /// knocked about).
     #[must_use]
     pub const fn chains(self) -> bool {
-        !matches!(self, Self::Flare)
+        !matches!(self, Self::Flare | Self::Smoke)
     }
 
-    /// Whether it ticks audibly while its fuse burns (flares do not; a remote charge only once
-    /// its detonator has fired, see [`crate::PlacedBomb::awaiting_remote`]).
+    /// Whether it ticks audibly while its fuse burns (flares and smoke do not; a remote charge
+    /// only once its detonator has fired, see [`crate::PlacedBomb::awaiting_remote`]).
     #[must_use]
     pub const fn has_audible_fuse(self) -> bool {
-        !matches!(self, Self::Flare)
+        !matches!(self, Self::Flare | Self::Smoke)
+    }
+
+    /// Whether it is a weapon of destruction for "no bombs" jobs (flares and smoke are utility).
+    #[must_use]
+    pub const fn counts_as_bomb(self) -> bool {
+        !matches!(self, Self::Flare | Self::Smoke)
     }
 }
 

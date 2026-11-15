@@ -180,6 +180,9 @@ patches! {
     MachineHurt => "machine_hurt",
     MachineDeath => "machine_death",
     EnemyBite => "enemy_bite",
+    // Wave 2 (weapons and explosives): appended so earlier patches keep their seeds.
+    SmokeBurst => "smoke_burst",
+    ScareBang => "scare_bang",
 }
 
 /// Playback metadata of a patch.
@@ -358,6 +361,16 @@ impl Patch {
                 .jitter(0.05, 1.0)
                 .ducking(0.55)
                 .priority(9),
+            Self::SmokeBurst => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.25)
+                .jitter(0.05, 1.0),
+            Self::ScareBang => PatchInfo::new(Big)
+                .instances(2)
+                .send(0.45)
+                .jitter(0.04, 1.0)
+                .ducking(0.45)
+                .priority(8),
             Self::ThrustLoop
             | Self::DrillSoftLoop
             | Self::DrillHardLoop
@@ -479,6 +492,8 @@ impl Patch {
             Self::MachineHurt => machine_hurt(rng),
             Self::MachineDeath => machine_death(rng),
             Self::EnemyBite => enemy_bite(rng),
+            Self::SmokeBurst => smoke_burst(rng),
+            Self::ScareBang => scare_bang(rng),
         }
     }
 }
@@ -1487,6 +1502,42 @@ fn emp_pulse(rng: &mut Rng) -> Vec<f32> {
         let tail = fm.next(frequency * 0.5, 1.41, 2.0 * decay(t, 0.3)) * perc(t, 0.005, 0.7);
         let dry = filter.run(zap * 0.6 + tail * 0.5, glide(t, 8_000.0, 900.0, 0.3), 1.4);
         dry + echo.process(dry, 0.11, 0.4) * 0.4
+    })
+}
+
+/// A smoke charge bursting: a soft canister pop, then a long breathy exhale of smoke.
+fn smoke_burst(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(150.0 * rng.jitter(0.06), 70.0, 0.1, 1.5);
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::LowPass, 1_400.0, 0.7);
+    let swirl = rng.range(2.0, 3.5);
+    let exhale = render(1.4, |t| {
+        let cutoff = 700.0 + 900.0 * decay(t, 0.5) + 200.0 * sine(t, swirl).abs();
+        filter.run(noise.next(), cutoff, 0.7)
+            * segments(t, &[(0.0, 0.0), (0.06, 1.0), (0.5, 0.6), (1.4, 0.0)])
+    });
+    mix_into(&mut out, &exhale, 0.02, 0.9);
+    out
+}
+
+/// A scare charge: a deafening crack with a ringing whine and a short boom underneath, all bark
+/// and no bite.
+fn scare_bang(rng: &mut Rng) -> Vec<f32> {
+    let mut crack_noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut crack_filter = Svf::new(FilterMode::HighPass, 1_500.0, 0.7);
+    let mut whine_osc = Osc::new(Wave::Sine);
+    let pitch = 3_300.0 * rng.jitter(0.05);
+    let mut boom = Osc::new(Wave::Sine);
+    let mut echo = Delay::new(0.5).with_damping(0.4);
+    render(0.9, |t| {
+        let crack = crack_filter.process(crack_noise.next()) * perc(t, 0.000_2, 0.05);
+        let whine = whine_osc.next(pitch) * perc(t, 0.002, 0.6) * 0.18;
+        let sub = saturate(
+            boom.next(glide(t, 160.0, 60.0, 0.06)) * perc(t, 0.001, 0.18),
+            3.0,
+        );
+        let dry = crack * 1.2 + whine + sub * 0.7;
+        dry + echo.process(dry, 0.13, 0.35) * 0.35
     })
 }
 
