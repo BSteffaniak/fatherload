@@ -32,11 +32,11 @@ mod cave_tests;
 mod caves;
 #[cfg(test)]
 mod charge_equivalence_tests;
+#[cfg(test)]
+mod climb_tests;
 mod clock;
 #[cfg(test)]
 mod clock_tests;
-#[cfg(test)]
-mod climb_tests;
 mod commands;
 mod crew;
 #[cfg(test)]

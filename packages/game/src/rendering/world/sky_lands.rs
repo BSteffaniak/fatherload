@@ -403,6 +403,20 @@ fn draw_updrafts(
 /// Rows below the Moon from which its looming underside starts to show.
 const MOON_LOOM_ROWS: i32 = MOON_BOTTOM_ROWS - CONTINENTS_BOTTOM_ROWS + 400;
 
+/// How much of the clock's phased backdrop Moon (`sky::draw_moon`) still shows in `visible`:
+/// 1 on older worlds and from the ground up to where the looming underside starts to show, then
+/// fading to 0 over the same stretch the looming Moon fades in, so the two never show at once
+/// at full strength.
+pub fn backdrop_moon_share(settings: &WorldSettings, visible: Rectangle) -> f32 {
+    if !settings.generator.has_sky() {
+        return 1.0;
+    }
+    let distance = visible.y - y_of(MOON_BOTTOM_ROWS);
+    #[allow(clippy::cast_precision_loss, reason = "band rows are small integers")]
+    let reach = MOON_LOOM_ROWS as f32 * TILE_SIZE;
+    (1.0 - (reach - distance) / (reach * 0.25)).clamp(0.0, 1.0)
+}
+
 /// The Moon's underside hanging above its column, drawn in perspective: far below it, it is a
 /// small grey lens near the top of the view; it grows and drops toward its true place as the
 /// view climbs, then gives way to its real tiles.

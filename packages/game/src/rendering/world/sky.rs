@@ -749,7 +749,12 @@ fn draw_stars(
     // The Moon is solid: no star shows through its disc (it is drawn later, translucent by day).
     let (moon_x, moon_y, moon_radius) = moon_disc(visible, time.moon);
     let moon_reach = (moon_radius as f32 + 1.0) * ART;
+    // A backdrop Moon faded out on a V8 world (the real Moon took over) hides no stars.
+    let moon_solid = super::sky_lands::backdrop_moon_share(settings, visible) > 0.5;
     let behind_moon = |x: f32, y: f32| {
+        if !moon_solid {
+            return false;
+        }
         let (dx, dy) = (x - moon_x, y - moon_y);
         dx.mul_add(dx, dy * dy) <= moon_reach * moon_reach
     };
@@ -840,6 +845,11 @@ fn draw_moon(
     time: &SkyTime,
 ) {
     let center_y = super::sky_lands::gradient_y(settings, visible.y + visible.height * 0.5);
+    // On a V8 world the real Moon's looming underside takes over from the continents up.
+    let share = super::sky_lands::backdrop_moon_share(settings, visible);
+    if share <= 0.0 {
+        return;
+    }
     let (cx, cy, radius) = moon_disc(visible, time.moon);
     let r = radius as f32 * ART;
     if cx + r < visible.x
@@ -852,8 +862,8 @@ fn draw_moon(
     let first_row = (((visible.y - cy) / ART).floor() as i32).max(-radius);
     let last_row = (((visible.y + visible.height - cy) / ART).ceil() as i32).min(radius);
     let night = time.look.stars.max(star_share(center_y));
-    let lit_alpha = (night.mul_add(175.0, 80.0)).round() as u8;
-    let dark_alpha = (night * 200.0).round() as u8;
+    let lit_alpha = (night.mul_add(175.0, 80.0) * share).round() as u8;
+    let dark_alpha = (night * 200.0 * share).round() as u8;
     let cycle = time.clock.moon_cycle();
     let terminator = (cycle * std::f32::consts::TAU).cos();
     let waxing = cycle < 0.5;

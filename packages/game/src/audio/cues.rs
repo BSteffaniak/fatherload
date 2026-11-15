@@ -489,7 +489,7 @@ mod tests {
             | GameplayEventKind::NightSkipped { .. }
             | GameplayEventKind::GotUp { .. }
             | GameplayEventKind::SleepRuleChanged { .. } => {}
-            | GameplayEventKind::SkyBandEntered { .. }
+            GameplayEventKind::SkyBandEntered { .. }
             | GameplayEventKind::UpdraftCaught { .. }
             | GameplayEventKind::RigIcing { .. } => {}
         }

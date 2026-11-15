@@ -435,3 +435,28 @@ fn untouched_clocks_do_not_change_world_hashes() {
         0,
     );
 }
+
+#[test]
+fn the_moon_hangs_above_the_sky_generators_moon() {
+    use crate::worldgen::{GeneratorVersion, WorldSettings, sky};
+    let seed = 0x0E00_0042;
+    let sky_world = WorldSettings {
+        generator: GeneratorVersion::V8,
+        ..WorldSettings::new(seed)
+    };
+    let world = WorldState::new_game_with_settings(PLAYER, &sky_world, SimulationParams::new(60));
+    let anchor = world.moon_anchor();
+    assert_eq!(Some(anchor.column), sky::moon_column(&sky_world));
+    assert_eq!(anchor.row, sky::row_of(sky::MOON_BOTTOM_ROWS));
+
+    let old_world = WorldSettings {
+        generator: GeneratorVersion::V7,
+        ..WorldSettings::new(seed)
+    };
+    let world = WorldState::new_game_with_settings(PLAYER, &old_world, SimulationParams::new(60));
+    assert_eq!(
+        world.moon_anchor(),
+        crate::clock::default_moon_anchor(seed),
+        "worlds without a sky keep the seed's backdrop Moon"
+    );
+}

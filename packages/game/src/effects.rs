@@ -695,7 +695,7 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::BaseServiceUsed { player_id, .. }
         | GameplayEventKind::GotUp { player_id }
         | GameplayEventKind::SleepRuleChanged { player_id, .. } => Some(player_id),
-        | GameplayEventKind::SkyBandEntered { player_id, .. }
+        GameplayEventKind::SkyBandEntered { player_id, .. }
         | GameplayEventKind::UpdraftCaught { player_id }
         | GameplayEventKind::RigIcing { player_id } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged

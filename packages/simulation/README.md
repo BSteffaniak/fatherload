@@ -973,10 +973,12 @@ ClockState::offset_millis`, so it is deterministic, tick-rate safe and replicate
   (the underground is dark whatever the time), or the brightest source in reach: rig lamps,
   lamp fixtures, village and town streets, lava, magma vents and glowing cave growths. Night
   monsters (T25) and others may branch on it.
-- **The Moon's place (seam for T16/T22).** `WorldState::moon_anchor()` returns a `MoonAnchor`
-  (column, underside row); today `clock::default_moon_anchor(seed)`: a column 2,400-4,800 tiles
-  east or west of town, row `DEFAULT_MOON_ROW`. The sky generator should replace the body of
-  `moon_anchor()` with the real landmass's placement; the game draws the Moon above it.
+- **The Moon's place.** `WorldState::moon_anchor()` returns a `MoonAnchor` (column, underside
+  row). On a V8+ world it is the real Moon landmass (`worldgen::sky::moon`: its column and
+  `row_of(MOON_BOTTOM_ROWS)`); older generators fall back to `clock::default_moon_anchor(seed)`
+  (a column 2,400-4,800 tiles east or west of town, row `DEFAULT_MOON_ROW`). The game draws the
+  phased backdrop Moon above the anchor and, on V8, fades it out as the real Moon's looming
+  underside (`sky_lands`) takes over from the continents up.
 - **Scenario setup.** `set_world_time_millis` (tests and screenshot scenes).
 - **Formats.** `PROTOCOL_VERSION` 11 and save format 9 (version 8 saves load as is) cover the
   clock; the integrator may collapse these bumps with the other wave 3 tracks'.

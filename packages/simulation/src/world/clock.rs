@@ -91,11 +91,19 @@ impl WorldState {
         self.clock.offset_millis = world_millis.saturating_sub(self.tick_millis());
     }
 
-    /// Where the Moon hangs over the world (see [`MoonAnchor`]). The seam for the sky generator
-    /// (T16/T22): today the seed's default column.
+    /// Where the Moon hangs over the world (see [`MoonAnchor`]). On a world with a sky
+    /// (generator V8+) this is the real Moon landmass ([`crate::worldgen::sky::moon`]): its
+    /// column and the row of its underside's lowest point. Older generators have no Moon
+    /// landmass, so their backdrop Moon hangs above the seed's default column.
     #[must_use]
-    pub const fn moon_anchor(&self) -> MoonAnchor {
-        default_moon_anchor(self.terrain.seed())
+    pub fn moon_anchor(&self) -> MoonAnchor {
+        crate::worldgen::sky::moon(self.terrain.settings()).map_or_else(
+            || default_moon_anchor(self.terrain.seed()),
+            |moon| MoonAnchor {
+                column: moon.center_x,
+                row: crate::worldgen::sky::row_of(crate::worldgen::sky::MOON_BOTTOM_ROWS),
+            },
+        )
     }
 
     /// Whether `player_id` is in bed.

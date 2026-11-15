@@ -11,8 +11,8 @@
 
 pub mod base;
 pub mod cave;
-pub mod clock;
 pub mod climb;
+pub mod clock;
 pub mod combat;
 pub mod command;
 pub mod contract;
