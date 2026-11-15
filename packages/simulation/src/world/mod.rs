@@ -26,6 +26,8 @@ mod bombs;
 #[cfg(test)]
 mod cave_tests;
 mod caves;
+#[cfg(test)]
+mod charge_equivalence_tests;
 mod commands;
 #[cfg(test)]
 mod determinism_tests;
@@ -371,6 +373,13 @@ impl WorldState {
     #[must_use]
     pub fn bombs(&self) -> &[PlacedBomb] {
         &self.bombs
+    }
+
+    /// Adds a charge as-is (building a scenario world before play: tests, capture scenes).
+    /// Keeps the charge id counter ahead of it.
+    pub fn insert_charge(&mut self, bomb: PlacedBomb) {
+        self.next_bomb_id = self.next_bomb_id.max(bomb.id.saturating_add(1));
+        self.bombs.push(bomb);
     }
 
     #[must_use]
