@@ -112,14 +112,28 @@ fn a_stalactite_over_a_rig_falls() {
     let mut world = world();
     let origin = TilePosition { x: 400, y: 120 };
     pocket(&mut world, origin, 6, 7);
-    let hanging = TilePosition { x: 403, y: 120 };
+    // A loose one (most stalactites hold for good, see `stalactite_is_loose`).
+    let seed = world.terrain().seed();
+    let hanging = (origin.x..origin.x + 6)
+        .map(|x| TilePosition { x, y: 120 })
+        .find(|&tile| super::caves::stalactite_is_loose(seed, tile))
+        .expect("a loose stalactite tile along the ceiling");
     world
         .terrain_mut()
         .set_kind(hanging, TileKind::Cave(CaveTile::Stalactite));
-    put_rig(&mut world, TilePosition { x: 403, y: 126 });
+    put_rig(
+        &mut world,
+        TilePosition {
+            x: hanging.x,
+            y: 126,
+        },
+    );
     let boulders = world.entities().count_of(EntityKind::Boulder);
     let events = tick(&mut world, idle());
-    assert!(events.contains(&GameplayEventKind::StalactiteFell { x: 403, y: 120 }));
+    assert!(events.contains(&GameplayEventKind::StalactiteFell {
+        x: hanging.x,
+        y: 120
+    }));
     assert_eq!(
         world.terrain().tile(hanging).map(|tile| tile.kind),
         Some(TileKind::Air)

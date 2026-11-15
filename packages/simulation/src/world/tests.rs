@@ -1164,6 +1164,16 @@ fn canonical_explosive_pocket_schedules_deterministic_cave_in() {
     player.x = 20.0 * TILE_SIZE;
     player.y = 10.0 * TILE_SIZE;
     let target = TilePosition { x: 20, y: 11 };
+    // The rig stands in a three-wide, two-high room the boulders can hang in.
+    for x in 19..=21 {
+        for y in 8..=10 {
+            assert!(
+                world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x, y }, TileKind::Air)
+            );
+        }
+    }
     assert!(
         world
             .terrain_mut()

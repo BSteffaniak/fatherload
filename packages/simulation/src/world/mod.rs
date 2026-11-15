@@ -28,6 +28,8 @@ mod bases;
 mod bomb_tests;
 mod bombs;
 #[cfg(test)]
+mod boulder_tests;
+#[cfg(test)]
 mod cave_tests;
 mod caves;
 #[cfg(test)]
@@ -268,6 +270,10 @@ pub struct CanonicalProgressionState {
     /// Quests accepted in crew mode, shared with every player.
     #[serde(default)]
     pub crew_quests: crate::quest::CrewQuests,
+    /// Ground that recently came down and holds for a while (see
+    /// [`crate::hazard::SettledGround`]).
+    #[serde(default)]
+    pub settled_ground: crate::hazard::SettledGround,
 }
 
 /// The canonical gameplay world.

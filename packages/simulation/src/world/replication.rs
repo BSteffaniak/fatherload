@@ -7,7 +7,7 @@
 //! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); bombs and entity counters ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
 //! | Per-tick delta | entities (gas clouds, falling boulders, drops, ...): relevance-filtered spawns, changes (by [`crate::entity::Entity::revision`]) and despawns ([`crate::entity::EntityDelta`]) against each receiver's baseline | [`WorldState::entity_revisions`], [`WorldState::entity_record`], [`WorldState::apply_entity_delta`] |
 //! | Op log | terrain tiles (shared; a client outside a chunk's relevance skips its ops and gets [`WorldState::terrain_chunk`] (the chunk's diffs from generation) when it approaches); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
-//! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, quest log, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants, test-mode toggles, crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs), bases (claims, modules, fixtures), the world clock (day length, skipped nights, sleepers), people (character memories, conversations, perks) | [`WorldState::section`], [`WorldState::apply_section`] |
+//! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, quest log, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers (with settled ground), session constants, test-mode toggles, crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs), bases (claims, modules, fixtures), the world clock (day length, skipped nights, sleepers), people (character memories, conversations, perks) | [`WorldState::section`], [`WorldState::apply_section`] |
 //!
 //! Private state (a player's [`PlayerLoadout`] and discovery) is replicated only to its owner;
 //! see [`super::visibility`] for the client-visible state hash and keyframe redaction.
@@ -150,6 +150,9 @@ pub struct TimersSection {
     pub escape_deadline: Option<SimulationTick>,
     /// Twin-relay vault locks waiting for their second relay.
     pub vault_relay_deadlines: BTreeMap<crate::worldgen::FeatureId, SimulationTick>,
+    /// Ground that recently came down and holds for a while.
+    #[serde(default)]
+    pub settled_ground: crate::hazard::SettledGround,
 }
 
 /// Session constants: fixed for the lifetime of a session.
@@ -447,6 +450,7 @@ impl WorldState {
             next_day_tick,
             vault_relay_deadlines,
             crew_quests,
+            settled_ground,
         } = progression;
         Some(match key {
             SectionKey::Loadout(player_id) => {
@@ -505,6 +509,7 @@ impl WorldState {
                 next_day_tick: *next_day_tick,
                 escape_deadline: *escape_deadline,
                 vault_relay_deadlines: vault_relay_deadlines.clone(),
+                settled_ground: settled_ground.clone(),
             }),
             SectionKey::Session => SectionPayload::Session(Box::new(SessionSection {
                 timing: *timing,
@@ -639,10 +644,12 @@ impl WorldState {
                     next_day_tick,
                     escape_deadline,
                     vault_relay_deadlines,
+                    settled_ground,
                 } = timers;
                 self.progression.next_day_tick = next_day_tick;
                 self.progression.escape_deadline = escape_deadline;
                 self.progression.vault_relay_deadlines = vault_relay_deadlines;
+                self.progression.settled_ground = settled_ground;
             }
             (SectionKey::Session, SectionPayload::Session(session)) => {
                 let SessionSection {

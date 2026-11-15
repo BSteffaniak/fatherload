@@ -52,13 +52,17 @@ pub const AUTHORITATIVE_DESCENT_BRAKE_MULTIPLIER: f32 = 1.25;
 pub const AUTHORITATIVE_MAX_CLIMB_SPEED: f32 = 190.0;
 /// Vertical air resistance (per second): velocity relaxes toward `acceleration / rate`.
 pub const AUTHORITATIVE_VERTICAL_DRAG_RATE_PER_SECOND: f32 = 0.7;
-/// Warning time before a boulder loosened by mining starts to fall.
-pub const AUTHORITATIVE_BOULDER_WARNING_MILLIS: u64 = 1_500;
+/// Warning time before a boulder loosened by mining starts to fall (it shakes and sheds dust
+/// first; was 1.5 s).
+pub const AUTHORITATIVE_BOULDER_WARNING_MILLIS: u64 = 2_000;
 /// Lifetime of a boulder loosened by mining.
 pub const AUTHORITATIVE_BOULDER_LIFE_MILLIS: u64 = 4_200;
-/// One in this many mined stone tiles loosens a boulder (per mined tile, not per tick, so it is
-/// independent of the tick rate). Was one in 16; boulders are a rare surprise now.
-pub const AUTHORITATIVE_BOULDER_SPAWN_CHANCE: u64 = 80;
+/// One in this many mined stone tiles loosens a boulder.
+///
+/// Rolled per mined tile, not per tick, so it is independent of the tick rate. Was one in 16, then one in 80; boulders are a rare surprise
+/// now, and a loosened one also needs open ground to hang in and unsettled ground
+/// (`world/hazards.rs`).
+pub const AUTHORITATIVE_BOULDER_SPAWN_CHANCE: u64 = 400;
 
 /// One in this many stone tiles mined by a drill of `drill_strength` loosens a boulder.
 ///
@@ -70,10 +74,10 @@ pub const fn boulder_spawn_chance(drill_strength: u8) -> u64 {
     let bite = drill_bite(drill_strength) as u64;
     AUTHORITATIVE_BOULDER_SPAWN_CHANCE * bite * bite
 }
-/// Warning time of the centre boulder of a cave-in.
-pub const AUTHORITATIVE_CAVE_IN_WARNING_MILLIS: u64 = 900;
+/// Warning time of the centre boulder of a cave-in (was 0.9 s).
+pub const AUTHORITATIVE_CAVE_IN_WARNING_MILLIS: u64 = 1_500;
 /// Extra warning time per tile away from the centre of a cave-in.
-pub const AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS: u64 = 200;
+pub const AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS: u64 = 250;
 /// Lifetime of cave-in boulders.
 pub const AUTHORITATIVE_CAVE_IN_LIFE_MILLIS: u64 = 4_000;
 pub const AUTHORITATIVE_FUEL_BURN_PER_SECOND: f32 = 5.0;

@@ -39,7 +39,19 @@ pub const CRITTER_DESPAWN_RANGE: f32 = 64.0;
 /// Most critters one cave holds.
 pub const MAX_CRITTERS_PER_CAVE: usize = 8;
 
+/// One stalactite in this many is loose enough to fall on a rig passing under it (a fixed roll
+/// per tile); the rest are part of the cave's ceiling for good.
+pub const STALACTITE_LOOSE_ODDS: u64 = 3;
+
 const SALT_CRITTER: u64 = 0xC217_7E25;
+const SALT_STALACTITE: u64 = 0x57A1_AC71;
+
+/// Whether the stalactite at `tile` on `seed`'s world is a loose one (see
+/// [`STALACTITE_LOOSE_ODDS`]).
+#[must_use]
+pub const fn stalactite_is_loose(seed: u64, tile: TilePosition) -> bool {
+    hash2(seed, SALT_STALACTITE, tile.x, tile.y).is_multiple_of(STALACTITE_LOOSE_ODDS)
+}
 
 impl WorldState {
     /// Records caves rigs enter for the first time ("Found: Crystal Geode").
@@ -64,8 +76,9 @@ impl WorldState {
         }
     }
 
-    /// Breaks off any stalactite hanging over a rig with nothing in between: it cracks, then
-    /// falls (a falling boulder that shatters on the rig or the floor).
+    /// Breaks off a loose stalactite ([`stalactite_is_loose`]) hanging over a rig with nothing in
+    /// between, on unsettled ground: it cracks, then falls (a falling boulder that shatters on
+    /// the rig or the floor).
     pub(super) fn trigger_stalactites(&mut self, output: &mut TickOutput) {
         if !self.terrain.settings().generator.has_cave_biomes() {
             return;
@@ -75,6 +88,7 @@ impl WorldState {
             .values()
             .map(|player| player.tile_position(TILE_SIZE))
             .collect();
+        let seed = self.terrain.seed();
         let mut loosened = BTreeSet::new();
         for rig in rigs {
             for dx in -1..=1 {
@@ -87,7 +101,9 @@ impl WorldState {
                         break;
                     };
                     if found.kind == TileKind::Cave(CaveTile::Stalactite) {
-                        loosened.insert(tile);
+                        if stalactite_is_loose(seed, tile) {
+                            loosened.insert(tile);
+                        }
                         break;
                     }
                     if found.kind != TileKind::Air {
@@ -97,7 +113,9 @@ impl WorldState {
             }
         }
         for tile in loosened {
-            if !self.terrain.set_kind(tile, TileKind::Air) {
+            // Each break settles the ground around it for a while (`world/hazards.rs`), so a
+            // ceiling full of stalactites drops one at a time, not in a shower.
+            if !self.loosen_ground(tile) || !self.terrain.set_kind(tile, TileKind::Air) {
                 continue;
             }
             #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]

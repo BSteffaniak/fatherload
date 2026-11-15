@@ -96,9 +96,10 @@ impl WorldState {
                 if let Some(player) = self.players.values().next() {
                     let x = player.x;
                     let y = player.y;
-                    self.spawn_cave_in(x, y);
+                    if self.try_cave_in(x, y) {
+                        output.push_event(GameplayEventKind::BouldersChanged);
+                    }
                 }
-                output.push_event(GameplayEventKind::BouldersChanged);
             }
             WorldEventKind::MarketCrash
             | WorldEventKind::MarketBoom

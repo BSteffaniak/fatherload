@@ -21,10 +21,7 @@ use crate::{
 
 use super::{
     ActiveDrillTimer, WorldState,
-    movement::{
-        AUTHORITATIVE_BOULDER_LIFE_MILLIS, AUTHORITATIVE_BOULDER_SPAWN_CHANCE,
-        AUTHORITATIVE_BOULDER_WARNING_MILLIS, boulder_spawn_chance,
-    },
+    movement::{AUTHORITATIVE_BOULDER_SPAWN_CHANCE, boulder_spawn_chance},
     quests::QuestNotes,
 };
 
@@ -56,6 +53,8 @@ impl WorldState {
         let timing = self.timing;
         let delta_seconds = timing.delta_seconds;
         self.terrain.start_journal();
+        // Collapsed ground whose hold has run out may move again.
+        self.progression.settled_ground.prune(self.simulation_tick);
         let mut quest_notes = QuestNotes::default();
         for (&player_id, input) in &inputs.players {
             // On foot the held controls drive the pilot (`advance_pilots`); the parked rig
@@ -369,32 +368,13 @@ impl WorldState {
                     self.start_escape(next_tick, player_id, &mut output);
                 }
                 MineResult::Mined(TileKind::Stone | TileKind::HardRock) => {
-                    #[allow(
-                        clippy::cast_precision_loss,
-                        clippy::cast_sign_loss,
-                        clippy::suboptimal_flops,
-                        reason = "terrain coordinates deterministically reproduce the legacy hazard schedule"
-                    )]
-                    let (value, boulder_x, boulder_y) = (
-                        self.terrain.seed()
-                            ^ ((target.x as u64).wrapping_mul(0x9E37))
-                            ^ ((target.y as u64).wrapping_mul(0x85EB)),
-                        target.x as f32 * TILE_SIZE + TILE_SIZE * 0.5,
-                        (target.y as f32 - 1.0) * TILE_SIZE,
-                    );
                     let chance = self
                         .players
                         .get(&player_id)
                         .map_or(AUTHORITATIVE_BOULDER_SPAWN_CHANCE, |player| {
                             boulder_spawn_chance(player.drill_strength)
                         });
-                    if value.is_multiple_of(chance) {
-                        self.spawn_falling_boulder(
-                            boulder_x,
-                            boulder_y,
-                            AUTHORITATIVE_BOULDER_WARNING_MILLIS,
-                            AUTHORITATIVE_BOULDER_LIFE_MILLIS,
-                        );
+                    if self.loosen_mining_boulder(target, chance) {
                         output.push_event(GameplayEventKind::BouldersChanged);
                     }
                 }
@@ -409,7 +389,7 @@ impl WorldState {
                 MineResult::Blast => {
                     if let Some(player) = self.players.get(&player_id) {
                         let (player_x, player_y) = (player.x, player.y);
-                        self.spawn_cave_in(player_x, player_y);
+                        let _loose = self.spawn_cave_in(player_x, player_y);
                     }
                     output.push_event(GameplayEventKind::HazardChanged);
                     output.push_event(GameplayEventKind::BouldersChanged);
@@ -524,8 +504,9 @@ impl WorldState {
             && let Some(player) = self.players.values().next()
         {
             let (x, y) = (player.x, player.y);
-            self.spawn_cave_in(x, y);
-            output.push_event(GameplayEventKind::BouldersChanged);
+            if self.spawn_cave_in(x, y) {
+                output.push_event(GameplayEventKind::BouldersChanged);
+            }
         }
         if rate.schedule_fires(
             next_tick,

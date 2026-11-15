@@ -36,7 +36,7 @@ use crate::{
 
 use super::{
     WorldState,
-    hazards::BOULDER_HIT_DAMAGE,
+    hazards::{BOULDER_HIT_DAMAGE, BOULDER_RADIUS},
     movement::{AUTHORITATIVE_GRAVITY, AUTHORITATIVE_PLAYER_RADIUS},
 };
 
@@ -239,7 +239,9 @@ impl WorldState {
     }
 
     /// A boulder hangs until its warning deadline, then falls; it shatters on a rig (damaging
-    /// it, less with the boulder deflector) or on rock, and crumbles at its expiry.
+    /// it, less with the boulder deflector) or when its lower edge meets solid ground, and
+    /// crumbles at its expiry. Spawns only hang boulders in open ground, so nothing shatters
+    /// without falling onto something.
     fn advance_boulder(
         &mut self,
         id: EntityId,
@@ -291,14 +293,17 @@ impl WorldState {
             )]
             let tile = TilePosition {
                 x: (body.x / TILE_SIZE).floor() as i32,
-                y: (body.y / TILE_SIZE).floor() as i32,
+                y: ((body.y + BOULDER_RADIUS) / TILE_SIZE).floor() as i32,
             };
             if self.terrain.is_solid_at(tile) {
-                // It shatters on the rock, leaving a stone block of rubble (WP-DROPS).
+                // Its lower edge meets the ground: it shatters there, leaving a stone block of
+                // rubble (WP-DROPS) on top of what it hit.
                 self.entities.despawn(id);
+                #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
+                let ground = tile.y as f32 * TILE_SIZE;
                 let _rubble = self.spawn_loot(
                     body.x,
-                    TILE_SIZE.mul_add(-0.5, body.y),
+                    (ground - BOULDER_RADIUS).min(body.y),
                     (0.0, -60.0),
                     ItemStack::new(ItemKind::Block(BlockKind::Stone), 1),
                     None,

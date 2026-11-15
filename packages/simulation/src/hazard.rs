@@ -1,4 +1,5 @@
-//! Live hazard entities: gas clouds, falling boulders, placed bombs, and scanner markers.
+//! Live hazard entities (gas clouds, falling boulders, placed bombs, scanner markers) and the
+//! ground that settles after a collapse.
 
 use serde::{Deserialize, Serialize};
 
@@ -77,4 +78,81 @@ pub struct FallingBoulder {
 pub struct ScanMarker {
     pub position: TilePosition,
     pub kind: TileKind,
+}
+
+/// Ground that came down recently and holds for a while.
+///
+/// Every loosened boulder, cave-in or stalactite settles its cell of [`SettledGround::CELL_TILES`] square tiles until a deadline,
+/// and no random collapse (mining boulders, collapse surges, deep-run pressure, earthquakes,
+/// stalactites) starts in or next to a settled cell. This is what keeps one unstable spot from
+/// raining boulders over and over.
+///
+/// Kept sorted by cell; expired cells are pruned every tick.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct SettledGround {
+    cells: Vec<SettledCell>,
+}
+
+/// One settled cell (cell coordinates are tile coordinates divided by
+/// [`SettledGround::CELL_TILES`], rounding down) and the tick it may move again.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct SettledCell {
+    pub x: i32,
+    pub y: i32,
+    pub until: crate::SimulationTick,
+}
+
+impl SettledGround {
+    /// Side of a settled cell, in tiles.
+    pub const CELL_TILES: i32 = 8;
+
+    /// The cell holding `tile`.
+    #[must_use]
+    pub const fn cell_of(tile: TilePosition) -> (i32, i32) {
+        (
+            tile.x.div_euclid(Self::CELL_TILES),
+            tile.y.div_euclid(Self::CELL_TILES),
+        )
+    }
+
+    /// Whether nothing is settled.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.cells.is_empty()
+    }
+
+    /// The settled cells, sorted by cell.
+    #[must_use]
+    pub fn cells(&self) -> &[SettledCell] {
+        &self.cells
+    }
+
+    /// Whether `tile`'s cell or one of its eight neighbours is still settled at `now`.
+    #[must_use]
+    pub fn holds(&self, tile: TilePosition, now: crate::SimulationTick) -> bool {
+        let (x, y) = Self::cell_of(tile);
+        self.cells
+            .iter()
+            .any(|cell| (cell.x - x).abs() <= 1 && (cell.y - y).abs() <= 1 && now < cell.until)
+    }
+
+    /// Settles `tile`'s cell until `until` (keeping a later deadline already there).
+    pub fn settle(&mut self, tile: TilePosition, until: crate::SimulationTick) {
+        let (x, y) = Self::cell_of(tile);
+        match self
+            .cells
+            .binary_search_by(|cell| (cell.x, cell.y).cmp(&(x, y)))
+        {
+            Ok(index) => {
+                let cell = &mut self.cells[index];
+                cell.until = cell.until.max(until);
+            }
+            Err(index) => self.cells.insert(index, SettledCell { x, y, until }),
+        }
+    }
+
+    /// Forgets cells whose deadline has passed.
+    pub fn prune(&mut self, now: crate::SimulationTick) {
+        self.cells.retain(|cell| now < cell.until);
+    }
 }

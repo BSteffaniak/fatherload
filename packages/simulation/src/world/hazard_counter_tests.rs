@@ -310,31 +310,30 @@ fn the_boulder_deflector_turns_boulders_aside() {
 
 #[test]
 fn boulders_fall_rarely_and_with_a_long_warning() {
-    // One in 16 mined stone tiles used to loosen a boulder with under a second of warning.
-    const { assert!(AUTHORITATIVE_BOULDER_SPAWN_CHANCE >= 64) };
-    const { assert!(AUTHORITATIVE_BOULDER_WARNING_MILLIS >= 1_500) };
-    const { assert!(AUTHORITATIVE_CAVE_IN_WARNING_MILLIS >= 900) };
+    // One in 16 mined stone tiles used to loosen a boulder with under a second of warning,
+    // then one in 80 with 1.5 s (cave-ins 0.9 s); the playtest still found them a nuisance.
+    const { assert!(AUTHORITATIVE_BOULDER_SPAWN_CHANCE >= 400) };
+    const { assert!(AUTHORITATIVE_BOULDER_WARNING_MILLIS >= 2_000) };
+    const { assert!(AUTHORITATIVE_CAVE_IN_WARNING_MILLIS >= 1_500) };
 
-    // Mining a long stone corridor loosens few boulders (the same per-tile roll the tick uses).
+    // Mining a long stone corridor rolls few boulders (the per-tile roll the tick uses; each
+    // also needs open ground to hang in and unsettled ground).
     let world = pocket_world(TileKind::Dirt);
     let mut boulders = 0;
-    for x in 0..400 {
+    for x in 0..2_000 {
         let position = TilePosition {
-            x: x % 200 + 20,
-            y: 40 + x / 200,
+            x: x % 500 + 20,
+            y: 40 + x / 500,
         };
-        let value = world.terrain().seed()
-            ^ (u64::try_from(position.x)
-                .expect("positive")
-                .wrapping_mul(0x9E37))
-            ^ (u64::try_from(position.y)
-                .expect("positive")
-                .wrapping_mul(0x85EB));
-        if value.is_multiple_of(AUTHORITATIVE_BOULDER_SPAWN_CHANCE) {
+        if super::hazards::mining_boulder_roll(
+            world.terrain().seed(),
+            position,
+            AUTHORITATIVE_BOULDER_SPAWN_CHANCE,
+        ) {
             boulders += 1;
         }
     }
-    assert!(boulders <= 20, "{boulders} boulders in 400 stone tiles");
+    assert!(boulders <= 20, "{boulders} boulders in 2,000 stone tiles");
 }
 
 #[test]
