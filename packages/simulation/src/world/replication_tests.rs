@@ -9,7 +9,13 @@ use super::{
     SectionKey, SectionPayload, WorldState,
     determinism_tests::{scripted_inputs, scripted_world},
 };
-use crate::{LiveEntities, PlayerId, PlayerTickState, SimulationTick, TickOutput};
+use crate::{
+    LiveEntities, PlayerId, PlayerTickState, SimulationTick, TickOutput,
+    entity::{Entity, EntityDelta, EntityId, EntityKind},
+    hazard::{FallingBoulder, HazardCloud},
+    item::{ItemKind, ItemStack},
+    terrain::{MineralKind, TILE_SIZE},
+};
 
 /// Round-trips a value through the binary wire codec, as the network would.
 fn wire<T: Serialize + DeserializeOwned>(value: &T) -> T {
@@ -24,6 +30,10 @@ struct Baseline {
     sent: usize,
     /// `Some(viewer)`: replicate only what a client playing `viewer` may see.
     viewer: Option<PlayerId>,
+    /// Entities the replica holds, with their revisions (as the netcode host keeps them).
+    entities: Vec<(EntityId, u64)>,
+    /// Entity records sent so far.
+    entity_records_sent: usize,
 }
 
 impl Baseline {
@@ -51,6 +61,29 @@ impl Baseline {
         self.sent += changed.len();
         changed
     }
+
+    /// New or changed entity records and the ids the replica must drop.
+    fn entity_delta(&mut self, authority: &WorldState) -> EntityDelta {
+        let current = authority.entity_revisions(None, None);
+        let held: BTreeMap<EntityId, u64> = self.entities.iter().copied().collect();
+        let updates: Vec<Entity> = current
+            .iter()
+            .filter(|(id, revision)| held.get(id) != Some(revision))
+            .filter_map(|(id, _)| authority.entity_record(*id))
+            .collect();
+        let despawned = held
+            .keys()
+            .filter(|id| {
+                current
+                    .binary_search_by_key(*id, |(other, _)| *other)
+                    .is_err()
+            })
+            .copied()
+            .collect();
+        self.entity_records_sent += updates.len();
+        self.entities = current;
+        EntityDelta { updates, despawned }
+    }
 }
 
 fn replicate_tick(
@@ -69,6 +102,7 @@ fn replicate_tick(
     }
     let entities: LiveEntities = wire(&authority.live_entities());
     replica.apply_live_entities(entities);
+    replica.apply_entity_delta(wire(&baseline.entity_delta(authority)));
     for op in wire(&output.terrain_ops) {
         replica.apply_tile_change(&op);
     }
@@ -121,6 +155,94 @@ fn keyframe_plus_section_updates_reach_identical_hashes() {
     assert!(
         updates < 6_000 * authority.section_keys().len() / 4,
         "on-change sections are not resent every tick: {updates}"
+    );
+}
+
+/// The scripted world plus gas clouds, a boulder and a scatter of drops along the surface (the
+/// bots dig and bomb under some of them).
+fn world_with_entities() -> WorldState {
+    let mut world = scripted_world();
+    let spawn_x = super::NEW_WORLD_SPAWN.0;
+    for index in 0..60_u16 {
+        let x = f32::from(index).mul_add(20.0, spawn_x - 300.0);
+        let lifetime = (index % 4 == 0).then_some(15_000 + u64::from(index) * 100);
+        world.spawn_item_drop(
+            x,
+            TILE_SIZE,
+            (f32::from(index % 7) * 10.0 - 30.0, 0.0),
+            ItemStack::new(ItemKind::Mineral(MineralKind::Iron), 1),
+            lifetime,
+        );
+    }
+    world.restore_legacy_live_entities(
+        vec![HazardCloud {
+            x: spawn_x,
+            y: 6.0 * TILE_SIZE,
+            life: 9.0,
+            radius: 12.0,
+        }],
+        vec![FallingBoulder {
+            x: spawn_x + 64.0,
+            y: 2.0 * TILE_SIZE,
+            velocity_y: 0.0,
+            warning_seconds: 1.0,
+            life: 4.0,
+        }],
+        &[SimulationTick::new(60)],
+        &[SimulationTick::new(240)],
+    );
+    world
+}
+
+#[test]
+fn entity_deltas_keep_a_replica_exact_and_skip_sleeping_entities() {
+    let mut authority = world_with_entities();
+    let mut replica: WorldState = wire(&authority);
+    let mut baseline = Baseline::default();
+    let _ = baseline.changed_sections(&authority);
+    // The keyframe carries every entity.
+    baseline.entities = authority.entity_revisions(None, None);
+    let mut entity_ticks = 0;
+    let mut saw_sleep = false;
+    let mut woke = false;
+    for tick in 0..3_000 {
+        let asleep_before = authority.entities().len() - authority.entities().awake_count();
+        let inputs = scripted_inputs(tick);
+        let output = authority.simulate_tick(SimulationTick::new(tick), &inputs);
+        replicate_tick(&mut replica, &authority, &output, &mut baseline);
+        assert_eq!(
+            replica.simulation_state_hash(),
+            authority.simulation_state_hash(),
+            "replica diverged at tick {}",
+            tick + 1
+        );
+        entity_ticks += authority.entities().len();
+        let asleep = authority.entities().len() - authority.entities().awake_count();
+        saw_sleep |= asleep > 0;
+        woke |= asleep < asleep_before && asleep_before > 0;
+    }
+    authority.entities().assert_indices_consistent();
+    replica.entities().assert_indices_consistent();
+    assert!(saw_sleep, "drops came to rest and slept");
+    assert!(woke, "digging or blasts woke sleeping drops");
+    assert_eq!(
+        authority.entities().count_of(EntityKind::GasCloud),
+        0,
+        "the cloud dispersed"
+    );
+    assert_eq!(
+        authority.entities().count_of(EntityKind::Boulder),
+        0,
+        "the boulder fell"
+    );
+    assert!(
+        authority.entities().count_of(EntityKind::Drop) < 60,
+        "short-lived drops expired"
+    );
+    assert!(
+        baseline.entity_records_sent * 10 < entity_ticks,
+        "resting entities are not resent every tick: {} records for {entity_ticks} entity-ticks",
+        baseline.entity_records_sent
     );
 }
 

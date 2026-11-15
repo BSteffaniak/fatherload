@@ -4,7 +4,8 @@
 //!
 //! | Kind | Contents | API |
 //! |---|---|---|
-//! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); live entities: gas clouds, falling boulders, bombs ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
+//! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); bombs and entity counters ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
+//! | Per-tick delta | entities (gas clouds, falling boulders, drops, ...): relevance-filtered spawns, changes (by [`crate::entity::Entity::revision`]) and despawns ([`crate::entity::EntityDelta`]) against each receiver's baseline | [`WorldState::entity_revisions`], [`WorldState::entity_record`], [`WorldState::apply_entity_delta`] |
 //! | Op log | terrain tiles (shared; a client outside a chunk's relevance skips its ops and gets [`WorldState::terrain_chunk`] (the chunk's diffs from generation) when it approaches); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
 //! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, quest log, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants, test-mode toggles, crew quests | [`WorldState::section`], [`WorldState::apply_section`] |
 //!
@@ -30,7 +31,7 @@ use crate::{
     contract::ContractLog,
     economy::{DeepClaimStatus, TownDevelopment},
     hash::StateHasher,
-    hazard::{FallingBoulder, HazardCloud, PlacedBomb, ScanMarker},
+    hazard::{PlacedBomb, ScanMarker},
     ids::{PlayerId, SimulationTick},
     infrastructure::PlacedInfrastructure,
     progression::{Expedition, LegendaryBlueprint, SideContract, WorldEventKind},
@@ -61,16 +62,22 @@ pub struct PlayerTickState {
     pub deep_run: Option<DeepRunState>,
 }
 
-/// Per-tick live entities. Parallel vectors stay index-aligned.
+/// Per-tick live state sent whole every frame: bombs (relevance-filtered) and the id counters.
+///
+/// The entity store itself replicates incrementally as [`crate::entity::EntityDelta`]s
+/// ([`WorldState::entity_revisions`], [`WorldState::entity_record`],
+/// [`WorldState::apply_entity_delta`]).
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct LiveEntities {
-    pub hazards: Vec<HazardCloud>,
-    pub falling_boulders: Vec<FallingBoulder>,
-    pub boulder_warning_deadlines: Vec<SimulationTick>,
-    pub boulder_expiry_ticks: Vec<SimulationTick>,
     pub bombs: Vec<PlacedBomb>,
     #[serde(default)]
     pub next_bomb_id: u64,
+    /// The entity store's next id.
+    #[serde(default)]
+    pub next_entity_id: u64,
+    /// The entity store's next revision.
+    #[serde(default)]
+    pub next_entity_revision: u64,
 }
 
 /// One player's on-change section.
@@ -287,60 +294,41 @@ impl WorldState {
         set_or_remove(&mut self.deep_run_states, player_id, deep_run);
     }
 
-    /// All live entities.
+    /// Bombs and entity counters.
     #[must_use]
     pub fn live_entities(&self) -> LiveEntities {
         self.live_entities_where(|_, _| true)
     }
 
-    /// Live entities whose world position satisfies `relevant(x, y)` (interest management).
+    /// Bombs whose world position satisfies `relevant(x, y)` (interest management), and the
+    /// entity counters.
     #[must_use]
     pub fn live_entities_where(&self, relevant: impl Fn(f32, f32) -> bool) -> LiveEntities {
-        let mut entities = LiveEntities {
-            next_bomb_id: self.next_bomb_id,
-            hazards: self
-                .hazards
+        LiveEntities {
+            bombs: self
+                .bombs
                 .iter()
-                .filter(|cloud| relevant(cloud.x, cloud.y))
+                .filter(|bomb| relevant(bomb.x, bomb.y))
                 .copied()
                 .collect(),
-            ..LiveEntities::default()
-        };
-        for (index, boulder) in self.falling_boulders.iter().enumerate() {
-            if relevant(boulder.x, boulder.y) {
-                entities.falling_boulders.push(*boulder);
-                entities
-                    .boulder_warning_deadlines
-                    .extend(self.boulder_warning_deadlines.get(index).copied());
-                entities
-                    .boulder_expiry_ticks
-                    .extend(self.boulder_expiry_ticks.get(index).copied());
-            }
+            next_bomb_id: self.next_bomb_id,
+            next_entity_id: self.entities.next_id(),
+            next_entity_revision: self.entities.next_revision(),
         }
-        for bomb in &self.bombs {
-            if relevant(bomb.x, bomb.y) {
-                entities.bombs.push(*bomb);
-            }
-        }
-        entities
     }
 
-    /// Replaces the live entities with a replicated copy.
+    /// Replaces the bombs and entity counters with a replicated copy.
     pub fn apply_live_entities(&mut self, entities: LiveEntities) {
         let LiveEntities {
-            hazards,
-            falling_boulders,
-            boulder_warning_deadlines,
-            boulder_expiry_ticks,
             bombs,
             next_bomb_id,
+            next_entity_id,
+            next_entity_revision,
         } = entities;
-        self.hazards = hazards;
-        self.falling_boulders = falling_boulders;
-        self.boulder_warning_deadlines = boulder_warning_deadlines;
-        self.boulder_expiry_ticks = boulder_expiry_ticks;
         self.bombs = bombs;
         self.next_bomb_id = next_bomb_id;
+        self.entities
+            .set_counters(next_entity_id, next_entity_revision);
     }
 
     /// Applies one op-log entry.
@@ -401,10 +389,7 @@ impl WorldState {
             progression,
             scan_markers,
             collapse_warnings,
-            hazards: _,
-            falling_boulders: _,
-            boulder_warning_deadlines: _,
-            boulder_expiry_ticks: _,
+            entities: _,
             terrain,
             bombs: _,
             infrastructure,

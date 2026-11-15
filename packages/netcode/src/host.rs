@@ -191,6 +191,8 @@ struct RemoteClient<S: NetSimulation> {
     /// Chunks whose ops were skipped while out of relevance (refreshed whole
     /// once relevant again).
     stale_chunks: BTreeSet<S::Chunk>,
+    /// Incrementally replicated entities this client holds, with the revision it holds.
+    entity_baseline: Vec<(S::EntityKey, u64)>,
     pending_events: Vec<NetEvent<S::Event>>,
     stats: HostClientStats,
 }
@@ -214,6 +216,7 @@ impl<S: NetSimulation> RemoteClient<S> {
             roster_sent: Vec::new(),
             pending_ops: Vec::new(),
             stale_chunks: BTreeSet::new(),
+            entity_baseline: Vec::new(),
             pending_events: Vec::new(),
             stats: HostClientStats {
                 input_datagrams: 0,
@@ -240,6 +243,8 @@ impl<S: NetSimulation> RemoteClient<S> {
             .filter_map(|key| world.section_hash(&key).map(|hash| (key, hash)))
             .collect();
         self.roster_sent = world.player_ids();
+        // A keyframe carries every entity.
+        self.entity_baseline = world.entity_revisions(&Relevance::everything());
         self.pending_ops.clear();
         self.stale_chunks.clear();
         self.frame_acc = 0;
@@ -1254,6 +1259,7 @@ fn build_frame<S: NetSimulation>(
     };
 
     let (ops, chunk_refreshes) = relevant_ops(world, &relevance, remote);
+    let (entity_updates, entity_despawns) = entity_delta(world, &relevance, remote);
     let events = std::mem::take(&mut remote.pending_events)
         .into_iter()
         .filter(|event| {
@@ -1280,6 +1286,8 @@ fn build_frame<S: NetSimulation>(
         players,
         far_players,
         entities: world.entities(&relevance),
+        entity_updates,
+        entity_despawns,
         ops,
         chunk_refreshes,
         sections,
@@ -1287,6 +1295,34 @@ fn build_frame<S: NetSimulation>(
         events,
         debug_hash: None,
     }
+}
+
+/// Diffs the entities relevant to a client against what it holds (both lists are in key
+/// order, so this is one merge pass) and moves its baseline forward.
+fn entity_delta<S: NetSimulation>(
+    world: &S,
+    relevance: &Relevance,
+    remote: &mut RemoteClient<S>,
+) -> (Vec<S::EntityRecord>, Vec<S::EntityKey>) {
+    let current = world.entity_revisions(relevance);
+    let baseline = std::mem::take(&mut remote.entity_baseline);
+    let mut updates = Vec::new();
+    let mut despawns = Vec::new();
+    let mut held = baseline.into_iter().peekable();
+    for (key, revision) in &current {
+        while let Some((gone, _)) = held.next_if(|(old, _)| old < key) {
+            despawns.push(gone);
+        }
+        let unchanged = held
+            .next_if(|(old, _)| old == key)
+            .is_some_and(|(_, old_revision)| old_revision == *revision);
+        if !unchanged && let Some(record) = world.entity_record(key) {
+            updates.push(record);
+        }
+    }
+    despawns.extend(held.map(|(gone, _)| gone));
+    remote.entity_baseline = current;
+    (updates, despawns)
 }
 
 /// Takes a client's pending ops: drops ops it may not see, skips ops in

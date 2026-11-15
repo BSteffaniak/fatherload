@@ -8,7 +8,8 @@
 //!   per submitted action so every action's fate is observable exactly once (an ignored action,
 //!   e.g. a purchase without credits, produces no gameplay event).
 //! * Replication maps one-to-one onto the world's replication sections: per-tick
-//!   [`PlayerTickState`] / [`LiveEntities`], the op log ([`WorldOp`]: terrain [`TileChange`]s
+//!   [`PlayerTickState`] / [`LiveEntities`] (bombs and id counters), the entity store as
+//!   incremental per-client deltas ([`Entity`] records by [`EntityId`] and revision), the op log ([`WorldOp`]: terrain [`TileChange`]s
 //!   and per-player [`Discovery`] reveals) and on-change [`SectionKey`] / [`SectionPayload`]
 //!   sections. The keyframe is the world itself, whose terrain serializes as generation
 //!   settings plus the tiles that differ from generation (the client regenerates the rest and
@@ -23,7 +24,9 @@
 use fatherload_simulation::{
     ControlState, Discovery, GameplayEvent, GameplayEventKind, InputSequence, LiveEntities,
     PlayerCommand, PlayerScopedCommandOutcome, PlayerTickState, SectionKey, SectionPayload,
-    SimulationTick, TILE_SIZE, TickAction, TileChange, WorldState, input,
+    SimulationTick, TILE_SIZE, TickAction, TileChange, WorldState,
+    entity::{Entity, EntityDelta, EntityId},
+    input,
     terrain::{CHUNK_SIZE_TILES, ChunkPosition, TileDiffs},
 };
 use serde::{Deserialize, Serialize};
@@ -133,6 +136,8 @@ impl NetSimulation for WorldState {
     type Event = WorldEvent;
     type PlayerState = PlayerTickState;
     type Entities = LiveEntities;
+    type EntityKey = EntityId;
+    type EntityRecord = Entity;
     type Op = WorldOp;
     type Chunk = ChunkPosition;
     type ChunkSnapshot = TileDiffs;
@@ -312,6 +317,21 @@ impl NetSimulation for WorldState {
 
     fn apply_entities(&mut self, entities: LiveEntities) {
         self.apply_live_entities(entities);
+    }
+
+    fn entity_revisions(&self, relevance: &Relevance) -> Vec<(EntityId, u64)> {
+        if relevance.is_infinite() {
+            return Self::entity_revisions(self, None, None);
+        }
+        Self::entity_revisions(self, relevance.center, relevance.radius)
+    }
+
+    fn entity_record(&self, key: &EntityId) -> Option<Entity> {
+        Self::entity_record(self, *key)
+    }
+
+    fn apply_entity_delta(&mut self, updates: Vec<Entity>, despawned: Vec<EntityId>) {
+        Self::apply_entity_delta(self, EntityDelta { updates, despawned });
     }
 
     fn op_chunk(&self, op: &WorldOp) -> Option<ChunkPosition> {

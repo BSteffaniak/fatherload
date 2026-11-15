@@ -320,12 +320,14 @@ pub struct RenderSnapshot<'w> {
     /// The session tick rate (quest timers in seconds).
     pub tick_rate: TickRate,
     pub terrain: &'w Terrain,
-    pub hazards: &'w [HazardCloud],
+    /// Gas clouds (entities, copied out of the world's entity store).
+    pub hazards: Vec<HazardCloud>,
     pub bombs: &'w [PlacedBomb],
     /// Presentation fraction between a bomb's previous and current fixed-tick poses.
     pub bomb_alpha: f32,
     pub infrastructure: &'w [PlacedInfrastructure],
-    pub boulders: &'w [FallingBoulder],
+    /// Falling boulders (entities, copied out of the world's entity store).
+    pub boulders: Vec<FallingBoulder>,
     pub sparks: &'w [SparkParticle],
     /// Bomb blasts in progress.
     pub explosions: &'w [Explosion],

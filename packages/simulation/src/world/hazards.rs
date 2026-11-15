@@ -1,14 +1,12 @@
 //! World-event hazards, deep-run pressure, and falling boulders.
 
-use std::mem;
-
 use crate::{
     event::{GameplayEventKind, TickOutput},
     hazard::{FallingBoulder, HazardCloud},
     ids::{PlayerId, SimulationTick},
     progression::WorldEventKind,
     quantize::quantize_simulation_scalar,
-    terrain::{DeepStratum, MineralKind, TILE_SIZE, TilePosition},
+    terrain::{DeepStratum, MineralKind, TILE_SIZE},
     worldgen::Band,
 };
 
@@ -16,8 +14,7 @@ use super::{
     WorldState,
     movement::{
         AUTHORITATIVE_CAVE_IN_LIFE_MILLIS, AUTHORITATIVE_CAVE_IN_WARNING_MILLIS,
-        AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS, AUTHORITATIVE_GRAVITY,
-        AUTHORITATIVE_PLAYER_RADIUS,
+        AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS,
     },
 };
 
@@ -68,7 +65,7 @@ impl WorldState {
                 .rate
                 .schedule_fires(next_tick, GAS_BLOOM_PERIOD_MILLIS, 0)
         {
-            self.hazards.push(HazardCloud {
+            self.spawn_gas_cloud(HazardCloud {
                 x: player_x,
                 y: player_y + TILE_SIZE,
                 life: 6.0,
@@ -145,12 +142,13 @@ impl WorldState {
                 .schedule_fires(next_tick, RARE_CARGO_GAS_PERIOD_MILLIS, 0)
         {
             let player = self.players.get(&player_id).expect("player remains valid");
-            self.hazards.push(HazardCloud {
+            let cloud = HazardCloud {
                 x: player.x,
                 y: player.y + TILE_SIZE,
                 life: 5.0,
                 radius: 10.0 + f32::from(u16::try_from(rare_cargo).unwrap_or(u16::MAX)).min(4.0),
-            });
+            };
+            super::entities::spawn_gas_cloud_into(&mut self.entities, self.simulation_tick, cloud);
             output.push_event(GameplayEventKind::HazardChanged);
         }
         if state.instability >= 100.0 {
@@ -189,75 +187,16 @@ impl WorldState {
         let rate = self.timing.rate;
         let warning_ticks = rate.ticks_for_millis(warning_millis);
         let life_ticks = rate.ticks_for_millis(life_millis);
-        self.falling_boulders.push(FallingBoulder {
-            x,
-            y,
-            velocity_y: 0.0,
-            warning_seconds: rate.seconds_for_ticks(warning_ticks),
-            life: rate.seconds_for_ticks(life_ticks),
-        });
-        self.boulder_warning_deadlines.push(SimulationTick::new(
-            self.simulation_tick.get().saturating_add(warning_ticks),
-        ));
-        self.boulder_expiry_ticks.push(SimulationTick::new(
-            self.simulation_tick.get().saturating_add(life_ticks),
-        ));
-    }
-
-    pub(super) fn advance_falling_boulders(
-        &mut self,
-        next_tick: SimulationTick,
-        output: &mut TickOutput,
-    ) {
-        let timing = self.timing;
-        let boulders = mem::take(&mut self.falling_boulders);
-        let warning_deadlines = mem::take(&mut self.boulder_warning_deadlines);
-        let expiry_ticks = mem::take(&mut self.boulder_expiry_ticks);
-        for (index, mut boulder) in boulders.into_iter().enumerate() {
-            let warning_deadline = warning_deadlines.get(index).copied().unwrap_or(next_tick);
-            let expiry_tick = expiry_ticks.get(index).copied().unwrap_or(next_tick);
-            if next_tick >= expiry_tick {
-                continue;
-            }
-            if next_tick >= warning_deadline {
-                boulder.velocity_y = quantize_simulation_scalar(
-                    (AUTHORITATIVE_GRAVITY * 0.8)
-                        .mul_add(timing.delta_seconds, boulder.velocity_y)
-                        .min(520.0),
-                );
-                boulder.y = quantize_simulation_scalar(
-                    boulder.velocity_y.mul_add(timing.delta_seconds, boulder.y),
-                );
-                let hit_player = self.players.iter().find_map(|(player_id, player)| {
-                    let dx = player.x - boulder.x;
-                    let dy = player.y - boulder.y;
-                    (dx.mul_add(dx, dy * dy) <= (AUTHORITATIVE_PLAYER_RADIUS + 8.0).powi(2))
-                        .then_some((*player_id, player.hazard_gear))
-                });
-                if let Some((player_id, gear)) = hit_player {
-                    // The boulder shatters on the rig; the deflector turns aside its weight.
-                    if self.damage_player(player_id, gear.boulder_damage(BOULDER_HIT_DAMAGE)) {
-                        output.push_event(GameplayEventKind::PlayerDamaged { player_id });
-                    }
-                    continue;
-                }
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    reason = "bounded boulder coordinates intentionally map to terrain tiles"
-                )]
-                let tile = TilePosition {
-                    x: (boulder.x / TILE_SIZE).floor() as i32,
-                    y: (boulder.y / TILE_SIZE).floor() as i32,
-                };
-                if self.terrain.is_solid_at(tile) {
-                    continue;
-                }
-            }
-            boulder.warning_seconds = timing.rate.seconds_until(next_tick, warning_deadline);
-            boulder.life = timing.rate.seconds_until(next_tick, expiry_tick);
-            self.falling_boulders.push(boulder);
-            self.boulder_warning_deadlines.push(warning_deadline);
-            self.boulder_expiry_ticks.push(expiry_tick);
-        }
+        self.spawn_boulder(
+            FallingBoulder {
+                x,
+                y,
+                velocity_y: 0.0,
+                warning_seconds: rate.seconds_for_ticks(warning_ticks),
+                life: rate.seconds_for_ticks(life_ticks),
+            },
+            SimulationTick::new(self.simulation_tick.get().saturating_add(warning_ticks)),
+            SimulationTick::new(self.simulation_tick.get().saturating_add(life_ticks)),
+        );
     }
 }

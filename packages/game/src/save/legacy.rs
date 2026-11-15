@@ -586,10 +586,39 @@ fn migrate_player_items(player: &mut Value) -> Result<(), serde_json::Error> {
     Ok(())
 }
 
-/// Reads a world written before the item model (v1-v6 JSON shapes of the current world):
-/// migrates rig cargo maps and lost-cargo sites into item containers, then deserializes.
+/// A pre-entity world's live object lists (gas clouds; boulders with index-aligned deadlines).
+#[derive(Debug, Default, Deserialize)]
+struct LegacyLiveObjects {
+    #[serde(default)]
+    hazards: Vec<HazardCloud>,
+    #[serde(default)]
+    falling_boulders: Vec<FallingBoulder>,
+    #[serde(default)]
+    boulder_warning_deadlines: Vec<SimulationTick>,
+    #[serde(default)]
+    boulder_expiry_ticks: Vec<SimulationTick>,
+}
+
+/// Reads a world written before the item and entity models (v1-v6 JSON shapes of the current
+/// world): migrates rig cargo maps and lost-cargo sites into item containers and the gas cloud
+/// and boulder lists into entities, then deserializes.
 fn v6_world(mut world: Value) -> Result<WorldState, serde_json::Error> {
+    let mut live = LegacyLiveObjects::default();
     if let Some(object) = world.as_object_mut() {
+        if !object.contains_key("entities") {
+            let mut lists = serde_json::Map::new();
+            for key in [
+                "hazards",
+                "falling_boulders",
+                "boulder_warning_deadlines",
+                "boulder_expiry_ticks",
+            ] {
+                if let Some(value) = object.remove(key) {
+                    lists.insert(key.to_owned(), value);
+                }
+            }
+            live = serde_json::from_value(Value::Object(lists))?;
+        }
         if let Some(template) = object.get_mut("player_template") {
             migrate_player_items(template)?;
         }
@@ -614,7 +643,14 @@ fn v6_world(mut world: Value) -> Result<WorldState, serde_json::Error> {
             }
         }
     }
-    serde_json::from_value(world)
+    let mut world: WorldState = serde_json::from_value(world)?;
+    world.restore_legacy_live_entities(
+        live.hazards,
+        live.falling_boulders,
+        &live.boulder_warning_deadlines,
+        &live.boulder_expiry_ticks,
+    );
+    Ok(world)
 }
 
 /// Reads a v3/v4 world: lifts `authoritative_summary.won_game` to `won_game` and drops the rest

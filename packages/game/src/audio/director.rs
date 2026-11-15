@@ -591,7 +591,7 @@ impl Director {
         // Loose and falling boulders rumble.
         let mut rumble = 0.0_f32;
         let mut rumble_dx = 0.0;
-        for boulder in snapshot.boulders {
+        for boulder in &snapshot.boulders {
             let dx = boulder.x - listener.x;
             let weight = if boulder.warning_seconds > 0.0 {
                 0.45

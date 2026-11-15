@@ -532,6 +532,8 @@ impl NetSimulation for ToySim {
     type Event = ToyEvent;
     type PlayerState = ToyPlayer;
     type Entities = ToyEntities;
+    type EntityKey = u32;
+    type EntityRecord = ();
     type Op = ToyTileOp;
     type Chunk = (i32, i32);
     type ChunkSnapshot = Vec<u8>;

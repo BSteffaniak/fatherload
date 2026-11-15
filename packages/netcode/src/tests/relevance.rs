@@ -240,3 +240,79 @@ fn world_client_converges_on_far_terrain_when_it_moves_close() {
         "terrain fully converged"
     );
 }
+
+#[test]
+fn world_entities_spawn_change_and_despawn_per_client_relevance() {
+    use fatherload_simulation::{
+        item::{ItemKind, ItemStack},
+        terrain::MineralKind,
+    };
+    let params = SessionParams::new(60);
+    let sim_host = fatherload_simulation::PlayerId::new(0);
+    let mut world = WorldState::new_game_with_params(
+        sim_host,
+        fatherload_simulation::SimulationParams::new(params.tick_rate_hz),
+    );
+    let spawn_x = 62.5 * TILE_SIZE;
+    let mut template = world.player_template().clone();
+    template.x = spawn_x;
+    world.set_player_template(template);
+    world.player_mut(sim_host).expect("host rig").x = 20.5 * TILE_SIZE;
+    let gold = ItemStack::new(ItemKind::Mineral(MineralKind::Gold), 2);
+    // Two drops falling near the joining client, one short-lived; one far away by the host.
+    let near = world.spawn_item_drop(spawn_x + 40.0, 2.0 * TILE_SIZE, (30.0, 0.0), gold, None);
+    let fleeting = world.spawn_item_drop(
+        spawn_x - 40.0,
+        2.0 * TILE_SIZE,
+        (0.0, 0.0),
+        gold,
+        Some(2_000),
+    );
+    let far = world.spawn_item_drop(20.5 * TILE_SIZE, 2.0 * TILE_SIZE, (0.0, 0.0), gold, None);
+    let mut pair = Pair::new(world, finite_tuning(8.0), params, |host| {
+        assert!(host.adopt_local_player(SeatId(0), PlayerId(0)));
+    });
+    let idle = ControlState::default();
+    for _ in 0..60 {
+        pair.step(&idle);
+    }
+    assert_eq!(pair.client.phase(), ClientPhase::InGame);
+    let held = |pair: &Pair<WorldState>| {
+        pair.authority()
+            .entities()
+            .iter()
+            .map(|entity| entity.id)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        held(&pair),
+        vec![near, fleeting],
+        "only nearby entities, the far one despawned"
+    );
+    for _ in 0..60 {
+        pair.step(&idle);
+    }
+    // The near drop landed and fell asleep; the client holds exactly the host's record.
+    let host_near = pair
+        .host
+        .world()
+        .entities()
+        .get(near)
+        .cloned()
+        .expect("near");
+    assert!(host_near.body.asleep, "the drop came to rest");
+    assert_eq!(pair.authority().entities().get(near), Some(&host_near));
+    // The short-lived drop expires on the host and the despawn reaches the client.
+    for _ in 0..60 {
+        pair.step(&idle);
+    }
+    assert!(!pair.host.world().entities().contains(fleeting));
+    assert_eq!(held(&pair), vec![near]);
+    // With unlimited relevance the client converges on the whole store.
+    pair.set_radius(None);
+    for _ in 0..5 {
+        pair.step(&idle);
+    }
+    assert_eq!(held(&pair), vec![near, far]);
+    assert_eq!(pair.authority().entities(), pair.host.world().entities());
+}

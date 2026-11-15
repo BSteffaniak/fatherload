@@ -110,12 +110,17 @@ impl WorldState {
                         && (item.position.y - target.y).abs() <= 5
                 });
                 if !protected {
-                    self.hazards.push(HazardCloud {
+                    let cloud = HazardCloud {
                         x: player.x,
                         y: player.y + TILE_SIZE,
                         life: 8.0,
                         radius: 10.0,
-                    });
+                    };
+                    super::entities::spawn_gas_cloud_into(
+                        &mut self.entities,
+                        self.simulation_tick,
+                        cloud,
+                    );
                 }
             }
             MineResult::Blast => {

@@ -973,8 +973,8 @@ fn canonical_heat_wave_and_deep_instability_affect_survival_deterministically() 
         first.simulation_state_hash(),
         second.simulation_state_hash()
     );
-    assert_eq!(first.falling_boulders.len(), 3);
-    assert!(!first.hazards.is_empty());
+    assert_eq!(first.falling_boulders().len(), 3);
+    assert!(!first.hazards().is_empty());
     assert!(first.player(LOCAL_PLAYER_ID).expect("player exists").fuel < 100.0);
 }
 
@@ -1142,7 +1142,7 @@ fn canonical_falling_boulders_use_tick_deadlines_and_damage_players() {
     let second_output = second.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
 
     assert!(first.player(LOCAL_PLAYER_ID).expect("player exists").hull < 100.0);
-    assert!(first.falling_boulders.is_empty());
+    assert!(first.falling_boulders().is_empty());
     assert_eq!(first_output, second_output);
     assert_eq!(
         first.simulation_state_hash(),
@@ -1183,9 +1183,13 @@ fn canonical_explosive_pocket_schedules_deterministic_cave_in() {
     );
     let output = world.simulate_tick(SimulationTick::new(0), &crate::TickInputs::default());
 
-    assert_eq!(world.falling_boulders.len(), 3);
-    assert_eq!(world.boulder_warning_deadlines.len(), 3);
-    assert_eq!(world.boulder_expiry_ticks.len(), 3);
+    assert_eq!(world.falling_boulders().len(), 3);
+    assert_eq!(
+        world
+            .entities()
+            .count_of(crate::entity::EntityKind::Boulder),
+        3
+    );
     assert!(
         output
             .events
@@ -1515,7 +1519,7 @@ fn canonical_tick_advances_scanner_and_hazard_state() {
         (player.x, player.y, player.hull)
     };
     world.set_scanner_cooldown_seconds(LOCAL_PLAYER_ID, 1.0);
-    world.hazards.push(crate::HazardCloud {
+    world.spawn_gas_cloud(crate::HazardCloud {
         x: player_x,
         y: player_y,
         life: 1.0,

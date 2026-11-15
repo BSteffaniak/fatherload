@@ -124,24 +124,11 @@ impl WorldState {
         hash.write_serialized(self.terrain.settings());
         hash.write_u64(u64::try_from(self.terrain.tiles().len()).unwrap_or(u64::MAX));
         hash.write_u64(self.terrain.digest());
-        hash.write_u64(u64::try_from(self.hazards.len()).unwrap_or(u64::MAX));
-        for hazard in &self.hazards {
-            hash.write_f32(hazard.x);
-            hash.write_f32(hazard.y);
-            hash.write_f32(hazard.life);
-            hash.write_f32(hazard.radius);
-        }
-        hash.write_u64(u64::try_from(self.falling_boulders.len()).unwrap_or(u64::MAX));
-        for boulder in &self.falling_boulders {
-            hash.write_f32(boulder.x);
-            hash.write_f32(boulder.y);
-            hash.write_f32(boulder.velocity_y);
-        }
-        for deadline in &self.boulder_warning_deadlines {
-            hash.write_u64(deadline.get());
-        }
-        for deadline in &self.boulder_expiry_ticks {
-            hash.write_u64(deadline.get());
+        hash.write_u64(self.entities.next_id());
+        hash.write_u64(self.entities.next_revision());
+        hash.write_u64(u64::try_from(self.entities.len()).unwrap_or(u64::MAX));
+        for entity in self.entities.iter() {
+            hash.write_serialized(entity);
         }
         hash.write_u64(u64::try_from(self.bombs.len()).unwrap_or(u64::MAX));
         for bomb in &self.bombs {

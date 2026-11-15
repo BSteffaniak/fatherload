@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     contract::ContractLog,
     economy::{DeepClaimStatus, TownDevelopment},
-    hazard::{FallingBoulder, HazardCloud, PlacedBomb, ScanMarker},
+    entity::EntityStore,
+    hazard::{HazardCloud, PlacedBomb, ScanMarker},
     ids::{PlayerId, SimulationTick},
     infrastructure::PlacedInfrastructure,
     player::Player,
@@ -28,6 +29,9 @@ mod determinism_tests;
 mod discovery;
 #[cfg(test)]
 mod drill_tests;
+mod entities;
+#[cfg(test)]
+mod entity_tests;
 #[cfg(test)]
 mod flight_tests;
 #[cfg(test)]
@@ -226,10 +230,9 @@ pub struct WorldState {
     progression: CanonicalProgressionState,
     scan_markers: Vec<ScanMarker>,
     collapse_warnings: Vec<TilePosition>,
-    hazards: Vec<HazardCloud>,
-    falling_boulders: Vec<FallingBoulder>,
-    boulder_warning_deadlines: Vec<SimulationTick>,
-    boulder_expiry_ticks: Vec<SimulationTick>,
+    /// Live entities: gas clouds, falling boulders, drops (see [`crate::entity`]).
+    #[serde(default)]
+    entities: EntityStore,
     terrain: Terrain,
     bombs: Vec<PlacedBomb>,
     infrastructure: Vec<PlacedInfrastructure>,
@@ -292,11 +295,6 @@ impl WorldState {
     }
 
     #[must_use]
-    pub fn falling_boulders(&self) -> &[FallingBoulder] {
-        &self.falling_boulders
-    }
-
-    #[must_use]
     pub const fn players(&self) -> &BTreeMap<PlayerId, Player> {
         &self.players
     }
@@ -324,11 +322,6 @@ impl WorldState {
     #[must_use]
     pub const fn infrastructure_count(&self) -> usize {
         self.infrastructure.len()
-    }
-
-    #[must_use]
-    pub fn hazards(&self) -> &[HazardCloud] {
-        &self.hazards
     }
 
     #[must_use]
@@ -551,7 +544,8 @@ impl WorldState {
         scanner_cooldowns: BTreeMap<PlayerId, f32>,
     ) {
         self.terrain = terrain;
-        self.hazards = hazards;
+        self.entities = EntityStore::new();
+        self.restore_legacy_live_entities(hazards, Vec::new(), &[], &[]);
         self.bombs = bombs;
         self.infrastructure = infrastructure;
         self.active_drills = active_drills;

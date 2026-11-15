@@ -28,6 +28,22 @@ fn assert_played(harness: &WorldHarness) {
         harness.world().play_progress() > fresh.play_progress() + harness.clients.len(),
         "bots dug terrain"
     );
+    // The surface drops settled and some were disturbed by digging or blasts since.
+    let entities = harness.world().entities();
+    assert!(
+        entities.iter().any(|entity| entity.body.asleep),
+        "drops sleep"
+    );
+    assert!(
+        entities
+            .iter()
+            .any(|entity| entity.body.y > 7.0 * fatherload_simulation::TILE_SIZE),
+        "some drop fell into a shaft or was thrown: {:?}",
+        entities
+            .iter()
+            .map(|entity| entity.body.y)
+            .collect::<Vec<_>>()
+    );
     for label in [
         "applied scanner",
         "applied infrastructure",

@@ -13,6 +13,7 @@
 //! | Kind | Trait surface | Netcode behaviour |
 //! |---|---|---|
 //! | Per-tick | [`NetSimulation::player_state`], [`NetSimulation::entities`] | Full copy in every frame, relevance-filtered (§15) |
+//! | Per-tick delta | [`NetSimulation::entity_revisions`], [`NetSimulation::entity_record`] | Spawned/changed records and despawned keys against the client's baseline, relevance-filtered (leaving relevance despawns) |
 //! | Op log | [`TickOutput::ops`], [`NetSimulation::apply_op`] | Exact ops since the client's previous frame, in order; ops in chunks outside the client's relevance are skipped and the chunk is refreshed whole ([`NetSimulation::chunk_snapshot`]) once it is relevant again |
 //! | On-change | [`NetSimulation::section_keys`] / [`NetSimulation::section_hash`] | Whole section resent when its hash changes (per client baseline) |
 //!
@@ -240,8 +241,13 @@ pub trait NetSimulation: Clone + Debug {
     type Event: Clone + Debug + Serialize + DeserializeOwned;
     /// Per-tick replicated state of one player.
     type PlayerState: Clone + Debug + Serialize + DeserializeOwned;
-    /// Per-tick replicated live entities (bombs, falling rocks, ...).
+    /// Per-tick replicated live state sent whole every frame (bombs, id counters, ...).
     type Entities: Clone + Debug + Serialize + DeserializeOwned;
+    /// Stable identity of an entity replicated incrementally
+    /// ([`NetSimulation::entity_revisions`]).
+    type EntityKey: Clone + Debug + Ord + Serialize + DeserializeOwned;
+    /// The full replicated state of one such entity.
+    type EntityRecord: Clone + Debug + Serialize + DeserializeOwned;
     /// One op-log change (normally a terrain tile change).
     type Op: Clone + Debug + Serialize + DeserializeOwned;
     /// A spatial block of op-log state (a terrain chunk): the unit of op
@@ -298,6 +304,25 @@ pub trait NetSimulation: Clone + Debug {
     fn entities(&self, relevance: &Relevance) -> Self::Entities;
     /// Replaces the per-tick entities with a received copy.
     fn apply_entities(&mut self, entities: Self::Entities);
+
+    /// Incrementally replicated entities relevant to `relevance`, as `(key, revision)` in key
+    /// order. A revision changes whenever the entity does. The host keeps each client's last
+    /// sent pairs and every frame sends the records of new or changed entities and the keys of
+    /// entities that are gone or left relevance (applied after [`Self::apply_entities`]).
+    fn entity_revisions(&self, _relevance: &Relevance) -> Vec<(Self::EntityKey, u64)> {
+        Vec::new()
+    }
+    /// The current record of one entity.
+    fn entity_record(&self, _key: &Self::EntityKey) -> Option<Self::EntityRecord> {
+        None
+    }
+    /// Applies received entity spawns/changes and despawns.
+    fn apply_entity_delta(
+        &mut self,
+        _updates: Vec<Self::EntityRecord>,
+        _despawned: Vec<Self::EntityKey>,
+    ) {
+    }
 
     /// Whether an op-log entry should be sent to a client with `relevance`
     /// (for example only to [`Relevance::viewer`] for private ops). Defaults

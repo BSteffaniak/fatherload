@@ -60,7 +60,7 @@ impl WorldState {
         match kind {
             WorldEventKind::GasBloom => {
                 if let Some(player) = self.players.values().next() {
-                    self.hazards.push(HazardCloud {
+                    self.spawn_gas_cloud(HazardCloud {
                         x: player.x,
                         y: player.y + TILE_SIZE,
                         life: 8.0 + f32::from(u16::try_from(severity).unwrap_or(u16::MAX)),

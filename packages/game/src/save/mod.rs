@@ -678,6 +678,151 @@ mod tests {
         .expect("serialize")
     }
 
+    /// Rewrites a current save as format 6 wrote it: separate rig cargo maps, lost-cargo
+    /// mineral/artifact maps, and gas cloud / boulder lists instead of entities.
+    fn as_v6_json(save: &WorldSave) -> serde_json::Value {
+        use fatherload_simulation::{
+            entity::{EntityKind, EntityState},
+            item::ItemContainer,
+        };
+        fn v6_player(player: &mut serde_json::Value) {
+            let object = player.as_object_mut().expect("player object");
+            let bay: ItemContainer =
+                serde_json::from_value(object.remove("cargo_bay").expect("bay")).expect("bay");
+            object.remove("block_hopper");
+            object.remove("block_hopper_capacity");
+            object.insert("cargo".into(), serde_json::json!(bay.mineral_map()));
+            object.insert("artifacts".into(), serde_json::json!(bay.artifact_map()));
+            object.insert("materials".into(), serde_json::json!(bay.material_map()));
+        }
+        let mut world = serde_json::to_value(&save.world).expect("world json");
+        let object = world.as_object_mut().expect("world object");
+        v6_player(object.get_mut("player_template").expect("template"));
+        for player in object
+            .get_mut("players")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("players")
+            .values_mut()
+        {
+            v6_player(player);
+        }
+        for site in object
+            .get_mut("lost_cargo_sites")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("sites")
+            .values_mut()
+        {
+            let site = site.as_object_mut().expect("site");
+            let items: ItemContainer =
+                serde_json::from_value(site.remove("items").expect("items")).expect("items");
+            site.insert("minerals".into(), serde_json::json!(items.mineral_map()));
+            site.insert("artifacts".into(), serde_json::json!(items.artifact_map()));
+        }
+        object.remove("entities");
+        let entities = save.world.entities();
+        let boulders =
+            entities
+                .of_kind(EntityKind::Boulder)
+                .filter_map(|entity| match entity.state {
+                    EntityState::Boulder(boulder) => Some(boulder),
+                    _ => None,
+                });
+        let (warnings, expiries): (Vec<_>, Vec<_>) = boulders
+            .map(|boulder| (boulder.warning_deadline, boulder.expiry_tick))
+            .unzip();
+        object.insert("hazards".into(), serde_json::json!(save.world.hazards()));
+        object.insert(
+            "falling_boulders".into(),
+            serde_json::json!(save.world.falling_boulders()),
+        );
+        object.insert(
+            "boulder_warning_deadlines".into(),
+            serde_json::json!(warnings),
+        );
+        object.insert("boulder_expiry_ticks".into(), serde_json::json!(expiries));
+        serde_json::json!({
+            "version": 6,
+            "save": { "world": world, "play_seconds": save.play_seconds },
+        })
+    }
+
+    #[test]
+    fn version_six_cargo_maps_and_live_object_lists_migrate_to_items_and_entities() {
+        use fatherload_simulation::{
+            FallingBoulder, HazardCloud, LostCargoSite, SectionKey, SectionPayload,
+            terrain::{ArtifactKind, StrategicResourceKind},
+        };
+        let mut world = WorldState::new_game(LEGACY_PLAYER_ID);
+        world.set_simulation_tick(SimulationTick::new(40));
+        let rig = world.player_mut(LEGACY_PLAYER_ID).expect("rig");
+        rig.cargo_bay.add(MineralKind::Gold, 3);
+        rig.cargo_bay.add(MineralKind::Copper, 5);
+        rig.cargo_bay.add(ArtifactKind::Fossil, 1);
+        rig.cargo_bay.add(StrategicResourceKind::CoreShard, 2);
+        let Some(SectionPayload::Loadout(mut loadout)) =
+            world.section(SectionKey::Loadout(LEGACY_PLAYER_ID))
+        else {
+            panic!("loadout section");
+        };
+        loadout.lost_cargo_site = Some(LostCargoSite {
+            x: 320.0,
+            y: 900.0,
+            items: [
+                (MineralKind::Iron.into(), 4),
+                (ArtifactKind::OldCircuit.into(), 1),
+            ]
+            .into_iter()
+            .collect(),
+        });
+        world.apply_section(
+            SectionKey::Loadout(LEGACY_PLAYER_ID),
+            SectionPayload::Loadout(loadout),
+        );
+        world.restore_legacy_live_entities(
+            vec![HazardCloud {
+                x: 3_000.0,
+                y: 400.0,
+                life: 4.0,
+                radius: 12.0,
+            }],
+            vec![FallingBoulder {
+                x: 3_100.0,
+                y: 380.0,
+                velocity_y: 0.0,
+                warning_seconds: 1.0,
+                life: 6.0,
+            }],
+            &[SimulationTick::new(100)],
+            &[SimulationTick::new(400)],
+        );
+        let save = WorldSave {
+            world,
+            play_seconds: 7.0,
+        };
+        let v6 = as_v6_json(&save);
+        assert!(v6["save"]["world"]["players"]["1"]["cargo"]["Gold"] == 3);
+        let migrated = parse_save(&v6.to_string()).expect("v6 migrates");
+        assert_eq!(
+            migrated.world.simulation_state_hash(),
+            save.world.simulation_state_hash(),
+            "items and entities migrate exactly"
+        );
+        let rig = player(&migrated);
+        assert_eq!(rig.cargo_bay.mineral(MineralKind::Gold), 3);
+        assert_eq!(rig.cargo_bay.material(StrategicResourceKind::CoreShard), 2);
+        assert_eq!(rig.cargo_used(), 9, "materials still take no slots");
+        assert_eq!(migrated.world.hazards().len(), 1);
+        assert_eq!(migrated.world.falling_boulders().len(), 1);
+        assert_eq!(
+            migrated
+                .world
+                .lost_cargo_sites()
+                .get(&LEGACY_PLAYER_ID)
+                .map(LostCargoSite::count),
+            Some(5)
+        );
+    }
+
     /// A world after a long scripted dig (drilling, bombs, infrastructure, scanning) plus
     /// hundreds of blast craters and tunnels across the whole map.
     fn heavily_dug_world() -> WorldState {

@@ -254,6 +254,17 @@ impl HarnessSim for WorldState {
         template.bombs = 6;
         template.survey_drone_kits = 3;
         world.set_player_template(template);
+        // Loose item drops along the surface (falling, settling, sleeping, then woken and
+        // thrown by the bots' digging and bombs) so entity replication is exercised too.
+        for index in 0..48_u16 {
+            let x = (f32::from(index).mul_add(0.75, 1.25) + spawn_tile_x) * TILE_SIZE;
+            let stack = fatherload_simulation::item::ItemStack::new(
+                fatherload_simulation::item::ItemKind::Mineral(MineralKind::Copper),
+                1,
+            );
+            let lifetime = (index % 3 == 0).then_some(20_000 + u64::from(index) * 250);
+            let _ = world.spawn_item_drop(x, 2.0 * TILE_SIZE, (0.0, 0.0), stack, lifetime);
+        }
         world
     }
 

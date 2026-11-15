@@ -3,6 +3,7 @@
 use std::mem;
 
 use crate::{
+    entity::{EntityKind, EntityPhase, EntityState},
     event::{ActionOutcome, GameplayEventKind, TickOutput, gameplay_event_for_applied_command},
     ids::{PlayerId, SimulationTick},
     infrastructure::InfrastructureKind,
@@ -117,22 +118,23 @@ impl WorldState {
                 .insert(*player_id, timing.rate.seconds_until(next_tick, *deadline));
         }
 
-        for cloud in &mut self.hazards {
-            cloud.life -= delta_seconds;
-            cloud.radius = 8.0f32.mul_add(delta_seconds, cloud.radius);
-        }
-        self.hazards.retain(|cloud| cloud.life > 0.0);
+        self.advance_entities(EntityPhase::Early, next_tick, &mut output);
         let player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in player_ids {
             let in_cloud = self.players.get(&player_id).is_some_and(|player| {
-                self.hazards.iter().any(|cloud| {
-                    if cloud.life >= 6.0 {
-                        return false;
-                    }
-                    let dx = player.x - cloud.x;
-                    let dy = player.y - cloud.y;
-                    dx.mul_add(dx, dy * dy) <= cloud.radius * cloud.radius
-                })
+                self.entities
+                    .of_kind(EntityKind::GasCloud)
+                    .any(|entity| match entity.state {
+                        EntityState::GasCloud(cloud) => {
+                            if cloud.life >= 6.0 {
+                                return false;
+                            }
+                            let dx = player.x - entity.body.x;
+                            let dy = player.y - entity.body.y;
+                            dx.mul_add(dx, dy * dy) <= cloud.radius * cloud.radius
+                        }
+                        _ => false,
+                    })
             });
             let damage = self.players.get(&player_id).map_or(0.0, |player| {
                 player.hazard_gear.gas_damage(4.0 * delta_seconds)
@@ -239,7 +241,9 @@ impl WorldState {
             }
         }
 
+        let events_before_bombs = output.events.len();
         self.advance_bombs(next_tick, &mut quest_notes, &mut output);
+        self.push_entities_from_detonations(&output, events_before_bombs);
 
         let active_players: Vec<PlayerId> = self.active_drills.keys().copied().collect();
         for player_id in active_players {
@@ -371,13 +375,14 @@ impl WorldState {
             self.advance_world_event_hazards(player_id, next_tick, &mut output);
             self.advance_deep_run_pressure(player_id, next_tick, &mut output);
         }
-        self.advance_falling_boulders(next_tick, &mut output);
+        self.advance_entities(EntityPhase::Late, next_tick, &mut output);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.advance_quests(next_tick, &quest_notes, &mut output);
         self.reveal_tiles_near_players();
         self.apply_test_mode_refills();
         output.terrain_ops = self.terrain.finish_journal();
+        self.wake_entities_near(&output.terrain_ops);
         output.discoveries = self.take_discoveries();
         self.set_simulation_tick(next_tick);
         output

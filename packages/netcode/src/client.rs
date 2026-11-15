@@ -485,6 +485,8 @@ impl<S: NetSimulation> ClientSession<S> {
             players,
             far_players,
             entities,
+            entity_updates,
+            entity_despawns,
             ops,
             chunk_refreshes,
             sections,
@@ -500,7 +502,7 @@ impl<S: NetSimulation> ClientSession<S> {
             tick,
             roster,
             players,
-            entities,
+            (entities, entity_updates, entity_despawns),
             &ops,
             chunk_refreshes,
             sections,
@@ -894,7 +896,7 @@ fn apply_replication<S: NetSimulation>(
     tick: Tick,
     roster: Option<Vec<PlayerId>>,
     players: Vec<(PlayerId, S::PlayerState)>,
-    entities: S::Entities,
+    entities: (S::Entities, Vec<S::EntityRecord>, Vec<S::EntityKey>),
     ops: &[(Tick, S::Op)],
     chunk_refreshes: Vec<(S::Chunk, S::ChunkSnapshot)>,
     sections: Vec<(S::SectionKey, S::Section)>,
@@ -916,7 +918,9 @@ fn apply_replication<S: NetSimulation>(
     for (player, state) in players {
         authority.apply_player_state(player, state);
     }
+    let (entities, entity_updates, entity_despawns) = entities;
     authority.apply_entities(entities);
+    authority.apply_entity_delta(entity_updates, entity_despawns);
     for (_, op) in ops {
         authority.apply_op(op);
     }

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     contract::ContractLog,
     economy::{DeepClaimStatus, TownDevelopment},
+    entity::EntityStore,
     hazard::{FallingBoulder, HazardCloud, PlacedBomb, ScanMarker},
     ids::{PlayerId, SimulationTick},
     infrastructure::PlacedInfrastructure,
@@ -93,7 +94,7 @@ impl WorldState {
         let player_id = import.player_id;
         let timing = TickTiming::new(params);
         let ticks = |seconds: f32| timing.rate.ticks_for_seconds(seconds);
-        Self {
+        let mut world = Self {
             timing,
             player_template: Player::new(NEW_WORLD_SPAWN.0, NEW_WORLD_SPAWN.1),
             simulation_tick: SimulationTick::default(),
@@ -169,18 +170,7 @@ impl WorldState {
             },
             scan_markers: import.scan_markers.clone(),
             collapse_warnings: import.collapse_warnings.clone(),
-            hazards: import.hazard_clouds.clone(),
-            falling_boulders: import.falling_boulders.clone(),
-            boulder_warning_deadlines: import
-                .falling_boulders
-                .iter()
-                .map(|boulder| SimulationTick::new(ticks(boulder.warning_seconds)))
-                .collect(),
-            boulder_expiry_ticks: import
-                .falling_boulders
-                .iter()
-                .map(|boulder| SimulationTick::new(ticks(boulder.life)))
-                .collect(),
+            entities: EntityStore::new(),
             terrain: import.terrain.clone(),
             bombs: import
                 .placed_bombs
@@ -223,7 +213,24 @@ impl WorldState {
             discovered_tiles: BTreeMap::from([(player_id, DiscoveredTiles::default())]),
             service_transactions: Vec::new(),
             test_mode: None,
-        }
+        };
+        let warning_deadlines: Vec<SimulationTick> = import
+            .falling_boulders
+            .iter()
+            .map(|boulder| SimulationTick::new(ticks(boulder.warning_seconds)))
+            .collect();
+        let expiry_ticks: Vec<SimulationTick> = import
+            .falling_boulders
+            .iter()
+            .map(|boulder| SimulationTick::new(ticks(boulder.life)))
+            .collect();
+        world.restore_legacy_live_entities(
+            import.hazard_clouds.clone(),
+            import.falling_boulders.clone(),
+            &warning_deadlines,
+            &expiry_ticks,
+        );
+        world
     }
 }
 
