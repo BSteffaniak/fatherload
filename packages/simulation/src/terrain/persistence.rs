@@ -803,6 +803,10 @@ impl Tile {
                 Some(tile) => TileKind::Cave(tile),
                 None => return None,
             },
+            0xB00..=0xBFF => match crate::base::BuiltTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Built(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

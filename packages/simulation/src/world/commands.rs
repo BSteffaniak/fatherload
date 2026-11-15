@@ -429,6 +429,7 @@ impl WorldState {
                 self.apply_enemy_difficulty(difficulty)
             }
             PlayerCommand::MountWeapon { weapon } => self.mount_weapon(player_id, weapon),
+            PlayerCommand::Build(command) => self.apply_build_command(player_id, &command),
         }
     }
 }
@@ -513,7 +514,7 @@ pub(super) fn authoritative_drill_seconds_per_chip(
         TileKind::Dirt => 0.09,
         TileKind::Clay => 0.12,
         TileKind::Stone => 0.15,
-        TileKind::HardRock | TileKind::Foundation | TileKind::Bedrock => 0.19,
+        TileKind::HardRock | TileKind::Foundation | TileKind::Bedrock | TileKind::Built(_) => 0.19,
         TileKind::Lava
         | TileKind::Gas
         | TileKind::ExplosivePocket

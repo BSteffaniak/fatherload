@@ -11,6 +11,7 @@
 
 pub mod cave;
 pub mod combat;
+pub mod base;
 pub mod command;
 pub mod contract;
 pub mod cosmetics;

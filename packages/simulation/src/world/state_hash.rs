@@ -161,6 +161,10 @@ impl WorldState {
         if !self.enemies.is_default() {
             hash.write_serialized(&self.enemies);
         }
+        // Absent until something is built, so worlds without bases keep their hashes.
+        if !self.bases.is_empty() {
+            hash.write_serialized(&self.bases);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

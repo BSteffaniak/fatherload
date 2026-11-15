@@ -75,6 +75,7 @@ impl WorldState {
             service_transactions,
             test_mode: _,
             enemies: _,
+            bases: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

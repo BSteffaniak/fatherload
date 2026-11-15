@@ -201,6 +201,7 @@ impl WorldState {
             service_transactions: Vec::new(),
             test_mode: None,
             enemies: crate::enemy::EnemyDirector::default(),
+            bases: crate::base::Bases::new(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

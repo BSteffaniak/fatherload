@@ -229,6 +229,9 @@ pub enum TileKind {
     /// A cave-ecosystem tile (crystal, fungus, obsidian, ruins, stalactites, caches; see
     /// [`crate::cave`]).
     Cave(CaveTile),
+    /// A solid building piece placed in a claim (WP-BASE, [`crate::base`]): no drill or blast
+    /// breaks it; it comes down only by deconstruction.
+    Built(crate::base::BuiltTile),
 }
 
 impl TileKind {
@@ -251,6 +254,7 @@ impl TileKind {
             Self::Poi(tile) => tile.name(),
             Self::Bedrock => "bedrock",
             Self::Cave(tile) => tile.name(),
+            Self::Built(tile) => tile.name(),
         }
     }
 }
@@ -333,10 +337,15 @@ impl Tile {
             TileKind::Poi(tile) => 0x300 | tile.code(),
             TileKind::Bedrock => 11,
             TileKind::Cave(tile) => 0x400 | tile.code(),
+            TileKind::Built(tile) => BUILT_TILE_CODE_BASE | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
 }
+
+/// Kind-code range of [`TileKind::Built`] tiles in [`Tile::code`] (`0xB00 | BuiltTile::code`),
+/// kept clear of the ranges other tile families use.
+pub const BUILT_TILE_CODE_BASE: u64 = 0xB00;
 
 /// Order-independent digest contribution of one tile at one index (bounded terrain).
 const fn tile_digest(index: usize, tile: Tile) -> u64 {
@@ -1187,7 +1196,11 @@ impl Terrain {
                 };
                 let before = self.read(slot).kind;
                 let left = match before {
-                    TileKind::Air | TileKind::Lava | TileKind::Foundation | TileKind::Bedrock => {
+                    TileKind::Air
+                    | TileKind::Lava
+                    | TileKind::Foundation
+                    | TileKind::Bedrock
+                    | TileKind::Built(_) => {
                         continue;
                     }
                     TileKind::Poi(poi) => match poi.after_blast() {
@@ -1472,17 +1485,18 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
     matches!(kind, TileKind::Bedrock)
 }
 
-/// Whether no drill can ever dig `kind`, not even a test-mode rig's.
+/// Whether no drill can ever dig `kind`, not even a test-mode rig's: the bedrock floor and
+/// placed building pieces (which come down only by deconstruction).
 #[must_use]
 pub const fn is_indestructible(kind: TileKind) -> bool {
-    is_unbreakable(kind)
+    is_unbreakable(kind) || matches!(kind, TileKind::Built(_))
 }
 
 /// Drill strength needed to dig a tile.
 #[must_use]
 pub const fn tile_hardness(kind: TileKind) -> u8 {
     match kind {
-        TileKind::Bedrock => UNBREAKABLE_HARDNESS,
+        TileKind::Bedrock | TileKind::Built(_) => UNBREAKABLE_HARDNESS,
         TileKind::Air
         | TileKind::Lava
         | TileKind::Gas
@@ -1535,7 +1549,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Artifact(artifact) => tile_hardness(TileKind::Artifact(artifact)) + 5,
         TileKind::Poi(tile) => tile.durability(),
         TileKind::Cave(tile) => tile.durability(),
-        TileKind::Bedrock => u8::MAX,
+        TileKind::Bedrock | TileKind::Built(_) => u8::MAX,
     }
 }
 

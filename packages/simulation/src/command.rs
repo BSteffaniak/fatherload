@@ -62,6 +62,8 @@ pub enum PlayerCommand {
     MountWeapon {
         weapon: Option<crate::weapon::WeaponKind>,
     },
+    /// A base-building action: place, deconstruct or use a module (see [`crate::base`]).
+    Build(crate::base::BuildCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

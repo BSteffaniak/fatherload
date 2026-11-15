@@ -7,7 +7,7 @@
 //! | Per-tick | each rig's pose, velocity, fuel, hull, drill and scanner timers, deep-run pressure ([`PlayerTickState`]); bombs and entity counters ([`LiveEntities`]); the tick itself | [`WorldState::player_tick_state`], [`WorldState::live_entities`] |
 //! | Per-tick delta | entities (gas clouds, falling boulders, drops, ...): relevance-filtered spawns, changes (by [`crate::entity::Entity::revision`]) and despawns ([`crate::entity::EntityDelta`]) against each receiver's baseline | [`WorldState::entity_revisions`], [`WorldState::entity_record`], [`WorldState::apply_entity_delta`] |
 //! | Op log | terrain tiles (shared; a client outside a chunk's relevance skips its ops and gets [`WorldState::terrain_chunk`] (the chunk's diffs from generation) when it approaches); per-player map discovery (owner only) | [`crate::TickOutput::terrain_ops`] / [`WorldState::apply_tile_change`], [`crate::TickOutput::discoveries`] / [`WorldState::apply_discovery`] |
-//! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, quest log, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants, test-mode toggles, crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | [`WorldState::section`], [`WorldState::apply_section`] |
+//! | On-change | per player: the visible rig build ([`RigBuild`], everyone) and the private loadout: inventory, credits, upgrades, rig parts, quest log, rescue/salvage, transactions ([`PlayerLoadout`], owner only); shared: economy, contracts, progression, town, world events, infrastructure, map markers, RNG, timers, session constants, test-mode toggles, crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs), bases (claims, modules, fixtures) | [`WorldState::section`], [`WorldState::apply_section`] |
 //!
 //! Private state (a player's [`PlayerLoadout`] and discovery) is replicated only to its owner;
 //! see [`super::visibility`] for the client-visible state hash and keyframe redaction.
@@ -184,6 +184,8 @@ pub enum SectionKey {
     Quests,
     /// Enemy difficulty, rig i-frames, spawn cooldowns and cleared lairs.
     Enemies,
+    /// Claims, base modules and fixtures (WP-BASE; solid pieces travel as terrain ops).
+    Bases,
 }
 
 impl SectionKey {
@@ -203,7 +205,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 13] = [
+    pub const SHARED: [Self; 14] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -217,6 +219,7 @@ impl SectionKey {
         Self::TestMode,
         Self::Quests,
         Self::Enemies,
+        Self::Bases,
     ];
 }
 
@@ -238,6 +241,7 @@ pub enum SectionPayload {
     TestMode(Option<crate::test_mode::TestModeState>),
     Quests(Box<crate::quest::CrewQuests>),
     Enemies(Box<crate::enemy::EnemyDirector>),
+    Bases(Box<crate::base::Bases>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -407,6 +411,7 @@ impl WorldState {
             service_transactions,
             test_mode,
             enemies,
+            bases,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -496,6 +501,7 @@ impl WorldState {
             SectionKey::TestMode => SectionPayload::TestMode(*test_mode),
             SectionKey::Quests => SectionPayload::Quests(Box::new(crew_quests.clone())),
             SectionKey::Enemies => SectionPayload::Enemies(Box::new(enemies.clone())),
+            SectionKey::Bases => SectionPayload::Bases(Box::new(bases.clone())),
         })
     }
 
@@ -641,6 +647,9 @@ impl WorldState {
             }
             (SectionKey::Enemies, SectionPayload::Enemies(enemies)) => {
                 self.enemies = *enemies;
+            }
+            (SectionKey::Bases, SectionPayload::Bases(bases)) => {
+                self.bases = *bases;
             }
             _ => {}
         }

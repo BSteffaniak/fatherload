@@ -21,6 +21,9 @@ use crate::{
 };
 
 #[cfg(test)]
+mod base_tests;
+mod bases;
+#[cfg(test)]
 mod bomb_tests;
 mod bombs;
 #[cfg(test)]
@@ -94,6 +97,7 @@ mod visibility;
 mod weapon_tests;
 mod weapons;
 
+pub use bases::{BuildQuote, TOWN_NO_BUILD_MARGIN, TOWN_NO_BUILD_ROWS, payment_for};
 pub use discovery::{DiscoveredTiles, Discovery};
 pub use player_sections::{PlayerInventory, PlayerRig, RigBuild, join_player, split_player};
 pub use quests::{QuestAvailability, QuestOffer};
@@ -289,6 +293,10 @@ pub struct WorldState {
     /// [`crate::enemy::EnemyDirector`]; the enemies themselves are entities).
     #[serde(default)]
     enemies: crate::enemy::EnemyDirector,
+    /// Claims, base modules and fixtures (WP-BASE, see [`crate::base`]); solid building pieces
+    /// live in the terrain.
+    #[serde(default)]
+    bases: crate::base::Bases,
 }
 
 impl WorldState {
@@ -369,6 +377,12 @@ impl WorldState {
     /// gameplay only changes terrain inside [`Self::simulate_tick`].
     pub const fn terrain_mut(&mut self) -> &mut Terrain {
         &mut self.terrain
+    }
+
+    /// Claims, base modules and fixtures (see [`crate::base`]).
+    #[must_use]
+    pub const fn bases(&self) -> &crate::base::Bases {
+        &self.bases
     }
 
     #[must_use]

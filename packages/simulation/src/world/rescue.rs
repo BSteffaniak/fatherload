@@ -33,6 +33,10 @@ impl WorldState {
             .get(&player_id)
             .cloned()
             .unwrap_or_default();
+        // A home point (WP-BASE bed or homestead) replaces the town drop.
+        let (home_x, home_y) = self
+            .rescue_home(player_id)
+            .unwrap_or((12.0 * TILE_SIZE, 4.0 * TILE_SIZE));
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
@@ -76,9 +80,9 @@ impl WorldState {
             });
         }
         player.insured = false;
-        player.x = 12.0 * TILE_SIZE;
+        player.x = home_x;
         player.x_remainder = 0.0;
-        player.y = 4.0 * TILE_SIZE;
+        player.y = home_y;
         player.velocity_x = 0.0;
         player.velocity_y = 0.0;
         player.hull = player.max_hull() * 0.5;

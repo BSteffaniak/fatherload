@@ -35,6 +35,8 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   explosive items in the cargo bay, smoke / scare / rocket kinds, weapon controls in
 ///   `ControlState`, weapon state in `PlayerTickState` / `RigBuild` / `PlayerInventory`,
 ///   `MountWeapon`, the weapon services and events 90-95;
+/// * T12 base building: `PlayerCommand::Build`, built terrain tiles (`TileKind::Built`), the
+///   `Bases` world field and section, and base events 100-102;
 pub const PROTOCOL_VERSION: u8 = 9;
 
 /// One client input frame: the controls and actions for exactly one tick.

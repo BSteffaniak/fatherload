@@ -88,6 +88,7 @@ impl WorldState {
             service_transactions,
             test_mode: _,
             enemies,
+            bases: _,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);

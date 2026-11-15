@@ -70,7 +70,9 @@ impl WorldState {
                 if target.is_some() && target != previous_target {
                     output.push_event(GameplayEventKind::DrillStarted { player_id });
                 }
-                let _step = if self.no_clip_active() {
+                let fuel_before = self.players.get(&player_id).map(|player| player.fuel);
+                let no_clip = self.no_clip_active();
+                let _step = if no_clip {
                     // Test-mode no-clip: thrust flies up, drill flies down.
                     let vertical =
                         f32::from(i8::from(controls.drill_down) - i8::from(controls.thrust));
@@ -83,6 +85,12 @@ impl WorldState {
                     )
                 };
                 self.update_weapon(player_id, controls.weapon, tick.next(), &mut output);
+                if let Some(fuel_before) = fuel_before
+                    && !no_clip
+                {
+                    // Lift ladders in bases (WP-BASE).
+                    self.apply_base_lift(player_id, fuel_before, controls.thrust);
+                }
             }
             for action in &input.actions {
                 let outcome = if !self.players.contains_key(&player_id) {
@@ -382,6 +390,7 @@ impl WorldState {
         self.advance_enemy_director(next_tick);
         self.advance_entities(EntityPhase::Late, next_tick, &mut output);
         self.advance_critters(next_tick);
+        self.advance_bases(next_tick);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.track_cave_discoveries(&mut output);

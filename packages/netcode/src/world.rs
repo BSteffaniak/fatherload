@@ -155,6 +155,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::ProjectileImpact { .. } => (93, None),
         GameplayEventKind::EntityDamaged { .. } => (94, None),
         GameplayEventKind::EntityDestroyed { .. } => (95, None),
+        // Base building (WP-BASE): 100-102.
+        GameplayEventKind::BasePlaced { player_id, .. } => (100, Some(player_id)),
+        GameplayEventKind::BaseRemoved { player_id, .. } => (101, Some(player_id)),
+        GameplayEventKind::BaseServiceUsed { player_id, .. } => (102, Some(player_id)),
     }
 }
 

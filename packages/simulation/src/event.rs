@@ -315,6 +315,26 @@ pub enum GameplayEventKind {
         y: i32,
         by: Option<PlayerId>,
     },
+    /// A player placed a building piece, fixture or module with its bottom-left tile at
+    /// `(x, y)` (a claim beacon stakes a claim). See [`crate::base`].
+    BasePlaced {
+        player_id: PlayerId,
+        item: crate::base::Buildable,
+        x: i32,
+        y: i32,
+    },
+    /// A player deconstructed what stood at tile `(x, y)` for a refund.
+    BaseRemoved {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// A player used one of a base module's services.
+    BaseServiceUsed {
+        player_id: PlayerId,
+        structure: crate::base::StructureId,
+        service: crate::base::ModuleService,
+    },
 }
 
 /// What a weapon shot struck.
@@ -418,5 +438,27 @@ pub(crate) const fn gameplay_event_for_applied_command(
             player_id,
             weapon: *weapon,
         },
+        PlayerCommand::Build(crate::base::BuildCommand::Place { item, at, .. }) => {
+            GameplayEventKind::BasePlaced {
+                player_id,
+                item: *item,
+                x: at.x,
+                y: at.y,
+            }
+        }
+        PlayerCommand::Build(crate::base::BuildCommand::Remove { at }) => {
+            GameplayEventKind::BaseRemoved {
+                player_id,
+                x: at.x,
+                y: at.y,
+            }
+        }
+        PlayerCommand::Build(crate::base::BuildCommand::Use { structure, service }) => {
+            GameplayEventKind::BaseServiceUsed {
+                player_id,
+                structure: *structure,
+                service: *service,
+            }
+        }
     }
 }

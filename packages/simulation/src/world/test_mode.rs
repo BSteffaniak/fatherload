@@ -185,7 +185,12 @@ impl WorldState {
                 let clear = Self::pocket_area(candidate, top).all(|position| {
                     !matches!(
                         self.terrain.tile(position).map(|tile| tile.kind),
-                        Some(TileKind::Poi(_) | TileKind::Foundation | TileKind::Bedrock)
+                        Some(
+                            TileKind::Poi(_)
+                                | TileKind::Foundation
+                                | TileKind::Bedrock
+                                | TileKind::Built(_)
+                        )
                     )
                 });
                 clear.then_some((candidate, top))
