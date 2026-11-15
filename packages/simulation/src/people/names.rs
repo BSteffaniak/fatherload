@@ -317,7 +317,7 @@ const MESA: NameTable = NameTable {
     ],
     nickname_percent: 20,
     nicknames: &[
-        "Chispa", "Lobo", "Abuelita", "Sombra", "Flaco", "Canela", "Sunbird",
+        "Chispa", "Lobo", "Cactus", "Sombra", "Flaco", "Canela", "Sunbird",
     ],
     place_heads: &[
         "Agua", "Sol", "Piedra", "Mesa", "Arroyo", "Cielo", "Luz", "Canyon", "Vista", "Coral",
