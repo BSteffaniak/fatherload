@@ -107,6 +107,14 @@ fn every_village_is_laid_out_inside_its_span_with_a_service_and_a_specialty() {
                 .position(|building| building.kind == BuildingKind::Market)
                 .unwrap_or_else(|| panic!("{label}: no market"));
             assert!(!found.offers(market).is_empty(), "{label}");
+            // Every village (inn or not) can point you at something nearby.
+            assert!(
+                (0..found.buildings.len()).any(|building| found
+                    .offers(building)
+                    .iter()
+                    .any(|offer| offer.deal == crate::village::VillageDeal::Rumour)),
+                "{label}: nobody trades rumours"
+            );
             let count = found.population.characters.len();
             assert!((4..=12).contains(&count), "{label}: {count} residents");
             let housed: BTreeSet<u16> = found

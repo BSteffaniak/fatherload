@@ -211,6 +211,16 @@ pub fn offers(village: &Village, building: &VillageBuilding) -> Vec<VillageOffer
     // Prosperous villages trade a little better.
     let prosperity = u32::from(village.prosperity);
     match service {
+        // A village too small for an inn hears its rumours at the meeting hall instead, so every
+        // village can point you at something buried nearby.
+        VillageService::Hall
+            if !village
+                .buildings
+                .iter()
+                .any(|lot| lot.kind == BuildingKind::Inn) =>
+        {
+            vec![VillageOffer::flat(VillageDeal::Rumour, 25)]
+        }
         VillageService::Hall | VillageService::Home => Vec::new(),
         VillageService::TradingPost => vec![
             VillageOffer::metered(VillageDeal::SellCargo {
