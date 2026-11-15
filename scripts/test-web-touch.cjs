@@ -8,6 +8,8 @@ const path = require('node:path');
 const { chromium } = require('../web/node_modules/playwright');
 
 const root = path.resolve(__dirname, '..', process.env.FATHERLOAD_WEB_ROOT || 'target/web');
+// Set to test a deployed site instead of serving the local build (the deploy job does).
+const remote = process.env.FATHERLOAD_WEB_URL;
 const artifacts = path.resolve(__dirname, '../target/web-test');
 const errors = [];
 const server = http.createServer(async (req, res) => {
@@ -137,7 +139,7 @@ async function play(browser, url, phone) {
   let browser;
   try {
     await fs.mkdir(artifacts, { recursive: true });
-    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    if (!remote) await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     browser = await chromium.launch({
       headless: true,
       ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}),
@@ -147,7 +149,7 @@ async function play(browser, url, phone) {
         ? ['--enable-gpu', '--ignore-gpu-blocklist']
         : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])],
     });
-    const url = `http://127.0.0.1:${server.address().port}`;
+    const url = remote || `http://127.0.0.1:${server.address().port}`;
     for (const phone of PHONES) await play(browser, url, phone);
     assert.deepEqual(errors, [], 'no page errors');
     console.log('Phone touch test passed.');
