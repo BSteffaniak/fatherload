@@ -240,7 +240,6 @@ pub enum TouchControl {
     Pause,
     Inventory,
     Map,
-    Confirm,
     Back,
     TabPrevious,
     TabNext,
@@ -276,6 +275,14 @@ const FAR_SIDE: Slot = (3.25, 0.5, 0.36);
 const FAR_UPPER: Slot = (0.5, 3.2, 0.36);
 const FAR_DIAGONAL: Slot = (3.1, 1.6, 0.36);
 const OUTER: Slot = (1.75, 3.0, 0.36);
+const MENU_BACK: Slot = (0.55, 0.5, 0.42);
+const MENU_NEXT: Slot = (1.45, 0.42, 0.34);
+const MENU_PREVIOUS: Slot = (2.2, 0.42, 0.34);
+
+/// The HUD's top corner panels in UI art pixels: the stats panel's width (left), the wallet's
+/// (right), and how far down the taller of them reaches. The top-row buttons go between them
+/// or below them.
+const HUD_CORNER_PANELS: (f32, f32, f32) = (184.0, 128.0, 78.0);
 
 /// Radius of the small buttons along the top edge, in button widths.
 const TOP_BUTTON_RADIUS: f32 = 0.3;
@@ -312,7 +319,8 @@ impl TouchLayout {
             button,
             mirrored: settings.left_handed,
         };
-        let has_stick = !matches!(context.mode, TouchMode::Build);
+        // Build mode points with taps and menus are tapped directly: no stick for either.
+        let has_stick = matches!(context.mode, TouchMode::Play | TouchMode::Interior);
         if has_stick {
             let top = if screen.portrait() { 0.5 } else { 0.25 };
             let width = safe.w * 0.45;
@@ -330,7 +338,8 @@ impl TouchLayout {
         match context.mode {
             TouchMode::Play => {
                 layout.push_top(
-                    safe,
+                    screen,
+                    settings.left_handed,
                     &[
                         TouchControl::Inventory,
                         TouchControl::Pause,
@@ -360,7 +369,7 @@ impl TouchLayout {
                 }
             }
             TouchMode::Build => {
-                layout.push_top(safe, &[TouchControl::BuildExit]);
+                layout.push_top(screen, settings.left_handed, &[TouchControl::BuildExit]);
                 for (control, slot) in [
                     (TouchControl::BuildPlace, PRIMARY),
                     (TouchControl::BuildRemove, SIDE),
@@ -372,7 +381,7 @@ impl TouchLayout {
                 }
             }
             TouchMode::Interior => {
-                layout.push_top(safe, &[TouchControl::Pause]);
+                layout.push_top(screen, settings.left_handed, &[TouchControl::Pause]);
                 layout
                     .controls
                     .push((TouchControl::Use, cluster.place(PRIMARY)));
@@ -381,11 +390,12 @@ impl TouchLayout {
                     .push((TouchControl::Back, cluster.place(SIDE)));
             }
             TouchMode::Menu => {
+                // Rows are tapped where they are; what is left is backing out and stepping
+                // a row's value or tab left and right. Kept small: they sit over the dialog.
                 for (control, slot) in [
-                    (TouchControl::Confirm, PRIMARY),
-                    (TouchControl::Back, SIDE),
-                    (TouchControl::TabNext, DIAGONAL),
-                    (TouchControl::TabPrevious, FAR_DIAGONAL),
+                    (TouchControl::Back, MENU_BACK),
+                    (TouchControl::TabNext, MENU_NEXT),
+                    (TouchControl::TabPrevious, MENU_PREVIOUS),
                 ] {
                     layout.controls.push((control, cluster.place(slot)));
                 }
@@ -441,18 +451,38 @@ impl TouchLayout {
         }
     }
 
-    /// A row of small buttons centred on the top edge.
-    fn push_top(&mut self, safe: TouchRect, controls: &[TouchControl]) {
+    /// A row of small buttons centred on the top edge. When the gap between the HUD's corner
+    /// panels is too narrow for it, the row drops below them and moves to the stick's side,
+    /// clear of the thumb cluster.
+    fn push_top(&mut self, screen: TouchScreen, left_handed: bool, controls: &[TouchControl]) {
+        let safe = screen.safe();
         let radius = self.button * TOP_BUTTON_RADIUS;
         let pitch = self.button * 0.8;
         #[allow(clippy::cast_precision_loss, reason = "a handful of buttons")]
-        let first = safe.x + safe.w * 0.5 - pitch * (controls.len() as f32 - 1.0) * 0.5;
+        let row_width = pitch * (controls.len() as f32 - 1.0) + radius * 2.0;
+        let panels = HUD_CORNER_PANELS;
+        let gap = safe.w - (panels.0 + panels.1) * screen.points_per_ui_pixel;
+        let dropped = gap < row_width + self.button * 0.2;
+        let drop = if dropped {
+            panels.2 * screen.points_per_ui_pixel
+        } else {
+            0.0
+        };
+        let margin = self.button * 0.2 + radius;
+        #[allow(clippy::cast_precision_loss, reason = "a handful of buttons")]
+        let span = pitch * (controls.len() as f32 - 1.0);
+        let first = match (dropped, left_handed) {
+            // Centred in the gap between the two panels (they are not the same width).
+            (false, _) => safe.x + panels.0 * screen.points_per_ui_pixel + gap * 0.5 - span * 0.5,
+            (true, false) => safe.x + margin,
+            (true, true) => safe.x + safe.w - margin - span,
+        };
         for (index, control) in controls.iter().enumerate() {
             #[allow(clippy::cast_precision_loss, reason = "a handful of buttons")]
             let x = pitch.mul_add(index as f32, first);
             self.controls.push((
                 *control,
-                TouchRect::around(x, safe.y + radius + self.button * 0.1, radius),
+                TouchRect::around(x, safe.y + drop + radius + self.button * 0.1, radius),
             ));
         }
     }
@@ -793,10 +823,12 @@ impl TouchInput {
             TouchControl::Pause => input.pause = true,
             TouchControl::Inventory => input.inventory = true,
             TouchControl::Map => input.map = true,
-            TouchControl::Confirm | TouchControl::BuildPlace => input.confirm = true,
+            TouchControl::BuildPlace => input.confirm = true,
             TouchControl::Back => input.back = true,
-            TouchControl::TabPrevious => input.tab_previous = true,
-            TouchControl::TabNext | TouchControl::BuildNext => input.tab_next = true,
+            // Left and right both switch tabs and adjust the selected row, on every screen.
+            TouchControl::TabPrevious => input.menu_left = true,
+            TouchControl::TabNext => input.menu_right = true,
+            TouchControl::BuildNext => input.tab_next = true,
             TouchControl::BuildRemove => input.build_remove = true,
             TouchControl::BuildRotate => input.build_rotate = true,
             TouchControl::BuildPrevious => input.build_previous = true,
@@ -906,6 +938,8 @@ pub enum TouchReach {
     Control(TouchControl),
     /// The floating stick.
     Stick,
+    /// Touching the thing itself (a menu row).
+    Tap,
 }
 
 /// The touch answer to every controller action. Exhaustive on purpose: a new [`PadAction`]
@@ -914,10 +948,10 @@ pub enum TouchReach {
 #[must_use]
 pub const fn pad_action_control(action: PadAction) -> TouchReach {
     use TouchControl as C;
-    use TouchReach::{Control, Stick};
+    use TouchReach::{Control, Stick, Tap};
     match action {
         PadAction::Thrust => Stick,
-        PadAction::Confirm => Control(C::Confirm),
+        PadAction::Confirm => Tap,
         PadAction::Interact => Control(C::Prompt),
         PadAction::Back => Control(C::Back),
         PadAction::Inventory => Control(C::Inventory),
@@ -942,8 +976,7 @@ pub const fn pad_action_control(action: PadAction) -> TouchReach {
 #[must_use]
 pub const fn touch_labels(prompt: Prompt) -> &'static [&'static str] {
     match prompt {
-        Prompt::Use | Prompt::BuildCursor => &["Tap"],
-        Prompt::Confirm => &["OK"],
+        Prompt::Use | Prompt::Confirm | Prompt::BuildCursor => &["Tap"],
         Prompt::Back => &["Back"],
         Prompt::Scroll => &["Drag"],
         // On-screen controls that label themselves.

@@ -256,6 +256,7 @@ mod tests {
         save: false,
         load: false,
         selected_upgrade: None,
+        menu_pick: None,
         map: false,
         help: false,
         volume_up: false,

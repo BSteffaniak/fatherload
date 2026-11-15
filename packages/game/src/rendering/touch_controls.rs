@@ -194,8 +194,7 @@ const fn rim(control: TouchControl) -> Color {
             palette::ORANGE
         }
         TouchControl::Scan => palette::MINT,
-        TouchControl::Confirm
-        | TouchControl::Use
+        TouchControl::Use
         | TouchControl::BuildPlace
         | TouchControl::Build
         | TouchControl::Kit(_) => palette::GOLD,
@@ -240,7 +239,6 @@ const fn label(control: TouchControl) -> &'static str {
         TouchControl::Pause => "II",
         TouchControl::Inventory => "BAG",
         TouchControl::Map => "MAP",
-        TouchControl::Confirm => "OK",
         TouchControl::Back => "BACK",
         TouchControl::TabPrevious | TouchControl::BuildPrevious => "<",
         TouchControl::TabNext | TouchControl::BuildNext => ">",

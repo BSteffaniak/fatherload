@@ -55,7 +55,7 @@ impl From<(i32, i32)> for ScreenSize {
 /// draws the world at the same scale.
 #[must_use]
 pub fn world_scale_for_screen(screen: ScreenSize) -> f32 {
-    crate::pixel_scale::world_scale(screen.height, screen.density)
+    crate::pixel_scale::world_scale(screen.width, screen.height, screen.density)
 }
 
 /// Every mineral, in market display order.
@@ -932,7 +932,8 @@ mod tests {
     }
 
     fn scale_at(height: i32) -> f32 {
-        world_scale_for_screen(ScreenSize::from((1, height)))
+        // A widescreen desktop window (phones scale by their own rules, see `pixel_scale`).
+        world_scale_for_screen(ScreenSize::from((height * 16 / 9, height)))
     }
 
     #[test]

@@ -121,6 +121,9 @@ pub struct PlayerInput {
     pub pointer_primary: bool,
     /// Right mouse button pressed.
     pub pointer_secondary: bool,
+    /// A row of the menu in front was tapped or clicked: select it and confirm (see
+    /// `shell::pointer`). The index counts the screen's selectable rows from the top.
+    pub menu_pick: Option<usize>,
 }
 
 impl PlayerInput {
@@ -200,9 +203,11 @@ impl PlayerInput {
             build_pointer: _,
             pointer_primary,
             pointer_secondary,
+            menu_pick,
         } = *self;
         horizontal.abs() > f32::EPSILON
             || ui_scroll.abs() > f32::EPSILON
+            || menu_pick.is_some()
             || selected_upgrade.is_some()
             || text_input.is_some()
             || [
@@ -373,6 +378,7 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         build_pointer: primary.build_pointer.or(secondary.build_pointer),
         pointer_primary: primary.pointer_primary || secondary.pointer_primary,
         pointer_secondary: primary.pointer_secondary || secondary.pointer_secondary,
+        menu_pick: primary.menu_pick.or(secondary.menu_pick),
     }
 }
 
@@ -481,6 +487,8 @@ fn read_primary_keyboard_input_with_options(
         build_pointer: None,
         pointer_primary: raylib.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT),
         pointer_secondary: raylib.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_RIGHT),
+        // The app resolves clicks against the menus drawn last frame.
+        menu_pick: None,
     }
 }
 

@@ -241,6 +241,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         }
         let plan = node.render_plan();
         self.render_plan(&plan);
+        record_pointer_rows(&plan, body);
         if let Some((offset, content_height)) = overflow {
             self.scroll_bar(body, offset, content_height);
             self.scroll_prompt(panel, title);
@@ -398,6 +399,7 @@ impl<'draw, 'handle> UiLayout<'draw, 'handle> {
         };
         ui_kit::panel(self.draw, rect, style);
         LAST_DIALOG_RECT.with(|last| last.set(Some(rect)));
+        super::pointer::record_dialog(rect);
         let x = rect.x as i32 + 12;
         let mut y = rect.y as i32 + 10;
         ui_kit::text(self.draw, title, x, y, title_style, title_color);
@@ -949,6 +951,25 @@ fn modal_content_node(content: &ModalContent, width: f32) -> widgets::UiNode {
 /// or after the last button are reachable with the selection alone. Any other row scrolls just
 /// enough to stay fully visible, and not at all while it already is. Nothing happens until
 /// the focus moves again, so wheel / Page / stick scrolling in between is never undone.
+/// What a selectable row's widget id starts with; its index among the rows follows.
+const MODAL_OPTION_PREFIX: &str = "modal-option-";
+
+/// Tells the pointer where each selectable row of `plan` ended up inside `body`.
+fn record_pointer_rows(plan: &widgets::RenderPlan, body: Rectangle) {
+    for command in plan.commands() {
+        if let widgets::RenderCommand::Button {
+            rect, id: Some(id), ..
+        } = command
+            && let Some(index) = id
+                .as_str()
+                .strip_prefix(MODAL_OPTION_PREFIX)
+                .and_then(|index| index.parse().ok())
+        {
+            super::pointer::record_row(*rect, body, index);
+        }
+    }
+}
+
 fn follow_focused_row(node: &widgets::UiNode, body: Rectangle) -> bool {
     let plan = node.render_plan();
     let rows: Vec<(&widgets::WidgetId, Rectangle, bool)> = plan

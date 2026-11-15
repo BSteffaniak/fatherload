@@ -12,6 +12,10 @@ impl WidgetId {
     pub(in crate::rendering) fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
+
+    pub(in crate::rendering) fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Clone, Debug, Default)]

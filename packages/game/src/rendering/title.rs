@@ -415,14 +415,16 @@ fn draw_menu(draw: &mut impl RaylibDraw, ui: &UiFrame<'_, '_>, width: i32, heigh
         } else {
             ButtonState::Idle
         };
+        let row_rect = Rectangle::new(
+            (panel_x + 14) as f32,
+            y as f32,
+            (panel_width - 21) as f32,
+            row_height as f32,
+        );
+        super::pointer::record_row(row_rect, row_rect, index);
         ui_kit::item_row(
             draw,
-            Rectangle::new(
-                (panel_x + 14) as f32,
-                y as f32,
-                (panel_width - 21) as f32,
-                row_height as f32,
-            ),
+            row_rect,
             &ItemRow {
                 icon: Some(option_icon(*option)),
                 label: option.label(),

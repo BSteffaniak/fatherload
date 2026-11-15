@@ -474,10 +474,10 @@ fn tapping_a_pointed_tile_again_places_there() {
 fn dragging_a_menu_scrolls_it_and_a_still_finger_taps() {
     let mut rig = Rig::new(TouchContext::default());
     let layout = rig.layout();
-    // Right of the stick zone, above the buttons.
-    let start = (600.0, 120.0);
+    // Anywhere on a menu: there is no stick to plant.
+    let start = (200.0, 220.0);
     assert_eq!(layout.hit(start.0, start.1), None);
-    assert!(!layout.stick_zone.contains(start.0, start.1));
+    assert!(close(layout.stick_zone.w, 0.0));
     rig.frame(&[(1, start)]);
     let small = rig.frame(&[(1, (start.0, start.1 + 4.0))]);
     assert!(close(small.input.ui_scroll, 0.0), "inside the tap slop");
@@ -508,20 +508,10 @@ fn dragging_a_menu_scrolls_it_and_a_still_finger_taps() {
 #[test]
 fn menus_and_interiors_have_their_own_buttons() {
     let mut menu = Rig::new(TouchContext::default());
-    assert!(menu.tap(TouchControl::Confirm).0.confirm);
     let back = menu.tap(TouchControl::Back).0;
     assert!(back.back && !back.cancel && !back.pause);
-    assert!(menu.tap(TouchControl::TabNext).0.tab_next);
-    assert!(menu.tap(TouchControl::TabPrevious).0.tab_previous);
-    // The stick steps the selection.
-    let base = menu.stick_point();
-    let radius = menu.layout().stick_radius();
-    menu.frame(&[(1, base)]);
-    assert!(
-        menu.frame(&[(1, (base.0, base.1 + radius))])
-            .input
-            .menu_down
-    );
+    assert!(menu.tap(TouchControl::TabNext).0.menu_right);
+    assert!(menu.tap(TouchControl::TabPrevious).0.menu_left);
 
     let mut interior = Rig::new(TouchContext {
         mode: TouchMode::Interior,
@@ -665,7 +655,7 @@ fn every_controller_action_has_a_touch_control_somewhere() {
     let layouts = layouts(PHONE);
     for (action, _) in PAD_BINDINGS {
         match pad_action_control(*action) {
-            TouchReach::Stick => {}
+            TouchReach::Stick | TouchReach::Tap => {}
             TouchReach::Control(control) => assert!(
                 layouts
                     .iter()
@@ -732,7 +722,8 @@ fn every_input_field_has_a_touch_answer() {
         build_remove: _,
         build_rotate: _,
         build_previous: _,
-        // Taps on the world (the app projects them) and drags on menus.
+        // Taps on the world and on menu rows (the app resolves them) and drags on menus.
+        menu_pick: _,
         build_pointer: _,
         pointer_primary: _,
         ui_scroll: _,

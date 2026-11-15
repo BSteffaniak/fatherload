@@ -17,6 +17,7 @@ use crate::{
     },
     pixel_scale,
     render_snapshot::{ScreenSize, ViewSnapshot},
+    rendering::pointer::{self, MenuHit},
     shell::ShellState,
 };
 
@@ -104,6 +105,17 @@ impl TouchDevice {
             }
         } else {
             self.build_tap.reset();
+        }
+        if self.context.mode == TouchMode::Menu {
+            for event in &frame.events {
+                if let PointerEvent::Tap { x, y } = *event {
+                    match pointer::hit(x, y) {
+                        MenuHit::Row(row) => input.menu_pick = Some(row),
+                        MenuHit::Outside => input.back = true,
+                        MenuHit::Dialog | MenuHit::Nothing => {}
+                    }
+                }
+            }
         }
         self.quiet_seconds = if frame.engaged {
             Some(0.0)
@@ -219,6 +231,7 @@ fn touch_screen(screen: ScreenSize) -> TouchScreen {
     let ui_pixel = pixel_scale::ui_pixel_size(
         (screen.width as f32 * density).round() as i32,
         (screen.height as f32 * density).round() as i32,
+        density,
     ) as f32;
     #[allow(clippy::cast_precision_loss, reason = "screen sizes are small")]
     TouchScreen {

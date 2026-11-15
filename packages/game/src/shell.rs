@@ -29,6 +29,7 @@ mod build;
 mod crew;
 mod garage;
 pub mod hopper;
+mod pointer;
 mod quests;
 mod test_mode;
 mod village;
@@ -1844,6 +1845,9 @@ impl ShellState {
         delta_seconds: f32,
         ctx: ShellContext<'_>,
     ) -> Vec<ShellRequest> {
+        // A tapped or clicked row becomes "that row is selected and confirmed".
+        let inputs = self.take_menu_picks(inputs);
+        let inputs = inputs.as_slice();
         let primary = inputs.first().copied().unwrap_or_default();
         let mut requests = Vec::new();
         self.set_seat_count(ctx.players.len().max(inputs.len()));

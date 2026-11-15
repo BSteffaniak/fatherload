@@ -27,6 +27,7 @@ mod layout;
 mod menus;
 mod people_art;
 pub mod pixel_art;
+pub mod pointer;
 mod prompts;
 mod quests;
 pub mod rig_art;
@@ -306,6 +307,11 @@ impl GameRenderer {
             .unwrap_or_default();
         state.begin_frame();
         layout::set_current_ui_state(state);
+        pointer::set_target(match owner {
+            UiOwner::Global => pointer::Target::Global,
+            UiOwner::Seat(0) => pointer::Target::FirstSeat,
+            UiOwner::Seat(_) => pointer::Target::Ignored,
+        });
     }
 
     /// Stores `owner`'s dialog state after drawing its UI.
@@ -329,6 +335,7 @@ impl GameRenderer {
         let seconds = shell.update_ticks as f32 / 60.0;
         let screen = UiCanvas::from_draw(draw);
         ui_kit::begin_frame(screen, self.font_faces(), seconds);
+        pointer::begin_frame();
         draw.clear_background(palette::SKY_LIGHT);
 
         // The title and online screens paint their own backdrop over the whole canvas.

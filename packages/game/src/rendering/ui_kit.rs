@@ -62,7 +62,7 @@ impl UiCanvas {
     /// The canvas for a `render_width` x `render_height` framebuffer at `density`.
     #[must_use]
     pub fn for_framebuffer(render_width: i32, render_height: i32, density: f32) -> Self {
-        let pixel = pixel_scale::ui_pixel_size(render_width, render_height);
+        let pixel = pixel_scale::ui_pixel_size(render_width, render_height, density);
         Self {
             pixel,
             density: density.max(1.0),

@@ -14,7 +14,10 @@ use crate::{
         router::{DeviceFrame, InputRouter},
     },
     local_game::{FrameInput, LocalGame, SaveTarget},
-    rendering::GameRenderer,
+    rendering::{
+        GameRenderer,
+        pointer::{self, MenuHit},
+    },
     runtime::MAX_LOCAL_SEATS,
     save::{load_settings, save_settings},
     shell::RunMode,
@@ -142,6 +145,12 @@ fn sample_frame_input(
     if !touch.owns_pointer {
         let mouse = raylib.get_mouse_position();
         point_with_mouse(&mut input.primary, view, (mouse.x, mouse.y));
+        // A click on a menu row picks it.
+        if input.primary.pointer_primary
+            && let MenuHit::Row(row) = pointer::hit(mouse.x, mouse.y)
+        {
+            input.primary.menu_pick = Some(row);
+        }
     }
     input
 }
