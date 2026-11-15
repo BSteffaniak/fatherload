@@ -27,6 +27,15 @@ use super::{ART, GROUND_Y, Pen, text_art_width};
 const LOT_HEIGHT: i32 = 64;
 /// Lot width in art pixels.
 const LOT_WIDTH: i32 = 128;
+/// The bank's stair: three 4-row steps stacked 3 rows apart (sharing ink edges), its top row
+/// right under the temple's wall, door and column bases, its bottom row on the ground line.
+const BANK_STEPS_TOP: i32 = LOT_HEIGHT - BANK_STEPS_HEIGHT;
+/// Rows the bank's stair covers.
+const BANK_STEPS_HEIGHT: i32 = 2 * 3 + 4;
+// The bank stands flush on its stair (a playtest found an empty see-through line between the
+// temple and its steps): the stair ends on the ground line and its top row is the one right
+// under the wall, door and column bases, which all end at `BANK_STEPS_TOP`.
+const _: () = assert!(BANK_STEPS_TOP + BANK_STEPS_HEIGHT == LOT_HEIGHT && BANK_STEPS_TOP == 54);
 
 /// Per-building drawing state.
 #[derive(Clone, Copy)]
@@ -475,25 +484,27 @@ fn bank(draw: &mut impl RaylibDraw, lot: Lot<'_>) {
     pen.rect(draw, 7, 26, 114, 1, MIST);
     let width = text_art_width(lot.label);
     pen.text(draw, lot.label, 64 - width / 2, 17, SLATE_DARK);
-    // Back wall and columns.
-    pen.rect(draw, 10, 28, 108, 26, INK);
-    pen.rect(draw, 11, 28, 106, 26, STONE_LIGHT);
+    // Back wall and columns (rows 28..BANK_STEPS_TOP).
+    pen.rect(draw, 10, 28, 108, BANK_STEPS_TOP - 28, INK);
+    pen.rect(draw, 11, 28, 106, BANK_STEPS_TOP - 28, STONE_LIGHT);
     for x in [12, 30, 88, 106] {
         pen.boxed(draw, x - 1, 28, 12, 3, BONE);
         pen.boxed(draw, x, 30, 10, 22, BONE);
         pen.rect(draw, x + 6, 31, 3, 20, MIST);
         pen.rect(draw, x + 3, 31, 1, 20, MIST);
-        pen.boxed(draw, x - 1, 51, 12, 3, BONE);
+        pen.boxed(draw, x - 1, BANK_STEPS_TOP - 3, 12, 3, BONE);
     }
     window(draw, pen, 46, 33, 8, 10, false);
     window(draw, pen, 74, 33, 8, 10, false);
-    door(draw, lot, 56, 34, 16, 20, ORANGE);
+    door(draw, lot, 56, 34, 16, BANK_STEPS_TOP - 34, ORANGE);
     pen.rect(draw, 64, 35, 1, 18, INK);
-    // Steps.
+    // Steps: three 4-row slabs sharing their ink edges, the bottom one ending on the ground
+    // line and the top one starting on the row right under the wall and column bases (row 54),
+    // so the temple sits flush on its stair with no see-through line between them.
     for (index, inset) in [0, 4, 8].into_iter().enumerate() {
-        let y = 63 - index as i32 * 3;
-        pen.boxed(draw, 4 + inset, y - 2, 120 - inset * 2, 4, STONE_LIGHT);
-        pen.rect(draw, 5 + inset, y - 1, 118 - inset * 2, 1, BONE);
+        let y = BANK_STEPS_TOP + (2 - index as i32) * 3;
+        pen.boxed(draw, 4 + inset, y, 120 - inset * 2, 4, STONE_LIGHT);
+        pen.rect(draw, 5 + inset, y + 1, 118 - inset * 2, 1, BONE);
     }
 }
 
