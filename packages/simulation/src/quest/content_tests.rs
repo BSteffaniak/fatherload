@@ -399,22 +399,39 @@ fn every_quest_binds_on_many_seeds() {
     }
 }
 
-/// Features in `terrain` a target spec could bind to.
-fn candidate_count(spec: super::TargetSpec, terrain: &Terrain) -> usize {
+/// Features in `terrain` a target spec bound from `origin` could pick: every one of a bounded
+/// world, or those in the nearest window a streamed world's binding searches first.
+fn candidate_count(spec: super::TargetSpec, terrain: &Terrain, origin: TilePosition) -> usize {
+    use crate::worldgen::{FeatureKind, TileRect};
     let (first, last) = spec.bands();
-    let in_bands = |feature: &&crate::worldgen::WorldFeature| {
+    let in_bands = |feature: &crate::worldgen::WorldFeature| {
         (usize::from(first)..=usize::from(last)).contains(&feature.band.index())
+    };
+    let (min_x, max_x) = if terrain.is_streamed() {
+        let columns = super::binding::STREAMED_BIND_COLUMNS[0];
+        (origin.x - columns, origin.x + columns)
+    } else {
+        (terrain.min_x(), terrain.max_x())
+    };
+    let rect = TileRect {
+        min: TilePosition { x: min_x, y: 0 },
+        max: TilePosition {
+            x: max_x,
+            y: terrain.height() - 1,
+        },
     };
     match spec {
         super::TargetSpec::Poi { kind, unopened, .. } => terrain
-            .features()
-            .pois_of(kind)
-            .filter(in_bands)
+            .features_in(&rect, Some(&[FeatureKind::PointOfInterest]))
+            .iter()
+            .filter(|feature| feature.poi_kind() == Some(kind) && in_bands(feature))
             .filter(|feature| !unopened || super::binding::poi_unopened(terrain, feature))
             .count(),
-        super::TargetSpec::Feature { kind, .. } => {
-            terrain.features().of_kind(kind).filter(in_bands).count()
-        }
+        super::TargetSpec::Feature { kind, .. } => terrain
+            .features_in(&rect, Some(&[kind]))
+            .iter()
+            .filter(|feature| in_bands(feature))
+            .count(),
     }
 }
 
@@ -426,6 +443,7 @@ fn binding_is_deterministic_and_prefers_unclaimed_places() {
         y: 4,
     };
     let journal = PoiJournal::default();
+    let mut moved = 0;
     for def in all() {
         let first = bind_quest(def, &terrain, origin, &journal, 0, &BTreeSet::new());
         let again = bind_quest(def, &terrain, origin, &journal, 0, &BTreeSet::new());
@@ -444,12 +462,15 @@ fn binding_is_deterministic_and_prefers_unclaimed_places() {
             let alternatives = def
                 .targets
                 .iter()
-                .all(|spec| candidate_count(*spec, &terrain) >= 2);
+                .all(|spec| candidate_count(*spec, &terrain, origin) >= 2);
             if def.targets.len() == 1 && alternatives {
                 assert!(other_features.is_disjoint(&taken), "{}", def.title);
+                moved += 1;
             }
         }
     }
+    // The check above must actually run (an empty candidate count would skip it silently).
+    assert!(moved > 0, "no quest had alternatives to move to");
 }
 
 #[test]
