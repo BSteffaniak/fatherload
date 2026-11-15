@@ -186,6 +186,14 @@ interest plus feature, POI-kind and hazard-cluster counts (min / mean / max over
 preview writes a whole-world map (layers, caves, ores, hazards, artifacts, with motherlodes,
 artifact beds and chambers outlined, and each point of interest outlined with its map icon).
 
+People and story review (no window opens): procedural villagers (names, personalities,
+quirks, wants, fears, histories, relationships), their dialogue across several visits and after
+the player helps them, and the story seeds their village grows (`packages/simulation/src/people`):
+
+```bash
+cargo run --release --bin fatherload -- --story-report [--seed 7] [--count 30] [--no-world]
+```
+
 Audio review (no window opens): every sound is generated in code; this writes each one (and its
 variations) to WAV with a level report and a `showcase.wav` tour through the in-game mixer (see
 `packages/game/src/audio/README.md`):

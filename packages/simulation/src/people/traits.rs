@@ -43,6 +43,7 @@ impl TraitBias {
     };
 
     #[must_use]
+    #[allow(clippy::many_single_char_names, reason = "the Big Five initials")]
     pub const fn new(o: i8, c: i8, e: i8, a: i8, n: i8) -> Self {
         Self {
             openness: o,
@@ -66,7 +67,8 @@ impl Personality {
     /// Rolls traits (a bell-ish average of two rolls) nudged by `bias`.
     pub(crate) fn roll(rng: &mut PeopleRng, bias: TraitBias) -> Self {
         let mut roll = |nudge: i8| {
-            let value = (rng.range(0, 100) + rng.range(0, 100)) / 2 + i32::from(nudge);
+            let (first, second) = (rng.range(0, 100), rng.range(0, 100));
+            let value = i32::midpoint(first, second) + i32::from(nudge);
             u8::try_from(value.clamp(0, 100)).unwrap_or(50)
         };
         Self {
@@ -80,6 +82,7 @@ impl Personality {
 
     /// How strongly each tone fits these traits (higher fits better).
     #[must_use]
+    #[allow(clippy::many_single_char_names, reason = "the Big Five initials")]
     pub fn tone_scores(self) -> [(Tone, i32); 6] {
         let o = i32::from(self.openness);
         let c = i32::from(self.conscientiousness);
@@ -244,6 +247,7 @@ impl Quirk {
 
     /// Asides this quirk slips into conversation (templates; `{player}` etc. allowed).
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "a data table")]
     pub const fn asides(self) -> &'static [&'static str] {
         match self {
             Self::HumsOffKey => &[

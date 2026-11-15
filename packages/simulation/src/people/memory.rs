@@ -50,10 +50,9 @@ impl MemoryFact {
     #[must_use]
     pub const fn effect(&self) -> FactEffect {
         match self {
-            Self::Met => FactEffect::new(1, 0, 0, 2),
+            Self::Met | Self::Traded => FactEffect::new(1, 0, 0, 2),
             Self::Gift { liked: true } => FactEffect::new(4, 0, 0, 12),
             Self::Gift { liked: false } => FactEffect::new(0, 0, 0, -4),
-            Self::Traded => FactEffect::new(1, 0, 0, 2),
             Self::ArcCompleted { .. } => FactEffect::new(15, 1, 0, 25),
             Self::ArcAbandoned { .. } => FactEffect::new(-8, 0, 1, -15),
             Self::FoundPerson { .. } => FactEffect::new(20, 1, 0, 30),

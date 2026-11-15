@@ -302,22 +302,22 @@ fn add_families(population: &mut Population, rng: &mut PeopleRng) {
         }
         for (position, a) in members.iter().enumerate() {
             for b in &members[position + 1..] {
-                let (older, younger) = (*a, *b);
-                let gap = population.characters[older]
+                let (senior, junior) = (*a, *b);
+                let gap = population.characters[senior]
                     .age
-                    .saturating_sub(population.characters[younger].age);
+                    .saturating_sub(population.characters[junior].age);
                 let kind = if gap >= 18 {
                     RelationshipKind::Child
                 } else if members.len() == 2
                     && gap <= 10
-                    && population.characters[younger].age >= 22
+                    && population.characters[junior].age >= 22
                     && rng.chance(50)
                 {
                     RelationshipKind::Spouse
                 } else {
                     RelationshipKind::Sibling
                 };
-                population.link(older, younger, kind);
+                population.link(senior, junior, kind);
             }
         }
     }

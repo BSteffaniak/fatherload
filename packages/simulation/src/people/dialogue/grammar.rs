@@ -54,12 +54,10 @@ fn article(word: &str) -> &'static str {
 
 /// One `{...}` reference: (variable, capitalise, article).
 fn parse_ref(inner: &str) -> (&str, bool, Option<bool>) {
-    let (article, name) = if let Some(rest) = inner.strip_prefix("a ") {
-        (Some(false), rest)
-    } else if let Some(rest) = inner.strip_prefix("A ") {
-        (Some(true), rest)
-    } else {
-        (None, inner)
+    let (article, name) = match (inner.strip_prefix("a "), inner.strip_prefix("A ")) {
+        (Some(rest), _) => (Some(false), rest),
+        (None, Some(rest)) => (Some(true), rest),
+        (None, None) => (None, inner),
     };
     let capital = name.chars().next().is_some_and(char::is_uppercase);
     (name, capital, article)

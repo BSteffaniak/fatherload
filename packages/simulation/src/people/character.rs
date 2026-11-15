@@ -371,10 +371,13 @@ impl Appearance {
 
     fn roll(seed: u64, age: u8) -> Self {
         let mut rng = PeopleRng::new(seed, 0xA9, 0, 0);
-        let mut hair = u8::try_from(rng.below(Self::HAIR.len())).unwrap_or(0);
-        if age >= 60 && rng.chance(60) {
-            hair = if rng.chance(50) { 3 } else { 5 };
-        }
+        let rolled = u8::try_from(rng.below(Self::HAIR.len())).unwrap_or(0);
+        // Older folk tend to go silver or white.
+        let hair = match (age >= 60 && rng.chance(60), rng.chance(50)) {
+            (true, true) => 3,
+            (true, false) => 5,
+            (false, _) => rolled,
+        };
         Self {
             seed: rng.next_u64(),
             build: u8::try_from(rng.below(Self::BUILDS.len())).unwrap_or(0),
@@ -536,6 +539,10 @@ const fn culture_roles(culture: Culture) -> &'static [Role] {
 /// Characters generated alone have no neighbours; [`super::generate_population`] adds families
 /// and relationships on top.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one roll after another, in a fixed order"
+)]
 pub fn generate_character(seed: u64, id: CharacterId, culture: Culture) -> Character {
     let mut rng = PeopleRng::new(
         seed,
@@ -797,6 +804,36 @@ pub(crate) const BEATS: &[BeatDef] = &[
         cultures: &[Culture::Highland, Culture::Mesa],
         roles: &[],
     },
+    BeatDef {
+        stage: LifeStage::Origin,
+        text: "Grew up on a river barge, and still sways a little when standing still.",
+        cultures: &[Culture::Riverside],
+        roles: &[],
+    },
+    BeatDef {
+        stage: LifeStage::Recently,
+        text: "Went up top for a market day and came back sunburnt and amazed by clouds.",
+        cultures: &[Culture::Deepfolk],
+        roles: &[],
+    },
+    BeatDef {
+        stage: LifeStage::TurningPoint,
+        text: "Spent a whole year alone in the far tunnels, listening, and came back with a new name.",
+        cultures: &[Culture::Deepfolk],
+        roles: &[],
+    },
+    BeatDef {
+        stage: LifeStage::TurningPoint,
+        text: "Won {a formerly}'s entire workshop in a card game, and has been learning the trade ever since.",
+        cultures: &[Culture::Frontier, Culture::Scrapper],
+        roles: &[],
+    },
+    BeatDef {
+        stage: LifeStage::Recently,
+        text: "Has been painting the adobe walls a new colour every season, to the neighbours' delight.",
+        cultures: &[Culture::Mesa],
+        roles: &[],
+    },
     beat(
         LifeStage::TurningPoint,
         "Lost a whole rig in {band} and walked out with only the lamp, which still works.",
@@ -974,7 +1011,17 @@ pub(crate) fn history(seed: u64, character: &Character) -> Vec<HistoryBeat> {
         if options.is_empty() {
             continue;
         }
-        let def = *rng.pick(&options);
+        // Culture and trade beats are rarer in the table, so give them a fair chance.
+        let specific: Vec<&BeatDef> = options
+            .iter()
+            .copied()
+            .filter(|beat| !beat.cultures.is_empty() || !beat.roles.is_empty())
+            .collect();
+        let def = if !specific.is_empty() && rng.chance(40) {
+            *rng.pick(&specific)
+        } else {
+            *rng.pick(&options)
+        };
         beats.push(HistoryBeat {
             stage: *stage,
             text: grammar::expand(def.text, &vars, rng),

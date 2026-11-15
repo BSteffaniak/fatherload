@@ -183,6 +183,7 @@ fn tally(counts: &BTreeMap<&str, u32>) -> String {
         .join(", ")
 }
 
+#[allow(clippy::too_many_lines, reason = "one report block, top to bottom")]
 fn profile(
     out: &mut String,
     seed: u64,
@@ -299,7 +300,7 @@ fn profile(
         &mut state,
         &ctx(8),
         dialogue::Topic::Gift {
-            liked: character.voice_seed % 3 != 0,
+            liked: !character.voice_seed.is_multiple_of(3),
         },
     );
     if let Some(gift) = gift {

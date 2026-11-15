@@ -88,10 +88,10 @@ impl PersonName {
     /// "Hollis \"Dusty\" Pike", or "Ilvo of the Third Lamp".
     #[must_use]
     pub fn full(&self) -> String {
-        match &self.nickname {
-            Some(nickname) => format!("{} \"{nickname}\" {}", self.given, self.family),
-            None => format!("{} {}", self.given, self.family),
-        }
+        self.nickname.as_ref().map_or_else(
+            || self.formal(),
+            |nickname| format!("{} \"{nickname}\" {}", self.given, self.family),
+        )
     }
 
     /// The name they go by day to day.
@@ -426,7 +426,15 @@ fn syllable_name(table: &NameTable, rng: &mut PeopleRng) -> String {
 /// vowels running.
 fn pronounceable(name: &str) -> bool {
     let chars: Vec<char> = name.to_lowercase().chars().collect();
-    if !(3..=9).contains(&chars.len()) {
+    if !(4..=8).contains(&chars.len()) {
+        return false;
+    }
+    let lower = name.to_lowercase();
+    if lower.starts_with("ee")
+        || ["aa", "ii", "uu", "yi", "iy"]
+            .iter()
+            .any(|pair| lower.contains(pair))
+    {
         return false;
     }
     let is_vowel = |c: char| "aeiouy".contains(c);
@@ -512,6 +520,8 @@ mod tests {
     #[test]
     fn pronounceable_rejects_noise() {
         assert!(pronounceable("Hollis"));
+        assert!(!pronounceable("Tasiita"));
+        assert!(!pronounceable("Een"));
         assert!(!pronounceable("Aaaron"));
         assert!(!pronounceable("Brrkst"));
         assert!(!pronounceable("Al"));

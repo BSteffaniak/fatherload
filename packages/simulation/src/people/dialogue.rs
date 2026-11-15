@@ -104,7 +104,7 @@ fn common_vars(character: &Character, ctx: &TalkContext<'_>, rng: &mut PeopleRng
 }
 
 /// "yesterday", "a few days back", ...
-fn days_ago(today: u32, then: u32) -> &'static str {
+const fn days_ago(today: u32, then: u32) -> &'static str {
     match today.saturating_sub(then) {
         0 => "earlier today",
         1 => "yesterday",
@@ -116,6 +116,10 @@ fn days_ago(today: u32, then: u32) -> &'static str {
 
 /// Resolves a topic into a line set and its variables, or `None` when the character has
 /// nothing to say about it.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one flat match over every topic reads best"
+)]
 fn resolve(
     character: &Character,
     state: &CharacterState,
@@ -438,9 +442,10 @@ const ROTATION: [Topic; 7] = [
     Topic::Value,
 ];
 
-/// A short exchange: a greeting, one topic (an unmentioned memory first, otherwise the next
-/// topic in a per-character rotation) and sometimes a quirk aside. Counts the conversation and
-/// records the first meeting.
+/// A short exchange: a greeting, one topic and sometimes a quirk aside.
+///
+/// The topic is an unmentioned memory first, otherwise the next topic in a per-character
+/// rotation. Counts the conversation and records the first meeting.
 pub fn talk(character: &Character, state: &mut CharacterState, ctx: &TalkContext<'_>) -> Vec<Line> {
     let mut lines = Vec::new();
     lines.extend(say(character, state, ctx, Topic::Greeting));
@@ -455,10 +460,11 @@ pub fn talk(character: &Character, state: &mut CharacterState, ctx: &TalkContext
         u64::from(talks),
         0x7A1C,
     );
-    let mut topic_line = None;
-    if talks > 0 && memory.unmentioned().is_some() {
-        topic_line = say(character, state, ctx, Topic::Memory);
-    }
+    let mut topic_line = if talks > 0 && memory.unmentioned().is_some() {
+        say(character, state, ctx, Topic::Memory)
+    } else {
+        None
+    };
     if topic_line.is_none() {
         // The first visit is introductions: what they do.
         let offset = usize::try_from(character.voice_seed % 7).unwrap_or(0);

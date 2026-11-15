@@ -360,7 +360,7 @@ pub const LINE_SETS: &[LineSet] = &[
             ],
             poetic: &[
                 "Today I was {work}. There's a kind of music in it, if you listen.",
-                "A {role}'s life is small and good. This morning: {work}, and watching the light move.",
+                "{A role}'s life is small and good. This morning: {work}, and watching the light move.",
             ],
             dry: &[
                 "I've been {work}. Living the dream. Someone's dream.",
@@ -468,15 +468,15 @@ pub const LINE_SETS: &[LineSet] = &[
         lines: ToneLines {
             gruff: &[
                 "My {rel_word}, {rel}. Stubborn. Gets it from me.",
-                "{Rel}'s my {rel_word}. If anyone gives {rel} trouble, they answer to me.",
+                "{Rel} is my {rel_word}. If anyone gives {rel} trouble, they answer to me.",
             ],
             cheerful: &[
-                "Have you met my {rel_word}? {Rel}'s wonderful! A bit much! Like me!",
+                "Have you met my {rel_word}? {Rel} is wonderful! A bit much! Like me!",
                 "My {rel_word} {rel} is the best, don't tell {rel} I said so!",
             ],
             nervous: &[
                 "My {rel_word}, {rel}... I worry about {rel} constantly. Is that normal?",
-                "{Rel}'s my {rel_word}. If you see {rel} near the shaft, tell me, okay?",
+                "{Rel} is my {rel_word}. If you see {rel} near the shaft, tell me, okay?",
             ],
             poetic: &[
                 "My {rel_word}, {rel}: same blood, different weather.",
@@ -484,11 +484,11 @@ pub const LINE_SETS: &[LineSet] = &[
             ],
             dry: &[
                 "My {rel_word}, {rel}. We get along beautifully as long as we're in different rooms.",
-                "{Rel}? {Rel}'s my {rel_word}. I didn't choose it, but I'd choose it.",
+                "{Rel}? {Rel} is my {rel_word}. I didn't choose it, but I'd choose it.",
             ],
             earnest: &[
                 "My {rel_word}, {rel}, means the world to me.",
-                "I'd do anything for my {rel_word}. {Rel}'s the reason I stay in {village}.",
+                "I'd do anything for my {rel_word}. {Rel} is the reason I stay in {village}.",
             ],
         },
     },
@@ -497,7 +497,7 @@ pub const LINE_SETS: &[LineSet] = &[
         topic: LineTopic::AboutFriend,
         lines: ToneLines {
             gruff: &[
-                "{Rel}'s all right. Don't tell {rel} I said that.",
+                "{Rel} is all right. Don't tell {rel} I said that.",
                 "{Rel} and I go back. Owe each other more than coin.",
             ],
             cheerful: &[
@@ -505,7 +505,7 @@ pub const LINE_SETS: &[LineSet] = &[
                 "Oh, you have to meet {rel}! Funniest person alive! After me!",
             ],
             nervous: &[
-                "{Rel}'s a good friend. The only one who doesn't mind when I fret.",
+                "{Rel} is a good friend. The only one who doesn't mind when I fret.",
                 "I hope {rel} still likes me. Do you think {rel} still likes me?",
             ],
             poetic: &[
@@ -513,7 +513,7 @@ pub const LINE_SETS: &[LineSet] = &[
                 "Friendship's a seam you work together. {Rel} and I have worked ours deep.",
             ],
             dry: &[
-                "{Rel}'s my friend. We tolerate each other professionally.",
+                "{Rel} is my friend. We tolerate each other professionally.",
                 "{Rel} laughs at my jokes. That's a very rare quality.",
             ],
             earnest: &[
@@ -608,7 +608,7 @@ pub const LINE_SETS: &[LineSet] = &[
             ],
             earnest: &[
                 "I helped {rel} out when times were hard. That's what neighbours do.",
-                "{Rel} owes me a little, but I'm not worried. {Rel}'s good for it.",
+                "{Rel} owes me a little, but I'm not worried. {Rel} is good for it.",
             ],
         },
     },
@@ -663,7 +663,7 @@ pub const LINE_SETS: &[LineSet] = &[
                 "There's a road between me and {rel}, overgrown now. I walk it in my sleep.",
             ],
             dry: &[
-                "{Rel} and I aren't speaking. Well, I'm speaking. {Rel}'s doing the other thing.",
+                "{Rel} and I aren't speaking. Well, I'm speaking. {Rel} is doing the other thing.",
                 "We had a disagreement, {rel} and I. It's lasted longer than most marriages.",
             ],
             earnest: &[
@@ -681,8 +681,8 @@ pub const LINE_SETS: &[LineSet] = &[
                 "{Rel} was the best driller I knew. Went too deep. That's all I'll say.",
             ],
             cheerful: &[
-                "My {rel_word} {rel} went off exploring way down deep! Somewhere! I like to think {rel}'s having an adventure!",
-                "{Rel}'s out there! My {rel_word}! Just hasn't written. For a while. A long while.",
+                "My {rel_word} {rel} went off exploring way down deep! Somewhere! I like to think {rel} is having an adventure!",
+                "{Rel} is out there! My {rel_word}! Just hasn't written. For a while. A long while.",
             ],
             nervous: &[
                 "My {rel_word} went down past the slate and... I keep the lamp lit. Just in case {rel} comes back.",
@@ -712,10 +712,10 @@ pub const LINE_SETS: &[LineSet] = &[
             ],
             cheerful: &[
                 "My {rel_word} {rel} lives way off past the hills now! Sends the best letters!",
-                "{Rel}'s off seeing the world! I'm so proud! And a bit jealous!",
+                "{Rel} is off seeing the world! I'm so proud! And a bit jealous!",
             ],
             nervous: &[
-                "My {rel_word} moved away. I hope {rel}'s eating properly.",
+                "My {rel_word} moved away. I hope {rel} is eating properly.",
                 "{Rel} lives so far away now. What if something happens and I don't hear?",
             ],
             poetic: &[
@@ -873,7 +873,7 @@ pub const LINE_SETS: &[LineSet] = &[
                 "{Fact_name}'s rig, found. The deep gave something back, because of you.",
             ],
             dry: &[
-                "You found {fact_name}'s rig. Took you {days}. Took me twelve years and I didn't. So.",
+                "You found {fact_name}'s rig. Twelve years I looked. You just went and found it. Show-off.",
                 "My {fact_relation}'s rig turned up, thanks to you. Typical {fact_name}: parked badly.",
             ],
             earnest: &[
