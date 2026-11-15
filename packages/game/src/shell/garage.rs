@@ -134,6 +134,14 @@ impl GarageDraft {
         }
     }
 
+    /// Mixes `salt` (the tick the garage opened on) into the shuffle state, so "Surprise me"
+    /// does not deal the same looks every visit.
+    #[must_use]
+    pub const fn salted(mut self, salt: u64) -> Self {
+        self.seed = (self.seed ^ salt.wrapping_mul(0xBF58_476D_1CE4_E5B9)) | 1;
+        self
+    }
+
     const fn next(&mut self) -> u64 {
         // xorshift64*
         self.seed ^= self.seed >> 12;
@@ -229,7 +237,9 @@ impl SeatUi {
         let (Some(player_id), Some(player)) = (ctx.player, ctx.player()) else {
             return;
         };
-        self.garage = Some(GarageDraft::of(player_id, player.cosmetics));
+        self.garage = Some(
+            GarageDraft::of(player_id, player.cosmetics).salted(ctx.world.simulation_tick().get()),
+        );
         self.modal = Some(ModalScreen::Garage);
         self.selected_menu_item = 0;
         "Iona: Pick your colours. The rig in the bay shows the job before you commit."
