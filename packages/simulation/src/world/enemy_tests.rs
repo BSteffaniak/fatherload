@@ -69,7 +69,7 @@ fn px(tile: f32) -> f32 {
 
 #[allow(clippy::cast_precision_loss, reason = "small tile indices")]
 fn floor_y(radius: f32) -> f32 {
-    FLOOR as f32 * TILE_SIZE - radius - 1.0
+    (FLOOR as f32).mul_add(TILE_SIZE, -radius) - 1.0
 }
 
 fn park(world: &mut WorldState, player: PlayerId, tile_x: f32, tile_y: f32) {
@@ -175,7 +175,8 @@ fn roaming_enemies_spawn_in_the_dark_out_of_view_and_within_caps() {
             assert!(!world.enemy_safe_zone(tile));
             assert!(tile.y - world.terrain().surface_row(tile.x) >= 10);
         }
-        let near = world.enemies_near(px(rig.x as f32), px(rig.y as f32), px(32.0));
+        let (cx, cy) = crate::enemy::tile_centre(rig.x, rig.y);
+        let near = world.enemies_near(cx, cy, px(32.0));
         assert!(near.len() <= 13, "local cap: {}", near.len());
     }
     assert!(

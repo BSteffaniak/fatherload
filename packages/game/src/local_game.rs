@@ -10,7 +10,8 @@ use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 use fatherload_netcode::ReconnectToken;
 use fatherload_quic_transport::{HostDescriptor, JoinTarget, lan::LanDiscoveredGame};
 use fatherload_simulation::{
-    GameplayEventKind, PlayerCommand, PlayerId, WorldState, worldgen::WorldSettings,
+    EnemyDifficulty, GameplayEventKind, PlayerCommand, PlayerId, WorldState,
+    worldgen::WorldSettings,
 };
 
 use crate::{
@@ -656,7 +657,8 @@ impl LocalGame {
                 seats,
                 settings,
                 test_mode,
-            } => self.new_game(seats, &settings, test_mode, report),
+                enemies,
+            } => self.new_game(seats, &settings, (test_mode, enemies), report),
             ShellRequest::ResumeLatest => {
                 let loaded = match &self.save_target {
                     SaveTarget::UserFiles => save::load_latest_world(),
@@ -699,7 +701,8 @@ impl LocalGame {
             ShellRequest::HostOnline {
                 settings,
                 test_mode,
-            } => self.host_online(&settings, test_mode, report),
+                enemies,
+            } => self.host_online(&settings, (test_mode, enemies), report),
             ShellRequest::OpenOnline => self.open_online(),
             ShellRequest::JoinAddress(text) => match parse_join_addr(&text) {
                 Some(addr) => self.start_join(JoinTarget::Addr(addr), None, report),
@@ -741,10 +744,10 @@ impl LocalGame {
         &mut self,
         seats: usize,
         settings: &WorldSettings,
-        test_mode: bool,
+        (test_mode, enemies): (bool, EnemyDifficulty),
         report: &mut FrameReport,
     ) {
-        self.runtime = Runtime::local(world_from_setup(settings, test_mode), seats);
+        self.runtime = Runtime::local(world_from_setup(settings, test_mode, enemies), seats);
         self.reset_presentation(report);
         self.shell.enter_world(
             if test_mode {
@@ -865,9 +868,14 @@ impl LocalGame {
         }
     }
 
-    fn host_online(&mut self, settings: &WorldSettings, test_mode: bool, report: &mut FrameReport) {
+    fn host_online(
+        &mut self,
+        settings: &WorldSettings,
+        (test_mode, enemies): (bool, EnemyDifficulty),
+        report: &mut FrameReport,
+    ) {
         match LocalHost::online(
-            world_from_setup(settings, test_mode),
+            world_from_setup(settings, test_mode, enemies),
             1,
             self.host_bind,
             true,
@@ -1087,13 +1095,18 @@ pub fn world_from_settings(settings: &WorldSettings) -> WorldState {
 }
 
 /// A brand-new world from the world setup dialog: generated from `settings`, in test mode when
-/// `test_mode` is set.
+/// `test_mode` is set, with `enemies` as its enemy setting.
 #[must_use]
-pub fn world_from_setup(settings: &WorldSettings, test_mode: bool) -> WorldState {
+pub fn world_from_setup(
+    settings: &WorldSettings,
+    test_mode: bool,
+    enemies: EnemyDifficulty,
+) -> WorldState {
     let mut world = world_from_settings(settings);
     if test_mode {
         world.enable_test_mode();
     }
+    world.set_enemy_difficulty(enemies);
     world
 }
 
@@ -2394,6 +2407,7 @@ mod tests {
             ShellRequest::HostOnline {
                 settings: WorldSettings::default(),
                 test_mode: false,
+                enemies: EnemyDifficulty::Normal,
             },
             &mut requests,
             &mut FrameReport::default(),

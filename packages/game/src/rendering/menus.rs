@@ -178,6 +178,16 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::ToggleInvulnerable => &icons::HULL,
         PauseOption::ToggleInfiniteFuel => &icons::FUEL,
         PauseOption::ToggleNoClip => &menu_icons::GHOST,
+        PauseOption::EnemyDifficulty => &icons::WARNING,
+    }
+}
+
+/// The colour of an enemy setting: calm green, normal amber, hard red.
+const fn difficulty_color(difficulty: fatherload_simulation::EnemyDifficulty) -> Color {
+    match difficulty {
+        fatherload_simulation::EnemyDifficulty::Peaceful => LIME,
+        fatherload_simulation::EnemyDifficulty::Normal => AMBER,
+        fatherload_simulation::EnemyDifficulty::Hard => RED,
     }
 }
 
@@ -187,8 +197,17 @@ const fn on_off(on: bool) -> (&'static str, Color) {
 }
 
 /// A pause menu row, with the current value of a test-mode toggle.
-fn pause_entry(option: PauseOption, test_mode: Option<TestModeState>) -> Entry {
+fn pause_entry(
+    option: PauseOption,
+    test_mode: Option<TestModeState>,
+    enemies: fatherload_simulation::EnemyDifficulty,
+) -> Entry {
     let entry = Entry::new(pause_icon(option), option.label());
+    if option == PauseOption::EnemyDifficulty {
+        return entry
+            .detail(enemies.description())
+            .value(enemies.name(), difficulty_color(enemies));
+    }
     let toggle = match option {
         PauseOption::ToggleInvulnerable => test_mode.map(|state| state.invulnerable),
         PauseOption::ToggleInfiniteFuel => test_mode.map(|state| state.infinite_fuel),
@@ -208,7 +227,7 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     let test_mode = ui.shell.shown_test_mode(ui.snapshot.test_mode);
     let entries = PauseOption::for_session(ui.shell.online.role, test_mode.is_some())
         .into_iter()
-        .map(|option| pause_entry(option, test_mode))
+        .map(|option| pause_entry(option, test_mode, ui.snapshot.enemy_difficulty))
         .collect();
     let player = ui.player;
     let mut rig = vec![
@@ -452,6 +471,12 @@ pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
                     HazardIntensity::Standard => AMBER,
                     HazardIntensity::Brutal => RED,
                 },
+            ),
+        Entry::new(&icons::WARNING, "Enemies")
+            .detail(setup.enemies.description())
+            .value(
+                cycler(setup.enemies.name()),
+                difficulty_color(setup.enemies),
             ),
         Entry::new(&menu_icons::ROCKET, "Test Mode")
             .detail(if setup.test_mode {

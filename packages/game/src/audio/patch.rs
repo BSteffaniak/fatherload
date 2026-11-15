@@ -168,6 +168,18 @@ patches! {
     // Wave 2 (villages): appended so earlier patches keep their variation seeds.
     VillageArrival => "village_arrival",
     ShrineChime => "shrine_chime",
+    // Enemies (WP-ENEMIES), appended so earlier patches keep their variation seeds.
+    CreatureScreech => "creature_screech",
+    CreatureHiss => "creature_hiss",
+    AcidSpit => "acid_spit",
+    CreatureHurt => "creature_hurt",
+    CreatureDeath => "creature_death",
+    MachineAlert => "machine_alert",
+    MachineCharge => "machine_charge",
+    MachineZap => "machine_zap",
+    MachineHurt => "machine_hurt",
+    MachineDeath => "machine_death",
+    EnemyBite => "enemy_bite",
 }
 
 /// Playback metadata of a patch.
@@ -362,6 +374,29 @@ impl Patch {
                 .send(0.25)
                 .jitter(0.015, 0.5),
             Self::StowageFull => PatchInfo::new(Interface).instances(1).jitter(0.0, 0.3),
+            Self::CreatureScreech | Self::MachineAlert => PatchInfo::new(Alarm)
+                .instances(2)
+                .priority(6)
+                .send(0.3)
+                .jitter(0.08, 1.5),
+            Self::CreatureHiss | Self::MachineCharge => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.25)
+                .jitter(0.06, 1.0),
+            Self::AcidSpit | Self::MachineZap => {
+                PatchInfo::new(Feedback).instances(4).jitter(0.07, 1.5)
+            }
+            Self::CreatureHurt | Self::MachineHurt => {
+                PatchInfo::new(Impact).instances(3).jitter(0.1, 1.5)
+            }
+            Self::CreatureDeath | Self::MachineDeath => PatchInfo::new(Impact)
+                .instances(3)
+                .send(0.3)
+                .jitter(0.06, 1.0),
+            Self::EnemyBite => PatchInfo::new(Impact)
+                .instances(2)
+                .jitter(0.06, 1.0)
+                .ducking(0.2),
         }
     }
 
@@ -433,6 +468,17 @@ impl Patch {
             Self::StalactiteCrack => stalactite_crack(rng),
             Self::CacheOpen => cache_open(rng),
             Self::MushroomBounce => mushroom_bounce(rng),
+            Self::CreatureScreech => creature_screech(rng),
+            Self::CreatureHiss => creature_hiss(rng),
+            Self::AcidSpit => acid_spit(rng),
+            Self::CreatureHurt => creature_hurt(rng),
+            Self::CreatureDeath => creature_death(rng),
+            Self::MachineAlert => machine_alert(rng),
+            Self::MachineCharge => machine_charge(rng),
+            Self::MachineZap => machine_zap(rng),
+            Self::MachineHurt => machine_hurt(rng),
+            Self::MachineDeath => machine_death(rng),
+            Self::EnemyBite => enemy_bite(rng),
         }
     }
 }
@@ -1971,6 +2017,225 @@ fn block_dump(rng: &mut Rng) -> Vec<f32> {
         let clack = thump(380.0 * rng.jitter(0.15), 240.0, 0.04, 2.5);
         mix_into(&mut out, &clack, time, rng.range(0.35, 0.8));
     }
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// Enemies (WP-ENEMIES)
+// ---------------------------------------------------------------------------------------------
+
+/// A creature noticing you: a shrill, warbling screech that rises then falls.
+fn creature_screech(rng: &mut Rng) -> Vec<f32> {
+    let mut fm = Fm::default();
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut band = Svf::new(FilterMode::BandPass, 2_400.0, 2.0);
+    let base = rng.range(900.0, 1_300.0);
+    let warble = rng.range(22.0, 34.0);
+    render(0.42, |t| {
+        let pitch = base * segments(t, &[(0.0, 0.8), (0.08, 1.35), (0.42, 0.9)]);
+        let vibrato = 1.0 + 0.04 * sine(t, warble);
+        let voice = fm.next(pitch * vibrato, 1.5, 1.6 * decay(t, 0.25));
+        let breath = band.run(noise.next(), pitch * 2.0, 2.5) * 0.5;
+        saturate((voice * 0.7 + breath) * perc(t, 0.01, 0.36), 2.0)
+    })
+}
+
+/// A creature winding up: a throaty, swelling hiss.
+fn creature_hiss(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut band = Svf::new(FilterMode::BandPass, 3_000.0, 1.2);
+    let mut growl = Osc::new(Wave::Saw);
+    let mut low = Svf::new(FilterMode::LowPass, 400.0, 1.5);
+    let pitch = rng.range(70.0, 95.0);
+    render(0.6, |t| {
+        let swell = segments(t, &[(0.0, 0.0), (0.4, 1.0), (0.6, 0.0)]);
+        let hiss = band.run(noise.next(), glide(t, 2_000.0, 4_500.0, 0.3), 1.2);
+        let throat = low.process(growl.next(pitch * (1.0 + 0.1 * sine(t, 13.0))));
+        (hiss * 0.6 + throat * 0.5) * swell
+    })
+}
+
+/// Acid launched: a wet glottal pop and a sizzling spray.
+fn acid_spit(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Sine);
+    let base = rng.range(260.0, 340.0);
+    let mut out = render(0.12, |t| {
+        osc.next(base * (1.0 + t * 18.0)) * perc(t, 0.002, 0.08)
+    });
+    let spray = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        rng.range(3_500.0, 5_000.0),
+        0.8,
+        0.22,
+    );
+    mix_into(&mut out, &spray, 0.02, 0.5);
+    for time in scatter(rng, 6, 0.04, 0.25, 1.5) {
+        let bubble = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            rng.range(1_500.0, 3_000.0),
+            3.0,
+            0.012,
+        );
+        mix_into(&mut out, &bubble, time, rng.range(0.3, 0.6));
+    }
+    out
+}
+
+/// A creature hit: a short squelch and yelp.
+fn creature_hurt(rng: &mut Rng) -> Vec<f32> {
+    let mut fm = Fm::default();
+    let start = rng.range(700.0, 1_000.0);
+    let mut out = render(0.18, |t| {
+        fm.next(
+            glide(t, start, start * 0.55, 0.06),
+            1.0,
+            2.0 * decay(t, 0.05),
+        ) * perc(t, 0.003, 0.14)
+    });
+    let squelch = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        rng.range(500.0, 900.0),
+        2.0,
+        0.07,
+    );
+    mix_into(&mut out, &squelch, 0.0, 0.9);
+    out
+}
+
+/// A creature dying: a falling wail over a wet crunch.
+fn creature_death(rng: &mut Rng) -> Vec<f32> {
+    let mut fm = Fm::default();
+    let start = rng.range(800.0, 1_100.0);
+    let mut out = render(0.7, |t| {
+        let pitch = glide(t, start, start * 0.3, 0.25);
+        fm.next(
+            pitch * (1.0 + 0.05 * sine(t, 18.0)),
+            1.5,
+            1.8 * decay(t, 0.2),
+        ) * perc(t, 0.005, 0.55)
+            * 0.7
+    });
+    let crunch = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        rng.range(700.0, 1_200.0),
+        1.0,
+        0.15,
+    );
+    mix_into(&mut out, &crunch, 0.0, 0.8);
+    mix_into(&mut out, &thump(140.0, 60.0, 0.2, 2.0), 0.0, 0.7);
+    out
+}
+
+/// A machine locking on: two quick square-wave beeps.
+fn machine_alert(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Square);
+    let mut filter = Svf::new(FilterMode::LowPass, 3_500.0, 0.9);
+    let pitch = rng.range(1_150.0, 1_350.0);
+    render(0.32, |t| {
+        let (beep, local) = if t < 0.14 { (1.0, t) } else { (1.25, t - 0.16) };
+        if local < 0.0 {
+            return 0.0;
+        }
+        filter.process(osc.next(pitch * beep))
+            * segments(local, &[(0.0, 0.0), (0.005, 1.0), (0.1, 0.8), (0.12, 0.0)])
+    })
+}
+
+/// A machine charging a shot or a dash: a rising whine.
+fn machine_charge(rng: &mut Rng) -> Vec<f32> {
+    let mut saw = Osc::new(Wave::Saw);
+    let mut filter = Svf::new(FilterMode::LowPass, 1_000.0, 2.5);
+    let start = rng.range(180.0, 240.0);
+    render(0.75, |t| {
+        let pitch = start * (1.0 + t * t * 9.0);
+        let tremolo = 0.8 + 0.2 * sine(t, 18.0 + t * 30.0);
+        filter.run(saw.next(pitch), pitch * 3.0, 2.5)
+            * segments(t, &[(0.0, 0.0), (0.05, 0.6), (0.7, 1.0), (0.75, 0.0)])
+            * tremolo
+    })
+}
+
+/// An energy bolt fired: a bright descending zap.
+fn machine_zap(rng: &mut Rng) -> Vec<f32> {
+    let mut saw = Osc::new(Wave::Saw);
+    let mut crush = Decimator::default();
+    let start = rng.range(2_400.0, 3_000.0);
+    render(0.22, |t| {
+        let pitch = glide(t, start, 300.0, 0.05);
+        crush.process(saw.next(pitch), 4.0) * perc(t, 0.001, 0.16) * 0.8
+    })
+}
+
+/// A machine hit: a dented metal clank with a spark crackle.
+fn machine_hurt(rng: &mut Rng) -> Vec<f32> {
+    let base = rng.range(420.0, 620.0);
+    let mut out = clank(rng, base, 0.18);
+    for time in scatter(rng, 5, 0.0, 0.12, 1.5) {
+        let spark = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::HighPass,
+            rng.range(4_000.0, 7_000.0),
+            0.8,
+            0.008,
+        );
+        mix_into(&mut out, &spark, time, rng.range(0.3, 0.6));
+    }
+    out
+}
+
+/// A machine destroyed: a crunching bang, a power-down whine and scattered rattles.
+fn machine_death(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::LowPass,
+        2_200.0,
+        0.8,
+        0.3,
+    );
+    mix_into(&mut out, &thump(120.0, 45.0, 0.35, 3.0), 0.0, 0.9);
+    let mut saw = Osc::new(Wave::Saw);
+    let mut filter = Svf::new(FilterMode::LowPass, 2_000.0, 1.5);
+    let start = rng.range(700.0, 900.0);
+    let whine = render(0.6, |t| {
+        filter.process(saw.next(glide(t, start, 60.0, 0.2))) * perc(t, 0.01, 0.5) * 0.4
+    });
+    mix_into(&mut out, &whine, 0.03, 1.0);
+    for time in scatter(rng, 4, 0.08, 0.5, 1.4) {
+        let base = rng.range(900.0, 1_600.0);
+        let rattle = clank(rng, base, 0.06);
+        mix_into(&mut out, &rattle, time, rng.range(0.2, 0.4));
+    }
+    out
+}
+
+/// A bite or ram on the rig: a meaty crunch over a hull knock.
+fn enemy_bite(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        rng.range(900.0, 1_300.0),
+        1.2,
+        0.09,
+    );
+    let mut crush = Decimator::default();
+    for sample in &mut out {
+        *sample = crush.process(saturate(*sample * 3.0, 3.0), 2.0) * 0.7;
+    }
+    mix_into(&mut out, &thump(160.0, 70.0, 0.14, 2.5), 0.0, 0.9);
+    let base = rng.range(300.0, 380.0);
+    let knock = clank(rng, base, 0.12);
+    mix_into(&mut out, &knock, 0.01, 0.4);
     out
 }
 

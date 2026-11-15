@@ -205,6 +205,7 @@ impl Effects {
         let mut blast_cues = 0;
         let mut impact_cues = 0;
         let mut pickup_cues: BTreeMap<PlayerId, usize> = BTreeMap::new();
+        let mut enemy_cues = 0;
         for event in events {
             let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
                 continue;
@@ -331,6 +332,30 @@ impl Effects {
                     if impact_cues < 4 {
                         cues.push(PlacedCue::world(SoundCue::StalactiteCrack, x, y));
                         impact_cues += 1;
+                    }
+                    continue;
+                }
+                GameplayEventKind::EnemyAlerted { x, y, .. }
+                | GameplayEventKind::EnemyWindup { x, y, .. }
+                | GameplayEventKind::EnemyFired { x, y, .. }
+                | GameplayEventKind::EnemyHurt { x, y, .. }
+                | GameplayEventKind::EnemyKilled { x, y, .. }
+                | GameplayEventKind::EnemyStunned { x, y, .. } => {
+                    // Enemy sounds come from the enemy (heard by every nearby seat); hits and
+                    // deaths throw sparks or debris.
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    match gameplay.kind {
+                        GameplayEventKind::EnemyKilled { .. } => self.spawn_blast_debris(x, y),
+                        GameplayEventKind::EnemyHurt { .. }
+                        | GameplayEventKind::EnemyStunned { .. } => self.spawn_sparks(x, y),
+                        _ => {}
+                    }
+                    if enemy_cues < 6
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::world(cue, x, y));
+                        enemy_cues += 1;
                     }
                     continue;
                 }
@@ -473,7 +498,9 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::BlocksDumped { player_id }
         | GameplayEventKind::CollectBlocksToggled { player_id, .. }
         | GameplayEventKind::CaveDiscovered { player_id, .. }
-        | GameplayEventKind::CaveCacheOpened { player_id, .. } => Some(player_id),
+        | GameplayEventKind::CaveCacheOpened { player_id, .. }
+        | GameplayEventKind::RigStruck { player_id, .. }
+        | GameplayEventKind::EnemyDifficultyChanged { player_id, .. } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
@@ -485,7 +512,13 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::FireSpread { .. }
         | GameplayEventKind::VaultOpened { .. }
         | GameplayEventKind::VaultLockReset { .. }
-        | GameplayEventKind::StalactiteFell { .. } => None,
+        | GameplayEventKind::StalactiteFell { .. }
+        | GameplayEventKind::EnemyAlerted { .. }
+        | GameplayEventKind::EnemyWindup { .. }
+        | GameplayEventKind::EnemyFired { .. }
+        | GameplayEventKind::EnemyHurt { .. }
+        | GameplayEventKind::EnemyKilled { .. }
+        | GameplayEventKind::EnemyStunned { .. } => None,
     }
 }
 

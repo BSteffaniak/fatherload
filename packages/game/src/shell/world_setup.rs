@@ -1,9 +1,13 @@
 //! The world setup dialog shown before a new world starts (title "New Game", "Local
 //! Split-Screen" and "Host Online Game"): seed (random by default, re-roll, type or paste),
-//! world size, resource richness, hazard intensity and test mode.
+//! world size, resource richness, hazard intensity, enemies (peaceful / normal / hard) and test
+//! mode.
 
-use fatherload_simulation::worldgen::{
-    HazardIntensity, ResourceRichness, WorldSettings, WorldSize, format_seed, parse_seed,
+use fatherload_simulation::{
+    EnemyDifficulty,
+    worldgen::{
+        HazardIntensity, ResourceRichness, WorldSettings, WorldSize, format_seed, parse_seed,
+    },
 };
 
 use crate::input::PlayerInput;
@@ -30,6 +34,8 @@ pub enum SetupRow {
     Size,
     Richness,
     Hazards,
+    /// Hostile creatures and machines: peaceful, normal or hard.
+    Enemies,
     /// Test mode: maxed rigs, crew toggles and band warps for exploring the layers.
     TestMode,
     Start,
@@ -37,12 +43,13 @@ pub enum SetupRow {
 }
 
 impl SetupRow {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Seed,
         Self::Reroll,
         Self::Size,
         Self::Richness,
         Self::Hazards,
+        Self::Enemies,
         Self::TestMode,
         Self::Start,
         Self::Back,
@@ -54,8 +61,9 @@ impl SetupRow {
 pub enum SetupOutcome {
     Stay,
     Close,
-    /// Start a world for the purpose with these settings; the flag asks for test mode.
-    Start(SetupPurpose, WorldSettings, bool),
+    /// Start a world for the purpose with these settings; the flag asks for test mode, the
+    /// difficulty sets the world's enemies.
+    Start(SetupPurpose, WorldSettings, bool, EnemyDifficulty),
 }
 
 /// The dialog's state.
@@ -65,6 +73,8 @@ pub struct WorldSetup {
     pub settings: WorldSettings,
     /// Start the world in test mode (see `fatherload_simulation::test_mode`).
     pub test_mode: bool,
+    /// The world's enemy setting.
+    pub enemies: EnemyDifficulty,
     pub selected: usize,
     /// The seed text being typed, while the seed field is focused.
     pub seed_edit: Option<String>,
@@ -96,6 +106,7 @@ impl WorldSetup {
             purpose,
             settings: WorldSettings::new(seed),
             test_mode: false,
+            enemies: EnemyDifficulty::Normal,
             selected: 0,
             seed_edit: None,
         }
@@ -164,11 +175,19 @@ impl WorldSetup {
             SetupRow::Hazards if step != 0 => {
                 self.settings.hazards = cycle(&HazardIntensity::ALL, self.settings.hazards, step);
             }
+            SetupRow::Enemies if step != 0 => {
+                self.enemies = cycle(&EnemyDifficulty::ALL, self.enemies, step);
+            }
             SetupRow::TestMode if step != 0 => self.test_mode = !self.test_mode,
             SetupRow::Seed if input.confirm => self.seed_edit = Some(String::new()),
             SetupRow::Reroll if input.confirm => self.settings.seed = reroll(),
             SetupRow::Start if input.confirm => {
-                return SetupOutcome::Start(self.purpose, self.settings, self.test_mode);
+                return SetupOutcome::Start(
+                    self.purpose,
+                    self.settings,
+                    self.test_mode,
+                    self.enemies,
+                );
             }
             SetupRow::Back if input.confirm => return SetupOutcome::Close,
             _ => {}
@@ -300,6 +319,10 @@ mod tests {
         press(&mut setup, CONFIRM);
         assert_eq!(setup.settings.hazards, HazardIntensity::Brutal);
         press(&mut setup, DOWN);
+        assert_eq!(setup.row(), SetupRow::Enemies);
+        press(&mut setup, CONFIRM);
+        assert_eq!(setup.enemies, EnemyDifficulty::Hard);
+        press(&mut setup, DOWN);
         assert_eq!(setup.row(), SetupRow::TestMode);
         assert!(!setup.test_mode);
         press(&mut setup, CONFIRM);
@@ -308,7 +331,12 @@ mod tests {
         let outcome = press(&mut setup, CONFIRM);
         assert_eq!(
             outcome,
-            SetupOutcome::Start(SetupPurpose::Local { seats: 2 }, setup.settings, true)
+            SetupOutcome::Start(
+                SetupPurpose::Local { seats: 2 },
+                setup.settings,
+                true,
+                EnemyDifficulty::Hard
+            )
         );
     }
 

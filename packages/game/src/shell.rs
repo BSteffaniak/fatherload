@@ -157,6 +157,8 @@ pub enum PauseOption {
     ToggleInfiniteFuel,
     /// Test mode: toggle the crew's no-clip flight (through rock, no gravity).
     ToggleNoClip,
+    /// Host / local: cycle the world's enemies (peaceful, normal, hard).
+    EnemyDifficulty,
 }
 
 impl PauseOption {
@@ -171,6 +173,7 @@ impl PauseOption {
                 Self::Load,
                 Self::OpenOnline,
                 Self::Options,
+                Self::EnemyDifficulty,
                 Self::CopySeed,
                 Self::ExitToDesktop,
             ],
@@ -181,6 +184,7 @@ impl PauseOption {
                 Self::Load,
                 Self::EndSession,
                 Self::Options,
+                Self::EnemyDifficulty,
                 Self::CopySeed,
                 Self::ExitToDesktop,
             ],
@@ -218,6 +222,7 @@ impl PauseOption {
             Self::ToggleInvulnerable => "Invulnerable Hull",
             Self::ToggleInfiniteFuel => "Infinite Fuel",
             Self::ToggleNoClip => "No-Clip Flight",
+            Self::EnemyDifficulty => "Enemies",
         }
     }
 }
@@ -346,6 +351,28 @@ pub enum SoundCue {
     VillageArrival,
     /// A shrine blessing took hold.
     ShrineBlessing,
+    /// A creature noticing a rig.
+    CreatureScreech,
+    /// A creature winding up an attack.
+    CreatureHiss,
+    /// Acid spat at a rig.
+    AcidSpit,
+    /// A creature hit.
+    CreatureHurt,
+    /// A creature killed.
+    CreatureDeath,
+    /// A machine locking on to a rig.
+    MachineAlert,
+    /// A machine charging a shot or a dash.
+    MachineCharge,
+    /// An energy bolt fired.
+    MachineZap,
+    /// A machine hit (or knocked out by an EMP).
+    MachineHurt,
+    /// A machine destroyed.
+    MachineDeath,
+    /// An enemy biting, ramming or shooting a rig.
+    EnemyBite,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -366,6 +393,8 @@ pub enum ShellRequest {
         settings: WorldSettings,
         /// Start the world in test mode.
         test_mode: bool,
+        /// The world's enemy setting.
+        enemies: fatherload_simulation::EnemyDifficulty,
     },
     /// Load the most recent save.
     ResumeLatest,
@@ -388,6 +417,8 @@ pub enum ShellRequest {
     HostOnline {
         settings: WorldSettings,
         test_mode: bool,
+        /// The world's enemy setting.
+        enemies: fatherload_simulation::EnemyDifficulty,
     },
     /// Open the running local game to remote players.
     OpenOnline,
@@ -1729,7 +1760,13 @@ impl ShellState {
             }
             RunMode::Paused => {
                 let seed = ctx.world.world_settings().seed_text();
-                self.handle_pause_menu(menu_input, &seed, ctx.world.test_mode(), &mut requests);
+                let enemies = ctx.world.enemy_difficulty();
+                self.handle_pause_menu(
+                    menu_input,
+                    &seed,
+                    (ctx.world.test_mode(), enemies),
+                    &mut requests,
+                );
             }
             RunMode::Lobby => self.handle_online(primary, &mut requests),
             RunMode::Playing => {
@@ -2105,7 +2142,7 @@ impl ShellState {
                 self.modal = None;
                 self.world_setup = None;
             }
-            SetupOutcome::Start(purpose, settings, test_mode) => {
+            SetupOutcome::Start(purpose, settings, test_mode, enemies) => {
                 self.modal = None;
                 self.world_setup = None;
                 requests.push(match purpose {
@@ -2113,10 +2150,12 @@ impl ShellState {
                         seats,
                         settings,
                         test_mode,
+                        enemies,
                     },
                     SetupPurpose::HostOnline => ShellRequest::HostOnline {
                         settings,
                         test_mode,
+                        enemies,
                     },
                 });
             }
@@ -2127,7 +2166,10 @@ impl ShellState {
         &mut self,
         input: PlayerInput,
         seed: &str,
-        test_mode: Option<TestModeState>,
+        (test_mode, enemies): (
+            Option<TestModeState>,
+            fatherload_simulation::EnemyDifficulty,
+        ),
         requests: &mut Vec<ShellRequest>,
     ) {
         if self.modal.is_some() {
@@ -2173,6 +2215,19 @@ impl ShellState {
             | PauseOption::ToggleInfiniteFuel
             | PauseOption::ToggleNoClip => {
                 self.toggle_test_mode(options[self.selected_pause_item], test_mode, requests);
+            }
+            PauseOption::EnemyDifficulty => {
+                use fatherload_simulation::EnemyDifficulty;
+                let next = match enemies {
+                    EnemyDifficulty::Peaceful => EnemyDifficulty::Normal,
+                    EnemyDifficulty::Normal => EnemyDifficulty::Hard,
+                    EnemyDifficulty::Hard => EnemyDifficulty::Peaceful,
+                };
+                requests.push(ShellRequest::Action {
+                    seat: self.menu_seat,
+                    command: PlayerCommand::SetEnemyDifficulty(next),
+                });
+                self.message = format!("Enemies: {} ({}).", next.name(), next.description());
             }
         }
     }

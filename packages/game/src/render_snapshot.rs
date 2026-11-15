@@ -446,6 +446,13 @@ pub struct RenderSnapshot<'w> {
     pub events: &'w [RuntimeEvent],
     /// Cave critters (entities, copied out of the world's entity store).
     pub critters: Vec<CritterPresentation>,
+    /// Enemies and enemy shots (entities copied out of the world; drawn interpolated with
+    /// `bomb_alpha`).
+    pub enemies: Vec<fatherload_simulation::entity::Entity>,
+    /// Rigs inside their post-hit invulnerability window and the seconds left (hit flash).
+    pub rig_guards: Vec<(PlayerId, f32)>,
+    /// The world's enemy setting (pause menu).
+    pub enemy_difficulty: fatherload_simulation::EnemyDifficulty,
 }
 
 impl<'w> RenderSnapshot<'w> {
@@ -518,6 +525,22 @@ impl<'w> RenderSnapshot<'w> {
             won_game: world.won_game(),
             test_mode: world.test_mode(),
             events,
+            enemies: world
+                .entities()
+                .of_kind(fatherload_simulation::entity::EntityKind::Enemy)
+                .chain(
+                    world
+                        .entities()
+                        .of_kind(fatherload_simulation::entity::EntityKind::EnemyShot),
+                )
+                .cloned()
+                .collect(),
+            rig_guards: world
+                .player_ids()
+                .map(|id| (id, world.rig_guard_seconds(id)))
+                .filter(|(_, seconds)| *seconds > 0.0)
+                .collect(),
+            enemy_difficulty: world.enemy_difficulty(),
         }
     }
 

@@ -2,7 +2,7 @@
 //! gameplay event -> cue table. Pure data, no device access.
 
 use fatherload_simulation::{
-    ExplosiveKind, GameplayEventKind, PlayerId, PoiKind,
+    EnemyKind, ExplosiveKind, GameplayEventKind, PlayerId, PoiKind, ShotKind,
     explosive::Deployment,
     item::{ItemCategory, ItemKind},
     village::VillageService,
@@ -114,6 +114,34 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::CacheOpened => Patch::CacheOpen,
         SoundCue::VillageArrival => Patch::VillageArrival,
         SoundCue::ShrineBlessing => Patch::ShrineChime,
+        SoundCue::CreatureScreech => Patch::CreatureScreech,
+        SoundCue::CreatureHiss => Patch::CreatureHiss,
+        SoundCue::AcidSpit => Patch::AcidSpit,
+        SoundCue::CreatureHurt => Patch::CreatureHurt,
+        SoundCue::CreatureDeath => Patch::CreatureDeath,
+        SoundCue::MachineAlert => Patch::MachineAlert,
+        SoundCue::MachineCharge => Patch::MachineCharge,
+        SoundCue::MachineZap => Patch::MachineZap,
+        SoundCue::MachineHurt => Patch::MachineHurt,
+        SoundCue::MachineDeath => Patch::MachineDeath,
+        SoundCue::EnemyBite => Patch::EnemyBite,
+    }
+}
+
+/// The cue of an enemy event: creatures screech, hiss, squelch and wail; machines beep, whine,
+/// clank and blow apart (exhaustive: a new kind picks its family's sounds).
+#[must_use]
+pub const fn enemy_cue(kind: EnemyKind, creature: SoundCue, machine: SoundCue) -> SoundCue {
+    if kind.is_machine() { machine } else { creature }
+}
+
+/// The sound of an enemy projectile being fired (exhaustive: a new shot needs a sound).
+#[must_use]
+pub const fn shot_cue(shot: ShotKind) -> SoundCue {
+    match shot {
+        ShotKind::Acid => SoundCue::AcidSpit,
+        ShotKind::Fireball => SoundCue::FireWhoosh,
+        ShotKind::Bolt => SoundCue::MachineZap,
     }
 }
 
@@ -195,9 +223,10 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::VaultLockReset { .. } => Some(SoundCue::VaultReset),
         // Quests: a tick per finished stage, the error buzz when a twist fails a job, and the
         // upgrade chime for a completed blueprint.
-        // (The collect-blocks toggle ticks like a menu confirm.)
+        // (The collect-blocks toggle and a changed enemy setting tick like a menu confirm.)
         GameplayEventKind::QuestStageDone { .. }
-        | GameplayEventKind::CollectBlocksToggled { .. } => Some(SoundCue::Ui),
+        | GameplayEventKind::CollectBlocksToggled { .. }
+        | GameplayEventKind::EnemyDifficultyChanged { .. } => Some(SoundCue::Ui),
         GameplayEventKind::QuestFailed { .. } => Some(SoundCue::UiError),
         GameplayEventKind::BlueprintCompleted { .. } => Some(SoundCue::Upgrade),
         // A garage paint job: the spray can, heard from the rig (other players too).
@@ -220,6 +249,30 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
             VillageService::Cartographer => Some(SoundCue::Scanner),
             _ => None,
         },
+        // Enemies: every tell, wind-up, shot, hit and death is heard from where it happens.
+        GameplayEventKind::EnemyAlerted { kind, .. } => Some(enemy_cue(
+            *kind,
+            SoundCue::CreatureScreech,
+            SoundCue::MachineAlert,
+        )),
+        GameplayEventKind::EnemyWindup { kind, .. } => Some(enemy_cue(
+            *kind,
+            SoundCue::CreatureHiss,
+            SoundCue::MachineCharge,
+        )),
+        GameplayEventKind::EnemyFired { shot, .. } => Some(shot_cue(*shot)),
+        GameplayEventKind::EnemyHurt { kind, .. } => Some(enemy_cue(
+            *kind,
+            SoundCue::CreatureHurt,
+            SoundCue::MachineHurt,
+        )),
+        GameplayEventKind::EnemyKilled { kind, .. } => Some(enemy_cue(
+            *kind,
+            SoundCue::CreatureDeath,
+            SoundCue::MachineDeath,
+        )),
+        GameplayEventKind::EnemyStunned { .. } => Some(SoundCue::MachineHurt),
+        GameplayEventKind::RigStruck { .. } => Some(SoundCue::EnemyBite),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -291,7 +344,15 @@ mod tests {
             | GameplayEventKind::CaveCacheOpened { .. }
             | GameplayEventKind::StalactiteFell { .. }
             | GameplayEventKind::VillageDiscovered { .. }
-            | GameplayEventKind::VillageServiceUsed { .. } => {}
+            | GameplayEventKind::VillageServiceUsed { .. }
+            | GameplayEventKind::EnemyAlerted { .. }
+            | GameplayEventKind::EnemyWindup { .. }
+            | GameplayEventKind::EnemyFired { .. }
+            | GameplayEventKind::EnemyHurt { .. }
+            | GameplayEventKind::EnemyKilled { .. }
+            | GameplayEventKind::EnemyStunned { .. }
+            | GameplayEventKind::RigStruck { .. }
+            | GameplayEventKind::EnemyDifficultyChanged { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -416,6 +477,52 @@ mod tests {
                 direction: fatherload_simulation::BlastDirection::Down,
             });
         }
+        for kind in EnemyKind::ALL {
+            events.push(GameplayEventKind::EnemyAlerted {
+                entity: 1,
+                kind,
+                x: 0,
+                y: 0,
+            });
+            events.push(GameplayEventKind::EnemyWindup {
+                entity: 1,
+                kind,
+                x: 0,
+                y: 0,
+            });
+            events.push(GameplayEventKind::EnemyHurt {
+                entity: 1,
+                kind,
+                x: 0,
+                y: 0,
+            });
+            events.push(GameplayEventKind::EnemyKilled {
+                entity: 1,
+                kind,
+                x: 0,
+                y: 0,
+                by: Some(player_id),
+            });
+            events.push(GameplayEventKind::EnemyStunned {
+                entity: 1,
+                kind,
+                x: 0,
+                y: 0,
+            });
+            events.push(GameplayEventKind::RigStruck { player_id, kind });
+        }
+        for shot in [ShotKind::Acid, ShotKind::Fireball, ShotKind::Bolt] {
+            events.push(GameplayEventKind::EnemyFired {
+                entity: 1,
+                shot,
+                x: 0,
+                y: 0,
+            });
+        }
+        events.push(GameplayEventKind::EnemyDifficultyChanged {
+            player_id,
+            difficulty: fatherload_simulation::EnemyDifficulty::Hard,
+        });
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
@@ -511,6 +618,17 @@ mod tests {
             SoundCue::CacheOpened,
             SoundCue::VillageArrival,
             SoundCue::ShrineBlessing,
+            SoundCue::CreatureScreech,
+            SoundCue::CreatureHiss,
+            SoundCue::AcidSpit,
+            SoundCue::CreatureHurt,
+            SoundCue::CreatureDeath,
+            SoundCue::MachineAlert,
+            SoundCue::MachineCharge,
+            SoundCue::MachineZap,
+            SoundCue::MachineHurt,
+            SoundCue::MachineDeath,
+            SoundCue::EnemyBite,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

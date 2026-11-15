@@ -651,6 +651,9 @@ impl GameRenderer {
                     ticks: shell.update_ticks,
                     aim_preview: view.aim_preview.as_ref(),
                     critters: &snapshot.critters,
+                    enemies: &snapshot.enemies,
+                    rig_guards: &snapshot.rig_guards,
+                    world_tick: snapshot.tick,
                 },
             );
         }

@@ -34,6 +34,7 @@ use crate::{
 mod buildings;
 mod drops;
 mod caves;
+mod enemies;
 mod explosives;
 mod fx;
 mod quest_marks;
@@ -103,6 +104,12 @@ pub(super) struct WorldScene<'a> {
     pub aim_preview: Option<&'a crate::render_snapshot::AimPreview>,
     /// Cave critters (WP-CAVES).
     pub critters: &'a [crate::render_snapshot::CritterPresentation],
+    /// Enemies and enemy shots (entities copied out of the world).
+    pub enemies: &'a [fatherload_simulation::entity::Entity],
+    /// Rigs still inside their post-hit invulnerability window, with the seconds left.
+    pub rig_guards: &'a [(fatherload_simulation::PlayerId, f32)],
+    /// The snapshot's simulation tick (enemy hurt flashes and stun timers).
+    pub world_tick: u64,
 }
 
 impl WorldScene<'_> {
@@ -204,12 +211,25 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
         fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);
     }
+    enemies::draw_enemies(
+        draw,
+        &enemies::EnemyScene {
+            entities: scene.enemies,
+            terrain: scene.terrain,
+            explored: scene.explored,
+            visible: scene.visible,
+            alpha: scene.bomb_alpha,
+            world_tick: scene.world_tick,
+            ticks: scene.ticks,
+        },
+    );
     for player in scene.players {
         speed_fx::draw_speed_lines(draw, player, scene.ticks);
     }
     for player in scene.players {
         rig::draw_rig(draw, scene.terrain, player, scene.facings, scene.ticks);
     }
+    enemies::draw_rig_hits(draw, scene.players, scene.rig_guards, scene.ticks);
     if let Some(drill) = scene.active_drill {
         fx::draw_drill_debris(draw, scene.terrain, drill, scene.ticks);
     }

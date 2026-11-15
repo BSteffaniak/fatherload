@@ -2,6 +2,7 @@
 //! atlas packs them (the tests fail for a sprite that is drawn but missing here only at runtime,
 //! so keep groups' lists complete).
 
+pub mod enemies;
 pub mod explosives;
 pub mod icons;
 pub mod interior;
@@ -282,6 +283,21 @@ pub const ALL: &[&SpriteDef] = &[
     &prompts::LEFT_STICK,
     &prompts::RIGHT_STICK,
     &prompts::MOUSE_WHEEL,
+    &enemies::CAVE_BAT,
+    &enemies::BURROWER,
+    &enemies::ACID_SPITTER,
+    &enemies::ROCK_MIMIC,
+    &enemies::SHELLBACK,
+    &enemies::MAGMA_WISP,
+    &enemies::BROOD_NEST,
+    &enemies::BROOD_LORD,
+    &enemies::MINING_DRONE,
+    &enemies::SENTRY_TURRET,
+    &enemies::ROGUE_EXCAVATOR,
+    &enemies::ANCIENT_GUARDIAN,
+    &enemies::SHOT_ACID,
+    &enemies::SHOT_FIREBALL,
+    &enemies::SHOT_BOLT,
 ];
 
 #[cfg(test)]

@@ -33,9 +33,14 @@ const SAVE_SLOTS: usize = 3;
 /// Current save format.
 ///
 /// 8 (wave 2, T7 drops; the integrator collapses wave 2's bumps into one): drops carry magnet /
-/// dump / "blocked" marks and rigs a `collect_blocks` toggle. Both have serde defaults, so a
-/// version 7 file reads as version 8 unchanged.
+/// dump / "blocked" marks and rigs a `collect_blocks` toggle (serde defaults).
+///
+/// 8 (wave 2, T10 enemies): enemy and enemy-shot entities and the world's enemy director
+/// (difficulty, rig i-frames, spawn cooldowns, cleared lairs). Version 7 files are the same
+/// shape without them (serde defaults) and load unchanged.
 pub const SAVE_VERSION: u32 = 8;
+/// The previous format, read as the current one (its new fields default).
+const PREVIOUS_SAVE_VERSION: u32 = 7;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -290,12 +295,11 @@ fn parse_save(json: &str) -> Result<WorldSave, SaveError> {
 
 fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
     let probe: VersionProbe = serde_json::from_str(json).map_err(SaveError::Serialize)?;
-    if matches!(probe.version, 5..=7 | SAVE_VERSION) {
+    if matches!(probe.version, 5 | 6 | PREVIOUS_SAVE_VERSION | SAVE_VERSION) {
         check_generator(json)?;
     }
     match probe.version {
-        // Version 7 differs only by fields with serde defaults (see `SAVE_VERSION`).
-        7 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        PREVIOUS_SAVE_VERSION | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
         6 => serde_json::from_str::<legacy::V6SaveFile>(json)
@@ -1152,6 +1156,52 @@ mod tests {
             );
             assert!(v6 * 5 < v5, "{label}: v6 {v6} vs v5 {v5}");
         }
+    }
+
+    #[test]
+    fn enemies_and_the_enemy_setting_save_and_version_seven_files_still_load() {
+        use fatherload_simulation::{EnemyDifficulty, EnemyKind, entity::EntityKind};
+        let mut world = WorldState::new_game(PlayerId::new(1));
+        let plain = WorldSave {
+            world: world.clone(),
+            play_seconds: 3.0,
+        };
+        world.set_enemy_difficulty(EnemyDifficulty::Hard);
+        let _bat = world.spawn_enemy(EnemyKind::CaveBat, 3_000.0, 6_000.0);
+        let _turret = world.spawn_enemy(EnemyKind::SentryTurret, 3_100.0, 6_000.0);
+        let save = WorldSave {
+            world,
+            play_seconds: 3.0,
+        };
+        let json = serde_json::to_string(&SaveFile {
+            version: SAVE_VERSION,
+            save: save.clone(),
+        })
+        .expect("serialize");
+        let loaded = parse_save(&json).expect("v8 loads");
+        assert_eq!(loaded.world.enemy_difficulty(), EnemyDifficulty::Hard);
+        assert_eq!(loaded.world.entities().count_of(EntityKind::Enemy), 2);
+        assert_eq!(
+            loaded.world.simulation_state_hash(),
+            save.world.simulation_state_hash()
+        );
+        // A version 7 file (no enemies, no director) loads as a normal-difficulty world.
+        let mut v7 = serde_json::to_value(&SaveFile {
+            version: 7,
+            save: plain.clone(),
+        })
+        .expect("serialize");
+        let _director = v7["save"]["world"]
+            .as_object_mut()
+            .expect("world object")
+            .remove("enemies")
+            .expect("the director is saved");
+        let loaded = parse_save(&v7.to_string()).expect("v7 loads");
+        assert_eq!(loaded.world.enemy_difficulty(), EnemyDifficulty::Normal);
+        assert_eq!(
+            loaded.world.simulation_state_hash(),
+            plain.world.simulation_state_hash()
+        );
     }
 
     #[test]
