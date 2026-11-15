@@ -253,6 +253,8 @@ impl HarnessSim for WorldState {
         template.credits = 600;
         template.bombs = 6;
         template.add_explosives(fatherload_simulation::ExplosiveKind::C4, 6);
+        // A rivet gun, fired during the hop (projectiles predicted and replicated).
+        let _ = template.receive_weapon(fatherload_simulation::WeaponKind::RivetGun);
         template.survey_drone_kits = 3;
         world.set_player_template(template);
         // Loose item drops along the surface (falling, settling, sleeping, then woken and
@@ -295,8 +297,17 @@ impl HarnessSim for WorldState {
         };
         let controls = match t {
             30..330 => ControlState::new(0.0, false, true),
-            // A short symmetric hop keeps each bot over its own spawn column.
-            330..560 | 600..680 => ControlState::new(0.0, true, false),
+            // A short symmetric hop keeps each bot over its own spawn column; rivets fly up
+            // and to the side while it hovers.
+            330..560 => ControlState::new(0.0, true, false),
+            600..680 => ControlState::new(0.0, true, false).with_weapon(
+                fatherload_simulation::WeaponControl {
+                    fire: bot.issue_actions,
+                    auto_aim: false,
+                    aim_x: 90,
+                    aim_y: -90,
+                },
+            ),
             560..580 => ControlState::new(0.5, true, false),
             580..600 => ControlState::new(-0.5, true, false),
             _ => ControlState::default(),
@@ -355,6 +366,7 @@ impl HarnessSim for WorldState {
             WorldEvent::Gameplay(event) => match event.kind {
                 GameplayEventKind::BombDetonated { .. } => Some("bomb detonated"),
                 GameplayEventKind::ExplosiveDetonated { .. } => Some("explosive detonated"),
+                GameplayEventKind::WeaponFired { .. } => Some("weapon fired"),
                 GameplayEventKind::CargoChanged { .. } => Some("cargo changed"),
                 GameplayEventKind::ItemsCollected { .. } => Some("items collected"),
                 _ => None,

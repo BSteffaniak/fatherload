@@ -59,6 +59,7 @@ fn assert_played(harness: &WorldHarness) {
         // WP-DROPS: the bots' digging and blasts dropped loot their magnets collected (host
         // authoritative; clients predicted the same pickups, see `assert_converged`).
         "items collected",
+        "weapon fired",
     ] {
         assert!(
             harness.event_counts.get(label).copied().unwrap_or(0) > 0,
