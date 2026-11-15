@@ -107,7 +107,7 @@ const server = http.createServer(async (req, res) => {
     assert(startupSizes.length <= 3, `startup resize feedback loop: ${startupSizes.join(', ')}`);
     await key('Enter');
     await page.waitForFunction(() => window.miniaudio?.devices.some(device => device?.webaudio?.state === 'running'));
-    for (let i = 0; i < 6; i++) await key('ArrowDown');
+    for (let i = 0; i < 7; i++) await key('ArrowDown');  // seed, re-roll, size, resources, hazards, enemies, test mode -> Start Digging
     await key('Enter'); await page.waitForTimeout(3000); await shot('single-player');
     await page.evaluate(() => { window.frameSamples = []; });
     await page.waitForTimeout(2000);
@@ -143,7 +143,7 @@ const server = http.createServer(async (req, res) => {
     await split.waitForFunction(() => document.body.classList.contains('playing'), { timeout: 60000 });
     await split.waitForTimeout(5000);
     await splitKey('ArrowDown'); await splitKey('Enter');
-    for (let i = 0; i < 6; i++) await splitKey('ArrowDown');
+    for (let i = 0; i < 7; i++) await splitKey('ArrowDown');
     await splitKey('Enter'); await split.waitForTimeout(3000);
     await split.screenshot({ path: path.join(artifacts, 'split-screen.png') });
     await splitKey('Escape'); await splitKey('s'); await splitKey('Enter'); await splitKey('Enter');
