@@ -135,7 +135,7 @@ const DAY_KEY: Key = Key {
 };
 
 /// The day's keyframes in slice order; the first and last are both night so the day wraps.
-const KEYS: [Key; 13] = [
+const KEYS: [Key; 14] = [
     NIGHT_KEY,
     Key {
         slice: 16.0,
@@ -236,6 +236,10 @@ const KEYS: [Key; 13] = [
         rim: NONE,
         rim_side: RimSide::Right,
         overlay: wash(DEEP_BLUE, 150),
+    },
+    Key {
+        slice: 81.0,
+        ..NIGHT_KEY
     },
     Key {
         slice: 96.0,

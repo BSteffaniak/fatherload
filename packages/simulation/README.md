@@ -822,6 +822,59 @@ station refuelling a stranded rig at depth, synthesis and supply drops, power or
 the uplink, lift ladders, home points, access, claim limits, save round trips, replication
 through terrain ops and the section, and determinism.
 
+## World clock (`src/clock.rs`, `src/world/clock.rs`)
+
+Part II F4. Time of day is derived, never stepped: `world_millis = tick * 1000 / hz +
+ClockState::offset_millis`, so it is deterministic, tick-rate safe and replicates for free.
+
+- **Reading the time.** `WorldState::clock()` returns a `WorldClock` (`Copy`): `day()` (from 1,
+  rolls over at midnight), `slice()` (0..96 from midnight), `time_permille()`, `hours_minutes()`,
+  `phase()` (`DayPhase::{Night, Dawn, Day, Dusk}`), `phase_progress()`, `is_night()`,
+  `light_level()` (open-sky permille: 1000 by day, 110-200 at night by the Moon), `moon_phase()`
+  (`MoonPhase`, an 8-day cycle offset by the seed) and `millis_until_dawn()`; presentation floats
+  `day_fraction()`, `sun_angle()` (0 rising left, `PI/2` noon, `PI` setting right),
+  `sun_height()`, `moon_cycle()`. Phase boundaries (slices): night 78..18 round midnight, dawn
+  18..23, day 23..73, dusk 73..78; with the default 48-minute day that is ~30 minutes of light and
+  18 of night. New worlds start at slice 32 (08:00) of day 1. Shortcuts: `WorldState::is_night()`,
+  `day_length()`.
+- **Settings and saves.** `DayLength::{Short, Standard, Long}` (24 / 48 / 72 real minutes) is set
+  at world creation (`WorldState::set_day_length`, the New World dialog). `ClockState` (the
+  `clock` world field, serde default: worlds and saves from before load with the standard day)
+  holds the day length, the offset (start time plus skipped nights), the `SleepRule`, the
+  sleepers and the sleep countdown. It replicates as the shared `SectionKey::Clock` section
+  (changes only when someone sleeps or the rule changes) and is hashed only once it differs from
+  a new world's standard clock.
+- **Time that should pass while the crew sleeps** (contractor construction, plan decision 3) must
+  use `WorldClock::world_millis()`, not ticks: sleeping moves only the clock.
+- **Day events.** `GameplayEventKind::{Dawn, Dusk, NewDay, NightSkipped}` (`day` carried) fire in
+  the tick that crosses the boundary (event codes 110-113), plus `GotUp` and `SleepRuleChanged`
+  (114-115). Audio: rooster and birds at dawn, crickets at dusk, a bell at midnight (heard by
+  seats under the sky), a lullaby on a skipped night, and a night cricket loop.
+- **Beds and the sleep vote.** `ModuleService::Sleep` on a bed or homestead, or the inn's
+  `VillageDeal::Room` (`INN_ROOM_PRICE` credits), puts a player in bed at dusk or night
+  (`BuildRefusal::NotTired` otherwise). When every live player is in bed (`SleepRule::Everyone`)
+  or anyone is (`SleepRule::Anyone`, `PlayerCommand::Sleep(SleepCommand::SetRule)`, offered to
+  the host), a `SLEEP_FADE_MILLIS` countdown runs and the clock jumps to the next dawn.
+  `SleepCommand::GetUp`, driving more than a tile from the bed, the bed coming down, leaving or
+  parking all get a player up. Queries: `is_in_bed`, `awake_players`,
+  `sleep_countdown_seconds`, `seconds_since_night_skipped`.
+- **Light for gameplay.** `WorldState::light_at(x, y)` (tile coordinates, permille, integer
+  math): the open sky's light fading out over `SKY_LIGHT_DEPTH_TILES` under the local ground
+  (the underground is dark whatever the time), or the brightest source in reach: rig lamps,
+  lamp fixtures, village and town streets, lava, magma vents and glowing cave growths. Night
+  monsters (T25) and others may branch on it.
+- **The Moon's place (seam for T16/T22).** `WorldState::moon_anchor()` returns a `MoonAnchor`
+  (column, underside row); today `clock::default_moon_anchor(seed)`: a column 2,400-4,800 tiles
+  east or west of town, row `DEFAULT_MOON_ROW`. The sky generator should replace the body of
+  `moon_anchor()` with the real landmass's placement; the game draws the Moon above it.
+- **Scenario setup.** `set_world_time_millis` (tests and screenshot scenes).
+- **Formats.** `PROTOCOL_VERSION` 11 and save format 9 (version 8 saves load as is) cover the
+  clock; the integrator may collapse these bumps with the other wave 3 tracks'.
+
+`world/clock_tests.rs` covers determinism, tick-rate safety, each boundary's event, beds being
+for the night, sleeping alone, the crew vote and the host's rule, getting up, departing players,
+light levels, saves (including version 8 files), replication and hashes.
+
 ## Wave 2 seams (integration notes)
 
 Where the wave 2 tracks meet, for the tracks that build on them:
@@ -870,7 +923,7 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | everyone |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
 | On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes) | everyone |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes), the world clock (`SectionKey::Clock`: day length, skipped nights, sleep rule, sleepers) | everyone |
 
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is

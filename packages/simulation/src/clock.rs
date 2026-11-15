@@ -56,8 +56,8 @@ pub const DUSK_START_SLICE: u32 = 73;
 pub const NIGHT_START_SLICE: u32 = 78;
 /// Noon: the sun at the top of its arc.
 pub const NOON_SLICE: u32 = 48;
-/// Where a brand-new world's clock starts: early morning of day 1.
-pub const NEW_WORLD_START_SLICE: u32 = 26;
+/// Where a brand-new world's clock starts: 8 in the morning of day 1, in full daylight.
+pub const NEW_WORLD_START_SLICE: u32 = 32;
 /// Days from one new moon to the next.
 pub const LUNAR_CYCLE_DAYS: u32 = 8;
 /// Light level (permille) of a moonless night on the open surface.

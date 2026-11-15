@@ -415,6 +415,23 @@ drifting clouds (0.3) are tiled textures; the sun is nearly screen-fixed. Each b
 on a 128x64 art-pixel lot with its own silhouette, a sign carrying its simulation label and a
 door that lights up while the local rig stands at it.
 
+**Time of day** (`world/daylight.rs`, `world/sky.rs`, `world/lighting.rs`, `screen/clock_hud.rs`).
+Keyframes over the day (`daylight::KEYS`, slices from midnight) name palette colours only; between
+two keyframes a colour is a `Mix` (the earlier colour with the later one laid over it with
+`with_alpha`). They set the five low sky bands (the band steps are a white dither mask tinted with
+the band colours), three glow bands over the horizon (anchored on the hills' ground line), the
+stars' share, cloud and hill tints, a rim of low sun along the hills' sunward slopes (startup rim
+masks per biome) and the foreground overlay. The sun arcs from the left horizon over the top of
+the view to the right, big and orange with a glare when low. Stars wheel round a pole above the
+view (a turn a day). The Moon hangs above its column (`MoonAnchor`): drawn in colour runs, lit in
+its phase (waxing on the right), a pale ghost by day, earthlit at night, larger overhead and
+growing with altitude. The light map: 8-pixel cells, the overlay hugging the local ground (full
+over the surface, gone 14 tiles into the rock and 12 tiles up the sky), lights subtracting from
+it, posterized into stepped levels and drawn as merged runs, plus a warm haze and a pale shaft
+ahead of each rig's headlight; nothing is drawn by day. HUD: a half-disc sun dial (sun by day,
+Moon by night) with `DAY n` and the time under the wallet panel; the in-bed banner; the fade to
+dark while the crew falls asleep and the `DAY n` card as the morning fades in.
+
 **Effects** (`world/fx.rs`). Sparks are square embers cooling cream to red; drilling throws chips
 of the target's material (plus sparks on rock); `effects::Explosion`s (spawned where a detonated
 bomb was) flash, burn as a stepped fireball and roll smoke; bombs blink faster as the fuse runs
@@ -460,7 +477,10 @@ controller prompts
 `keyboard_hud`, and the rig customization scenes (`scene_capture/rig_scenes.rs`):
 `rig_sheet_tiers`, `rig_sheet_paints`, `rig_sheet_drills`, `rig_lineup`, `rig_flight_custom`,
 `garage_counter`, `garage_paint_bay`, `garage_paint_bay_pad`, `split_garage`,
-`coop_custom_paints`, `coop_custom_underground`. Scenes choose prompt devices with `SceneStage::use_devices`. Check UI changes at 1280x720, 1920x1080 and the
+`coop_custom_paints`, `coop_custom_underground`, and the world clock scenes
+(`scene_capture/clock_scenes.rs`): `clock_dawn`, `clock_noon`, `clock_golden_hour`, `clock_dusk`,
+`night_town`, `night_headlights`, `night_village`, `night_moon`, `night_sleep_vote`,
+`clock_short_day_hud`. Scenes choose prompt devices with `SceneStage::use_devices`. Check UI changes at 1280x720, 1920x1080 and the
 960x540 minimum.
 
 Adding a scene: append a `Scene { name, summary, setup }` to `scene_capture::SCENES`. `setup`

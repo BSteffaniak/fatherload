@@ -103,6 +103,23 @@ The dark caves below the topsoil are home to enemies, creatures and machines tha
 
 The upgrade shop sells long upgrade lines (up to 15 tiers: endgame bays of ~300 slots, tanks of ~3,000 fuel, hulls of ~2,500, drills that plow through the hardest rock) and a hazard counter for every danger: Heat Shielding (each layer runs hotter; radiator and shielding together decide how deep you stay cool), Lava Plating (lava is drillable but burns; the top tier is lava-proof), Gas Scrubber, Pressure Bracing (pressure pockets, explosive pockets, magma vents) and Boulder Deflector.
 
+### Day and night
+
+The world has a clock. A full day lasts 48 real minutes by default (24 or 72 in the New World
+dialog): about 30 minutes of daylight and 18 of night, with a dawn and a dusk between. The sky
+follows it, from dawn pinks and oranges through a deep noon blue and golden hour to dusk
+purples and a starry night with the stars wheeling overhead; the sun arcs across the sky and
+the mountains catch its low light. The Moon never moves: it hangs huge above one spot in the
+world, a few thousand tiles from town, lit by the sun in its phases. At night the open surface
+goes dark and your rig's headlights matter; village and town windows, street lamps, base lamps,
+flares, lava and glowing crystals light the dark. The underground is as dark as ever whatever
+the time. A rooster crows at dawn, crickets come out at dusk and a far bell tolls at midnight.
+
+Sleep through the night in a bed: your base's bed or homestead (**Sleep until dawn**), or a room
+at a village inn. In split-screen or online everyone has to turn in before the night passes (the
+host can switch the pause menu's **Sleeping** row to let anyone sleep). The HUD shows a sun dial
+with the day count and the time.
+
 ### Rigs
 
 Every rig is drawn from layered parts that show its upgrades: a drill head per drill tier (steel,

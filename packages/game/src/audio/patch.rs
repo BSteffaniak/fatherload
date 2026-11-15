@@ -437,10 +437,7 @@ impl Patch {
                 .instances(1)
                 .send(0.4)
                 .jitter(0.01, 0.5),
-            Self::MidnightBell => PatchInfo::new(Feedback)
-                .instances(1)
-                .send(0.55)
-                .jitter(0.0, 0.3),
+            Self::MidnightBell => PatchInfo::new(Big).instances(1).send(0.55).jitter(0.0, 0.3),
             Self::NightSkip => PatchInfo::new(Big)
                 .instances(1)
                 .send(0.45)
@@ -2930,7 +2927,7 @@ fn dawn_chorus(rng: &mut Rng) -> Vec<f32> {
         });
         mix_into(&mut out, &voice, start, 0.42);
     }
-    for time in scatter(rng, 7, 0.9, 2.1, 1.0) {
+    for time in scatter(rng, 7, 0.85, 1.5, 1.0) {
         let mut osc = Osc::new(Wave::Sine);
         let top = rng.range(3_200.0, 4_800.0);
         let chirps = 2 + rng.index(3);
@@ -2959,7 +2956,7 @@ fn dusk_crickets(rng: &mut Rng) -> Vec<f32> {
                     * trill
                     * segments(t, &[(0.0, 0.0), (0.02, 1.0), (0.14, 0.8), (0.16, 0.0)])
             });
-            mix_into(&mut out, &voice, offset + chirp as f32 * 0.42, 0.13);
+            mix_into(&mut out, &voice, offset + chirp as f32 * 0.36, 0.13);
         }
     }
     // A wood owl somewhere: two soft hoots, the second lower.
@@ -2969,7 +2966,7 @@ fn dusk_crickets(rng: &mut Rng) -> Vec<f32> {
             osc.next(frequency * (1.0 + 0.04 * (1.0 - t / 0.42)))
                 * segments(t, &[(0.0, 0.0), (0.06, 1.0), (0.3, 0.7), (0.42, 0.0)])
         });
-        mix_into(&mut out, &hoot, 0.9 + index as f32 * 0.55, 0.3);
+        mix_into(&mut out, &hoot, 0.8 + index as f32 * 0.5, 0.3);
     }
     out
 }
@@ -3042,11 +3039,11 @@ fn night_skip(rng: &mut Rng) -> Vec<f32> {
 /// Night ambience (looped by the director on the surface at night): a bed of crickets, each
 /// trilling on its own beat, over a faint breeze.
 fn night_loop(rng: &mut Rng) -> Vec<f32> {
-    const SECONDS: f32 = 4.0;
-    let mut out = render(SECONDS, |_| 0.0);
-    let mut breeze = Noise::new(NoiseColor::Brown, rng.next_u64());
-    let mut breeze_filter = Svf::new(FilterMode::LowPass, 380.0, 0.6);
-    let bed = render(SECONDS, |t| {
+    const SECONDS: f32 = LOOP_SECONDS;
+    let mut out = render(loop_length(), |_| 0.0);
+    let mut breeze = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut breeze_filter = Svf::new(FilterMode::BandPass, 420.0, 0.7);
+    let bed = render(loop_length(), |t| {
         breeze_filter.process(breeze.next()) * (0.6 + 0.4 * sine(t, 0.25))
     });
     mix_into(&mut out, &bed, 0.0, 0.25);
@@ -3056,7 +3053,7 @@ fn night_loop(rng: &mut Rng) -> Vec<f32> {
         let period = SECONDS / (4 + rng.index(4)) as f32;
         let phase = rng.unit() * period;
         let mut osc = Osc::new(Wave::Sine);
-        let voice = render(SECONDS, |t| {
+        let voice = render(loop_length(), |t| {
             let local = (t + phase).rem_euclid(period);
             let trill = if (local * 30.0).fract() < 0.5 {
                 1.0
