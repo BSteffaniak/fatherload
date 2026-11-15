@@ -432,7 +432,7 @@ fn golden_v7_chunk_digests_are_pinned() {
     );
 }
 
-const GOLDEN_V7_DIGEST: u64 = 0x3d11_988f_1bf0_6b16;
+const GOLDEN_V7_DIGEST: u64 = 0x09bd_a7dd_a806_f21c;
 
 fn v6(seed: u64) -> WorldSettings {
     WorldSettings {

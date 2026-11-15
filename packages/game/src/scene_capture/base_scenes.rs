@@ -10,6 +10,7 @@ use fatherload_simulation::{
     base::{BuildCommand, Buildable, BuiltTile, Facing, Fixture, ModuleKind, StructureId},
     item::{BlockKind, ItemKind},
     terrain::{TILE_SIZE, TileKind, TilePosition},
+    worldgen::biome::{self, Biome},
 };
 
 use super::{ARROWS, Scene, SceneStage, WASD, XBOX, carve, reveal, tile_centre};
@@ -26,6 +27,11 @@ pub const BASE_SCENES: &[Scene] = &[
         name: "base_homestead_interior",
         summary: "Inside the homestead: the cutaway room with bed, fireplace, trophy shelf and pantry",
         setup: |stage| surface_base(stage, true),
+    },
+    Scene {
+        name: "base_hillside_homestead",
+        summary: "A claim on a hilltop terrace far from town: homestead, generator, chest and lamps on biome ground above the town's ground line, slopes falling away either side",
+        setup: hillside_base,
     },
     Scene {
         name: "base_underground_fuel_station",
@@ -190,7 +196,10 @@ fn meadow(world: &mut WorldState) {
 }
 
 fn build_homestead(world: &mut WorldState, player: PlayerId, row: i32) {
-    let b = HOME_BEACON;
+    build_homestead_at(world, player, HOME_BEACON, row);
+}
+
+fn build_homestead_at(world: &mut WorldState, player: PlayerId, b: i32, row: i32) {
     let steps = [
         (
             (b, row),
@@ -263,6 +272,70 @@ fn build_homestead(world: &mut WorldState, player: PlayerId, row: i32) {
             },
         );
     }
+}
+
+/// A hilltop (ground at least eight rows above the town's) away from villages, searching
+/// outward from the town: its column and ground row.
+fn find_hilltop(world: &WorldState) -> (i32, i32) {
+    let settings = *world.world_settings();
+    let terrain = world.terrain();
+    let high = |x: i32| terrain.surface_row(x) <= GROUND - 8;
+    for distance in (300..30_000).step_by(8) {
+        for x in [distance, -distance] {
+            let biome = biome::biome_at(&settings, x);
+            if biome != Biome::Mountains
+                && (x - 14..=x + 14).step_by(2).all(high)
+                && !fatherload_simulation::worldgen::streamed::in_village_area(
+                    &settings,
+                    TilePosition {
+                        x,
+                        y: terrain.surface_row(x),
+                    },
+                    60,
+                )
+            {
+                return (x, terrain.surface_row(x));
+            }
+        }
+    }
+    (HOME_BEACON, GROUND)
+}
+
+/// A homestead on a terrace cut into a hilltop: the rig levels a pad at the hill's ground row
+/// (digging into the rise, filling the dips), then builds through the real tick.
+fn hillside_base(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        let (beacon, ground) = find_hilltop(world);
+        for x in beacon - 12..beacon + 15 {
+            for y in ground - 12..ground {
+                let _ = world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x, y }, TileKind::Air);
+            }
+            for y in ground..ground + 3 {
+                let position = TilePosition { x, y };
+                if !world.terrain().is_solid_at(position) {
+                    let _ = world.terrain_mut().set_kind(position, TileKind::Dirt);
+                }
+            }
+        }
+        reveal(
+            world,
+            player,
+            beacon - 50..beacon + 50,
+            ground - 30..ground + 12,
+        );
+        unlock_depth(world);
+        if let Some(rig) = world.player_mut(player) {
+            rig.credits = 50_000;
+            rig.stow(ItemKind::Block(BlockKind::Stone), 20);
+        }
+        build_homestead_at(world, player, beacon, ground - 1);
+        stand(world, player, beacon + 9, ground - 1);
+        world.stream_terrain_near_players();
+    });
+    stage.settle(50);
 }
 
 /// What the underground scene shows on top of the outpost.

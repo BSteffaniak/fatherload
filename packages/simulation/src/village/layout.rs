@@ -35,9 +35,9 @@ pub enum VillageSetting {
 
 /// The landscape a surface village stands in: the "biome flavour" that picks its culture.
 ///
-/// Until surface biomes exist this is a coarse noise band along the surface
-/// ([`site_landscape`]), so neighbouring villages often share a flavour. The surface-biome track
-/// maps its biomes onto these (or extends them) in that one function.
+/// On biome worlds (V7) it follows the surface biome; on V6 worlds it is a coarse noise band
+/// along the surface, so neighbouring villages often share a flavour (both in
+/// [`site_landscape`]).
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub enum Landscape {
     Plains,
@@ -392,7 +392,15 @@ fn landscape_and_culture(settings: &WorldSettings, id: VillageId) -> Option<(Lan
     }
     let landscape = site_landscape(settings, surface.center);
     let mut rng = PeopleRng::new(settings.seed, SALT_IDENTITY, u64::from(id.0), 0);
-    Some((landscape, culture_for(landscape, &mut rng)))
+    let culture = culture_for(landscape, &mut rng);
+    // On biome worlds the look follows the biome: hill (mountain and tundra) villages are
+    // always Highland stone and scrapland camps always Scrapper; older worlds keep their mix.
+    let culture = match landscape {
+        Landscape::Hills if settings.generator.has_biomes() => Culture::Highland,
+        Landscape::Scrapland if settings.generator.has_biomes() => Culture::Scrapper,
+        _ => culture,
+    };
+    Some((landscape, culture))
 }
 
 fn pick_specialty(culture: Culture, rng: &mut PeopleRng) -> Specialty {

@@ -1532,7 +1532,7 @@ impl WorldState {
         }
         let passable = |x: f32, y: f32| {
             let tile = tile_of(x, y);
-            if tile.y < 0 {
+            if tile.y < self.terrain.min_y() {
                 return true;
             }
             self.terrain.contains(tile)

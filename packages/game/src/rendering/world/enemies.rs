@@ -87,7 +87,8 @@ impl EnemyScene<'_> {
             x: (x / TILE_SIZE).floor() as i32,
             y: (y / TILE_SIZE).floor() as i32,
         };
-        tile.y >= 0
+        // Open sky (above the local ground, mountains included) is never fogged.
+        tile.y >= self.terrain.surface_row(tile.x).min(0)
             && self
                 .explored
                 .is_some_and(|explored| !explored.contains(tile))

@@ -106,11 +106,12 @@ carried in the session section); `Terrain::generate` builds a world and `Terrain
 `deep_stratum_at` answer which layer a tile is in. Saves without settings are legacy worlds
 (`GeneratorVersion::Legacy`, the original fixed-depth generator).
 
-### Surface biomes and the heightmap (`worldgen/biome.rs`, generator V6)
+### Surface biomes and the heightmap (`worldgen/biome.rs`, generator V7)
 
-`GeneratorVersion::V6` (the current generator) is V5 with a real surface (WP-SURFACE). V5
-worlds keep their placeholder swell and their golden digest; `GeneratorVersion::has_biomes`
-tells them apart. Everything below is a pure integer function of the settings and a column, so
+`GeneratorVersion::V7` (the current generator) is V6 (cave ecosystems and villages) with a real
+surface (WP-SURFACE). V5 and V6 worlds keep their placeholder swell and their golden digests;
+`GeneratorVersion::has_biomes` tells them apart, and a V7 golden digest
+(`cave_tests::golden_v7_chunk_digests_are_pinned`) pins the new output. Everything below is a pure integer function of the settings and a column, so
 chunks stay seamless and order-independent.
 
 - **Biome spans** of about `BIOME_SPAN_COLUMNS` (360, jittered) columns. A climate cycle of
@@ -128,15 +129,17 @@ chunks stay seamless and order-independent.
   on the classic ladder, mountain granite like stone) plus dirt and clay; shallow biome ore in
   them (desert gold, tundra silver, bog iron; mountain pods richer higher up). Surface
   materials break into the classic `BlockKind` of the same hardness (snow melts).
-- **Rows above 0**: a V6 world's first row is `-SKY_HEADROOM_ROWS` (`Terrain::min_y`,
+- **Rows above 0**: a V7 world's first row is `-SKY_HEADROOM_ROWS` (`Terrain::min_y`,
   `streamed::top_row`); its mountains live there. Above it is open sky with no tiles. Code that
   walks rows uses `min_y()..height()` (as columns use `min_x()..=max_x()`).
-- **Flat ground**: the town's columns, and **flat sites** for villages (WP-VILLAGE hook):
-  `flat_sites_in(settings, first, last)`, `flat_site_at`, `nearest_flat_site` return
-  `FlatSite { center, first_column, last_column, row, biome }`, about one per
-  `SITE_SPACING_COLUMNS` (600, jittered), none near the town. The heightmap already eases into
-  each over `FLAT_FADE_COLUMNS`, so a village built on a site stands on level ground at `row`;
-  sites no village claims are clearings.
+- **Flat ground**: the town's columns, and a **flat site** under every surface village
+  (`village::placement::surface_site`): `flat_sites_in(settings, first, last)`, `flat_site_at`,
+  `nearest_flat_site` return `FlatSite { center, first_column, last_column, row, biome }`, the
+  village's span with its ground row (the raw biome elevation at the village centre, clamped
+  so lake sites sit on a raised bank and mountain sites on a shelf at most 24 rows up). The
+  heightmap eases into each over `FLAT_FADE_COLUMNS`, so the village stands on level ground at
+  `row` (`streamed::village_ground_row`), and its landscape follows the site's biome
+  (`village::layout::site_landscape`).
 - **Flora** (`flora_at`): presentation data for what stands on a column (grass, flowers,
   bushes, oaks, pines, snowy pines, cacti, dead brush, boulders, reeds, lily pads).
 - Columns are memoized per thread (`column`), a cache that never changes a result.
@@ -581,14 +584,14 @@ versus about 18 ms one `despawn` at a time (release), so bulk removals should ba
 
 ## Villages (`src/village.rs`, `src/village/`, `src/world/villages.rs`, `src/worldgen/streamed/villages.rs`)
 
-Expansion plan WP-VILLAGE, on [`GeneratorVersion::V6`] worlds
+Expansion plan WP-VILLAGE, on [`GeneratorVersion::V6`] and V7 worlds
 (`GeneratorVersion::has_villages`, the single switch; V5 and older generate exactly as before
 and the V5 golden digest is unchanged). A village is a pure function of `(WorldSettings, site)`:
 nothing about it is saved or replicated except what players did there.
 
 - **Placement** (`village::placement`, const and integer-only): surface site `n` (`n > 0` east,
   `n < 0` west, never 0) is centred `450 + (|n| - 1) * 600` columns from the town's centre
-  (column 115), jittered by up to 100, so neighbours are 400-800 columns apart and the first
+  (`TOWN_CENTER_COLUMN`, the middle of `surface::town_span()`: column 115), jittered by up to 100, so neighbours are 400-800 columns apart and the first
   ones are a short trip out. Size (hamlet / village / town: 64 / 88 / 112 columns) is a hash of
   the site; `surface_site_at(seed, x, margin)` answers "which village is column x in" in O(1).
   About one site in four (and always one of the two second sites) has an underground settlement:
@@ -602,16 +605,21 @@ nothing about it is saved or replicated except what players did there.
   surface / 1 underground) of kind `FeatureKind::Village` with `FeatureDetail::Village(id)`
   (`WorldFeature::village()`), so `Terrain::features_in`, `Terrain::nearest_feature` and
   `Terrain::feature` find them anywhere; `village::nearest_village` wraps the outward search.
-- **Terrain hooks**: `streamed::surface_row` = `raw_surface_row` (the heightmap; the
-  surface-biome track replaces it) flattened across each village span to
-  `village_ground_row(settings, centre)` (the raw row at the village's centre), easing back over
-  `FLATTEN_FADE_COLUMNS` (16). Chunk assembly then runs the village stamps last
+- **Terrain hooks**: on V6, `streamed::surface_row` = `raw_surface_row` (the placeholder
+  heightmap) flattened across each village span to `village_ground_row(settings, centre)` (the
+  raw row at the village's centre), easing back over `FLATTEN_FADE_COLUMNS` (16). On V7 the
+  biome heightmap is the surface and already holds every village on its flat shelf (see
+  surface biomes), so all three read the biome heightmap; on V7 caves (classic caverns and cave
+  ecosystems, through `Ctx::cave_allowed`) also keep clear of village ground and 6 tiles around
+  every hall (`streamed::villages::keeps_caves_out`). Chunk assembly then runs the village stamps last
   (`streamed::villages::stamps_touching`): hazard and POI tiles under the village (8 rows) and
   around a hall (3 tiles) turn back into the band's soft rock, building lots get two rows of
   foundation plus a staggered third, the plaza and landing pad are paved, and halls are carved
   with a two-row foundation floor.
-- **Layout grammar** (`village::layout::build`): landscape (`site_landscape`, a coarse noise band
-  along the surface until biomes exist: the second hook for the surface track) -> culture ->
+- **Layout grammar** (`village::layout::build`): landscape (`site_landscape`: on V7 the site's
+  biome, plains / forest and wetlands -> forest / mountains and tundra -> hills / desert -> mesa /
+  badlands -> mesa or scrapland; on V6 a coarse noise band along the surface) -> culture (on V7
+  hills are always Highland and scrapland always Scrapper) ->
   `BuildingStyle`; a `Specialty`, prosperity 1-5, an optional `VillageProblem`; 4-12 residents
   from `people::generate_population`; then the street: hall and market flank the plaza, the
   specialty's building, inn and workshop alternate outward with houses, farms / towers / mine
@@ -818,10 +826,15 @@ through terrain ops and the section, and determinism.
 
 Where the wave 2 tracks meet, for the tracks that build on them:
 
-- **One generator, V6:** caves (`has_cave_biomes`) and villages (`has_villages`) both switch on
-  with `GeneratorVersion::V6`; the V6 golden digest pins caves and villages together. The
-  surface track (T8, not integrated yet) still has to replace `raw_surface_row` and feed
-  `site_landscape`; the feature layers are `Cave = 8`, `Village = 9`.
+- **Generators V6 and V7:** caves (`has_cave_biomes`) and villages (`has_villages`) both switch
+  on with `GeneratorVersion::V6`; the V6 golden digest pins caves and villages together. V7 adds
+  the surface biomes (`has_biomes`, T8) on top: the biome heightmap replaces `raw_surface_row`,
+  its flat sites are the village sites and feed `site_landscape`, village stamps reach shelves
+  above row 0, and caves keep clear of villages and halls. The feature layers are `Cave = 8`,
+  `Village = 9`.
+- **Unlimited altitude (R17):** no flight ceiling anywhere (fuel is the limit); code that walks
+  rows uses `Terrain::min_y()` (enemy movement treats only rows above it as open sky, enemy fog
+  in the renderer starts at the local ground), and parked rigs keep their altitude.
 - **Damage:** `WorldState::damage_entity` (`crate::combat`) is the one entry point. Enemies
   report a `Health` view and are routed to `damage_enemy`; blasts reach enemies only through
   `enemies_feel_blasts` (scares and EMPs included) and other damageable kinds through
@@ -837,7 +850,9 @@ Where the wave 2 tracks meet, for the tracks that build on them:
   cosmetics) and so parks and unparks with the rig; claims and home points stay keyed by the
   player id; parked players keep their armed C4 (`remove_player_with`).
 - **Event codes** (netcode): drops 60-63, caves 70-72, villages 45-46, enemies 80-87, weapons
-  90-95, bases 100-102. `PROTOCOL_VERSION` 9 and save format 8 cover all of wave 2.
+  90-95, bases 100-102. `PROTOCOL_VERSION` 10 (9 for wave 2, 10 for T8's V7 worlds, surface tiles at codes 0x500 and
+  chunks above row 0) and save format 8 (unchanged: an older build rejects a V7 save by its
+  unknown generator) cover all of wave 2.
 
 ## Replication
 

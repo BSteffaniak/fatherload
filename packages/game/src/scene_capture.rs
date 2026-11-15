@@ -12,8 +12,8 @@
 mod crew_scenes;
 mod enemy_scenes;
 mod rig_scenes;
-mod village_scenes;
 mod surface_scenes;
+mod village_scenes;
 
 use std::path::{Path, PathBuf};
 

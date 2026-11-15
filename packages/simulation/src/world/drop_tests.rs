@@ -364,6 +364,37 @@ fn a_crowded_cell_folds_new_drops_into_stacks() {
     );
 }
 
+#[test]
+#[allow(clippy::cast_precision_loss, reason = "small tile indices")]
+fn drops_rest_on_a_mountain_slope_above_row_zero() {
+    // A biome world's mountains stand above row 0: a drop spilled on a slope comes to rest on
+    // the slope's ground, not at row 0 under it.
+    let mut world = arena();
+    let peak = (300..20_000)
+        .find(|x| world.terrain().surface_row(*x) < -30)
+        .expect("a mountain within reach");
+    #[allow(clippy::cast_precision_loss, reason = "small tile indices")]
+    let x = px(peak as f32 + 0.5);
+    let ground = world.terrain().surface_row(peak);
+    #[allow(clippy::cast_precision_loss, reason = "small tile indices")]
+    let ground_px = px(ground as f32);
+    park(&mut world, PLAYER, peak as f32 + 30.5, ground as f32 - 20.0);
+    let _ = world.spawn_loot(
+        x,
+        ground_px - px(3.0),
+        (0.0, 0.0),
+        stack(BlockKind::Stone, 1),
+        None,
+    );
+    let _ = run(&mut world, 60 * 3);
+    let (_, body, _, _) = world.drops().next().expect("the drop");
+    assert!(
+        body.y < ground_px + px(1.0) && body.y > ground_px - px(8.0),
+        "rests near ground row {ground}: row {}",
+        body.y / TILE_SIZE
+    );
+}
+
 /// A ring of ore and dirt around a charge at tile (20, 20), the rig parked far away.
 fn loaded_blast(kind: ExplosiveKind) -> WorldState {
     let mut world = arena();

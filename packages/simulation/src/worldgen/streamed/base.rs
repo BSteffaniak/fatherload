@@ -53,14 +53,11 @@ pub fn surface_row(settings: &WorldSettings, x: i32) -> i32 {
     if !settings.generator.has_villages() {
         return raw;
     }
-    match placement::surface_site_at(settings.seed, x, FLATTEN_FADE_COLUMNS) {
-        Some(site) => {
-            let ground = village_ground_row(settings, site.center);
-            let distance = site.distance(x);
-            ground + (raw - ground) * distance / (FLATTEN_FADE_COLUMNS + 1)
-        }
-        None => raw,
-    }
+    placement::surface_site_at(settings.seed, x, FLATTEN_FADE_COLUMNS).map_or(raw, |site| {
+        let ground = village_ground_row(settings, site.center);
+        let distance = site.distance(x);
+        ground + (raw - ground) * distance / (FLATTEN_FADE_COLUMNS + 1)
+    })
 }
 
 /// The ground row of a surface village centred on column `center`.

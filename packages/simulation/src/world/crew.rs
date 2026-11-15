@@ -248,6 +248,29 @@ mod tests {
     }
 
     #[test]
+    fn a_rig_parked_high_in_the_sky_comes_back_where_it_was() {
+        // No flight ceiling (R17): a rig parked thousands of tiles up keeps its altitude
+        // through a save round trip and unparks there, not at a spawn slot.
+        let mut world = WorldState::new_game(HOST);
+        assert!(world.world_settings().generator.has_biomes());
+        world.add_player(ALEX);
+        let altitude = -5_000.0 * TILE_SIZE;
+        if let Some(rig) = world.player_mut(ALEX) {
+            rig.y = altitude;
+            rig.velocity_y = -300.0;
+        }
+        let x = world.player(ALEX).expect("alex").x;
+        assert!(world.park_player(ALEX));
+        let json = serde_json::to_string(&world).expect("serialize");
+        let mut world: WorldState = serde_json::from_str(&json).expect("deserialize");
+        assert!(world.unpark_player(ALEX));
+        let rig = world.player(ALEX).expect("alex is back");
+        assert!((rig.y - altitude).abs() < f32::EPSILON, "y {}", rig.y);
+        assert!((rig.x - x).abs() < f32::EPSILON);
+        assert!(rig.velocity_y.abs() < f32::EPSILON, "parked at rest");
+    }
+
+    #[test]
     fn redacted_keyframes_never_carry_the_crew_roster() {
         let mut world = WorldState::new_game(HOST);
         world.add_player(ALEX);

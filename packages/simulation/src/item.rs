@@ -46,36 +46,32 @@ impl BlockKind {
     /// The block a plain tile breaks into (`None` for anything that is not a plain block).
     #[must_use]
     pub const fn from_tile(kind: TileKind) -> Option<Self> {
+        // Surface-biome materials break into the classic block of the same hardness, so
+        // building (WP-BASE) needs no new block kinds; snow melts away. Cave rock (WP-CAVES)
+        // breaks into the plain block it is closest to; living and glowing cave tiles, crystal
+        // and caches (which pay out their own loot) give none.
         match kind {
-            TileKind::Dirt => Some(Self::Dirt),
-            TileKind::Clay => Some(Self::Clay),
-            TileKind::Stone => Some(Self::Stone),
-            TileKind::HardRock => Some(Self::HardRock),
-            // Cave rock (WP-CAVES) breaks into the plain block it is closest to; living and
-            // glowing cave tiles, crystal and caches (which pay out their own loot) give none.
-            TileKind::Cave(cave) => match cave {
-                crate::cave::CaveTile::Mycelium | crate::cave::CaveTile::Silt => Some(Self::Dirt),
+            TileKind::Dirt
+            | TileKind::Surface(SurfaceMaterial::Sand | SurfaceMaterial::Mud)
+            | TileKind::Cave(crate::cave::CaveTile::Mycelium | crate::cave::CaveTile::Silt) => {
+                Some(Self::Dirt)
+            }
+            TileKind::Clay
+            | TileKind::Surface(SurfaceMaterial::Sandstone | SurfaceMaterial::RedRock) => {
+                Some(Self::Clay)
+            }
+            TileKind::Stone
+            | TileKind::Surface(SurfaceMaterial::Granite)
+            | TileKind::Cave(
                 crate::cave::CaveTile::RuinBrick
                 | crate::cave::CaveTile::RuinPillar
                 | crate::cave::CaveTile::RuinGlyph
                 | crate::cave::CaveTile::FossilRib
-                | crate::cave::CaveTile::Stalactite => Some(Self::Stone),
-                crate::cave::CaveTile::Obsidian => Some(Self::HardRock),
-                crate::cave::CaveTile::Crystal
-                | crate::cave::CaveTile::MushroomStem
-                | crate::cave::CaveTile::MushroomCap
-                | crate::cave::CaveTile::GlowCap
-                | crate::cave::CaveTile::GlowAlgae
-                | crate::cave::CaveTile::TreasureCache
-                | crate::cave::CaveTile::RelicCache => None,
-            },
-            // Surface-biome materials break into the classic block of the same hardness, so
-            // building (WP-BASE) needs no new block kinds; snow melts away.
-            TileKind::Surface(SurfaceMaterial::Sand | SurfaceMaterial::Mud) => Some(Self::Dirt),
-            TileKind::Surface(SurfaceMaterial::Sandstone | SurfaceMaterial::RedRock) => {
-                Some(Self::Clay)
+                | crate::cave::CaveTile::Stalactite,
+            ) => Some(Self::Stone),
+            TileKind::HardRock | TileKind::Cave(crate::cave::CaveTile::Obsidian) => {
+                Some(Self::HardRock)
             }
-            TileKind::Surface(SurfaceMaterial::Granite) => Some(Self::Stone),
             _ => None,
         }
     }

@@ -9,6 +9,7 @@ use fatherload_simulation::{
     people::Culture,
     terrain::{MineralKind, TILE_SIZE},
     village::{self, BuildingKind, Specialty, Village, VillageSetting, placement},
+    worldgen::biome::{self, Biome},
 };
 
 use super::{Scene, SceneStage, reveal};
@@ -61,6 +62,31 @@ fn park_in(world: &mut WorldState, player: PlayerId, found: &Village, column: i3
         area.min.x - 20..area.max.x + 20,
         area.min.y - 4..area.max.y + 6,
     );
+}
+
+/// A street scene of the first surface village standing in `wanted_biome` (a biome world's
+/// village takes its look from its biome), the rig at its plaza a little above the street so
+/// the slopes around the village's flat shelf show.
+fn street_in_biome(stage: &mut SceneStage<'_>, wanted_biome: Biome) {
+    stage.play(1, |world, seats| {
+        let settings = *world.world_settings();
+        let found = find_village(world, |found: &Village| {
+            found.setting == VillageSetting::Surface
+                && biome::biome_at(
+                    &settings,
+                    i32::midpoint(found.first_column, found.last_column),
+                ) == wanted_biome
+        });
+        let column = i32::midpoint(found.plaza.0, found.plaza.1);
+        park_in(world, seats[0].player, &found, column);
+        if let Some(rig) = world.player_mut(seats[0].player) {
+            rig.villages.visited.insert(found.id);
+        }
+        world.stream_terrain_near_players();
+    });
+    stage.settle(20);
+    stage.seat(0).village.banner = None;
+    stage.settle(1);
 }
 
 /// A street scene of the first surface village of `culture`, the rig at its plaza.
@@ -164,6 +190,31 @@ pub const VILLAGE_SCENES: &[Scene] = &[
                 0,
             );
         },
+    },
+    Scene {
+        name: "village_biome_desert",
+        summary: "A village in the desert on a biome world: built in the mesa style on flat ground among the dunes",
+        setup: |stage| street_in_biome(stage, Biome::Desert),
+    },
+    Scene {
+        name: "village_biome_tundra",
+        summary: "A village in the tundra: highland stone on flat ground among snowy hills",
+        setup: |stage| street_in_biome(stage, Biome::Tundra),
+    },
+    Scene {
+        name: "village_biome_mountains",
+        summary: "A mountain village on its flat shelf partway up the slopes, built of highland stone",
+        setup: |stage| street_in_biome(stage, Biome::Mountains),
+    },
+    Scene {
+        name: "village_biome_wetlands",
+        summary: "A wetland village of riverside timber on a raised bank beside the lakes",
+        setup: |stage| street_in_biome(stage, Biome::Wetlands),
+    },
+    Scene {
+        name: "village_biome_badlands",
+        summary: "A badlands village (mesa adobe or a scrap camp) on a terrace among the red rock mesas",
+        setup: |stage| street_in_biome(stage, Biome::Badlands),
     },
     Scene {
         name: "village_shrine",

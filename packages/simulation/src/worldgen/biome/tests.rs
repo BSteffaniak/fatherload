@@ -140,17 +140,21 @@ fn flat_sites_are_flat_spaced_and_findable() {
                 site.row
             );
             let landscape = crate::village::layout::site_landscape(&settings, site.center);
-            let expected: &[crate::village::layout::Landscape] = match biome_at(&settings, site.center) {
-                Biome::Plains => &[crate::village::layout::Landscape::Plains],
-                Biome::Forest | Biome::Wetlands => &[crate::village::layout::Landscape::Forest],
-                Biome::Mountains | Biome::Tundra => &[crate::village::layout::Landscape::Hills],
-                Biome::Desert => &[crate::village::layout::Landscape::Mesa],
-                Biome::Badlands => &[
-                    crate::village::layout::Landscape::Mesa,
-                    crate::village::layout::Landscape::Scrapland,
-                ],
-            };
-            assert!(expected.contains(&landscape), "site {site:?}: {landscape:?}");
+            let expected: &[crate::village::layout::Landscape] =
+                match biome_at(&settings, site.center) {
+                    Biome::Plains => &[crate::village::layout::Landscape::Plains],
+                    Biome::Forest | Biome::Wetlands => &[crate::village::layout::Landscape::Forest],
+                    Biome::Mountains | Biome::Tundra => &[crate::village::layout::Landscape::Hills],
+                    Biome::Desert => &[crate::village::layout::Landscape::Mesa],
+                    Biome::Badlands => &[
+                        crate::village::layout::Landscape::Mesa,
+                        crate::village::layout::Landscape::Scrapland,
+                    ],
+                };
+            assert!(
+                expected.contains(&landscape),
+                "site {site:?}: {landscape:?}"
+            );
         }
     }
     assert!(flat_sites_in(&WorldSettings::bounded(1), -1_000, 1_000).is_empty());

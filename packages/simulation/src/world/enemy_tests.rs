@@ -676,6 +676,43 @@ fn walkers_hop_steps_to_reach_the_rig() {
 }
 
 #[test]
+fn mountain_rock_above_row_zero_holds_enemies() {
+    // Biome worlds have solid ground above row 0 (mountains): only the open sky above the
+    // world's first row lets enemies pass, so a burrower dropping into a mountain pocket lands
+    // on its granite floor instead of sinking through it.
+    let mut world = cavern();
+    no_spawns(&mut world);
+    assert!(world.terrain().min_y() < -20, "a biome world");
+    // A tall peak, and a pocket deep enough inside it to be out of the surface's safe strip.
+    let peak = (300..20_000)
+        .find(|x| world.terrain().surface_row(*x) < -40)
+        .expect("a mountain within reach");
+    let top = world.terrain().surface_row(peak);
+    let (left, right) = (peak - 10, peak + 10);
+    let floor = top + 24;
+    assert!(floor < -4, "the pocket is above row 0");
+    let granite = TileKind::Surface(crate::terrain::SurfaceMaterial::Granite);
+    fill(&mut world, left - 6..right + 6, top..floor + 6, granite);
+    fill(&mut world, left..right, floor - 8..floor, TileKind::Air);
+    #[allow(clippy::cast_precision_loss, reason = "small tile indices")]
+    let (drop_x, rig_x, floor_px) = (
+        (left + 3) as f32 + 0.5,
+        (right - 3) as f32 + 0.5,
+        px(floor as f32),
+    );
+    park(&mut world, PLAYER, rig_x, 0.0);
+    world.player_mut(PLAYER).expect("player").y = floor_px - 11.0;
+    let burrower = world.spawn_enemy(EnemyKind::Burrower, px(drop_x), floor_px - px(4.0));
+    let _ = run(&mut world, 60 * 2);
+    let (body, _) = enemy(&world, burrower).expect("burrower");
+    assert!(
+        body.y < floor_px,
+        "stays in the pocket: row {} (floor {floor})",
+        body.y / TILE_SIZE
+    );
+}
+
+#[test]
 fn flyers_path_through_gaps_in_walls() {
     let mut world = cavern();
     no_spawns(&mut world);

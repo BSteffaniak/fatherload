@@ -12,9 +12,9 @@
 //!   `features_in` find them anywhere; [`nearest_village`] wraps that.
 //! - **Ground**: a village's span is flattened to the heightmap's row at its centre, easing back
 //!   over [`placement::FLATTEN_FADE_COLUMNS`] (the hook in
-//!   [`crate::worldgen::streamed::surface_row`]: it reads the raw heightmap,
-//!   `raw_surface_row`, which the surface-biome track replaces without touching villages).
-//!   Building lots, the plaza and the landing pad stand on foundation tiles.
+//!   [`crate::worldgen::streamed::surface_row`]). On V7 biome worlds the biome heightmap lays
+//!   each village on a flat shelf of its own ([`crate::worldgen::biome::flat_sites_in`]) and no
+//!   cave undercuts it. Building lots, the plaza and the landing pad stand on foundation tiles.
 //! - **Layout** ([`layout`]): a grammar picks the culture (from the landscape flavour, the hook
 //!   [`layout::site_landscape`]), the building style, a specialty, the residents (generated with
 //!   [`crate::people::generate_population`]) and lays out a hall, a market, the specialty's
