@@ -380,16 +380,17 @@ the loot; base values, charge costs subtracted, per minute):
 | Depth (nominal row) | Drill tier | Drill net | Bombs net | Mining charges net |
 |---|---|---|---|---|
 | 14 | 3 | 158 | -134 | -1,220 |
-| 60 | 5 | 1,125 | 1,494 | 3,268 |
-| 60 | 8 | 2,461 | 1,494 | 3,268 |
+| 60 | 5 | 1,125 | 1,189 | 2,755 |
+| 60 | 8 | 2,461 | 1,189 | 2,755 |
 | 120 | 10 | 6,656 | 4,405 | 11,305 |
 | 120 | 14 | 6,802 | 4,405 | 11,305 |
 
 Plain bombs are tunnelling tools near the surface, a fast earner for an under-drilled rig in
 the middle strata and behind a strong drill deep down. Mining charges, now the loot tool, were
-repriced from 160 to 300 cr a pair so they pay off only where ore is rich (about 1.3x a tier 8
+repriced from 160 to 300 cr a pair so they pay off only where ore is rich (about 1.1x a tier 8
 drill mid-depth, 1.7x deep, before the real overhead of placing, waiting and trips to the
-surface). `bombing_stays_balanced_against_drilling` pins those ratios. Block sales add at most
+surface). `bombing_stays_balanced_against_drilling` pins those ratios. (One mid-depth
+bomb run frees a Star Core, which starts the escape and its cave-ins, just as drilling it would.) Block sales add at most
 a few percent to drilling income.
 
 ### Performance
