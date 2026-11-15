@@ -228,6 +228,35 @@ fn the_magnet_pulls_visible_drops_in_and_ignores_drops_behind_rock() {
 }
 
 #[test]
+fn a_pull_lets_go_when_the_rig_leaves_magnet_reach() {
+    let mut world = arena();
+    park(&mut world, PLAYER, 20.5, 30.5);
+    let id = world.spawn_item_drop(
+        px(23.0),
+        px(30.5),
+        (0.0, 0.0),
+        stack(MineralKind::Gold, 1),
+        None,
+    );
+    let _ = tick(&mut world);
+    let pulled = |world: &WorldState| {
+        world.entities().get(id).is_some_and(|entity| {
+            matches!(entity.state, EntityState::Drop(drop) if drop.pulled_by == Some(PLAYER))
+        })
+    };
+    assert!(pulled(&world));
+    // Rescued to the far side of the arena: the drop drops.
+    park(&mut world, PLAYER, 38.5, 9.5);
+    let _ = run(&mut world, 60);
+    assert!(!pulled(&world));
+    let entity = world.entities().get(id).expect("still there");
+    assert!(
+        entity.body.x < px(30.0),
+        "it did not fly through the arena after the rig"
+    );
+}
+
+#[test]
 fn the_nearest_rig_with_room_gets_the_drop() {
     let mut world = arena();
     world.add_player(OTHER);

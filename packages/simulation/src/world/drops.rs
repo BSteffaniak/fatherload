@@ -447,7 +447,15 @@ impl WorldState {
             return;
         };
         if let Some(puller) = drop.pulled_by {
-            if let Some((px, py)) = self.players.get(&puller).map(|p| (p.x, p.y)) {
+            // A rig that left magnet reach (rescued to the surface, warped) lets go.
+            let target = self.players.get(&puller).and_then(|player| {
+                let reach = magnet_radius(player) + BLOCKED_CLEAR_MARGIN;
+                self.entities.get(id).and_then(|entity| {
+                    ((entity.body.x - player.x).hypot(entity.body.y - player.y) <= reach)
+                        .then_some((player.x, player.y))
+                })
+            });
+            if let Some((px, py)) = target {
                 self.entities.update(id, |entity| {
                     let body = &mut entity.body;
                     body.previous_x = body.x;

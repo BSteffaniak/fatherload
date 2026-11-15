@@ -46,7 +46,11 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `ui_back` | interface | Two falling triangle notes (A5, D5). |
 | `ui_error` | interface | Two buzzy pulses: detuned 150/159 Hz squares, low-passed, saturated and folded. |
 | `toast` | interface | Soft FM bell (E6) with a quieter fifth above. |
-| `pickup` | feedback | Two quick FM glints a fifth apart from a pentatonic set. |
+| `pickup` | feedback | Two quick FM glints a fifth apart from a pentatonic set (ore and materials collected). |
+| `pickup_block` | feedback | A block clacking into the hopper: a short knock (420 -> 260 Hz thump, band-passed pink noise) and a tiny upward triangle blip. |
+| `pickup_artifact` | feedback | An artifact collected: a low FM bell under three rising pentatonic glints. |
+| `stowage_full` | interface | Cargo bay or hopper full: two muffled clunks (saturated thump plus a dull clank) against a closed hatch. |
+| `block_dump` | impact | Blocks tipped out: a brown-noise tumble with nine scattered clacks settling. |
 | `coins` | feedback | Drawer thunk, 5-7 metallic coin hits (inharmonic partials 1 : 2.76 : 5.4 : 8.93) rising in pitch, then a register "ching" bell. |
 | `purchase` | feedback | C-E-G-C brass arpeggio (detuned saws, enveloped low-pass), sparkle bells, 110 ms damped echo. |
 | `crate_open` | feedback | Latch clack, lid thump, creaking hinge (band-passed saw with vibrato), two sparkle bells. |
