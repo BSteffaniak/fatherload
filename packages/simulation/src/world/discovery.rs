@@ -217,7 +217,8 @@ fn reveal_around(discovered: &mut DiscoveredTiles, terrain: &Terrain, player: &P
         y: (player.y / TILE_SIZE).floor() as i32,
     };
     let (radius_x, radius_y) = REVEAL_RADIUS_TILES;
-    let x_range = (center.x - radius_x).max(0)..=(center.x + radius_x).min(terrain.width() - 1);
+    let x_range =
+        (center.x - radius_x).max(terrain.min_x())..=(center.x + radius_x).min(terrain.max_x());
     for y in (center.y - radius_y).max(0)..=(center.y + radius_y).min(terrain.height() - 1) {
         for x in x_range.clone() {
             discovered.reveal(TilePosition { x, y });
@@ -237,9 +238,13 @@ impl WorldState {
         let discovered = self.discovered_tiles.entry(player_id).or_default();
         let before = discovered.len();
         let radius = radius.max(0);
-        let (width, height) = (self.terrain.width(), self.terrain.height());
+        let (min_x, max_x, height) = (
+            self.terrain.min_x(),
+            self.terrain.max_x(),
+            self.terrain.height(),
+        );
         for y in (center.y - radius).max(0)..=(center.y + radius).min(height - 1) {
-            for x in (center.x - radius).max(0)..=(center.x + radius).min(width - 1) {
+            for x in (center.x - radius).max(min_x)..=(center.x + radius).min(max_x) {
                 if (x - center.x).abs() + (y - center.y).abs() <= radius {
                     discovered.reveal(TilePosition { x, y });
                 }
@@ -367,10 +372,7 @@ mod tests {
         let output = world.simulate_tick(tick, &TickInputs::default());
         let tiles = world.discovered_tiles(player).expect("discovery");
         assert!(!tiles.is_empty());
-        assert!(tiles.iter().all(|tile| tile.x >= 0
-            && tile.y >= 0
-            && tile.x < world.terrain().width()
-            && tile.y < world.terrain().height()));
+        assert!(tiles.iter().all(|tile| world.terrain().contains(tile)));
         let reported: usize = output
             .discoveries
             .iter()

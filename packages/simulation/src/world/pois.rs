@@ -17,7 +17,7 @@ use crate::{
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
     terrain::{TILE_SIZE, TileKind, TilePosition},
-    worldgen::{FeatureId, WorldFeature},
+    worldgen::{FeatureId, TileRect, WorldFeature},
 };
 
 use super::WorldState;
@@ -31,7 +31,7 @@ impl WorldState {
         if !self.terrain.settings().generator.has_points_of_interest() {
             return None;
         }
-        self.terrain.features().poi_at(position).copied()
+        self.terrain.poi_at(position)
     }
 
     /// A player drilled through a POI tile: pays out what it held.
@@ -262,13 +262,28 @@ impl WorldState {
         if changed.is_empty() || !self.terrain.settings().generator.has_points_of_interest() {
             return;
         }
+        let area = changed.iter().skip(1).fold(
+            TileRect {
+                min: changed[0],
+                max: changed[0],
+            },
+            |area, tile| TileRect {
+                min: TilePosition {
+                    x: area.min.x.min(tile.x),
+                    y: area.min.y.min(tile.y),
+                },
+                max: TilePosition {
+                    x: area.max.x.max(tile.x),
+                    y: area.max.y.max(tile.y),
+                },
+            },
+        );
         let vaults: Vec<WorldFeature> = self
             .terrain
-            .features()
-            .pois()
+            .pois_touching(&area)
+            .into_iter()
             .filter(|feature| feature.poi() == Some(PoiVariant::Vault(VaultPuzzle::Seals)))
             .filter(|feature| changed.iter().any(|tile| feature.bounds.contains(*tile)))
-            .copied()
             .collect();
         for vault in vaults {
             let tiles = self.vault_tiles(&vault);
@@ -293,7 +308,7 @@ impl WorldState {
             .map(|(feature, _)| *feature)
             .collect();
         for feature in expired {
-            let vault = self.terrain.features().get(feature).copied();
+            let vault = self.terrain.feature(feature);
             match vault {
                 Some(vault) => self.reset_vault_lock(&vault, output),
                 None => {
@@ -311,10 +326,10 @@ impl WorldState {
         let Self {
             players, terrain, ..
         } = self;
-        let features = terrain.features();
         for (player_id, player) in players.iter_mut() {
             let tile = player.tile_position(TILE_SIZE);
-            for feature in features.pois() {
+            let nearby = terrain.pois_touching(&TileRect::around(tile, VISIT_MARGIN, VISIT_MARGIN));
+            for feature in &nearby {
                 if !feature.bounds.expanded(VISIT_MARGIN).contains(tile) {
                     continue;
                 }
@@ -357,8 +372,8 @@ impl WorldState {
             return 0;
         };
         terrain
-            .features()
-            .pois()
+            .pois_touching(&TileRect::around(center, range, range))
+            .into_iter()
             .filter(|feature| in_scanner_range(&feature.bounds, center, range))
             .filter(|feature| player.journal.learn(feature.id, knowledge))
             .count()

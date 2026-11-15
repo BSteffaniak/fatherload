@@ -384,8 +384,23 @@ impl WorldState {
         output.terrain_ops = self.terrain.finish_journal();
         self.wake_entities_near(&output.terrain_ops);
         output.discoveries = self.take_discoveries();
+        self.stream_terrain_near_players();
         self.set_simulation_tick(next_tick);
         output
+    }
+
+    /// Keeps a streamed world's chunks loaded around every rig and unloads the rest (edits are
+    /// kept). Loading never changes a tile, so this has no effect on the simulation's results.
+    pub fn stream_terrain_near_players(&mut self) {
+        if !self.terrain.is_streamed() {
+            return;
+        }
+        let centers: Vec<TilePosition> = self
+            .players
+            .values()
+            .map(|player| player.tile_position(TILE_SIZE))
+            .collect();
+        self.terrain.stream_around(&centers);
     }
 
     pub(super) fn advance_escape_sequence(
@@ -469,7 +484,7 @@ impl WorldState {
                 .tile_position(TILE_SIZE)
                 .x
                 .saturating_add(2)
-                .clamp(1, self.terrain.width() - 2),
+                .clamp(self.terrain.min_x() + 1, self.terrain.max_x() - 1),
             y: depth.clamp(10, self.terrain.height() - 2),
         };
         // Reward tiers read classic nominal depths.

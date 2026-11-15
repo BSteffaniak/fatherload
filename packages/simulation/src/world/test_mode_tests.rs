@@ -319,7 +319,7 @@ fn nothing_drills_or_blasts_through_the_bedrock_floor_even_in_test_mode() {
         .tile_position(TILE_SIZE);
     let floor_below_rig = bedrock_top_row(&settings, rig.x).expect("floor");
     assert!(rig.y < floor_below_rig, "the rig stays above the floor");
-    for x in 0..world.terrain().width() {
+    for x in column - 60..=column + 60 {
         let top = bedrock_top_row(&settings, x).expect("floor");
         assert!(
             (top..world.terrain().height()).all(|y| world

@@ -19,6 +19,12 @@ pub struct Player {
     pub y: f32,
     pub velocity_x: f32,
     pub velocity_y: f32,
+    /// The part of the rig's exact horizontal position (world pixels) that `x` cannot hold:
+    /// `x + x_remainder` is where movement put the rig. Zero near spawn, where `f32` resolves
+    /// the simulation's sub-pixel grid; far out in an endless world it keeps travel exact
+    /// (see `integrate_x` in the world's movement).
+    #[serde(default)]
+    pub x_remainder: f32,
     pub fuel: f32,
     pub fuel_capacity: f32,
     pub hull: f32,
@@ -94,6 +100,7 @@ impl Player {
             y: spawn_y,
             velocity_x: 0.0,
             velocity_y: 0.0,
+            x_remainder: 0.0,
             fuel: 100.0,
             fuel_capacity: 100.0,
             hull: 100.0,

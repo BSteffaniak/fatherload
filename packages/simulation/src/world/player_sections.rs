@@ -22,6 +22,9 @@ pub struct PlayerRig {
     pub y: f32,
     pub velocity_x: f32,
     pub velocity_y: f32,
+    /// See [`Player::x_remainder`].
+    #[serde(default)]
+    pub x_remainder: f32,
     pub fuel: f32,
     pub hull: f32,
 }
@@ -84,6 +87,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         y,
         velocity_x,
         velocity_y,
+        x_remainder,
         fuel,
         fuel_capacity,
         hull,
@@ -122,6 +126,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             y,
             velocity_x,
             velocity_y,
+            x_remainder,
             fuel,
             hull,
         },
@@ -169,6 +174,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         y,
         velocity_x,
         velocity_y,
+        x_remainder,
         fuel,
         hull,
     } = rig;
@@ -210,6 +216,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         y,
         velocity_x,
         velocity_y,
+        x_remainder,
         fuel,
         fuel_capacity,
         hull,

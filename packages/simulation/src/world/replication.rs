@@ -53,6 +53,9 @@ pub struct PlayerTickState {
     pub y: f32,
     pub velocity_x: f32,
     pub velocity_y: f32,
+    /// See [`crate::Player::x_remainder`].
+    #[serde(default)]
+    pub x_remainder: f32,
     pub fuel: f32,
     pub hull: f32,
     pub drill: Option<DrillState>,
@@ -249,6 +252,7 @@ impl WorldState {
             y: rig.y,
             velocity_x: rig.velocity_x,
             velocity_y: rig.velocity_y,
+            x_remainder: rig.x_remainder,
             fuel: rig.fuel,
             hull: rig.hull,
             drill: self.active_drills.get(&player_id).copied(),
@@ -267,6 +271,7 @@ impl WorldState {
             y,
             velocity_x,
             velocity_y,
+            x_remainder,
             fuel,
             hull,
             drill,
@@ -280,6 +285,7 @@ impl WorldState {
             player.y = y;
             player.velocity_x = velocity_x;
             player.velocity_y = velocity_y;
+            player.x_remainder = x_remainder;
             player.fuel = fuel;
             player.hull = hull;
         }

@@ -134,14 +134,15 @@ impl WorldState {
     fn warp_pocket_site(&self, band: Band, column: i32) -> Option<(i32, i32)> {
         let settings = *self.terrain.settings();
         let margin = POCKET_HALF_WIDTH + 2;
-        let last_column = self.terrain.width() - 1 - margin;
-        if last_column < margin {
+        let first_column = self.terrain.min_x() + margin;
+        let last_column = self.terrain.max_x() - margin;
+        if last_column < first_column {
             return None;
         }
-        let start = column.clamp(margin, last_column);
+        let start = column.clamp(first_column, last_column);
         (0..=WARP_SEARCH_COLUMNS)
             .flat_map(|offset| [start - offset, start + offset])
-            .filter(|candidate| (margin..=last_column).contains(candidate))
+            .filter(|candidate| (first_column..=last_column).contains(candidate))
             .find_map(|candidate| {
                 let top = (candidate - POCKET_HALF_WIDTH..=candidate + POCKET_HALF_WIDTH)
                     .map(|x| band_solid_top_row(&settings, band, x))

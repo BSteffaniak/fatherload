@@ -203,8 +203,11 @@ mod tests {
     fn assert_spread(world: &WorldState) {
         let rigs: Vec<_> = world.players().values().collect();
         for (index, first) in rigs.iter().enumerate() {
-            let width = f64::from(world.terrain().width()) * f64::from(TILE_SIZE);
-            assert!(first.x >= 0.0 && f64::from(first.x) <= width);
+            let (left, right) = (
+                f64::from(world.terrain().min_x()) * f64::from(TILE_SIZE),
+                f64::from(world.terrain().max_x() + 1) * f64::from(TILE_SIZE),
+            );
+            assert!(f64::from(first.x) >= left && f64::from(first.x) <= right);
             let tile = world.terrain().tile(first.tile_position(TILE_SIZE));
             assert!(
                 tile.is_none_or(|tile| tile.kind == TileKind::Air),

@@ -60,6 +60,14 @@ pub const SURFACE_BUILDINGS: [SurfaceBuilding; 8] = [
     },
 ];
 
+/// The first and last column of the town (its building lots).
+#[must_use]
+pub const fn town_span() -> (i32, i32) {
+    let first = SURFACE_BUILDINGS[0];
+    let last = SURFACE_BUILDINGS[SURFACE_BUILDINGS.len() - 1];
+    (first.tile_x, last.tile_x + last.tile_width - 1)
+}
+
 /// Deepest rig position (in tiles, measured at the rig's centre) that still counts as standing at
 /// a surface building's door.
 pub const SURFACE_SERVICE_MAX_DEPTH_TILES: f32 = 5.5;

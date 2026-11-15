@@ -571,13 +571,12 @@ impl WorldState {
                 player.quests.deepest_row = row;
             }
             if has_pois && player.journal.visited_count() > 0 {
-                let features = terrain.features();
                 let kinds: Vec<_> = player
                     .journal
                     .known
                     .iter()
                     .filter(|(_, knowledge)| **knowledge == crate::poi::PoiKnowledge::Visited)
-                    .filter_map(|(feature, _)| features.get(*feature)?.poi_kind())
+                    .filter_map(|(feature, _)| terrain.feature(*feature)?.poi_kind())
                     .filter(|kind| !player.quests.visited_kinds.contains(kind))
                     .collect();
                 player.quests.visited_kinds.extend(kinds);
@@ -1102,8 +1101,8 @@ impl WorldState {
     /// The haul's next tile on the shortest open path to the surface, if any.
     fn escort_step(&self, from: TilePosition) -> Option<TilePosition> {
         const REACH: i32 = 70;
-        let min_x = (from.x - REACH).max(0);
-        let max_x = (from.x + REACH).min(self.terrain.width() - 1);
+        let min_x = (from.x - REACH).max(self.terrain.min_x());
+        let max_x = (from.x + REACH).min(self.terrain.max_x());
         let max_y = (from.y + 12).min(self.terrain.height() - 1);
         let width = usize::try_from(max_x - min_x + 1).ok()?;
         let height = usize::try_from(max_y + 1).ok()?;

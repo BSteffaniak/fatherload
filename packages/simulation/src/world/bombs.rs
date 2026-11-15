@@ -107,7 +107,7 @@ fn solid(terrain: &Terrain, x: f32, y: f32) -> bool {
         y: (y / TILE_SIZE).floor() as i32,
     };
     // The sky is open; the side edges and the bottom are not.
-    if position.x < 0 || position.x >= terrain.width() || position.y >= terrain.height() {
+    if !terrain.contains_column(position.x) || position.y >= terrain.height() {
         return true;
     }
     position.y >= 0 && terrain.is_solid_at(position)

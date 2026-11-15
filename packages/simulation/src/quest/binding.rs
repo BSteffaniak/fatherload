@@ -11,7 +11,7 @@ use crate::{
     poi::{PoiJournal, PoiKind, PoiKnowledge, PoiTile},
     surface::SURFACE_BUILDINGS,
     terrain::{Terrain, TileKind, TilePosition},
-    worldgen::{FeatureId, FeatureKind, WorldFeature, noise::hash2},
+    worldgen::{FeatureId, FeatureKind, TileRect, WorldFeature, noise::hash2},
 };
 
 use super::{
@@ -53,8 +53,8 @@ pub fn poi_unopened(terrain: &Terrain, feature: &WorldFeature) -> bool {
 /// vault fixture or a building foundation).
 #[must_use]
 pub fn diggable_spot(terrain: &Terrain, position: TilePosition) -> bool {
-    if position.x < 2
-        || position.x > terrain.width() - 3
+    if position.x < terrain.min_x() + 2
+        || position.x > terrain.max_x() - 2
         || position.y < SURFACE_ROW + 3
         || position.y > terrain.height() - 3
     {
@@ -125,18 +125,73 @@ const fn stand_in(kind: FeatureKind) -> Option<FeatureKind> {
     }
 }
 
+/// Columns either side of the binding origin a streamed world searches for quest targets.
+///
+/// Nearest first: a quest should send a rig somewhere it can reach, and the search widens only
+/// when a window holds no candidate at all.
+pub const STREAMED_BIND_COLUMNS: [i32; 3] = [160, 640, 2_048];
+
+/// Every feature a quest could bind to for `kinds`: the whole index of a bounded world, or,
+/// in a streamed one, the wanted bands' rows (then every row) of the columns around `origin`
+/// (widening while that finds nothing).
+fn world_features(
+    terrain: &Terrain,
+    origin: TilePosition,
+    (first, last): (u8, u8),
+    kinds: &[FeatureKind],
+    keep: impl Fn(&WorldFeature) -> bool,
+) -> Vec<WorldFeature> {
+    if !terrain.is_streamed() {
+        return terrain
+            .features()
+            .all()
+            .iter()
+            .filter(|feature| kinds.contains(&feature.kind) && keep(feature))
+            .copied()
+            .collect();
+    }
+    let settings = terrain.settings();
+    let band = |index: u8| crate::worldgen::Band::ALL[usize::from(index).min(11)];
+    let band_rows = (
+        crate::worldgen::strata::band_layout_rows(settings, band(first)).0 - 8,
+        crate::worldgen::strata::band_layout_rows(settings, band(last)).1 + 8,
+    );
+    for columns in STREAMED_BIND_COLUMNS {
+        for (top, bottom) in [band_rows, (0, terrain.height() - 1)] {
+            let rect = TileRect {
+                min: TilePosition {
+                    x: origin.x - columns,
+                    y: top,
+                },
+                max: TilePosition {
+                    x: origin.x + columns,
+                    y: bottom,
+                },
+            };
+            let found: Vec<WorldFeature> = terrain
+                .features_in(&rect, Some(kinds))
+                .into_iter()
+                .filter(|feature| keep(feature))
+                .collect();
+            if !found.is_empty() {
+                return found;
+            }
+        }
+    }
+    Vec::new()
+}
+
 /// Candidate features for `spec`, best first.
-fn candidates<'a>(
+fn candidates(
     spec: TargetSpec,
-    terrain: &'a Terrain,
+    terrain: &Terrain,
     origin: TilePosition,
     journal: &PoiJournal,
     taken: &BTreeSet<FeatureId>,
-) -> Vec<&'a WorldFeature> {
-    let features = terrain.features();
+) -> Vec<WorldFeature> {
     let (first, last) = spec.bands();
     // How many bands a feature lies outside the wanted range (0 inside it).
-    let band_gap = |feature: &&WorldFeature| {
+    let band_gap = |feature: &WorldFeature| {
         let index = feature.band.index();
         usize::from(first)
             .saturating_sub(index)
@@ -145,32 +200,36 @@ fn candidates<'a>(
     // Lean or unlucky worlds (and generators whose bands vary in thickness) can lack a kind in
     // the wanted bands: keep the candidates in the nearest bands that have one rather than leave
     // the quest unbindable.
-    let nearest_bands = |all: Vec<&'a WorldFeature>| -> Vec<&'a WorldFeature> {
+    let nearest_bands = |all: Vec<WorldFeature>| -> Vec<WorldFeature> {
         let nearest = all.iter().map(band_gap).min();
         all.into_iter()
             .filter(|feature| Some(band_gap(feature)) == nearest)
             .collect()
     };
-    let mut found: Vec<&WorldFeature> = match spec {
+    let mut found: Vec<WorldFeature> = match spec {
         TargetSpec::Poi { kind, unopened, .. } => {
             if !terrain.settings().generator.has_points_of_interest() {
                 return Vec::new();
             }
-            nearest_bands(
-                features
-                    .pois_of(kind)
-                    .filter(|feature| !unopened || poi_unopened(terrain, feature))
-                    .collect(),
-            )
+            nearest_bands(world_features(
+                terrain,
+                origin,
+                (first, last),
+                &[FeatureKind::PointOfInterest],
+                |feature| {
+                    feature.poi_kind() == Some(kind)
+                        && (!unopened || poi_unopened(terrain, feature))
+                },
+            ))
         }
         TargetSpec::Feature { kind, .. } => {
             // A world without any of the kind (some lean worlds roll no motherlode at all)
             // uses its closest stand-in.
-            let mut all: Vec<&WorldFeature> = features.of_kind(kind).collect();
+            let mut all = world_features(terrain, origin, (first, last), &[kind], |_| true);
             if all.is_empty()
                 && let Some(stand_in) = stand_in(kind)
             {
-                all = features.of_kind(stand_in).collect();
+                all = world_features(terrain, origin, (first, last), &[stand_in], |_| true);
             }
             nearest_bands(all)
         }
@@ -205,7 +264,7 @@ pub fn bind_quest(
     let mut chosen = BTreeSet::new();
     let mut targets = Vec::with_capacity(def.targets.len());
     for (index, spec) in def.targets.iter().enumerate() {
-        let options: Vec<&WorldFeature> = candidates(*spec, terrain, origin, journal, &used)
+        let options: Vec<WorldFeature> = candidates(*spec, terrain, origin, journal, &used)
             .into_iter()
             .filter(|feature| !chosen.contains(&feature.id))
             .collect();
@@ -349,7 +408,7 @@ fn simultaneous_spots(
         }
     };
     let row = TilePosition {
-        x: slide(center.x, 3, terrain.width() - 4),
+        x: slide(center.x, terrain.min_x() + 3, terrain.max_x() - 3),
         y: center.y,
     };
     let column = TilePosition {

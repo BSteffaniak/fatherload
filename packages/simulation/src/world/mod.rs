@@ -57,6 +57,8 @@ mod roster;
 mod services;
 mod simulate;
 mod state_hash;
+#[cfg(test)]
+mod streaming_tests;
 mod test_mode;
 #[cfg(test)]
 mod test_mode_tests;
@@ -98,7 +100,7 @@ pub use movement::{
     AUTHORITATIVE_MAX_HORIZONTAL_SPEED, AUTHORITATIVE_MIN_PLAYER_Y, AUTHORITATIVE_PLAYER_RADIUS,
     AUTHORITATIVE_RIG_GRAVITY, AUTHORITATIVE_SAFE_LANDING_SPEED,
     AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES, AUTHORITATIVE_THRUST_ACCELERATION,
-    AUTHORITATIVE_VERTICAL_DRAG_RATE_PER_SECOND, AuthoritativeMovementStep,
+    AUTHORITATIVE_VERTICAL_DRAG_RATE_PER_SECOND, AuthoritativeMovementStep, integrate_x,
 };
 /// Tick deadline of a rig's next drill chip.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]

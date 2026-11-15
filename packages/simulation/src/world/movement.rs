@@ -195,7 +195,7 @@ impl WorldState {
 
         let delta_x = quantize_simulation_scalar(player.velocity_x * delta_seconds);
         let delta_y = quantize_simulation_scalar(player.velocity_y * delta_seconds);
-        let next_x = quantize_simulation_scalar(player.x + delta_x);
+        let (next_x, next_remainder) = integrate_x(player.x, player.x_remainder, delta_x);
         let next_y = quantize_simulation_scalar(player.y + delta_y);
 
         if authoritative_player_collides(&self.terrain, next_x, player.y) {
@@ -218,8 +218,14 @@ impl WorldState {
             }
             player.velocity_x = 0.0;
         } else {
-            player.x =
-                quantize_simulation_scalar(clamp_authoritative_player_x(&self.terrain, next_x));
+            let clamped = clamp_authoritative_player_x(&self.terrain, next_x);
+            if clamped.to_bits() == next_x.to_bits() {
+                player.x = next_x;
+                player.x_remainder = next_remainder;
+            } else {
+                player.x = quantize_simulation_scalar(clamped);
+                player.x_remainder = 0.0;
+            }
         }
 
         if authoritative_player_collides(&self.terrain, player.x, next_y) {
@@ -252,6 +258,29 @@ impl WorldState {
             velocity_y: player.velocity_y,
         })
     }
+}
+
+/// Moves a rig at `x` (with its [`crate::Player::x_remainder`]) by `delta_x` world pixels:
+/// the new `(x, remainder)`.
+///
+/// The exact position `x + remainder` advances on the simulation's sub-pixel grid in `f64`;
+/// `x` is its nearest `f32` and the remainder the rest. Near spawn `f32` holds the grid
+/// exactly, so the remainder stays zero and this is plain quantized addition; tens of thousands
+/// of tiles out (endless worlds) it keeps a rig's travel identical to travel near spawn instead
+/// of rounding every step to the coarser `f32` spacing there.
+#[must_use]
+pub fn integrate_x(x: f32, remainder: f32, delta_x: f32) -> (f32, f32) {
+    let subpixels = f64::from(crate::quantize::SIMULATION_SUBPIXELS_PER_PIXEL);
+    let exact = f64::from(x) + f64::from(remainder) + f64::from(delta_x);
+    let exact = (exact * subpixels).round() / subpixels;
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "the nearest f32 is the point; the remainder keeps the rest"
+    )]
+    let next = exact as f32;
+    #[allow(clippy::cast_possible_truncation, reason = "a sub-ulp remainder")]
+    let rest = (exact - f64::from(next)) as f32;
+    (next, rest)
 }
 
 pub(super) fn authoritative_player_collides(terrain: &Terrain, x: f32, y: f32) -> bool {
@@ -298,7 +327,10 @@ pub(super) fn authoritative_point_to_tile(x: f32, y: f32) -> TilePosition {
     reason = "authoritative movement clamps integer terrain bounds in floating player space"
 )]
 pub(super) fn clamp_authoritative_player_x(terrain: &Terrain, x: f32) -> f32 {
-    x.clamp(0.0, (terrain.width() as f32 - 1.0) * TILE_SIZE)
+    x.clamp(
+        terrain.min_x() as f32 * TILE_SIZE,
+        terrain.max_x() as f32 * TILE_SIZE,
+    )
 }
 
 #[allow(

@@ -14,7 +14,11 @@ use crate::{
 const RIG: PlayerId = PlayerId::new(1);
 
 fn world(seed: u64) -> WorldState {
-    WorldState::new_game_with_settings(RIG, &WorldSettings::new(seed), SimulationParams::default())
+    WorldState::new_game_with_settings(
+        RIG,
+        &WorldSettings::bounded(seed),
+        SimulationParams::default(),
+    )
 }
 
 /// The first world (from a few seeds) with a POI matching `wanted`, and that POI.
@@ -483,7 +487,7 @@ fn relay_windows_last_the_same_time_at_every_tick_rate() {
         })
         .expect("the vault's seed");
     let run = |hz: u32| {
-        let settings = WorldSettings::new(seed);
+        let settings = WorldSettings::bounded(seed);
         let mut world =
             WorldState::new_game_with_settings(RIG, &settings, SimulationParams::new(hz));
         let relay = poi_tiles(&world, &vault, |tile| {

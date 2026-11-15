@@ -364,6 +364,17 @@ impl WorldState {
     pub fn world_features(&self) -> &crate::worldgen::FeatureIndex {
         self.terrain.features()
     }
+
+    /// The feature with id `id` in any world (bounded or streamed; see
+    /// [`Terrain::feature`]). Prefer this over `world_features().get(..)`, which only knows
+    /// bounded worlds.
+    #[must_use]
+    pub fn world_feature(
+        &self,
+        id: crate::worldgen::FeatureId,
+    ) -> Option<crate::worldgen::WorldFeature> {
+        self.terrain.feature(id)
+    }
 }
 
 /// The default world's terrain, generated once per process (generation is a pure function of
