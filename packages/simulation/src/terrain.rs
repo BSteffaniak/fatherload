@@ -1148,7 +1148,8 @@ impl Terrain {
                 let Some(slot) = self.slot(position) else {
                     continue;
                 };
-                let left = match self.read(slot).kind {
+                let before = self.read(slot).kind;
+                let left = match before {
                     TileKind::Air | TileKind::Lava | TileKind::Foundation | TileKind::Bedrock => {
                         continue;
                     }
@@ -1171,6 +1172,7 @@ impl Terrain {
                 self.write_tile(slot, position, tile);
                 if tile.kind == TileKind::Air {
                     result.cleared += 1;
+                    result.broken.push((position, before));
                 }
                 result.changed_tiles.push(position);
             }
@@ -1209,6 +1211,8 @@ impl Terrain {
 pub struct BlastResult {
     pub cleared: u32,
     pub changed_tiles: Vec<TilePosition>,
+    /// Every tile the blast turned to air, with what it was (WP-DROPS turns these into loot).
+    pub broken: Vec<(TilePosition, TileKind)>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

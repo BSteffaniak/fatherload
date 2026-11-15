@@ -395,7 +395,7 @@ fn a_shaped_charge_on_a_wall_cuts_sideways_and_stops_at_bedrock() {
 }
 
 #[test]
-fn a_mining_charge_clears_wide_but_leaves_ore_and_artifacts_standing() {
+fn a_mining_charge_clears_wide_and_pops_ore_out_intact() {
     let mut world = arena();
     fill(&mut world, 8..=40, 21..=31, TileKind::Stone);
     let _ = world.terrain_mut().set_kind(
@@ -410,7 +410,10 @@ fn a_mining_charge_clears_wide_but_leaves_ore_and_artifacts_standing() {
         SimulationTick::new(1),
     )];
     advance(&mut world, 1);
-    assert_eq!(kind_at(&world, 22, 22), TileKind::Ore(MineralKind::Gold));
+    // WP-DROPS: the ore breaks cleanly and drops as loot (a plain blast shatters some).
+    assert_eq!(kind_at(&world, 22, 22), TileKind::Air);
+    assert!(world.drops().any(|(_, _, drop, _)| drop.stack
+        == crate::item::ItemStack::new(crate::item::ItemKind::Mineral(MineralKind::Gold), 1)));
     assert_eq!(kind_at(&world, 20, 24), TileKind::Air, "radius four");
     assert_eq!(kind_at(&world, 21, 22), TileKind::Air);
 }

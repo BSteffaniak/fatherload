@@ -256,9 +256,12 @@ impl HarnessSim for WorldState {
         template.survey_drone_kits = 3;
         world.set_player_template(template);
         // Loose item drops along the surface (falling, settling, sleeping, then woken and
-        // thrown by the bots' digging and bombs) so entity replication is exercised too.
+        // thrown by the bots' digging and bombs, or hoovered up by their magnets) so entity
+        // replication is exercised too. Spread over the whole bounded map, inside its walls.
+        #[allow(clippy::cast_precision_loss, reason = "small tile counts")]
+        let spacing = (WORLD_HARNESS_WIDTH_TILES - 4) as f32 / 48.0;
         for index in 0..48_u16 {
-            let x = (f32::from(index).mul_add(0.75, 1.25) + spawn_tile_x) * TILE_SIZE;
+            let x = f32::from(index).mul_add(spacing, 2.5) * TILE_SIZE;
             let stack = fatherload_simulation::item::ItemStack::new(
                 fatherload_simulation::item::ItemKind::Mineral(MineralKind::Copper),
                 1,
@@ -353,6 +356,7 @@ impl HarnessSim for WorldState {
                 GameplayEventKind::BombDetonated { .. } => Some("bomb detonated"),
                 GameplayEventKind::ExplosiveDetonated { .. } => Some("explosive detonated"),
                 GameplayEventKind::CargoChanged { .. } => Some("cargo changed"),
+                GameplayEventKind::ItemsCollected { .. } => Some("items collected"),
                 _ => None,
             },
         }

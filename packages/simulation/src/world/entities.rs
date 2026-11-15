@@ -28,8 +28,8 @@ use crate::{
     event::{GameplayEventKind, TickOutput},
     hazard::{FallingBoulder, HazardCloud},
     ids::SimulationTick,
-    item::ItemStack,
-    physics::{self, Blast, BodyParams},
+    item::{BlockKind, ItemKind, ItemStack},
+    physics::{self, Blast},
     quantize::quantize_simulation_scalar,
     terrain::{TILE_SIZE, TileChange, TilePosition},
 };
@@ -94,7 +94,9 @@ impl WorldState {
     }
 
     /// Spawns a floating item stack at `(x, y)` moving at `(velocity_x, velocity_y)`, which
-    /// despawns after `lifetime_millis` (none: never). WP-DROPS adds pickup and merging.
+    /// despawns after `lifetime_millis` (none: never;
+    /// [`crate::world::drops::drop_lifetime_millis`] gives each kind's usual lifetime). Rigs
+    /// collect it like any drop (`world/drops.rs`).
     pub fn spawn_item_drop(
         &mut self,
         x: f32,
@@ -112,7 +114,7 @@ impl WorldState {
         });
         self.spawn_entity(
             Body::at(x, y).moving(velocity.0, velocity.1),
-            EntityState::Drop(DropState { stack }),
+            EntityState::Drop(DropState::new(stack)),
             expires_at,
         )
     }
@@ -184,6 +186,8 @@ impl WorldState {
         if phase == EntityPhase::Late {
             let _expired = self.entities.take_expired(next_tick);
         }
+        // Drops merged away during this phase (never merged into again).
+        let mut merged = std::collections::BTreeSet::new();
         for id in self.entities.awake_in_phase(phase) {
             let Some(kind) = self.entities.get(id).map(Entity::kind) else {
                 continue;
@@ -191,8 +195,12 @@ impl WorldState {
             match kind {
                 EntityKind::GasCloud => self.advance_gas_cloud(id),
                 EntityKind::Boulder => self.advance_boulder(id, next_tick, output),
-                EntityKind::Drop => self.advance_drop(id),
+                EntityKind::Drop => self.advance_drop(id, &mut merged),
             }
+        }
+        if phase == EntityPhase::Late {
+            // WP-DROPS: magnets, pickups and "full" feedback (`world/drops.rs`).
+            self.advance_drop_pickups(output);
         }
     }
 
@@ -267,7 +275,15 @@ impl WorldState {
                 y: (body.y / TILE_SIZE).floor() as i32,
             };
             if self.terrain.is_solid_at(tile) {
+                // It shatters on the rock, leaving a stone block of rubble (WP-DROPS).
                 self.entities.despawn(id);
+                let _rubble = self.spawn_loot(
+                    body.x,
+                    TILE_SIZE.mul_add(-0.5, body.y),
+                    (0.0, -60.0),
+                    ItemStack::new(ItemKind::Block(BlockKind::Stone), 1),
+                    None,
+                );
                 return;
             }
         }
@@ -278,19 +294,6 @@ impl WorldState {
                     timing.rate.seconds_until(next_tick, state.warning_deadline);
                 boulder.life = timing.rate.seconds_until(next_tick, state.expiry_tick);
             }
-        });
-    }
-
-    /// A drop falls, bounces and slides under [`BodyParams::DROP`], and sleeps once it rests.
-    fn advance_drop(&mut self, id: EntityId) {
-        let delta_seconds = self.timing.delta_seconds;
-        let sleep_after = u16::try_from(self.timing.ticks_for_millis(ENTITY_SLEEP_AFTER_MILLIS))
-            .unwrap_or(u16::MAX);
-        let terrain = &self.terrain;
-        self.entities.update(id, |entity| {
-            let params = BodyParams::DROP;
-            let _report = physics::step_body(&mut entity.body, &params, terrain, delta_seconds);
-            physics::settle(&mut entity.body, &params, terrain, sleep_after);
         });
     }
 

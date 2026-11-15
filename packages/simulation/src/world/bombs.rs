@@ -195,7 +195,7 @@ impl WorldState {
         if bomb.burning() {
             match bomb.kind {
                 ExplosiveKind::Incendiary => {
-                    self.burn_ring(center, i32::from(bomb.stage), output);
+                    self.burn_ring(&bomb, i32::from(bomb.stage), output);
                     output.push_event(fire_event(bomb));
                     if bomb.stage >= INCENDIARY_RINGS {
                         return None;
@@ -226,6 +226,8 @@ impl WorldState {
             detonated_event(bomb)
         });
         if let Some(blast) = blast {
+            // Bomb loot (WP-DROPS): the broken tiles spray out as drops.
+            self.spawn_blast_drops(bomb.kind, bomb.x, bomb.y, &blast.broken);
             self.vent_vault_seals(&blast.changed_tiles, output);
         }
         match bomb.kind {
@@ -255,24 +257,10 @@ impl WorldState {
     fn blast_terrain(&mut self, bomb: &PlacedBomb, center: TilePosition) -> Option<BlastResult> {
         match bomb.kind.blast() {
             BlastShape::None => None,
-            BlastShape::Diamond(radius) => Some(self.detonate_bomb_at(center, radius)),
-            BlastShape::LootSafe(radius) => {
-                let mut result = BlastResult::default();
-                for y in center.y - radius..=center.y + radius {
-                    for x in center.x - radius..=center.x + radius {
-                        if (x - center.x).abs() + (y - center.y).abs() > radius {
-                            continue;
-                        }
-                        let position = TilePosition { x, y };
-                        if self.terrain.tile(position).is_some_and(|tile| {
-                            matches!(tile.kind, TileKind::Ore(_) | TileKind::Artifact(_))
-                        }) {
-                            continue;
-                        }
-                        merge(&mut result, self.terrain.blast_radius(position, 0));
-                    }
-                }
-                Some(result)
+            // A mining charge (`LootSafe`) breaks ore and artifacts cleanly: they pop out intact
+            // as drops (`world/drops.rs`, `ore_survives_blast`) instead of shattering.
+            BlastShape::Diamond(radius) | BlastShape::LootSafe(radius) => {
+                Some(self.detonate_bomb_at(center, radius))
             }
             BlastShape::Tunnel { length, half_width } => {
                 let (step_x, step_y) = bomb.direction.step();
@@ -300,9 +288,11 @@ impl WorldState {
     }
 
     /// One ring of an incendiary's fire: dirt, clay and gas at Manhattan distance `radius` burn
-    /// away; explosive pockets it reaches go off.
-    fn burn_ring(&mut self, center: TilePosition, radius: i32, output: &mut TickOutput) {
+    /// away (baked into blocks that drop); explosive pockets it reaches go off.
+    fn burn_ring(&mut self, bomb: &PlacedBomb, radius: i32, output: &mut TickOutput) {
+        let center = bomb_tile_position(*bomb);
         let mut changed = Vec::new();
+        let mut broken = Vec::new();
         for y in center.y - radius..=center.y + radius {
             for x in center.x - radius..=center.x + radius {
                 if (x - center.x).abs() + (y - center.y).abs() != radius {
@@ -317,9 +307,12 @@ impl WorldState {
                     TileKind::ExplosivePocket => 1,
                     _ => continue,
                 };
-                changed.extend(self.terrain.blast_radius(position, reach).changed_tiles);
+                let blast = self.terrain.blast_radius(position, reach);
+                changed.extend(blast.changed_tiles);
+                broken.extend(blast.broken);
             }
         }
+        self.spawn_blast_drops(bomb.kind, bomb.x, bomb.y, &broken);
         self.vent_vault_seals(&changed, output);
     }
 
@@ -552,6 +545,7 @@ fn pushed_speed(current: f32, push: f32, max_negative: f32, max_positive: f32) -
 fn merge(into: &mut BlastResult, blast: BlastResult) {
     into.cleared += blast.cleared;
     into.changed_tiles.extend(blast.changed_tiles);
+    into.broken.extend(blast.broken);
 }
 
 /// Whether no blast breaks `kind` (shaped-charge lanes stop at it).

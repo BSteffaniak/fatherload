@@ -30,7 +30,9 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::RemoteDetonate { .. }
         | PlayerCommand::PlaceInfrastructure { .. }
         | PlayerCommand::Rescue
-        | PlayerCommand::TestMode(_) => None,
+        | PlayerCommand::TestMode(_)
+        | PlayerCommand::DumpBlocks { .. }
+        | PlayerCommand::SetCollectBlocks { .. } => None,
     }
 }
 
@@ -43,6 +45,7 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
             &[SurfaceZone::Repair]
         }
         SessionServiceRequest::SellCargo
+        | SessionServiceRequest::SellBlocks
         | SessionServiceRequest::AutoSortLowGradeCargo
         | SessionServiceRequest::SellScanData => &[SurfaceZone::Depot],
         SessionServiceRequest::CompleteDepotWork => {
@@ -123,6 +126,9 @@ impl WorldState {
         }
         if let SessionServiceRequest::CustomizeRig { cosmetics } = request {
             return self.apply_rig_customization(player_id, cosmetics);
+        }
+        if matches!(request, SessionServiceRequest::SellBlocks) {
+            return self.sell_blocks(player_id);
         }
         let direct = match request {
             SessionServiceRequest::Refuel { .. } => Some(PlayerCommand::Refuel),
@@ -249,6 +255,7 @@ impl WorldState {
             SessionServiceRequest::Refuel { .. }
             | SessionServiceRequest::Repair { .. }
             | SessionServiceRequest::SellCargo
+            | SessionServiceRequest::SellBlocks
             | SessionServiceRequest::BuyUpgrade { .. }
             | SessionServiceRequest::Finance
             | SessionServiceRequest::BuyInsurance

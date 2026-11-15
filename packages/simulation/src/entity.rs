@@ -24,7 +24,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ids::SimulationTick,
+    ids::{PlayerId, SimulationTick},
     item::ItemStack,
     terrain::{CHUNK_SIZE_TILES, TILE_SIZE},
 };
@@ -170,10 +170,35 @@ pub struct BoulderState {
     pub expiry_tick: SimulationTick,
 }
 
-/// A floating item stack's per-kind state (WP-DROPS builds pickup and merging on it).
+/// A floating item stack's per-kind state (WP-DROPS: pickup, magnet and merging live in
+/// `world/drops.rs`).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DropState {
     pub stack: ItemStack,
+    /// The rig whose magnet is pulling it in (it flies free of gravity and rock toward that
+    /// rig), if any.
+    #[serde(default)]
+    pub pulled_by: Option<PlayerId>,
+    /// A rig that never auto-collects it (the rig that dumped it out of its hopper).
+    #[serde(default)]
+    pub ignored_by: Option<PlayerId>,
+    /// It sits in a rig's pickup reach but that rig's bay or hopper had no room for it (drawn
+    /// as a "full" drop; the rig was told once).
+    #[serde(default)]
+    pub blocked: bool,
+}
+
+impl DropState {
+    /// A fresh drop of `stack` (not pulled, ignored or blocked).
+    #[must_use]
+    pub const fn new(stack: ItemStack) -> Self {
+        Self {
+            stack,
+            pulled_by: None,
+            ignored_by: None,
+            blocked: false,
+        }
+    }
 }
 
 /// Per-kind entity state.
@@ -806,9 +831,10 @@ mod tests {
     use crate::{item::ItemKind, terrain::MineralKind};
 
     fn drop_state() -> EntityState {
-        EntityState::Drop(DropState {
-            stack: ItemStack::new(ItemKind::Mineral(MineralKind::Gold), 1),
-        })
+        EntityState::Drop(DropState::new(ItemStack::new(
+            ItemKind::Mineral(MineralKind::Gold),
+            1,
+        )))
     }
 
     fn cloud(life: f32) -> EntityState {

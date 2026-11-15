@@ -40,9 +40,14 @@ pub struct Player {
     /// Building blocks, kept apart from the cargo bay so plain blocks never crowd out ore.
     #[serde(default)]
     pub block_hopper: ItemContainer,
-    /// Block hopper capacity, in blocks.
+    /// Block hopper capacity, in blocks (grows with the cargo bay tier, see
+    /// [`crate::world::drops::block_hopper_capacity_for_level`]).
     #[serde(default = "default_block_hopper_capacity")]
     pub block_hopper_capacity: u32,
+    /// The "collect blocks" toggle: off, the magnet leaves plain block drops alone
+    /// ([`crate::PlayerCommand::SetCollectBlocks`]).
+    #[serde(default = "default_collect_blocks")]
+    pub collect_blocks: bool,
     pub fuel_tank_level: u8,
     pub cargo_bay_level: u8,
     pub credits: u32,
@@ -122,6 +127,7 @@ impl Player {
             cargo_capacity: 12,
             block_hopper: ItemContainer::new(),
             block_hopper_capacity: BLOCK_HOPPER_BASE_CAPACITY,
+            collect_blocks: true,
             fuel_tank_level: 1,
             cargo_bay_level: 1,
             credits: 0,
@@ -306,12 +312,21 @@ const fn default_block_hopper_capacity() -> u32 {
     BLOCK_HOPPER_BASE_CAPACITY
 }
 
+const fn default_collect_blocks() -> bool {
+    true
+}
+
 impl Player {
     /// Lifts fuel tank and cargo bay capacities stored under the old five-tier curves (+50 fuel
     /// and +8 slots a tier) onto the current curves for the fitted tiers, keeping any bonus
     /// earned on top of the old curve. Rigs already on the current curves are untouched, so this
     /// is safe to run on every load.
     pub fn catch_up_capacity_curves(&mut self) {
+        self.block_hopper_capacity =
+            self.block_hopper_capacity
+                .max(crate::world::drops::block_hopper_capacity_for_level(
+                    self.cargo_bay_level,
+                ));
         let cargo = cargo_capacity_for_level(self.cargo_bay_level);
         if self.cargo_capacity < cargo {
             let legacy = 12 + 8 * tiers_past_first(self.cargo_bay_level);

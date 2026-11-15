@@ -394,6 +394,10 @@ fn apply_upgrade(player: &mut Player, kind: UpgradeKind) {
                 .cargo_capacity
                 .saturating_add(added)
                 .max(cargo_capacity_for_level(player.cargo_bay_level));
+            // The block hopper (and the magnet, see `world::drops::magnet_radius`) grow with it.
+            player.block_hopper_capacity = player.block_hopper_capacity.max(
+                crate::world::drops::block_hopper_capacity_for_level(player.cargo_bay_level),
+            );
         }
         UpgradeKind::Engine => player.engine_level += 1,
         UpgradeKind::Hull => {

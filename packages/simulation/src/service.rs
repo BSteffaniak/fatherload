@@ -111,6 +111,8 @@ pub enum SessionServiceRequest {
         menu_item: usize,
     },
     SellCargo,
+    /// The depot buys every block in the hopper (WP-DROPS).
+    SellBlocks,
     BuyUpgrade {
         index: usize,
     },

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     explosive::{ExplosiveKind, ThrowAim},
     ids::InputSequence,
+    item::BlockKind,
     service::SessionServiceRequest,
     test_mode::TestModeAction,
 };
@@ -43,6 +44,16 @@ pub enum PlayerCommand {
     Service(SessionServiceRequest),
     /// A test-mode toggle or warp (ignored outside a test-mode world).
     TestMode(TestModeAction),
+    /// Tips the block hopper's blocks (one kind, or every kind) out beside the rig as drops
+    /// the rig will not pick up again (WP-DROPS).
+    DumpBlocks {
+        block: Option<BlockKind>,
+    },
+    /// The rig's "collect blocks" toggle: off, the magnet ignores plain blocks (they still
+    /// drop and other rigs can collect them).
+    SetCollectBlocks {
+        enabled: bool,
+    },
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

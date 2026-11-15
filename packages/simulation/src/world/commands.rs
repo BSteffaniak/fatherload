@@ -71,6 +71,12 @@ impl WorldState {
         ) {
             self.active_drills.remove(&player_id);
         }
+        if let MineResult::Mined(mined) = result {
+            // Every broken tile drops (WP-DROPS): ore and artifacts as items, plain ground as
+            // blocks. The drop lands inside the rig's collect radius, so the pickup pass at the
+            // end of the tick stows it (or leaves it floating when the bay is full).
+            self.spawn_drill_drop(player_id, target, mined);
+        }
         let player = self.players.get_mut(&player_id)?;
         let gear = player.hazard_gear;
         let mut damage = 0.0;
@@ -78,12 +84,6 @@ impl WorldState {
             MineResult::Mined(mined) => {
                 player.fuel = quantize_simulation_scalar((player.fuel - 0.45).max(0.0));
                 match mined {
-                    TileKind::Ore(mineral) => {
-                        let _added = player.add_cargo(mineral);
-                    }
-                    TileKind::Artifact(artifact) => {
-                        let _added = player.add_artifact(artifact);
-                    }
                     TileKind::PressurePocket => {
                         let kick = 1.0 - gear.pressure_absorbed();
                         player.velocity_y = quantize_simulation_scalar(-360.0 * kick);
@@ -418,6 +418,10 @@ impl WorldState {
             PlayerCommand::Rescue => self.canonical_rescue_player(player_id),
             PlayerCommand::Service(request) => self.apply_service_request(player_id, request),
             PlayerCommand::TestMode(action) => self.apply_test_mode_action(player_id, action),
+            PlayerCommand::DumpBlocks { block } => self.dump_blocks(player_id, block),
+            PlayerCommand::SetCollectBlocks { enabled } => {
+                self.set_collect_blocks(player_id, enabled)
+            }
         }
     }
 }

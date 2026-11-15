@@ -307,15 +307,12 @@ impl WorldState {
                 quest_notes.mined.push((player_id, target, kind));
             }
             match result {
-                MineResult::Mined(TileKind::Ore(_)) => {
-                    output.push_event(GameplayEventKind::CargoChanged { player_id });
-                }
+                // Ore and artifacts now drop: the pickup pass reports them (`ItemsCollected`).
                 MineResult::Mined(TileKind::Artifact(ArtifactKind::StarCore)) => {
                     self.progression.escape_deadline =
                         Some(SimulationTick::new(next_tick.get().saturating_add(
                             timing.ticks_for_millis(ESCAPE_DURATION_MILLIS),
                         )));
-                    output.push_event(GameplayEventKind::CargoChanged { player_id });
                     output.push_event(GameplayEventKind::EscapeStarted { player_id });
                 }
                 MineResult::Mined(TileKind::Stone | TileKind::HardRock) => {

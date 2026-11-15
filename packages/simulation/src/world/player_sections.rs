@@ -72,6 +72,9 @@ pub struct PlayerInventory {
     pub cargo_capacity: u32,
     pub block_hopper: ItemContainer,
     pub block_hopper_capacity: u32,
+    /// The "collect blocks" toggle.
+    #[serde(default = "crate::world::player_sections::default_true")]
+    pub collect_blocks: bool,
     pub fuel_tank_level: u8,
     pub credits: u32,
     /// Hazard counter tiers.
@@ -115,6 +118,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         cargo_capacity,
         block_hopper,
         block_hopper_capacity,
+        collect_blocks,
         fuel_tank_level,
         cargo_bay_level,
         credits,
@@ -170,6 +174,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             cargo_capacity,
             block_hopper,
             block_hopper_capacity,
+            collect_blocks,
             fuel_tank_level,
             credits,
             hazard_gear,
@@ -221,6 +226,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         cargo_capacity,
         block_hopper,
         block_hopper_capacity,
+        collect_blocks,
         fuel_tank_level,
         credits,
         hazard_gear,
@@ -253,6 +259,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         cargo_capacity,
         block_hopper,
         block_hopper_capacity,
+        collect_blocks,
         fuel_tank_level,
         cargo_bay_level,
         credits,
@@ -281,4 +288,8 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         cosmetics,
         cosmetic_unlocks,
     }
+}
+
+pub const fn default_true() -> bool {
+    true
 }

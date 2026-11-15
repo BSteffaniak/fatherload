@@ -16,8 +16,9 @@
 //!   react in the same `push_from_blasts` hook (`kind == Emp`) or to
 //!   [`crate::GameplayEventKind::ExplosiveDetonated`] with `kind: Emp`. EMPs have no push
 //!   reach, so `push_from_blasts` must check the kind before calling [`blast_impulse`].
-//! * [`ExplosiveKind::Mining`] leaves ore and artifacts standing (see [`BlastShape::LootSafe`]);
-//!   the drops track can turn those tiles into floating loot instead.
+//! * [`ExplosiveKind::Mining`] breaks ore and artifacts cleanly (see [`BlastShape::LootSafe`]):
+//!   every tile pops out intact as a drop, where a plain blast shatters about a third of the
+//!   ore it breaks (`world::drops::ore_survives_blast`).
 
 use serde::{Deserialize, Serialize};
 
@@ -44,7 +45,7 @@ pub enum ExplosiveKind {
     C4,
     /// Placed against a surface; blasts a long tunnel straight into it.
     Shaped,
-    /// Dropped; a wide blast that leaves ore and artifacts standing.
+    /// Dropped; a wide blast that pops ore and artifacts out intact as loot.
     Mining,
     /// Thrown; a small blast, then a spreading fire that eats soft ground.
     Incendiary,
@@ -72,7 +73,8 @@ pub enum BlastShape {
     None,
     /// A diamond (Manhattan radius) around the charge, like the original bomb.
     Diamond(i32),
-    /// A diamond that skips ore and artifact tiles (they are left exposed).
+    /// A diamond that breaks ore and artifact tiles cleanly: every one drops intact (WP-DROPS),
+    /// where a plain blast shatters some ore.
     LootSafe(i32),
     /// A straight tunnel `length` tiles long and `2 * half_width + 1` tiles wide, starting at
     /// the charge and running along its [`BlastDirection`]. Each lane stops at the first tile

@@ -20,7 +20,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// keyframes, `x_remainder`), rig cosmetics and the garage (`RigBuild` tiers and paint,
 /// event 44), test-mode no-clip flight (`TestModeState::no_clip`, `TestModeAction::SetNoClip`)
 /// and the explosive kinds (`DeployExplosive`, `RemoteDetonate`, events 33-38).
-pub const PROTOCOL_VERSION: u8 = 8;
+///
+/// 9 (wave 2, T7 drops; the integrator collapses wave 2's bumps into one): `DropState` pull /
+/// dump / blocked marks, `Player::collect_blocks` (`PlayerInventory`), the `DumpBlocks` and
+/// `SetCollectBlocks` commands, `SessionServiceRequest::SellBlocks` and the pickup events
+/// (60-63).
+pub const PROTOCOL_VERSION: u8 = 9;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

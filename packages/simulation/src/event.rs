@@ -6,6 +6,7 @@ use crate::{
     command::PlayerCommand,
     explosive::{BlastDirection, ExplosiveKind},
     ids::{InputSequence, PlayerId, SimulationTick},
+    item::{ItemKind, Stowage},
     poi::{PoiKind, PoiReward},
     quest::{BlueprintId, QuestFailure, QuestId},
     summary::PlayerScopedCommandOutcome,
@@ -162,6 +163,30 @@ pub enum GameplayEventKind {
     RigCustomized {
         player_id: PlayerId,
     },
+    /// A rig picked up `count` of `item` from a drop at world pixel `(x, y)` (WP-DROPS; see
+    /// `world/drops.rs`).
+    ItemsCollected {
+        player_id: PlayerId,
+        item: ItemKind,
+        count: u32,
+        x: i32,
+        y: i32,
+    },
+    /// A drop sits in a rig's pickup reach but its cargo bay or block hopper (`stowage`) is
+    /// full (once per stack that appears, not every tick).
+    PickupBlocked {
+        player_id: PlayerId,
+        stowage: Stowage,
+    },
+    /// A rig tipped blocks out of its hopper.
+    BlocksDumped {
+        player_id: PlayerId,
+    },
+    /// A rig switched its "collect blocks" toggle.
+    CollectBlocksToggled {
+        player_id: PlayerId,
+        enabled: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -229,5 +254,10 @@ pub(crate) const fn gameplay_event_for_applied_command(
         PlayerCommand::UseScanner => GameplayEventKind::ScannerUsed { player_id },
         PlayerCommand::Rescue => GameplayEventKind::RescueTriggered { player_id },
         PlayerCommand::TestMode(_) => GameplayEventKind::TestModeChanged { player_id },
+        PlayerCommand::DumpBlocks { .. } => GameplayEventKind::BlocksDumped { player_id },
+        PlayerCommand::SetCollectBlocks { enabled } => GameplayEventKind::CollectBlocksToggled {
+            player_id,
+            enabled: *enabled,
+        },
     }
 }

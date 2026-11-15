@@ -129,6 +129,11 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::QuestFailed { player_id, .. } => (23, Some(player_id)),
         GameplayEventKind::BlueprintCompleted { player_id, .. } => (24, Some(player_id)),
         GameplayEventKind::RigCustomized { player_id } => (44, Some(player_id)),
+        // WP-DROPS (60+: clear of the other wave-2 tracks' codes).
+        GameplayEventKind::ItemsCollected { player_id, .. } => (60, Some(player_id)),
+        GameplayEventKind::PickupBlocked { player_id, .. } => (61, Some(player_id)),
+        GameplayEventKind::BlocksDumped { player_id } => (62, Some(player_id)),
+        GameplayEventKind::CollectBlocksToggled { player_id, .. } => (63, Some(player_id)),
     }
 }
 

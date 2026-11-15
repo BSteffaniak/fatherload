@@ -170,7 +170,16 @@ fn world_with_entities() -> WorldState {
             x,
             TILE_SIZE,
             (f32::from(index % 7) * 10.0 - 30.0, 0.0),
-            ItemStack::new(ItemKind::Mineral(MineralKind::Iron), 1),
+            // Timed drops are copper so they never merge into (and outlive as) a lasting
+            // iron stack.
+            ItemStack::new(
+                ItemKind::Mineral(if lifetime.is_some() {
+                    MineralKind::Copper
+                } else {
+                    MineralKind::Iron
+                }),
+                1,
+            ),
             lifetime,
         );
     }
@@ -202,6 +211,13 @@ fn entity_deltas_keep_a_replica_exact_and_skip_sleeping_entities() {
     let _ = baseline.changed_sections(&authority);
     // The keyframe carries every entity.
     baseline.entities = authority.entity_revisions(None, None);
+    let short_lived: Vec<_> = authority
+        .entities()
+        .iter()
+        .filter(|entity| entity.expires_at.is_some())
+        .map(|entity| entity.id)
+        .collect();
+    assert!(!short_lived.is_empty());
     let mut entity_ticks = 0;
     let mut saw_sleep = false;
     let mut woke = false;
@@ -235,12 +251,18 @@ fn entity_deltas_keep_a_replica_exact_and_skip_sleeping_entities() {
         0,
         "the boulder fell"
     );
+    // The rigs' digging adds drops of its own (WP-DROPS), so check the timed ones by id.
     assert!(
-        authority.entities().count_of(EntityKind::Drop) < 60,
+        short_lived
+            .iter()
+            .all(|id| authority.entities().get(*id).is_none()),
         "short-lived drops expired"
     );
+    // Every tile the rigs dig now spawns a drop that falls (and, once the hopper is full,
+    // follows the rig down its shaft), so moving entities are a larger share than before
+    // WP-DROPS; resting ones still cost nothing.
     assert!(
-        baseline.entity_records_sent * 10 < entity_ticks,
+        baseline.entity_records_sent * 5 < entity_ticks,
         "resting entities are not resent every tick: {} records for {entity_ticks} entity-ticks",
         baseline.entity_records_sent
     );
