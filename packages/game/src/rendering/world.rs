@@ -137,6 +137,10 @@ fn draw_lowered_ground_backdrop(draw: &mut impl RaylibDraw, terrain: &Terrain, v
 }
 
 /// Draws one view's world: backdrop, town, terrain, props, rigs and effects, back to front.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the world's draw order in one place: each layer is one call"
+)]
 pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_>) {
     let seconds = scene.seconds();
     sky::draw_sky(draw, scene.sky, scene.visible, seconds);

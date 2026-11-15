@@ -167,7 +167,13 @@ fn drilling_a_cache_pays_credits_and_spills_loot() {
     put_rig(&mut world, TilePosition { x: 401, y: 122 });
     world.player_mut(PLAYER).expect("rig").drill_strength = 4;
     let credits = world.player(PLAYER).expect("rig").credits;
-    let drops = world.entities().count_of(EntityKind::Drop);
+    // WP-DROPS: the spilled loot is either still floating or already in the cargo bay (the
+    // rig's magnet picks it up within a few ticks).
+    let loot = |world: &WorldState| {
+        world.entities().count_of(EntityKind::Drop)
+            + world.player(PLAYER).expect("rig").cargo_bay.total() as usize
+    };
+    let before = loot(&world);
     let mut opened = None;
     for _ in 0..600 {
         for event in tick(&mut world, ControlState::new(0.0, false, true)) {
@@ -183,7 +189,7 @@ fn drilling_a_cache_pays_credits_and_spills_loot() {
     assert_eq!(tile, CaveTile::TreasureCache);
     assert!(paid > 0);
     assert_eq!(world.player(PLAYER).expect("rig").credits, credits + paid);
-    assert!(world.entities().count_of(EntityKind::Drop) > drops);
+    assert!(loot(&world) > before, "the cache's loot spilled");
 }
 
 fn critters_of(world: &WorldState, cave: &WorldFeature) -> usize {
