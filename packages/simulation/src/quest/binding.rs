@@ -120,9 +120,8 @@ pub fn giver_door(giver: QuestGiver) -> TilePosition {
 const fn stand_in(kind: FeatureKind) -> Option<FeatureKind> {
     match kind {
         FeatureKind::Motherlode => Some(FeatureKind::ArtifactBed),
-        FeatureKind::Chamber => Some(FeatureKind::LargeCavern),
         // Worlds before V6 have no cave ecosystems: a cave quest goes to a large cavern.
-        FeatureKind::Cave => Some(FeatureKind::LargeCavern),
+        FeatureKind::Chamber | FeatureKind::Cave => Some(FeatureKind::LargeCavern),
         _ => None,
     }
 }

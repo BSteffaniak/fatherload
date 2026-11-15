@@ -513,6 +513,28 @@ impl Director {
                 let gain = (impact / HARD_LANDING_SPEED).clamp(0.4, 1.0);
                 self.play(patch, gain, pan, 1.0);
             }
+            // A giant mushroom cap springing the rig back up (fungal grottos): the fall flips
+            // into a climb right over a cap.
+            if state.velocity_y > LANDING_SPEED
+                && velocity_y < -LANDING_SPEED * 2.0
+                && [0, 1].iter().any(|below| {
+                    terrain
+                        .tile(TilePosition {
+                            x: foot.x,
+                            y: foot.y + below,
+                        })
+                        .is_some_and(|tile| {
+                            tile.kind
+                                == TileKind::Cave(
+                                    fatherload_simulation::cave::CaveTile::MushroomCap,
+                                )
+                        })
+                })
+            {
+                let gain = (state.velocity_y / HARD_LANDING_SPEED).clamp(0.45, 1.0);
+                let rate = self.rng.range(0.92, 1.08);
+                self.play(Patch::MushroomBounce, gain, pan, rate);
+            }
             let lost = state.velocity_x.abs() - velocity_x.abs();
             if drill.is_none()
                 && state.velocity_x.abs() > BUMP_SPEED
@@ -874,6 +896,38 @@ mod tests {
         assert!(right.gain < 0.5 && right.gain > 0.02);
         assert!(right.pan > 0.5 && left.pan < -0.5);
         assert!(right.cutoff < near.cutoff, "distant blasts are muffled");
+    }
+
+    #[test]
+    fn a_mushroom_cap_bounce_boings() {
+        let one = PlayerId::new(1);
+        let mut world = WorldState::new_game(one);
+        let seats = [seat(0, one)];
+        let (x, y) = {
+            let snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
+            (snapshot.players[0].x, snapshot.players[0].y)
+        };
+        let foot = TilePosition {
+            x: (x / TILE_SIZE).floor() as i32,
+            y: ((y + FOOT_OFFSET + 3.0) / TILE_SIZE).floor() as i32,
+        };
+        let cap = TileKind::Cave(fatherload_simulation::cave::CaveTile::MushroomCap);
+        assert!(world.terrain_mut().set_kind(foot, cap));
+        let mut director = Director::new(1);
+        let audio = [SeatAudio {
+            playing: true,
+            ..SeatAudio::default()
+        }];
+        let mut boings = 0;
+        for velocity_y in [320.0, -300.0, -280.0] {
+            let mut snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
+            snapshot.players[0].velocity_y = velocity_y;
+            boings += plays(director.update(&frame(&snapshot, &[], &audio)))
+                .iter()
+                .filter(|request| request.patch == Patch::MushroomBounce)
+                .count();
+        }
+        assert_eq!(boings, 1, "one boing per bounce");
     }
 
     #[test]

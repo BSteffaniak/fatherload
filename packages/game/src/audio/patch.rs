@@ -164,6 +164,7 @@ patches! {
     CaveDiscovered => "cave_discovered",
     StalactiteCrack => "stalactite_crack",
     CacheOpen => "cache_open",
+    MushroomBounce => "mushroom_bounce",
 }
 
 /// Playback metadata of a patch.
@@ -280,9 +281,11 @@ impl Patch {
             Self::DrillBite | Self::DrillCrunch => {
                 PatchInfo::new(Impact).instances(3).jitter(0.08, 2.0)
             }
-            Self::LandLight | Self::LandMedium | Self::WallBump | Self::BreakSoft => {
-                PatchInfo::new(Impact).instances(2).jitter(0.05, 1.0)
-            }
+            Self::LandLight
+            | Self::LandMedium
+            | Self::WallBump
+            | Self::BreakSoft
+            | Self::MushroomBounce => PatchInfo::new(Impact).instances(2).jitter(0.05, 1.0),
             Self::LandHeavy | Self::HullHit | Self::BreakHard => PatchInfo::new(Impact)
                 .instances(2)
                 .jitter(0.04, 1.0)
@@ -418,6 +421,7 @@ impl Patch {
             Self::CaveDiscovered => cave_discovered(rng),
             Self::StalactiteCrack => stalactite_crack(rng),
             Self::CacheOpen => cache_open(rng),
+            Self::MushroomBounce => mushroom_bounce(rng),
         }
     }
 }
@@ -1538,6 +1542,19 @@ fn cache_open(rng: &mut Rng) -> Vec<f32> {
     mix_into(&mut out, &coins(rng), 0.24, 0.6);
     mix_into(&mut out, &bell(1_760.0, 2.0, 1.0, 0.3), 0.3, 0.3);
     mix_into(&mut out, &bell(2_349.3, 2.0, 1.0, 0.35), 0.38, 0.25);
+    out
+}
+
+/// A rig springing off a giant mushroom cap: a soft rubbery thud and a wobbling rising boing.
+fn mushroom_bounce(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(120.0 * rng.jitter(0.05), 70.0, 0.08, 1.2);
+    let mut osc = Osc::new(Wave::Triangle).with_phase(rng.unit());
+    let base = 180.0 * rng.jitter(0.06);
+    let boing = render(0.42, |t| {
+        let frequency = base * (1.0 + 1.6 * t) * (1.0 + 0.06 * sine(t, 11.0));
+        osc.next(frequency) * perc(t, 0.004, 0.32)
+    });
+    mix_into(&mut out, &boing, 0.01, 0.55);
     out
 }
 
