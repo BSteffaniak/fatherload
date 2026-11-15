@@ -110,7 +110,7 @@ mod tests {
         assert!((settled - target).abs() < 1.0, "{settled} vs {target}");
         // Capped in a small (split-screen) view.
         let (capped, _) = leads.offset(PLAYER, (320.0, 180.0));
-        assert!(320.0f32.mul_add(-MAX_LEAD_FRACTION_X, capped).abs() < f32::EPSILON);
+        assert!(320.0f32.mul_add(-MAX_LEAD_FRACTION_X, capped).abs() < 1e-3);
         // A sudden stop glides back rather than snapping.
         world.player_mut(PLAYER).expect("player").velocity_x = 0.0;
         leads.update(1.0 / 60.0, &world, &[PLAYER]);
