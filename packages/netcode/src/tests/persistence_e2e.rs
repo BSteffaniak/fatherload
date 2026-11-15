@@ -9,7 +9,7 @@ use fatherload_simulation::{Player, WorldState, terrain::MineralKind};
 
 use super::support::assert_converged;
 use crate::harness::{Harness, HarnessConfig};
-use crate::world::to_sim_player;
+use crate::world::{from_sim_player, to_sim_player, to_sim_profile};
 use crate::{CrewNotice, IdentityNotice, LinkConditions, PlayerId, ProfileId, SessionParams};
 
 type WorldHarness = Harness<WorldState>;
@@ -270,4 +270,84 @@ fn a_player_on_a_new_install_claims_their_saved_rig_with_the_hosts_approval() {
     harness.restart_host(save);
     let laptop_again = harness.add_client_as(None, Some(SAM_NEW_LAPTOP), "Sam");
     assert_eq!(wait_joined(&mut harness, laptop_again), sam);
+}
+
+/// Waits until the host has a claim request pending.
+fn wait_claim(harness: &mut WorldHarness) {
+    let mut guard = 0;
+    while harness.host.claim_requests().is_empty() {
+        harness.step();
+        guard += 1;
+        assert!(guard < 5_000, "claim never reached the host");
+    }
+}
+
+fn profile_rig(harness: &WorldHarness, profile: ProfileId) -> Option<PlayerId> {
+    harness
+        .world()
+        .player_for_profile(to_sim_profile(profile))
+        .and_then(from_sim_player)
+}
+
+#[test]
+fn a_second_window_on_the_same_install_joins_with_a_fresh_rig() {
+    let mut harness = harness();
+    let first = harness.add_client_as(None, Some(ALEX), "Alex");
+    let alex = wait_joined(&mut harness, first);
+    // Same machine, same profile file, a second game window: not turned away.
+    let second = harness.add_client_as(None, Some(ALEX), "Alex");
+    let other = wait_joined(&mut harness, second);
+    assert_ne!(other, alex);
+    wait_in_game(&mut harness);
+    // The profile still names the first window's rig.
+    assert_eq!(profile_rig(&harness, ALEX), Some(alex));
+    harness.run_for(Duration::from_secs(1));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+}
+
+#[test]
+fn claiming_another_rig_keeps_the_claimers_own_saved_rig() {
+    let mut harness = harness();
+    let (alex, sam) = play_first_session(&mut harness);
+    let mut save = autosave(&harness);
+    save.player_mut(to_sim_player(alex)).expect("alex").credits = 1_111;
+    harness.restart_host(save);
+
+    // Alex returns (gets his saved rig back) and then claims Sam's parked rig.
+    let alex_again = harness.add_client_as(None, Some(ALEX), "Alex");
+    assert_eq!(wait_joined(&mut harness, alex_again), alex);
+    wait_in_game(&mut harness);
+    harness.clients[alex_again].session.claim_rig(sam);
+    wait_claim(&mut harness);
+    let client = harness.clients[alex_again].id;
+    assert!(harness.host.resolve_claim(client, true));
+    assert_eq!(harness.host.client_player(client), Some(sam));
+
+    // Alex's own saved rig is parked (not deleted), no longer tied to his profile, and can be
+    // claimed back.
+    let parked = harness
+        .world()
+        .parked_player(to_sim_player(alex))
+        .expect("alex's saved rig is kept");
+    assert_eq!(parked.player.credits, 1_111);
+    assert_eq!(parked.member.profile, None);
+    assert_eq!(profile_rig(&harness, ALEX), Some(sam));
+    harness.run_for(Duration::from_millis(500));
+    harness.clients[alex_again].session.claim_rig(alex);
+    wait_claim(&mut harness);
+    assert!(harness.host.resolve_claim(client, true));
+    assert_eq!(harness.host.client_player(client), Some(alex));
+    assert!(
+        harness.world().is_parked(to_sim_player(sam)),
+        "Sam's rig waits again"
+    );
+    assert_eq!(rig(&harness, alex).credits, 1_111);
+    // ... and still belongs to Sam, who is recognized when he comes back.
+    assert_eq!(profile_rig(&harness, SAM), Some(sam));
+    assert_eq!(profile_rig(&harness, ALEX), Some(alex));
+    harness.reset_measurements();
+    harness.run_for(Duration::from_secs(2));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
 }

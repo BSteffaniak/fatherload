@@ -187,6 +187,12 @@ struct PlayerSlot<S: NetSimulation> {
     token: ReconnectToken,
     /// Persistent identity, if the player sent one (local seats: set by the app).
     profile: Option<ProfileId>,
+    /// The player's rig is a saved one handed back this session (not a fresh rig): an approved
+    /// claim of another rig parks it instead of discarding it.
+    restored: bool,
+    /// The profile the rig belonged to before this client claimed it (handed back to the rig
+    /// if the client later claims yet another rig).
+    owner_before_claim: Option<ProfileId>,
     ready: bool,
     last_controls: S::Controls,
     last_input_tick: Option<Tick>,
@@ -202,6 +208,8 @@ impl<S: NetSimulation> PlayerSlot<S> {
             name,
             token,
             profile: None,
+            restored: false,
+            owner_before_claim: None,
             ready: false,
             last_controls: S::Controls::default(),
             last_input_tick: None,
@@ -649,9 +657,26 @@ impl<S: NetSimulation> HostSession<S> {
             self.players.insert(old, slot);
             return deny(self);
         }
-        self.world.remove_player(old);
+        let target_owner = self.world.crew_record(target).flatten();
+        if slot.restored {
+            // The client gives up a saved rig: keep it parked instead of losing it, owned by
+            // whoever owned it before this client claimed it (or nobody, free to be claimed
+            // back), never by the client's profile, which now names the claimed rig.
+            let owner = slot
+                .owner_before_claim
+                .filter(|owner| Some(*owner) != slot.profile);
+            self.world.identify_player(old, owner, &slot.name, None);
+            if !self.world.park_player(old) {
+                self.world.remove_player(old);
+            }
+        } else {
+            // A fresh stand-in rig from this session.
+            self.world.remove_player(old);
+        }
         self.world
             .identify_player(target, slot.profile, &slot.name, None);
+        slot.restored = true;
+        slot.owner_before_claim = target_owner;
         slot.token = self.new_token();
         slot.last_input_tick = None;
         slot.last_controls = S::Controls::default();
@@ -956,6 +981,10 @@ impl<S: NetSimulation> HostSession<S> {
                 self.world.add_player(fresh);
                 fresh
             };
+            if let Some(slot) = self.players.get_mut(&id) {
+                slot.restored = saved.is_some();
+                slot.owner_before_claim = None;
+            }
             taken.insert(target);
             if target != id || saved.is_some() {
                 moves.push((id, target, saved.is_some()));
@@ -1246,10 +1275,21 @@ impl<S: NetSimulation> HostSession<S> {
         });
         // Not a session reconnect: a returning player's profile finds their saved rig (live
         // while reserved, or parked from an earlier session).
+        let mut profile = profile;
         let recognized = if reclaimed.is_none() {
-            profile
+            match profile
                 .and_then(|profile| self.world.player_for_profile(profile))
                 .map(|player| (player, self.players.get(&player).map(|slot| slot.owner)))
+            {
+                Some((_, Some(Owner::Local(_) | Owner::Remote(_)))) => {
+                    // The same install is already playing that rig (a second window on one
+                    // machine, or a client on the host's own install): join with a fresh rig
+                    // that is not tied to the profile instead of turning the player away.
+                    profile = None;
+                    None
+                }
+                other => other,
+            }
         } else {
             None
         };
@@ -1276,10 +1316,9 @@ impl<S: NetSimulation> HostSession<S> {
                 }
                 self.next_player = self.next_player.max(player.0.saturating_add(1));
                 let token = self.new_token();
-                self.players.insert(
-                    player,
-                    PlayerSlot::new(Owner::Remote(client), name.clone(), token),
-                );
+                let mut slot = PlayerSlot::new(Owner::Remote(client), name.clone(), token);
+                slot.restored = true;
+                self.players.insert(player, slot);
                 player
             }
             None => {
