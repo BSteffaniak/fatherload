@@ -255,8 +255,11 @@ impl WorldState {
             return;
         }
         if next_tick >= state.warning_deadline {
+            // Gravity fields (F6): exactly 1.0 underground, where boulders hang.
+            let field =
+                crate::environment::environment_at(self.terrain.settings(), body.x, body.y).gravity;
             body.velocity_y = quantize_simulation_scalar(
-                (AUTHORITATIVE_GRAVITY * 0.8)
+                (AUTHORITATIVE_GRAVITY * 0.8 * field)
                     .mul_add(timing.delta_seconds, body.velocity_y)
                     .min(520.0),
             );

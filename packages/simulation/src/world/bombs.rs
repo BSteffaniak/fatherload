@@ -409,8 +409,8 @@ impl WorldState {
         }
     }
 
-    /// One ring of an incendiary's fire: dirt, clay and gas at Manhattan distance `radius` burn
-    /// away (baked into blocks that drop); explosive pockets it reaches go off.
+    /// One ring of an incendiary's fire: dirt, clay, gas and sky-island turf, soil and roots at
+    /// Manhattan distance `radius` burn away (baked into blocks that drop); explosive pockets it reaches go off.
     fn burn_ring(&mut self, bomb: &PlacedBomb, radius: i32, output: &mut TickOutput) {
         let center = bomb_tile_position(*bomb);
         let mut changed = Vec::new();
@@ -430,6 +430,12 @@ impl WorldState {
                     | TileKind::Gas
                     | TileKind::Surface(
                         SurfaceMaterial::Snow | SurfaceMaterial::Mud | SurfaceMaterial::Sand,
+                    )
+                    // A sky island's turf, soil and dangling roots burn like dirt.
+                    | TileKind::Sky(
+                        crate::sky::SkyTile::Turf(_)
+                        | crate::sky::SkyTile::Soil
+                        | crate::sky::SkyTile::Roots,
                     ) => 0,
                     TileKind::ExplosivePocket => 1,
                     _ => continue,
