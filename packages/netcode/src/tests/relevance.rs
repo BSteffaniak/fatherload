@@ -260,15 +260,22 @@ fn world_entities_spawn_change_and_despawn_per_client_relevance() {
     world.player_mut(sim_host).expect("host rig").x = 20.5 * TILE_SIZE;
     let gold = ItemStack::new(ItemKind::Mineral(MineralKind::Gold), 2);
     // Two drops falling near the joining client, one short-lived; one far away by the host.
-    let near = world.spawn_item_drop(spawn_x + 40.0, 2.0 * TILE_SIZE, (30.0, 0.0), gold, None);
+    // All of them out of the rigs' magnet reach (WP-DROPS), but inside the client's relevance.
+    let near = world.spawn_item_drop(
+        5.0f32.mul_add(TILE_SIZE, spawn_x),
+        2.0 * TILE_SIZE,
+        (30.0, 0.0),
+        gold,
+        None,
+    );
     let fleeting = world.spawn_item_drop(
-        spawn_x - 40.0,
+        5.0f32.mul_add(-TILE_SIZE, spawn_x),
         2.0 * TILE_SIZE,
         (0.0, 0.0),
         gold,
         Some(2_000),
     );
-    let far = world.spawn_item_drop(20.5 * TILE_SIZE, 2.0 * TILE_SIZE, (0.0, 0.0), gold, None);
+    let far = world.spawn_item_drop(25.5 * TILE_SIZE, 2.0 * TILE_SIZE, (0.0, 0.0), gold, None);
     let mut pair = Pair::new(world, finite_tuning(8.0), params, |host| {
         assert!(host.adopt_local_player(SeatId(0), PlayerId(0)));
     });

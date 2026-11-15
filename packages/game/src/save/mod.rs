@@ -31,7 +31,11 @@ const SETTINGS_FILE_NAME: &str = "settings.json";
 const SAVE_FILE_NAME: &str = "save.json";
 const SAVE_SLOTS: usize = 3;
 /// Current save format.
-pub const SAVE_VERSION: u32 = 7;
+///
+/// 8 (wave 2, T7 drops; the integrator collapses wave 2's bumps into one): drops carry magnet /
+/// dump / "blocked" marks and rigs a `collect_blocks` toggle. Both have serde defaults, so a
+/// version 7 file reads as version 8 unchanged.
+pub const SAVE_VERSION: u32 = 8;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -286,11 +290,12 @@ fn parse_save(json: &str) -> Result<WorldSave, SaveError> {
 
 fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
     let probe: VersionProbe = serde_json::from_str(json).map_err(SaveError::Serialize)?;
-    if matches!(probe.version, 5 | 6 | SAVE_VERSION) {
+    if matches!(probe.version, 5..=7 | SAVE_VERSION) {
         check_generator(json)?;
     }
     match probe.version {
-        SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        // Version 7 differs only by fields with serde defaults (see `SAVE_VERSION`).
+        7 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
         6 => serde_json::from_str::<legacy::V6SaveFile>(json)
@@ -604,6 +609,63 @@ mod tests {
         assert!((loaded.play_seconds - 12.5).abs() < f32::EPSILON);
         let metadata = SaveSlotMetadata::from_save(&loaded, None);
         assert_eq!(metadata.credits, 77);
+    }
+
+    #[test]
+    fn version_7_saves_without_drop_marks_load_with_defaults() {
+        /// Removes what version 8 added, as a version 7 game wrote it.
+        fn strip(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    map.remove("collect_blocks");
+                    if map.contains_key("stack") {
+                        for key in ["pulled_by", "ignored_by", "blocked"] {
+                            map.remove(key);
+                        }
+                    }
+                    map.values_mut().for_each(strip);
+                }
+                serde_json::Value::Array(items) => items.iter_mut().for_each(strip),
+                _ => {}
+            }
+        }
+        let player = PlayerId::new(1);
+        let mut world = WorldState::new_game(player);
+        let _ = world.spawn_item_drop(
+            100.0,
+            40.0,
+            (0.0, 0.0),
+            fatherload_simulation::item::ItemStack::new(
+                fatherload_simulation::item::ItemKind::Mineral(
+                    fatherload_simulation::terrain::MineralKind::Gold,
+                ),
+                2,
+            ),
+            None,
+        );
+        let save = WorldSave {
+            world,
+            play_seconds: 1.0,
+        };
+        let mut json: serde_json::Value = serde_json::from_str(
+            &serde_json::to_string(&SaveFile {
+                version: SAVE_VERSION,
+                save: save.clone(),
+            })
+            .expect("json"),
+        )
+        .expect("value");
+        // Strip what version 8 added, as a version 7 game wrote it.
+        strip(&mut json);
+        json["version"] = 7.into();
+        let text = json.to_string();
+        assert!(!text.contains("collect_blocks") && !text.contains("pulled_by"));
+        let loaded = parse_save_file(&text).expect("a v7 save loads");
+        assert_eq!(
+            loaded.world.simulation_state_hash(),
+            save.world.simulation_state_hash()
+        );
+        assert!(loaded.world.player(player).expect("rig").collect_blocks);
     }
 
     #[test]

@@ -34,14 +34,15 @@ fn assert_played(harness: &WorldHarness) {
         entities.iter().any(|entity| entity.body.asleep),
         "drops sleep"
     );
-    // Every drop starts at or right of the first bot's spawn column: one below the surface
-    // fell into a shaft, one left of it was thrown there by a blast.
-    let spawn_x = harness.world().player_template().x;
+    // Every surface drop starts in the air above the ground: one below the surface fell into a
+    // shaft or was dug out by a bot (every broken tile drops), or the bots' magnets took some.
+    let fresh_drops = fresh.entities().len();
     assert!(
-        entities.iter().any(|entity| {
-            entity.body.y > 7.0 * fatherload_simulation::TILE_SIZE || entity.body.x < spawn_x
-        }),
-        "some drop fell into a shaft or was thrown: {:?}",
+        entities
+            .iter()
+            .any(|entity| entity.body.y > 7.0 * fatherload_simulation::TILE_SIZE)
+            || entities.len() != fresh_drops,
+        "drops were dug, thrown or collected: {:?}",
         entities
             .iter()
             .map(|entity| (entity.body.x, entity.body.y))
@@ -55,6 +56,9 @@ fn assert_played(harness: &WorldHarness) {
         "applied explosive",
         "applied detonator",
         "explosive detonated",
+        // WP-DROPS: the bots' digging and blasts dropped loot their magnets collected (host
+        // authoritative; clients predicted the same pickups, see `assert_converged`).
+        "items collected",
     ] {
         assert!(
             harness.event_counts.get(label).copied().unwrap_or(0) > 0,
