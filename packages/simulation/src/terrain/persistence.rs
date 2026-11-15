@@ -398,6 +398,27 @@ fn streamed_generator_probe(settings: &WorldSettings) -> u64 {
             }
         }
     }
+    // A sky world (V8) also fingerprints its sky: a chunk of low isles and the Moon's top.
+    if let Some(moon) = worldgen::sky::moon(settings) {
+        let sky_chunks = [
+            ChunkPosition::of(crate::terrain::TilePosition {
+                x: 5 * CHUNK_SIZE_TILES,
+                y: worldgen::sky::row_of(worldgen::sky::LOW_ISLES_BOTTOM_ROWS + 150),
+            }),
+            ChunkPosition::of(crate::terrain::TilePosition {
+                x: moon.center_x,
+                y: moon.top_row,
+            }),
+        ];
+        for chunk in sky_chunks {
+            for tile in worldgen::streamed::generated_chunk(settings, chunk).tiles() {
+                for byte in tile.code().to_le_bytes() {
+                    hash ^= u64::from(byte);
+                    hash = hash.wrapping_mul(0x0100_0000_01B3);
+                }
+            }
+        }
+    }
     hash
 }
 

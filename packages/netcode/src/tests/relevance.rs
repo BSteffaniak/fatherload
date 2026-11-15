@@ -340,6 +340,9 @@ fn rig_far_above_the_surface_flies_online() {
     let altitude = 10_000.0 * TILE_SIZE;
     let mut template = world.player_template().clone();
     template.y = -altitude;
+    // A V8 sky is airless this high (orbit): only high-altitude intakes still give thrust.
+    template.hazard_gear.altitude_intake =
+        fatherload_simulation::environment::ALTITUDE_INTAKE_MAX_LEVEL;
     world.set_player_template(template);
     let host_player = PlayerId(0);
     let mut pair = Pair::new(world, finite_tuning(12.0), params, |host| {

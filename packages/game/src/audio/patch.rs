@@ -2910,12 +2910,12 @@ fn updraft_whoosh(rng: &mut Rng) -> Vec<f32> {
 /// The hull icing up: a brittle crackle of frost forming, high glassy ticks over a cold hiss.
 fn ice_crackle(rng: &mut Rng) -> Vec<f32> {
     let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
-    let mut filter = Svf::new(FilterMode::HighPass, 4_000.0, 0.7);
+    let mut filter = Svf::new(FilterMode::BandPass, 2_400.0, 0.9);
     let mut out = render(0.7, |t| {
-        filter.process(noise.next()) * segments(t, &[(0.0, 0.0), (0.05, 0.25), (0.7, 0.0)])
+        filter.process(noise.next()) * segments(t, &[(0.0, 0.0), (0.05, 0.2), (0.7, 0.0)])
     });
     for time in scatter(rng, 12, 0.0, 0.6, 1.0) {
-        let pitch = rng.range(2_500.0, 5_000.0);
+        let pitch = rng.range(1_400.0, 3_200.0);
         let tick = clank(rng, pitch, 0.02);
         let gain = rng.range(0.3, 0.7);
         mix_into(&mut out, &tick, time, gain);
