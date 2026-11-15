@@ -951,7 +951,7 @@ impl SeatUi {
     /// Whether a transaction from this seat is waiting for its tick.
     #[must_use]
     pub const fn has_pending_service(&self) -> bool {
-        !self.pending_services.is_empty()
+        !self.pending_services.is_empty() || self.village.people_pending()
     }
 
     /// Back outdoors with nothing open (new game, load, back to the title). Receipts and the
@@ -999,6 +999,7 @@ impl SeatUi {
             "global dialogs live in ShellState::modal"
         );
         self.pickup_armed = (self.pickup_armed - delta_seconds).max(0.0);
+        self.village.tick_pending();
         if self.build.is_some() {
             return self.handle_build(input, ctx, cues, requests);
         }

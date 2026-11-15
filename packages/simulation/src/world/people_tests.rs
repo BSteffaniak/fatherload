@@ -124,7 +124,7 @@ fn meet_someone(world: &mut WorldState, found: &Village) -> EntityId {
 }
 
 fn approach(world: &mut WorldState, found: &Village, id: EntityId) {
-    let x = world.entities().get(id).expect("npc").body.x;
+    let (x, _) = world.npc_position(id).expect("npc");
     park_at(world, PLAYER, found, x);
 }
 
@@ -210,13 +210,45 @@ fn people_walk_deterministically_and_rest_without_churn() {
         world
             .entities()
             .of_kind(EntityKind::Npc)
-            .map(|entity| (entity.id.get(), entity.body.x.to_bits()))
+            .filter_map(|entity| match entity.state {
+                EntityState::Npc(state) => Some((
+                    entity.id.get(),
+                    state.x_at(world.simulation_tick(), 0.0).to_bits(),
+                )),
+                _ => None,
+            })
             .collect()
     };
     assert_eq!(positions(&a), positions(&b));
     // Somebody moved during those 30 seconds.
     let (start, _) = village_world();
     assert_ne!(positions(&start), positions(&a));
+    // Walks are legs: a person's entity changes when a leg starts or ends, not every tick, so
+    // walking people cost little on the wire.
+    let (mut world, found) = village_world();
+    let revisions = |world: &WorldState| -> std::collections::BTreeMap<EntityId, u64> {
+        world
+            .entities()
+            .of_kind(EntityKind::Npc)
+            .map(|entity| (entity.id, entity.revision))
+            .collect()
+    };
+    let mut last = revisions(&world);
+    let mut changes = 0;
+    for _ in 0..1_800 {
+        let _ = step(&mut world, &idle());
+        let now = revisions(&world);
+        changes += now
+            .iter()
+            .filter(|(id, revision)| last.get(id).is_some_and(|old| old != *revision))
+            .count();
+        last = now;
+    }
+    let people = found.population.characters.len();
+    assert!(
+        changes < people * 30,
+        "{changes} entity changes for {people} people in 30 s"
+    );
 }
 
 #[test]
@@ -224,7 +256,7 @@ fn talking_needs_reach_varies_and_builds_goodwill() {
     let (mut world, found) = village_world();
     let npc = meet_someone(&mut world, &found);
     // Too far away: nothing.
-    let x = world.entities().get(npc).expect("npc").body.x;
+    let (x, _) = world.npc_position(npc).expect("npc");
     park_at(&mut world, PLAYER, &found, TILE_SIZE.mul_add(12.0, x));
     let far = act(
         &mut world,
@@ -522,7 +554,7 @@ fn affinity_persists_through_saves_and_parking() {
             seat: None,
         },
     );
-    let npc_x = world.entities().get(npc).expect("npc").body.x;
+    let (npc_x, _) = world.npc_position(npc).expect("npc");
     park_at(&mut world, friend, &found, npc_x);
     let tick = world.simulation_tick();
     let output = world.simulate_tick(
@@ -596,10 +628,15 @@ fn people_and_conversations_replicate() {
         world.entities().of_kind(EntityKind::Npc).cloned().collect()
     };
     assert_eq!(people(&replica), people(&authority));
-    // Interpolation: a walking person's previous position trails its current one.
-    assert!(people(&authority).iter().all(|entity| {
-        let (x, _) = entity.body.lerp_position(0.5);
-        (x - entity.body.x).abs() <= TILE_SIZE
+    // Interpolation: positions between two ticks lie on the walking leg, a step apart.
+    let now = authority.simulation_tick();
+    let before = SimulationTick::new(now.get() - 1);
+    assert!(people(&authority).iter().all(|entity| match entity.state {
+        EntityState::Npc(state) => {
+            let (a, b) = (state.x_at(before, 0.0), state.x_at(before, 1.0));
+            (b - state.x_at(now, 0.0)).abs() < 0.01 && (a - b).abs() <= TILE_SIZE
+        }
+        _ => true,
     }));
 }
 

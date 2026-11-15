@@ -284,10 +284,12 @@ fn world_entities_spawn_change_and_despawn_per_client_relevance() {
         pair.step(&idle);
     }
     assert_eq!(pair.client.phase(), ClientPhase::InGame);
+    // The drops (the town's folk walk about the spawn too, WP-PEOPLE).
     let held = |pair: &Pair<WorldState>| {
         pair.authority()
             .entities()
             .iter()
+            .filter(|entity| entity.kind() == fatherload_simulation::entity::EntityKind::Drop)
             .map(|entity| entity.id)
             .collect::<Vec<_>>()
     };

@@ -791,7 +791,7 @@ mod tests {
             .of_kind(EntityKind::Npc)
             .find_map(|entity| match entity.state {
                 EntityState::Npc(state) if state.inside.is_none() => {
-                    Some((entity.id, entity.body.x))
+                    Some((entity.id, state.x_at(world.simulation_tick(), 0.0)))
                 }
                 _ => None,
             })

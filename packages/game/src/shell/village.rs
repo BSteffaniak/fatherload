@@ -122,8 +122,8 @@ pub fn talk_target(world: &WorldState, player: PlayerId) -> Option<EntityId> {
     let npc = *world.npcs_in_reach(player).first()?;
     if world.player_village_building(player).is_some() {
         let (x, _) = world.people_actor_position(player)?;
-        let (entity, _) = world.npc(npc)?;
-        if (entity.body.x - x).abs() > TALK_OVER_DOOR_TILES * fatherload_simulation::TILE_SIZE {
+        let (npc_x, _) = world.npc_position(npc)?;
+        if (npc_x - x).abs() > TALK_OVER_DOOR_TILES * fatherload_simulation::TILE_SIZE {
             return None;
         }
     }
@@ -199,6 +199,9 @@ pub struct SeatVillage {
     pub banner: Option<VillageBanner>,
     /// The village the rig was in on the previous frame.
     last_village: Option<VillageId>,
+    /// Frames the world keeps ticking for a people command this seat just sent (a single-player
+    /// world otherwise rests while every seat is indoors).
+    pending_frames: u8,
 }
 
 impl SeatVillage {
@@ -209,9 +212,24 @@ impl SeatVillage {
             talk: None,
             banner: None,
             last_village: None,
+            pending_frames: 0,
         }
     }
+
+    /// Whether a people command from this seat may still be waiting for its tick.
+    #[must_use]
+    pub const fn people_pending(&self) -> bool {
+        self.pending_frames > 0
+    }
+
+    /// One frame passed.
+    pub const fn tick_pending(&mut self) {
+        self.pending_frames = self.pending_frames.saturating_sub(1);
+    }
 }
+
+/// Frames the world keeps ticking after a people command (a few ticks of round trip).
+const PEOPLE_PENDING_FRAMES: u8 = 20;
 
 /// One person standing in a building's room.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -453,7 +471,7 @@ impl SeatUi {
         });
         self.selected_menu_item = 0;
         self.modal = Some(ModalScreen::VillageTalk);
-        Self::send_people(
+        self.send_people(
             ctx,
             PeopleCommand::Talk {
                 npc,
@@ -464,8 +482,14 @@ impl SeatUi {
     }
 
     /// Sends a people command for the seat's player.
-    fn send_people(ctx: SeatContext<'_>, command: PeopleCommand, requests: &mut Vec<ShellRequest>) {
+    fn send_people(
+        &mut self,
+        ctx: SeatContext<'_>,
+        command: PeopleCommand,
+        requests: &mut Vec<ShellRequest>,
+    ) {
         if ctx.player.is_some() {
+            self.village.pending_frames = PEOPLE_PENDING_FRAMES;
             requests.push(ShellRequest::Action {
                 seat: ctx.seat,
                 command: PlayerCommand::People(command),
@@ -497,7 +521,7 @@ impl SeatUi {
             .talk
             .take()
             .is_some_and(|talk| talk.from_counter);
-        Self::send_people(ctx, PeopleCommand::Goodbye, requests);
+        self.send_people(ctx, PeopleCommand::Goodbye, requests);
         self.selected_menu_item = 0;
         self.modal = from_counter.then_some(ModalScreen::VillageCounter);
     }
@@ -540,7 +564,7 @@ impl SeatUi {
                 }
                 match choices.get(self.selected_menu_item).copied() {
                     Some(TalkChoice::Topic(topic)) => {
-                        Self::send_people(
+                        self.send_people(
                             ctx,
                             PeopleCommand::Talk {
                                 npc: talk.npc,
@@ -584,7 +608,7 @@ impl SeatUi {
                 let list = speaker.as_ref().map_or_else(Vec::new, offers::offers_of);
                 self.move_selection(input, list.len().saturating_sub(1));
                 if (input.confirm || input.interact) && self.selected_menu_item < list.len() {
-                    Self::send_people(
+                    self.send_people(
                         ctx,
                         PeopleCommand::Trade {
                             npc: talk.npc,
@@ -609,7 +633,7 @@ impl SeatUi {
                 if (input.confirm || input.interact)
                     && let Some((item, _)) = items.get(self.selected_menu_item).copied()
                 {
-                    Self::send_people(
+                    self.send_people(
                         ctx,
                         PeopleCommand::Gift {
                             npc: talk.npc,

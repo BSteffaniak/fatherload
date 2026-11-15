@@ -19,7 +19,7 @@
 use raylib::prelude::*;
 
 use fatherload_simulation::{
-    DiscoveredTiles,
+    DiscoveredTiles, SimulationTick,
     entity::{EntityId, EntityState, EntityStore},
     people::{self, Character, Culture},
     terrain::{TILE_SIZE, Terrain, TilePosition},
@@ -310,7 +310,8 @@ pub fn village_lights(terrain: &Terrain, visible: Rectangle) -> Vec<(f32, f32, f
 }
 
 /// The people (WP-PEOPLE NPC entities) on the streets overlapping `visible`, in front of the
-/// terrain: interpolated between ticks with `alpha`, walking with a step cycle, facing the way
+/// terrain: interpolated along their walking legs between world tick `tick - 1` and `tick` with
+/// `alpha`, walking with a step cycle, facing the way
 /// they go (or the player they talk to), with a name tag over whoever `near` names (the person
 /// the view's rig would talk to). People indoors are drawn in their rooms instead. Underground
 /// settlements only show their people once the hall is explored.
@@ -324,20 +325,24 @@ pub fn draw_village_people(
     entities: &EntityStore,
     visible: Rectangle,
     explored: Option<&DiscoveredTiles>,
-    alpha: f32,
+    (tick, alpha): (u64, f32),
     near: Option<EntityId>,
     seconds: f32,
 ) {
+    // Positions are read from each person's leg between the last two ticks.
+    let previous = SimulationTick::new(tick.saturating_sub(1));
     let settings = terrain.settings();
     if !settings.generator.has_villages() {
         return;
     }
-    let margin = 2.0 * TILE_SIZE;
+    // Bodies sit where their current leg started; a leg is at most a street long.
+    let margin_x = 48.0 * TILE_SIZE;
+    let margin_y = 2.0 * TILE_SIZE;
     for id in entities.ids_in_rect(
-        visible.x - margin,
-        visible.y - margin,
-        visible.x + visible.width + margin,
-        visible.y + visible.height + margin,
+        visible.x - margin_x,
+        visible.y - margin_y,
+        visible.x + visible.width + margin_x,
+        visible.y + visible.height + margin_y,
     ) {
         let Some(entity) = entities.get(id) else {
             continue;
@@ -359,7 +364,7 @@ pub fn draw_village_people(
         else {
             continue;
         };
-        let (x, y) = entity.body.lerp_position(alpha);
+        let (x, y) = (state.x_at(previous, alpha), entity.body.y);
         if settlement.underground
             && !explored.is_some_and(|tiles| {
                 tiles.contains(TilePosition {
@@ -370,7 +375,7 @@ pub fn draw_village_people(
         {
             continue;
         }
-        let walking = entity.body.velocity_x.abs() > 1.0;
+        let walking = state.walking_at(previous);
         let pen = PersonPen {
             x: super::snap(x),
             y: super::snap(y),

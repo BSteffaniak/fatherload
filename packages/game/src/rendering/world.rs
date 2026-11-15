@@ -278,7 +278,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         scene.entities,
         scene.visible,
         scene.explored,
-        scene.bomb_alpha,
+        (scene.world_tick, scene.bomb_alpha),
         scene.talk_target,
         seconds,
     );

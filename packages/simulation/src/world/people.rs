@@ -3,7 +3,8 @@
 //!
 //! # Population
 //!
-//! Every [`PEOPLE_REFRESH_MILLIS`], `advance_people` spawns the residents of every settlement
+//! Every [`PEOPLE_REFRESH_MILLIS`] (and every tick while nobody is about), `advance_people`
+//! spawns the residents of every settlement
 //! (a village, an underground settlement or the town, see [`crate::people::routine`]) that an
 //! actor ([`WorldState::people_actor_position`]) is within [`SPAWN_MARGIN_COLUMNS`] of, at the
 //! place their routine has them at that moment, and despawns the people of settlements no actor
@@ -65,8 +66,10 @@ pub const PEOPLE_REFRESH_MILLIS: u64 = 500;
 pub const SPAWN_MARGIN_COLUMNS: i32 = 90;
 /// ... and leave once every actor is further than this.
 pub const DESPAWN_MARGIN_COLUMNS: i32 = 130;
-/// Rows above or below a settlement's ground an actor still counts as near it.
-pub const NEAR_ROWS: i32 = 60;
+/// Rows above or below a settlement's ground within which an actor brings its people out ...
+pub const NEAR_ROWS: i32 = 14;
+/// ... and the extra rows beyond that before they leave again (no churn at the boundary).
+pub const KEEP_EXTRA_ROWS: i32 = 30;
 /// How close (tiles) an actor must be to talk to someone outdoors.
 pub const TALK_REACH_TILES: f32 = 3.0;
 /// How long a person waits, mid-conversation, for a player who walked off (they then carry on).
@@ -124,6 +127,21 @@ impl WorldState {
         }
     }
 
+    /// Where person `npc` stands right now (world pixels, feet): their body moved along their
+    /// current leg.
+    #[must_use]
+    pub fn npc_position(&self, npc: EntityId) -> Option<(f32, f32)> {
+        let (entity, state) = self.npc(npc)?;
+        Some((state.x_at(self.simulation_tick, 0.0), entity.body.y))
+    }
+
+    fn npc_body(&self, body: Body, state: &NpcState) -> Body {
+        Body {
+            x: state.x_at(self.simulation_tick, 0.0),
+            ..body
+        }
+    }
+
     /// The person entity of `character`, if they are about.
     #[must_use]
     pub fn npc_of(&self, character: CharacterId) -> Option<EntityId> {
@@ -146,14 +164,16 @@ impl WorldState {
             .ids_in_radius(x, y, reach * 2.0)
             .into_iter()
             .filter_map(|id| self.npc(id))
-            .filter(|(entity, state)| state.inside.is_none() && outdoor_reach(entity.body, x, y))
-            .map(|(entity, _)| {
+            .filter(|(entity, state)| {
+                state.inside.is_none() && outdoor_reach(self.npc_body(entity.body, state), x, y)
+            })
+            .map(|(entity, state)| {
                 #[allow(
                     clippy::cast_possible_truncation,
                     clippy::cast_sign_loss,
                     reason = "a few tiles of pixels"
                 )]
-                let distance = (entity.body.x - x).abs() as u32;
+                let distance = (state.x_at(self.simulation_tick, 0.0) - x).abs() as u32;
                 (distance, entity.id)
             })
             .collect();
@@ -193,7 +213,7 @@ impl WorldState {
             return false;
         };
         match state.inside {
-            None => outdoor_reach(entity.body, x, y),
+            None => outdoor_reach(self.npc_body(entity.body, &state), x, y),
             Some(lot) => {
                 state.character.village != TOWN_VILLAGE
                     && village::building_at(self.terrain.settings(), x, y).is_some_and(
@@ -221,14 +241,20 @@ impl WorldState {
             return;
         }
         let period = self.timing.ticks_for_millis(PEOPLE_REFRESH_MILLIS).max(1);
-        if next_tick.get().is_multiple_of(period) {
+        // Also straight away while nobody is about (a fresh or loaded world, or a rig that just
+        // warped in), so people are there from the first tick a rig stands near them.
+        if next_tick.get().is_multiple_of(period) || self.entities.count_of(EntityKind::Npc) == 0 {
             self.refresh_population(next_tick);
         }
         self.walk_people(next_tick);
     }
 
-    /// Settlement ids near any actor (`margin` columns beyond their span), in id order.
-    fn settlements_near_actors(&self, margin: i32) -> BTreeMap<VillageId, Arc<Settlement>> {
+    /// Settlement ids near any actor (`margin` columns beyond their span, `rows` above or below
+    /// their ground), in id order.
+    fn settlements_near_actors(
+        &self,
+        (margin, rows): (i32, i32),
+    ) -> BTreeMap<VillageId, Arc<Settlement>> {
         let settings = *self.terrain.settings();
         let mut found = BTreeMap::new();
         let actors: Vec<(f32, f32)> = self
@@ -261,7 +287,7 @@ impl WorldState {
                 };
                 let near_columns = column >= settlement.first_column - margin
                     && column <= settlement.last_column + margin;
-                let near_rows = (row - settlement.ground_row).abs() <= NEAR_ROWS;
+                let near_rows = (row - settlement.ground_row).abs() <= rows;
                 if near_columns && near_rows {
                     found.insert(id, settlement);
                 }
@@ -271,7 +297,8 @@ impl WorldState {
     }
 
     fn refresh_population(&mut self, next_tick: SimulationTick) {
-        let keep = self.settlements_near_actors(DESPAWN_MARGIN_COLUMNS);
+        let keep =
+            self.settlements_near_actors((DESPAWN_MARGIN_COLUMNS, NEAR_ROWS + KEEP_EXTRA_ROWS));
         let mut leaving = BTreeSet::new();
         let mut present = BTreeSet::new();
         for entity in self.entities.of_kind(EntityKind::Npc) {
@@ -287,7 +314,7 @@ impl WorldState {
         if !leaving.is_empty() {
             self.entities.despawn_many(&leaving);
         }
-        let spawn = self.settlements_near_actors(SPAWN_MARGIN_COLUMNS);
+        let spawn = self.settlements_near_actors((SPAWN_MARGIN_COLUMNS, NEAR_ROWS));
         let time = self.people_clock();
         for settlement in spawn.values() {
             for index in 0..settlement.residents.len() {
@@ -312,7 +339,11 @@ impl WorldState {
                     activity: stop.activity,
                     inside,
                     going_inside: inside,
+                    from_x: x,
                     target_x: x,
+                    depart: next_tick,
+                    arrive: next_tick,
+                    settled: false,
                     facing: if index % 2 == 0 { 1 } else { -1 },
                     talking_to: None,
                     idle_until: next_tick,
@@ -326,6 +357,12 @@ impl WorldState {
         }
     }
 
+    /// Walks everyone toward their routine's stop, one tick (to `next_tick`).
+    ///
+    /// A walk is a leg (`from_x` at `depart` to `target_x` at `arrive`) that positions are read
+    /// from ([`NpcState::x_at`]), so a person's entity changes only when a leg starts or ends,
+    /// they step through a door, or a conversation holds them: walking people cost a record per
+    /// leg, not per tick, on the wire.
     #[allow(
         clippy::too_many_lines,
         reason = "one walking step reads best as a single pass"
@@ -333,7 +370,6 @@ impl WorldState {
     fn walk_people(&mut self, next_tick: SimulationTick) {
         let settings = *self.terrain.settings();
         let time = self.people_clock();
-        let delta = self.timing.delta_seconds;
         let ids: Vec<EntityId> = self.entities.ids_of(EntityKind::Npc).collect();
         let mut settlements: BTreeMap<VillageId, Option<Arc<Settlement>>> = BTreeMap::new();
         for id in ids {
@@ -356,11 +392,10 @@ impl WorldState {
             let Some(resident) = settlement.residents.get(index) else {
                 continue;
             };
+            let speed = f32::from(resident.pace) / 100.0 * TILE_SIZE;
+            let x = state.x_at(next_tick, 0.0);
+            let walking = next_tick.get() < state.arrive.get();
             let mut next = state;
-            let mut next_body = body;
-            next_body.previous_x = body.x;
-            next_body.previous_y = body.y;
-            next_body.velocity_x = 0.0;
             next.activity = stop.activity;
             let wanted_inside = match stop.place {
                 Place::Inside(lot) => u8::try_from(lot).ok(),
@@ -377,111 +412,114 @@ impl WorldState {
                     .people
                     .conversation(player)
                     .is_some_and(|conversation| conversation.npc == id)
-                    && self.people_actor_position(player).is_some_and(|(x, y)| {
-                        (x - body.x).abs() <= CONVERSATION_PATIENCE_TILES * TILE_SIZE
-                            && (y - body.y).abs() <= CONVERSATION_PATIENCE_TILES * TILE_SIZE
+                    && self.people_actor_position(player).is_some_and(|(px, py)| {
+                        (px - x).abs() <= CONVERSATION_PATIENCE_TILES * TILE_SIZE
+                            && (py - body.y).abs() <= CONVERSATION_PATIENCE_TILES * TILE_SIZE
                     });
                 if listening {
-                    if let Some((x, _)) = self.people_actor_position(player)
+                    if walking {
+                        next.stand(x, next_tick);
+                    }
+                    if let Some((px, _)) = self.people_actor_position(player)
                         && state.inside.is_none()
                     {
-                        next.facing = if x < body.x { -1 } else { 1 };
+                        next.facing = if px < x { -1 } else { 1 };
                     }
-                    self.commit_npc(id, entity_snapshot(body, state), (next_body, next));
+                    self.commit_npc(id, body, state, next);
                     continue;
                 }
                 next.talking_to = None;
             }
             if let Some(inside) = state.inside {
-                if wanted_inside == Some(inside) {
-                    self.commit_npc(id, entity_snapshot(body, state), (next_body, next));
-                    continue;
+                if wanted_inside != Some(inside) {
+                    // Out of the door.
+                    let door = settlement
+                        .lots
+                        .get(usize::from(inside))
+                        .map_or(anchor, |lot| column_px(lot.door_column()));
+                    next.inside = None;
+                    next.going_inside = None;
+                    next.stand(door, next_tick);
+                    next.settled = true;
                 }
-                // Out of the door.
-                let door = settlement
-                    .lots
-                    .get(usize::from(inside))
-                    .map_or(anchor, |lot| column_px(lot.door_column()));
-                next.inside = None;
-                next_body.x = door;
-                next_body.previous_x = door;
-                next.target_x = anchor;
-                next.going_inside = wanted_inside;
-                next.idle_until = next_tick;
-                self.commit_npc(id, entity_snapshot(body, state), (next_body, next));
+                self.commit_npc(id, body, state, next);
                 continue;
             }
-            // Outdoors: pick where to walk.
             if wanted_inside.is_some() {
+                // Off to a building: walk to its door, then in.
                 next.going_inside = wanted_inside;
-                next.target_x = anchor;
-            } else {
-                next.going_inside = None;
-                let strayed = (state.target_x - anchor).abs() > roam + TILE_SIZE;
-                if stop.activity != state.activity || strayed {
-                    next.target_x = anchor;
-                } else if (state.target_x - body.x).abs() < 0.5
-                    && next_tick.get() >= state.idle_until.get()
-                    && roam > 0.0
-                {
-                    let roll = hash2(
-                        self.terrain.seed() ^ SALT_STROLL,
-                        u64::from(state.character.index) | (u64::from(village.0) << 16),
-                        i32::try_from(next_tick.get() % 0x7FFF_FFFF).unwrap_or(0),
-                        0,
-                    );
-                    #[allow(clippy::cast_precision_loss, reason = "a stroll is a few tiles")]
-                    let offset = ((roll % 2001) as f32 / 1000.0 - 1.0) * roam;
-                    next.target_x = snap_px(anchor + offset);
+                if (state.target_x - anchor).abs() > 0.5 {
+                    next.walk(x, anchor, speed, next_tick, self.timing.rate.hz());
+                } else if !walking {
+                    next.inside = wanted_inside;
+                    next.settled = true;
                 }
+                self.commit_npc(id, body, state, next);
+                continue;
             }
-            let speed = f32::from(resident.pace) / 100.0 * TILE_SIZE;
-            let dx = next.target_x - body.x;
-            if dx.abs() > 0.0 {
-                let stride = speed * delta;
-                let moved = if dx.abs() <= stride {
-                    dx
-                } else {
-                    stride * dx.signum()
-                };
-                next_body.x = body.x + moved;
-                next_body.velocity_x = moved / delta.max(f32::EPSILON);
-                next.facing = if moved < 0.0 { -1 } else { 1 };
-                if (next.target_x - next_body.x).abs() < 0.5 {
-                    next_body.x = next.target_x;
-                    // Arrived: in through the door, or a pause before the next stroll.
-                    if let Some(lot) = next.going_inside {
-                        next.inside = Some(lot);
-                    } else {
-                        let roll = hash2(
-                            self.terrain.seed() ^ SALT_STROLL ^ 0x51,
-                            u64::from(state.character.index) | (u64::from(village.0) << 16),
-                            i32::try_from(next_tick.get() % 0x7FFF_FFFF).unwrap_or(0),
-                            1,
-                        );
-                        let span = IDLE_MILLIS.1 - IDLE_MILLIS.0;
-                        let pause = IDLE_MILLIS.0 + roll % span.max(1);
-                        next.idle_until = SimulationTick::new(
-                            next_tick.get() + self.timing.ticks_for_millis(pause),
-                        );
-                    }
-                }
-            } else if let Some(lot) = next.going_inside {
-                next.inside = Some(lot);
+            next.going_inside = None;
+            let strayed = (state.target_x - anchor).abs() > roam + TILE_SIZE;
+            if stop.activity != state.activity || strayed || state.going_inside.is_some() {
+                // The routine moved on: head for the new stop.
+                // Spread out a little within the stop's roam, so a crowd does not stack.
+                #[allow(clippy::cast_precision_loss, reason = "a small spread")]
+                let shift = (i32::from(state.character.index) % 5 - 2) as f32 * 0.25 * roam;
+                next.walk(
+                    x,
+                    snap_px(anchor + shift),
+                    speed,
+                    next_tick,
+                    self.timing.rate.hz(),
+                );
+            } else if !walking && !state.settled {
+                // Arrived: a pause before the next stroll.
+                let roll = hash2(
+                    self.terrain.seed() ^ SALT_STROLL ^ 0x51,
+                    u64::from(state.character.index) | (u64::from(village.0) << 16),
+                    i32::try_from(next_tick.get() % 0x7FFF_FFFF).unwrap_or(0),
+                    1,
+                );
+                let span = IDLE_MILLIS.1 - IDLE_MILLIS.0;
+                let pause = IDLE_MILLIS.0 + roll % span.max(1);
+                next.settled = true;
+                next.idle_until =
+                    SimulationTick::new(next_tick.get() + self.timing.ticks_for_millis(pause));
+            } else if !walking && next_tick.get() >= state.idle_until.get() && roam > 0.0 {
+                // A stroll somewhere within the stop's roam.
+                let roll = hash2(
+                    self.terrain.seed() ^ SALT_STROLL,
+                    u64::from(state.character.index) | (u64::from(village.0) << 16),
+                    i32::try_from(next_tick.get() % 0x7FFF_FFFF).unwrap_or(0),
+                    0,
+                );
+                #[allow(clippy::cast_precision_loss, reason = "a stroll is a few tiles")]
+                let offset = ((roll % 2001) as f32 / 1000.0 - 1.0) * roam;
+                next.walk(
+                    x,
+                    snap_px(anchor + offset),
+                    speed,
+                    next_tick,
+                    self.timing.rate.hz(),
+                );
             }
-            self.commit_npc(id, entity_snapshot(body, state), (next_body, next));
+            self.commit_npc(id, body, state, next);
         }
     }
 
-    /// Writes a person's new body and state when anything changed.
-    fn commit_npc(&mut self, id: EntityId, before: (Body, NpcState), after: (Body, NpcState)) {
+    /// Writes a person's new state (and their body at the start of the current leg, for the
+    /// spatial index and relevance) when anything changed.
+    fn commit_npc(&mut self, id: EntityId, body: Body, before: NpcState, after: NpcState) {
         if before == after {
             return;
         }
-        let (body, state) = after;
+        let mut next_body = body;
+        next_body.x = after.from_x;
+        next_body.previous_x = after.from_x;
+        next_body.previous_y = body.y;
+        next_body.velocity_x = 0.0;
         self.entities.update(id, |entity| {
-            entity.body = body;
-            entity.state = EntityState::Npc(state);
+            entity.body = next_body;
+            entity.state = EntityState::Npc(after);
         });
     }
 
@@ -575,15 +613,20 @@ impl WorldState {
             }
         }
         let facing_x = self.people_actor_position(player_id).map(|(x, _)| x);
+        let now = self.simulation_tick;
         self.entities.update(npc, |entity| {
-            let x = entity.body.x;
             if let EntityState::Npc(state) = &mut entity.state {
+                let x = state.x_at(now, 0.0);
                 state.talking_to = Some(player_id);
                 if let Some(at) = facing_x {
                     state.facing = if at < x { -1 } else { 1 };
                 }
                 // Standing still to talk.
-                state.target_x = x;
+                if state.inside.is_none() {
+                    state.stand(x, now);
+                    entity.body.x = x;
+                    entity.body.previous_x = x;
+                }
             }
         });
     }
@@ -1067,10 +1110,6 @@ fn outdoor_reach(body: Body, x: f32, y: f32) -> bool {
     let reach = TALK_REACH_TILES * TILE_SIZE;
     // People stand on the street (their body is at their feet); rigs hover a little above it.
     (body.x - x).abs() <= reach && (body.y - TILE_SIZE - y).abs() <= reach + TILE_SIZE
-}
-
-const fn entity_snapshot(body: Body, state: NpcState) -> (Body, NpcState) {
-    (body, state)
 }
 
 /// World pixel of a column's centre.

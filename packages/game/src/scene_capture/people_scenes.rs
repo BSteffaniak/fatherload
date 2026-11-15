@@ -105,7 +105,7 @@ fn approach_someone(
             EntityState::Npc(npc) if npc.inside.is_none() => {
                 let fits = routine::character(&settings, npc.character)
                     .is_some_and(|character| wanted(&character));
-                Some((entity.id, entity.body.x, fits))
+                Some((entity.id, npc.x_at(world.simulation_tick(), 0.0), fits))
             }
             _ => None,
         })

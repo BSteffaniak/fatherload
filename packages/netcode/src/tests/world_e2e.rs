@@ -827,3 +827,103 @@ fn world_sleep_vote_skips_the_night_for_every_client() {
         );
     }
 }
+
+/// People in a village (WP-PEOPLE) replicate to every client under latency: the NPC entities
+/// walking their routines, and a conversation a client opens with a keeper through its own
+/// input stream (the host validates the talk at the counter's door and every client sees the
+/// same lines in the people ledger).
+#[test]
+fn world_people_and_conversations_replicate_to_every_client() {
+    use fatherload_simulation::{
+        PlayerCommand, SimulationParams, TILE_SIZE,
+        entity::{EntityKind, EntityState},
+        people::{PeopleCommand, TalkTopic},
+        village::{self, BuildingKind, placement},
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(30, 4, 1.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    for client in &mut harness.clients {
+        client.bot.active = false;
+    }
+    // The same session on a world with villages: both rigs on the first village's street, the
+    // talker at the trading post's door.
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V7,
+        ..WorldSettings::new(0x5EED_0017)
+    };
+    let villages = WorldState::new_game_with_settings(
+        fatherload_simulation::PlayerId::new(99),
+        &settings,
+        SimulationParams::new(60),
+    );
+    let mut world = harness.world().clone();
+    *world.terrain_mut() = villages.terrain().clone();
+    let found = village::village(&settings, placement::surface_id(1)).expect("village");
+    let market = found
+        .buildings
+        .iter()
+        .position(|lot| lot.kind == BuildingKind::Market)
+        .expect("a trading post");
+    let talker = crate::world::to_sim_player(harness.clients[0].session.player().expect("joined"));
+    let other = crate::world::to_sim_player(harness.clients[1].session.player().expect("joined"));
+    #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+    for (player, column) in [
+        (talker, found.buildings[market].first_column + 2),
+        (other, i32::midpoint(found.plaza.0, found.plaza.1)),
+    ] {
+        let rig = world.player_mut(player).expect("rig");
+        rig.x = (column as f32 + 0.5) * TILE_SIZE;
+        rig.y = (found.ground_row as f32 - 0.5) * TILE_SIZE;
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+    }
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(2));
+    let keeper = found.buildings[market].keeper.expect("a keeper");
+    let npc = harness
+        .world()
+        .entities()
+        .of_kind(EntityKind::Npc)
+        .find(|entity| {
+            matches!(entity.state, EntityState::Npc(state)
+                if state.character.village == found.id && state.character.index == keeper)
+        })
+        .map(|entity| entity.id)
+        .expect("the keeper is about");
+    harness.clients[0]
+        .queued_actions
+        .push(PlayerCommand::People(PeopleCommand::Talk {
+            npc,
+            topic: TalkTopic::Chat,
+        }));
+    harness.run_for(Duration::from_secs(2));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    harness.assert_actions_exactly_once();
+    let host = harness.world();
+    let conversation = host
+        .people()
+        .conversation(talker)
+        .expect("the host opened the conversation");
+    assert_eq!(conversation.npc, npc);
+    assert!(!conversation.lines.is_empty());
+    let people = host.entities().of_kind(EntityKind::Npc).count();
+    assert_eq!(people, found.population.characters.len());
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(
+            seen.people(),
+            host.people(),
+            "every client hears the same lines"
+        );
+        assert_eq!(
+            seen.entities().of_kind(EntityKind::Npc).count(),
+            people,
+            "the villagers reach every client"
+        );
+    }
+}

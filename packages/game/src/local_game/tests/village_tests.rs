@@ -175,3 +175,61 @@ fn split_screen_seats_use_different_village_buildings_at_once() {
     assert!(!game.shell.seat(1).inside());
     assert!(game.shell.seat(0).inside());
 }
+
+#[test]
+fn a_seat_talks_to_someone_on_the_street_and_opens_their_trade_list() {
+    use fatherload_simulation::entity::{EntityKind, EntityState};
+
+    let mut world = new_world();
+    let (found, market) = village_with(&world, BuildingKind::Market);
+    park_at(&mut world, FIRST, &found, market);
+    let mut game = playing(world, 1, "people-street");
+    idle(&mut game, 5);
+    let x = game
+        .world()
+        .entities()
+        .of_kind(EntityKind::Npc)
+        .find_map(|entity| match entity.state {
+            EntityState::Npc(state) if state.inside.is_none() => {
+                Some(state.x_at(game.world().simulation_tick(), 0.0))
+            }
+            _ => None,
+        })
+        .expect("someone on the street");
+    game.edit_world(|world| {
+        world.player_mut(FIRST).expect("rig").x = x;
+    });
+    idle(&mut game, 1);
+    press_seat(&mut game, 0, interact());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::VillageTalk));
+    idle(&mut game, 3);
+    let conversation = game
+        .world()
+        .people()
+        .conversation(FIRST)
+        .expect("a conversation")
+        .clone();
+    assert!(!conversation.lines.is_empty());
+    assert!(game.world().npc(conversation.npc).is_some());
+    let speaker = fatherload_simulation::people::routine::character(
+        game.world().world_settings(),
+        conversation.character,
+    );
+    // The trade row opens their list; Back returns to the talk, again says goodbye.
+    let trade = crate::shell::talk_choices(speaker.as_ref())
+        .iter()
+        .position(|choice| *choice == crate::shell::TalkChoice::Trade)
+        .expect("a trade row");
+    game.shell.seat_mut(0).selected_menu_item = trade;
+    press_seat(&mut game, 0, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::PersonTrade));
+    press_seat(&mut game, 0, back_input());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::VillageTalk));
+    press_seat(&mut game, 0, back_input());
+    assert_eq!(game.shell.seat(0).modal, None);
+    idle(&mut game, 3);
+    assert!(
+        game.world().people().conversation(FIRST).is_none(),
+        "goodbye ends the conversation"
+    );
+}

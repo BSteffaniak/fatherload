@@ -340,9 +340,12 @@ pub struct TargetState {
 
 /// A person's per-kind state (WP-PEOPLE): who they are and where their routine is taking them.
 ///
-/// The body stands on the street (its `y` is the ground under their feet); `world/people.rs`
-/// walks it toward `target_x` and hides it indoors (`inside`) while they are in a building.
-/// People have no health: weapons, blasts and enemies never touch them.
+/// The body stands on the street (its `y` is the ground under their feet). A walk is a leg:
+/// from `from_x` at tick `depart` to `target_x` at tick `arrive`, and where they are is a pure
+/// function of the tick ([`Self::x_at`]), so the entity changes only when a leg starts or
+/// ends (presentation interpolates exactly, every peer agrees). `world/people.rs` plans the legs
+/// and hides people indoors (`inside`) while they are in a building. People have no health:
+/// weapons, blasts and enemies never touch them.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub struct NpcState {
     pub character: crate::people::CharacterId,
@@ -352,14 +355,80 @@ pub struct NpcState {
     pub inside: Option<u8>,
     /// The lot their routine wants them inside when they reach `target_x`, if any.
     pub going_inside: Option<u8>,
-    /// Where they are walking to (world pixels).
+    /// Where the current leg started (world pixels) ...
+    pub from_x: f32,
+    /// ... and where it ends.
     pub target_x: f32,
+    /// The tick the leg started ...
+    pub depart: SimulationTick,
+    /// ... and the tick they get there.
+    pub arrive: SimulationTick,
+    /// They arrived and the pause that follows is planned.
+    pub settled: bool,
     /// -1 facing left, 1 facing right.
     pub facing: i8,
     /// The player they are talking to (they stop and face them).
     pub talking_to: Option<PlayerId>,
     /// They stand still until this tick (idle pauses between strolls).
     pub idle_until: SimulationTick,
+}
+
+impl NpcState {
+    /// Where they are (world pixel column) at `tick` plus `alpha` of the next tick (0..1):
+    /// presentation passes the previous tick and its interpolation alpha.
+    #[must_use]
+    pub fn x_at(&self, tick: SimulationTick, alpha: f32) -> f32 {
+        let total = self.arrive.get().saturating_sub(self.depart.get());
+        if total == 0 || tick.get() >= self.arrive.get() {
+            return self.target_x;
+        }
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "a leg lasts a few hundred ticks"
+        )]
+        let done = (tick.get().saturating_sub(self.depart.get()) as f32 + alpha) / total as f32;
+        (self.target_x - self.from_x).mul_add(done.clamp(0.0, 1.0), self.from_x)
+    }
+
+    /// Whether they are mid-leg at `tick`.
+    #[must_use]
+    pub const fn walking_at(&self, tick: SimulationTick) -> bool {
+        tick.get() >= self.depart.get() && tick.get() < self.arrive.get()
+    }
+
+    /// Starts a leg from `from` to `to` at `now`, at `speed` pixels per second.
+    pub fn walk(&mut self, from: f32, to: f32, speed: f32, now: SimulationTick, tick_rate_hz: u32) {
+        let distance = (to - from).abs();
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss,
+            reason = "a leg lasts a few hundred ticks"
+        )]
+        let ticks = if distance < 0.5 {
+            0
+        } else {
+            ((distance / speed.max(1.0)) * tick_rate_hz as f32)
+                .ceil()
+                .max(1.0) as u64
+        };
+        self.from_x = from;
+        self.target_x = to;
+        self.depart = now;
+        self.arrive = SimulationTick::new(now.get() + ticks);
+        self.settled = false;
+        if distance >= 0.5 {
+            self.facing = if to < from { -1 } else { 1 };
+        }
+    }
+
+    /// Stands still at `x` from `now`.
+    pub const fn stand(&mut self, x: f32, now: SimulationTick) {
+        self.from_x = x;
+        self.target_x = x;
+        self.depart = now;
+        self.arrive = now;
+    }
 }
 
 /// Per-kind entity state.
