@@ -338,6 +338,57 @@ fn signposts_point_to_the_neighbours_and_home() {
 }
 
 #[test]
+fn trail_milestones_point_at_the_nearest_place_along_the_surface() {
+    for seed in seeds(4) {
+        let settings = v6(seed);
+        let (town_first, town_last) = crate::surface::town_span();
+        let mut posts = 0;
+        for x in -3_000..=3_000 {
+            let Some(post) = milestone_at(&settings, x) else {
+                continue;
+            };
+            posts += 1;
+            assert_eq!(post.column, x);
+            assert!(
+                placement::surface_site_at(settings.seed, x, 0).is_none(),
+                "seed {seed:#x}: milestone inside a village at {x}"
+            );
+            assert!(!(town_first..=town_last).contains(&x));
+            // It points the right way, at the nearest place, and says how far.
+            let (target_first, target_last) = match post.target {
+                SignTarget::Town => (town_first, town_last),
+                SignTarget::Village(id) => {
+                    let found = village(&settings, id).expect("target village");
+                    assert_eq!(found.setting, VillageSetting::Surface);
+                    (found.first_column, found.last_column)
+                }
+            };
+            let edge = if post.direction > 0 {
+                target_first
+            } else {
+                target_last
+            };
+            assert_eq!(
+                (edge - x) * post.direction,
+                post.distance,
+                "seed {seed:#x} x {x}"
+            );
+            assert!(post.distance > 0 && post.distance <= 450, "{post:?}");
+        }
+        // Roughly one every MILESTONE_SPACING columns, minus the villages and town.
+        assert!(
+            (40..=76).contains(&posts),
+            "seed {seed:#x}: {posts} milestones"
+        );
+    }
+    let v5 = WorldSettings {
+        generator: GeneratorVersion::V5,
+        ..WorldSettings::new(1)
+    };
+    assert_eq!(milestone_at(&v5, 1_075), None);
+}
+
+#[test]
 fn village_facts_and_story_seeds_bind() {
     let settings = v6(0xFAC7);
     let found = village(&settings, placement::surface_id(2)).expect("village");

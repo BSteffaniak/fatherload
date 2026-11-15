@@ -150,8 +150,20 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         seconds,
         villages::VillagePass::Behind,
     );
+    villages::draw_trails(
+        draw,
+        scene.terrain,
+        scene.visible,
+        villages::VillagePass::Behind,
+    );
     draw_world_edges(draw, scene.terrain, scene.visible);
     scene.terrain_renderer.draw(draw, scene.visible);
+    villages::draw_trails(
+        draw,
+        scene.terrain,
+        scene.visible,
+        villages::VillagePass::Front,
+    );
     villages::draw_villages(
         draw,
         (scene.terrain, scene.explored),

@@ -49,7 +49,7 @@ use serde::{Deserialize, Serialize};
 pub use crate::people::VillageId;
 pub use layout::{
     BuildingKind, BuildingStyle, Decor, DecorKind, Landscape, SignTarget, Signpost, Specialty,
-    VillageBuilding, VillageRelation, VillageSetting,
+    VillageBuilding, VillageRelation, VillageSetting, milestone_at,
 };
 pub use placement::VillageSize;
 pub use services::{BlessingKind, VillageDeal, VillageOffer, VillageService};

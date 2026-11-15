@@ -200,6 +200,41 @@ pub const VILLAGE_SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "village_trail",
+        summary: "Out on the trail between villages: the trodden path over the grass and a milestone naming the nearest village",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let settings = *world.world_settings();
+                let (_, town_last) = fatherload_simulation::surface::town_span();
+                let post = (town_last..town_last + 2_000)
+                    .find_map(|x| {
+                        village::milestone_at(&settings, x).filter(|post| {
+                            matches!(post.target, village::SignTarget::Village(_))
+                                && post.distance > 60
+                        })
+                    })
+                    .expect("a milestone east of town");
+                let row = world.terrain().surface_row(post.column);
+                if let Some(rig) = world.player_mut(seats[0].player) {
+                    #[allow(clippy::cast_precision_loss, reason = "tile indices")]
+                    {
+                        rig.x = (post.column as f32 - 6.5) * TILE_SIZE;
+                        rig.y = (row as f32 - 0.5) * TILE_SIZE;
+                    }
+                    rig.velocity_x = 0.0;
+                    rig.velocity_y = 0.0;
+                }
+                reveal(
+                    world,
+                    seats[0].player,
+                    post.column - 40..post.column + 40,
+                    row - 6..row + 6,
+                );
+            });
+            stage.settle(20);
+        },
+    },
+    Scene {
         name: "village_arrival_banner",
         summary: "Driving into a village for the first time: the discovery banner with its name, style and specialty",
         setup: |stage| {

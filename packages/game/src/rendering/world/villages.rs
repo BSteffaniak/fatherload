@@ -1261,3 +1261,133 @@ fn draw_signpost(draw: &mut impl RaylibDraw, terrain: &Terrain, found: &Village,
         pen.rect(draw, x, base - 30 + row * 2, span, 2, CLAY);
     }
 }
+
+/// Whether column `x` carries the trail between the town and the villages: open surface,
+/// outside every village's flat span and the town's lots.
+fn on_trail(terrain: &Terrain, x: i32) -> bool {
+    let settings = terrain.settings();
+    let (town_first, town_last) = fatherload_simulation::surface::town_span();
+    !(town_first - 2..=town_last + 2).contains(&x)
+        && village::placement::surface_site_at(settings.seed, x, 1).is_none()
+}
+
+/// The trails joining the town and the surface villages: a trodden dirt path along the top
+/// of the untouched ground ([`VillagePass::Front`], over the grass) and a milestone every
+/// [`village::layout::MILESTONE_SPACING`] columns naming the nearest place and how far it is
+/// ([`VillagePass::Behind`], standing in the open air). Drilled-out ground loses its path.
+pub fn draw_trails(
+    draw: &mut impl RaylibDraw,
+    terrain: &Terrain,
+    visible: Rectangle,
+    pass: VillagePass,
+) {
+    let settings = terrain.settings();
+    if !settings.generator.has_villages() {
+        return;
+    }
+    let first = (visible.x / TILE_SIZE).floor() as i32 - 2;
+    let last = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 2;
+    // The surface sits within a few rows of the classic row; skip deep views outright.
+    let lowest_surface = tile_px(terrain.surface_row(first).max(terrain.surface_row(last)) + 4);
+    if visible.y > lowest_surface {
+        return;
+    }
+    match pass {
+        VillagePass::Front => {
+            for x in first..=last {
+                let row = terrain.surface_row(x);
+                let intact = terrain.is_solid_at(TilePosition { x, y: row })
+                    && !terrain.is_solid_at(TilePosition { x, y: row - 1 });
+                if !intact || !on_trail(terrain, x) {
+                    continue;
+                }
+                draw_trail_tile(draw, x, row, terrain.surface_row(x + 1) - row);
+            }
+        }
+        VillagePass::Behind => {
+            let spacing = village::layout::MILESTONE_SPACING;
+            // Start a spacing early: a milestone's board reaches a few tiles past its post.
+            let mut x = first
+                - (first - village::placement::TOWN_CENTER_COLUMN).rem_euclid(spacing)
+                - spacing;
+            while x <= last + spacing {
+                if let Some(post) = village::milestone_at(settings, x) {
+                    let row = terrain.surface_row(x);
+                    if terrain.is_solid_at(TilePosition { x, y: row }) {
+                        draw_milestone(draw, terrain, &post, row);
+                    }
+                }
+                x += spacing;
+            }
+        }
+    }
+}
+
+/// One tile of trodden path on top of surface tile `(x, row)`; `step` is how many rows the
+/// next column's surface lies lower (the path bends down or up to meet it).
+fn draw_trail_tile(draw: &mut impl RaylibDraw, x: i32, row: i32, step: i32) {
+    let pen = Pen::at(tile_px(x), tile_px(row));
+    let hash = (x as u32).wrapping_mul(0x2C9B_7F13) >> 7;
+    // Packed earth over the grass, ruts darker, a few pale pebbles.
+    pen.rect(draw, 0, 0, TILE_ART, 3, LOAM);
+    pen.rect(draw, 0, 3, TILE_ART, 1, SOIL);
+    pen.rect(draw, 2 + (hash % 3) as i32, 1, 4, 1, SOIL);
+    pen.rect(draw, 9 + ((hash >> 2) % 3) as i32, 1, 4, 1, SOIL);
+    if hash.is_multiple_of(4) {
+        pen.px(draw, ((hash >> 4) % 14) as i32 + 1, 0, SAND);
+    }
+    if hash % 5 == 1 {
+        pen.px(draw, ((hash >> 6) % 14) as i32 + 1, 2, CLAY);
+    }
+    if step != 0 {
+        // A worn edge where the ground steps to the next column's height.
+        let edge = if step > 0 { TILE_ART - 2 } else { 0 };
+        pen.rect(draw, edge, 0, 2, 4, SOIL);
+    }
+}
+
+/// A trail milestone: a squat painted stone and a stake carrying a little arrow board that
+/// names the nearest place along the surface and the distance to its edge.
+fn draw_milestone(draw: &mut impl RaylibDraw, terrain: &Terrain, post: &Signpost, row: i32) {
+    let target = match post.target {
+        SignTarget::Town => "TOWN".to_owned(),
+        SignTarget::Village(id) => village::village_identity(terrain.settings(), id)
+            .map_or_else(|| "?".to_owned(), |(name, _)| name.to_uppercase()),
+    };
+    let base = 30;
+    let pen = Pen::at(
+        tile_px(post.column) + TILE_SIZE * 0.5,
+        tile_px(row) - base as f32 * ART,
+    );
+    pen.rect(draw, -1, base - 26, 3, 20, INK);
+    pen.rect(draw, 0, base - 26, 1, 20, LOAM);
+    pen.boxed(draw, -5, base - 9, 11, 9, STONE_LIGHT);
+    pen.rect(draw, -4, base - 8, 9, 1, MIST);
+    pen.rect(draw, -4, base - 5, 9, 2, RED);
+    pen.rect(draw, -4, base - 2, 9, 1, STONE);
+    let label = format!("{target} {} m", post.distance);
+    let width = text_art_width(&label) + 10;
+    let left = if post.direction < 0 { -width + 3 } else { -3 };
+    pen.boxed(draw, left, base - 27, width, 12, CLAY);
+    pen.text(
+        draw,
+        &label,
+        left + if post.direction < 0 { 7 } else { 3 },
+        base - 26,
+        INK,
+    );
+    let tip_x = if post.direction < 0 {
+        left - 3
+    } else {
+        left + width
+    };
+    for step in 0..5 {
+        let span = 3 - (step - 2_i32).abs();
+        let x = if post.direction < 0 {
+            tip_x + 3 - span
+        } else {
+            tip_x
+        };
+        pen.rect(draw, x, base - 26 + step * 2, span, 2, CLAY);
+    }
+}

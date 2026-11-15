@@ -519,7 +519,9 @@ nothing about it is saved or replicated except what players did there.
   one end and signposts stand outside both edges. Keepers are residents picked by role, homes
   are dealt in family order, the eldest lives at the hall. `Village::area` is the rectangle a rig
   counts as "in the village" in; `Village::building_at_pixel` the door rule (in the lot's columns,
-  on or up to 3 tiles above the village ground).
+  on or up to 3 tiles above the village ground). `village::milestone_at(settings, x)` is the
+  trail milestone at column `x` (every `MILESTONE_SPACING` columns outside villages and the town,
+  pointing at the nearest surface place); the renderer draws the trail and posts from it.
 - **Lookups** (memoized per process like streamed regions; a miss only costs time):
   `village::village(settings, id)`, `villages_between`, `village_at(position)`,
   `building_at(x, y)`, `nearest_village`, `village_identity` (name and culture without building

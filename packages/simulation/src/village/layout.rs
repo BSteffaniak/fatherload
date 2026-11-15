@@ -866,6 +866,61 @@ fn assign_residents(population: &crate::people::Population, buildings: &mut [Vil
     }
 }
 
+/// Columns between the milestones along the trails that join the town and the villages.
+pub const MILESTONE_SPACING: i32 = 80;
+/// Columns a milestone keeps clear of a village span or the town's flat ground.
+const MILESTONE_CLEARANCE: i32 = 24;
+
+/// The trail milestone standing at column `x`, if any.
+///
+/// The trails between the town and the surface villages carry a post every
+/// [`MILESTONE_SPACING`] columns (counted from the town's centre) pointing at the nearest place
+/// along the surface, town or village, and how far its nearest edge is. Pure in the seed and
+/// the column, so every view and seat agrees; columns in or near a village or the town have
+/// none (their own signposts do the job there).
+#[must_use]
+pub fn milestone_at(settings: &WorldSettings, x: i32) -> Option<Signpost> {
+    if !settings.generator.has_villages()
+        || (x - placement::TOWN_CENTER_COLUMN).rem_euclid(MILESTONE_SPACING) != 0
+    {
+        return None;
+    }
+    let (town_first, town_last) = crate::surface::town_span();
+    let town_distance = if x < town_first {
+        town_first - x
+    } else {
+        x - town_last
+    };
+    if town_distance <= placement::FLATTEN_FADE_COLUMNS + MILESTONE_CLEARANCE
+        || placement::surface_site_at(settings.seed, x, MILESTONE_CLEARANCE).is_some()
+    {
+        return None;
+    }
+    let mut best = (
+        town_distance,
+        if x < town_first { 1 } else { -1 },
+        SignTarget::Town,
+    );
+    let near = placement::site_index_near(x);
+    for site in near - 1..=near + 1 {
+        let Some(found) = placement::surface_site(settings.seed, site) else {
+            continue;
+        };
+        let distance = found.distance(x);
+        if distance < best.0 {
+            let direction = if found.first > x { 1 } else { -1 };
+            best = (distance, direction, SignTarget::Village(found.id()));
+        }
+    }
+    let (distance, direction, target) = best;
+    Some(Signpost {
+        column: x,
+        direction,
+        target,
+        distance,
+    })
+}
+
 /// The signposts at a surface village's two edges: west to the next village west (or the
 /// town), east likewise.
 fn signposts(settings: &WorldSettings, site: i32, first: i32, last: i32) -> Vec<Signpost> {

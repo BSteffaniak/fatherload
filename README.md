@@ -229,7 +229,9 @@ sites always does). Each village is generated from the world seed:
   flank the plaza (well, statue, fountain, totem, bonfire or crystals), with the specialty's
   building, an inn, a workshop, houses, farms, lookouts and old mine heads along the street,
   lamps, trees, carts and banners between them, a landing pad at one end and signposts at both
-  edges naming the next village (or town) and how far it is.
+  edges naming the next village (or town) and how far it is. Out between the villages a trodden
+  trail runs over the grass, with a milestone every 80 columns naming the nearest village (or
+  the town) and the distance. A village too small for an inn hears its rumours at the hall.
 - **Specialty**, the reason to come back: an assay office paying well over the depot price for
   one mineral, a workshop selling rare rig parts for the crew's parts locker, a paint-and-trim
   shop selling garage looks that are otherwise locked, a smithy selling bigger packs of special
