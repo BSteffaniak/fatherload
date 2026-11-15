@@ -692,3 +692,133 @@ fn world_client_build_actions_reach_the_host_and_every_client() {
         );
     }
 }
+
+/// The sleep vote online (Part II F4): two clients each lie down in a bed through their own
+/// input streams. One in bed is not enough; once both are, the host skips the night and every
+/// client converges on the same morning (the jump travels in the `Clock` section).
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one online scenario: set up, vote, converge"
+)]
+fn world_sleep_vote_skips_the_night_for_every_client() {
+    use fatherload_simulation::{
+        InputSequence, PlayerCommand, PlayerId, PlayerTickInput, TILE_SIZE, TickAction, TickInputs,
+        base::{BuildCommand, Buildable, Facing, ModuleKind, ModuleService},
+        clock::{DayLength, DayPhase},
+        terrain::{TileKind, TilePosition},
+    };
+
+    let floor = 60;
+    let park = |world: &mut WorldState, player: PlayerId, tile_x: i32| {
+        let rig = world.player_mut(player).expect("rig");
+        #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+        {
+            rig.x = (tile_x as f32 + 0.5) * TILE_SIZE;
+            rig.y = (floor as f32 - 0.5) * TILE_SIZE;
+        }
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(30, 4, 1.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    for client in &mut harness.clients {
+        client.bot.active = false;
+    }
+    let sleepers: Vec<PlayerId> = harness
+        .clients
+        .iter()
+        .map(|client| crate::world::to_sim_player(client.session.player().expect("joined")))
+        .collect();
+    // A cavern deep under the west meadow with a claim and a bed; both rigs parked at the bed.
+    let mut world = harness.world().clone();
+    for y in floor - 6..=floor {
+        for x in 10..=30 {
+            let kind = if y == floor {
+                TileKind::Stone
+            } else {
+                TileKind::Air
+            };
+            let _ = world.terrain_mut().set_kind(TilePosition { x, y }, kind);
+        }
+    }
+    park(&mut world, sleepers[0], 18);
+    world.player_mut(sleepers[0]).expect("rig").credits = 10_000;
+    for (kind, x) in [(ModuleKind::Beacon, 18), (ModuleKind::Bed, 20)] {
+        let mut inputs = TickInputs::default();
+        inputs.players.insert(
+            sleepers[0],
+            PlayerTickInput {
+                controls: None,
+                actions: vec![TickAction {
+                    sequence: InputSequence::new(0),
+                    command: PlayerCommand::Build(BuildCommand::Place {
+                        item: Buildable::Module(kind),
+                        at: TilePosition { x, y: floor - 1 },
+                        facing: Facing::Right,
+                    }),
+                }],
+            },
+        );
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(tick, &inputs);
+    }
+    let bed = world
+        .bases()
+        .modules()
+        .find(|module| module.kind == ModuleKind::Bed)
+        .map(|module| module.id)
+        .expect("bed built");
+    park(&mut world, sleepers[0], 20);
+    park(&mut world, sleepers[1], 21);
+    // Late in the night of day 1.
+    let length = world.day_length();
+    assert_eq!(length, DayLength::Standard);
+    world.set_world_time_millis(84 * length.slice_millis());
+    assert!(world.is_night());
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(1));
+    let sleep = || {
+        PlayerCommand::Build(BuildCommand::Use {
+            structure: bed,
+            service: ModuleService::Sleep,
+        })
+    };
+
+    harness.clients[0].queued_actions.push(sleep());
+    harness.run_for(Duration::from_secs(4));
+    {
+        let host = harness.world();
+        assert!(host.is_in_bed(sleepers[0]), "the first player lay down");
+        assert!(host.is_night(), "one of two in bed is not enough");
+        assert_eq!(host.awake_players(), vec![sleepers[1]]);
+    }
+
+    harness.clients[1].queued_actions.push(sleep());
+    harness.run_for(Duration::from_secs(5));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    harness.assert_actions_exactly_once();
+    let host = harness.world();
+    let morning = host.clock();
+    assert_eq!(morning.day(), 2, "the night was skipped into day 2");
+    assert_eq!(morning.phase(), DayPhase::Dawn);
+    assert_eq!(
+        host.awake_players().len(),
+        sleepers.len(),
+        "everyone got up"
+    );
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(seen.clock_state(), host.clock_state());
+        let seen_clock = seen.clock();
+        assert_eq!(
+            (seen_clock.day(), seen_clock.phase()),
+            (2, DayPhase::Dawn),
+            "every client wakes on the same morning"
+        );
+    }
+}
