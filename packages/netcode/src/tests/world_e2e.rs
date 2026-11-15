@@ -607,3 +607,88 @@ fn world_bases_replicate_to_every_client() {
         );
     }
 }
+
+/// A client builds mid-session through its own input stream (not a host-side world swap):
+/// the host validates the build actions inside the tick, and every client, the builder
+/// included, converges on the claim, the module and the built tile.
+#[test]
+fn world_client_build_actions_reach_the_host_and_every_client() {
+    use fatherload_simulation::{
+        PlayerCommand, TILE_SIZE,
+        base::{BuildCommand, Buildable, BuiltTile, Facing, ModuleKind},
+        terrain::{TileKind, TilePosition},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(30, 4, 1.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    for client in &mut harness.clients {
+        client.bot.active = false;
+    }
+    let builder = crate::world::to_sim_player(harness.clients[0].session.player().expect("joined"));
+    let floor = 60;
+    let mut world = harness.world().clone();
+    for y in floor - 6..=floor {
+        for x in 10..=30 {
+            let kind = if y == floor {
+                TileKind::Stone
+            } else {
+                TileKind::Air
+            };
+            let _ = world.terrain_mut().set_kind(TilePosition { x, y }, kind);
+        }
+    }
+    let rig = world.player_mut(builder).expect("builder");
+    #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+    {
+        rig.x = 20.5 * TILE_SIZE;
+        rig.y = (floor as f32 - 0.5) * TILE_SIZE;
+    }
+    rig.velocity_x = 0.0;
+    rig.velocity_y = 0.0;
+    rig.credits = 10_000;
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(1));
+    let place = |item, x| {
+        PlayerCommand::Build(BuildCommand::Place {
+            item,
+            at: TilePosition { x, y: floor - 1 },
+            facing: Facing::Right,
+        })
+    };
+    harness.clients[0].queued_actions.extend([
+        place(Buildable::Module(ModuleKind::Beacon), 18),
+        place(Buildable::Module(ModuleKind::Storage), 22),
+        place(Buildable::Tile(BuiltTile::Plating), 24),
+    ]);
+    harness.run_for(Duration::from_secs(2));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    harness.assert_actions_exactly_once();
+    let host = harness.world();
+    assert_eq!(
+        host.bases().claims().count(),
+        1,
+        "the host staked the claim"
+    );
+    assert_eq!(host.bases().modules().count(), 2, "beacon and chest built");
+    assert!(
+        host.player(builder).expect("builder").credits < 10_000,
+        "the builder paid"
+    );
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(seen.bases(), host.bases(), "every client sees the base");
+        assert_eq!(
+            seen.terrain()
+                .tile(TilePosition {
+                    x: 24,
+                    y: floor - 1
+                })
+                .map(|tile| tile.kind),
+            Some(TileKind::Built(BuiltTile::Plating)),
+            "built tiles travel with the terrain"
+        );
+    }
+}

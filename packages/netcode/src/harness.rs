@@ -428,6 +428,9 @@ pub struct HarnessClient<S: HarnessSim> {
     pub margins: Vec<i64>,
     /// Session stats at the last measurement reset.
     pub baseline: ClientStats,
+    /// Scripted actions sent with the client's next input frame, besides the bot's (tests
+    /// that drive a specific action through the full client path).
+    pub queued_actions: Vec<S::Action>,
 }
 
 /// Aggregate results.
@@ -550,6 +553,7 @@ impl<S: HarnessSim> Harness<S> {
             up_reliable: LinkSim::new(self.config.uplink, true, seed ^ 2),
             down: LinkSim::new(self.config.downlink, true, seed ^ 3),
             bot: Bot::new(seed ^ 4),
+            queued_actions: Vec::new(),
             connected: true,
             bytes_down: 0,
             bytes_up: 0,
@@ -666,7 +670,8 @@ impl<S: HarnessSim> Harness<S> {
                     }
                 }
             }
-            let (controls, actions) = client.bot.decide::<S>();
+            let (controls, mut actions) = client.bot.decide::<S>();
+            actions.append(&mut client.queued_actions);
             let messages = client.session.advance(dt, &controls, actions);
             send_client_messages(client, now, messages);
         }
