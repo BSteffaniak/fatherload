@@ -89,8 +89,8 @@ impl WorldState {
         };
         let band = self.terrain.band_at(player.tile_position(TILE_SIZE));
         let rare_cargo = player
-            .cargo
-            .iter()
+            .cargo_bay
+            .minerals()
             .filter(|(mineral, _)| {
                 matches!(
                     mineral,
@@ -100,9 +100,9 @@ impl WorldState {
                         | MineralKind::Mythril
                 )
             })
-            .map(|(_, count)| *count)
+            .map(|(_, count)| count)
             .sum::<u32>()
-            .saturating_add(player.artifacts.values().copied().sum());
+            .saturating_add(player.cargo_bay.artifact_total());
         let timing = self.timing;
         let delta_seconds = timing.delta_seconds;
         let state = self.deep_run_states.entry(player_id).or_default();

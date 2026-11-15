@@ -18,6 +18,7 @@ pub mod hazard;
 pub mod ids;
 pub mod infrastructure;
 pub mod input;
+pub mod item;
 pub mod player;
 pub mod poi;
 pub mod progression;

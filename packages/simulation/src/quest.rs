@@ -379,31 +379,21 @@ impl QuestItem {
     /// How many `player` carries.
     #[must_use]
     pub fn held(self, player: &Player) -> u32 {
-        match self {
-            Self::Mineral(mineral) => player.cargo.get(&mineral).copied(),
-            Self::Artifact(artifact) => player.artifacts.get(&artifact).copied(),
-            Self::Material(material) => player.materials.get(&material).copied(),
-        }
-        .unwrap_or(0)
+        player.carried(self.item())
     }
 
     /// Takes up to `count` from `player`; returns how many were taken.
     pub fn take(self, player: &mut Player, count: u32) -> u32 {
-        fn take_from<K: Ord>(map: &mut BTreeMap<K, u32>, key: &K, count: u32) -> u32 {
-            let Some(held) = map.get_mut(key) else {
-                return 0;
-            };
-            let taken = (*held).min(count);
-            *held -= taken;
-            if *held == 0 {
-                map.remove(key);
-            }
-            taken
-        }
+        player.cargo_bay.remove(self.item(), count)
+    }
+
+    /// The item these goods are.
+    #[must_use]
+    pub const fn item(self) -> crate::item::ItemKind {
         match self {
-            Self::Mineral(mineral) => take_from(&mut player.cargo, &mineral, count),
-            Self::Artifact(artifact) => take_from(&mut player.artifacts, &artifact, count),
-            Self::Material(material) => take_from(&mut player.materials, &material, count),
+            Self::Mineral(mineral) => crate::item::ItemKind::Mineral(mineral),
+            Self::Artifact(artifact) => crate::item::ItemKind::Artifact(artifact),
+            Self::Material(material) => crate::item::ItemKind::Material(material),
         }
     }
 }

@@ -4,8 +4,6 @@
     reason = "canonical simulation tests enumerate exact deterministic outcomes"
 )]
 
-use std::collections::BTreeMap;
-
 use crate::{
     ControlState, DrillDirection, DrillState, FIXED_DELTA_SECONDS, InfrastructureKind,
     PlayerCommand, PlayerId, SimulationTick, TILE_SIZE, TickInputs, WorldImport, WorldState,
@@ -430,8 +428,8 @@ fn canonical_deep_rewards_and_escape_sequence_are_tick_deterministic() {
         first
             .player(LOCAL_PLAYER_ID)
             .expect("player exists")
-            .materials
-            .contains_key(&crate::terrain::StrategicResourceKind::PressurePearl)
+            .cargo_bay
+            .contains(crate::terrain::StrategicResourceKind::PressurePearl)
     );
     let output = first.simulate_tick(SimulationTick::new(1), &crate::TickInputs::default());
     assert!(first.failure_state(LOCAL_PLAYER_ID).is_some());
@@ -525,8 +523,12 @@ fn canonical_salvage_subservices_update_only_canonical_state() {
     }];
     {
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-        player.cargo.insert(crate::terrain::MineralKind::Copper, 2);
-        player.cargo.insert(crate::terrain::MineralKind::Diamond, 1);
+        player
+            .cargo_bay
+            .insert(crate::terrain::MineralKind::Copper, 2);
+        player
+            .cargo_bay
+            .insert(crate::terrain::MineralKind::Diamond, 1);
     }
     for request in [
         crate::SessionServiceRequest::SalvageRecoverWreckedPart,
@@ -551,11 +553,11 @@ fn canonical_salvage_subservices_update_only_canonical_state() {
     let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
     assert!(
         !player
-            .cargo
-            .contains_key(&crate::terrain::MineralKind::Copper)
+            .cargo_bay
+            .contains(crate::terrain::MineralKind::Copper)
     );
     assert_eq!(
-        player.cargo.get(&crate::terrain::MineralKind::Diamond),
+        player.cargo_bay.get(crate::terrain::MineralKind::Diamond),
         Some(&1)
     );
     assert!(player.credits > 0);
@@ -572,7 +574,7 @@ fn canonical_market_sale_applies_events_depot_bonus_and_history() {
         world
             .player_mut(LOCAL_PLAYER_ID)
             .expect("player exists")
-            .cargo
+            .cargo_bay
             .insert(crate::terrain::MineralKind::Diamond, 2);
     }
     boom.world_event_severity
@@ -634,7 +636,7 @@ fn canonical_expedition_acceptance_and_special_rewards_are_deterministic() {
         world
             .player_mut(LOCAL_PLAYER_ID)
             .expect("player exists")
-            .artifacts
+            .cargo_bay
             .insert(crate::terrain::ArtifactKind::Fossil, 1);
         assert_eq!(
             world.complete_canonical_progression_for_player(LOCAL_PLAYER_ID),
@@ -672,8 +674,12 @@ fn canonical_salvage_recovers_exact_lost_inventory_and_can_launch_drone() {
         crate::LostCargoSite {
             x: 20.0 * TILE_SIZE,
             y: 40.0 * TILE_SIZE,
-            minerals: BTreeMap::from([(crate::terrain::MineralKind::Copper, 2)]),
-            artifacts: BTreeMap::from([(crate::terrain::ArtifactKind::Fossil, 1)]),
+            items: [
+                (crate::terrain::MineralKind::Copper.into(), 2),
+                (crate::terrain::ArtifactKind::Fossil.into(), 1),
+            ]
+            .into_iter()
+            .collect(),
         },
     );
     world
@@ -690,11 +696,11 @@ fn canonical_salvage_recovers_exact_lost_inventory_and_can_launch_drone() {
     );
     let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
     assert_eq!(
-        player.cargo.get(&crate::terrain::MineralKind::Copper),
+        player.cargo_bay.get(crate::terrain::MineralKind::Copper),
         Some(&2)
     );
     assert_eq!(
-        player.artifacts.get(&crate::terrain::ArtifactKind::Fossil),
+        player.cargo_bay.get(crate::terrain::ArtifactKind::Fossil),
         Some(&1)
     );
     assert_eq!(player.credits, 82);
@@ -718,7 +724,7 @@ fn canonical_side_contract_lifecycle_posts_completes_and_expires() {
         let contract = world.progression.active_side_contracts[0];
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
         if let TileKind::Ore(mineral) = contract.target {
-            player.cargo.insert(mineral, contract.required);
+            player.cargo_bay.insert(mineral, contract.required);
         }
         assert_eq!(
             world.complete_canonical_side_contract(LOCAL_PLAYER_ID),
@@ -745,7 +751,7 @@ fn canonical_side_contract_lifecycle_posts_completes_and_expires() {
     first
         .player_mut(LOCAL_PLAYER_ID)
         .expect("player exists")
-        .cargo
+        .cargo_bay
         .insert(crate::terrain::MineralKind::Ruby, 1);
     assert_eq!(
         first.complete_canonical_side_contract(LOCAL_PLAYER_ID),
@@ -790,7 +796,7 @@ fn canonical_banking_insurance_crafting_and_town_upgrades_are_transactional() {
         world
             .player_mut(LOCAL_PLAYER_ID)
             .expect("player exists")
-            .materials
+            .cargo_bay
             .insert(*material, *required);
     }
     let capacity_before = world
@@ -840,10 +846,10 @@ fn canonical_story_contract_progression_consumes_cargo_and_hashes_state() {
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
         match contract.target {
             crate::contract::ContractTarget::Mineral(mineral) => {
-                player.cargo.insert(mineral, contract.required);
+                player.cargo_bay.insert(mineral, contract.required);
             }
             crate::contract::ContractTarget::Artifact(artifact) => {
-                player.artifacts.insert(artifact, contract.required);
+                player.cargo_bay.insert(artifact, contract.required);
             }
         }
     }
@@ -883,7 +889,9 @@ fn canonical_expedition_completion_consumes_delivery_and_rewards_player() {
     };
     world.progression.active_expeditions.push(expedition);
     let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
-    player.cargo.insert(crate::terrain::MineralKind::Copper, 2);
+    player
+        .cargo_bay
+        .insert(crate::terrain::MineralKind::Copper, 2);
     let credits_before = player.credits;
 
     assert_eq!(
@@ -894,8 +902,8 @@ fn canonical_expedition_completion_consumes_delivery_and_rewards_player() {
     assert_eq!(player.credits, credits_before + expedition.reward);
     assert!(
         !player
-            .cargo
-            .contains_key(&crate::terrain::MineralKind::Copper)
+            .cargo_bay
+            .contains(crate::terrain::MineralKind::Copper)
     );
     assert!(world.progression.active_expeditions.is_empty());
     assert_eq!(world.progression.expeditions_completed, 1);
@@ -945,7 +953,9 @@ fn canonical_heat_wave_and_deep_instability_affect_survival_deterministically() 
         player.y = (f32::from(i16::try_from(row).expect("row")) + 0.5) * TILE_SIZE;
         player.fuel = 100.0;
         player.hull = 100.0;
-        player.cargo.insert(crate::terrain::MineralKind::Diamond, 1);
+        player
+            .cargo_bay
+            .insert(crate::terrain::MineralKind::Diamond, 1);
         world.set_simulation_tick(SimulationTick::new(239));
         world.deep_run_states.insert(
             LOCAL_PLAYER_ID,
@@ -976,7 +986,9 @@ fn canonical_rescue_site_recovers_lost_cargo_once() {
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
         player.x = 20.0 * TILE_SIZE;
         player.y = 40.0 * TILE_SIZE;
-        player.cargo.insert(crate::terrain::MineralKind::Copper, 4);
+        player
+            .cargo_bay
+            .insert(crate::terrain::MineralKind::Copper, 4);
     }
     assert_eq!(
         world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Rescue),
@@ -990,8 +1002,8 @@ fn canonical_rescue_site_recovers_lost_cargo_once() {
     let retained_count = world
         .player(LOCAL_PLAYER_ID)
         .expect("player exists")
-        .cargo
-        .get(&crate::terrain::MineralKind::Copper)
+        .cargo_bay
+        .get(crate::terrain::MineralKind::Copper)
         .copied()
         .unwrap_or(0);
     {
@@ -1005,8 +1017,8 @@ fn canonical_rescue_site_recovers_lost_cargo_once() {
         world
             .player(LOCAL_PLAYER_ID)
             .expect("player exists")
-            .cargo
-            .get(&crate::terrain::MineralKind::Copper),
+            .cargo_bay
+            .get(crate::terrain::MineralKind::Copper),
         Some(&retained_count.saturating_add(site.count()))
     );
     assert!(output.events.iter().any(|event| {
@@ -1089,7 +1101,9 @@ fn canonical_rescue_applies_fee_cargo_loss_and_partial_recovery() {
     player.credits = 500;
     player.fuel = 0.0;
     player.hull = 0.0;
-    player.cargo.insert(crate::terrain::MineralKind::Iron, 8);
+    player
+        .cargo_bay
+        .insert(crate::terrain::MineralKind::Iron, 8);
 
     assert_eq!(
         world.apply_player_command(LOCAL_PLAYER_ID, &PlayerCommand::Rescue),
@@ -1098,7 +1112,7 @@ fn canonical_rescue_applies_fee_cargo_loss_and_partial_recovery() {
     let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
     assert_eq!(player.credits, 330);
     assert_eq!(
-        player.cargo.get(&crate::terrain::MineralKind::Iron),
+        player.cargo_bay.get(crate::terrain::MineralKind::Iron),
         Some(&4)
     );
     assert!(12.0f32.mul_add(-TILE_SIZE, player.x).abs() < f32::EPSILON);
@@ -1280,8 +1294,8 @@ fn canonical_drilling_collects_ore_artifacts_and_applies_hazard_outcomes() {
         world
             .player(LOCAL_PLAYER_ID)
             .expect("player exists")
-            .artifacts
-            .get(&crate::terrain::ArtifactKind::Fossil),
+            .cargo_bay
+            .get(crate::terrain::ArtifactKind::Fossil),
         Some(&1),
     );
     assert!(output.terrain_ops.iter().any(|op| op.position == target));
@@ -1319,7 +1333,9 @@ fn canonical_movement_applies_rig_and_mechanic_modifiers() {
         world.set_player_movement_modifiers(LOCAL_PLAYER_ID, mechanic_level, parts.iter().copied());
         let player = world.player_mut(LOCAL_PLAYER_ID).expect("player exists");
         player.cargo_capacity = 10;
-        player.cargo.insert(crate::terrain::MineralKind::Copper, 10);
+        player
+            .cargo_bay
+            .insert(crate::terrain::MineralKind::Copper, 10);
         let fuel_before = player.fuel;
         let _step = world.step_authoritative_movement(LOCAL_PLAYER_ID, 1.0, true);
         let player = world.player(LOCAL_PLAYER_ID).expect("player exists");
@@ -1549,7 +1565,7 @@ fn authoritative_world_handles_upgrades_and_story_victory() {
     world
         .player_mut(LOCAL_PLAYER_ID)
         .expect("player exists")
-        .cargo
+        .cargo_bay
         .insert(crate::terrain::MineralKind::Copper, 1);
     assert!(!world.won_game());
     assert_eq!(

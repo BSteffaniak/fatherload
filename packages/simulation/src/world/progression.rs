@@ -191,17 +191,17 @@ impl WorldState {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
         let mineral_payout = player_snapshot
-            .cargo
-            .iter()
+            .cargo_bay
+            .minerals()
             .map(|(mineral, count)| {
-                self.canonical_mineral_market_value(*mineral)
-                    .saturating_mul(*count)
+                self.canonical_mineral_market_value(mineral)
+                    .saturating_mul(count)
             })
             .sum::<u32>();
         let artifact_payout = player_snapshot
-            .artifacts
-            .iter()
-            .map(|(artifact, count)| artifact.value().saturating_mul(*count))
+            .cargo_bay
+            .artifacts()
+            .map(|(artifact, count)| artifact.value().saturating_mul(count))
             .sum::<u32>();
         let payout = mineral_payout.saturating_add(artifact_payout);
         let payout = payout.saturating_add(
@@ -217,8 +217,7 @@ impl WorldState {
         };
         let credits_before = player.credits;
         let cargo_before = player.cargo_used();
-        player.cargo.clear();
-        player.artifacts.clear();
+        player.cargo_bay.clear_ore_and_artifacts();
         player.credits = player.credits.saturating_add(payout);
         self.progression.total_earnings = self.progression.total_earnings.saturating_add(payout);
         record_service_transaction(
@@ -427,11 +426,9 @@ impl WorldState {
         }
         match contract.kind {
             SideContractKind::Cargo | SideContractKind::Rush => match contract.target {
-                TileKind::Ore(mineral) => {
-                    player.cargo.get(&mineral).copied().unwrap_or(0) >= contract.required
-                }
+                TileKind::Ore(mineral) => player.cargo_bay.mineral(mineral) >= contract.required,
                 TileKind::Artifact(artifact) => {
-                    player.artifacts.get(&artifact).copied().unwrap_or(0) >= contract.required
+                    player.cargo_bay.artifact(artifact) >= contract.required
                 }
                 _ => false,
             },
@@ -583,7 +580,8 @@ impl WorldState {
                     .into_iter()
                     .enumerate()
                 {
-                    if let Some(count) = player.cargo.remove(&mineral) {
+                    let count = player.cargo_bay.take_all(mineral);
+                    if count > 0 {
                         payout =
                             payout.saturating_add(low_grade_values[index].saturating_mul(count));
                     }
@@ -653,17 +651,16 @@ impl WorldState {
                 }
             }
             crate::SessionServiceRequest::CraftRecipe { recipe } => {
-                if recipe.cost().iter().any(|(material, required)| {
-                    player.materials.get(material).copied().unwrap_or(0) < *required
-                }) {
+                if recipe
+                    .cost()
+                    .iter()
+                    .any(|(material, required)| player.cargo_bay.material(*material) < *required)
+                {
                     false
                 } else {
                     for (material, required) in recipe.cost() {
-                        if let Some(count) = player.materials.get_mut(material) {
-                            *count = count.saturating_sub(*required);
-                        }
+                        player.cargo_bay.remove(*material, *required);
                     }
-                    player.materials.retain(|_, count| *count > 0);
                     match recipe {
                         crate::RecipeKind::ReinforcedBulkhead => {
                             player.crafted_bulkheads = player.crafted_bulkheads.saturating_add(1);
@@ -715,12 +712,7 @@ impl WorldState {
                         .saturating_sub(recovered.saturating_mul(discount))
                         .min(player.credits);
                     player.credits -= fee;
-                    for (mineral, count) in &site.minerals {
-                        *player.cargo.entry(*mineral).or_default() += *count;
-                    }
-                    for (artifact, count) in &site.artifacts {
-                        *player.artifacts.entry(*artifact).or_default() += *count;
-                    }
+                    player.cargo_bay.merge(&site.items);
                     if launch_drone {
                         #[allow(
                             clippy::cast_possible_truncation,
@@ -745,23 +737,17 @@ impl WorldState {
                 let cost = self.progression.town_development.upgrade_cost(building);
                 let material_gate = self.progression.town_development.level(building) >= 1;
                 let has_material = player
-                    .materials
-                    .get(&StrategicResourceKind::AncientAlloy)
-                    .copied()
-                    .unwrap_or(0)
+                    .cargo_bay
+                    .material(StrategicResourceKind::AncientAlloy)
                     > 0;
                 if player.credits < cost || (material_gate && !has_material) {
                     false
                 } else {
                     player.credits -= cost;
                     if material_gate {
-                        if let Some(count) = player
-                            .materials
-                            .get_mut(&StrategicResourceKind::AncientAlloy)
-                        {
-                            *count = count.saturating_sub(1);
-                        }
-                        player.materials.retain(|_, count| *count > 0);
+                        player
+                            .cargo_bay
+                            .remove(StrategicResourceKind::AncientAlloy, 1);
                     }
                     *self.progression.town_development.level_mut(building) += 1;
                     self.progression.town_development.reputation = self
@@ -802,10 +788,8 @@ impl WorldState {
                 u32::try_from(self.progression.deepest_tile_reached).unwrap_or(0)
             }
             ExpeditionObjectiveKind::DeliverCargo => match expedition.target {
-                TileKind::Ore(mineral) => player.cargo.get(&mineral).copied().unwrap_or(0),
-                TileKind::Artifact(artifact) => {
-                    player.artifacts.get(&artifact).copied().unwrap_or(0)
-                }
+                TileKind::Ore(mineral) => player.cargo_bay.mineral(mineral),
+                TileKind::Artifact(artifact) => player.cargo_bay.artifact(artifact),
                 _ => 0,
             },
             ExpeditionObjectiveKind::BuildPumpStations => u32::try_from(
@@ -817,7 +801,7 @@ impl WorldState {
             .unwrap_or(u32::MAX),
             ExpeditionObjectiveKind::MineVein => player.cargo_used(),
             ExpeditionObjectiveKind::DeliverExplosives => player.bombs,
-            ExpeditionObjectiveKind::RetrieveArtifact => player.artifacts.values().copied().sum(),
+            ExpeditionObjectiveKind::RetrieveArtifact => player.cargo_bay.artifact_total(),
             ExpeditionObjectiveKind::NoDamageReturn => u32::from(player.hull >= player.max_hull()),
             ExpeditionObjectiveKind::FastReturn => {
                 u32::from(self.progression.town_event_day <= expedition.expires_day)

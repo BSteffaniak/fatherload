@@ -153,16 +153,10 @@ pub fn consume_expedition_delivery(expedition: Expedition, player: &mut Player) 
     }
     match expedition.target {
         TileKind::Ore(mineral) => {
-            if let Some(count) = player.cargo.get_mut(&mineral) {
-                *count = count.saturating_sub(expedition.required);
-            }
-            player.cargo.retain(|_, count| *count > 0);
+            player.cargo_bay.remove(mineral, expedition.required);
         }
         TileKind::Artifact(artifact) => {
-            if let Some(count) = player.artifacts.get_mut(&artifact) {
-                *count = count.saturating_sub(expedition.required);
-            }
-            player.artifacts.retain(|_, count| *count > 0);
+            player.cargo_bay.remove(artifact, expedition.required);
         }
         _ => {}
     }
@@ -171,21 +165,11 @@ pub fn consume_expedition_delivery(expedition: Expedition, player: &mut Player) 
 pub fn consume_side_contract_cargo(contract: SideContract, player: &mut Player) {
     match contract.target {
         TileKind::Ore(mineral) => {
-            consume_side_count(&mut player.cargo, &mineral, contract.required);
+            player.cargo_bay.remove(mineral, contract.required);
         }
         TileKind::Artifact(artifact) => {
-            consume_side_count(&mut player.artifacts, &artifact, contract.required);
+            player.cargo_bay.remove(artifact, contract.required);
         }
         _ => {}
-    }
-}
-
-fn consume_side_count<K: Ord>(items: &mut std::collections::BTreeMap<K, u32>, key: &K, count: u32) {
-    let Some(available) = items.get_mut(key) else {
-        return;
-    };
-    *available = available.saturating_sub(count);
-    if *available == 0 {
-        items.remove(key);
     }
 }

@@ -16,7 +16,7 @@ use crate::{
     rng::DeterministicRngState,
     service::PlayerServiceTransaction,
     summary::PlayerSurvivalSnapshot,
-    terrain::{ArtifactKind, MineralKind, Terrain, TilePosition},
+    terrain::{MineralKind, Terrain, TilePosition},
 };
 
 #[cfg(test)]
@@ -164,18 +164,14 @@ pub struct DeepRunState {
 pub struct LostCargoSite {
     pub x: f32,
     pub y: f32,
-    pub minerals: BTreeMap<MineralKind, u32>,
-    pub artifacts: BTreeMap<ArtifactKind, u32>,
+    /// The spilled ore and artifacts.
+    pub items: crate::item::ItemContainer,
 }
 
 impl LostCargoSite {
     #[must_use]
     pub fn count(&self) -> u32 {
-        self.minerals
-            .values()
-            .chain(self.artifacts.values())
-            .copied()
-            .sum()
+        self.items.total()
     }
 }
 

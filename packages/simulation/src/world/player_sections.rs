@@ -4,21 +4,15 @@
 //! |---|---|---|
 //! | [`PlayerRig`]: pose, velocity, fuel, hull | per tick | everyone it is relevant to |
 //! | [`RigBuild`]: the upgrade levels drawn on a rig (hull, radiator, scanner, bulkheads, drill mount) | on-change [`super::SectionKey::RigBuild`] | everyone |
-//! | [`PlayerInventory`]: cargo, credits, other upgrades, kits, debt, insurance, POI journal, quest log | on-change [`super::SectionKey::Loadout`] | the owner only |
+//! | [`PlayerInventory`]: cargo bay, block hopper, credits, other upgrades, kits, debt, insurance, POI journal, quest log | on-change [`super::SectionKey::Loadout`] | the owner only |
 //!
 //! [`split_player`] destructures the whole [`Player`] without `..`, so a new player field fails
 //! to compile until it is assigned to one of the parts.
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    player::Player,
-    poi::PoiJournal,
-    protection::HazardGear,
-    quest::QuestLog,
-    terrain::{ArtifactKind, MineralKind, StrategicResourceKind},
+    item::ItemContainer, player::Player, poi::PoiJournal, protection::HazardGear, quest::QuestLog,
 };
 
 /// The per-tick parts of a [`Player`].
@@ -54,10 +48,10 @@ pub struct RigBuild {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PlayerInventory {
     pub fuel_capacity: f32,
-    pub cargo: BTreeMap<MineralKind, u32>,
-    pub artifacts: BTreeMap<ArtifactKind, u32>,
-    pub materials: BTreeMap<StrategicResourceKind, u32>,
+    pub cargo_bay: ItemContainer,
     pub cargo_capacity: u32,
+    pub block_hopper: ItemContainer,
+    pub block_hopper_capacity: u32,
     pub fuel_tank_level: u8,
     pub cargo_bay_level: u8,
     pub credits: u32,
@@ -93,10 +87,10 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         fuel,
         fuel_capacity,
         hull,
-        cargo,
-        artifacts,
-        materials,
+        cargo_bay,
         cargo_capacity,
+        block_hopper,
+        block_hopper_capacity,
         fuel_tank_level,
         cargo_bay_level,
         credits,
@@ -140,10 +134,10 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         },
         PlayerInventory {
             fuel_capacity,
-            cargo,
-            artifacts,
-            materials,
+            cargo_bay,
             cargo_capacity,
+            block_hopper,
+            block_hopper_capacity,
             fuel_tank_level,
             cargo_bay_level,
             credits,
@@ -187,10 +181,10 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
     } = build;
     let PlayerInventory {
         fuel_capacity,
-        cargo,
-        artifacts,
-        materials,
+        cargo_bay,
         cargo_capacity,
+        block_hopper,
+        block_hopper_capacity,
         fuel_tank_level,
         cargo_bay_level,
         credits,
@@ -219,10 +213,10 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         fuel,
         fuel_capacity,
         hull,
-        cargo,
-        artifacts,
-        materials,
+        cargo_bay,
         cargo_capacity,
+        block_hopper,
+        block_hopper_capacity,
         fuel_tank_level,
         cargo_bay_level,
         credits,

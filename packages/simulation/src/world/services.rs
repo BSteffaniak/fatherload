@@ -336,8 +336,8 @@ mod tests {
         world
             .player_mut(PLAYER)
             .expect("player")
-            .cargo
-            .insert(MineralKind::Gold, 2);
+            .cargo_bay
+            .set(MineralKind::Gold, 2);
         // At the repair garage, not the fuel station or the depot.
         stand_at(&mut world, SurfaceZone::Repair);
         let outcomes = tick_with(
@@ -359,7 +359,7 @@ mod tests {
         let player = world.player(PLAYER).expect("player");
         assert!(player.fuel < 10.5, "no refuel: {}", player.fuel);
         assert_eq!(player.credits, 500);
-        assert_eq!(player.cargo.get(&MineralKind::Gold), Some(&2));
+        assert_eq!(player.cargo_bay.mineral(MineralKind::Gold), 2);
         assert_eq!(player.bombs, 0);
     }
 

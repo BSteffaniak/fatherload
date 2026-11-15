@@ -1,4 +1,4 @@
-//! Readers for older save formats (versions 1-5), migrated to a canonical [`WorldState`].
+//! Readers for older save formats (versions 1-6), migrated to a canonical [`WorldState`].
 //!
 //! * v1: `{ version, game }` — the whole legacy single-player `GameState`.
 //! * v2: `{ version, world: { session, world, game, roster... } }` — legacy game plus persisted
@@ -10,6 +10,10 @@
 //!   `won_game` itself.
 //! * v5: the current envelope and world, but the terrain wrote out every tile ([`FullTerrain`])
 //!   instead of its generation settings plus the tiles that differ from generation.
+//! * v6: the current envelope, world and compact terrain, but each rig carried separate
+//!   `cargo` / `artifacts` / `materials` maps (now one `cargo_bay` item container), lost-cargo
+//!   sites carried `minerals` / `artifacts` maps (now `items`), and gas clouds and falling
+//!   boulders were separate world lists (now entities in the world's entity store).
 //!
 //! Every pre-v6 terrain is read as a [`FullTerrain`] and converted; re-saving writes the compact
 //! form.
@@ -27,6 +31,7 @@ use fatherload_simulation::{
     SideContractKind, SimulationTick, WorldImport, WorldState,
     contract::ContractLog,
     economy::{DeepClaimStatus, TownDevelopment},
+    item::ItemContainer,
     progression::LegendaryBlueprint,
     terrain::{ArtifactKind, FullTerrain, MineralKind, StrategicResourceKind, Terrain, TileKind},
 };
@@ -49,6 +54,13 @@ fn full_terrain<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Terrain, D
     Terrain::try_from(FullTerrain::deserialize(deserializer)?).map_err(D::Error::custom)
 }
 
+/// Reads a rig written before the item model (separate cargo / artifact / material maps).
+fn legacy_player<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Player, D::Error> {
+    let mut value = Value::deserialize(deserializer)?;
+    migrate_player_items(&mut value).map_err(D::Error::custom)?;
+    serde_json::from_value(value).map_err(D::Error::custom)
+}
+
 /// Rewrites a pre-v6 world's full-tile `terrain` in the current compact form, so the rest of
 /// the world deserializes as a current [`WorldState`].
 fn compact_terrain(world: &mut Value) -> Result<(), serde_json::Error> {
@@ -65,6 +77,7 @@ fn compact_terrain(world: &mut Value) -> Result<(), serde_json::Error> {
 pub struct LegacyGame {
     #[serde(deserialize_with = "full_terrain")]
     terrain: Terrain,
+    #[serde(deserialize_with = "legacy_player")]
     player: Player,
     #[serde(default = "legacy_current_game_version")]
     save_version: u32,
@@ -336,9 +349,11 @@ impl PersistentPlayerState {
         player.velocity_x = self.velocity_x;
         player.velocity_y = self.velocity_y;
         player.credits = self.credits;
-        player.cargo.clone_from(&self.cargo);
-        player.artifacts.clone_from(&self.artifacts);
-        player.materials.clone_from(&self.materials);
+        player.cargo_bay = fatherload_simulation::item::ItemContainer::from_legacy_cargo(
+            &self.cargo,
+            &self.artifacts,
+            &self.materials,
+        );
         player.cargo_capacity = self.cargo_capacity;
         player.fuel = self.fuel;
         if self.fuel_capacity > 0.0 {
@@ -523,10 +538,83 @@ impl V5SaveFile {
         let mut world = self.save.world;
         compact_terrain(&mut world)?;
         Ok(WorldSave {
-            world: serde_json::from_value(world)?,
+            world: v6_world(world)?,
             play_seconds: self.save.play_seconds,
         })
     }
+}
+
+/// v6: the current envelope around a world from before the item and entity models.
+#[derive(Debug, Deserialize)]
+pub struct V6SaveFile {
+    save: V4Save,
+}
+
+impl V6SaveFile {
+    pub fn migrate(self) -> Result<WorldSave, serde_json::Error> {
+        Ok(WorldSave {
+            world: v6_world(self.save.world)?,
+            play_seconds: self.save.play_seconds,
+        })
+    }
+}
+
+/// Takes a legacy count map out of a JSON object (missing or null: empty).
+fn take_map<K: serde::de::DeserializeOwned + Ord>(
+    object: &mut serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<BTreeMap<K, u32>, serde_json::Error> {
+    match object.remove(key) {
+        None | Some(Value::Null) => Ok(BTreeMap::new()),
+        Some(value) => serde_json::from_value(value),
+    }
+}
+
+/// Moves a v6 rig's `cargo` / `artifacts` / `materials` maps into its `cargo_bay`.
+fn migrate_player_items(player: &mut Value) -> Result<(), serde_json::Error> {
+    let Some(object) = player.as_object_mut() else {
+        return Ok(());
+    };
+    if object.contains_key("cargo_bay") {
+        return Ok(());
+    }
+    let minerals = take_map::<MineralKind>(object, "cargo")?;
+    let artifacts = take_map::<ArtifactKind>(object, "artifacts")?;
+    let materials = take_map::<StrategicResourceKind>(object, "materials")?;
+    let bay = ItemContainer::from_legacy_cargo(&minerals, &artifacts, &materials);
+    object.insert("cargo_bay".to_owned(), serde_json::to_value(bay)?);
+    Ok(())
+}
+
+/// Reads a world written before the item model (v1-v6 JSON shapes of the current world):
+/// migrates rig cargo maps and lost-cargo sites into item containers, then deserializes.
+fn v6_world(mut world: Value) -> Result<WorldState, serde_json::Error> {
+    if let Some(object) = world.as_object_mut() {
+        if let Some(template) = object.get_mut("player_template") {
+            migrate_player_items(template)?;
+        }
+        if let Some(Value::Object(players)) = object.get_mut("players") {
+            for player in players.values_mut() {
+                migrate_player_items(player)?;
+            }
+        }
+        if let Some(Value::Object(sites)) = object.get_mut("lost_cargo_sites") {
+            for site in sites.values_mut() {
+                let Some(site) = site.as_object_mut() else {
+                    continue;
+                };
+                if site.contains_key("items") {
+                    continue;
+                }
+                let minerals = take_map::<MineralKind>(site, "minerals")?;
+                let artifacts = take_map::<ArtifactKind>(site, "artifacts")?;
+                let items =
+                    ItemContainer::from_legacy_cargo(&minerals, &artifacts, &BTreeMap::new());
+                site.insert("items".to_owned(), serde_json::to_value(items)?);
+            }
+        }
+    }
+    serde_json::from_value(world)
 }
 
 /// Reads a v3/v4 world: lifts `authoritative_summary.won_game` to `won_game` and drops the rest
@@ -541,5 +629,5 @@ fn world_with_summary(mut world: Value) -> Result<WorldState, serde_json::Error>
             .entry("won_game")
             .or_insert(Value::Bool(summary.won_game));
     }
-    serde_json::from_value(world)
+    v6_world(world)
 }

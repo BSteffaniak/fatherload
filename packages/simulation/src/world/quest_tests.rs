@@ -209,7 +209,7 @@ fn quests_are_accepted_and_turned_in_only_at_their_givers_counter() {
     world
         .player_mut(LEAD)
         .expect("rig")
-        .cargo
+        .cargo_bay
         .insert(MineralKind::Iron, 6);
     let events = idle(&mut world, 1);
     assert!(events.contains(&GameplayEventKind::QuestReady {
@@ -226,7 +226,7 @@ fn quests_are_accepted_and_turned_in_only_at_their_givers_counter() {
         }));
     let rig = world.player(LEAD).expect("rig");
     assert_eq!(rig.credits, credits + 170);
-    assert_eq!(rig.cargo.get(&MineralKind::Iron), Some(&1));
+    assert_eq!(rig.cargo_bay.get(MineralKind::Iron), Some(&1));
     assert_eq!(rig.quests.reputation(QuestGiver::Kade), 6);
     assert!(rig.quests.completed.contains(&SCALES));
     assert!(active(&world, LEAD, SCALES).is_none());
@@ -677,7 +677,7 @@ fn split_deliveries_must_land_close_together() {
         world
             .player_mut(player)
             .expect("rig")
-            .cargo
+            .cargo_bay
             .insert(MineralKind::Silver, 2);
     };
     // Crew: both halves at once.
@@ -697,8 +697,8 @@ fn split_deliveries_must_land_close_together() {
         !world
             .player(WING)
             .expect("wing")
-            .cargo
-            .contains_key(&MineralKind::Silver)
+            .cargo_bay
+            .contains(MineralKind::Silver)
     );
 
     // Solo: a half that waits past the window spoils.
@@ -793,11 +793,11 @@ fn deliveries_and_parcels_need_their_items_at_turn_in() {
     world
         .player_mut(LEAD)
         .expect("rig")
-        .cargo
+        .cargo_bay
         .insert(MineralKind::Iron, 5);
     let _ = idle(&mut world, 1);
     // Selling the iron before turning in leaves nothing to hand over.
-    world.player_mut(LEAD).expect("rig").cargo.clear();
+    world.player_mut(LEAD).expect("rig").cargo_bay.clear();
     assert!(!applied(&turn_in(&mut world, LEAD, SCALES)));
 }
 

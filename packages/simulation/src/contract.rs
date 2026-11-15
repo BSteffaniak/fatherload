@@ -100,10 +100,8 @@ impl Contract {
     #[must_use]
     pub fn progress(&self, player: &Player) -> u32 {
         match self.target {
-            ContractTarget::Mineral(mineral) => player.cargo.get(&mineral).copied().unwrap_or(0),
-            ContractTarget::Artifact(artifact) => {
-                player.artifacts.get(&artifact).copied().unwrap_or(0)
-            }
+            ContractTarget::Mineral(mineral) => player.cargo_bay.mineral(mineral),
+            ContractTarget::Artifact(artifact) => player.cargo_bay.artifact(artifact),
         }
     }
 
@@ -115,10 +113,10 @@ impl Contract {
     fn consume(&self, player: &mut Player) {
         match self.target {
             ContractTarget::Mineral(mineral) => {
-                consume_count(&mut player.cargo, &mineral, self.required);
+                player.cargo_bay.remove(mineral, self.required);
             }
             ContractTarget::Artifact(artifact) => {
-                consume_count(&mut player.artifacts, &artifact, self.required);
+                player.cargo_bay.remove(artifact, self.required);
             }
         }
     }
@@ -233,17 +231,6 @@ fn contract_for_index(index: u32) -> Contract {
             1_500,
             true,
         ),
-    }
-}
-
-fn consume_count<K: Ord>(items: &mut std::collections::BTreeMap<K, u32>, key: &K, count: u32) {
-    let Some(available) = items.get_mut(key) else {
-        return;
-    };
-
-    *available = available.saturating_sub(count);
-    if *available == 0 {
-        items.remove(key);
     }
 }
 

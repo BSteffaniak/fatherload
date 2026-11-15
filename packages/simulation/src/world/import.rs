@@ -128,14 +128,17 @@ impl WorldState {
                     LostCargoSite {
                         x,
                         y,
-                        minerals: if import.lost_minerals.is_empty()
+                        items: if import.lost_minerals.is_empty()
                             && import.lost_artifacts.is_empty()
                         {
-                            BTreeMap::from([(MineralKind::Iron, count)])
+                            std::iter::once((MineralKind::Iron.into(), count)).collect()
                         } else {
-                            import.lost_minerals.clone()
+                            crate::item::ItemContainer::from_legacy_cargo(
+                                &import.lost_minerals,
+                                &import.lost_artifacts,
+                                &BTreeMap::new(),
+                            )
                         },
-                        artifacts: import.lost_artifacts.clone(),
                     },
                 )]),
                 _ => BTreeMap::new(),

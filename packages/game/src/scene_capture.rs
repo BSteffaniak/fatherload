@@ -2269,7 +2269,7 @@ fn load_cargo(rig: &mut fatherload_simulation::Player) {
         (MineralKind::Silver, 2),
         (MineralKind::Gold, 1),
     ] {
-        rig.cargo.insert(mineral, count);
+        rig.cargo_bay.insert(mineral, count);
     }
 }
 

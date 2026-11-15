@@ -82,8 +82,7 @@ impl WorldState {
             hash.write_u64(player_id.get());
             hash.write_f32(site.x);
             hash.write_f32(site.y);
-            hash.write_serialized(&site.minerals);
-            hash.write_serialized(&site.artifacts);
+            hash.write_serialized(&site.items);
         }
         for (player_id, count) in &self.rescue_counts {
             if sees_private(*player_id) {

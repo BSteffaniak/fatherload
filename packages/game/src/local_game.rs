@@ -1374,7 +1374,7 @@ mod tests {
     #[test]
     fn selling_cargo_at_the_depot_goes_through_the_runtime() {
         let world = rig_at_building(SurfaceZone::Depot, |rig| {
-            rig.cargo.insert(MineralKind::Gold, 3);
+            rig.cargo_bay.insert(MineralKind::Gold, 3);
             rig.credits = 0;
         });
         let mut game = playing(world, 1, "sell");
@@ -1390,7 +1390,7 @@ mod tests {
         confirm(&mut game);
 
         let rig = player(&game, PLAYER);
-        assert!(rig.cargo.is_empty(), "cargo sold");
+        assert!(rig.cargo_bay.is_empty(), "cargo sold");
         assert!(rig.credits > 0, "credits earned");
         assert!(
             game.shell.seat(0).message.starts_with("Sold cargo for"),
@@ -1874,7 +1874,7 @@ mod tests {
         world
             .player_mut(PLAYER)
             .expect("rig")
-            .cargo
+            .cargo_bay
             .insert(MineralKind::Gold, 3);
         world.player_mut(PLAYER).expect("rig").credits = 0;
         world.player_mut(second).expect("rig").credits = 10_000;
@@ -1907,7 +1907,7 @@ mod tests {
         let credits_two = player(&game, second).credits;
         press_seat(&mut game, 0, confirm_input());
         idle(&mut game, 3);
-        assert!(player(&game, PLAYER).cargo.is_empty());
+        assert!(player(&game, PLAYER).cargo_bay.is_empty());
         assert!(player(&game, PLAYER).credits > 0);
         assert_eq!(player(&game, second).credits, credits_two);
         assert!(

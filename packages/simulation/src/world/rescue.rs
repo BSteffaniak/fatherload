@@ -3,6 +3,7 @@
 use crate::{
     ids::PlayerId,
     infrastructure::InfrastructureKind,
+    item::{ItemContainer, ItemKind},
     rig::RigPartKind,
     service::{PlayerServiceTransaction, PlayerTransactionKind},
     summary::{PlayerScopedCommandOutcome, PlayerSurvivalSnapshot},
@@ -54,32 +55,25 @@ impl WorldState {
             1
         };
         player.credits -= (relayed_fee / fee_divisor).min(player.credits);
-        let before_minerals = player.cargo.clone();
-        let before_artifacts = player.artifacts.clone();
         let protected_cargo = player.insured && player.insurance_tier >= 2;
         let quarter_loss = player.insured || parts.contains(&RigPartKind::ArmoredCargoBay);
         let mut lost_count = 0_u32;
+        // Ore and artifacts spill at the rescue site; materials and other items stay aboard.
+        let mut lost_items = ItemContainer::new();
         if !protected_cargo {
-            for count in player.cargo.values_mut() {
+            player.cargo_bay.update_counts(|kind, count| {
+                if !matches!(kind, ItemKind::Mineral(_) | ItemKind::Artifact(_)) {
+                    return count;
+                }
                 let lost = if quarter_loss {
-                    (*count).div_ceil(4)
+                    count.div_ceil(4)
                 } else {
-                    (*count).div_ceil(2)
+                    count.div_ceil(2)
                 };
-                *count -= lost;
+                lost_items.add(kind, lost);
                 lost_count = lost_count.saturating_add(lost);
-            }
-            for count in player.artifacts.values_mut() {
-                let lost = if quarter_loss {
-                    (*count).div_ceil(4)
-                } else {
-                    (*count).div_ceil(2)
-                };
-                *count -= lost;
-                lost_count = lost_count.saturating_add(lost);
-            }
-            player.cargo.retain(|_, count| *count > 0);
-            player.artifacts.retain(|_, count| *count > 0);
+                count - lost
+            });
         }
         player.insured = false;
         player.x = 12.0 * TILE_SIZE;
@@ -91,28 +85,12 @@ impl WorldState {
         self.active_drills.remove(&player_id);
         self.active_drill_timers.remove(&player_id);
         if lost_count > 0 {
-            let minerals = before_minerals
-                .iter()
-                .filter_map(|(kind, before)| {
-                    let lost = before.saturating_sub(player.cargo.get(kind).copied().unwrap_or(0));
-                    (lost > 0).then_some((*kind, lost))
-                })
-                .collect();
-            let artifacts = before_artifacts
-                .iter()
-                .filter_map(|(kind, before)| {
-                    let lost =
-                        before.saturating_sub(player.artifacts.get(kind).copied().unwrap_or(0));
-                    (lost > 0).then_some((*kind, lost))
-                })
-                .collect();
             self.lost_cargo_sites.insert(
                 player_id,
                 LostCargoSite {
                     x: rescue_x,
                     y: rescue_y,
-                    minerals,
-                    artifacts,
+                    items: lost_items,
                 },
             );
         }
@@ -147,28 +125,13 @@ impl WorldState {
         if dx.mul_add(dx, dy * dy) > (TILE_SIZE * 0.9).powi(2) || capacity == 0 {
             return false;
         }
-        for (kind, count) in &mut site.minerals {
-            let recovered = capacity.min(*count);
-            *player.cargo.entry(*kind).or_default() += recovered;
-            *count -= recovered;
+        // Minerals first, then artifacts (kind order), as long as the bay has room.
+        site.items.update_counts(|kind, count| {
+            let recovered = capacity.min(count);
+            player.cargo_bay.add(kind, recovered);
             capacity -= recovered;
-            if capacity == 0 {
-                break;
-            }
-        }
-        if capacity > 0 {
-            for (kind, count) in &mut site.artifacts {
-                let recovered = capacity.min(*count);
-                *player.artifacts.entry(*kind).or_default() += recovered;
-                *count -= recovered;
-                capacity -= recovered;
-                if capacity == 0 {
-                    break;
-                }
-            }
-        }
-        site.minerals.retain(|_, count| *count > 0);
-        site.artifacts.retain(|_, count| *count > 0);
+            count - recovered
+        });
         if site.count() == 0 {
             self.lost_cargo_sites.remove(&player_id);
         } else {

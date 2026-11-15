@@ -812,41 +812,41 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             SectionItem::icon_stat(&icons::BOMB, "Bombs", ui.player.bombs.to_string(), ORANGE),
         ],
     ));
-    let mineral_items = if ui.player.cargo.is_empty() {
-        vec![SectionItem::text("No minerals onboard.")]
-    } else {
+    let mineral_items = if ui.player.cargo_bay.has_minerals() {
         ui.player
-            .cargo
-            .iter()
+            .cargo_bay
+            .minerals()
             .map(|(mineral, quantity)| {
-                let value = ui.snapshot.market_value(*mineral).saturating_mul(*quantity);
+                let value = ui.snapshot.market_value(mineral).saturating_mul(quantity);
                 SectionItem::icon_stat(
-                    icons::mineral(*mineral),
+                    icons::mineral(mineral),
                     format!("{} x{quantity}", mineral.name()),
                     format!("est. {value} cr"),
                     GOLD,
                 )
             })
             .collect()
+    } else {
+        vec![SectionItem::text("No minerals onboard.")]
     };
     sections.push(Section::new("Minerals", BONE, mineral_items));
-    let artifact_items = if ui.player.artifacts.is_empty() {
-        vec![SectionItem::text("No artifacts onboard.")]
-    } else {
+    let artifact_items = if ui.player.cargo_bay.has_artifacts() {
         ui.player
-            .artifacts
-            .iter()
+            .cargo_bay
+            .artifacts()
             .map(|(artifact, quantity)| {
                 SectionItem::stat(
                     artifact.name(),
                     format!(
                         "x{quantity} | base {} cr",
-                        artifact.value().saturating_mul(*quantity)
+                        artifact.value().saturating_mul(quantity)
                     ),
                     PINK,
                 )
             })
             .collect()
+    } else {
+        vec![SectionItem::text("No artifacts onboard.")]
     };
     sections.push(Section::new("Artifacts", PINK, artifact_items));
     sections.push(Section::new(

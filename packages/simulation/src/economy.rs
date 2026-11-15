@@ -326,19 +326,18 @@ pub fn repair(player: &mut Player) -> u32 {
 #[cfg(test)]
 pub fn sell_cargo(player: &mut Player) -> u32 {
     let mineral_payout: u32 = player
-        .cargo
-        .iter()
+        .cargo_bay
+        .minerals()
         .map(|(mineral, count)| mineral.value() * count)
         .sum();
     let artifact_payout: u32 = player
-        .artifacts
-        .iter()
+        .cargo_bay
+        .artifacts()
         .map(|(artifact, count)| artifact.value() * count)
         .sum();
     let payout = mineral_payout + artifact_payout;
     player.credits += payout;
-    player.cargo.clear();
-    player.artifacts.clear();
+    player.cargo_bay.clear_ore_and_artifacts();
     payout
 }
 

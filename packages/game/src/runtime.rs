@@ -951,7 +951,7 @@ mod tests {
         world
             .player_mut(RIG)
             .expect("rig")
-            .cargo
+            .cargo_bay
             .insert(fatherload_simulation::terrain::MineralKind::Gold, 1);
         let mut runtime = Runtime::local(world, 1);
         let seat = runtime.local_seats()[0].seat;
@@ -975,7 +975,7 @@ mod tests {
             .collect();
         assert_eq!(resolved, [false], "the sale resolves exactly once, refused");
         assert_eq!(
-            runtime.world().player(RIG).map(|rig| rig.cargo.len()),
+            runtime.world().player(RIG).map(|rig| rig.cargo_bay.kinds()),
             Some(1),
             "nothing was sold"
         );

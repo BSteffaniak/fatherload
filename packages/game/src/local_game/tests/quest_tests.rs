@@ -45,7 +45,7 @@ fn row_of(game: &LocalGame, player: PlayerId, giver: QuestGiver, quest: QuestId)
 #[test]
 fn a_solo_pilot_takes_finishes_and_turns_in_a_job_at_the_counter_tab() {
     let world = rig_at_building(SurfaceZone::Depot, |rig| {
-        rig.cargo.insert(MineralKind::Iron, 6);
+        rig.cargo_bay.insert(MineralKind::Iron, 6);
     });
     let mut game = playing(world, 1, "quest-solo");
     idle(&mut game, 5);
@@ -104,12 +104,12 @@ fn a_two_seat_crew_splits_a_delivery_and_both_get_paid() {
             &fatherload_simulation::worldgen::WorldSettings::default(),
             30,
         );
-        lead.cargo.insert(MineralKind::Silver, 2);
+        lead.cargo_bay.insert(MineralKind::Silver, 2);
     }
     world
         .player_mut(second)
         .expect("wing")
-        .cargo
+        .cargo_bay
         .insert(MineralKind::Silver, 2);
     let mut game = playing(world, 2, "quest-crew");
     idle(&mut game, 5);
@@ -314,7 +314,7 @@ fn a_save_made_mid_quest_loads_and_the_job_carries_on() {
     world
         .player_mut(PLAYER)
         .expect("rig")
-        .cargo
+        .cargo_bay
         .insert(MineralKind::Iron, 5);
     let mut game = playing(world, 1, "quest-save-loaded");
     idle(&mut game, 5);

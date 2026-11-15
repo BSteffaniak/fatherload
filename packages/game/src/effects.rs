@@ -295,12 +295,7 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
 
 /// Everything in a rig's bay: ore, artifacts and materials.
 fn cargo_total(player: &fatherload_simulation::Player) -> u32 {
-    player
-        .cargo
-        .values()
-        .chain(player.artifacts.values())
-        .chain(player.materials.values())
-        .sum()
+    player.cargo_bay.total()
 }
 
 #[cfg(test)]
@@ -434,10 +429,9 @@ mod tests {
         )];
         assert!(effects.apply(&changed, &world, &[local]).is_empty());
         if let Some(player) = world.player_mut(local) {
-            *player
-                .cargo
-                .entry(fatherload_simulation::terrain::MineralKind::Copper)
-                .or_default() += 1;
+            player
+                .cargo_bay
+                .add(fatherload_simulation::terrain::MineralKind::Copper, 1);
         }
         assert_eq!(
             effects.apply(&changed, &world, &[local]),

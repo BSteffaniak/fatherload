@@ -787,14 +787,14 @@ fn material_list(cost: &[(fatherload_simulation::terrain::StrategicResourceKind,
 }
 
 pub(super) fn draw_crafting(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    let materials = &ui.player.materials;
+    let bay = &ui.player.cargo_bay;
     let offers = RecipeKind::ALL
         .into_iter()
         .map(|recipe| {
             let can_craft = recipe
                 .cost()
                 .iter()
-                .all(|(material, needed)| materials.get(material).copied().unwrap_or(0) >= *needed);
+                .all(|(material, needed)| bay.material(*material) >= *needed);
             Offer::new(
                 &menu_icons::ANVIL,
                 recipe.name(),
@@ -808,13 +808,12 @@ pub(super) fn draw_crafting(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_
             .about(recipe.description())
         })
         .collect();
-    let status = if materials.is_empty() {
+    let status = if bay.materials().next().is_none() {
         vec![SectionItem::text(
             "No strategic materials yet. Process ore or find relics deep down.",
         )]
     } else {
-        materials
-            .iter()
+        bay.materials()
             .map(|(material, count)| SectionItem::stat(material.name(), count.to_string(), MINT))
             .collect()
     };
@@ -833,10 +832,8 @@ pub(super) fn draw_town_development(draw: &mut RaylibDrawHandle<'_>, ui: &UiFram
     let town = &ui.snapshot.progression.town_development;
     let alloy = ui
         .player
-        .materials
-        .get(&fatherload_simulation::terrain::StrategicResourceKind::AncientAlloy)
-        .copied()
-        .unwrap_or(0);
+        .cargo_bay
+        .material(fatherload_simulation::terrain::StrategicResourceKind::AncientAlloy);
     let offers = TownBuilding::ALL
         .into_iter()
         .map(|building| {
@@ -926,21 +923,21 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     let contract = &progression.contracts.active;
     let (line, done) = contract_line(ui);
     let cargo_value: u32 = player
-        .cargo
-        .iter()
-        .map(|(mineral, count)| ui.snapshot.market_value(*mineral).saturating_mul(*count))
+        .cargo_bay
+        .minerals()
+        .map(|(mineral, count)| ui.snapshot.market_value(mineral).saturating_mul(count))
         .sum::<u32>()
         + player
-            .artifacts
-            .iter()
-            .map(|(artifact, count)| artifact.value().saturating_mul(*count))
+            .cargo_bay
+            .artifacts()
+            .map(|(artifact, count)| artifact.value().saturating_mul(count))
             .sum::<u32>();
     let low_grade: u32 = [MineralKind::Copper, MineralKind::Iron]
         .into_iter()
         .map(|mineral| {
             ui.snapshot
                 .market_value(mineral)
-                .saturating_mul(player.cargo.get(&mineral).copied().unwrap_or(0))
+                .saturating_mul(player.cargo_bay.mineral(mineral))
         })
         .sum();
     let lab = progression.town_development.scanner_lab_level;
@@ -1013,27 +1010,27 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
 /// The hold's minerals and artifacts at today's prices.
 fn cargo_items(ui: &UiFrame<'_, '_>) -> Vec<SectionItem> {
     let player = ui.player;
-    if player.cargo_used() == 0 && player.artifacts.is_empty() {
+    if player.cargo_used() == 0 && !player.cargo_bay.has_artifacts() {
         vec![SectionItem::text("Cargo hold empty.")]
     } else {
         player
-            .cargo
-            .iter()
+            .cargo_bay
+            .minerals()
             .map(|(mineral, count)| {
                 SectionItem::icon_stat(
-                    icons::mineral(*mineral),
+                    icons::mineral(mineral),
                     format!("{} x{count}", mineral.name()),
                     format!(
                         "{} cr",
-                        ui.snapshot.market_value(*mineral).saturating_mul(*count)
+                        ui.snapshot.market_value(mineral).saturating_mul(count)
                     ),
                     GOLD,
                 )
             })
-            .chain(player.artifacts.iter().map(|(artifact, count)| {
+            .chain(player.cargo_bay.artifacts().map(|(artifact, count)| {
                 SectionItem::stat(
                     format!("{} x{count}", artifact.name()),
-                    format!("{} cr", artifact.value().saturating_mul(*count)),
+                    format!("{} cr", artifact.value().saturating_mul(count)),
                     PINK,
                 )
             }))

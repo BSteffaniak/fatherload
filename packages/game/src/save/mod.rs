@@ -1,10 +1,12 @@
 //! Settings and world saves.
 //!
-//! A save is the host's [`WorldState`] plus a little session metadata (format version 6). The
+//! A save is the host's [`WorldState`] plus a little session metadata (format version 7). The
 //! world's terrain is stored compactly: its generation settings (seed, size, richness, hazards,
 //! generator version), a digest and only the tiles that differ from freshly generated terrain;
-//! loading regenerates the rest and checks the digest. Older formats (1-5, which wrote out every
-//! tile) are migrated on load by [`legacy`]. Loading always hands the runtime a fresh world, which
+//! loading regenerates the rest and checks the digest. Rigs carry their goods in item containers
+//! (cargo bay, block hopper) and live world objects such as gas clouds and falling boulders are
+//! entities in the world's entity store. Older formats (1-5, which wrote out every tile, and 6,
+//! from before the item and entity models) are migrated on load by [`legacy`]. Loading always hands the runtime a fresh world, which
 //! starts a new session epoch.
 
 mod legacy;
@@ -29,7 +31,7 @@ const SETTINGS_FILE_NAME: &str = "settings.json";
 const SAVE_FILE_NAME: &str = "save.json";
 const SAVE_SLOTS: usize = 3;
 /// Current save format.
-pub const SAVE_VERSION: u32 = 6;
+pub const SAVE_VERSION: u32 = 7;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -284,12 +286,15 @@ fn parse_save(json: &str) -> Result<WorldSave, SaveError> {
 
 fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
     let probe: VersionProbe = serde_json::from_str(json).map_err(SaveError::Serialize)?;
-    if matches!(probe.version, 5 | SAVE_VERSION) {
+    if matches!(probe.version, 5 | 6 | SAVE_VERSION) {
         check_generator(json)?;
     }
     match probe.version {
         SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
+            .map_err(SaveError::Serialize),
+        6 => serde_json::from_str::<legacy::V6SaveFile>(json)
+            .and_then(legacy::V6SaveFile::migrate)
             .map_err(SaveError::Serialize),
         5 => serde_json::from_str::<legacy::V5SaveFile>(json)
             .and_then(legacy::V5SaveFile::migrate)
@@ -488,7 +493,7 @@ mod tests {
     fn version_one_game_state_migrates_to_a_world() {
         let save = parse_save(V1).expect("v1 migrates");
         assert_eq!(player(&save).credits, 1234);
-        assert_eq!(player(&save).cargo.get(&MineralKind::Gold), Some(&3));
+        assert_eq!(player(&save).cargo_bay.get(MineralKind::Gold), Some(&3));
         assert_eq!(player(&save).bombs, 2);
         assert!((save.play_seconds - 321.0).abs() < f32::EPSILON);
         assert_eq!(save.world.progression().total_earnings, 900);
@@ -776,7 +781,7 @@ mod tests {
         let written = fs::read_to_string(&path).expect("read back");
         let _ignored = fs::remove_file(&path);
         let probe: VersionProbe = serde_json::from_str(&written).expect("probe");
-        assert_eq!(probe.version, 6);
+        assert_eq!(probe.version, SAVE_VERSION);
         assert!(written.len() * 5 < v5.len(), "v6 is much smaller than v5");
         let reloaded = parse_save(&written).expect("re-saved v6 loads");
         assert_eq!(

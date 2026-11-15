@@ -3,11 +3,10 @@
     reason = "player world positions intentionally convert to terrain tile coordinates"
 )]
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    item::{ItemContainer, ItemKind, Stowage},
     poi::PoiJournal,
     protection::HazardGear,
     quest::QuestLog,
@@ -23,11 +22,17 @@ pub struct Player {
     pub fuel: f32,
     pub fuel_capacity: f32,
     pub hull: f32,
-    pub cargo: BTreeMap<MineralKind, u32>,
-    pub artifacts: BTreeMap<ArtifactKind, u32>,
+    /// The cargo bay: minerals, artifacts, strategic materials and any other bay-stowed items
+    /// ([`crate::item`]). Its capacity is [`Self::cargo_capacity`] slots.
     #[serde(default)]
-    pub materials: BTreeMap<StrategicResourceKind, u32>,
+    pub cargo_bay: ItemContainer,
     pub cargo_capacity: u32,
+    /// Building blocks, kept apart from the cargo bay so plain blocks never crowd out ore.
+    #[serde(default)]
+    pub block_hopper: ItemContainer,
+    /// Block hopper capacity, in blocks.
+    #[serde(default = "default_block_hopper_capacity")]
+    pub block_hopper_capacity: u32,
     pub fuel_tank_level: u8,
     pub cargo_bay_level: u8,
     pub credits: u32,
@@ -92,10 +97,10 @@ impl Player {
             fuel: 100.0,
             fuel_capacity: 100.0,
             hull: 100.0,
-            cargo: BTreeMap::new(),
-            artifacts: BTreeMap::new(),
-            materials: BTreeMap::new(),
+            cargo_bay: ItemContainer::new(),
             cargo_capacity: 12,
+            block_hopper: ItemContainer::new(),
+            block_hopper_capacity: BLOCK_HOPPER_BASE_CAPACITY,
             fuel_tank_level: 1,
             cargo_bay_level: 1,
             credits: 0,
@@ -145,7 +150,7 @@ impl Player {
 
     #[must_use]
     pub fn cargo_used(&self) -> u32 {
-        self.cargo.values().sum::<u32>() + self.artifacts.values().sum::<u32>()
+        self.cargo_bay.slots_used()
     }
 
     #[must_use]
@@ -163,12 +168,12 @@ impl Player {
             return false;
         }
 
-        *self.cargo.entry(mineral).or_default() += 1;
+        self.cargo_bay.add(mineral, 1);
         true
     }
 
     pub fn add_material(&mut self, material: StrategicResourceKind, count: u32) {
-        *self.materials.entry(material).or_default() += count;
+        self.cargo_bay.add(material, count);
     }
 
     pub fn add_artifact(&mut self, artifact: ArtifactKind) -> bool {
@@ -176,9 +181,59 @@ impl Player {
             return false;
         }
 
-        *self.artifacts.entry(artifact).or_default() += 1;
+        self.cargo_bay.add(artifact, 1);
         true
     }
+
+    /// The container `kind` is stowed in.
+    #[must_use]
+    pub const fn container(&self, kind: ItemKind) -> &ItemContainer {
+        match kind.stowage() {
+            Stowage::CargoBay => &self.cargo_bay,
+            Stowage::BlockHopper => &self.block_hopper,
+        }
+    }
+
+    /// Capacity, in slots, of the container `kind` is stowed in.
+    #[must_use]
+    pub const fn container_capacity(&self, kind: ItemKind) -> u32 {
+        match kind.stowage() {
+            Stowage::CargoBay => self.cargo_capacity,
+            Stowage::BlockHopper => self.block_hopper_capacity,
+        }
+    }
+
+    /// How many of `count` units of `kind` would fit right now.
+    #[must_use]
+    pub fn room_for(&self, kind: ItemKind, count: u32) -> u32 {
+        self.container(kind)
+            .accepts(kind, count, self.container_capacity(kind))
+    }
+
+    /// Stows as many of `count` units of `kind` as fit in its container (cargo bay or block
+    /// hopper) and returns how many were taken; the rest stays wherever it came from (a drop
+    /// left floating when the bay is full).
+    pub fn stow(&mut self, kind: ItemKind, count: u32) -> u32 {
+        let accepted = self.room_for(kind, count);
+        match kind.stowage() {
+            Stowage::CargoBay => self.cargo_bay.add(kind, accepted),
+            Stowage::BlockHopper => self.block_hopper.add(kind, accepted),
+        }
+        accepted
+    }
+
+    /// Units of `kind` carried (in whichever container it is stowed in).
+    #[must_use]
+    pub fn carried(&self, kind: ItemKind) -> u32 {
+        self.container(kind).count(kind)
+    }
+}
+
+/// Block hopper capacity of a stock rig, in blocks.
+pub const BLOCK_HOPPER_BASE_CAPACITY: u32 = 60;
+
+const fn default_block_hopper_capacity() -> u32 {
+    BLOCK_HOPPER_BASE_CAPACITY
 }
 
 impl Player {
