@@ -14,7 +14,7 @@
 //! - [`upgrade_preview`]: the next tier of a line for a player (the shop showcase).
 //! - [`preview_between`]: any two levels of a line (the purchase moment compares the tier just
 //!   bought with the one before).
-//! - The measurements: [`dig_seconds`], [`thrust_seconds`], [`climb_speed_tiles`],
+//! - The measurements: [`dig_seconds`], [`dig_speed_multiplier`], [`thrust_seconds`], [`climb_speed_tiles`],
 //!   [`climb_ceiling_tiles`], [`cooled_band`].
 
 use crate::{
@@ -133,14 +133,27 @@ const DRILL_LADDER: [(TileKind, &str); 4] = [
 /// down, or `None` if the tile is too hard for it.
 #[must_use]
 pub fn dig_seconds(kind: TileKind, drill_level: u8) -> Option<f32> {
-    if tile_hardness(kind) > drill_level {
-        return None;
-    }
+    (tile_hardness(kind) <= drill_level).then(|| chip_through_seconds(kind, drill_level))
+}
+
+/// [`dig_seconds`] without the hardness check: how long the drill's chips (speed, chip-rate
+/// floor and bite) take to wear a fresh `kind` tile away.
+fn chip_through_seconds(kind: TileKind, drill_level: u8) -> f32 {
     let per_chip = (base_drill_seconds_per_chip(kind) / drill_speed(drill_level))
         .max(MIN_DRILL_SECONDS_PER_CHIP);
     let bite = drill_bite(drill_level).max(1);
     let chips = tile_durability(kind).max(1).div_ceil(bite);
-    Some(per_chip * f32::from(chips))
+    per_chip * f32::from(chips)
+}
+
+/// The drill's measured dig speed as a multiple of a stock drill's (the shop's "Dig speed" bar).
+///
+/// It is how much faster its chips wear through a hard rock tile: speed, the chip-rate floor and
+/// bite all count, so tiers that change nothing on rock show no gain.
+#[must_use]
+pub fn dig_speed_multiplier(drill_level: u8) -> f32 {
+    chip_through_seconds(TileKind::HardRock, 1)
+        / chip_through_seconds(TileKind::HardRock, drill_level)
 }
 
 /// Seconds of continuous thrust a full tank at `fuel_tank_level` gives.
@@ -217,7 +230,7 @@ pub fn preview_between(
     let mut changes = Vec::new();
     match kind {
         UpgradeKind::Drill => {
-            let rate = |level: u8| drill_speed(level) * f32::from(drill_bite(level));
+            let rate = dig_speed_multiplier;
             bars.push(bar("Dig speed", rate(from), rate(to), rate(top), "x", 1));
             let hardness = |level: u8| f32::from(level.min(MAX_ROCK_HARDNESS));
             bars.push(bar(
@@ -640,6 +653,24 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_dig_speed_bar_is_the_measured_rock_speed_up() {
+        assert!((dig_speed_multiplier(1) - 1.0).abs() < 1e-6);
+        for level in 1..15 {
+            let (now, next) = (dig_speed_multiplier(level), dig_speed_multiplier(level + 1));
+            assert!(next >= now, "tier {level}");
+            // Tiers that dig hard rock show exactly its dig-time ratio.
+            if let (Some(a), Some(b)) = (
+                dig_seconds(TileKind::HardRock, level),
+                dig_seconds(TileKind::HardRock, level + 1),
+            ) {
+                assert!((next / now - a / b).abs() < 1e-4, "tier {level}");
+            }
+        }
+        // Past the chip-rate floor a tier that adds no bite adds no speed: the bar stays put.
+        assert!((dig_speed_multiplier(11) - dig_speed_multiplier(10)).abs() < 1e-6);
     }
 
     #[test]
