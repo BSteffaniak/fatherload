@@ -91,6 +91,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `discovery` | `DiscoveredTiles` (16x16 chunk bitsets; positions in JSON saves, bitsets in binary keyframes), clamped allocation-free reveals, `Discovery` op-log entries |
 | `player_sections` | how a `Player` splits into per-tick `PlayerRig`, public `RigBuild` (visible tiers and cosmetics) and private `PlayerInventory` |
 | `bases` | base building (WP-BASE): `check_build` / `apply_build_command` for every `BuildCommand`, fuel station synthesis, lift ladders, rescue home points (see Base building below) |
+| `pilot` | the pilot on foot (Part II F5): exit and board, the pilot pass (movement with the owner's controls, air, lava, regeneration, the hand pick), throws, pickups into the pack, damage, strikes and blasts, death and respawn, parking, gear, crawlways (see [The pilot on foot](#the-pilot-on-foot-srcpilotrs-srcworldpilotrs)) |
 | `garage` | the paint bay service (`SessionServiceRequest::CustomizeRig`, validated against the player's cosmetic unlocks; free) and `rig_cosmetics` |
 | `replication` | per-tick state, live entities, op log and on-change sections (`SectionKey` / `SectionPayload`) |
 | `visibility` | what one client may see: `SectionKey::visible_to`, `redacted_for`, `visible_state_hash` |
@@ -981,11 +982,86 @@ ClockState::offset_millis`, so it is deterministic, tick-rate safe and replicate
   underside (`sky_lands`) takes over from the continents up.
 - **Scenario setup.** `set_world_time_millis` (tests and screenshot scenes).
 - **Formats.** `PROTOCOL_VERSION` 11 and save format 9 (version 8 saves load as is) cover the
-  clock; the integrator may collapse these bumps with the other wave 3 tracks'.
+  clock, shared with the other wave 3 tracks (one bump each for the whole wave).
 
 `world/clock_tests.rs` covers determinism, tick-rate safety, each boundary's event, beds being
 for the night, sleeping alone, the crew vote and the host's rule, getting up, departing players,
 light levels, saves (including version 8 files), replication and hashes.
+
+## The pilot on foot (`src/pilot.rs`, `src/world/pilot.rs`)
+
+Expansion plan Part II F5. A player who climbs out of the rig becomes a pilot: an
+[`EntityKind::Pilot`] entity owned by the player ([`pilot::PilotState`]; it replicates, saves,
+hashes and is relevance-filtered like every entity). There is at most one per player, and the
+entity is the single source of truth for "on foot" (`WorldState::pilot_of`, `is_on_foot`,
+`pilots`).
+
+- **Exit / board** (`PlayerCommand::TogglePilot`, predicted on clients): a rig slower than
+  `EXIT_MAX_SPEED` lets its pilot out beside it (`can_exit_rig`); a pilot within `BOARD_REACH`
+  of its rig boards it (`can_board_rig`), and the personal pack empties into the rig (what fits).
+  Events `PilotExited`, `PilotBoarded { transferred }`. The parked rig keeps its cargo, gets
+  neutral controls (no thrust, drill or weapon), is still hurt by enemies, hazards and blasts,
+  and its roof is a one-way platform for its own pilot.
+- **Controls**: while on foot the player's held `ControlState` drives the pilot in its own pass
+  right after the inputs (`advance_pilots`): `horizontal` walks (a held direction breaks into a
+  run after `RUN_AFTER_SECONDS`), `thrust` (up) climbs ladders / ropes and jumps elsewhere,
+  `drill_down` crouches, crawls and climbs down, the new `ControlState::jump` jumps (held in
+  the air: the jetpack), and `weapon.fire` swings the hand pick along `weapon.aim` (down while
+  crouching, up while holding up, else the facing). Bomb commands throw from the pilot's hands
+  (`pilot_throw`, a little loft on level throws, `THROW_COOLDOWN_SECONDS`); the scanner and
+  infrastructure kits are rig-only.
+- **The body** (`pilot::step_pilot`, pure, over the `PilotTerrain` trait): a 25 x 50 px hitbox
+  (28 px crouched) with the feet at `Body (x, y)`; integrated in fixed 240 Hz steps, so 30, 60,
+  120 and 240 Hz sessions trace the same path. Coyote time, jump buffering, variable jump
+  height, ladders / ropes / lift ladders (`Fixture::Ladder`, the new `Fixture::Rope`), ledge
+  grabs and pull-ups, swimming in cave water, the jetpack (`PilotGear::jetpack` tiers of 1.5 s,
+  recharging only on the ground), and landing speed for fall damage (`fall_damage`: a fall of
+  about five tiles is free, twelve kill an unarmoured pilot).
+- **Survival**: health and air from the suit (`PilotGear::max_health`, `max_oxygen`); air
+  drains under water, in gas clouds and beside gas pockets, and above `THIN_AIR_ROW`
+  (`WorldState::pilot_air_at` is the seam for F6 air density and the Moon's vacuum), and
+  suffocation hurts. Lava burns; health regenerates after `REGEN_AFTER_SECONDS` unhurt.
+  Damage: `WorldState::damage_pilot` (also reached from `damage_entity`; pilots report no
+  `health()`, so weapons and auto-aim never find crewmates), `strike_pilot` for enemies (safe
+  zones, strike guard, knockback, difficulty scaling), blasts (`pilots_feel_blasts`, own bombs
+  included). Events `PilotHurt`, `PilotLanded { hard }`, `PilotOxygenLow { empty }`,
+  `PilotSplashed`, `PilotLedgeGrab`, `PilotJumped`, `JetpackIgnited`, `JetpackEmpty`.
+- **Death**: at zero health the pilot drops half of its first three pack stacks as drops and
+  respawns in the rig, or (rig wrecked) on foot at the player's home point (`PilotDied`).
+- **Hand pick**: chips only soft dirt-like tiles (`pick_seconds`: dirt, sand, snow, mud 0.9 s;
+  clay 1.6 s) within `PICK_REACH`; a broken tile drops through the drop system
+  (`spawn_tile_drop`); anything harder clinks (`PickStruck { broke }`, `PickClinked`).
+  `WorldState::pick_target` tells the renderer which tile.
+- **Pack**: `Player::pilot_pack` (private loadout, capacity `PilotGear::pack_capacity`);
+  pilots collect drops they touch into it (`advance_pilot_pickups`, no magnet), and
+  `PlayerCommand::PilotPack { item, count, to_rig }` swaps stacks by hand (in the rig or beside
+  it; `PackTransferred`).
+- **Gear**: `Player::pilot_gear` (private), bought with `SessionServiceRequest::BuyPilotGear` on
+  the Explosives Shack's rack (`PilotGearKind::price`); a pilot already out is refitted.
+- **Enemies** perceive pilots as prey (seen, never heard: only drilling rigs are heard), chase
+  whichever of a player's bodies is nearer, and bite or shoot pilots they touch.
+- **Counters and buildings** use the actor: `actor_position` / `actor_tile` (the pilot's
+  middle on foot, else the rig) drive `player_surface_zone`, `player_village_building`,
+  `check_build` (build mode and module menus reach from the pilot) and the netcode pose
+  (relevance, smoothing; the on-foot pose mode is one constant).
+- **Pilot-only spaces**: `BuiltTile::VentGrate` (code 7) is solid to rigs, drops, charges and
+  enemies but pilots pass it (`pilot::pilot_passable`); `WorldState::carve_crawlway` cuts a
+  1-tile-high tunnel capped by grates. Content is tagged with `poi::SpaceAccess`
+  (`RequiresPilot`, `RequiresRig`, `Both`): `PoiKind::access`, `CaveKind::access` (chasms are
+  rig-only), `BuiltTile::access`, `poi::CRAWLWAY_ACCESS`.
+- **Persistence**: parking a player on foot parks the pilot too (`ParkedPlayer::pilot`,
+  restored where it stood unless that spot was filled in); removing a player removes its pilot.
+- **Scenario helpers**: `place_pilot`, `edit_pilot`, `carve_crawlway` (tests and screenshot
+  scenes).
+
+`pilot/tests.rs` covers the body on hand-made grids (walk and run, jump height, short hops,
+coyote time, buffering, 1-tile shafts, crawlways, low ceilings, ladders, ledges, fall damage,
+swimming, the jetpack, tick-rate independence at 30-240 Hz); `world/pilot_tests.rs` covers exit
+and board, controls, the pack, the pick, throws and blasts, oxygen, death drops and respawn,
+falls and strikes, god mode, crawlways, gear, parking, saves (JSON and postcard, identical
+continuation), replication (redacted keyframes, entity deltas, identical prediction) and
+tick-rate independence; the netcode harness bots climb out, jump, pick and board every cycle
+(zero corrections at zero latency, convergence under loss).
 
 ## Wave 2 seams (integration notes)
 
@@ -1032,12 +1108,32 @@ Where the wave 2 tracks meet, for the tracks that build on them:
   lands_touching, land, updrafts_touching, updraft_at}`, the band constants and
   `sky::SkyBand`. Wave 4 fills continents (`SkyLandKind::Continent`) and the Moon with content
   (towns, ores, dungeons) inside their footprints.
-- **T14 (sky rendering)**: draw the Moon backdrop from the ground above `moon_column`; the
+- **T14 (sky rendering)**: wired at integration: `moon_anchor()` follows `moon_column`, so the
+  clock's phased Moon backdrop hangs above the real Moon from the ground; the
   game's `rendering/world/sky_lands.rs` already draws cloud seas, wind and updraft cues and the
   Moon looming from the continents up, and stretches the altitude colour bands over V8's bands
-  (`gradient_y` / `world_y_of_gradient`); the old decorative space moon is skipped on V8 worlds.
-- **Event codes** 110-112 (altitude), `PROTOCOL_VERSION` 11; save format unchanged (an older
+  (`gradient_y` / `world_y_of_gradient`); the backdrop Moon fades out as the looming one fades in.
+- **Event codes** 116-118 (altitude), `PROTOCOL_VERSION` 11; save format unchanged (an older
   build rejects a V8 save by its unknown generator; `HazardGear` fields default).
+
+## Wave 3 seams: the pilot (T15)
+
+- **Clock** (T14): nothing in the pilot reads the clock; a helmet lamp is always on. Night
+  danger, sleep and shop hours can gate on `is_on_foot` / `pilots()`.
+- **Air and gravity** (T16 / F6, WP-MOON): `WorldState::pilot_air_at` is the one place air is
+  decided (thin air is a fixed row today; swap in air density or airless regions there).
+  `pilot::GRAVITY` is a constant: a gravity field multiplies it in `step_once` (and the jump
+  and jetpack constants scale with it).
+- **People** (T17): NPCs can stand in walk-in rooms; `actor_position` is where a talking player
+  is. Quests can require the pilot with `poi::SpaceAccess`.
+- **Rewards** (T18): `PilotGearKind` tiers are purchases like upgrades (`BuyPilotGear`).
+- **Balance** (T19): pilot tuning lives at the top of `pilot.rs` (speeds, jump, fall damage,
+  oxygen, health, pick seconds, pack sizes, gear prices).
+- **Generators** (V8+): `WorldState::carve_crawlway`'s shape (grates at both ends of a 1-tile
+  tunnel) is what a generator stamps for crawlways; V1-V7 output is unchanged.
+- **Formats**: `PROTOCOL_VERSION` 11 (pilot entity, `ControlState::jump`, the new commands,
+  services, events 120-133, pilot gear and pack in the loadout, vent grates, ropes) and save
+  format 9 (version 8 files load unchanged).
 
 ## Replication
 

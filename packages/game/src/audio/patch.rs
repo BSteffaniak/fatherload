@@ -2361,12 +2361,12 @@ fn oxygen_alarm(_rng: &mut Rng) -> Vec<f32> {
 fn jetpack_burst(rng: &mut Rng) -> Vec<f32> {
     let mut out = thump(260.0 * rng.jitter(0.05), 90.0, 0.05, 2.5);
     let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
-    let mut low = Svf::new(FilterMode::LowPass, 900.0, 0.8);
+    let mut low = Svf::new(FilterMode::LowPass, 1_600.0, 0.8);
     let mut hiss = Noise::new(NoiseColor::White, rng.next_u64());
     let mut high = Svf::new(FilterMode::HighPass, 3_500.0, 0.7);
     let roar = render(0.45, |t| {
         let env = segments(t, &[(0.0, 0.0), (0.04, 1.0), (0.25, 0.7), (0.45, 0.0)]);
-        (saturate(low.process(noise.next()) * 3.0, 2.0) * 0.8 + high.process(hiss.next()) * 0.3)
+        (saturate(low.process(noise.next()) * 3.0, 2.0) * 0.7 + high.process(hiss.next()) * 0.5)
             * env
     });
     mix_into(&mut out, &roar, 0.01, 0.8);
@@ -2380,18 +2380,18 @@ fn jetpack_sputter(rng: &mut Rng) -> Vec<f32> {
         let level = 1.0 - f32::from(index) * 0.28;
         let cough = burst(
             rng.next_u64(),
-            NoiseColor::Brown,
-            FilterMode::LowPass,
-            700.0 * rng.jitter(0.15),
-            0.9,
+            NoiseColor::Pink,
+            FilterMode::BandPass,
+            1_300.0 * rng.jitter(0.15),
+            0.8,
             0.06,
         );
         mix_into(&mut out, &cough, f32::from(index) * 0.11, level);
         mix_into(
             &mut out,
-            &thump(200.0, 120.0, 0.04, 2.0),
+            &thump(260.0, 160.0, 0.03, 2.0),
             f32::from(index) * 0.11,
-            level * 0.4,
+            level * 0.2,
         );
     }
     out

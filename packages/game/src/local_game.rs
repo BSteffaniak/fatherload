@@ -1258,6 +1258,7 @@ mod tests {
     mod base_tests;
     mod crew_tests;
     mod garage_tests;
+    mod pilot_tests;
     mod quest_tests;
     mod split_seat_tests;
     mod test_mode_tests;

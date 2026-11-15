@@ -106,13 +106,43 @@ mod tests {
         player.block_hopper.add(BlockKind::Stone, 4);
         player.block_hopper.add(BlockKind::Dirt, 9);
         assert_eq!(
-            hopper_rows(&player),
-            vec![
+            hopper_rows(&player)[..4],
+            [
                 HopperRow::ToggleCollect,
                 HopperRow::DumpAll,
                 HopperRow::Dump(BlockKind::Dirt),
                 HopperRow::Dump(BlockKind::Stone),
             ]
+        );
+        // Then the pilot pack's rows (Part II F5): the rig's blocks could go into the pack.
+        assert_eq!(
+            hopper_rows(&player)[4..],
+            [
+                HopperRow::Pack {
+                    item: ItemKind::Block(BlockKind::Dirt),
+                    to_rig: false,
+                },
+                HopperRow::Pack {
+                    item: ItemKind::Block(BlockKind::Stone),
+                    to_rig: false,
+                },
+            ]
+        );
+        player.pilot_pack.add(BlockKind::Clay, 2);
+        assert_eq!(
+            pack_rows(&player)[0],
+            HopperRow::Pack {
+                item: ItemKind::Block(BlockKind::Clay),
+                to_rig: true,
+            }
+        );
+        assert_eq!(
+            pack_rows(&player)[0].command(&player),
+            PlayerCommand::PilotPack {
+                item: ItemKind::Block(BlockKind::Clay),
+                count: u32::MAX,
+                to_rig: true,
+            }
         );
     }
 }

@@ -211,8 +211,10 @@ struct Rig {
     /// Front arm: the glove's offset from the hanging position (x forward, y up negative).
     front_arm: (i32, i32),
     back_arm: (i32, i32),
-    /// Legs folded (crouch, crawl, tucked jump).
+    /// Legs folded and the body squashed down (crouch, crawl).
     folded: bool,
+    /// Legs tucked up under a full-height body (a jump).
+    tucked: bool,
     /// Extra drop of the upper body while folded.
     fold_drop: i32,
 }
@@ -253,10 +255,9 @@ pub fn paint_pilot(look: &PilotLook, frame: PilotFrame) -> PilotCanvas {
             rig.back_arm = (if stride > 0 { 2 } else { -1 }, -2);
         }
         PilotPose::Jump => {
-            rig.folded = true;
-            rig.fold_drop = 0;
-            rig.front_leg = (1, 2);
-            rig.back_leg = (-1, 1);
+            rig.tucked = true;
+            rig.front_leg = (1, 1);
+            rig.back_leg = (-1, 0);
             rig.front_arm = (1, -6);
         }
         PilotPose::Fall => {
@@ -273,14 +274,14 @@ pub fn paint_pilot(look: &PilotLook, frame: PilotFrame) -> PilotCanvas {
         }
         PilotPose::Crouch => {
             rig.folded = true;
-            rig.fold_drop = 8;
+            rig.fold_drop = 3;
         }
         PilotPose::Crawl => {
             rig.folded = true;
-            rig.fold_drop = 9;
+            rig.fold_drop = 3;
             rig.upper_dx = 3;
             let phase = step(6.0, 2) as i32;
-            rig.front_arm = (2 + phase, 3);
+            rig.front_arm = (2 + phase, 0);
             rig.front_leg = (-phase, 0);
             rig.back_leg = (phase - 1, 0);
         }
@@ -323,11 +324,17 @@ fn paint_body(canvas: &mut PilotCanvas, look: &PilotLook, rig: &Rig, frame: Pilo
     let suit = look.suit;
     let gear = look.gear;
     // Legs and boots.
-    let (leg_top, leg_rows) = if rig.folded { (-4, 3) } else { (-7, 5) };
+    let (leg_top, leg_rows) = if rig.folded || rig.tucked {
+        (-4, 3)
+    } else {
+        (-7, 5)
+    };
     let leg = |canvas: &mut PilotCanvas, x: i32, (dx, lift): (i32, i32), front: bool| {
         let color = if front { suit.body } else { suit.shade };
         let boot = if front { gear.shade } else { gear.deep };
-        if rig.folded {
+        // A tucked leg is a folded one drawn up under the belt.
+        let lift = lift + if rig.tucked { 3 } else { 0 };
+        if rig.folded || rig.tucked {
             // Thigh forward, shin back down: a bent knee.
             canvas.rect(x + dx, leg_top - lift, 3, 2, color);
             canvas.rect(x + dx + 1, leg_top + 2 - lift, 2, 1, color);
@@ -345,45 +352,50 @@ fn paint_body(canvas: &mut PilotCanvas, look: &PilotLook, rig: &Rig, frame: Pilo
     let up_x = rig.upper_dx;
     let up_y = rig.upper_dy + rig.fold_drop;
     let belt = -8 + up_y;
+    // Folded (crouch, crawl, tucked jump) the torso squashes and the helmet tucks down, so a
+    // crouched pilot fits a 1-tile crawlway.
+    let squash = if rig.folded { 4 } else { 0 };
+    let top = -15 + up_y + squash;
+    let rows = 7 - squash;
     // Back arm (behind the pack and torso).
-    let shoulder = (-1 + up_x, -14 + up_y);
+    let shoulder = (-1 + up_x, top + 1);
     paint_arm(canvas, shoulder, rig.back_arm, suit.deep, gear.deep);
     // Pack or jetpack.
     let pack_x = -6 + up_x;
     if look.jetpack {
-        canvas.rect(pack_x, -15 + up_y, 3, 7, STEEL);
-        canvas.rect(pack_x, -15 + up_y, 1, 7, STEEL_LIGHT);
-        canvas.rect(pack_x + 2, -15 + up_y, 1, 7, STEEL_DARK);
-        canvas.rect(pack_x, -16 + up_y, 3, 1, look.trim);
-        canvas.rect(pack_x, -8 + up_y, 1, 2, STEEL_DARK);
-        canvas.rect(pack_x + 2, -8 + up_y, 1, 2, STEEL_DARK);
+        canvas.rect(pack_x, top, 3, rows, STEEL);
+        canvas.rect(pack_x, top, 1, rows, STEEL_LIGHT);
+        canvas.rect(pack_x + 2, top, 1, rows, STEEL_DARK);
+        canvas.rect(pack_x, top - 1, 3, 1, look.trim);
+        canvas.rect(pack_x, belt, 1, 2, STEEL_DARK);
+        canvas.rect(pack_x + 2, belt, 1, 2, STEEL_DARK);
     } else {
-        canvas.rect(pack_x, -15 + up_y, 3, 6, gear.body);
-        canvas.rect(pack_x, -15 + up_y, 3, 1, gear.light);
-        canvas.rect(pack_x, -10 + up_y, 3, 1, gear.shade);
-        canvas.set(pack_x + 1, -13 + up_y, look.trim);
+        canvas.rect(pack_x, top, 3, rows - 1, gear.body);
+        canvas.rect(pack_x, top, 3, 1, gear.light);
+        canvas.rect(pack_x, top + rows - 2, 3, 1, gear.shade);
+        canvas.set(pack_x + 1, top + 2, look.trim);
     }
     // Belt and torso.
     canvas.rect(-3 + up_x, belt, 5, 1, look.trim);
     canvas.set(up_x, belt, GOLD);
-    canvas.rect(-3 + up_x, -15 + up_y, 5, 7, suit.body);
-    canvas.rect(-3 + up_x, -15 + up_y, 1, 7, suit.shade);
-    canvas.rect(1 + up_x, -14 + up_y, 1, 5, suit.light);
-    canvas.rect(-2 + up_x, -15 + up_y, 4, 1, suit.light);
+    canvas.rect(-3 + up_x, top, 5, rows, suit.body);
+    canvas.rect(-3 + up_x, top, 1, rows, suit.shade);
+    canvas.rect(1 + up_x, top + 1, 1, rows - 2, suit.light);
+    canvas.rect(-2 + up_x, top, 4, 1, suit.light);
     // A pack strap across the chest and a chest badge.
-    canvas.set(-2 + up_x, -14 + up_y, gear.shade);
-    canvas.set(-1 + up_x, -13 + up_y, gear.shade);
-    canvas.set(up_x, -12 + up_y, look.trim);
+    canvas.set(-2 + up_x, top + 1, gear.shade);
+    canvas.set(-1 + up_x, top + 2, gear.shade);
+    canvas.set(up_x, top + (rows - 1).min(3), look.trim);
     if look.suit_tier >= 2 {
-        canvas.rect(-3 + up_x, -15 + up_y, 2, 1, look.trim);
-        canvas.set(1 + up_x, -15 + up_y, look.trim);
+        canvas.rect(-3 + up_x, top, 2, 1, look.trim);
+        canvas.set(1 + up_x, top, look.trim);
     }
-    if look.suit_tier >= 3 {
-        canvas.set(-1 + up_x, -11 + up_y, MINT);
+    if look.suit_tier >= 3 && rows >= 6 {
+        canvas.set(-1 + up_x, top + 4, MINT);
     }
     // Helmet with its visor and lamp.
     let hx = up_x;
-    let hy = up_y;
+    let hy = up_y + squash + i32::from(rig.folded);
     canvas.rect(-2 + hx, -16 + hy, 4, 1, STONE_DARK);
     canvas.rect(-2 + hx, -23 + hy, 4, 1, BONE);
     canvas.rect(-3 + hx, -22 + hy, 6, 6, MIST);
@@ -398,12 +410,13 @@ fn paint_body(canvas: &mut PilotCanvas, look: &PilotLook, rig: &Rig, frame: Pilo
     if look.suit_tier >= 1 {
         canvas.rect(-3 + hx, -19 + hy, 1, 1, look.trim);
     }
-    if look.suit_tier >= 3 {
+    if look.suit_tier >= 3 && !rig.folded {
+        // The top suit's antenna (folded down out of the way in a crouch).
         canvas.rect(-2 + hx, -25 + hy, 1, 2, STEEL);
         canvas.set(-2 + hx, -26 + hy, look.trim);
     }
     // Front arm, then the pick in its glove.
-    let front_shoulder = (1 + up_x, -14 + up_y);
+    let front_shoulder = (1 + up_x, top + 1);
     let glove = paint_arm(canvas, front_shoulder, rig.front_arm, suit.body, gear.body);
     if frame.swinging {
         paint_pick(canvas, glove, rig.front_arm.1 < -3);
@@ -533,6 +546,8 @@ mod tests {
                 let height = max_y - min_y + 1;
                 if matches!(pose, PilotPose::Crouch | PilotPose::Crawl) {
                     assert!(height <= 16, "{pose:?} fits a crawlway: {height}");
+                } else if pose == PilotPose::Jump {
+                    assert!((18..=30).contains(&height), "{pose:?}: {height}");
                 } else {
                     assert!((22..=30).contains(&height), "{pose:?}: {height}");
                 }

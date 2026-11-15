@@ -437,9 +437,13 @@ impl Director {
             };
         }
 
-        // Thrust: follows the held throttle, climbing opens it up.
-        let thrusting = seat_input.thrust && playing && fuel > 0.0;
-        if thrusting && !state.thrust_held && state.throttle < 0.25 {
+        // Thrust: follows the held throttle, climbing opens it up. On foot (Part II F5) the
+        // same loop is the jetpack's roar while it burns (its ignition is an event cue).
+        let thrusting = view.pilot.as_ref().map_or_else(
+            || seat_input.thrust && playing && fuel > 0.0,
+            |pilot| pilot.state.jetting && playing,
+        );
+        if thrusting && !state.thrust_held && state.throttle < 0.25 && view.pilot.is_none() {
             let rate = self.rng.jitter(0.04);
             self.play(Patch::ThrustIgnite, 0.45, pan, rate);
         }
@@ -842,13 +846,19 @@ fn listeners(snapshot: &RenderSnapshot<'_>) -> Vec<Listener> {
         .views
         .iter()
         .map(|view| {
-            let (x, y) = snapshot
-                .players
-                .iter()
-                .find(|player| player.player_id == view.player_id)
-                .map_or((view.player.x, view.player.y), |player| {
-                    (player.x, player.y)
-                });
+            // On foot the seat hears from its pilot (Part II F5).
+            let (x, y) = view.pilot.as_ref().map_or_else(
+                || {
+                    snapshot
+                        .players
+                        .iter()
+                        .find(|player| player.player_id == view.player_id)
+                        .map_or((view.player.x, view.player.y), |player| {
+                            (player.x, player.y)
+                        })
+                },
+                crate::render_snapshot::PilotPresentation::middle,
+            );
             let centre = view.viewport.x as f32 + view.viewport.width as f32 * 0.5;
             let pan = if split {
                 ((centre / screen_width) * 2.0 - 1.0) * SEAT_PAN_SPREAD

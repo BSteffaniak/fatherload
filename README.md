@@ -435,6 +435,43 @@ services or only themselves. You hold two claims to start and one more every two
 reached; each extra beacon costs more. Bases save with the world and are shared online (the host
 checks every build action); nothing hostile spawns inside or near a claim.
 
+### On foot
+
+Press `E` (controller `X`, the arrow-keys seat's `Right Ctrl`) with the rig at rest and the
+pilot climbs out (anywhere a building door or base module isn't claiming the button). The rig
+stays parked with its hazard lights blinking and its lamp on; it keeps its cargo, and enemies
+can still go for it. Walk back beside it and press the same button to board: whatever the
+pilot carried goes into the rig.
+
+On foot you are slow vertically and weak at digging, but you fit where the rig can't:
+
+- **Move**: walk with `A` / `D` (hold a direction to break into a run), jump with `Space`
+  (controller `A`; the arrow-keys seat jumps with up). Jumps forgive a late press off a ledge
+  and an early press before landing; let go early for a short hop. Run into a wall you can
+  almost reach and the pilot grabs the ledge: jump or push up to pull up.
+- **Climb**: `W` / `S` climb lift ladders and climbing ropes (a new build piece); jump to let go.
+- **Crouch and crawl**: hold `S` to crouch; crouched you crawl through 1-tile gaps. A
+  **crawlway** behind **vent grates** (a new build piece, solid to rigs, drops and creatures)
+  is a pilot-only space.
+- **Swim** in cave water (jump / up strokes up, down dives).
+- **Hand pick**: hold the fire button (`LMB` / `V`, controller `RT`) to chip soft dirt, sand,
+  snow, mud and clay where you aim (down while crouching): slow, for footholds, not shafts.
+  Every chipped tile drops a block. Rock just clinks.
+- **Explosives**: the bomb button throws the selected charge from the pilot's hands. Stand
+  back: blasts hurt pilots.
+- **Jetpack** (the shack's gear rack, three tiers): hold jump in the air to fly for a few
+  seconds; it only recharges standing on the ground.
+- **Survival**: the pilot has its own health and air (suit tiers raise both and the pack).
+  Air runs out under water, in gas and very high up, then the pilot suffocates; lava burns;
+  long falls hurt (about five tiles is safe). A pilot who goes down drops some of what it
+  carried and wakes up in the rig (at your home point if the rig is wrecked).
+- **Pack**: the pilot picks up loose drops it walks over into a small personal pack; the
+  inventory (`Tab`) has rows to move stacks between the pack and the rig by hand.
+- **Buildings**: on foot, push up at a door to walk straight in; walk out through the door on
+  the left. Rigs still use the door with `E`.
+- The camera, HUD (pilot health, air, jetpack and pack), prompts and controller bindings all
+  switch while you are on foot, in every split-screen seat and online.
+
 ## Controls
 
 - `A` / `D` or left/right arrows: move horizontally and drill sideways while resting on the
@@ -452,7 +489,9 @@ checks every build action); nothing hostile spawns inside or near a claim.
 - `X`: swap the next weapon you own onto the hardpoint
 - `N`: build mode (see Bases): mouse or `W` `A` `S` `D` aim, click / `E` place, right click / `X`
   take down, `R` rotate, `Z` / `Q` or the wheel pick a piece (weapons hold fire while building)
-- `E` / `Enter`: interact with buildings/interior counters, confirm menus, or start game
+- `E` / `Enter`: interact with buildings/interior counters, confirm menus, or start game;
+  with nothing else to use, climb out of the rig (and board it again on foot, see On foot)
+- `Space`: on foot, jump (held in the air: the jetpack)
 - `Backspace` / `Esc`: close menus; `P` pauses/resumes
 - `M`: large mine map with ore, hazard, rescue, and lost-cargo markers
 - `H`: help screen
@@ -479,6 +518,9 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 | Next weapon | tap `L3` (click the left stick; hold it for build mode) | `X` |
 | Drill down | Down on stick / d-pad | `S` |
 | Use building, counter, door | `X` | `E` |
+| Climb out of the rig / board it | `X` (with nothing else to use) | `E` |
+| On foot: jump (jetpack held in the air) / climb / crouch | `A` / stick up, down / stick down | `Space` / `W` `S` / `S` |
+| On foot: hand pick | `RT` (held) | left mouse button / `V` |
 | Confirm in menus / call rescue | `A` | `Enter` |
 | Back / close / leave building | `B` (never pauses or quits) | `Esc` / `Backspace` |
 | Menu navigation (auto-repeats) | Left stick or d-pad | arrows / `W` `S` |
