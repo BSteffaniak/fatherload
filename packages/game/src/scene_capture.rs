@@ -252,9 +252,9 @@ mod base_scenes;
 mod cave_scenes;
 mod drop_scenes;
 mod explosive_scenes;
-mod touch_scenes;
-mod pilot_scenes;
 mod people_scenes;
+mod pilot_scenes;
+mod touch_scenes;
 mod weapon_scenes;
 
 /// One capturable scene.

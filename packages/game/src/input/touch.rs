@@ -186,6 +186,41 @@ pub struct TouchContext {
     pub prompt: bool,
     /// Which infrastructure kits the rig carries, by slot.
     pub kits: [bool; KIT_COUNT],
+    /// Where the pilot is (Part II F5): in the rig or on foot.
+    pub pilot: TouchPilot,
+}
+
+/// Where the first seat's pilot is, as the touch controls see it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TouchPilot {
+    /// In the rig and unable to climb out (moving, or nowhere to stand).
+    #[default]
+    Seated,
+    /// In the rig and able to climb out: the small OUT button shows in the top row.
+    CanExit,
+    /// On foot: the thumb cluster turns into jump, pick and throw.
+    OnFoot,
+    /// On foot beside the rig: the IN button shows too.
+    CanBoard,
+}
+
+impl TouchPilot {
+    /// From the view's flags.
+    #[must_use]
+    pub const fn new(on_foot: bool, can_exit: bool, can_board: bool) -> Self {
+        match (on_foot, can_exit, can_board) {
+            (true, _, true) => Self::CanBoard,
+            (true, _, false) => Self::OnFoot,
+            (false, true, _) => Self::CanExit,
+            (false, false, _) => Self::Seated,
+        }
+    }
+
+    /// The pilot is out of the rig.
+    #[must_use]
+    pub const fn on_foot(self) -> bool {
+        matches!(self, Self::OnFoot | Self::CanBoard)
+    }
 }
 
 impl TouchContext {
@@ -238,6 +273,12 @@ pub enum TouchControl {
     Build,
     /// Hold to thrust (optional; pushing the stick up thrusts too).
     Thrust,
+    /// On foot: hold to jump, and in the air to burn the jetpack.
+    Jump,
+    /// Climb out of the rig (a small top-row button, away from the thumbs).
+    ExitRig,
+    /// On foot beside the rig: climb back in.
+    BoardRig,
     /// The context prompt under the rig.
     Prompt,
     /// Use the counter or door the rig stands at inside a building.
@@ -343,16 +384,10 @@ impl TouchLayout {
         }
         match context.mode {
             TouchMode::Play => {
-                layout.push_top(
-                    screen,
-                    settings.left_handed,
-                    &[
-                        TouchControl::Inventory,
-                        TouchControl::Pause,
-                        TouchControl::Map,
-                    ],
-                );
-                if tools_open {
+                layout.push_top(screen, settings.left_handed, play_top_row(context));
+                if context.pilot.on_foot() {
+                    layout.push_foot(cluster, context);
+                } else if tools_open {
                     // The fan takes the thumb corner over; only its own button stays.
                     layout
                         .controls
@@ -433,6 +468,22 @@ impl TouchLayout {
     #[must_use]
     pub fn stick_radius(&self) -> f32 {
         self.button * STICK_RADIUS
+    }
+
+    /// On foot: the pilot jumps where the rig would fire, swings the pick (or fires) beside
+    /// it, and throws explosives above.
+    fn push_foot(&mut self, cluster: Cluster, context: TouchContext) {
+        let mut push = |control, slot| self.controls.push((control, cluster.place(slot)));
+        push(TouchControl::Jump, PRIMARY);
+        push(TouchControl::Fire, SIDE);
+        push(TouchControl::Bomb, UPPER);
+        push(TouchControl::CycleExplosive, FAR_UPPER);
+        if context.pilot == TouchPilot::CanBoard {
+            push(TouchControl::BoardRig, FAR_SIDE);
+        }
+        if context.charges_out {
+            push(TouchControl::Detonate, DIAGONAL);
+        }
     }
 
     fn push_play(&mut self, cluster: Cluster, settings: TouchSettings, context: TouchContext) {
@@ -828,7 +879,9 @@ impl TouchInput {
                 input.interact = true;
                 input.confirm = true;
             }
-            TouchControl::Use => input.interact = true,
+            TouchControl::Use | TouchControl::ExitRig | TouchControl::BoardRig => {
+                input.interact = true;
+            }
             TouchControl::Pause => input.pause = true,
             TouchControl::Inventory => input.inventory = true,
             TouchControl::Map => input.map = true,
@@ -845,6 +898,7 @@ impl TouchInput {
             // (bomb).
             TouchControl::Fire
             | TouchControl::Thrust
+            | TouchControl::Jump
             | TouchControl::Detonate
             | TouchControl::Bomb => {}
         }
@@ -875,6 +929,7 @@ impl TouchInput {
                     }
                 }
                 TouchControl::Thrust => input.thrust = true,
+                TouchControl::Jump => input.jump = true,
                 _ => {}
             }
         }
@@ -939,6 +994,25 @@ fn stick_axes(x: f32, y: f32) -> (f32, f32) {
     (x / length * strength, y / length * strength)
 }
 
+/// The small buttons along the top edge in play: the OUT button joins them while the rig can
+/// let its pilot out.
+const fn play_top_row(context: TouchContext) -> &'static [TouchControl] {
+    if matches!(context.pilot, TouchPilot::CanExit) {
+        &[
+            TouchControl::Inventory,
+            TouchControl::Pause,
+            TouchControl::Map,
+            TouchControl::ExitRig,
+        ]
+    } else {
+        &[
+            TouchControl::Inventory,
+            TouchControl::Pause,
+            TouchControl::Map,
+        ]
+    }
+}
+
 /// How a controller action is reached by touch.
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -972,10 +1046,13 @@ pub const fn pad_action_control(action: PadAction) -> TouchReach {
         PadAction::Detonate => Control(C::Detonate),
         PadAction::TabPrevious => Control(C::TabPrevious),
         PadAction::TabNext => Control(C::TabNext),
-        PadAction::FireWeapon => Control(C::Fire),
+        // On foot the fire button swings the pick.
+        PadAction::FireWeapon | PadAction::SwingPick => Control(C::Fire),
         PadAction::CycleWeapon => Control(C::CycleWeapon),
         PadAction::BuildMode => Control(C::Build),
         PadAction::BuildRotate => Control(C::BuildRotate),
+        PadAction::Jump => Control(C::Jump),
+        PadAction::BoardRig => Control(C::BoardRig),
     }
 }
 
@@ -1013,6 +1090,12 @@ pub const fn touch_labels(prompt: Prompt) -> &'static [&'static str] {
         | Prompt::BuildRemove
         | Prompt::BuildRotate
         | Prompt::BuildCycle
+        | Prompt::Jump
+        | Prompt::Climb
+        | Prompt::Crouch
+        | Prompt::Pick
+        | Prompt::ExitRig
+        | Prompt::BoardRig
         // Not on touch: desktop hotkeys, text editing keys and controller seat claims.
         | Prompt::Help
         | Prompt::Fullscreen

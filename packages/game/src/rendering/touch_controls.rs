@@ -90,7 +90,11 @@ pub fn upright_controls_top() -> Option<i32> {
 const fn is_top_row(control: TouchControl) -> bool {
     matches!(
         control,
-        TouchControl::Pause | TouchControl::Inventory | TouchControl::Map | TouchControl::BuildExit
+        TouchControl::Pause
+            | TouchControl::Inventory
+            | TouchControl::Map
+            | TouchControl::BuildExit
+            | TouchControl::ExitRig
     )
 }
 
@@ -221,6 +225,9 @@ const fn rim(control: TouchControl) -> Color {
         | TouchControl::Kit(_) => palette::GOLD,
         TouchControl::Tools
         | TouchControl::Thrust
+        | TouchControl::Jump
+        | TouchControl::ExitRig
+        | TouchControl::BoardRig
         | TouchControl::Prompt
         | TouchControl::Pause
         | TouchControl::Inventory
@@ -255,6 +262,9 @@ const fn label(control: TouchControl) -> &'static str {
         TouchControl::Kit(_) => "ORE",
         TouchControl::Build => "BUILD",
         TouchControl::Thrust => "FLY",
+        TouchControl::Jump => "JUMP",
+        TouchControl::ExitRig => "OUT",
+        TouchControl::BoardRig => "IN",
         TouchControl::Prompt => "",
         TouchControl::Use => "USE",
         TouchControl::Pause => "II",

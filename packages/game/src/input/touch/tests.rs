@@ -17,6 +17,7 @@ const PLAY: TouchContext = TouchContext {
     charges_out: false,
     prompt: false,
     kits: [false; KIT_COUNT],
+    pilot: TouchPilot::Seated,
 };
 
 const ARMED: TouchContext = TouchContext {
@@ -532,17 +533,25 @@ fn contexts() -> Vec<TouchContext> {
         TouchMode::Menu,
     ] {
         for bits in 0u8..16 {
-            contexts.push(TouchContext {
-                mode,
-                armed: bits & 1 != 0,
-                charges_out: bits & 2 != 0,
-                prompt: bits & 4 != 0,
-                kits: if bits & 8 == 0 {
-                    [false; KIT_COUNT]
-                } else {
-                    [true; KIT_COUNT]
-                },
-            });
+            for pilot in [
+                TouchPilot::Seated,
+                TouchPilot::CanExit,
+                TouchPilot::OnFoot,
+                TouchPilot::CanBoard,
+            ] {
+                contexts.push(TouchContext {
+                    mode,
+                    armed: bits & 1 != 0,
+                    charges_out: bits & 2 != 0,
+                    prompt: bits & 4 != 0,
+                    kits: if bits & 8 == 0 {
+                        [false; KIT_COUNT]
+                    } else {
+                        [true; KIT_COUNT]
+                    },
+                    pilot,
+                });
+            }
         }
     }
     contexts
@@ -705,6 +714,7 @@ fn every_input_field_has_a_touch_answer() {
         menu_left: _,
         menu_right: _,
         // On-screen controls.
+        jump: _,
         interact: _,
         confirm: _,
         back: _,
@@ -766,4 +776,40 @@ fn every_input_field_has_a_touch_answer() {
         scroll_end: _,
         paste: _,
     } = PlayerInput::default();
+}
+
+/// On foot the thumb cluster jumps, swings the pick and throws; the rig's OUT and IN buttons
+/// show only when climbing out or boarding would work.
+#[test]
+fn on_foot_layout_jumps_and_the_hatch_buttons_follow_the_pilot() {
+    let layout = |pilot| {
+        TouchLayout::compute(
+            PHONE,
+            TouchSettings::default(),
+            TouchContext { pilot, ..PLAY },
+            false,
+        )
+    };
+    let seated = layout(TouchPilot::Seated);
+    assert!(seated.rect(TouchControl::ExitRig).is_none());
+    assert!(seated.rect(TouchControl::Jump).is_none());
+    assert!(
+        layout(TouchPilot::CanExit)
+            .rect(TouchControl::ExitRig)
+            .is_some()
+    );
+    let foot = layout(TouchPilot::OnFoot);
+    for control in [TouchControl::Jump, TouchControl::Fire, TouchControl::Bomb] {
+        assert!(foot.rect(control).is_some(), "{control:?}");
+    }
+    assert!(foot.rect(TouchControl::BoardRig).is_none());
+    assert!(
+        foot.rect(TouchControl::Tools).is_none(),
+        "no build kit on foot"
+    );
+    assert!(
+        layout(TouchPilot::CanBoard)
+            .rect(TouchControl::BoardRig)
+            .is_some()
+    );
 }

@@ -12,7 +12,7 @@ use crate::{
         PlayerInput,
         touch::{
             BuildTap, KIT_COUNT, PointerEvent, TouchContext, TouchInput, TouchLayout, TouchMode,
-            TouchPoint, TouchScreen, TouchSettings, TouchView,
+            TouchPilot, TouchPoint, TouchScreen, TouchSettings, TouchView,
         },
     },
     pixel_scale,
@@ -335,5 +335,6 @@ pub fn touch_context(
             || view.village_door.is_some()
             || view.nearby_module.is_some(),
         kits: kits.map(|count| count > 0),
+        pilot: TouchPilot::new(view.pilot.is_some(), view.can_exit, view.can_board),
     }
 }
