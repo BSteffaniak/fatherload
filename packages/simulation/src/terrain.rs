@@ -13,6 +13,7 @@ mod persistence;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    cave::CaveTile,
     poi::PoiTile,
     surface::building_foundation_at,
     worldgen::{
@@ -225,6 +226,9 @@ pub enum TileKind {
     /// The floor of a deep world: nothing drills, blasts or digs through it (see
     /// [`UNBREAKABLE_HARDNESS`]).
     Bedrock,
+    /// A cave-ecosystem tile (crystal, fungus, obsidian, ruins, stalactites, caches; see
+    /// [`crate::cave`]).
+    Cave(CaveTile),
 }
 
 impl TileKind {
@@ -246,6 +250,7 @@ impl TileKind {
             Self::Artifact(artifact) => artifact.name(),
             Self::Poi(tile) => tile.name(),
             Self::Bedrock => "bedrock",
+            Self::Cave(tile) => tile.name(),
         }
     }
 }
@@ -327,6 +332,7 @@ impl Tile {
             TileKind::Artifact(artifact) => 0x200 | artifact as u64,
             TileKind::Poi(tile) => 0x300 | tile.code(),
             TileKind::Bedrock => 11,
+            TileKind::Cave(tile) => 0x400 | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -686,6 +692,37 @@ impl Terrain {
             .filter(|feature| feature.bounds.intersects(rect))
             .copied()
             .collect()
+    }
+
+    /// The cave ecosystem at `position` ([`crate::cave`]): its kind, feature id, whether the
+    /// tile is in its open interior and whether that is water. `None` outside every cave and on
+    /// worlds without cave ecosystems (generators before V6). A pure function of the settings.
+    #[must_use]
+    pub fn cave_at(&self, position: TilePosition) -> Option<crate::cave::CaveSample> {
+        worldgen::streamed::cave_at(&self.settings, position)
+    }
+
+    /// The kind of cave ecosystem at `position`, walls included (spawn tags for enemies:
+    /// `terrain.cave_kind_at(tile).map(CaveKind::spawn_tags)`).
+    #[must_use]
+    pub fn cave_kind_at(&self, position: TilePosition) -> Option<crate::cave::CaveKind> {
+        self.cave_at(position).map(|sample| sample.kind)
+    }
+
+    /// The caves whose footprints overlap `rect` (each with its raster of open, water and
+    /// wall cells; empty on worlds without cave ecosystems).
+    #[must_use]
+    pub fn caves_touching(&self, rect: &TileRect) -> Vec<Arc<worldgen::streamed::CaveRegion>> {
+        worldgen::streamed::caves_touching(&self.settings, rect)
+    }
+
+    /// Whether `position` is open water: a flooded cave's generated water over an open tile.
+    #[must_use]
+    pub fn water_at(&self, position: TilePosition) -> bool {
+        self.cave_at(position).is_some_and(|sample| sample.water)
+            && self
+                .tile(position)
+                .is_some_and(|tile| tile.kind == TileKind::Air)
     }
 
     /// The point of interest whose bounds contain `position` (lowest id if several overlap).
@@ -1465,6 +1502,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         )
         | TileKind::Artifact(ArtifactKind::BuriedIdol | ArtifactKind::StarCore) => 4,
         TileKind::Poi(tile) => tile.hardness(),
+        TileKind::Cave(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1494,6 +1532,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Ore(mineral) => tile_hardness(TileKind::Ore(mineral)) + 2,
         TileKind::Artifact(artifact) => tile_hardness(TileKind::Artifact(artifact)) + 5,
         TileKind::Poi(tile) => tile.durability(),
+        TileKind::Cave(tile) => tile.durability(),
         TileKind::Bedrock => u8::MAX,
     }
 }

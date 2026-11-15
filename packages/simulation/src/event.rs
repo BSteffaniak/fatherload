@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    cave::{CaveKind, CaveTile},
     command::PlayerCommand,
     explosive::{BlastDirection, ExplosiveKind},
     ids::{InputSequence, PlayerId, SimulationTick},
@@ -186,6 +187,23 @@ pub enum GameplayEventKind {
     CollectBlocksToggled {
         player_id: PlayerId,
         enabled: bool,
+    },
+    /// A player entered a cave ecosystem for the first time ("Found: Crystal Geode").
+    CaveDiscovered {
+        player_id: PlayerId,
+        feature: FeatureId,
+        cave: CaveKind,
+    },
+    /// A player drilled open a cave cache: `credits` paid, its loot spilled as item drops.
+    CaveCacheOpened {
+        player_id: PlayerId,
+        tile: CaveTile,
+        credits: u32,
+    },
+    /// A stalactite broke off the ceiling above a rig at tile `(x, y)` and is falling.
+    StalactiteFell {
+        x: i32,
+        y: i32,
     },
 }
 

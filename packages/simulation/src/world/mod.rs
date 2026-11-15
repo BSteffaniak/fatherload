@@ -23,6 +23,9 @@ use crate::{
 #[cfg(test)]
 mod bomb_tests;
 mod bombs;
+#[cfg(test)]
+mod cave_tests;
+mod caves;
 mod commands;
 #[cfg(test)]
 mod determinism_tests;

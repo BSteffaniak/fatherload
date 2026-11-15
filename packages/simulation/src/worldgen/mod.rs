@@ -76,40 +76,52 @@ pub enum GeneratorVersion {
     /// floor, generated chunk by chunk from overlapping region grids, with a per-column surface
     /// heightmap hook. The town stays flat on its classic columns.
     V5,
+    /// V5 plus Caves 2.0 ([`crate::cave`]): cave ecosystems (grand caverns, crystal geodes,
+    /// flooded caves, lava tubes, fungal grottos, worm burrows, ancient ruins, chasms and cave
+    /// networks) placed per region with their own tiles, light, loot and critters.
+    V6,
 }
 
 impl GeneratorVersion {
     /// The generator new worlds use.
-    pub const CURRENT: Self = Self::V5;
+    pub const CURRENT: Self = Self::V6;
 
     /// Every generator, oldest first.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Legacy,
         Self::V1,
         Self::V2,
         Self::V3,
         Self::V4,
         Self::V5,
+        Self::V6,
     ];
 
     /// Whether this generator stamps points of interest.
     #[must_use]
     pub const fn has_points_of_interest(self) -> bool {
-        matches!(self, Self::V2 | Self::V3 | Self::V4 | Self::V5)
+        matches!(self, Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6)
     }
 
     /// Whether this generator builds the deep (about four times taller) band stack with a
     /// bedrock floor.
     #[must_use]
     pub const fn is_deep(self) -> bool {
-        matches!(self, Self::V4 | Self::V5)
+        matches!(self, Self::V4 | Self::V5 | Self::V6)
     }
 
     /// Whether worlds of this generator are streamed: unbounded horizontally and generated
     /// chunk by chunk on demand ([`streamed`]). Older generators build bounded worlds.
     #[must_use]
     pub const fn is_streamed(self) -> bool {
-        matches!(self, Self::V5)
+        matches!(self, Self::V5 | Self::V6)
+    }
+
+    /// Whether this generator places cave ecosystems ([`crate::cave::CaveKind`]): their
+    /// tiles, water, light, loot and critters.
+    #[must_use]
+    pub const fn has_cave_biomes(self) -> bool {
+        matches!(self, Self::V6)
     }
 
     #[must_use]
@@ -121,6 +133,7 @@ impl GeneratorVersion {
             Self::V3 => "v3",
             Self::V4 => "v4",
             Self::V5 => "v5",
+            Self::V6 => "v6",
         }
     }
 }

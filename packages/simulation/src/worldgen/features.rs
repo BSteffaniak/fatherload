@@ -10,6 +10,7 @@ use std::ops::RangeInclusive;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    cave::CaveKind,
     poi::{PoiKind, PoiVariant},
     terrain::{ArtifactKind, MineralKind, TileKind, TilePosition},
 };
@@ -45,10 +46,13 @@ pub enum FeatureKind {
     /// A stamped prefab point of interest (see [`crate::poi`]); its detail is
     /// [`FeatureDetail::Poi`].
     PointOfInterest,
+    /// A cave ecosystem ([`crate::cave::CaveKind`], [`super::GeneratorVersion::V6`]); its
+    /// detail is [`FeatureDetail::Cave`] and its centre an open tile inside it.
+    Cave,
 }
 
 impl FeatureKind {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::LargeCavern,
         Self::Chamber,
         Self::Motherlode,
@@ -57,6 +61,7 @@ impl FeatureKind {
         Self::StratumTransition,
         Self::PrefabSlot,
         Self::PointOfInterest,
+        Self::Cave,
     ];
 
     #[must_use]
@@ -70,6 +75,7 @@ impl FeatureKind {
             Self::StratumTransition => "stratum transition",
             Self::PrefabSlot => "prefab slot",
             Self::PointOfInterest => "point of interest",
+            Self::Cave => "cave",
         }
     }
 }
@@ -138,6 +144,7 @@ pub enum FeatureDetail {
     Hazard(HazardKind),
     Transition { upper: Band, lower: Band },
     Poi(PoiVariant),
+    Cave(CaveKind),
 }
 
 impl FeatureDetail {
@@ -146,6 +153,15 @@ impl FeatureDetail {
     pub const fn poi(self) -> Option<PoiVariant> {
         match self {
             Self::Poi(variant) => Some(variant),
+            _ => None,
+        }
+    }
+
+    /// The cave kind, if this is a cave ecosystem.
+    #[must_use]
+    pub const fn cave(self) -> Option<CaveKind> {
+        match self {
+            Self::Cave(kind) => Some(kind),
             _ => None,
         }
     }

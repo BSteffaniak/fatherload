@@ -162,6 +162,66 @@ spawn/town/hazard clearance, nothing undiggable below spawn, and that every vaul
 switches, relays and seals can be reached and worked from spawn. `FATHERLOAD_WORLDGEN_SEEDS=300
 cargo test --release -p fatherload_simulation worldgen` runs it over more seeds.
 
+## Cave ecosystems (`src/cave.rs`, `src/worldgen/streamed/cave_biomes.rs`, `src/world/caves.rs`)
+
+Expansion plan WP-CAVES, generator V6 (`GeneratorVersion::has_cave_biomes`; V1-V5 are
+unchanged, their golden digests still pass, and a V6 golden digest pins the new output).
+
+**Generation.** The plane is split into `CAVE_REGION` (96x64) cells; a cell holds at most one cave,
+chosen by its band (`kind_weights`: no geodes or ruins above the grey stone, no lava tubes above the
+basalt, deep strata favour their own kinds) from the region's RNG. A cave reads only the base layer
+and the POI layer (it skips regions whose footprint would come within 4 tiles of a POI, the spawn
+shaft or the starter field) and its whole footprint stays inside its region, so chunks consult only
+the regions they overlap and stay seamless and order-independent. A cave is a raster of
+`BiomeCell`s: `Open`/`Water` interior, `Wall` (plain rock that worm tunnels and caverns may still
+open: natural entrances), `Shell(kind)` (dressed walls that also yield) and `Solid(kind)` (decor,
+loot and hazards that always stand). The cave layer (`Window`) consults the rasters, so hazards,
+POIs and deposits work around caves. Every interior is one connected area (smaller pieces are
+walled up), the feature centre is an open tile, nothing in a cave is undrillable or harder than its
+band's drill (`CaveTile::hardness`).
+
+| Kind | Shape and dressing | Loot | Light / critters |
+|---|---|---|---|
+| Grand cavern | wide flat-floored hall, stalagmites, stalactites | cache 80 %, gem vein 70 % | dark / bats, fireflies |
+| Crystal geode | round hollow, crystal shell and spikes | gems in the shell, cache 35 % | glowing / glow moths |
+| Flooded cave | lake under a water line, silt bed, glow algae | sunken cache 75 %, vein 40 % | dim / cave fish, fireflies |
+| Lava tube | meandering obsidian-lined tube, lava pools on the floor | vein 55 %, cache 30 % | glowing / ember moths |
+| Fungal grotto | mycelium, giant mushrooms (bouncy caps), glowcaps, spore gas | cache 40 % | glowing / fireflies, moths |
+| Worm burrows | 2-3 winding tunnels from a bulb, bone ribs | cache 50 % | dark / bats |
+| Ancient ruins | brick hall, pillars, glyphs, rubble, corridor out | relic cache (always) | dim / bats |
+| Chasm | tall wandering crack, ledges, stalactites, bottom chamber | cache 60 %, vein 60 % | dark / bats |
+| Cave network | 3-5 chambers joined by tunnels | cache 35 %, vein 50 % | dark / fireflies, bats |
+
+**Reading caves (for other tracks).** `Terrain::cave_at(tile) -> Option<CaveSample>` (kind,
+feature id, interior, water), `Terrain::cave_kind_at(tile)`, `Terrain::water_at(tile)` and
+`Terrain::caves_touching(rect)` (the rasters). `CaveKind::spawn_tags()` is what WP-ENEMIES reads
+(`nests`, `swarmers`, `aquatic`, `heat`, `machines`, `burrowers`, `elite_lair`,
+`danger_per_mille`), e.g. `terrain.cave_kind_at(tile).map(CaveKind::spawn_tags)`;
+`CaveKind::light()` says whether a cave is dark. Caves are regional features
+(`FeatureKind::Cave`, `FeatureDetail::Cave(kind)`, id layer 8), so quests and stories bind to them
+through `features_in` / `nearest_feature`.
+
+**Gameplay (`world/caves.rs`, all in the tick).** Entering a cave's interior records it in the
+player's `PoiJournal::caves` and fires `CaveDiscovered`. A `CaveTile::Stalactite` with open air
+between it and a rig up to 7 rows below breaks off (`StalactiteFell`) as a falling boulder (fast,
+0.45 s warning; the boulder deflector counters it). Drilling a `TreasureCache` / `RelicCache` pays
+`cave::cache_loot` (credits by depth tier, plus gems or a relic) and spills the items as drops via
+`spawn_item_drop` (WP-DROPS collects them) with `CaveCacheOpened`. Movement: in cave water a rig is
+buoyed (80 % of gravity) and dragged (`1 / (1 + 3 dt)` per tick); landing on a `MushroomCap` faster
+than 120 px/s bounces it back at 85 % (at least 300 px/s) with no landing damage.
+
+**Critters** are `EntityKind::Critter` entities (`CritterState`: kind, cave, slot, roam, phase).
+Every 500 ms `advance_critters` fills the missing slots (one per 30 interior tiles, 3-8) of caves
+within 40x28 tiles of a rig at deterministic homes with open space around them (fish only in
+water) and despawns critters 64+ tiles from every rig (`despawn_many`). A critter's body never
+moves and its record never changes after spawning (it replicates once); presentation animates it
+with `CritterState::offset_at(seconds)`. Harmless: no collision, damage or blast push.
+
+Tests: `worldgen/streamed/cave_tests.rs` (every kind on every seed, density, connected and
+reachable interiors, clearances, loot bounds, still water, order independence and seamless windows,
+V5 without caves, ids, the V6 golden digest; `FATHERLOAD_WORLDGEN_SEEDS` for more seeds) and
+`world/cave_tests.rs` (discovery, stalactites, caches, critters, water, mushroom bounce).
+
 ## Points of interest (`src/poi.rs`, `src/world/pois.rs`)
 
 Generator v2 worlds hold supply caches, derelict rigs, vaults (sequence switches, pressure

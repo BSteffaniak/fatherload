@@ -360,6 +360,9 @@ impl WorldState {
                 MineResult::Mined(TileKind::Poi(tile)) => {
                     self.open_poi_tile(player_id, target, tile, &mut output);
                 }
+                MineResult::Mined(TileKind::Cave(tile)) if tile.is_cache() => {
+                    self.open_cave_cache(player_id, target, tile, &mut output);
+                }
                 MineResult::Activated(lit) => {
                     self.activate_vault_lock(target, lit, next_tick, &mut output);
                 }
@@ -374,9 +377,12 @@ impl WorldState {
             self.advance_world_event_hazards(player_id, next_tick, &mut output);
             self.advance_deep_run_pressure(player_id, next_tick, &mut output);
         }
+        self.trigger_stalactites(&mut output);
         self.advance_entities(EntityPhase::Late, next_tick, &mut output);
+        self.advance_critters(next_tick);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
+        self.track_cave_discoveries(&mut output);
         self.advance_quests(next_tick, &quest_notes, &mut output);
         self.reveal_tiles_near_players();
         self.apply_test_mode_refills();

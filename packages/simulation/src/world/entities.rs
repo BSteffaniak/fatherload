@@ -196,6 +196,9 @@ impl WorldState {
                 EntityKind::GasCloud => self.advance_gas_cloud(id),
                 EntityKind::Boulder => self.advance_boulder(id, next_tick, output),
                 EntityKind::Drop => self.advance_drop(id, &mut merged),
+                // A critter's motion is a pure function of time (`CritterState::offset_at`);
+                // its population is kept by `advance_critters` (`world/caves.rs`).
+                EntityKind::Critter => {}
             }
         }
         // Merged-away drops (their stacks already moved onto their neighbours).

@@ -445,6 +445,7 @@ impl TargetSpec {
                 FeatureKind::StratumTransition => "stratum seam",
                 FeatureKind::PrefabSlot => "quiet hollow",
                 FeatureKind::PointOfInterest => "site",
+                FeatureKind::Cave => "cave",
             },
         }
     }

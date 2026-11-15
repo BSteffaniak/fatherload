@@ -784,6 +784,9 @@ pub struct PoiJournal {
     /// Derelict logs the player has recovered.
     #[serde(default)]
     pub logs: BTreeSet<LoreId>,
+    /// Cave ecosystems the player has found, by feature id (WP-CAVES map markers).
+    #[serde(default)]
+    pub caves: BTreeMap<FeatureId, crate::cave::CaveKind>,
 }
 
 impl PoiJournal {

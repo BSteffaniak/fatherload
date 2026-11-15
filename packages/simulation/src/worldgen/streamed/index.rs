@@ -17,6 +17,7 @@ use crate::{
 
 use super::{
     base::Ctx,
+    cave_biomes::{CAVE_REGION, cave_region},
     regions::{
         self, BED_REGION, CAVERN_REGION, CHAMBER_REGION, HAZARD_REGION, MOTHERLODE_REGION,
         POI_REGION_WIDTH, TRANSITION_REGION_WIDTH, bed_region, cavern_region, chamber_region,
@@ -35,10 +36,11 @@ pub enum Layer {
     Bed = 5,
     Transition = 6,
     Cavern = 7,
+    Cave = 8,
 }
 
 impl Layer {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 8] = [
         Self::Chamber,
         Self::Hazard,
         Self::Poi,
@@ -46,6 +48,7 @@ impl Layer {
         Self::Bed,
         Self::Transition,
         Self::Cavern,
+        Self::Cave,
     ];
 
     const fn kind(self) -> FeatureKind {
@@ -57,6 +60,7 @@ impl Layer {
             Self::Bed => FeatureKind::ArtifactBed,
             Self::Transition => FeatureKind::StratumTransition,
             Self::Cavern => FeatureKind::LargeCavern,
+            Self::Cave => FeatureKind::Cave,
         }
     }
 }
@@ -162,6 +166,18 @@ fn layer_features(ctx: &Ctx, layer: Layer, rect: &TileRect, out: &mut Vec<WorldF
                 out.extend(cavern_region(ctx, rx, ry).feature);
             }
         }
+        Layer::Cave => {
+            if ctx.settings.generator.has_cave_biomes() {
+                for (rx, ry) in grid(CAVE_REGION) {
+                    out.extend(
+                        cave_region(ctx, rx, ry)
+                            .biome
+                            .as_ref()
+                            .map(|biome| biome.feature),
+                    );
+                }
+            }
+        }
         Layer::Transition => {
             for rx in span(rect.min.x, rect.max.x, TRANSITION_REGION_WIDTH) {
                 for index in 0..BOUNDARY_COUNT {
@@ -261,6 +277,10 @@ pub fn feature(ctx: &Ctx, id: FeatureId) -> Option<WorldFeature> {
         Layer::Motherlode => motherlode_region(ctx, rx, ry).feature,
         Layer::Bed => bed_region(ctx, rx, ry).feature,
         Layer::Cavern => cavern_region(ctx, rx, ry).feature,
+        Layer::Cave => cave_region(ctx, rx, ry)
+            .biome
+            .as_ref()
+            .map(|biome| biome.feature),
         Layer::Transition => {
             let index = usize::try_from(ry)
                 .ok()

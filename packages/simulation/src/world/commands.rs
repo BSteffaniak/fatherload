@@ -521,6 +521,7 @@ pub(super) fn authoritative_drill_seconds_per_chip(
             crate::poi::PoiTile::GeodeShell => 0.2,
             _ => 0.16,
         },
+        TileKind::Cave(tile) => tile.base_chip_seconds(),
     };
     let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
         || parts.contains(&RigPartKind::ResonanceDrill)

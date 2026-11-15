@@ -7,8 +7,11 @@
 
 use crate::{terrain::TileKind, worldgen::features::TileRect, worldgen::strata::Band};
 
+use std::sync::Arc;
+
 use super::{
     base::Ctx,
+    cave_biomes::{BiomeCell, CaveRegion, caves_in},
     regions::{
         self, CHAMBER_REACH, Chamber, WORM_REACH, chamber_region, chamber_tile, poi_regions_in,
         worm_region,
@@ -32,6 +35,8 @@ pub struct Window<'c> {
     carved: Vec<bool>,
     /// Bounds of every point of interest that reaches the window.
     pois: Vec<TileRect>,
+    /// Every cave ecosystem whose footprint overlaps the window.
+    caves: Vec<Arc<CaveRegion>>,
 }
 
 impl<'c> Window<'c> {
@@ -60,6 +65,7 @@ impl<'c> Window<'c> {
             bands: vec![0; cells],
             carved: vec![false; cells],
             pois: Vec::new(),
+            caves: Vec::new(),
         };
         if cells == 0 {
             return window;
@@ -95,7 +101,18 @@ impl<'c> Window<'c> {
             .iter()
             .filter_map(|region| region.poi.as_ref().map(|poi| poi.feature.bounds))
             .collect();
+        window.caves = caves_in(ctx, &rect);
         window
+    }
+
+    /// The cave-ecosystem cell at `(x, y)` (`Outside` beyond every cave).
+    fn cave_cell(&self, x: i32, y: i32) -> BiomeCell {
+        let position = crate::terrain::TilePosition { x, y };
+        self.caves
+            .iter()
+            .filter_map(|region| region.biome.as_ref())
+            .find(|biome| biome.bounds().contains(position))
+            .map_or(BiomeCell::Outside, |biome| biome.cell(x, y))
     }
 
     const fn index(&self, x: i32, y: i32) -> Option<usize> {
@@ -184,7 +201,8 @@ impl<'c> Window<'c> {
     }
 
     /// Whether `(x, y)` is open (sky or cave), solid rock, or a fixed tile: 1 fixed or outside,
-    /// 2 open, 3 plain rock. Cheaper than [`Self::kind`] (no rock-mass noise).
+    /// 2 open, 3 plain rock, 4 a cave ecosystem's decor (see [`BiomeCell`]). Cheaper than
+    /// [`Self::kind`] (no rock-mass noise).
     fn class(&mut self, x: i32, y: i32) -> u8 {
         let Some(index) = self.index(x, y) else {
             return 1;
@@ -196,13 +214,22 @@ impl<'c> Window<'c> {
             Some(TileKind::Air) => 2,
             Some(_) => 1,
             None => {
-                if self.ctx.cave_allowed(x, y)
-                    && !self.near_poi(x, y, POI_CAVE_SHIELD)
-                    && (self.carved[index] || self.cavern_open(x, y))
-                {
-                    2
-                } else {
-                    3
+                let cave = self.cave_cell(x, y);
+                match cave {
+                    BiomeCell::Open | BiomeCell::Water => 2,
+                    BiomeCell::Solid(_) => 4,
+                    BiomeCell::Outside | BiomeCell::Wall | BiomeCell::Shell(_) => {
+                        if self.ctx.cave_allowed(x, y)
+                            && !self.near_poi(x, y, POI_CAVE_SHIELD)
+                            && (self.carved[index] || self.cavern_open(x, y))
+                        {
+                            2
+                        } else if matches!(cave, BiomeCell::Shell(_)) {
+                            4
+                        } else {
+                            3
+                        }
+                    }
                 }
             }
         };
@@ -222,11 +249,15 @@ impl<'c> Window<'c> {
         match self.ctx.fixed_kind(x, y) {
             Some(TileKind::Air) => true,
             Some(_) => false,
-            None => {
-                self.ctx.cave_allowed(x, y)
-                    && !self.near_poi(x, y, POI_CAVE_SHIELD)
-                    && (self.carved[index] || self.raw(x, y))
-            }
+            None => match self.cave_cell(x, y) {
+                BiomeCell::Open | BiomeCell::Water => true,
+                BiomeCell::Solid(_) => false,
+                BiomeCell::Outside | BiomeCell::Wall | BiomeCell::Shell(_) => {
+                    self.ctx.cave_allowed(x, y)
+                        && !self.near_poi(x, y, POI_CAVE_SHIELD)
+                        && (self.carved[index] || self.raw(x, y))
+                }
+            },
         }
     }
 
@@ -239,6 +270,13 @@ impl<'c> Window<'c> {
                 let band = self.band(x, y);
                 self.ctx.rock_kind(x, y, band)
             }
+            4 => match self.cave_cell(x, y) {
+                BiomeCell::Solid(kind) | BiomeCell::Shell(kind) => kind,
+                _ => {
+                    let band = self.band(x, y);
+                    self.ctx.rock_kind(x, y, band)
+                }
+            },
             _ => self
                 .index(x, y)
                 .and_then(|_| self.ctx.fixed_kind(x, y))

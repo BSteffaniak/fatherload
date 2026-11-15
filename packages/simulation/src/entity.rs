@@ -52,6 +52,8 @@ pub enum EntityKind {
     Boulder,
     /// A floating item stack (WP-DROPS).
     Drop,
+    /// A harmless ambient cave critter (WP-CAVES): fireflies, moths, bats, cave fish.
+    Critter,
 }
 
 /// When in the tick an entity kind updates (`WorldState::simulate_tick` runs each phase at a
@@ -66,14 +68,14 @@ pub enum EntityPhase {
 
 impl EntityKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 3] = [Self::GasCloud, Self::Boulder, Self::Drop];
+    pub const ALL: [Self; 4] = [Self::GasCloud, Self::Boulder, Self::Drop, Self::Critter];
 
     /// The tick phase this kind updates in.
     #[must_use]
     pub const fn phase(self) -> EntityPhase {
         match self {
             Self::GasCloud => EntityPhase::Early,
-            Self::Boulder | Self::Drop => EntityPhase::Late,
+            Self::Boulder | Self::Drop | Self::Critter => EntityPhase::Late,
         }
     }
 
@@ -201,12 +203,67 @@ impl DropState {
     }
 }
 
+/// An ambient cave critter's per-kind state (WP-CAVES).
+///
+/// A critter's body stays at its home (an open tile inside its cave) and never changes, so it
+/// replicates once; where it flutters or swims around that home is a pure function of the
+/// tick ([`CritterState::offset_at`]) that presentation evaluates. Critters are harmless.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CritterState {
+    pub kind: crate::cave::CritterKind,
+    /// The cave it lives in.
+    pub cave: crate::worldgen::FeatureId,
+    /// Its slot in the cave's population (a cave never holds two critters in one slot).
+    pub slot: u8,
+    /// How far it roams from home, in pixels (the open space around home).
+    pub roam: u16,
+    /// Its own phase, so neighbours never move in step.
+    pub phase: u16,
+}
+
+impl CritterState {
+    /// Where the critter is relative to its home at `seconds` of world time, in pixels.
+    ///
+    /// Fireflies drift in slow loops, moths flutter in figure eights, bats dart in quick
+    /// wide arcs, fish circle flat in the water and ember moths spiral up and down.
+    #[must_use]
+    pub fn offset_at(&self, seconds: f32) -> (f32, f32) {
+        use crate::cave::CritterKind;
+        let roam = f32::from(self.roam);
+        let phase = f32::from(self.phase) / 65_536.0 * std::f32::consts::TAU;
+        let t = seconds;
+        match self.kind {
+            CritterKind::Firefly => (
+                t.mul_add(0.53, phase).sin() * roam,
+                t.mul_add(0.71, phase * 1.7).sin() * roam * 0.6,
+            ),
+            CritterKind::GlowMoth => (
+                t.mul_add(1.1, phase).sin() * roam,
+                t.mul_add(2.2, phase).sin() * roam * 0.45,
+            ),
+            CritterKind::Bat => (
+                t.mul_add(1.9, phase).sin() * roam,
+                roam.mul_add(-0.2, t.mul_add(3.1, phase).cos() * roam * 0.35),
+            ),
+            CritterKind::CaveFish => (
+                t.mul_add(0.6, phase).sin() * roam,
+                t.mul_add(0.3, phase).sin() * roam * 0.25,
+            ),
+            CritterKind::EmberMoth => (
+                t.mul_add(0.9, phase).cos() * roam * 0.7,
+                t.mul_add(1.3, phase).sin() * roam,
+            ),
+        }
+    }
+}
+
 /// Per-kind entity state.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum EntityState {
     GasCloud(GasCloudState),
     Boulder(BoulderState),
     Drop(DropState),
+    Critter(CritterState),
 }
 
 impl EntityState {
@@ -216,6 +273,7 @@ impl EntityState {
             Self::GasCloud(_) => EntityKind::GasCloud,
             Self::Boulder(_) => EntityKind::Boulder,
             Self::Drop(_) => EntityKind::Drop,
+            Self::Critter(_) => EntityKind::Critter,
         }
     }
 }

@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeMap, fmt::Write as _};
 
-use crate::{poi::PoiKind, terrain::TileKind};
+use crate::{cave::CaveKind, poi::PoiKind, terrain::TileKind};
 
 use super::{
     Band, FeatureKind, GeneratedWorld, HazardKind, WorldSettings, band_at,
@@ -35,6 +35,12 @@ pub struct WorldStats {
     pub features: BTreeMap<FeatureKind, u64>,
     pub pois: BTreeMap<PoiKind, u64>,
     pub starter_field_value: u64,
+    /// Cave ecosystems centred in the world, by kind (V6+).
+    pub caves: BTreeMap<CaveKind, u64>,
+    /// Cave caches (treasure and relic) in the world.
+    pub cave_caches: u64,
+    /// Open cave water tiles.
+    pub water_tiles: u64,
 }
 
 impl WorldStats {
@@ -67,7 +73,19 @@ impl WorldStats {
                 let band = &mut stats.bands[band_at(settings, x, y).index()];
                 band.tiles += 1;
                 match kind {
-                    TileKind::Air => band.open_tiles += 1,
+                    TileKind::Air => {
+                        band.open_tiles += 1;
+                        if settings.generator.has_cave_biomes()
+                            && super::streamed::cave_at(
+                                settings,
+                                crate::terrain::TilePosition { x, y },
+                            )
+                            .is_some_and(|sample| sample.water)
+                        {
+                            stats.water_tiles += 1;
+                        }
+                    }
+                    TileKind::Cave(tile) if tile.is_cache() => stats.cave_caches += 1,
                     TileKind::Ore(mineral) => {
                         band.ore_tiles += 1;
                         band.ore_value += u64::from(mineral.value());
@@ -89,6 +107,9 @@ impl WorldStats {
             *stats.features.entry(feature.kind).or_default() += 1;
             if let super::FeatureDetail::Hazard(hazard) = feature.detail {
                 *stats.hazard_clusters.entry(hazard).or_default() += 1;
+            }
+            if let Some(kind) = feature.detail.cave() {
+                *stats.caves.entry(kind).or_default() += 1;
             }
             if let Some(kind) = feature.poi_kind() {
                 *stats.pois.entry(kind).or_default() += 1;
@@ -163,6 +184,12 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
         .map(|kind| (kind, Spread::default()))
         .collect();
     let mut caves = Spread::default();
+    let mut ecosystems: BTreeMap<CaveKind, Spread> = CaveKind::ALL
+        .into_iter()
+        .map(|kind| (kind, Spread::default()))
+        .collect();
+    let mut cave_caches = Spread::default();
+    let mut water = Spread::default();
     let mut starter = Spread::default();
     let mut features: BTreeMap<FeatureKind, Spread> = FeatureKind::ALL
         .into_iter()
@@ -193,6 +220,11 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
             spread.add(stats.pois.get(kind).copied().unwrap_or_default());
         }
         caves.add(stats.cave_per_mille());
+        for (kind, spread) in &mut ecosystems {
+            spread.add(stats.caves.get(kind).copied().unwrap_or_default());
+        }
+        cave_caches.add(stats.cave_caches);
+        water.add(stats.water_tiles);
         starter.add(stats.starter_field_value);
         for (kind, spread) in &mut features {
             spread.add(stats.features.get(kind).copied().unwrap_or_default());
@@ -259,6 +291,14 @@ pub fn distribution_report(template: WorldSettings, first_seed: u64, seeds: u64)
     let _ = writeln!(out, "\npoints of interest");
     for (kind, spread) in &poi_kinds {
         let _ = writeln!(out, "  {:<20} {}", kind.name(), spread.cell());
+    }
+    if template.generator.has_cave_biomes() {
+        let _ = writeln!(out, "\ncave ecosystems");
+        for (kind, spread) in &ecosystems {
+            let _ = writeln!(out, "  {:<20} {}", kind.name(), spread.cell());
+        }
+        let _ = writeln!(out, "  {:<20} {}", "cave caches", cave_caches.cell());
+        let _ = writeln!(out, "  {:<20} {}", "water tiles", water.cell());
     }
     let _ = writeln!(out, "\nhazard clusters");
     for (kind, spread) in &clusters {

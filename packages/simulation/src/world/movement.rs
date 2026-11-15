@@ -5,7 +5,7 @@ use crate::{
     player::{ENGINE_CLIMB_CAP, drill_bite, engine_power, fuel_burn_efficiency},
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
-    terrain::{TILE_SIZE, Terrain, TilePosition},
+    terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
 };
 
 use super::WorldState;
@@ -81,6 +81,27 @@ pub const AUTHORITATIVE_MAX_FALL_SPEED: f32 = 560.0;
 pub const AUTHORITATIVE_PLAYER_RADIUS: f32 = 10.5;
 pub const AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES: f32 = 12.0;
 pub const AUTHORITATIVE_MIN_PLAYER_Y: f32 = -AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES * TILE_SIZE;
+
+/// Drag on a rig in cave water (per second; velocity is divided by `1 + rate * dt` each tick).
+pub const WATER_DRAG_PER_SECOND: f32 = 3.0;
+/// Share of the rig's gravity cave water buoys away.
+pub const WATER_BUOYANCY: f32 = 0.8;
+/// Slowest fall a mushroom cap bounces (px/s); slower landings just rest on it.
+pub const MUSHROOM_BOUNCE_MIN_IMPACT: f32 = 120.0;
+/// Share of the landing speed a mushroom cap gives back.
+pub const MUSHROOM_BOUNCE_KEEP: f32 = 0.85;
+/// Least upward speed a bounce gives (px/s).
+pub const MUSHROOM_BOUNCE_SPEED: f32 = 300.0;
+
+/// Whether a rig at `(x, y)` would rest on a mushroom cap (either bottom corner).
+fn lands_on_mushroom(terrain: &Terrain, x: f32, y: f32) -> bool {
+    let points = authoritative_collision_points(x, y);
+    points[2..].iter().any(|position| {
+        terrain
+            .tile(*position)
+            .is_some_and(|tile| tile.kind == TileKind::Cave(crate::cave::CaveTile::MushroomCap))
+    })
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AuthoritativeMovementStep {
@@ -197,6 +218,20 @@ impl WorldState {
                     AUTHORITATIVE_MAX_FALL_SPEED,
                 ),
         );
+        // Cave water (flooded caves, V6): buoyant and draggy, so a rig drifts down slowly and
+        // swims rather than flies. `1 / (1 + k dt)` keeps the step exact in plain arithmetic.
+        if self
+            .terrain
+            .water_at(authoritative_point_to_tile(player.x, player.y))
+        {
+            let drag = 1.0 / WATER_DRAG_PER_SECOND.mul_add(delta_seconds, 1.0);
+            player.velocity_x = quantize_simulation_scalar(player.velocity_x * drag);
+            player.velocity_y = quantize_simulation_scalar(
+                (-AUTHORITATIVE_RIG_GRAVITY * WATER_BUOYANCY)
+                    .mul_add(delta_seconds, player.velocity_y)
+                    * drag,
+            );
+        }
         if thrusting {
             let mut efficiency = fuel_burn_efficiency(player.fuel_tank_level);
             if parts.contains(&RigPartKind::BurstEngine) {
@@ -267,6 +302,17 @@ impl WorldState {
             if !blocked_y {
                 let next_y = quantize_simulation_scalar(player.y + step_y);
                 if authoritative_player_collides(&self.terrain, player.x, next_y) {
+                    // A giant mushroom's cap (fungal grottos) springs a falling rig back up.
+                    if delta_y > 0.0
+                        && player.velocity_y >= MUSHROOM_BOUNCE_MIN_IMPACT
+                        && lands_on_mushroom(&self.terrain, player.x, next_y)
+                    {
+                        player.velocity_y = quantize_simulation_scalar(
+                            -(player.velocity_y * MUSHROOM_BOUNCE_KEEP).max(MUSHROOM_BOUNCE_SPEED),
+                        );
+                        blocked_y = true;
+                        continue;
+                    }
                     if delta_y > 0.0 && player.velocity_y > AUTHORITATIVE_SAFE_LANDING_SPEED {
                         let damage = (player.velocity_y - AUTHORITATIVE_SAFE_LANDING_SPEED)
                             * AUTHORITATIVE_CRASH_DAMAGE_SCALE;

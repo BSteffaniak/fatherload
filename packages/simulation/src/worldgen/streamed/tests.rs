@@ -343,7 +343,8 @@ fn feature_ids_name_their_region() {
     let area = rect(-300, 0, 300, settings.height_tiles() - 1);
     let features = features_in(&settings, &area, None);
     for kind in FeatureKind::ALL {
-        if kind == FeatureKind::PrefabSlot {
+        // V5 has no cave ecosystems (V6 does, see `cave_tests`).
+        if matches!(kind, FeatureKind::PrefabSlot | FeatureKind::Cave) {
             continue;
         }
         assert!(
@@ -540,6 +541,7 @@ fn glyph(kind: TileKind) -> char {
         TileKind::Ore(_) => 'o',
         TileKind::Artifact(_) => 'A',
         TileKind::Poi(_) => 'P',
+        TileKind::Cave(_) => 'c',
     }
 }
 

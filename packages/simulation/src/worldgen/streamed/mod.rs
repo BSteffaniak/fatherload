@@ -33,6 +33,9 @@
 mod assemble;
 mod base;
 mod cache;
+pub mod cave_biomes;
+#[cfg(test)]
+mod cave_tests;
 pub mod index;
 mod regions;
 #[cfg(test)]
@@ -45,7 +48,10 @@ pub use assemble::CHUNK_TILES;
 pub use base::{MAX_SURFACE_DIP_ROWS, TOWN_FLAT_FIRST_COLUMN, TOWN_FLAT_LAST_COLUMN, surface_row};
 pub use regions::{POI_REGION_WIDTH, TRANSITION_REGION_WIDTH};
 
+pub use cave_biomes::{BiomeCell, CAVE_REGION, CaveBiome, CaveRegion};
+
 use crate::{
+    cave::CaveSample,
     terrain::{CHUNK_SIZE_TILES, ChunkPosition, Tile, TilePosition},
     worldgen::{
         FeatureId, FeatureIndex, FeatureKind, GeneratedWorld, WorldSettings,
@@ -170,11 +176,35 @@ pub fn nearest_feature(
     index::nearest_feature(&ctx(settings), from, kind, max_columns, accept)
 }
 
+/// The cave-ecosystem sample at `position` (`None` outside every cave, and on generators
+/// without cave ecosystems). See [`crate::cave`].
+#[must_use]
+pub fn cave_at(settings: &WorldSettings, position: TilePosition) -> Option<CaveSample> {
+    if !settings.generator.has_cave_biomes() {
+        return None;
+    }
+    let (region, cell) = cave_biomes::cave_cell_at(&ctx(settings), position.x, position.y)?;
+    let biome = region.biome.as_ref()?;
+    Some(CaveSample {
+        kind: biome.kind,
+        feature: biome.feature.id,
+        interior: matches!(cell, BiomeCell::Open | BiomeCell::Water),
+        water: cell == BiomeCell::Water,
+    })
+}
+
+/// The caves whose footprints overlap `rect` (their rasters: open, water and wall cells).
+#[must_use]
+pub fn caves_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<Arc<CaveRegion>> {
+    cave_biomes::caves_in(&ctx(settings), rect)
+}
+
 /// Forgets every memoized region and chunk (tests).
 #[cfg(test)]
 pub(crate) fn clear_caches() {
     CHUNKS.clear();
     regions::clear_caches();
+    cave_biomes::clear_caches();
 }
 
 /// The chunk rows a streamed world of `settings` has (its height in chunks, rounded up).
