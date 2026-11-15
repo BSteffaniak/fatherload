@@ -1988,10 +1988,9 @@ pub const fn blast_damage(kind: ExplosiveKind) -> Option<f32> {
         ExplosiveKind::Cluster => 30.0,
         ExplosiveKind::Bomblet => 24.0,
         ExplosiveKind::C4 => 95.0,
-        ExplosiveKind::Shaped => 45.0,
+        ExplosiveKind::Shaped | ExplosiveKind::Rocket => 45.0,
         ExplosiveKind::Mining => 50.0,
         ExplosiveKind::Incendiary => 28.0,
-        ExplosiveKind::Rocket => 45.0,
         ExplosiveKind::Emp | ExplosiveKind::Flare | ExplosiveKind::Smoke | ExplosiveKind::Scare => {
             return None;
         }

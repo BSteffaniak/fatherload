@@ -382,9 +382,6 @@ impl Patch {
                 .jitter(0.04, 1.0)
                 .ducking(0.45)
                 .priority(8),
-            Self::RivetShot | Self::CutterZap => {
-                PatchInfo::new(Feedback).instances(4).jitter(0.07, 1.5)
-            }
             Self::ImpactRock | Self::ImpactHit => {
                 PatchInfo::new(Feedback).instances(4).jitter(0.1, 2.0)
             }
@@ -425,7 +422,7 @@ impl Patch {
                 .instances(3)
                 .send(0.25)
                 .jitter(0.06, 1.0),
-            Self::AcidSpit | Self::MachineZap => {
+            Self::AcidSpit | Self::MachineZap | Self::RivetShot | Self::CutterZap => {
                 PatchInfo::new(Feedback).instances(4).jitter(0.07, 1.5)
             }
             Self::CreatureHurt | Self::MachineHurt => {

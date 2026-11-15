@@ -196,15 +196,14 @@ impl WorldState {
                 EntityKind::GasCloud => self.advance_gas_cloud(id),
                 EntityKind::Boulder => self.advance_boulder(id, next_tick, output),
                 EntityKind::Drop => self.advance_drop(id, &mut merged),
-                // A critter's motion is a pure function of time (`CritterState::offset_at`);
-                // its population is kept by `advance_critters` (`world/caves.rs`).
-                EntityKind::Critter => {}
                 EntityKind::Enemy => self.advance_enemy(id, next_tick, output),
                 EntityKind::EnemyShot => self.advance_enemy_shot(id, next_tick, output),
                 EntityKind::Projectile => self.advance_projectile(id, next_tick, output),
-                // Charges move in the bomb pass (`EntityPhase::Charges`), never here; practice
-                // targets stand still.
-                EntityKind::Charge | EntityKind::Target => {}
+                // A critter's motion is a pure function of time (`CritterState::offset_at`);
+                // its population is kept by `advance_critters` (`world/caves.rs`). Charges move
+                // in the bomb pass (`EntityPhase::Charges`), never here; practice targets stand
+                // still.
+                EntityKind::Critter | EntityKind::Charge | EntityKind::Target => {}
             }
         }
         // Merged-away drops (their stacks already moved onto their neighbours).
