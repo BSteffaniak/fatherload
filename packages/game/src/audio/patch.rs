@@ -155,6 +155,11 @@ patches! {
     GasHissLoop => "loop_gas_hiss",
     LavaSizzleLoop => "loop_lava_sizzle",
     BoulderRumbleLoop => "loop_boulder_rumble",
+    // WP-DROPS pickups (appended: earlier patches keep their variation seeds).
+    BlockPickup => "pickup_block",
+    ArtifactPickup => "pickup_artifact",
+    StowageFull => "stowage_full",
+    BlockDump => "block_dump",
 }
 
 /// Playback metadata of a patch.
@@ -320,6 +325,17 @@ impl Patch {
             | Self::GasHissLoop
             | Self::LavaSizzleLoop
             | Self::BoulderRumbleLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            // A hoovered spray plays many of these at once: cheap, quiet and well jittered.
+            Self::BlockPickup => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.08)
+                .jitter(0.09, 2.0),
+            Self::ArtifactPickup => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.25)
+                .jitter(0.015, 0.5),
+            Self::StowageFull => PatchInfo::new(Interface).instances(1).jitter(0.0, 0.3),
+            Self::BlockDump => PatchInfo::new(Impact).instances(2).jitter(0.05, 1.0),
         }
     }
 
@@ -381,6 +397,10 @@ impl Patch {
             Self::GasHissLoop => gas_hiss_loop(rng),
             Self::LavaSizzleLoop => lava_sizzle_loop(rng),
             Self::BoulderRumbleLoop => boulder_rumble_loop(rng),
+            Self::BlockPickup => block_pickup(rng),
+            Self::ArtifactPickup => artifact_pickup(rng),
+            Self::StowageFull => stowage_full(rng),
+            Self::BlockDump => block_dump(rng),
         }
     }
 }
@@ -1723,6 +1743,76 @@ fn boulder_rumble_loop(rng: &mut Rng) -> Vec<f32> {
         0.2,
         false,
     );
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// Drops and pickups (WP-DROPS)
+// ---------------------------------------------------------------------------------------------
+
+/// A plain block clacking into the hopper: a short wooden knock with a little grit.
+fn block_pickup(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(420.0 * rng.jitter(0.08), 260.0, 0.05, 2.5);
+    let knock = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        1_600.0 * rng.jitter(0.1),
+        2.5,
+        0.035,
+    );
+    mix_into(&mut out, &knock, 0.0, 0.6);
+    // A tiny upward blip so it reads as "got it", not as a bump.
+    let mut osc = Osc::new(Wave::Triangle);
+    let blip = render(0.06, |t| {
+        osc.next(glide(t, 900.0, 1_300.0, 0.03)) * perc(t, 0.002, 0.05)
+    });
+    mix_into(&mut out, &blip, 0.012, 0.25);
+    out
+}
+
+/// An artifact into the bay: the ore sparkle, richer, with a low bell under it.
+fn artifact_pickup(rng: &mut Rng) -> Vec<f32> {
+    let first = rng.index(SPARKLE_NOTES.len() - 4);
+    let mut out = bell(SPARKLE_NOTES[first] * 0.5, 1.0, 1.8, 0.7);
+    for (step, offset) in [0_usize, 2, 4].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &bell(SPARKLE_NOTES[first + offset], 2.0, 1.4, 0.35),
+            0.06 * step as f32,
+            0.6,
+        );
+    }
+    out
+}
+
+/// Bay or hopper full: a muffled double clunk against a closed hatch.
+fn stowage_full(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for hit in 0..2 {
+        let mut clunk = thump(170.0 * rng.jitter(0.03), 110.0, 0.09, 3.0);
+        let pitch = 620.0 * rng.jitter(0.04);
+        let lid = clank(rng, pitch, 0.06);
+        mix_into(&mut clunk, &lid, 0.0, 0.35);
+        mix_into(&mut out, &clunk, hit as f32 * 0.12, 1.0 - hit as f32 * 0.2);
+    }
+    out
+}
+
+/// Blocks tipped out of the hopper: a tumbling rattle of clacks settling.
+fn block_dump(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Brown,
+        FilterMode::LowPass,
+        800.0,
+        0.8,
+        0.25,
+    );
+    for time in scatter(rng, 9, 0.0, 0.45, 1.6) {
+        let clack = thump(380.0 * rng.jitter(0.15), 240.0, 0.04, 2.5);
+        mix_into(&mut out, &clack, time, rng.range(0.35, 0.8));
+    }
     out
 }
 

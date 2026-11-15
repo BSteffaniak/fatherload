@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use fatherload_simulation::{
-    BlastDirection, ExplosiveKind, GameplayEventKind, PlayerId, WorldState,
+    BlastDirection, ExplosiveKind, GameplayEventKind, PlayerId, WorldState, item::ItemKind,
 };
 
 use crate::{
@@ -18,6 +18,13 @@ const DAMAGE_CUE_COOLDOWN_SECONDS: f32 = 0.5;
 const SPARK_LIFE_SECONDS: f32 = 0.45;
 /// How long a bomb blast stays on screen.
 pub const EXPLOSION_SECONDS: f32 = 0.7;
+/// How long a picked-up drop takes to fly into its rig (WP-DROPS).
+pub const PICKUP_FLIGHT_SECONDS: f32 = 0.22;
+/// Most pickup flights alive at once (a hoovered blast spray).
+const MAX_PICKUP_FLIGHTS: usize = 96;
+/// Most pickup sounds one frame plays per player (a spray hoovered in one tick is a flurry,
+/// not a wall of identical chimes).
+const PICKUP_CUES_PER_FRAME: usize = 3;
 
 /// Delivers each runtime event to presentation at most once, keyed by its stable identity
 /// `(epoch, tick, player, kind, ordinal)`. Host events are already unique; a predicting client
@@ -86,11 +93,38 @@ impl Explosion {
     }
 }
 
+/// A collected drop flying from where it was into its rig (presentation of
+/// [`GameplayEventKind::ItemsCollected`]; the item is already in the bay).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PickupFlight {
+    pub item: ItemKind,
+    /// How many were picked up (a stack shows its count on the way in).
+    pub count: u32,
+    /// Where the drop was, in world pixels.
+    pub from_x: f32,
+    pub from_y: f32,
+    /// The rig it flies into (followed every frame).
+    pub player: PlayerId,
+    /// Seconds since the pickup.
+    pub age: f32,
+}
+
+impl PickupFlight {
+    /// Progress of the flight, 0 at the drop to 1 at the rig (eased in, so it accelerates into
+    /// the hatch).
+    #[must_use]
+    pub fn progress(&self) -> f32 {
+        let t = (self.age / PICKUP_FLIGHT_SECONDS).clamp(0.0, 1.0);
+        t * t
+    }
+}
+
 /// Transient presentation effects.
 #[derive(Clone, Debug, Default)]
 pub struct Effects {
     sparks: Vec<SparkParticle>,
     explosions: Vec<Explosion>,
+    pickups: Vec<PickupFlight>,
     damage_cooldowns: BTreeMap<PlayerId, f32>,
     /// Items in each local player's bay last frame (a pickup is growth).
     cargo_totals: BTreeMap<PlayerId, u32>,
@@ -112,10 +146,17 @@ impl Effects {
         &self.explosions
     }
 
+    /// Drops flying into their rigs.
+    #[must_use]
+    pub fn pickups(&self) -> &[PickupFlight] {
+        &self.pickups
+    }
+
     /// Clears everything (new world).
     pub fn clear(&mut self) {
         self.sparks.clear();
         self.explosions.clear();
+        self.pickups.clear();
         self.presented_blasts.clear();
         self.blast_order.clear();
         self.damage_cooldowns.clear();
@@ -136,6 +177,11 @@ impl Effects {
         }
         self.explosions
             .retain(|explosion| explosion.age < EXPLOSION_SECONDS);
+        for pickup in &mut self.pickups {
+            pickup.age += delta_seconds;
+        }
+        self.pickups
+            .retain(|pickup| pickup.age < PICKUP_FLIGHT_SECONDS);
         for cooldown in self.damage_cooldowns.values_mut() {
             *cooldown -= delta_seconds;
         }
@@ -158,6 +204,7 @@ impl Effects {
         let mut cues = Vec::new();
         let mut blast_cues = 0;
         let mut impact_cues = 0;
+        let mut pickup_cues: BTreeMap<PlayerId, usize> = BTreeMap::new();
         for event in events {
             let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
                 continue;
@@ -239,6 +286,37 @@ impl Effects {
                     {
                         cues.push(PlacedCue::world(cue, x, y));
                         impact_cues += 1;
+                    }
+                    continue;
+                }
+                GameplayEventKind::ItemsCollected {
+                    player_id,
+                    item,
+                    count,
+                    x,
+                    y,
+                } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (from_x, from_y) = (x as f32, y as f32);
+                    if self.pickups.len() < MAX_PICKUP_FLIGHTS {
+                        self.pickups.push(PickupFlight {
+                            item,
+                            count,
+                            from_x,
+                            from_y,
+                            player: player_id,
+                            age: 0.0,
+                        });
+                    }
+                    let heard = pickup_cues.entry(player_id).or_default();
+                    if !local || !local_players.contains(&player_id) {
+                        continue;
+                    }
+                    if *heard < PICKUP_CUES_PER_FRAME
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        *heard += 1;
+                        cues.push(PlacedCue::player(cue, player_id));
                     }
                     continue;
                 }
@@ -373,7 +451,11 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::BlueprintCompleted { player_id, .. }
         | GameplayEventKind::RigCustomized { player_id }
         | GameplayEventKind::ExplosiveDeployed { player_id, .. }
-        | GameplayEventKind::RemoteDetonation { player_id } => Some(player_id),
+        | GameplayEventKind::RemoteDetonation { player_id }
+        | GameplayEventKind::ItemsCollected { player_id, .. }
+        | GameplayEventKind::PickupBlocked { player_id, .. }
+        | GameplayEventKind::BlocksDumped { player_id }
+        | GameplayEventKind::CollectBlocksToggled { player_id, .. } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

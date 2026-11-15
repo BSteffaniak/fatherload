@@ -119,10 +119,10 @@ pub(super) fn draw_view_hud(
     let (left, top) = (rect.x as i32 + 4, rect.y as i32 + 4);
     let split = snapshot.views.len() > 1;
 
-    // Stats: hull, fuel, cargo.
+    // Stats: hull, fuel, cargo, block hopper.
     let width = stats_panel_width(rect.width);
     let header = if split { 11 } else { 0 };
-    let panel_height = 6 + header + 3 * 12 + 3;
+    let panel_height = 6 + header + 4 * 12 + 3;
     ui_kit::panel(
         draw,
         Rectangle::new(left as f32, top as f32, width as f32, panel_height as f32),
@@ -166,7 +166,7 @@ pub(super) fn draw_view_hud(
         BarColors::FUEL,
         0.2,
     );
-    ui_kit::stat_bar(
+    y += ui_kit::stat_bar(
         draw,
         inner_x,
         y,
@@ -176,6 +176,24 @@ pub(super) fn draw_view_hud(
         hud.cargo_used as f32,
         hud.cargo_capacity as f32,
         BarColors::CARGO,
+        0.0,
+    );
+    // WP-DROPS: the block hopper fills separately from the bay ("BLOCKS OFF" when the rig's
+    // collect toggle is off).
+    ui_kit::stat_bar(
+        draw,
+        inner_x,
+        y,
+        inner_width,
+        &icons::STONE_BLOCK,
+        if view.player.collect_blocks {
+            "BLOCKS"
+        } else {
+            "BLOCKS OFF"
+        },
+        view.player.block_hopper.total() as f32,
+        view.player.block_hopper_capacity as f32,
+        BarColors::HOPPER,
         0.0,
     );
 
@@ -560,6 +578,9 @@ fn hud_warnings(
     if player.cargo_used() >= player.cargo_capacity {
         warnings.push(("CARGO FULL", &icons::CARGO));
     }
+    if player.collect_blocks && player.block_hopper.total() >= player.block_hopper_capacity {
+        warnings.push(("HOPPER FULL", &icons::STONE_BLOCK));
+    }
     // Warning depths are classic nominal rows (deep worlds stretch them with their bands).
     let depth = snapshot.terrain.nominal_row(view.hud.depth);
     if depth >= 60 {
@@ -874,6 +895,7 @@ fn draw_research_log_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
 )]
 fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let mut sections = Vec::new();
+    let (hopper, hopper_about) = counters::hopper_section(ui);
     sections.push(Section::new(
         "Cargo",
         GOLD,
@@ -1036,11 +1058,16 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         )
         .collect(),
     ));
+    // The hopper's rows are the dialog's only selectable ones: right after the cargo.
+    sections.insert(1, hopper);
     UiLayout::screen(draw).modal_with_render_plan(
         "Inventory",
-        "Cargo, artifacts, consumables and field kits.",
-        &ModalContent::new(sections)
-            .prompts(&[hint(Prompt::Inventory, ""), hint(Prompt::Back, "close")]),
+        "Cargo, blocks, artifacts, consumables and field kits.",
+        &ModalContent::new(sections).footer(hopper_about).prompts(&[
+            hint(Prompt::Confirm, "toggle / dump"),
+            hint(Prompt::Inventory, ""),
+            hint(Prompt::Back, "close"),
+        ]),
     );
 }
 

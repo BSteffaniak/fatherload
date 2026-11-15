@@ -32,6 +32,7 @@ use crate::{
 };
 
 mod buildings;
+mod drops;
 mod explosives;
 mod fx;
 mod quest_marks;
@@ -75,6 +76,10 @@ pub(super) struct WorldScene<'a> {
     pub bombs: &'a [PlacedBomb],
     pub bomb_alpha: f32,
     pub boulders: &'a [FallingBoulder],
+    /// Entities (item drops are drawn from it, see `drops`).
+    pub entities: &'a fatherload_simulation::entity::EntityStore,
+    /// Collected drops flying into their rigs.
+    pub pickups: &'a [crate::effects::PickupFlight],
     pub sparks: &'a [SparkParticle],
     pub explosions: &'a [Explosion],
     /// Twin-relay vault locks counting down.
@@ -154,6 +159,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     for boulder in scene.boulders {
         fx::draw_boulder(draw, boulder, seconds);
     }
+    drops::draw_drops(draw, scene);
     quest_marks::draw_quest_markers(draw, scene.quest_markers, seconds);
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
@@ -172,6 +178,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         fx::draw_gas_cloud(draw, cloud, seconds);
     }
     fx::draw_sparks(draw, scene.sparks);
+    drops::draw_pickup_flights(draw, scene);
     for explosion in scene.explosions {
         if explosion.kind == fatherload_simulation::ExplosiveKind::Bomb {
             fx::draw_explosion(draw, explosion);
@@ -190,6 +197,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             rig::draw_remote_tag(draw, player, scene.ticks);
         }
     }
+    drops::draw_full_tag(draw, scene);
 }
 
 /// Solid bedrock beyond the left and right edges of the world below the ground line, and under

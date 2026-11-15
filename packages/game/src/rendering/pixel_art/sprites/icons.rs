@@ -1,6 +1,6 @@
 //! 9x9 icons that sit on a text line: rig stats, currency, warnings and every mineral.
 
-use fatherload_simulation::terrain::MineralKind;
+use fatherload_simulation::{item::BlockKind, terrain::MineralKind};
 
 #[allow(
     clippy::wildcard_imports,
@@ -406,3 +406,92 @@ pub const fn mineral(mineral: MineralKind) -> &'static SpriteDef {
         MineralKind::Mythril => &MYTHRIL_ORE,
     }
 }
+
+/// A building block (WP-DROPS): `w` glint, `l` top face, `m` body, `d` shade, `x` specks.
+const BLOCK: &[&str] = &[
+    ".ooooooo.",
+    "owllllllo",
+    "olllllldo",
+    "ommmmmmdo",
+    "omxmmmmdo",
+    "ommmmxmdo",
+    "ommxmmmdo",
+    "odddddddo",
+    ".ooooooo.",
+];
+
+macro_rules! block_icon {
+    ($ident:ident, $name:literal, $d:ident, $m:ident, $l:ident, $w:ident, $x:ident) => {
+        pub const $ident: SpriteDef = SpriteDef {
+            name: $name,
+            legend: &[
+                ('o', INK),
+                ('d', $d),
+                ('m', $m),
+                ('l', $l),
+                ('w', $w),
+                ('x', $x),
+            ],
+            frames: &[BLOCK],
+            frame_seconds: 0.0,
+        };
+    };
+}
+
+block_icon!(
+    DIRT_BLOCK,
+    "icon_block_dirt",
+    SOIL_DARK,
+    SOIL,
+    LOAM,
+    SAND,
+    SOIL_DARK
+);
+block_icon!(CLAY_BLOCK, "icon_block_clay", RUST, CLAY, SAND, CREAM, RUST);
+block_icon!(
+    STONE_BLOCK,
+    "icon_block_stone",
+    STONE_DARK,
+    STONE,
+    STONE_LIGHT,
+    MIST,
+    STONE_DARK
+);
+block_icon!(
+    HARD_ROCK_BLOCK,
+    "icon_block_hard_rock",
+    SLATE_DARK,
+    SLATE,
+    SLATE_LIGHT,
+    FOG,
+    NIGHT
+);
+
+/// The icon for `block`.
+#[must_use]
+pub const fn block(block: BlockKind) -> &'static SpriteDef {
+    match block {
+        BlockKind::Dirt => &DIRT_BLOCK,
+        BlockKind::Clay => &CLAY_BLOCK,
+        BlockKind::Stone => &STONE_BLOCK,
+        BlockKind::HardRock => &HARD_ROCK_BLOCK,
+    }
+}
+
+/// The rig's pickup magnet (the "collect blocks" toggle).
+pub const MAGNET: SpriteDef = SpriteDef {
+    name: "icon_magnet",
+    legend: &[('o', INK), ('r', RED), ('p', ROSE), ('w', STEEL_LIGHT)],
+    frames: &[&[
+        "..ooooo..",
+        ".oprrrro.",
+        "oprooorro",
+        "opro.orro",
+        "orro.orro",
+        "oooo.oooo",
+        "owwo.owwo",
+        "owwo.owwo",
+        "oooo.oooo",
+    ]],
+    frame_seconds: 0.0,
+};

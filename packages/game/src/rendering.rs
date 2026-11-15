@@ -608,6 +608,8 @@ impl GameRenderer {
                     bombs: snapshot.bombs,
                     bomb_alpha: snapshot.bomb_alpha,
                     boulders: &snapshot.boulders,
+                    entities: snapshot.entities,
+                    pickups: snapshot.pickups,
                     sparks: snapshot.sparks,
                     explosions: snapshot.explosions,
                     relay_countdowns: &snapshot.relay_countdowns,

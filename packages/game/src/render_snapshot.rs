@@ -20,7 +20,7 @@ use fatherload_simulation::{
 
 use crate::{
     camera_lead::CameraLeads,
-    effects::{Explosion, SparkParticle},
+    effects::{Explosion, PickupFlight, SparkParticle},
     runtime::LocalSeat,
     runtime::RuntimeEvent,
 };
@@ -418,6 +418,11 @@ pub struct RenderSnapshot<'w> {
     pub infrastructure: &'w [PlacedInfrastructure],
     /// Falling boulders (entities, copied out of the world's entity store).
     pub boulders: Vec<FallingBoulder>,
+    /// The world's entity store: item drops are drawn straight from it, looked up per view
+    /// through its spatial index (WP-DROPS).
+    pub entities: &'w fatherload_simulation::entity::EntityStore,
+    /// Collected drops flying into their rigs (set by the game after [`Self::build`]).
+    pub pickups: &'w [PickupFlight],
     pub sparks: &'w [SparkParticle],
     /// Bomb blasts in progress.
     pub explosions: &'w [Explosion],
@@ -469,6 +474,8 @@ impl<'w> RenderSnapshot<'w> {
             bomb_alpha: 1.0,
             infrastructure: world.infrastructure(),
             boulders: world.falling_boulders(),
+            entities: world.entities(),
+            pickups: &[],
             sparks,
             explosions,
             relay_countdowns: relay_countdowns(world),

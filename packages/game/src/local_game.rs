@@ -314,6 +314,7 @@ impl LocalGame {
         // A client draws its rig where prediction + smoothing put it (the camera follows that
         // same transform) and remote rigs where interpolation puts them.
         snapshot.bomb_alpha = self.runtime.interpolation_alpha();
+        snapshot.pickups = self.effects.pickups();
         snapshot.apply_pose_overrides(&self.runtime.pose_overrides());
         snapshot.apply_camera_leads(&self.camera_leads);
         for view in &mut snapshot.views {

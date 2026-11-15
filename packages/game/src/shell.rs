@@ -25,6 +25,7 @@ use crate::{
 };
 
 mod garage;
+pub mod hopper;
 mod quests;
 mod test_mode;
 mod world_setup;
@@ -282,8 +283,16 @@ pub enum SoundCue {
     UiBack,
     /// A refused action.
     UiError,
-    /// Ore or an artifact went into the cargo bay.
+    /// Ore or a material went into the cargo bay.
     Pickup,
+    /// A building block went into the block hopper (WP-DROPS).
+    BlockPickup,
+    /// An artifact went into the cargo bay.
+    ArtifactPickup,
+    /// A drop in reach did not fit: the cargo bay or block hopper is full.
+    StowageFull,
+    /// Blocks tipped out of the hopper.
+    BlocksDumped,
     BombPlaced,
     BombBounce,
     InfrastructurePlaced,
@@ -750,6 +759,10 @@ impl SeatUi {
             self.modal.is_none_or(|modal| !modal.is_global()),
             "global dialogs live in ShellState::modal"
         );
+        if input.inventory && self.modal != Some(ModalScreen::Inventory) {
+            // The inventory's hopper rows start at the top.
+            self.selected_menu_item = 0;
+        }
         toggle_modal(&mut self.modal, input.inventory, ModalScreen::Inventory);
         toggle_modal(&mut self.modal, input.map, ModalScreen::Map);
         toggle_modal(&mut self.modal, input.help, ModalScreen::Help);
@@ -911,11 +924,14 @@ impl SeatUi {
             .map_or(1, |player| upgrade_offers(player).len());
         let progression = ctx.world.progression();
         let max_item = match modal {
-            ModalScreen::Depot => 4,
+            // The depot's last row (index 5) sells the block hopper (WP-DROPS).
+            ModalScreen::Depot | ModalScreen::Salvage => 5,
+            ModalScreen::Inventory => ctx.player().map_or(0, |player| {
+                hopper::hopper_rows(player).len().saturating_sub(1)
+            }),
             ModalScreen::Fuel | ModalScreen::Bank => 2,
             ModalScreen::Repair => GARAGE_COUNTER_ROW,
             ModalScreen::Explosives => 3 + fatherload_simulation::explosive::EXPLOSIVE_OFFERS.len(),
-            ModalScreen::Salvage => 5,
             ModalScreen::Headquarters => {
                 if ctx.deep_claim_unlocked() {
                     6
@@ -991,6 +1007,7 @@ impl SeatUi {
                 1 => Some(SessionServiceRequest::SellCargo),
                 2 => Some(SessionServiceRequest::AutoSortLowGradeCargo),
                 3 => Some(SessionServiceRequest::SellScanData),
+                5 => Some(SessionServiceRequest::SellBlocks),
                 _ => {
                     self.modal = Some(ModalScreen::DepotReceiptHistory);
                     None
@@ -1080,8 +1097,32 @@ impl SeatUi {
             | ModalScreen::WorldSetup
             | ModalScreen::WarpToLayer
             | ModalScreen::Help
-            | ModalScreen::Inventory
             | ModalScreen::Garage => None,
+            ModalScreen::Inventory => {
+                // The hopper rows (WP-DROPS): toggle collecting, dump blocks.
+                if let Some(player) = ctx.player()
+                    && let Some(row) = hopper::hopper_rows(player)
+                        .get(self.selected_menu_item)
+                        .copied()
+                {
+                    requests.push(ShellRequest::Action {
+                        seat: ctx.seat,
+                        command: row.command(player),
+                    });
+                    self.message = match row {
+                        hopper::HopperRow::ToggleCollect if player.collect_blocks => {
+                            "Collect blocks: off. The magnet leaves plain blocks alone.".to_owned()
+                        }
+                        hopper::HopperRow::ToggleCollect => {
+                            "Collect blocks: on. Blocks go to the hopper.".to_owned()
+                        }
+                        hopper::HopperRow::DumpAll => "Hopper tipped out.".to_owned(),
+                        hopper::HopperRow::Dump(block) => format!("Dumped every {}.", block.name()),
+                    };
+                    self.selected_menu_item = 0;
+                }
+                None
+            }
         };
         if let Some(request) = service {
             self.submit_service(request, ctx, requests);
@@ -1200,6 +1241,16 @@ impl SeatUi {
                     "Hull already repaired or no credits available.".to_owned()
                 } else {
                     format!("Hull repaired for {spent} credits.")
+                }
+            }
+            SessionServiceRequest::SellBlocks => {
+                cue = SoundCue::Sell;
+                if earned == 0 {
+                    "No blocks to sell.".to_owned()
+                } else {
+                    let receipt = format!("Sold the block hopper for {earned} credits.");
+                    self.push_receipt(receipt.clone());
+                    receipt
                 }
             }
             SessionServiceRequest::SellCargo | SessionServiceRequest::AutoSortLowGradeCargo => {
@@ -2241,6 +2292,7 @@ const fn unavailable_message(request: SessionServiceRequest) -> &'static str {
             "Upgrade unavailable: check credits, tier and depth unlocks."
         }
         SessionServiceRequest::CompleteDepotWork => "No contract is ready to complete.",
+        SessionServiceRequest::SellBlocks => "The block hopper is empty.",
         SessionServiceRequest::CustomizeRig { .. } => {
             "The paint bay refused that job: a part of it is still locked."
         }

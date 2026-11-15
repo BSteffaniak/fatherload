@@ -12,8 +12,12 @@ use fatherload_simulation::{
         upgrade_effect, upgrade_locked_by, upgrade_maxed, upgrade_offers, upgrade_tier_name,
     },
     explosive::EXPLOSIVE_OFFERS,
+    item::BlockKind,
     terrain::MineralKind,
-    world::{BOMB_BUNDLES, MINING_ROCKETS_COST, MINING_ROCKETS_COUNT, MINING_ROCKETS_SHACK_LEVEL},
+    world::{
+        BOMB_BUNDLES, MINING_ROCKETS_COST, MINING_ROCKETS_COUNT, MINING_ROCKETS_SHACK_LEVEL,
+        drops::block_sale_value,
+    },
 };
 use raylib::prelude::*;
 
@@ -31,7 +35,10 @@ use super::{
     prompts::{Hint, hint},
     screen::UiFrame,
 };
-use crate::input::prompts::Prompt;
+use crate::{
+    input::prompts::Prompt,
+    shell::hopper::{HopperRow, hopper_rows},
+};
 
 /// One counter row before it becomes a [`SectionItem`]: what it is, what it costs and why it
 /// may be unavailable.
@@ -968,6 +975,10 @@ pub(super) fn draw_expedition_board(draw: &mut RaylibDrawHandle<'_>, ui: &UiFram
     );
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one row list mirroring the depot's menu, index for index"
+)]
 pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let player = ui.player;
     let progression = ui.snapshot.progression;
@@ -1040,6 +1051,21 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
             format!("{} saved receipts", ui.seat.depot_receipts.len()),
         )
         .about("Your recent sales and payouts."),
+        Offer::new(
+            icons::block(BlockKind::Stone),
+            "Sell block hopper",
+            format!(
+                "{}/{} blocks aboard",
+                player.block_hopper.total(),
+                player.block_hopper_capacity
+            ),
+        )
+        .payout(hopper_value(player))
+        .unavailable_if(player.block_hopper.is_empty())
+        .about(
+            "Kade buys plain blocks for fill: 1 cr dirt, 2 cr clay or stone, 4 cr hard rock. \
+             Keep them instead to build with.",
+        ),
     ];
     let (items, about) = offer_items(offers, ui.seat.selected_menu_item);
     let cargo_items = cargo_items(ui);
@@ -1056,6 +1082,74 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
             .footer(about)
             .prompts(&super::quests::with_quest_tab(ui, COUNTER_HELP)),
     );
+}
+
+/// What the depot pays for the whole block hopper.
+fn hopper_value(player: &fatherload_simulation::Player) -> u32 {
+    player
+        .block_hopper
+        .blocks()
+        .map(|(block, count)| block_sale_value(block).saturating_mul(count))
+        .sum()
+}
+
+/// The inventory's block hopper section (WP-DROPS): fill, the "collect blocks" toggle and one
+/// dump row per kind, index for index with [`hopper_rows`] (what confirm submits), plus the
+/// selected row's details.
+pub(super) fn hopper_section(ui: &UiFrame<'_, '_>) -> (Section, Option<String>) {
+    let player = ui.player;
+    let offers = hopper_rows(player)
+        .into_iter()
+        .map(|row| match row {
+            HopperRow::ToggleCollect => Offer::new(
+                &icons::MAGNET,
+                "Collect blocks",
+                if player.collect_blocks {
+                    "The magnet picks up plain blocks"
+                } else {
+                    "Blocks are left where they fall"
+                },
+            )
+            .tag(
+                if player.collect_blocks { "ON" } else { "OFF" },
+                if player.collect_blocks { LIME } else { FOG },
+            )
+            .about(
+                "Ore and artifacts are always collected. Turn blocks off when you only want \
+                 loot; they still drop for later (or for your crew).",
+            ),
+            HopperRow::DumpAll => Offer::new(
+                &menu_icons::SORT,
+                "Dump every block",
+                format!("{} blocks out the hatch", player.block_hopper.total()),
+            )
+            .tag("DUMP", ORANGE)
+            .about("Tips the hopper out beside the rig. Your magnet will not take them back."),
+            HopperRow::Dump(block) => Offer::new(
+                icons::block(block),
+                format!("Dump {}", block.name()),
+                format!("x{}", player.block_hopper.count(block)),
+            )
+            .tag("DUMP", ORANGE)
+            .about(format!(
+                "Tips every {} out beside the rig; the depot pays {} cr each instead.",
+                block.name(),
+                block_sale_value(block)
+            )),
+        })
+        .collect();
+    let (mut items, about) = offer_items(offers, ui.seat.selected_menu_item);
+    items.insert(
+        0,
+        SectionItem::meter(
+            "Hopper",
+            player.block_hopper.total() as f32,
+            player.block_hopper_capacity as f32,
+            SAND,
+            LOAM,
+        ),
+    );
+    (Section::new("Block Hopper", SAND, items), about)
 }
 
 /// The hold's minerals and artifacts at today's prices.

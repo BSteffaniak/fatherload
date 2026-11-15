@@ -701,6 +701,12 @@ impl BarColors {
         body: CLAY,
         shade: LOAM,
     };
+    /// The block hopper (stone greys, apart from the cargo bay's clay).
+    pub const HOPPER: Self = Self {
+        light: STONE_LIGHT,
+        body: STONE,
+        shade: STONE_DARK,
+    };
     pub const COOL: Self = Self {
         light: ICE,
         body: SKY_LIGHT,

@@ -2,7 +2,9 @@
 //! gameplay event -> cue table. Pure data, no device access.
 
 use fatherload_simulation::{
-    ExplosiveKind, GameplayEventKind, PlayerId, PoiKind, explosive::Deployment,
+    ExplosiveKind, GameplayEventKind, PlayerId, PoiKind,
+    explosive::Deployment,
+    item::{ItemCategory, ItemKind},
 };
 
 use super::patch::Patch;
@@ -81,6 +83,10 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::UiBack => Patch::UiBack,
         SoundCue::UiError => Patch::UiError,
         SoundCue::Pickup => Patch::Pickup,
+        SoundCue::BlockPickup => Patch::BlockPickup,
+        SoundCue::ArtifactPickup => Patch::ArtifactPickup,
+        SoundCue::StowageFull => Patch::StowageFull,
+        SoundCue::BlocksDumped => Patch::BlockDump,
         SoundCue::BombPlaced => Patch::BombArm,
         SoundCue::BombBounce => Patch::LandLight,
         SoundCue::InfrastructurePlaced => Patch::Deploy,
@@ -129,6 +135,24 @@ pub const fn deploy_cue(kind: ExplosiveKind) -> SoundCue {
     }
 }
 
+/// The sound of picking up `item` (WP-DROPS): a clack for blocks, the bell sparkle for ore and
+/// materials, a richer chime for artifacts.
+#[must_use]
+pub const fn pickup_cue(item: ItemKind) -> SoundCue {
+    match item.category() {
+        ItemCategory::Block => SoundCue::BlockPickup,
+        ItemCategory::Artifact => SoundCue::ArtifactPickup,
+        ItemCategory::Mineral
+        | ItemCategory::Material
+        | ItemCategory::Module
+        | ItemCategory::Weapon
+        | ItemCategory::Ammo
+        | ItemCategory::Explosive
+        | ItemCategory::Cosmetic
+        | ItemCategory::Quest => SoundCue::Pickup,
+    }
+}
+
 /// The one-shot cue a gameplay event plays, if any. Exhaustive on purpose: a new event kind
 /// fails to compile until someone decides how it sounds. Events answered `None` are covered
 /// elsewhere (noted per arm).
@@ -165,11 +189,18 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::VaultLockReset { .. } => Some(SoundCue::VaultReset),
         // Quests: a tick per finished stage, the error buzz when a twist fails a job, and the
         // upgrade chime for a completed blueprint.
-        GameplayEventKind::QuestStageDone { .. } => Some(SoundCue::Ui),
+        // (The collect-blocks toggle ticks like a menu confirm.)
+        GameplayEventKind::QuestStageDone { .. }
+        | GameplayEventKind::CollectBlocksToggled { .. } => Some(SoundCue::Ui),
         GameplayEventKind::QuestFailed { .. } => Some(SoundCue::UiError),
         GameplayEventKind::BlueprintCompleted { .. } => Some(SoundCue::Upgrade),
         // A garage paint job: the spray can, heard from the rig (other players too).
         GameplayEventKind::RigCustomized { .. } => Some(SoundCue::SprayPaint),
+        // Drops (WP-DROPS): the pickup sound by item, the closed-hatch clunk when the bay or
+        // hopper is full and the rattle of dumped blocks.
+        GameplayEventKind::ItemsCollected { item, .. } => Some(pickup_cue(*item)),
+        GameplayEventKind::PickupBlocked { .. } => Some(SoundCue::StowageFull),
+        GameplayEventKind::BlocksDumped { .. } => Some(SoundCue::BlocksDumped),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -232,7 +263,11 @@ mod tests {
             | GameplayEventKind::QuestCompleted { .. }
             | GameplayEventKind::QuestFailed { .. }
             | GameplayEventKind::BlueprintCompleted { .. }
-            | GameplayEventKind::RigCustomized { .. } => {}
+            | GameplayEventKind::RigCustomized { .. }
+            | GameplayEventKind::ItemsCollected { .. }
+            | GameplayEventKind::PickupBlocked { .. }
+            | GameplayEventKind::BlocksDumped { .. }
+            | GameplayEventKind::CollectBlocksToggled { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -282,6 +317,30 @@ mod tests {
             GameplayEventKind::RigCustomized { player_id },
         ];
         events.push(GameplayEventKind::RemoteDetonation { player_id });
+        for item in [
+            ItemKind::Mineral(fatherload_simulation::terrain::MineralKind::Gold),
+            ItemKind::Artifact(fatherload_simulation::terrain::ArtifactKind::Fossil),
+            ItemKind::Block(fatherload_simulation::item::BlockKind::Stone),
+        ] {
+            events.push(GameplayEventKind::ItemsCollected {
+                player_id,
+                item,
+                count: 1,
+                x: 0,
+                y: 0,
+            });
+        }
+        for stowage in [
+            fatherload_simulation::item::Stowage::CargoBay,
+            fatherload_simulation::item::Stowage::BlockHopper,
+        ] {
+            events.push(GameplayEventKind::PickupBlocked { player_id, stowage });
+        }
+        events.push(GameplayEventKind::BlocksDumped { player_id });
+        events.push(GameplayEventKind::CollectBlocksToggled {
+            player_id,
+            enabled: false,
+        });
         events.push(GameplayEventKind::ClusterSplit {
             bomb_id: 1,
             x: 0,
@@ -369,6 +428,10 @@ mod tests {
             SoundCue::UiBack,
             SoundCue::UiError,
             SoundCue::Pickup,
+            SoundCue::BlockPickup,
+            SoundCue::ArtifactPickup,
+            SoundCue::StowageFull,
+            SoundCue::BlocksDumped,
             SoundCue::BombPlaced,
             SoundCue::BombBounce,
             SoundCue::InfrastructurePlaced,
