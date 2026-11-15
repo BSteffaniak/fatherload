@@ -44,7 +44,7 @@ fn cavern() -> WorldState {
     let mut world = WorldState::from_import(&WorldImport::new_game(PLAYER));
     for y in 52..=FLOOR + 1 {
         for x in LEFT - 1..=RIGHT + 1 {
-            let kind = if y >= FLOOR || x < LEFT || x > RIGHT {
+            let kind = if y >= FLOOR || !(LEFT..=RIGHT).contains(&x) {
                 TileKind::Stone
             } else {
                 TileKind::Air
@@ -107,13 +107,17 @@ fn act(
     )
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "call sites build the command inline"
+)]
 fn applied(world: &mut WorldState, player_id: PlayerId, command: PlayerCommand) {
+    let refused = command_refusal(world, player_id, &command);
     let (outcome, _) = act(world, player_id, command.clone());
     assert_eq!(
         outcome,
         PlayerScopedCommandOutcome::Applied,
-        "{command:?}: {:?}",
-        command_refusal(world, player_id, &command)
+        "{command:?}: {refused:?}"
     );
 }
 
@@ -129,7 +133,7 @@ fn command_refusal(
 }
 
 fn refusal(world: &WorldState, player_id: PlayerId, command: &PlayerCommand) -> BuildRefusal {
-    let (before, _) = (world.simulation_state_hash(), ());
+    let before = world.simulation_state_hash();
     let refusal = command_refusal(world, player_id, command).expect("refused");
     let mut copy = world.clone();
     let (outcome, _) = act(&mut copy, player_id, command.clone());
@@ -197,6 +201,7 @@ fn a_beacon_stakes_a_claim_and_charges_for_it() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines, reason = "one scenario per placement rule")]
 fn placement_rules_refuse_bad_spots_without_changing_the_world() {
     let mut world = cavern();
     // No claim yet.
@@ -510,7 +515,13 @@ fn the_underground_fuel_station_refuels_a_rig_at_depth() {
     assert_eq!(player.credits, credits, "your own station's fuel is free");
     assert!(world.failure_state(PLAYER).is_none(), "no longer stranded");
     let left = world.bases().module(station).expect("station").fuel;
-    assert_eq!(left, FUEL_STATION_STARTING_FUEL - expected as u32);
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a small whole amount of fuel"
+    )]
+    let pumped = expected as u32;
+    assert_eq!(left, FUEL_STATION_STARTING_FUEL - pumped);
     // Away from the station it refuses.
     park(&mut world, PLAYER, BEACON.x - 6, FLOOR - 1);
     world.player_mut(PLAYER).expect("player").fuel = 1.0;
@@ -733,7 +744,7 @@ fn lift_ladders_climb_without_fuel_and_break_falls() {
     }
     let player = world.player(PLAYER).expect("player");
     assert!(
-        player.y < start_y - 2.0 * TILE_SIZE,
+        player.y < 2.0f32.mul_add(-TILE_SIZE, start_y),
         "climbed with an empty tank"
     );
     assert!(player.fuel <= 0.0);
@@ -911,7 +922,8 @@ fn replicas_follow_builds_through_terrain_ops_and_the_bases_section() {
         let inputs = TickInputs::default().act(PLAYER, command);
         let output = authority.simulate_tick(authority.simulation_tick(), &inputs);
         replica.set_simulation_tick(authority.simulation_tick());
-        for id in authority.player_ids().collect::<Vec<_>>() {
+        let ids: Vec<PlayerId> = authority.player_ids().collect();
+        for id in ids {
             replica.apply_player_tick_state(id, authority.player_tick_state(id).expect("rig"));
         }
         for op in wire(&output.terrain_ops) {

@@ -89,6 +89,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `roster` | `add_player` / `remove_player`; spawn placement on an unbounded grid so any number of rigs spawn without overlap |
 | `discovery` | `DiscoveredTiles` (16x16 chunk bitsets; positions in JSON saves, bitsets in binary keyframes), clamped allocation-free reveals, `Discovery` op-log entries |
 | `player_sections` | how a `Player` splits into per-tick `PlayerRig`, public `RigBuild` (visible tiers and cosmetics) and private `PlayerInventory` |
+| `bases` | base building (WP-BASE): `check_build` / `apply_build_command` for every `BuildCommand`, fuel station synthesis, lift ladders, rescue home points (see Base building below) |
 | `garage` | the paint bay service (`SessionServiceRequest::CustomizeRig`, validated against the player's cosmetic unlocks; free) and `rig_cosmetics` |
 | `replication` | per-tick state, live entities, op log and on-change sections (`SectionKey` / `SectionPayload`) |
 | `visibility` | what one client may see: `SectionKey::visible_to`, `redacted_for`, `visible_state_hash` |
@@ -705,6 +706,54 @@ dormant mimics, leash, burrowers hearing drills, flares, nests, step hops, paths
 damage (armour, bombs, EMP and shields, fire, loot, cleared lairs), god mode, determinism, saves
 and replication.
 
+## Base building (`src/base.rs`, `src/world/bases.rs`)
+
+Expansion plan WP-BASE. A [`base::Bases`] (one shared on-change section, `SectionKey::Bases`,
+saved with the world) holds every claim, module, fixture and home point; solid pieces are
+terrain tiles.
+
+- **Claims.** A claim beacon (`ModuleKind::Beacon`) stakes a claim: a square of
+  `CLAIM_RADIUS` (10) tiles each way around it, owned by its builder, never overlapping
+  another claim or the town (its lots and the first `TOWN_NO_BUILD_ROWS` rows under them).
+  `claim_limit` (two, plus one every two bands reached) caps claims per player; each extra
+  beacon costs more (`beacon_price`). A beacon comes down only once its claim is bare.
+- **Pieces.** `BuiltTile` (block walls, plating, glass, planks) are `TileKind::Built` terrain
+  tiles: solid, replicated and saved by the op log and diffs, and `is_indestructible` (no drill,
+  test mode included, and no blast breaks them; `blast_radius` and shaped-charge lanes skip
+  them). Tile codes use their own range (`BUILT_TILE_CODE_BASE`, 0xB00). `TileFixtures` hold a
+  back wall and a passable front `Fixture` (door, lift ladder, lamp, decorations).
+- **Modules** (`ModuleKind`, `PlacedModule`): footprints placed by their bottom-left tile, open
+  tiles on solid ground, inside one claim. Storage chest, crew quarters, generator, fuel station,
+  repair bay, cargo uplink and the surface-only homestead; later ones unlock by band
+  (`ModuleKind::unlock_band`). Each claim's power (`Bases::power`, `WorldState::claim_power`) is
+  its beacon's cell plus generators (geothermal: more in hotter bands); modules draw power in
+  placement order (`WorldState::base_module_powered`). Powered fuel stations synthesize fuel on a
+  fixed schedule (`advance_bases`, every `FUEL_SYNTH_PERIOD_MILLIS`); refuelling from a station
+  is free, supply drops cost credits (`supply_drop_offer`).
+- **Commands.** `PlayerCommand::Build(BuildCommand)`: `Place { item, at, facing }`,
+  `Remove { at }` (module, else solid piece, else front fixture, else back wall, with refunds:
+  blocks back to the hopper and spilled as item drops when it is full, 75 % of a module's
+  credits) and `Use { structure, service }`. `WorldState::check_build` returns the verdict and
+  `BuildQuote` (cost or refund) the tick applies, or a `BuildRefusal` with a message; build
+  mode previews with it. Every action is host-authoritative (clients do not predict it).
+  Pieces take a block from the hopper or buy it (`block_credit_price`); modules take credits plus
+  blocks (cheapest kinds first, the rest bought).
+- **Permissions.** `ClaimAccess`: the crew builds and uses (default), crew uses / owner builds,
+  or owner only; the beacon's `CycleAccess` service is owner-only.
+- **Lift ladders and homes.** A rig centred on a ladder burns no fuel, climbs while thrust is
+  held even with an empty tank and falls no faster than `LIFT_SLIDE_SPEED`
+  (`apply_base_lift`, after the movement step). `SetHome` on a bed or homestead makes rescues
+  land there (`WorldState::rescue_home`).
+- **For other tracks.** `Bases::is_safe_zone` (claims plus `CLAIM_SAFE_MARGIN`) is where enemies
+  must not spawn. Blocks come from `Player::block_hopper` (`ItemKind::Block`), which WP-DROPS
+  fills.
+- **Events.** `BasePlaced`, `BaseRemoved`, `BaseServiceUsed` (netcode event codes 70-72).
+
+`world/base_tests.rs` covers placement rules, refunds, fixtures, blast-proofing, the fuel
+station refuelling a stranded rig at depth, synthesis and supply drops, power order, storage,
+the uplink, lift ladders, home points, access, claim limits, save round trips, replication
+through terrain ops and the section, and determinism.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
@@ -719,6 +768,9 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount), the rig's cosmetics and its mounted weapon | everyone |
 | On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, weapon rack, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
 | On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | everyone |
+| On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
+| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes) | everyone |
 
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is

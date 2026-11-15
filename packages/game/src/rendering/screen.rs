@@ -1555,6 +1555,7 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 (Prompt::Map, "Map"),
                 (Prompt::Inventory, "Inventory"),
                 (Prompt::Infrastructure, "Field kits"),
+                (Prompt::BuildMode, "Build mode"),
             ],
         ),
         (

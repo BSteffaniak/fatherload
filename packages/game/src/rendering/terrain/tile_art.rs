@@ -535,7 +535,7 @@ pub fn paint_tile(
 
 #[allow(
     clippy::too_many_lines,
-    reason = "one tile's paint order: air, fixtures, cave tiles, rock, stamps and edges"
+    reason = "one pass per tile family: air, built pieces, POI fixtures, cave tiles, rock"
 )]
 fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     let kind = terrain

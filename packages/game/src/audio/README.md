@@ -91,6 +91,16 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `impact_rock` | feedback | A shot chipping rock: a dusty pink-noise tick with grit. |
 | `impact_hit` | feedback | A shot striking a target: a solid thwack. |
 | `target_destroyed` | impact | A target breaking apart: a thump, a crunch and a clatter of parts. |
+| `build_place` | impact | A block set in place: a gritty pink-noise scrape, a dense knock and a settle of grit. |
+| `module_built` | feedback | A module bolted down: a heavy clunk and clank, an air-tool rattle, a two-bell ready chime. |
+| `build_remove` | impact | Deconstruction: four ratchet ticks falling in pitch, then a pop and a clink. |
+| `claim_stake` | feedback | A claim staked: the beacon's spike thumped in, a rising G-C-G brass call sign, a bell and an echo. |
+| `fuel_pump` | feedback | Refuelling at a base station: a nozzle clunk, a run of rising sine bubbles over a band-passed flow. |
+| `supply_drop` | feedback | A supply drop: a falling triangle whistle, the canister thudding home with a clank and a bell. |
+| `repair_weld` | feedback | A repair bay at work: high-passed arc crackle and a low-passed saw servo whirr, a done bell. |
+| `storage_stow` | feedback | Stowing in a chest: a wooden lid thunk and two latch clinks. |
+| `uplink_beam` | feedback | The cargo uplink: a sine and FM shimmer charging up two octaves, sparkle bells as it beams away. |
+| `home_set` | feedback | A home point set: a warm G-major chord on soft brass and a bell. |
 | `fuse_tick` | feedback | 30 ms tick: high-passed noise snap plus a 3.2 kHz blip. The director speeds it up (and raises its pitch) as the fuse burns. |
 | `deploy` | feedback | Six ratchet clicks, a heavy thunk and a metal ping. |
 | `scanner_pulse` | feedback | Sonar ping gliding down, FM shimmer, a band-pass whoosh sweeping up, echoes (180 ms, 45% feedback). |

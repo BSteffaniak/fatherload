@@ -78,6 +78,7 @@ pub const UPLINK_FEE_PERCENT: u32 = 15;
 /// Share of a module's credit price refunded on deconstruction.
 pub const MODULE_REFUND_PERCENT: u32 = 75;
 /// Credits per building block a piece costs when the hopper has none of the right kind.
+#[must_use]
 pub const fn block_credit_price(block: BlockKind) -> u32 {
     match block {
         BlockKind::Dirt => 2,

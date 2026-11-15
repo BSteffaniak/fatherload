@@ -41,7 +41,7 @@ pub const fn built_ramp(tile: BuiltTile) -> Ramp {
 
 /// Coursed masonry: `course` rows tall, `length` wide, alternate courses offset by half, a
 /// mortar line of `mortar` between, a lit top edge and a shaded bottom edge per block.
-fn masonry(
+const fn masonry(
     x: i32,
     y: i32,
     course: i32,
@@ -64,7 +64,7 @@ fn masonry(
         colors[0]
     } else if tone == 0 {
         colors[1]
-    } else if (hash(x, y, 223) % 23) == 0 {
+    } else if hash(x, y, 223).is_multiple_of(23) {
         colors[3]
     } else {
         colors[2]
@@ -72,7 +72,7 @@ fn masonry(
 }
 
 /// Rammed earth: wavy horizontal layers with pebbles.
-fn earth(x: i32, y: i32) -> PaletteIndex {
+const fn earth(x: i32, y: i32) -> PaletteIndex {
     let wave = (hash(x.div_euclid(5), 0, 233) % 2) as i32;
     let layer = (y + wave).rem_euclid(5);
     if hash(x, y, 239).is_multiple_of(31) {
@@ -87,7 +87,7 @@ fn earth(x: i32, y: i32) -> PaletteIndex {
 }
 
 /// Riveted plating: 8x8 panels with rivets in the corners and a brushed sheen.
-fn plating(x: i32, y: i32) -> PaletteIndex {
+const fn plating(x: i32, y: i32) -> PaletteIndex {
     let (px, py) = (x.rem_euclid(8), y.rem_euclid(8));
     if px == 7 || py == 7 {
         return STEEL_RAMP[0];

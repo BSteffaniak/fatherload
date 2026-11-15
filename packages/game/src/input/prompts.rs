@@ -162,13 +162,13 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         }
         (Prompt::Adjust | Prompt::Tab | Prompt::Walk, Wasd) | (Prompt::Walk, Full) => &["A", "D"],
         (Prompt::Confirm, Full | Wasd) => &["Enter"],
-        (Prompt::Confirm | Prompt::Use, Arrows) => &["RCtrl"],
+        (Prompt::Confirm | Prompt::Use | Prompt::BuildPlace, Arrows) => &["RCtrl"],
         (Prompt::Back | Prompt::Pause, Full | Wasd) => &["Esc"],
         (Prompt::Back, Arrows) => &["RShift"],
         (Prompt::Pause, Arrows) => &["RAlt"],
         (Prompt::Inventory, Arrows) => &["Num1"],
         (Prompt::Map, Arrows) => &["Num2"],
-        (Prompt::Use, Full | Wasd) => &["E"],
+        (Prompt::Use, Full | Wasd) | (Prompt::BuildPlace, Wasd) => &["E"],
         (Prompt::Thrust, Full | Wasd) => &["W"],
         (Prompt::Thrust, Arrows) => &["\u{2191}"],
         (Prompt::Drill, Full | Wasd) => &["S"],
@@ -183,8 +183,10 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::Detonate, Arrows) => &["Num4"],
         (Prompt::DetonateSequence, Full | Wasd) => &["G"],
         (Prompt::DetonateSequence, Arrows) => &["Num5"],
-        (Prompt::Aim, Full | Wasd) => &["W", "A", "S", "D"],
-        (Prompt::Aim, Arrows) => &["\u{2190}", "\u{2191}", "\u{2192}", "\u{2193}"],
+        (Prompt::Aim, Full | Wasd) | (Prompt::BuildCursor, Wasd) => &["W", "A", "S", "D"],
+        (Prompt::Aim | Prompt::BuildCursor, Arrows) => {
+            &["\u{2190}", "\u{2191}", "\u{2192}", "\u{2193}"]
+        }
         (Prompt::FireWeapon, Full | Wasd) => &["LMB", "V"],
         (Prompt::FireWeapon, Arrows) => &["Num6"],
         (Prompt::CycleWeapon, Full | Wasd) => &["X"],
@@ -206,8 +208,6 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::BuildMode, Full | Wasd) => &["N"],
         (Prompt::BuildMode, Arrows) => &["Num8"],
         (Prompt::BuildPlace, Full) => &["Click", "E"],
-        (Prompt::BuildPlace, Wasd) => &["E"],
-        (Prompt::BuildPlace, Arrows) => &["RCtrl"],
         (Prompt::BuildRemove, Full) => &["RClick", "X"],
         (Prompt::BuildRemove, Wasd) => &["X"],
         (Prompt::BuildRemove, Arrows) => &["Num6"],
@@ -216,8 +216,6 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::BuildCycle, Full | Wasd) => &["Z", "Q"],
         (Prompt::BuildCycle, Arrows) => &["Num9", "Num3"],
         (Prompt::BuildCursor, Full) => &["Mouse", "W", "A", "S", "D"],
-        (Prompt::BuildCursor, Wasd) => &["W", "A", "S", "D"],
-        (Prompt::BuildCursor, Arrows) => &["\u{2190}", "\u{2191}", "\u{2192}", "\u{2193}"],
         // The arrow-keys seat leaves the global hotkeys and scrolling to the main keyboard,
         // and keyboards never "join".
         (
@@ -253,9 +251,12 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
             PadAxis::RightX | PadAxis::RightY => PadGlyph::RightStick,
         }],
         Prompt::Drill => vec![PadGlyph::DPadDown],
-        Prompt::Confirm | Prompt::Join => button(PadAction::Confirm).into_iter().collect(),
+        Prompt::Confirm | Prompt::Join | Prompt::BuildPlace => {
+            button(PadAction::Confirm).into_iter().collect()
+        }
         Prompt::Back => button(PadAction::Back).into_iter().collect(),
-        Prompt::Use => button(PadAction::Interact).into_iter().collect(),
+        // In build mode the use button deconstructs.
+        Prompt::Use | Prompt::BuildRemove => button(PadAction::Interact).into_iter().collect(),
         Prompt::Thrust => button(PadAction::Thrust).into_iter().collect(),
         Prompt::Scan => button(PadAction::Scan).into_iter().collect(),
         Prompt::Bomb => button(PadAction::Bomb).into_iter().collect(),
@@ -267,16 +268,12 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
         Prompt::Aim | Prompt::AimWeapon => vec![PadGlyph::RightStick],
         Prompt::FireWeapon => button(PadAction::FireWeapon).into_iter().collect(),
         Prompt::CycleWeapon => button(PadAction::CycleWeapon).into_iter().collect(),
-        Prompt::Tab => both(PadAction::TabPrevious, PadAction::TabNext),
+        Prompt::Tab | Prompt::BuildCycle => both(PadAction::TabPrevious, PadAction::TabNext),
         Prompt::Pause => button(PadAction::Pause).into_iter().collect(),
         Prompt::Map => button(PadAction::Map).into_iter().collect(),
         Prompt::Inventory => button(PadAction::Inventory).into_iter().collect(),
         Prompt::BuildMode => button(PadAction::BuildMode).into_iter().collect(),
-        Prompt::BuildPlace => button(PadAction::Confirm).into_iter().collect(),
-        // In build mode the use button deconstructs.
-        Prompt::BuildRemove => button(PadAction::Interact).into_iter().collect(),
         Prompt::BuildRotate => button(PadAction::BuildRotate).into_iter().collect(),
-        Prompt::BuildCycle => both(PadAction::TabPrevious, PadAction::TabNext),
         Prompt::BuildCursor => vec![PadGlyph::DPadVertical, PadGlyph::DPadHorizontal],
         // Keyboard-only: no controller binding.
         Prompt::Help

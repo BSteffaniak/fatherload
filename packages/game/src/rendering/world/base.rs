@@ -291,7 +291,11 @@ const fn lamp_bulb(facing: Facing) -> (i32, i32) {
 }
 
 /// One front fixture at `pen` (`alpha` < 255 for the ghost).
-#[allow(clippy::many_single_char_names, reason = "short art names")]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::too_many_arguments,
+    reason = "short art names; a fixture's whole look in one call"
+)]
 fn draw_fixture(
     draw: &mut impl RaylibDraw,
     pen: Pen,
@@ -465,6 +469,10 @@ struct ModuleArt {
 
 impl ModuleArt {
     /// A rectangle in module art pixels, mirrored inside `width` when flipped.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "an art rectangle: where, how big, what colour"
+    )]
     fn rect(
         &self,
         draw: &mut impl RaylibDraw,
@@ -907,8 +915,9 @@ fn claim_outline(
     let color = with_alpha(color, alpha);
     let dash = 4.0 * ART;
     let shift = (seconds * 8.0).rem_euclid(2.0) * dash;
-    let mut offset = -shift;
-    while offset < size {
+    let dashes = (size / (dash * 2.0)).ceil() as i32 + 1;
+    for index in 0..dashes {
+        let offset = (index as f32).mul_add(dash * 2.0, -shift);
         let start = offset.max(0.0);
         let end = (offset + dash).min(size);
         if end > start {
@@ -921,7 +930,6 @@ fn claim_outline(
                 draw.draw_rectangle_rec(Rectangle::new(x, y, w, h), color);
             }
         }
-        offset += dash * 2.0;
     }
 }
 
@@ -958,7 +966,7 @@ pub(in crate::rendering) fn draw_build_ghost(
         }
         Buildable::BackWall(block) => back_wall(draw, pen, block, ghost_alpha),
         Buildable::Fixture(fixture) => {
-            draw_fixture(draw, pen, fixture, preview.facing, false, GOLD, ghost_alpha)
+            draw_fixture(draw, pen, fixture, preview.facing, false, GOLD, ghost_alpha);
         }
         Buildable::Module(kind) => {
             let art = ModuleArt {

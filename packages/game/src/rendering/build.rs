@@ -34,19 +34,8 @@ use crate::{
 /// What `preview`'s piece costs here, as one line.
 fn cost_line(preview: &BuildPreview) -> (String, Color) {
     let base = preview.item.base_cost();
-    match &preview.place {
-        Ok(quote) => {
-            let blocks = quote.cost.blocks.total();
-            let credits = quote.cost.credits;
-            let text = match (blocks, credits) {
-                (0, 0) => "Free".to_owned(),
-                (0, credits) => format!("{credits} c"),
-                (blocks, 0) => format!("{blocks} block{}", if blocks == 1 { "" } else { "s" }),
-                (blocks, credits) => format!("{blocks} blocks + {credits} c"),
-            };
-            (text, GOLD)
-        }
-        Err(_) => {
+    preview.place.as_ref().map_or_else(
+        |_| {
             let text = match (base.block, base.any_blocks, base.credits) {
                 (Some(block), _, _) => format!(
                     "1 {} or {} c",
@@ -57,8 +46,19 @@ fn cost_line(preview: &BuildPreview) -> (String, Color) {
                 (None, blocks, credits) => format!("{credits} c + {blocks} blocks"),
             };
             (text, FOG)
-        }
-    }
+        },
+        |quote| {
+            let blocks = quote.cost.blocks.total();
+            let credits = quote.cost.credits;
+            let text = match (blocks, credits) {
+                (0, 0) => "Free".to_owned(),
+                (0, credits) => format!("{credits} c"),
+                (blocks, 0) => format!("{blocks} block{}", if blocks == 1 { "" } else { "s" }),
+                (blocks, credits) => format!("{blocks} blocks + {credits} c"),
+            };
+            (text, GOLD)
+        },
+    )
 }
 
 /// The status line: ready, or why not.
@@ -90,6 +90,10 @@ fn remove_line(preview: &BuildPreview) -> Option<String> {
 }
 
 /// The build bar along the bottom of `view`.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the bar's rows are laid out top to bottom in one place"
+)]
 pub(super) fn draw_build_bar(
     draw: &mut RaylibDrawHandle<'_>,
     view: &ViewSnapshot<'_>,
@@ -324,10 +328,10 @@ pub(super) fn draw_base_module(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
         })
         .collect();
     let mut sections = vec![Section::new("Status", SKY_LIGHT, status)];
-    if !rows.is_empty() {
-        sections.push(Section::new("Services", GOLD, rows));
-    } else {
+    if rows.is_empty() {
         about = Some(menu.kind().blurb().to_owned());
+    } else {
+        sections.push(Section::new("Services", GOLD, rows));
     }
     UiLayout::screen(draw).modal_with_render_plan(
         menu.kind().name(),

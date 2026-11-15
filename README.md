@@ -333,6 +333,41 @@ depot buys the hopper. In co-op the nearest rig with room gets each drop.
 
 Successful return trips award streak bonuses. Emergency rescue returns the rig to the surface for a fee, drops part of the cargo at the rescue site, and records a depot invoice; lost cargo can be recovered later if there is cargo space.
 
+### Bases
+
+Stake a **claim beacon** anywhere outside the town, on the surface or deep underground, and the
+21x21-tile square around it is yours to build in. Press `N` (hold `L3` on a controller; a tap
+swaps weapons; `Numpad 8` for the arrow-keys seat) for **build mode**: the rig parks, a cursor appears beside it and a bar
+along the bottom shows the piece, its cost, whether it fits and the controls. Move the cursor with
+the movement keys or d-pad (or point with the mouse), place with `E` / `Enter` / left click / `A`,
+take down with `X` / right click / the controller's use button (refunds the block, or most of a
+module's price), rotate with `R` / `Y`, and pick pieces with `Z` / `Q`, the mouse wheel or
+`LB` / `RB` (`1`-`3` jump to structure, interior and modules). The ghost turns red with the reason
+when something does not fit.
+
+- **Structure:** rammed earth, brick, stone and granite walls (one building block each from the
+  block hopper, or bought for a few credits), riveted plating, glass windows and plank floors.
+  Built tiles are solid like rock, but no drill, bomb or cave-in breaks them.
+- **Interior:** back walls for rooms, doors that slide open for rigs, **lift ladders** (a rig on
+  one climbs without fuel, even with an empty tank, and never falls hard), lamps that light the
+  dark, ferns, banners, crates and workbenches.
+- **Modules** (credits plus blocks; deeper finds unlock the later ones):
+  **Underground fuel station** (from the clay beds): refuel for free from its reserve, which it
+  synthesizes while powered; order a supply drop for credits when it runs dry. A stranded rig at
+  a station can still refuel. **Generator**: powers the claim's modules, more the deeper and
+  hotter it sits (every beacon also carries a small cell). **Repair bay** (grey stone): hull
+  repairs at town prices while powered. **Cargo uplink** (slate): sells the bay's ore and relics
+  at today's prices from anywhere, less a 15 % fee. **Storage chest**: stores cargo and blocks,
+  shared with the crew. **Crew quarters** and the surface-only **homestead** (a house with a
+  pantry, a trophy shelf and a cutaway interior when you step inside): set either as home and the
+  rescue crew drops you there instead of in town.
+
+Walk up to a module and press use (`E` / `X`) for its menu. Claims belong to whoever staked them:
+by default the whole crew builds and uses them, and the beacon's menu lets the owner allow only
+services or only themselves. You hold two claims to start and one more every two layers
+reached; each extra beacon costs more. Bases save with the world and are shared online (the host
+checks every build action); nothing hostile spawns inside or near a claim.
+
 ## Controls
 
 - `A` / `D` or left/right arrows: move horizontally and drill sideways while resting on the
@@ -348,6 +383,8 @@ Successful return trips award streak bonuses. Emergency rescue returns the rig t
 - Hold left mouse button or `V`: fire the hardpoint weapon at the mouse pointer (while the mouse
   rests for a few seconds, or without one, it auto-aims at the nearest target ahead)
 - `X`: swap the next weapon you own onto the hardpoint
+- `N`: build mode (see Bases): mouse or `W` `A` `S` `D` aim, click / `E` place, right click / `X`
+  take down, `R` rotate, `Z` / `Q` or the wheel pick a piece (weapons hold fire while building)
 - `E` / `Enter`: interact with buildings/interior counters, confirm menus, or start game
 - `Backspace` / `Esc`: close menus; `P` pauses/resumes
 - `M`: large mine map with ore, hazard, rescue, and lost-cargo markers
@@ -372,7 +409,7 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 | Thrust | `A`, or up on stick / d-pad (`RT` too while no weapon is mounted) | `W` / Space |
 | Fire weapon | `RT` (held) | left mouse button / `V` |
 | Aim weapon | Right stick (released: auto-aim at the nearest target ahead) | Mouse |
-| Next weapon | `L3` (click the left stick) | `X` |
+| Next weapon | tap `L3` (click the left stick; hold it for build mode) | `X` |
 | Drill down | Down on stick / d-pad | `S` |
 | Use building, counter, door | `X` | `E` |
 | Confirm in menus / call rescue | `A` | `Enter` |
@@ -386,6 +423,9 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 | Aim a throw | Right stick (else the held direction / facing) | `W` `A` `S` `D` |
 | Remote detonator | `LT` tap: all at once; hold: in sequence | `F` / `G` |
 | Previous / next tab or column (shop columns, quest desks, garage options) | `LB` / `RB` in menus | left / right arrows |
+| Build mode | hold `L3` (a tap swaps weapons) | `N` |
+| Build: place / take down / rotate | `A` / `X` / `Y` | click or `E` / right click or `X` / `R` |
+| Build: piece / cursor | `LB` `RB` / d-pad or left stick | `Z` `Q` or wheel / `W` `A` `S` `D` or mouse |
 
 The layout lives in one table (`PAD_BINDINGS` in `packages/game/src/input/gamepad.rs`).
 `fatherload --list-gamepads` lists every detected controller (index, name, axis and button
@@ -419,6 +459,7 @@ the player who made them.
 | Explosive / scanner | `B` / `C` | `Numpad 0` / `Numpad .` |
 | Next explosive / detonate / in sequence | `Q` / `F` / `G` | `Numpad 3` / `Numpad 4` / `Numpad 5` |
 | Fire weapon / next weapon | mouse button or `V` / `X` (mouse aim) | `Numpad 6` / `Numpad 7` (auto-aim) |
+| Build mode; in it: take down, previous / next piece, rotate | `N`; `X`, `Z` / `Q`, `R` | `Numpad 8`; `Numpad 6`, `Numpad 9` / `Numpad 3`, `Numpad 7` |
 | Scroll a dialog | mouse wheel, `Page Up` / `Page Down` | (the selection scrolls it) |
 
 Controllers use their usual buttons (table above) in their own seat, with the right stick

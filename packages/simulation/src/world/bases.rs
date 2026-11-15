@@ -116,7 +116,7 @@ impl WorldState {
         let (width, _) = home.kind.footprint();
         let anchor = home.anchor();
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-        let x = (anchor.x as f32 + width as f32 * 0.5) * TILE_SIZE;
+        let x = (width as f32).mul_add(0.5, anchor.x as f32) * TILE_SIZE;
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
         let y = (anchor.y as f32 + 0.5) * TILE_SIZE;
         Some((x, y))
@@ -495,7 +495,7 @@ impl WorldState {
             BuildCommand::Place { item, at, facing } => {
                 self.apply_place(player_id, item, at, facing, quote.cost);
             }
-            BuildCommand::Remove { at } => self.apply_remove(player_id, at, quote.refund),
+            BuildCommand::Remove { at } => self.apply_remove(player_id, at, &quote.refund),
             BuildCommand::Use { structure, service } => {
                 self.apply_use(player_id, structure, service);
             }
@@ -559,7 +559,7 @@ impl WorldState {
         }
     }
 
-    fn apply_remove(&mut self, player_id: PlayerId, at: TilePosition, refund: BuildPayment) {
+    fn apply_remove(&mut self, player_id: PlayerId, at: TilePosition, refund: &BuildPayment) {
         if let Some(id) = self.bases.module_at(at).map(|module| module.id) {
             let _removed = self.bases.remove_module(id);
         } else if matches!(
@@ -580,7 +580,7 @@ impl WorldState {
     }
 
     /// Pays a refund: credits, and blocks into the hopper (what does not fit drops at `at`).
-    fn give_refund(&mut self, player_id: PlayerId, at: TilePosition, refund: BuildPayment) {
+    fn give_refund(&mut self, player_id: PlayerId, at: TilePosition, refund: &BuildPayment) {
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
@@ -639,7 +639,7 @@ impl WorldState {
                     let next = self
                         .bases
                         .claim(claim)
-                        .map_or(ClaimAccess::default(), |claim| claim.access.next());
+                        .map_or_else(ClaimAccess::default, |claim| claim.access.next());
                     self.bases.set_access(claim, next);
                 }
                 return;

@@ -106,11 +106,11 @@ fn build(world: &mut WorldState, player: PlayerId, from: (i32, i32), command: Bu
     let _ = world.simulate_tick(tick, &inputs);
 }
 
-fn place(item: Buildable, x: i32, y: i32) -> BuildCommand {
+const fn place(item: Buildable, x: i32, y: i32) -> BuildCommand {
     place_facing(item, x, y, Facing::Right)
 }
 
-fn place_facing(item: Buildable, x: i32, y: i32, facing: Facing) -> BuildCommand {
+const fn place_facing(item: Buildable, x: i32, y: i32, facing: Facing) -> BuildCommand {
     BuildCommand::Place {
         item,
         at: TilePosition { x, y },
@@ -319,6 +319,10 @@ fn palette_index(item: Buildable) -> usize {
         .unwrap_or(0)
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "the outpost is laid out piece by piece"
+)]
 fn build_outpost(world: &mut WorldState, player: PlayerId) {
     // A cavern room in solid stone, with a shaft up from its right end.
     for y in FLOOR - 14..FLOOR + 3 {
@@ -516,7 +520,7 @@ fn coop_split(stage: &mut SceneStage<'_>) {
         );
         stand(world, other, 103, row);
         if let Some(rig) = world.player_mut(other) {
-            rig.x -= TILE_SIZE * 0.3;
+            rig.x = TILE_SIZE.mul_add(-0.3, rig.x);
         }
     });
     stage.use_devices(&[WASD, ARROWS]);
