@@ -509,15 +509,14 @@ pub fn authoritative_mine_target(
     None
 }
 
-pub(super) fn authoritative_drill_seconds_per_chip(
-    kind: TileKind,
-    drill_strength: u8,
-    direction: DrillDirection,
-    parts: &BTreeSet<RigPartKind>,
-    terrain: &Terrain,
-    target: TilePosition,
-) -> f32 {
-    let base = match kind {
+/// Seconds one drill chip takes on a fresh `kind` tile with a stock drill, drilling down.
+///
+/// This is before the drill tier's speed ([`crate::player::drill_speed`]), the direction
+/// penalty and rig parts (the base of [`authoritative_drill_seconds_per_chip`]; also read by
+/// the shop's upgrade preview, [`crate::upgrade_preview`]).
+#[must_use]
+pub const fn base_drill_seconds_per_chip(kind: TileKind) -> f32 {
+    match kind {
         TileKind::Air => 0.0,
         TileKind::Dirt => 0.09,
         TileKind::Clay => 0.12,
@@ -550,7 +549,18 @@ pub(super) fn authoritative_drill_seconds_per_chip(
             3 => 0.15,
             _ => 0.19,
         },
-    };
+    }
+}
+
+pub(super) fn authoritative_drill_seconds_per_chip(
+    kind: TileKind,
+    drill_strength: u8,
+    direction: DrillDirection,
+    parts: &BTreeSet<RigPartKind>,
+    terrain: &Terrain,
+    target: TilePosition,
+) -> f32 {
+    let base = base_drill_seconds_per_chip(kind);
     let effective_drill_strength = if parts.contains(&RigPartKind::TitanDrill)
         || parts.contains(&RigPartKind::ResonanceDrill)
     {

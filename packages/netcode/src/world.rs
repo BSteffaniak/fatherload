@@ -204,6 +204,9 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::AffinityChanged { player_id, .. } => (143, Some(player_id)),
         GameplayEventKind::RumourMarked { player_id, .. } => (144, Some(player_id)),
         GameplayEventKind::PeopleInteraction { player_id } => (145, Some(player_id)),
+        // Upgrade reward moments (wave 3, T18): 180-181.
+        GameplayEventKind::UpgradeInstalled { player_id, .. } => (180, Some(player_id)),
+        GameplayEventKind::MilestoneEarned { player_id, .. } => (181, Some(player_id)),
     }
 }
 

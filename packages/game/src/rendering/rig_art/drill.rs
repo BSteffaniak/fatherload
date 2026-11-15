@@ -179,6 +179,18 @@ fn row_spans(style: DrillStyle, u: i32, length: i32, half: i32, spin: usize) -> 
             let w = if u == last { 1 } else { (half - 1 - u).max(2) };
             vec![(-w, w)]
         }
+        DrillStyle::Corkscrew => {
+            // A cone with a spiral groove winding down it as the head spins.
+            let w = taper(half, 1, u, length);
+            if w <= 1 {
+                return vec![(-w, w)];
+            }
+            let gap = (u * 2 + spin as i32).rem_euclid(2 * w) - w;
+            [(-w, gap), (gap + 1, w)]
+                .into_iter()
+                .filter(|(start, end)| end > start)
+                .collect()
+        }
     }
 }
 

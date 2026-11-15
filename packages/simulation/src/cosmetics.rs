@@ -103,6 +103,16 @@ cosmetic_enum! {
         Graphite => ("Graphite", true),
         /// Near-black stealth paint (an unlock).
         Stealth => ("Stealth", false),
+        /// Milestone reward (reach the Grey Stone): deep green stone polish.
+        Jade => ("Jade", false),
+        /// Milestone reward (find a cave): a fungal glow.
+        Glowcap => ("Glowcap", false),
+        /// Milestone reward (max an upgrade line): mirror-bright chrome.
+        Chrome => ("Mirror Chrome", false),
+        /// Milestone reward (reach the Ancient Machine Layer): a deep abyssal blue.
+        Abyss => ("Abyss Blue", false),
+        /// Milestone reward (reach the Mantle Storm Zone): molten red and orange.
+        Magma => ("Magma", false),
     }
 }
 
@@ -119,6 +129,12 @@ cosmetic_enum! {
         White => ("White Hot", true),
         /// Cycles through the spectrum (an unlock).
         Prism => ("Prism", false),
+        /// Milestone reward (engine tier 5): a smouldering deep-red burn.
+        Ember => ("Ember", false),
+        /// Milestone reward (engine tier 10): a violet-white plasma jet.
+        Plasma => ("Plasma", false),
+        /// Milestone reward (an island-capable tank): a pale sky-blue aether flame.
+        Aether => ("Aether", false),
     }
 }
 
@@ -132,6 +148,8 @@ cosmetic_enum! {
         Crusher => ("Crusher", true),
         /// A long needle spire (an unlock).
         Spire => ("Spire", false),
+        /// Milestone reward (drill tier 5): a spiral corkscrew bit.
+        Corkscrew => ("Corkscrew", false),
     }
 }
 
@@ -146,6 +164,10 @@ cosmetic_enum! {
         Hazard => ("Hazard Chevrons", true),
         /// Glowing circuit traces (an unlock).
         Circuit => ("Circuit", false),
+        /// Milestone reward (drill tier 10): bold tiger stripes.
+        Tiger => ("Tiger Stripes", false),
+        /// Milestone reward (every core line maxed): a field of stars.
+        Starfield => ("Starfield", false),
     }
 }
 
@@ -160,6 +182,18 @@ cosmetic_enum! {
         Number => ("Crew Number", true),
         /// A golden crown (an unlock).
         Crown => ("Crown", false),
+        /// Milestone reward (first upgrade): a wrench.
+        Wrench => ("Wrench", false),
+        /// Milestone reward (first artifact): a cut gemstone.
+        Gem => ("Gemstone", false),
+        /// Milestone reward (first enemy defeated): a fang.
+        Fang => ("Fang", false),
+        /// Milestone reward (first claim staked): a claim flag.
+        Flag => ("Claim Flag", false),
+        /// Milestone reward (fly high above town): a pair of wings.
+        Wings => ("Wings", false),
+        /// Milestone reward (the Act II unlock): a crescent moon.
+        Moon => ("Crescent Moon", false),
     }
 }
 
@@ -173,6 +207,8 @@ cosmetic_enum! {
         LightBar => ("Light Bar", true),
         /// A floating ring (an unlock).
         Halo => ("Halo", false),
+        /// Milestone reward (reach the first deep stratum): a depth-record trophy cup.
+        Trophy => ("Depth Trophy", false),
     }
 }
 
@@ -192,6 +228,8 @@ cosmetic_enum! {
         Spoiler => ("Spoiler", true),
         Pennant => ("Pennant", true),
         Stacks => ("Chrome Stacks", true),
+        /// Milestone reward (visit a village): a swinging trail lantern.
+        Lantern => ("Trail Lantern", false),
     }
 }
 
@@ -299,6 +337,15 @@ impl CosmeticItem {
         }
     }
 
+    /// Whether village cosmetic vendors stock this item: every unlockable that is not a
+    /// milestone reward ([`crate::milestone::Milestone::reward_for`]). Milestone rewards are
+    /// earned, never sold, so the vendor list is exactly the original wave-2 unlock set (and
+    /// village offers are unchanged by later cosmetics).
+    #[must_use]
+    pub fn is_vendor_stock(self) -> bool {
+        !self.is_starter() && crate::milestone::Milestone::reward_for(self).is_none()
+    }
+
     /// Display name.
     #[must_use]
     pub const fn label(self) -> &'static str {
@@ -390,8 +437,28 @@ mod tests {
     fn the_starter_set_is_generous_but_leaves_unlocks() {
         let all = CosmeticItem::all();
         let starter = all.iter().filter(|item| item.is_starter()).count();
-        assert!(starter * 10 >= all.len() * 8, "most items are starters");
+        assert!(starter * 10 >= all.len() * 6, "most items are starters");
         assert!(starter < all.len(), "some items are left to unlock");
+    }
+
+    #[test]
+    fn vendors_stock_exactly_the_wave_two_unlocks() {
+        let stock: Vec<CosmeticItem> = CosmeticItem::all()
+            .into_iter()
+            .filter(|item| item.is_vendor_stock())
+            .collect();
+        assert_eq!(
+            stock,
+            vec![
+                CosmeticItem::Paint(PaintColor::Stealth),
+                CosmeticItem::Flame(FlameColor::Prism),
+                CosmeticItem::Drill(DrillStyle::Spire),
+                CosmeticItem::Pattern(HullPattern::Circuit),
+                CosmeticItem::Decal(Decal::Crown),
+                CosmeticItem::Roof(RoofAttachment::Halo),
+            ],
+            "village offers must not change when milestone rewards are added"
+        );
     }
 
     #[test]
@@ -409,9 +476,10 @@ mod tests {
     #[test]
     fn options_cycle_both_ways() {
         assert_eq!(PaintColor::Gold.cycled(1), PaintColor::Tangerine);
-        assert_eq!(PaintColor::Gold.cycled(-1), PaintColor::Stealth);
-        assert_eq!(PaintColor::Stealth.cycled(1), PaintColor::Gold);
-        assert_eq!(RearAttachment::None.cycled(-1), RearAttachment::Stacks);
+        assert_eq!(PaintColor::Gold.cycled(-1), PaintColor::Magma);
+        assert_eq!(PaintColor::Magma.cycled(1), PaintColor::Gold);
+        assert_eq!(PaintColor::Stealth.cycled(1), PaintColor::Jade);
+        assert_eq!(RearAttachment::None.cycled(-1), RearAttachment::Lantern);
     }
 
     #[test]

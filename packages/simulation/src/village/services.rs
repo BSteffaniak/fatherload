@@ -287,9 +287,10 @@ pub fn offers(village: &Village, building: &VillageBuilding) -> Vec<VillageOffer
             list
         }
         VillageService::CosmeticVendor => {
+            // Milestone rewards are earned, never sold (the vendor list stays the wave-2 set).
             let mut items: Vec<CosmeticItem> = CosmeticItem::all()
                 .into_iter()
-                .filter(|item| !item.is_starter())
+                .filter(|item| item.is_vendor_stock())
                 .collect();
             let mut list = Vec::new();
             for _ in 0..3 {

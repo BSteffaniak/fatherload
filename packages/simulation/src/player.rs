@@ -124,6 +124,9 @@ pub struct Player {
     /// ([`crate::PlayerCommand::PilotPack`]). Capacity: [`crate::pilot::PilotGear::pack_capacity`].
     #[serde(default)]
     pub pilot_pack: ItemContainer,
+    /// Milestones earned and personal records (private; see [`crate::milestone`]).
+    #[serde(default)]
+    pub milestones: crate::milestone::MilestoneLog,
 }
 
 #[allow(
@@ -182,6 +185,7 @@ impl Player {
             },
             pilot_gear: crate::pilot::PilotGear::default(),
             pilot_pack: ItemContainer::new(),
+            milestones: crate::milestone::MilestoneLog::default(),
         }
     }
 

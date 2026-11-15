@@ -60,7 +60,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// gear and the personal pack in `PlayerInventory`, `BuiltTile::VentGrate`, `Fixture::Rope`,
 /// the parked pilot in the crew roster and the pilot events 120-133;
 /// * T17 people in the world: `EntityState::Npc` entities, `PlayerCommand::People`, the
-///   `People` section (`PeopleLedger`) and people events 140-145.
+///   `People` section (`PeopleLedger`) and people events 140-145;
+/// * T18 upgrade reward moments: the milestone log in the loadout
+///   (`PlayerInventory::milestones`), the milestone-reward cosmetics (new `RigCosmetics` option
+///   variants in the rig build) and the `UpgradeInstalled` / `MilestoneEarned` events 180-181.
 pub const PROTOCOL_VERSION: u8 = 11;
 
 /// One client input frame: the controls and actions for exactly one tick.

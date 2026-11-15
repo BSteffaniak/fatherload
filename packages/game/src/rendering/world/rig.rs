@@ -237,7 +237,7 @@ const fn tag_lift(player: &PlayerPresentation) -> i32 {
     let roof = match player.cosmetics.roof {
         RoofAttachment::None => 0,
         RoofAttachment::Siren | RoofAttachment::LightBar => 1,
-        RoofAttachment::Dish => 3,
+        RoofAttachment::Dish | RoofAttachment::Trophy => 3,
         RoofAttachment::Antenna | RoofAttachment::Halo => 5,
     };
     cargo + roof

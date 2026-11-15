@@ -484,6 +484,21 @@ pub enum GameplayEventKind {
         count: u32,
         to_rig: bool,
     },
+    /// A player bought an upgrade at the shop: `upgrade` is now fitted at `level` (bomb packs
+    /// report level 0). Follows the purchase's [`Self::PurchaseCompleted`]; the game plays the
+    /// purchase moment (fanfare, rig transform, stat bars) from it. See
+    /// [`crate::upgrade_preview`].
+    UpgradeInstalled {
+        player_id: PlayerId,
+        upgrade: crate::economy::UpgradeKind,
+        level: u8,
+    },
+    /// A player earned a first-time milestone; its reward cosmetics are already unlocked (see
+    /// [`crate::milestone`]).
+    MilestoneEarned {
+        player_id: PlayerId,
+        milestone: crate::milestone::Milestone,
+    },
 }
 
 /// What a weapon shot struck.

@@ -317,7 +317,42 @@ fn paint_pattern(canvas: &mut RigCanvas, look: &RigLook, pose: &RigPose) {
             canvas.set(12, 6, glow);
             canvas.set(8, 8, glow);
         }
+        HullPattern::Tiger => {
+            // Slanted dark stripes over the painted hull only.
+            for y in 4..=9_i32 {
+                for x in 1..15_i32 {
+                    if (x + y / 2).rem_euclid(4) == 0 && is_primary(canvas.get(x, y), primary) {
+                        canvas.set(x, y, primary.deep);
+                    }
+                }
+            }
+        }
+        HullPattern::Starfield => {
+            // A night-sky band with twinkling stars.
+            for y in 6..=8 {
+                for x in 1..15 {
+                    if is_primary(canvas.get(x, y), primary) {
+                        canvas.set(x, y, primary.deep);
+                    }
+                }
+            }
+            let twinkle = (pose.ticks / 15) as i32;
+            for (index, (x, y)) in [(2, 7), (5, 6), (7, 8), (9, 6), (12, 7), (14, 8)]
+                .into_iter()
+                .enumerate()
+            {
+                if canvas.get(x, y) == Some(primary.deep) {
+                    let bright = (index as i32 + twinkle).rem_euclid(3) == 0;
+                    canvas.set(x, y, if bright { BONE } else { trim.light });
+                }
+            }
+        }
     }
+}
+
+/// Whether `color` is one of the primary paint's hull colours (patterns paint over those only).
+fn is_primary(color: Option<raylib::prelude::Color>, primary: super::paint::Ramp) -> bool {
+    color.is_some_and(|color| [primary.light, primary.body, primary.shade].contains(&color))
 }
 
 /// Decal glyphs (5 wide, 4-5 tall) for the flank: `x` the decal colour, `o` its outline,
@@ -330,6 +365,13 @@ const fn decal_glyph(decal: Decal) -> &'static [&'static str] {
         Decal::Flames => &[".....xx", "...xxww", ".xxwwww", "...xxww"],
         Decal::Picks => &["w...w", ".x.x.", "..x..", ".x.x.", "x...x"],
         Decal::Crown => &["w.w.w", "xxxxx", "xwxwx", "xxxxx"],
+        // Milestone rewards (WP-FEEL part 2).
+        Decal::Wrench => &["x.x..", "xxx..", ".xx..", "..xx.", "...xw"],
+        Decal::Gem => &[".www.", "xwxwx", ".xxx.", "..x.."],
+        Decal::Fang => &["xxxxx", ".xwx.", ".xx..", ".x..."],
+        Decal::Flag => &["xww..", "xwwww", "xww..", "x....", "x...."],
+        Decal::Wings => &["w...w", "xx.xx", "xxxxx", ".x.x."],
+        Decal::Moon => &[".xxw", "xx..", "x...", "xx..", ".xxw"],
     }
 }
 
@@ -353,6 +395,10 @@ fn paint_decal(canvas: &mut RigCanvas, look: &RigLook) {
     let (color, highlight) = match decal {
         Decal::Crown => (GOLD, CREAM),
         Decal::Flames => (trim.body, trim.light),
+        Decal::Gem => (SKY_LIGHT, ICE),
+        Decal::Moon => (CREAM, BONE),
+        Decal::Flag => (STEEL_LIGHT, trim.light),
+        Decal::Fang => (BONE, MIST),
         _ => (trim.light, BONE),
     };
     let legend = |ch: char| match ch {
@@ -644,6 +690,23 @@ fn paint_mast(canvas: &mut RigCanvas, look: &RigLook, pose: &RigPose, deck: Deck
             canvas.set(x, base - 4, BONE);
             canvas.set(x, base - 3, beacon);
         }
+        RoofAttachment::Trophy => {
+            // The depth-record cup on a short plinth; its rim glints now and then.
+            canvas.rect(x, base - 2, 1, 2, STEEL_LIGHT);
+            let glint = (pose.ticks / 10).rem_euclid(9) == 0;
+            canvas.stamp(
+                &["hyyyh", "h.l.h", ".yly.", "..y..", ".ooo."],
+                x - 2,
+                base - 7,
+                |ch| match ch {
+                    'h' => Some(AMBER),
+                    'y' => Some(GOLD),
+                    'l' => Some(if glint { BONE } else { CREAM }),
+                    'o' => Some(STEEL_DARK),
+                    _ => None,
+                },
+            );
+        }
     }
 }
 
@@ -713,6 +776,26 @@ fn paint_rear(canvas: &mut RigCanvas, look: &RigLook, pose: &RigPose, deck: Deck
                 canvas.set(pipe, top - 1, INK);
             }
             canvas.rect(x - 1, top + 1, 2, 1, STEEL_LIGHT);
+        }
+        RearAttachment::Lantern => {
+            // A trail lantern swinging from a hooked pole on the tail.
+            let x = deck.left;
+            let top = deck.top - 6;
+            canvas.rect(x, top, 1, 6, STEEL_DARK);
+            canvas.rect(x - 2, top, 2, 1, STEEL_DARK);
+            let swing = i32::from((pose.ticks / 18).is_multiple_of(2));
+            let flame = if (pose.ticks / 5).is_multiple_of(3) {
+                CREAM
+            } else {
+                GOLD
+            };
+            let lx = x - 3 + swing;
+            canvas.set(lx + 1, top + 1, INK);
+            canvas.stamp(&[".o.", "olo", ".o."], lx, top + 2, |ch| match ch {
+                'o' => Some(INK),
+                'l' => Some(flame),
+                _ => None,
+            });
         }
     }
 }

@@ -49,6 +49,12 @@ pub const fn paint_ramp(paint: PaintColor) -> Ramp {
         PaintColor::Steel => ramp(STEEL_LIGHT, STEEL, STEEL_DARK, SLATE_DARK),
         PaintColor::Graphite => ramp(SLATE_LIGHT, SLATE, SLATE_DARK, NIGHT),
         PaintColor::Stealth => ramp(SLATE, SLATE_DARK, NIGHT, INK),
+        // Milestone rewards (WP-FEEL part 2).
+        PaintColor::Jade => ramp(MINT, TEAL, TEAL_DARK, PINE),
+        PaintColor::Glowcap => ramp(CREAM, LIME, LEAF, MOSS),
+        PaintColor::Chrome => ramp(BONE, MIST, STEEL_LIGHT, STEEL),
+        PaintColor::Abyss => ramp(OCEAN, DEEP_BLUE, NIGHT, INK),
+        PaintColor::Magma => ramp(GOLD, ORANGE, RED, MAROON),
     }
 }
 
@@ -58,19 +64,19 @@ pub const fn paint_ramp(paint: PaintColor) -> Ramp {
 pub const fn paint_accent(paint: PaintColor) -> Color {
     match paint {
         PaintColor::Gold => GOLD,
-        PaintColor::Tangerine => ORANGE,
+        PaintColor::Tangerine | PaintColor::Magma => ORANGE,
         PaintColor::Crimson => RED,
         PaintColor::Rose => ROSE,
         PaintColor::Blossom => PINK,
         PaintColor::Violet => LAVENDER,
         PaintColor::Sky => SKY_LIGHT,
-        PaintColor::Cobalt => SKY,
-        PaintColor::Teal | PaintColor::Mint => MINT,
-        PaintColor::Lime => LIME,
+        PaintColor::Cobalt | PaintColor::Abyss => SKY,
+        PaintColor::Teal | PaintColor::Mint | PaintColor::Jade => MINT,
+        PaintColor::Lime | PaintColor::Glowcap => LIME,
         PaintColor::Forest => LEAF,
         PaintColor::Copper => COPPER,
         PaintColor::Sand => SAND,
-        PaintColor::Pearl => BONE,
+        PaintColor::Pearl | PaintColor::Chrome => BONE,
         PaintColor::Steel => STEEL_LIGHT,
         PaintColor::Graphite => FOG,
         PaintColor::Stealth => SLATE_LIGHT,
@@ -117,6 +123,10 @@ pub const fn flame_ramp(color: FlameColor, step: usize) -> FlameRamp {
         FlameColor::Pink => flame(MAROON, ROSE, PINK, BONE),
         FlameColor::White => flame(SKY, SKY_LIGHT, ICE, BONE),
         FlameColor::Prism => flame_ramp(PRISM[step % PRISM.len()], 0),
+        // Milestone rewards (WP-FEEL part 2).
+        FlameColor::Ember => flame(MAROON, RED, ORANGE, AMBER),
+        FlameColor::Plasma => flame(VIOLET, LAVENDER, ICE, BONE),
+        FlameColor::Aether => flame(OCEAN, MINT, ICE, BONE),
     }
 }
 

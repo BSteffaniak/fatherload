@@ -503,6 +503,12 @@ pub enum SoundCue {
     AffinityUp,
     /// A rumour marked a site on your map.
     RumourHeard,
+    /// An upgrade fitted at the shop: the purchase moment's fanfare (WP-FEEL part 2).
+    UpgradeFanfare,
+    /// A first-time milestone and its cosmetic unlock.
+    MilestoneFanfare,
+    /// The Act I -> II unlock: the sky opens.
+    ActTwoFanfare,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

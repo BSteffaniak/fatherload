@@ -180,6 +180,9 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::GiftGiven => Patch::GiftGiven,
         SoundCue::AffinityUp => Patch::AffinityUp,
         SoundCue::RumourHeard => Patch::RumourHeard,
+        SoundCue::UpgradeFanfare => Patch::UpgradeFanfare,
+        SoundCue::MilestoneFanfare => Patch::MilestoneFanfare,
+        SoundCue::ActTwoFanfare => Patch::ActTwoFanfare,
     }
 }
 
@@ -303,6 +306,7 @@ pub const fn service_cue(service: ModuleService) -> SoundCue {
 /// fails to compile until someone decides how it sounds. Events answered `None` are covered
 /// elsewhere (noted per arm).
 #[must_use]
+#[allow(clippy::too_many_lines, reason = "one arm per gameplay event kind")]
 pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
     match kind {
         GameplayEventKind::DrillStarted { .. } => Some(SoundCue::Drill),
@@ -441,6 +445,28 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
             SoundCue::UiBack
         }),
         GameplayEventKind::RumourMarked { .. } => Some(SoundCue::RumourHeard),
+        // Upgrade reward moments: the purchase fanfare (a bomb pack is just the purchase
+        // chime), a milestone's fanfare, and the big one when the sky opens.
+        GameplayEventKind::UpgradeInstalled { upgrade, .. } => Some(
+            if matches!(
+                upgrade,
+                fatherload_simulation::economy::UpgradeKind::BombPack
+            ) {
+                SoundCue::Upgrade
+            } else {
+                SoundCue::UpgradeFanfare
+            },
+        ),
+        GameplayEventKind::MilestoneEarned { milestone, .. } => Some(
+            if matches!(
+                milestone,
+                fatherload_simulation::milestone::Milestone::ActTwoUnlocked
+            ) {
+                SoundCue::ActTwoFanfare
+            } else {
+                SoundCue::MilestoneFanfare
+            },
+        ),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -560,7 +586,9 @@ mod tests {
             | GameplayEventKind::PersonGifted { .. }
             | GameplayEventKind::AffinityChanged { .. }
             | GameplayEventKind::RumourMarked { .. }
-            | GameplayEventKind::PeopleInteraction { .. } => {}
+            | GameplayEventKind::PeopleInteraction { .. }
+            | GameplayEventKind::UpgradeInstalled { .. }
+            | GameplayEventKind::MilestoneEarned { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -898,6 +926,23 @@ mod tests {
             feature,
         });
         events.push(GameplayEventKind::PeopleInteraction { player_id });
+        events.extend(
+            fatherload_simulation::economy::UpgradeKind::ALL.map(|upgrade| {
+                GameplayEventKind::UpgradeInstalled {
+                    player_id,
+                    upgrade,
+                    level: 2,
+                }
+            }),
+        );
+        events.extend(
+            fatherload_simulation::milestone::Milestone::ALL.map(|milestone| {
+                GameplayEventKind::MilestoneEarned {
+                    player_id,
+                    milestone,
+                }
+            }),
+        );
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
@@ -1067,6 +1112,9 @@ mod tests {
             SoundCue::GiftGiven,
             SoundCue::AffinityUp,
             SoundCue::RumourHeard,
+            SoundCue::UpgradeFanfare,
+            SoundCue::MilestoneFanfare,
+            SoundCue::ActTwoFanfare,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

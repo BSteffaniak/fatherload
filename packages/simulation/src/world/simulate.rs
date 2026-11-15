@@ -143,11 +143,16 @@ impl WorldState {
                     sequence: action.sequence,
                     outcome,
                 });
-                if outcome == PlayerScopedCommandOutcome::Applied
-                    && let Some(event) =
+                if outcome == PlayerScopedCommandOutcome::Applied {
+                    if let Some(event) =
                         gameplay_event_for_applied_command(player_id, &action.command)
-                {
-                    output.push_event(event);
+                    {
+                        output.push_event(event);
+                    }
+                    // The shop's purchase moment (WP-FEEL part 2).
+                    if let Some(event) = self.upgrade_installed_event(player_id, &action.command) {
+                        output.push_event(event);
+                    }
                 }
             }
         }
@@ -444,6 +449,7 @@ impl WorldState {
         self.advance_quests(next_tick, &quest_notes, &mut output);
         self.reveal_tiles_near_players();
         self.discover_villages(&mut output);
+        self.advance_milestones(&mut output);
         self.apply_test_mode_refills();
         output.terrain_ops = self.terrain.finish_journal();
         self.wake_entities_near(&output.terrain_ops);

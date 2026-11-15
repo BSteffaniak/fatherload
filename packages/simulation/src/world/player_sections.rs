@@ -4,7 +4,7 @@
 //! |---|---|---|
 //! | [`PlayerRig`]: pose, velocity, fuel, hull | per tick | everyone it is relevant to |
 //! | [`RigBuild`]: the upgrade levels drawn on a rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and its cosmetics | on-change [`super::SectionKey::RigBuild`] | everyone |
-//! | [`PlayerInventory`]: cargo bay, block hopper, credits, other upgrades, kits, debt, insurance, POI journal, quest log, cosmetic unlocks, village journal, pilot gear and personal pack | on-change [`super::SectionKey::Loadout`] | the owner only |
+//! | [`PlayerInventory`]: cargo bay, block hopper, credits, other upgrades, kits, debt, insurance, POI journal, quest log, cosmetic unlocks, village journal, pilot gear and personal pack, milestones | on-change [`super::SectionKey::Loadout`] | the owner only |
 //!
 //! [`split_player`] destructures the whole [`Player`] without `..`, so a new player field fails
 //! to compile until it is assigned to one of the parts.
@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     cosmetics::{CosmeticUnlocks, RigCosmetics},
     item::ItemContainer,
+    milestone::MilestoneLog,
     player::Player,
     poi::PoiJournal,
     protection::HazardGear,
@@ -113,6 +114,9 @@ pub struct PlayerInventory {
     /// The pilot's personal pack.
     #[serde(default)]
     pub pilot_pack: ItemContainer,
+    /// Milestones earned and personal records.
+    #[serde(default)]
+    pub milestones: MilestoneLog,
 }
 
 /// Splits a player into its per-tick, public and private parts (exhaustive: every field goes to
@@ -165,6 +169,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         weapon,
         pilot_gear,
         pilot_pack,
+        milestones,
     } = player.clone();
     (
         PlayerRig {
@@ -217,6 +222,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             weapon_rack,
             pilot_gear,
             pilot_pack,
+            milestones,
         },
     )
 }
@@ -274,6 +280,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         weapon_rack,
         pilot_gear,
         pilot_pack,
+        milestones,
     } = inventory;
     Player {
         x,
@@ -321,6 +328,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         weapon,
         pilot_gear,
         pilot_pack,
+        milestones,
     }
 }
 

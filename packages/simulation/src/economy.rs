@@ -121,7 +121,7 @@ pub enum SurfaceZone {
     Salvage,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum UpgradeKind {
     Drill,
     FuelTank,

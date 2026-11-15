@@ -717,7 +717,9 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::PersonGifted { player_id, .. }
         | GameplayEventKind::AffinityChanged { player_id, .. }
         | GameplayEventKind::RumourMarked { player_id, .. }
-        | GameplayEventKind::PeopleInteraction { player_id } => Some(player_id),
+        | GameplayEventKind::PeopleInteraction { player_id }
+        | GameplayEventKind::UpgradeInstalled { player_id, .. }
+        | GameplayEventKind::MilestoneEarned { player_id, .. } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

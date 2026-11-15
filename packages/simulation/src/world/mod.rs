@@ -66,6 +66,7 @@ mod god_mode_tests;
 mod hazard_counter_tests;
 mod hazards;
 mod import;
+mod milestones;
 mod movement;
 mod no_clip;
 mod people;
@@ -132,7 +133,10 @@ pub use services::{
 };
 pub use timing::TickTiming;
 
-pub use commands::{DrillContact, DrillIntent, authoritative_mine_target};
+pub use commands::{
+    DrillContact, DrillIntent, MIN_DRILL_SECONDS_PER_CHIP, authoritative_mine_target,
+    base_drill_seconds_per_chip,
+};
 pub use import::{
     NEW_WORLD_HEIGHT_TILES, NEW_WORLD_SEED, NEW_WORLD_SPAWN, NEW_WORLD_WIDTH_TILES, WorldImport,
 };

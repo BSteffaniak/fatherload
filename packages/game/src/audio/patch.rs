@@ -243,6 +243,10 @@ patches! {
     GiftGiven => "gift_given",
     AffinityUp => "affinity_up",
     RumourHeard => "rumour_heard",
+    // Upgrade reward moments (WP-FEEL part 2), appended so earlier seeds stay put.
+    UpgradeFanfare => "upgrade_fanfare",
+    MilestoneFanfare => "milestone_fanfare",
+    ActTwoFanfare => "act_two_fanfare",
 }
 
 /// Playback metadata of a patch.
@@ -399,10 +403,18 @@ impl Patch {
             | Self::Rescue
             | Self::VillageArrival
             | Self::CrewReturn
-            | Self::PilotDown => PatchInfo::new(Big)
+            | Self::PilotDown
+            | Self::UpgradeFanfare
+            | Self::MilestoneFanfare => PatchInfo::new(Big)
                 .instances(1)
                 .jitter(0.0, 0.0)
                 .ducking(0.35),
+            Self::ActTwoFanfare => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.0, 0.0)
+                .ducking(0.6)
+                .priority(9),
             Self::ThrowWhoosh | Self::ChargeStick | Self::FireCrackle => {
                 PatchInfo::new(Feedback).instances(3).jitter(0.06, 1.0)
             }
@@ -700,6 +712,9 @@ impl Patch {
             Self::PickClink => pick_clink(rng),
             Self::Splash => splash(rng),
             Self::LedgeGrab => ledge_grab(rng),
+            Self::UpgradeFanfare => upgrade_fanfare(rng),
+            Self::MilestoneFanfare => milestone_fanfare(rng),
+            Self::ActTwoFanfare => act_two_fanfare(rng),
         }
     }
 }
@@ -3543,6 +3558,147 @@ fn night_loop(rng: &mut Rng) -> Vec<f32> {
             osc.next(pitch) * trill * gate
         });
         mix_into(&mut out, &voice, 0.0, 0.1);
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// Upgrade reward moments (WP-FEEL part 2)
+// ---------------------------------------------------------------------------------------------
+
+/// An upgrade fitted at the shop: a ratchet of wrench clicks and a pneumatic hiss as the part
+/// bolts on, a power-up sweep, then a bright rising brass fanfare (C-E-G-C) landing on a held
+/// chord with a shower of sparkle bells.
+fn upgrade_fanfare(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    // The part bolting on: three ratchet clicks and an air-tool hiss.
+    for click in 0..3_u8 {
+        let pitch = 2_400.0 * rng.jitter(0.04);
+        mix_into(
+            &mut out,
+            &clank(rng, pitch, 0.05),
+            f32::from(click) * 0.06,
+            0.4,
+        );
+    }
+    let hiss = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        3_500.0,
+        0.8,
+        0.18,
+    );
+    mix_into(&mut out, &hiss, 0.16, 0.35);
+    // Power-up sweep.
+    let mut osc = Osc::new(Wave::Square);
+    let mut filter = Svf::new(FilterMode::LowPass, 900.0, 1.6);
+    let sweep = render(0.32, |t| {
+        let frequency = glide(t, 180.0, 720.0, 0.3);
+        filter.run(osc.next(frequency), 600.0 + 5_000.0 * t, 1.6)
+            * segments(t, &[(0.0, 0.0), (0.04, 0.5), (0.28, 0.6), (0.32, 0.0)])
+    });
+    mix_into(&mut out, &sweep, 0.24, 0.3);
+    // The fanfare.
+    let notes = [523.25, 659.25, 783.99, 1_046.5];
+    for (index, note) in notes.into_iter().enumerate() {
+        let gate = if index == 3 { 0.7 } else { 0.09 };
+        mix_into(
+            &mut out,
+            &brass(rng, note, gate, 1.0),
+            0.5 + index as f32 * 0.08,
+            0.42,
+        );
+    }
+    for note in [523.25, 659.25, 783.99] {
+        mix_into(&mut out, &brass(rng, note, 0.7, 0.7), 0.74, 0.18);
+    }
+    for time in scatter(rng, 9, 0.74, 1.5, 1.2) {
+        let note = SPARKLE_NOTES[rng.index(SPARKLE_NOTES.len())] * 2.0;
+        mix_into(&mut out, &bell(note, 2.0, 0.9, 0.18), time, 0.1);
+    }
+    out
+}
+
+/// A milestone and its unlock: a warm three-note brass call (G-B-D), a bright bell answer and a
+/// glittering shimmer for the cosmetic that just unlocked.
+fn milestone_fanfare(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for (index, note) in [392.0, 493.88, 587.33].into_iter().enumerate() {
+        let gate = if index == 2 { 0.8 } else { 0.12 };
+        mix_into(
+            &mut out,
+            &brass(rng, note, gate, 0.85),
+            index as f32 * 0.13,
+            0.38,
+        );
+    }
+    for note in [783.99, 987.77] {
+        mix_into(&mut out, &brass(rng, note, 0.6, 0.6), 0.26, 0.16);
+    }
+    for (index, note) in [1_567.98, 1_975.5, 2_349.3, 3_136.0]
+        .into_iter()
+        .enumerate()
+    {
+        mix_into(
+            &mut out,
+            &bell(note, 2.0, 1.1, 0.6),
+            0.3 + index as f32 * 0.07,
+            0.16,
+        );
+    }
+    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut hp = Svf::new(FilterMode::HighPass, 7_000.0, 0.7);
+    let shimmer = render(0.9, |t| {
+        hp.process(noise.next()) * (0.5 + 0.5 * sine(t, 22.0)) * perc(t, 0.15, 0.9)
+    });
+    mix_into(&mut out, &shimmer, 0.35, 0.12);
+    out
+}
+
+/// The sky opens (Act I -> II): a deep swell and wind rush, then a broad rising brass anthem
+/// (C - G - C - E - G over a sustained C major chord, an octave higher at the top), crowned by
+/// slow high bells, long echo.
+fn act_two_fanfare(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(48.0, 32.0, 1.2, 1.5);
+    let rush = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        900.0,
+        0.9,
+        1.4,
+    );
+    mix_into(&mut out, &rush, 0.0, 0.45);
+    let climb = [261.63, 392.0, 523.25, 659.25, 783.99];
+    for (index, note) in climb.into_iter().enumerate() {
+        let gate = if index == climb.len() - 1 { 1.4 } else { 0.16 };
+        mix_into(
+            &mut out,
+            &brass(rng, note, gate, 1.0),
+            0.35 + index as f32 * 0.17,
+            0.34,
+        );
+    }
+    for note in [130.81, 261.63, 329.63, 392.0, 523.25] {
+        mix_into(&mut out, &brass(rng, note, 1.8, 0.8), 1.03, 0.16);
+    }
+    for (index, note) in [2_093.0, 2_637.0, 3_136.0, 4_186.0, 3_136.0, 4_186.0]
+        .into_iter()
+        .enumerate()
+    {
+        mix_into(
+            &mut out,
+            &bell(note, 2.0, 1.0, 0.9),
+            1.05 + index as f32 * 0.14,
+            0.09,
+        );
+    }
+    let mut echo = Delay::new(0.5).with_damping(0.45);
+    out.resize(out.len() + samples_for(0.9), 0.0);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.36, 0.4) * 0.35;
+        *sample = saturate(*sample, 1.2);
     }
     out
 }
