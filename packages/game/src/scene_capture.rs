@@ -1612,11 +1612,11 @@ pub const SCENES: &[Scene] = &[
     },
     Scene {
         name: "endless_west_of_town",
-        summary: "An endless world: the ground runs on past the town's west end (no world edge), the minimap scrolling with the rig",
+        summary: "An endless world west of town: the ground runs on (no world edge) with the placeholder surface swell lowering it a row in places, the minimap scrolling with the rig",
         setup: |stage| {
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
-                let x = -40;
+                let x = -128;
                 let row = world.terrain().surface_row(x) - 1;
                 place_rig(world, player, x, row);
                 carve(world, x + 6..x + 9, row + 1..row + 9);

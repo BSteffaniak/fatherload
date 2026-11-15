@@ -445,7 +445,9 @@ fn cell_at(terrain: &Terrain, x: i32, y: i32) -> Cell {
     }
     match terrain.tile(TilePosition { x, y }) {
         Some(tile) if tile.kind == TileKind::Air => {
-            if y <= SKY_MAX_TILE_Y {
+            // Open air above the column's ground line is sky (the surface heightmap can lower
+            // the ground below the classic sky rows).
+            if y <= SKY_MAX_TILE_Y || y < terrain.surface_row(x) {
                 Cell::Sky
             } else {
                 Cell::Cave
@@ -542,7 +544,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     let right = cell_at(terrain, x + 1, y);
 
     if kind == TileKind::Air {
-        if y <= SKY_MAX_TILE_Y {
+        if cell_at(terrain, x, y) == Cell::Sky {
             paint_grass_blades(&mut canvas, terrain, position, down);
         } else {
             paint_cave(&mut canvas, &strata, up, left, right);

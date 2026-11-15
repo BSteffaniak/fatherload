@@ -86,13 +86,15 @@ pub struct DarknessGrid {
 }
 
 impl DarknessGrid {
-    /// Darkness for the tiles `min..min + size` (plus a border), from `explored`.
+    /// Darkness for the tiles `min..min + size` (plus a border), from `explored`. Open sky
+    /// above each column's ground line (`surface_row(x)`, the first ground row) is never dark.
     #[must_use]
     pub fn compute(
         explored: &DiscoveredTiles,
         min: TilePosition,
         size: (i32, i32),
         terrain_height: i32,
+        surface_row: impl Fn(i32) -> i32,
     ) -> Self {
         let margin = DISTANCE_FULL_DARK_TILES;
         let (grid_x, grid_y) = (min.x - 1, min.y - 1);
@@ -143,11 +145,12 @@ impl DarknessGrid {
             }
         }
         let mut values = Vec::with_capacity((grid_width * grid_height) as usize);
+        let surfaces: Vec<i32> = (0..grid_width).map(|x| surface_row(grid_x + x)).collect();
         for y in 0..grid_height {
-            for x in 0..grid_width {
+            for (x, surface) in (0..grid_width).zip(surfaces.iter().copied()) {
                 let tile_y = (grid_y + y).min(terrain_height - 1);
                 let d = distance[at(x + margin, y + margin)];
-                values.push(tile_darkness(tile_y, d == 0, d));
+                values.push(tile_darkness(tile_y, d == 0 || tile_y < surface, d));
             }
         }
         Self {
@@ -256,7 +259,7 @@ mod tests {
             TilePosition { x: 30, y: 26 },
         ]);
         let min = TilePosition { x: 4, y: 14 };
-        let grid = DarknessGrid::compute(&explored, min, (32, 20), 200);
+        let grid = DarknessGrid::compute(&explored, min, (32, 20), 200, |_| 5);
         for y in min.y - 1..min.y + 21 {
             for x in min.x - 1..min.x + 33 {
                 let position = TilePosition { x, y };
@@ -270,10 +273,21 @@ mod tests {
     #[test]
     fn unexplored_ground_far_away_is_black_but_the_surface_stays_readable() {
         let explored = DiscoveredTiles::default();
-        let grid = DarknessGrid::compute(&explored, TilePosition { x: 0, y: 0 }, (16, 40), 200);
+        // Column 9's ground is lowered two rows (an endless world's heightmap): its open air
+        // stays clear like the sky above every column.
+        let surface = |x: i32| if x == 9 { 7 } else { 5 };
+        let grid = DarknessGrid::compute(
+            &explored,
+            TilePosition { x: 0, y: 0 },
+            (16, 40),
+            200,
+            surface,
+        );
         assert_eq!(grid.tile(5, 30), 255);
         assert!(grid.tile(5, GRADIENT_START_TILE_Y) < 128);
         assert_eq!(grid.tile(5, SKY_MAX_TILE_Y), 0);
+        assert_eq!(grid.tile(9, 6), 0);
+        assert!(grid.tile(9, 7) > 0);
         assert_eq!(apply(index_of(INK), 255.0, 0, 0), index_of(INK));
         let lit = crate::rendering::pixel_art::shade::index_of(
             crate::rendering::pixel_art::palette::GOLD,

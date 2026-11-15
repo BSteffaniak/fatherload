@@ -592,7 +592,7 @@ pub(super) fn draw_minimap_for_view(
                 x: origin_x + px * visible_width / width,
                 y: tile_y,
             };
-            let sky = tile_y <= 4;
+            let sky = tile_y <= 4 || tile_y < terrain.surface_row(position.x);
             if !sky && !explored.contains(position) {
                 continue;
             }
@@ -1142,7 +1142,7 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 x: origin_x + column,
                 y: tile_y,
             };
-            let sky = tile_y <= 4;
+            let sky = tile_y <= 4 || tile_y < terrain.surface_row(position.x);
             if !sky && !ui.view.is_explored(position) {
                 continue;
             }

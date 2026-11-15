@@ -312,6 +312,7 @@ impl TerrainChunk {
                     self.tile_max_y - self.tile_min_y,
                 ),
                 terrain.height(),
+                |x| terrain.surface_row(x),
             );
         }
         let pixels = self.composite();
