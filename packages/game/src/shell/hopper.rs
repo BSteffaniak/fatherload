@@ -1,10 +1,15 @@
 //! The block hopper rows of the inventory dialog (WP-DROPS): the "collect blocks" toggle and
-//! dumping blocks, by keyboard, mouse-free menus and controller alike.
+//! dumping blocks, by keyboard, mouse-free menus and controller alike; then the pilot's
+//! personal pack rows (Part II F5): move a stack from the pack into the rig, or from the rig's
+//! bay or hopper into the pack (the manual swap; boarding empties the pack automatically).
 //!
 //! The rows are shared with the renderer (`rendering::counters::hopper_section`), so the
 //! labels always describe what confirm does.
 
-use fatherload_simulation::{Player, PlayerCommand, item::BlockKind};
+use fatherload_simulation::{
+    Player, PlayerCommand,
+    item::{BlockKind, ItemKind},
+};
 
 /// One selectable row of the inventory's hopper section, in display order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -15,6 +20,8 @@ pub enum HopperRow {
     DumpAll,
     /// Tip one kind out.
     Dump(BlockKind),
+    /// Move a whole stack between the pilot's pack and the rig (`to_rig`: pack to rig).
+    Pack { item: ItemKind, to_rig: bool },
 }
 
 impl HopperRow {
@@ -27,6 +34,12 @@ impl HopperRow {
             },
             Self::DumpAll => PlayerCommand::DumpBlocks { block: None },
             Self::Dump(block) => PlayerCommand::DumpBlocks { block: Some(block) },
+            // The simulation moves as much as fits (and as much as there is).
+            Self::Pack { item, to_rig } => PlayerCommand::PilotPack {
+                item,
+                count: u32::MAX,
+                to_rig,
+            },
         }
     }
 }
@@ -43,6 +56,36 @@ pub fn hopper_rows(player: &Player) -> Vec<HopperRow> {
                 .block_hopper
                 .blocks()
                 .map(|(block, _)| HopperRow::Dump(block)),
+        );
+    }
+    rows.extend(pack_rows(player));
+    rows
+}
+
+/// The pack rows: each stack in the pack (to the rig), then the rig's ore, relics and blocks
+/// that could go into the pack.
+#[must_use]
+pub fn pack_rows(player: &Player) -> Vec<HopperRow> {
+    let mut rows: Vec<HopperRow> = player
+        .pilot_pack
+        .iter()
+        .map(|(item, _)| HopperRow::Pack { item, to_rig: true })
+        .collect();
+    let room = player
+        .pilot_gear
+        .pack_capacity()
+        .saturating_sub(player.pilot_pack.total());
+    if room > 0 {
+        rows.extend(
+            player
+                .cargo_bay
+                .iter()
+                .filter(|(item, _)| matches!(item, ItemKind::Mineral(_) | ItemKind::Artifact(_)))
+                .chain(player.block_hopper.iter())
+                .map(|(item, _)| HopperRow::Pack {
+                    item,
+                    to_rig: false,
+                }),
         );
     }
     rows

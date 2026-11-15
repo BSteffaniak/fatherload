@@ -34,7 +34,7 @@ pub const fn built_ramp(tile: BuiltTile) -> Ramp {
         BuiltTile::Wall(BlockKind::Clay) => BRICK,
         BuiltTile::Wall(BlockKind::Stone) => DRESSED,
         BuiltTile::Wall(BlockKind::HardRock) => GRANITE,
-        BuiltTile::Plating | BuiltTile::Glass => STEEL_RAMP,
+        BuiltTile::Plating | BuiltTile::Glass | BuiltTile::VentGrate => STEEL_RAMP,
         BuiltTile::Plank => TIMBER,
     }
 }
@@ -140,12 +140,52 @@ pub(super) fn paint(
             }
         }
         BuiltTile::Glass => paint_glass(canvas, position),
+        BuiltTile::VentGrate => paint_vent(canvas, position),
         BuiltTile::Plank => {
             paint_plank(canvas, strata, edges);
             return;
         }
     }
     paint_edges(canvas, strata, edges, colors[3], colors[0], true);
+}
+
+/// A crawlway's vent grate (Part II F5): a riveted steel frame around slanted louvres with
+/// dark gaps, a rust streak per tile and a warm hazard tab on top, so pilots read it as "a way
+/// through" and rig drivers as a wall.
+fn paint_vent(canvas: &mut TileCanvas, (tile_x, tile_y): (i32, i32)) {
+    let last = TILE_ART - 1;
+    let rust = 3 + (hash(tile_x, tile_y, 257) % (TILE_ART as u32 - 6)) as i32;
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let outer = px == 0 || py == 0 || px == last || py == last;
+            let frame = px <= 1 || py <= 1 || px >= last - 1 || py >= last - 1;
+            let rivet = (px == 2 || px == last - 2) && (py == 2 || py == last - 2);
+            let pixel = if outer {
+                index_of(INK)
+            } else if rivet {
+                STEEL_RAMP[3]
+            } else if frame {
+                if py <= 1 {
+                    if (px / 2) % 2 == 0 {
+                        index_of(AMBER)
+                    } else {
+                        index_of(INK)
+                    }
+                } else {
+                    STEEL_RAMP[2]
+                }
+            } else {
+                // Louvres: a lit slat, its shaded underside, then a gap into the dark.
+                match (py - 2).rem_euclid(4) {
+                    0 => STEEL_RAMP[3],
+                    1 => STEEL_RAMP[1],
+                    _ if px == rust && py > 3 => index_of(RUST),
+                    _ => index_of(NIGHT),
+                }
+            };
+            canvas.set(px, py, pixel);
+        }
+    }
 }
 
 /// A steel-framed window pane: deep blue glass, a diagonal glint and a mullion cross.

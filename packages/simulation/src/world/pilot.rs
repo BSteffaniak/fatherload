@@ -185,6 +185,13 @@ impl WorldState {
             .map(|player| (player.x, player.y))
     }
 
+    /// The tile [`Self::actor_position`] is in: where build mode, module menus and counters
+    /// reach from.
+    #[must_use]
+    pub fn actor_tile(&self, player_id: PlayerId) -> Option<TilePosition> {
+        self.actor_position(player_id).map(|(x, y)| tile_at(x, y))
+    }
+
     /// Whether `player_id`'s rig would let its pilot out now (slow enough, intact).
     #[must_use]
     pub fn can_exit_rig(&self, player_id: PlayerId) -> bool {

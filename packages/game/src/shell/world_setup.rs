@@ -257,6 +257,7 @@ mod tests {
         horizontal: 0.0,
         thrust: false,
         drill_down: false,
+        jump: false,
         interact: false,
         confirm: false,
         cancel: false,

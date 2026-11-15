@@ -353,6 +353,17 @@ fn draw_fixture(
             // The lift strip.
             pen.rect(draw, 7, 0, 2, T, a(with_alpha(TEAL, 160)));
         }
+        Fixture::Rope => {
+            // A braided hemp rope, twists alternating light and dark, with a knot per tile.
+            pen.rect(draw, 7, 0, 2, T, a(SOIL));
+            for y in (0..T).step_by(2) {
+                pen.rect(draw, 7, y, 1, 1, a(SAND));
+                pen.rect(draw, 8, y + 1, 1, 1, a(LOAM));
+            }
+            pen.rect(draw, 6, 9, 4, 3, a(LOAM));
+            pen.rect(draw, 6, 9, 4, 1, a(SAND));
+            pen.rect(draw, 6, 11, 4, 1, a(SOIL_DARK));
+        }
         Fixture::Light => match facing {
             Facing::Up => {
                 pen.rect(draw, 7, 0, 2, 5, a(STEEL_DARK));
@@ -1209,6 +1220,7 @@ const fn built_colors(tile: BuiltTile) -> (Color, Color) {
         BuiltTile::Plating => (STEEL, STEEL_LIGHT),
         BuiltTile::Glass => (OCEAN, ICE),
         BuiltTile::Plank => (RUST, AMBER),
+        BuiltTile::VentGrate => (NIGHT, STEEL_LIGHT),
     }
 }
 
@@ -1247,6 +1259,12 @@ pub(in crate::rendering) fn draw_item_icon(
                 if tile == BuiltTile::Glass {
                     px(&mut push, 4.0, 5.0, 2.0, 2.0, ICE);
                     px(&mut push, 7.5, 2.0, 1.0, 12.0, STEEL);
+                }
+                if tile == BuiltTile::VentGrate {
+                    for slat in [4.0, 8.0, 12.0] {
+                        px(&mut push, 2.0, slat, 12.0, 1.0, STEEL);
+                    }
+                    px(&mut push, 2.0, 2.0, 12.0, 1.0, AMBER);
                 }
             }
             Buildable::BackWall(block) => {

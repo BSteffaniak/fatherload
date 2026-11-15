@@ -562,6 +562,75 @@ pub const fn block(block: BlockKind) -> &'static SpriteDef {
     }
 }
 
+/// The pilot's helmet (pilot health, the pilot suit, "on foot").
+pub const HELMET: SpriteDef = SpriteDef {
+    name: "icon_helmet",
+    legend: &[
+        ('o', INK),
+        ('w', BONE),
+        ('m', MIST),
+        ('f', FOG),
+        ('v', OCEAN),
+        ('g', ICE),
+        ('a', AMBER),
+    ],
+    frames: &[&[
+        "..ooooo..",
+        ".owwwwmo.",
+        "owwvvvvmo",
+        "owvgvvvfo",
+        "owvvvvvfo",
+        "owwvvvmfo",
+        ".owwmmfo.",
+        "oaaaaaaao",
+        ".ooooooo.",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// The jetpack (its burn gauge and the gear row).
+pub const JETPACK: SpriteDef = SpriteDef {
+    name: "icon_jetpack",
+    legend: &[
+        ('o', INK),
+        ('s', STEEL_LIGHT),
+        ('d', STEEL),
+        ('k', STEEL_DARK),
+        ('y', GOLD),
+        ('r', ORANGE),
+    ],
+    frames: &[&[
+        ".oo...oo.",
+        "osdo.osdo",
+        "osdooosdo",
+        "osdkdksdo",
+        "osdkdksdo",
+        "okkoookko",
+        ".oko.oko.",
+        ".oyo.oyo.",
+        "..r...r..",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Air bubbles (the pilot's oxygen).
+pub const OXYGEN: SpriteDef = SpriteDef {
+    name: "icon_oxygen",
+    legend: &[('o', INK), ('s', SKY_LIGHT), ('i', ICE), ('b', SKY)],
+    frames: &[&[
+        "....ooo..",
+        "...oisbo.",
+        "...osbbo.",
+        "oo..ooo..",
+        "iso......",
+        "obo.oooo.",
+        "...oissbo",
+        "...osbbbo",
+        "....oooo.",
+    ]],
+    frame_seconds: 0.0,
+};
+
 /// The rig's pickup magnet (the "collect blocks" toggle).
 pub const MAGNET: SpriteDef = SpriteDef {
     name: "icon_magnet",

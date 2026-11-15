@@ -117,7 +117,6 @@ pub(super) fn draw_view_hud(
     view: &ViewSnapshot<'_>,
 ) {
     let fps = draw.get_fps();
-    let hud = view.hud;
     let rect = view_rect(view);
     let (left, top) = (rect.x as i32 + 4, rect.y as i32 + 4);
     let split = snapshot.views.len() > 1;
@@ -145,6 +144,46 @@ pub(super) fn draw_view_hud(
         );
         y += header;
     }
+    if let Some(pilot) = &view.pilot {
+        // On foot (Part II F5): the pilot's own gauges replace the rig's.
+        draw_pilot_bars(draw, view, pilot, (inner_x, y, inner_width));
+    } else {
+        draw_rig_bars(draw, view, (inner_x, y, inner_width));
+    }
+
+    let armed = snapshot
+        .bombs
+        .iter()
+        .filter(|bomb| bomb.owner == Some(view.player_id) && bomb.awaiting_remote())
+        .count();
+    let wallet_bottom = draw_wallet_panel(
+        draw,
+        view,
+        (&shell.seat(view.seat_index).explosives, armed),
+        rect,
+        left + width + 4,
+        top,
+    );
+    if let Some(bottom) = wallet_bottom {
+        clock_hud::draw_clock_badge(draw, snapshot, rect, bottom + 3);
+    }
+    // Altitude air, cold and wind while flying a V8 sky (F6).
+    super::sky_hud::draw_sky_gauge(draw, snapshot, view, rect, top + 74);
+    draw_view_prompt(draw, shell, view, rect);
+    draw_view_hud_rest(
+        draw,
+        shell,
+        snapshot,
+        view,
+        (left, top, width, panel_height),
+        fps,
+    );
+}
+
+/// The rig's four gauges: hull, fuel, cargo and the block hopper.
+fn draw_rig_bars(draw: &mut RaylibDrawHandle<'_>, view: &ViewSnapshot<'_>, at: (i32, i32, i32)) {
+    let hud = view.hud;
+    let (inner_x, mut y, inner_width) = at;
     y += ui_kit::stat_bar(
         draw,
         inner_x,
@@ -199,27 +238,93 @@ pub(super) fn draw_view_hud(
         BarColors::HOPPER,
         0.0,
     );
+}
 
-    let armed = snapshot
-        .bombs
-        .iter()
-        .filter(|bomb| bomb.owner == Some(view.player_id) && bomb.awaiting_remote())
-        .count();
-    let wallet_bottom = draw_wallet_panel(
+/// The pilot's gauges on foot: health, air, the jetpack's burn (or the rig's hull when there
+/// is no jetpack) and the personal pack.
+fn draw_pilot_bars(
+    draw: &mut RaylibDrawHandle<'_>,
+    view: &ViewSnapshot<'_>,
+    pilot: &crate::render_snapshot::PilotPresentation,
+    at: (i32, i32, i32),
+) {
+    let state = &pilot.state;
+    let (inner_x, mut y, inner_width) = at;
+    y += ui_kit::stat_bar(
         draw,
-        view,
-        (&shell.seat(view.seat_index).explosives, armed),
-        rect,
-        left + width + 4,
-        top,
+        inner_x,
+        y,
+        inner_width,
+        &icons::HELMET,
+        "PILOT",
+        state.health,
+        state.max_health,
+        BarColors::PILOT,
+        0.3,
     );
-    if let Some(bottom) = wallet_bottom {
-        clock_hud::draw_clock_badge(draw, snapshot, rect, bottom + 3);
-    }
-    // Altitude air, cold and wind while flying a V8 sky (F6).
-    super::sky_hud::draw_sky_gauge(draw, snapshot, view, rect, top + 74);
-    draw_view_prompt(draw, shell, view, rect);
+    y += ui_kit::stat_bar(
+        draw,
+        inner_x,
+        y,
+        inner_width,
+        &icons::OXYGEN,
+        "AIR",
+        state.oxygen,
+        state.max_oxygen,
+        BarColors::AIR,
+        0.25,
+    );
+    y += if state.jetpack_capacity > 0.0 {
+        ui_kit::stat_bar(
+            draw,
+            inner_x,
+            y,
+            inner_width,
+            &icons::JETPACK,
+            "JET",
+            state.jetpack_fuel,
+            state.jetpack_capacity,
+            BarColors::FUEL,
+            0.0,
+        )
+    } else {
+        ui_kit::stat_bar(
+            draw,
+            inner_x,
+            y,
+            inner_width,
+            &icons::HULL,
+            "RIG",
+            view.hud.hull,
+            view.hud.max_hull,
+            BarColors::HULL,
+            0.35,
+        )
+    };
+    ui_kit::stat_bar(
+        draw,
+        inner_x,
+        y,
+        inner_width,
+        &icons::CARGO,
+        "PACK",
+        view.player.pilot_pack.total() as f32,
+        view.player.pilot_gear.pack_capacity() as f32,
+        BarColors::CARGO,
+        0.0,
+    );
+}
 
+/// The rest of a view's HUD: warning badges, the quest tracker and the details overlay.
+fn draw_view_hud_rest(
+    draw: &mut RaylibDrawHandle<'_>,
+    shell: &ShellState,
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
+    (left, top, width, panel_height): (i32, i32, i32, i32),
+    fps: u32,
+) {
+    let rect = view_rect(view);
     // Warning badges.
     let mut badge_x = left;
     let badge_y = top + panel_height + 3;
@@ -300,12 +405,31 @@ fn draw_view_prompt(
     rect: Rectangle,
 ) {
     let device = shell.prompt_device(view.seat_index);
+    let idle = shell.run_mode == RunMode::Playing
+        && shell.modal.is_none()
+        && shell.seat(view.seat_index).modal.is_none()
+        && shell.seat(view.seat_index).build.is_none();
     let (prompt, label, accent) = if device == InputDevice::Unassigned {
         (
             Prompt::Join,
             format!("to join as Player {}", view.seat_index + 1),
             false,
         )
+    } else if idle && view.can_board {
+        // On foot beside the rig (Part II F5): boarding comes first.
+        (Prompt::BoardRig, "Board the rig".to_owned(), true)
+    } else if idle && view.pilot.is_some() && view.surface_zone.is_some() {
+        let zone = view
+            .surface_zone
+            .unwrap_or(fatherload_simulation::economy::SurfaceZone::Fuel);
+        (
+            Prompt::Climb,
+            format!("Walk into {}", surface_zone_label(zone)),
+            true,
+        )
+    } else if idle && view.pilot.is_some() && view.village_door.is_some() {
+        let door = view.village_door.clone().unwrap_or_default();
+        (Prompt::Climb, door.replacen("Enter", "Walk into", 1), true)
     } else if shell.run_mode == RunMode::Playing
         && shell.modal.is_none()
         && shell.seat(view.seat_index).modal.is_none()
@@ -333,6 +457,14 @@ fn draw_view_prompt(
         && let Some(module) = view.nearby_module
     {
         (Prompt::Use, format!("Use {}", module.name()), true)
+    } else if idle
+        && view.can_exit
+        && view.failure.is_none()
+        && view.active_drill.is_none()
+        && view.player.velocity_x.abs() < 1.0
+        && view.player.velocity_y.abs() < 1.0
+    {
+        (Prompt::ExitRig, "Climb out".to_owned(), false)
     } else {
         return;
     };
@@ -1302,16 +1434,21 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         )
         .collect(),
     ));
-    // The hopper's rows are the dialog's only selectable ones: right after the cargo.
+    // The hopper's rows, then the pilot pack's, are the dialog's selectable ones: right after
+    // the cargo.
+    let (pack, pack_about) = counters::pack_section(ui);
     sections.insert(1, hopper);
+    sections.insert(2, pack);
     UiLayout::screen(draw).modal_with_render_plan(
         "Inventory",
-        "Cargo, blocks, artifacts, consumables and field kits.",
-        &ModalContent::new(sections).footer(hopper_about).prompts(&[
-            hint(Prompt::Confirm, "toggle / dump"),
-            hint(Prompt::Inventory, ""),
-            hint(Prompt::Back, "close"),
-        ]),
+        "Cargo, blocks, the pilot's pack, artifacts, consumables and field kits.",
+        &ModalContent::new(sections)
+            .footer(hopper_about.or(pack_about))
+            .prompts(&[
+                hint(Prompt::Confirm, "toggle / dump / move"),
+                hint(Prompt::Inventory, ""),
+                hint(Prompt::Back, "close"),
+            ]),
     );
 }
 
@@ -1598,6 +1735,7 @@ fn draw_map_depth_scale(
 
 /// The controls reference: every action with its keys or buttons for the menu device, in two
 /// columns (actions without a binding on that device are left out).
+#[allow(clippy::too_many_lines, reason = "the controls table is data")]
 fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
     type Rows = &'static [(Prompt, &'static str)];
     const GROUPS: [(&str, Color, Rows); 3] = [
@@ -1609,6 +1747,11 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 (Prompt::Thrust, "Thrust / crown bore"),
                 (Prompt::Drill, "Drill down"),
                 (Prompt::Use, "Use building"),
+                (Prompt::ExitRig, "Climb out / board"),
+                (Prompt::Jump, "Jump / jetpack (on foot)"),
+                (Prompt::Climb, "Climb ladders (on foot)"),
+                (Prompt::Crouch, "Crouch / crawl (on foot)"),
+                (Prompt::Pick, "Hand pick (on foot)"),
                 (Prompt::Pause, "Pause"),
             ],
         ),

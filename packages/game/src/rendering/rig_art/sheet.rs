@@ -30,6 +30,9 @@ pub enum RigSheet {
     Drills,
     /// Every hardpoint weapon (columns) at each upgrade tier and aim (rows).
     Weapons,
+    /// The pilot's sprite sheet (Part II F5): every pose and its frames, then crew paint jobs
+    /// and suit tiers.
+    Pilots,
 }
 
 /// Tiers that start each visual class (plus the top tier).
@@ -150,6 +153,112 @@ pub fn draw_rig_sheet(draw: &mut RaylibDrawHandle<'_>, sheet: RigSheet) {
         RigSheet::Paints => draw_paints(draw, canvas.width),
         RigSheet::Drills => draw_drills(draw, canvas.width),
         RigSheet::Weapons => draw_weapons(draw, canvas.width),
+        RigSheet::Pilots => draw_pilots(draw, canvas.width),
+    }
+}
+
+/// The pilot's poses (rows of frames) and paint jobs, large.
+fn draw_pilots(draw: &mut RaylibDrawHandle<'_>, width: i32) {
+    use crate::rendering::pilot_art::{PilotFrame, PilotLook, paint_pilot};
+    use fatherload_simulation::pilot::{PilotGear, PilotPose};
+    ui_kit::text(draw, "Pilot on foot", 8, 6, TextStyle::Bold, GOLD);
+    let poses: [(&str, PilotPose, f32, bool); 13] = [
+        ("Idle", PilotPose::Idle, 1.5, false),
+        ("Walk", PilotPose::Walk, 8.0, false),
+        ("Run", PilotPose::Run, 12.0, false),
+        ("Jump", PilotPose::Jump, 1.0, false),
+        ("Fall", PilotPose::Fall, 1.0, false),
+        ("Climb", PilotPose::Climb, 6.0, false),
+        ("Crouch", PilotPose::Crouch, 1.0, false),
+        ("Crawl", PilotPose::Crawl, 6.0, false),
+        ("Swim", PilotPose::Swim, 4.0, false),
+        ("Hurt", PilotPose::Hurt, 1.0, false),
+        ("Jetpack", PilotPose::Jetpack, 10.0, false),
+        ("Hang", PilotPose::Hang, 1.0, false),
+        ("Pick", PilotPose::Idle, 6.6, true),
+    ];
+    let scale = 2;
+    let columns = 7;
+    let column_width = (width - 16) / columns;
+    let look = PilotLook::new(
+        RigCosmetics::default_for(PlayerId::new(1)),
+        PilotGear {
+            jetpack: 1,
+            suit: 2,
+        },
+    );
+    for (index, (name, pose, rate, swinging)) in poses.into_iter().enumerate() {
+        let column = index as i32 % columns;
+        let row = index as i32 / columns;
+        let cx = 8 + column * column_width + column_width / 2;
+        let feet = 78 + row * 84;
+        let label_width = ui_kit::text_width(name, TextStyle::Bold);
+        ui_kit::text(
+            draw,
+            name,
+            cx - label_width / 2,
+            feet + 6,
+            TextStyle::Bold,
+            BONE,
+        );
+        // Two frames side by side (one cycle step apart).
+        for frame in 0..2 {
+            let seconds = frame as f32 / rate.max(1.0);
+            let canvas = paint_pilot(
+                &look,
+                PilotFrame {
+                    pose,
+                    seconds,
+                    swinging,
+                },
+            );
+            let x = cx - 14 + frame * 28;
+            canvas.draw(
+                draw,
+                Vector2::new(x as f32, feet as f32),
+                scale as f32,
+                false,
+                None,
+            );
+        }
+    }
+    // Paint jobs and suit tiers.
+    let jobs = paint_jobs();
+    let top = 78 + 2 * 84 + 14;
+    ui_kit::text(draw, "Suit paint and tiers", 8, top, TextStyle::Bold, GOLD);
+    for (index, (name, cosmetics)) in jobs.into_iter().take(8).enumerate() {
+        let cx = 8 + index as i32 * ((width - 16) / 8) + (width - 16) / 16;
+        let look = PilotLook::new(
+            cosmetics,
+            PilotGear {
+                jetpack: u8::from(index % 2 == 0),
+                suit: (index % 4) as u8,
+            },
+        );
+        let canvas = paint_pilot(
+            &look,
+            PilotFrame {
+                pose: PilotPose::Walk,
+                seconds: index as f32 * 0.13,
+                swinging: false,
+            },
+        );
+        canvas.draw(
+            draw,
+            Vector2::new(cx as f32, (top + 72) as f32),
+            2.0,
+            false,
+            None,
+        );
+        let label_width = ui_kit::text_width(name, TextStyle::Body);
+        ui_kit::text(
+            draw,
+            name,
+            cx - label_width / 2,
+            top + 76,
+            TextStyle::Body,
+            super::paint_accent(cosmetics.primary),
+        );
     }
 }
 

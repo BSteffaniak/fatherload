@@ -697,7 +697,21 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::SleepRuleChanged { player_id, .. } => Some(player_id),
         GameplayEventKind::SkyBandEntered { player_id, .. }
         | GameplayEventKind::UpdraftCaught { player_id }
-        | GameplayEventKind::RigIcing { player_id } => Some(player_id),
+        | GameplayEventKind::RigIcing { player_id }
+        | GameplayEventKind::PilotExited { player_id, .. }
+        | GameplayEventKind::PilotBoarded { player_id, .. }
+        | GameplayEventKind::PilotJumped { player_id }
+        | GameplayEventKind::PilotLanded { player_id, .. }
+        | GameplayEventKind::PilotLedgeGrab { player_id }
+        | GameplayEventKind::PilotSplashed { player_id }
+        | GameplayEventKind::PilotHurt { player_id, .. }
+        | GameplayEventKind::PilotDied { player_id, .. }
+        | GameplayEventKind::PilotOxygenLow { player_id, .. }
+        | GameplayEventKind::JetpackIgnited { player_id }
+        | GameplayEventKind::JetpackEmpty { player_id }
+        | GameplayEventKind::PickStruck { player_id, .. }
+        | GameplayEventKind::PickClinked { player_id }
+        | GameplayEventKind::PackTransferred { player_id, .. } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

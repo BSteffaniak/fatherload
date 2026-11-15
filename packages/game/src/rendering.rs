@@ -26,6 +26,7 @@ mod interior;
 mod layout;
 mod menus;
 mod people_art;
+mod pilot_art;
 pub mod pixel_art;
 pub mod pointer;
 mod prompts;
@@ -656,6 +657,7 @@ impl GameRenderer {
                     relay_countdowns: &snapshot.relay_countdowns,
                     quest_markers: &view.quest_markers,
                     players: &snapshot.players,
+                    pilots: &snapshot.pilots,
                     facings: &self.rig_facings,
                     local: snapshot
                         .players

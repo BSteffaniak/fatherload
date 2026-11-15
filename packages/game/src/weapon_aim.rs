@@ -119,6 +119,43 @@ pub fn seat_aim(
     }
 }
 
+/// The control a seat on foot sends (Part II F5): the trigger swings the hand pick, aimed from
+/// the pilot's chest at the pointer, along the right stick, or (auto) where the pilot faces.
+/// `None` when `player_id` is in its rig.
+#[must_use]
+pub fn pilot_aim(
+    input: &PlayerInput,
+    world: &WorldState,
+    player_id: fatherload_simulation::PlayerId,
+    anchor: Option<&ViewAnchor>,
+) -> Option<SeatAim> {
+    let (_, body, state) = world.pilot_of(player_id)?;
+    let (x, y) = state.middle(body);
+    let facing_aim = (if state.facing < 0 { -127 } else { 127 }, 0);
+    let pointer = input
+        .pointer
+        .zip(anchor)
+        .filter(|((px, py), anchor)| anchor.contains(*px, *py))
+        .map(|((px, py), anchor)| anchor.world_point(px, py));
+    let aim = if input.auto_aim {
+        None
+    } else {
+        pointer
+            .and_then(|(wx, wy)| quantize_aim(wx - x, wy - y))
+            .or_else(|| quantize_aim(input.aim_x, input.aim_y))
+    };
+    let (aim_x, aim_y) = aim.unwrap_or(facing_aim);
+    Some(SeatAim {
+        control: WeaponControl {
+            fire: input.fire,
+            auto_aim: aim.is_none(),
+            aim_x,
+            aim_y,
+        },
+        pointer: if aim.is_some() { pointer } else { None },
+    })
+}
+
 /// Whether a controller trigger meant as "fire" should thrust instead: the rig has no weapon
 /// mounted (the trigger's meaning before weapons).
 #[must_use]
@@ -166,6 +203,10 @@ pub fn reticle(
 ) -> Option<Reticle> {
     let player = world.player(player_id)?;
     let weapon = player.mounted_weapon?.kind;
+    if world.is_on_foot(player_id) {
+        // On foot the trigger swings the pick: its cracks show on the tile instead.
+        return None;
+    }
     let base = (player.x, player.y - MUZZLE_RISE);
     if let Some((x, y)) = aim.pointer {
         return Some(Reticle {

@@ -40,6 +40,7 @@ mod enemies;
 mod explosives;
 mod fx;
 mod lighting;
+mod pilot;
 mod quest_marks;
 mod rig;
 mod sky;
@@ -96,6 +97,8 @@ pub(super) struct WorldScene<'a> {
     /// Markers of the view player's quests.
     pub quest_markers: &'a [fatherload_simulation::quest::describe::QuestMarker],
     pub players: &'a [PlayerPresentation],
+    /// Pilots on foot (Part II F5).
+    pub pilots: &'a [crate::render_snapshot::PilotPresentation],
     /// Each rig's last facing.
     pub facings: &'a RigFacings,
     /// The rig this view follows.
@@ -251,6 +254,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     if let Some(drill) = scene.active_drill {
         fx::draw_drill_damage(draw, scene.terrain, drill, scene.ticks);
     }
+    pilot::draw_pick_cracks(draw, scene.pilots);
     if let Some((x, y)) = scene.lost_cargo {
         fx::draw_lost_cargo(draw, x, y, seconds);
     }
@@ -291,7 +295,15 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     }
     for player in scene.players {
         rig::draw_rig(draw, scene.terrain, player, scene.facings, scene.ticks);
+        if scene
+            .pilots
+            .iter()
+            .any(|pilot| pilot.player_id == player.player_id)
+        {
+            pilot::draw_parked_rig(draw, player, scene.facings, scene.ticks);
+        }
     }
+    pilot::draw_pilots(draw, scene.pilots, scene.visible, scene.ticks);
     enemies::draw_rig_hits(draw, scene.players, scene.rig_guards, scene.ticks);
     if let Some(drill) = scene.active_drill {
         fx::draw_drill_debris(draw, scene.terrain, drill, scene.ticks);
@@ -350,6 +362,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             terrain: scene.terrain,
             visible: scene.visible,
             players: scene.players,
+            pilots: scene.pilots,
             facings: scene.facings,
             bombs: scene.bombs,
             explosions: scene.explosions,

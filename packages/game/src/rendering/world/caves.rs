@@ -56,6 +56,8 @@ const LEVELS: i32 = 9;
 pub const RIG_LAMP_TILES: f32 = 5.5;
 /// Lamp radius each scanner tier adds, in tiles.
 pub const RIG_LAMP_TILES_PER_SCANNER: f32 = 0.3;
+/// Radius of a pilot's helmet lamp, in tiles (smaller than a rig's floodlights).
+pub const PILOT_LAMP_TILES: f32 = 3.5;
 /// The colour of cave darkness.
 const DARK: Color = Color::new(6, 4, 14, 255);
 
@@ -288,12 +290,33 @@ pub(super) fn draw_critters(
     }
 }
 
-/// The lights in view: rig lamps (with a forward beam), flares, blasts, glowing tiles and
-/// glowing critters.
+/// Pilots' helmet lamps (Part II F5): a small pool around each pilot and a beam where it looks.
+fn pilot_lamps(pilots: &[crate::render_snapshot::PilotPresentation], lights: &mut Vec<Light>) {
+    for pilot in pilots {
+        let (x, y) = pilot.middle();
+        let ahead = f32::from(pilot.state.facing.signum());
+        lights.push(Light {
+            x,
+            y,
+            radius: PILOT_LAMP_TILES * TILE_SIZE,
+            strength: 0.95,
+        });
+        lights.push(Light {
+            x: ahead.mul_add(PILOT_LAMP_TILES * TILE_SIZE * 0.6, x),
+            y: TILE_SIZE.mul_add(-0.3, y),
+            radius: PILOT_LAMP_TILES * TILE_SIZE * 0.7,
+            strength: 0.8,
+        });
+    }
+}
+
+/// The lights in view: rig lamps (with a forward beam), pilots' lamps, flares, blasts,
+/// glowing tiles and glowing critters.
 fn gather_lights(scene: &DarknessScene<'_>, rect: &TileRect) -> Vec<Light> {
     let DarknessScene {
         terrain,
         players,
+        pilots,
         facings,
         bombs,
         explosions,
@@ -323,6 +346,7 @@ fn gather_lights(scene: &DarknessScene<'_>, rect: &TileRect) -> Vec<Light> {
             strength: 0.9,
         });
     }
+    pilot_lamps(pilots, &mut lights);
     for bomb in bombs {
         if bomb.kind == ExplosiveKind::Flare && bomb.burning() {
             let flicker = (seconds * 23.0 + bomb.id as f32).sin() * 0.04;
@@ -415,6 +439,8 @@ pub(super) struct DarknessScene<'a> {
     pub terrain: &'a Terrain,
     pub visible: Rectangle,
     pub players: &'a [PlayerPresentation],
+    /// Pilots on foot: their headlamps light the dark too (Part II F5).
+    pub pilots: &'a [crate::render_snapshot::PilotPresentation],
     pub facings: &'a RigFacings,
     pub bombs: &'a [PlacedBomb],
     pub explosions: &'a [Explosion],

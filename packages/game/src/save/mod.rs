@@ -43,9 +43,13 @@ const SAVE_SLOTS: usize = 3;
 /// toggle (T7), enemies and the enemy director (T10), cave and village journals (T13, T9),
 /// player bases (T12) and the crew roster of parked players and profiles (WP-PERSIST).
 ///
-/// 9 (wave 3): the world clock (T14: day length, skipped nights, the sleep rule and who is in
-/// bed), a field with a serde default, so a version 8 file loads as is with the standard 48
-/// minute day.
+/// 9 (expansion wave 3), one bump for all tracks; every new field has a serde default, so a
+/// version 8 file loads as is (same layout) and the bump makes older builds refuse the file:
+///
+/// * T14: the world clock (day length, skipped nights, the sleep rule and who is in bed),
+///   loading as the standard 48 minute day;
+/// * T15 pilot on foot: pilot entities in the entity store, pilot gear and the personal pack on
+///   players, parked pilots in the crew roster, vent grates and ropes.
 pub const SAVE_VERSION: u32 = 9;
 
 /// Persisted user settings.
@@ -309,6 +313,7 @@ fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
         check_generator(json)?;
     }
     match probe.version {
+        // Version 8 files have the current layout minus serde-defaulted wave 3 fields.
         8 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),

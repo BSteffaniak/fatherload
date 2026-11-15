@@ -106,6 +106,13 @@ pub enum PadAction {
     BuildMode,
     /// Pressed (build mode): rotate the selected piece.
     BuildRotate,
+    /// On foot (Part II F5), held: jump, and in the air the jetpack (the thrust button).
+    Jump,
+    /// On foot, held: swing the hand pick (the weapon trigger).
+    SwingPick,
+    /// Pressed: climb out of the rig, or board it on foot (the use button: buildings, doors
+    /// and modules claim it first in the rig, boarding first on foot).
+    BoardRig,
 }
 
 /// The controller layout: every `(action, button)` pair. An action may have several buttons
@@ -129,6 +136,10 @@ pub const PAD_BINDINGS: &[(PadAction, PadButton)] = &[
     (PadAction::TabNext, PadButton::RightBumper),
     (PadAction::BuildMode, PadButton::LeftStick),
     (PadAction::BuildRotate, PadButton::Y),
+    // On foot the same buttons mean: A jumps (stick up climbs), RT swings the pick, X boards.
+    (PadAction::Jump, PadButton::A),
+    (PadAction::SwingPick, PadButton::RightTrigger),
+    (PadAction::BoardRig, PadButton::X),
 ];
 
 /// How long the detonator button is held before it fires charges in sequence (a shorter tap
@@ -316,6 +327,8 @@ impl PadMapper {
             horizontal: state.horizontal(),
             thrust: state.action_held(PadAction::Thrust) || vertical < 0,
             drill_down: vertical > 0,
+            // On foot, A jumps (and holds the jetpack) while the stick climbs.
+            jump: state.action_held(PadAction::Jump),
             interact: pressed(PadAction::Interact),
             confirm: pressed(PadAction::Confirm),
             back: pressed(PadAction::Back),

@@ -738,6 +738,11 @@ fn draw_service_animation(
 /// The player's rig standing on the floor at the seat's `interior_x`: the same modular rig and
 /// paint as outdoors, wearing the garage draft while the paint bay is open (live preview).
 fn draw_rig(draw: &mut impl RaylibDraw, seat: &SeatUi, view: &ViewSnapshot<'_>, seconds: f32) {
+    if let Some(pilot) = &view.pilot {
+        // On foot the pilot walked in (Part II F5): it walks the room itself.
+        draw_room_pilot(draw, seat, pilot, seconds);
+        return;
+    }
     let mut look = RigLook::from_player(view.player_id, view.player);
     if let Some(preview) = seat.garage_preview() {
         look = look.wearing(preview);
@@ -761,6 +766,42 @@ fn draw_rig(draw: &mut impl RaylibDraw, seat: &SeatUi, view: &ViewSnapshot<'_>, 
     };
     let flip = seat.interior_facing < 0.0;
     rig_art::paint_rig(&look, &pose).draw(draw, Vector2::new(x as f32, y as f32), 1.0, flip);
+}
+
+/// The pilot standing (or walking) on the room's floor at the seat's `interior_x`, in its
+/// suit paint (the garage draft while the paint bay is open).
+fn draw_room_pilot(
+    draw: &mut impl RaylibDraw,
+    seat: &SeatUi,
+    pilot: &crate::render_snapshot::PilotPresentation,
+    seconds: f32,
+) {
+    use fatherload_simulation::pilot::PilotPose;
+    let cosmetics = seat.garage_preview().unwrap_or(pilot.cosmetics);
+    let look = super::pilot_art::PilotLook::new(cosmetics, pilot.state.gear);
+    let walking = seat.interior_stride > 0.0;
+    let frame = super::pilot_art::PilotFrame {
+        pose: if walking {
+            PilotPose::Walk
+        } else {
+            PilotPose::Idle
+        },
+        seconds: if walking {
+            seat.interior_stride
+        } else {
+            seconds
+        },
+        swinging: false,
+    };
+    let x = room_pixel_x(seat.interior_x);
+    draw.draw_rectangle(x - 5, FLOOR_Y, 10, 1, palette::with_alpha(INK, 120));
+    super::pilot_art::paint_pilot(&look, frame).draw(
+        draw,
+        Vector2::new(x as f32, FLOOR_Y as f32),
+        1.0,
+        seat.interior_facing < 0.0,
+        None,
+    );
 }
 
 /// Spray mist drifting around the rig after a garage paint job, in its new colours.

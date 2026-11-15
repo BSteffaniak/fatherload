@@ -727,8 +727,38 @@ fn arms_offers(player: &fatherload_simulation::Player, shack: u8, credits: u32) 
                 .price(cost, credits)
                 .about("Ammunition for the rocket launcher. Takes no cargo space.")
             }
+            ArmsRow::Gear(gear) => gear_offer(player, gear, credits),
         })
         .collect()
+}
+
+/// A pilot gear row (Part II F5): the next jetpack or suit tier, or "top tier".
+fn gear_offer(
+    player: &fatherload_simulation::Player,
+    gear: fatherload_simulation::pilot::PilotGearKind,
+    credits: u32,
+) -> Offer {
+    let owned = gear.tier(player.pilot_gear);
+    let icon = match gear {
+        fatherload_simulation::pilot::PilotGearKind::Jetpack => &icons::JETPACK,
+        fatherload_simulation::pilot::PilotGearKind::Suit => &icons::HELMET,
+    };
+    gear.price(owned).map_or_else(
+        || {
+            Offer::new(icon, format!("{} tier {owned}", gear.name()), "Top tier")
+                .unavailable_if(true)
+                .about(gear.blurb())
+        },
+        |price| {
+            Offer::new(
+                icon,
+                format!("{} tier {}", gear.name(), owned + 1),
+                "Pilot gear (on foot)",
+            )
+            .price(price, credits)
+            .about(gear.blurb())
+        },
+    )
 }
 
 /// The shack's special charge packs (C4, sticky bombs, flares...), locked below their level.
@@ -1219,7 +1249,9 @@ pub(super) fn hopper_section(ui: &UiFrame<'_, '_>) -> (Section, Option<String>) 
     let player = ui.player;
     let offers = hopper_rows(player)
         .into_iter()
+        .filter(|row| !matches!(row, HopperRow::Pack { .. }))
         .map(|row| match row {
+            HopperRow::Pack { .. } => unreachable!("pack rows are drawn in the pack section"),
             HopperRow::ToggleCollect => Offer::new(
                 &icons::MAGNET,
                 "Collect blocks",
@@ -1269,6 +1301,66 @@ pub(super) fn hopper_section(ui: &UiFrame<'_, '_>) -> (Section, Option<String>) 
         ),
     );
     (Section::new("Block Hopper", SAND, items), about)
+}
+
+/// The pilot's personal pack (Part II F5): its meter, then a row per stack to move into the
+/// rig and per rig stack to pack (the selection continues from the hopper rows).
+pub(super) fn pack_section(ui: &UiFrame<'_, '_>) -> (Section, Option<String>) {
+    use crate::shell::hopper::pack_rows;
+    let player = ui.player;
+    let first = hopper_rows(player).len() - pack_rows(player).len();
+    let icon = |item: fatherload_simulation::item::ItemKind| match item {
+        fatherload_simulation::item::ItemKind::Mineral(mineral) => icons::mineral(mineral),
+        fatherload_simulation::item::ItemKind::Block(block) => icons::block(block),
+        _ => &icons::CARGO,
+    };
+    let offers = pack_rows(player)
+        .into_iter()
+        .filter_map(|row| match row {
+            HopperRow::Pack { item, to_rig: true } => Some(
+                Offer::new(
+                    icon(item),
+                    format!("{} to the rig", item.name()),
+                    format!("x{} in the pack", player.pilot_pack.count(item)),
+                )
+                .tag("STOW", LIME)
+                .about("Moves the whole stack into the rig's bay or hopper (whatever fits)."),
+            ),
+            HopperRow::Pack {
+                item,
+                to_rig: false,
+            } => Some(
+                Offer::new(
+                    icon(item),
+                    format!("Pack {}", item.name()),
+                    format!("x{} in the rig", player.carried(item)),
+                )
+                .tag("TAKE", SKY_LIGHT)
+                .about(
+                    "Takes as many as the pack holds, to carry on foot (blocks to build with, \
+                     ore to hand over).",
+                ),
+            ),
+            _ => None,
+        })
+        .collect();
+    let selected = ui
+        .seat
+        .selected_menu_item
+        .checked_sub(first)
+        .unwrap_or(usize::MAX);
+    let (mut items, about) = offer_items(offers, selected);
+    items.insert(
+        0,
+        SectionItem::meter(
+            "Pack",
+            player.pilot_pack.total() as f32,
+            player.pilot_gear.pack_capacity() as f32,
+            SKY_LIGHT,
+            SKY,
+        ),
+    );
+    (Section::new("Pilot Pack", SKY_LIGHT, items), about)
 }
 
 /// The hold's minerals and artifacts at today's prices.

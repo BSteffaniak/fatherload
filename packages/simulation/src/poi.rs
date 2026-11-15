@@ -57,6 +57,51 @@ pub enum PoiKind {
     RivalClaim,
 }
 
+/// Who can get into a space (Part II F5): content (points of interest, caves, rooms, quest
+/// spots) is tagged so generators, quests and the map know whether it needs the pilot on foot,
+/// the rig, or either.
+///
+/// The proof space is the **crawlway** ([`CRAWLWAY_ACCESS`],
+/// `WorldState::carve_crawlway`): a 1-tile-high tunnel capped by vent grates
+/// ([`crate::base::BuiltTile::VentGrate`]) that stop rigs, drops, charges and enemies but let a
+/// crouching pilot through.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub enum SpaceAccess {
+    /// A rig or a pilot gets in.
+    Both,
+    /// Only a pilot on foot gets in (crawlways, vents, lever doors, hand-worked chests).
+    RequiresPilot,
+    /// Only a rig gets in (heavy rock, heat, sheer shafts with nothing to climb).
+    RequiresRig,
+}
+
+impl SpaceAccess {
+    /// Whether a pilot on foot gets in.
+    #[must_use]
+    pub const fn admits_pilot(self) -> bool {
+        matches!(self, Self::Both | Self::RequiresPilot)
+    }
+
+    /// Whether a rig gets in.
+    #[must_use]
+    pub const fn admits_rig(self) -> bool {
+        matches!(self, Self::Both | Self::RequiresRig)
+    }
+
+    /// A short tag for maps and logs.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Both => "rig or on foot",
+            Self::RequiresPilot => "on foot only",
+            Self::RequiresRig => "rig only",
+        }
+    }
+}
+
+/// A crawlway's access: on foot only.
+pub const CRAWLWAY_ACCESS: SpaceAccess = SpaceAccess::RequiresPilot;
+
 impl PoiKind {
     pub const ALL: [Self; 5] = [
         Self::SupplyCache,
@@ -86,6 +131,19 @@ impl PoiKind {
             Self::Vault => "A sealed room with blast-proof walls. Solve its lock to get in.",
             Self::Formation => "A dense bed of artifacts or crystal, guarded by the layer.",
             Self::RivalClaim => "An abandoned outpost. Its lockers hold infrastructure kits.",
+        }
+    }
+
+    /// Who can get in (Part II F5): every classic point of interest opens to a rig and a
+    /// pilot alike (a vault's lock is drilled, its loot reachable on foot).
+    #[must_use]
+    pub const fn access(self) -> SpaceAccess {
+        match self {
+            Self::SupplyCache
+            | Self::DerelictRig
+            | Self::Vault
+            | Self::Formation
+            | Self::RivalClaim => SpaceAccess::Both,
         }
     }
 

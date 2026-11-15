@@ -35,7 +35,7 @@ fn surface_of(culture: Culture) -> impl Fn(&Village) -> bool {
 }
 
 /// Parks `player`'s rig on the village ground at `column`, with some credits and cargo.
-fn park_in(world: &mut WorldState, player: PlayerId, found: &Village, column: i32) {
+pub(super) fn park_in(world: &mut WorldState, player: PlayerId, found: &Village, column: i32) {
     if let Some(rig) = world.player_mut(player) {
         #[allow(clippy::cast_precision_loss, reason = "tile indices")]
         {
@@ -106,7 +106,7 @@ fn street(stage: &mut SceneStage<'_>, wanted: impl Fn(&Village) -> bool, offset:
 }
 
 /// Puts seat 0 inside building `building` of `found`, at `x` room units.
-fn inside(stage: &mut SceneStage<'_>, found: &Village, building: usize, x: f32) {
+pub(super) fn inside(stage: &mut SceneStage<'_>, found: &Village, building: usize, x: f32) {
     let seat = stage.seat(0);
     seat.village.interior = Some(VillageInterior {
         village: found.id,

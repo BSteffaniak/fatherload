@@ -4,6 +4,7 @@
 
 use fatherload_simulation::{
     AmmoKind, Player, SessionServiceRequest, WeaponKind, explosive::EXPLOSIVE_OFFERS,
+    pilot::PilotGearKind,
 };
 
 /// One arms rack row.
@@ -15,10 +16,12 @@ pub enum ArmsRow {
     Battery,
     /// A pack of ammunition.
     Ammo(AmmoKind),
+    /// The next tier of the pilot's own gear (Part II F5: jetpack, suit).
+    Gear(PilotGearKind),
 }
 
 /// The arms rack, in counter order.
-pub const ARMS_ROWS: [ArmsRow; 8] = [
+pub const ARMS_ROWS: [ArmsRow; 10] = [
     ArmsRow::Weapon(WeaponKind::RivetGun),
     ArmsRow::Weapon(WeaponKind::Harpoon),
     ArmsRow::Weapon(WeaponKind::ScatterBlaster),
@@ -27,6 +30,8 @@ pub const ARMS_ROWS: [ArmsRow; 8] = [
     ArmsRow::Weapon(WeaponKind::Railgun),
     ArmsRow::Battery,
     ArmsRow::Ammo(AmmoKind::Rocket),
+    ArmsRow::Gear(PilotGearKind::Jetpack),
+    ArmsRow::Gear(PilotGearKind::Suit),
 ];
 
 /// Shack counter rows before the arms rack: four bomb rows, then the explosive packs.
@@ -52,6 +57,7 @@ pub fn request(row: ArmsRow, player: Option<&Player>) -> SessionServiceRequest {
         }
         ArmsRow::Battery => SessionServiceRequest::UpgradeBattery,
         ArmsRow::Ammo(ammo) => SessionServiceRequest::BuyAmmo { ammo },
+        ArmsRow::Gear(gear) => SessionServiceRequest::BuyPilotGear { gear },
     }
 }
 

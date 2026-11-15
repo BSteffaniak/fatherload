@@ -91,6 +91,23 @@ pub struct CaveSpawnTags {
 }
 
 impl CaveKind {
+    /// Who can explore this cave (Part II F5): a chasm's sheer walls need the rig's thrusters
+    /// (or a jetpack's patience); the rest open to both.
+    #[must_use]
+    pub const fn access(self) -> crate::poi::SpaceAccess {
+        match self {
+            Self::Chasm => crate::poi::SpaceAccess::RequiresRig,
+            Self::GrandCavern
+            | Self::CrystalGeode
+            | Self::FloodedCave
+            | Self::LavaTube
+            | Self::FungalGrotto
+            | Self::WormBurrows
+            | Self::AncientRuins
+            | Self::CaveNetwork => crate::poi::SpaceAccess::Both,
+        }
+    }
+
     pub const ALL: [Self; 9] = [
         Self::GrandCavern,
         Self::CrystalGeode,

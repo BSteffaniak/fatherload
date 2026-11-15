@@ -240,6 +240,10 @@ impl LocalGame {
     }
 
     /// Runs one frame.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the frame's order (shell, seats, runtime, presentation) reads best in one place"
+    )]
     pub fn frame(&mut self, input: &FrameInput, delta_seconds: f32) -> FrameReport {
         let mut report = FrameReport::default();
         self.runtime.pump_network(delta_seconds);
@@ -286,16 +290,29 @@ impl LocalGame {
                             .push(PlacedCue::interface(crate::shell::SoundCue::UiMove));
                     }
                     let mut frame = seat_input_with(sampled, *selection);
-                    // The hardpoint weapon: trigger, aim (pointer, stick or auto) and swaps.
+                    // The hardpoint weapon: trigger, aim (pointer, stick or auto) and swaps. On
+                    // foot (Part II F5) the trigger swings the hand pick from the pilot instead.
                     let anchor = self.view_anchors.borrow().get(index).copied().flatten();
-                    let aim = crate::weapon_aim::seat_aim(
+                    let pilot_aim = crate::weapon_aim::pilot_aim(
                         sampled,
-                        player,
-                        selection.facing,
+                        self.runtime.world(),
+                        seat.player,
                         anchor.as_ref(),
                     );
-                    frame.controls = frame.controls.with_weapon(aim.control);
-                    if crate::weapon_aim::trigger_thrusts(sampled, player) {
+                    let on_foot = pilot_aim.is_some();
+                    let aim = pilot_aim.unwrap_or_else(|| {
+                        crate::weapon_aim::seat_aim(
+                            sampled,
+                            player,
+                            selection.facing,
+                            anchor.as_ref(),
+                        )
+                    });
+                    frame.controls = frame
+                        .controls
+                        .with_weapon(aim.control)
+                        .with_jump(sampled.jump);
+                    if !on_foot && crate::weapon_aim::trigger_thrusts(sampled, player) {
                         frame.controls.thrust = true;
                     }
                     frame

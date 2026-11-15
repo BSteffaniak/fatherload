@@ -26,6 +26,9 @@ pub struct PlayerInput {
     pub horizontal: f32,
     pub thrust: bool,
     pub drill_down: bool,
+    /// Held: the on-foot jump button (Space, controller A). The rig ignores it; on foot it
+    /// jumps (and fires the jetpack in the air) while `thrust` (up) climbs ladders.
+    pub jump: bool,
     pub interact: bool,
     pub confirm: bool,
     /// Esc-style cancel (keyboard): backs out of menus, and also pauses play or quits from the
@@ -145,6 +148,7 @@ impl PlayerInput {
             horizontal,
             thrust,
             drill_down,
+            jump,
             interact,
             confirm,
             cancel,
@@ -213,6 +217,7 @@ impl PlayerInput {
             || [
                 thrust,
                 drill_down,
+                jump,
                 interact,
                 confirm,
                 cancel,
@@ -307,6 +312,7 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         },
         thrust: primary.thrust || secondary.thrust,
         drill_down: primary.drill_down || secondary.drill_down,
+        jump: primary.jump || secondary.jump,
         interact: primary.interact || secondary.interact,
         confirm: primary.confirm || secondary.confirm,
         cancel: primary.cancel || secondary.cancel,
@@ -414,6 +420,7 @@ fn read_primary_keyboard_input_with_options(
         horizontal: horizontal_axis(left, right),
         thrust: up,
         drill_down: down,
+        jump: raylib.is_key_down(KeyboardKey::KEY_SPACE),
         interact: raylib.is_key_pressed(KeyboardKey::KEY_E),
         confirm: raylib.is_key_pressed(KeyboardKey::KEY_ENTER)
             || raylib.is_key_pressed(KeyboardKey::KEY_E),

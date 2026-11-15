@@ -45,7 +45,7 @@ pub mod sheet;
 use fatherload_simulation::{Player, PlayerId, RigCosmetics};
 use raylib::prelude::*;
 
-pub use paint::{flame_ramp, paint_accent, paint_ramp};
+pub use paint::{Ramp, flame_ramp, paint_accent, paint_ramp};
 #[allow(
     unused_imports,
     reason = "HARDPOINT is the weapon mount for WP-WEAPONS (wave 2)"

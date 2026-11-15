@@ -241,10 +241,19 @@ impl SeatUi {
         if movement.abs() > f32::EPSILON {
             self.interior_facing = movement.signum();
         }
+        let at_door = self.interior_x <= 42.5 && movement < -0.5;
+        self.interior_stride = if movement.abs() > 0.2 {
+            self.interior_stride + delta_seconds
+        } else {
+            0.0
+        };
         self.interior_x = movement
             .mul_add(185.0 * delta_seconds, self.interior_x)
             .clamp(42.0, 598.0);
-        if input.backs_out() || (input.interact && self.interior_x < DOOR_REACH) {
+        // A pilot walks out through the door (Part II F5); a rig uses it (or Back).
+        let walked_out = at_door && ctx.on_foot();
+        if input.backs_out() || walked_out || (input.interact && self.interior_x < DOOR_REACH) {
+            self.door_latch = true;
             self.village.interior = None;
             self.village.talk = None;
             self.modal = None;

@@ -56,7 +56,10 @@ impl WorldState {
         if player.hull <= 0.0 {
             return Err(BuildRefusal::RigDisabled);
         }
-        let rig = player.tile_position(TILE_SIZE);
+        // On foot the pilot builds and uses modules from where it stands (Part II F5).
+        let rig = self
+            .actor_tile(player_id)
+            .unwrap_or_else(|| player.tile_position(TILE_SIZE));
         match *command {
             BuildCommand::Place { item, at, .. } => {
                 self.check_place(player_id, player, rig, item, at)
@@ -147,6 +150,13 @@ impl WorldState {
             let (left, right) = span(player.x);
             let (top, bottom) = span(player.y);
             (left..=right).contains(&tile.x) && (top..=bottom).contains(&tile.y)
+        }) || self.pilots().any(|(_, body, state)| {
+            // Never wall a pilot in either.
+            #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
+            let cell = |value: f32| (value / TILE_SIZE).floor() as i32;
+            let half = crate::pilot::PILOT_HALF_WIDTH;
+            (cell(body.x - half)..=cell(body.x + half)).contains(&tile.x)
+                && (cell(body.y - state.height())..=cell(body.y - 0.5)).contains(&tile.y)
         })
     }
 

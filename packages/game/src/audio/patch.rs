@@ -223,6 +223,21 @@ patches! {
     SkyBand => "sky_band",
     UpdraftWhoosh => "updraft_whoosh",
     IceCrackle => "ice_crackle",
+    // The pilot on foot (Part II F5), after every earlier patch so their seeds stay put.
+    HatchOpen => "hatch_open",
+    HatchClose => "hatch_close",
+    PilotJump => "pilot_jump",
+    PilotLand => "pilot_land",
+    PilotLandHard => "pilot_land_hard",
+    PilotHurt => "pilot_hurt",
+    PilotDown => "pilot_down",
+    OxygenAlarm => "alarm_oxygen",
+    JetpackBurst => "jetpack_burst",
+    JetpackSputter => "jetpack_sputter",
+    PickChip => "pick_chip",
+    PickClink => "pick_clink",
+    Splash => "splash",
+    LedgeGrab => "ledge_grab",
 }
 
 /// Playback metadata of a patch.
@@ -378,7 +393,8 @@ impl Patch {
             | Self::Milestone
             | Self::Rescue
             | Self::VillageArrival
-            | Self::CrewReturn => PatchInfo::new(Big)
+            | Self::CrewReturn
+            | Self::PilotDown => PatchInfo::new(Big)
                 .instances(1)
                 .jitter(0.0, 0.0)
                 .ducking(0.35),
@@ -509,6 +525,24 @@ impl Patch {
                 .priority(6)
                 .send(0.2)
                 .jitter(0.04, 0.5),
+            Self::HatchOpen | Self::HatchClose => {
+                PatchInfo::new(Feedback).instances(2).jitter(0.03, 0.5)
+            }
+            Self::PilotJump | Self::LedgeGrab => {
+                PatchInfo::new(Feedback).instances(2).jitter(0.06, 1.0)
+            }
+            Self::PilotLand | Self::PickChip | Self::PickClink => {
+                PatchInfo::new(Impact).instances(3).jitter(0.07, 1.5)
+            }
+            Self::PilotLandHard | Self::PilotHurt => PatchInfo::new(Impact)
+                .instances(2)
+                .jitter(0.05, 1.0)
+                .ducking(0.2),
+            Self::OxygenAlarm => PatchInfo::new(Alarm).instances(1).jitter(0.0, 0.0),
+            Self::JetpackBurst | Self::JetpackSputter | Self::Splash => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.2)
+                .jitter(0.05, 1.0),
         }
     }
 
@@ -628,6 +662,20 @@ impl Patch {
             Self::SkyBand => sky_band(rng),
             Self::UpdraftWhoosh => updraft_whoosh(rng),
             Self::IceCrackle => ice_crackle(rng),
+            Self::HatchOpen => hatch(rng, true),
+            Self::HatchClose => hatch(rng, false),
+            Self::PilotJump => pilot_jump(rng),
+            Self::PilotLand => pilot_land(rng, false),
+            Self::PilotLandHard => pilot_land(rng, true),
+            Self::PilotHurt => pilot_hurt(rng),
+            Self::PilotDown => pilot_down(rng),
+            Self::OxygenAlarm => oxygen_alarm(rng),
+            Self::JetpackBurst => jetpack_burst(rng),
+            Self::JetpackSputter => jetpack_sputter(rng),
+            Self::PickChip => pick_chip(rng),
+            Self::PickClink => pick_clink(rng),
+            Self::Splash => splash(rng),
+            Self::LedgeGrab => ledge_grab(rng),
         }
     }
 }
@@ -2164,6 +2212,246 @@ fn spray_paint(rng: &mut Rng) -> Vec<f32> {
 }
 
 // ---------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------
+// The pilot on foot (Part II F5)
+// ---------------------------------------------------------------------------------------------
+
+/// The canopy hatch: a latch clank and a pneumatic hiss. Opening, the latch pops and the hiss
+/// lifts the canopy (rising); closing, the hiss settles (falling) and the latch bites shut.
+fn hatch(rng: &mut Rng, opening: bool) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 3_000.0, 0.9);
+    let length = 0.32;
+    let hiss = render(length, |t| {
+        let progress = t / length;
+        let cutoff = if opening {
+            2_000.0 + 3_200.0 * progress
+        } else {
+            5_200.0 - 3_200.0 * progress
+        };
+        filter.run(noise.next(), cutoff, 0.9)
+            * segments(
+                t,
+                &[(0.0, 0.0), (0.03, 1.0), (length * 0.6, 0.6), (length, 0.0)],
+            )
+    });
+    let latch = clank(rng, if opening { 880.0 } else { 640.0 }, 0.08);
+    let thunk = thump(190.0, 120.0, 0.07, 1.5);
+    let mut out = Vec::new();
+    if opening {
+        mix_into(&mut out, &latch, 0.0, 0.6);
+        mix_into(&mut out, &thunk, 0.0, 0.45);
+        mix_into(&mut out, &hiss, 0.05, 0.55);
+    } else {
+        mix_into(&mut out, &hiss, 0.0, 0.5);
+        mix_into(&mut out, &thunk, 0.24, 0.8);
+        mix_into(&mut out, &latch, 0.25, 0.7);
+    }
+    out
+}
+
+/// A jump: a soft scuff of boots leaving the ground and a short airy whoosh rising after it.
+fn pilot_jump(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        900.0 * rng.jitter(0.1),
+        1.0,
+        0.04,
+    );
+    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 1_200.0, 1.2);
+    let whoosh = render(0.18, |t| {
+        filter.run(noise.next(), 900.0 + 2_600.0 * t / 0.18, 1.2)
+            * segments(t, &[(0.0, 0.0), (0.05, 0.8), (0.18, 0.0)])
+    });
+    mix_into(&mut out, &whoosh, 0.01, 0.5);
+    out
+}
+
+/// Boots landing: a dull thud and a little grit; the hard landing adds a heavy knock, a
+/// crunch of gear and a winded grunt below it.
+fn pilot_land(rng: &mut Rng, hard: bool) -> Vec<f32> {
+    let weight = if hard { 1.0 } else { 0.0 };
+    let mut out = thump(
+        (120.0 - weight * 30.0) * rng.jitter(0.06),
+        70.0 - weight * 20.0,
+        0.09 + weight * 0.12,
+        1.2 + weight,
+    );
+    grains(
+        rng,
+        &mut out,
+        4 + 6 * usize::from(hard),
+        (0.0, 0.12),
+        (1_200.0, 3_500.0),
+        0.25,
+    );
+    if hard {
+        mix_into(&mut out, &clank(rng, 520.0, 0.1), 0.0, 0.3);
+        mix_into(&mut out, &grunt(rng, 150.0, 0.18), 0.03, 0.55);
+    }
+    out
+}
+
+/// A voice-like formant "oof": a buzzy low tone through two vowel resonances, pitch sagging.
+fn grunt(rng: &mut Rng, pitch: f32, length: f32) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Saw).with_phase(rng.unit());
+    let mut first = Svf::new(FilterMode::BandPass, 600.0, 4.0);
+    let mut second = Svf::new(FilterMode::BandPass, 1_100.0, 5.0);
+    let pitch = pitch * rng.jitter(0.06);
+    render(length, |t| {
+        let raw = osc.next(glide(t, pitch * 1.2, pitch * 0.8, length * 0.5));
+        (first.process(raw) + second.process(raw) * 0.6)
+            * segments(
+                t,
+                &[(0.0, 0.0), (0.015, 1.0), (length * 0.5, 0.7), (length, 0.0)],
+            )
+    })
+}
+
+/// The pilot taking a hit: a padded smack on the suit and a short pained grunt.
+fn pilot_hurt(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(220.0 * rng.jitter(0.05), 110.0, 0.06, 2.0);
+    mix_into(
+        &mut out,
+        &burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            1_600.0,
+            0.9,
+            0.05,
+        ),
+        0.0,
+        0.4,
+    );
+    mix_into(&mut out, &grunt(rng, 190.0, 0.22), 0.02, 0.7);
+    out
+}
+
+/// The pilot going down: a falling sigh of a tone over a body thud, then the suit's flatline
+/// beep fading out (a respawn follows, so it stays light, not grim).
+fn pilot_down(rng: &mut Rng) -> Vec<f32> {
+    let mut out = grunt(rng, 170.0, 0.4);
+    mix_into(&mut out, &thump(90.0, 55.0, 0.25, 2.0), 0.3, 0.9);
+    let mut osc = Osc::new(Wave::Sine);
+    let beep = render(0.9, |t| {
+        osc.next(880.0) * segments(t, &[(0.0, 0.0), (0.02, 0.5), (0.5, 0.35), (0.9, 0.0)])
+    });
+    mix_into(&mut out, &beep, 0.55, 0.35);
+    out
+}
+
+/// The suit's low-oxygen alarm: two quick, breathy high pips.
+fn oxygen_alarm(_rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for (index, frequency) in [1_320.0, 1_100.0].into_iter().enumerate() {
+        let mut osc = Osc::new(Wave::Triangle);
+        let pip = render(0.12, |t| {
+            osc.next(frequency) * segments(t, &[(0.0, 0.0), (0.01, 1.0), (0.09, 0.8), (0.12, 0.0)])
+        });
+        mix_into(&mut out, &pip, index as f32 * 0.16, 0.8);
+    }
+    out
+}
+
+/// The jetpack lighting: an ignition pop and a short roar of rushing gas.
+fn jetpack_burst(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(260.0 * rng.jitter(0.05), 90.0, 0.05, 2.5);
+    let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut low = Svf::new(FilterMode::LowPass, 900.0, 0.8);
+    let mut hiss = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut high = Svf::new(FilterMode::HighPass, 3_500.0, 0.7);
+    let roar = render(0.45, |t| {
+        let env = segments(t, &[(0.0, 0.0), (0.04, 1.0), (0.25, 0.7), (0.45, 0.0)]);
+        (saturate(low.process(noise.next()) * 3.0, 2.0) * 0.8 + high.process(hiss.next()) * 0.3)
+            * env
+    });
+    mix_into(&mut out, &roar, 0.01, 0.8);
+    out
+}
+
+/// The jetpack running dry: three sputtering coughs, each weaker.
+fn jetpack_sputter(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for index in 0..3_u8 {
+        let level = 1.0 - f32::from(index) * 0.28;
+        let cough = burst(
+            rng.next_u64(),
+            NoiseColor::Brown,
+            FilterMode::LowPass,
+            700.0 * rng.jitter(0.15),
+            0.9,
+            0.06,
+        );
+        mix_into(&mut out, &cough, f32::from(index) * 0.11, level);
+        mix_into(
+            &mut out,
+            &thump(200.0, 120.0, 0.04, 2.0),
+            f32::from(index) * 0.11,
+            level * 0.4,
+        );
+    }
+    out
+}
+
+/// A hand-pick swing biting soft ground: a small metal tick and crumbling dirt.
+fn pick_chip(rng: &mut Rng) -> Vec<f32> {
+    let base = 1_900.0 * rng.jitter(0.05);
+    let mut out = clank(rng, base, 0.03);
+    for sample in &mut out {
+        *sample *= 0.5;
+    }
+    mix_into(&mut out, &thump(160.0, 100.0, 0.05, 1.5), 0.0, 0.5);
+    grains(rng, &mut out, 6, (0.005, 0.12), (900.0, 2_800.0), 0.35);
+    out
+}
+
+/// The hand pick glancing off rock: a bright ringing clink with no give.
+fn pick_clink(rng: &mut Rng) -> Vec<f32> {
+    let base = 2_400.0 * rng.jitter(0.04);
+    let mut out = clank(rng, base, 0.14);
+    mix_into(&mut out, &bell(3_150.0, 2.4, 1.2, 0.12), 0.0, 0.25);
+    out
+}
+
+/// Going into water: a plunge thump, a spray of bright droplets and a bubbling tail.
+fn splash(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(140.0 * rng.jitter(0.05), 70.0, 0.1, 1.2);
+    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 2_500.0, 0.7);
+    let spray = render(0.35, |t| {
+        filter.run(noise.next(), 4_000.0 - 2_500.0 * t / 0.35, 0.7) * perc(t, 0.004, 0.18)
+    });
+    mix_into(&mut out, &spray, 0.0, 0.7);
+    for index in 0..5_u8 {
+        let mut osc = Osc::new(Wave::Sine);
+        let base = rng.range(500.0, 1_100.0);
+        let bubble = render(0.05, |t| {
+            osc.next(base * (1.0 + t * 14.0)) * perc(t, 0.002, 0.04)
+        });
+        mix_into(&mut out, &bubble, 0.12 + f32::from(index) * 0.05, 0.25);
+    }
+    out
+}
+
+/// Gloves catching a ledge: a quick leathery slap and a scrape of boots against rock.
+fn ledge_grab(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        1_400.0 * rng.jitter(0.1),
+        1.4,
+        0.035,
+    );
+    mix_into(&mut out, &thump(200.0, 140.0, 0.04, 1.2), 0.0, 0.5);
+    grains(rng, &mut out, 5, (0.03, 0.16), (1_800.0, 4_000.0), 0.2);
+    out
+}
+
 // Loops (rendered LOOP_SECONDS + crossfade, then folded seamless by `fold_loop`). Periodic parts
 // use frequencies that complete whole cycles in LOOP_SECONDS (multiples of 0.5 Hz). Scattered
 // events (pops, knocks, grains) are spread evenly over the whole render at a steady density, so

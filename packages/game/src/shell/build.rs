@@ -140,11 +140,10 @@ impl SeatUi {
             cues.push(SoundCue::UiBack);
             return input.pause;
         }
-        let Some((player_id, rig)) = ctx.player.and_then(|id| {
-            ctx.world
-                .player(id)
-                .map(|rig| (id, rig.tile_position(TILE_SIZE)))
-        }) else {
+        let Some((player_id, rig)) = ctx
+            .player
+            .and_then(|id| ctx.world.actor_tile(id).map(|tile| (id, tile)))
+        else {
             return false;
         };
         let before = draft.selected;
@@ -241,8 +240,8 @@ impl SeatUi {
             .and_then(|id| ctx.world.bases().module(id))
             .filter(|module| {
                 ctx.player
-                    .and_then(|id| ctx.world.player(id))
-                    .is_some_and(|rig| module.reachable_from(rig.tile_position(TILE_SIZE)))
+                    .and_then(|id| ctx.world.actor_tile(id))
+                    .is_some_and(|tile| module.reachable_from(tile))
             });
         let Some(module) = module else {
             // Taken down, or the rig drove off.
@@ -290,7 +289,8 @@ impl SeatUi {
 /// The module a rig of `player` can use where it stands.
 #[must_use]
 pub fn module_at_rig(world: &WorldState, player: Option<PlayerId>) -> Option<StructureId> {
-    let rig = world.player(player?)?.tile_position(TILE_SIZE);
+    // On foot the pilot uses modules where it stands (the simulation checks the same spot).
+    let rig = world.actor_tile(player?)?;
     world
         .bases()
         .module_reachable_from(rig)

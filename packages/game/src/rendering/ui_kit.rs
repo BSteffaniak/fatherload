@@ -731,6 +731,18 @@ impl BarColors {
         body: LEAF,
         shade: MOSS,
     };
+    /// The pilot's health on foot (Part II F5).
+    pub const PILOT: Self = Self {
+        light: PINK,
+        body: ROSE,
+        shade: RED,
+    };
+    /// The pilot's air.
+    pub const AIR: Self = Self {
+        light: ICE,
+        body: SKY_LIGHT,
+        shade: SKY,
+    };
     pub const FUEL: Self = Self {
         light: CREAM,
         body: GOLD,

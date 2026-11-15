@@ -252,6 +252,7 @@ mod cave_scenes;
 mod drop_scenes;
 mod explosive_scenes;
 mod touch_scenes;
+mod pilot_scenes;
 mod weapon_scenes;
 
 /// One capturable scene.
@@ -346,6 +347,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(touch_scenes::TOUCH_SCENES)
         .chain(clock_scenes::CLOCK_SCENES)
         .chain(sky_scenes::SKY_SCENES)
+        .chain(pilot_scenes::PILOT_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

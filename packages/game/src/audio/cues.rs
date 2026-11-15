@@ -161,6 +161,21 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::Midnight => Patch::MidnightBell,
         SoundCue::BedDown => Patch::BedDown,
         SoundCue::NightSkipped => Patch::NightSkip,
+        SoundCue::HatchOpen => Patch::HatchOpen,
+        SoundCue::HatchClose => Patch::HatchClose,
+        SoundCue::PilotJump => Patch::PilotJump,
+        SoundCue::PilotLand => Patch::PilotLand,
+        SoundCue::PilotLandHard => Patch::PilotLandHard,
+        SoundCue::PilotHurt => Patch::PilotHurt,
+        SoundCue::PilotDown => Patch::PilotDown,
+        SoundCue::OxygenAlarm => Patch::OxygenAlarm,
+        SoundCue::JetpackBurst => Patch::JetpackBurst,
+        SoundCue::JetpackSputter => Patch::JetpackSputter,
+        SoundCue::PickChip => Patch::PickChip,
+        SoundCue::PickBreak => Patch::BreakSoft,
+        SoundCue::PickClink => Patch::PickClink,
+        SoundCue::Splash => Patch::Splash,
+        SoundCue::LedgeGrab => Patch::LedgeGrab,
     }
 }
 
@@ -393,6 +408,23 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::SkyBandEntered { .. } => Some(SoundCue::SkyBand),
         GameplayEventKind::UpdraftCaught { .. } => Some(SoundCue::Updraft),
         GameplayEventKind::RigIcing { .. } => Some(SoundCue::Icing),
+        // The pilot on foot (Part II F5): from the player, like the rig's own sounds.
+        GameplayEventKind::PilotExited { .. } => Some(SoundCue::HatchOpen),
+        GameplayEventKind::PilotBoarded { .. } => Some(SoundCue::HatchClose),
+        GameplayEventKind::PilotJumped { .. } => Some(SoundCue::PilotJump),
+        GameplayEventKind::PilotLanded { hard: false, .. } => Some(SoundCue::PilotLand),
+        GameplayEventKind::PilotLanded { hard: true, .. } => Some(SoundCue::PilotLandHard),
+        GameplayEventKind::PilotLedgeGrab { .. } => Some(SoundCue::LedgeGrab),
+        GameplayEventKind::PilotSplashed { .. } => Some(SoundCue::Splash),
+        GameplayEventKind::PilotHurt { .. } => Some(SoundCue::PilotHurt),
+        GameplayEventKind::PilotDied { .. } => Some(SoundCue::PilotDown),
+        GameplayEventKind::PilotOxygenLow { .. } => Some(SoundCue::OxygenAlarm),
+        GameplayEventKind::JetpackIgnited { .. } => Some(SoundCue::JetpackBurst),
+        GameplayEventKind::JetpackEmpty { .. } => Some(SoundCue::JetpackSputter),
+        GameplayEventKind::PickStruck { broke: false, .. } => Some(SoundCue::PickChip),
+        GameplayEventKind::PickStruck { broke: true, .. } => Some(SoundCue::PickBreak),
+        GameplayEventKind::PickClinked { .. } => Some(SoundCue::PickClink),
+        GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -492,6 +524,20 @@ mod tests {
             GameplayEventKind::SkyBandEntered { .. }
             | GameplayEventKind::UpdraftCaught { .. }
             | GameplayEventKind::RigIcing { .. } => {}
+            GameplayEventKind::PilotExited { .. }
+            | GameplayEventKind::PilotBoarded { .. }
+            | GameplayEventKind::PilotJumped { .. }
+            | GameplayEventKind::PilotLanded { .. }
+            | GameplayEventKind::PilotLedgeGrab { .. }
+            | GameplayEventKind::PilotSplashed { .. }
+            | GameplayEventKind::PilotHurt { .. }
+            | GameplayEventKind::PilotDied { .. }
+            | GameplayEventKind::PilotOxygenLow { .. }
+            | GameplayEventKind::JetpackIgnited { .. }
+            | GameplayEventKind::JetpackEmpty { .. }
+            | GameplayEventKind::PickStruck { .. }
+            | GameplayEventKind::PickClinked { .. }
+            | GameplayEventKind::PackTransferred { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -743,6 +789,63 @@ mod tests {
         }
         events.push(GameplayEventKind::UpdraftCaught { player_id });
         events.push(GameplayEventKind::RigIcing { player_id });
+        events.extend([
+            GameplayEventKind::PilotExited {
+                player_id,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::PilotBoarded {
+                player_id,
+                transferred: 2,
+            },
+            GameplayEventKind::PilotJumped { player_id },
+            GameplayEventKind::PilotLanded {
+                player_id,
+                hard: false,
+            },
+            GameplayEventKind::PilotLanded {
+                player_id,
+                hard: true,
+            },
+            GameplayEventKind::PilotLedgeGrab { player_id },
+            GameplayEventKind::PilotSplashed { player_id },
+            GameplayEventKind::PilotHurt {
+                player_id,
+                amount: 5,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::PilotDied {
+                player_id,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::PilotOxygenLow {
+                player_id,
+                empty: false,
+            },
+            GameplayEventKind::JetpackIgnited { player_id },
+            GameplayEventKind::JetpackEmpty { player_id },
+            GameplayEventKind::PickStruck {
+                player_id,
+                x: 0,
+                y: 0,
+                broke: false,
+            },
+            GameplayEventKind::PickStruck {
+                player_id,
+                x: 0,
+                y: 0,
+                broke: true,
+            },
+            GameplayEventKind::PickClinked { player_id },
+            GameplayEventKind::PackTransferred {
+                player_id,
+                count: 1,
+                to_rig: true,
+            },
+        ]);
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
@@ -890,6 +993,21 @@ mod tests {
             SoundCue::Midnight,
             SoundCue::BedDown,
             SoundCue::NightSkipped,
+            SoundCue::HatchOpen,
+            SoundCue::HatchClose,
+            SoundCue::PilotJump,
+            SoundCue::PilotLand,
+            SoundCue::PilotLandHard,
+            SoundCue::PilotHurt,
+            SoundCue::PilotDown,
+            SoundCue::OxygenAlarm,
+            SoundCue::JetpackBurst,
+            SoundCue::JetpackSputter,
+            SoundCue::PickChip,
+            SoundCue::PickBreak,
+            SoundCue::PickClink,
+            SoundCue::Splash,
+            SoundCue::LedgeGrab,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

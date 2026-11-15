@@ -225,6 +225,55 @@ pub struct PlayerPresentation {
     pub weapon: Option<WeaponPose>,
 }
 
+/// A pilot on foot as drawn (Part II F5): its owner, feet position, body and state, and the
+/// owner's paint job (the suit wears it).
+#[derive(Clone, Copy, Debug)]
+pub struct PilotPresentation {
+    pub player_id: PlayerId,
+    /// Feet position (world pixels): the middle of the boots.
+    pub x: f32,
+    pub y: f32,
+    pub state: fatherload_simulation::pilot::PilotState,
+    pub pose: fatherload_simulation::pilot::PilotPose,
+    pub cosmetics: RigCosmetics,
+    /// The tile the hand pick is chipping and how far along (0..1), while it swings.
+    pub pick: Option<(TilePosition, f32)>,
+}
+
+impl PilotPresentation {
+    fn of(world: &WorldState) -> Vec<Self> {
+        world
+            .pilots()
+            .map(|(_, body, state)| {
+                let owner = world.player(state.owner);
+                Self {
+                    player_id: state.owner,
+                    x: body.x,
+                    y: body.y,
+                    state: *state,
+                    pose: state.pose(body),
+                    cosmetics: RigCosmetics::resolve(
+                        owner.and_then(|player| player.cosmetics),
+                        state.owner,
+                    ),
+                    pick: state.pick.and_then(|pick| {
+                        let needed = world.terrain().tile(pick.target).and_then(|tile| {
+                            fatherload_simulation::pilot::pick_seconds(tile.kind)
+                        })?;
+                        Some((pick.target, (pick.seconds / needed).clamp(0.0, 1.0)))
+                    }),
+                }
+            })
+            .collect()
+    }
+
+    /// The pilot's middle (chest height), what the camera and lights follow.
+    #[must_use]
+    pub const fn middle(&self) -> (f32, f32) {
+        (self.x, self.state.height().mul_add(-0.5, self.y))
+    }
+}
+
 /// A mounted weapon as drawn: which, its tier, its aim (unit vector) and the trigger.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WeaponPose {
@@ -387,6 +436,12 @@ pub struct ViewSnapshot<'w> {
     pub base_module: Option<crate::base_view::BaseModuleView>,
     /// The base module the rig stands at (its use prompt).
     pub nearby_module: Option<fatherload_simulation::base::ModuleKind>,
+    /// The seat's pilot while it is on foot (Part II F5): HUD gauges and prompts.
+    pub pilot: Option<PilotPresentation>,
+    /// On foot and close enough to board the rig (the board prompt).
+    pub can_board: bool,
+    /// In the rig and slow enough to climb out (the exit prompt).
+    pub can_exit: bool,
 }
 
 impl ViewSnapshot<'_> {
@@ -470,8 +525,10 @@ impl AimPreview {
         selection: crate::input_mapping::ExplosiveSelection,
     ) -> Option<Self> {
         let kind = selection.selected;
+        // On foot (Part II F5) throws leave from the pilot's hands, not the rig: no rig arc.
         if kind.deployment() == fatherload_simulation::explosive::Deployment::Drop
             || world.player(player_id)?.explosive_count(kind) == 0
+            || world.is_on_foot(player_id)
         {
             return None;
         }
@@ -558,6 +615,8 @@ pub struct RenderSnapshot<'w> {
     pub relay_countdowns: Vec<RelayCountdown>,
     /// Every rig in the world.
     pub players: Vec<PlayerPresentation>,
+    /// Every pilot on foot (Part II F5).
+    pub pilots: Vec<PilotPresentation>,
     /// One view per local seat, in seat order.
     pub views: Vec<ViewSnapshot<'w>>,
     pub progression: &'w CanonicalProgressionState,
@@ -645,6 +704,7 @@ impl<'w> RenderSnapshot<'w> {
                 .iter()
                 .map(|(id, player)| PlayerPresentation::from_player(*id, player, world))
                 .collect(),
+            pilots: PilotPresentation::of(world),
             views,
             progression: world.progression(),
             market: MINERALS
@@ -711,7 +771,19 @@ impl<'w> RenderSnapshot<'w> {
         if poses.is_empty() {
             return;
         }
+        // A player on foot is posed by their pilot (the netcode pose is the pilot's middle);
+        // their parked rig stays where the world has it.
+        for pilot in &mut self.pilots {
+            if let Some(&(x, y)) = poses.get(&pilot.player_id) {
+                pilot.x = x;
+                pilot.y = pilot.state.height().mul_add(0.5, y);
+            }
+        }
+        let on_foot = |id: PlayerId| self.pilots.iter().any(|pilot| pilot.player_id == id);
         for player in &mut self.players {
+            if on_foot(player.player_id) {
+                continue;
+            }
             if let Some(&(x, y)) = poses.get(&player.player_id) {
                 player.x = x;
                 player.y = y;
@@ -720,6 +792,10 @@ impl<'w> RenderSnapshot<'w> {
         for view in &mut self.views {
             if let Some(&(x, y)) = poses.get(&view.player_id) {
                 view.camera = camera_for(view.viewport, view.world_scale, x, y);
+                if let Some(pilot) = view.pilot.as_mut() {
+                    pilot.x = x;
+                    pilot.y = pilot.state.height().mul_add(0.5, y);
+                }
             }
         }
     }
@@ -830,8 +906,20 @@ fn view_snapshot(
     world_scale: f32,
 ) -> Option<ViewSnapshot<'_>> {
     let player = world.player(player_id)?;
-    let camera = camera_for(viewport, world_scale, player.x, player.y);
-    let tile = player.tile_position(TILE_SIZE);
+    // On foot the camera follows the pilot (Part II F5).
+    let pilot = PilotPresentation::of(world)
+        .into_iter()
+        .find(|pilot| pilot.player_id == player_id);
+    let (focus_x, focus_y) = pilot.map_or((player.x, player.y), |pilot| pilot.middle());
+    let camera = camera_for(viewport, world_scale, focus_x, focus_y);
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "bounded world pixels address terrain tiles"
+    )]
+    let tile = TilePosition {
+        x: (focus_x / TILE_SIZE).floor() as i32,
+        y: (focus_y / TILE_SIZE).floor() as i32,
+    };
     let (depth, altitude) = depth_and_altitude(tile.y, world.terrain().surface_row(tile.x));
     Some(ViewSnapshot {
         aim_preview: None,
@@ -898,6 +986,9 @@ fn view_snapshot(
             .and_then(fatherload_simulation::quest::QuestGiver::at)
             .map(|giver| crate::shell::desk_rows(world, player_id, giver))
             .unwrap_or_default(),
+        pilot,
+        can_board: world.can_board_rig(player_id),
+        can_exit: world.can_exit_rig(player_id),
     })
 }
 

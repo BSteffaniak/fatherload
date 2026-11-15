@@ -478,6 +478,18 @@ fn falls_and_enemies_hurt_but_god_mode_does_not() {
 #[test]
 fn a_crawlway_lets_pilots_through_but_stops_rigs() {
     let mut world = arena();
+    assert!(
+        crate::poi::CRAWLWAY_ACCESS.admits_pilot() && !crate::poi::CRAWLWAY_ACCESS.admits_rig()
+    );
+    assert_eq!(
+        crate::base::BuiltTile::VentGrate.access(),
+        Some(crate::poi::SpaceAccess::RequiresPilot)
+    );
+    assert!(
+        crate::poi::PoiKind::ALL
+            .iter()
+            .all(|kind| kind.access().admits_rig())
+    );
     // A wall of stone with a 1-tile-high crawlway through it at the floor.
     fill(&mut world, 26..=30, 8..=31, TileKind::Stone);
     let written = world.carve_crawlway(TilePosition { x: 26, y: 31 }, 5);

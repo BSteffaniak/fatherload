@@ -237,6 +237,15 @@ impl BuiltTile {
         }
     }
 
+    /// Who gets through this piece (Part II F5): vent grates let only pilots by.
+    #[must_use]
+    pub const fn access(self) -> Option<crate::poi::SpaceAccess> {
+        match self {
+            Self::VentGrate => Some(crate::poi::SpaceAccess::RequiresPilot),
+            Self::Wall(_) | Self::Plating | Self::Glass | Self::Plank => None,
+        }
+    }
+
     /// Stable code inside the built-tile range of [`crate::terrain::Tile::code`].
     #[must_use]
     pub const fn code(self) -> u64 {

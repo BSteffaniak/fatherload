@@ -94,7 +94,7 @@ fn unlock_depth(world: &mut WorldState) {
 }
 
 /// Puts `player`'s rig at tile `(x, y)` (centre), at rest.
-fn stand(world: &mut WorldState, player: PlayerId, x: i32, y: i32) {
+pub(super) fn stand(world: &mut WorldState, player: PlayerId, x: i32, y: i32) {
     if let Some(rig) = world.player_mut(player) {
         rig.x = tile_centre(x);
         rig.y = tile_centre(y);
@@ -380,9 +380,9 @@ enum Ui {
 }
 
 /// The underground outpost's floor row (rigs park on `FLOOR - 1`).
-const FLOOR: i32 = 66;
+pub(super) const FLOOR: i32 = 66;
 const ROOM_LEFT: i32 = 96;
-const ROOM_RIGHT: i32 = 118;
+pub(super) const ROOM_RIGHT: i32 = 118;
 
 /// A plated outpost room deep underground with a fuel station.
 fn underground_base(stage: &mut SceneStage<'_>, ui: Ui) {
@@ -443,7 +443,7 @@ fn palette_index(item: Buildable) -> usize {
     clippy::too_many_lines,
     reason = "the outpost is laid out piece by piece"
 )]
-fn build_outpost(world: &mut WorldState, player: PlayerId) {
+pub(super) fn build_outpost(world: &mut WorldState, player: PlayerId) {
     // A cavern room in solid stone, with a shaft up from its right end.
     for y in FLOOR - 14..FLOOR + 3 {
         for x in ROOM_LEFT - 4..ROOM_RIGHT + 5 {

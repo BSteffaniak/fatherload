@@ -31,6 +31,7 @@ mod garage;
 pub mod hopper;
 pub mod options;
 mod pointer;
+mod pilot;
 mod quests;
 mod test_mode;
 mod village;
@@ -457,6 +458,37 @@ pub enum SoundCue {
     Updraft,
     /// A rig's hull started icing up in uncovered cold.
     Icing,
+    // --- The pilot on foot (Part II F5) ---
+    /// The canopy hatch popping open as the pilot climbs out.
+    HatchOpen,
+    /// The hatch latching shut as the pilot boards.
+    HatchClose,
+    /// The pilot jumping.
+    PilotJump,
+    /// Boots landing.
+    PilotLand,
+    /// A hard landing that hurts.
+    PilotLandHard,
+    /// The pilot taking a hit.
+    PilotHurt,
+    /// The pilot going down.
+    PilotDown,
+    /// The suit's low-oxygen alarm.
+    OxygenAlarm,
+    /// The jetpack lighting.
+    JetpackBurst,
+    /// The jetpack running dry.
+    JetpackSputter,
+    /// A hand-pick swing biting soft ground.
+    PickChip,
+    /// The hand pick breaking a block loose.
+    PickBreak,
+    /// The hand pick clinking off rock it cannot break.
+    PickClink,
+    /// The pilot going into water.
+    Splash,
+    /// Gloves catching a ledge.
+    LedgeGrab,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -844,6 +876,12 @@ pub struct SeatUi {
     pub last_build: Option<BuildDraft>,
     /// The base module whose menu is open ([`ModalScreen::BaseModule`]).
     pub base_module: Option<fatherload_simulation::base::StructureId>,
+    /// On foot: the pilot just left a building and still stands at its door, so pushing up
+    /// does not walk straight back in (see `shell/pilot.rs`).
+    pub door_latch: bool,
+    /// Seconds the seat has been walking across a room (0 standing): the pilot's walk cycle
+    /// inside buildings.
+    pub interior_stride: f32,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -881,6 +919,8 @@ impl SeatUi {
             build: None,
             last_build: None,
             base_module: None,
+            door_latch: false,
+            interior_stride: 0.0,
         }
     }
 
@@ -953,7 +993,7 @@ impl SeatUi {
         if self.inside() {
             return self.handle_interior(input, delta_seconds, ctx, cues, requests);
         }
-        if ctx.failed() {
+        if ctx.failed() && !ctx.on_foot() {
             // A stranded rig at a base fuel station can still refuel there.
             if self.modal == Some(ModalScreen::BaseModule) {
                 self.handle_base_module(input, ctx, cues, requests);
@@ -1001,11 +1041,26 @@ impl SeatUi {
             self.open_build(ctx, cues);
             return false;
         }
+        // On foot, pushing up at a door walks in (Part II F5).
+        if self.walk_in(input, ctx, cues) {
+            return false;
+        }
         if input.interact {
+            // On foot boarding comes first; in the rig climbing out comes last.
+            if ctx.on_foot() && self.try_board(ctx, cues, requests) {
+                return false;
+            }
             if let Some(zone) = ctx.current_zone() {
                 self.enter_interior(zone, ctx.device, cues);
-            } else if !self.try_enter_village(ctx, cues) && !self.open_base_module(ctx, cues) {
-                "No surface service here.".clone_into(&mut self.message);
+            } else if !self.try_enter_village(ctx, cues)
+                && !self.open_base_module(ctx, cues)
+                && !self.try_exit(ctx, requests)
+            {
+                if ctx.on_foot() {
+                    "Walk up to your rig to board it.".clone_into(&mut self.message);
+                } else {
+                    "No surface service here.".clone_into(&mut self.message);
+                }
             }
         }
         false
@@ -1047,11 +1102,20 @@ impl SeatUi {
         if movement.abs() > f32::EPSILON {
             self.interior_facing = movement.signum();
         }
+        let at_door = self.interior_x <= 42.5 && movement < -0.5;
+        self.interior_stride = if movement.abs() > 0.2 {
+            self.interior_stride + delta_seconds
+        } else {
+            0.0
+        };
         self.interior_x = movement
             .mul_add(185.0 * delta_seconds, self.interior_x)
             .clamp(42.0, 598.0);
-        if input.backs_out() || (input.interact && self.interior_x < 74.0) {
+        // A pilot walks out through the door; a rig uses it (or Back).
+        let walked_out = at_door && ctx.on_foot();
+        if input.backs_out() || walked_out || (input.interact && self.interior_x < 74.0) {
             self.interior_zone = None;
+            self.door_latch = true;
             self.modal = None;
             cues.push(SoundCue::Ui);
             "Back outside.".clone_into(&mut self.message);
@@ -1345,6 +1409,13 @@ impl SeatUi {
                         }
                         hopper::HopperRow::DumpAll => "Hopper tipped out.".to_owned(),
                         hopper::HopperRow::Dump(block) => format!("Dumped every {}.", block.name()),
+                        hopper::HopperRow::Pack { item, to_rig: true } => {
+                            format!("Moved your {} from the pack into the rig.", item.name())
+                        }
+                        hopper::HopperRow::Pack {
+                            item,
+                            to_rig: false,
+                        } => format!("Packed {} for the walk.", item.name()),
                     };
                     self.selected_menu_item = 0;
                 }
@@ -1510,6 +1581,19 @@ impl SeatUi {
                     },
                 )
             }
+            SessionServiceRequest::BuyPilotGear { gear } => format!(
+                "Bought the {} (tier {}). {}",
+                gear.name(),
+                gear.tier(player.pilot_gear),
+                match gear {
+                    fatherload_simulation::pilot::PilotGearKind::Jetpack => {
+                        "Hold jump in the air to fly; it recharges on the ground."
+                    }
+                    fatherload_simulation::pilot::PilotGearKind::Suit => {
+                        "More health, air and pack space on foot."
+                    }
+                }
+            ),
             SessionServiceRequest::BuyBombBundle { .. }
             | SessionServiceRequest::BuyMiningRockets
             | SessionServiceRequest::ClaimFreeTestCharge => {

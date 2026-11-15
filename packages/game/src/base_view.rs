@@ -10,7 +10,7 @@ use fatherload_simulation::{
         workshop_recipe,
     },
     economy::REPAIR_UNIT_COST,
-    terrain::{TILE_SIZE, TilePosition},
+    terrain::TilePosition,
     world::BuildQuote,
 };
 
@@ -48,7 +48,8 @@ impl BuildPreview {
     #[must_use]
     pub fn for_draft(world: &WorldState, player_id: PlayerId, draft: &BuildDraft) -> Option<Self> {
         let player = world.player(player_id)?;
-        let rig = player.tile_position(TILE_SIZE);
+        // On foot the pilot builds around itself (Part II F5).
+        let rig = world.actor_tile(player_id)?;
         let target = draft.target(rig);
         let item = draft.item();
         let size = item.footprint();

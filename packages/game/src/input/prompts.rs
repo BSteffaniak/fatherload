@@ -81,6 +81,19 @@ pub enum Prompt {
     BuildCycle,
     /// Build mode: move the cursor.
     BuildCursor,
+    // --- On foot (Part II F5): the seat's prompts switch to these while its pilot is out. ---
+    /// Jump (held in the air: the jetpack).
+    Jump,
+    /// Climb a ladder or rope up / down.
+    Climb,
+    /// Crouch and crawl.
+    Crouch,
+    /// Swing the hand pick (held).
+    Pick,
+    /// Climb out of the rig.
+    ExitRig,
+    /// Board the rig.
+    BoardRig,
 }
 
 /// A controller glyph: a button or a direction cluster.
@@ -161,24 +174,30 @@ pub fn inline_text(prompt: Prompt, device: InputDevice) -> Option<String> {
 pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [&'static str] {
     use KeyboardLayout::{Arrows, Full, Wasd};
     match (prompt, layout) {
-        (Prompt::Navigate, Full | Arrows) => &["\u{2191}", "\u{2193}"],
-        (Prompt::Navigate, Wasd) => &["W", "S"],
+        // On foot (Part II F5) the arrow keys and W/S climb.
+        (Prompt::Navigate, Full | Arrows) | (Prompt::Climb, Arrows) => &["\u{2191}", "\u{2193}"],
+        (Prompt::Navigate, Wasd) | (Prompt::Climb, Full | Wasd) => &["W", "S"],
         (Prompt::Adjust | Prompt::Tab, Full | Arrows) | (Prompt::Walk, Arrows) => {
             &["\u{2190}", "\u{2192}"]
         }
         (Prompt::Adjust | Prompt::Tab | Prompt::Walk, Wasd) | (Prompt::Walk, Full) => &["A", "D"],
         (Prompt::Confirm, Full | Wasd) => &["Enter"],
-        (Prompt::Confirm | Prompt::Use | Prompt::BuildPlace, Arrows) => &["RCtrl"],
+        (
+            Prompt::Confirm | Prompt::Use | Prompt::BuildPlace | Prompt::ExitRig | Prompt::BoardRig,
+            Arrows,
+        ) => &["RCtrl"],
         (Prompt::Back | Prompt::Pause, Full | Wasd) => &["Esc"],
         (Prompt::Back, Arrows) => &["RShift"],
         (Prompt::Pause, Arrows) => &["RAlt"],
         (Prompt::Inventory, Arrows) => &["Num1"],
         (Prompt::Map, Arrows) => &["Num2"],
-        (Prompt::Use, Full | Wasd) | (Prompt::BuildPlace, Wasd) => &["E"],
+        (Prompt::Use | Prompt::ExitRig | Prompt::BoardRig, Full | Wasd)
+        | (Prompt::BuildPlace, Wasd) => &["E"],
         (Prompt::Thrust, Full | Wasd) => &["W"],
-        (Prompt::Thrust, Arrows) => &["\u{2191}"],
-        (Prompt::Drill, Full | Wasd) => &["S"],
-        (Prompt::Drill, Arrows) => &["\u{2193}"],
+        // The arrow-keys seat jumps with up.
+        (Prompt::Thrust | Prompt::Jump, Arrows) => &["\u{2191}"],
+        (Prompt::Drill | Prompt::Crouch, Full | Wasd) => &["S"],
+        (Prompt::Drill | Prompt::Crouch, Arrows) => &["\u{2193}"],
         (Prompt::Scan, Full | Wasd) => &["C"],
         (Prompt::Scan, Arrows) => &["Num."],
         (Prompt::Bomb, Full | Wasd) => &["B"],
@@ -193,9 +212,10 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::Aim | Prompt::BuildCursor, Arrows) => {
             &["\u{2190}", "\u{2191}", "\u{2192}", "\u{2193}"]
         }
-        (Prompt::FireWeapon, Full | Wasd) => &["LMB", "V"],
+        // On foot the trigger swings the hand pick.
+        (Prompt::FireWeapon | Prompt::Pick, Full | Wasd) => &["LMB", "V"],
         // Build mode shares the weapon keys (weapons hold fire while a seat builds).
-        (Prompt::FireWeapon | Prompt::BuildRemove, Arrows) => &["Num6"],
+        (Prompt::FireWeapon | Prompt::BuildRemove | Prompt::Pick, Arrows) => &["Num6"],
         (Prompt::CycleWeapon, Full | Wasd) | (Prompt::BuildRemove, Wasd) => &["X"],
         (Prompt::CycleWeapon | Prompt::BuildRotate, Arrows) => &["Num7"],
         (Prompt::AimWeapon, Full | Wasd) => &["Mouse"],
@@ -220,6 +240,7 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::BuildCycle, Full | Wasd) => &["Z", "Q"],
         (Prompt::BuildCycle, Arrows) => &["Num9", "Num3"],
         (Prompt::BuildCursor, Full) => &["Mouse", "W", "A", "S", "D"],
+        (Prompt::Jump, Full | Wasd) => &["Space"],
         // The arrow-keys seat leaves the global hotkeys and scrolling to the main keyboard,
         // and keyboards never "join".
         (
@@ -247,14 +268,14 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
     let button = |action| primary_button(action).map(PadGlyph::Button);
     let both = |first, second| button(first).into_iter().chain(button(second)).collect();
     match prompt {
-        Prompt::Navigate => vec![PadGlyph::DPadVertical],
+        Prompt::Navigate | Prompt::Climb => vec![PadGlyph::DPadVertical],
         Prompt::Adjust => vec![PadGlyph::DPadHorizontal],
         Prompt::Walk => vec![PadGlyph::LeftStick],
         Prompt::Scroll => vec![match SCROLL_AXIS {
             PadAxis::LeftX | PadAxis::LeftY => PadGlyph::LeftStick,
             PadAxis::RightX | PadAxis::RightY => PadGlyph::RightStick,
         }],
-        Prompt::Drill => vec![PadGlyph::DPadDown],
+        Prompt::Drill | Prompt::Crouch => vec![PadGlyph::DPadDown],
         Prompt::Confirm | Prompt::Join | Prompt::BuildPlace => {
             button(PadAction::Confirm).into_iter().collect()
         }
@@ -279,6 +300,9 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
         Prompt::BuildMode => button(PadAction::BuildMode).into_iter().collect(),
         Prompt::BuildRotate => button(PadAction::BuildRotate).into_iter().collect(),
         Prompt::BuildCursor => vec![PadGlyph::DPadVertical, PadGlyph::DPadHorizontal],
+        Prompt::Jump => button(PadAction::Jump).into_iter().collect(),
+        Prompt::Pick => button(PadAction::SwingPick).into_iter().collect(),
+        Prompt::ExitRig | Prompt::BoardRig => button(PadAction::BoardRig).into_iter().collect(),
         // Keyboard-only: no controller binding.
         Prompt::Help
         | Prompt::Fullscreen
