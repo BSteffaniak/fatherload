@@ -41,6 +41,9 @@ impl WorldState {
         for player_id in others {
             world.redact_player(player_id);
         }
+        // Crew identities (profile ids are the credential for reclaiming a rig) and parked
+        // players stay on the host.
+        world.crew = crate::crew::CrewRoster::default();
         world
     }
 
@@ -76,6 +79,7 @@ impl WorldState {
             test_mode: _,
             enemies: _,
             bases: _,
+            crew: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

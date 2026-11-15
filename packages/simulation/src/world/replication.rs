@@ -412,6 +412,7 @@ impl WorldState {
             test_mode,
             enemies,
             bases,
+            crew: _,
         } = self;
         let super::CanonicalProgressionState {
             contracts,

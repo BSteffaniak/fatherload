@@ -59,6 +59,12 @@ impl WorldState {
 
     /// Removes a player and every piece of per-player state.
     pub fn remove_player(&mut self, player_id: PlayerId) {
+        self.remove_player_with(player_id, true);
+    }
+
+    /// [`Self::remove_player`], optionally keeping the player's armed remote charges (parking
+    /// keeps them for when the player returns, WP-PERSIST).
+    pub(super) fn remove_player_with(&mut self, player_id: PlayerId, disarm_charges: bool) {
         let Self {
             timing: _,
             player_template: _,
@@ -89,6 +95,7 @@ impl WorldState {
             test_mode: _,
             enemies,
             bases: _,
+            crew,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
@@ -106,9 +113,11 @@ impl WorldState {
         scanner_cooldowns.remove(&player_id);
         scanner_cooldown_deadlines.remove(&player_id);
         discovered_tiles.remove(&player_id);
+        crew.members.remove(&player_id);
         // Nobody is left to trigger a departed player's remote charges: they are disarmed.
         entities.retain(|entity| {
-            !matches!(entity.state, crate::entity::EntityState::Charge(charge)
+            !disarm_charges
+                || !matches!(entity.state, crate::entity::EntityState::Charge(charge)
                 if charge.owner == Some(player_id)
                     && charge.kind.remote()
                     && charge.detonation_tick == crate::explosive::REMOTE_FUSE)
@@ -119,7 +128,7 @@ impl WorldState {
 
     /// The first spawn slot at least [`SPAWN_SPACING`] away from every rig, or the least crowded
     /// slot when the grid is full.
-    fn free_spawn_position(&self, base_x: f32, base_y: f32) -> (f32, f32) {
+    pub(super) fn free_spawn_position(&self, base_x: f32, base_y: f32) -> (f32, f32) {
         let base_x = clamp_authoritative_player_x(&self.terrain, base_x);
         let max_x = clamp_authoritative_player_x(&self.terrain, f32::MAX);
         let right = slot_count(max_x - base_x);

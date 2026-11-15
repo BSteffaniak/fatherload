@@ -32,6 +32,7 @@ mod caves;
 #[cfg(test)]
 mod charge_equivalence_tests;
 mod commands;
+mod crew;
 #[cfg(test)]
 mod determinism_tests;
 mod discovery;
@@ -297,6 +298,10 @@ pub struct WorldState {
     /// live in the terrain.
     #[serde(default)]
     bases: crate::base::Bases,
+    /// Crew identities and parked players (WP-PERSIST, see [`crate::crew`]). Saved with the
+    /// world, never hashed or sent to clients.
+    #[serde(default)]
+    crew: crate::crew::CrewRoster,
 }
 
 impl WorldState {
