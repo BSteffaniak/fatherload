@@ -679,6 +679,7 @@ impl GameRenderer {
                     build_preview: view.build_preview.as_ref(),
                     clock: snapshot.clock,
                     moon: snapshot.moon,
+                    clock_state: snapshot.clock_state,
                 },
             );
         }

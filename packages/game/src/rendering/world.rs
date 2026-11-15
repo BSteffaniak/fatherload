@@ -135,6 +135,8 @@ pub(super) struct WorldScene<'a> {
     pub clock: fatherload_simulation::clock::WorldClock,
     /// Where the Moon hangs over the world.
     pub moon: fatherload_simulation::clock::MoonAnchor,
+    /// The clock's state: who is in bed (a sleeping rig's lamps are off).
+    pub clock_state: &'a fatherload_simulation::clock::ClockState,
 }
 
 impl WorldScene<'_> {
@@ -335,6 +337,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             bases: scene.bases,
             powered: scene.powered_modules,
             settlement_lights: &settlement_lights,
+            asleep: &scene.clock_state.sleepers,
             seconds,
         },
     );

@@ -6,10 +6,10 @@
 //! full over the surface world, fading out a few tiles into the rock (the underground stays as
 //! dark as it always is; caves keep their own darkness, `world/caves.rs`) and fading out high in
 //! the sky (the sky draws its own night). Lights subtract from the darkness: rig headlights (a
-//! forward beam and a pool round the rig, bigger with the scanner tier: they matter at night),
-//! village windows and street lamps, the town's windows, base lamps and lit modules, flares and
-//! blasts, lava, magma and glowing cave growths and critters. A second pass lays a faint warm
-//! haze round warm lights. A light out in the open lights the skin of the ground, not the rock
+//! forward beam and a pool round the rig, bigger with the scanner tier: they matter at night;
+//! a rig whose pilot is in bed has its lamps off), village windows and street lamps, the town's
+//! windows, base lamps and lit modules, flares and blasts, lava, magma and glowing cave growths
+//! and critters. A second pass lays a faint warm haze round warm lights. A light out in the open lights the skin of the ground, not the rock
 //! behind it, and a headlight beam only faintly lights the open air it crosses. Cells are
 //! posterized into a few levels (stepped rings of light, like the rest of the pixel art) and
 //! drawn as merged runs: a few hundred quads per view, and nothing at all by day, which keeps
@@ -27,8 +27,9 @@
 use raylib::prelude::*;
 
 use fatherload_simulation::{
-    ExplosiveKind, PlacedBomb,
+    ExplosiveKind, PlacedBomb, PlayerId,
     base::{Bases, Fixture, ModuleKind, StructureId},
+    clock::Sleeper,
     explosive::FLARE_LIGHT_RADIUS,
     terrain::{TILE_SIZE, Terrain, TilePosition},
 };
@@ -115,6 +116,8 @@ pub(super) struct LightScene<'a> {
     /// Lights of the town and the villages in view (`world/buildings.rs`, `world/villages.rs`):
     /// `(x, y, radius)` in world pixels.
     pub settlement_lights: &'a [(f32, f32, f32)],
+    /// Players in bed: their rigs' lamps are off for the night.
+    pub asleep: &'a std::collections::BTreeMap<PlayerId, Sleeper>,
     pub seconds: f32,
 }
 
@@ -280,6 +283,9 @@ fn draw_headlight_shafts(
         return;
     }
     for player in scene.players {
+        if scene.asleep.contains_key(&player.player_id) {
+            continue;
+        }
         let ahead = if scene.facings.facing_left(player) {
             -1.0
         } else {
@@ -391,7 +397,7 @@ fn gather_lights(scene: &LightScene<'_>) -> Vec<Light> {
     };
     let mut lights = Vec::new();
     for player in scene.players {
-        if !near(player.x, player.y) {
+        if !near(player.x, player.y) || scene.asleep.contains_key(&player.player_id) {
             continue;
         }
         let lamp = (f32::from(player.scanner_level) * RIG_LAMP_TILES_PER_SCANNER + RIG_LAMP_TILES)

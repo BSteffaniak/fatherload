@@ -365,9 +365,9 @@ fn draw_view_prompt(
 }
 
 /// Credits and depth (top-right, clear of the depth ruler), plus the scanner and bomb chips.
+/// Returns the panel's bottom (no panel when the view is too narrow for it), where the clock
+/// badge goes.
 #[allow(clippy::too_many_lines, reason = "one panel, row by row")]
-/// Draws the credits / depth / tools panel at the view's top right and returns its bottom (no
-/// panel when the view is too narrow for it).
 fn draw_wallet_panel(
     draw: &mut RaylibDrawHandle<'_>,
     view: &ViewSnapshot<'_>,
