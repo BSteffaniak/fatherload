@@ -9,14 +9,15 @@
 use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::sprite::SpriteDef;
 
-/// A cave bat: leathery violet wings, red eyes and a fang (wing flap).
+/// A cave bat: leathery lavender wings on a violet body, glowing gold eyes and a fang (wing
+/// flap). Light wings so a swarm reads against dark cave walls.
 pub const CAVE_BAT: SpriteDef = SpriteDef {
     name: "enemy_cave_bat",
     legend: &[
         ('o', INK),
-        ('d', PLUM),
-        ('m', VIOLET),
-        ('e', RED),
+        ('d', VIOLET),
+        ('m', LAVENDER),
+        ('e', GOLD),
         ('w', BONE),
     ],
     frames: &[
