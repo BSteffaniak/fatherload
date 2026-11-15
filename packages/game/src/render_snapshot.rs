@@ -324,12 +324,13 @@ pub struct HudValues {
 /// in tile row `row`: a rig resting on the ground (centre in the row above it) reads 0 m
 /// either way.
 #[must_use]
-pub fn depth_and_altitude(row: i32, surface_row: i32) -> (i32, Option<i32>) {
+pub const fn depth_and_altitude(row: i32, surface_row: i32) -> (i32, Option<i32>) {
     let resting_row = surface_row - 1;
-    if row > resting_row {
-        (row - resting_row, None)
-    } else if row < resting_row {
-        (0, Some(resting_row - row))
+    let offset = row - resting_row;
+    if offset > 0 {
+        (offset, None)
+    } else if offset < 0 {
+        (0, Some(-offset))
     } else {
         (0, None)
     }

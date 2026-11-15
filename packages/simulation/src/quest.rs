@@ -52,9 +52,10 @@ pub const MAX_ACTIVE_QUESTS: usize = 5;
 /// classic surface row (see [`surface_row_at`] for any column).
 pub const SURFACE_ROW: i32 = 6;
 
-/// The row at or above which a rig in column `x` counts as back on the surface: [`SURFACE_ROW`]
-/// where the ground is at the classic surface row, and as far above or below it as the surface
-/// heightmap moves the column's ground (a mountain top is the surface too).
+/// The row at or above which a rig in column `x` counts as back on the surface.
+///
+/// [`SURFACE_ROW`] where the ground is at the classic surface row, and as far above or below it
+/// as the surface heightmap moves the column's ground (a mountain top is the surface too).
 #[must_use]
 pub fn surface_row_at(terrain: &crate::terrain::Terrain, x: i32) -> i32 {
     terrain.surface_row(x) + (SURFACE_ROW - crate::worldgen::strata::SKY_ROWS)

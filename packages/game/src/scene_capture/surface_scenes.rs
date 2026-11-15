@@ -164,7 +164,8 @@ pub const SURFACE_SCENES: &[Scene] = &[
                         }
                     }
                 }
-                let (column, row) = spot.unwrap_or((x, biome::surface_row(&settings, x) + 6));
+                let (column, row) =
+                    spot.unwrap_or_else(|| (x, biome::surface_row(&settings, x) + 6));
                 let player = seats[0].player;
                 place_rig(world, player, column, row);
                 reveal(world, player, column - 30..column + 30, row - 20..row + 20);

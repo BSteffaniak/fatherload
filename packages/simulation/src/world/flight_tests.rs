@@ -73,7 +73,7 @@ fn there_is_no_flight_ceiling_only_fuel() {
     );
     assert!(rig.fuel <= 0.0, "fuel is the limit: {} left", rig.fuel);
     assert!(
-        rig.y > highest + 10.0 * TILE_SIZE,
+        rig.y > TILE_SIZE.mul_add(10.0, highest),
         "out of fuel, the rig fell back"
     );
 }

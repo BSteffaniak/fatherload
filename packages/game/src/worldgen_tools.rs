@@ -547,7 +547,8 @@ fn tile_color(kind: TileKind, band: Band, y: i32) -> Color {
         | TileKind::Clay
         | TileKind::Stone
         | TileKind::Foundation
-        | TileKind::Surface(_) => tile_art::material_color(kind, band),
+        | TileKind::Surface(_)
+        | TileKind::Bedrock => tile_art::material_color(kind, band),
         TileKind::HardRock => mix(tile_art::material_color(kind, band), palette::INK, 20),
         TileKind::Ore(mineral) => mineral_color(mineral),
         TileKind::Artifact(_) => palette::PINK,
@@ -558,7 +559,7 @@ fn tile_color(kind: TileKind, band: Band, y: i32) -> Color {
         TileKind::ExplosivePocket => palette::AMBER,
         TileKind::Poi(tile) => tile_art::poi_color(tile, band),
         TileKind::Cave(tile) => tile_art::cave_color(tile, band),
-        TileKind::Bedrock | TileKind::Built(_) => tile_art::material_color(kind, band),
+        TileKind::Built(_) => tile_art::material_color(kind, band),
     }
 }
 

@@ -195,9 +195,20 @@ town is. Chunks far from every rig are dropped from memory (dug tiles are kept),
 settings plus the changed chunks, and online clients generate chunks themselves while the host
 sends only changes. Worlds and saves from v1-v4 keep loading as the bounded worlds they were.
 
+Generator v7 (the current one) gives the endless surface **biomes and a real skyline**:
+plains, forests, desert dunes, badland mesas with cliffs, snowy tundra, tall mountains (granite
+peaks up to 80 tiles above town, snow caps, ledges, caves into the rock and richer ore the
+higher you dig) and wetlands with lakes. Each biome has its own ground and crust, vegetation,
+backdrop hills, weather (snow, dust, falling leaves, rain) and wind. The town stays flat, and
+every village stands on a flat shelf of its own (on a mountain, partway up) and is built in the
+style of its biome. **There is no flight ceiling**: fly as high as your fuel allows; the sky
+darkens to stars, a moon and black space far up. The HUD shows depth below the local ground, or
+altitude above it while flying, and the minimap and map follow mountain tops. V5 and v6 worlds
+keep their placeholder surface.
+
 ### Caves
 
-New worlds (generator v6, the current one) add **cave ecosystems**, each with its own rock,
+Worlds from generator v6 on add **cave ecosystems**, each with its own rock,
 light, loot and life: echoing **grand caverns** hung with stalactites, glowing **crystal
 geodes** lined with gems, **flooded caves** (underground lakes with a silt bed, glowing algae and
 cave fish; rigs float and drift slowly in the water), **lava tubes** with obsidian walls and lava
@@ -213,8 +224,8 @@ ember moths). Entering a cave for the first time says what you found ("Found: Cr
 and marks it on the minimap and the mine map; the collection log counts the kinds found.
 Older worlds keep their caves as they were.
 
-Generator v6 worlds also have **villages** (see below); v5 worlds keep generating exactly as
-before.
+Generator v6 and v7 worlds also have **villages** (see below); on v7 worlds no cave undercuts a
+village or opens beside an underground hall. V5 worlds keep generating exactly as before.
 
 ### Villages
 
@@ -224,7 +235,9 @@ in a carved hall a few hundred metres further out and 40 to 120 m down (one of t
 sites always does). Each village is generated from the world seed:
 
 - **Culture and style** follow the landscape it stands in (plains, forest, hills, mesa,
-  scrapland; surface biomes will pick these later): Frontier and Riverside villages are built of
+  scrapland; on v7 worlds the surface biome picks it: forests and wetlands build like forest
+  villages, mountains and tundra like hill villages, deserts like mesa towns, badlands like
+  mesa towns or scrap camps): Frontier and Riverside villages are built of
   timber, Highland ones of dry stone, Mesa towns of adobe, Scrapper camps of scrap metal, and
   the Deepfolk cut their settlements into the rock. Names come from the culture's generator.
 - **Layout**: a hamlet, village or town on flattened ground: a meeting hall and a trading post

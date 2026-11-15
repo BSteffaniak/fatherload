@@ -106,6 +106,55 @@ carried in the session section); `Terrain::generate` builds a world and `Terrain
 `deep_stratum_at` answer which layer a tile is in. Saves without settings are legacy worlds
 (`GeneratorVersion::Legacy`, the original fixed-depth generator).
 
+### Surface biomes and the heightmap (`worldgen/biome.rs`, generator V6)
+
+`GeneratorVersion::V6` (the current generator) is V5 with a real surface (WP-SURFACE). V5
+worlds keep their placeholder swell and their golden digest; `GeneratorVersion::has_biomes`
+tells them apart. Everything below is a pure integer function of the settings and a column, so
+chunks stay seamless and order-independent.
+
+- **Biome spans** of about `BIOME_SPAN_COLUMNS` (360, jittered) columns. A climate cycle of
+  `CLIMATE_CYCLE_SPANS` spans (cold, temperate, hot, temperate; phase set by the seed) deals
+  each zone's spans from a shuffled deck holding every biome of that climate, so every biome
+  appears every ~4,300 columns. The town's span is plains, a forest lies west of it.
+- **Biomes** (`Biome`): plains (swells), forest (rolling hills), desert (dunes), badlands
+  (terraced mesas with cliffs), tundra (low hills), mountains (ridged peaks up to
+  `MAX_ELEVATION_ROWS` = 80 rows above the classic surface, ledges and short cliffs, caves into
+  the rock via `mountain_cave`, ore graded by altitude) and wetlands (basins down to
+  `MAX_DIP_ROWS` below it, holding decorative water from `LAKE_ROW`, see `lake_row`).
+  Heights blend over `BIOME_BLEND_COLUMNS` either side of a boundary (`BiomeBlend`).
+- **Ground** (`ground_kind`, `ground_material`): biome crusts and masses made of
+  `TileKind::Surface(SurfaceMaterial)` (sand, sandstone, red rock, snow, granite, mud; hardness
+  on the classic ladder, mountain granite like stone) plus dirt and clay; shallow biome ore in
+  them (desert gold, tundra silver, bog iron; mountain pods richer higher up). Surface
+  materials break into the classic `BlockKind` of the same hardness (snow melts).
+- **Rows above 0**: a V6 world's first row is `-SKY_HEADROOM_ROWS` (`Terrain::min_y`,
+  `streamed::top_row`); its mountains live there. Above it is open sky with no tiles. Code that
+  walks rows uses `min_y()..height()` (as columns use `min_x()..=max_x()`).
+- **Flat ground**: the town's columns, and **flat sites** for villages (WP-VILLAGE hook):
+  `flat_sites_in(settings, first, last)`, `flat_site_at`, `nearest_flat_site` return
+  `FlatSite { center, first_column, last_column, row, biome }`, about one per
+  `SITE_SPACING_COLUMNS` (600, jittered), none near the town. The heightmap already eases into
+  each over `FLAT_FADE_COLUMNS`, so a village built on a site stands on level ground at `row`;
+  sites no village claims are clearings.
+- **Flora** (`flora_at`): presentation data for what stands on a column (grass, flowers,
+  bushes, oaks, pines, snowy pines, cacti, dead brush, boulders, reeds, lily pads).
+- Columns are memoized per thread (`column`), a cache that never changes a result.
+
+`worldgen/biome/tests.rs` checks determinism and cache independence, bounds and step heights,
+the flat town, flat and spaced sites, biome fairness (every biome within 8,000 columns of town on
+every seed, none over 40%), tall mountains and lakes, seamless biome ground across chunks,
+materials by biome and flora by biome.
+
+**Surface rules elsewhere.** The local surface replaces the old flat-surface constants:
+`quest::surface_row_at` (back on the surface, the stay-down twist, escort hauls, diggable
+quest spots), world-event hazards (only below the local ground), cave crusts (from the classic
+surface under mountains, which carve their own caves). **No flight ceiling (R17):**
+`AUTHORITATIVE_SKY_FLIGHT_HEIGHT_TILES` is now the numeric edge of space (131,072 tiles, where
+`f32` positions still resolve a fraction of a pixel); fuel is the real limit. Spawn placement
+stacks slots only `SPAWN_SKY_ROWS_TILES` up; reveals, streaming and relevance simply find
+nothing to do in the empty sky.
+
 ### Compact terrain (`terrain/persistence.rs`)
 
 A `Terrain` serializes as a `TerrainSnapshot`: its `WorldSettings`, size, digest and only the
@@ -160,7 +209,8 @@ the first upgrades, per-band ore value within target, ore never harder than its 
 path to the bottom with each band's own drill, artifacts in every stratum and feature counts in
 bounds, V3 and V4 band thicknesses within bounds and varying by seed, V4 transition zones that
 interleave over many rows, a solid V4 bedrock floor that nothing breaks, few deep ore specks on
-rich V3+ worlds, plus golden digests pinned to `GeneratorVersion::V1`, `V2`, `V3` and `V4`. `worldgen/poi_tests.rs`
+rich V3+ worlds, plus golden digests pinned to `GeneratorVersion::V1`, `V2`, `V3` and `V4` (and
+`V5` in `worldgen/streamed/tests.rs`). `worldgen/poi_tests.rs`
 checks POI counts per band and per kind, caches in the clay, grey stone and slate, spacing,
 spawn/town/hazard clearance, nothing undiggable below spawn, and that every vault's doors,
 switches, relays and seals can be reached and worked from spawn. `FATHERLOAD_WORLDGEN_SEEDS=300

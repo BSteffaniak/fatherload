@@ -141,6 +141,10 @@ impl Canvas {
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "every flora sprite is drawn here, one arm per kind"
+)]
 fn flora_image(flora: Flora, variant: usize) -> Image {
     let v = variant as i32;
     match flora {
@@ -185,7 +189,7 @@ fn flora_image(flora: Flora, variant: usize) -> Image {
             let mut canvas = Canvas::new(16, 10);
             canvas.blob(5, 6, 4, [LEAF, MOSS, PINE], 3 + variant as u32);
             canvas.blob(10, 5, 5, [LIME, LEAF, MOSS], 5 + variant as u32);
-            if variant % 2 == 0 {
+            if variant.is_multiple_of(2) {
                 canvas.px(9, 3, ROSE);
                 canvas.px(12, 6, ROSE);
             }
@@ -295,7 +299,7 @@ fn flora_image(flora: Flora, variant: usize) -> Image {
         }
         Flora::Boulder => {
             let mut canvas = Canvas::new(14, 9);
-            let colors = if variant % 2 == 0 {
+            let colors = if variant.is_multiple_of(2) {
                 [STONE_LIGHT, STONE, STONE_DARK]
             } else {
                 [SLATE_LIGHT, SLATE, SLATE_DARK]
@@ -334,7 +338,7 @@ fn flora_image(flora: Flora, variant: usize) -> Image {
                 canvas.px(x, 1, if x == 3 { MOSS } else { LEAF });
                 canvas.px(x, 2, MOSS);
             }
-            if variant % 2 == 0 {
+            if variant.is_multiple_of(2) {
                 canvas.px(5, 0, PINK);
                 canvas.px(4, 0, ROSE);
             }
@@ -473,7 +477,7 @@ pub fn draw_water(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectan
             let lift = if phase < 6 { 0.0 } else { ART };
             let color = if hash(gx, (ticks / 20) as i32, 77).is_multiple_of(11) {
                 BONE
-            } else if phase % 4 == 0 {
+            } else if phase.is_multiple_of(4) {
                 ICE
             } else {
                 SKY_LIGHT
@@ -505,7 +509,7 @@ struct Weather {
     colors: [Color; 2],
 }
 
-fn weather_for(biome: Biome, high: bool) -> Option<Weather> {
+const fn weather_for(biome: Biome, high: bool) -> Option<Weather> {
     match biome {
         Biome::Tundra => Some(Weather {
             count: 70,

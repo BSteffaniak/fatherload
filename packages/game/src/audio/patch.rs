@@ -2233,24 +2233,24 @@ fn wind_loop(rng: &mut Rng) -> Vec<f32> {
 
 /// Rain: a soft high-passed hiss and many tiny droplet ticks, a few heavier drips.
 fn rain_loop(rng: &mut Rng) -> Vec<f32> {
-    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
-    let mut hiss = Svf::new(FilterMode::HighPass, 3_200.0, 0.7);
-    let mut body = Svf::new(FilterMode::BandPass, 1_100.0, 0.5);
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut hiss = Svf::new(FilterMode::BandPass, 2_600.0, 0.8);
+    let mut body = Svf::new(FilterMode::BandPass, 700.0, 0.6);
     let mut swell = flutter(rng, 0.6, 0.2);
     let mut out = render(loop_length(), |_| {
-        let white = noise.next();
-        (hiss.process(white) * 0.35 + body.process(white) * 0.2) * swell()
+        let pink = noise.next();
+        (hiss.process(pink) * 0.3 + body.process(pink) * 0.45) * swell()
     });
     for time in scatter(rng, loop_events(70.0), 0.0, loop_length() - 0.02, 1.0) {
         let tick = burst(
             rng.next_u64(),
             NoiseColor::White,
             FilterMode::BandPass,
-            rng.range(2_500.0, 7_500.0),
+            rng.range(1_200.0, 4_000.0),
             3.0,
             0.004,
         );
-        mix_into(&mut out, &tick, time, rng.range(0.1, 0.45));
+        mix_into(&mut out, &tick, time, rng.range(0.1, 0.4));
     }
     for time in scatter(rng, loop_events(3.0), 0.0, loop_length() - 0.1, 1.0) {
         let mut osc = Osc::new(Wave::Sine);

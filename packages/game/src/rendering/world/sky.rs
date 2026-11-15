@@ -244,9 +244,10 @@ fn far_image(biome: Biome) -> Image {
                     }
                 } else if depth == 0 {
                     SKY_LIGHT
-                } else if (x + depth / 3) % 9 == 0 && depth > 3 {
-                    OCEAN
-                } else if biome == Biome::Forest && depth < 3 && hash(x, 0, 5).is_multiple_of(2) {
+                } else if ((x + depth / 3) % 9 == 0 && depth > 3)
+                    || (biome == Biome::Forest && depth < 3 && hash(x, 0, 5).is_multiple_of(2))
+                {
+                    // Shadowed folds (and, on forested ridges, a ragged treeline).
                     OCEAN
                 } else {
                     SKY
@@ -579,7 +580,7 @@ fn draw_stars(draw: &mut impl RaylibDraw, visible: Rectangle, seconds: f32) {
                 continue;
             }
             let (x, y) = (snap(x), snap(y));
-            let bright = (h >> 5) % 9 == 0;
+            let bright = (h >> 5).is_multiple_of(9);
             let color = match (h >> 12) % 6 {
                 0 => CREAM,
                 1 => ICE,
@@ -627,7 +628,10 @@ fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle) {
                 (-14, 8, 3),
             ]
             .iter()
-            .any(|(x, y, r)| (column - x) * (column - x) + (row - y) * (row - y) <= r * r);
+            .any(|(x, y, r)| {
+                let (dx, dy) = (column - x, row - y);
+                dx * dx + dy * dy <= r * r
+            });
             let rim = half - column.abs() <= 1 && column > 0;
             let color = if !lit {
                 if bayer4(column, row) < 3 {

@@ -213,14 +213,14 @@ pub struct FloraSpot {
 // Spans and climate.
 
 /// The first column of biome span `span`.
-fn span_start(seed: u64, span: i32) -> i32 {
+const fn span_start(seed: u64, span: i32) -> i32 {
     span * BIOME_SPAN_COLUMNS
         + SPAN_OFFSET
         + centred(lattice(seed, SALT_SPAN, span, 0), SPAN_JITTER)
 }
 
 /// The span holding column `x`, with its first column and one past its last.
-fn span_of(seed: u64, x: i32) -> (i32, i32, i32) {
+const fn span_of(seed: u64, x: i32) -> (i32, i32, i32) {
     let mut span = (x - SPAN_OFFSET).div_euclid(BIOME_SPAN_COLUMNS);
     if x < span_start(seed, span) {
         span -= 1;
@@ -642,28 +642,35 @@ pub fn biome_blend(settings: &WorldSettings, x: i32) -> BiomeBlend {
     }
 }
 
-/// The top row of decorative lake water over column `x`, if its generated ground lies below
-/// [`LAKE_ROW`] (water fills rows `LAKE_ROW..surface_row`). Presentation only: rigs pass
-/// through it. `None` for worlds without biomes.
+/// The top row of decorative lake water over column `x`, if any.
+///
+/// Water fills rows `LAKE_ROW..surface_row` wherever the generated ground lies below
+/// [`LAKE_ROW`]. Presentation only: rigs pass through it. `None` for worlds without biomes.
 #[must_use]
 pub fn lake_row(settings: &WorldSettings, x: i32) -> Option<i32> {
     (settings.generator.has_biomes() && surface_row(settings, x) > LAKE_ROW).then_some(LAKE_ROW)
 }
 
 /// The row above which mountain slopes at column `x` wear snow.
-fn snowline_row(seed: u64, x: i32) -> i32 {
+const fn snowline_row(seed: u64, x: i32) -> i32 {
     SKY_ROWS - SNOWLINE_ROWS + centred(line_noise(seed, SALT_MATERIAL + 9, x, 23), 4)
 }
 
 // ---------------------------------------------------------------------------------------------
 // Ground.
 
-/// The biome ground at `(x, y)` of a biome world, for a tile at or below the column's surface
-/// that generation would otherwise fill with its band's rock: the biome crust near the surface,
-/// the mass of a hill, mesa or mountain above the classic surface, and the shallow biome ore
-/// in it. `None` where the band's rock (and the classic generation) takes over.
+/// The biome ground at `(x, y)` of a biome world, ore included.
+///
+/// For a tile at or below the column's surface that generation would otherwise fill with its
+/// band's rock: the biome crust near the surface, the mass of a hill, mesa or mountain above
+/// the classic surface, and the shallow biome ore in it. `None` where the band's rock (and
+/// the classic generation) takes over.
 #[must_use]
 pub fn ground_kind(settings: &WorldSettings, x: i32, y: i32) -> Option<TileKind> {
+    // Below every biome's crust and ore (the deep rows skip the column lookup).
+    if y > SKY_ROWS + MAX_DIP_ROWS + 14 {
+        return None;
+    }
     let column = column(settings, x);
     let depth = y - column.surface_row;
     if depth < 0 {
@@ -675,12 +682,15 @@ pub fn ground_kind(settings: &WorldSettings, x: i32, y: i32) -> Option<TileKind>
     ground_material(settings, x, y)
 }
 
-/// The biome rock or soil at `(x, y)` without its ore: what [`ground_kind`] fills the tile
-/// with, or the host an ore pod there sits in (renderers draw ore over it). `None` above the
-/// surface and where the band's rock takes over, and for worlds without biomes.
+/// The biome rock or soil at `(x, y)`, without its ore.
+///
+/// What [`ground_kind`] fills the tile with, or the host an ore pod there sits in (renderers
+/// draw ore over it). `None` above the surface and where the band's rock takes over, and for
+/// worlds without biomes.
 #[must_use]
 pub fn ground_material(settings: &WorldSettings, x: i32, y: i32) -> Option<TileKind> {
-    if !settings.generator.has_biomes() {
+    // Below every biome's crust (renderers ask for every tile they paint).
+    if !settings.generator.has_biomes() || y > SKY_ROWS + MAX_DIP_ROWS + 3 {
         return None;
     }
     let column = column(settings, x);
@@ -768,7 +778,7 @@ pub fn ground_material(settings: &WorldSettings, x: i32, y: i32) -> Option<TileK
 
 /// Shallow biome ore: pods in mountain masses (richer higher up) and a light sprinkle of each
 /// biome's own minerals in its crust.
-fn biome_ore(
+const fn biome_ore(
     seed: u64,
     biome: Biome,
     x: i32,
@@ -850,9 +860,10 @@ fn biome_ore(
     })
 }
 
-/// Whether `(x, y)` is carved out by a mountain cave: winding tunnels and the odd chamber in
-/// the mass of a mountain or mesa above the classic surface (they sometimes break out onto a
-/// slope, so a cave mouth is a way in).
+/// Whether `(x, y)` is carved out by a mountain cave.
+///
+/// Winding tunnels and the odd chamber in the mass of a mountain or mesa above the classic
+/// surface (they sometimes break out onto a slope, so a cave mouth is a way in).
 #[must_use]
 pub fn mountain_cave(settings: &WorldSettings, x: i32, y: i32) -> bool {
     if y > SKY_ROWS - 3 {
@@ -879,10 +890,16 @@ pub fn mountain_cave(settings: &WorldSettings, x: i32, y: i32) -> bool {
 // ---------------------------------------------------------------------------------------------
 // Flora.
 
-/// The vegetation or prop standing on column `x`'s generated ground, if any (presentation
-/// data: a renderer draws it only while that ground is undug). Nothing grows on the town's or
-/// a site's flat ground except grass and flowers. `None` for worlds without biomes.
+/// The vegetation or prop standing on column `x`'s generated ground, if any.
+///
+/// Presentation data: a renderer draws it only while that ground is undug. Nothing grows on
+/// the town's or a site's flat ground except grass and flowers. `None` for worlds without
+/// biomes.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one table of what grows in each biome reads best in one place"
+)]
 pub fn flora_at(settings: &WorldSettings, x: i32) -> Option<FloraSpot> {
     if !settings.generator.has_biomes() {
         return None;
@@ -927,7 +944,7 @@ pub fn flora_at(settings: &WorldSettings, x: i32) -> Option<FloraSpot> {
         Biome::Forest => {
             let dense_room = hash2(seed, SALT_FLORA, x - 1, 0) % 1000 >= 420;
             if pick < 420 && dense_room {
-                spot(if pick % 3 == 0 {
+                spot(if pick.is_multiple_of(3) {
                     Flora::Pine
                 } else {
                     Flora::Oak

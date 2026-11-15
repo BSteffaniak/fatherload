@@ -46,12 +46,13 @@ fn the_heightmap_is_deterministic_and_cache_independent() {
             .collect();
         assert_eq!(cached, fresh, "seed {seed}");
         // Reverse order through the cache agrees too.
-        let reverse: Vec<i32> = (-3_000..3_000)
+        let mut reverse: Vec<i32> = (-3_000..3_000)
             .step_by(7)
             .rev()
             .map(|x| surface_row(&settings, x))
             .collect();
-        assert_eq!(cached, reverse.into_iter().rev().collect::<Vec<_>>());
+        reverse.reverse();
+        assert_eq!(cached, reverse);
     }
 }
 

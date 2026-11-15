@@ -79,10 +79,11 @@ pub const AUTHORITATIVE_CAVE_IN_LIFE_MILLIS: u64 = 4_000;
 pub const AUTHORITATIVE_FUEL_BURN_PER_SECOND: f32 = 5.0;
 pub const AUTHORITATIVE_MAX_FALL_SPEED: f32 = 560.0;
 pub const AUTHORITATIVE_PLAYER_RADIUS: f32 = 10.5;
-/// How high above row 0 a rig's position may go, in tiles: **not a flight ceiling** (fuel is
-/// the natural limit on how high a rig climbs) but the numeric edge of space, as far up as
-/// the world extends sideways ([`STREAMED_COLUMN_LIMIT`]), where `f32` positions still resolve
-/// a fraction of a pixel. No fuel tank or god-mode climb reaches it in practice.
+/// How high above row 0 a rig's position may go, in tiles: **not a flight ceiling**.
+///
+/// Fuel is the natural limit on how high a rig climbs; this is the numeric edge of space, as
+/// far up as the world extends sideways ([`STREAMED_COLUMN_LIMIT`]), where `f32` positions
+/// still resolve a fraction of a pixel. No fuel tank or god-mode climb reaches it in practice.
 ///
 /// [`STREAMED_COLUMN_LIMIT`]: crate::worldgen::streamed::STREAMED_COLUMN_LIMIT
 #[allow(

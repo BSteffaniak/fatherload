@@ -353,7 +353,7 @@ fn rig_far_above_the_surface_flies_online() {
     let me = crate::world::to_sim_player(pair.me());
     let start = pair.host.world().player(me).expect("client rig").y;
     assert!(
-        start < -altitude + 13.0 * TILE_SIZE,
+        start < TILE_SIZE.mul_add(13.0, -altitude),
         "spawned up high: {start}"
     );
 
@@ -366,7 +366,7 @@ fn rig_far_above_the_surface_flies_online() {
     }
     let host_rig = pair.host.world().player(me).expect("host copy").clone();
     assert!(
-        host_rig.y < start - 10.0 * TILE_SIZE,
+        host_rig.y < TILE_SIZE.mul_add(-10.0, start),
         "the rig climbed past where any ceiling stood: {start} -> {}",
         host_rig.y
     );
@@ -406,11 +406,29 @@ fn streamed_world_streams_far_chunk_diffs_to_clients() {
         fatherload_simulation::SimulationParams::new(params.tick_rate_hz),
     );
     assert!(world.terrain().is_streamed());
-    let far_column: i16 = -3_000;
+    // A column near 3,000 tiles west whose ground (wherever the heightmap puts it) a starter
+    // drill bites into.
+    let far_column: i16 = (-3_000..-2_800)
+        .find(|x| {
+            let row = world.terrain().surface_row(i32::from(*x));
+            (0..4).all(|dy| {
+                world
+                    .terrain()
+                    .hardness_at(fatherload_simulation::terrain::TilePosition {
+                        x: i32::from(*x),
+                        y: row + dy,
+                    })
+                    .is_some_and(|hardness| hardness <= 1)
+            })
+        })
+        .expect("soft ground far out");
+    let ground = world.terrain().surface_row(i32::from(far_column));
     {
         let digger = world.player_mut(sim_digger).expect("digger");
         digger.x = (f32::from(far_column) + 0.5) * TILE_SIZE;
-        digger.y = 4.5 * TILE_SIZE;
+        #[allow(clippy::cast_precision_loss, reason = "small tile rows")]
+        let resting = (ground as f32 - 0.5) * TILE_SIZE;
+        digger.y = resting;
         digger.velocity_x = 0.0;
         digger.velocity_y = 0.0;
     }
