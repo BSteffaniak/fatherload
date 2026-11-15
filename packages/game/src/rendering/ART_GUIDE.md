@@ -411,9 +411,16 @@ in its new colours. Garage row icons live in `sprites/rig.rs` (`ICON_*`).
 
 **Surface** (`world/sky.rs`, `world/buildings.rs`). The sky is a startup texture of flat bands
 with 5-row dithered steps; far snowy mountains (parallax 0.18), near pine hills (0.42) and
-drifting clouds (0.3) are tiled textures; the sun is nearly screen-fixed. Each building is drawn
-on a 128x64 art-pixel lot with its own silhouette, a sign carrying its simulation label and a
-door that lights up while the local rig stands at it.
+drifting clouds (0.3) are tiled textures; the sun is nearly screen-fixed. The near hills carry a
+128-row skirt that shades into their biome's deep colour, and below the texture they continue
+to the bottom of the view as one flat rect in that colour (tinted and biome-blended like the
+texture), so no valley under a tall peak, lowered ground or split-screen view ever shows sky
+beneath the backdrop; any new backdrop layer that can end above visible ground should do the
+same (`draw_layer`'s `fill`). Each building is drawn on a 128x64 art-pixel lot with its own
+silhouette, a sign carrying its simulation label and a door that lights up while the local rig
+stands at it; a building's lowest art row is the lot's row 63 (the ground line), and its parts
+stack without transparent rows between them (scene `town_bank` at `--size 640x360` shows the
+bank flush on its steps).
 
 **Time of day** (`world/daylight.rs`, `world/sky.rs`, `world/lighting.rs`, `screen/clock_hud.rs`).
 Keyframes over the day (`daylight::KEYS`, slices from midnight) name palette colours only; between

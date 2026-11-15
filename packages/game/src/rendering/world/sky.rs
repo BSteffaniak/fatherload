@@ -1270,3 +1270,50 @@ pub fn hills_bottom(settings: &WorldSettings, visible: Rectangle) -> f32 {
     }
     snap((sum / weights.max(1.0)).mul_add(TILE_SIZE, ART * 2.0))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The near hills' texture ends in solid rows of the colour the backdrop fills the rest of
+    /// the view with, so the flat fill continues it without a visible edge.
+    #[test]
+    fn near_hills_end_in_their_fill_colour() {
+        for biome in BACKDROPS {
+            let image = near_image(biome);
+            let deep = near_colors(biome).2;
+            for y in image.height() - 2..image.height() {
+                for x in 0..image.width() {
+                    assert_eq!(image.get_color(x, y), deep, "{biome:?} at ({x}, {y})");
+                }
+            }
+        }
+    }
+
+    /// The fill under a backdrop layer reaches past the view's bottom and sides, overlaps the
+    /// texture's last row, and is skipped when the layer ends below the view.
+    #[test]
+    fn the_fill_covers_the_view_below_the_layer() {
+        let view = Rectangle::new(1_000.0, -3_000.0, 1_280.0, 720.0);
+        let rect = below_layer(view, -2_800.0).expect("the layer ends inside the view");
+        assert!(rect.y <= -2_800.0 - ART + 0.01);
+        assert!(rect.y + rect.height >= view.y + view.height);
+        assert!(rect.x <= view.x && rect.x + rect.width >= view.x + view.width);
+        // A layer ending far above the view (a deep valley floor under the anchor): the fill
+        // covers the whole view.
+        let rect = below_layer(view, -9_000.0).expect("the view is below the layer");
+        assert!(rect.y <= view.y && rect.y + rect.height >= view.y + view.height);
+        // A layer ending below the view (high in the sky): nothing to fill.
+        assert!(below_layer(view, -2_000.0).is_none());
+    }
+
+    #[test]
+    fn multiply_matches_a_texture_tint() {
+        assert_eq!(multiply(PINE, Color::WHITE), PINE);
+        assert_eq!(multiply(Color::WHITE, PINE), PINE);
+        assert_eq!(
+            multiply(Color::new(255, 128, 0, 255), Color::new(128, 255, 255, 128)),
+            Color::new(128, 128, 0, 128)
+        );
+    }
+}
