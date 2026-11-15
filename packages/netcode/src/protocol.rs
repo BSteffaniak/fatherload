@@ -25,6 +25,9 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// dump / blocked marks, `Player::collect_blocks` (`PlayerInventory`), the `DumpBlocks` and
 /// `SetCollectBlocks` commands, `SessionServiceRequest::SellBlocks` and the pickup events
 /// (60-63).
+/// 9 (wave 2, T13 caves; the integrator collapses wave 2 bumps): V6 cave-ecosystem tiles
+/// (`TileKind::Cave`), critter entities (`EntityState::Critter`), found caves in the POI
+/// journal and the cave events 70-72.
 pub const PROTOCOL_VERSION: u8 = 9;
 
 /// One client input frame: the controls and actions for exactly one tick.

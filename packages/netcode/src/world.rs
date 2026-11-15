@@ -134,6 +134,9 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::PickupBlocked { player_id, .. } => (61, Some(player_id)),
         GameplayEventKind::BlocksDumped { player_id } => (62, Some(player_id)),
         GameplayEventKind::CollectBlocksToggled { player_id, .. } => (63, Some(player_id)),
+        GameplayEventKind::CaveDiscovered { player_id, .. } => (70, Some(player_id)),
+        GameplayEventKind::CaveCacheOpened { player_id, .. } => (71, Some(player_id)),
+        GameplayEventKind::StalactiteFell { .. } => (72, None),
     }
 }
 
