@@ -468,7 +468,10 @@ On foot you are slow vertically and weak at digging, but you fit where the rig c
 - **Pack**: the pilot picks up loose drops it walks over into a small personal pack; the
   inventory (`Tab`) has rows to move stacks between the pack and the rig by hand.
 - **Buildings**: on foot, push up at a door to walk straight in; walk out through the door on
-  the left. Rigs still use the door with `E`.
+  the left. Rigs still use the door with `E`. Counters that work on the rig (fuel, repairs,
+  paint, selling cargo, upgrades) need the rig parked outside.
+- **Stuck?** Away from the rig, press `E` twice to radio for a pickup: the pilot is hauled back
+  aboard for 25 credits (also the way back to a wrecked or dry rig).
 - The camera, HUD (pilot health, air, jetpack and pack), prompts and controller bindings all
   switch while you are on foot, in every split-screen seat and online.
 

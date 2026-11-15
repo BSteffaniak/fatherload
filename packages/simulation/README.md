@@ -1027,7 +1027,12 @@ entity is the single source of truth for "on foot" (`WorldState::pilot_of`, `is_
   included). Events `PilotHurt`, `PilotLanded { hard }`, `PilotOxygenLow { empty }`,
   `PilotSplashed`, `PilotLedgeGrab`, `PilotJumped`, `JetpackIgnited`, `JetpackEmpty`.
 - **Death**: at zero health the pilot drops half of its first three pack stacks as drops and
-  respawns in the rig, or (rig wrecked) on foot at the player's home point (`PilotDied`).
+  respawns in the rig (what the pack kept goes aboard), or (rig wrecked) on foot at the
+  player's home point (`PilotDied`).
+- **Radio for a pickup**: `PlayerCommand::Rescue` on foot hauls the pilot straight back aboard
+  its rig for `PILOT_RECALL_FEE` credits (pack emptied as when boarding, `PilotBoarded`), so a
+  pilot in a pit the pick cannot dig, or beside a wrecked rig, is never stuck. The rig's own
+  rescue then follows from the rig as usual.
 - **Hand pick**: chips only soft dirt-like tiles (`pick_seconds`: dirt, sand, snow, mud 0.9 s;
   clay 1.6 s) within `PICK_REACH`; a broken tile drops through the drop system
   (`spawn_tile_drop`); anything harder clinks (`PickStruck { broke }`, `PickClinked`).
@@ -1043,7 +1048,10 @@ entity is the single source of truth for "on foot" (`WorldState::pilot_of`, `is_
 - **Counters and buildings** use the actor: `actor_position` / `actor_tile` (the pilot's
   middle on foot, else the rig) drive `player_surface_zone`, `player_village_building`,
   `check_build` (build mode and module menus reach from the pilot) and the netcode pose
-  (relevance, smoothing; the on-foot pose mode is one constant).
+  (relevance, smoothing; the on-foot pose mode is one constant). Counters that work on the rig
+  itself (`services::command_services_rig`: fuel, repair, paint, selling cargo or blocks,
+  upgrades, and the village sell / refuel / repair deals) also need the rig parked within
+  `RIG_SERVICE_REACH` of the pilot (`WorldState::rig_within_service_reach`).
 - **Pilot-only spaces**: `BuiltTile::VentGrate` (code 7) is solid to rigs, drops, charges and
   enemies but pilots pass it (`pilot::pilot_passable`); `WorldState::carve_crawlway` cuts a
   1-tile-high tunnel capped by grates. Content is tagged with `poi::SpaceAccess`
