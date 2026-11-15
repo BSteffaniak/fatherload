@@ -12,6 +12,7 @@
 pub mod command;
 pub mod contract;
 pub mod economy;
+pub mod entity;
 pub mod event;
 pub mod hash;
 pub mod hazard;
@@ -19,6 +20,7 @@ pub mod ids;
 pub mod infrastructure;
 pub mod input;
 pub mod item;
+pub mod physics;
 pub mod player;
 pub mod poi;
 pub mod progression;
