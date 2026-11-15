@@ -562,7 +562,7 @@ fn every_arc_gets_seeded_and_seeds_render() {
 #[test]
 fn seeds_use_real_world_facts() {
     let terrain = Terrain::generate(&WorldSettings::new(9));
-    let facts = WorldFact::from_features(terrain.features().all());
+    let facts = WorldFact::near(&terrain, SPAWN_TILE_X, 180);
     assert!(facts.len() >= 10);
     let population = generate_population(9, VillageId(0), Culture::Frontier, 12);
     let seeds = story_seeds(&population, &facts, &[VillageProblem::SealedMine], &[], 0);

@@ -7,8 +7,11 @@
 use fatherload_simulation::{
     people::{WorldFact, report},
     terrain::Terrain,
-    worldgen::{WorldSettings, parse_seed},
+    worldgen::{SPAWN_TILE_X, WorldSettings, parse_seed},
 };
+
+/// Columns either side of town whose features feed the report's world facts.
+const STORY_REPORT_HALF_WIDTH: i32 = 180;
 
 /// A parsed `--story-report` invocation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,7 +65,8 @@ pub fn parse_args(args: &[String]) -> Result<Option<StoryReportOptions>, String>
 pub fn run(options: &StoryReportOptions, out: &mut impl std::io::Write) -> Result<(), String> {
     let facts = if options.world {
         let terrain = Terrain::generate(&WorldSettings::new(options.seed));
-        WorldFact::from_features(terrain.features().all())
+        // The classic world's span around town; endless worlds have no finite feature list.
+        WorldFact::near(&terrain, SPAWN_TILE_X, STORY_REPORT_HALF_WIDTH)
     } else {
         report::sample_facts()
     };

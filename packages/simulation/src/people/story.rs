@@ -171,6 +171,36 @@ impl WorldFact {
         features.iter().filter_map(Self::from_feature).collect()
     }
 
+    /// Facts for the story-worthy features of `terrain` whose centres lie within
+    /// `half_width` columns of `center_column`, at any depth, in id order.
+    ///
+    /// Works for every world: a bounded world filters its finite feature index; an endless (V5)
+    /// world, whose [`crate::terrain::Terrain::features`] is empty, asks the regional index.
+    /// Regional queries cost a few ms per hundred columns, so callers should cache the result
+    /// (e.g. per village) rather than re-query every tick.
+    #[must_use]
+    pub fn near(
+        terrain: &crate::terrain::Terrain,
+        center_column: i32,
+        half_width: i32,
+    ) -> Vec<Self> {
+        let rect = crate::worldgen::TileRect {
+            min: crate::terrain::TilePosition {
+                x: center_column - half_width,
+                y: 0,
+            },
+            max: crate::terrain::TilePosition {
+                x: center_column + half_width,
+                y: terrain.height() - 1,
+            },
+        };
+        terrain
+            .features_in(&rect, None)
+            .iter()
+            .filter_map(Self::from_feature)
+            .collect()
+    }
+
     /// "the Slate Shelves".
     #[must_use]
     pub fn band_name(self) -> String {
