@@ -305,10 +305,16 @@ fn entity_store_charges_reproduce_the_original_bomb_traces() {
 
 /// Recorded with the original `Vec<PlacedBomb>` charges. The second scenario (which fires the
 /// remote detonator) was re-recorded when the detonator gained its arming delay
-/// (`REMOTE_ARMING_MILLIS`), a deliberate behaviour change after the move; the others are the
-/// original recordings.
+/// (`REMOTE_ARMING_MILLIS`), a deliberate behaviour change after the move.
+///
+/// Wave 2 integration re-recorded all three on top of the other tracks (WP-DROPS turns blasted
+/// tiles into drops that the traces list; WP-CAVES / VILLAGE / ENEMIES change nothing here). The
+/// old list implementation, run on the same integrated base (integration commit "Pin explosive
+/// charge traces"), reproduces the third digest exactly; the first differs only in which of
+/// two touching drops survives a merge for a few ticks (drop and charge entity ids now
+/// interleave), with every charge, rig, event and terrain line identical.
 const GOLDEN: [u64; 3] = [
-    0x0061_6a47_494e_3417,
-    0x3905_8a11_9ecb_234b,
-    0xe701_07ea_06e3_40c5,
+    0x0467_6434_8c9d_00c8,
+    0xb019_146f_2d2d_34db,
+    0xc644_e1cc_1be2_ea9e,
 ];

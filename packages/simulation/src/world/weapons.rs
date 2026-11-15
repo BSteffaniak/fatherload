@@ -12,12 +12,13 @@
 //!
 //! # Seams for other tracks
 //!
-//! * Enemies (T10) become targets by giving their state a [`crate::combat::Health`] (see that
-//!   module); [`WorldState::damage_entity`] is the one way to hurt an entity.
+//! * Enemies (T10) report a [`crate::combat::Health`] view and [`WorldState::damage_entity`]
+//!   (the one way to hurt an entity) routes them to the enemy damage model
+//!   (`WorldState::damage_enemy`).
 //! * Plain tiles broken by weapons go through [`crate::terrain::Terrain::chip_by`] and so show
-//!   up in the tick's terrain journal and `terrain_ops` like drilled tiles; WP-DROPS can turn
-//!   them into block drops wherever it handles mined tiles (`WorldState::weapon_broke_tile` is
-//!   the single place this module breaks one).
+//!   up in the tick's terrain journal and `terrain_ops` like drilled tiles, and drop their block
+//!   (WP-DROPS, `spawn_tile_drop`) in `WorldState::weapon_broke_tile`, the single place this
+//!   module breaks one.
 
 use std::collections::BTreeSet;
 
@@ -75,6 +76,9 @@ struct RayCast {
 
 /// Whether a weapon can break `kind`: plain soil and rock only (ore, artifacts, POI fixtures,
 /// hazards and bedrock are left alone).
+/// Upward pop (pixels per second) of the block a weapon shot out of the rock.
+const WEAPON_DROP_POP: f32 = 40.0;
+
 const fn breakable_by_weapons(kind: TileKind) -> bool {
     matches!(
         kind,
@@ -632,15 +636,24 @@ impl WorldState {
     /// the change lands in the tick's terrain journal like a drilled tile. Returns whether the
     /// tile was removed.
     pub(super) fn weapon_broke_tile(&mut self, tile: TilePosition, bite: u8) -> bool {
-        let breakable = self
+        let Some(kind) = self
             .terrain
             .tile(tile)
-            .is_some_and(|tile| breakable_by_weapons(tile.kind));
-        breakable
-            && matches!(
-                self.terrain.chip_by(tile, bite, false),
-                MineResult::Mined(_)
-            )
+            .map(|tile| tile.kind)
+            .filter(|kind| breakable_by_weapons(*kind))
+        else {
+            return false;
+        };
+        let broke = matches!(
+            self.terrain.chip_by(tile, bite, false),
+            MineResult::Mined(_)
+        );
+        if broke {
+            // WP-DROPS: a shot-out tile drops its block like any other broken tile, popping
+            // gently up so it lands on the new floor.
+            let _ = self.spawn_tile_drop(tile, kind, (0.0, -WEAPON_DROP_POP));
+        }
+        broke
     }
 
     /// Live chaining charges (ones a hit would set off) near the box spanned by `from` and

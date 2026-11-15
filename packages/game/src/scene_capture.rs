@@ -234,8 +234,8 @@ fn save_framebuffer(
     }
 }
 
-mod drop_scenes;
 mod cave_scenes;
+mod drop_scenes;
 mod explosive_scenes;
 mod weapon_scenes;
 

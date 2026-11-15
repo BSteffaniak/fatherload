@@ -898,3 +898,46 @@ fn villages_are_safe_zones_and_caves_shape_the_roster() {
     }
     assert!(halls > 0, "some sites have underground settlements");
 }
+
+#[test]
+fn scare_charges_send_creatures_fleeing_and_smoke_hides_rigs() {
+    let mut world = cavern();
+    no_spawns(&mut world);
+    let bat = world.spawn_enemy(EnemyKind::CaveBat, px(262.0), px(220.0));
+    let drone = world.spawn_enemy(EnemyKind::MiningDrone, px(264.0), px(220.0));
+    let (ex, ey) = (px(263.0), px(222.0));
+    world.insert_charge(PlacedBomb {
+        id: 9,
+        x: ex,
+        y: ey,
+        previous_x: ex,
+        previous_y: ey,
+        kind: ExplosiveKind::Scare,
+        owner: Some(PLAYER),
+        detonation_tick: world.simulation_tick().next(),
+        ..PlacedBomb::default()
+    });
+    let _ = run(&mut world, 1);
+    assert_eq!(enemy(&world, bat).expect("bat").1.mode, EnemyMode::Flee);
+    assert_ne!(
+        enemy(&world, drone).expect("drone").1.mode,
+        EnemyMode::Flee,
+        "machines don't scare"
+    );
+    // A rig inside a smoke screen is out of sight.
+    let rig = world.player(PLAYER).expect("rig");
+    let (rx, ry) = (rig.x, rig.y);
+    world.insert_charge(PlacedBomb {
+        id: 10,
+        x: rx,
+        y: ry,
+        previous_x: rx,
+        previous_y: ry,
+        kind: ExplosiveKind::Smoke,
+        owner: Some(PLAYER),
+        detonation_tick: world.simulation_tick().next(),
+        ..PlacedBomb::default()
+    });
+    let _ = run(&mut world, 30);
+    assert!(world.smoke_at(rx, ry), "the screen covers the rig");
+}

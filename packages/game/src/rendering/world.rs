@@ -32,8 +32,8 @@ use crate::{
 };
 
 mod buildings;
-mod drops;
 mod caves;
+mod drops;
 mod enemies;
 mod explosives;
 mod fx;

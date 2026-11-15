@@ -420,8 +420,24 @@ fn harpoons_reel_loose_loot_back_toward_the_rig() {
         "{events:?} {:?}",
         world.entities().get(drop).map(|entity| entity.body)
     );
-    let after = world.entities().get(drop).expect("drop").body.x;
-    assert!(after < start - TILE_SIZE, "reeled in: {start} -> {after}");
+    // WP-DROPS: once reeled into magnet reach the rig collects it, so it is either still on
+    // the line (closer) or already in the cargo bay.
+    match world.entities().get(drop) {
+        Some(entity) => assert!(
+            entity.body.x < start - TILE_SIZE,
+            "reeled in: {start} -> {}",
+            entity.body.x
+        ),
+        None => assert_eq!(
+            world
+                .player(PLAYER)
+                .expect("rig")
+                .cargo_bay
+                .count(ItemKind::Mineral(MineralKind::Gold)),
+            1,
+            "reeled all the way in and collected"
+        ),
+    }
 }
 
 #[test]
@@ -753,4 +769,70 @@ fn test_mode_rigs_carry_every_weapon_at_its_top_tier() {
     assert!(player.ammo(AmmoKind::Rocket) >= 40);
     let _ = SimulationTick::new(0);
     let _ = Health::new(1.0, 0.0, 1.0);
+}
+
+#[test]
+fn weapons_hurt_enemies_through_the_enemy_damage_model_and_shot_out_rock_drops_blocks() {
+    use crate::enemy::EnemyKind;
+    let mut world = range(WeaponKind::Railgun);
+    let rig = world.player(PLAYER).expect("rig");
+    let (x, y) = (TILE_SIZE.mul_add(6.0, rig.x), rig.y - 4.0);
+    let enemy = world.spawn_enemy(EnemyKind::CaveBat, x, y);
+    let before = world
+        .entities()
+        .get(enemy)
+        .and_then(|entity| entity.state.health())
+        .expect("enemies report health")
+        .current;
+    let mut output = crate::TickOutput::default();
+    let outcome = world.damage_entity(
+        enemy,
+        crate::combat::Damage::new(
+            5.0,
+            crate::combat::DamageSource::Weapon {
+                player: PLAYER,
+                weapon: WeaponKind::RivetGun,
+            },
+        ),
+        &mut output,
+    );
+    assert!(
+        matches!(outcome, crate::combat::DamageOutcome::Hurt { remaining, .. } if remaining < before),
+        "{outcome:?}"
+    );
+    assert!(
+        output
+            .events
+            .iter()
+            .any(|event| matches!(event.kind, GameplayEventKind::EnemyHurt { .. })),
+        "the enemy model reports the hit"
+    );
+    let killed = world.damage_entity(
+        enemy,
+        crate::combat::Damage::new(
+            10_000.0,
+            crate::combat::DamageSource::Weapon {
+                player: PLAYER,
+                weapon: WeaponKind::Railgun,
+            },
+        ),
+        &mut output,
+    );
+    assert!(matches!(
+        killed,
+        crate::combat::DamageOutcome::Destroyed { .. }
+    ));
+    assert!(output.events.iter().any(|event| matches!(
+        event.kind,
+        GameplayEventKind::EnemyKilled {
+            by: Some(PLAYER),
+            ..
+        }
+    )));
+    // A plain tile shot out drops its block.
+    let tile = TilePosition { x: 40, y: 20 };
+    let _ = world.terrain_mut().set_kind(tile, TileKind::Dirt);
+    let drops = world.entities().count_of(crate::entity::EntityKind::Drop);
+    assert!(world.weapon_broke_tile(tile, u8::MAX));
+    assert!(world.entities().count_of(crate::entity::EntityKind::Drop) > drops);
 }
