@@ -42,11 +42,32 @@ const fn row_icon(row: GarageRow) -> &'static SpriteDef {
     }
 }
 
-/// What the details footer says about a row.
-fn row_about(row: GarageRow, locked: bool) -> String {
+/// What the details footer says about a row (`item`: the draft's choice in it).
+fn row_about(row: GarageRow, item: Option<CosmeticItem>, locked: bool, fresh: bool) -> String {
     if locked {
-        return "Locked. This one has to be earned out in the world; you can still try it on."
-            .to_owned();
+        // Milestone rewards say how to earn them; the rest come from village vendors.
+        return item
+            .and_then(fatherload_simulation::milestone::Milestone::reward_for)
+            .map_or_else(
+                || {
+                    "Locked. Village cosmetic vendors sell this one; you can still try it on."
+                        .to_owned()
+                },
+                |milestone| {
+                    format!(
+                        "Locked. Earn the {} milestone: {} You can still try it on.",
+                        milestone.title(),
+                        milestone.description()
+                    )
+                },
+            );
+    }
+    if fresh && let Some(item) = item {
+        let earned = fatherload_simulation::milestone::Milestone::reward_for(item)
+            .map_or_else(String::new, |milestone| {
+                format!(" from the {} milestone", milestone.title())
+            });
+        return format!("New unlock{earned}! Select Paint it to fit it for real.");
     }
     match row {
         GarageRow::Primary => {
@@ -95,11 +116,13 @@ pub(super) fn draw_garage(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>)
         let locked = item
             .is_some_and(|item| !item_available(ui.snapshot.test_mode.is_some(), ui.player, item));
         let changed = look != current;
+        let fresh = item.is_some_and(|item| ui.seat.rewards.fresh_unlocks.contains(&item));
         if index == selected {
-            about = Some(row_about(row, locked));
+            about = Some(row_about(row, item, locked, fresh));
         }
         let (value, value_color) = match (row, item) {
             (_, Some(item)) if locked => (format!("{} LOCKED", item.label()), RED),
+            (_, Some(item)) if fresh => (format!("NEW {}", item.label()), LIME),
             (_, Some(item)) => (item.label().to_owned(), item_color(item)),
             (GarageRow::Apply, None) if !changed => ("FITTED".to_owned(), LIME),
             (GarageRow::Apply, None) => ("FREE".to_owned(), LIME),

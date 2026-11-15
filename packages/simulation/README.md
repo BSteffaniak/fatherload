@@ -1163,6 +1163,54 @@ above.
 - **Formats:** `PROTOCOL_VERSION` 11 (NPC entities, `PlayerCommand::People`, the `People`
   section, events 140-145) and save format 9 (the `people` ledger; version 8 files load).
 
+## Upgrade rewards and milestones (`src/milestone.rs`, `src/upgrade_preview.rs`, `src/world/milestones.rs`)
+
+WP-FEEL part 2 (wave 3, T18). Deterministic rules only; the game draws the moments.
+
+- **Upgrade previews.** `upgrade_preview(player, kind)` (next tier) and
+  `preview_between(player, kind, from, to)` return an `UpgradePreview`: before/after `StatBar`s
+  (scaled to the line's top tier) and measured change lines, most important first ("Now cuts
+  hard rock", "Drills granite 1.2x faster (0.67 s -> 0.55 s a tile)", "Climbs 50% higher on a
+  full tank", "Runs cool down to the Slate Shelves", "Immune to lava burns!"). They use the
+  tick's own formulas: `dig_seconds` (base chip seconds, `drill_speed`, `drill_bite`,
+  `MIN_DRILL_SECONDS_PER_CHIP`), `thrust_seconds` / `climb_speed_tiles` /
+  `climb_ceiling_tiles` (tank size, burn efficiency, capped climb speed), `cooled_band`,
+  `protection_fraction`, `engine_top_speed_tiles`. Stock parts, empty bay, sea-level air. The
+  base chip table moved to `world::base_drill_seconds_per_chip` so the preview and the drill
+  share it. Tiers that change nothing on common rock (the chip-rate floor, e.g. drill 9 -> 10)
+  say so instead of inventing a gain.
+- **Milestones.** 19 `Milestone`s in four groups (upgrades, depths, discoveries, sky), each
+  with a `Medal` and one or two reward cosmetics (`Milestone::rewards`, all new non-starter
+  items: 5 paints, 3 flames, the corkscrew drill, 2 patterns, 6 decals, the depth trophy roof
+  piece and the trail lantern). Rules are state-based (`Milestone::met` over the `Player` and
+  `MilestoneFacts`), so nothing is missed and old saves earn what they already did.
+  `WorldState::advance_milestones` (once per tick, after village discovery) updates each
+  player's `MilestoneRecords` (deepest row and band, highest altitude above the local ground,
+  kills credited by `EnemyKilled { by }`, artifact pickups, upgrades bought), records newly met
+  milestones in `Player::milestones` (`MilestoneLog`: tick earned, records, `primed`), unlocks
+  their rewards and emits `MilestoneEarned`. A log's first check is silent (old saves and fresh
+  rigs do not get a burst of toasts). Test-mode worlds count nothing.
+- **Vendors.** Village cosmetic vendors stock `CosmeticItem::is_vendor_stock` only (the six
+  wave-2 unlocks), so milestone rewards are earned, never sold, and village offers are byte-for-
+  byte what they were.
+- **Purchase moment.** An applied `BuyUpgrade` (command or service) is followed by
+  `UpgradeInstalled { player_id, upgrade, level }` (level now fitted; bomb packs report 0).
+- **Sky gates (seam for T16).** `milestone::SKY_GATES`, `island_capable(player)` and
+  `crosses_dead_air(player)` are documented stand-ins (island tank tier 4; dead-air tank tier
+  13 plus an engine tier 12 standing in for the high-altitude intake). They decide the
+  `IslandCapableTank` and `ActTwoUnlocked` (Act I -> II) milestones and the shop's "Reaches the
+  low sky isles!" / "Crosses the dead-air gap" lines. The integrator rewires the two functions
+  to T16's measured bands and intake part; nothing else depends on how they decide.
+- **Replication and saves.** `Player::milestones` is private: it travels in the owner's
+  `Loadout` section (`PlayerInventory::milestones`), is saved with the player (serde default:
+  old saves load with an unprimed log) and parks with the rig. `PROTOCOL_VERSION` 11.
+- **Events.** `UpgradeInstalled` 180 and `MilestoneEarned` 181 (netcode codes).
+
+`milestone.rs`, `upgrade_preview.rs` and `world/milestones.rs` test the unlock rules (tiers,
+depth bands, sky gates, silent priming, test mode), rewards (each locked item awarded once,
+never sold), persistence (serde, loadout replication, redaction, parking) and stat-delta
+correctness against the formulas.
+
 ## Wave 2 seams (integration notes)
 
 Where the wave 2 tracks meet, for the tracks that build on them:

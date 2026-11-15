@@ -257,6 +257,7 @@ impl SeatUi {
     ) {
         if input.backs_out() {
             self.garage = None;
+            self.clear_fresh_unlocks();
             self.modal = Some(ModalScreen::Repair);
             self.selected_menu_item = GARAGE_COUNTER_ROW;
             cues.push(SoundCue::UiBack);

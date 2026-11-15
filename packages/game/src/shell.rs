@@ -33,6 +33,7 @@ pub mod options;
 mod pointer;
 mod pilot;
 mod quests;
+pub mod rewards;
 mod test_mode;
 mod village;
 mod world_setup;
@@ -126,6 +127,9 @@ pub enum ModalScreen {
     PersonGift,
     /// A base module's service menu (WP-BASE); the module is [`SeatUi::base_module`].
     BaseModule,
+    /// The seat's progression screen: milestones, trophies, unlocks and records (WP-FEEL part
+    /// 2; flips with the mine map, the collection log and the quest log).
+    Achievements,
 }
 
 impl ModalScreen {
@@ -905,6 +909,8 @@ pub struct SeatUi {
     /// On foot: seconds left to press use again and radio for a pickup (see
     /// `shell/pilot.rs`); 0 when not armed.
     pub pickup_armed: f32,
+    /// Upgrade reward moments: the purchase moment, milestone banners and NEW unlocks.
+    pub rewards: rewards::SeatRewards,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -945,6 +951,7 @@ impl SeatUi {
             door_latch: false,
             interior_stride: 0.0,
             pickup_armed: 0.0,
+            rewards: rewards::SeatRewards::new(),
         }
     }
 
@@ -1264,6 +1271,7 @@ impl SeatUi {
             ModalScreen::QuestLog => ctx.player.map_or(0, |player| {
                 log_quests(ctx.world, player).len().saturating_sub(1)
             }),
+            ModalScreen::Achievements => fatherload_simulation::milestone::Milestone::ALL.len() - 1,
             _ => 0,
         };
         let before = self.selected_menu_item;
@@ -1340,6 +1348,10 @@ impl SeatUi {
                 None
             }
             ModalScreen::QuestLog => {
+                self.open_modal(ModalScreen::Achievements);
+                None
+            }
+            ModalScreen::Achievements => {
                 self.modal = Some(ModalScreen::Map);
                 None
             }
@@ -1619,15 +1631,21 @@ impl SeatUi {
                 }
             }
             SessionServiceRequest::BuyUpgrade { index } => {
-                upgrade_offers(player).get(index).map_or_else(
-                    || "Upgrade purchased.".to_owned(),
-                    |offer| {
-                        format!(
-                            "Bought {}.",
-                            upgrade_tier_name(offer.kind, offer.level.saturating_sub(1))
-                        )
-                    },
-                )
+                upgrade_offers(player)
+                    .get(index)
+                    .map_or_else(
+                        || "Upgrade purchased.".to_owned(),
+                        |offer| {
+                            format!(
+                                "Bought {}.",
+                                upgrade_tier_name(offer.kind, offer.level.saturating_sub(1))
+                            )
+                        },
+                    )
+                    .clone_into(&mut self.message);
+                // The fanfare and the purchase moment play from the world's
+                // `UpgradeInstalled` event (see `shell::rewards`).
+                return;
             }
             SessionServiceRequest::BuyPilotGear { gear } => format!(
                 "Bought the {} (tier {}). {}",

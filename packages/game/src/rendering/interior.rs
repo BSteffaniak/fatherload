@@ -236,7 +236,10 @@ pub(super) fn draw_interior(
     }
     let counter_x = room_pixel_x(interior_service_x(zone)) - COUNTER_WIDTH / 2;
     {
-        let mut room = draw.begin_mode2D(placement.camera());
+        // The purchase moment punches the room's camera (WP-FEEL part 2).
+        let mut camera = placement.camera();
+        camera.offset.y += super::rewards::install_punch(seat) * placement.pixel as f32;
+        let mut room = draw.begin_mode2D(camera);
         draw_room_shell(&mut room, room_set, placement);
         draw_door(&mut room);
         let context = props::RoomContext {
@@ -255,6 +258,13 @@ pub(super) fn draw_interior(
         draw_counter(&mut room, room_set, counter_x, seconds);
         props::draw_counter_props(&mut room, &context);
         draw_service_animation(&mut room, seat, zone, counter_x);
+        super::rewards::draw_install_fx(
+            &mut room,
+            seat,
+            room_pixel_x(seat.interior_x),
+            FLOOR_Y - BODY_HEIGHT / 2,
+            FLOOR_Y,
+        );
         draw_rig(&mut room, seat, view, seconds);
         draw_paint_mist(&mut room, seat, view);
     }
@@ -747,8 +757,10 @@ fn draw_rig(draw: &mut impl RaylibDraw, seat: &SeatUi, view: &ViewSnapshot<'_>, 
     if let Some(preview) = seat.garage_preview() {
         look = look.wearing(preview);
     }
+    // The purchase moment: the old part, a flash, then the new part with a hop.
+    let (look, hop, flash) = super::rewards::install_look(look, seat);
     let x = room_pixel_x(seat.interior_x) - BODY_WIDTH / 2;
-    let y = FLOOR_Y - BODY_HEIGHT;
+    let y = FLOOR_Y - BODY_HEIGHT - hop;
     draw.draw_rectangle(
         x + 1,
         FLOOR_Y,
@@ -765,7 +777,13 @@ fn draw_rig(draw: &mut impl RaylibDraw, seat: &SeatUi, view: &ViewSnapshot<'_>, 
         ..RigPose::idle(ticks)
     };
     let flip = seat.interior_facing < 0.0;
-    rig_art::paint_rig(&look, &pose).draw(draw, Vector2::new(x as f32, y as f32), 1.0, flip);
+    let painted = rig_art::paint_rig(&look, &pose);
+    let origin = Vector2::new(x as f32, y as f32);
+    if flash {
+        super::rewards::draw_silhouette(draw, &painted, origin, 1.0, flip, BONE);
+    } else {
+        painted.draw(draw, origin, 1.0, flip);
+    }
 }
 
 /// The pilot standing (or walking) on the room's floor at the seat's `interior_x`, in its

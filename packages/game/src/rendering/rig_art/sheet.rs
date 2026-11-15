@@ -33,6 +33,8 @@ pub enum RigSheet {
     /// The pilot's sprite sheet (Part II F5): every pose and its frames, then crew paint jobs
     /// and suit tiers.
     Pilots,
+    /// The milestone-reward cosmetics (WP-FEEL part 2) on rigs of several tiers.
+    Rewards,
 }
 
 /// Tiers that start each visual class (plus the top tier).
@@ -154,6 +156,7 @@ pub fn draw_rig_sheet(draw: &mut RaylibDrawHandle<'_>, sheet: RigSheet) {
         RigSheet::Drills => draw_drills(draw, canvas.width),
         RigSheet::Weapons => draw_weapons(draw, canvas.width),
         RigSheet::Pilots => draw_pilots(draw, canvas.width),
+        RigSheet::Rewards => draw_rewards(draw, canvas.width),
     }
 }
 
@@ -329,9 +332,109 @@ fn draw_tiers(draw: &mut RaylibDrawHandle<'_>, width: i32) {
     }
 }
 
+/// The milestone-reward looks for the rewards sheet: every reward paint, flame, pattern, decal,
+/// the corkscrew drill, the depth trophy and the trail lantern.
+fn reward_jobs() -> Vec<(&'static str, RigCosmetics)> {
+    let job = |primary, secondary, trim| RigCosmetics {
+        primary,
+        secondary,
+        trim,
+        ..RigCosmetics::default()
+    };
+    vec![
+        (
+            "Jade tiger",
+            RigCosmetics {
+                pattern: HullPattern::Tiger,
+                drill_style: DrillStyle::Corkscrew,
+                decal: Decal::Wrench,
+                ..job(PaintColor::Jade, PaintColor::Graphite, PaintColor::Gold)
+            },
+        ),
+        (
+            "Glowcap lantern",
+            RigCosmetics {
+                decal: Decal::Gem,
+                flame: FlameColor::Aether,
+                rear: RearAttachment::Lantern,
+                pattern: HullPattern::Racing,
+                ..job(PaintColor::Glowcap, PaintColor::Forest, PaintColor::Mint)
+            },
+        ),
+        (
+            "Mirror chrome",
+            RigCosmetics {
+                decal: Decal::Wings,
+                flame: FlameColor::Plasma,
+                roof: RoofAttachment::Trophy,
+                pattern: HullPattern::TwoTone,
+                ..job(PaintColor::Chrome, PaintColor::Steel, PaintColor::Crimson)
+            },
+        ),
+        (
+            "Abyss starfield",
+            RigCosmetics {
+                pattern: HullPattern::Starfield,
+                decal: Decal::Moon,
+                flame: FlameColor::Aether,
+                ..job(PaintColor::Abyss, PaintColor::Chrome, PaintColor::Sky)
+            },
+        ),
+        (
+            "Magma ember",
+            RigCosmetics {
+                decal: Decal::Fang,
+                flame: FlameColor::Ember,
+                pattern: HullPattern::Solid,
+                rear: RearAttachment::Stacks,
+                ..job(PaintColor::Magma, PaintColor::Stealth, PaintColor::Gold)
+            },
+        ),
+        (
+            "Claim flag",
+            RigCosmetics {
+                decal: Decal::Flag,
+                flame: FlameColor::Plasma,
+                drill_style: DrillStyle::Corkscrew,
+                pattern: HullPattern::Racing,
+                ..job(PaintColor::Sand, PaintColor::Copper, PaintColor::Crimson)
+            },
+        ),
+        (
+            "Trophy hunter",
+            RigCosmetics {
+                roof: RoofAttachment::Trophy,
+                pattern: HullPattern::Tiger,
+                decal: Decal::Gem,
+                flame: FlameColor::Ember,
+                ..job(PaintColor::Gold, PaintColor::Graphite, PaintColor::Magma)
+            },
+        ),
+        (
+            "Night trail",
+            RigCosmetics {
+                pattern: HullPattern::Starfield,
+                rear: RearAttachment::Lantern,
+                decal: Decal::Wings,
+                flame: FlameColor::Aether,
+                ..job(PaintColor::Violet, PaintColor::Abyss, PaintColor::Glowcap)
+            },
+        ),
+    ]
+}
+
+fn draw_rewards(draw: &mut RaylibDrawHandle<'_>, width: i32) {
+    ui_kit::text(draw, "Milestone rewards", 8, 6, TextStyle::Bold, GOLD);
+    draw_jobs(draw, width, reward_jobs());
+}
+
 fn draw_paints(draw: &mut RaylibDrawHandle<'_>, width: i32) {
     ui_kit::text(draw, "Paint jobs", 8, 6, TextStyle::Bold, GOLD);
-    let jobs = paint_jobs();
+    draw_jobs(draw, width, paint_jobs());
+}
+
+/// Eight looks in a 4x2 grid at four times size.
+fn draw_jobs(draw: &mut RaylibDrawHandle<'_>, width: i32, jobs: Vec<(&'static str, RigCosmetics)>) {
     let per_row = 4;
     let column_width = width / per_row;
     let scale = 4;
@@ -451,9 +554,11 @@ fn draw_weapons(draw: &mut RaylibDrawHandle<'_>, width: i32) {
 fn draw_drills(draw: &mut RaylibDrawHandle<'_>, width: i32) {
     ui_kit::text(draw, "Drill heads", 8, 6, TextStyle::Bold, GOLD);
     let column_width = (width - 70) / 15;
-    let scale = 3;
+    // Rows share the canvas height (more drill styles, tighter rows).
+    let row_height = ((ui_kit::canvas().height - 34) / DrillStyle::ALL.len() as i32).min(55);
+    let scale = if row_height >= 50 { 3 } else { 2 };
     for (row, style) in DrillStyle::ALL.iter().enumerate() {
-        let top = 30 + row as i32 * 55;
+        let top = 30 + row as i32 * row_height;
         ui_kit::text(draw, style.label(), 6, top + 14, TextStyle::Body, MIST);
         for tier in 1..=15_u8 {
             let cx = 70 + (i32::from(tier) - 1) * column_width + column_width / 2;

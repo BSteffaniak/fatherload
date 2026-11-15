@@ -51,7 +51,9 @@ const SAVE_SLOTS: usize = 3;
 /// * T15 pilot on foot: pilot entities in the entity store, pilot gear and the personal pack on
 ///   players, parked pilots in the crew roster, vent grates and ropes;
 /// * T17 people in the world: NPC entities and the world's people ledger (every character's
-///   memory of every player, conversations, bought offers, perks).
+///   memory of every player, conversations, bought offers, perks);
+/// * T18 upgrade reward moments: each player's milestone log and records and the
+///   milestone-reward cosmetics.
 pub const SAVE_VERSION: u32 = 9;
 
 /// Persisted user settings.
@@ -1488,6 +1490,61 @@ mod tests {
         assert_eq!(
             loaded.world.simulation_state_hash(),
             plain.world.simulation_state_hash()
+        );
+    }
+
+    #[test]
+    fn milestones_save_and_version_eight_files_load_without_them() {
+        use fatherload_simulation::milestone::Milestone;
+        /// Removes the milestone logs, as a version 8 game wrote the file.
+        fn strip(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    map.remove("milestones");
+                    map.values_mut().for_each(strip);
+                }
+                serde_json::Value::Array(items) => items.iter_mut().for_each(strip),
+                _ => {}
+            }
+        }
+        let player = PlayerId::new(1);
+        let mut world = WorldState::new_game(player);
+        {
+            let rig = world.player_mut(player).expect("rig");
+            rig.milestones.primed = true;
+            rig.earn_milestone(Milestone::FirstDeepLayer, 40);
+            rig.milestones.records.deepest_row = 321;
+        }
+        let save = WorldSave {
+            world,
+            play_seconds: 3.0,
+        };
+        let text = serde_json::to_string(&SaveFile {
+            version: SAVE_VERSION,
+            save: save.clone(),
+        })
+        .expect("json");
+        let loaded = parse_save_file(&text).expect("current save loads");
+        assert_eq!(
+            loaded.world.player(player).expect("rig").milestones,
+            save.world.player(player).expect("rig").milestones
+        );
+        assert_eq!(
+            loaded.world.simulation_state_hash(),
+            save.world.simulation_state_hash()
+        );
+        // A version 8 file has no milestone log: it loads with an unprimed one (the first
+        // tick then records what the rig already met, silently).
+        let mut json: serde_json::Value = serde_json::from_str(&text).expect("value");
+        json["version"] = 8.into();
+        strip(&mut json);
+        let old = parse_save_file(&json.to_string()).expect("a v8 save loads");
+        let rig = old.world.player(player).expect("rig");
+        assert!(rig.milestones.earned.is_empty() && !rig.milestones.primed);
+        assert!(
+            rig.cosmetic_unlocks
+                .has(Milestone::FirstDeepLayer.rewards()[0]),
+            "unlocks already earned stay"
         );
     }
 

@@ -695,9 +695,11 @@ fn paint_mast(canvas: &mut RigCanvas, look: &RigLook, pose: &RigPose, deck: Deck
             canvas.rect(x, base - 2, 1, 2, STEEL_LIGHT);
             let glint = (pose.ticks / 10).rem_euclid(9) == 0;
             canvas.stamp(
-                &["hyyyh", "h.l.h", ".yly.", "..y..", ".ooo."],
-                x - 2,
-                base - 7,
+                &[
+                    "hyyyyyh", "hyylyyh", ".hyyyh.", "..yyy..", "...y...", "..ooo..",
+                ],
+                x - 3,
+                base - 8,
                 |ch| match ch {
                     'h' => Some(AMBER),
                     'y' => Some(GOLD),

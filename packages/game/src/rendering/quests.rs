@@ -409,7 +409,7 @@ pub(super) fn draw_quest_log(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
         "Your jobs and the crew's. The selected job is tracked on your HUD.",
         &ModalContent::new(sections).prompts(&[
             hint(Prompt::Navigate, "track"),
-            hint(Prompt::Confirm, "map"),
+            hint(Prompt::Confirm, "milestones"),
             hint(Prompt::Back, "close"),
         ]),
     );

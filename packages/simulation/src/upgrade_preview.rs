@@ -112,12 +112,20 @@ pub fn upgrade_preview(player: &Player, kind: UpgradeKind) -> Option<UpgradePrev
     Some(preview_between(player, kind, level, next))
 }
 
+/// The hardest grade of common rock (hard rock and the richest ores): a drill of this tier or
+/// better digs every breakable tile.
+pub const MAX_ROCK_HARDNESS: u8 = 4;
+
 /// Core materials the drill preview measures, softest first, with their display names.
-const DRILL_LADDER: [(TileKind, &str); 5] = [
+/// Mountain granite digs like stone (one hardness grade, a chip more durable), so the two share a
+/// rung, measured on granite.
+const DRILL_LADDER: [(TileKind, &str); 4] = [
     (TileKind::Dirt, "dirt"),
     (TileKind::Clay, "clay"),
-    (TileKind::Stone, "stone"),
-    (TileKind::Surface(SurfaceMaterial::Granite), "granite"),
+    (
+        TileKind::Surface(SurfaceMaterial::Granite),
+        "granite and stone",
+    ),
     (TileKind::HardRock, "hard rock"),
 ];
 
@@ -211,6 +219,15 @@ pub fn preview_between(
         UpgradeKind::Drill => {
             let rate = |level: u8| drill_speed(level) * f32::from(drill_bite(level));
             bars.push(bar("Dig speed", rate(from), rate(to), rate(top), "x", 1));
+            let hardness = |level: u8| f32::from(level.min(MAX_ROCK_HARDNESS));
+            bars.push(bar(
+                "Rock grade",
+                hardness(from),
+                hardness(to),
+                f32::from(MAX_ROCK_HARDNESS),
+                "",
+                0,
+            ));
             let hardest = |level: u8| {
                 DRILL_LADDER
                     .iter()
@@ -236,6 +253,7 @@ pub fn preview_between(
                 dig_seconds(TileKind::Dirt, from),
                 dig_seconds(TileKind::Dirt, to),
             ) && next < now
+                && hardest(from).is_some_and(|(tile, _)| tile != TileKind::Dirt)
             {
                 changes.push(format!(
                     "Chews through dirt in {next:.2} s (was {now:.2} s)"
@@ -637,7 +655,7 @@ mod tests {
         );
         let granite = TileKind::Surface(SurfaceMaterial::Granite);
         let ratio = dig_seconds(granite, 3).unwrap() / dig_seconds(granite, 4).unwrap();
-        let line = format!("Drills granite {ratio:.1}x faster");
+        let line = format!("Drills granite and stone {ratio:.1}x faster");
         assert!(
             preview
                 .changes

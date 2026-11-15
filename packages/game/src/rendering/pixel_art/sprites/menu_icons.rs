@@ -639,3 +639,119 @@ menu_icon!(
         "oo.oo.oo.",
     ]
 );
+
+// Milestone medals (WP-FEEL part 2): the trophy shelf, progression screen and banners.
+menu_icon!(
+    MEDAL_BRONZE,
+    "menu_medal_bronze",
+    [
+        ('r', RED),
+        ('b', MAROON),
+        ('h', SAND),
+        ('l', COPPER),
+        ('m', RUST)
+    ],
+    [
+        ".rr...bb.",
+        "..rr.bb..",
+        "...rbb...",
+        "..ooooo..",
+        ".ohhlllo.",
+        "ohllllmmo",
+        "olllllmmo",
+        ".olllmmo.",
+        "..ooooo..",
+    ]
+);
+
+menu_icon!(
+    MEDAL_SILVER,
+    "menu_medal_silver",
+    [
+        ('r', SKY),
+        ('b', OCEAN),
+        ('h', BONE),
+        ('l', STEEL_LIGHT),
+        ('m', STEEL)
+    ],
+    [
+        ".rr...bb.",
+        "..rr.bb..",
+        "...rbb...",
+        "..ooooo..",
+        ".ohhlllo.",
+        "ohllllmmo",
+        "olllllmmo",
+        ".olllmmo.",
+        "..ooooo..",
+    ]
+);
+
+menu_icon!(
+    MEDAL_GOLD,
+    "menu_medal_gold",
+    [
+        ('r', RED),
+        ('b', MAROON),
+        ('h', CREAM),
+        ('l', GOLD),
+        ('m', AMBER)
+    ],
+    [
+        ".rr...bb.",
+        "..rr.bb..",
+        "...rbb...",
+        "..ooooo..",
+        ".ohhlllo.",
+        "ohllllmmo",
+        "olllllmmo",
+        ".olllmmo.",
+        "..ooooo..",
+    ]
+);
+
+menu_icon!(
+    MEDAL_PLATINUM,
+    "menu_medal_platinum",
+    [
+        ('r', VIOLET),
+        ('b', PLUM),
+        ('h', BONE),
+        ('l', ICE),
+        ('m', SKY_LIGHT)
+    ],
+    [
+        ".rr...bb.",
+        "..rr.bb..",
+        "...rbb...",
+        "..ooooo..",
+        ".ohhlllo.",
+        "ohllllmmo",
+        "olllllmmo",
+        ".olllmmo.",
+        "..ooooo..",
+    ]
+);
+
+menu_icon!(
+    MEDAL_LOCKED,
+    "menu_medal_locked",
+    [
+        ('r', SLATE),
+        ('b', SLATE_DARK),
+        ('h', SLATE_LIGHT),
+        ('l', SLATE),
+        ('m', SLATE_DARK)
+    ],
+    [
+        ".rr...bb.",
+        "..rr.bb..",
+        "...rbb...",
+        "..ooooo..",
+        ".ohhlllo.",
+        "ohllllmmo",
+        "olllllmmo",
+        ".olllmmo.",
+        "..ooooo..",
+    ]
+);

@@ -31,6 +31,7 @@ pub mod pixel_art;
 pub mod pointer;
 mod prompts;
 mod quests;
+mod rewards;
 pub mod rig_art;
 mod screen;
 mod sky_hud;
@@ -560,6 +561,9 @@ impl GameRenderer {
                 && let Some(fanfare) = &seat.fanfare
             {
                 quests::draw_fanfare(draw, fanfare, shell.update_ticks);
+            }
+            if !shell.global_overlay() {
+                rewards::draw_reward_banner(draw, seat, shell.update_ticks, docked);
             }
         }
         if split {

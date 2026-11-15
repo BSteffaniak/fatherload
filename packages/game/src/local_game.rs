@@ -15,6 +15,7 @@ use fatherload_simulation::{
 };
 
 mod crew;
+mod rewards;
 
 #[cfg(test)]
 pub use crew::saved_seat_count;
@@ -499,6 +500,7 @@ impl LocalGame {
         self.announce_points_of_interest(&players);
         self.announce_villages(&players);
         self.announce_quests(&players);
+        self.announce_rewards(&players);
     }
 
     /// Quest news for local seats: the owner's banner when a job is done, paid, failed or a

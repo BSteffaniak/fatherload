@@ -281,7 +281,7 @@ pub(super) fn draw_repair(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>)
 }
 
 /// The icon for an upgrade line in the shop.
-const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
+pub(super) const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
     match kind {
         UpgradeKind::Drill => &rig::DRILL_DOWN,
         UpgradeKind::FuelTank => &icons::FUEL,
@@ -330,10 +330,16 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
                     upgrade_tier_name(offer.kind, offer.level)
                 )
             };
-            let about = upgrade_effect(ui.player, offer.kind).map_or_else(
-                || offer.description.to_owned(),
-                |effect| format!("{effect}. {}.", offer.description),
-            );
+            // The measured headline of what the next tier changes (the showcase card beside
+            // the panel shows the rest), then the line's description.
+            let about =
+                fatherload_simulation::upgrade_preview::upgrade_preview(ui.player, offer.kind)
+                    .and_then(|preview| preview.headline().map(str::to_owned))
+                    .or_else(|| upgrade_effect(ui.player, offer.kind))
+                    .map_or_else(
+                        || offer.description.to_owned(),
+                        |effect| format!("{effect}. {}.", offer.description),
+                    );
             if let Some(band) = upgrade_locked_by(offer, settings, deepest) {
                 return Offer::new(icon, offer.name, tier)
                     .tag("LOCKED", RED)
@@ -368,6 +374,7 @@ pub(super) fn draw_shop(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         "Upgrades",
         shop_offers(ui),
     );
+    super::rewards::draw_shop_showcase(draw, ui);
 }
 
 /// The receipt-style confirmation for a pending purchase: the item, its price and the balance
@@ -418,6 +425,7 @@ fn draw_purchase_confirm(
 pub(super) fn draw_shop_confirm(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let offer = shop_offers(ui).into_iter().nth(ui.seat.selected_menu_item);
     draw_purchase_confirm(draw, "Confirm Upgrade", offer, ui.player.credits);
+    super::rewards::draw_shop_showcase(draw, ui);
 }
 
 pub(super) fn draw_fuel_confirm(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {

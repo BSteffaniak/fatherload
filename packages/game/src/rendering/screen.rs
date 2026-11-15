@@ -1178,6 +1178,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::PersonTrade => counters::draw_person_trade(draw, ui),
         ModalScreen::PersonGift => counters::draw_person_gift(draw, ui),
         ModalScreen::BaseModule => super::build::draw_base_module(draw, ui),
+        ModalScreen::Achievements => super::rewards::draw_achievements(draw, ui),
     }
 }
 
