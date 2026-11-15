@@ -20,6 +20,7 @@ mod scene_capture;
 mod shell;
 #[cfg(not(target_os = "emscripten"))]
 mod story_report;
+#[cfg(not(target_os = "emscripten"))]
 mod village_report;
 mod window;
 #[cfg(not(target_os = "emscripten"))]
