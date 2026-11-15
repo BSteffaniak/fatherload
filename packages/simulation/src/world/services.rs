@@ -26,6 +26,8 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         PlayerCommand::Service(request) => Some(service_request_zones(*request)),
         PlayerCommand::UseScanner
         | PlayerCommand::PlaceBomb
+        | PlayerCommand::DeployExplosive { .. }
+        | PlayerCommand::RemoteDetonate { .. }
         | PlayerCommand::PlaceInfrastructure { .. }
         | PlayerCommand::Rescue
         | PlayerCommand::TestMode(_) => None,
@@ -52,6 +54,7 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
             &[SurfaceZone::Bank]
         }
         SessionServiceRequest::BuyBombBundle { .. }
+        | SessionServiceRequest::BuyExplosives { .. }
         | SessionServiceRequest::BuyMiningRockets
         | SessionServiceRequest::ClaimFreeTestCharge => &[SurfaceZone::Explosives],
         SessionServiceRequest::SalvagePatchHull
@@ -147,6 +150,28 @@ impl WorldState {
         self.apply_shop_and_board_service(player_id, request)
     }
 
+    /// One pack of a special explosive (see [`crate::explosive::EXPLOSIVE_OFFERS`]).
+    fn buy_explosives(
+        &mut self,
+        player_id: PlayerId,
+        kind: crate::explosive::ExplosiveKind,
+        shack_level: u8,
+    ) -> PlayerScopedCommandOutcome {
+        let Some(offer) = crate::explosive::explosive_offer(kind) else {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        };
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        if shack_level < offer.shack_level || player.credits < offer.cost {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        }
+        player.credits -= offer.cost;
+        player.add_explosives(kind, offer.count);
+        self.apply_quest_rebate(player_id, crate::quest::QuestGiver::Nix, offer.cost);
+        PlayerScopedCommandOutcome::Applied
+    }
+
     fn apply_shop_and_board_service(
         &mut self,
         player_id: PlayerId,
@@ -169,6 +194,9 @@ impl WorldState {
                 player.bombs = player.bombs.saturating_add(count + bonus);
                 self.apply_quest_rebate(player_id, crate::quest::QuestGiver::Nix, cost);
                 PlayerScopedCommandOutcome::Applied
+            }
+            SessionServiceRequest::BuyExplosives { kind } => {
+                self.buy_explosives(player_id, kind, shack_level)
             }
             SessionServiceRequest::BuyMiningRockets => {
                 let Some(player) = self.players.get_mut(&player_id) else {

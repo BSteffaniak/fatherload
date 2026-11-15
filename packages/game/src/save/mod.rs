@@ -555,6 +555,7 @@ mod tests {
             chain_triggered: true,
             detonation_tick: SimulationTick::new(30),
             timer_seconds: 0.5,
+            ..PlacedBomb::default()
         });
         world.apply_live_entities(entities);
         let save = WorldSave {

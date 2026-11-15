@@ -356,10 +356,21 @@ impl WorldState {
                                 .saturating_add(self.timing.ticks_for_millis(BOMB_FUSE_MILLIS)),
                         ),
                         timer_seconds: BOMB_FUSE_SECONDS,
+                        owner: Some(player_id),
+                        ..PlacedBomb::default()
                     });
                     self.next_bomb_id = self.next_bomb_id.saturating_add(1);
                     PlayerScopedCommandOutcome::Applied
                 }
+            }
+            PlayerCommand::DeployExplosive { kind, aim } => {
+                if kind == crate::explosive::ExplosiveKind::Bomb {
+                    return self.apply_player_command(player_id, &PlayerCommand::PlaceBomb);
+                }
+                self.deploy_explosive(player_id, kind, aim)
+            }
+            PlayerCommand::RemoteDetonate { sequenced } => {
+                self.remote_detonate(player_id, sequenced)
             }
             PlayerCommand::PlaceInfrastructure { slot } => {
                 let Some(kind) = infrastructure_kind_for_slot(slot) else {

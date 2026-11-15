@@ -2,7 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ids::InputSequence, service::SessionServiceRequest, test_mode::TestModeAction};
+use crate::{
+    explosive::{ExplosiveKind, ThrowAim},
+    ids::InputSequence,
+    service::SessionServiceRequest,
+    test_mode::TestModeAction,
+};
 
 /// One-shot gameplay commands submitted by a player.
 ///
@@ -13,6 +18,17 @@ use crate::{ids::InputSequence, service::SessionServiceRequest, test_mode::TestM
 pub enum PlayerCommand {
     UseScanner,
     PlaceBomb,
+    /// Deploys one carried explosive of `kind` along `aim` (dropped, thrown or placed, see
+    /// [`ExplosiveKind::deployment`]). `kind: Bomb` drops a plain bomb like [`Self::PlaceBomb`].
+    DeployExplosive {
+        kind: ExplosiveKind,
+        aim: ThrowAim,
+    },
+    /// Fires the player's remote detonator: every waiting remote charge (C4) they placed goes
+    /// off at once, or one after another in placement order when `sequenced`.
+    RemoteDetonate {
+        sequenced: bool,
+    },
     PlaceInfrastructure {
         slot: u8,
     },

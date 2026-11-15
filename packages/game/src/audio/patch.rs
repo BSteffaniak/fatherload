@@ -137,6 +137,17 @@ patches! {
     Milestone => "milestone",
     Rescue => "rescue",
     SprayPaint => "spray_paint",
+    ThrowWhoosh => "throw_whoosh",
+    ChargeStick => "charge_stick",
+    Detonator => "detonator",
+    SmallBlast => "small_blast",
+    ClusterBurst => "cluster_burst",
+    ShapedBlast => "shaped_blast",
+    DeepBlast => "deep_blast",
+    FireWhoosh => "fire_whoosh",
+    FireCrackle => "fire_crackle",
+    EmpPulse => "emp_pulse",
+    FlareIgnite => "flare_ignite",
     ThrustLoop => "loop_thrust",
     DrillSoftLoop => "loop_drill_soft",
     DrillHardLoop => "loop_drill_hard",
@@ -281,6 +292,27 @@ impl Patch {
                     .jitter(0.0, 0.0)
                     .ducking(0.35)
             }
+            Self::ThrowWhoosh | Self::ChargeStick | Self::FireCrackle => {
+                PatchInfo::new(Feedback).instances(3).jitter(0.06, 1.0)
+            }
+            Self::Detonator | Self::FlareIgnite => {
+                PatchInfo::new(Feedback).instances(2).jitter(0.01, 0.5)
+            }
+            Self::SmallBlast | Self::ClusterBurst => PatchInfo::new(Impact)
+                .instances(4)
+                .send(0.3)
+                .jitter(0.08, 1.5)
+                .ducking(0.2),
+            Self::FireWhoosh | Self::EmpPulse => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.3)
+                .jitter(0.04, 1.0),
+            Self::ShapedBlast | Self::DeepBlast => PatchInfo::new(Big)
+                .instances(2)
+                .send(0.35)
+                .jitter(0.05, 1.0)
+                .ducking(0.55)
+                .priority(9),
             Self::ThrustLoop
             | Self::DrillSoftLoop
             | Self::DrillHardLoop
@@ -331,6 +363,17 @@ impl Patch {
             Self::Milestone => milestone(rng),
             Self::Rescue => rescue(rng),
             Self::SprayPaint => spray_paint(rng),
+            Self::ThrowWhoosh => throw_whoosh(rng),
+            Self::ChargeStick => charge_stick(rng),
+            Self::Detonator => detonator(rng),
+            Self::SmallBlast => small_blast(rng),
+            Self::ClusterBurst => cluster_burst(rng),
+            Self::ShapedBlast => shaped_blast(rng),
+            Self::DeepBlast => deep_blast(rng),
+            Self::FireWhoosh => fire_whoosh(rng),
+            Self::FireCrackle => fire_crackle(rng),
+            Self::EmpPulse => emp_pulse(rng),
+            Self::FlareIgnite => flare_ignite(rng),
             Self::ThrustLoop => thrust_loop(rng),
             Self::DrillSoftLoop => drill_soft_loop(rng),
             Self::DrillHardLoop => drill_hard_loop(rng),
@@ -1140,6 +1183,226 @@ fn explosion(rng: &mut Rng) -> Vec<f32> {
     for sample in &mut out {
         *sample = saturate(*sample, 1.5);
     }
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// Explosives
+// ---------------------------------------------------------------------------------------------
+
+/// A lobbed charge: a short airy swish that rises then falls.
+fn throw_whoosh(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 600.0, 1.8);
+    let peak = 2_200.0 * rng.jitter(0.1);
+    let mut out = render(0.32, |t| {
+        let cutoff = 500.0 + peak * segments(t, &[(0.0, 0.0), (0.12, 1.0), (0.32, 0.2)]);
+        filter.run(noise.next(), cutoff, 1.8) * segments(t, &[(0.0, 0.0), (0.1, 1.0), (0.32, 0.0)])
+    });
+    mix_into(&mut out, &clank(rng, 900.0, 0.05), 0.0, 0.25);
+    out
+}
+
+/// A charge slapping onto rock: a wet thunk and a little arming chirp.
+fn charge_stick(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(240.0 * rng.jitter(0.05), 140.0, 0.07, 2.0);
+    let squelch = burst(
+        rng.next_u64(),
+        NoiseColor::Brown,
+        FilterMode::LowPass,
+        900.0,
+        1.2,
+        0.06,
+    );
+    mix_into(&mut out, &squelch, 0.0, 0.7);
+    let mut osc = Osc::new(Wave::Square);
+    osc.width = 0.3;
+    let chirp = render(0.05, |t| {
+        osc.next(glide(t, 2_400.0, 3_000.0, 0.02)) * perc(t, 0.001, 0.04)
+    });
+    mix_into(&mut out, &chirp, 0.09, 0.18);
+    out
+}
+
+/// The remote detonator: a switch click and two rising confirm beeps.
+fn detonator(rng: &mut Rng) -> Vec<f32> {
+    let mut out = clank(rng, 1_400.0, 0.03);
+    let mut osc = Osc::new(Wave::Square);
+    osc.width = 0.5;
+    let mut filter = Svf::new(FilterMode::LowPass, 4_000.0, 0.8);
+    let env = Adsr::new(0.002, 0.02, 0.7, 0.02);
+    for (index, note) in [1_318.5, 1_760.0].into_iter().enumerate() {
+        let beep = render(0.08, |t| {
+            filter.process(osc.next(note)) * env.level(t, 0.05)
+        });
+        mix_into(&mut out, &beep, 0.05 + index as f32 * 0.07, 0.35);
+    }
+    out
+}
+
+/// A bomblet or a cluster bomb's own small pop: a tight crack and a short boom.
+fn small_blast(rng: &mut Rng) -> Vec<f32> {
+    let mut crack_noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut crack_filter = Svf::new(FilterMode::HighPass, 2_000.0, 0.7);
+    let mut body_noise = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut body_filter = Svf::new(FilterMode::LowPass, 1_800.0, 0.8);
+    let mut boom = Osc::new(Wave::Sine);
+    let low = 110.0 * rng.jitter(0.1);
+    let mut out = render(0.6, |t| {
+        let crack = crack_filter.process(crack_noise.next()) * perc(t, 0.000_2, 0.02);
+        let body = body_filter.run(body_noise.next(), glide(t, 1_800.0, 250.0, 0.08), 0.8)
+            * perc(t, 0.002, 0.35);
+        let sub = saturate(
+            boom.next(glide(t, low, low * 0.6, 0.05)) * perc(t, 0.001, 0.25),
+            2.0,
+        );
+        crack * 0.8 + body * 1.2 + sub * 0.6
+    });
+    grains(rng, &mut out, 14, (0.03, 0.5), (1_000.0, 4_000.0), 0.3);
+    out
+}
+
+/// A cluster bomb bursting: a pop and the tinny rattle of bomblets scattering.
+fn cluster_burst(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(180.0, 90.0, 0.12, 2.0);
+    for time in scatter(rng, 6, 0.02, 0.22, 1.2) {
+        let base = rng.range(1_800.0, 2_600.0);
+        let tink = clank(rng, base, 0.06);
+        mix_into(&mut out, &tink, time, rng.range(0.25, 0.4));
+    }
+    let hiss = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        3_000.0,
+        1.0,
+        0.15,
+    );
+    mix_into(&mut out, &hiss, 0.0, 0.4);
+    out
+}
+
+/// A shaped charge: a hard, bright crack and a jet roaring away down the tunnel.
+fn shaped_blast(rng: &mut Rng) -> Vec<f32> {
+    let mut crack_noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut crack_filter = Svf::new(FilterMode::HighPass, 1_200.0, 0.7);
+    let mut jet_noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut jet_filter = Svf::new(FilterMode::BandPass, 3_000.0, 1.2);
+    let mut boom = Osc::new(Wave::Sine);
+    let low = 75.0 * rng.jitter(0.06);
+    let mut out = render(1.5, |t| {
+        let crack = crack_filter.process(crack_noise.next()) * perc(t, 0.000_2, 0.05);
+        let jet = jet_filter.run(jet_noise.next(), glide(t, 4_000.0, 500.0, 0.35), 1.2)
+            * segments(t, &[(0.0, 0.0), (0.02, 1.0), (0.5, 0.45), (1.3, 0.0)]);
+        let sub = saturate(
+            boom.next(glide(t, low, low * 0.5, 0.12)) * perc(t, 0.002, 0.8),
+            2.5,
+        );
+        crack * 1.1 + jet * 1.6 + sub * 0.6
+    });
+    for time in scatter(rng, 10, 0.08, 1.1, 1.3) {
+        let chunk = thump(rng.range(160.0, 260.0), 110.0, 0.05, 1.5);
+        mix_into(&mut out, &chunk, time, rng.range(0.1, 0.2));
+    }
+    for sample in &mut out {
+        *sample = saturate(*sample, 1.4);
+    }
+    out
+}
+
+/// A mining charge: a deep, rolling earth-moving boom with a long rumble of settling rock.
+fn deep_blast(rng: &mut Rng) -> Vec<f32> {
+    let mut boom = Osc::new(Wave::Sine);
+    let mut body_noise = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut body_filter = Svf::new(FilterMode::LowPass, 900.0, 0.9);
+    let low = 48.0 * rng.jitter(0.06);
+    let mut out = render(2.6, |t| {
+        let sub = saturate(
+            boom.next(glide(t, low, low * 0.55, 0.25)) * perc(t, 0.004, 1.8),
+            3.0,
+        );
+        let body = body_filter.run(body_noise.next(), glide(t, 1_400.0, 120.0, 0.4), 0.9)
+            * perc(t, 0.004, 2.2);
+        sub * 0.9 + body * 1.6
+    });
+    grains(rng, &mut out, 70, (0.15, 2.4), (300.0, 1_800.0), 0.4);
+    for sample in &mut out {
+        *sample = saturate(*sample, 1.6);
+    }
+    out
+}
+
+/// An incendiary going up: a soft thump and a roaring, rising rush of flame.
+fn fire_whoosh(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::LowPass, 400.0, 0.9);
+    let mut out = render(1.0, |t| {
+        filter.run(noise.next(), glide(t, 300.0, 2_600.0, 0.15), 0.9)
+            * segments(t, &[(0.0, 0.0), (0.06, 1.0), (0.4, 0.6), (1.0, 0.0)])
+    });
+    mix_into(&mut out, &thump(120.0, 70.0, 0.15, 1.8), 0.0, 0.7);
+    scatter_grains(
+        rng,
+        &mut out,
+        24,
+        (0.05, 0.9),
+        (1_500.0, 5_000.0),
+        0.25,
+        true,
+    );
+    out
+}
+
+/// Fire spreading: dry pops and crackles over a breath of flame.
+fn fire_crackle(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 1_200.0, 0.8);
+    let mut out = render(0.45, |t| {
+        filter.process(noise.next()) * segments(t, &[(0.0, 0.0), (0.05, 0.4), (0.45, 0.0)])
+    });
+    for time in scatter(rng, 9, 0.0, 0.4, 1.0) {
+        let pop = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::HighPass,
+            rng.range(2_000.0, 5_000.0),
+            0.8,
+            0.006,
+        );
+        mix_into(&mut out, &pop, time, rng.range(0.4, 0.9));
+    }
+    out
+}
+
+/// An EMP: a descending electric zap with a buzzing, ringing tail.
+fn emp_pulse(rng: &mut Rng) -> Vec<f32> {
+    let mut saw = Osc::new(Wave::Saw);
+    let mut fm = Fm::default();
+    let mut crush = Decimator::default();
+    let mut filter = Svf::new(FilterMode::LowPass, 6_000.0, 1.4);
+    let start = 1_800.0 * rng.jitter(0.04);
+    let mut echo = Delay::new(0.4).with_damping(0.3);
+    render(1.1, |t| {
+        let frequency = glide(t, start, 90.0, 0.18);
+        let zap = crush.process(saw.next(frequency), 6.0) * perc(t, 0.001, 0.45);
+        let ring = fm.next(frequency * 0.5, 1.41, 2.0 * decay(t, 0.3)) * perc(t, 0.005, 0.7);
+        let dry = filter.run(zap * 0.6 + ring * 0.5, glide(t, 8_000.0, 900.0, 0.3), 1.4);
+        dry + echo.process(dry, 0.11, 0.4) * 0.4
+    })
+}
+
+/// A flare striking: a scratch, a pop and a sputtering hiss.
+fn flare_ignite(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::HighPass, 2_500.0, 0.7);
+    let sputter_rate = rng.range(18.0, 26.0);
+    let mut out = render(0.9, |t| {
+        let flutter = 0.6 + 0.4 * sine(t, sputter_rate).abs();
+        filter.process(noise.next())
+            * segments(t, &[(0.0, 0.0), (0.04, 1.0), (0.25, 0.5), (0.9, 0.0)])
+            * flutter
+    });
+    mix_into(&mut out, &thump(300.0, 180.0, 0.05, 2.0), 0.03, 0.5);
     out
 }
 

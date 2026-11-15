@@ -33,6 +33,8 @@ mod entities;
 #[cfg(test)]
 mod entity_tests;
 #[cfg(test)]
+mod explosive_tests;
+#[cfg(test)]
 mod flight_tests;
 mod garage;
 #[cfg(test)]

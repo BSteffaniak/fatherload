@@ -119,6 +119,10 @@ pub enum SessionServiceRequest {
         cost: u32,
     },
     BuyMiningRockets,
+    /// One pack of a special explosive from [`crate::explosive::EXPLOSIVE_OFFERS`].
+    BuyExplosives {
+        kind: crate::explosive::ExplosiveKind,
+    },
     ClaimFreeTestCharge,
     SalvagePatchHull,
     Finance,

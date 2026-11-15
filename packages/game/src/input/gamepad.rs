@@ -86,8 +86,13 @@ pub enum PadAction {
     Pause,
     /// Pressed: fire the scanner.
     Scan,
-    /// Pressed: drop a bomb.
+    /// Pressed: drop, throw or place the selected explosive.
     Bomb,
+    /// Pressed: select the next carried explosive kind.
+    CycleExplosive,
+    /// Tapped: fire the remote detonator (every waiting C4 at once). Held for
+    /// [`DETONATE_HOLD_SECONDS`]: fire them in sequence instead.
+    Detonate,
     /// Pressed: previous tab / column in menus that have them.
     TabPrevious,
     /// Pressed: next tab / column in menus that have them.
@@ -108,9 +113,15 @@ pub const PAD_BINDINGS: &[(PadAction, PadButton)] = &[
     (PadAction::Pause, PadButton::Menu),
     (PadAction::Scan, PadButton::LeftBumper),
     (PadAction::Bomb, PadButton::RightBumper),
+    (PadAction::Detonate, PadButton::LeftTrigger),
+    (PadAction::CycleExplosive, PadButton::RightStick),
     (PadAction::TabPrevious, PadButton::LeftBumper),
     (PadAction::TabNext, PadButton::RightBumper),
 ];
+
+/// How long the detonator button is held before it fires charges in sequence (a shorter tap
+/// fires them all at once, on release).
+pub const DETONATE_HOLD_SECONDS: f32 = 0.4;
 
 /// The first button bound to `action` (what prompts show).
 #[must_use]
@@ -255,11 +266,17 @@ pub struct PadMapper {
     previous: PadState,
     vertical: MenuRepeat,
     horizontal: MenuRepeat,
+    /// How long the detonator has been held (`None`: not held).
+    detonate_held: Option<f32>,
+    /// The current hold already fired the sequenced detonator.
+    detonate_sequenced: bool,
 }
 
 impl PadMapper {
     /// Maps this frame's `state` (`delta_seconds` since the last frame).
     pub fn map(&mut self, state: &PadState, delta_seconds: f32) -> PlayerInput {
+        let (detonate, detonate_sequence) =
+            self.detonator(state.action_held(PadAction::Detonate), delta_seconds);
         let previous = &self.previous;
         let pressed = |action| state.action_pressed_since(previous, action);
         let vertical = state.vertical_direction();
@@ -269,6 +286,10 @@ impl PadMapper {
         let horizontal_step = self
             .horizontal
             .update(state.horizontal_direction(), delta_seconds);
+        let aiming = state
+            .axis(PadAxis::RightX)
+            .hypot(state.axis(PadAxis::RightY))
+            >= STICK_DEADZONE;
         let input = PlayerInput {
             horizontal: state.horizontal(),
             thrust: state.action_held(PadAction::Thrust) || vertical < 0,
@@ -281,6 +302,19 @@ impl PadMapper {
             map: pressed(PadAction::Map),
             scan: pressed(PadAction::Scan),
             bomb: pressed(PadAction::Bomb),
+            cycle_explosive: pressed(PadAction::CycleExplosive),
+            detonate,
+            detonate_sequence,
+            aim_x: if aiming {
+                state.axis(PadAxis::RightX)
+            } else {
+                0.0
+            },
+            aim_y: if aiming {
+                state.axis(PadAxis::RightY)
+            } else {
+                0.0
+            },
             tab_previous: pressed(PadAction::TabPrevious),
             tab_next: pressed(PadAction::TabNext),
             menu_up: vertical_step < 0,
@@ -292,6 +326,32 @@ impl PadMapper {
         };
         self.previous.clone_from(state);
         input
+    }
+
+    /// The detonator button: a tap fires on release (all at once); a hold past
+    /// [`DETONATE_HOLD_SECONDS`] fires the sequence once. Returns `(all, sequence)`.
+    fn detonator(&mut self, held: bool, delta_seconds: f32) -> (bool, bool) {
+        match (held, self.detonate_held) {
+            (true, None) => {
+                self.detonate_held = Some(0.0);
+                self.detonate_sequenced = false;
+                (false, false)
+            }
+            (true, Some(seconds)) => {
+                let seconds = seconds + delta_seconds.max(0.0);
+                self.detonate_held = Some(seconds);
+                if seconds >= DETONATE_HOLD_SECONDS && !self.detonate_sequenced {
+                    self.detonate_sequenced = true;
+                    return (false, true);
+                }
+                (false, false)
+            }
+            (false, Some(_)) => {
+                self.detonate_held = None;
+                (!self.detonate_sequenced, false)
+            }
+            (false, None) => (false, false),
+        }
     }
 
     /// The state mapped last frame.
@@ -360,6 +420,8 @@ mod tests {
             PadAction::Pause,
             PadAction::Scan,
             PadAction::Bomb,
+            PadAction::CycleExplosive,
+            PadAction::Detonate,
             PadAction::TabPrevious,
             PadAction::TabNext,
         ] {

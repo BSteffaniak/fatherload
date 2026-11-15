@@ -18,7 +18,7 @@ use crate::{
     camera_lead::CameraLeads,
     effects::{Effects, EventFeed},
     input::{PlayerInput, devices::InputDevice},
-    input_mapping::seat_input,
+    input_mapping::seat_input_with,
     online::{
         self, DEFAULT_PORT,
         client::OnlineClient,
@@ -254,7 +254,16 @@ impl LocalGame {
         let seats = self.seats().to_vec();
         for (index, seat) in seats.iter().enumerate() {
             let mut seat_frame = match inputs.get(index) {
-                Some(sampled) if self.shell.gameplay_input_enabled(index) => seat_input(sampled),
+                Some(sampled) if self.shell.gameplay_input_enabled(index) => {
+                    let player = self.runtime.world().player(seat.player);
+                    let selection = &mut self.shell.seat_mut(index).explosives;
+                    if selection.observe(sampled, player) {
+                        report
+                            .sound_cues
+                            .push(PlacedCue::interface(crate::shell::SoundCue::UiMove));
+                    }
+                    seat_input_with(sampled, selection)
+                }
                 _ => SeatInput::default(),
             };
             if let Some(actions) = seat_actions.get_mut(index) {

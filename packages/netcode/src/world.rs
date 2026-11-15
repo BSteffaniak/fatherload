@@ -111,6 +111,12 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::BouldersChanged => (12, None),
         GameplayEventKind::BombDetonated { .. } => (13, None),
         GameplayEventKind::BombBounced { .. } => (32, None),
+        GameplayEventKind::ExplosiveDeployed { player_id, .. } => (33, Some(player_id)),
+        GameplayEventKind::RemoteDetonation { player_id } => (34, Some(player_id)),
+        GameplayEventKind::ChargeStuck { .. } => (35, None),
+        GameplayEventKind::ExplosiveDetonated { .. } => (36, None),
+        GameplayEventKind::ClusterSplit { .. } => (37, None),
+        GameplayEventKind::FireSpread { .. } => (38, None),
         GameplayEventKind::PoiOpened { player_id, .. } => (14, Some(player_id)),
         GameplayEventKind::PoiDiscovered { player_id, .. } => (15, Some(player_id)),
         GameplayEventKind::VaultOpened { .. } => (16, None),
@@ -277,6 +283,8 @@ impl NetSimulation for WorldState {
         matches!(
             action,
             PlayerCommand::PlaceBomb
+                | PlayerCommand::DeployExplosive { .. }
+                | PlayerCommand::RemoteDetonate { .. }
                 | PlayerCommand::UseScanner
                 | PlayerCommand::PlaceInfrastructure { .. }
         )

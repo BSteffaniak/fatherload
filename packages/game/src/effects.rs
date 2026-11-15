@@ -3,10 +3,12 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use fatherload_simulation::{GameplayEventKind, PlayerId, WorldState};
+use fatherload_simulation::{
+    BlastDirection, ExplosiveKind, GameplayEventKind, PlayerId, WorldState,
+};
 
 use crate::{
-    audio::cues::{PlacedCue, event_cue},
+    audio::cues::{PlacedCue, detonation_cue, event_cue},
     runtime::{RuntimeEvent, RuntimeEventKind},
     shell::SoundCue,
 };
@@ -63,6 +65,25 @@ pub struct Explosion {
     pub x: f32,
     pub y: f32,
     pub age: f32,
+    /// What went off (the plain bomb for [`GameplayEventKind::BombDetonated`]); decides the
+    /// look: a shaped charge's jet, an EMP's ring, a mining charge's wide dust.
+    pub kind: ExplosiveKind,
+    /// Which way a shaped charge cut.
+    pub direction: BlastDirection,
+}
+
+impl Explosion {
+    /// A plain bomb blast at `(x, y)`.
+    #[must_use]
+    pub const fn bomb(x: f32, y: f32) -> Self {
+        Self {
+            x,
+            y,
+            age: 0.0,
+            kind: ExplosiveKind::Bomb,
+            direction: BlastDirection::Down,
+        }
+    }
 }
 
 /// Transient presentation effects.
@@ -160,12 +181,60 @@ impl Effects {
                     #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
                     let (x, y) = (x as f32, y as f32);
                     if self.explosions.len() < 64 {
-                        self.explosions.push(Explosion { x, y, age: 0.0 });
+                        self.explosions.push(Explosion::bomb(x, y));
                         self.spawn_blast_debris(x, y);
                     }
                     if blast_cues < 8 {
                         cues.push(PlacedCue::world(SoundCue::Explosion, x, y));
                         blast_cues += 1;
+                    }
+                    continue;
+                }
+                GameplayEventKind::ExplosiveDetonated {
+                    bomb_id,
+                    kind,
+                    x,
+                    y,
+                    direction,
+                } => {
+                    if !self.remember_blast(bomb_id) {
+                        continue;
+                    }
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    if self.explosions.len() < 64 {
+                        self.explosions.push(Explosion {
+                            x,
+                            y,
+                            age: 0.0,
+                            kind,
+                            direction,
+                        });
+                        match kind {
+                            ExplosiveKind::Emp => {}
+                            ExplosiveKind::Flare | ExplosiveKind::Incendiary => {
+                                self.spawn_sparks(x, y);
+                            }
+                            _ => self.spawn_blast_debris(x, y),
+                        }
+                    }
+                    if blast_cues < 8 {
+                        cues.push(PlacedCue::world(detonation_cue(kind), x, y));
+                        blast_cues += 1;
+                    }
+                    continue;
+                }
+                GameplayEventKind::ChargeStuck { x, y, .. }
+                | GameplayEventKind::ClusterSplit { x, y, .. }
+                | GameplayEventKind::FireSpread { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    self.spawn_sparks(x, y);
+                    if impact_cues < 4
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::world(cue, x, y));
+                        impact_cues += 1;
                     }
                     continue;
                 }
@@ -219,6 +288,21 @@ impl Effects {
             }
         }
         cues
+    }
+
+    /// Records a detonation as presented; `false` if it was already (a predicting client sees
+    /// it twice).
+    fn remember_blast(&mut self, bomb_id: u64) -> bool {
+        if !self.presented_blasts.insert(bomb_id) {
+            return false;
+        }
+        self.blast_order.push_back(bomb_id);
+        if self.blast_order.len() > PRESENTED_EVENT_HISTORY
+            && let Some(expired) = self.blast_order.pop_front()
+        {
+            self.presented_blasts.remove(&expired);
+        }
+        true
     }
 
     fn spawn_blast_debris(&mut self, x: f32, y: f32) {
@@ -283,12 +367,18 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::QuestCompleted { player_id, .. }
         | GameplayEventKind::QuestFailed { player_id, .. }
         | GameplayEventKind::BlueprintCompleted { player_id, .. }
-        | GameplayEventKind::RigCustomized { player_id } => Some(player_id),
+        | GameplayEventKind::RigCustomized { player_id }
+        | GameplayEventKind::ExplosiveDeployed { player_id, .. }
+        | GameplayEventKind::RemoteDetonation { player_id } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
         | GameplayEventKind::BombDetonated { .. }
         | GameplayEventKind::BombBounced { .. }
+        | GameplayEventKind::ChargeStuck { .. }
+        | GameplayEventKind::ExplosiveDetonated { .. }
+        | GameplayEventKind::ClusterSplit { .. }
+        | GameplayEventKind::FireSpread { .. }
         | GameplayEventKind::VaultOpened { .. }
         | GameplayEventKind::VaultLockReset { .. } => None,
     }

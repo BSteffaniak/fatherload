@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     command::PlayerCommand,
+    explosive::{BlastDirection, ExplosiveKind},
     ids::{InputSequence, PlayerId, SimulationTick},
     poi::{PoiKind, PoiReward},
     quest::{BlueprintId, QuestFailure, QuestId},
@@ -58,6 +59,45 @@ pub enum GameplayEventKind {
         y: i32,
     },
     BombBounced {
+        bomb_id: u64,
+        x: i32,
+        y: i32,
+    },
+    /// A player deployed (dropped, threw or placed) an explosive other than via
+    /// [`PlayerCommand::PlaceBomb`].
+    ExplosiveDeployed {
+        player_id: PlayerId,
+        kind: ExplosiveKind,
+    },
+    /// A player fired their remote detonator and at least one charge was armed by it.
+    RemoteDetonation {
+        player_id: PlayerId,
+    },
+    /// A sticky charge (sticky bomb, C4, shaped charge) stuck to a surface.
+    ChargeStuck {
+        bomb_id: u64,
+        kind: ExplosiveKind,
+        x: i32,
+        y: i32,
+    },
+    /// An explosive other than the plain bomb went off ([`Self::BombDetonated`] stays the plain
+    /// bomb's event). For a flare this is it lighting up; for an EMP, its pulse.
+    ExplosiveDetonated {
+        bomb_id: u64,
+        kind: ExplosiveKind,
+        x: i32,
+        y: i32,
+        /// Which way a shaped charge cut (meaningless for the other kinds).
+        direction: BlastDirection,
+    },
+    /// A cluster bomb burst and released its bomblets.
+    ClusterSplit {
+        bomb_id: u64,
+        x: i32,
+        y: i32,
+    },
+    /// An incendiary's fire spread one ring further.
+    FireSpread {
         bomb_id: u64,
         x: i32,
         y: i32,
@@ -178,6 +218,11 @@ pub(crate) const fn gameplay_event_for_applied_command(
         | PlayerCommand::Service(_) => GameplayEventKind::PurchaseCompleted { player_id },
         PlayerCommand::SellCargo => GameplayEventKind::CargoChanged { player_id },
         PlayerCommand::PlaceBomb => GameplayEventKind::BombPlaced { player_id },
+        PlayerCommand::DeployExplosive { kind, .. } => GameplayEventKind::ExplosiveDeployed {
+            player_id,
+            kind: *kind,
+        },
+        PlayerCommand::RemoteDetonate { .. } => GameplayEventKind::RemoteDetonation { player_id },
         PlayerCommand::PlaceInfrastructure { .. } => {
             GameplayEventKind::InfrastructurePlaced { player_id }
         }

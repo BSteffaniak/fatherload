@@ -1,7 +1,9 @@
 //! What the game asks to hear: [`SoundCue`]s placed at a source, the cue -> patch table, and the
 //! gameplay event -> cue table. Pure data, no device access.
 
-use fatherload_simulation::{GameplayEventKind, PlayerId, PoiKind};
+use fatherload_simulation::{
+    ExplosiveKind, GameplayEventKind, PlayerId, PoiKind, explosive::Deployment,
+};
 
 use super::patch::Patch;
 use crate::shell::SoundCue;
@@ -89,6 +91,41 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::VaultOpened => Patch::VaultFanfare,
         SoundCue::VaultReset => Patch::VaultReset,
         SoundCue::SprayPaint => Patch::SprayPaint,
+        SoundCue::ExplosiveThrow => Patch::ThrowWhoosh,
+        SoundCue::ChargeStuck => Patch::ChargeStick,
+        SoundCue::Detonator => Patch::Detonator,
+        SoundCue::SmallBlast => Patch::SmallBlast,
+        SoundCue::ClusterBurst => Patch::ClusterBurst,
+        SoundCue::ShapedBlast => Patch::ShapedBlast,
+        SoundCue::DeepBlast => Patch::DeepBlast,
+        SoundCue::FireWhoosh => Patch::FireWhoosh,
+        SoundCue::FireCrackle => Patch::FireCrackle,
+        SoundCue::EmpPulse => Patch::EmpPulse,
+        SoundCue::FlareIgnite => Patch::FlareIgnite,
+    }
+}
+
+/// The blast each explosive kind goes off with (exhaustive: a new kind needs a sound).
+#[must_use]
+pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
+    match kind {
+        ExplosiveKind::Bomb | ExplosiveKind::Sticky | ExplosiveKind::C4 => SoundCue::Explosion,
+        ExplosiveKind::Cluster | ExplosiveKind::Bomblet => SoundCue::SmallBlast,
+        ExplosiveKind::Shaped => SoundCue::ShapedBlast,
+        ExplosiveKind::Mining => SoundCue::DeepBlast,
+        ExplosiveKind::Incendiary => SoundCue::FireWhoosh,
+        ExplosiveKind::Emp => SoundCue::EmpPulse,
+        ExplosiveKind::Flare => SoundCue::FlareIgnite,
+    }
+}
+
+/// The sound of deploying `kind`: a whoosh for throws, the arming clank for drops and placed
+/// charges.
+#[must_use]
+pub const fn deploy_cue(kind: ExplosiveKind) -> SoundCue {
+    match kind.deployment() {
+        Deployment::Throw => SoundCue::ExplosiveThrow,
+        Deployment::Drop | Deployment::Place => SoundCue::BombPlaced,
     }
 }
 
@@ -113,6 +150,12 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::PlayerDamaged { .. } => Some(SoundCue::Damage),
         GameplayEventKind::BombDetonated { .. } => Some(SoundCue::Explosion),
         GameplayEventKind::BombBounced { .. } => Some(SoundCue::BombBounce),
+        GameplayEventKind::ExplosiveDeployed { kind, .. } => Some(deploy_cue(*kind)),
+        GameplayEventKind::RemoteDetonation { .. } => Some(SoundCue::Detonator),
+        GameplayEventKind::ChargeStuck { .. } => Some(SoundCue::ChargeStuck),
+        GameplayEventKind::ExplosiveDetonated { kind, .. } => Some(detonation_cue(*kind)),
+        GameplayEventKind::ClusterSplit { .. } => Some(SoundCue::ClusterBurst),
+        GameplayEventKind::FireSpread { .. } => Some(SoundCue::FireCrackle),
         GameplayEventKind::PoiOpened { poi, .. } => Some(match poi {
             PoiKind::SupplyCache | PoiKind::RivalClaim => SoundCue::CrateOpened,
             PoiKind::DerelictRig | PoiKind::Vault | PoiKind::Formation => SoundCue::SalvageOpened,
@@ -171,6 +214,12 @@ mod tests {
             | GameplayEventKind::BouldersChanged
             | GameplayEventKind::BombDetonated { .. }
             | GameplayEventKind::BombBounced { .. }
+            | GameplayEventKind::ExplosiveDeployed { .. }
+            | GameplayEventKind::RemoteDetonation { .. }
+            | GameplayEventKind::ChargeStuck { .. }
+            | GameplayEventKind::ExplosiveDetonated { .. }
+            | GameplayEventKind::ClusterSplit { .. }
+            | GameplayEventKind::FireSpread { .. }
             | GameplayEventKind::PoiOpened { .. }
             | GameplayEventKind::PoiDiscovered { .. }
             | GameplayEventKind::VaultOpened { .. }
@@ -231,6 +280,33 @@ mod tests {
             },
             GameplayEventKind::RigCustomized { player_id },
         ];
+        events.push(GameplayEventKind::RemoteDetonation { player_id });
+        events.push(GameplayEventKind::ClusterSplit {
+            bomb_id: 1,
+            x: 0,
+            y: 0,
+        });
+        events.push(GameplayEventKind::FireSpread {
+            bomb_id: 1,
+            x: 0,
+            y: 0,
+        });
+        for kind in ExplosiveKind::ALL {
+            events.push(GameplayEventKind::ExplosiveDeployed { player_id, kind });
+            events.push(GameplayEventKind::ChargeStuck {
+                bomb_id: 1,
+                kind,
+                x: 0,
+                y: 0,
+            });
+            events.push(GameplayEventKind::ExplosiveDetonated {
+                bomb_id: 1,
+                kind,
+                x: 0,
+                y: 0,
+                direction: fatherload_simulation::BlastDirection::Down,
+            });
+        }
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
@@ -267,6 +343,17 @@ mod tests {
     }
 
     #[test]
+    fn every_explosive_kind_has_its_own_blast_and_throws_whoosh() {
+        for kind in ExplosiveKind::ALL {
+            let cue = detonation_cue(kind);
+            assert!(!cue_patch(cue).looped(), "{kind:?}");
+        }
+        assert_eq!(detonation_cue(ExplosiveKind::Shaped), SoundCue::ShapedBlast);
+        assert_eq!(deploy_cue(ExplosiveKind::Sticky), SoundCue::ExplosiveThrow);
+        assert_eq!(deploy_cue(ExplosiveKind::C4), SoundCue::BombPlaced);
+    }
+
+    #[test]
     fn every_cue_has_a_distinct_rendered_patch() {
         let cues = [
             SoundCue::Drill,
@@ -290,6 +377,17 @@ mod tests {
             SoundCue::SalvageOpened,
             SoundCue::VaultOpened,
             SoundCue::VaultReset,
+            SoundCue::ExplosiveThrow,
+            SoundCue::ChargeStuck,
+            SoundCue::Detonator,
+            SoundCue::SmallBlast,
+            SoundCue::ClusterBurst,
+            SoundCue::ShapedBlast,
+            SoundCue::DeepBlast,
+            SoundCue::FireWhoosh,
+            SoundCue::FireCrackle,
+            SoundCue::EmpPulse,
+            SoundCue::FlareIgnite,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

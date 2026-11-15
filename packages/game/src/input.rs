@@ -53,6 +53,16 @@ pub struct PlayerInput {
     pub fullscreen: bool,
     pub local_multiplayer_toggle: bool,
     pub bomb: bool,
+    /// Pressed: select the next carried explosive kind.
+    pub cycle_explosive: bool,
+    /// Pressed: fire the remote detonator (every waiting C4 at once).
+    pub detonate: bool,
+    /// Pressed: fire the remote detonator in sequence (one charge after another).
+    pub detonate_sequence: bool,
+    /// Free aim for throws (a controller's right stick past its deadzone), -1..=1 each way
+    /// (+y is down); zero when not aiming.
+    pub aim_x: f32,
+    pub aim_y: f32,
     pub scan: bool,
     pub place_relay: bool,
     pub place_drone: bool,
@@ -121,6 +131,11 @@ impl PlayerInput {
             fullscreen,
             local_multiplayer_toggle,
             bomb,
+            cycle_explosive,
+            detonate,
+            detonate_sequence,
+            aim_x: _,
+            aim_y: _,
             scan,
             place_relay,
             place_drone,
@@ -169,6 +184,9 @@ impl PlayerInput {
                 fullscreen,
                 local_multiplayer_toggle,
                 bomb,
+                cycle_explosive,
+                detonate,
+                detonate_sequence,
                 scan,
                 place_relay,
                 place_drone,
@@ -241,6 +259,19 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         local_multiplayer_toggle: primary.local_multiplayer_toggle
             || secondary.local_multiplayer_toggle,
         bomb: primary.bomb || secondary.bomb,
+        cycle_explosive: primary.cycle_explosive || secondary.cycle_explosive,
+        detonate: primary.detonate || secondary.detonate,
+        detonate_sequence: primary.detonate_sequence || secondary.detonate_sequence,
+        aim_x: if secondary.aim_x.hypot(secondary.aim_y) > primary.aim_x.hypot(primary.aim_y) {
+            secondary.aim_x
+        } else {
+            primary.aim_x
+        },
+        aim_y: if secondary.aim_x.hypot(secondary.aim_y) > primary.aim_x.hypot(primary.aim_y) {
+            secondary.aim_y
+        } else {
+            primary.aim_y
+        },
         scan: primary.scan || secondary.scan,
         place_relay: primary.place_relay || secondary.place_relay,
         place_drone: primary.place_drone || secondary.place_drone,
@@ -326,6 +357,11 @@ fn read_primary_keyboard_input_with_options(
         fullscreen: raylib.is_key_pressed(KeyboardKey::KEY_F11),
         local_multiplayer_toggle: raylib.is_key_pressed(KeyboardKey::KEY_F2),
         bomb: raylib.is_key_pressed(KeyboardKey::KEY_B),
+        cycle_explosive: raylib.is_key_pressed(KeyboardKey::KEY_Q),
+        detonate: raylib.is_key_pressed(KeyboardKey::KEY_F),
+        detonate_sequence: raylib.is_key_pressed(KeyboardKey::KEY_G),
+        aim_x: 0.0,
+        aim_y: 0.0,
         scan: raylib.is_key_pressed(KeyboardKey::KEY_C),
         place_relay: raylib.is_key_pressed(KeyboardKey::KEY_R),
         place_drone: raylib.is_key_pressed(KeyboardKey::KEY_T),
@@ -361,6 +397,7 @@ fn read_primary_keyboard_input_with_options(
 /// | Pause (the shared pause menu) | Right Alt (Right Option) |
 /// | Inventory, map | Numpad 1, Numpad 2 |
 /// | Bomb, scanner | Numpad 0, Numpad . |
+/// | Next explosive, detonate, detonate in sequence | Numpad 3, Numpad 4, Numpad 5 |
 ///
 /// Right Shift is a gamepad-style Back: it closes dialogs and leaves buildings but never
 /// pauses. The mouse wheel and Page Up/Down stay with the main keyboard (seat 1).
@@ -388,6 +425,9 @@ pub fn read_secondary_keyboard_input(raylib: &RaylibHandle) -> PlayerInput {
         inventory: raylib.is_key_pressed(KeyboardKey::KEY_KP_1),
         map: raylib.is_key_pressed(KeyboardKey::KEY_KP_2),
         bomb: raylib.is_key_pressed(KeyboardKey::KEY_KP_0),
+        cycle_explosive: raylib.is_key_pressed(KeyboardKey::KEY_KP_3),
+        detonate: raylib.is_key_pressed(KeyboardKey::KEY_KP_4),
+        detonate_sequence: raylib.is_key_pressed(KeyboardKey::KEY_KP_5),
         scan: raylib.is_key_pressed(KeyboardKey::KEY_KP_DECIMAL),
         ..PlayerInput::default()
     }

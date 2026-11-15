@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     cosmetics::{CosmeticItem, CosmeticUnlocks, RigCosmetics},
+    explosive::ExplosiveKind,
     item::{ItemContainer, ItemKind, Stowage},
     poi::PoiJournal,
     protection::HazardGear,
@@ -59,6 +60,9 @@ pub struct Player {
     pub hazard_gear: HazardGear,
     #[serde(default)]
     pub bombs: u32,
+    /// Special explosives carried, by kind (plain bombs stay in [`Self::bombs`]).
+    #[serde(default)]
+    pub explosives: BTreeMap<ExplosiveKind, u32>,
     #[serde(default)]
     pub loan_debt: u32,
     #[serde(default)]
@@ -127,6 +131,7 @@ impl Player {
             drill_mount_level: 0,
             hazard_gear: HazardGear::default(),
             bombs: 0,
+            explosives: BTreeMap::new(),
             loan_debt: 0,
             insured: false,
             insurance_tier: 0,
@@ -193,6 +198,46 @@ impl Player {
 
         self.cargo_bay.add(mineral, 1);
         true
+    }
+
+    /// Charges of `kind` carried (plain bombs come from [`Self::bombs`]).
+    #[must_use]
+    pub fn explosive_count(&self, kind: ExplosiveKind) -> u32 {
+        if kind == ExplosiveKind::Bomb {
+            self.bombs
+        } else {
+            self.explosives.get(&kind).copied().unwrap_or(0)
+        }
+    }
+
+    /// Adds `count` charges of `kind` (plain bombs go to [`Self::bombs`]).
+    pub fn add_explosives(&mut self, kind: ExplosiveKind, count: u32) {
+        if kind == ExplosiveKind::Bomb {
+            self.bombs = self.bombs.saturating_add(count);
+        } else if count > 0 {
+            let carried = self.explosives.entry(kind).or_default();
+            *carried = carried.saturating_add(count);
+        }
+    }
+
+    /// Takes one charge of `kind`, returning whether there was one.
+    pub fn take_explosive(&mut self, kind: ExplosiveKind) -> bool {
+        if kind == ExplosiveKind::Bomb {
+            if self.bombs == 0 {
+                return false;
+            }
+            self.bombs -= 1;
+            return true;
+        }
+        let Some(carried) = self.explosives.get_mut(&kind) else {
+            return false;
+        };
+        let had = *carried > 0;
+        *carried = carried.saturating_sub(1);
+        if *carried == 0 {
+            self.explosives.remove(&kind);
+        }
+        had
     }
 
     pub fn add_material(&mut self, material: StrategicResourceKind, count: u32) {

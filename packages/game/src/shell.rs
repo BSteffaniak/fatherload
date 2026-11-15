@@ -295,6 +295,28 @@ pub enum SoundCue {
     VaultReset,
     /// A garage paint job (spray can).
     SprayPaint,
+    /// An explosive thrown from a rig.
+    ExplosiveThrow,
+    /// A sticky charge (sticky bomb, C4, shaped charge) stuck to a surface.
+    ChargeStuck,
+    /// A remote detonator fired.
+    Detonator,
+    /// A bomblet or cluster bomb popping.
+    SmallBlast,
+    /// A cluster bomb bursting into bomblets.
+    ClusterBurst,
+    /// A shaped charge cutting its tunnel.
+    ShapedBlast,
+    /// A mining charge's deep blast.
+    DeepBlast,
+    /// An incendiary going up.
+    FireWhoosh,
+    /// An incendiary's fire spreading.
+    FireCrackle,
+    /// An EMP pulse.
+    EmpPulse,
+    /// A flare lighting up.
+    FlareIgnite,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -638,6 +660,8 @@ pub struct SeatUi {
     pub fanfare: Option<Fanfare>,
     /// The look being edited while the garage is open (live preview on the rig).
     pub garage: Option<GarageDraft>,
+    /// The explosive the seat's bomb button deploys, and which way its rig faces for throws.
+    pub explosives: crate::input_mapping::ExplosiveSelection,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -670,6 +694,7 @@ impl SeatUi {
             quest_abandon_armed: None,
             fanfare: None,
             garage: None,
+            explosives: crate::input_mapping::ExplosiveSelection::new(),
         }
     }
 
@@ -1197,6 +1222,11 @@ impl SeatUi {
             | SessionServiceRequest::ClaimFreeTestCharge => {
                 format!("Nix packed your charges. You now carry {}.", player.bombs)
             }
+            SessionServiceRequest::BuyExplosives { kind } => format!(
+                "Nix packed your {}s. You now carry {}.",
+                kind.name().to_lowercase(),
+                player.explosive_count(kind)
+            ),
             SessionServiceRequest::SalvagePatchHull => format!(
                 "Salvage Yard patch job restored {:.0} hull.",
                 player.hull - pending.hull
