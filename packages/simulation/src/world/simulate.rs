@@ -82,6 +82,7 @@ impl WorldState {
                         controls.thrust,
                     )
                 };
+                self.update_weapon(player_id, controls.weapon, tick.next(), &mut output);
             }
             for action in &input.actions {
                 let outcome = if !self.players.contains_key(&player_id) {

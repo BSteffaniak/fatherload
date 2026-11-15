@@ -428,6 +428,7 @@ impl WorldState {
             PlayerCommand::SetEnemyDifficulty(difficulty) => {
                 self.apply_enemy_difficulty(difficulty)
             }
+            PlayerCommand::MountWeapon { weapon } => self.mount_weapon(player_id, weapon),
         }
     }
 }

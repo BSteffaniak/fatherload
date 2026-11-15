@@ -4,11 +4,12 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use fatherload_simulation::{
-    BlastDirection, ExplosiveKind, GameplayEventKind, PlayerId, WorldState, item::ItemKind,
+    BlastDirection, ExplosiveKind, GameplayEventKind, PlayerId, WeaponKind, WorldState,
+    event::ImpactSurface, item::ItemKind,
 };
 
 use crate::{
-    audio::cues::{PlacedCue, detonation_cue, event_cue},
+    audio::cues::{PlacedCue, detonation_cue, event_cue, impact_cue, weapon_cue},
     runtime::{RuntimeEvent, RuntimeEventKind},
     shell::SoundCue,
 };
@@ -25,6 +26,34 @@ const MAX_PICKUP_FLIGHTS: usize = 96;
 /// Most pickup sounds one frame plays per player (a spray hoovered in one tick is a flurry,
 /// not a wall of identical chimes).
 const PICKUP_CUES_PER_FRAME: usize = 3;
+/// How long a muzzle flash (and a railgun's tracer) stays on screen.
+pub const SHOT_SECONDS: f32 = 0.16;
+/// How long a railgun tracer lingers.
+pub const RAIL_SECONDS: f32 = 0.4;
+
+/// A weapon shot's flash in world space, `age` seconds old: the muzzle flash at `(x, y)`
+/// pointing toward `(end_x, end_y)` (a hitscan shot's full tracer).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShotFlash {
+    pub weapon: WeaponKind,
+    pub x: f32,
+    pub y: f32,
+    pub end_x: f32,
+    pub end_y: f32,
+    pub age: f32,
+}
+
+impl ShotFlash {
+    /// How long this flash stays on screen.
+    #[must_use]
+    pub fn lifetime(&self) -> f32 {
+        if self.weapon == WeaponKind::Railgun {
+            RAIL_SECONDS
+        } else {
+            SHOT_SECONDS
+        }
+    }
+}
 
 /// Delivers each runtime event to presentation at most once, keyed by its stable identity
 /// `(epoch, tick, player, kind, ordinal)`. Host events are already unique; a predicting client
@@ -125,6 +154,7 @@ pub struct Effects {
     sparks: Vec<SparkParticle>,
     explosions: Vec<Explosion>,
     pickups: Vec<PickupFlight>,
+    shots: Vec<ShotFlash>,
     damage_cooldowns: BTreeMap<PlayerId, f32>,
     /// Items in each local player's bay last frame (a pickup is growth).
     cargo_totals: BTreeMap<PlayerId, u32>,
@@ -152,11 +182,18 @@ impl Effects {
         &self.pickups
     }
 
+    /// Live muzzle flashes and tracers.
+    #[must_use]
+    pub fn shots(&self) -> &[ShotFlash] {
+        &self.shots
+    }
+
     /// Clears everything (new world).
     pub fn clear(&mut self) {
         self.sparks.clear();
         self.explosions.clear();
         self.pickups.clear();
+        self.shots.clear();
         self.presented_blasts.clear();
         self.blast_order.clear();
         self.damage_cooldowns.clear();
@@ -182,6 +219,10 @@ impl Effects {
         }
         self.pickups
             .retain(|pickup| pickup.age < PICKUP_FLIGHT_SECONDS);
+        for shot in &mut self.shots {
+            shot.age += delta_seconds;
+        }
+        self.shots.retain(|shot| shot.age < shot.lifetime());
         for cooldown in self.damage_cooldowns.values_mut() {
             *cooldown -= delta_seconds;
         }
@@ -337,6 +378,49 @@ impl Effects {
                     }
                     continue;
                 }
+                GameplayEventKind::WeaponFired {
+                    player_id,
+                    weapon,
+                    x,
+                    y,
+                    end_x,
+                    end_y,
+                } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y, end_x, end_y) = (x as f32, y as f32, end_x as f32, end_y as f32);
+                    if self.shots.len() < 96 {
+                        self.shots.push(ShotFlash {
+                            weapon,
+                            x,
+                            y,
+                            end_x,
+                            end_y,
+                            age: 0.0,
+                        });
+                    }
+                    // Everyone hears every gun: local rigs from their seat, others in the world.
+                    let cue = weapon_cue(weapon);
+                    cues.push(if local_players.contains(&player_id) {
+                        PlacedCue::player(cue, player_id)
+                    } else {
+                        PlacedCue::world(cue, x, y)
+                    });
+                    continue;
+                }
+                GameplayEventKind::ProjectileImpact { x, y, surface, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    if surface == ImpactSurface::Terrain {
+                        self.spawn_dust(x, y);
+                    } else {
+                        self.spawn_sparks(x, y);
+                    }
+                    if impact_cues < 6 {
+                        cues.push(PlacedCue::world(impact_cue(surface), x, y));
+                        impact_cues += 1;
+                    }
+                    continue;
+                }
                 GameplayEventKind::EnemyAlerted { x, y, .. }
                 | GameplayEventKind::EnemyWindup { x, y, .. }
                 | GameplayEventKind::EnemyFired { x, y, .. }
@@ -361,6 +445,14 @@ impl Effects {
                     }
                     continue;
                 }
+                GameplayEventKind::EntityDestroyed { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    self.spawn_blast_debris(x, y);
+                    cues.push(PlacedCue::world(SoundCue::TargetDestroyed, x, y));
+                    continue;
+                }
+                GameplayEventKind::EntityDamaged { .. } => continue,
                 GameplayEventKind::BombBounced { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
                     let (x, y) = (x as f32, y as f32);
@@ -426,6 +518,24 @@ impl Effects {
             self.presented_blasts.remove(&expired);
         }
         true
+    }
+
+    /// A puff of rock chips where a shot struck terrain.
+    fn spawn_dust(&mut self, x: f32, y: f32) {
+        for grain in 0..5_u8 {
+            if self.sparks.len() >= 768 {
+                break;
+            }
+            let angle = f32::from(grain).mul_add(1.25, 3.6);
+            let speed = f32::from(grain).mul_add(18.0, 60.0);
+            self.sparks.push(SparkParticle {
+                x,
+                y,
+                velocity_x: angle.cos() * speed,
+                velocity_y: angle.sin().mul_add(speed, -70.0),
+                life: SPARK_LIFE_SECONDS * 0.6,
+            });
+        }
     }
 
     fn spawn_blast_debris(&mut self, x: f32, y: f32) {
@@ -502,7 +612,10 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::CaveDiscovered { player_id, .. }
         | GameplayEventKind::CaveCacheOpened { player_id, .. }
         | GameplayEventKind::RigStruck { player_id, .. }
-        | GameplayEventKind::EnemyDifficultyChanged { player_id, .. } => Some(player_id),
+        | GameplayEventKind::EnemyDifficultyChanged { player_id, .. }
+        | GameplayEventKind::WeaponFired { player_id, .. }
+        | GameplayEventKind::WeaponDry { player_id, .. }
+        | GameplayEventKind::WeaponMounted { player_id, .. } => Some(player_id),
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
@@ -520,7 +633,10 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::EnemyFired { .. }
         | GameplayEventKind::EnemyHurt { .. }
         | GameplayEventKind::EnemyKilled { .. }
-        | GameplayEventKind::EnemyStunned { .. } => None,
+        | GameplayEventKind::EnemyStunned { .. }
+        | GameplayEventKind::ProjectileImpact { .. }
+        | GameplayEventKind::EntityDamaged { .. }
+        | GameplayEventKind::EntityDestroyed { .. } => None,
     }
 }
 

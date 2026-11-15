@@ -97,6 +97,10 @@ pub enum PadAction {
     TabPrevious,
     /// Pressed: next tab / column in menus that have them.
     TabNext,
+    /// Held: fire the hardpoint weapon (a rig without one thrusts instead, as before).
+    FireWeapon,
+    /// Pressed: swap the next owned weapon onto the hardpoint.
+    CycleWeapon,
 }
 
 /// The controller layout: every `(action, button)` pair. An action may have several buttons
@@ -104,7 +108,8 @@ pub enum PadAction {
 /// prompts read this table too ([`primary_button`]), so they always match.
 pub const PAD_BINDINGS: &[(PadAction, PadButton)] = &[
     (PadAction::Thrust, PadButton::A),
-    (PadAction::Thrust, PadButton::RightTrigger),
+    (PadAction::FireWeapon, PadButton::RightTrigger),
+    (PadAction::CycleWeapon, PadButton::LeftStick),
     (PadAction::Confirm, PadButton::A),
     (PadAction::Interact, PadButton::X),
     (PadAction::Back, PadButton::B),
@@ -317,6 +322,9 @@ impl PadMapper {
             },
             tab_previous: pressed(PadAction::TabPrevious),
             tab_next: pressed(PadAction::TabNext),
+            fire: state.action_held(PadAction::FireWeapon),
+            fire_thrusts_unarmed: true,
+            cycle_weapon: pressed(PadAction::CycleWeapon),
             menu_up: vertical_step < 0,
             menu_down: vertical_step > 0,
             menu_left: horizontal_step < 0,
@@ -473,9 +481,14 @@ mod tests {
     }
 
     #[test]
-    fn right_trigger_and_up_also_thrust_and_down_drills() {
+    fn right_trigger_fires_up_also_thrusts_and_down_drills() {
         let mut mapper = PadMapper::default();
-        assert!(mapper.map(&pad(&[PadButton::RightTrigger]), DT).thrust);
+        // The right trigger fires the weapon; for a rig without one it still thrusts (the
+        // seat's input mapping decides, see `weapon_aim::trigger_thrusts`).
+        let trigger = mapper.map(&pad(&[PadButton::RightTrigger]), DT);
+        assert!(trigger.fire && trigger.fire_thrusts_unarmed && !trigger.thrust);
+        let cycle = mapper.map(&pad(&[PadButton::LeftStick]), DT);
+        assert!(cycle.cycle_weapon);
         assert!(mapper.map(&pad(&[PadButton::DPadUp]), DT).thrust);
         assert!(mapper.map(&stick(0.0, -0.9), DT).thrust);
         let down = mapper.map(&stick(0.0, 0.9), DT);

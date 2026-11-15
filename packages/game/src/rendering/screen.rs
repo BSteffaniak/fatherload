@@ -351,6 +351,7 @@ fn draw_view_prompt(
 }
 
 /// Credits and depth (top-right, clear of the depth ruler), plus the scanner and bomb chips.
+#[allow(clippy::too_many_lines, reason = "one panel, row by row")]
 fn draw_wallet_panel(
     draw: &mut RaylibDrawHandle<'_>,
     view: &ViewSnapshot<'_>,
@@ -398,13 +399,23 @@ fn draw_wallet_panel(
     let line_width = charge_line
         .as_ref()
         .map_or(0, |line| ui_kit::text_width(line, TextStyle::Body));
-    let panel_width = value_width.max(chips_width).max(line_width) + ui_kit::PANEL_PADDING * 2;
+    // A weapon row: the mounted gun, its tier and its capacitor charge or ammo.
+    let weapon_line = weapon_row(view);
+    let weapon_width = weapon_line.as_ref().map_or(0, |WeaponRow { label, .. }| {
+        ui_kit::text_width(label, TextStyle::Body) + icons::ICON_SIZE + 40
+    });
+    let panel_width = value_width
+        .max(chips_width)
+        .max(line_width)
+        .max(weapon_width)
+        + ui_kit::PANEL_PADDING * 2;
     let panel_width = panel_width.max(64);
     let x = (rect.x + rect.width) as i32 - 16 - panel_width;
     if x <= min_x {
         return;
     }
-    let height = if charge_line.is_some() { 56 } else { 45 };
+    let weapon_top = if charge_line.is_some() { 56 } else { 45 };
+    let height = weapon_top + if weapon_line.is_some() { 13 } else { 0 };
     ui_kit::panel(
         draw,
         Rectangle::new(x as f32, top as f32, panel_width as f32, height as f32),
@@ -437,6 +448,9 @@ fn draw_wallet_panel(
             if armed > 0 { ROSE } else { MIST },
         );
     }
+    if let Some(row) = &weapon_line {
+        draw_weapon_row(draw, row, x + 6, right, top + weapon_top - 2);
+    }
     if has_scanner {
         let ready = scan == "READY";
         let scan_width = ui_kit::text_width(&scan, TextStyle::Bold);
@@ -453,6 +467,73 @@ fn draw_wallet_panel(
             &icons::SCANNER,
             right - scan_width - icons::ICON_SIZE - 2,
             chip_y,
+        );
+    }
+}
+
+/// The HUD's weapon row: the mounted gun, its label, its ammo (ammo weapons) or capacitor
+/// charge (0..=1), and whether it can fire now.
+struct WeaponRow {
+    weapon: fatherload_simulation::WeaponKind,
+    label: String,
+    ammo: Option<u32>,
+    energy: f32,
+    ready: bool,
+}
+
+fn weapon_row(view: &ViewSnapshot<'_>) -> Option<WeaponRow> {
+    let mounted = view.player.mounted_weapon?;
+    let stats = mounted.kind.stats(mounted.mk);
+    let ammo = stats.ammo.map(|ammo| view.player.ammo(ammo));
+    Some(WeaponRow {
+        weapon: mounted.kind,
+        label: format!(
+            "{} {}",
+            mounted.kind.name().to_uppercase(),
+            crate::shell::arms::mk_name(mounted.mk).trim_start_matches("Mk ")
+        ),
+        ammo,
+        energy: (view.player.weapon.energy / view.player.battery_capacity().max(1.0))
+            .clamp(0.0, 1.0),
+        ready: ammo.map_or(view.player.weapon.energy >= stats.energy, |count| count > 0),
+    })
+}
+
+fn draw_weapon_row(draw: &mut RaylibDrawHandle<'_>, row: &WeaponRow, x: i32, right: i32, y: i32) {
+    ui_kit::icon(
+        draw,
+        crate::rendering::pixel_art::sprites::weapons::icon(row.weapon),
+        x,
+        y,
+    );
+    ui_kit::text(
+        draw,
+        &row.label,
+        x + icons::ICON_SIZE + 2,
+        y + 1,
+        TextStyle::Body,
+        if row.ready { MINT } else { FOG },
+    );
+    if let Some(count) = row.ammo {
+        ui_kit::text_right(
+            draw,
+            &format!("x{count}"),
+            right,
+            y + 1,
+            TextStyle::Bold,
+            if count > 0 { ORANGE } else { ROSE },
+        );
+    } else {
+        // The capacitor gauge.
+        let (bar_width, bar_x) = (28, right - 28);
+        draw.draw_rectangle(bar_x, y + 3, bar_width, 5, NIGHT);
+        let fill = ((bar_width - 2) as f32 * row.energy).round() as i32;
+        draw.draw_rectangle(
+            bar_x + 1,
+            y + 4,
+            fill.max(0),
+            3,
+            if row.ready { MINT } else { ROSE },
         );
     }
 }

@@ -301,6 +301,39 @@ pub fn draw_sprite_rotated(
     }
 }
 
+/// [`draw_sprite_rotated`], optionally mirrored vertically first (a side-on weapon pointing
+/// left stays the right way up).
+pub fn draw_sprite_rotated_flipped(
+    _draw: &mut impl RaylibDraw,
+    sprite: &SpriteDef,
+    frame: usize,
+    center: Vector2,
+    scale: f32,
+    degrees: f32,
+    flip_y: bool,
+) {
+    let (Some(texture), Some(rect)) = (current_atlas(), layout().frame(sprite.name, frame)) else {
+        return;
+    };
+    let width = rect.width as f32 * scale;
+    let height = rect.height as f32 * scale;
+    let mut source = rect.source();
+    if flip_y {
+        source.height = -source.height;
+    }
+    // SAFETY: like blit, the current atlas lives throughout the renderer's draw scope.
+    unsafe {
+        ffi::DrawTexturePro(
+            texture,
+            source,
+            Rectangle::new(center.x, center.y, width, height),
+            Vector2::new(width * 0.5, height * 0.5),
+            degrees,
+            Color::WHITE,
+        );
+    }
+}
+
 /// Draws `slice` stretched over `dest`; corners are `border * scale` units.
 pub fn draw_nine_slice(
     _draw: &mut impl RaylibDraw,

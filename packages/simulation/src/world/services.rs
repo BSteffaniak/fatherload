@@ -33,7 +33,8 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::TestMode(_)
         | PlayerCommand::DumpBlocks { .. }
         | PlayerCommand::SetCollectBlocks { .. }
-        | PlayerCommand::SetEnemyDifficulty(_) => None,
+        | PlayerCommand::SetEnemyDifficulty(_)
+        | PlayerCommand::MountWeapon { .. } => None,
     }
 }
 
@@ -59,6 +60,10 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
         }
         SessionServiceRequest::BuyBombBundle { .. }
         | SessionServiceRequest::BuyExplosives { .. }
+        | SessionServiceRequest::BuyWeapon { .. }
+        | SessionServiceRequest::UpgradeWeapon { .. }
+        | SessionServiceRequest::UpgradeBattery
+        | SessionServiceRequest::BuyAmmo { .. }
         | SessionServiceRequest::BuyMiningRockets
         | SessionServiceRequest::ClaimFreeTestCharge => &[SurfaceZone::Explosives],
         SessionServiceRequest::SalvagePatchHull
@@ -224,6 +229,14 @@ impl WorldState {
             SessionServiceRequest::BuyExplosives { kind } => {
                 self.buy_explosives(player_id, kind, shack_level)
             }
+            SessionServiceRequest::BuyWeapon { weapon } => {
+                self.buy_weapon(player_id, weapon, shack_level)
+            }
+            SessionServiceRequest::UpgradeWeapon { weapon } => {
+                self.upgrade_weapon(player_id, weapon)
+            }
+            SessionServiceRequest::UpgradeBattery => self.upgrade_battery(player_id),
+            SessionServiceRequest::BuyAmmo { ammo } => self.buy_ammo(player_id, ammo),
             SessionServiceRequest::BuyMiningRockets => {
                 let Some(player) = self.players.get_mut(&player_id) else {
                     return PlayerScopedCommandOutcome::UnknownPlayer;

@@ -26,7 +26,7 @@ use crate::rendering::rig_art::{
 use super::{ART, Pen, snap, text_art_width};
 
 /// World pixels from the rig's centre down to the bottom of its tracks.
-const FOOT_OFFSET: f32 = 12.0;
+pub(super) const FOOT_OFFSET: f32 = 12.0;
 
 /// The way each rig last faced, so a stopped rig keeps facing where it was going. Updated once
 /// per frame from the snapshot, before any view draws.
@@ -150,6 +150,7 @@ pub fn draw_rig(
         _ => top,
     };
     rig_art::paint_rig(&look, &pose).draw(draw, Vector2::new(left_x, body_y), ART, facing_left);
+    super::weapons::draw_mounted_weapon(draw, player, facing_left, ticks);
     let pen = Pen::at(left_x, body_y);
     draw_exhaust(draw, player, &look, pen, facing_left, ticks);
     // Dust kicked up behind the tracks.
@@ -309,6 +310,7 @@ mod tests {
             active_drill: None,
             tiers: crate::render_snapshot::RigTiers::STOCK,
             cosmetics: RigCosmetics::default_for(id),
+            weapon: None,
         }
     }
 

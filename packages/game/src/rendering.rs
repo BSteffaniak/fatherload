@@ -654,6 +654,11 @@ impl GameRenderer {
                     enemies: &snapshot.enemies,
                     rig_guards: &snapshot.rig_guards,
                     world_tick: snapshot.tick,
+                    projectiles: &snapshot.projectiles,
+                    targets: &snapshot.targets,
+                    beams: &snapshot.beams,
+                    shots: snapshot.shots,
+                    reticle: view.reticle,
                 },
             );
         }

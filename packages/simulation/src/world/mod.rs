@@ -90,6 +90,9 @@ mod timing;
 mod village_tests;
 mod villages;
 mod visibility;
+#[cfg(test)]
+mod weapon_tests;
+mod weapons;
 
 pub use discovery::{DiscoveredTiles, Discovery};
 pub use player_sections::{PlayerInventory, PlayerRig, RigBuild, join_player, split_player};

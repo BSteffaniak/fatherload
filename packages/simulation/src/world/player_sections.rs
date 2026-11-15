@@ -19,6 +19,7 @@ use crate::{
     protection::HazardGear,
     quest::QuestLog,
     village::VillageJournal,
+    weapon::{MountedWeapon, RigWeaponState, WeaponRack},
 };
 
 /// The per-tick parts of a [`Player`].
@@ -33,6 +34,9 @@ pub struct PlayerRig {
     pub x_remainder: f32,
     pub fuel: f32,
     pub hull: f32,
+    /// Capacitor energy, weapon cooldown, aim and trigger.
+    #[serde(default)]
+    pub weapon: RigWeaponState,
 }
 
 /// The public on-change parts of a [`Player`]: what other players' rendering shows of a rig
@@ -56,6 +60,9 @@ pub struct RigBuild {
     /// The garage paint job and attachments (`None`: the player's default look).
     #[serde(default)]
     pub cosmetics: Option<RigCosmetics>,
+    /// The weapon on the hardpoint.
+    #[serde(default)]
+    pub mounted_weapon: Option<MountedWeapon>,
 }
 
 /// The private on-change parts of a [`Player`]: inventory, credits, upgrades and kits.
@@ -97,6 +104,9 @@ pub struct PlayerInventory {
     /// Villages visited and charted, and an active shrine blessing.
     #[serde(default)]
     pub villages: VillageJournal,
+    /// Owned weapons and the capacitor level.
+    #[serde(default)]
+    pub weapon_rack: WeaponRack,
 }
 
 /// Splits a player into its per-tick, public and private parts (exhaustive: every field goes to
@@ -144,6 +154,9 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         cosmetics,
         cosmetic_unlocks,
         villages,
+        weapon_rack,
+        mounted_weapon,
+        weapon,
     } = player.clone();
     (
         PlayerRig {
@@ -154,6 +167,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             x_remainder,
             fuel,
             hull,
+            weapon,
         },
         RigBuild {
             drill_strength,
@@ -165,6 +179,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             crafted_bulkheads,
             drill_mount_level,
             cosmetics,
+            mounted_weapon,
         },
         PlayerInventory {
             fuel_capacity,
@@ -191,6 +206,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             quests,
             cosmetic_unlocks,
             villages,
+            weapon_rack,
         },
     )
 }
@@ -206,6 +222,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         x_remainder,
         fuel,
         hull,
+        weapon,
     } = rig;
     let RigBuild {
         drill_strength,
@@ -217,6 +234,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         crafted_bulkheads,
         drill_mount_level,
         cosmetics,
+        mounted_weapon,
     } = build;
     let PlayerInventory {
         fuel_capacity,
@@ -243,6 +261,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         quests,
         cosmetic_unlocks,
         villages,
+        weapon_rack,
     } = inventory;
     Player {
         x,
@@ -285,6 +304,9 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         cosmetics,
         cosmetic_unlocks,
         villages,
+        weapon_rack,
+        mounted_weapon,
+        weapon,
     }
 }
 

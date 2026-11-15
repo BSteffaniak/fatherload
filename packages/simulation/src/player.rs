@@ -13,6 +13,7 @@ use crate::{
     protection::HazardGear,
     quest::QuestLog,
     terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TilePosition},
+    weapon::{AmmoKind, MountedWeapon, RigWeaponState, WeaponKind, WeaponRack},
 };
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -105,6 +106,15 @@ pub struct Player {
     /// Villages visited and charted, and an active shrine blessing (private).
     #[serde(default)]
     pub villages: crate::village::VillageJournal,
+    /// Owned hardpoint weapons and the capacitor (private; see [`crate::weapon`]).
+    #[serde(default)]
+    pub weapon_rack: WeaponRack,
+    /// The weapon on the hardpoint (public: drawn on the rig).
+    #[serde(default)]
+    pub mounted_weapon: Option<MountedWeapon>,
+    /// Capacitor energy, cooldown and aim (per tick).
+    #[serde(default)]
+    pub weapon: RigWeaponState,
 }
 
 #[allow(
@@ -155,7 +165,55 @@ impl Player {
             cosmetics: None,
             cosmetic_unlocks: CosmeticUnlocks::default(),
             villages: crate::village::VillageJournal::default(),
+            weapon_rack: WeaponRack::default(),
+            mounted_weapon: None,
+            weapon: RigWeaponState {
+                energy: crate::weapon::battery_capacity(0),
+                ..RigWeaponState::default()
+            },
         }
+    }
+
+    /// Adds `weapon` to the rack at Mk I (a purchase, quest reward or picked-up weapon item)
+    /// and mounts it if the hardpoint is empty. Returns `false` if it was already owned.
+    pub fn receive_weapon(&mut self, weapon: WeaponKind) -> bool {
+        if self.weapon_rack.owned.contains_key(&weapon) {
+            return false;
+        }
+        self.weapon_rack.owned.insert(weapon, 0);
+        if self.mounted_weapon.is_none() {
+            self.mounted_weapon = Some(MountedWeapon {
+                kind: weapon,
+                mk: 0,
+            });
+        }
+        true
+    }
+
+    /// Mounts an owned weapon (`None` holsters it). Returns whether the hardpoint changed.
+    pub fn mount_weapon(&mut self, weapon: Option<WeaponKind>) -> bool {
+        let next = match weapon {
+            None => None,
+            Some(kind) => match self.weapon_rack.mk(kind) {
+                Some(mk) => Some(MountedWeapon { kind, mk }),
+                None => return false,
+            },
+        };
+        let changed = next != self.mounted_weapon;
+        self.mounted_weapon = next;
+        changed
+    }
+
+    /// Capacitor capacity at the rack's battery level.
+    #[must_use]
+    pub fn battery_capacity(&self) -> f32 {
+        crate::weapon::battery_capacity(self.weapon_rack.battery_level)
+    }
+
+    /// Rounds of `ammo` carried.
+    #[must_use]
+    pub fn ammo(&self, ammo: AmmoKind) -> u32 {
+        self.cargo_bay.count(ammo.item())
     }
 
     /// Unlocks a cosmetic item for this player (quest rewards, milestones, shops). Returns

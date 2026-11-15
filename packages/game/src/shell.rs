@@ -24,6 +24,7 @@ use crate::{
     save,
 };
 
+pub mod arms;
 mod garage;
 pub mod hopper;
 mod quests;
@@ -377,6 +378,28 @@ pub enum SoundCue {
     SmokeBurst,
     /// A scare charge's deafening bang.
     ScareBang,
+    /// A rivet gun shot.
+    RivetShot,
+    /// A scatter blaster's boom.
+    ScatterShot,
+    /// One pulse of the plasma cutter's beam (a buzz while held).
+    CutterZap,
+    /// A rocket leaving the launcher.
+    RocketLaunch,
+    /// A harpoon's twang.
+    HarpoonShot,
+    /// A railgun slug's charge and crack.
+    RailgunShot,
+    /// A trigger pull with an empty capacitor or no ammo.
+    WeaponDry,
+    /// A weapon swapped onto the hardpoint.
+    WeaponMount,
+    /// A shot striking rock.
+    ImpactRock,
+    /// A shot striking a target.
+    ImpactHit,
+    /// A target destroyed.
+    TargetDestroyed,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -1001,7 +1024,7 @@ impl SeatUi {
             }),
             ModalScreen::Fuel | ModalScreen::Bank => 2,
             ModalScreen::Repair => GARAGE_COUNTER_ROW,
-            ModalScreen::Explosives => 3 + fatherload_simulation::explosive::EXPLOSIVE_OFFERS.len(),
+            ModalScreen::Explosives => arms::ARMS_FIRST_ROW + arms::ARMS_ROWS.len() - 1,
             ModalScreen::Headquarters => {
                 if ctx.deep_claim_unlocked() {
                     6
@@ -1125,6 +1148,11 @@ impl SeatUi {
                 },
                 2 => SessionServiceRequest::BuyMiningRockets,
                 3 => SessionServiceRequest::ClaimFreeTestCharge,
+                // The arms rack comes after the explosive packs.
+                item if arms::row_at(item).is_some() => arms::request(
+                    arms::row_at(item).unwrap_or(arms::ArmsRow::Battery),
+                    ctx.player(),
+                ),
                 // The special charges follow, in the shack's offer order.
                 item => SessionServiceRequest::BuyExplosives {
                     kind: fatherload_simulation::explosive::EXPLOSIVE_OFFERS[(item - 4)
@@ -1360,6 +1388,38 @@ impl SeatUi {
                 "Nix packed your {}. You now carry {}.",
                 kind.plural(),
                 player.explosive_count(kind)
+            ),
+            SessionServiceRequest::BuyWeapon { weapon } => {
+                if player
+                    .mounted_weapon
+                    .is_some_and(|mounted| mounted.kind == weapon)
+                {
+                    format!(
+                        "Nix bolted the {} onto your hardpoint. {} to fire.",
+                        weapon.name(),
+                        weapon_fire_hint(ctx.device)
+                    )
+                } else {
+                    format!(
+                        "Nix racked your new {}. {} to swap it onto the hardpoint.",
+                        weapon.name(),
+                        weapon_cycle_hint(ctx.device)
+                    )
+                }
+            }
+            SessionServiceRequest::UpgradeWeapon { weapon } => format!(
+                "{} upgraded to {}: harder hits, faster cycling, less energy.",
+                weapon.name(),
+                arms::mk_name(player.weapon_rack.mk(weapon).unwrap_or(0))
+            ),
+            SessionServiceRequest::UpgradeBattery => format!(
+                "Capacitor upgraded: {:.0} energy, recharging faster.",
+                player.battery_capacity()
+            ),
+            SessionServiceRequest::BuyAmmo { ammo } => format!(
+                "Nix packed your {}. You now carry {}.",
+                ammo.plural(),
+                player.ammo(ammo)
             ),
             SessionServiceRequest::SalvagePatchHull => format!(
                 "Salvage Yard patch job restored {:.0} hull.",
@@ -2468,6 +2528,21 @@ pub const fn interior_service_x(zone: SurfaceZone) -> f32 {
         SurfaceZone::Explosives => 431.0,
         SurfaceZone::Salvage => 410.0,
     }
+}
+
+/// "Hold LMB/V" style text for the fire control on `device`.
+fn weapon_fire_hint(device: crate::input::devices::InputDevice) -> String {
+    crate::input::prompts::inline_text(crate::input::prompts::Prompt::FireWeapon, device)
+        .map_or_else(
+            || "Pull the trigger".to_owned(),
+            |keys| format!("Hold {keys}"),
+        )
+}
+
+/// "Press X" style text for the next-weapon control on `device`.
+fn weapon_cycle_hint(device: crate::input::devices::InputDevice) -> String {
+    crate::input::prompts::inline_text(crate::input::prompts::Prompt::CycleWeapon, device)
+        .map_or_else(|| "Swap weapons".to_owned(), |keys| format!("Press {keys}"))
 }
 
 #[cfg(test)]

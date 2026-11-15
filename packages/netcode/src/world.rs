@@ -148,6 +148,13 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::EnemyStunned { .. } => (85, None),
         GameplayEventKind::RigStruck { player_id, .. } => (86, Some(player_id)),
         GameplayEventKind::EnemyDifficultyChanged { player_id, .. } => (87, Some(player_id)),
+        // Weapons (wave 2, T11): 90-95.
+        GameplayEventKind::WeaponFired { player_id, .. } => (90, Some(player_id)),
+        GameplayEventKind::WeaponDry { player_id, .. } => (91, Some(player_id)),
+        GameplayEventKind::WeaponMounted { player_id, .. } => (92, Some(player_id)),
+        GameplayEventKind::ProjectileImpact { .. } => (93, None),
+        GameplayEventKind::EntityDamaged { .. } => (94, None),
+        GameplayEventKind::EntityDestroyed { .. } => (95, None),
     }
 }
 
@@ -306,6 +313,7 @@ impl NetSimulation for WorldState {
                 | PlayerCommand::RemoteDetonate { .. }
                 | PlayerCommand::UseScanner
                 | PlayerCommand::PlaceInfrastructure { .. }
+                | PlayerCommand::MountWeapon { .. }
         )
     }
 

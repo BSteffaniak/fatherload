@@ -221,6 +221,44 @@ pub struct PlayerPresentation {
     pub tiers: RigTiers,
     /// The rig's look: the player's garage paint job, or their default.
     pub cosmetics: RigCosmetics,
+    /// The weapon on the hardpoint, where it points and whether its trigger is held.
+    pub weapon: Option<WeaponPose>,
+}
+
+/// A mounted weapon as drawn: which, its tier, its aim (unit vector) and the trigger.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeaponPose {
+    pub mounted: fatherload_simulation::MountedWeapon,
+    pub aim: (f32, f32),
+    pub firing: bool,
+}
+
+/// A projectile in flight (presentation copy of a projectile entity).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ProjectileView {
+    pub weapon: fatherload_simulation::WeaponKind,
+    pub x: f32,
+    pub y: f32,
+    pub previous_x: f32,
+    pub previous_y: f32,
+    pub velocity_x: f32,
+    pub velocity_y: f32,
+}
+
+/// A damageable entity (practice target) as drawn.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TargetView {
+    pub x: f32,
+    pub y: f32,
+    /// Health left, 0..=1.
+    pub health: f32,
+}
+
+/// A plasma cutter's beam: from the muzzle to where it stops.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BeamView {
+    pub from: (f32, f32),
+    pub to: (f32, f32),
 }
 
 impl PlayerPresentation {
@@ -238,6 +276,11 @@ impl PlayerPresentation {
             active_drill: world.active_drill(player_id).copied(),
             tiers: RigTiers::of(player),
             cosmetics: RigCosmetics::resolve(player.cosmetics, player_id),
+            weapon: player.mounted_weapon.map(|mounted| WeaponPose {
+                mounted,
+                aim: player.weapon.aim(),
+                firing: player.weapon.firing,
+            }),
         }
     }
 
@@ -311,6 +354,8 @@ pub struct ViewSnapshot<'w> {
     pub quest_desk: Vec<crate::shell::DeskRow>,
     /// The seat's throw aim preview (set by the game loop from the seat's selection).
     pub aim_preview: Option<AimPreview>,
+    /// The seat's weapon aim reticle (set by the game loop from the seat's aim).
+    pub reticle: Option<crate::weapon_aim::Reticle>,
 }
 
 impl ViewSnapshot<'_> {
@@ -406,6 +451,44 @@ impl AimPreview {
     }
 }
 
+/// Projectiles in flight, for drawing.
+fn projectile_views(world: &WorldState) -> Vec<ProjectileView> {
+    use fatherload_simulation::entity::{EntityKind, EntityState};
+    world
+        .entities()
+        .of_kind(EntityKind::Projectile)
+        .filter_map(|entity| match entity.state {
+            EntityState::Projectile(state) => Some(ProjectileView {
+                weapon: state.weapon,
+                x: entity.body.x,
+                y: entity.body.y,
+                previous_x: entity.body.previous_x,
+                previous_y: entity.body.previous_y,
+                velocity_x: entity.body.velocity_x,
+                velocity_y: entity.body.velocity_y,
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Damageable entities with their health, for drawing.
+fn target_views(world: &WorldState) -> Vec<TargetView> {
+    use fatherload_simulation::entity::EntityKind;
+    world
+        .entities()
+        .of_kind(EntityKind::Target)
+        .filter_map(|entity| {
+            let health = entity.state.health()?;
+            Some(TargetView {
+                x: entity.body.x,
+                y: entity.body.y,
+                health: (health.current / health.max.max(1.0)).clamp(0.0, 1.0),
+            })
+        })
+        .collect()
+}
+
 /// Everything rendering needs for one frame.
 #[derive(Clone, Debug)]
 pub struct RenderSnapshot<'w> {
@@ -430,6 +513,15 @@ pub struct RenderSnapshot<'w> {
     pub sparks: &'w [SparkParticle],
     /// Bomb blasts in progress.
     pub explosions: &'w [Explosion],
+    /// Muzzle flashes and tracers (set by the game loop from its effects).
+    pub shots: &'w [crate::effects::ShotFlash],
+    /// Projectiles in flight.
+    pub projectiles: Vec<ProjectileView>,
+    /// Practice targets and other damageable entities.
+    pub targets: Vec<TargetView>,
+    /// Plasma cutter beams being fired.
+    pub beams: Vec<BeamView>,
+
     /// Twin-relay vault locks counting down.
     pub relay_countdowns: Vec<RelayCountdown>,
     /// Every rig in the world.
@@ -492,6 +584,15 @@ impl<'w> RenderSnapshot<'w> {
             critters: critters_of(world),
             sparks,
             explosions,
+            shots: &[],
+            projectiles: projectile_views(world),
+            targets: target_views(world),
+            beams: world
+                .player_ids()
+                .filter_map(|id| world.active_beam(id))
+                .map(|(from, to)| BeamView { from, to })
+                .collect(),
+
             relay_countdowns: relay_countdowns(world),
             players: world
                 .players()
@@ -679,6 +780,7 @@ fn view_snapshot(
     let depth = (player.y / TILE_SIZE).max(0.0) as i32;
     Some(ViewSnapshot {
         aim_preview: None,
+        reticle: None,
         seat_index,
         player_id,
         viewport,

@@ -58,6 +58,10 @@ pub enum PlayerCommand {
     /// Changes the world's enemy setting for everyone (the game offers it to the host or a
     /// local session; Peaceful clears every hostile).
     SetEnemyDifficulty(EnemyDifficulty),
+    /// Mounts an owned weapon on the rig's hardpoint (`None` holsters it).
+    MountWeapon {
+        weapon: Option<crate::weapon::WeaponKind>,
+    },
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

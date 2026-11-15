@@ -66,6 +66,8 @@ pub enum ExplosiveKind {
     /// Thrown; a deafening bang with a light shove and no terrain damage that sends creatures
     /// running.
     Scare,
+    /// A rocket launcher's warhead going off on impact (never sold or carried).
+    Rocket,
 }
 
 /// How a rig deploys an explosive.
@@ -391,7 +393,7 @@ impl ExplosiveKind {
     ];
 
     /// Every kind, bomblets included.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Bomb,
         Self::Sticky,
         Self::Cluster,
@@ -404,6 +406,7 @@ impl ExplosiveKind {
         Self::Flare,
         Self::Smoke,
         Self::Scare,
+        Self::Rocket,
     ];
 
     #[must_use]
@@ -421,6 +424,7 @@ impl ExplosiveKind {
             Self::Flare => "Flare",
             Self::Smoke => "Smoke charge",
             Self::Scare => "Scare charge",
+            Self::Rocket => "Rocket",
         }
     }
 
@@ -439,7 +443,7 @@ impl ExplosiveKind {
     #[must_use]
     pub const fn item_id(self) -> Option<crate::item::ExplosiveId> {
         let id = match self {
-            Self::Bomb | Self::Bomblet => return None,
+            Self::Bomb | Self::Bomblet | Self::Rocket => return None,
             Self::Sticky => 1,
             Self::Cluster => 2,
             Self::C4 => 3,
@@ -488,6 +492,7 @@ impl ExplosiveKind {
             Self::Flare => "flares",
             Self::Smoke => "smoke charges",
             Self::Scare => "scare charges",
+            Self::Rocket => "rockets",
         }
     }
 
@@ -519,6 +524,7 @@ impl ExplosiveKind {
             Self::Scare => {
                 "Thrown. A deafening bang that breaks nothing but sends critters running."
             }
+            Self::Rocket => "A rocket launcher's warhead.",
         }
     }
 
@@ -526,7 +532,7 @@ impl ExplosiveKind {
     #[must_use]
     pub const fn deployment(self) -> Deployment {
         match self {
-            Self::Bomb | Self::Bomblet | Self::Mining => Deployment::Drop,
+            Self::Bomb | Self::Bomblet | Self::Mining | Self::Rocket => Deployment::Drop,
             Self::Sticky
             | Self::Cluster
             | Self::Incendiary
@@ -558,7 +564,7 @@ impl ExplosiveKind {
             Self::Sticky => 2_000,
             Self::Cluster | Self::Shaped => 1_800,
             Self::Bomblet => 650,
-            Self::C4 => 0,
+            Self::C4 | Self::Rocket => 0,
             Self::Mining => 3_000,
             Self::Incendiary | Self::Emp => 1_500,
             Self::Flare => 350,
@@ -582,7 +588,9 @@ impl ExplosiveKind {
     pub const fn blast(self) -> BlastShape {
         match self {
             Self::Bomb | Self::Sticky => BlastShape::Diamond(2),
-            Self::Cluster | Self::Bomblet | Self::Incendiary => BlastShape::Diamond(1),
+            Self::Cluster | Self::Bomblet | Self::Incendiary | Self::Rocket => {
+                BlastShape::Diamond(1)
+            }
             Self::C4 => BlastShape::Diamond(3),
             Self::Shaped => BlastShape::Tunnel {
                 length: 11,
@@ -598,7 +606,9 @@ impl ExplosiveKind {
     pub const fn push_reach(self) -> f32 {
         match self {
             Self::Bomb | Self::Sticky => TILE_SIZE * 4.0,
-            Self::Cluster | Self::Incendiary | Self::Shaped | Self::Scare => TILE_SIZE * 3.0,
+            Self::Cluster | Self::Incendiary | Self::Shaped | Self::Scare | Self::Rocket => {
+                TILE_SIZE * 3.0
+            }
             Self::Bomblet => TILE_SIZE * 2.0,
             Self::C4 => TILE_SIZE * 5.0,
             Self::Mining => TILE_SIZE * 6.0,
@@ -611,7 +621,7 @@ impl ExplosiveKind {
     pub const fn push_strength(self) -> f32 {
         match self {
             Self::Bomb | Self::Sticky => 460.0,
-            Self::Cluster | Self::Incendiary | Self::Shaped => 360.0,
+            Self::Cluster | Self::Incendiary | Self::Shaped | Self::Rocket => 360.0,
             Self::Bomblet => 220.0,
             Self::C4 => 540.0,
             Self::Mining => 420.0,
@@ -627,7 +637,7 @@ impl ExplosiveKind {
             Self::Bomb | Self::Sticky | Self::Cluster | Self::Incendiary | Self::Shaped => {
                 TILE_SIZE * 2.5
             }
-            Self::Bomblet => TILE_SIZE * 1.5,
+            Self::Bomblet | Self::Rocket => TILE_SIZE * 1.5,
             Self::C4 | Self::Mining => TILE_SIZE * 3.0,
             Self::Emp | Self::Flare | Self::Smoke | Self::Scare => 0.0,
         }

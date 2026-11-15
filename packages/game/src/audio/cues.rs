@@ -2,7 +2,8 @@
 //! gameplay event -> cue table. Pure data, no device access.
 
 use fatherload_simulation::{
-    EnemyKind, ExplosiveKind, GameplayEventKind, PlayerId, PoiKind, ShotKind,
+    EnemyKind, ExplosiveKind, GameplayEventKind, PlayerId, PoiKind, ShotKind, WeaponKind,
+    event::ImpactSurface,
     explosive::Deployment,
     item::{ItemCategory, ItemKind},
     village::VillageService,
@@ -127,6 +128,17 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::EnemyBite => Patch::EnemyBite,
         SoundCue::SmokeBurst => Patch::SmokeBurst,
         SoundCue::ScareBang => Patch::ScareBang,
+        SoundCue::RivetShot => Patch::RivetShot,
+        SoundCue::ScatterShot => Patch::ScatterShot,
+        SoundCue::CutterZap => Patch::CutterZap,
+        SoundCue::RocketLaunch => Patch::RocketLaunch,
+        SoundCue::HarpoonShot => Patch::HarpoonShot,
+        SoundCue::RailgunShot => Patch::RailgunShot,
+        SoundCue::WeaponDry => Patch::WeaponDry,
+        SoundCue::WeaponMount => Patch::WeaponMount,
+        SoundCue::ImpactRock => Patch::ImpactRock,
+        SoundCue::ImpactHit => Patch::ImpactHit,
+        SoundCue::TargetDestroyed => Patch::TargetDestroyed,
     }
 }
 
@@ -152,7 +164,9 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
 pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
     match kind {
         ExplosiveKind::Bomb | ExplosiveKind::Sticky | ExplosiveKind::C4 => SoundCue::Explosion,
-        ExplosiveKind::Cluster | ExplosiveKind::Bomblet => SoundCue::SmallBlast,
+        ExplosiveKind::Cluster | ExplosiveKind::Bomblet | ExplosiveKind::Rocket => {
+            SoundCue::SmallBlast
+        }
         ExplosiveKind::Shaped => SoundCue::ShapedBlast,
         ExplosiveKind::Mining => SoundCue::DeepBlast,
         ExplosiveKind::Incendiary => SoundCue::FireWhoosh,
@@ -160,6 +174,28 @@ pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
         ExplosiveKind::Flare => SoundCue::FlareIgnite,
         ExplosiveKind::Smoke => SoundCue::SmokeBurst,
         ExplosiveKind::Scare => SoundCue::ScareBang,
+    }
+}
+
+/// The shot each weapon fires with (exhaustive: a new weapon needs a sound).
+#[must_use]
+pub const fn weapon_cue(weapon: WeaponKind) -> SoundCue {
+    match weapon {
+        WeaponKind::RivetGun => SoundCue::RivetShot,
+        WeaponKind::ScatterBlaster => SoundCue::ScatterShot,
+        WeaponKind::PlasmaCutter => SoundCue::CutterZap,
+        WeaponKind::RocketLauncher => SoundCue::RocketLaunch,
+        WeaponKind::Harpoon => SoundCue::HarpoonShot,
+        WeaponKind::Railgun => SoundCue::RailgunShot,
+    }
+}
+
+/// The sound of a shot striking `surface`.
+#[must_use]
+pub const fn impact_cue(surface: ImpactSurface) -> SoundCue {
+    match surface {
+        ImpactSurface::Terrain => SoundCue::ImpactRock,
+        ImpactSurface::Target | ImpactSurface::Charge | ImpactSurface::Loot => SoundCue::ImpactHit,
     }
 }
 
@@ -277,11 +313,19 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         )),
         GameplayEventKind::EnemyStunned { .. } => Some(SoundCue::MachineHurt),
         GameplayEventKind::RigStruck { .. } => Some(SoundCue::EnemyBite),
+        // Weapons: each gun's shot, the empty click, the hardpoint clack, impacts and a
+        // target breaking apart. Damage numbers are silent: the impact or blast is the sound.
+        GameplayEventKind::WeaponFired { weapon, .. } => Some(weapon_cue(*weapon)),
+        GameplayEventKind::WeaponDry { .. } => Some(SoundCue::WeaponDry),
+        GameplayEventKind::WeaponMounted { .. } => Some(SoundCue::WeaponMount),
+        GameplayEventKind::ProjectileImpact { surface, .. } => Some(impact_cue(*surface)),
+        GameplayEventKind::EntityDestroyed { .. } => Some(SoundCue::TargetDestroyed),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
         // test-mode toggles/warps are answered by the counter or menu that requested them.
         GameplayEventKind::PurchaseCompleted { .. }
+        | GameplayEventKind::EntityDamaged { .. }
         | GameplayEventKind::QuestAccepted { .. }
         | GameplayEventKind::TestModeChanged { .. }
         | GameplayEventKind::HazardChanged
@@ -356,7 +400,13 @@ mod tests {
             | GameplayEventKind::EnemyKilled { .. }
             | GameplayEventKind::EnemyStunned { .. }
             | GameplayEventKind::RigStruck { .. }
-            | GameplayEventKind::EnemyDifficultyChanged { .. } => {}
+            | GameplayEventKind::EnemyDifficultyChanged { .. }
+            | GameplayEventKind::WeaponFired { .. }
+            | GameplayEventKind::WeaponDry { .. }
+            | GameplayEventKind::WeaponMounted { .. }
+            | GameplayEventKind::ProjectileImpact { .. }
+            | GameplayEventKind::EntityDamaged { .. }
+            | GameplayEventKind::EntityDestroyed { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -527,6 +577,40 @@ mod tests {
             player_id,
             difficulty: fatherload_simulation::EnemyDifficulty::Hard,
         });
+        for weapon in WeaponKind::ALL {
+            events.push(GameplayEventKind::WeaponFired {
+                player_id,
+                weapon,
+                x: 0,
+                y: 0,
+                end_x: 1,
+                end_y: 0,
+            });
+            events.push(GameplayEventKind::WeaponDry { player_id, weapon });
+        }
+        events.push(GameplayEventKind::WeaponMounted {
+            player_id,
+            weapon: Some(WeaponKind::RivetGun),
+        });
+        for surface in [
+            ImpactSurface::Terrain,
+            ImpactSurface::Target,
+            ImpactSurface::Charge,
+            ImpactSurface::Loot,
+        ] {
+            events.push(GameplayEventKind::ProjectileImpact {
+                weapon: WeaponKind::RivetGun,
+                x: 0,
+                y: 0,
+                surface,
+            });
+        }
+        events.push(GameplayEventKind::EntityDestroyed {
+            entity: 1,
+            x: 0,
+            y: 0,
+            by: Some(player_id),
+        });
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
@@ -564,6 +648,16 @@ mod tests {
                     service: VillageService::TradingPost,
                 },
             ]
+        );
+        assert!(
+            event_cue(&GameplayEventKind::EntityDamaged {
+                entity: 1,
+                x: 0,
+                y: 0,
+                amount: 3
+            })
+            .is_none(),
+            "damage numbers are silent: the impact plays"
         );
     }
 
@@ -635,6 +729,17 @@ mod tests {
             SoundCue::EnemyBite,
             SoundCue::SmokeBurst,
             SoundCue::ScareBang,
+            SoundCue::RivetShot,
+            SoundCue::ScatterShot,
+            SoundCue::CutterZap,
+            SoundCue::RocketLaunch,
+            SoundCue::HarpoonShot,
+            SoundCue::RailgunShot,
+            SoundCue::WeaponDry,
+            SoundCue::WeaponMount,
+            SoundCue::ImpactRock,
+            SoundCue::ImpactHit,
+            SoundCue::TargetDestroyed,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

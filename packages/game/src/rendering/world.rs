@@ -42,6 +42,7 @@ mod rig;
 mod sky;
 mod speed_fx;
 mod villages;
+mod weapons;
 
 pub use rig::{RigFacings, player_accent};
 pub use sky::SkyArt;
@@ -110,6 +111,16 @@ pub(super) struct WorldScene<'a> {
     pub rig_guards: &'a [(fatherload_simulation::PlayerId, f32)],
     /// The snapshot's simulation tick (enemy hurt flashes and stun timers).
     pub world_tick: u64,
+    /// Projectiles in flight.
+    pub projectiles: &'a [crate::render_snapshot::ProjectileView],
+    /// Practice targets.
+    pub targets: &'a [crate::render_snapshot::TargetView],
+    /// Plasma beams being fired.
+    pub beams: &'a [crate::render_snapshot::BeamView],
+    /// Muzzle flashes and tracers.
+    pub shots: &'a [crate::effects::ShotFlash],
+    /// The view's weapon reticle.
+    pub reticle: Option<crate::weapon_aim::Reticle>,
 }
 
 impl WorldScene<'_> {
@@ -206,6 +217,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     }
     villages::draw_village_people(draw, scene.terrain, scene.visible, scene.explored, seconds);
     drops::draw_drops(draw, scene);
+    weapons::draw_targets(draw, scene.targets, seconds);
     quest_marks::draw_quest_markers(draw, scene.quest_markers, seconds);
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
@@ -233,6 +245,9 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     if let Some(drill) = scene.active_drill {
         fx::draw_drill_debris(draw, scene.terrain, drill, scene.ticks);
     }
+    weapons::draw_projectiles(draw, scene.projectiles, scene.bomb_alpha, seconds);
+    weapons::draw_beams(draw, scene.beams, seconds);
+    weapons::draw_shots(draw, scene.shots);
     for cloud in scene.hazards {
         fx::draw_gas_cloud(draw, cloud, seconds);
     }
@@ -260,6 +275,10 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     );
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);
+    }
+    if let (Some(reticle), Some(local)) = (scene.reticle, scene.local) {
+        let accent = player_accent(local.player_id, Some(local.cosmetics));
+        weapons::draw_reticle(draw, &reticle, accent, seconds);
     }
     for player in scene.players {
         let is_local = scene

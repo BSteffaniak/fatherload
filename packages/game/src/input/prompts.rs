@@ -38,6 +38,12 @@ pub enum Prompt {
     DetonateSequence,
     /// Aim a throw freely (a controller's right stick; keyboards aim with the movement keys).
     Aim,
+    /// Fire the hardpoint weapon (held).
+    FireWeapon,
+    /// Swap the next owned weapon onto the hardpoint.
+    CycleWeapon,
+    /// Aim the hardpoint weapon (the mouse, or a controller's right stick).
+    AimWeapon,
     /// Previous/next tab or column.
     Tab,
     Pause,
@@ -167,6 +173,11 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::DetonateSequence, Arrows) => &["Num5"],
         (Prompt::Aim, Full | Wasd) => &["W", "A", "S", "D"],
         (Prompt::Aim, Arrows) => &["\u{2190}", "\u{2191}", "\u{2192}", "\u{2193}"],
+        (Prompt::FireWeapon, Full | Wasd) => &["LMB", "V"],
+        (Prompt::FireWeapon, Arrows) => &["Num6"],
+        (Prompt::CycleWeapon, Full | Wasd) => &["X"],
+        (Prompt::CycleWeapon, Arrows) => &["Num7"],
+        (Prompt::AimWeapon, Full | Wasd) => &["Mouse"],
         (Prompt::Map, Full | Wasd) => &["M"],
         (Prompt::Inventory, Full | Wasd) => &["Tab"],
         (Prompt::Help, Full | Wasd) => &["H"],
@@ -193,7 +204,8 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
             | Prompt::Infrastructure
             | Prompt::Details
             | Prompt::NetOverlay
-            | Prompt::Scroll,
+            | Prompt::Scroll
+            | Prompt::AimWeapon,
             Arrows,
         )
         | (Prompt::Join, _) => &[],
@@ -225,7 +237,9 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
         Prompt::Detonate | Prompt::DetonateSequence => {
             button(PadAction::Detonate).into_iter().collect()
         }
-        Prompt::Aim => vec![PadGlyph::RightStick],
+        Prompt::Aim | Prompt::AimWeapon => vec![PadGlyph::RightStick],
+        Prompt::FireWeapon => button(PadAction::FireWeapon).into_iter().collect(),
+        Prompt::CycleWeapon => button(PadAction::CycleWeapon).into_iter().collect(),
         Prompt::Tab => both(PadAction::TabPrevious, PadAction::TabNext),
         Prompt::Pause => button(PadAction::Pause).into_iter().collect(),
         Prompt::Map => button(PadAction::Map).into_iter().collect(),

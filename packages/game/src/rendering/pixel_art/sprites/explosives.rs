@@ -534,7 +534,7 @@ pub const ICON_FLARE: SpriteDef = SpriteDef {
 pub const fn icon(kind: fatherload_simulation::ExplosiveKind) -> &'static SpriteDef {
     use fatherload_simulation::ExplosiveKind;
     match kind {
-        ExplosiveKind::Bomb | ExplosiveKind::Bomblet => &super::icons::BOMB,
+        ExplosiveKind::Bomb | ExplosiveKind::Bomblet | ExplosiveKind::Rocket => &super::icons::BOMB,
         ExplosiveKind::Sticky => &ICON_STICKY,
         ExplosiveKind::Cluster => &ICON_CLUSTER,
         ExplosiveKind::C4 => &ICON_C4,

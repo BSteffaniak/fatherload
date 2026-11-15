@@ -131,7 +131,7 @@ fn hit(
     damage: Damage,
 ) -> (DamageOutcome, Vec<GameplayEventKind>) {
     let mut output = TickOutput::default();
-    let outcome = world.damage_entity(id, damage, &mut output);
+    let outcome = world.damage_enemy(id, damage, &mut output);
     (
         outcome,
         output.events.into_iter().map(|event| event.kind).collect(),

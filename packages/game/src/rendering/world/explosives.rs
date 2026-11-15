@@ -26,7 +26,7 @@ pub const fn charge_sprite(kind: ExplosiveKind) -> Option<&'static SpriteDef> {
         ExplosiveKind::Bomb => return None,
         ExplosiveKind::Sticky => &art::STICKY,
         ExplosiveKind::Cluster => &art::CLUSTER,
-        ExplosiveKind::Bomblet => &art::BOMBLET,
+        ExplosiveKind::Bomblet | ExplosiveKind::Rocket => &art::BOMBLET,
         ExplosiveKind::C4 => &art::C4,
         ExplosiveKind::Shaped => &art::SHAPED,
         ExplosiveKind::Mining => &art::MINING,

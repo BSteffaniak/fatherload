@@ -61,6 +61,10 @@ pub enum EntityKind {
     /// A live explosive charge: bombs, sticky bombs, C4, bomblets, burning flares and fires
     /// (`world/bombs.rs` drives them in its own pass, see [`EntityPhase::Charges`]).
     Charge,
+    /// A weapon projectile in flight (rivet, pellet, rocket, harpoon; `world/weapons.rs`).
+    Projectile,
+    /// A practice target with health: the reference damageable entity ([`crate::combat`]).
+    Target,
 }
 
 /// When in the tick an entity kind updates (`WorldState::simulate_tick` runs each phase at a
@@ -79,7 +83,7 @@ pub enum EntityPhase {
 
 impl EntityKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 9] = [
         Self::GasCloud,
         Self::Boulder,
         Self::Drop,
@@ -87,6 +91,8 @@ impl EntityKind {
         Self::Enemy,
         Self::EnemyShot,
         Self::Charge,
+        Self::Projectile,
+        Self::Target,
     ];
 
     /// The tick phase this kind updates in.
@@ -94,9 +100,13 @@ impl EntityKind {
     pub const fn phase(self) -> EntityPhase {
         match self {
             Self::GasCloud => EntityPhase::Early,
-            Self::Boulder | Self::Drop | Self::Critter | Self::Enemy | Self::EnemyShot => {
-                EntityPhase::Late
-            }
+            Self::Boulder
+            | Self::Drop
+            | Self::Critter
+            | Self::Enemy
+            | Self::EnemyShot
+            | Self::Projectile
+            | Self::Target => EntityPhase::Late,
             Self::Charge => EntityPhase::Charges,
         }
     }
@@ -299,6 +309,26 @@ pub struct ChargeState {
     pub stage: u8,
 }
 
+/// A weapon projectile's per-kind state (its stats come from `weapon.stats(mk)`).
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ProjectileState {
+    pub weapon: crate::weapon::WeaponKind,
+    pub mk: u8,
+    pub owner: crate::ids::PlayerId,
+    /// Distance flown so far, in pixels (it fizzles at the weapon's range).
+    pub travelled: f32,
+    /// Targets it can still pass through.
+    pub pierce_left: u8,
+    /// The last target it hit (a piercing shot never hits the same one twice in a row).
+    pub last_hit: Option<EntityId>,
+}
+
+/// A practice target's per-kind state.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub struct TargetState {
+    pub health: crate::combat::Health,
+}
+
 /// Per-kind entity state.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 pub enum EntityState {
@@ -309,6 +339,8 @@ pub enum EntityState {
     Enemy(crate::enemy::EnemyState),
     EnemyShot(crate::enemy::EnemyShotState),
     Charge(ChargeState),
+    Projectile(ProjectileState),
+    Target(TargetState),
 }
 
 impl EntityState {
@@ -322,6 +354,54 @@ impl EntityState {
             Self::Enemy(_) => EntityKind::Enemy,
             Self::EnemyShot(_) => EntityKind::EnemyShot,
             Self::Charge(_) => EntityKind::Charge,
+            Self::Projectile(_) => EntityKind::Projectile,
+            Self::Target(_) => EntityKind::Target,
+        }
+    }
+
+    /// The entity's health, if it can be damaged (see [`crate::combat`]: new damageable kinds
+    /// add their arm here and in [`Self::health_mut`]).
+    ///
+    /// Enemies (WP-ENEMIES) report a view of their own health (no armour: their resistances
+    /// apply inside `WorldState::damage_enemy`) so weapons and auto-aim find them; they have no
+    /// [`Self::health_mut`] because `WorldState::damage_entity` routes them to the enemy damage
+    /// model (shields, resistances, EMP stuns, aggro, loot).
+    #[must_use]
+    pub const fn health(&self) -> Option<crate::combat::Health> {
+        match self {
+            Self::Target(target) => Some(target.health),
+            Self::Enemy(enemy) => {
+                let spec = enemy.kind.stats();
+                Some(crate::combat::Health {
+                    current: enemy.health,
+                    max: enemy.max_health,
+                    armor: 0.0,
+                    radius: spec.radius,
+                    machine: enemy.kind.is_machine(),
+                })
+            }
+            Self::GasCloud(_)
+            | Self::Boulder(_)
+            | Self::Drop(_)
+            | Self::Critter(_)
+            | Self::EnemyShot(_)
+            | Self::Charge(_)
+            | Self::Projectile(_) => None,
+        }
+    }
+
+    /// Mutable health, if the entity can be damaged.
+    pub const fn health_mut(&mut self) -> Option<&mut crate::combat::Health> {
+        match self {
+            Self::Target(target) => Some(&mut target.health),
+            Self::GasCloud(_)
+            | Self::Boulder(_)
+            | Self::Drop(_)
+            | Self::Critter(_)
+            | Self::Enemy(_)
+            | Self::EnemyShot(_)
+            | Self::Charge(_)
+            | Self::Projectile(_) => None,
         }
     }
 }

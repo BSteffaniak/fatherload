@@ -876,8 +876,8 @@ fn smoke_screens_billow_hide_points_inside_and_clear_up() {
         .ticks_for_millis(crate::explosive::SMOKE_PULSE_MILLIS);
     advance(&mut world, ticks_per_pulse * 4);
     let (x, y) = (20.5 * TILE_SIZE, 31.5 * TILE_SIZE);
-    assert!(world.smoke_at(x + 2.0 * TILE_SIZE, y));
-    assert!(!world.smoke_at(x + 8.0 * TILE_SIZE, y));
+    assert!(world.smoke_at(2.0f32.mul_add(TILE_SIZE, x), y));
+    assert!(!world.smoke_at(8.0f32.mul_add(TILE_SIZE, x), y));
     assert_eq!(world.smoke_screens().len(), 1);
     advance(
         &mut world,

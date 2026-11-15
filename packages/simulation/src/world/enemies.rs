@@ -28,7 +28,7 @@
 //!
 //! # Damage API (for WP-WEAPONS)
 //!
-//! [`WorldState::damage_entity`] applies a [`Damage`] (amount, [`DamageKind`], source,
+//! [`WorldState::damage_enemy`] applies a [`Damage`] (amount, [`DamageKind`], source,
 //! impulse) to an entity and returns a [`DamageOutcome`]. It applies the target's resistance,
 //! shields, EMP stuns, burning, aggro toward the attacking player, flinch and fleeing, and on a
 //! kill drops the loot (`spawn_item_drop`), clears the lair and emits
@@ -1794,9 +1794,11 @@ impl WorldState {
 
     // --- Damage -------------------------------------------------------------------------
 
-    /// Applies `damage` to entity `id` (the damage API; see the module docs). Only enemies
-    /// take damage today; anything else is [`DamageOutcome::Ignored`].
-    pub fn damage_entity(
+    /// Applies the enemy damage model's `damage` to entity `id` (resistances, shields, EMP
+    /// stuns, burning, aggro, flinch, fleeing, loot; see the module docs). Anything but an enemy
+    /// is [`DamageOutcome::Ignored`]. Weapons and other callers use
+    /// `WorldState::damage_entity` (`crate::combat`), which routes enemies here.
+    pub fn damage_enemy(
         &mut self,
         id: EntityId,
         damage: Damage,
@@ -1922,7 +1924,7 @@ impl WorldState {
                 .map_or(DamageSource::World, DamageSource::Player);
             if blast.kind == ExplosiveKind::Emp {
                 for id in self.enemies_near(blast.x, blast.y, EMP_RADIUS) {
-                    let _outcome = self.damage_entity(
+                    let _outcome = self.damage_enemy(
                         id,
                         Damage::new(EMP_DAMAGE, DamageKind::Emp, source),
                         output,
@@ -1967,7 +1969,7 @@ impl WorldState {
                 } else {
                     DamageKind::Explosive
                 };
-                let _outcome = self.damage_entity(
+                let _outcome = self.damage_enemy(
                     id,
                     Damage::new(base * falloff, kind, source).with_impulse(ix * 0.8, iy * 0.8),
                     output,
@@ -1989,6 +1991,7 @@ pub const fn blast_damage(kind: ExplosiveKind) -> Option<f32> {
         ExplosiveKind::Shaped => 45.0,
         ExplosiveKind::Mining => 50.0,
         ExplosiveKind::Incendiary => 28.0,
+        ExplosiveKind::Rocket => 45.0,
         ExplosiveKind::Emp | ExplosiveKind::Flare | ExplosiveKind::Smoke | ExplosiveKind::Scare => {
             return None;
         }

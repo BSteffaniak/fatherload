@@ -10,6 +10,7 @@
 //! replays, and in tests.
 
 pub mod cave;
+pub mod combat;
 pub mod command;
 pub mod contract;
 pub mod cosmetics;
@@ -41,6 +42,7 @@ pub mod terrain;
 pub mod test_mode;
 pub mod tick;
 pub mod village;
+pub mod weapon;
 pub mod world;
 pub mod worldgen;
 
@@ -57,7 +59,7 @@ pub use ids::{InputSequence, PlayerId, SimulationTick};
 pub use infrastructure::{
     InfrastructureKind, PlacedInfrastructure, default_infrastructure_durability,
 };
-pub use input::{ControlState, PlayerTickInput, TickInputs};
+pub use input::{ControlState, PlayerTickInput, TickInputs, WeaponControl};
 pub use player::Player;
 pub use poi::{PoiJournal, PoiKind, PoiKnowledge, PoiReward, PoiTile, PoiVariant};
 pub use progression::{
@@ -78,6 +80,7 @@ pub use test_mode::{TestModeAction, TestModeState};
 pub use tick::{
     DEFAULT_TICK_RATE_HZ, FIXED_DELTA_SECONDS, SIMULATION_HZ, SimulationParams, TickRate,
 };
+pub use weapon::{AmmoKind, MountedWeapon, RigWeaponState, WeaponKind, WeaponRack};
 pub use world::{
     ActiveDrillTimer, AuthoritativeMovementStep, CanonicalProgressionState, DeepRunState,
     DiscoveredTiles, Discovery, LiveEntities, LostCargoSite, PlayerLoadout, PlayerTickState,

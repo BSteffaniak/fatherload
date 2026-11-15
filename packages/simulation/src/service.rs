@@ -125,6 +125,20 @@ pub enum SessionServiceRequest {
     BuyExplosives {
         kind: crate::explosive::ExplosiveKind,
     },
+    /// A hardpoint weapon from the shack's arms rack.
+    BuyWeapon {
+        weapon: crate::weapon::WeaponKind,
+    },
+    /// The next upgrade tier of an owned weapon.
+    UpgradeWeapon {
+        weapon: crate::weapon::WeaponKind,
+    },
+    /// The next capacitor level.
+    UpgradeBattery,
+    /// One pack of ammunition.
+    BuyAmmo {
+        ammo: crate::weapon::AmmoKind,
+    },
     ClaimFreeTestCharge,
     SalvagePatchHull,
     Finance,

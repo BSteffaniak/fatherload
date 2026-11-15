@@ -12,6 +12,7 @@ pub mod prompts;
 pub mod rig;
 pub mod terrain;
 pub mod ui;
+pub mod weapons;
 pub mod world;
 
 use super::sprite::SpriteDef;
@@ -98,6 +99,25 @@ pub const ALL: &[&SpriteDef] = &[
     &explosives::SCARE,
     &explosives::ICON_SMOKE,
     &explosives::ICON_SCARE,
+    &weapons::RIVET_GUN,
+    &weapons::SCATTER_BLASTER,
+    &weapons::PLASMA_CUTTER,
+    &weapons::ROCKET_LAUNCHER,
+    &weapons::HARPOON,
+    &weapons::RAILGUN,
+    &weapons::RIVET,
+    &weapons::PELLET,
+    &weapons::ROCKET,
+    &weapons::SPEAR,
+    &weapons::TARGET,
+    &weapons::ICON_RIVET_GUN,
+    &weapons::ICON_SCATTER_BLASTER,
+    &weapons::ICON_PLASMA_CUTTER,
+    &weapons::ICON_ROCKET_LAUNCHER,
+    &weapons::ICON_HARPOON,
+    &weapons::ICON_RAILGUN,
+    &weapons::ICON_BATTERY,
+    &weapons::ICON_ROCKET_AMMO,
     &world::CARGO_CRATE,
     &world::MARKER_ARROW,
     &world::SIGNAL_RELAY,

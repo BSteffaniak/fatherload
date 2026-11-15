@@ -30,7 +30,7 @@ use super::{
     layout::{ItemEntry, ModalContent, Section, SectionItem, UiLayout},
     pixel_art::{
         sprite::SpriteDef,
-        sprites::{explosives as explosive_art, icons, menu_icons, rig},
+        sprites::{explosives as explosive_art, icons, menu_icons, rig, weapons as weapon_art},
     },
     prompts::{Hint, hint},
     screen::UiFrame,
@@ -607,6 +607,21 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         test,
     ];
     offers.extend(special_offers(shack, credits, &bomb_key));
+    offers.extend(arms_offers(ui.player, shack, credits));
+    if let Some(mounted) = ui.player.mounted_weapon {
+        status.push(SectionItem::icon_stat(
+            weapon_art::icon(mounted.kind),
+            mounted.kind.name(),
+            crate::shell::arms::mk_name(mounted.mk).to_owned(),
+            MINT,
+        ));
+    }
+    status.push(SectionItem::icon_stat(
+        &weapon_art::ICON_BATTERY,
+        "Capacitor",
+        format!("{:.0}", ui.player.battery_capacity()),
+        MINT,
+    ));
     draw_counter(
         ui,
         draw,
@@ -616,6 +631,103 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         "For sale",
         offers,
     );
+}
+
+/// The shack's arms rack: each weapon (buy, then upgrade), the capacitor and rocket ammo.
+fn arms_offers(player: &fatherload_simulation::Player, shack: u8, credits: u32) -> Vec<Offer> {
+    use crate::shell::arms::{ARMS_ROWS, ArmsRow, mk_name};
+    use fatherload_simulation::weapon::{
+        MAX_BATTERY_LEVEL, MAX_WEAPON_MK, battery_capacity, battery_upgrade_cost,
+    };
+    let fire =
+        crate::input::prompts::inline_text(Prompt::FireWeapon, super::prompts::menu_device())
+            .unwrap_or_else(|| "the trigger".to_owned());
+    let cycle =
+        crate::input::prompts::inline_text(Prompt::CycleWeapon, super::prompts::menu_device())
+            .unwrap_or_else(|| "the next-weapon button".to_owned());
+    ARMS_ROWS
+        .iter()
+        .map(|row| match *row {
+            ArmsRow::Weapon(weapon) => {
+                let locked = shack < weapon.shack_level();
+                match player.weapon_rack.mk(weapon) {
+                    None => Offer::new(
+                        weapon_art::icon(weapon),
+                        weapon.name(),
+                        if locked {
+                            format!("Shack level {} needed", weapon.shack_level())
+                        } else {
+                            "Hardpoint weapon".to_owned()
+                        },
+                    )
+                    .tag("ARMS", MINT)
+                    .price(weapon.cost(), credits)
+                    .unavailable_if(locked)
+                    .about(format!(
+                        "{} Hold {fire} to fire; {cycle} swaps weapons.",
+                        weapon.description()
+                    )),
+                    Some(mk) if mk >= MAX_WEAPON_MK => Offer::new(
+                        weapon_art::icon(weapon),
+                        format!("{} {}", weapon.name(), mk_name(mk)),
+                        "Fully upgraded",
+                    )
+                    .unavailable_if(true)
+                    .about(weapon.description()),
+                    Some(mk) => {
+                        let now = weapon.stats(mk);
+                        let next = weapon.stats(mk + 1);
+                        Offer::new(
+                            weapon_art::icon(weapon),
+                            format!("{} {}", weapon.name(), mk_name(mk + 1)),
+                            format!("Damage {:.0} -> {:.0}", now.damage, next.damage),
+                        )
+                        .price(weapon.upgrade_cost(mk + 1), credits)
+                        .about(format!(
+                            "Harder hits, faster cycling and less energy per shot. {}",
+                            weapon.description()
+                        ))
+                    }
+                }
+            }
+            ArmsRow::Battery => {
+                let level = player.weapon_rack.battery_level;
+                if level >= MAX_BATTERY_LEVEL {
+                    Offer::new(&weapon_art::ICON_BATTERY, "Capacitor", "Fully upgraded")
+                        .unavailable_if(true)
+                } else {
+                    Offer::new(
+                        &weapon_art::ICON_BATTERY,
+                        format!("Capacitor level {}", level + 1),
+                        format!(
+                            "{:.0} -> {:.0} energy",
+                            battery_capacity(level),
+                            battery_capacity(level + 1)
+                        ),
+                    )
+                    .price(battery_upgrade_cost(level + 1), credits)
+                    .about(
+                        "Energy weapons draw from the capacitor, which recharges from your fuel. \
+                         A bigger cell fires longer and recharges faster.",
+                    )
+                }
+            }
+            ArmsRow::Ammo(ammo) => {
+                let (count, cost) = ammo.pack();
+                Offer::new(
+                    &weapon_art::ICON_ROCKET_AMMO,
+                    format!("{} pack", ammo.name()),
+                    format!(
+                        "+{count} {} (carrying {})",
+                        ammo.plural(),
+                        player.ammo(ammo)
+                    ),
+                )
+                .price(cost, credits)
+                .about("Ammunition for the rocket launcher. Takes no cargo space.")
+            }
+        })
+        .collect()
 }
 
 /// The shack's special charge packs (C4, sticky bombs, flares...), locked below their level.

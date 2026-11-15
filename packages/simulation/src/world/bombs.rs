@@ -71,7 +71,7 @@ pub struct Blast {
     pub kind: ExplosiveKind,
     pub x: f32,
     pub y: f32,
-    /// Who set the charge (kill credit for enemies caught in it).
+    /// Who set the charge (blast damage and enemy kills are credited to them).
     pub owner: Option<PlayerId>,
 }
 
@@ -126,8 +126,10 @@ impl WorldState {
             }
         }
         self.push_from_blasts(&blasts);
-        // Enemies take the same blasts (damage, pushes, EMP stuns) on the same terrain.
+        // Enemies take the same blasts (damage, pushes, EMP stuns, scares) on the same terrain;
+        // every other damageable entity (practice targets) through the combat model.
         self.enemies_feel_blasts(&blasts, output);
+        self.damage_from_blasts(&blasts, output);
         let mut spawned = Vec::new();
         for (id, bomb) in expiring {
             if let Some(continuing) = self.expire_bomb(bomb, next_tick, notes, output, &mut spawned)

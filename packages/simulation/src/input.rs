@@ -14,6 +14,23 @@ pub struct ControlState {
     horizontal_milli: i16,
     pub thrust: bool,
     pub drill_down: bool,
+    /// The hardpoint weapon's trigger and aim.
+    #[serde(default)]
+    pub weapon: WeaponControl,
+}
+
+/// A seat's weapon trigger and aim for one tick (held, so firing is predicted like movement).
+///
+/// The aim is a quantized direction (`i8` per axis, +y down): free aim from the mouse or the
+/// right stick. With `auto_aim` (the split-screen arrow-keys seat) the simulation picks the
+/// nearest target inside a cone around `aim` (the rig's facing) and fires along `aim` when
+/// there is none.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct WeaponControl {
+    pub fire: bool,
+    pub auto_aim: bool,
+    pub aim_x: i8,
+    pub aim_y: i8,
 }
 
 impl ControlState {
@@ -31,7 +48,15 @@ impl ControlState {
             horizontal_milli,
             thrust,
             drill_down,
+            weapon: WeaponControl::default(),
         }
+    }
+
+    /// The same controls with `weapon` as the weapon trigger and aim.
+    #[must_use]
+    pub const fn with_weapon(mut self, weapon: WeaponControl) -> Self {
+        self.weapon = weapon;
+        self
     }
 
     #[must_use]

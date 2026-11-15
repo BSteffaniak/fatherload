@@ -24,19 +24,50 @@ use crate::{
 #[cfg(not(target_os = "emscripten"))]
 const TARGET_FPS: u32 = 60;
 
+/// Seconds the mouse may rest before the keyboard seat stops aiming at it (its weapon falls
+/// back to auto-aim).
+const MOUSE_AIM_IDLE_SECONDS: f32 = 4.0;
+
+/// Whether the mouse is currently someone's aim: it moved or clicked recently.
+#[derive(Clone, Copy, Debug, Default)]
+struct MouseAim {
+    idle_seconds: f32,
+    seen: bool,
+}
+
+impl MouseAim {
+    /// The pointer position while the mouse is in use.
+    fn sample(&mut self, raylib: &raylib::RaylibHandle, delta_seconds: f32) -> Option<(f32, f32)> {
+        let moved = raylib.get_mouse_delta();
+        let used = moved.x.abs() + moved.y.abs() > 0.5
+            || raylib.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT);
+        if used {
+            self.idle_seconds = 0.0;
+            self.seen = true;
+        } else {
+            self.idle_seconds += delta_seconds.max(0.0);
+        }
+        let position = raylib.get_mouse_position();
+        (self.seen && self.idle_seconds < MOUSE_AIM_IDLE_SECONDS)
+            .then_some((position.x, position.y))
+    }
+}
+
 /// Samples every input device for this frame. Playing alone, the main keyboard reads WASD and
 /// the arrow keys; in split-screen the arrow keys are their own scheme (see `input::seats`).
 fn sample_devices(
     raylib: &mut raylib::RaylibHandle,
     seat_count: usize,
     exit_requested: bool,
+    pointer: Option<(f32, f32)>,
 ) -> DeviceFrame {
     let solo = seat_count <= 1;
-    let keyboard = if solo {
+    let mut keyboard = if solo {
         read_input_with_arrow_aliases(raylib, exit_requested)
     } else {
         read_input(raylib, exit_requested)
     };
+    keyboard.pointer = pointer;
     let arrow_keys = if solo {
         PlayerInput::default()
     } else {
@@ -63,10 +94,11 @@ fn sample_frame_input(
     raylib: &mut raylib::RaylibHandle,
     router: &mut InputRouter,
     game: &mut LocalGame,
-    delta_seconds: f32,
+    (delta_seconds, mouse): (f32, &mut MouseAim),
     exit_requested: bool,
 ) -> FrameInput {
-    let devices = sample_devices(raylib, game.seats().len(), exit_requested);
+    let pointer = mouse.sample(raylib, delta_seconds);
+    let devices = sample_devices(raylib, game.seats().len(), exit_requested, pointer);
     let output = router.route(&devices, game.seats().len(), delta_seconds);
     for notice in &output.notices {
         game.shell.message = notice.message();
@@ -135,6 +167,7 @@ struct App {
     window: DesktopWindow,
     saved_window: crate::save::WindowSettings,
     router: InputRouter,
+    mouse: MouseAim,
     thread: raylib::RaylibThread,
     raylib: raylib::RaylibHandle,
 }
@@ -169,6 +202,7 @@ impl App {
             window,
             saved_window,
             router,
+            mouse: MouseAim::default(),
             thread,
             raylib,
         }
@@ -185,6 +219,7 @@ impl App {
             audio,
             renderer,
             router,
+            mouse,
         } = self;
         if game.should_exit() {
             // Remember a resized or (un)maximized window for the next run.
@@ -213,7 +248,8 @@ impl App {
         // raylib's web WindowShouldClose sleeps internally; RAF owns scheduling here.
         #[cfg(target_os = "emscripten")]
         let exit_requested = false;
-        let mut input = sample_frame_input(raylib, router, game, delta_seconds, exit_requested);
+        let mut input =
+            sample_frame_input(raylib, router, game, (delta_seconds, mouse), exit_requested);
         if input.primary.paste {
             input.clipboard = raylib.get_clipboard_text().ok();
         }

@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::weapon::WeaponKind;
+
 use crate::{
     cave::{CaveKind, CaveTile},
     command::PlayerCommand,
@@ -270,6 +272,61 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         difficulty: EnemyDifficulty,
     },
+    /// A rig fired its hardpoint weapon: from the muzzle `(x, y)` toward `(end_x, end_y)` (a
+    /// hitscan ray's end, or a point along a projectile's launch direction).
+    WeaponFired {
+        player_id: PlayerId,
+        weapon: WeaponKind,
+        x: i32,
+        y: i32,
+        end_x: i32,
+        end_y: i32,
+    },
+    /// A trigger pull with too little capacitor energy or no ammo (the empty click).
+    WeaponDry {
+        player_id: PlayerId,
+        weapon: WeaponKind,
+    },
+    /// A rig swapped (or holstered) the weapon on its hardpoint.
+    WeaponMounted {
+        player_id: PlayerId,
+        weapon: Option<WeaponKind>,
+    },
+    /// A shot or ray struck something at `(x, y)`.
+    ProjectileImpact {
+        weapon: WeaponKind,
+        x: i32,
+        y: i32,
+        surface: ImpactSurface,
+    },
+    /// A damageable entity took `amount` damage (see [`crate::combat`]; enemies report
+    /// [`Self::EnemyHurt`] instead).
+    EntityDamaged {
+        entity: u64,
+        x: i32,
+        y: i32,
+        amount: u16,
+    },
+    /// A damageable entity was destroyed (and despawned); `by` is the player credited (enemies
+    /// report [`Self::EnemyKilled`] instead).
+    EntityDestroyed {
+        entity: u64,
+        x: i32,
+        y: i32,
+        by: Option<PlayerId>,
+    },
+}
+
+/// What a weapon shot struck.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub enum ImpactSurface {
+    Terrain,
+    /// A damageable entity.
+    Target,
+    /// A live charge (which the hit sets off).
+    Charge,
+    /// A loose drop speared by a harpoon.
+    Loot,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -357,5 +414,9 @@ pub(crate) const fn gameplay_event_for_applied_command(
                 difficulty: *difficulty,
             }
         }
+        PlayerCommand::MountWeapon { weapon } => GameplayEventKind::WeaponMounted {
+            player_id,
+            weapon: *weapon,
+        },
     }
 }

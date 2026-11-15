@@ -60,9 +60,21 @@ pub struct PlayerInput {
     /// Pressed: fire the remote detonator in sequence (one charge after another).
     pub detonate_sequence: bool,
     /// Free aim for throws (a controller's right stick past its deadzone), -1..=1 each way
-    /// (+y is down); zero when not aiming.
+    /// (+y is down); zero when not aiming. Also aims the hardpoint weapon.
     pub aim_x: f32,
     pub aim_y: f32,
+    /// Held: fire the hardpoint weapon.
+    pub fire: bool,
+    /// `fire` comes from a controller trigger that thrusts when the rig has no weapon mounted
+    /// (the trigger's meaning before weapons existed).
+    pub fire_thrusts_unarmed: bool,
+    /// Pressed: swap the next owned weapon onto the hardpoint.
+    pub cycle_weapon: bool,
+    /// The mouse pointer in screen points, while the mouse is this seat's aim (it moved or
+    /// clicked recently); `None` otherwise.
+    pub pointer: Option<(f32, f32)>,
+    /// This seat aims automatically (the split-screen arrow-keys seat).
+    pub auto_aim: bool,
     pub scan: bool,
     pub place_relay: bool,
     pub place_drone: bool,
@@ -140,6 +152,11 @@ impl PlayerInput {
             detonate_sequence,
             aim_x: _,
             aim_y: _,
+            fire,
+            fire_thrusts_unarmed: _,
+            cycle_weapon,
+            pointer: _,
+            auto_aim: _,
             scan,
             place_relay,
             place_drone,
@@ -191,6 +208,8 @@ impl PlayerInput {
                 cycle_explosive,
                 detonate,
                 detonate_sequence,
+                fire,
+                cycle_weapon,
                 scan,
                 place_relay,
                 place_drone,
@@ -276,6 +295,15 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         } else {
             primary.aim_y
         },
+        fire: primary.fire || secondary.fire,
+        fire_thrusts_unarmed: if secondary.fire && !primary.fire {
+            secondary.fire_thrusts_unarmed
+        } else {
+            primary.fire_thrusts_unarmed
+        },
+        cycle_weapon: primary.cycle_weapon || secondary.cycle_weapon,
+        pointer: primary.pointer.or(secondary.pointer),
+        auto_aim: primary.auto_aim && secondary.auto_aim,
         scan: primary.scan || secondary.scan,
         place_relay: primary.place_relay || secondary.place_relay,
         place_drone: primary.place_drone || secondary.place_drone,
@@ -366,6 +394,13 @@ fn read_primary_keyboard_input_with_options(
         detonate_sequence: raylib.is_key_pressed(KeyboardKey::KEY_G),
         aim_x: 0.0,
         aim_y: 0.0,
+        fire: raylib.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT)
+            || raylib.is_key_down(KeyboardKey::KEY_V),
+        fire_thrusts_unarmed: false,
+        cycle_weapon: raylib.is_key_pressed(KeyboardKey::KEY_X),
+        // Filled in by the app from its mouse tracker (see `crate::input::MouseAim`).
+        pointer: None,
+        auto_aim: false,
         scan: raylib.is_key_pressed(KeyboardKey::KEY_C),
         place_relay: raylib.is_key_pressed(KeyboardKey::KEY_R),
         place_drone: raylib.is_key_pressed(KeyboardKey::KEY_T),
@@ -402,6 +437,7 @@ fn read_primary_keyboard_input_with_options(
 /// | Inventory, map | Numpad 1, Numpad 2 |
 /// | Bomb, scanner | Numpad 0, Numpad . |
 /// | Next explosive, detonate, detonate in sequence | Numpad 3, Numpad 4, Numpad 5 |
+/// | Fire the weapon (auto-aimed), next weapon | Numpad 6, Numpad 7 |
 ///
 /// Right Shift is a gamepad-style Back: it closes dialogs and leaves buildings but never
 /// pauses. The mouse wheel and Page Up/Down stay with the main keyboard (seat 1).
@@ -433,6 +469,9 @@ pub fn read_secondary_keyboard_input(raylib: &RaylibHandle) -> PlayerInput {
         detonate: raylib.is_key_pressed(KeyboardKey::KEY_KP_4),
         detonate_sequence: raylib.is_key_pressed(KeyboardKey::KEY_KP_5),
         scan: raylib.is_key_pressed(KeyboardKey::KEY_KP_DECIMAL),
+        fire: raylib.is_key_down(KeyboardKey::KEY_KP_6),
+        cycle_weapon: raylib.is_key_pressed(KeyboardKey::KEY_KP_7),
+        auto_aim: true,
         ..PlayerInput::default()
     }
 }

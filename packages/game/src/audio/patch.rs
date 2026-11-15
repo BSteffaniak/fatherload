@@ -183,6 +183,17 @@ patches! {
     // Wave 2 (weapons and explosives): appended so earlier patches keep their seeds.
     SmokeBurst => "smoke_burst",
     ScareBang => "scare_bang",
+    RivetShot => "rivet_shot",
+    ScatterShot => "scatter_shot",
+    CutterZap => "cutter_zap",
+    RocketLaunch => "rocket_launch",
+    HarpoonShot => "harpoon_shot",
+    RailgunShot => "railgun_shot",
+    WeaponDry => "weapon_dry",
+    WeaponMount => "weapon_mount",
+    ImpactRock => "impact_rock",
+    ImpactHit => "impact_hit",
+    TargetDestroyed => "target_destroyed",
 }
 
 /// Playback metadata of a patch.
@@ -371,6 +382,24 @@ impl Patch {
                 .jitter(0.04, 1.0)
                 .ducking(0.45)
                 .priority(8),
+            Self::RivetShot | Self::CutterZap => {
+                PatchInfo::new(Feedback).instances(4).jitter(0.07, 1.5)
+            }
+            Self::ImpactRock | Self::ImpactHit => {
+                PatchInfo::new(Feedback).instances(4).jitter(0.1, 2.0)
+            }
+            Self::WeaponDry | Self::WeaponMount => {
+                PatchInfo::new(Interface).instances(2).jitter(0.03, 0.5)
+            }
+            Self::ScatterShot | Self::HarpoonShot | Self::RocketLaunch => PatchInfo::new(Impact)
+                .instances(3)
+                .send(0.25)
+                .jitter(0.05, 1.0),
+            Self::RailgunShot | Self::TargetDestroyed => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.35)
+                .jitter(0.03, 1.0)
+                .ducking(0.2),
             Self::ThrustLoop
             | Self::DrillSoftLoop
             | Self::DrillHardLoop
@@ -494,6 +523,17 @@ impl Patch {
             Self::EnemyBite => enemy_bite(rng),
             Self::SmokeBurst => smoke_burst(rng),
             Self::ScareBang => scare_bang(rng),
+            Self::RivetShot => rivet_shot(rng),
+            Self::ScatterShot => scatter_shot(rng),
+            Self::CutterZap => cutter_zap(rng),
+            Self::RocketLaunch => rocket_launch(rng),
+            Self::HarpoonShot => harpoon_shot(rng),
+            Self::RailgunShot => railgun_shot(rng),
+            Self::WeaponDry => weapon_dry(rng),
+            Self::WeaponMount => weapon_mount(rng),
+            Self::ImpactRock => impact_rock(rng),
+            Self::ImpactHit => impact_hit(rng),
+            Self::TargetDestroyed => target_destroyed(rng),
         }
     }
 }
@@ -1539,6 +1579,190 @@ fn scare_bang(rng: &mut Rng) -> Vec<f32> {
         let dry = crack * 1.2 + whine + sub * 0.7;
         dry + echo.process(dry, 0.13, 0.35) * 0.35
     })
+}
+
+/// A rivet gun shot: a tight pneumatic snap with a metallic tick.
+fn rivet_shot(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        2_600.0 * rng.jitter(0.08),
+        1.4,
+        0.05,
+    );
+    mix_into(&mut out, &clank(rng, 1_700.0, 0.04), 0.0, 0.5);
+    mix_into(&mut out, &thump(260.0, 140.0, 0.04, 1.5), 0.0, 0.4);
+    out
+}
+
+/// A scatter blaster: a deep boom with a spray of pellets rattling off.
+fn scatter_shot(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        1_800.0,
+        0.7,
+        0.05,
+    );
+    let blast = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::LowPass,
+        4_500.0,
+        0.8,
+        0.16,
+    );
+    mix_into(&mut out, &blast, 0.0, 1.0);
+    mix_into(
+        &mut out,
+        &thump(170.0 * rng.jitter(0.05), 80.0, 0.14, 2.0),
+        0.0,
+        0.45,
+    );
+    grains(rng, &mut out, 12, (0.01, 0.2), (2_500.0, 6_000.0), 0.35);
+    out
+}
+
+/// One pulse of the plasma cutter: a short electric sizzle (back to back they buzz).
+fn cutter_zap(rng: &mut Rng) -> Vec<f32> {
+    let mut saw = Osc::new(Wave::Saw);
+    let mut fm = Fm::default();
+    let mut filter = Svf::new(FilterMode::BandPass, 1_800.0, 1.2);
+    let base = 210.0 * rng.jitter(0.04);
+    render(0.13, |t| {
+        let buzz = saw.next(base) * 0.6 + fm.next(base * 4.0, 2.01, 3.0) * 0.4;
+        filter.run(buzz, 1_400.0 + 900.0 * sine(t, 31.0).abs(), 1.2)
+            * segments(t, &[(0.0, 0.0), (0.01, 1.0), (0.1, 0.8), (0.13, 0.0)])
+    })
+}
+
+/// A rocket leaving the tube: a thump and a rising, roaring whoosh.
+fn rocket_launch(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(110.0, 70.0, 0.12, 2.0);
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 800.0, 1.0);
+    let roar = render(0.5, |t| {
+        filter.run(noise.next(), glide(t, 600.0, 2_400.0, 0.25), 1.0)
+            * segments(t, &[(0.0, 0.0), (0.04, 1.0), (0.3, 0.7), (0.5, 0.0)])
+    });
+    mix_into(&mut out, &roar, 0.02, 0.9);
+    out
+}
+
+/// A harpoon: a taut twang and the whizz of line paying out.
+fn harpoon_shot(rng: &mut Rng) -> Vec<f32> {
+    let pitch = 160.0 * rng.jitter(0.05);
+    let bank = [
+        (pitch, 1.0, 0.25),
+        (pitch * 2.01, 0.5, 0.18),
+        (pitch * 3.03, 0.3, 0.1),
+    ];
+    let mut out = render(0.35, |t| partials(t, &bank) * perc(t, 0.001, 0.3));
+    let whizz = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        3_500.0,
+        0.8,
+        0.25,
+    );
+    mix_into(&mut out, &whizz, 0.02, 0.3);
+    out
+}
+
+/// A railgun slug: a rising capacitor whine, a hard crack and a long metallic ring.
+fn railgun_shot(rng: &mut Rng) -> Vec<f32> {
+    let mut whine = Osc::new(Wave::Sine);
+    let mut charge = render(0.07, |t| {
+        whine.next(glide(t, 500.0, 3_200.0, 0.06))
+            * segments(t, &[(0.0, 0.0), (0.06, 0.6), (0.07, 0.0)])
+    });
+    let mut crack_noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut crack_filter = Svf::new(FilterMode::HighPass, 1_200.0, 0.7);
+    let ring_pitch = 1_100.0 * rng.jitter(0.04);
+    let bank = [
+        (ring_pitch, 0.5, 0.5),
+        (ring_pitch * 2.76, 0.25, 0.3),
+        (ring_pitch * 5.4, 0.12, 0.2),
+    ];
+    let crack = render(0.7, |t| {
+        crack_filter.process(crack_noise.next()) * perc(t, 0.000_2, 0.04) + partials(t, &bank)
+    });
+    mix_into(&mut charge, &crack, 0.065, 1.0);
+    mix_into(&mut charge, &thump(180.0, 60.0, 0.15, 3.0), 0.065, 0.6);
+    charge
+}
+
+/// The empty click of a dry trigger.
+fn weapon_dry(rng: &mut Rng) -> Vec<f32> {
+    let mut out = clank(rng, 2_300.0, 0.025);
+    mix_into(&mut out, &clank(rng, 1_500.0, 0.02), 0.05, 0.5);
+    out
+}
+
+/// A weapon locking onto the hardpoint: two mechanical clacks and a servo chirp.
+fn weapon_mount(rng: &mut Rng) -> Vec<f32> {
+    let mut out = clank(rng, 900.0, 0.05);
+    mix_into(&mut out, &clank(rng, 1_250.0, 0.05), 0.09, 0.8);
+    let mut osc = Osc::new(Wave::Square);
+    osc.width = 0.4;
+    let chirp = render(0.06, |t| {
+        osc.next(glide(t, 900.0, 1_500.0, 0.05)) * perc(t, 0.002, 0.05)
+    });
+    mix_into(&mut out, &chirp, 0.16, 0.15);
+    out
+}
+
+/// A shot striking rock: a dusty chip.
+fn impact_rock(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        1_400.0 * rng.jitter(0.15),
+        1.0,
+        0.07,
+    );
+    mix_into(&mut out, &clank(rng, 700.0, 0.03), 0.0, 0.3);
+    grains(rng, &mut out, 4, (0.01, 0.1), (2_000.0, 4_500.0), 0.2);
+    out
+}
+
+/// A shot striking a target: a solid thwack.
+fn impact_hit(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(320.0 * rng.jitter(0.08), 150.0, 0.08, 2.5);
+    let slap = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        1_800.0,
+        1.0,
+        0.05,
+    );
+    mix_into(&mut out, &slap, 0.0, 0.7);
+    out
+}
+
+/// A target breaking apart: a crunch and a clatter of parts.
+fn target_destroyed(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(200.0, 70.0, 0.2, 2.5);
+    let crunch = burst(
+        rng.next_u64(),
+        NoiseColor::Brown,
+        FilterMode::LowPass,
+        2_000.0,
+        0.8,
+        0.2,
+    );
+    mix_into(&mut out, &crunch, 0.0, 0.9);
+    for time in scatter(rng, 5, 0.05, 0.45, 1.3) {
+        let base = rng.range(800.0, 1_800.0);
+        let part = clank(rng, base, 0.06);
+        mix_into(&mut out, &part, time, rng.range(0.2, 0.35));
+    }
+    out
 }
 
 /// A flare striking: a scratch, a pop and a sputtering hiss.

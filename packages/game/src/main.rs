@@ -22,6 +22,7 @@ mod shell;
 mod story_report;
 #[cfg(not(target_os = "emscripten"))]
 mod village_report;
+mod weapon_aim;
 mod window;
 #[cfg(not(target_os = "emscripten"))]
 mod worldgen_tools;

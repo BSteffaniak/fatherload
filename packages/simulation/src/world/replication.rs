@@ -63,6 +63,9 @@ pub struct PlayerTickState {
     pub scanner_cooldown: Option<f32>,
     pub scanner_deadline: Option<SimulationTick>,
     pub deep_run: Option<DeepRunState>,
+    /// Capacitor energy, weapon cooldown, aim and trigger.
+    #[serde(default)]
+    pub weapon: crate::weapon::RigWeaponState,
 }
 
 /// Per-tick live state sent whole every frame: the id counters.
@@ -264,6 +267,7 @@ impl WorldState {
             scanner_cooldown: self.scanner_cooldowns.get(&player_id).copied(),
             scanner_deadline: self.scanner_cooldown_deadlines.get(&player_id).copied(),
             deep_run: self.deep_run_states.get(&player_id).copied(),
+            weapon: rig.weapon,
         })
     }
 
@@ -283,8 +287,10 @@ impl WorldState {
             scanner_cooldown,
             scanner_deadline,
             deep_run,
+            weapon,
         } = state;
         if let Some(player) = self.players.get_mut(&player_id) {
+            player.weapon = weapon;
             player.x = x;
             player.y = y;
             player.velocity_x = velocity_x;

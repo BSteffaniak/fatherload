@@ -201,8 +201,10 @@ impl WorldState {
                 EntityKind::Critter => {}
                 EntityKind::Enemy => self.advance_enemy(id, next_tick, output),
                 EntityKind::EnemyShot => self.advance_enemy_shot(id, next_tick, output),
-                // Charges move in the bomb pass (`EntityPhase::Charges`), never here.
-                EntityKind::Charge => {}
+                EntityKind::Projectile => self.advance_projectile(id, next_tick, output),
+                // Charges move in the bomb pass (`EntityPhase::Charges`), never here; practice
+                // targets stand still.
+                EntityKind::Charge | EntityKind::Target => {}
             }
         }
         // Merged-away drops (their stacks already moved onto their neighbours).

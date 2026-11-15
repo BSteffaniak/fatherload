@@ -25,6 +25,22 @@ const WARP_SEARCH_COLUMNS: i32 = 48;
 fn equip_for_testing(player: &mut Player) {
     max_out_upgrades(player);
     player.credits = player.credits.max(TEST_MODE_CREDITS);
+    // Every weapon at its top tier, a full capacitor and a rack of rockets.
+    for weapon in crate::weapon::WeaponKind::ALL {
+        let _ = player.receive_weapon(weapon);
+        player
+            .weapon_rack
+            .owned
+            .insert(weapon, crate::weapon::MAX_WEAPON_MK);
+    }
+    player.weapon_rack.battery_level = crate::weapon::MAX_BATTERY_LEVEL;
+    if let Some(mounted) = player.mounted_weapon.as_mut() {
+        mounted.mk = crate::weapon::MAX_WEAPON_MK;
+    }
+    player.weapon.energy = player.battery_capacity();
+    let rockets = crate::weapon::AmmoKind::Rocket.item();
+    let missing = 40_u32.saturating_sub(player.cargo_bay.count(rockets));
+    player.cargo_bay.add(rockets, missing);
 }
 
 impl WorldState {
@@ -99,6 +115,7 @@ impl WorldState {
             }
             if state.infinite_fuel {
                 player.fuel = player.fuel_capacity;
+                player.weapon.energy = player.battery_capacity();
             }
         }
     }

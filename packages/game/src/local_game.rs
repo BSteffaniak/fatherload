@@ -151,6 +151,10 @@ pub struct LocalGame {
     client_entered: bool,
     autosave_seconds: f32,
     host_bind: SocketAddr,
+    /// Where each seat's view sat on screen when last drawn (mouse aim), in seat order.
+    view_anchors: std::cell::RefCell<Vec<Option<crate::weapon_aim::ViewAnchor>>>,
+    /// How each seat aimed this frame (its reticle), in seat order.
+    seat_aims: Vec<crate::weapon_aim::SeatAim>,
 }
 
 impl LocalGame {
@@ -171,6 +175,8 @@ impl LocalGame {
             client_entered: false,
             autosave_seconds: 0.0,
             host_bind: SocketAddr::new(std::net::Ipv4Addr::UNSPECIFIED.into(), DEFAULT_PORT),
+            view_anchors: std::cell::RefCell::new(Vec::new()),
+            seat_aims: Vec::new(),
         }
     }
 
@@ -253,6 +259,8 @@ impl LocalGame {
         }
 
         let seats = self.seats().to_vec();
+        self.seat_aims
+            .resize_with(seats.len(), crate::weapon_aim::SeatAim::default);
         for (index, seat) in seats.iter().enumerate() {
             let mut seat_frame = match inputs.get(index) {
                 Some(sampled) if self.shell.gameplay_input_enabled(index) => {
@@ -263,9 +271,29 @@ impl LocalGame {
                             .sound_cues
                             .push(PlacedCue::interface(crate::shell::SoundCue::UiMove));
                     }
-                    seat_input_with(sampled, *selection)
+                    let mut frame = seat_input_with(sampled, *selection);
+                    // The hardpoint weapon: trigger, aim (pointer, stick or auto) and swaps.
+                    let anchor = self.view_anchors.borrow().get(index).copied().flatten();
+                    let aim = crate::weapon_aim::seat_aim(
+                        sampled,
+                        player,
+                        selection.facing,
+                        anchor.as_ref(),
+                    );
+                    frame.controls = frame.controls.with_weapon(aim.control);
+                    if crate::weapon_aim::trigger_thrusts(sampled, player) {
+                        frame.controls.thrust = true;
+                    }
+                    frame
+                        .actions
+                        .extend(crate::weapon_aim::cycle_command(sampled, player));
+                    self.seat_aims[index] = aim;
+                    frame
                 }
-                _ => SeatInput::default(),
+                _ => {
+                    self.seat_aims[index] = crate::weapon_aim::SeatAim::default();
+                    SeatInput::default()
+                }
             };
             if let Some(actions) = seat_actions.get_mut(index) {
                 seat_frame.actions.append(actions);
@@ -318,15 +346,31 @@ impl LocalGame {
         snapshot.pickups = self.effects.pickups();
         snapshot.apply_pose_overrides(&self.runtime.pose_overrides());
         snapshot.apply_camera_leads(&self.camera_leads);
+        let mut anchors = self.view_anchors.borrow_mut();
+        anchors.clear();
         for view in &mut snapshot.views {
+            if anchors.len() <= view.seat_index {
+                anchors.resize(view.seat_index + 1, None);
+            }
+            anchors[view.seat_index] = Some(crate::weapon_aim::ViewAnchor {
+                viewport: view.viewport,
+                camera: view.camera,
+                world_scale: view.world_scale,
+            });
             if self.shell.gameplay_input_enabled(view.seat_index) {
                 view.aim_preview = crate::render_snapshot::AimPreview::for_selection(
                     self.runtime.world(),
                     view.player_id,
                     self.shell.seat(view.seat_index).explosives,
                 );
+                if let Some(aim) = self.seat_aims.get(view.seat_index) {
+                    view.reticle =
+                        crate::weapon_aim::reticle(self.runtime.world(), view.player_id, aim);
+                }
             }
         }
+        drop(anchors);
+        snapshot.shots = self.effects.shots();
         snapshot
     }
 
