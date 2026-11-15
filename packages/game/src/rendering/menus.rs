@@ -27,8 +27,8 @@ use crate::{
     runtime::OnlineRole,
     save::{save_slot_count, save_slot_metadata},
     shell::{
-        JOIN_MENU, LobbyAction, NoticeAction, OnlineScreen, PauseOption, SetupPurpose, ShellState,
-        WARP_BANDS,
+        JOIN_MENU, LobbyAction, NoticeAction, OnlineScreen, PauseOption, RESUME_HOST_MENU,
+        SetupPurpose, ShellState, WARP_BANDS, lobby_action_text,
     },
 };
 use fatherload_simulation::{
@@ -655,8 +655,10 @@ const fn lobby_icon(action: LobbyAction) -> &'static SpriteDef {
     match action {
         LobbyAction::Start | LobbyAction::BackToGame => &menu_icons::PLAY,
         LobbyAction::CopyDescriptor => &menu_icons::KEY,
-        LobbyAction::ToggleReady => &menu_icons::READY,
+        LobbyAction::ToggleReady | LobbyAction::ApproveClaim(_) => &menu_icons::READY,
         LobbyAction::Leave => &menu_icons::DOOR,
+        LobbyAction::ClaimRig(_) => &menu_icons::PERSON,
+        LobbyAction::DenyClaim(_) => &menu_icons::BACK,
     }
 }
 
@@ -737,6 +739,7 @@ pub(super) fn draw_online(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
         ),
         OnlineScreen::LanBrowser => lan_screen(online),
         OnlineScreen::Lobby => lobby_screen(shell),
+        OnlineScreen::ResumeHost => resume_host_screen(online),
         OnlineScreen::Notice => {
             let entries = online
                 .notice_options()
@@ -798,7 +801,51 @@ fn lan_screen(online: &crate::shell::OnlineShell) -> (String, &'static [Hint], V
     )
 }
 
+/// The offer after loading a save that holds other players: who is waiting in it, then host it
+/// online or play alone (WP-PERSIST).
+fn resume_host_screen(
+    online: &crate::shell::OnlineShell,
+) -> (String, &'static [Hint], Vec<Section>) {
+    let hidden = online.resume_crew.len().saturating_sub(MAX_ROSTER_ROWS);
+    let mut crew: Vec<SectionItem> = online
+        .resume_crew
+        .iter()
+        .take(MAX_ROSTER_ROWS)
+        .map(|name| SectionItem::icon_stat(&menu_icons::OFFLINE, name.clone(), "SAVED RIG", ORANGE))
+        .collect();
+    if hidden > 0 {
+        crew.push(SectionItem::text(format!("... and {hidden} more")));
+    }
+    crew.push(SectionItem::text(
+        "Their rigs, cargo, credits and upgrades are kept in this save. Host it and each friend gets their own rig back the moment they join.",
+    ));
+    let details = [
+        "Friends rejoin from their own devices",
+        "Open it to LAN / online later from the pause menu",
+    ];
+    let icons: [&'static SpriteDef; 2] = [&menu_icons::GLOBE, &menu_icons::PLAY];
+    let entries = RESUME_HOST_MENU
+        .iter()
+        .zip(icons)
+        .zip(details)
+        .map(|((label, icon), detail)| Entry::new(icon, *label).detail(detail))
+        .collect();
+    (
+        "Your Crew Is Waiting".to_owned(),
+        NAVIGATE_BACK,
+        vec![
+            Section::new(
+                format!("Saved crewmates ({})", online.resume_crew.len()),
+                GOLD,
+                crew,
+            ),
+            Section::new("Resume", SKY_LIGHT, menu_items(entries, online.selected)),
+        ],
+    )
+}
+
 /// One row per lobby player with a state chip, condensed past [`MAX_ROSTER_ROWS`].
+/// Saved players who are not connected read "OFFLINE, WAITING" until they rejoin.
 fn roster_items(lobby: &crate::runtime::LobbyInfo) -> Vec<SectionItem> {
     if lobby.roster.is_empty() {
         vec![SectionItem::text("Waiting for the roster...")]
@@ -813,14 +860,16 @@ fn roster_items(lobby: &crate::runtime::LobbyInfo) -> Vec<SectionItem> {
                 if lobby.local_player == Some(entry.player) {
                     name.push_str(" (you)");
                 }
-                let (icon, state, color): (&'static SpriteDef, &str, Color) = if !entry.connected {
-                    (&menu_icons::OFFLINE, "OFFLINE", ORANGE)
+                let (icon, state, color): (&'static SpriteDef, &str, Color) = if entry.parked {
+                    (&menu_icons::OFFLINE, "OFFLINE, WAITING", ORANGE)
+                } else if !entry.connected {
+                    (&menu_icons::OFFLINE, "RECONNECTING", ORANGE)
                 } else if entry.local {
                     (&menu_icons::CROWN, "HOST", GOLD)
                 } else if entry.ready {
                     (&menu_icons::READY, "READY", LIME)
                 } else {
-                    (&menu_icons::WAITING, "WAITING", FOG)
+                    (&menu_icons::WAITING, "ONLINE", SKY_LIGHT)
                 };
                 SectionItem::icon_stat(icon, name, state, color)
             })
@@ -829,6 +878,28 @@ fn roster_items(lobby: &crate::runtime::LobbyInfo) -> Vec<SectionItem> {
             rows.push(SectionItem::text(format!("... and {hidden} more")));
         }
         rows
+    }
+}
+
+/// Lobby rows about saved crewmates (WP-PERSIST): how they rejoin, and pending rig claims.
+fn crew_rows(lobby: &crate::runtime::LobbyInfo, host: bool, players: &mut Vec<SectionItem>) {
+    if lobby.roster.iter().any(|entry| entry.parked) {
+        players.push(SectionItem::text(if host {
+            "Saved crewmates get their own rigs back when they join from their device."
+        } else {
+            "New device? Claim your saved rig below; the host approves it."
+        }));
+    }
+    for claim in &lobby.claims {
+        players.push(SectionItem::icon_stat(
+            &menu_icons::PERSON,
+            format!(
+                "{} (new device) asks for {}'s saved rig",
+                claim.name, claim.target_name
+            ),
+            "CLAIM",
+            GOLD,
+        ));
     }
 }
 
@@ -880,19 +951,24 @@ fn lobby_screen(shell: &ShellState) -> (String, &'static [Hint], Vec<Section>) {
         .iter()
         .filter(|entry| entry.connected && (entry.local || entry.ready))
         .count();
-    let players = roster_items(&lobby);
+    let connected_count = lobby.roster.iter().filter(|entry| entry.connected).count();
+    let mut players = roster_items(&lobby);
+    crew_rows(&lobby, host, &mut players);
     let entries = online
         .lobby_options()
         .into_iter()
         .map(|action| {
-            let entry = Entry::new(lobby_icon(action), action.label(host));
+            let entry = Entry::new(
+                lobby_icon(action),
+                lobby_action_text(action, host, Some(&lobby)),
+            );
             match action {
                 LobbyAction::ToggleReady => entry.value(
                     if online.ready { "READY" } else { "NOT READY" },
                     if online.ready { LIME } else { FOG },
                 ),
                 LobbyAction::Start => {
-                    entry.value(format!("{ready_count}/{} ready", lobby.roster.len()), LIME)
+                    entry.value(format!("{ready_count}/{connected_count} ready"), LIME)
                 }
                 _ => entry,
             }
@@ -911,7 +987,14 @@ fn lobby_screen(shell: &ShellState) -> (String, &'static [Hint], Vec<Section>) {
         },
         vec![
             Section::new("Session", SKY_LIGHT, session),
-            Section::new(format!("Players ({})", lobby.roster.len()), GOLD, players),
+            Section::new(
+                match lobby.roster.len() - connected_count {
+                    0 => format!("Players ({connected_count})"),
+                    saved => format!("Players ({connected_count} online, {saved} offline)"),
+                },
+                GOLD,
+                players,
+            ),
             Section::new("Actions", SKY_LIGHT, menu_items(entries, online.selected)),
         ],
     )

@@ -10,6 +10,7 @@
 //! frames with held input, and `shell` exposes the menu state to open screens directly.
 
 mod enemy_scenes;
+mod crew_scenes;
 mod rig_scenes;
 mod village_scenes;
 
@@ -325,6 +326,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(village_scenes::VILLAGE_SCENES)
         .chain(enemy_scenes::ENEMY_SCENES)
         .chain(base_scenes::BASE_SCENES)
+        .chain(crew_scenes::CREW_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
@@ -832,6 +834,7 @@ pub const SCENES: &[Scene] = &[
                 started: false,
                 status: "Listening for players. 3 connected.".to_owned(),
                 local_player: Some(NetPlayerId(1)),
+                ..LobbyInfo::default()
             });
         },
     },
@@ -858,6 +861,7 @@ pub const SCENES: &[Scene] = &[
                 started: false,
                 status: "Connected to the host. Waiting for the game to start.".to_owned(),
                 local_player: Some(NetPlayerId(2)),
+                ..LobbyInfo::default()
             });
         },
     },
@@ -2537,6 +2541,7 @@ fn lobby_entry(id: u32, name: &str, ready: bool, connected: bool, local: bool) -
         ready,
         connected,
         local,
+        parked: false,
     }
 }
 

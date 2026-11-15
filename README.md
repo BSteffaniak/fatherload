@@ -561,9 +561,26 @@ Files live in `$FATHERLOAD_STATE_DIR`, else `$XDG_STATE_HOME/fatherload`, else
   hopper; special explosives are items there too) and live objects (gas clouds, boulders, drops,
   explosive charges, projectiles) are entities. v1-v5 saves (which wrote out every tile), v6
   saves (separate cargo maps and hazard lists) and v7 saves (a separate charge list and explosive
-  count maps) are migrated on load and re-saved as v8; saves from before seeded worlds keep their terrain and load as legacy worlds. A save from
+  count maps, and no crew roster) are migrated on load and re-saved as v8; saves from before
+  seeded worlds keep their terrain and load as legacy worlds. A save from
   an unknown generator version is refused with a clear error. Loading starts a new session
   epoch.
+- Every rig in a save remembers who plays it (v8 crew roster), so **resuming a multiplayer game
+  remembers every player**: rig, cargo bay, block hopper, credits, upgrades, quests, cosmetics and
+  explosives. Players who are not connected are parked outside the live world (not simulated or
+  drawn, but saved) and get their rig back, exactly where they left it, when they rejoin from
+  their own device (with a "Welcome back, <name>" banner). Loading a save that holds other
+  players offers **Host this world online** straight away; the host's lobby lists every saved
+  player ("OFFLINE, WAITING" until they join). A brand-new player gets a fresh rig beside them.
+  Someone joining from a new machine or cleared browser storage can **claim** their saved rig in
+  the lobby, and the host approves or denies it (the rig then belongs to the new device). Local
+  split-screen seats take their saved rigs back in seat order (a save loaded from the title
+  starts with as many seats as it had). Saves from before the roster load with every rig; the
+  rigs beyond the host's seats are parked instead of deleted.
+- `profile.json` holds this install's persistent player id (random, made on first run) and
+  display name (edit it there; `FATHERLOAD_PLAYER_NAME` overrides it for one run). It is sent
+  when joining so hosts recognize you; in the browser it lives in the site's IndexedDB with the
+  saves.
 - Slot UI displays depth and credits; the title shows the latest save's depth, credits and playtime.
 - Settings are stored in `settings.json` and persist volume/fullscreen preferences and
   the window size/maximized state.

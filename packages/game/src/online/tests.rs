@@ -106,7 +106,7 @@ impl Peer {
         token: Option<fatherload_netcode::ReconnectToken>,
     ) -> Self {
         Self {
-            client: OnlineClient::join(JoinTarget::Addr(addr), name, token, headless_world())
+            client: OnlineClient::join(JoinTarget::Addr(addr), name, token, None, headless_world())
                 .expect("client network thread starts"),
             frame: 0,
             scripted: true,

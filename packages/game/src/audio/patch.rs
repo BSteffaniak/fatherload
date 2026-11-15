@@ -207,6 +207,8 @@ patches! {
     HomeSet => "home_set",
     RefineryLoad => "refinery_load",
     WorkshopCraft => "workshop_craft",
+    // WP-PERSIST (appended: variation seeds follow declaration order).
+    CrewReturn => "crew_return",
 }
 
 /// Playback metadata of a patch.
@@ -360,7 +362,8 @@ impl Patch {
             | Self::VaultFanfare
             | Self::Milestone
             | Self::Rescue
-            | Self::VillageArrival => PatchInfo::new(Big)
+            | Self::VillageArrival
+            | Self::CrewReturn => PatchInfo::new(Big)
                 .instances(1)
                 .jitter(0.0, 0.0)
                 .ducking(0.35),
@@ -521,6 +524,7 @@ impl Patch {
             Self::FireCrackle => fire_crackle(rng),
             Self::EmpPulse => emp_pulse(rng),
             Self::FlareIgnite => flare_ignite(rng),
+            Self::CrewReturn => crew_return(rng),
             Self::ThrustLoop => thrust_loop(rng),
             Self::DrillSoftLoop => drill_soft_loop(rng),
             Self::DrillHardLoop => drill_hard_loop(rng),
@@ -2031,6 +2035,23 @@ fn milestone(rng: &mut Rng) -> Vec<f32> {
             0.18,
         );
     }
+    out
+}
+
+/// A crewmate back in a resumed world ("Welcome back"): a friendly door chime (two bells, low
+/// then high) under a warm rising brass third, like the town's bell ringing someone in.
+fn crew_return(rng: &mut Rng) -> Vec<f32> {
+    let mut out = bell(659.25 * rng.jitter(0.004), 2.0, 1.1, 0.7);
+    mix_into(&mut out, &bell(987.77, 2.0, 1.0, 0.8), 0.16, 0.9);
+    for (index, note) in [392.0, 493.88, 587.33].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &brass(rng, note, 0.42 - index as f32 * 0.08, 0.55),
+            0.3 + index as f32 * 0.09,
+            0.22,
+        );
+    }
+    mix_into(&mut out, &bell(1_975.5, 2.0, 0.9, 0.45), 0.56, 0.16);
     out
 }
 

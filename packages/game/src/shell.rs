@@ -26,6 +26,7 @@ use crate::{
 
 pub mod arms;
 mod build;
+mod crew;
 mod garage;
 pub mod hopper;
 mod quests;
@@ -34,6 +35,7 @@ mod village;
 mod world_setup;
 
 pub use build::{BuildDraft, module_at_rig};
+pub use crew::{RESUME_HOST_MENU, lobby_action_text};
 pub use garage::{GARAGE_COUNTER_ROW, GarageDraft, GarageRow, item_available};
 pub use quests::{
     DeskRow, Fanfare, FanfareKind, desk_rows, has_quest_tab, log_quests, tracked_quest,
@@ -428,6 +430,9 @@ pub enum SoundCue {
     RefineryLoad,
     /// A workshop pressing blocks into a charge.
     WorkshopCraft,
+    /// A crewmate rejoined a resumed world, or this player got their saved rig back
+    /// ("Welcome back", WP-PERSIST).
+    CrewReturn,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -497,6 +502,15 @@ pub enum ShellRequest {
     CopyToClipboard(String),
     /// Dev: step the selected live network tuning value.
     AdjustTuning { parameter: usize, step: i32 },
+    /// Client: ask the host for a saved (parked) player's rig.
+    ClaimRig(fatherload_netcode::PlayerId),
+    /// Host: approve or deny a client's rig claim.
+    ResolveClaim {
+        client: fatherload_netcode::ClientId,
+        approve: bool,
+    },
+    /// Host the loaded world online (its saved crewmates rejoin with their rigs).
+    HostLoadedWorld,
     /// Close the app.
     Exit,
 }
@@ -516,6 +530,8 @@ pub enum OnlineScreen {
     Lobby,
     /// A session-ended / rejected / disconnected message.
     Notice,
+    /// A loaded save holds other players: host it online, or play alone (WP-PERSIST).
+    ResumeHost,
 }
 
 /// Lobby menu entries.
@@ -531,6 +547,12 @@ pub enum LobbyAction {
     ToggleReady,
     /// Host: end the session; client: leave it.
     Leave,
+    /// Client: ask the host for this saved (parked) player's rig.
+    ClaimRig(fatherload_netcode::PlayerId),
+    /// Host: hand the asked-for saved rig to this client.
+    ApproveClaim(fatherload_netcode::ClientId),
+    /// Host: turn this client's rig claim down.
+    DenyClaim(fatherload_netcode::ClientId),
 }
 
 impl LobbyAction {
@@ -549,6 +571,9 @@ impl LobbyAction {
                     "Leave session"
                 }
             }
+            Self::ClaimRig(_) => "Claim a saved rig",
+            Self::ApproveClaim(_) => "Approve rig claim",
+            Self::DenyClaim(_) => "Deny rig claim",
         }
     }
 }
@@ -612,6 +637,8 @@ pub struct OnlineShell {
     pub tune_parameter: usize,
     /// Last address typed into the join form.
     pub last_address: String,
+    /// Saved crewmates of a just-loaded world ([`OnlineScreen::ResumeHost`]).
+    pub resume_crew: Vec<String>,
 }
 
 impl Default for OnlineShell {
@@ -631,6 +658,7 @@ impl Default for OnlineShell {
             net_debug: Vec::new(),
             tune_parameter: 0,
             last_address: format!("127.0.0.1:{}", crate::online::DEFAULT_PORT),
+            resume_crew: Vec::new(),
         }
     }
 }
@@ -652,11 +680,14 @@ impl OnlineShell {
         } else {
             LobbyAction::ToggleReady
         };
+        let mut options = vec![first];
+        options.extend(crew::crew_actions(self));
         if self.role == Some(OnlineRole::Host) {
-            vec![first, LobbyAction::CopyDescriptor, LobbyAction::Leave]
+            options.extend([LobbyAction::CopyDescriptor, LobbyAction::Leave]);
         } else {
-            vec![first, LobbyAction::Leave]
+            options.push(LobbyAction::Leave);
         }
+        options
     }
 
     /// Notice menu entries.
@@ -2045,7 +2076,8 @@ impl ShellState {
             OnlineScreen::JoinMenu
             | OnlineScreen::LanBrowser
             | OnlineScreen::Lobby
-            | OnlineScreen::Notice => {}
+            | OnlineScreen::Notice
+            | OnlineScreen::ResumeHost => {}
         }
     }
 
@@ -2143,8 +2175,12 @@ impl ShellState {
                         requests.push(ShellRequest::SetReady(self.online.ready));
                     }
                     LobbyAction::Leave => requests.push(ShellRequest::LeaveOnline),
+                    action @ (LobbyAction::ClaimRig(_)
+                    | LobbyAction::ApproveClaim(_)
+                    | LobbyAction::DenyClaim(_)) => requests.extend(crew::crew_request(action)),
                 }
             }
+            OnlineScreen::ResumeHost => self.handle_resume_host(input, requests),
             OnlineScreen::Notice => {
                 if input.backs_out() {
                     self.return_to_title("Mine ore, sell cargo, and buy upgrades.");

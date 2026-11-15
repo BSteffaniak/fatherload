@@ -194,6 +194,7 @@ mod tests {
         assert_eq!(client_channel(&inputs), Channel::Unreliable);
         let hello = WorldClientMessage::Hello {
             token: Some(ReconnectToken(7)),
+            profile: Some(fatherload_netcode::ProfileId(0xfeed)),
             name: "Miner".to_owned(),
             version: PROTOCOL_VERSION,
         };
@@ -212,6 +213,7 @@ mod tests {
     fn encoded_messages_round_trip_through_the_codec() {
         let hello = WorldClientMessage::Hello {
             token: None,
+            profile: None,
             name: "Rig".to_owned(),
             version: PROTOCOL_VERSION,
         };

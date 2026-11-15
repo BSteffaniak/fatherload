@@ -6,15 +6,22 @@
 //! other gameplay path: the shell submits held controls and one-shot actions per seat, the
 //! runtime advances fixed ticks from real time, and rendering reads the world it exposes.
 
-use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    net::SocketAddr,
+    time::Duration,
+};
 
 use fatherload_netcode::{
-    ClientPhase, EndReason, HostConfig, HostPhase, HostSession, InterpDelay, LobbyEntry, NetEvent,
-    NetTuning, SeatId, SessionParams,
-    world::{ActionResolution, WorldEvent, WorldOp, from_sim_player, to_sim_player},
+    ClaimRequest, ClientId, ClientPhase, CrewNotice, EndReason, HostConfig, HostPhase, HostSession,
+    IdentityNotice, InterpDelay, LobbyEntry, NetEvent, NetTuning, SeatId, SessionParams,
+    world::{
+        ActionResolution, WorldEvent, WorldOp, from_sim_player, from_sim_profile, to_sim_player,
+    },
 };
 use fatherload_simulation::{
-    ControlState, GameplayEvent, PlayerCommand, PlayerId, WorldState, terrain::TilePosition,
+    ControlState, CrewMember, GameplayEvent, PlayerCommand, PlayerId, ProfileId, WorldState,
+    terrain::TilePosition,
 };
 
 use crate::online::{
@@ -37,6 +44,83 @@ pub struct LocalSeat {
     pub seat: SeatId,
     /// The world player bound to the seat.
     pub player: PlayerId,
+}
+
+/// Who this app's local seats are (WP-PERSIST): the install's persistent profile and display
+/// name. Seat `n` plays as `profile.for_seat(n)`, so every seat gets its own rig back when a
+/// saved world is loaded again.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct LocalIdentity {
+    /// The install's profile (`None`: anonymous, e.g. tests and scripted scenes; seats then
+    /// rebind by seat index).
+    pub profile: Option<ProfileId>,
+    /// Display name of the first seat.
+    pub name: String,
+}
+
+impl LocalIdentity {
+    /// The persistent identity of seat `index`.
+    #[must_use]
+    pub fn seat_profile(&self, index: usize) -> Option<ProfileId> {
+        self.profile
+            .map(|profile| profile.for_seat(u32::try_from(index).unwrap_or(u32::MAX)))
+    }
+
+    /// The roster name of seat `index`.
+    #[must_use]
+    pub fn seat_name(&self, index: usize) -> String {
+        let name = if self.name.trim().is_empty() {
+            "Player"
+        } else {
+            self.name.as_str()
+        };
+        if index == 0 {
+            name.to_owned()
+        } else {
+            format!("{name} P{}", index + 1)
+        }
+    }
+}
+
+/// Crew news for the app's toasts and sounds (WP-PERSIST).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CrewToast {
+    /// This player joined and got their saved rig back.
+    WelcomeBack {
+        /// This player's name.
+        name: String,
+    },
+    /// Host: a saved crewmate rejoined.
+    CrewmateReturned {
+        /// Their name.
+        name: String,
+    },
+    /// Host: a new player joined.
+    CrewmateJoined {
+        /// Their name.
+        name: String,
+    },
+    /// Host: a player left (`parked`: their rig waits for them in the save).
+    CrewmateLeft {
+        /// Their name.
+        name: String,
+        /// Their rig is kept.
+        parked: bool,
+    },
+    /// Host: someone asks to take over a saved rig.
+    ClaimRequested {
+        /// Who asks.
+        name: String,
+        /// The saved rig's name.
+        target_name: String,
+    },
+    /// The host approved this client's rig claim.
+    ClaimApproved {
+        /// This player's name.
+        name: String,
+    },
+    /// The host declined this client's rig claim.
+    ClaimDenied,
 }
 
 /// One seat's gameplay input for the next tick(s).
@@ -148,6 +232,10 @@ pub struct LobbyInfo {
     pub status: String,
     /// The roster entry that is this app's (first) player.
     pub local_player: Option<fatherload_netcode::PlayerId>,
+    /// Host: pending "claim a saved rig" requests to approve or deny.
+    pub claims: Vec<ClaimRequest>,
+    /// Client: the saved rig this client asked for, until the host answers.
+    pub pending_claim: Option<fatherload_netcode::PlayerId>,
 }
 
 /// The gameplay authority the app runs on.
@@ -164,7 +252,13 @@ impl Runtime {
     /// [`MAX_LOCAL_SEATS`]).
     #[must_use]
     pub fn local(world: WorldState, seats: usize) -> Self {
-        Self::Host(Box::new(LocalHost::new(world, seats)))
+        Self::local_as(world, seats, LocalIdentity::default())
+    }
+
+    /// A local host whose seats play as `identity` (seats rebind to their saved rigs).
+    #[must_use]
+    pub fn local_as(world: WorldState, seats: usize, identity: LocalIdentity) -> Self {
+        Self::Host(Box::new(LocalHost::with_identity(world, seats, identity)))
     }
 
     /// Fraction of a fixed tick for presentation, never gameplay.
@@ -325,6 +419,65 @@ impl Runtime {
         }
     }
 
+    /// Client: asks the host for a parked (saved, offline) player's rig.
+    pub fn claim_rig(&mut self, player: fatherload_netcode::PlayerId) {
+        if let Self::Client(client) = self {
+            client.claim_rig(player);
+        }
+    }
+
+    /// Host: approves or denies a pending rig claim.
+    pub fn resolve_claim(&mut self, client: ClientId, approve: bool) {
+        if let Self::Host(host) = self {
+            host.session.resolve_claim(client, approve);
+        }
+    }
+
+    /// Crew news (joins, departures, claims, welcome back) since the last call.
+    pub fn take_crew_toasts(&mut self) -> Vec<CrewToast> {
+        match self {
+            Self::Host(host) => host
+                .session
+                .take_crew_notices()
+                .into_iter()
+                .map(|notice| match notice {
+                    CrewNotice::Joined {
+                        name, returning, ..
+                    } => {
+                        if returning {
+                            CrewToast::CrewmateReturned { name }
+                        } else {
+                            CrewToast::CrewmateJoined { name }
+                        }
+                    }
+                    CrewNotice::Left { name, parked, .. } => {
+                        CrewToast::CrewmateLeft { name, parked }
+                    }
+                    CrewNotice::ClaimRequested(request) => CrewToast::ClaimRequested {
+                        name: request.name,
+                        target_name: request.target_name,
+                    },
+                })
+                .collect(),
+            Self::Client(client) => {
+                let name = client.session().config().name.clone();
+                client
+                    .take_identity_notices()
+                    .into_iter()
+                    .map(|notice| match notice {
+                        IdentityNotice::WelcomeBack => {
+                            CrewToast::WelcomeBack { name: name.clone() }
+                        }
+                        IdentityNotice::ClaimApproved => {
+                            CrewToast::ClaimApproved { name: name.clone() }
+                        }
+                        IdentityNotice::ClaimDenied { .. } => CrewToast::ClaimDenied,
+                    })
+                    .collect()
+            }
+        }
+    }
+
     /// Host: starts the online game from the lobby.
     pub fn start_online_game(&mut self) {
         if let Self::Host(host) = self {
@@ -370,15 +523,16 @@ pub struct LocalHost {
     session: HostSession<WorldState>,
     seats: Vec<LocalSeat>,
     net: Option<HostNet>,
+    identity: LocalIdentity,
 }
 
 impl LocalHost {
-    /// Hosts `world` with `seats` local players. Existing world players are adopted by the first
-    /// seats in id order (so a loaded save keeps its rigs); further seats spawn new players and
-    /// world players beyond the seat count are dropped.
+    /// Hosts `world` with `seats` local players playing as `identity`. Each seat takes its saved
+    /// rig back (see [`choose_seat_rigs`]); further seats spawn new players. Every other saved
+    /// rig is parked: kept in the save and listed in the roster until its player rejoins.
     #[must_use]
-    pub fn new(world: WorldState, seats: usize) -> Self {
-        Self::with_lobby(world, seats, false)
+    pub fn with_identity(world: WorldState, seats: usize, identity: LocalIdentity) -> Self {
+        Self::with_lobby(world, seats, false, identity)
     }
 
     /// Hosts `world` online: binds `bind` (optionally advertising on the LAN) and waits in the
@@ -390,17 +544,23 @@ impl LocalHost {
     pub fn online(
         world: WorldState,
         seats: usize,
+        identity: LocalIdentity,
         bind: SocketAddr,
         publish_lan: bool,
     ) -> std::io::Result<Self> {
-        let mut host = Self::with_lobby(world, seats, true);
+        let mut host = Self::with_lobby(world, seats, true, identity);
         host.net = Some(HostNet::start(bind, publish_lan)?);
         Ok(host)
     }
 
-    fn with_lobby(world: WorldState, seats: usize, start_in_lobby: bool) -> Self {
+    fn with_lobby(
+        world: WorldState,
+        seats: usize,
+        start_in_lobby: bool,
+        identity: LocalIdentity,
+    ) -> Self {
         let seats = seats.clamp(1, MAX_LOCAL_SEATS);
-        let (world, existing) = keep_first_players(world, seats);
+        let (world, existing) = prepare_seat_rigs(world, seats, &identity);
         let tuning = NetTuning {
             debug_hash_interval: if cfg!(debug_assertions) {
                 DEV_DEBUG_HASH_INTERVAL
@@ -420,8 +580,10 @@ impl LocalHost {
             session: HostSession::new(world, config),
             seats: Vec::new(),
             net: None,
+            identity,
         };
-        host.bind_seats(existing, seats);
+        host.bind_seats(&existing, seats);
+        host.session.park_unowned_players();
         host
     }
 
@@ -438,10 +600,15 @@ impl LocalHost {
         Ok(())
     }
 
-    /// Names the host's first seat in the roster.
+    /// Names the host's seats in the roster (seat 2.. get a numbered variant).
     pub fn set_host_name(&mut self, name: &str) {
-        if let Some(first) = self.seats.first() {
-            self.session.set_local_player_name(first.seat, name);
+        name.clone_into(&mut self.identity.name);
+        for (index, seat) in self.seats.clone().into_iter().enumerate() {
+            self.session.set_local_identity(
+                seat.seat,
+                self.identity.seat_profile(index).map(from_sim_profile),
+                self.identity.seat_name(index),
+            );
         }
     }
 
@@ -485,18 +652,34 @@ impl LocalHost {
         }
     }
 
-    /// Adds a seat with a freshly spawned player, up to [`MAX_LOCAL_SEATS`].
+    /// Adds a seat, up to [`MAX_LOCAL_SEATS`]: it takes back the saved rig this seat played in
+    /// the world (parked until now), else a freshly spawned one.
     pub fn add_seat(&mut self) -> Option<LocalSeat> {
         if self.seats.len() >= MAX_LOCAL_SEATS {
             return None;
         }
-        let seat = (0..MAX_LOCAL_SEATS)
-            .map(seat_id)
-            .find(|seat| self.seats.iter().all(|local| local.seat != *seat))?;
-        let player = to_sim_player_id(self.session.add_local_player(seat));
+        let index = (0..MAX_LOCAL_SEATS)
+            .find(|index| self.seats.iter().all(|local| local.seat != seat_id(*index)))?;
+        let seat = seat_id(index);
+        let saved = saved_seat_rig(self.session.world(), index, &self.identity);
+        let player = match saved.and_then(from_sim_player) {
+            Some(net_player) if self.session.adopt_local_player(seat, net_player) => {
+                to_sim_player(net_player)
+            }
+            _ => to_sim_player_id(self.session.add_local_player(seat)),
+        };
         let local = LocalSeat { seat, player };
         self.seats.push(local);
+        self.identify_seat(index, seat);
         Some(local)
+    }
+
+    fn identify_seat(&mut self, index: usize, seat: SeatId) {
+        self.session.set_local_identity(
+            seat,
+            self.identity.seat_profile(index).map(from_sim_profile),
+            self.identity.seat_name(index),
+        );
     }
 
     /// Queues a seat's input.
@@ -567,16 +750,19 @@ impl LocalHost {
             if self.net.is_some() {
                 return false;
             }
-            *self = Self::new(world, seat_count);
+            *self = Self::with_identity(world, seat_count, self.identity.clone());
             return true;
         }
         for local in std::mem::take(&mut self.seats) {
             self.session.remove_local_player(local.seat);
         }
-        // Remote players are re-added to the new world by the session (`new_epoch`).
-        let (world, saved) = keep_first_players(world, seat_count);
+        // The seats' saved rigs are chosen (and identified, so no remote takes their ids) and
+        // every other saved rig is parked; remote players then get their own saved rigs back by
+        // profile in the session's `new_epoch`.
+        let (world, saved) = prepare_seat_rigs(world, seat_count, &self.identity);
         self.session.new_epoch(world);
-        self.bind_seats(saved, seat_count);
+        self.bind_seats(&saved, seat_count);
+        self.session.park_unowned_players();
         true
     }
 
@@ -611,6 +797,8 @@ impl LocalHost {
                 .seats
                 .first()
                 .and_then(|seat| from_sim_player(seat.player)),
+            claims: self.session.claim_requests(),
+            pending_claim: None,
         })
     }
 
@@ -657,21 +845,23 @@ impl LocalHost {
         lines
     }
 
-    /// Binds seats `0..` to `saved` world players in order, then spawns players for the rest up
-    /// to `seat_count`.
-    fn bind_seats(&mut self, saved: Vec<PlayerId>, seat_count: usize) {
-        for (index, player) in saved.into_iter().enumerate() {
+    /// Binds seat `n` to `saved[n]` (its saved rig) or a freshly spawned player, for seats
+    /// `0..seat_count`, and records every seat's identity in the world.
+    fn bind_seats(&mut self, saved: &[Option<PlayerId>], seat_count: usize) {
+        for index in 0..seat_count.min(MAX_LOCAL_SEATS) {
             let seat = seat_id(index);
-            if let Some(net_player) = from_sim_player(player)
-                && self.session.adopt_local_player(seat, net_player)
-            {
-                self.seats.push(LocalSeat { seat, player });
-            }
-        }
-        while self.seats.len() < seat_count {
-            if self.add_seat().is_none() {
-                break;
-            }
+            let adopted = saved
+                .get(index)
+                .copied()
+                .flatten()
+                .and_then(|player| from_sim_player(player).map(|net| (player, net)))
+                .filter(|(_, net)| self.session.adopt_local_player(seat, *net));
+            let player = adopted.map_or_else(
+                || to_sim_player_id(self.session.add_local_player(seat)),
+                |(player, _)| player,
+            );
+            self.seats.push(LocalSeat { seat, player });
+            self.identify_seat(index, seat);
         }
     }
 }
@@ -792,6 +982,8 @@ fn client_lobby_info(client: &OnlineClient) -> LobbyInfo {
         started: client.session().phase() == ClientPhase::InGame,
         status,
         local_player: client.session().player(),
+        claims: Vec::new(),
+        pending_claim: client.pending_claim(),
     }
 }
 
@@ -850,13 +1042,100 @@ fn client_debug_lines(client: &OnlineClient) -> Vec<String> {
     ]
 }
 
-/// Drops world players beyond the first `seats` (in id order) and returns the kept ids.
-fn keep_first_players(mut world: WorldState, seats: usize) -> (WorldState, Vec<PlayerId>) {
-    let mut kept: Vec<PlayerId> = world.player_ids().collect();
-    for extra in kept.split_off(seats.min(kept.len())) {
-        world.remove_player(extra);
+/// Which saved rig each local seat takes back when `world` is hosted by `identity`
+/// (`None`: the seat gets a fresh rig), in this order:
+///
+/// 1. the rig recorded for the seat's own profile (`identity.seat_profile(n)`);
+/// 2. if this install owns no rig in the world at all (the host moved to another machine, or
+///    anonymous play), the rig recorded as played from seat `n`;
+/// 3. rigs with no crew record (saves from before persistent identities), in id order.
+///
+/// Live and parked rigs both count; a parked one is restored when its seat adopts it.
+#[must_use]
+pub fn choose_seat_rigs(
+    world: &WorldState,
+    seats: usize,
+    identity: &LocalIdentity,
+) -> Vec<Option<PlayerId>> {
+    let mut chosen: Vec<Option<PlayerId>> = (0..seats)
+        .map(|index| {
+            identity
+                .seat_profile(index)
+                .and_then(|profile| world.player_for_profile(profile))
+        })
+        .collect();
+    let mut used: BTreeSet<PlayerId> = chosen.iter().flatten().copied().collect();
+    let members: Vec<(PlayerId, Option<CrewMember>)> = world
+        .player_ids()
+        .map(|id| (id, world.crew_member(id).cloned()))
+        .chain(
+            world
+                .parked_players()
+                .map(|(id, parked)| (id, Some(parked.member.clone()))),
+        )
+        .collect();
+    if used.is_empty() {
+        for (index, slot) in chosen.iter_mut().enumerate() {
+            let seat = u32::try_from(index).ok();
+            if let Some((id, _)) = members.iter().find(|(id, member)| {
+                !used.contains(id) && member.as_ref().is_some_and(|member| member.seat == seat)
+            }) {
+                *slot = Some(*id);
+                used.insert(*id);
+            }
+        }
     }
-    (world, kept)
+    let mut legacy = members
+        .iter()
+        .filter(|(id, member)| member.is_none() && !used.contains(id))
+        .map(|(id, _)| *id);
+    for slot in chosen.iter_mut().filter(|slot| slot.is_none()) {
+        *slot = legacy.next();
+    }
+    chosen
+}
+
+/// The saved rig local seat `index` would take back (see [`choose_seat_rigs`]), if it is
+/// parked (a live rig already has a seat or a client).
+fn saved_seat_rig(world: &WorldState, index: usize, identity: &LocalIdentity) -> Option<PlayerId> {
+    choose_seat_rigs(world, index + 1, identity)
+        .get(index)
+        .copied()
+        .flatten()
+        .filter(|player| world.is_parked(*player))
+}
+
+/// Chooses the seats' saved rigs ([`choose_seat_rigs`]), records each as its seat's so no other
+/// player is handed it, and parks every other live rig (a friend's rig waits in the save for
+/// them instead of being deleted).
+fn prepare_seat_rigs(
+    mut world: WorldState,
+    seats: usize,
+    identity: &LocalIdentity,
+) -> (WorldState, Vec<Option<PlayerId>>) {
+    let chosen = choose_seat_rigs(&world, seats, identity);
+    for (index, player) in chosen.iter().enumerate() {
+        let Some(player) = *player else {
+            continue;
+        };
+        let _restored = world.unpark_player(player);
+        world.set_crew_member(
+            player,
+            CrewMember {
+                profile: identity.seat_profile(index),
+                name: identity.seat_name(index),
+                seat: u32::try_from(index).ok(),
+            },
+        );
+    }
+    let others: Vec<PlayerId> = world
+        .player_ids()
+        .filter(|player| !chosen.contains(&Some(*player)))
+        .collect();
+    for player in others {
+        world.park_player(player);
+    }
+    (world, chosen)
 }
 
 fn seat_id(index: usize) -> SeatId {
@@ -922,12 +1201,13 @@ mod tests {
     }
 
     #[test]
-    fn loading_keeps_the_seat_count_and_drops_extra_saved_rigs() {
+    fn loading_keeps_the_seat_count_and_parks_extra_saved_rigs() {
         let mut runtime = Runtime::local(WorldState::new_game(RIG), 2);
         let mut save = WorldState::new_game(RIG);
         for extra in [2, 3, 4] {
             save.add_player(PlayerId::new(extra));
         }
+        save.player_mut(PlayerId::new(4)).expect("rig 4").credits = 4_444;
         assert!(runtime.load_world(save));
         let seated: Vec<PlayerId> = runtime
             .local_seats()
@@ -936,11 +1216,119 @@ mod tests {
             .collect();
         assert_eq!(seated, [RIG, PlayerId::new(2)]);
         assert_eq!(runtime.world().player_ids().collect::<Vec<_>>(), seated);
+        // The rigs beyond the seats are parked, not deleted (an old save's friends).
+        let parked: Vec<PlayerId> = runtime.world().parked_players().map(|(id, _)| id).collect();
+        assert_eq!(parked, [PlayerId::new(3), PlayerId::new(4)]);
+        assert_eq!(
+            runtime
+                .world()
+                .parked_player(PlayerId::new(4))
+                .map(|parked| parked.player.credits),
+            Some(4_444)
+        );
 
         // A save with fewer rigs than seats respawns the missing seat.
         assert!(runtime.load_world(WorldState::new_game(RIG)));
         assert_eq!(runtime.local_seats().len(), 2);
         assert_eq!(runtime.world().player_ids().count(), 2);
+    }
+
+    fn identity(profile: u64, name: &str) -> LocalIdentity {
+        LocalIdentity {
+            profile: Some(ProfileId::new(profile)),
+            name: name.to_owned(),
+        }
+    }
+
+    fn seated(runtime: &Runtime) -> Vec<PlayerId> {
+        runtime
+            .local_seats()
+            .iter()
+            .map(|seat| seat.player)
+            .collect()
+    }
+
+    #[test]
+    fn split_screen_seats_rebind_to_their_saved_rigs_in_order() {
+        let me = identity(0xabc, "Kit");
+        let runtime = Runtime::local_as(WorldState::new_game(RIG), 3, me.clone());
+        let before = seated(&runtime);
+        // Give every seat a recognizable rig, plus a remote friend who is parked.
+        let mut save = runtime.world().clone();
+        for (index, player) in before.iter().enumerate() {
+            save.player_mut(*player).expect("seat rig").credits =
+                u32::try_from(index).unwrap_or(0) * 1_000 + 7;
+        }
+        save.add_player(PlayerId::new(40));
+        save.set_crew_member(
+            PlayerId::new(40),
+            CrewMember {
+                profile: Some(ProfileId::new(0xf00d)),
+                name: "Remy".to_owned(),
+                seat: None,
+            },
+        );
+        let json = serde_json::to_string(&save).expect("save");
+        let save: WorldState = serde_json::from_str(&json).expect("load");
+
+        // Loaded from the title on the same install: every seat back on its own rig.
+        assert_eq!(crate::local_game::saved_seat_count(&save, &me), 3);
+        let resumed = Runtime::local_as(save.clone(), 3, me.clone());
+        assert_eq!(seated(&resumed), before);
+        for (index, player) in before.iter().enumerate() {
+            assert_eq!(
+                resumed.world().player(*player).map(|rig| rig.credits),
+                Some(u32::try_from(index).unwrap_or(0) * 1_000 + 7)
+            );
+        }
+        assert!(resumed.world().is_parked(PlayerId::new(40)), "Remy waits");
+
+        // Resumed with one seat: the others are parked and come back as seats are added.
+        let mut single = Runtime::local_as(save.clone(), 1, me);
+        assert_eq!(seated(&single), before[..1]);
+        assert!(single.world().is_parked(before[2]));
+        assert_eq!(
+            single.add_local_seat().map(|seat| seat.player),
+            Some(before[1])
+        );
+        assert_eq!(
+            single.add_local_seat().map(|seat| seat.player),
+            Some(before[2])
+        );
+        let fresh = single.add_local_seat().expect("a fourth seat").player;
+        assert!(!before.contains(&fresh) && fresh != PlayerId::new(40));
+
+        // Another install (the host moved machines) rebinds by seat index.
+        let other = Runtime::local_as(save, 3, identity(0x999, "Kit"));
+        assert_eq!(seated(&other), before);
+    }
+
+    #[test]
+    fn a_remote_friend_hosting_the_save_plays_their_own_rig() {
+        let mut save = WorldState::new_game(RIG);
+        save.set_crew_member(
+            RIG,
+            CrewMember {
+                profile: Some(ProfileId::new(0x1)),
+                name: "Host".to_owned(),
+                seat: Some(0),
+            },
+        );
+        save.add_player(PlayerId::new(5));
+        save.set_crew_member(
+            PlayerId::new(5),
+            CrewMember {
+                profile: Some(ProfileId::new(0x2)),
+                name: "Friend".to_owned(),
+                seat: None,
+            },
+        );
+        let runtime = Runtime::local_as(save.clone(), 1, identity(0x2, "Friend"));
+        assert_eq!(seated(&runtime), [PlayerId::new(5)]);
+        assert!(runtime.world().is_parked(RIG));
+        let runtime = Runtime::local_as(save, 1, identity(0x1, "Host"));
+        assert_eq!(seated(&runtime), [RIG]);
+        assert!(runtime.world().is_parked(PlayerId::new(5)));
     }
 
     #[test]

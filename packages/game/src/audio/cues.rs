@@ -152,6 +152,7 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::HomeSet => Patch::HomeSet,
         SoundCue::RefineryLoad => Patch::RefineryLoad,
         SoundCue::WorkshopCraft => Patch::WorkshopCraft,
+        SoundCue::CrewReturn => Patch::CrewReturn,
     }
 }
 
@@ -833,6 +834,7 @@ mod tests {
             SoundCue::HomeSet,
             SoundCue::RefineryLoad,
             SoundCue::WorkshopCraft,
+            SoundCue::CrewReturn,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

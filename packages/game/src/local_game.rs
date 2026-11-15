@@ -14,6 +14,11 @@ use fatherload_simulation::{
     worldgen::WorldSettings,
 };
 
+mod crew;
+
+#[cfg(test)]
+pub use crew::saved_seat_count;
+
 use crate::{
     audio::cues::PlacedCue,
     camera_lead::CameraLeads,
@@ -21,7 +26,7 @@ use crate::{
     input::{PlayerInput, devices::InputDevice},
     input_mapping::seat_input_with,
     online::{
-        self, DEFAULT_PORT,
+        DEFAULT_PORT,
         client::OnlineClient,
         lan::{self, Background},
     },
@@ -155,6 +160,12 @@ pub struct LocalGame {
     view_anchors: std::cell::RefCell<Vec<Option<crate::weapon_aim::ViewAnchor>>>,
     /// How each seat aimed this frame (its reticle), in seat order.
     seat_aims: Vec<crate::weapon_aim::SeatAim>,
+    /// The install's persistent identity (WP-PERSIST); `None` plays anonymously (tests, scenes).
+    profile: Option<crate::profile::PlayerProfile>,
+    /// A "Welcome back" banner waiting for the gameplay view to show (title, detail).
+    pending_welcome: Option<(String, String)>,
+    /// Play time of a loaded save that is being hosted from the lobby.
+    resumed_play_seconds: Option<f32>,
 }
 
 impl LocalGame {
@@ -177,6 +188,9 @@ impl LocalGame {
             host_bind: SocketAddr::new(std::net::Ipv4Addr::UNSPECIFIED.into(), DEFAULT_PORT),
             view_anchors: std::cell::RefCell::new(Vec::new()),
             seat_aims: Vec::new(),
+            profile: None,
+            pending_welcome: None,
+            resumed_play_seconds: None,
         }
     }
 
@@ -310,6 +324,7 @@ impl LocalGame {
         report.changed_tiles.extend(frame.changed_tiles);
         self.frame_events = self.events.present(frame.events);
         self.observe_events();
+        self.show_pending_welcome();
         let local_players = self.local_players();
         self.effects.update(delta_seconds);
         self.camera_leads
@@ -784,8 +799,9 @@ impl LocalGame {
             ShellRequest::SetReady(ready) => self.runtime.set_ready(ready),
             ShellRequest::StartOnline => {
                 self.runtime.start_online_game();
+                let play_seconds = self.resumed_play_seconds.take().unwrap_or(0.0);
                 self.shell
-                    .enter_world("The session started. Good digging!", 0.0);
+                    .enter_world("The session started. Good digging!", play_seconds);
                 self.shell.sound_cues.push(SoundCue::Milestone);
             }
             ShellRequest::LeaveOnline => self.leave_online(report),
@@ -799,6 +815,14 @@ impl LocalGame {
                 self.shell.message = self.runtime.adjust_tuning(parameter, step);
             }
             ShellRequest::Exit => self.shell.request_exit = true,
+            ShellRequest::ClaimRig(player) => {
+                self.runtime.claim_rig(player);
+                "Asked the host for that saved rig...".clone_into(&mut self.shell.message);
+            }
+            ShellRequest::ResolveClaim { client, approve } => {
+                self.runtime.resolve_claim(client, approve);
+            }
+            ShellRequest::HostLoadedWorld => self.host_loaded_world(report),
         }
     }
 
@@ -809,7 +833,11 @@ impl LocalGame {
         (test_mode, enemies): (bool, EnemyDifficulty),
         report: &mut FrameReport,
     ) {
-        self.runtime = Runtime::local(world_from_setup(settings, test_mode, enemies), seats);
+        self.runtime = Runtime::local_as(
+            world_from_setup(settings, test_mode, enemies),
+            seats,
+            self.identity(),
+        );
         self.reset_presentation(report);
         self.shell.enter_world(
             if test_mode {
@@ -867,6 +895,7 @@ impl LocalGame {
         for notice in self.runtime.take_notices() {
             self.shell.message = notice;
         }
+        self.present_crew_toasts();
         if self.shell.online.show_net_debug {
             self.shell.online.net_debug = self.runtime.net_debug_lines();
         }
@@ -936,14 +965,16 @@ impl LocalGame {
         (test_mode, enemies): (bool, EnemyDifficulty),
         report: &mut FrameReport,
     ) {
+        let identity = self.identity();
         match LocalHost::online(
             world_from_setup(settings, test_mode, enemies),
             1,
+            identity.clone(),
             self.host_bind,
             true,
         ) {
             Ok(mut host) => {
-                host.set_host_name(&online::player_name());
+                host.set_host_name(&identity.name);
                 self.go_online(Runtime::Host(Box::new(host)), report);
                 self.shell.online.ready = false;
                 self.shell.show_online(OnlineScreen::Lobby);
@@ -956,12 +987,13 @@ impl LocalGame {
 
     fn open_online(&mut self) {
         let bind = self.host_bind;
+        let name = self.identity().name;
         let Runtime::Host(host) = &mut self.runtime else {
             return;
         };
         match host.open_online(bind, true) {
             Ok(()) => {
-                host.set_host_name(&online::player_name());
+                host.set_host_name(&name);
                 "Opened to LAN/online. Pause > Online Session shows the address."
                     .clone_into(&mut self.shell.message);
             }
@@ -976,7 +1008,12 @@ impl LocalGame {
         report: &mut FrameReport,
     ) {
         let fallback = self.runtime.world().clone();
-        match OnlineClient::join(target.clone(), online::player_name(), token, fallback) {
+        let identity = self.identity();
+        let profile = self
+            .profile
+            .as_ref()
+            .map(crate::profile::PlayerProfile::net_id);
+        match OnlineClient::join(target.clone(), identity.name, token, profile, fallback) {
             Ok(client) => {
                 self.last_join = Some((target, token));
                 self.go_online(Runtime::Client(Box::new(client)), report);
@@ -1065,9 +1102,13 @@ impl LocalGame {
     ) {
         match loaded {
             Ok(save) => {
-                if self.shell.run_mode == RunMode::Title {
-                    // From the title, a load starts a fresh single-seat session.
-                    self.runtime = Runtime::local(save.world, 1);
+                let from_title = self.shell.run_mode == RunMode::Title;
+                if from_title {
+                    // From the title, a load starts a fresh session with as many seats as the
+                    // save's split-screen crew (each takes its saved rig back).
+                    let identity = self.identity();
+                    let seats = crew::saved_seat_count(&save.world, &identity);
+                    self.runtime = Runtime::local_as(save.world, seats, identity);
                 } else if !self.runtime.load_world(save.world) {
                     let refusal = if self.runtime.can_save() {
                         "That save runs at another tick rate than this online session."
@@ -1081,6 +1122,9 @@ impl LocalGame {
                 self.reset_presentation(report);
                 self.shell.enter_world(success, save.play_seconds);
                 self.shell.sound_cues.push(SoundCue::Ui);
+                if from_title {
+                    self.offer_resume_hosting();
+                }
             }
             Err(error) => {
                 self.shell.message = format!("Load failed: {error}");
@@ -1191,6 +1235,7 @@ mod tests {
     };
 
     mod base_tests;
+    mod crew_tests;
     mod garage_tests;
     mod quest_tests;
     mod split_seat_tests;

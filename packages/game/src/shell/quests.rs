@@ -31,6 +31,8 @@ pub enum FanfareKind {
     Failed,
     /// A blueprint was finished from its fragments.
     Blueprint,
+    /// A returning player got their saved rig back in a resumed world (WP-PERSIST).
+    WelcomeBack,
 }
 
 /// A banner across the top of a seat's view.

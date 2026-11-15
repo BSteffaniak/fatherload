@@ -277,6 +277,7 @@ pub fn run_bots(
                 JoinTarget::Addr(addr),
                 format!("bot-{index}"),
                 None,
+                None,
                 fallback.clone(),
             )
             .map(|client| Bot {

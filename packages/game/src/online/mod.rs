@@ -15,6 +15,8 @@ pub mod host;
 pub mod lan;
 
 #[cfg(test)]
+mod persistence_tests;
+#[cfg(test)]
 mod tests;
 
 use fatherload_quic_transport::NetConfig;

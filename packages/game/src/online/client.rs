@@ -9,7 +9,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use fatherload_netcode::{
-    ClientConfig, ClientSession, ReconnectToken, SeatId,
+    ClientConfig, ClientSession, IdentityNotice, ProfileId, ReconnectToken, SeatId,
     world::{ActionResolution, WorldEvent, to_sim_player},
 };
 use fatherload_quic_transport::{ConnId, JoinTarget, LinkStats, NetErrorKind, NetEvent, NetHandle};
@@ -62,7 +62,9 @@ pub struct OnlineClient {
 
 impl OnlineClient {
     /// Starts a network thread and joins `target` as `name`, reclaiming a previous player with
-    /// `token`. `fallback` is rendered until the host's keyframe arrives.
+    /// `token` and presenting the install's persistent `profile` (so a host whose world saved
+    /// this player's rig hands it back). `fallback` is rendered until the host's keyframe
+    /// arrives.
     ///
     /// # Errors
     ///
@@ -71,6 +73,7 @@ impl OnlineClient {
         target: JoinTarget,
         name: impl Into<String>,
         token: Option<ReconnectToken>,
+        profile: Option<ProfileId>,
         fallback: WorldState,
     ) -> std::io::Result<Self> {
         let net = NetHandle::start(net_config())?;
@@ -78,6 +81,7 @@ impl OnlineClient {
         let session = ClientSession::new(ClientConfig {
             name: name.into(),
             reconnect_token: token,
+            profile,
             initial_rtt: None,
         });
         Ok(Self {
@@ -220,15 +224,34 @@ impl OnlineClient {
                 NetEvent::HostReady { .. } | NetEvent::ShutdownComplete => {}
             }
         }
-        if self.seats.is_empty()
-            && let Some(player) = self.player()
-        {
-            self.seats.push(LocalSeat {
+        // The seat follows the session's player (it changes when the host approves a rig claim).
+        if let Some(player) = self.player() {
+            let seat = LocalSeat {
                 seat: SeatId(0),
                 player,
-            });
+            };
+            if self.seats.first() != Some(&seat) {
+                self.seats = vec![seat];
+            }
         }
         self.flush_outbound();
+    }
+
+    /// Asks the host for a parked (saved, offline) player's rig.
+    pub fn claim_rig(&mut self, player: fatherload_netcode::PlayerId) {
+        self.session.claim_rig(player);
+        self.flush_outbound();
+    }
+
+    /// The parked player this client asked for, until the host answers.
+    #[must_use]
+    pub const fn pending_claim(&self) -> Option<fatherload_netcode::PlayerId> {
+        self.session.pending_claim()
+    }
+
+    /// Identity news (welcome back, claim answers) since the last call.
+    pub fn take_identity_notices(&mut self) -> Vec<IdentityNotice> {
+        self.session.take_identity_notices()
     }
 
     /// Advances real time: runs the due client ticks with the submitted input, sends the input

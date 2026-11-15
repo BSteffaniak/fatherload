@@ -608,6 +608,7 @@ pub(super) fn draw_fanfare(draw: &mut RaylibDrawHandle<'_>, fanfare: &Fanfare, n
         FanfareKind::Ready => ("JOB DONE", LIME, PanelStyle::Accent),
         FanfareKind::Failed => ("QUEST FAILED", RED, PanelStyle::Warning),
         FanfareKind::Blueprint => ("BLUEPRINT COMPLETE", VIOLET, PanelStyle::Accent),
+        FanfareKind::WelcomeBack => ("CREW REUNITED", SKY_LIGHT, PanelStyle::Accent),
     };
     let mut details = ui_kit::wrap(&fanfare.detail, width - 16, TextStyle::Body);
     details.truncate(2);
@@ -625,7 +626,10 @@ pub(super) fn draw_fanfare(draw: &mut RaylibDrawHandle<'_>, fanfare: &Fanfare, n
         style,
     );
     // Sparkles on the corners for a completion.
-    if fanfare.kind == FanfareKind::Complete || fanfare.kind == FanfareKind::Blueprint {
+    if matches!(
+        fanfare.kind,
+        FanfareKind::Complete | FanfareKind::Blueprint | FanfareKind::WelcomeBack
+    ) {
         let twinkle = (age / 6).is_multiple_of(2);
         for (sx, sy) in [(x + 5, y + 5), (x + width - 8, y + 5)] {
             draw.draw_rectangle(sx, sy + 1, 3, 1, if twinkle { CREAM } else { color });
