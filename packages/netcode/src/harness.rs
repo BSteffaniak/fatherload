@@ -266,6 +266,18 @@ impl HarnessSim for WorldState {
             let lifetime = (index % 3 == 0).then_some(20_000 + u64::from(index) * 250);
             let _ = world.spawn_item_drop(x, 2.0 * TILE_SIZE, (0.0, 0.0), stack, lifetime);
         }
+        // One more over the first bot's shaft: digging wakes it, then it falls in or a blast
+        // throws it.
+        let _ = world.spawn_item_drop(
+            spawn_tile_x * TILE_SIZE,
+            2.0 * TILE_SIZE,
+            (0.0, 0.0),
+            fatherload_simulation::item::ItemStack::new(
+                fatherload_simulation::item::ItemKind::Mineral(MineralKind::Copper),
+                1,
+            ),
+            None,
+        );
         world
     }
 
@@ -292,9 +304,10 @@ impl HarnessSim for WorldState {
                 100 => actions.push(PlayerCommand::UseScanner),
                 120 => actions.push(PlayerCommand::PlaceInfrastructure { slot: 1 }),
                 200 => actions.push(PlayerCommand::PlaceBomb),
-                // A C4 charge dropped down the shaft after the bomb went off, fired by the
-                // remote once the rig is well clear of it.
-                350 => actions.push(PlayerCommand::DeployExplosive {
+                // A C4 charge placed in the shaft once the bomb has gone off (the bomb's
+                // 2.4 s fuse ends around frame 410; a live bomb next to it would set it off
+                // early), fired by the remote once the rig is well clear of it.
+                440 => actions.push(PlayerCommand::DeployExplosive {
                     kind: fatherload_simulation::ExplosiveKind::C4,
                     aim: fatherload_simulation::ThrowAim::DOWN,
                 }),

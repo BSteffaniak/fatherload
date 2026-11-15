@@ -34,14 +34,17 @@ fn assert_played(harness: &WorldHarness) {
         entities.iter().any(|entity| entity.body.asleep),
         "drops sleep"
     );
+    // Every drop starts at or right of the first bot's spawn column: one below the surface
+    // fell into a shaft, one left of it was thrown there by a blast.
+    let spawn_x = harness.world().player_template().x;
     assert!(
-        entities
-            .iter()
-            .any(|entity| entity.body.y > 7.0 * fatherload_simulation::TILE_SIZE),
+        entities.iter().any(|entity| {
+            entity.body.y > 7.0 * fatherload_simulation::TILE_SIZE || entity.body.x < spawn_x
+        }),
         "some drop fell into a shaft or was thrown: {:?}",
         entities
             .iter()
-            .map(|entity| entity.body.y)
+            .map(|entity| (entity.body.x, entity.body.y))
             .collect::<Vec<_>>()
     );
     for label in [
