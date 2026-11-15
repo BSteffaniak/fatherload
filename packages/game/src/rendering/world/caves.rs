@@ -26,7 +26,10 @@ use fatherload_simulation::{
     cave::{CaveTile, CritterKind},
     explosive::FLARE_LIGHT_RADIUS,
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
-    worldgen::{TileRect, streamed::BiomeCell},
+    worldgen::{
+        TileRect,
+        streamed::{BiomeCell, CaveBiome},
+    },
 };
 
 #[allow(
@@ -380,6 +383,33 @@ fn gather_lights(scene: &DarknessScene<'_>, rect: &TileRect) -> Vec<Light> {
     lights
 }
 
+/// The ambient darkness of tile `(x, y)` of `biome` at full `level`: the open interior and the
+/// wall right against it are fully dark, the next ring of wall two-thirds, and rock farther out
+/// stays as it is, so the darkness traces the cave's own shape instead of smudging its whole
+/// footprint.
+fn interior_shade(biome: &CaveBiome, x: i32, y: i32, level: u8) -> u8 {
+    if biome.cell(x, y) == BiomeCell::Outside {
+        return 0;
+    }
+    let open_within = |reach: i32| {
+        (-reach..=reach).any(|dy| {
+            (-reach..=reach).any(|dx| {
+                matches!(
+                    biome.cell(x + dx, y + dy),
+                    BiomeCell::Open | BiomeCell::Water
+                )
+            })
+        })
+    };
+    if open_within(1) {
+        level
+    } else if open_within(2) {
+        (u16::from(level) * 2 / 3) as u8
+    } else {
+        0
+    }
+}
+
 /// What one view's darkness pass needs.
 pub(super) struct DarknessScene<'a> {
     pub terrain: &'a Terrain,
@@ -414,9 +444,10 @@ pub(super) fn draw_cave_darkness(draw: &mut impl RaylibDraw, scene: &DarknessSce
         let bounds = biome.bounds();
         for y in bounds.min.y.max(rect.min.y)..=bounds.max.y.min(rect.max.y) {
             for x in bounds.min.x.max(rect.min.x)..=bounds.max.x.min(rect.max.x) {
-                if biome.cell(x, y) != BiomeCell::Outside {
+                let shade = interior_shade(biome, x, y, level);
+                if shade > 0 {
                     let index = ((y - rect.min.y) * tw + (x - rect.min.x)) as usize;
-                    ambient[index] = ambient[index].max(level);
+                    ambient[index] = ambient[index].max(shade);
                 }
             }
         }
