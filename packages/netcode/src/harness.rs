@@ -310,12 +310,14 @@ impl HarnessSim for WorldState {
             ),
             560..580 => ControlState::new(0.5, true, false),
             580..600 => ControlState::new(-0.5, true, false),
-            // On foot (Part II F5): walk out and back, jump, swing the hand pick at the
-            // ground (pilots are entities: predicted, replicated and reconciled like rigs).
-            860..900 => ControlState::new(1.0, false, false),
-            900..940 => ControlState::new(-1.0, false, false),
-            950..960 => ControlState::default().with_jump(true),
-            990..1_030 => ControlState::new(0.0, false, true).with_weapon(
+            // On foot (Part II F5): a step out and back, a jump, a few hand-pick swings at the
+            // ground (too short to break through), staying beside the rig so no crewmate's
+            // shaft or blast is in reach (pilots are entities: predicted, replicated and
+            // reconciled like rigs).
+            850..860 => ControlState::default().with_jump(true),
+            890..900 => ControlState::new(1.0, false, false),
+            900..910 => ControlState::new(-1.0, false, false),
+            912..952 => ControlState::new(0.0, false, true).with_weapon(
                 fatherload_simulation::WeaponControl {
                     fire: bot.issue_actions,
                     auto_aim: false,
@@ -345,7 +347,7 @@ impl HarnessSim for WorldState {
                     actions.push(PlayerCommand::BuyUpgrade { index });
                 }
                 820 => actions.push(PlayerCommand::Refuel),
-                840 | 1_060 => actions.push(PlayerCommand::TogglePilot),
+                840 | 960 => actions.push(PlayerCommand::TogglePilot),
                 _ => {}
             }
         }
@@ -387,7 +389,9 @@ impl HarnessSim for WorldState {
                 GameplayEventKind::PilotExited { .. } => Some("pilot exited"),
                 GameplayEventKind::PilotBoarded { .. } => Some("pilot boarded"),
                 GameplayEventKind::PilotJumped { .. } => Some("pilot jumped"),
-                GameplayEventKind::PickStruck { .. } => Some("pick struck"),
+                GameplayEventKind::PickStruck { .. } | GameplayEventKind::PickClinked { .. } => {
+                    Some("pick struck")
+                }
                 _ => None,
             },
         }

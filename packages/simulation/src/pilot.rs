@@ -190,7 +190,7 @@ impl PilotGear {
     }
 }
 
-/// A piece of pilot gear sold at the Upgrade Shop
+/// A piece of pilot gear sold on the Explosives Shack's arms rack
 /// ([`crate::SessionServiceRequest::BuyPilotGear`]).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum PilotGearKind {
@@ -450,7 +450,8 @@ impl PilotState {
 pub struct PilotControls {
     /// -1..=1.
     pub horizontal: f32,
-    /// Up: climb, and jump where there is nothing to climb.
+    /// Up: climb, and jump where there is nothing to climb. Up held together with
+    /// [`Self::jump`] jumps rather than grabbing a ladder (keyboards send both for Space).
     pub up: bool,
     /// Down: crouch, climb down, dive, let go of a ledge.
     pub down: bool,
@@ -686,7 +687,7 @@ fn step_once(
     let climbable = climbable_here(world, body, height);
     if state.mode == PilotMode::Free
         && !state.crouching
-        && ((controls.up && climbable)
+        && ((controls.up && !controls.jump && climbable)
             || (controls.down && {
                 let below = climbable_below(world, body);
                 below || (climbable && !state.grounded)
@@ -927,15 +928,15 @@ fn step_once(
         if state.mode == PilotMode::Climb {
             state.mode = PilotMode::Free;
         }
-        if !was_grounded {
-            report.landed = true;
-            if state.mode != PilotMode::Swim {
-                report.landing_speed = report.landing_speed.max(fall_speed);
-            }
-        }
         state.jetting = false;
     }
     state.grounded = state.mode != PilotMode::Swim && grounded(world, body, height);
+    // A landing is the step the pilot becomes grounded, whether it touched down this step or
+    // ended the step within a pixel of the floor (its speed is the one it fell at).
+    if state.grounded && !was_grounded && state.mode == PilotMode::Free {
+        report.landed = true;
+        report.landing_speed = report.landing_speed.max(fall_speed);
+    }
 
     // Ledge grab: falling against a wall whose top is at hand height.
     if wall != 0

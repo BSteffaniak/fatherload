@@ -200,6 +200,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
     }
 }
 
+/// [`Pose::mode`] of a player on foot (drill modes are `(y << 16 ^ x) + 1`; this high bit
+/// pattern is never one of theirs in practice).
+pub const ON_FOOT_POSE_MODE: u32 = 0xF00F_0001;
+
 const fn drill_mode(target: fatherload_simulation::terrain::TilePosition) -> u32 {
     // Distinct non-zero code per target tile (zero means "not drilling").
     ((target.y.cast_unsigned() << 16) ^ (target.x.cast_unsigned() & 0xFFFF)).wrapping_add(1)
@@ -406,14 +410,11 @@ impl NetSimulation for WorldState {
         let sim_id = to_sim_player(id);
         // On foot the pose is the pilot's (relevance and smoothing follow the pilot); getting
         // in or out changes the mode, so the client snaps instead of smoothing across bodies.
-        if let Some((pilot, _, _)) = self.pilot_of(sim_id) {
+        // The mode is one constant (not the entity id: a predicted pilot may get a different id
+        // than the host's until the authority arrives, and that is no reason to snap).
+        if self.is_on_foot(sim_id) {
             let (x, y) = self.actor_position(sim_id)?;
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "a distinct non-zero code per pilot entity is enough"
-            )]
-            let mode = 0x8000_0000 | (pilot.get() as u32 & 0x7FFF_FFFF);
-            return Some(Pose::new(x / TILE_SIZE, y / TILE_SIZE, mode));
+            return Some(Pose::new(x / TILE_SIZE, y / TILE_SIZE, ON_FOOT_POSE_MODE));
         }
         let player = self.player(sim_id)?;
         let mode = self

@@ -192,7 +192,7 @@ pub enum SessionServiceRequest {
         offer: u8,
         service: crate::village::VillageService,
     },
-    /// The next tier of a piece of pilot gear (jetpack, suit) from the Upgrade Shop
+    /// The next tier of a piece of pilot gear (jetpack, suit) from the Explosives Shack's rack
     /// ([`crate::pilot::PilotGearKind::price`]).
     BuyPilotGear {
         gear: crate::pilot::PilotGearKind,

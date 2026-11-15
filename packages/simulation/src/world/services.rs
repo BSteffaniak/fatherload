@@ -57,14 +57,13 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
         SessionServiceRequest::CompleteDepotWork => {
             &[SurfaceZone::Depot, SurfaceZone::Headquarters]
         }
-        SessionServiceRequest::BuyUpgrade { .. } | SessionServiceRequest::BuyPilotGear { .. } => {
-            &[SurfaceZone::Shop]
-        }
+        SessionServiceRequest::BuyUpgrade { .. } => &[SurfaceZone::Shop],
         SessionServiceRequest::Finance => &[SurfaceZone::Headquarters, SurfaceZone::Bank],
         SessionServiceRequest::BuyInsurance | SessionServiceRequest::StartSideContract => {
             &[SurfaceZone::Bank]
         }
         SessionServiceRequest::BuyBombBundle { .. }
+        | SessionServiceRequest::BuyPilotGear { .. }
         | SessionServiceRequest::BuyExplosives { .. }
         | SessionServiceRequest::BuyWeapon { .. }
         | SessionServiceRequest::UpgradeWeapon { .. }

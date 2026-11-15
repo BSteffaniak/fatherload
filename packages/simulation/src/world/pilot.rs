@@ -3,7 +3,8 @@
 //! * **Exit and board** ([`crate::PlayerCommand::TogglePilot`]): a slow rig lets its pilot out
 //!   beside it as a [`EntityKind::Pilot`] entity; standing within [`BOARD_REACH`] of the rig,
 //!   the same button boards it (the personal pack empties into the rig, what fits). The parked
-//!   rig keeps its cargo, stays solid (pilots stand on its roof) and can still be hurt.
+//!   rig keeps its cargo, stays solid to its pilot (who can stand on its roof) and can still be
+//!   hurt by enemies.
 //! * **Controls**: while a player is on foot their held controls drive the pilot (the rig gets
 //!   neutral controls): move, up / jump, down, the jump button, and the trigger swings the hand
 //!   pick toward the aim. Bomb buttons throw from the pilot's hands.
@@ -247,7 +248,8 @@ impl WorldState {
         let side = if player.velocity_x < 0.0 { -1.0 } else { 1.0 };
         let feet = player.y + super::movement::AUTHORITATIVE_PLAYER_RADIUS - 0.5;
         let view = self.pilot_view(None);
-        for dx in [side * 26.0, -side * 26.0, 0.0] {
+        // Clear of the rig's roof (half-width 14) on either side, else on top of it.
+        for dx in [side * 30.0, -side * 30.0, 0.0] {
             let x = player.x + dx;
             for (height, crouched) in [(PILOT_STAND_HEIGHT, false), (PILOT_CROUCH_HEIGHT, true)] {
                 if box_blocked(&view, x, feet, height) {
@@ -269,13 +271,15 @@ impl WorldState {
         None
     }
 
-    fn pilot_view(&self, skip_roof_of: Option<PlayerId>) -> PilotView<'_> {
-        let roofs = self
-            .players
-            .iter()
-            .filter(|(id, player)| Some(**id) != skip_roof_of && player.hull > 0.0)
-            .map(|(_, player)| (player.x, player.y - RIG_ROOF_ABOVE_CENTRE))
-            .collect();
+    /// The world as `owner`'s pilot sees it. Only its own rig is solid to it (a roof to stand
+    /// on): other players' rigs move under their own (unpredicted) controls, so treating them
+    /// as solid would make every client mispredict its pilot near a crewmate's rig.
+    fn pilot_view(&self, owner: Option<PlayerId>) -> PilotView<'_> {
+        let roofs = owner
+            .and_then(|owner| self.players.get(&owner))
+            .filter(|player| player.hull > 0.0)
+            .map(|player| vec![(player.x, player.y - RIG_ROOF_ABOVE_CENTRE)])
+            .unwrap_or_default();
         PilotView { world: self, roofs }
     }
 
@@ -394,7 +398,7 @@ impl WorldState {
         PlayerScopedCommandOutcome::Applied
     }
 
-    /// [`crate::SessionServiceRequest::BuyPilotGear`] at the Upgrade Shop.
+    /// [`crate::SessionServiceRequest::BuyPilotGear`] at the Explosives Shack.
     pub(super) fn buy_pilot_gear(
         &mut self,
         player_id: PlayerId,
@@ -561,7 +565,7 @@ impl WorldState {
                 jump: controls.jump,
             };
             let report = {
-                let view = self.pilot_view(None);
+                let view = self.pilot_view(Some(owner));
                 step_pilot(&mut body, &mut state, &view, foot, dt)
             };
             state.pick_cooldown = (state.pick_cooldown - dt).max(0.0);

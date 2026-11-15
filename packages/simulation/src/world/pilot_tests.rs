@@ -509,18 +509,18 @@ fn a_crawlway_lets_pilots_through_but_stops_rigs() {
 }
 
 #[test]
-fn pilot_gear_is_sold_at_the_upgrade_shop() {
+fn pilot_gear_is_sold_at_the_explosives_shack() {
     let mut world = WorldState::new_game(PLAYER);
     world.player_mut(PLAYER).expect("rig").credits = 100_000;
     let buy = SessionServiceRequest::BuyPilotGear {
         gear: PilotGearKind::Jetpack,
     };
-    // Away from the shop: refused.
+    // Bought at the shack counter.
     let shop = crate::surface::SURFACE_BUILDINGS
         .iter()
-        .find(|building| building.zone == crate::economy::SurfaceZone::Shop)
+        .find(|building| building.zone == crate::economy::SurfaceZone::Explosives)
         .copied()
-        .expect("shop");
+        .expect("shack");
     let player = world.player_mut(PLAYER).expect("rig");
     player.x = (shop.tile_x as f32 + 0.5 * shop.tile_width as f32) * TILE_SIZE;
     run(
