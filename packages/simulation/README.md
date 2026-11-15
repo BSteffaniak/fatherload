@@ -50,9 +50,47 @@ cooling (`heat_cooling`, counted in thirds of a level: a whole level per radiato
 tier 5, a third per radiator tier after that, a whole level per shielding tier) covers that
 much; each uncovered third burns `HEAT_DAMAGE_PER_EXCESS_UNIT` hull per second (3 per level). Deep-run instability builds from the
 basalt deeps down and the pressure fuel drain/scanner lockout starts at the fossil oceans (both
-by band). Boulders loosened by mining are one per 80 stone tiles with a 1.5 s warning,
-rarer still for late drills (`boulder_spawn_chance`: odds fall with the square of the drill's
-bite, so a top drill loosens no more boulders per minute than a tier 5 one).
+by band). Boulders loosened by mining are one per 400 stone tiles (was 80) with a 2 s warning
+(was 1.5 s), rarer still for late drills (`boulder_spawn_chance`: odds fall with the square of
+the drill's bite, so a top drill loosens no more boulders per minute than a tier 5 one).
+
+**Falling boulders and cave-ins (`world/hazards.rs`, `world/entities.rs`, playtest fix).** Rules
+every boulder source follows (new ones must too):
+
+- *Placement*: a boulder only ever hangs in open ground with an open tile under it to fall
+  through (`WorldState::boulder_hang_tile`). A mining boulder hangs in the open tile over the
+  cut (the cut itself under a ceiling, else the tile above it); a sideways cut in a
+  one-tile-high tunnel loosens none. A cave-in (`spawn_cave_in`) hangs up to three boulders in
+  the rig's column and its two neighbours, up to three rows up (under the ceiling when it is
+  that close); a column solid at the rig's height or without room to fall gets none, so a
+  one-high tunnel gets no cave-in. Boulders hang `BOULDER_RADIUS` (11 px) under the top of their
+  tile. The old spawns put mining boulders in the rock over sideways cuts and cave-ins two rows
+  up regardless of rock; those "shattered" the moment their warning ran out.
+- *Impact*: a falling boulder shatters on a rig or when its lower edge (`y + BOULDER_RADIUS`)
+  meets solid ground, leaving its rubble on top of what it hit; nothing else breaks it.
+- *Settled ground* (`hazard::SettledGround`, `CanonicalProgressionState::settled_ground`, saved,
+  hashed only once non-empty, replicated in the timers section): every collapse settles its
+  8 x 8-tile cell for `SETTLED_GROUND_MILLIS` (3 min), and no random collapse starts in or next
+  to a settled cell. Random collapses go through `loosen_ground` (underground only: 3+ rows under
+  the local surface): mining boulders, collapse surges, deep-run cave-ins, earthquakes and
+  stalactites (`try_cave_in` for cave-ins). Scripted ones (an explosive pocket's blast, the Star
+  Core escape) call `spawn_cave_in` directly: they ignore settled ground but still settle it.
+- *Rates*: a collapse surge rolls a cave-in every 45 s (was every 3 s for its whole three-to-four
+  market days, the "falling over and over" of the playtest); a full deep-run instability meter
+  empties (was: back to 45, refilling within minutes) and its 4-hull jolt only lands with an
+  actual cave-in; one stalactite in three is loose (`stalactite_is_loose`, a fixed per-tile
+  roll; the rest never fall); cave-in warnings are 1.5 s plus 0.25 s per column out (were 0.9 s
+  and 0.2 s). The renderer adds ceiling dust that thickens and a harder shake near the drop.
+- `boulder_frequency_report` (`cargo test -p fatherload_simulation --release
+  boulder_frequency_report -- --ignored --nocapture`; 4 seeds, the economy bot mining 20 min,
+  rigs parked 30 min) before / after this fix:
+
+  | Scenario | Boulders per hour before | after | Spawned in rock before | after | Broke without falling before | after |
+  |---|---|---|---|---|---|---|
+  | Mining (prospector bot, one seed hit a collapse surge) | 407 | 15 | 153 | 0 | 176 | 0 |
+  | Mining (shaft bot) | 9 | 0 | 8 | 0 | 8 | 0 |
+  | Parked under a collapse surge | 3,600 | 60 | 0 | 0 | 0 | 0 |
+  | Parked in the crystal faults (deep-run pressure, world events) | 1,866 | 42 | 0 | 0 | 0 | 0 |
 
 Test mode (`test_mode.rs`, `world/test_mode.rs`): `WorldState::enable_test_mode` (before play)
 maxes every rig (hazard counters included) and the player template, fills the parts locker and
@@ -374,7 +412,8 @@ without caves), and caves are `WorldFactKind::CaveSystem` story facts (`WorldFac
 **Gameplay (`world/caves.rs`, all in the tick).** Entering a cave's interior records it in the
 player's `PoiJournal::caves` and fires `CaveDiscovered`. A `CaveTile::Stalactite` with open air
 between it and a rig up to 7 rows below breaks off (`StalactiteFell`) as a falling boulder (fast,
-0.45 s warning; the boulder deflector counters it). Drilling a `TreasureCache` / `RelicCache` pays
+0.45 s warning; the boulder deflector counters it) when it is one of the loose ones (one in
+three, `stalactite_is_loose`) and the ground there is not settled (see falling boulders above). Drilling a `TreasureCache` / `RelicCache` pays
 `cave::cache_loot` (credits by depth tier, plus gems or a relic) and spills the items as drops via
 WP-DROPS' `spawn_loot` (kind lifetimes, cell cap; the magnet collects them) with
 `CaveCacheOpened`. Other cave rock (mycelium, silt, ruin brick, fossil ribs, stalactites,
