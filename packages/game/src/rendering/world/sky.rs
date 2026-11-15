@@ -731,6 +731,13 @@ fn draw_stars(draw: &mut impl RaylibDraw, visible: Rectangle, seconds: f32, time
     let first_y = ((min_y - origin_y) / CELL).floor() as i32;
     let last_y = ((max_y - origin_y) / CELL).ceil() as i32;
     let twinkle = (seconds * 2.0) as u32;
+    // The Moon is solid: no star shows through its disc (it is drawn later, translucent by day).
+    let (moon_x, moon_y, moon_radius) = moon_disc(visible, time.moon);
+    let moon_reach = (moon_radius as f32 + 1.0) * ART;
+    let behind_moon = |x: f32, y: f32| {
+        let (dx, dy) = (x - moon_x, y - moon_y);
+        dx.mul_add(dx, dy * dy) <= moon_reach * moon_reach
+    };
     for cy in first_y..=last_y {
         for cx in first_x..=last_x {
             let h = hash(cx, cy, 91);
@@ -754,6 +761,9 @@ fn draw_stars(draw: &mut impl RaylibDraw, visible: Rectangle, seconds: f32, time
                 continue;
             }
             let (x, y) = (snap(x), snap(y));
+            if behind_moon(x, y) {
+                continue;
+            }
             let bright = (h >> 5).is_multiple_of(9);
             let color = match (h >> 12) % 6 {
                 0 => CREAM,
@@ -786,14 +796,17 @@ fn draw_stars(draw: &mut impl RaylibDraw, visible: Rectangle, seconds: f32, time
     clippy::too_many_lines,
     reason = "placement, phase and the run-merged disc read best together"
 )]
-fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle, time: &SkyTime) {
+/// Where the Moon's disc sits in a view: centre (world pixels) and radius (art pixels). Seen
+/// from far off it rides low toward its side of the sky; under it, it is straight overhead, and
+/// it grows as the camera climbs toward it.
+fn moon_disc(visible: Rectangle, moon: MoonAnchor) -> (f32, f32, i32) {
     use fatherload_simulation::terrain::TILE_SIZE;
     let center_x = visible.x + visible.width * 0.5;
     let center_y = visible.y + visible.height * 0.5;
-    let moon_x = (time.moon.column as f32 + 0.5) * TILE_SIZE;
+    let moon_x = (moon.column as f32 + 0.5) * TILE_SIZE;
     let swing = ((moon_x - center_x) / (MOON_SWING_TILES * TILE_SIZE)).clamp(-1.0, 1.0);
     // Altitude toward the Moon (0 on the ground, 1 at its underside).
-    let moon_y = time.moon.row as f32 * TILE_SIZE;
+    let moon_y = moon.row as f32 * TILE_SIZE;
     let climb = ((GROUND_Y - center_y) / (GROUND_Y - moon_y).max(1.0)).clamp(0.0, 1.0);
     let grow = climb.sqrt().mul_add(5.0, 1.0);
     let overhead = swing.abs().mul_add(-0.75, 1.75);
@@ -802,6 +815,12 @@ fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle, time: &SkyTime) {
     let lift = swing.abs().mul_add(0.25, 0.2) * (1.0 - climb);
     let cy =
         snap(visible.height.mul_add(lift, visible.y) + radius as f32 * ART * (0.4 - climb * 0.4));
+    (cx, cy, radius)
+}
+
+fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle, time: &SkyTime) {
+    let center_y = visible.y + visible.height * 0.5;
+    let (cx, cy, radius) = moon_disc(visible, time.moon);
     let r = radius as f32 * ART;
     if cx + r < visible.x
         || cx - r > visible.x + visible.width
@@ -809,6 +828,9 @@ fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle, time: &SkyTime) {
     {
         return;
     }
+    // Only the rows inside the view are walked (the disc is huge up close).
+    let first_row = (((visible.y - cy) / ART).floor() as i32).max(-radius);
+    let last_row = (((visible.y + visible.height - cy) / ART).ceil() as i32).min(radius);
     let night = time.look.stars.max(star_share(center_y));
     let lit_alpha = (night.mul_add(175.0, 80.0)).round() as u8;
     let dark_alpha = (night * 200.0).round() as u8;
@@ -823,7 +845,7 @@ fn draw_moon(draw: &mut impl RaylibDraw, visible: Rectangle, time: &SkyTime) {
         (-0.48, 0.28, 0.11),
         (0.05, -0.05, 0.08),
     ];
-    for row in -radius..=radius {
+    for row in first_row..=last_row {
         let v = row as f32 / radius as f32;
         let half_width = (1.0 - v * v).max(0.0).sqrt();
         let half = (half_width * radius as f32).round() as i32;
