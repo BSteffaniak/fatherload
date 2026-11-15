@@ -235,11 +235,19 @@ pub const fn site_index_near(x: i32) -> i32 {
 pub const fn surface_site_at(seed: u64, x: i32, margin: i32) -> Option<SurfaceSite> {
     let near = site_index_near(x);
     let mut site = near - 1;
+    // Half the widest village: a column further than this (plus the jitter and margin) from a
+    // site's nominal centre cannot be in it, so most columns skip the hashing altogether.
+    let reach = SITE_JITTER + VillageSize::Town.width_tiles() / 2 + 1 + margin;
     while site <= near + 1 {
-        if let Some(found) = surface_site(seed, site)
-            && found.distance(x) <= margin
-        {
-            return Some(found);
+        if valid_site(site) {
+            let nominal = TOWN_CENTER_COLUMN
+                + site.signum() * (FIRST_SITE_OFFSET + (site.abs() - 1) * SITE_SPACING);
+            if (x - nominal).abs() <= reach
+                && let Some(found) = surface_site(seed, site)
+                && found.distance(x) <= margin
+            {
+                return Some(found);
+            }
         }
         site += 1;
     }

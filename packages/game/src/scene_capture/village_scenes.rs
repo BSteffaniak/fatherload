@@ -74,6 +74,9 @@ fn street(stage: &mut SceneStage<'_>, wanted: impl Fn(&Village) -> bool, offset:
         }
     });
     stage.settle(20);
+    // A street portrait: no arrival banner over it (the banner has its own scene).
+    stage.seat(0).village.banner = None;
+    stage.settle(1);
 }
 
 /// Puts seat 0 inside building `building` of `found`, at `x` room units.
@@ -281,6 +284,43 @@ pub const VILLAGE_SCENES: &[Scene] = &[
                 Some(ModalScreen::VillageCounter),
             );
             stage.settle(4);
+        },
+    },
+    Scene {
+        name: "village_split",
+        summary: "Split-screen in a village: one seat at the trading post counter, the other outdoors on the plaza",
+        setup: |stage| {
+            let mut chosen = None;
+            stage.play(2, |world, seats| {
+                let found = find_village(world, |found| {
+                    found.setting == VillageSetting::Surface
+                        && found.size != village::VillageSize::Hamlet
+                });
+                let market = found
+                    .buildings
+                    .iter()
+                    .position(|lot| lot.kind == BuildingKind::Market)
+                    .expect("market");
+                park_in(
+                    world,
+                    seats[0].player,
+                    &found,
+                    found.buildings[market].first_column + 2,
+                );
+                park_in(
+                    world,
+                    seats[1].player,
+                    &found,
+                    i32::midpoint(found.plaza.0, found.plaza.1),
+                );
+                chosen = Some((found, market));
+            });
+            stage.settle(10);
+            let (found, market) = chosen.expect("staged");
+            inside(stage, &found, market, VILLAGE_COUNTER_X);
+            stage.seat(0).modal = Some(ModalScreen::VillageCounter);
+            stage.seat(1).village.banner = None;
+            stage.settle(3);
         },
     },
     Scene {

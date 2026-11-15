@@ -543,6 +543,9 @@ nothing about it is saved or replicated except what players did there.
   Every tick, after map reveals, a rig entering a village for the first time is recorded with
   `GameplayEventKind::VillageDiscovered`; a bought deal emits `VillageServiceUsed`.
 - **Report**: `village::report::village_report` behind `fatherload --village-report`.
+- **Cost** (`village_timing_report`, release): 160 surface chunks across a village take about
+  14 ms on V6 against 13 ms on V5 (the flattening check is a few integer ops per column and
+  skips hashing away from sites); building a village (layout and residents) takes under 0.1 ms.
 
 Tests: `village/tests.rs` (determinism, layout inside the span with a service and a specialty
 in every village, housing, variety across cultures / sizes / specialties, flat foundations under

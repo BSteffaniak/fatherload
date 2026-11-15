@@ -431,8 +431,8 @@ Press `E` (controller `X`) at a surface building to walk inside its room. Move w
   thruster flame colour, drill style (standard, serrated, auger, twin bit, crusher), hull pattern,
   decal and roof / nose / tail attachments. The rig in the room and a preview card wear the job
   live before you apply it; Back returns to the counter without applying. A few items (stealth
-  paint, prism flame, spire drill, circuit pattern, crown decal, halo) are locked until later
-  updates add ways to earn them (test-mode worlds unlock everything).
+  paint, prism flame, spire drill, circuit pattern, crown decal, halo) are locked: villages with
+  a paint-and-trim shop sell them (test-mode worlds unlock everything).
 - Ore Depot: sells mineral/artifact cargo and shows receipt history
 - HQ: completes contracts, provides named story/radio briefings, and offers/collects debt advances
 - Explosives Shack: bomb packs, plus special charges (the better stocked the shack, the more it

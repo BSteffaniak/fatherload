@@ -66,17 +66,10 @@ mod tests {
 
     #[test]
     fn parses_flags_and_prints_villages() {
-        let args: Vec<String> = [
-            "fatherload",
-            "--village-report",
-            "--seed",
-            "7",
-            "--count",
-            "2",
-        ]
-        .iter()
-        .map(|arg| (*arg).to_owned())
-        .collect();
+        let args: Vec<String> = ["--village-report", "--seed", "7", "--count", "2"]
+            .iter()
+            .map(|arg| (*arg).to_owned())
+            .collect();
         let options = parse_args(&args).expect("parses").expect("present");
         assert_eq!(options, VillageReportOptions { seed: 7, count: 2 });
         let mut out = Vec::new();
@@ -84,7 +77,7 @@ mod tests {
         let text = String::from_utf8(out).expect("utf8");
         assert!(text.contains("street:"), "{text}");
         assert!(
-            parse_args(&["fatherload".to_owned()])
+            parse_args(&["--story-report".to_owned()])
                 .expect("ok")
                 .is_none()
         );

@@ -89,7 +89,7 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `milestone` | big | D major brass swell under a quick ascending bell arpeggio. |
 | `rescue` | big | Tractor beam: FM sweep rising three octaves with 12 Hz tremolo and shimmering noise, resolving to an E/B chord and a bell. |
 | `village_arrival` | big | Arriving in a village for the first time: a soft triangle pad (G3, B3, D4) under a plucked G-major bell arpeggio and a welcoming high bell, short echo. |
-| `shrine_chime` | feedback | A shrine blessing: three slow, high temple bells (C6, E6, G6) shimmering into a long echo. |
+| `shrine_chime` | feedback | A shrine blessing: three high temple bells (C6, E6, G6) rung in turn, shimmering into an echo. |
 | `loop_thrust` | loop | Pink-noise band hiss with flutter, a sputtering 2.8 kHz jet band, a little brown-noise rumble and a 55/82.5 Hz hum, saturated. |
 | `loop_drill_soft` | loop | Motor (95 Hz saw + 190 Hz pulse), pink-noise scrape modulated by a 16 Hz rotation, clods. |
 | `loop_drill_hard` | loop | Motor (120/240 Hz saws), heavily saturated 2.2 kHz grind with 24 Hz chatter and random roughness, faint metal squeal partials. |

@@ -338,3 +338,31 @@ fn village_facts_and_story_seeds_bind() {
     let seeds = found.story_seeds(&facts, &[], 0);
     assert!(!seeds.is_empty());
 }
+
+/// Chunk generation cost with and without villages, and the cost of building a village
+/// (`cargo test --release -p fatherload_simulation village_timing_report -- --ignored
+/// --nocapture`).
+#[test]
+#[ignore = "timing report"]
+fn village_timing_report() {
+    use crate::{terrain::ChunkPosition, worldgen::streamed::generated_chunk};
+    for generator in [GeneratorVersion::V5, GeneratorVersion::V6] {
+        let settings = WorldSettings {
+            generator,
+            ..WorldSettings::new(0x71AE)
+        };
+        crate::worldgen::streamed::clear_caches();
+        let start = std::time::Instant::now();
+        // The surface and crust chunks across two villages' worth of columns.
+        for x in 20..60 {
+            for y in 0..4 {
+                let _ = generated_chunk(&settings, ChunkPosition { x, y });
+            }
+        }
+        println!("{generator:?}: 160 surface chunks in {:?}", start.elapsed());
+    }
+    let settings = v6(0x71AE);
+    let start = std::time::Instant::now();
+    let built = sample(&settings, 20).len();
+    println!("{built} villages built in {:?}", start.elapsed());
+}

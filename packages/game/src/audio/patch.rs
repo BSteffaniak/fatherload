@@ -1605,20 +1605,20 @@ fn mushroom_bounce(rng: &mut Rng) -> Vec<f32> {
 
 /// A shrine blessing: three high, slow temple bells, shimmering into a long echo.
 fn shrine_chime(rng: &mut Rng) -> Vec<f32> {
-    let mut out = vec![0.0; samples_for(2.4)];
+    let mut out = vec![0.0; samples_for(1.4)];
     let detune = 1.0 + (rng.unit() - 0.5) * 0.004;
     for (index, (note, gain)) in [(1_046.5_f32, 0.4), (1_318.5, 0.32), (1_568.0, 0.28)]
         .into_iter()
         .enumerate()
     {
         #[allow(clippy::cast_precision_loss, reason = "three notes")]
-        let offset = index as f32 * 0.22;
-        mix_into(&mut out, &bell(note * detune, 3.5, 1.8, 1.8), offset, gain);
+        let offset = index as f32 * 0.16;
+        mix_into(&mut out, &bell(note * detune, 3.5, 1.8, 1.0), offset, gain);
     }
-    let mut echo = Delay::new(0.41).with_damping(0.35);
-    out.resize(out.len() + samples_for(0.8), 0.0);
+    let mut echo = Delay::new(0.27).with_damping(0.4);
+    out.resize(out.len() + samples_for(0.3), 0.0);
     for sample in &mut out {
-        *sample += echo.process(*sample, 0.4, 0.35) * 0.4;
+        *sample += echo.process(*sample, 0.3, 0.35) * 0.35;
     }
     out
 }

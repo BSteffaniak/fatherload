@@ -474,11 +474,11 @@ impl SeatUi {
 fn banner_for(found: &Village, first_visit: bool, tick: u64) -> VillageBanner {
     let kind = match found.setting {
         VillageSetting::Surface => found.size.name(),
-        VillageSetting::Underground => "deep settlement",
+        VillageSetting::Underground => "settlement",
     };
     let subtitle = if let village::Specialty::MineralBuyer(mineral) = found.specialty {
         format!(
-            "{} {kind} - the assayer pays top price for {}",
+            "{} {kind} - top prices paid for {}",
             capitalized(found.style.name()),
             mineral.name()
         )
