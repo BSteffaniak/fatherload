@@ -1,5 +1,6 @@
 //! Surface scenes (WP-SURFACE): each biome, a mountain range, a mountain cave, a lake, a
-//! biome border, and the sky high up and out in space.
+//! biome border, the sky high up and out in space, the bank up close, and the hills backdrop
+//! beside the deepest valleys under tall peaks at several camera heights.
 
 use fatherload_simulation::{
     PlayerId, WorldState,
@@ -35,6 +36,35 @@ fn peak_near(world: &WorldState, x: i32, reach: i32) -> i32 {
     (x - reach..=x + reach)
         .min_by_key(|column| world.terrain().surface_row(*column))
         .unwrap_or(x)
+}
+
+/// The column in the mountains around `x` whose ground lies deepest below the highest peak
+/// within `reach` of it: a valley floor under a towering slope, where the hills backdrop's
+/// averaged anchor sits far above the ground.
+fn valley_under_peak(world: &WorldState, x: i32, reach: i32) -> i32 {
+    let terrain = world.terrain();
+    (x - 200..=x + 200)
+        .step_by(2)
+        .max_by_key(|column| {
+            let peak = (column - reach..=column + reach)
+                .step_by(3)
+                .map(|near| terrain.surface_row(near))
+                .min()
+                .unwrap_or(0);
+            terrain.surface_row(*column) - peak
+        })
+        .unwrap_or(x)
+}
+
+/// A rig hanging `height` rows above the deepest valley floor beside a tall peak.
+fn valley_scene(stage: &mut SceneStage<'_>, height: i32) {
+    stage.play(1, |world, seats| {
+        let x = find_biome(world, Biome::Mountains, 90);
+        let valley = valley_under_peak(world, x, 30);
+        hover_over(world, seats[0].player, valley, height);
+        world.stream_terrain_near_players();
+    });
+    hang(stage, 12);
 }
 
 /// Hovers the seat's rig `height` rows above column `x`'s ground and reveals the area, so the
@@ -237,6 +267,58 @@ pub const SURFACE_SCENES: &[Scene] = &[
                 world.stream_terrain_near_players();
             });
             hang(stage, 12);
+        },
+    },
+    Scene {
+        name: "town_bank",
+        summary: "The bank up close: the temple standing flush on its three steps, the steps on the ground (best at --size 640x360)",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                place_rig(world, seats[0].player, 142, 4);
+            });
+            stage.settle(30);
+        },
+    },
+    Scene {
+        name: "valley_backdrop_floor",
+        summary: "On the floor of a deep valley under a towering peak: the hills backdrop continues down behind the low ground (no sky under it)",
+        setup: |stage| valley_scene(stage, 2),
+    },
+    Scene {
+        name: "valley_backdrop_mid",
+        summary: "Hovering halfway up beside a towering peak over a deep valley: the hills backdrop fills the view below its ridge line",
+        setup: |stage| valley_scene(stage, 16),
+    },
+    Scene {
+        name: "valley_backdrop_high",
+        summary: "High over a deep mountain valley: the backdrop's ridge low in the view, filled down to the valley floor",
+        setup: |stage| valley_scene(stage, 22),
+    },
+    Scene {
+        name: "valley_backdrop_split",
+        summary: "Split-screen in the mountains: one seat on a deep valley floor, one hovering near a peak; neither view shows sky under the backdrop",
+        setup: |stage| {
+            stage.play(2, |world, seats| {
+                let x = find_biome(world, Biome::Mountains, 90);
+                let valley = valley_under_peak(world, x, 30);
+                hover_over(world, seats[0].player, valley, 2);
+                let peak = peak_near(world, valley, 40);
+                hover_over(world, seats[1].player, peak, 3);
+                world.stream_terrain_near_players();
+            });
+            stage.hold_seats(
+                12,
+                &[
+                    PlayerInput {
+                        thrust: true,
+                        ..PlayerInput::default()
+                    },
+                    PlayerInput {
+                        thrust: true,
+                        ..PlayerInput::default()
+                    },
+                ],
+            );
         },
     },
 ];

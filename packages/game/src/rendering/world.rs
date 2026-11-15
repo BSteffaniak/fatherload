@@ -152,35 +152,6 @@ impl WorldScene<'_> {
     }
 }
 
-/// Continues the hills backdrop down to the ground wherever a V5 world's placeholder surface
-/// lowers a column's ground below the classic ground line (open sky there, not a dark tunnel).
-/// Biome worlds' near hills carry their own skirt down past their anchor instead.
-fn draw_lowered_ground_backdrop(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectangle) {
-    let hills_bottom = sky::hills_bottom(terrain.settings(), visible);
-    if !terrain.is_streamed()
-        || terrain.settings().generator.has_biomes()
-        || visible.y > hills_bottom + 4.0 * TILE_SIZE
-    {
-        return;
-    }
-    let first = (visible.x / TILE_SIZE).floor() as i32;
-    let last = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32;
-    for x in first..=last {
-        let ground = terrain.surface_row(x) as f32 * TILE_SIZE;
-        if ground > hills_bottom {
-            draw.draw_rectangle_rec(
-                Rectangle::new(
-                    x as f32 * TILE_SIZE,
-                    hills_bottom,
-                    TILE_SIZE,
-                    ground - hills_bottom,
-                ),
-                palette::PINE,
-            );
-        }
-    }
-}
-
 /// Draws one view's world: backdrop, town, terrain, props, rigs and effects, back to front.
 #[allow(
     clippy::too_many_lines,
@@ -215,7 +186,6 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     );
     // The high sky of a V8 world: cloud seas, wind, updrafts and the Moon overhead (F6).
     sky_lands::draw_sky_backdrop(draw, scene.terrain.settings(), scene.visible, seconds);
-    draw_lowered_ground_backdrop(draw, scene.terrain, scene.visible);
     buildings::draw_town(draw, scene.visible, scene.local, seconds);
     villages::draw_villages(
         draw,

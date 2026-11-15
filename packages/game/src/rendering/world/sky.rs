@@ -411,9 +411,11 @@ fn near_tops(biome: Biome) -> Vec<i32> {
         .collect()
 }
 
-fn near_image(biome: Biome) -> Image {
-    let tops = near_tops(biome);
-    let (edge, body, deep) = match biome {
+/// A biome's near-hills colours: `(ridge edge, body, deep)`. The skirt shades from the body
+/// into the deep colour, so the texture's bottom rows are solid `deep`, which is also what
+/// [`draw_layer`] fills the rest of the view below the texture with.
+const fn near_colors(biome: Biome) -> (Color, Color, Color) {
+    match biome {
         Biome::Plains => (LEAF, MOSS, PINE),
         Biome::Forest => (MOSS, PINE, PINE),
         Biome::Desert => (CREAM, SAND, CLAY),
@@ -421,7 +423,12 @@ fn near_image(biome: Biome) -> Image {
         Biome::Tundra => (ICE, MIST, FOG),
         Biome::Mountains => (SLATE_LIGHT, SLATE, SLATE_DARK),
         Biome::Wetlands => (LEAF, MOSS, TEAL_DARK),
-    };
+    }
+}
+
+fn near_image(biome: Biome) -> Image {
+    let tops = near_tops(biome);
+    let (edge, body, deep) = near_colors(biome);
     let mut image = silhouette(
         NEAR_WIDTH,
         NEAR_HEIGHT + NEAR_SKIRT,
@@ -508,16 +515,26 @@ fn clouds_image() -> Image {
 
 /// Draws `texture` repeated horizontally across `visible`, scrolled for a layer at `parallax`
 /// (0 = fixed to the screen, 1 = fixed to the world), bottom at world `bottom`, tinted `tint`.
+///
+/// With a `fill` colour (the texture's solid bottom row), the layer also continues below its
+/// texture to the bottom of the view as one flat rectangle in that colour (tinted alike), so
+/// ground far below the hills' anchor (a valley beside a tall mountain, the foot of a range)
+/// never shows the sky under the backdrop, at the cost of a single draw call.
 fn draw_layer(
     draw: &mut impl RaylibDraw,
     texture: &Texture2D,
     visible: Rectangle,
     parallax: f32,
     bottom: f32,
-    tint: Color,
+    (tint, fill): (Color, Option<Color>),
 ) {
     let width = texture.width() as f32 * ART;
     let height = texture.height() as f32 * ART;
+    if let Some(fill) = fill
+        && let Some(rect) = below_layer(visible, bottom)
+    {
+        draw.draw_rectangle_rec(rect, multiply(fill, tint));
+    }
     if bottom < visible.y || bottom - height > visible.y + visible.height {
         return;
     }
@@ -535,6 +552,35 @@ fn draw_layer(
             tint,
         );
     }
+}
+
+/// The part of the view below a backdrop layer whose texture ends at world `bottom` (a little
+/// wider and taller than the view, so it never leaves a seam at the edges), if any.
+fn below_layer(visible: Rectangle, bottom: f32) -> Option<Rectangle> {
+    let view_bottom = visible.y + visible.height + ART;
+    // Overlap the texture's bottom row by one art pixel: no seam at fractional camera offsets.
+    let top = (bottom - ART).max(visible.y - ART);
+    (top < view_bottom).then(|| {
+        Rectangle::new(
+            snap(visible.x) - ART * 2.0,
+            top,
+            visible.width + ART * 6.0,
+            view_bottom - top,
+        )
+    })
+}
+
+/// `color` as drawn through a texture `tint` (raylib multiplies each channel).
+const fn multiply(color: Color, tint: Color) -> Color {
+    const fn channel(a: u8, b: u8) -> u8 {
+        ((a as u16 * b as u16 + 127) / 255) as u8
+    }
+    Color::new(
+        channel(color.r, tint.r),
+        channel(color.g, tint.g),
+        channel(color.b, tint.b),
+        channel(color.a, tint.a),
+    )
 }
 
 /// The time of day the sky draws: the clock, its keyframed look and where the Moon hangs.
@@ -1142,53 +1188,66 @@ fn draw_hills(
         RimSide::Left => 0,
         RimSide::Right => 1,
     };
+    // The near hills are opaque and continue down to the view's bottom in their deep colour
+    // (see `draw_layer`), so they cover the far hills' bottom edge as well as the sky below it.
     let layers: [HillLayer<'_>; 2] = [
-        (&art.far, &art.far_rims, 0.18, anchor),
+        (&art.far, &art.far_rims, 0.18, anchor, false),
         (
             &art.near,
             &art.near_rims,
             0.42,
             (NEAR_SKIRT as f32).mul_add(ART, anchor),
+            true,
         ),
     ];
-    let paint = |draw: &mut dyn FnMut(&Texture2D, Color),
-                 textures: &[Option<Texture2D>],
-                 rims: &[[Option<Texture2D>; 2]],
+    let paint = |draw: &mut dyn FnMut(&Texture2D, Color, Option<Color>),
+                 (textures, rims, skirted): HillArt<'_>,
                  biome: Biome,
                  weight: u8| {
+        let fill = skirted.then(|| near_colors(biome).2);
         if let Some(Some(texture)) = textures.get(index(biome)) {
-            draw(texture, with_alpha(look.hills.base, weight));
+            draw(texture, with_alpha(look.hills.base, weight), fill);
             if look.hills.t > 0 && look.hills.over != look.hills.base {
                 let alpha = (u16::from(weight) * u16::from(look.hills.t) / 255) as u8;
-                draw(texture, with_alpha(look.hills.over, alpha));
+                draw(texture, with_alpha(look.hills.over, alpha), fill);
             }
         }
         if look.rim.alpha > 0
             && let Some(Some(rim)) = rims.get(index(biome)).map(|pair| &pair[rim_slot])
         {
             let alpha = (u16::from(weight) * u16::from(look.rim.alpha) / 255) as u8;
-            draw(rim, with_alpha(look.rim.color, alpha));
+            draw(rim, with_alpha(look.rim.color, alpha), None);
         }
     };
-    for (textures, rims, parallax, bottom) in layers {
-        let mut layer = |texture: &Texture2D, tint: Color| {
-            draw_layer(draw, texture, visible, parallax, bottom, tint);
+    for (textures, rims, parallax, bottom, skirted) in layers {
+        let mut layer = |texture: &Texture2D, tint: Color, fill: Option<Color>| {
+            draw_layer(draw, texture, visible, parallax, bottom, (tint, fill));
         };
-        paint(&mut layer, textures, rims, blend.primary, 255);
+        paint(&mut layer, (textures, rims, skirted), blend.primary, 255);
         if blend.mix > 0 && blend.secondary != blend.primary {
             // `mix` is the neighbour's weight in 256ths (at most half, on the boundary).
-            paint(&mut layer, textures, rims, blend.secondary, blend.mix);
+            paint(
+                &mut layer,
+                (textures, rims, skirted),
+                blend.secondary,
+                blend.mix,
+            );
         }
     }
 }
 
-/// One backdrop layer: its biome textures, their rim masks, its parallax and its bottom.
+/// One backdrop layer: its biome textures, their rim masks, its parallax, its bottom and
+/// whether it continues down to the bottom of the view below its texture.
 type HillLayer<'a> = (
     &'a [Option<Texture2D>],
     &'a [[Option<Texture2D>; 2]],
     f32,
     f32,
+    bool,
 );
+
+/// A backdrop layer's art: its biome textures, their rim masks and whether it is skirted.
+type HillArt<'a> = (&'a [Option<Texture2D>], &'a [[Option<Texture2D>; 2]], bool);
 
 /// World y of the bottom of the hills backdrop for a view: the classic ground line, or in a
 /// biome world the ground averaged over a wide window around the view's centre (so the hills
