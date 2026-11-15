@@ -365,8 +365,10 @@ pub fn draw_boulder(draw: &mut impl RaylibDraw, boulder: &FallingBoulder, second
     let sprite = &props::BOULDER;
     let (width, height) = (sprite.width() as f32 * ART, sprite.height() as f32 * ART);
     let warning = boulder.warning_seconds > 0.0;
+    // How close a hanging boulder is to dropping: 0 with 1.5 s or more to go, 1 as it falls.
+    let urgency = (1.0 - boulder.warning_seconds / 1.5).clamp(0.0, 1.0);
     let shake = if warning && (boulder.warning_seconds * 30.0) as i32 % 2 == 0 {
-        ART
+        if urgency > 0.6 { ART * 2.0 } else { ART }
     } else {
         0.0
     };
@@ -382,9 +384,24 @@ pub fn draw_boulder(draw: &mut impl RaylibDraw, boulder: &FallingBoulder, second
             pen.rect(draw, 5, -2, 3, 2, INK);
             pen.px(draw, 6, -2, GOLD);
         }
-        for grit in 0..3 {
+        // Dust shaken off the ceiling it hangs from, thickening as it works loose, and grit
+        // trickling down (more of it near the end): the telegraph before it drops.
+        let dust = 2 + (urgency * 4.0) as i32;
+        for puff in 0..dust {
+            let drift = ((seconds * 3.0 + puff as f32 * 0.9).sin() * 2.0) as i32;
+            pen.rect(
+                draw,
+                -1 + puff * 3 + drift,
+                -3 - puff % 2,
+                3,
+                2,
+                with_alpha(STONE_LIGHT, (70.0 + urgency * 110.0) as u8),
+            );
+        }
+        let streams = 3 + (urgency * 2.0) as i32;
+        for grit in 0..streams {
             let fall = ((seconds * 20.0) as i32 + grit * 5) % 12;
-            pen.px(draw, 3 + grit * 3, 11 + fall, with_alpha(STONE_LIGHT, 200));
+            pen.px(draw, 2 + grit * 2, 11 + fall, with_alpha(STONE_LIGHT, 200));
         }
     } else {
         for puff in 0..3 {

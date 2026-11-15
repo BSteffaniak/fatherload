@@ -1814,12 +1814,18 @@ pub const SCENES: &[Scene] = &[
                 let (x, y) = find_tile(world, 30..80, |kind| kind == TileKind::ExplosivePocket)
                     .map_or((110, 40), |tile| (tile.x, tile.y - 1));
                 sink_rig(world, player, x, y);
+                // The pocket right under the rig (also on worlds whose search found none).
+                world
+                    .terrain_mut()
+                    .set_kind(TilePosition { x, y: y + 1 }, TileKind::ExplosivePocket);
                 carve(world, x - 2..x + 3, y - 3..y + 1);
                 reveal(world, player, x - 14..x + 15, y - 8..y + 9);
             });
             stage.settle(10);
+            // Drill it, then catch the boulders hanging (shaking, shedding dust) before they
+            // drop.
             stage.hold(
-                30,
+                45,
                 PlayerInput {
                     drill_down: true,
                     ..PlayerInput::default()
