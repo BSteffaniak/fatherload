@@ -114,7 +114,10 @@ every boulder source follows (new ones must too):
   The roaming row is the worst case for settled ground (the rig always stands on fresh ground
   in a room tall enough to hang boulders; a one-high tunnel gets no cave-in at all). With a
   45 s surge roll and the old instability build it was 102 per hour, a cave-in about every
-  minute and a half for the whole run, which is why both were cut further.
+  minute and a half for the whole run, which is why both were cut further. With the second
+  fuel and cargo curves on top (bots stay down longer on the bigger tanks) the mining rows read
+  15.0 (prospector) and 2.2 (shaft) per hour; the parked and roaming rows are unchanged, and
+  nothing spawns in rock or breaks without falling.
 
 Test mode (`test_mode.rs`, `world/test_mode.rs`): `WorldState::enable_test_mode` (before play)
 maxes every rig (hazard counters included) and the player template, fills the parts locker and
