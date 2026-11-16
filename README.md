@@ -304,6 +304,29 @@ its own open shafts in town) and never affords drill II at 420 cr; once broke, e
 baseline and partly the bot (a player would tunnel to the ore beside the shaft, as the
 prospector does), but the rescue's poverty trap is worth a look in a later pass.
 
+The fuel and cargo pass (playtest: fuel should only bite on deep and long runs), before and after
+(4 seeds, 60 game minutes, 60 Hz; `--only economy,progression,climb,trip`):
+
+| Measure | Before | After |
+|---|---|---|
+| Stock tank / tier 2 / tier 3 / top tank (fuel) | 100 / 150 / 225 / 3,075 | 450 / 700 / 1,070 / 14,870 |
+| Stock bay / tier 2 / tier 3 / top bay (slots); hopper per bay tier | 12 / 20 / 30 / 306; +20 | 12 / 22 / 37 / 607; +30 |
+| Everyday trip (first drill upgrade, 50 rows down, 2 min of mining, home): fuel burned, share of a stock / tier 2 / tier 3 tank | about 160: more than a stock tank holds | 164: 36 % / 23 % / 14 % |
+| Economy bot trips: median (90th percentile) share of the tank, tanks 1 / 2 / 3 | 15 (35) / 23 (38) / 25 (40) % | 3 (5) / 6 (9) / 6 (10) % |
+| Prospector bot: credits per minute, whole hour / last half hour; upgrades bought | 174 / 186; 11.2 | 221 / 247; 14.5 |
+| Prospector bot: minute of tier 2 / tier 3, fuel tank, cargo bay, drill | 3.0 / 32.2, 6.8 / 33.2, 13.0 / 46.2 | 2.6 / 32.3, 5.3 / 32.7, 10.8 / 33.7 |
+| Shaft-only baseline: rescues an hour | 46.5 | 10.0 |
+| Still-air climb ceiling (rows above row 0), top engine and tier 6 intakes, tanks 1 / 5 / 10 / 15 | 410 / 1,340 / 4,680 / 12,150 | 1,140 / 4,800 / 19,480 / 54,140 |
+| The same without intakes, top engine | 360 / 900 / 2,360 / 4,980 | 790 / 2,410 / 5,240 / 5,250 |
+| Climb from the surface in a V8 sky, stock engine and tank (tiles) | 120 | 397 (thin air caps a stock engine at about 480) |
+
+V8 worlds keep their sky exactly (the bands are frozen per generator), so in a V8 world the
+bigger tanks reach the bands earlier: a stock tank already climbs into the low isles, and tank
+10 with a top engine and tier 2 intakes crosses the dead air (no rig crosses without intakes).
+The next sky generator recalibrates the bands to the new curve
+([packages/simulation/README.md](packages/simulation/README.md), "Band tables per generator
+version").
+
 ### Caves
 
 Worlds from generator v6 on add **cave ecosystems**, each with its own rock,
