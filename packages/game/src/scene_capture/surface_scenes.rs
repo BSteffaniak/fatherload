@@ -291,8 +291,8 @@ pub const SURFACE_SCENES: &[Scene] = &[
     },
     Scene {
         name: "valley_backdrop_high",
-        summary: "High over a deep mountain valley: the backdrop's ridge low in the view, filled down to the valley floor",
-        setup: |stage| valley_scene(stage, 22),
+        summary: "High over a deep mountain valley: the backdrop's ridge low in the view, its skirt running off the bottom edge (the fill below it stays off-view and is skipped)",
+        setup: |stage| valley_scene(stage, 19),
     },
     Scene {
         name: "valley_backdrop_split",
