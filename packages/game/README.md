@@ -82,7 +82,7 @@ Modules:
   tiles, interpolated with the bomb alpha) and the red hit flash on rigs inside their
   post-hit i-frames (`RenderSnapshot::rig_guards`).
 - `balance_report` (desktop only) — `fatherload --balance-report [--seeds N] [--minutes M]
-  [--hz H] [--only economy,progression,combat,exposure,building,climb] [--strategies
+  [--hz H] [--only economy,progression,combat,exposure,building,climb,trip] [--strategies
   shaft,prospector,charges] [--threads T]` runs `fatherload_simulation::balance` and prints its
   Markdown report (threads default to every core).
 - `worldgen_tools` — `fatherload --worldgen-report [--seeds N] [--first-seed S] [--size X]

@@ -33,13 +33,29 @@ Upgrades (`economy.rs`): fourteen shop lines, offer index = position in `Upgrade
 drill mount stays at `DRILL_MOUNT_OFFER_INDEX` 8). The core lines (drill, fuel tank, cargo bay,
 engine, hull, radiator) run to tier 15, the scanner to 10, each hazard counter to 6-8. Prices
 grow geometrically per tier from a cheap first purchase (`upgrade_cost`); stat curves live in
-`player.rs` (`cargo_capacity_for_level` ~300 at the top, `fuel_capacity_for_level` ~3,000,
+`player.rs` (`cargo_capacity_for_level` 12 stock, +10, +15, +20, ... ~600 at the top;
+`fuel_capacity_for_level` 450 stock, +250, +370, +490, ... ~14,900 at the top;
 `hull_capacity_for_level` ~2,500, `engine_power` ~4x thrust with climb speed capped; horizontal
 top speed follows `world::engine_top_speed_tiles`, ~5x stock at the top tier).
-Capacities are stored, so a save from the old five-tier curves keeps its levels; loading it
-(`WorldState::catch_up_capacity_curves`, run by the game's save loader) lifts the tank and bay
-onto the new curve for the fitted tiers, keeping bonuses earned on top. Levels load whatever
-their value.
+
+**Fuel and cargo, second curves (playtest fix).** Fuel should only bite on deep and long runs and
+sky expeditions, not everyday trips: the yardstick is the balance harness's everyday trip
+(`balance::trip`: drill 50 rows down, mine two minutes, fly home), which burns about 160 fuel,
+about 35 % of the 450 stock tank (it could not be flown on the old 100). Each tank tier adds far
+more than before and the top tank holds ~14,900 (was ~3,000); burn rates
+(`fuel_burn_efficiency`, `AUTHORITATIVE_FUEL_BURN_PER_SECOND`, 0.45 per tile drilled) are
+unchanged. The cargo bay keeps its 12 stock slots but grows +10, +15, +20, ... (~600 at the
+top, was ~300), and the block hopper grows 30 per bay tier (`BLOCK_HOPPER_PER_TIER`, was 20).
+The old curves stay as `fuel_capacity_v2` / `cargo_capacity_v2` for migration.
+
+Capacities are stored, so a save from an older curve (the five-tier curves, or the first
+fifteen-tier curves) keeps its levels; loading it (`WorldState::catch_up_capacity_curves`, run
+by the game's save loader, and therefore by a host before it serves the world online) lifts the
+tank, bay and hopper onto the current curve for the fitted tiers, keeping bonuses earned on top
+(auxiliary tanks, cargo racks), and scales the fuel on board with the tank (half full stays half
+full). Running it again changes nothing. Levels load whatever their value. **Code that builds a
+rig by hand must take capacities from these functions** (or `Player::new`), never literals like
+100 fuel / 12 slots: the stock tank is now 450.
 
 Hazard counters (`protection.rs`, `Player::hazard_gear`, private loadout): Heat Shielding,
 Lava Plating, Gas Scrubber, Pressure Bracing (pressure pockets, explosive pockets, magma vents)
@@ -212,18 +228,39 @@ ground exactly (`worldgen::sky::tests::v8_ground_is_exactly_v7_ground`) with a s
 and digests are unchanged and a V8 golden digest
 (`worldgen::sky::tests::chunk_digests_of_v8_skies_are_pinned`) pins the new output.
 
-**The climb table** (`climb.rs`): `CLIMB_CEILINGS[tank][engine][intake]` is the highest
+**The climb tables** (`climb.rs`): a `ClimbTable` `[tank][engine][intake]` holds the highest
 altitude (rows above row 0) a rig of each fuel tank tier (1-15), engine tier (1, 4, 8, 12, 15)
 and altitude intake tier (0, 2, 4, 6) reaches holding thrust from rest 100 rows up in still
-air (the density profile, standard gravity, no wind or updrafts). `climb::ceiling(t, e, i)` and
-`climb::fraction` define every band; `world::climb_tests::climb_table_matches_the_simulation`
-re-measures a sample against the real movement step, `climb_table_report` (ignored, run in
-release) prints the whole table, and `the_table_unlocks_the_sky_in_order` pins the design
-claims. Rebalancing tanks, engines or the air moves the islands with them (as a new generator
-version: it changes V8 output).
+air (the density profile, standard gravity, no wind or updrafts). There are two:
+`CLIMB_CEILINGS` (the current fuel curve; read by the gates, `climb::ceiling` / `climb::reach`)
+and `V8_CLIMB_CEILINGS` (frozen: measured on the first fifteen-tier fuel curve, the table V8's
+bands were calibrated from). `world::climb_tests::climb_table_matches_the_simulation`
+re-measures a sample of the current table against the real movement step, `climb_table_report`
+(ignored, run in release, one thread per tank tier) prints it, and
+`the_table_unlocks_the_sky_in_order` pins the design claims for both tables. Without intakes no
+tank climbs past about 5,250 rows (thin air); with them the second fuel curve climbs about four
+times higher than the first at the top (a maxed rig 54,140 rows, was 12,150).
 
-**Bands** (`sky::SkyBand`, `SkyBand::at_altitude` / `at_row`; rows above row 0 in
-`worldgen::sky`): low isles from `LOW_ISLES_BOTTOM_ROWS` (65 % of a tier 2 tank + tier 4 engine,
+**Band tables per generator version** (`worldgen::sky::SkyBands`,
+`GeneratorVersion::sky_bands()`; `has_sky()` is `sky_bands().is_some()`): each sky generator has
+its own frozen band table, and placement (`lands_touching`, `land`, `moon`, updrafts,
+`streamed::top_row`) reads the world's, so rebalancing fuel never moves an existing world's
+islands. `SkyBands::calibrated(&table)` is the rule (fractions of a climb table, below);
+`V8_SKY_BANDS` holds V8's values as literals (`v8_bands_are_frozen` checks they equal
+`calibrated(&V8_CLIMB_CEILINGS)`; the V8 golden digest is unchanged). **For the next sky
+generator** (the parallel wave's V9): `NEXT_SKY_BANDS = calibrated(&CLIMB_CEILINGS)` is the
+same rule on the current fuel curve (low isles 500, archipelago 1,350, dead air 4,720,
+continents 35,500, orbit 39,680, Moon 46,010; pinned by `next_bands_are_pinned`). Adopting it:
+add the version's arm to `sky_bands()` with these values as literals (then freeze them), and
+note that the environment (`environment.rs`: vacuum fade at the orbit floor, cold, gravity
+fields, wind bands), `SkyBand::at_altitude` / `bottom_rows` and the renderer still read V8's
+constants (`*_BOTTOM_ROWS`); a generator with other bands must route those through its
+`SkyBands` too (`SkyBand::at_altitude_in`, `bottom_rows_in`). The much taller sky is the cost of
+keeping the tier design on far bigger tanks: if V9 wants a shorter sky, steepen thin-air burn
+for its worlds and re-measure rather than moving the gates to early tiers.
+
+**Bands** (`sky::SkyBand`, `SkyBand::at_altitude` / `at_row` in a V8 sky, `at_altitude_in`
+for any `SkyBands`; rows above row 0 in `worldgen::sky`), V8's: low isles from `LOW_ISLES_BOTTOM_ROWS` (65 % of a tier 2 tank + tier 4 engine,
 about 220), the cloud archipelago from `ARCHIPELAGO_BOTTOM_ROWS` (a tier 4 rig's full reach,
 about 540), the dead-air gap from `DEAD_AIR_BOTTOM_ROWS` (90 % of the best rig without intakes,
 about 4,480), sky continents from `CONTINENTS_BOTTOM_ROWS` (85 % of a tier 13 tank, top engine
@@ -682,7 +719,7 @@ full bay now leaves the ore floating instead of losing it.
   `PickupBlocked { stowage }` once per stack that appears.
 - **Stowage**: `Player::stow` routes ore, artifacts and materials to the cargo bay and blocks
   to the block hopper, whose capacity grows with the cargo bay (`block_hopper_capacity_for_level`:
-  60 + 20 per tier). `Player::collect_blocks` (private loadout, `PlayerCommand::SetCollectBlocks`)
+  60 + 30 per tier). `Player::collect_blocks` (private loadout, `PlayerCommand::SetCollectBlocks`)
   makes the magnet ignore blocks. `PlayerCommand::DumpBlocks` tips blocks out as drops the
   dumping rig never auto-collects (`DropState::ignored_by`, 20 s lifetime);
   `SessionServiceRequest::SellBlocks` sells the hopper at the depot (`block_sale_value`: 1-4 cr).
@@ -1254,14 +1291,19 @@ above.
 
 WP-FEEL part 2 (wave 3, T18). Deterministic rules only; the game draws the moments.
 
-- **Upgrade previews.** `upgrade_preview(player, kind)` (next tier) and
-  `preview_between(player, kind, from, to)` return an `UpgradePreview`: before/after `StatBar`s
+- **Upgrade previews.** `upgrade_preview(player, kind, sky)` (next tier) and
+  `preview_between(player, kind, from, to, sky)` (`sky`: the world's
+  `GeneratorVersion::sky_bands()`, `None` without a sky: then no sky lines) return an
+  `UpgradePreview`: before/after `StatBar`s
   (scaled to the line's top tier) and measured change lines, most important first ("Now cuts
   hard rock", "Drills granite 1.2x faster (0.67 s -> 0.55 s a tile)", "Climbs 50% higher on a
   full tank", "Runs cool down to the Slate Shelves", "Immune to lava burns!"). They use the
   tick's own formulas: `dig_seconds` (base chip seconds, `drill_speed`, `drill_bite`,
   `MIN_DRILL_SECONDS_PER_CHIP`), `thrust_seconds` / `climb_speed_tiles` /
-  `climb_ceiling_tiles` (tank size, burn efficiency, capped climb speed), `cooled_band`,
+  `climb_ceiling_tiles` (tank size, burn efficiency, capped climb speed; at sea level, worlds
+  without a sky) or `thin_air_ceiling_tiles` (the measured climb table above its 100-row start,
+  worlds with a sky: thin air caps big tanks without intakes, and the tank preview then says
+  so instead of a 0 % gain), `cooled_band`,
   `protection_fraction`, `engine_top_speed_tiles`; the "Dig speed" bar is
   `dig_speed_multiplier` (the measured hard-rock speed-up over a stock drill, flat where a tier
   adds nothing). The game's first-use drill toast also reads `dig_seconds`. Stock parts, empty
@@ -1285,16 +1327,23 @@ WP-FEEL part 2 (wave 3, T18). Deterministic rules only; the game draws the momen
   byte what they were.
 - **Purchase moment.** An applied `BuyUpgrade` (command or service) is followed by
   `UpgradeInstalled { player_id, upgrade, level }` (level now fitted; bomb packs report 0).
-- **Sky gates** (wired to T16 at integration). `milestone::climb_reach(player)` reads T16's
-  measured climb table (`climb::reach(tank, engine, intake)`, engine and intake rounded down to
-  the measured tiers); `island_capable` is a reach of `ISLAND_REACH_ROWS` (40 rows into the
-  low isles: tank 2 with a stock engine, or a tier 4 engine on the stock tank) and
-  `crosses_dead_air` a reach of `DEAD_AIR_REACH_ROWS` (the continents' floor: for example tank
-  13 + engine 8 + intake 6, or tank 15 + engine 15 + intake 4; no tank and engine cross without
-  intakes). They decide the `IslandCapableTank` and `ActTwoUnlocked` (Act I -> II) milestones,
-  awarded only on worlds with a sky (`MilestoneFacts::has_sky`), and the shop's "Reaches the
-  low sky isles!" / "Crosses the dead-air gap" lines on the tank, engine and Altitude Intake
-  previews. The shop also previews the Altitude Intake (thin-air thrust) and De-Icer (cold
+- **Sky gates.** `milestone::climb_reach(player)` reads the current fuel curve's measured
+  climb table (`climb::reach(tank, engine, intake)`, engine and intake rounded down to the
+  measured tiers) and compares it with **the world's own bands**:
+  `island_capable(player, &bands)` is a reach of `bands.island_reach_rows()` (40 rows into the
+  low isles) and `crosses_dead_air(player, &bands)` a reach of `bands.dead_air_reach_rows()`
+  (the continents' floor). `MilestoneFacts::sky_bands` (was `has_sky: bool`) carries the
+  world's `GeneratorVersion::sky_bands()`; callers outside the world (story quests, previews)
+  must pass the world's bands too, never assume V8's. On next-generator bands the design
+  holds: tank 2 (stock engine) reaches the isles, the stock rig does not; crossing the dead air
+  needs a near-max tank and intakes (tank 13 + engine 15 + intake 6, or tank 15 + intake 4).
+  On V8 worlds (calibrated on the old, smaller fuel curve) the bigger tanks open the bands
+  earlier: a stock tank already reaches V8's low isles (so a stock rig in a V8 world earns
+  `IslandCapableTank` at once) and tank 10 + engine 15 + intake 2 crosses V8's dead air; no
+  rig crosses without intakes. They decide the `IslandCapableTank` and `ActTwoUnlocked`
+  (Act I -> II) milestones and the shop's "Reaches the low sky isles!" / "Crosses the dead-air
+  gap" lines on the tank, engine and Altitude Intake previews. `HighFlyer` now needs 420 tiles
+  above the ground (a stock rig climbs about 400 on a full tank). The shop also previews the Altitude Intake (thin-air thrust) and De-Icer (cold
   cover) lines.
 - **Replication and saves.** `Player::milestones` is private: it travels in the owner's
   `Loadout` section (`PlayerInventory::milestones`), is saved with the player (serde default:
@@ -1317,7 +1366,7 @@ Probes may set a scenario up directly (carve an arena, hand a rig a weapon) but 
 shortcut the tick. Same config, same report, on every machine.
 
 - **Report:** `fatherload --balance-report [--seeds N] [--minutes M] [--hz H] [--only
-  economy,progression,combat,exposure,building,climb] [--strategies shaft,prospector,charges]
+  economy,progression,combat,exposure,building,climb,trip] [--strategies shaft,prospector,charges]
   [--threads T]` (release build), or `cargo test --release -p fatherload_simulation
   balance_report -- --ignored --nocapture` with `BALANCE_SEEDS`, `BALANCE_MINUTES`,
   `BALANCE_ONLY`. `trace_economy_bot` (ignored; `BALANCE_TRACE=1 BOT_SEED BOT_STRATEGY
@@ -1333,10 +1382,18 @@ shortcut the tick. Same config, same report, on every machine.
   fuel reserve measured on earlier climbs, trips home to sell, refuel, repair and buy
   upgrades (cheapest weighted line, a reserve kept), a rivet gun once affordable, rescues when
   stranded. `EconomyRun` keeps per-minute samples, purchases, band times, damage by enemy
-  kind and the rescue log.
+  kind, the rescue log and a trip log (`BotStats::trip_log`: fuel burned shaft mouth to town
+  against the tank flown, depth, length and why it turned home).
 - **Progression:** time to each tier of the core lines (the prospector's runs: the shaft
-  baseline never upgrades and would drag the medians down), depth and earning rate over time,
-  the minute each band was entered.
+  baseline never upgrades and would drag the medians down), fuel per trip by the tank flown
+  (metrics `fuel.tank{t}.median_tank_percent` / `.p90_tank_percent` / `.fuel_turn_percent`),
+  depth and earning rate over time, the minute each band was entered.
+- **Everyday trip** (`trip::everyday_trip(seed, tank, hz) -> TripResult`, probe `trip`): a
+  scripted rig with the first drill upgrade sinks a shaft beside town (the nearest column clear
+  of buildings it can drill solid 60 rows down), drills 50 rows, mines for two minutes
+  (8-tile tunnels each side, two rows deeper, again; a one-second hop every 20 s) and flies
+  home to land beside the shaft. Fuel burned and the share of each tank (metric
+  `trip.tank{t}.tank_percent`): the fuel curve's yardstick. `BALANCE_TRACE_TRIP=1` traces it.
 - **Combat** (`combat::duel(kind, band, loadout, hz) -> DuelResult`): a sealed arena at a
   band's depth (bedrock past a stone shell, lair chunks marked cleared through
   `WorldState::mark_lair_cleared`, the deep reward tile cleared), one enemy, a rig with one of
@@ -1354,13 +1411,14 @@ shortcut the tick. Same config, same report, on every machine.
   burned) per `climb::TANK_TIERS` x `climb::ENGINE_TIERS`, metrics
   `climb.tank{t}.engine{e}.apex_tiles` / `.turn_back_tiles`. It reads only the tick, so T16's
   altitude physics (air density, cold, gravity fields) shows up in it on integration; T16's
-  own climb harness stays the authority for sky band placement. At this commit (no air
-  physics yet): stock rig 120 tiles, tank 6 / engine 6 about 2,200, top tank and engine
-  about 27,500.
+  own climb harness stays the authority for sky band placement. In a V8 sky without intakes
+  every climb tops out where thin air leaves the engine too weak: about 480 tiles for a stock
+  engine, 990 for engine 6 and up; a stock rig climbs about 400 tiles on its 450-fuel tank
+  (120 on the old 100).
 - **Pinned tests** (`balance/tests.rs`): the bot mines, sells and upgrades without rescues;
   early burrowers bite softly; elites fall in set-piece time; armour still matters; bigger
-  tanks and engines climb higher (turn back at about half the apex); the building probe pays
-  list prices.
+  tanks and engines climb higher (turn back past half the apex); an everyday trip burns under
+  40 % of a stock tank; the building probe pays list prices.
 - **Wave 4 hooks:** implement `balance::BalanceProbe` (`name`, `run(&mut ProbeContext) ->
   ReportSection`) and add it to `standard_probes()`. `ProbeContext::economy()` shares the
   economy runs, so a probe can price things in minutes of income; `ReportSection::metric`

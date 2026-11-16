@@ -101,7 +101,7 @@ Drill below the surface, gather minerals and artifacts, manage fuel/hull/cargo/d
 
 The dark caves below the topsoil are home to enemies, creatures and machines that grow tougher with depth: bat swarms, burrowers that hear your drill through the rock, acid spitters, rock mimics posing as boulders, armoured shellbacks, magma wisps in the mantle, brood nests and their brood lords, rogue mining drones, sentry turrets, excavators that chew toward you and shielded ancient guardians. Each has a tell before it strikes (a screech, a wind-up, a charge glow) and a counter: bombs crack armour, EMP charges knock machines out and drop shields, flares lure bats away. A hit knocks the rig back and leaves it a moment of invulnerability; the surface, the town and your outposts stay safe, kills drop ore and materials, and cleared lairs stay cleared. The New World dialog (and the host's pause menu) sets enemies to Peaceful, Normal or Hard; god mode makes rigs immune.
 
-The upgrade shop sells long upgrade lines (up to 15 tiers: endgame bays of ~300 slots, tanks of ~3,000 fuel, hulls of ~2,500, drills that plow through the hardest rock) and a hazard counter for every danger: Heat Shielding (each layer runs hotter; radiator and shielding together decide how deep you stay cool), Lava Plating (lava is drillable but burns; the top tier is lava-proof), Gas Scrubber, Pressure Bracing (pressure pockets, explosive pockets, magma vents) and Boulder Deflector.
+The upgrade shop sells long upgrade lines (up to 15 tiers: endgame bays of ~600 slots, tanks of ~15,000 fuel, hulls of ~2,500, drills that plow through the hardest rock) and a hazard counter for every danger: Heat Shielding (each layer runs hotter; radiator and shielding together decide how deep you stay cool), Lava Plating (lava is drillable but burns; the top tier is lava-proof), Gas Scrubber, Pressure Bracing (pressure pockets, explosive pockets, magma vents) and Boulder Deflector.
 
 ### Day and night
 
@@ -260,7 +260,7 @@ air.
 ### Balance
 
 The balance harness (`fatherload --balance-report [--seeds N] [--minutes M] [--only
-economy,progression,combat,exposure,building,climb]`, release build; details in
+economy,progression,combat,exposure,building,climb,trip]`, release build; details in
 [packages/simulation/README.md](packages/simulation/README.md#balance-harness-srcbalancers-srcbalance))
 plays fresh worlds with scripted bots through the real simulation: an economy bot (straight
 shafts, a prospector tunnelling sideways to ore, and a mining-charge miner with its own
