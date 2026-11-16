@@ -437,9 +437,13 @@ The fuel and cargo pass (playtest: fuel should only bite on deep and long runs),
 V8 worlds keep their sky exactly (the bands are frozen per generator), so in a V8 world the
 bigger tanks reach the bands earlier: a stock tank already climbs into the low isles, and tank
 10 with a top engine and tier 2 intakes crosses the dead air (no rig crosses without intakes).
-The next sky generator recalibrates the bands to the new curve
+Generator V9 (new worlds) recalibrates its own bands to the new curve, with thirstier thin
+air so its sky stays as tall as V8's: the first tank upgrade reaches the low isles (from 310
+rows), a tier 4 tank and engine the cloud archipelago (740), only a tier 13 tank with a tier 8
+engine and top intakes crosses the dead air to the sky continents (12,010), and the Moon
+(15,360) takes a tier 14 tank and top intakes
 ([packages/simulation/README.md](packages/simulation/README.md), "Band tables per generator
-version").
+version" and "V9's sky").
 
 ### Caves
 

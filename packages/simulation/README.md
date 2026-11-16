@@ -252,17 +252,33 @@ its own frozen band table, and placement (`lands_touching`, `land`, `moon`, updr
 `streamed::top_row`) reads the world's, so rebalancing fuel never moves an existing world's
 islands. `SkyBands::calibrated(&table)` is the rule (fractions of a climb table, below);
 `V8_SKY_BANDS` holds V8's values as literals (`v8_bands_are_frozen` checks they equal
-`calibrated(&V8_CLIMB_CEILINGS)`; the V8 golden digest is unchanged). **For the next sky
-generator** (the parallel wave's V9): `NEXT_SKY_BANDS = calibrated(&CLIMB_CEILINGS)` is the
-same rule on the current fuel curve (low isles 500, archipelago 1,350, dead air 4,720,
-continents 35,500, orbit 39,680, Moon 46,010; pinned by `next_bands_are_pinned`). Adopting it:
-add the version's arm to `sky_bands()` with these values as literals (then freeze them), and
-note that the environment (`environment.rs`: vacuum fade at the orbit floor, cold, gravity
-fields, wind bands), `SkyBand::at_altitude` / `bottom_rows` and the renderer still read V8's
-constants (`*_BOTTOM_ROWS`); a generator with other bands must route those through its
-`SkyBands` too (`SkyBand::at_altitude_in`, `bottom_rows_in`). The much taller sky is the cost of
-keeping the tier design on far bigger tanks: if V9 wants a shorter sky, steepen thin-air burn
-for its worlds and re-measure rather than moving the gates to early tiers.
+`calibrated(&V8_CLIMB_CEILINGS)`; the V8 golden digest is unchanged). **V9's sky** (adopted at the wave 4 integration on top of the playtest fixes): the literal
+next bands on V8's physics (500 / 1,350 / 4,720 / 35,500 / 39,680 / 46,010) put the sky
+continents and the Moon above 2^20 world pixels, where `f32` positions resolve only 1/8 px: the
+pilot stuck on the Moon facility's ledges and the Moon precision test failed. So V9 steepened
+thin-air burn for its worlds and re-measured, as planned: `environment::V9_THIN_AIR_BURN` = 30
+(V8 keeps `THIN_AIR_BURN` = 8; `Environment::thin_air_burn`, `thin_air_burn_of(generator)`),
+`climb::V9_CLIMB_CEILINGS` measured on it (`v9_climb_table_report`; a maxed rig climbs 18,080
+rows, without intakes 5,240), and `V9_SKY_BANDS = calibrated(&V9_CLIMB_CEILINGS)` frozen as
+literals: low isles 310, archipelago 740, dead air 4,710, continents 12,010, orbit 13,430, Moon
+15,360 (`v9_bands_are_frozen`, which also checks the Moon's top stays under 2^19 px, the 1/32 px
+regime V8's sky and every pilot space were built in). `NEXT_SKY_BANDS` is the same calibration
+(equal to V9's today, `next_bands_are_pinned`). Pacing on V9: a stock rig climbs 330 rows (the
+lowest isles' turf is at 350: the first tank upgrade, 340 cr, reaches them), a tier 4 tank and
+engine reach the archipelago, the cheapest dead-air crossing is tank 13 / engine 8 / intakes 6
+(203,910 cr) and the Moon's top needs tank 14 / engine 12 / intakes 6 (or tank 15 / engine 8).
+**Every reader goes through the world's bands**: `SkyBands::climb` is the climb table a sky's
+gates compare with (V8: today's `CLIMB_CEILINGS`; V9: its own), read by
+`milestone::climb_reach` / `island_capable` / `crosses_dead_air` / `sky_refuel_level`, the tank
+previews and the second-act probe; the environment (vacuum fade at the orbit floor, cold,
+gravity fields, wind bands), `SkyBand::at_row_of(settings, row)` (altitude events, sky enemy
+tiers, the hostile sky, the HUDs), sky caches, buoys, collapsing isles, sky cities and lakes,
+quest isles, the Moon anchor, the save fingerprint, the map, tile art, audio, the sky renderer
+and the sky scenes all take the world's `SkyBands`. `SkyBand::at_altitude` / `at_row` /
+`bottom_rows` and the `*_BOTTOM_ROWS` constants are V8's only. Breathing and the hull's seal
+read **breathable air** (`Environment::breathable`, `environment::breathable_air`): the
+density at the matching height of a V8 sky, so every sky's continents hold air and its orbit is
+vacuum; thrust, burn and drag still read the measured density profile (`air_density`).
 
 **Bands** (`sky::SkyBand`, `SkyBand::at_altitude` / `at_row` in a V8 sky, `at_altitude_in`
 for any `SkyBands`; rows above row 0 in `worldgen::sky`), V8's: low isles from `LOW_ISLES_BOTTOM_ROWS` (65 % of a tier 2 tank + tier 4 engine,
@@ -404,13 +420,36 @@ below describe each track; this one lists what the integration unified.
   gates (low isles, dead-air gap, the Moon checklist), the sky refuel ceilings, the Act II and
   Moon weapons, the pilot's Moon kit and homes, in credits and minutes of late-game mining.
 
+**Rebased onto the playtest fixes** (reconciliation, see also the sky section above):
+- *Sky bands*: V9 has its own bands, thin-air burn and climb table, and nothing in wave 4 reads
+  V8's band constants any more; V9's isle, continent and Moon digests were re-pinned (V1-V8
+  unchanged).
+- *Dead-air gate*: buoys (720 fuel, a third of the tank plus 720), sky town and base refuels
+  (`sky_refuel_level` against the world's bands and climb table) and the second-act probe are
+  re-measured on V9's table: no rig short of the gap is carried over it by sky fuel.
+- *Enemy bodies*: every wave 4 kind moves through the shared enemy step (`step_body`,
+  `free_from_rock`, `keep_off_bodies`) and has a real `EnemyKind::contact_half` sized to its
+  art; airship turrets riding their hull take the nearest open spot when the mount point would
+  sit in rock; dune stalkers dig real tunnels through the crust they hunt in
+  (`diggable_by`); spawns search up to four tiles for open space. `world::enemy_body_tests::
+  wave_four_families_keep_their_bodies_in_their_habitats` soaks the sky families on a cloud
+  archipelago isle, the night monsters on the night surface and the Moon's creatures on the
+  regolith. Pilot weapons go through `launch_projectiles` and the Act II and Moon guns through
+  the projectile and ray paths, so all get the hardpoint-to-muzzle sweep; the gravity gun also
+  grabs point-blank targets.
+- *Boulders*: a collapsing isle sheds a rock only from a tile with open air under it
+  (`boulder_hang_tile`), centred in the tile it emptied.
+- *Formats*: `PROTOCOL_VERSION` 12 and save format 10, one bump each over master's 11 / 9;
+  `catch_up_capacity_curves` still runs on every load.
+
 
 ### Sky isles and sky towns (`worldgen/sky/{isles,towns,winds}.rs`, `world/sky_isles.rs`, `skycraft.rs`, generator V9)
 
 Expansion plan WP-SKY (wave 4, T20). `GeneratorVersion::V9` (current, `has_sky_isles`) keeps
-V8's bands, continents, Moon and island placement (`worldgen::sky::isle_tests::
-v9_keeps_v8_placement_outside_town_cells`) and furnishes the low isles and archipelago; V8 and
-older output is unchanged and `GOLDEN_V9_DIGEST` pins the new output.
+V8's island placement rule in its own, taller bands (`worldgen::sky::isle_tests::
+v9_keeps_the_bare_placement_outside_town_cells`; V9's bands and thin air are described under
+the sky section above) and furnishes the low isles and archipelago; V8 and older output is
+unchanged and `GOLDEN_V9_DIGEST` pins the new output.
 
 - **Island content** (`isles`, `SkyLand::content() -> Option<&IsleContent>`): skystone ore
   (`MineralKind::Skystone`, hardness 2) in every isle's rock, cloud silver
@@ -450,7 +489,8 @@ older output is unchanged and `GOLDEN_V9_DIGEST` pins the new output.
 - **Fuel buoys** (`BuoySite`, `isles::buoy_of`, `WorldState::buoy_at_rig` / `buoy_used`):
   `SessionServiceRequest::SkyBuoy { isle }` from a rig parked on the pad buys one refill per
   player per buoy (`VillageJournal::buoys`, serde default) for `BUOY_PRICE` (450): at most
-  `BUOY_FUEL` (160) and never past `buoy_fill_level` (a third of the tank plus 160). A rig
+  `BUOY_FUEL` (720, sized for the second fuel curve: a tier 1-3 tank fills right up) and never
+  past `buoy_fill_level` (a third of the tank plus 720). A rig
   leaving a buoy is never better off than one that climbed to the band's top on a full tank,
   so buoys cannot open the dead-air gap; `world::sky_isle_tests::
   buoys_never_open_the_dead_air_gap` measures it for every near-gap loadout of the climb table
