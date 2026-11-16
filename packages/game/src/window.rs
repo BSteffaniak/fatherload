@@ -212,6 +212,13 @@ impl DesktopWindow {
 
     /// Records the window's restorable size and maximized state, and keeps a plain window
     /// grabbable (see [`recentred_window_position`]); call once per frame.
+    #[cfg_attr(
+        target_os = "emscripten",
+        allow(
+            clippy::needless_pass_by_ref_mut,
+            reason = "only the desktop build moves the window"
+        )
+    )]
     pub fn track(&mut self, raylib: &mut RaylibHandle) {
         let observation = WindowObservation {
             screen: Self::screen_size(raylib),
