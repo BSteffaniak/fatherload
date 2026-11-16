@@ -222,8 +222,11 @@ fn spawn_point(kind: EnemyKind, floor: i32, centre_x: i32) -> (f32, f32) {
     let floor_y = floor as f32 * TILE_SIZE;
     match stats.locomotion {
         Locomotion::Flying => (x, floor_y - 4.0 * TILE_SIZE),
-        Locomotion::Burrowing => (x, floor_y + 1.5 * TILE_SIZE),
-        Locomotion::Walking | Locomotion::Stationary => (x, floor_y - stats.radius - 1.0),
+        // Burrowers start on the arena floor too: they no longer pass through rock, so one
+        // spawned in the stone under the floor stays in its den out of every weapon's reach.
+        Locomotion::Burrowing | Locomotion::Walking | Locomotion::Stationary => {
+            (x, floor_y - stats.radius - 1.0)
+        }
     }
 }
 
