@@ -455,9 +455,47 @@ fn old_saves_past_the_old_top_tier_keep_upgrading() {
     old.cargo_capacity = 44 + 4;
     old.fuel_tank_level = 5;
     old.fuel_capacity = 300.0 + 20.0;
+    old.fuel = 160.0;
     old.catch_up_capacity_curves();
     assert_eq!(old.cargo_capacity, cargo_capacity_for_level(5) + 4);
     assert!((old.fuel_capacity - (fuel_capacity_for_level(5) + 20.0)).abs() < f32::EPSILON);
+    assert!(
+        old.fuel_capacity.mul_add(-0.5, old.fuel).abs() < 0.01,
+        "half a tank stays half a tank: {} of {}",
+        old.fuel,
+        old.fuel_capacity
+    );
+    // A rig from the first fifteen-tier curves (tier 8 bay and tank, a cargo rack and an
+    // auxiliary tank on top, a quarter tank left) lands on the second curves the same way.
+    let mut v2 = Player::new(0.0, 0.0);
+    v2.cargo_bay_level = 8;
+    v2.cargo_capacity = crate::player::cargo_capacity_v2(8) + 2;
+    v2.fuel_tank_level = 8;
+    v2.fuel_capacity = crate::player::fuel_capacity_v2(8) + 15.0;
+    v2.fuel = v2.fuel_capacity / 4.0;
+    v2.block_hopper_capacity = 60 + 20 * 7;
+    v2.catch_up_capacity_curves();
+    assert_eq!(v2.cargo_capacity, cargo_capacity_for_level(8) + 2);
+    assert!((v2.fuel_capacity - (fuel_capacity_for_level(8) + 15.0)).abs() < f32::EPSILON);
+    assert!(
+        (v2.fuel - v2.fuel_capacity / 4.0).abs() < 0.01,
+        "{}",
+        v2.fuel
+    );
+    assert_eq!(
+        v2.block_hopper_capacity,
+        crate::world::drops::block_hopper_capacity_for_level(8)
+    );
+    let v2_caught_up = v2.clone();
+    v2.catch_up_capacity_curves();
+    assert_eq!(v2, v2_caught_up, "idempotent");
+    // A stock rig saved on the old 100-fuel tank gets the new stock tank, as full as it was.
+    let mut stock_v2 = Player::new(0.0, 0.0);
+    stock_v2.fuel_capacity = 100.0;
+    stock_v2.fuel = 100.0;
+    stock_v2.catch_up_capacity_curves();
+    assert!((stock_v2.fuel_capacity - fuel_capacity_for_level(1)).abs() < f32::EPSILON);
+    assert!((stock_v2.fuel - fuel_capacity_for_level(1)).abs() < 0.01);
     let caught_up = old.clone();
     old.catch_up_capacity_curves();
     assert_eq!(old, caught_up, "idempotent");

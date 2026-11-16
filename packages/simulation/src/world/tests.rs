@@ -123,7 +123,7 @@ fn world_state_records_player_scoped_service_transactions() {
     let mut game = WorldImport::new_game(LOCAL_PLAYER_ID);
     game.player.fuel = 1.0;
     game.player.hull = 1.0;
-    game.player.credits = 1_000;
+    game.player.credits = 2_000;
     game.player.add_cargo(crate::terrain::MineralKind::Copper);
     let mut world = WorldState::from_import(&game);
 

@@ -332,14 +332,17 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
             };
             // The measured headline of what the next tier changes (the showcase card beside
             // the panel shows the rest), then the line's description.
-            let about =
-                fatherload_simulation::upgrade_preview::upgrade_preview(ui.player, offer.kind)
-                    .and_then(|preview| preview.headline().map(str::to_owned))
-                    .or_else(|| upgrade_effect(ui.player, offer.kind))
-                    .map_or_else(
-                        || offer.description.to_owned(),
-                        |effect| format!("{effect}. {}.", offer.description),
-                    );
+            let about = fatherload_simulation::upgrade_preview::upgrade_preview(
+                ui.player,
+                offer.kind,
+                settings.generator.sky_bands().as_ref(),
+            )
+            .and_then(|preview| preview.headline().map(str::to_owned))
+            .or_else(|| upgrade_effect(ui.player, offer.kind))
+            .map_or_else(
+                || offer.description.to_owned(),
+                |effect| format!("{effect}. {}.", offer.description),
+            );
             if let Some(band) = upgrade_locked_by(offer, settings, deepest) {
                 return Offer::new(icon, offer.name, tier)
                     .tag("LOCKED", RED)

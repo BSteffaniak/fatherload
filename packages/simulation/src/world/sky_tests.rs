@@ -302,10 +302,15 @@ fn cold_ices_the_hull_unless_the_de_icer_covers_it() {
 
 #[test]
 fn the_real_sky_unlocks_by_tier() {
+    // V8's bands were calibrated on the first fifteen-tier fuel curve: on that curve the real
+    // sky (wind, thin air, vacuum) unlocks by tier as designed.
     let settings = WorldSettings::default();
-    let climb = |tank: u8, engine: u8, intake: u8, column: i32| {
+    let climb_on = |capacity: fn(u8) -> f32, tank: u8, engine: u8, intake: u8, column: i32| {
         let mut world = world();
         fit(&mut world, tank, engine, intake);
+        let rig = world.player_mut(PLAYER).expect("player");
+        rig.fuel_capacity = capacity(tank);
+        rig.fuel = rig.fuel_capacity;
         place(
             &mut world,
             column,
@@ -333,6 +338,15 @@ fn the_real_sky_unlocks_by_tier() {
         #[allow(clippy::cast_possible_truncation, reason = "altitudes")]
         let rows = (-highest / TILE_SIZE).floor() as i32;
         rows
+    };
+    let climb = |tank, engine, intake, column| {
+        climb_on(
+            crate::player::fuel_capacity_v2,
+            tank,
+            engine,
+            intake,
+            column,
+        )
     };
     let clear = clear_column(&settings, 100, SKY_CEILING_ROWS - 200);
     assert!(climb(1, 1, 0, clear) < LOW_ISLES_BOTTOM_ROWS, "a stock rig");
@@ -369,6 +383,18 @@ fn the_real_sky_unlocks_by_tier() {
     assert!(
         reached >= MOON_BOTTOM_ROWS - 20,
         "reached {reached} under the Moon"
+    );
+    // On the current, bigger fuel curve V8's bands open earlier (the gates follow:
+    // `milestone::island_capable` reads the climb table of the current curve), but the dead
+    // air still needs intakes.
+    let now = |tank, engine, intake| climb_on(fuel_capacity_for_level, tank, engine, intake, clear);
+    assert!(
+        now(1, 1, 0) >= LOW_ISLES_BOTTOM_ROWS,
+        "a stock tank now reaches V8's isles"
+    );
+    assert!(
+        now(15, 15, 0) < CONTINENTS_BOTTOM_ROWS,
+        "no intakes: still stuck under the gap"
     );
 }
 

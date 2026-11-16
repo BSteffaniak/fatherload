@@ -11,10 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::worldgen::sky::{
-    ARCHIPELAGO_BOTTOM_ROWS, CONTINENTS_BOTTOM_ROWS, DEAD_AIR_BOTTOM_ROWS, LOW_ISLES_BOTTOM_ROWS,
-    MOON_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS,
-};
+use crate::worldgen::sky::{SkyBands, V8_SKY_BANDS};
 
 /// The palette of one floating island: its turf and the colour of its rock underside.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -216,34 +213,47 @@ impl SkyBand {
         }
     }
 
-    /// The altitude (rows above row 0) where the band starts.
+    /// The altitude (rows above row 0) where the band starts in a V8 sky.
     #[must_use]
     pub const fn bottom_rows(self) -> i32 {
+        self.bottom_rows_in(&V8_SKY_BANDS)
+    }
+
+    /// The altitude (rows above row 0) where the band starts in a sky with `bands`.
+    #[must_use]
+    pub const fn bottom_rows_in(self, bands: &SkyBands) -> i32 {
         match self {
             Self::Ground => i32::MIN,
-            Self::LowIsles => LOW_ISLES_BOTTOM_ROWS,
-            Self::Archipelago => ARCHIPELAGO_BOTTOM_ROWS,
-            Self::DeadAir => DEAD_AIR_BOTTOM_ROWS,
-            Self::Continents => CONTINENTS_BOTTOM_ROWS,
-            Self::Orbit => ORBIT_BOTTOM_ROWS,
-            Self::Lunar => MOON_BOTTOM_ROWS,
+            Self::LowIsles => bands.low_isles,
+            Self::Archipelago => bands.archipelago,
+            Self::DeadAir => bands.dead_air,
+            Self::Continents => bands.continents,
+            Self::Orbit => bands.orbit,
+            Self::Lunar => bands.moon,
         }
     }
 
-    /// The band holding altitude `altitude_rows` (rows above row 0; negative underground).
+    /// The band holding altitude `altitude_rows` (rows above row 0; negative underground) in a
+    /// V8 sky.
     #[must_use]
     pub const fn at_altitude(altitude_rows: i32) -> Self {
-        if altitude_rows >= MOON_BOTTOM_ROWS {
+        Self::at_altitude_in(altitude_rows, &V8_SKY_BANDS)
+    }
+
+    /// The band holding altitude `altitude_rows` in a sky with `bands`.
+    #[must_use]
+    pub const fn at_altitude_in(altitude_rows: i32, bands: &SkyBands) -> Self {
+        if altitude_rows >= bands.moon {
             Self::Lunar
-        } else if altitude_rows >= ORBIT_BOTTOM_ROWS {
+        } else if altitude_rows >= bands.orbit {
             Self::Orbit
-        } else if altitude_rows >= CONTINENTS_BOTTOM_ROWS {
+        } else if altitude_rows >= bands.continents {
             Self::Continents
-        } else if altitude_rows >= DEAD_AIR_BOTTOM_ROWS {
+        } else if altitude_rows >= bands.dead_air {
             Self::DeadAir
-        } else if altitude_rows >= ARCHIPELAGO_BOTTOM_ROWS {
+        } else if altitude_rows >= bands.archipelago {
             Self::Archipelago
-        } else if altitude_rows >= LOW_ISLES_BOTTOM_ROWS {
+        } else if altitude_rows >= bands.low_isles {
             Self::LowIsles
         } else {
             Self::Ground
@@ -251,7 +261,7 @@ impl SkyBand {
     }
 
     /// The band of tile row `row` (row 0 is the classic surface line; rows above it are
-    /// negative).
+    /// negative) in a V8 sky.
     #[must_use]
     pub const fn at_row(row: i32) -> Self {
         Self::at_altitude(row.saturating_neg())

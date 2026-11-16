@@ -493,14 +493,16 @@ pub(super) fn draw_shop_showcase(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'
         .install_at(now)
         .filter(|moment| moment.upgrade == kind)
         .cloned();
+    let sky = ui.snapshot.terrain.settings().generator.sky_bands();
     let preview: Option<UpgradePreview> = install.as_ref().map_or_else(
-        || upgrade_preview(player, kind),
+        || upgrade_preview(player, kind, sky.as_ref()),
         |moment| {
             Some(preview_between(
                 player,
                 kind,
                 moment.from_level,
                 moment.to_level,
+                sky.as_ref(),
             ))
         },
     );

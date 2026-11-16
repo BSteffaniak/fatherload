@@ -43,26 +43,40 @@ fn earn(rig: &mut Player, milestones: &[Milestone]) {
     }
 }
 
-/// Records every milestone the rig's tiers already meet (so only the scene's own moment is
-/// announced).
-fn earn_met(rig: &mut Player) {
-    let met = Milestone::newly_met(
-        rig,
-        &fatherload_simulation::milestone::MilestoneFacts::default(),
-    );
+/// Records every milestone the rig's tiers already meet in a world with `sky` bands (so only
+/// the scene's own moment is announced).
+fn earn_met(rig: &mut Player, sky: Option<fatherload_simulation::worldgen::sky::SkyBands>) {
+    let facts = fatherload_simulation::milestone::MilestoneFacts {
+        sky_bands: sky,
+        ..fatherload_simulation::milestone::MilestoneFacts::default()
+    };
+    let met = Milestone::newly_met(rig, &facts);
     earn(rig, &met);
 }
 
 /// The shop counter with the rig at `tier` (whatever it has met already earned), `row`
 /// selected, for `seat` 0.
 fn open_shop(stage: &mut SceneStage<'_>, tier: u8, row: usize, credits: u32) {
+    open_shop_with(stage, tier, row, credits, |_| {});
+}
+
+/// [`open_shop`] with `kit` applied to the rig after its tiers are fitted.
+fn open_shop_with(
+    stage: &mut SceneStage<'_>,
+    tier: u8,
+    row: usize,
+    credits: u32,
+    kit: fn(&mut Player),
+) {
     stage.play(1, |world, seats| {
         let player = seats[0].player;
         park_at(world, player, SurfaceZone::Shop);
+        let sky = world.world_settings().generator.sky_bands();
         if let Some(rig) = world.player_mut(player) {
             fit(rig, tier);
+            kit(rig);
             rig.credits = credits;
-            earn_met(rig);
+            earn_met(rig, sky);
         }
     });
     stage.settle(5);
@@ -184,7 +198,7 @@ pub const REWARD_SCENES: &[Scene] = &[
     },
     Scene {
         name: "reward_shop_showcase_tank",
-        summary: "Shop showcase for a fuel tank that reaches the low sky isles (climb ceiling bars)",
+        summary: "Shop showcase for the next fuel tank (fuel and thin-air climb ceiling bars)",
         setup: |stage| open_shop(stage, 3, 1, 9_400),
     },
     Scene {
@@ -242,9 +256,10 @@ pub const REWARD_SCENES: &[Scene] = &[
                     }
                 }
                 reveal(world, player, 104..137, row - 8..row + 10);
+                let sky = world.world_settings().generator.sky_bands();
                 if let Some(rig) = world.player_mut(player) {
                     fit(rig, 4);
-                    earn_met(rig);
+                    earn_met(rig, sky);
                     earn(rig, &[Milestone::ReachedStone]);
                 }
             });
@@ -265,7 +280,11 @@ pub const REWARD_SCENES: &[Scene] = &[
         name: "reward_act_two_unlock",
         summary: "The Act I to II unlock: buying the tank that crosses the dead-air gap raises the sky banner",
         setup: |stage| {
-            open_shop(stage, 12, 1, 400_000);
+            // Tier 8 with tier 4 altitude intakes: the tier 9 tank carries it over a V8 sky's
+            // dead air (the climb table of the current fuel curve against V8's bands).
+            open_shop_with(stage, 8, 1, 400_000, |rig| {
+                rig.hazard_gear.altitude_intake = 4;
+            });
             buy_selected(stage, 50);
         },
     },

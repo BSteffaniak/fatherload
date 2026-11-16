@@ -100,7 +100,7 @@ pub const DUMPED_DROP_LIFETIME_MILLIS: u64 = 20_000;
 /// Lifetime of ore, materials and other valuables.
 pub const VALUABLE_DROP_LIFETIME_MILLIS: u64 = 600_000;
 /// Block hopper capacity added per cargo bay tier past the first.
-pub const BLOCK_HOPPER_PER_TIER: u32 = 20;
+pub const BLOCK_HOPPER_PER_TIER: u32 = 30;
 /// Pixels a drill drop pops toward the rig per second, before gravity.
 const DRILL_POP_SPEED: f32 = 70.0;
 /// Pickup claims are checked for drops this far past a rig's magnet reach, so a stale

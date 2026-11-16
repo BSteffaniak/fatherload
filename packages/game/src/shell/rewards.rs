@@ -26,6 +26,7 @@ use fatherload_simulation::{
     milestone::Milestone,
     terrain::TileKind,
     upgrade_preview::{dig_seconds, preview_between},
+    worldgen::sky::SkyBands,
 };
 
 use super::{SeatUi, ShellState};
@@ -252,12 +253,17 @@ impl SeatRewards {
 
 /// The HUD toast for a fitted upgrade: its name and the headline of what it changes.
 #[must_use]
-pub fn install_message(player: &Player, upgrade: UpgradeKind, level: u8) -> String {
+pub fn install_message(
+    player: &Player,
+    upgrade: UpgradeKind,
+    level: u8,
+    sky: Option<&SkyBands>,
+) -> String {
     let name = fatherload_simulation::economy::upgrade_tier_name(upgrade, level.saturating_sub(1));
     if upgrade == UpgradeKind::BombPack {
         return format!("Bought a {name}. You now carry {} bombs.", player.bombs);
     }
-    let preview = preview_between(player, upgrade, level.saturating_sub(1), level);
+    let preview = preview_between(player, upgrade, level.saturating_sub(1), level, sky);
     preview.headline().map_or_else(
         || format!("Bought the {name}!"),
         |headline| {
@@ -273,18 +279,19 @@ pub fn install_message(player: &Player, upgrade: UpgradeKind, level: u8) -> Stri
 
 impl ShellState {
     /// Plays the purchase moment of `upgrade` (now at `level`) in seat `seat`'s view, with a
-    /// HUD toast saying what it changes.
+    /// HUD toast saying what it changes (`sky`: the world's sky bands, for the sky gates).
     pub fn upgrade_installed(
         &mut self,
         seat: usize,
         player: &Player,
         upgrade: UpgradeKind,
         level: u8,
+        sky: Option<&SkyBands>,
     ) {
         let now = self.update_ticks;
         if let Some(state) = self.seats.get_mut(seat) {
             state.rewards.installed(upgrade, level, now);
-            state.message = install_message(player, upgrade, level);
+            state.message = install_message(player, upgrade, level, sky);
         }
     }
 
@@ -435,15 +442,17 @@ mod tests {
     fn install_toasts_name_the_part_and_what_it_changes() {
         let mut player = Player::new(0.0, 0.0);
         player.fuel_tank_level = 2;
-        // The first tank lifts a stock rig into the V8 sky's low isles (T16's climb table).
-        let message = install_message(&player, UpgradeKind::FuelTank, 2);
+        // The first tank lifts a stock rig into the low isles of a sky calibrated on the
+        // current fuel curve (the next generator's bands).
+        let sky = Some(&fatherload_simulation::worldgen::sky::NEXT_SKY_BANDS);
+        let message = install_message(&player, UpgradeKind::FuelTank, 2, sky);
         assert_eq!(
             message, "Bought the Twin Fuel Tank! Reaches the low sky isles!",
             "{message}"
         );
         // Past the isles, the toast says how much higher it climbs.
         player.fuel_tank_level = 3;
-        let message = install_message(&player, UpgradeKind::FuelTank, 3);
+        let message = install_message(&player, UpgradeKind::FuelTank, 3, sky);
         assert!(message.contains("Climbs "), "{message}");
         assert!(message.contains("% higher on a full tank"), "{message}");
     }

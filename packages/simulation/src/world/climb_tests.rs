@@ -1,25 +1,29 @@
 //! The climb harness (expansion plan F6): how high each fuel tank, engine and intake tier
-//! climbs, the table the sky bands are defined from ([`crate::climb`]), and reachability of the
-//! bands in a real V8 sky.
+//! climbs, the tables the sky bands are defined from ([`crate::climb`]): the current fuel
+//! curve's (re-measured here) and V8's frozen one, and the band tables calibrated from them.
 
 use crate::{
     PlayerId, SimulationParams, WorldState,
-    climb::{CLIMB_CEILINGS, ENGINE_TIERS, INTAKE_TIERS, TANK_TIERS, ceiling},
+    climb::{
+        CLIMB_CEILINGS, ClimbTable, ENGINE_TIERS, INTAKE_TIERS, TANK_TIERS, V8_CLIMB_CEILINGS,
+        ceiling, ceiling_in,
+    },
     environment,
     player::fuel_capacity_for_level,
     terrain::{TILE_SIZE, TilePosition},
     worldgen::{
-        TileRect, WorldSettings,
+        GeneratorVersion, TileRect, WorldSettings,
         sky::{
-            self, ARCHIPELAGO_BOTTOM_ROWS, CONTINENTS_BOTTOM_ROWS, LOW_ISLES_BOTTOM_ROWS,
-            MOON_BOTTOM_ROWS, SKY_CEILING_ROWS,
+            self, ARCHIPELAGO_BOTTOM_ROWS, CONTINENTS_BOTTOM_ROWS, DEAD_AIR_BOTTOM_ROWS,
+            LOW_ISLES_BOTTOM_ROWS, MOON_BOTTOM_ROWS, NEXT_SKY_BANDS, ORBIT_BOTTOM_ROWS,
+            SKY_CEILING_ROWS, SkyBands, V8_SKY_BANDS,
         },
     },
 };
 
 const PLAYER: PlayerId = PlayerId::new(1);
 /// The harness starts every climb at rest this many rows above row 0 (above every peak).
-pub const START_ALTITUDE_ROWS: i32 = 100;
+pub const START_ALTITUDE_ROWS: i32 = crate::climb::START_ALTITUDE_ROWS;
 
 /// A loadout to climb with.
 #[derive(Clone, Copy, Debug)]
@@ -142,62 +146,138 @@ fn climb_table_matches_the_simulation() {
 #[test]
 #[ignore = "report: measures the whole climb table (run in release, paste into crate::climb)"]
 fn climb_table_report() {
-    println!("pub const CLIMB_CEILINGS: [[[i32; 4]; 5]; 15] = [");
-    for tank in TANK_TIERS {
-        print!("    [");
-        for (index, engine) in ENGINE_TIERS.iter().enumerate() {
-            let row: Vec<String> = INTAKE_TIERS
-                .iter()
-                .map(|intake| {
-                    measure(
-                        Loadout {
-                            tank,
-                            engine: *engine,
-                            intake: *intake,
-                        },
-                        60,
-                    )
-                    .to_string()
+    // One thread per tank tier: the top tanks climb for many game minutes.
+    #[allow(
+        clippy::needless_collect,
+        reason = "every thread is spawned before any is joined"
+    )]
+    let rows: Vec<String> = std::thread::scope(|scope| {
+        let handles: Vec<_> = TANK_TIERS
+            .iter()
+            .map(|tank| {
+                scope.spawn(move || {
+                    let cells: Vec<String> = ENGINE_TIERS
+                        .iter()
+                        .map(|engine| {
+                            let row: Vec<String> = INTAKE_TIERS
+                                .iter()
+                                .map(|intake| {
+                                    measure(
+                                        Loadout {
+                                            tank: *tank,
+                                            engine: *engine,
+                                            intake: *intake,
+                                        },
+                                        60,
+                                    )
+                                    .to_string()
+                                })
+                                .collect();
+                            format!("[{}]", row.join(", "))
+                        })
+                        .collect();
+                    format!("    [{}], // tank {tank}", cells.join(", "))
                 })
-                .collect();
-            print!("{}[{}]", if index == 0 { "" } else { ", " }, row.join(", "));
-        }
-        println!("], // tank {tank}");
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("climb thread"))
+            .collect()
+    });
+    println!("pub const CLIMB_CEILINGS: [[[i32; 4]; 5]; 15] = [");
+    for row in rows {
+        println!("{row}");
     }
     println!("];");
     let _ = CLIMB_CEILINGS;
 }
 
-#[test]
-fn the_table_unlocks_the_sky_in_order() {
-    // Design claims of the bands, read straight off the table.
+/// The design claims of a band table calibrated from `table`.
+fn assert_unlocks_in_order(table: &ClimbTable, bands: &SkyBands) {
+    let ceiling = |tank, engine, intake| ceiling_in(table, tank, engine, intake);
     assert!(
-        ceiling(1, 1, 0) < LOW_ISLES_BOTTOM_ROWS,
+        ceiling(1, 1, 0) < bands.low_isles,
         "a stock rig stays below the isles"
     );
     assert!(
-        ceiling(2, 4, 0) >= LOW_ISLES_BOTTOM_ROWS,
+        ceiling(2, 4, 0) >= bands.low_isles,
         "tank 2 reaches the low isles"
     );
     assert!(
-        ceiling(4, 4, 0) >= ARCHIPELAGO_BOTTOM_ROWS,
+        ceiling(4, 4, 0) >= bands.archipelago,
         "tank 4 reaches the archipelago"
     );
     assert!(
-        ceiling(15, 15, 0) < CONTINENTS_BOTTOM_ROWS,
-        "without intakes no tank crosses the dead-air gap ({} < {CONTINENTS_BOTTOM_ROWS})",
-        ceiling(15, 15, 0)
+        ceiling(15, 15, 0) < bands.continents,
+        "without intakes no tank crosses the dead-air gap ({} < {})",
+        ceiling(15, 15, 0),
+        bands.continents
     );
     assert!(
-        ceiling(13, 15, 6) >= CONTINENTS_BOTTOM_ROWS,
+        ceiling(13, 15, 6) >= bands.continents,
         "a near-max tank with top intakes crosses it"
     );
     assert!(
-        ceiling(12, 15, 6) < CONTINENTS_BOTTOM_ROWS,
+        ceiling(12, 15, 6) < bands.continents,
         "a tier 12 tank does not, even with top intakes"
     );
     assert!(
-        ceiling(15, 15, 6) >= MOON_BOTTOM_ROWS,
+        ceiling(15, 15, 6) >= bands.moon,
         "a maxed rig reaches the Moon"
+    );
+    assert!(
+        bands.low_isles < bands.archipelago
+            && bands.archipelago < bands.dead_air
+            && bands.dead_air < bands.continents
+            && bands.continents < bands.orbit
+            && bands.orbit < bands.moon,
+        "{bands:?}"
+    );
+}
+
+#[test]
+fn the_table_unlocks_the_sky_in_order() {
+    // The next sky generator's bands, on the current fuel curve's table.
+    assert_eq!(NEXT_SKY_BANDS, SkyBands::calibrated(&CLIMB_CEILINGS));
+    assert_unlocks_in_order(&CLIMB_CEILINGS, &NEXT_SKY_BANDS);
+    // V8's frozen bands, on the frozen table they were calibrated from.
+    assert_unlocks_in_order(&V8_CLIMB_CEILINGS, &V8_SKY_BANDS);
+}
+
+#[test]
+fn v8_bands_are_frozen() {
+    // V8 worlds must keep generating identically: their bands are the old calibration exactly.
+    assert_eq!(SkyBands::calibrated(&V8_CLIMB_CEILINGS), V8_SKY_BANDS);
+    assert_eq!(
+        (
+            LOW_ISLES_BOTTOM_ROWS,
+            ARCHIPELAGO_BOTTOM_ROWS,
+            DEAD_AIR_BOTTOM_ROWS,
+            CONTINENTS_BOTTOM_ROWS,
+            ORBIT_BOTTOM_ROWS,
+            MOON_BOTTOM_ROWS,
+            SKY_CEILING_ROWS,
+        ),
+        (220, 540, 4_480, 8_080, 9_030, 10_320, 11_296)
+    );
+    assert_eq!(GeneratorVersion::V8.sky_bands(), Some(V8_SKY_BANDS));
+    assert_eq!(GeneratorVersion::V7.sky_bands(), None);
+}
+
+#[test]
+fn next_bands_are_pinned() {
+    // The table a next sky generator adopts (freeze these as literals when it ships). A change
+    // here means the fuel curve or the climb physics moved: re-check the design claims above.
+    assert_eq!(
+        NEXT_SKY_BANDS,
+        SkyBands {
+            low_isles: 500,
+            archipelago: 1_350,
+            dead_air: 4_720,
+            continents: 35_500,
+            orbit: 39_680,
+            moon: 46_010,
+        }
     );
 }

@@ -55,13 +55,14 @@ fn step(world: &mut WorldState, tick: &mut u64, thrust: bool) {
 
 #[test]
 fn there_is_no_flight_ceiling_only_fuel() {
-    // R17: a rig climbs as long as its tank lasts, far past the old ceiling twelve tiles
-    // above the surface, then falls back once the fuel is gone.
+    // R17: a rig climbs as long as its tank lasts (a stock tank holds 90 s of thrust), far
+    // past the old ceiling twelve tiles above the surface, then falls back once the fuel is
+    // gone.
     let (mut world, floor) = open_air_world();
     lift(&mut world, floor, 0.0);
     let mut tick = 0;
     let mut highest = f32::MAX;
-    for _ in 0..HZ * 40 {
+    for _ in 0..HZ * 120 {
         step(&mut world, &mut tick, true);
         highest = highest.min(world.player(PLAYER).expect("player").y);
     }

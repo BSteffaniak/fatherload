@@ -20,12 +20,15 @@
 //! # Sky gates
 //!
 //! Two milestones belong to Act II: an **island-capable tank** and the **Act I -> II unlock**
-//! (tank, engine and altitude intake that can cross the dead-air gap). Both read T16's measured
-//! climb table ([`crate::climb::reach`]) against the V8 sky's bands: [`island_capable`] is a
-//! climb that tops [`ISLAND_REACH_ROWS`] (a little into the low isles' band), and
-//! [`crosses_dead_air`] one that tops [`DEAD_AIR_REACH_ROWS`] (the floor of the sky continents,
-//! above the whole dead-air gap). Rebalancing the bands or the climb table moves the gates with
-//! them. They are only awarded on worlds with a sky ([`MilestoneFacts::has_sky`]).
+//! (tank, engine and altitude intake that can cross the dead-air gap). Both read the measured
+//! climb table of the current fuel curve ([`crate::climb::reach`]) against the bands of the
+//! world's own sky ([`MilestoneFacts::sky_bands`], from
+//! [`crate::worldgen::GeneratorVersion::sky_bands`]): [`island_capable`] is a climb that tops
+//! [`SkyBands::island_reach_rows`] (a little into the low isles' band), and
+//! [`crosses_dead_air`] one that tops [`SkyBands::dead_air_reach_rows`] (the floor of the sky
+//! continents, above the whole dead-air gap). So the gates always say what the rig can really
+//! do in this world: V8 skies were calibrated on the smaller first fuel curve, so bigger tanks
+//! open their bands earlier than V8 planned. They are only awarded on worlds with a sky.
 
 use std::collections::BTreeMap;
 
@@ -38,7 +41,7 @@ use crate::{
     },
     economy::{MAX_UPGRADE_LEVEL, UpgradeKind, current_level},
     player::Player,
-    worldgen::Band,
+    worldgen::{Band, sky::SkyBands},
 };
 
 /// A first-time achievement.
@@ -80,7 +83,8 @@ pub enum Milestone {
     FirstClaim,
     /// Flew [`HIGH_FLYER_ALTITUDE_TILES`] above the local ground.
     HighFlyer,
-    /// Fitted a fuel tank that can reach the low sky isles ([`island_capable`]).
+    /// Fitted a fuel tank that can reach the low sky isles ([`island_capable`]) of the
+    /// world's sky.
     IslandCapableTank,
     /// The Act I -> II unlock: tank and intake can cross the dead-air gap
     /// ([`crosses_dead_air`]).
@@ -132,15 +136,11 @@ impl MilestoneGroup {
     }
 }
 
-/// Altitude above the local ground (tiles) that earns [`Milestone::HighFlyer`]: just past a
-/// stock tank's straight climb, so it needs the first tank upgrade.
-pub const HIGH_FLYER_ALTITUDE_TILES: i32 = 120;
-
-/// Altitude (rows above row 0) a full-tank climb must top to count as reaching the low sky
-/// isles: 40 rows into their band, where the lowest isles' turf is.
-pub const ISLAND_REACH_ROWS: i32 = crate::worldgen::sky::LOW_ISLES_BOTTOM_ROWS + 40;
-/// Altitude a full-tank climb must top to cross the dead-air gap: the sky continents' floor.
-pub const DEAD_AIR_REACH_ROWS: i32 = crate::worldgen::sky::CONTINENTS_BOTTOM_ROWS;
+/// Altitude above the local ground (tiles) that earns [`Milestone::HighFlyer`].
+///
+/// Just past a stock rig's straight climb on a full tank (about 400 tiles, the balance report's
+/// climb table), so it needs the first tank or engine upgrade.
+pub const HIGH_FLYER_ALTITUDE_TILES: i32 = 420;
 
 /// How high `player`'s rig climbs on a full tank in still air (T16's measured climb table,
 /// conservatively rounded down between its engine and intake tiers).
@@ -153,17 +153,17 @@ pub fn climb_reach(player: &Player) -> i32 {
     )
 }
 
-/// Whether `player`'s rig climbs into the low sky isles on a full tank.
+/// Whether `player`'s rig climbs into the low sky isles of a sky with `bands` on a full tank.
 #[must_use]
-pub fn island_capable(player: &Player) -> bool {
-    climb_reach(player) >= ISLAND_REACH_ROWS
+pub fn island_capable(player: &Player, bands: &SkyBands) -> bool {
+    climb_reach(player) >= bands.island_reach_rows()
 }
 
-/// Whether `player`'s tank, engine and altitude intake carry the rig over the dead-air gap to
-/// the sky continents and the Moon: the Act I -> II unlock.
+/// Whether `player`'s tank, engine and altitude intake carry the rig over the dead-air gap of a
+/// sky with `bands` to the sky continents and the Moon: the Act I -> II unlock.
 #[must_use]
-pub fn crosses_dead_air(player: &Player) -> bool {
-    climb_reach(player) >= DEAD_AIR_REACH_ROWS
+pub fn crosses_dead_air(player: &Player, bands: &SkyBands) -> bool {
+    climb_reach(player) >= bands.dead_air_reach_rows()
 }
 
 /// What the world knows about a player this tick beyond the [`Player`] itself.
@@ -173,8 +173,9 @@ pub struct MilestoneFacts {
     pub deepest_band: Option<usize>,
     /// The player owns at least one base claim.
     pub owns_claim: bool,
-    /// The world has a sky to reach (generator V8+): the sky gates count only there.
-    pub has_sky: bool,
+    /// The bands of the world's sky (`None` without one: the sky gates count only with a sky,
+    /// against its own bands).
+    pub sky_bands: Option<SkyBands>,
 }
 
 /// The core upgrade lines (the ones that reach [`MAX_UPGRADE_LEVEL`]).
@@ -257,7 +258,7 @@ impl Milestone {
             Self::FirstVillage => "Roll into a village.",
             Self::FirstKill => "Defeat an enemy.",
             Self::FirstClaim => "Stake a base claim with a claim beacon.",
-            Self::HighFlyer => "Fly 120 tiles above the ground below you.",
+            Self::HighFlyer => "Fly 420 tiles above the ground below you.",
             Self::IslandCapableTank => "Fit a fuel tank that can reach the low sky isles.",
             Self::ActTwoUnlocked => {
                 "Fit a tank and intake that can cross the dead-air gap to the sky lands."
@@ -390,8 +391,12 @@ impl Milestone {
             Self::HighFlyer => {
                 player.milestones.records.highest_altitude >= HIGH_FLYER_ALTITUDE_TILES
             }
-            Self::IslandCapableTank => facts.has_sky && island_capable(player),
-            Self::ActTwoUnlocked => facts.has_sky && crosses_dead_air(player),
+            Self::IslandCapableTank => facts
+                .sky_bands
+                .is_some_and(|bands| island_capable(player, &bands)),
+            Self::ActTwoUnlocked => facts
+                .sky_bands
+                .is_some_and(|bands| crosses_dead_air(player, &bands)),
         }
     }
 
@@ -556,26 +561,28 @@ mod tests {
 
     #[test]
     fn the_sky_gates_need_the_tank_and_the_intake() {
+        // A sky calibrated on the current fuel curve (the next generator's bands).
+        let bands = crate::worldgen::sky::NEXT_SKY_BANDS;
         let mut player = rig();
         assert!(
-            !island_capable(&player),
+            !island_capable(&player, &bands),
             "a stock rig stays under the isles"
         );
         player.fuel_tank_level = 2;
         assert!(
-            island_capable(&player),
+            island_capable(&player, &bands),
             "the first tank reaches the low isles"
         );
         player.fuel_tank_level = 15;
         player.engine_level = 15;
         assert!(
-            !crosses_dead_air(&player),
+            !crosses_dead_air(&player, &bands),
             "the best tank and engine alone die in the dead air"
         );
         player.hazard_gear.altitude_intake = 4;
-        assert!(crosses_dead_air(&player), "intakes carry it over");
+        assert!(crosses_dead_air(&player, &bands), "intakes carry it over");
         let sky = MilestoneFacts {
-            has_sky: true,
+            sky_bands: Some(bands),
             ..MilestoneFacts::default()
         };
         let met = Milestone::newly_met(&player, &sky);
@@ -585,6 +592,40 @@ mod tests {
         assert!(
             !ground.contains(&Milestone::ActTwoUnlocked),
             "worlds without a sky award no sky gates"
+        );
+    }
+
+    #[test]
+    fn v8_gates_read_the_v8_bands() {
+        // V8 skies were calibrated on the smaller first fuel curve: the gates compare what the
+        // rig really climbs with the world's own bands, so bigger tanks open them earlier.
+        let v8 = crate::worldgen::sky::V8_SKY_BANDS;
+        let mut player = rig();
+        assert!(
+            island_capable(&player, &v8),
+            "a stock tank now reaches V8's isles"
+        );
+        player.fuel_tank_level = 15;
+        player.engine_level = 15;
+        assert!(
+            !crosses_dead_air(&player, &v8),
+            "without intakes nothing crosses V8's dead air either"
+        );
+        player.fuel_tank_level = 10;
+        player.hazard_gear.altitude_intake = 2;
+        assert!(crosses_dead_air(&player, &v8), "but far less kit does");
+        let v8_facts = MilestoneFacts {
+            sky_bands: Some(v8),
+            ..MilestoneFacts::default()
+        };
+        assert!(Milestone::ActTwoUnlocked.met(&player, &v8_facts));
+        let next_facts = MilestoneFacts {
+            sky_bands: Some(crate::worldgen::sky::NEXT_SKY_BANDS),
+            ..MilestoneFacts::default()
+        };
+        assert!(
+            !Milestone::ActTwoUnlocked.met(&player, &next_facts),
+            "the same rig is far from the next generator's continents"
         );
     }
 

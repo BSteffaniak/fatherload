@@ -5,8 +5,11 @@
 //! every platform.
 //!
 //! **Bands.** The sky is cut into altitude bands ([`SkyBand`]), each defined as a fraction of
-//! the climb harness's measurements ([`crate::climb`]), so fuel tank tiers unlock the sky in
-//! order:
+//! the climb harness's measurements ([`crate::climb`], [`SkyBands::calibrated`]), so fuel tank
+//! tiers unlock the sky in order. Each sky generator has its own frozen band table
+//! ([`SkyBands`], [`super::GeneratorVersion::sky_bands`]) and placement reads the world's:
+//! V8's is [`V8_SKY_BANDS`] (the `*_BOTTOM_ROWS` constants), the next generator adopts
+//! [`NEXT_SKY_BANDS`], recalibrated to the second fuel curve. In a V8 sky:
 //!
 //! | Band | Rows above row 0 | Holds |
 //! |---|---|---|
@@ -46,7 +49,7 @@
 //! [`FeatureKind::Moon`]: super::FeatureKind::Moon
 
 use crate::{
-    climb::{ceiling, fraction},
+    climb::{CLIMB_CEILINGS, ClimbTable, ceiling_in, fraction},
     sky::{SkyBand, SkyBiome, SkyTile},
     terrain::{CHUNK_SIZE_TILES, TileKind, TilePosition},
     village::placement::TOWN_CENTER_COLUMN,
@@ -58,51 +61,169 @@ use crate::{
 };
 
 // ---------------------------------------------------------------------------------------------
-// Bands (rows above row 0), each a fraction of the climb table.
+// Bands (rows above row 0), per generator version, each a fraction of a climb table.
 // ---------------------------------------------------------------------------------------------
 
-/// Where the low isles start: 65 % of what a tier 2 tank with a tier 4 engine reaches (clear
-/// of the tallest mountains, and above what a stock rig reaches).
-pub const LOW_ISLES_BOTTOM_ROWS: i32 = max(fraction(ceiling(2, 4, 0), 65), 200);
-/// Where the cloud archipelago starts: the full reach of a tier 4 tank and engine (so the low
-/// isles are the tank tier 2-4 band).
-pub const ARCHIPELAGO_BOTTOM_ROWS: i32 = max(
-    fraction(ceiling(4, 4, 0), 100),
-    LOW_ISLES_BOTTOM_ROWS + 3 * LOW_ISLE_CELL.1,
-);
-/// Where the dead-air gap starts: 90 % of the best a rig without intakes can do (top tank and
-/// engine), so the whole archipelago is open to mid and late tiers.
-pub const DEAD_AIR_BOTTOM_ROWS: i32 = max(
-    fraction(ceiling(15, 15, 0), 90),
-    ARCHIPELAGO_BOTTOM_ROWS + 3 * ARCHIPELAGO_CELL.1,
-);
-/// Where the sky continents start: 85 % of a near-max rig (tier 13 tank, top engine, top
-/// intakes). No rig without intakes gets near it (`ceiling(15, 15, 0)`), nor a tier 12 tank
-/// with them.
-pub const CONTINENTS_BOTTOM_ROWS: i32 = fraction(ceiling(13, 15, 6), 85);
-/// Where the orbit band starts (gravity falls to near zero above it): 95 % of a near-max rig.
-pub const ORBIT_BOTTOM_ROWS: i32 = max(
-    fraction(ceiling(13, 15, 6), 95),
-    CONTINENTS_BOTTOM_ROWS + CONTINENT_BAND_MIN_ROWS,
-);
-/// The lowest point of the Moon's underside: 85 % of a maxed rig's still-air reach (the last
-/// climb through near-zero-g orbit is cheap).
-pub const MOON_BOTTOM_ROWS: i32 = max(
-    fraction(ceiling(15, 15, 6), 85),
-    ORBIT_BOTTOM_ROWS + ORBIT_MIN_ROWS,
-);
+/// Where the bands of one generator version's sky start, in rows above row 0.
+///
+/// Every sky generator has its own entry ([`GeneratorVersion::sky_bands`]): placement reads
+/// the world's entry, so a world keeps generating identically when the fuel curve (and with it
+/// the climb table) changes. An entry is computed once from a climb table
+/// ([`Self::calibrated`]) and then frozen: V8's is [`V8_SKY_BANDS`] (calibrated from
+/// [`crate::climb::V8_CLIMB_CEILINGS`]); the next sky generator adopts [`NEXT_SKY_BANDS`]
+/// (calibrated from the current [`crate::climb::CLIMB_CEILINGS`]) and freezes it the same
+/// way.
+///
+/// [`GeneratorVersion::sky_bands`]: super::GeneratorVersion::sky_bands
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct SkyBands {
+    /// Floor of the low isles (small island clusters).
+    pub low_isles: i32,
+    /// Floor of the cloud archipelago (chains of medium islands).
+    pub archipelago: i32,
+    /// Floor of the dead-air gap (nothing: crosswinds and thin air).
+    pub dead_air: i32,
+    /// Floor of the sky continents.
+    pub continents: i32,
+    /// Floor of orbit (gravity falls to near zero above it).
+    pub orbit: i32,
+    /// The lowest point of the Moon's underside.
+    pub moon: i32,
+}
+
+impl SkyBands {
+    /// The bands calibrated from climb table `table` (rows above row 0, each rounded down to a
+    /// multiple of 10), so fuel tank tiers unlock the sky in order:
+    ///
+    /// - low isles: 65 % of a tier 2 tank with a tier 4 engine (at least 200 rows: clear of
+    ///   the tallest mountains);
+    /// - cloud archipelago: the full reach of a tier 4 tank and engine (so the low isles are
+    ///   the tank tier 2-4 band; at least three low isle cells tall);
+    /// - dead-air gap: 90 % of the best a rig without intakes can do (top tank and engine), so
+    ///   the whole archipelago is open to mid and late tiers;
+    /// - sky continents: 85 % of a near-max rig (tier 13 tank, top engine, top intakes): no rig
+    ///   without intakes gets there, nor a tier 12 tank with them;
+    /// - orbit: 95 % of a near-max rig (at least a continent's height above the continents);
+    /// - the Moon: 85 % of a maxed rig's still-air reach (the last climb through near-zero-g
+    ///   orbit is cheap).
+    #[must_use]
+    pub const fn calibrated(table: &ClimbTable) -> Self {
+        let low_isles = max(fraction(ceiling_in(table, 2, 4, 0), 65), 200);
+        let archipelago = max(
+            fraction(ceiling_in(table, 4, 4, 0), 100),
+            low_isles + 3 * LOW_ISLE_CELL.1,
+        );
+        let dead_air = max(
+            fraction(ceiling_in(table, 15, 15, 0), 90),
+            archipelago + 3 * ARCHIPELAGO_CELL.1,
+        );
+        let continents = fraction(ceiling_in(table, 13, 15, 6), 85);
+        let orbit = max(
+            fraction(ceiling_in(table, 13, 15, 6), 95),
+            continents + CONTINENT_BAND_MIN_ROWS,
+        );
+        let moon = max(
+            fraction(ceiling_in(table, 15, 15, 6), 85),
+            orbit + ORBIT_MIN_ROWS,
+        );
+        Self {
+            low_isles,
+            archipelago,
+            dead_air,
+            continents,
+            orbit,
+            moon,
+        }
+    }
+
+    /// Rows of sky a world with these bands holds above row 0 (its first row is minus this):
+    /// the Moon's surface plus some space, rounded up to whole chunks
+    /// ([`super::streamed::top_row`]). Rigs may fly higher still (into open space with no
+    /// tiles).
+    #[must_use]
+    pub const fn ceiling_rows(&self) -> i32 {
+        let rows = self.moon + MOON_DEPTH_ROWS + MOON_HILL_ROWS + 2 + SPACE_ABOVE_MOON_ROWS;
+        (rows + CHUNK_SIZE_TILES - 1) / CHUNK_SIZE_TILES * CHUNK_SIZE_TILES
+    }
+
+    /// Altitude a full-tank climb must top to count as reaching the low isles: 40 rows into
+    /// their band, where the lowest isles' turf is (`milestone::island_capable`).
+    #[must_use]
+    pub const fn island_reach_rows(&self) -> i32 {
+        self.low_isles + 40
+    }
+
+    /// Altitude a full-tank climb must top to cross the dead-air gap: the sky continents' floor
+    /// (`milestone::crosses_dead_air`).
+    #[must_use]
+    pub const fn dead_air_reach_rows(&self) -> i32 {
+        self.continents
+    }
+
+    /// The band holding altitude `altitude_rows` (rows above row 0; negative underground).
+    #[must_use]
+    pub const fn band_at(&self, altitude_rows: i32) -> SkyBand {
+        SkyBand::at_altitude_in(altitude_rows, self)
+    }
+}
+
+/// The bands of [`GeneratorVersion::V8`](super::GeneratorVersion::V8) skies. **Frozen.**
+///
+/// These are the values V8 worlds generate with (calibrated from the first fifteen-tier fuel curve's
+/// climb table, [`crate::climb::V8_CLIMB_CEILINGS`]); never change them, or every V8 world's
+/// sky moves.
+pub const V8_SKY_BANDS: SkyBands = SkyBands {
+    low_isles: 220,
+    archipelago: 540,
+    dead_air: 4_480,
+    continents: 8_080,
+    orbit: 9_030,
+    moon: 10_320,
+};
+
+/// The bands for the **next** sky generator (the one after V8).
+///
+/// Calibrated by the same rule as V8's ([`SkyBands::calibrated`]) from the current fuel curve's climb table
+/// ([`crate::climb::CLIMB_CEILINGS`]): the low isles open around tank tier 2-4, the cloud
+/// archipelago spans the mid tiers, the dead-air gap is crossed only with a near-max tank and
+/// altitude intakes, the continents sit near the max and the Moon at the top.
+///
+/// The bigger tanks of the second fuel curve climb about four times higher at the top, so these
+/// bands are far taller than V8's (500 / 1,350 / 4,720 / 35,500 / 39,680 / 46,010 rows). A
+/// generator adopting them returns them from [`GeneratorVersion::sky_bands`] and freezes the
+/// values as literals like [`V8_SKY_BANDS`] (a test pins today's values). Its altitude physics
+/// must follow its bands (the vacuum fade, cold and gravity fields read V8's constants today,
+/// [`crate::environment`]), and the climb table must be re-measured if that physics changes
+/// below the Moon.
+///
+/// [`GeneratorVersion::sky_bands`]: super::GeneratorVersion::sky_bands
+pub const NEXT_SKY_BANDS: SkyBands = SkyBands::calibrated(&CLIMB_CEILINGS);
+
+/// Where the low isles start in a V8 sky ([`V8_SKY_BANDS`]).
+pub const LOW_ISLES_BOTTOM_ROWS: i32 = V8_SKY_BANDS.low_isles;
+/// Where the cloud archipelago starts in a V8 sky ([`V8_SKY_BANDS`]).
+pub const ARCHIPELAGO_BOTTOM_ROWS: i32 = V8_SKY_BANDS.archipelago;
+/// Where the dead-air gap starts in a V8 sky ([`V8_SKY_BANDS`]).
+pub const DEAD_AIR_BOTTOM_ROWS: i32 = V8_SKY_BANDS.dead_air;
+/// Where the sky continents start in a V8 sky ([`V8_SKY_BANDS`]).
+pub const CONTINENTS_BOTTOM_ROWS: i32 = V8_SKY_BANDS.continents;
+/// Where the orbit band starts in a V8 sky ([`V8_SKY_BANDS`]).
+pub const ORBIT_BOTTOM_ROWS: i32 = V8_SKY_BANDS.orbit;
+/// The lowest point of the Moon's underside in a V8 sky ([`V8_SKY_BANDS`]).
+pub const MOON_BOTTOM_ROWS: i32 = V8_SKY_BANDS.moon;
 /// Thickness of the Moon at its centre (underside point to surface).
 pub const MOON_DEPTH_ROWS: i32 = 240;
 /// Rows of space kept above the Moon's surface before the world's first row.
 const SPACE_ABOVE_MOON_ROWS: i32 = 704;
-/// Rows of sky a V8 world holds above row 0 (its first row is `-SKY_CEILING_ROWS`).
-///
-/// The Moon's surface plus some space, rounded up to whole chunks
-/// ([`super::streamed::top_row`]). Rigs may fly higher still (into open space with no tiles).
-pub const SKY_CEILING_ROWS: i32 = {
-    let rows = MOON_BOTTOM_ROWS + MOON_DEPTH_ROWS + MOON_HILL_ROWS + 2 + SPACE_ABOVE_MOON_ROWS;
-    (rows + CHUNK_SIZE_TILES - 1) / CHUNK_SIZE_TILES * CHUNK_SIZE_TILES
-};
+/// Rows of sky a V8 world holds above row 0 (its first row is `-SKY_CEILING_ROWS`); see
+/// [`SkyBands::ceiling_rows`].
+pub const SKY_CEILING_ROWS: i32 = V8_SKY_BANDS.ceiling_rows();
+
+/// The bands of `settings`' sky (`None` on generators without a sky).
+#[must_use]
+pub const fn bands_of(settings: &WorldSettings) -> Option<SkyBands> {
+    settings.generator.sky_bands()
+}
 
 /// The least band height that fits a continent.
 const CONTINENT_BAND_MIN_ROWS: i32 = 200;
@@ -413,8 +534,8 @@ fn crater_depth(shape: u64, x: i32) -> i32 {
 }
 
 /// The palette of an island hanging at altitude `altitude_rows`, from a roll.
-const fn biome_for(altitude_rows: i32, roll: u64) -> SkyBiome {
-    let cold = altitude_rows >= ARCHIPELAGO_BOTTOM_ROWS;
+const fn biome_for(bands: &SkyBands, altitude_rows: i32, roll: u64) -> SkyBiome {
+    let cold = altitude_rows >= bands.archipelago;
     match roll % 10 {
         0..=4 => {
             if cold && roll.is_multiple_of(3) {
@@ -436,34 +557,34 @@ const fn biome_for(altitude_rows: i32, roll: u64) -> SkyBiome {
 }
 
 /// The altitude range `(bottom, top)` (rows above row 0) islands of a band may use.
-const fn band_rows(id_band: i32) -> (i32, i32) {
+const fn band_rows(bands: &SkyBands, id_band: i32) -> (i32, i32) {
     match id_band {
-        ID_LOW => (LOW_ISLES_BOTTOM_ROWS + 8, ARCHIPELAGO_BOTTOM_ROWS - 8),
-        ID_ARCHIPELAGO => (ARCHIPELAGO_BOTTOM_ROWS + 8, DEAD_AIR_BOTTOM_ROWS - 24),
-        _ => (CONTINENTS_BOTTOM_ROWS + 16, ORBIT_BOTTOM_ROWS - 60),
+        ID_LOW => (bands.low_isles + 8, bands.archipelago - 8),
+        ID_ARCHIPELAGO => (bands.archipelago + 8, bands.dead_air - 24),
+        _ => (bands.continents + 16, bands.orbit - 60),
     }
 }
 
 /// Cell rows of a band with cells `cell_rows` tall.
-const fn band_cell_rows(id_band: i32, cell_rows: i32) -> i32 {
-    let (bottom, top) = band_rows(id_band);
+const fn band_cell_rows(bands: &SkyBands, id_band: i32, cell_rows: i32) -> i32 {
+    let (bottom, top) = band_rows(bands, id_band);
     let rows = (top - bottom) / cell_rows;
     if rows < 1 { 1 } else { rows }
 }
 
 /// The altitude range `(bottom, top)` of cell row `ry` of a band.
-const fn cell_altitudes(id_band: i32, ry: i32, cell_rows: i32) -> (i32, i32) {
-    let (bottom, _) = band_rows(id_band);
+const fn cell_altitudes(bands: &SkyBands, id_band: i32, ry: i32, cell_rows: i32) -> (i32, i32) {
+    let (bottom, _) = band_rows(bands, id_band);
     (bottom + ry * cell_rows, bottom + (ry + 1) * cell_rows - 1)
 }
 
 /// The low isles of cell `(rx, ry)`: a cluster of up to three small islands.
-fn low_isle_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
+fn low_isle_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Vec<SkyLand> {
     let mut rng = RegionRng::new(seed, SALT_LOW, rx, ry);
     if !rng.chance(640) {
         return Vec::new();
     }
-    let (alt_bottom, alt_top) = cell_altitudes(ID_LOW, ry, LOW_ISLE_CELL.1);
+    let (alt_bottom, alt_top) = cell_altitudes(bands, ID_LOW, ry, LOW_ISLE_CELL.1);
     let x0 = rx * LOW_ISLE_CELL.0;
     let count = rng.range(1, 3);
     let mut lands: Vec<SkyLand> = Vec::new();
@@ -485,7 +606,7 @@ fn low_isle_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
                 u16::try_from(local).unwrap_or(0),
             ),
             kind: SkyLandKind::Isle,
-            biome: biome_for(top_alt, rng.next_u64()),
+            biome: biome_for(bands, top_alt, rng.next_u64()),
             center_x,
             top_row: row_of(top_alt),
             half_width,
@@ -504,12 +625,12 @@ fn low_isle_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
 
 /// The archipelago isles of cell `(rx, ry)`: a chain of two to four medium islands stepping
 /// across the cell.
-fn archipelago_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
+fn archipelago_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Vec<SkyLand> {
     let mut rng = RegionRng::new(seed, SALT_ARCHIPELAGO, rx, ry);
     if !rng.chance(720) {
         return Vec::new();
     }
-    let (alt_bottom, alt_top) = cell_altitudes(ID_ARCHIPELAGO, ry, ARCHIPELAGO_CELL.1);
+    let (alt_bottom, alt_top) = cell_altitudes(bands, ID_ARCHIPELAGO, ry, ARCHIPELAGO_CELL.1);
     let x0 = rx * ARCHIPELAGO_CELL.0;
     let x_end = x0 + ARCHIPELAGO_CELL.0 - 4;
     let count = rng.range(2, 4);
@@ -533,7 +654,7 @@ fn archipelago_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
                 u16::try_from(local).unwrap_or(0),
             ),
             kind: SkyLandKind::ArchipelagoIsle,
-            biome: biome_for(top_alt, rng.next_u64()),
+            biome: biome_for(bands, top_alt, rng.next_u64()),
             center_x,
             top_row: row_of(top_alt),
             half_width,
@@ -547,12 +668,12 @@ fn archipelago_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
 }
 
 /// The continent footprint of cell `rx`, if it has one.
-fn continent_cell(seed: u64, rx: i32) -> Option<SkyLand> {
+fn continent_cell(seed: u64, bands: &SkyBands, rx: i32) -> Option<SkyLand> {
     let mut rng = RegionRng::new(seed, SALT_CONTINENT, rx, 0);
     if !rng.chance(520) {
         return None;
     }
-    let (alt_bottom, alt_top) = band_rows(ID_CONTINENT);
+    let (alt_bottom, alt_top) = band_rows(bands, ID_CONTINENT);
     let x0 = rx * CONTINENT_CELL_COLUMNS;
     let half_width = rng.range(160, 340);
     let depth = rng.range(50, 100).min((alt_top - alt_bottom) / 2);
@@ -577,14 +698,13 @@ fn continent_cell(seed: u64, rx: i32) -> Option<SkyLand> {
     })
 }
 
-/// The Moon of a world with a sky (`None` on older generators): one giant landmass about
-/// 2,000-2,900 tiles wide whose underside's lowest point sits at [`MOON_BOTTOM_ROWS`], hanging
-/// above [`moon_column`].
+/// The Moon of a world with a sky (`None` on older generators).
+///
+/// One giant landmass about 2,000-2,900 tiles wide whose underside's lowest point sits at the world's
+/// [`SkyBands::moon`] ([`MOON_BOTTOM_ROWS`] in V8), hanging above [`moon_column`].
 #[must_use]
 pub fn moon(settings: &WorldSettings) -> Option<SkyLand> {
-    if !settings.generator.has_sky() {
-        return None;
-    }
+    let bands = bands_of(settings)?;
     let mut rng = RegionRng::new(settings.seed, SALT_MOON, 0, 0);
     let side = if rng.chance(500) { 1 } else { -1 };
     let distance = rng.range(3_200, 4_800);
@@ -594,7 +714,7 @@ pub fn moon(settings: &WorldSettings) -> Option<SkyLand> {
         kind: SkyLandKind::Moon,
         biome: SkyBiome::Frost,
         center_x: TOWN_CENTER_COLUMN + side * distance,
-        top_row: row_of(MOON_BOTTOM_ROWS + MOON_DEPTH_ROWS),
+        top_row: row_of(bands.moon + MOON_DEPTH_ROWS),
         half_width,
         depth: MOON_DEPTH_ROWS,
         shape: rng.next_u64(),
@@ -614,10 +734,15 @@ const fn cells(first: i32, last: i32, size: i32) -> std::ops::RangeInclusive<i32
 
 /// Cell rows `0..rows` of a band whose cells (`cell_rows` tall) can reach tile rows
 /// `rect.min.y..=rect.max.y`.
-fn band_cells(id_band: i32, cell_rows: i32, rect: &TileRect) -> std::ops::Range<i32> {
+fn band_cells(
+    bands: &SkyBands,
+    id_band: i32,
+    cell_rows: i32,
+    rect: &TileRect,
+) -> std::ops::Range<i32> {
     let (alt_low, alt_high) = (-rect.max.y, -rect.min.y);
-    let (bottom, _) = band_rows(id_band);
-    let rows = band_cell_rows(id_band, cell_rows);
+    let (bottom, _) = band_rows(bands, id_band);
+    let rows = band_cell_rows(bands, id_band, cell_rows);
     let first = ((alt_low - bottom).div_euclid(cell_rows)).clamp(0, rows);
     let last = ((alt_high - bottom).div_euclid(cell_rows) + 1).clamp(0, rows);
     first..last
@@ -628,24 +753,28 @@ fn band_cells(id_band: i32, cell_rows: i32, rect: &TileRect) -> std::ops::Range<
 #[must_use]
 pub fn lands_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<SkyLand> {
     let mut found = Vec::new();
-    if !settings.generator.has_sky() || rect.min.y > row_of(LOW_ISLES_BOTTOM_ROWS) {
+    let Some(bands) = bands_of(settings) else {
+        return found;
+    };
+    if rect.min.y > row_of(bands.low_isles) {
         return found;
     }
+    let bands = &bands;
     let seed = settings.seed;
-    for ry in band_cells(ID_LOW, LOW_ISLE_CELL.1, rect) {
+    for ry in band_cells(bands, ID_LOW, LOW_ISLE_CELL.1, rect) {
         for rx in cells(rect.min.x, rect.max.x, LOW_ISLE_CELL.0) {
-            found.extend(low_isle_cell(seed, rx, ry));
+            found.extend(low_isle_cell(seed, bands, rx, ry));
         }
     }
-    for ry in band_cells(ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1, rect) {
+    for ry in band_cells(bands, ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1, rect) {
         for rx in cells(rect.min.x, rect.max.x, ARCHIPELAGO_CELL.0) {
-            found.extend(archipelago_cell(seed, rx, ry));
+            found.extend(archipelago_cell(seed, bands, rx, ry));
         }
     }
-    let (continent_bottom, continent_top) = band_rows(ID_CONTINENT);
+    let (continent_bottom, continent_top) = band_rows(bands, ID_CONTINENT);
     if -rect.max.y <= continent_top && -rect.min.y >= continent_bottom {
         for rx in cells(rect.min.x, rect.max.x, CONTINENT_CELL_COLUMNS) {
-            found.extend(continent_cell(seed, rx));
+            found.extend(continent_cell(seed, bands, rx));
         }
     }
     found.extend(moon(settings));
@@ -658,14 +787,17 @@ pub fn lands_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<SkyLand>
 #[must_use]
 pub fn land(settings: &WorldSettings, id: FeatureId) -> Option<SkyLand> {
     let (layer, rx, ry, local) = super::streamed::index::decode(id)?;
-    if layer != Layer::Sky || !settings.generator.has_sky() {
+    if layer != Layer::Sky {
         return None;
     }
+    let bands = &bands_of(settings)?;
     let (band, row) = (ry.div_euclid(1000), ry.rem_euclid(1000));
     let lands = match band {
-        ID_LOW => low_isle_cell(settings.seed, rx, row),
-        ID_ARCHIPELAGO => archipelago_cell(settings.seed, rx, row),
-        ID_CONTINENT => continent_cell(settings.seed, rx).into_iter().collect(),
+        ID_LOW => low_isle_cell(settings.seed, bands, rx, row),
+        ID_ARCHIPELAGO => archipelago_cell(settings.seed, bands, rx, row),
+        ID_CONTINENT => continent_cell(settings.seed, bands, rx)
+            .into_iter()
+            .collect(),
         ID_MOON => moon(settings).into_iter().collect(),
         _ => Vec::new(),
     };
@@ -747,17 +879,17 @@ impl Updraft {
 }
 
 /// Cell rows of the updraft grid (from [`UPDRAFT_FLOOR_ROWS`] to the orbit band).
-const fn updraft_cell_rows() -> i32 {
-    (ORBIT_BOTTOM_ROWS - UPDRAFT_FLOOR_ROWS) / UPDRAFT_CELL.1
+const fn updraft_cell_rows(bands: &SkyBands) -> i32 {
+    (bands.orbit - UPDRAFT_FLOOR_ROWS) / UPDRAFT_CELL.1
 }
 
 /// The updraft of cell `(rx, ry)`, if it has one (none in the dead-air gap).
-fn updraft_cell(seed: u64, rx: i32, ry: i32) -> Option<Updraft> {
+fn updraft_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Option<Updraft> {
     let alt_bottom = UPDRAFT_FLOOR_ROWS + ry * UPDRAFT_CELL.1;
     let alt_top = alt_bottom + UPDRAFT_CELL.1 - 1;
-    let band = SkyBand::at_altitude(alt_bottom);
+    let band = bands.band_at(alt_bottom);
     if matches!(band, SkyBand::DeadAir | SkyBand::Orbit | SkyBand::Lunar)
-        || SkyBand::at_altitude(alt_top) == SkyBand::DeadAir
+        || bands.band_at(alt_top) == SkyBand::DeadAir
     {
         return None;
     }
@@ -793,18 +925,18 @@ fn updraft_cell(seed: u64, rx: i32, ry: i32) -> Option<Updraft> {
 #[must_use]
 pub fn updrafts_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<Updraft> {
     let mut found = Vec::new();
-    if !settings.generator.has_sky() {
+    let Some(bands) = bands_of(settings) else {
         return found;
-    }
+    };
     let (alt_low, alt_high) = (-rect.max.y, -rect.min.y);
-    let rows = updraft_cell_rows();
+    let rows = updraft_cell_rows(&bands);
     let first = (alt_low - UPDRAFT_FLOOR_ROWS)
         .div_euclid(UPDRAFT_CELL.1)
         .clamp(0, rows);
     let last = ((alt_high - UPDRAFT_FLOOR_ROWS).div_euclid(UPDRAFT_CELL.1) + 1).clamp(0, rows);
     for ry in first..last {
         for rx in cells(rect.min.x, rect.max.x, UPDRAFT_CELL.0) {
-            if let Some(updraft) = updraft_cell(settings.seed, rx, ry)
+            if let Some(updraft) = updraft_cell(settings.seed, &bands, rx, ry)
                 && updraft.rect.intersects(rect)
             {
                 found.push(updraft);
@@ -818,18 +950,18 @@ pub fn updrafts_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<Updra
 /// per tick (one cell hash).
 #[must_use]
 pub fn updraft_at(settings: &WorldSettings, x: i32, y: i32) -> i32 {
-    if !settings.generator.has_sky() {
+    let Some(bands) = bands_of(settings) else {
         return 0;
-    }
+    };
     let altitude = -y;
     if altitude < UPDRAFT_FLOOR_ROWS {
         return 0;
     }
     let ry = (altitude - UPDRAFT_FLOOR_ROWS).div_euclid(UPDRAFT_CELL.1);
-    if ry >= updraft_cell_rows() {
+    if ry >= updraft_cell_rows(&bands) {
         return 0;
     }
-    updraft_cell(settings.seed, x.div_euclid(UPDRAFT_CELL.0), ry)
+    updraft_cell(settings.seed, &bands, x.div_euclid(UPDRAFT_CELL.0), ry)
         .map_or(0, |updraft| updraft.acceleration_at(x, y))
 }
 

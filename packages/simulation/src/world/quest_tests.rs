@@ -773,8 +773,13 @@ fn reputation_earns_rebates_at_the_givers_counter() {
     );
     let rig = world.player(LEAD).expect("rig");
     let spent = 1_000 - rig.credits;
-    // Rank 2 hands back 8%: a full tank (100 fuel at 3 credits) costs 276 instead of 300.
-    let full = 100 * crate::economy::REFUEL_UNIT_COST;
+    // Rank 2 hands back 8% of a full tank's price.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a stock tank's whole fuel units"
+    )]
+    let full = crate::player::fuel_capacity_for_level(1) as u32 * crate::economy::REFUEL_UNIT_COST;
     assert_eq!(spent, full - full * 8 / 100);
 }
 

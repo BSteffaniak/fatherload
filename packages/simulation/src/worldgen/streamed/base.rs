@@ -81,13 +81,14 @@ pub fn raw_surface_row(settings: &WorldSettings, x: i32) -> i32 {
 
 /// The first row of a streamed world.
 ///
-/// Sky worlds (V8) reach up to the Moon ([`crate::worldgen::sky::SKY_CEILING_ROWS`]); biome
-/// worlds keep [`biome::SKY_HEADROOM_ROWS`] above row 0 for their mountains; older streamed
-/// worlds start at row 0.
+/// Sky worlds (V8) reach up to the Moon ([`crate::worldgen::sky::SkyBands::ceiling_rows`] of
+/// the world's bands, [`crate::worldgen::sky::SKY_CEILING_ROWS`] in V8); biome worlds keep
+/// [`biome::SKY_HEADROOM_ROWS`] above row 0 for their mountains; older streamed worlds start at
+/// row 0.
 #[must_use]
 pub const fn top_row(settings: &WorldSettings) -> i32 {
-    if settings.generator.has_sky() {
-        -crate::worldgen::sky::SKY_CEILING_ROWS
+    if let Some(bands) = settings.generator.sky_bands() {
+        -bands.ceiling_rows()
     } else if settings.generator.has_biomes() {
         -biome::SKY_HEADROOM_ROWS
     } else {

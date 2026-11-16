@@ -81,7 +81,7 @@ impl WorldState {
             }
         }
         let player_ids: Vec<PlayerId> = self.players.keys().copied().collect();
-        let has_sky = self.terrain.settings().generator.has_sky();
+        let sky_bands = self.terrain.settings().generator.sky_bands();
         for player_id in player_ids {
             let Some(player) = self.players.get(&player_id) else {
                 continue;
@@ -118,7 +118,7 @@ impl WorldState {
             let facts = MilestoneFacts {
                 deepest_band: records.deepest_band.map(usize::from),
                 owns_claim,
-                has_sky,
+                sky_bands,
             };
             let silent = !player.milestones.primed;
             player.milestones.primed = true;

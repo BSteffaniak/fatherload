@@ -124,30 +124,47 @@ fn armour_still_matters() {
     );
 }
 
-/// The climb probe flies the real tick: a bigger tank and a stronger engine both climb higher,
-/// and half a tank gets about half the apex (the turn-back altitude the sky bands key off).
+/// The climb probe flies the real tick: a bigger tank and a stronger engine both climb higher.
+/// Without altitude intakes every climb tops out where thin air leaves the engine too weak
+/// (about 480 tiles for a stock engine; even a stock tank gets most of the way), and thin air
+/// slows the top of a climb, so the half-tank turn-back altitude sits past half the apex.
 #[test]
 fn bigger_tanks_and_engines_climb_higher() {
     use super::climb::climb;
     let stock = climb(11, 1, 1, 30).expect("stock climb");
     let tank = climb(11, 3, 1, 30).expect("tank 3 climb");
     let engine = climb(11, 1, 6, 30).expect("engine 6 climb");
-    assert!(stock.apex_tiles > 40, "{stock:?}");
-    assert!(
-        tank.apex_tiles > stock.apex_tiles * 2,
-        "{tank:?} vs {stock:?}"
-    );
+    assert!(stock.apex_tiles > 200, "{stock:?}");
+    assert!(tank.apex_tiles > stock.apex_tiles, "{tank:?} vs {stock:?}");
     assert!(
         engine.apex_tiles > stock.apex_tiles * 3 / 2,
         "{engine:?} vs {stock:?}"
     );
-    for result in [stock, tank, engine] {
-        let half = result.apex_tiles / 2;
+    for result in [stock, engine] {
         assert!(
-            (result.turn_back_tiles - half).abs() <= result.apex_tiles / 8,
+            result.turn_back_tiles >= result.apex_tiles / 2
+                && result.turn_back_tiles < result.apex_tiles,
             "{result:?}"
         );
     }
+}
+
+/// Pinned: the fuel curve's yardstick. An everyday early trip (drill 50 rows down, mine for
+/// two minutes, fly home) burns well under half a stock tank, so fuel only bites on deep and
+/// long runs.
+#[test]
+fn an_everyday_trip_burns_well_under_half_a_stock_tank() {
+    use super::trip::{TRIP_DEPTH_ROWS, everyday_trip};
+    let trip = everyday_trip(11, 1, 30).expect("trip");
+    println!("{trip:?} {:.1} %", trip.tank_percent());
+    assert!(trip.landed, "{trip:?}");
+    assert!(trip.depth_rows >= TRIP_DEPTH_ROWS, "{trip:?}");
+    assert!(trip.tiles_mined >= 80, "{trip:?}");
+    assert!(
+        trip.tank_percent() < 40.0,
+        "{:.0} % of a stock tank: {trip:?}",
+        trip.tank_percent()
+    );
 }
 
 /// The building probe places every module through real build commands and pays exactly the

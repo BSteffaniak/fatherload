@@ -142,8 +142,8 @@ impl Player {
             velocity_x: 0.0,
             velocity_y: 0.0,
             x_remainder: 0.0,
-            fuel: 100.0,
-            fuel_capacity: 100.0,
+            fuel: fuel_capacity_for_level(1),
+            fuel_capacity: fuel_capacity_for_level(1),
             hull: 100.0,
             cargo_bay: ItemContainer::new(),
             cargo_capacity: 12,
@@ -394,26 +394,45 @@ const fn default_collect_blocks() -> bool {
 }
 
 impl Player {
-    /// Lifts fuel tank and cargo bay capacities stored under the old five-tier curves (+50 fuel
-    /// and +8 slots a tier) onto the current curves for the fitted tiers, keeping any bonus
-    /// earned on top of the old curve. Rigs already on the current curves are untouched, so this
-    /// is safe to run on every load.
+    /// Lifts fuel tank and cargo bay capacities stored under an older curve (the five-tier
+    /// curves, +50 fuel and +8 slots a tier, or the first fifteen-tier curves,
+    /// [`fuel_capacity_v2`] and [`cargo_capacity_v2`]) onto the current curves for the fitted
+    /// tiers, keeping any bonus earned on top of the old curve (auxiliary tanks, cargo racks).
+    /// The fuel on board scales with the tank, so a rig that was half full stays half full.
+    /// The block hopper catches up to its cargo bay tier too. Rigs already on the current
+    /// curves are untouched, so this is safe to run on every load.
     pub fn catch_up_capacity_curves(&mut self) {
         self.block_hopper_capacity =
             self.block_hopper_capacity
                 .max(crate::world::drops::block_hopper_capacity_for_level(
                     self.cargo_bay_level,
                 ));
-        let cargo = cargo_capacity_for_level(self.cargo_bay_level);
+        let level = self.cargo_bay_level;
+        let cargo = cargo_capacity_for_level(level);
         if self.cargo_capacity < cargo {
-            let legacy = 12 + 8 * tiers_past_first(self.cargo_bay_level);
-            self.cargo_capacity = cargo + self.cargo_capacity.saturating_sub(legacy);
+            let old = if self.cargo_capacity >= cargo_capacity_v2(level) {
+                cargo_capacity_v2(level)
+            } else {
+                cargo_capacity_v1(level)
+            };
+            self.cargo_capacity = cargo + self.cargo_capacity.saturating_sub(old);
         }
-        let fuel = fuel_capacity_for_level(self.fuel_tank_level);
+        let level = self.fuel_tank_level;
+        let fuel = fuel_capacity_for_level(level);
         if self.fuel_capacity < fuel {
-            #[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
-            let legacy = (tiers_past_first(self.fuel_tank_level) as f32).mul_add(50.0, 100.0);
-            self.fuel_capacity = fuel + (self.fuel_capacity - legacy).max(0.0);
+            let old = if self.fuel_capacity >= fuel_capacity_v2(level) {
+                fuel_capacity_v2(level)
+            } else {
+                fuel_capacity_v1(level)
+            };
+            let previous = self.fuel_capacity;
+            self.fuel_capacity = fuel + (previous - old).max(0.0);
+            let share = if previous > 0.0 {
+                (self.fuel / previous).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
+            self.fuel = crate::quantize::quantize_simulation_scalar(self.fuel_capacity * share);
         }
     }
 }
@@ -423,24 +442,65 @@ const fn tiers_past_first(level: u8) -> u32 {
     level.saturating_sub(1) as u32
 }
 
-/// Cargo slots of a cargo bay at `level`: 12 stock, each tier adding two more slots than the
-/// last (+8, +10, +12, ...), about 300 at the top tier.
+/// Cargo slots of a cargo bay at `level`: 12 stock, each tier adding five more slots than the
+/// last (+10, +15, +20, ...), about 600 at the top tier.
+///
+/// The second curve: saves from the first fifteen-tier curve ([`cargo_capacity_v2`]) catch up
+/// on load ([`Player::catch_up_capacity_curves`]).
 #[must_use]
 pub const fn cargo_capacity_for_level(level: u8) -> u32 {
+    let n = tiers_past_first(level);
+    12 + 10 * n + 5 * n * n.saturating_sub(1) / 2
+}
+
+/// Cargo slots of the first fifteen-tier curve (+8, +10, +12, ..., about 300 at the top), kept
+/// to migrate old saves.
+#[must_use]
+pub const fn cargo_capacity_v2(level: u8) -> u32 {
     let n = tiers_past_first(level);
     12 + 8 * n + n * n.saturating_sub(1)
 }
 
-/// Fuel of a fuel tank at `level`: 100 stock, each tier adding 25 more than the last (+50,
-/// +75, +100, ...), about 3,000 at the top tier.
+/// Cargo slots of the old five-tier curve (+8 a tier), kept to migrate old saves.
+const fn cargo_capacity_v1(level: u8) -> u32 {
+    12 + 8 * tiers_past_first(level)
+}
+
+/// Fuel of a fuel tank at `level`: 450 stock, each tier adding 120 more than the last (+250,
+/// +370, +490, ...), about 15,000 at the top tier.
+///
+/// Sized so fuel only bites on deep and long runs and sky expeditions: an everyday trip
+/// (out to a shaft, 40-60 rows down, a couple of minutes of mining, home to sell) burns well
+/// under half a stock tank (the balance report's fuel-per-trip table). The second curve: saves
+/// from the first fifteen-tier curve ([`fuel_capacity_v2`]) catch up on load
+/// ([`Player::catch_up_capacity_curves`]). The sky bands of V8 worlds were measured on the old
+/// curve and are frozen ([`crate::worldgen::sky::V8_SKY_BANDS`]).
+#[must_use]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "tank sizes are some thousands of units, exact in f32"
+)]
+pub const fn fuel_capacity_for_level(level: u8) -> f32 {
+    let n = tiers_past_first(level);
+    (450 + 250 * n + 60 * n * n.saturating_sub(1)) as f32
+}
+
+/// Fuel of the first fifteen-tier curve (100 stock, +50, +75, +100, ..., about 3,000 at the
+/// top), kept to migrate old saves and to re-measure the V8 climb table.
 #[must_use]
 #[allow(
     clippy::cast_precision_loss,
     reason = "tank sizes are a few thousand units, exact in f32"
 )]
-pub const fn fuel_capacity_for_level(level: u8) -> f32 {
+pub const fn fuel_capacity_v2(level: u8) -> f32 {
     let n = tiers_past_first(level);
     (100 + 50 * n + 25 * n * n.saturating_sub(1) / 2) as f32
+}
+
+/// Fuel of the old five-tier curve (+50 a tier), kept to migrate old saves.
+#[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
+const fn fuel_capacity_v1(level: u8) -> f32 {
+    (100 + 50 * tiers_past_first(level)) as f32
 }
 
 /// Hull integrity of hull plating at `level` (before crafted bulkheads): 100 stock, each tier

@@ -168,7 +168,28 @@ impl GeneratorVersion {
     /// an empty sky and standard air and gravity everywhere.
     #[must_use]
     pub const fn has_sky(self) -> bool {
-        matches!(self, Self::V8)
+        self.sky_bands().is_some()
+    }
+
+    /// Where this generator's sky bands start ([`sky::SkyBands`]; `None` without a sky).
+    ///
+    /// Each sky generator has its own frozen entry, so its worlds keep generating identically
+    /// when the fuel curve and the climb table move: V8 keeps [`sky::V8_SKY_BANDS`] (calibrated
+    /// on the first fifteen-tier fuel curve). The next sky generator adds its arm here with the
+    /// bands calibrated on the current curve ([`sky::NEXT_SKY_BANDS`]), frozen as literals.
+    #[must_use]
+    pub const fn sky_bands(self) -> Option<sky::SkyBands> {
+        match self {
+            Self::V8 => Some(sky::V8_SKY_BANDS),
+            Self::Legacy
+            | Self::V1
+            | Self::V2
+            | Self::V3
+            | Self::V4
+            | Self::V5
+            | Self::V6
+            | Self::V7 => None,
+        }
     }
 
     #[must_use]

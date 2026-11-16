@@ -15,7 +15,8 @@
 //! - [`preview_between`]: any two levels of a line (the purchase moment compares the tier just
 //!   bought with the one before).
 //! - The measurements: [`dig_seconds`], [`dig_speed_multiplier`], [`thrust_seconds`], [`climb_speed_tiles`],
-//!   [`climb_ceiling_tiles`], [`cooled_band`].
+//!   [`climb_ceiling_tiles`] (sea level), [`thin_air_ceiling_tiles`] (a sky with thin air: the
+//!   measured climb table), [`cooled_band`].
 
 use crate::{
     economy::{UpgradeKind, current_level},
@@ -31,7 +32,7 @@ use crate::{
         MIN_DRILL_SECONDS_PER_CHIP, base_drill_seconds_per_chip,
         drops::block_hopper_capacity_for_level, engine_top_speed_tiles,
     },
-    worldgen::Band,
+    worldgen::{Band, sky::SkyBands},
 };
 
 /// One before/after bar: `now` and `next` on a scale whose full bar is `max` (the line's top
@@ -97,9 +98,13 @@ impl UpgradePreview {
 }
 
 /// The preview of the next tier of `kind` for `player`, or `None` when the line is maxed (bomb
-/// packs never max out).
+/// packs never max out). `sky` is the world's sky bands (see [`preview_between`]).
 #[must_use]
-pub fn upgrade_preview(player: &Player, kind: UpgradeKind) -> Option<UpgradePreview> {
+pub fn upgrade_preview(
+    player: &Player,
+    kind: UpgradeKind,
+    sky: Option<&SkyBands>,
+) -> Option<UpgradePreview> {
     let level = current_level(player, kind);
     if kind != UpgradeKind::BombPack && level >= kind.max_level() {
         return None;
@@ -109,7 +114,7 @@ pub fn upgrade_preview(player: &Player, kind: UpgradeKind) -> Option<UpgradePrev
     } else {
         level + 1
     };
-    Some(preview_between(player, kind, level, next))
+    Some(preview_between(player, kind, level, next, sky))
 }
 
 /// The hardest grade of common rock (hard rock and the richest ores): a drill of this tier or
@@ -176,6 +181,22 @@ pub fn climb_ceiling_tiles(fuel_tank_level: u8, engine_level: u8) -> f32 {
     thrust_seconds(fuel_tank_level) * climb_speed_tiles(engine_level)
 }
 
+/// How many tiles a rig climbs straight up on one full tank in a sky with thin air.
+///
+/// The measured climb table ([`crate::climb::reach`], engine and intake rounded down to its
+/// tiers) above the harness's starting altitude. Without altitude intakes thin air caps every
+/// climb, so this is far below [`climb_ceiling_tiles`] for big tanks.
+#[must_use]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "altitudes are some thousands of rows"
+)]
+pub fn thin_air_ceiling_tiles(fuel_tank_level: u8, engine_level: u8, intake_level: u8) -> f32 {
+    (crate::climb::reach(fuel_tank_level, engine_level, intake_level)
+        - crate::climb::START_ALTITUDE_ROWS)
+        .max(0) as f32
+}
+
 /// The deepest band a rig with `cooling` heat units runs cool in.
 #[must_use]
 pub fn cooled_band(cooling: u8) -> Band {
@@ -216,6 +237,9 @@ const fn bar(
 
 /// The preview of going from `from_level` to `to_level` on `kind` with the rest of `player`'s
 /// rig as it is (the radiator and shielding cool together, the engine climbs with the tank).
+///
+/// `sky` is the bands of the world's sky (`GeneratorVersion::sky_bands`): the tank, engine and
+/// intake previews announce the sky gates against them, and say nothing of the sky without one.
 #[must_use]
 #[allow(clippy::too_many_lines, reason = "one arm per upgrade line")]
 pub fn preview_between(
@@ -223,8 +247,12 @@ pub fn preview_between(
     kind: UpgradeKind,
     from_level: u8,
     to_level: u8,
+    sky: Option<&SkyBands>,
 ) -> UpgradePreview {
     let (from, to) = (from_level, to_level);
+    // The sky gates, against the world's own bands (none without a sky).
+    let island = |rig: &Player| sky.is_some_and(|bands| island_capable(rig, bands));
+    let crosses = |rig: &Player| sky.is_some_and(|bands| crosses_dead_air(rig, bands));
     let top = kind.max_level();
     let mut bars = Vec::new();
     let mut changes = Vec::new();
@@ -291,6 +319,15 @@ pub fn preview_between(
         }
         UpgradeKind::FuelTank => {
             let engine = player.engine_level;
+            let intake = player.hazard_gear.altitude_intake;
+            // In a sky with thin air the measured table, at sea level the plain formula.
+            let climb_ceiling_tiles = |tank: u8, engine: u8| {
+                if sky.is_some() {
+                    thin_air_ceiling_tiles(tank, engine, intake)
+                } else {
+                    climb_ceiling_tiles(tank, engine)
+                }
+            };
             let (fuel_now, fuel_next) =
                 (fuel_capacity_for_level(from), fuel_capacity_for_level(to));
             let (ceiling_now, ceiling_next) = (
@@ -313,10 +350,18 @@ pub fn preview_between(
                 "tiles",
                 0,
             ));
-            changes.push(format!(
-                "Climbs {}% higher on a full tank ({ceiling_now:.0} -> {ceiling_next:.0} tiles)",
-                percent(ceiling_now, ceiling_next)
-            ));
+            if percent(ceiling_now, ceiling_next) > 0 {
+                changes.push(format!(
+                    "Climbs {}% higher on a full tank ({ceiling_now:.0} -> {ceiling_next:.0} tiles)",
+                    percent(ceiling_now, ceiling_next)
+                ));
+            } else {
+                // Thin air, not fuel, stops this rig: say so instead of a 0 % gain.
+                changes.push(format!(
+                    "Thin air caps the climb at {ceiling_now:.0} tiles: altitude intakes and a \
+                     stronger engine lift it"
+                ));
+            }
             changes.push(format!(
                 "{:.0} s of thrust per tank (was {:.0} s)",
                 thrust_seconds(to),
@@ -333,22 +378,22 @@ pub fn preview_between(
             upgraded.fuel_tank_level = to;
             let mut current = player.clone();
             current.fuel_tank_level = from;
-            if island_capable(&upgraded) && !island_capable(&current) {
+            if island(&upgraded) && !island(&current) {
                 changes.insert(0, "Reaches the low sky isles!".to_owned());
             }
-            if crosses_dead_air(&upgraded) && !crosses_dead_air(&current) {
+            if crosses(&upgraded) && !crosses(&current) {
                 changes.insert(
                     0,
                     "Crosses the dead-air gap: the sky lands open!".to_owned(),
                 );
-            } else if !crosses_dead_air(&upgraded) {
+            } else if !crosses(&upgraded) {
                 // Would this tank carry a top engine and intake over? Say so the first time.
                 let mut kitted = upgraded;
                 kitted.engine_level = crate::economy::MAX_UPGRADE_LEVEL;
                 kitted.hazard_gear.altitude_intake = crate::environment::ALTITUDE_INTAKE_MAX_LEVEL;
                 let mut kitted_now = kitted.clone();
                 kitted_now.fuel_tank_level = from;
-                if crosses_dead_air(&kitted) && !crosses_dead_air(&kitted_now) {
+                if crosses(&kitted) && !crosses(&kitted_now) {
                     changes.push(
                         "Big enough for the dead-air gap, with a strong engine and altitude \
                          intakes"
@@ -440,7 +485,7 @@ pub fn preview_between(
             upgraded.engine_level = to;
             let mut current = player.clone();
             current.engine_level = from;
-            if crosses_dead_air(&upgraded) && !crosses_dead_air(&current) {
+            if crosses(&upgraded) && !crosses(&current) {
                 changes.insert(
                     0,
                     "Crosses the dead-air gap: the sky lands open!".to_owned(),
@@ -547,7 +592,7 @@ pub fn preview_between(
             upgraded.hazard_gear.altitude_intake = to;
             let mut current = player.clone();
             current.hazard_gear.altitude_intake = from;
-            if crosses_dead_air(&upgraded) && !crosses_dead_air(&current) {
+            if crosses(&upgraded) && !crosses(&current) {
                 changes.insert(
                     0,
                     "Crosses the dead-air gap: the sky lands open!".to_owned(),
@@ -634,6 +679,9 @@ pub fn preview_between(
 mod tests {
     use super::*;
 
+    /// A sky calibrated on the current fuel curve (the next generator's bands).
+    const SKY: Option<&SkyBands> = Some(&crate::worldgen::sky::NEXT_SKY_BANDS);
+
     fn rig() -> Player {
         Player::new(0.0, 0.0)
     }
@@ -683,7 +731,7 @@ mod tests {
     fn the_drill_preview_names_the_new_rock_and_the_speedup() {
         let mut player = rig();
         player.drill_strength = 3;
-        let preview = upgrade_preview(&player, UpgradeKind::Drill).expect("not maxed");
+        let preview = upgrade_preview(&player, UpgradeKind::Drill, None).expect("not maxed");
         assert_eq!((preview.from_level, preview.to_level), (3, 4));
         assert!(
             preview.changes[0].contains("Now cuts hard rock"),
@@ -704,20 +752,36 @@ mod tests {
     }
 
     #[test]
-    fn the_tank_preview_measures_the_climb() {
+    fn the_tank_preview_reads_the_climb_table_under_a_sky() {
         let player = rig();
-        let preview = upgrade_preview(&player, UpgradeKind::FuelTank).expect("not maxed");
+        let preview = upgrade_preview(&player, UpgradeKind::FuelTank, SKY).expect("not maxed");
         let ceiling = preview
             .bars
             .iter()
             .find(|bar| bar.label == "Climb ceiling")
             .expect("ceiling bar");
-        // Stock: 100 fuel at 5/s = 20 s; tier 2: 150 fuel at 4.75/s.
+        let table =
+            |tank| f32::from(u16::try_from(crate::climb::ceiling(tank, 1, 0) - 100).expect("rows"));
+        assert!((ceiling.now - table(1)).abs() < 1e-3, "{ceiling:?}");
+        assert!((ceiling.next - table(2)).abs() < 1e-3, "{ceiling:?}");
+        assert!((ceiling.max - table(15)).abs() < 1e-3, "{ceiling:?}");
+    }
+
+    #[test]
+    fn the_tank_preview_measures_the_climb() {
+        // Sea level (a world without a sky): the tank's thrust time at the climb speed.
+        let player = rig();
+        let preview = upgrade_preview(&player, UpgradeKind::FuelTank, None).expect("not maxed");
+        let ceiling = preview
+            .bars
+            .iter()
+            .find(|bar| bar.label == "Climb ceiling")
+            .expect("ceiling bar");
+        // Stock: 450 fuel at 5/s = 90 s; tier 2: 700 fuel at 4.75/s.
         let speed = climb_speed_tiles(1);
-        assert!(20.0f32.mul_add(-speed, ceiling.now).abs() < 1e-3);
-        assert!((150.0f32 / 4.75).mul_add(-speed, ceiling.next).abs() < 1e-3);
+        assert!(90.0f32.mul_add(-speed, ceiling.now).abs() < 1e-2);
+        assert!((700.0f32 / 4.75).mul_add(-speed, ceiling.next).abs() < 1e-2);
         let expected = percent(ceiling.now, ceiling.next);
-        // (The headline above it says the first tank reaches the low isles.)
         assert!(
             preview
                 .changes
@@ -731,15 +795,15 @@ mod tests {
     #[test]
     fn the_tank_preview_announces_the_sky_gates() {
         let mut player = rig();
-        // The first tank upgrade lifts a stock rig into the low isles (T16's climb table).
+        // The first tank upgrade lifts a stock rig into the low isles (the climb table).
         player.fuel_tank_level = 1;
-        let preview = upgrade_preview(&player, UpgradeKind::FuelTank).expect("not maxed");
+        let preview = upgrade_preview(&player, UpgradeKind::FuelTank, SKY).expect("not maxed");
         assert_eq!(preview.headline(), Some("Reaches the low sky isles!"));
         // A top engine with tier 6 intakes crosses the dead air from tank 13 (tank 12 cannot).
         player.fuel_tank_level = 12;
         player.engine_level = 15;
         player.hazard_gear.altitude_intake = 6;
-        let preview = upgrade_preview(&player, UpgradeKind::FuelTank).expect("not maxed");
+        let preview = upgrade_preview(&player, UpgradeKind::FuelTank, SKY).expect("not maxed");
         assert_eq!(
             preview.headline(),
             Some("Crosses the dead-air gap: the sky lands open!")
@@ -747,30 +811,50 @@ mod tests {
         // ... and so does buying the intake tier that a big tank and engine lack (3 -> 4).
         player.fuel_tank_level = 15;
         player.hazard_gear.altitude_intake = 3;
-        let preview = upgrade_preview(&player, UpgradeKind::AltitudeIntake).expect("not maxed");
+        let preview =
+            upgrade_preview(&player, UpgradeKind::AltitudeIntake, SKY).expect("not maxed");
         assert_eq!(
             preview.headline(),
             Some("Crosses the dead-air gap: the sky lands open!")
+        );
+        // A world without a sky hears nothing of it.
+        let preview =
+            upgrade_preview(&player, UpgradeKind::AltitudeIntake, None).expect("not maxed");
+        assert!(
+            preview
+                .changes
+                .iter()
+                .all(|change| !change.contains("dead-air")),
+            "{:?}",
+            preview.changes
+        );
+        player.fuel_tank_level = 1;
+        player.engine_level = 1;
+        let preview = upgrade_preview(&player, UpgradeKind::FuelTank, None).expect("not maxed");
+        assert!(
+            preview.changes.iter().all(|change| !change.contains("sky")),
+            "{:?}",
+            preview.changes
         );
     }
 
     #[test]
     fn engine_cargo_hull_and_cooling_deltas_match_their_tables() {
         let player = rig();
-        let engine = upgrade_preview(&player, UpgradeKind::Engine).expect("not maxed");
+        let engine = upgrade_preview(&player, UpgradeKind::Engine, None).expect("not maxed");
         let close = |a: f32, b: f32| (a - b).abs() < 1e-6;
         assert!(close(engine.bars[0].now, engine_top_speed_tiles(1)));
         assert!(close(engine.bars[0].next, engine_top_speed_tiles(2)));
         assert!(close(engine.bars[0].max, engine_top_speed_tiles(15)));
-        let cargo = upgrade_preview(&player, UpgradeKind::CargoBay).expect("not maxed");
-        assert!(cargo.changes[0].starts_with("Hauls 8 more ore per trip (12 -> 20 slots"));
-        let hull = upgrade_preview(&player, UpgradeKind::Hull).expect("not maxed");
+        let cargo = upgrade_preview(&player, UpgradeKind::CargoBay, None).expect("not maxed");
+        assert!(cargo.changes[0].starts_with("Hauls 10 more ore per trip (12 -> 22 slots"));
+        let hull = upgrade_preview(&player, UpgradeKind::Hull, None).expect("not maxed");
         assert!(
             hull.changes[0].contains("(100 -> 140 hull)"),
             "{:?}",
             hull.changes
         );
-        let radiator = upgrade_preview(&player, UpgradeKind::Radiator).expect("not maxed");
+        let radiator = upgrade_preview(&player, UpgradeKind::Radiator, None).expect("not maxed");
         assert!(
             radiator.changes[0].contains(cooled_band(heat_cooling(2, 0)).name()),
             "{:?}",
@@ -783,7 +867,7 @@ mod tests {
         let mut player = rig();
         crate::economy::max_out_upgrades(&mut player);
         for kind in UpgradeKind::ALL {
-            let preview = upgrade_preview(&player, kind);
+            let preview = upgrade_preview(&player, kind, SKY);
             assert_eq!(preview.is_some(), kind == UpgradeKind::BombPack, "{kind:?}");
         }
     }
@@ -793,7 +877,7 @@ mod tests {
         let player = rig();
         for kind in UpgradeKind::ALL {
             for level in kind.starting_level()..kind.max_level() {
-                let preview = preview_between(&player, kind, level, level + 1);
+                let preview = preview_between(&player, kind, level, level + 1, SKY);
                 assert!(!preview.bars.is_empty(), "{kind:?} {level}");
                 assert!(!preview.changes.is_empty(), "{kind:?} {level}");
                 for bar in &preview.bars {
