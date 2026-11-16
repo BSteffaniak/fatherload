@@ -10,9 +10,23 @@
 //! [`story_seeds`] scores every (resident, arc) pair whose trigger matches and whose slots
 //! bind, then keeps the best seed per resident (and at most two per arc), so a village's seeds
 //! read like its people. [`StorySeed::quest_def`] turns a seed into a
-//! [`QuestDef`]: the quest engine binds and runs it unchanged. (Pinning a place slot to its exact
-//! feature, character givers, outcomes and the bulk of the arcs are Wave 3 / WP-STORY; this
-//! module is the data model and the first templates.)
+//! [`QuestDef`]: the quest engine binds and runs it unchanged.
+//!
+//! WP-STORY (Wave 4, T26) builds the arcs out on this model:
+//!
+//! - **Arc grammar.** Every template has a [`ArcKind`] (frontier, village, sky, mystery, home,
+//!   night, pilot, crew), quest prerequisites, and one [`ArcStep`] per stage: the journal's
+//!   story text for that beat, what the giver says if you check in, and what a contact says
+//!   when a [`crate::quest::Objective::Speak`] beat finds them. A climax line lands when the
+//!   last beat is done, and every [`ArcOutcome`] has the giver's reply and a journal epilogue.
+//! - **Places.** Targets may be [`TargetSpec::Story`] places (villages, camps, halls, the town,
+//!   the giver's home, sky islands, continents, the Moon), each with a fallback, so an arc
+//!   binds anywhere in an endless world and on worlds without sky or Moon.
+//! - **Content** lives in batches (`arcs.rs` and `arcs/*.rs`); [`ARC_TEMPLATES`] chains them.
+//! - **Runtime** ([`run`]): which arc a person offers, binding an arc to the world from the
+//!   giver's settlement, the [`run::ArcLog`] each player keeps, and the story text.
+
+use std::sync::LazyLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -29,17 +43,43 @@ use super::{
     traits::{Fear, Quirk, Tone, Value, Want},
 };
 use crate::{
+    cosmetics::CosmeticItem,
     poi::PoiKind,
     quest::{
-        Objective, QuestDef, QuestGiver, QuestId, QuestReward, QuestText, QuestTier, TargetSpec,
-        Twist,
+        ARC_QUEST_BASE, Objective, Prerequisite, QuestDef, QuestGiver, QuestId, QuestReward,
+        QuestText, QuestTier, TargetSpec, Twist,
     },
     worldgen::{Band, FeatureKind, WorldFeature},
 };
 
+#[cfg(test)]
+mod arc_tests;
 pub mod arcs;
+pub mod run;
 
-pub use arcs::ARC_TEMPLATES;
+/// Every arc template, batch by batch (ids are unique across batches; lint-checked).
+pub static ARC_TEMPLATES: LazyLock<Vec<ArcTemplate>> = LazyLock::new(|| {
+    arcs::BATCHES
+        .iter()
+        .flat_map(|batch| batch.iter().copied())
+        .collect()
+});
+
+/// The quest definition each arc runs on (`ARC_QUEST_BASE + arc id`), built once.
+static ARC_QUEST_DEFS: LazyLock<Vec<QuestDef>> = LazyLock::new(|| {
+    ARC_TEMPLATES
+        .iter()
+        .map(|template| {
+            template.quest_def(QuestId(ARC_QUEST_BASE + template.id.0), QuestGiver::Vale)
+        })
+        .collect()
+});
+
+/// The quest definition of an arc quest id ([`ARC_QUEST_BASE`] and up).
+#[must_use]
+pub fn arc_quest_def(id: QuestId) -> Option<&'static QuestDef> {
+    ARC_QUEST_DEFS.iter().find(|def| def.id == id)
+}
 
 /// Stable id of an arc template (saved in memories; never reused).
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -50,6 +90,72 @@ impl ArcId {
     pub fn template(self) -> Option<&'static ArcTemplate> {
         ARC_TEMPLATES.iter().find(|template| template.id == self)
     }
+
+    /// The quest id the arc runs as.
+    #[must_use]
+    pub const fn quest(self) -> QuestId {
+        QuestId(ARC_QUEST_BASE + self.0)
+    }
+}
+
+/// What kind of story an arc tells (the journal groups and colours by it; the lint wants
+/// every kind represented).
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+pub enum ArcKind {
+    /// Act I: the ground and the deep, derelicts, claims and caves.
+    Frontier,
+    /// Between villages: messages, feuds, trade, a missing person.
+    Village,
+    /// Act II: islands, continents, wind.
+    Sky,
+    /// The deep mystery: the lights below, the core, the Moon.
+    Mystery,
+    /// Homes, homesteads, contractors and settling down.
+    Home,
+    /// Night: watches, lights, things that move after dark.
+    Night,
+    /// Only the pilot on foot can finish it.
+    Pilot,
+    /// Built for a crew (co-op primitives, with solo paths).
+    Crew,
+}
+
+impl ArcKind {
+    pub const ALL: [Self; 8] = [
+        Self::Frontier,
+        Self::Village,
+        Self::Sky,
+        Self::Mystery,
+        Self::Home,
+        Self::Night,
+        Self::Pilot,
+        Self::Crew,
+    ];
+
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Frontier => "Frontier",
+            Self::Village => "Village",
+            Self::Sky => "Sky",
+            Self::Mystery => "Mystery",
+            Self::Home => "Home",
+            Self::Night => "Night",
+            Self::Pilot => "On foot",
+            Self::Crew => "Crew",
+        }
+    }
+}
+
+/// One beat of an arc, as the story tells it (one per quest stage).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArcStep {
+    /// The journal's story text while this beat is current (arc variables).
+    pub journal: &'static str,
+    /// What the giver says if you look in on them during this beat.
+    pub nudge: &'static str,
+    /// What the contact says when a [`Objective::Speak`] beat finds them (empty otherwise).
+    pub contact: &'static str,
 }
 
 /// A kind of place the world offers stories.
@@ -145,6 +251,7 @@ impl WorldFactKind {
                 Self::of_feature(FeatureKind::PointOfInterest, Some(kind))
             }
             TargetSpec::Feature { kind, .. } => Self::of_feature(kind, None),
+            TargetSpec::Story(_) => None,
         }
     }
 }
@@ -285,6 +392,8 @@ pub enum Trigger {
     Problem(VillageProblem),
     /// The player has done this.
     History(HistoryKind),
+    /// They work this trade.
+    Role(Role),
 }
 
 impl Trigger {
@@ -298,6 +407,7 @@ impl Trigger {
             Self::Relationship(_) => 22,
             Self::Fear(_) => 20,
             Self::History(_) => 18,
+            Self::Role(_) => 16,
             Self::Quirk(_) => 14,
             Self::Value(_) => 10,
         }
@@ -321,6 +431,9 @@ pub enum SeedSource {
     },
     Problem(VillageProblem),
     History(String),
+    Role(Role),
+    /// A follow-up the giver promised after an earlier arc.
+    FollowUp(ArcId),
 }
 
 /// A slot an arc binds when seeded.
@@ -379,6 +492,12 @@ pub enum ArcEffect {
     Remember,
     /// Another arc becomes available from the same giver.
     FollowUp(ArcId),
+    /// Extra credits on top of the quest reward.
+    Credits(u32),
+    /// A cosmetic unlock (the garage paint bay).
+    Cosmetic(CosmeticItem),
+    /// Goodwill with everyone in the giver's settlement.
+    Settlement(i16),
 }
 
 /// One ending of an arc.
@@ -387,6 +506,11 @@ pub struct ArcOutcome {
     pub label: &'static str,
     pub when: OutcomeWhen,
     pub effects: &'static [ArcEffect],
+    /// What the giver says when this ending is chosen (arc variables; the default ending
+    /// uses the template's thanks when empty).
+    pub line: &'static str,
+    /// The journal's last word on the story (arc variables).
+    pub epilogue: &'static str,
 }
 
 /// An authored arc. See the module docs.
@@ -394,6 +518,10 @@ pub struct ArcOutcome {
 pub struct ArcTemplate {
     pub id: ArcId,
     pub title: &'static str,
+    pub kind: ArcKind,
+    /// A `Speak` beat in the giver's own settlement goes to the person the neighbour slot bound
+    /// (a sweetheart, a rival) rather than to someone picked at random.
+    pub contact_other: bool,
     /// The setup that makes it worth doing.
     pub hook: &'static str,
     /// The turn the story takes.
@@ -401,6 +529,8 @@ pub struct ArcTemplate {
     /// How the world changes.
     pub consequence: &'static str,
     pub tier: QuestTier,
+    /// What the player must have done before anyone offers it.
+    pub prerequisites: &'static [Prerequisite],
     /// Any one of these can seed it.
     pub triggers: &'static [Trigger],
     /// Roles that suit giving it (a scoring nudge).
@@ -412,6 +542,10 @@ pub struct ArcTemplate {
     pub stages: &'static [&'static [Objective]],
     /// One title per stage.
     pub beats: &'static [&'static str],
+    /// One story step per stage.
+    pub steps: &'static [ArcStep],
+    /// The moment the last beat is done (a banner and the journal; arc variables).
+    pub climax: &'static str,
     pub twists: &'static [Twist],
     pub reward: QuestReward,
     pub outcomes: &'static [ArcOutcome],
@@ -435,6 +569,11 @@ pub const ARC_VARS: &[&str] = &[
     "depth",
     "village",
     "player",
+    "dest",
+    "where",
+    "dest2",
+    "where2",
+    "contact",
 ];
 
 impl ArcTemplate {
@@ -449,7 +588,62 @@ impl ArcTemplate {
                 Slot::Place { .. } => vars.extend(["place", "band", "depth"]),
             }
         }
+        if !self.targets.is_empty() {
+            vars.extend(["dest", "where"]);
+        }
+        if self.targets.len() >= 2 {
+            vars.extend(["dest2", "where2"]);
+        }
+        if self
+            .stages
+            .iter()
+            .flat_map(|stage| stage.iter())
+            .any(|objective| matches!(objective, Objective::Speak { .. }))
+        {
+            vars.push("contact");
+        }
         vars
+    }
+
+    /// Whether only the pilot on foot can finish it.
+    #[must_use]
+    pub fn needs_pilot(&self) -> bool {
+        self.stages
+            .iter()
+            .flat_map(|stage| stage.iter())
+            .any(|objective| objective.is_on_foot())
+    }
+
+    /// The outcome the default ending (turning in without a choice) takes.
+    #[must_use]
+    pub fn completed_outcome(&self) -> usize {
+        self.outcomes
+            .iter()
+            .position(|outcome| outcome.when == OutcomeWhen::Completed)
+            .unwrap_or(0)
+    }
+
+    /// Endings a player may pick at turn-in (the default first, then the choices), as
+    /// outcome indices.
+    #[must_use]
+    pub fn turn_in_choices(&self) -> Vec<usize> {
+        let mut choices = vec![self.completed_outcome()];
+        choices.extend(
+            self.outcomes
+                .iter()
+                .enumerate()
+                .filter(|(_, outcome)| outcome.when == OutcomeWhen::Choice)
+                .map(|(index, _)| index),
+        );
+        choices
+    }
+
+    /// The ending an abandoned arc takes, if authored.
+    #[must_use]
+    pub fn abandoned_outcome(&self) -> Option<usize> {
+        self.outcomes
+            .iter()
+            .position(|outcome| outcome.when == OutcomeWhen::Abandoned)
     }
 
     /// The arc as a quest definition the engine can bind and run, handed out by `giver` (a
@@ -462,7 +656,7 @@ impl ArcTemplate {
             giver,
             tier: self.tier,
             hook: self.hook,
-            prerequisites: &[],
+            prerequisites: self.prerequisites,
             targets: self.targets,
             stages: self.stages,
             twists: self.twists,
@@ -518,17 +712,46 @@ impl StorySeed {
                     vars.set("place", fact.kind.nouns()[0]);
                     vars.set("band", fact.band_name());
                     vars.set("depth", fact.depth().to_string());
+                    vars.set("dest", format!("the {}", fact.kind.nouns()[0]));
+                    vars.set(
+                        "where",
+                        format!("down in {}, {}m down", fact.band_name(), fact.depth()),
+                    );
                 }
                 SlotBinding::Place(_) => {}
             }
         }
+        // Before binding, story places are only known by kind.
+        if !vars.has("dest") {
+            let noun = self
+                .template()
+                .targets
+                .first()
+                .map_or("place", |target| target.noun());
+            vars.set("dest", format!("the {noun}"));
+            vars.set("where", "not far from here");
+        }
+        if let Some(target) = self.template().targets.get(1) {
+            vars.set("dest2", format!("the {}", target.noun()));
+            vars.set("where2", "a little further on");
+        }
+        vars.set("contact", "someone I know there");
         vars
     }
 
     fn line(&self, lines: &ToneLines, giver: &Character, village: &str, player: &str) -> String {
         let mut rng = PeopleRng::new(giver.voice_seed, salt::STORY, u64::from(self.arc.0), 1);
         let tone: Tone = giver.tone;
-        let template = rng.pick(lines.get(tone));
+        let options = lines.get(tone);
+        if options.is_empty() {
+            // No authored thanks: the default ending's own line.
+            let template = self.template();
+            let ending = template.outcomes.get(template.completed_outcome());
+            return ending.map_or_else(String::new, |ending| {
+                grammar::expand(ending.line, &self.vars(giver, village, player), &mut rng)
+            });
+        }
+        let template = rng.pick(options);
         grammar::expand(template, &self.vars(giver, village, player), &mut rng)
     }
 
@@ -595,6 +818,7 @@ fn best_trigger(
                 .iter()
                 .find(|fact| kind.matches(fact))
                 .map(|fact| SeedSource::History(format!("{fact:?}"))),
+            Trigger::Role(role) if character.role == role => Some(SeedSource::Role(role)),
             _ => None,
         };
         if let Some(source) = source {
@@ -696,6 +920,9 @@ fn bind_slots(
             }
             Slot::Place { target, kind } => {
                 let spec = template.targets.get(usize::from(target))?;
+                if matches!(spec, TargetSpec::Story(_)) {
+                    return None;
+                }
                 let (first, last) = spec.bands();
                 let gap = |fact: &&WorldFact| {
                     u32::from(first.saturating_sub(fact.band))
@@ -755,7 +982,7 @@ pub fn story_seeds(
 ) -> Vec<StorySeed> {
     let mut candidates = Vec::new();
     for character in &population.characters {
-        for template in ARC_TEMPLATES {
+        for template in ARC_TEMPLATES.iter() {
             let Some((mut weight, mut source)) =
                 best_trigger(template, character, population, problems, history, true)
             else {

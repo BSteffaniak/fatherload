@@ -968,6 +968,12 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::AffinityChanged { player_id, .. }
         | GameplayEventKind::RumourMarked { player_id, .. }
         | GameplayEventKind::PeopleInteraction { player_id }
+        | GameplayEventKind::ArcOffered { player_id, .. }
+        | GameplayEventKind::ArcAccepted { player_id, .. }
+        | GameplayEventKind::ArcStepDone { player_id, .. }
+        | GameplayEventKind::ArcClimax { player_id, .. }
+        | GameplayEventKind::ArcCompleted { player_id, .. }
+        | GameplayEventKind::ArcAbandoned { player_id, .. }
         | GameplayEventKind::UpgradeInstalled { player_id, .. }
         | GameplayEventKind::MilestoneEarned { player_id, .. }
         | GameplayEventKind::ArcChained { player_id, .. }

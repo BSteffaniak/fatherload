@@ -260,6 +260,13 @@ impl CharacterState {
         }
     }
 
+    /// Shifts their mood by `delta` on `day` (a story's ending), fading like any other.
+    pub fn shift_mood(&mut self, day: u32, delta: i16) {
+        let shift = self.current_shift(day);
+        self.mood_shift = (shift + delta).clamp(-60, 60);
+        self.mood_day = day;
+    }
+
     /// Adds a reputation change heard through the grapevine (see
     /// [`super::Population::reputation_ripple`]).
     pub fn hear_about(&mut self, player: PlayerId, delta: i16) {

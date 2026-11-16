@@ -258,6 +258,38 @@ pub enum GameplayEventKind {
     PeopleInteraction {
         player_id: PlayerId,
     },
+    /// A person pitched a story arc to a player (WP-STORY; the offer waits for a yes).
+    ArcOffered {
+        player_id: PlayerId,
+        arc: crate::people::ArcId,
+    },
+    /// A player took on a story arc.
+    ArcAccepted {
+        player_id: PlayerId,
+        arc: crate::people::ArcId,
+    },
+    /// A beat of a story arc is done (`step`: the beat that just finished, from 0).
+    ArcStepDone {
+        player_id: PlayerId,
+        arc: crate::people::ArcId,
+        step: u8,
+    },
+    /// The last beat of a story arc is done: its climax lands; go back to the giver.
+    ArcClimax {
+        player_id: PlayerId,
+        arc: crate::people::ArcId,
+    },
+    /// A story arc ended at its giver with ending `outcome`.
+    ArcCompleted {
+        player_id: PlayerId,
+        arc: crate::people::ArcId,
+        outcome: u8,
+    },
+    /// A story arc was given up or failed.
+    ArcAbandoned {
+        player_id: PlayerId,
+        arc: crate::people::ArcId,
+    },
     /// An enemy noticed a rig (its tell: a screech, a beep). `x`, `y` in world pixels.
     EnemyAlerted {
         entity: u64,

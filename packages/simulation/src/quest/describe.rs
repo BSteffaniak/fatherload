@@ -95,7 +95,11 @@ pub fn quest_markers(quest: &ActiveQuest, tick: u64) -> Vec<QuestMarker> {
             | Objective::Survive { target: index, .. }
             | Objective::PickUp { target: index, .. }
             | Objective::Build { target: index, .. }
-            | Objective::RecoverLog { target: index } => {
+            | Objective::RecoverLog { target: index }
+            | Objective::OnFoot { target: index }
+            | Objective::HandDeliver { target: index, .. }
+            | Objective::Vigil { target: index, .. }
+            | Objective::Speak { target: index } => {
                 if let Some(center) = target(index) {
                     push(center, QuestMarkerKind::Target);
                 }
@@ -145,7 +149,8 @@ pub fn quest_markers(quest: &ActiveQuest, tick: u64) -> Vec<QuestMarker> {
             Objective::Deliver { .. }
             | Objective::ReachDepth { .. }
             | Objective::ReturnToSurface
-            | Objective::SplitDelivery { .. } => {}
+            | Objective::SplitDelivery { .. }
+            | Objective::Settle { .. } => {}
         }
     }
     markers
@@ -169,17 +174,36 @@ pub fn primary_marker(quest: &ActiveQuest, tick: u64) -> Option<QuestMarker> {
         .copied()
 }
 
-fn noun(def: &QuestDef, index: u8) -> &'static str {
-    def.targets
-        .get(usize::from(index))
-        .map_or("site", |spec| spec.noun())
+/// How objective lines name the quest's places: "the derelict rig (92m)" by default, or the
+/// story's own names (story arcs: "Copperhollow", "the meadow island").
+struct Places<'a> {
+    def: &'a QuestDef,
+    quest: &'a ActiveQuest,
+    names: &'a [String],
 }
 
-fn depth(quest: &ActiveQuest, index: u8) -> String {
-    quest
-        .targets
-        .get(usize::from(index))
-        .map_or_else(String::new, |target| format!(" ({}m)", target.center.y))
+impl Places<'_> {
+    /// "the derelict rig (92m)", or the story's name for it.
+    fn the(&self, index: u8) -> String {
+        if let Some(name) = self.names.get(usize::from(index)) {
+            return name.clone();
+        }
+        format!("the {}{}", self.noun(index), self.depth(index))
+    }
+
+    fn noun(&self, index: u8) -> &'static str {
+        self.def
+            .targets
+            .get(usize::from(index))
+            .map_or("site", |spec| spec.noun())
+    }
+
+    fn depth(&self, index: u8) -> String {
+        self.quest
+            .targets
+            .get(usize::from(index))
+            .map_or_else(String::new, |target| format!(" ({}m)", target.center.y))
+    }
 }
 
 /// The world row a depth objective asks for: the row bound at acceptance, or the authored row in
@@ -207,44 +231,71 @@ pub fn objective_line(
     owner: Option<&Player>,
     rate: TickRate,
 ) -> String {
+    objective_line_named(def, quest, objective, progress, owner, rate, &[])
+}
+
+/// [`objective_line`] with the story's names for the quest's places (`names[i]` names target
+/// `i`; missing names fall back to "the {noun} ({depth}m)").
+#[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one line per primitive keeps the wording in one place"
+)]
+pub fn objective_line_named(
+    def: &QuestDef,
+    quest: &ActiveQuest,
+    objective: Objective,
+    progress: &ObjectiveProgress,
+    owner: Option<&Player>,
+    rate: TickRate,
+    names: &[String],
+) -> String {
     let seconds = |ticks: u64| whole_seconds(rate, ticks);
+    let places = Places { def, quest, names };
     match objective {
         Objective::Deliver { item, count } => {
             let held = owner.map_or(0, |player| item.held(player)).min(count);
             format!("Bring {count} {} ({held}/{count})", item.name())
         }
-        Objective::Reach { target } => {
-            format!("Reach the {}{}", noun(def, target), depth(quest, target))
-        }
+        Objective::Reach { target } => format!("Reach {}", places.the(target)),
         Objective::ReachDepth { row } => format!("Dive to {}m", depth_row(row, progress)),
         Objective::Dig { target, count } => format!(
-            "Dig at the {}{} ({}/{count})",
-            noun(def, target),
-            depth(quest, target),
+            "Dig at {} ({}/{count})",
+            places.the(target),
             progress.count.min(u64::from(count))
         ),
-        Objective::Scan { target } => format!(
-            "Pulse the scanner near the {}{}",
-            noun(def, target),
-            depth(quest, target)
-        ),
-        Objective::OpenPoi { target } => {
-            format!("Open the {}{}", noun(def, target), depth(quest, target))
+        Objective::Scan { target } => {
+            format!("Pulse the scanner near {}", places.the(target))
         }
+        Objective::OpenPoi { target } => format!("Open {}", places.the(target)),
         Objective::Survive {
             target,
             seconds: needed,
         } => format!(
-            "Hold out in the {}{} ({}/{needed}s)",
-            noun(def, target),
-            depth(quest, target),
+            "Hold out in {} ({}/{needed}s)",
+            places.the(target),
             seconds(progress.count).min(u64::from(needed))
         ),
-        Objective::PickUp { target, parcel } => format!(
-            "Pick up the {parcel} at the {}{}",
-            noun(def, target),
-            depth(quest, target)
+        Objective::PickUp { target, parcel } => {
+            format!("Pick up the {parcel} at {}", places.the(target))
+        }
+        Objective::OnFoot { target } => {
+            format!("Climb out and reach {} on foot", places.the(target))
+        }
+        Objective::HandDeliver { target, parcel } => format!(
+            "Carry the {parcel} by hand to a door in {}",
+            places.the(target)
         ),
+        Objective::Vigil {
+            target,
+            seconds: needed,
+        } => format!(
+            "Keep watch at {} after dark ({}/{needed}s)",
+            places.the(target),
+            seconds(progress.count).min(u64::from(needed))
+        ),
+        Objective::Speak { target } => format!("Find the contact in {}", places.the(target)),
+        Objective::Settle { kind } => format!("Have a {} standing in your claim", kind.name()),
         Objective::ReturnToSurface => {
             if quest.carrying {
                 "Bring the parcel up to the surface".to_owned()
@@ -252,21 +303,18 @@ pub fn objective_line(
                 "Return to the surface".to_owned()
             }
         }
-        Objective::Build { target, kind } => format!(
-            "Place a {} at the {}{}",
-            kind.name(),
-            noun(def, target),
-            depth(quest, target)
-        ),
+        Objective::Build { target, kind } => {
+            format!("Place a {} at {}", kind.name(), places.the(target))
+        }
         Objective::Detonate { target, spots } => format!(
             "Bomb the marks at the {} in order ({}/{spots})",
-            noun(def, target),
+            places.noun(target),
             progress.count.min(u64::from(spots))
         ),
         Objective::RecoverLog { target } => format!(
             "Drill the {}'s core{}",
-            noun(def, target),
-            depth(quest, target)
+            places.noun(target),
+            places.depth(target)
         ),
         Objective::Simultaneous {
             spots,
@@ -294,21 +342,15 @@ pub fn objective_line(
         }
         Objective::Relay { target, .. } => {
             if progress.carrier.is_some() {
-                format!(
-                    "Carry the marker to the {}{}",
-                    noun(def, target),
-                    depth(quest, target)
-                )
+                format!("Carry the marker to {}", places.the(target))
             } else {
                 let at = progress.position.map_or(0, |position| position.y);
                 format!("Pick up the marker ({at}m) and carry it on")
             }
         }
-        Objective::HoldAndClimb { goal, .. } => format!(
-            "Hold the switch while a rig reaches the {}{}",
-            noun(def, goal),
-            depth(quest, goal)
-        ),
+        Objective::HoldAndClimb { goal, .. } => {
+            format!("Hold the switch while a rig reaches {}", places.the(goal))
+        }
         Objective::Escort { .. } => {
             let at = progress.position.map_or(0, |position| position.y);
             format!("Walk the haul up to the surface ({at}m to go)")

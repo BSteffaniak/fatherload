@@ -216,7 +216,8 @@ fn a_seat_talks_to_someone_on_the_street_and_opens_their_trade_list() {
         conversation.character,
     );
     // The trade row opens their list; Back returns to the talk, again says goodbye.
-    let trade = crate::shell::talk_choices(speaker.as_ref())
+    let story = game.world().arc_talk(FIRST, conversation.npc);
+    let trade = crate::shell::talk_choices(speaker.as_ref(), &story)
         .iter()
         .position(|choice| *choice == crate::shell::TalkChoice::Trade)
         .expect("a trade row");

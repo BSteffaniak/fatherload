@@ -18,7 +18,7 @@ use fatherload_simulation::{
 use super::{Scene, SceneStage, reveal};
 use crate::shell::{ModalScreen, VillageInterior};
 
-fn find_village(world: &WorldState, wanted: impl Fn(&Village) -> bool) -> Arc<Village> {
+pub(super) fn find_village(world: &WorldState, wanted: impl Fn(&Village) -> bool) -> Arc<Village> {
     let settings = *world.world_settings();
     for site in (1..80).flat_map(|site| [site, -site]) {
         for id in [placement::surface_id(site), placement::underground_id(site)] {
@@ -33,7 +33,7 @@ fn find_village(world: &WorldState, wanted: impl Fn(&Village) -> bool) -> Arc<Vi
 }
 
 /// Jumps the world clock to `time` (the people clock is derived from the tick).
-const fn set_time(world: &mut WorldState, time: DayTime) {
+pub(super) const fn set_time(world: &mut WorldState, time: DayTime) {
     let tick = TickClock::tick_at(time, world.tick_rate_hz(), DEFAULT_DAY_LENGTH_MINUTES);
     world.set_simulation_tick(SimulationTick::new(tick));
 }
@@ -54,13 +54,13 @@ fn park(world: &mut WorldState, player: PlayerId, x: f32, ground_row: i32) {
 }
 
 #[allow(clippy::cast_precision_loss, reason = "tile indices")]
-fn column_x(column: i32) -> f32 {
+pub(super) fn column_x(column: i32) -> f32 {
     (column as f32 + 0.5) * TILE_SIZE
 }
 
 /// A street scene in the first village `wanted` accepts, at `time`, the rig `offset` columns
 /// from the plaza's middle.
-fn street_at(
+pub(super) fn street_at(
     stage: &mut SceneStage<'_>,
     wanted: impl Fn(&Village) -> bool,
     time: DayTime,

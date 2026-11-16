@@ -36,6 +36,7 @@ mod pilot;
 mod pointer;
 mod quests;
 pub mod rewards;
+mod story;
 mod test_mode;
 mod village;
 mod world_setup;
@@ -46,11 +47,15 @@ pub use garage::{GARAGE_COUNTER_ROW, GarageDraft, GarageRow, item_available};
 pub use quests::{
     DeskRow, Fanfare, FanfareKind, desk_rows, has_quest_tab, log_quests, tracked_quest,
 };
+pub use story::{
+    JournalRow, STORY_MOMENT_TICKS, SeatJournal, StoryChoice, StoryMoment, StoryMomentKind,
+    journal_rows, story_choices,
+};
 pub use test_mode::WARP_BANDS;
 pub use village::{
     BANNER_TICKS, SeatVillage, TalkChoice, VILLAGE_COUNTER_X, VILLAGE_REACH, VillageBanner,
-    VillageInterior, building_title, gift_items, interior_village, keeper_inside, room_residents,
-    talk_choices, talk_target,
+    VillageInterior, building_title, gift_items, interior_village, interior_village_now,
+    keeper_inside, room_residents, talk_choices, talk_target,
 };
 
 pub use world_setup::{SetupOutcome, SetupPurpose, WorldSetup, random_world_seed};
@@ -138,6 +143,9 @@ pub enum ModalScreen {
     /// the deed, and inside a home its menu, decorating, storage, trophies and crafting
     /// ([`SeatUi::home`]).
     Home,
+    /// The seat's story journal (WP-STORY): stories under way with their text, stories told,
+    /// giving one up. Between the quest log and the milestones in the map's page cycle.
+    Journal,
 }
 
 impl ModalScreen {
@@ -617,6 +625,14 @@ pub enum SoundCue {
     DawnRelief,
     /// A night monster burrowing away at dawn: a puff of dust.
     Burrow,
+    /// Someone pitched a story (WP-STORY).
+    StoryHook,
+    /// A story taken on, or one of its beats done.
+    StoryQuill,
+    /// A story's climax.
+    StoryClimax,
+    /// A story's end, back with whoever told it.
+    StoryResolved,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -1020,6 +1036,10 @@ pub struct SeatUi {
     pub moon_landing: Option<u64>,
     /// Contractor-built homes: the home the seat is inside and the open home screen.
     pub home: homes::SeatHome,
+    /// The journal page's focus and armed "give up" (WP-STORY).
+    pub journal: SeatJournal,
+    /// The latest story moment card (a new story, its climax, its end).
+    pub story_moment: Option<StoryMoment>,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1063,6 +1083,8 @@ impl SeatUi {
             rewards: rewards::SeatRewards::new(),
             moon_landing: None,
             home: homes::SeatHome::new(),
+            journal: SeatJournal::new(),
+            story_moment: None,
         }
     }
 
@@ -1384,6 +1406,10 @@ impl SeatUi {
             self.handle_home_modal(input, ctx, cues, requests);
             return true;
         }
+        if modal == ModalScreen::Journal {
+            self.handle_journal(input, ctx, cues, requests);
+            return true;
+        }
         if input.backs_out() {
             self.modal = None;
             return true;
@@ -1502,7 +1528,7 @@ impl SeatUi {
                 None
             }
             ModalScreen::QuestLog => {
-                self.open_modal(ModalScreen::Achievements);
+                self.open_modal(ModalScreen::Journal);
                 None
             }
             ModalScreen::Achievements => {
@@ -1588,7 +1614,8 @@ impl SeatUi {
             | ModalScreen::PersonGift
             | ModalScreen::BaseModule
             | ModalScreen::Colony
-            | ModalScreen::Home => None,
+            | ModalScreen::Home
+            | ModalScreen::Journal => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len()
@@ -2452,6 +2479,25 @@ impl ShellState {
         let seat_ctx = ctx.seat(seat, self.prompt_device(seat));
         if let Some(state) = self.seats.get_mut(seat) {
             state.service_resolved(request, applied, seat_ctx, &mut self.sound_cues);
+        }
+    }
+
+    /// Puts up a story moment card for seat `seat` (WP-STORY).
+    pub fn story_moment(
+        &mut self,
+        seat: usize,
+        kind: StoryMomentKind,
+        title: impl Into<String>,
+        text: impl Into<String>,
+    ) {
+        let tick = self.update_ticks;
+        if let Some(state) = self.seats.get_mut(seat) {
+            state.story_moment = Some(StoryMoment {
+                kind,
+                title: title.into(),
+                text: text.into(),
+                tick,
+            });
         }
     }
 

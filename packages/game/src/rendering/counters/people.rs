@@ -124,7 +124,8 @@ pub(in crate::rendering) fn draw_village_talk(
                     SectionItem::text(format!("{}: \"{}\"", who.character.name.short(), line.text))
                 }
                 Speaker::You => SectionItem::text(format!("You: {}", line.text)),
-                Speaker::Note => SectionItem::stat("", line.text.clone(), GOLD),
+                // Notes wrap (a story's title can run long).
+                Speaker::Note => SectionItem::text(format!("> {}", line.text)),
             })
             .collect()
     });
@@ -134,7 +135,7 @@ pub(in crate::rendering) fn draw_village_talk(
             who.character.name.short()
         )));
     }
-    let choices: Vec<Offer> = shell::talk_choices(Some(&who.character))
+    let choices: Vec<Offer> = shell::talk_choices(Some(&who.character), &ui.view.arc_talk)
         .into_iter()
         .map(|choice| choice_row(ui, &who, choice))
         .collect();
@@ -158,6 +159,7 @@ pub(in crate::rendering) fn draw_village_talk(
 fn choice_row(ui: &UiFrame<'_, '_>, who: &Who, choice: TalkChoice) -> Offer {
     let name = who.character.name.short();
     match choice {
+        TalkChoice::Story(story) => story_row(ui, name, story),
         TalkChoice::Topic(topic) => {
             use fatherload_simulation::people::TalkTopic;
             let (icon, about) = match topic {
@@ -201,6 +203,59 @@ fn choice_row(ui: &UiFrame<'_, '_>, who: &Who, choice: TalkChoice) -> Offer {
         }
         TalkChoice::Goodbye => Offer::new(&menu_icons::BACK, choice.label(), "")
             .about(format!("Leave {name} to their day.")),
+    }
+}
+
+/// A story row of the talk panel: asking, taking a story on, or how it ended.
+fn story_row(ui: &UiFrame<'_, '_>, name: &str, story: shell::StoryChoice) -> Offer {
+    use fatherload_simulation::world::ArcTalk;
+    let arc = match &ui.view.arc_talk {
+        ArcTalk::HasWork(arc)
+        | ArcTalk::Pitched(arc)
+        | ArcTalk::Running(arc)
+        | ArcTalk::Ready { arc, .. } => Some(*arc),
+        ArcTalk::Nothing => None,
+    };
+    let template = arc.and_then(fatherload_simulation::people::ArcId::template);
+    let title = template.map_or("", |template| template.title);
+    match story {
+        shell::StoryChoice::Ask { running: false } => {
+            Offer::new(&menu_icons::BOOK, story.label(), "a story").about(format!(
+                "{name} has something on their mind. Ask, and they'll tell you."
+            ))
+        }
+        shell::StoryChoice::Ask { running: true } => {
+            Offer::new(&menu_icons::BOOK, story.label(), title.to_owned()).about(format!(
+                "Ask {name} how \"{title}\" stands, and what to do next."
+            ))
+        }
+        shell::StoryChoice::Accept => {
+            let full = ui.player.quests.arcs.active.len()
+                >= fatherload_simulation::people::story::run::MAX_ACTIVE_ARCS;
+            Offer::new(&menu_icons::CONTRACT, story.label(), title.to_owned())
+                .unavailable_if(full)
+                .about(if full {
+                    "Your journal is full: finish or give up a story first.".to_owned()
+                } else {
+                    format!("Take on \"{title}\". It goes in your journal.")
+                })
+        }
+        shell::StoryChoice::Ending { outcome, .. } => {
+            let ending = template.and_then(|template| template.outcomes.get(usize::from(outcome)));
+            let default = ending.is_some_and(|ending| {
+                ending.when == fatherload_simulation::people::story::OutcomeWhen::Completed
+            });
+            Offer::new(
+                if default {
+                    &menu_icons::READY
+                } else {
+                    &menu_icons::SPLIT
+                },
+                story.label(),
+                if default { "the ending" } else { "another way" },
+            )
+            .about(format!("Tell {name} how \"{title}\" ends."))
+        }
     }
 }
 

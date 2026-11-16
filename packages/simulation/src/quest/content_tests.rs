@@ -463,6 +463,8 @@ fn candidate_count(spec: super::TargetSpec, terrain: &Terrain, origin: TilePosit
             .iter()
             .filter(|feature| in_bands(feature))
             .count(),
+        // Story places always bind (each has a fallback).
+        super::TargetSpec::Story(_) => 1,
     }
 }
 

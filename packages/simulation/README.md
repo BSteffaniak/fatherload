@@ -1117,7 +1117,8 @@ nothing about it is saved or replicated except what players did there.
   `village::village(settings, id)`, `villages_between`, `village_at(position)`,
   `building_at(x, y)`, `nearest_village`, `village_identity` (name and culture without building
   the village), and `village_facts` (the story-worthy `WorldFact`s within 160 columns, cached
-  per village; `Village::story_seeds` feeds them to `people::story_seeds` with the village's
+  per village; `Village::story_seeds` feeds them to `people::story_seeds` (WP-STORY's
+  `people::story::run::offer_for` picks each person's arc at play time) with the village's
   problem).
 - **Services** (`village::services`, `world/villages.rs`): `Village::offers(building)` lists a
   counter's `VillageOffer`s (a `VillageDeal` and a flat price, or 0 for metered deals). They are
@@ -1461,7 +1462,7 @@ villages, camps, homes and lit bases are safe; Peaceful turns it off (plan §11 
   under a full moon and about 220 on a new moon once the alpha finds it; under a lamp, nothing.
 - **Formats**: the ledger rides inside the `EnemyDirector` (serde default; the `Enemies`
   section; hashed with it). `PROTOCOL_VERSION` 12 (new enemy, shot, material, tile and deal
-  variants and events 240-243) and save format 10 (version 9 files load as is).
+  variants and events 250-253) and save format 10 (version 9 files load as is).
 
 `world/night_tests.rs` covers rising after dusk and burrowing at dawn, nothing by day,
 underground, in town or on Peaceful, safety by lamps, palisades, homes, camps, villages and the
@@ -1725,6 +1726,103 @@ above.
 - **Formats:** `PROTOCOL_VERSION` 11 (NPC entities, `PlayerCommand::People`, the `People`
   section, events 140-145) and save format 9 (the `people` ledger; version 8 files load).
 
+## Story arcs (`src/people/story.rs`, `src/people/story/`, `src/world/arcs.rs`)
+
+Expansion plan WP-STORY (wave 4, T26), on the people framework and the quest engine. Arcs are
+authored data; everything at play time is a pure function of the settings, the regional feature
+index, the giver (rebuilt from the seed) and the player's `ArcLog`, so every peer agrees.
+
+- **Arc grammar** (`people::story`): an `ArcTemplate` has an id (stable, saved), title,
+  `ArcKind` (Frontier, Village, Sky, Mystery, Home, Night, Pilot, Crew), hook / twist /
+  consequence, tier, quest `Prerequisite`s, `Trigger`s (want, fear, value, quirk, relationship,
+  absent person, village problem, player history, role), role nudges, `Slot`s (an absent
+  person, a neighbour, a world fact for a target), quest `TargetSpec`s and stages of
+  `Objective`s, one beat title and one `ArcStep` per stage (`journal` story text, the giver's
+  `nudge`, and the `contact`'s line for a `Speak` beat), a `climax`, twists, a `QuestReward`,
+  `ArcOutcome`s (the default ending, chosen endings, an abandoned ending; each with `effects`,
+  the giver's `line` and the journal `epilogue`), a `pitch` in every voice (`voices(terse, warm,
+  soft)`: gruff/dry, cheerful/earnest, nervous/poetic; the dialogue tone filter colours each),
+  optional per-tone thanks, and `contact_other` (a `Speak` beat at home goes to the neighbour
+  slot's person). Text variables (`ARC_VARS`): giver, village, player, focus/focus_relation,
+  other/other_word, place/band/depth (the first place slot's target), dest/where (target 0),
+  dest2/where2 (target 1), contact.
+- **Content** (`story/arcs.rs`, `story/arcs/*.rs`): 67 arcs in batches (first 8; frontier 101-110;
+  village 201-210; sky 301-308; mystery 401-408, a chain from "Blue Lights Below" to "The Heart
+  of the Moon" that ties the deep's lights and hum to the Moon; home 501-506; night 601-607;
+  pilot 701-707; crew 801-803). `ARC_TEMPLATES` chains `arcs::BATCHES`; each arc runs on the
+  quest engine as `QuestId(ARC_QUEST_BASE + id)` (`ARC_QUEST_BASE` 20,000;
+  `QuestId::def`/`QuestId::arc`, `ArcId::quest`).
+- **Story places** (`quest::StoryPlace`, `TargetSpec::Story`, bound in `quest::binding`): the
+  nearest other surface village (else the town), an underground hall (else a cavern), a camp
+  (else a village, else the town), the town, the giver's home, a sky island (else the highest
+  ridge within 240 columns), a sky continent (else an island, else the ridge) and the Moon
+  (else the deepest chamber), all through regional queries from the giver's settlement
+  (`bind_quest_from` returns what each target bound to as a `BoundTarget`). Every arc binds on
+  V5-V8 worlds, with and without sky (lint); worlds without a sky don't offer sky-continent
+  arcs.
+- **New objective primitives** (`quest::Objective`): `OnFoot` (the pilot reaches the target),
+  `HandDeliver` (the pilot at a building door, a town counter or a camp's fire inside the
+  target), `Vigil` (seconds at the target counted only at night), `Speak` (talk to the arc's
+  contact; bound without one, reaching the target counts) and `Settle` (a base module of a kind
+  standing in a claim the owner holds; WP-HOME's homes are claims too). Pilot primitives read
+  `actor_tile`; markers and objective lines cover all of them (`describe::objective_line_named`
+  names places the story's way).
+- **Runtime** (`people::story::run`): `offer_for` (a promised follow-up first, else the best
+  trigger score with role fit and a jitter rotated every `OFFER_ROTATION_DAYS`; arcs finished
+  with this giver, running, locked by prerequisites are skipped, ones finished with someone
+  else score lower), `bind_arc` (binds from the giver's settlement, names every place as an
+  `ArcPlace`, picks the `ArcContact`, starts relays at the giver), `ArcCast` (text kept as text:
+  `vars`, `render`, `voiced`), `ArcRun` (cast + the `ActiveQuest`; `journal_text`,
+  `story_so_far`, `objective_lines`), `ArcRecord` (history; `epilogue`), `ending_reply`, and
+  the `ArcLog` (open `offer`, `active` (at most `MAX_ACTIVE_ARCS` = 3), `history`, promised
+  `follow_ups`, `finished`).
+- **Rules** (`world/arcs.rs`): `PeopleCommand::AskWork { npc }` pitches (binding the offer) or
+  nudges / asks how it went; `AcceptArc { npc }`; `TurnInArc { npc, outcome }` (only an outcome
+  of `ArcTemplate::turn_in_choices`; deliveries handed over; the quest reward paid with its
+  reputation as goodwill; the ending's `ArcEffect`s: `Reputation`, `Mood`, `Prosperity` (the
+  ledger's `prosperity` per settlement), `Relationship` (the ledger's `bonds`), `UnlockOffer`
+  (the journal's `unlocked`: that person's rows sell as to a friend), `FollowUp`, `Credits`,
+  `Cosmetic`, `Settlement` (goodwill with every resident); the giver remembers
+  `MemoryFact::ArcCompleted`, word spreads); `AbandonArc { arc }` (anywhere; the abandoned
+  ending, `MemoryFact::ArcAbandoned`). Arcs step inside `advance_quests` (a failed twist loses
+  the arc); a `Speak` beat lands when the player talks to the contact (`arc_contact_lines`).
+  Queries: `arc_log`, `arc_talk(player, npc)` (`ArcTalk`: nothing / has work / pitched /
+  running / ready with endings), `arc_offer`, `arc_markers`.
+- **State**: the `ArcLog` is `QuestLog::arcs` (private loadout; saved; serde default); the
+  ledger's `prosperity`, `bonds` and `PersonJournal::unlocked` are public (`People` section).
+- **Events** (codes 260-265): `ArcOffered`, `ArcAccepted`, `ArcStepDone`, `ArcClimax`,
+  `ArcCompleted`, `ArcAbandoned`. Audio: a curious hook, a quill per beat, a music-box climax,
+  a warm cadence at the end (patches `story_hook`, `story_quill`, `story_climax`,
+  `story_resolved`).
+- **Report**: `people::report::arc_report` behind `fatherload --story-report --arcs`.
+
+Tests: `people/story/arc_tests.rs` (shape, text and variable lints, no reused lines, honest
+kinds, variety of beat shapes and primitives, no dead ends, rewards in bounds, every arc offered
+by someone across 240 villages, follow-ups and prerequisites, every arc binding and rendering on
+V5-V8 worlds with stand-ins where there is no sky, deterministic binding, memories) and
+`world/arc_tests.rs` (pitch and take on, reach, every arc played through the tick to its climax
+by a bot (going places, talking to contacts, keeping night watches, walking on foot; digging and
+bombing marked done as the quest engine's own tests cover them), endings with rewards, memory
+and history, giving up, saves (old saves load), replication of the loadout and ledger,
+determinism, two seats with their own stories).
+
+## Wave 4 seams: stories (T26)
+
+- **Homes (T24):** `Objective::Settle` counts any module in a claim the owner holds; a
+  contracted home is a claim, so home arcs complete with WP-HOME's houses too. Contractor arcs
+  read `people::contractor` roles through triggers (Smith, Apprentice, Mechanic...).
+- **Night (T25):** `Objective::Vigil` counts while `WorldState::is_night()`; night arcs need no
+  monsters, and peaceful worlds keep them.
+- **Sky / Moon (T20-T22):** sky places bind to `FeatureKind::SkyIsland`, `SkyContinent` and
+  `Moon` regional features; new sky towns become ordinary settlements if they are
+  `village`/`routine` settlements (then they give stories and are contacts). A sky-town
+  `StoryPlace` can be added next to `Village`.
+- **Pilot (T23):** `OnFoot` and `HandDeliver` read `is_on_foot` / `actor_tile`; crawlways and
+  lever ruins can become `Feature` targets once a generator places them.
+- **Formats:** `PROTOCOL_VERSION` 12 (the people commands, objectives, story places, arc log in
+  the loadout, ledger story marks, events 260-265) and save format 10 (serde defaults: version
+  8 and 9 files load).
+
 ## Upgrade rewards and milestones (`src/milestone.rs`, `src/upgrade_preview.rs`, `src/world/milestones.rs`)
 
 WP-FEEL part 2 (wave 3, T18). Deterministic rules only; the game draws the moments.
@@ -1898,7 +1996,7 @@ Where the wave 2 tracks meet, for the tracks that build on them:
 
 ## Wave 4 seams: the night (T25)
 
-- **Event codes** 240-243 (`NightFell`, `NightSurvived`, `RareNightSpawn`,
+- **Event codes** 250-253 (`NightFell`, `NightSurvived`, `RareNightSpawn`,
   `NightMonsterBurrowed`).
 - **Enemy kinds** are appended to `EnemyKind` (and `EnemyKind::ALL`); sky and Moon enemies
   (T21, T22) append after them. Cave-habitat and safe-zone matches list them explicitly.
@@ -2113,11 +2211,11 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
 | Op log | per-player discovery | the owner only |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount), the rig's cosmetics and its mounted weapon | everyone |
-| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, weapon rack, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
+| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, weapon rack, kits, rig parts, POI journal, quest log (solo quests, story arcs, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
 | On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | everyone |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
-| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes), the world clock (`SectionKey::Clock`: day length, skipped nights, sleep rule, sleepers), people (character memories, conversations, perks) | everyone |
+| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, story arcs, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes), the world clock (`SectionKey::Clock`: day length, skipped nights, sleep rule, sleepers), people (character memories, conversations, perks, story marks) | everyone |
 
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is

@@ -30,6 +30,14 @@ pub const RUMOUR_RADIUS_COLUMNS: i32 = 320;
 const CHART_REVEAL_RADIUS: i32 = 6;
 
 impl WorldState {
+    /// Village `id` as it stands now: generated, then with the prosperity stories gave it
+    /// (WP-STORY `Prosperity` endings; see [`crate::people::PeopleLedger::village_now`]).
+    /// Counters price their deals from this.
+    #[must_use]
+    pub fn village_now(&self, id: VillageId) -> Option<Arc<Village>> {
+        village::village(self.terrain.settings(), id).map(|found| self.people.village_now(found))
+    }
+
     /// The village `player_id`'s rig is in, if any.
     #[must_use]
     pub fn player_village(&self, player_id: PlayerId) -> Option<Arc<Village>> {
@@ -85,7 +93,7 @@ impl WorldState {
         offer: u8,
         service: VillageService,
     ) -> PlayerScopedCommandOutcome {
-        let Some(found) = village::village(self.terrain.settings(), village_id) else {
+        let Some(found) = self.village_now(village_id) else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
         let building = usize::from(building);

@@ -22,6 +22,9 @@ use crate::{
 
 mod altitude;
 #[cfg(test)]
+mod arc_tests;
+mod arcs;
+#[cfg(test)]
 mod base_tests;
 mod bases;
 #[cfg(test)]
@@ -138,6 +141,7 @@ mod visibility;
 mod weapon_tests;
 mod weapons;
 
+pub use arcs::{ArcTalk, tile_center_px};
 pub use bases::{BuildQuote, TOWN_NO_BUILD_MARGIN, TOWN_NO_BUILD_ROWS, payment_for};
 pub use discovery::{DiscoveredTiles, Discovery};
 pub use enemies::{JOLT_MILLIS, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES, TURRET_MOUNTS};

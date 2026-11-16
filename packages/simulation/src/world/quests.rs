@@ -35,6 +35,8 @@ const ESCORT_RADIUS: i32 = 4;
 const STAY_DOWN_ARM_ROWS: i32 = 6;
 /// Rows a relay leg must cover before the marker can go back to the rig that handed it over.
 const RELAY_MIN_LEG_ROWS: i32 = 4;
+/// How close (tiles) to a camp's fire a hand delivery counts (camps have no doors).
+const HAND_DELIVER_REACH: i32 = 3;
 
 /// The window (ms) a simultaneous objective allows. A crew with a rig for every spot gets the
 /// tight crew window; a crew short of rigs gets a window stretched toward the solo one for each
@@ -66,7 +68,7 @@ pub(super) struct QuestNotes {
 
 /// Facts read from the tick's events.
 #[derive(Default)]
-struct EventFacts {
+pub(super) struct EventFacts {
     scanned: BTreeSet<PlayerId>,
     bombed: BTreeSet<PlayerId>,
     rescued: BTreeSet<PlayerId>,
@@ -533,10 +535,9 @@ impl WorldState {
     ) {
         self.track_quest_history();
         let any_active = !self.progression.crew_quests.active.is_empty()
-            || self
-                .players
-                .values()
-                .any(|player| !player.quests.active.is_empty());
+            || self.players.values().any(|player| {
+                !player.quests.active.is_empty() || !player.quests.arcs.active.is_empty()
+            });
         if !any_active {
             return;
         }
@@ -562,8 +563,76 @@ impl WorldState {
         crew.retain_mut(|quest| self.step_quest_or_fail(quest, tick, notes, &facts, &mut events));
         crew.append(&mut self.progression.crew_quests.active);
         self.progression.crew_quests.active = crew;
+        self.advance_arcs(tick, notes, &facts, &mut events);
         for event in events {
             output.push_event(event);
+        }
+    }
+
+    /// Steps every running story arc's quest (WP-STORY) like any other quest, telling its
+    /// stages as arc events: a beat done, the climax, or (a twist failed it) the arc lost.
+    fn advance_arcs(
+        &mut self,
+        tick: u64,
+        notes: &QuestNotes,
+        facts: &EventFacts,
+        events: &mut Vec<GameplayEventKind>,
+    ) {
+        let owners: Vec<PlayerId> = self
+            .players
+            .iter()
+            .filter(|(_, player)| !player.quests.arcs.active.is_empty())
+            .map(|(id, _)| *id)
+            .collect();
+        for owner in owners {
+            let Some(player) = self.players.get_mut(&owner) else {
+                continue;
+            };
+            let runs = std::mem::take(&mut player.quests.arcs.active);
+            let mut kept = Vec::with_capacity(runs.len());
+            let mut lost = Vec::new();
+            for mut run in runs {
+                let stage = run.quest.stage;
+                let mut quest_events = Vec::new();
+                let alive =
+                    self.step_quest_or_fail(&mut run.quest, tick, notes, facts, &mut quest_events);
+                for event in quest_events {
+                    events.push(match event {
+                        GameplayEventKind::QuestStageDone { player_id, .. } => {
+                            GameplayEventKind::ArcStepDone {
+                                player_id,
+                                arc: run.arc(),
+                                step: stage,
+                            }
+                        }
+                        GameplayEventKind::QuestReady { player_id, .. } => {
+                            GameplayEventKind::ArcClimax {
+                                player_id,
+                                arc: run.arc(),
+                            }
+                        }
+                        GameplayEventKind::QuestFailed { player_id, .. } => {
+                            GameplayEventKind::ArcAbandoned {
+                                player_id,
+                                arc: run.arc(),
+                            }
+                        }
+                        other => other,
+                    });
+                }
+                if alive {
+                    kept.push(run);
+                } else {
+                    lost.push(run);
+                }
+            }
+            if let Some(player) = self.players.get_mut(&owner) {
+                kept.append(&mut player.quests.arcs.active);
+                player.quests.arcs.active = kept;
+            }
+            for run in lost {
+                self.arc_lost(owner, run);
+            }
         }
     }
 
@@ -753,6 +822,71 @@ impl WorldState {
         let ticks = |millis: u64| self.timing.ticks_for_millis(millis);
         match objective {
             Objective::Deliver { .. } => {}
+            Objective::OnFoot { target: index } => {
+                if let Some(target) = target(index) {
+                    let arrived = self.actors_inside(rigs, target, 2, true);
+                    if !arrived.is_empty() {
+                        helpers.extend(arrived);
+                        progress.done = true;
+                    }
+                }
+            }
+            Objective::HandDeliver { target: index, .. } => {
+                if let Some(target) = target(index) {
+                    let at_door =
+                        self.actors_inside(rigs, target, 2, true)
+                            .into_iter()
+                            .find(|id| {
+                                self.player_village_building(*id).is_some()
+                                    || self.player_surface_zone(*id).is_some()
+                                    || self.actor_tile(*id).is_some_and(|tile| {
+                                        tile_distance(tile, target.center) <= HAND_DELIVER_REACH
+                                    })
+                            });
+                    if let Some(id) = at_door {
+                        helpers.push(id);
+                        progress.done = true;
+                    }
+                }
+            }
+            Objective::Vigil {
+                target: index,
+                seconds,
+            } => {
+                if let Some(target) = target(index)
+                    && self.is_night()
+                {
+                    let present = self.actors_inside(rigs, target, 2, false);
+                    if !present.is_empty() {
+                        progress.count += 1;
+                        helpers.extend(present);
+                    }
+                }
+                progress.done = progress.count >= ticks(u64::from(seconds) * 1_000);
+            }
+            Objective::Speak { target: index } => {
+                // The people tick marks a found contact; a place nobody lives in counts on
+                // arrival.
+                if crate::people::story::run::speak_reaches(progress)
+                    && let Some(target) = target(index)
+                {
+                    let arrived = self.actors_inside(rigs, target, 1, false);
+                    if !arrived.is_empty() {
+                        helpers.extend(arrived);
+                        progress.done = true;
+                    }
+                }
+            }
+            Objective::Settle { kind } => {
+                let owner = quest.owner;
+                progress.done = self.bases.modules().any(|module| {
+                    module.kind == kind
+                        && self
+                            .bases
+                            .claim(module.claim)
+                            .is_some_and(|claim| claim.owner == owner)
+                });
+            }
             Objective::Reach { target: index } => {
                 if let Some(target) = target(index) {
                     let arrived: Vec<PlayerId> = inside(target, 1).collect();
@@ -1106,6 +1240,23 @@ impl WorldState {
         }
     }
 
+    /// The counted players standing (in person: the pilot on foot, else the rig) inside
+    /// `target` grown by `margin`; `on_foot` counts only pilots.
+    fn actors_inside(
+        &self,
+        rigs: &[(PlayerId, TilePosition)],
+        target: QuestTarget,
+        margin: i32,
+        on_foot: bool,
+    ) -> Vec<PlayerId> {
+        let area = target.bounds.expanded(margin);
+        rigs.iter()
+            .filter(|(id, _)| !on_foot || self.is_on_foot(*id))
+            .filter(|(id, _)| self.actor_tile(*id).is_some_and(|tile| area.contains(tile)))
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
     /// The haul's next tile on the shortest open path to the surface, if any.
     fn escort_step(&self, from: TilePosition) -> Option<TilePosition> {
         const REACH: i32 = 70;
@@ -1172,7 +1323,7 @@ impl WorldState {
     clippy::cast_sign_loss,
     reason = "hull is a small non-negative quantized value"
 )]
-fn hull_tenths(hull: f32) -> u32 {
+pub(super) fn hull_tenths(hull: f32) -> u32 {
     (hull.max(0.0) * 10.0).round() as u32
 }
 

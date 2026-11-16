@@ -506,7 +506,110 @@ impl LocalGame {
         self.announce_moon(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
+        self.announce_stories(&players);
         self.announce_rewards(&players);
+    }
+
+    /// Story moments for local seats (WP-STORY): the card when a story is taken on, reaches
+    /// its climax, ends or is let go, and the next beat's text when a beat is done.
+    fn announce_stories(&mut self, players: &[PlayerId]) {
+        use crate::shell::StoryMomentKind;
+        let world = self.runtime.world();
+        let mut moments: Vec<(usize, StoryMomentKind, String, String)> = Vec::new();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+            let running = |player: PlayerId, arc| {
+                world
+                    .arc_log(player)
+                    .and_then(|log| log.running(arc))
+                    .cloned()
+            };
+            match gameplay.kind {
+                GameplayEventKind::ArcAccepted { player_id, arc } => {
+                    if let (Some(seat), Some(run)) = (seat_of(player_id), running(player_id, arc))
+                        && let Some(template) = run.template()
+                    {
+                        moments.push((
+                            seat,
+                            StoryMomentKind::Begun,
+                            template.title.to_owned(),
+                            run.journal_text(),
+                        ));
+                    }
+                }
+                GameplayEventKind::ArcStepDone { player_id, arc, .. } => {
+                    if let (Some(seat), Some(run)) = (seat_of(player_id), running(player_id, arc))
+                        && let Some(template) = run.template()
+                    {
+                        messages
+                            .push((seat, format!("{}: {}", template.title, run.journal_text())));
+                    }
+                }
+                GameplayEventKind::ArcClimax { player_id, arc } => {
+                    if let (Some(seat), Some(run)) = (seat_of(player_id), running(player_id, arc))
+                        && let Some(template) = run.template()
+                    {
+                        moments.push((
+                            seat,
+                            StoryMomentKind::Climax,
+                            template.title.to_owned(),
+                            run.journal_text(),
+                        ));
+                        messages.push((
+                            seat,
+                            format!(
+                                "{}: go back to {} in {}.",
+                                template.title, run.cast.giver_name, run.cast.home
+                            ),
+                        ));
+                    }
+                }
+                GameplayEventKind::ArcCompleted { player_id, arc, .. }
+                | GameplayEventKind::ArcAbandoned { player_id, arc } => {
+                    let lost = matches!(gameplay.kind, GameplayEventKind::ArcAbandoned { .. });
+                    let Some(seat) = seat_of(player_id) else {
+                        continue;
+                    };
+                    let record = world.arc_log(player_id).and_then(|log| {
+                        log.history
+                            .iter()
+                            .rev()
+                            .find(|record| record.cast.arc == arc)
+                    });
+                    if let (Some(record), Some(template)) = (record, arc.template()) {
+                        let text = if lost && record.ending().is_none() {
+                            format!(
+                                "You let this one go. {} hasn't forgotten.",
+                                record.cast.giver_name
+                            )
+                        } else {
+                            record.epilogue()
+                        };
+                        moments.push((
+                            seat,
+                            if lost {
+                                StoryMomentKind::Lost
+                            } else {
+                                StoryMomentKind::Ended
+                            },
+                            template.title.to_owned(),
+                            text,
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (seat, kind, title, text) in moments {
+            self.shell.story_moment(seat, kind, title, text);
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
     }
 
     /// Quest news for local seats: the owner's banner when a job is done, paid, failed or a

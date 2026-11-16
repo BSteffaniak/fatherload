@@ -117,7 +117,8 @@ impl WorldState {
     }
 
     /// Whether night monsters leave `tile` alone (see the module docs): off the open surface,
-    /// the town, villages, infrastructure, camps, homes, palisade-fenced claims and lit spots.
+    /// the town, villages, infrastructure, camps, bed claims, contractor-built home plots (T24),
+    /// palisade-fenced claims and lit spots.
     #[must_use]
     pub fn night_safe_zone(&self, tile: TilePosition) -> bool {
         let surface = self.terrain.surface_row(tile.x);
@@ -139,6 +140,7 @@ impl WorldState {
         if crate::worldgen::streamed::in_village_area(settings, tile, VILLAGE_SAFE_TILES)
             || self.near_camp(tile)
             || self.in_home_claim(tile)
+            || self.homes.is_safe_zone(tile)
             || self.palisade_guarded(tile)
         {
             return true;

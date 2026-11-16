@@ -352,7 +352,196 @@ fn source_text(source: &SeedSource, population: &Population) -> String {
         SeedSource::Absent { fate, name } => format!("{name} ({fate:?})"),
         SeedSource::Problem(problem) => format!("village problem: {problem:?}"),
         SeedSource::History(fact) => format!("player history: {fact}"),
+        SeedSource::Role(role) => format!("works as a {}", role.name()),
+        SeedSource::FollowUp(arc) => format!(
+            "a promised follow-up to \"{}\"",
+            arc.template()
+                .map_or("an earlier story", |template| template.title)
+        ),
     }
+}
+
+/// A player who has done everything (every arc's prerequisites met), for the arc report.
+fn veteran() -> crate::player::Player {
+    let mut player = crate::player::Player::new(0.0, 0.0);
+    player.fuel_tank_level = crate::economy::MAX_UPGRADE_LEVEL;
+    player.engine_level = crate::economy::MAX_UPGRADE_LEVEL;
+    player.drill_strength = crate::economy::MAX_UPGRADE_LEVEL;
+    player.quests.deepest_row = 100_000;
+    player
+}
+
+/// The full-arcs report (`fatherload --story-report --arcs`).
+///
+/// Walks the surface villages of the world `settings` describe, east and west of town, asks
+/// each resident what story they have for a seasoned player, binds it to the real world from
+/// their village exactly as play would, and prints it whole: the pitch in their voice, every
+/// beat's journal text, nudge and contact, the climax, and every ending's reply and epilogue.
+/// Stops after `count` arcs.
+#[must_use]
+pub fn arc_report(settings: &crate::worldgen::WorldSettings, count: usize) -> String {
+    use super::story::run::{BindContext, OfferContext, bind_arc, ending_reply, offer_for};
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "Fatherload arc report: seed {}, generator {:?}, up to {count} arcs\n",
+        crate::worldgen::format_seed(settings.seed),
+        settings.generator
+    );
+    if !settings.generator.has_villages() {
+        let _ = writeln!(
+            out,
+            "(this generator has no villages, so nobody offers stories)"
+        );
+        return out;
+    }
+    let terrain = crate::terrain::Terrain::generate(settings);
+    let player = veteran();
+    let journal = crate::poi::PoiJournal::default();
+    let taken = std::collections::BTreeSet::new();
+    let mut printed = 0;
+    let mut kinds: BTreeMap<&'static str, usize> = BTreeMap::new();
+    let mut seen_arcs = std::collections::BTreeSet::new();
+    'villages: for step in 1..=40_i32 {
+        for site in [step, -step] {
+            let Some(found) =
+                crate::village::village(settings, crate::village::placement::surface_id(site))
+            else {
+                continue;
+            };
+            let settlement = super::routine::Settlement::of_village(&found);
+            let facts = crate::village::village_facts(settings, &found);
+            let problems: Vec<VillageProblem> = found.problem.into_iter().collect();
+            let day = site.unsigned_abs() * 3;
+            let ctx = OfferContext {
+                settings,
+                population: &found.population,
+                facts: &facts,
+                problems: &problems,
+                history: &[],
+                day,
+            };
+            for character in &found.population.characters {
+                let Some(seed) = offer_for(character, &ctx, &super::ArcLog::default(), &player)
+                else {
+                    continue;
+                };
+                // One telling per arc keeps the report varied.
+                if !seen_arcs.insert(seed.arc) {
+                    continue;
+                }
+                let bind = BindContext {
+                    terrain: &terrain,
+                    origin: crate::terrain::TilePosition {
+                        x: settlement.center_column(),
+                        y: settlement.ground_row - 1,
+                    },
+                    home: found.id,
+                    home_name: &found.name,
+                    journal: &journal,
+                    taken: &taken,
+                    owner: PlayerId::new(1),
+                    player_name: PLAYER_NAME,
+                    tick: 0,
+                    day,
+                    hull_tenths: 1_000,
+                };
+                let Some(run) = bind_arc(&seed, character, &bind) else {
+                    let _ = writeln!(out, "!! {} did not bind\n", seed.template().title);
+                    continue;
+                };
+                write_arc(&mut out, &run, character, &found.population, ending_reply);
+                *kinds.entry(seed.template().kind.name()).or_default() += 1;
+                printed += 1;
+                if printed >= count {
+                    break 'villages;
+                }
+            }
+        }
+    }
+    let _ = writeln!(out, "== {printed} arcs; by kind: {kinds:?}");
+    out
+}
+
+/// One arc, told whole.
+fn write_arc(
+    out: &mut String,
+    run: &super::ArcRun,
+    giver: &Character,
+    population: &Population,
+    reply: fn(&super::ArcCast, &super::story::ArcOutcome, &Character, u64) -> String,
+) {
+    let Some(template) = run.template() else {
+        return;
+    };
+    let cast = &run.cast;
+    let _ = writeln!(
+        out,
+        "================ \"{}\" ({}, {} tier) ================",
+        template.title,
+        template.kind.name(),
+        template.tier.name()
+    );
+    let _ = writeln!(
+        out,
+        "{}, {} of {} ({} voice), because: {}",
+        cast.giver_full,
+        giver.role.name(),
+        cast.home,
+        giver.tone.name(),
+        source_text(&cast.source, population)
+    );
+    for place in &cast.places {
+        let _ = writeln!(
+            out,
+            "  place: {} = {} ({}){}",
+            place.noun,
+            place.dest,
+            place.phrase,
+            if place.stand_in { " [stand-in]" } else { "" }
+        );
+    }
+    if let Some(contact) = &cast.contact {
+        let _ = writeln!(out, "  contact: {} of {}", contact.name, contact.home);
+    }
+    let _ = writeln!(
+        out,
+        "\n{}: \"{}\"",
+        cast.giver_name,
+        cast.voiced(&template.pitch, Some(giver), 1)
+    );
+    for (index, (step, beat)) in template.steps.iter().zip(template.beats).enumerate() {
+        let _ = writeln!(out, "\n  [{}] {beat}", index + 1);
+        let _ = writeln!(out, "      Journal: {}", cast.render(step.journal, 3));
+        let _ = writeln!(
+            out,
+            "      {} (if you look in): \"{}\"",
+            cast.giver_name,
+            cast.render(step.nudge, 3)
+        );
+        if !step.contact.is_empty() {
+            let who = cast
+                .contact
+                .as_ref()
+                .map_or("Whoever's about", |contact| contact.name.as_str());
+            let _ = writeln!(out, "      {who}: \"{}\"", cast.render(step.contact, 5));
+        }
+    }
+    let _ = writeln!(out, "\n  CLIMAX: {}", cast.render(template.climax, 3));
+    for ending in template.outcomes {
+        let when = match ending.when {
+            super::story::OutcomeWhen::Completed => "ending",
+            super::story::OutcomeWhen::Choice => "choice",
+            super::story::OutcomeWhen::Abandoned => "if abandoned",
+        };
+        let _ = writeln!(out, "\n  -> {when}: {}", ending.label);
+        let spoken = reply(cast, ending, giver, 2);
+        if !spoken.is_empty() && ending.when != super::story::OutcomeWhen::Abandoned {
+            let _ = writeln!(out, "     {}: \"{spoken}\"", cast.giver_name);
+        }
+        let _ = writeln!(out, "     Epilogue: {}", cast.render(ending.epilogue, 4));
+    }
+    let _ = writeln!(out);
 }
 
 /// Something the player could plausibly have done for this character.
@@ -456,6 +645,15 @@ pub fn describe_objective(objective: Objective, targets: &[TargetSpec]) -> Strin
         Objective::SplitDelivery { item, count, .. } => {
             format!("deliver {count} {} to two buildings together", item.name())
         }
+        Objective::OnFoot { target } => format!("reach the {} on foot", noun(target)),
+        Objective::HandDeliver { target, parcel } => {
+            format!("carry the {parcel} by hand into the {}", noun(target))
+        }
+        Objective::Vigil { target, seconds } => {
+            format!("keep watch at the {} for {seconds}s of night", noun(target))
+        }
+        Objective::Speak { target } => format!("find the contact in the {}", noun(target)),
+        Objective::Settle { kind } => format!("have a {} standing in your claim", kind.name()),
     }
 }
 

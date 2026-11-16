@@ -457,6 +457,9 @@ pub struct ViewSnapshot<'w> {
     pub quest_markers: Vec<QuestMarker>,
     /// The quest desk of the keeper whose door the rig stands at (empty elsewhere).
     pub quest_desk: Vec<crate::shell::DeskRow>,
+    /// What the person this player is talking to has in the way of stories for them (the talk
+    /// panel's story rows; WP-STORY).
+    pub arc_talk: fatherload_simulation::world::ArcTalk,
     /// The seat's throw aim preview (set by the game loop from the seat's selection).
     pub aim_preview: Option<AimPreview>,
     /// The seat's weapon aim reticle (set by the game loop from the seat's aim).
@@ -1057,7 +1060,12 @@ fn view_snapshot(
             .visible_quests(player_id)
             .into_iter()
             .flat_map(|quest| quest_markers(quest, world.simulation_tick().get()))
+            .chain(world.arc_markers(player_id))
             .collect(),
+        arc_talk: world.people().conversation(player_id).map_or(
+            fatherload_simulation::world::ArcTalk::Nothing,
+            |conversation| world.arc_talk(player_id, conversation.npc),
+        ),
         quest_desk: world
             .player_surface_zone(player_id)
             .and_then(fatherload_simulation::quest::QuestGiver::at)

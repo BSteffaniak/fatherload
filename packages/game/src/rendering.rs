@@ -37,6 +37,7 @@ mod rewards;
 pub mod rig_art;
 mod screen;
 mod sky_hud;
+mod story;
 pub mod terrain;
 mod title;
 pub mod touch_controls;
@@ -579,6 +580,12 @@ impl GameRenderer {
             }
             if !shell.global_overlay() {
                 rewards::draw_reward_banner(draw, seat, shell.update_ticks, docked);
+            }
+            if !shell.global_overlay()
+                && seat.modal.is_none()
+                && let Some(moment) = &seat.story_moment
+            {
+                story::draw_story_moment(draw, moment, shell.update_ticks);
             }
         }
         if split {

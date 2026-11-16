@@ -234,11 +234,10 @@ pub(in crate::rendering) fn draw_village_counter(
     ui: &UiFrame<'_, '_>,
 ) {
     let settings = ui.snapshot.terrain.settings();
-    let Some((found, building)) = ui
-        .seat
-        .village
-        .interior
-        .and_then(|interior| shell::interior_village(settings, interior))
+    let Some((found, building)) =
+        ui.seat.village.interior.and_then(|interior| {
+            shell::interior_village_now(settings, ui.snapshot.people, interior)
+        })
     else {
         return;
     };

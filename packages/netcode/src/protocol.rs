@@ -97,7 +97,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `ShotKind::Wispfire` in entity records, the night materials
 ///   (`StrategicResourceKind::MothSilk` ..), `BuiltTile::Palisade` in tile ops,
 ///   `VillageDeal::SellNightGoods`, the `NightLedger` inside the enemies section and the night
-///   events 250-253.
+///   events 250-253;
+/// * T26 story arcs: the arc log in the quest log (loadout), the people ledger's story marks,
+///   the `PeopleCommand` story commands (`AskWork`, `AcceptArc`, `TurnInArc`, `AbandonArc`),
+///   the new objective primitives and story target places, and the arc events 260-265.
 pub const PROTOCOL_VERSION: u8 = 12;
 
 /// One client input frame: the controls and actions for exactly one tick.

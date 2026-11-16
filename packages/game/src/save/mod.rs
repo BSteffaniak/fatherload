@@ -67,7 +67,10 @@ const SAVE_SLOTS: usize = 3;
 ///   their decor, furniture stocks, home points), site-crew NPCs (`NpcState::site`) and home
 ///   beds (`BedSpot::Home`);
 /// * T25 night: night monster kinds and wispfire shots in the entity store, night materials in
-///   cargo bays, palisade tiles and the night ledger inside the enemy director.
+///   cargo bays, palisade tiles and the night ledger inside the enemy director;
+/// * T26 story arcs: each player's arc log in the quest log (the open offer, running arcs,
+///   history, promised follow-ups) and the people ledger's story marks (prosperity shifts,
+///   changed relationships, unlocked offers).
 pub const SAVE_VERSION: u32 = 10;
 
 /// Persisted user settings.

@@ -814,3 +814,26 @@ fn night_rules_are_tick_rate_safe() {
         let _ = DayLength::Standard;
     }
 }
+
+#[test]
+fn a_contractor_built_home_keeps_the_night_off_its_plot() {
+    // Integration seam (T24 x T25): a home plot is safe from night monsters like a bed in a
+    // claim, a camp or a village.
+    use crate::home::{Blueprint, PlotSetting, PlotSite, PlotSize, SiteKey};
+    let mut world = world();
+    let column = exposed_column(&world);
+    let row = ground(&world, column);
+    let spot = TilePosition { x: column, y: row - 1 };
+    assert!(!world.night_safe_zone(spot), "open ground before the plot");
+    let site = PlotSite {
+        key: SiteKey::Surveyed,
+        size: PlotSize::Small,
+        setting: PlotSetting::Wilds,
+        left: column - PlotSize::Small.width() / 2,
+        ground_row: row,
+        price: 0,
+    };
+    let _ = world.scenario_home(PLAYER, site, Some(Blueprint::Cabin));
+    assert!(world.night_safe_zone(spot), "the plot is safe at night");
+    assert!(world.enemy_safe_zone(spot));
+}

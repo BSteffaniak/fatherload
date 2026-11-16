@@ -275,6 +275,9 @@ fn the_quest_log_tracks_the_selected_job_and_flips_with_the_map() {
         "the demolition marks are on the map"
     );
     let _report = press(&mut game, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Journal));
+    // An empty journal's only row turns the page.
+    let _report = press(&mut game, confirm_input());
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Achievements));
     let _report = press(&mut game, confirm_input());
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Map));

@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use super::{CharacterId, CharacterState, offers::Perk};
+use super::{CharacterId, CharacterState, RelationshipKind, VillageId, offers::Perk, story::ArcId};
 use crate::{entity::EntityId, ids::PlayerId, item::ItemKind};
 
 /// Lines kept in an open conversation (the newest last).
@@ -51,6 +51,17 @@ pub enum PeopleCommand {
     Gift { npc: EntityId, item: ItemKind },
     /// End the open conversation.
     Goodbye,
+    /// Ask `npc` whether they need a hand (WP-STORY): they pitch the arc they have for the
+    /// player (bound to the world and kept as the open offer), or say how the arc they gave is
+    /// going.
+    AskWork { npc: EntityId },
+    /// Take on the arc `npc` just pitched.
+    AcceptArc { npc: EntityId },
+    /// Tell `npc` the arc they gave is done, choosing ending `outcome` (an index into the arc's
+    /// outcomes: its default ending or one of its choices).
+    TurnInArc { npc: EntityId, outcome: u8 },
+    /// Give up a running arc (from the journal, anywhere).
+    AbandonArc { arc: ArcId },
 }
 
 /// Who said a conversation line.
@@ -111,6 +122,10 @@ pub struct PersonJournal {
     /// The world day each person last counted a chat as goodwill.
     #[serde(default, with = "pairs")]
     pub chat_days: BTreeMap<CharacterId, u32>,
+    /// People whose unique offers a finished story opened up (WP-STORY): their rows sell to
+    /// this player as to a friend.
+    #[serde(default)]
+    pub unlocked: BTreeSet<CharacterId>,
 }
 
 impl PersonJournal {
@@ -128,13 +143,64 @@ pub struct PeopleLedger {
     pub characters: BTreeMap<CharacterId, CharacterState>,
     #[serde(default)]
     pub players: BTreeMap<PlayerId, PersonJournal>,
+    /// How stories changed each settlement's fortunes (WP-STORY `Prosperity` effects), summed.
+    #[serde(default, with = "pairs")]
+    pub prosperity: BTreeMap<VillageId, i16>,
+    /// Relationships stories changed: `(giver, other)` became this kind (`None`: it ended).
+    #[serde(default, with = "pairs")]
+    pub bonds: BTreeMap<(CharacterId, CharacterId), Option<RelationshipKind>>,
 }
 
 impl PeopleLedger {
     /// Whether nothing has happened yet (worlds without people hash as before).
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.characters.is_empty() && self.players.is_empty()
+        self.characters.is_empty()
+            && self.players.is_empty()
+            && self.prosperity.is_empty()
+            && self.bonds.is_empty()
+    }
+
+    /// How much stories have lifted (or sunk) `village`'s fortunes.
+    #[must_use]
+    pub fn prosperity_shift(&self, village: VillageId) -> i16 {
+        self.prosperity.get(&village).copied().unwrap_or(0)
+    }
+
+    /// `found` as stories left it: its prosperity (1..=5, which prices its counters and fills
+    /// the meeting hall's stars) shifted by [`Self::prosperity_shift`]. Unchanged villages are
+    /// handed back as they are.
+    #[must_use]
+    pub fn village_now(
+        &self,
+        found: std::sync::Arc<crate::village::Village>,
+    ) -> std::sync::Arc<crate::village::Village> {
+        let shift = self.prosperity_shift(found.id);
+        if shift == 0 {
+            return found;
+        }
+        let prosperity = (i16::from(found.prosperity) + shift).clamp(1, 5);
+        let mut changed = (*found).clone();
+        changed.prosperity = u8::try_from(prosperity).unwrap_or(changed.prosperity);
+        std::sync::Arc::new(changed)
+    }
+
+    /// What became of the relationship between `a` and `b` in a story, if one changed it
+    /// (`Some(None)`: it ended). Either order.
+    #[must_use]
+    pub fn bond(&self, a: CharacterId, b: CharacterId) -> Option<Option<RelationshipKind>> {
+        self.bonds
+            .get(&(a, b))
+            .or_else(|| self.bonds.get(&(b, a)))
+            .copied()
+    }
+
+    /// Whether a story opened `character`'s unique offers to `player`.
+    #[must_use]
+    pub fn offers_unlocked(&self, character: CharacterId, player: PlayerId) -> bool {
+        self.players
+            .get(&player)
+            .is_some_and(|journal| journal.unlocked.contains(&character))
     }
 
     /// `character`'s state (empty if nothing happened with them).

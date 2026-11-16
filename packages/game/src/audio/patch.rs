@@ -304,6 +304,11 @@ patches! {
     DawnRelief => "dawn_relief",
     BurrowPuff => "burrow_puff",
     NightProwlLoop => "loop_night_prowl",
+    // Story arcs (WP-STORY), appended so earlier seeds stay put.
+    StoryHook => "story_hook",
+    StoryQuill => "story_quill",
+    StoryClimax => "story_climax",
+    StoryResolved => "story_resolved",
 }
 
 /// Playback metadata of a patch.
@@ -529,6 +534,17 @@ impl Patch {
                 .send(0.4)
                 .jitter(0.04, 0.5),
             Self::KeycardBeep => PatchInfo::new(Feedback).instances(1).jitter(0.0, 0.0),
+            // Stories: a curious hook when someone pitches one, a quill's scratch and chime for
+            // each beat, a music-box swell at the climax and a warm cadence at the end.
+            Self::StoryHook | Self::StoryQuill => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.3)
+                .jitter(0.01, 0.5),
+            Self::StoryClimax | Self::StoryResolved => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.4)
+                .jitter(0.0, 0.0)
+                .ducking(0.3),
             Self::ThrowWhoosh | Self::ChargeStick | Self::FireCrackle => {
                 PatchInfo::new(Feedback).instances(3).jitter(0.06, 1.0)
             }
@@ -944,6 +960,10 @@ impl Patch {
             Self::DawnRelief => dawn_relief(rng),
             Self::BurrowPuff => burrow_puff(rng),
             Self::NightProwlLoop => night_prowl_loop(rng),
+            Self::StoryHook => story_hook(rng),
+            Self::StoryQuill => story_quill(rng),
+            Self::StoryClimax => story_climax(rng),
+            Self::StoryResolved => story_resolved(rng),
         }
     }
 }
@@ -4910,6 +4930,103 @@ fn night_prowl_loop(rng: &mut Rng) -> Vec<f32> {
     });
     let howl = hound_howl(rng, 0.85);
     mix_into(&mut out, &howl, rng.range(0.4, 1.2), 0.12);
+    out
+}
+
+/// Someone has a story for you: a plucked "hm?" of two notes rising a sixth, the second left
+/// hanging, over a breath of paper.
+fn story_hook(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        3_200.0,
+        1.1,
+        0.18,
+    );
+    for sample in &mut out {
+        *sample *= 0.35;
+    }
+    let detune = rng.jitter(0.004);
+    mix_into(&mut out, &bell(392.0 * detune, 2.5, 0.9, 0.5), 0.04, 0.34);
+    mix_into(&mut out, &bell(659.25 * detune, 2.5, 1.3, 0.9), 0.24, 0.3);
+    mix_into(&mut out, &bell(587.33 * detune, 2.0, 1.2, 1.1), 0.5, 0.14);
+    out
+}
+
+/// A beat of the story written down: a quill's quick scratches and a small bright chime.
+fn story_quill(rng: &mut Rng) -> Vec<f32> {
+    let mut out = vec![0.0; samples_for(0.7)];
+    for index in 0..4_u8 {
+        let scratch = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            4_800.0 * rng.jitter(0.15),
+            2.5,
+            0.035 + f32::from(index % 2) * 0.02,
+        );
+        mix_into(&mut out, &scratch, f32::from(index) * 0.06, 0.32);
+    }
+    mix_into(
+        &mut out,
+        &bell(1_046.5 * rng.jitter(0.003), 3.0, 0.9, 0.7),
+        0.3,
+        0.3,
+    );
+    mix_into(&mut out, &bell(1_567.98, 3.0, 0.8, 0.8), 0.38, 0.18);
+    out
+}
+
+/// The climax lands: a music box spelling out a rising arpeggio while a soft pad swells under
+/// it, ending on a held, shimmering chord.
+fn story_climax(rng: &mut Rng) -> Vec<f32> {
+    let mut out = vec![0.0; samples_for(2.4)];
+    let detune = rng.jitter(0.002);
+    let notes = [
+        523.25_f32, 659.25, 783.99, 1_046.5, 987.77, 1_174.7, 1_318.5,
+    ];
+    for (index, note) in notes.into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &bell(note * detune, 4.0, 1.0, 1.2),
+            0.05 + index as f32 * 0.13,
+            0.22,
+        );
+    }
+    let mut pad = Osc::new(Wave::Triangle).with_phase(rng.unit());
+    let mut fifth = Osc::new(Wave::Triangle).with_phase(rng.unit());
+    let env = Adsr::new(0.6, 0.4, 0.7, 0.8);
+    let swell = render(2.2, |t| {
+        (pad.next(261.63) + fifth.next(392.0) * 0.7) * env.level(t, 1.4) * 0.12
+    });
+    mix_into(&mut out, &swell, 0.0, 1.0);
+    for note in [1_046.5, 1_318.5, 1_567.98] {
+        mix_into(&mut out, &bell(note, 2.0, 1.6, 1.6), 1.0, 0.12);
+    }
+    let mut echo = Delay::new(0.4).with_damping(0.5);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.31, 0.35) * 0.3;
+    }
+    out
+}
+
+/// A story's end: a warm brass cadence (IV, V, I) with a bell on the last chord.
+fn story_resolved(rng: &mut Rng) -> Vec<f32> {
+    let mut out = vec![0.0; samples_for(2.0)];
+    let chords: [(f32, &[f32]); 3] = [
+        (0.0, &[349.23, 440.0, 523.25]),
+        (0.36, &[392.0, 493.88, 587.33]),
+        (0.72, &[261.63, 329.63, 392.0, 523.25]),
+    ];
+    for (index, (start, notes)) in chords.into_iter().enumerate() {
+        let gate = if index == 2 { 1.0 } else { 0.3 };
+        for note in notes {
+            mix_into(&mut out, &brass(rng, *note, gate, 0.7), start, 0.13);
+        }
+    }
+    mix_into(&mut out, &bell(1_046.5, 2.0, 1.4, 1.1), 0.74, 0.2);
+    mix_into(&mut out, &bell(1_567.98, 2.0, 1.2, 1.2), 0.86, 0.1);
     out
 }
 

@@ -33,6 +33,18 @@ pub enum RelationshipKind {
 }
 
 impl RelationshipKind {
+    /// The share of a reputation change about someone that this relation of theirs takes on
+    /// (family half, friends and sweethearts a third, rivals a quarter the other way).
+    #[must_use]
+    pub const fn reputation_share(self, delta: i16) -> i16 {
+        match self {
+            kind if kind.is_family() => delta / 2,
+            Self::Friend | Self::Sweetheart => delta / 3,
+            Self::Rival => -delta / 4,
+            _ => 0,
+        }
+    }
+
     pub const ALL: [Self; 10] = [
         Self::Parent,
         Self::Child,
@@ -157,12 +169,7 @@ impl Population {
     pub fn reputation_ripple(&self, subject: CharacterId, delta: i16) -> Vec<(CharacterId, i16)> {
         let mut ripple = Vec::new();
         for relationship in self.relationships.iter().filter(|edge| edge.to == subject) {
-            let share = match relationship.kind {
-                kind if kind.is_family() => delta / 2,
-                RelationshipKind::Friend | RelationshipKind::Sweetheart => delta / 3,
-                RelationshipKind::Rival => -delta / 4,
-                _ => 0,
-            };
+            let share = relationship.kind.reputation_share(delta);
             if share != 0 {
                 ripple.push((relationship.from, share));
             }

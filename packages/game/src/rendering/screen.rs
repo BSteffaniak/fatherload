@@ -1263,6 +1263,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Achievements => super::rewards::draw_achievements(draw, ui),
         ModalScreen::Colony => super::moon_hud::draw_colony(draw, ui),
         ModalScreen::Home => super::homes::draw_home_modal(draw, ui),
+        ModalScreen::Journal => super::story::draw_journal(draw, ui),
     }
 }
 

@@ -523,6 +523,50 @@ DISCOVERED" the first time, "WELCOME BACK TO" later). Villages show on the minim
 mine map: gold with their name once visited, blue once charted, a dim outline for surface
 villages not reached yet; underground settlements stay hidden until visited or charted.
 
+### Stories
+
+People have things on their minds, and when they have a story for you the talk panel's first
+row says so: **"Need a hand with anything?"** Ask, and they pitch it in their own voice, naming
+real places near their home (a derelict 116 m down in the Grey Stone, the village along the
+trail, the amber island up among the clouds); "I'll do it." writes it in your **journal**. There
+are 67 stories in eight kinds, each a few beats long with a twist and more than one ending:
+
+- **Frontier**: lost brass canaries, overdue library books, a digging machine that wandered off.
+- **Village**: letters between pen friends, a peace cake for two feuding families, a courier who
+  didn't come. These send you to talk to real people in other settlements, who answer.
+- **Sky** (once your tank can take it): a contest kite on a floating island, weather readings,
+  the first map of the great land past the dead air.
+- **Mystery**: the blue lights below the slate, the lamplighters who keep the deep tunnels
+  tidy, the two hums, and the Moon's heart. One leads to the next.
+- **Home**: a housewarming once you've put up a homestead, a bed below, a fuel station at depth.
+- **Night**: watches that only count after dark: a prowler, a sleepwalker, glowcaps that bloom
+  once a year at midnight.
+- **On foot**: only the pilot can finish them: squeeze into a crevice, carry a wedding
+  invitation in by hand.
+- **Crew**: twin bells rung together, a heat core passed from rig to rig.
+
+Beats are the quest engine's objectives (with markers on the map and minimap), plus a few
+new ones: reach a place on foot, hand-deliver at a door, keep watch at night, find a contact
+and talk to them, have a module standing in your claim. When the last beat is done a card tells
+the climax; go back to whoever told it and pick how it ends. Endings pay credits and goods,
+warm the giver (and their circle), can lift a village's fortunes, mend a feud, open someone's
+special offers, unlock a garage look, or lead to a follow-up story. People remember the
+stories you finished with them, and the ones you gave up. Places outside the world (no sky, no
+Moon) have stand-ins: the highest ridge nearby, the deepest chamber.
+
+The journal sits in the map's pages (`M`, then confirm: map, collection log, quest log,
+journal, milestones; `Tab` / the shoulder buttons also turn pages): stories under way with
+where they stand and what to do next, stories told with their epilogues, and "Give up this
+story" (confirm twice). Every row works by keys, pad, mouse and touch. At most three stories
+run at once; each player in split-screen or online keeps their own.
+
+Full stories as play would bind them, with every beat, contact line, climax and ending (no
+window opens):
+
+```bash
+cargo run --release --bin fatherload -- --story-report --arcs [--seed 7] [--count 30] [--generator v7]
+```
+
 Village review (no window opens): street layout, every counter's deals, residents and the
 stories each village grows, nearest town first:
 

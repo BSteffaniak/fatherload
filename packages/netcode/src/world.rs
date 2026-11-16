@@ -210,6 +210,13 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::AffinityChanged { player_id, .. } => (143, Some(player_id)),
         GameplayEventKind::RumourMarked { player_id, .. } => (144, Some(player_id)),
         GameplayEventKind::PeopleInteraction { player_id } => (145, Some(player_id)),
+        // Story arcs (WP-STORY, wave 4 T26): 260-265.
+        GameplayEventKind::ArcOffered { player_id, .. } => (260, Some(player_id)),
+        GameplayEventKind::ArcAccepted { player_id, .. } => (261, Some(player_id)),
+        GameplayEventKind::ArcStepDone { player_id, .. } => (262, Some(player_id)),
+        GameplayEventKind::ArcClimax { player_id, .. } => (263, Some(player_id)),
+        GameplayEventKind::ArcCompleted { player_id, .. } => (264, Some(player_id)),
+        GameplayEventKind::ArcAbandoned { player_id, .. } => (265, Some(player_id)),
         // Upgrade reward moments (wave 3, T18): 180-181.
         GameplayEventKind::UpgradeInstalled { player_id, .. } => (180, Some(player_id)),
         GameplayEventKind::MilestoneEarned { player_id, .. } => (181, Some(player_id)),

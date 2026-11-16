@@ -63,6 +63,8 @@ pub struct TalkView {
 /// What a seat can say or do in a conversation (the talk panel's rows, in order).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TalkChoice {
+    /// A story row (WP-STORY): ask for work, take a story on, or tell how one ended.
+    Story(super::StoryChoice),
     Topic(TalkTopic),
     /// Open their trade list.
     Trade,
@@ -76,6 +78,7 @@ impl TalkChoice {
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
+            Self::Story(story) => story.label(),
             Self::Topic(TalkTopic::Chat) => "Chat",
             Self::Topic(TalkTopic::Rumours) => "Ask about rumours",
             Self::Topic(TalkTopic::Life) => "Ask about their life",
@@ -87,14 +90,23 @@ impl TalkChoice {
     }
 }
 
-/// The talk panel's rows for `speaker` (a contractor also takes building questions).
+/// The talk panel's rows for `speaker`: their story rows first (`story`: what they have for the
+/// player, see [`WorldState::arc_talk`]), then the topics (a contractor also takes building
+/// questions), trade, gifts and goodbye.
 #[must_use]
-pub fn talk_choices(speaker: Option<&fatherload_simulation::people::Character>) -> Vec<TalkChoice> {
-    let mut choices = vec![
+pub fn talk_choices(
+    speaker: Option<&fatherload_simulation::people::Character>,
+    story: &fatherload_simulation::world::ArcTalk,
+) -> Vec<TalkChoice> {
+    let mut choices: Vec<TalkChoice> = super::story_choices(story)
+        .into_iter()
+        .map(TalkChoice::Story)
+        .collect();
+    choices.extend([
         TalkChoice::Topic(TalkTopic::Chat),
         TalkChoice::Topic(TalkTopic::Rumours),
         TalkChoice::Topic(TalkTopic::Life),
-    ];
+    ]);
     if speaker.is_some_and(|character| contractor_profile(character).is_some()) {
         choices.push(TalkChoice::Topic(TalkTopic::BuildingWork));
     }
@@ -276,6 +288,18 @@ pub fn interior_village(
     (building < found.buildings.len()).then_some((found, building))
 }
 
+/// [`interior_village`] as stories left it (its prosperity, which prices the counter and fills
+/// the meeting hall's stars; [`fatherload_simulation::people::PeopleLedger::village_now`]).
+#[must_use]
+pub fn interior_village_now(
+    settings: &fatherload_simulation::worldgen::WorldSettings,
+    people: &fatherload_simulation::people::PeopleLedger,
+    interior: VillageInterior,
+) -> Option<(Arc<Village>, usize)> {
+    interior_village(settings, interior)
+        .map(|(found, building)| (people.village_now(found), building))
+}
+
 /// The counter rows of `building` at `time` (WP-NIGHT: the night market's stock after dark,
 /// none at a shut counter): its deals, then a row to talk to the keeper, then (in a meeting
 /// hall) the land office (WP-HOME).
@@ -393,11 +417,9 @@ impl SeatUi {
         if input.pause {
             return true;
         }
-        let Some((found, building)) = self
-            .village
-            .interior
-            .and_then(|interior| interior_village(ctx.world.world_settings(), interior))
-        else {
+        let Some((found, building)) = self.village.interior.and_then(|interior| {
+            interior_village_now(ctx.world.world_settings(), ctx.world.people(), interior)
+        }) else {
             self.village.interior = None;
             return false;
         };
@@ -569,12 +591,37 @@ impl SeatUi {
                     cues.push(SoundCue::UiBack);
                     return;
                 }
-                let choices = talk_choices(speaker.as_ref());
+                let story = ctx
+                    .player
+                    .map_or(fatherload_simulation::world::ArcTalk::Nothing, |player| {
+                        ctx.world.arc_talk(player, talk.npc)
+                    });
+                let choices = talk_choices(speaker.as_ref(), &story);
                 self.move_selection(input, choices.len().saturating_sub(1));
                 if !(input.confirm || input.interact) {
                     return;
                 }
                 match choices.get(self.selected_menu_item).copied() {
+                    Some(TalkChoice::Story(choice)) => {
+                        let command = match choice {
+                            super::StoryChoice::Ask { .. } => {
+                                PeopleCommand::AskWork { npc: talk.npc }
+                            }
+                            super::StoryChoice::Accept => {
+                                PeopleCommand::AcceptArc { npc: talk.npc }
+                            }
+                            super::StoryChoice::Ending { outcome, .. } => {
+                                PeopleCommand::TurnInArc {
+                                    npc: talk.npc,
+                                    outcome,
+                                }
+                            }
+                        };
+                        self.send_people(ctx, command, requests);
+                        // The rows change with the answer: back to the top.
+                        self.selected_menu_item = 0;
+                        cues.push(SoundCue::Ui);
+                    }
                     Some(TalkChoice::Topic(topic)) => {
                         self.send_people(
                             ctx,
@@ -678,10 +725,9 @@ impl SeatUi {
             self.handle_people_modal(modal, input, ctx, cues, requests);
             return;
         }
-        let interior = self
-            .village
-            .interior
-            .and_then(|interior| interior_village(ctx.world.world_settings(), interior));
+        let interior = self.village.interior.and_then(|interior| {
+            interior_village_now(ctx.world.world_settings(), ctx.world.people(), interior)
+        });
         let Some((found, building)) = interior else {
             self.modal = None;
             return;
@@ -742,7 +788,7 @@ impl SeatUi {
         else {
             return None;
         };
-        let found = village::village(ctx.world.world_settings(), id)?;
+        let found = ctx.world.village_now(id)?;
         let deal = found
             .offers_at(usize::from(building), ctx.world.market_time())
             .get(usize::from(offer))?
@@ -779,7 +825,7 @@ impl SeatUi {
         else {
             return None;
         };
-        let found = village::village(ctx.world.world_settings(), id)?;
+        let found = ctx.world.village_now(id)?;
         let building = usize::from(building);
         let deal = found
             .offers_at(building, ctx.world.market_time())
@@ -945,7 +991,7 @@ impl super::ShellState {
         village: VillageId,
     ) {
         let tick = self.update_ticks;
-        let Some(found) = village::village(world.world_settings(), village) else {
+        let Some(found) = world.village_now(village) else {
             return;
         };
         if let Some(state) = self.seats.get_mut(seat) {

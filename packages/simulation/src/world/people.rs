@@ -583,6 +583,12 @@ impl WorldState {
                 self.trade_with(player_id, npc, offer, &mut events)
             }
             PeopleCommand::Gift { npc, item } => self.gift_to(player_id, npc, item, &mut events),
+            PeopleCommand::AskWork { npc } => self.ask_work(player_id, npc, &mut events),
+            PeopleCommand::AcceptArc { npc } => self.accept_arc(player_id, npc, &mut events),
+            PeopleCommand::TurnInArc { npc, outcome } => {
+                self.turn_in_arc(player_id, npc, outcome, &mut events)
+            }
+            PeopleCommand::AbandonArc { arc } => self.abandon_arc(player_id, arc, &mut events),
         };
         Some((outcome, events))
     }
@@ -602,7 +608,7 @@ impl WorldState {
     }
 
     /// The person behind `npc` if `player_id` can reach them: their settlement and character.
-    fn reachable_person(
+    pub(super) fn reachable_person(
         &self,
         player_id: PlayerId,
         npc: EntityId,
@@ -622,7 +628,7 @@ impl WorldState {
     }
 
     /// Opens (or continues) `player_id`'s conversation with `npc` with `lines`.
-    fn converse(
+    pub(super) fn converse(
         &mut self,
         player_id: PlayerId,
         npc: EntityId,
@@ -666,7 +672,7 @@ impl WorldState {
     }
 
     /// Reports a change of standing since `before`.
-    fn warm(
+    pub(super) fn warm(
         &self,
         player_id: PlayerId,
         npc: EntityId,
@@ -693,7 +699,12 @@ impl WorldState {
     }
 
     /// Goodwill `amount` (before the charmer bonus) from `character` toward `player_id`.
-    fn add_goodwill(&mut self, player_id: PlayerId, character: CharacterId, amount: i16) {
+    pub(super) fn add_goodwill(
+        &mut self,
+        player_id: PlayerId,
+        character: CharacterId,
+        amount: i16,
+    ) {
         let amount = if amount > 0 && self.people.has_perk(player_id, Perk::Charmer) {
             amount + (amount + 1) / 2
         } else {
@@ -710,7 +721,7 @@ impl WorldState {
     /// circle (family shares half, friends and sweethearts a third, rivals a quarter the other
     /// way; [`people::Population::reputation_ripple`]): word gets around a settlement. One step
     /// only, so a rumour never echoes back.
-    fn spread_word(
+    pub(super) fn spread_word(
         &mut self,
         player_id: PlayerId,
         settlement: &Settlement,
@@ -721,7 +732,19 @@ impl WorldState {
         if delta == 0 {
             return;
         }
-        for (other, share) in settlement.population.reputation_ripple(character, delta) {
+        let mut ripple = settlement.population.reputation_ripple(character, delta);
+        // Stories change relationships (WP-STORY `Relationship` endings): a feud ended or a
+        // romance begun passes word on its new terms.
+        for resident in &settlement.population.characters {
+            if let Some(bond) = self.people.bond(character, resident.id) {
+                ripple.retain(|(other, _)| *other != resident.id);
+                let share = bond.map_or(0, |kind| kind.reputation_share(delta));
+                if share != 0 {
+                    ripple.push((resident.id, share));
+                }
+            }
+        }
+        for (other, share) in ripple {
             self.people
                 .characters
                 .entry(other)
@@ -730,7 +753,10 @@ impl WorldState {
         }
     }
 
-    fn talk_context_facts(&self, settlement: &Settlement) -> Arc<Vec<people::WorldFact>> {
+    pub(super) fn talk_context_facts(
+        &self,
+        settlement: &Settlement,
+    ) -> Arc<Vec<people::WorldFact>> {
         let settings = self.terrain.settings();
         if settlement.village == TOWN_VILLAGE || people::camps::is_camp(settlement.village) {
             return Arc::new(Vec::new());
@@ -838,6 +864,8 @@ impl WorldState {
                 }
             }
         }
+        // A story beat that sent the player to this person lands here (WP-STORY).
+        lines.extend(self.arc_contact_lines(player_id, id));
         if topic == TalkTopic::Rumours {
             marked = self.free_rumour(player_id, &settlement, id, time.day);
             match marked {
@@ -931,7 +959,15 @@ impl WorldState {
         };
         let before = self.people.standing(id, player_id);
         let affinity_before = self.people.affinity(id, player_id);
-        if !offers::standing_allows(before, offer.needs) {
+        // A finished story can open someone's door wider: their rows sell as to a friend.
+        let gate = if self.people.offers_unlocked(id, player_id)
+            && matches!(before, Standing::Stranger | Standing::Acquainted)
+        {
+            Standing::Friendly
+        } else {
+            before
+        };
+        if !offers::standing_allows(gate, offer.needs) {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
         if offer.once
@@ -1215,14 +1251,14 @@ const fn snap_px(x: f32) -> f32 {
     x.round()
 }
 
-fn you(text: &str) -> ConversationLine {
+pub(super) fn you(text: &str) -> ConversationLine {
     ConversationLine {
         speaker: Speaker::You,
         text: text.to_owned(),
     }
 }
 
-const fn note_line(text: String) -> ConversationLine {
+pub(super) const fn note_line(text: String) -> ConversationLine {
     ConversationLine {
         speaker: Speaker::Note,
         text,

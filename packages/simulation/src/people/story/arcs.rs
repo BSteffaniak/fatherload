@@ -5,8 +5,8 @@
 //! 5 Crystal Faults, 6 Fossil Oceans.
 
 use super::{
-    ArcEffect, ArcId, ArcOutcome, ArcTemplate, HistoryKind, OutcomeWhen, Slot, Trigger,
-    VillageProblem, WorldFactKind,
+    ArcEffect, ArcId, ArcKind, ArcOutcome, ArcStep, ArcTemplate, HistoryKind, OutcomeWhen, Slot,
+    Trigger, VillageProblem, WorldFactKind,
 };
 use crate::{
     people::{
@@ -17,7 +17,8 @@ use crate::{
     },
     poi::PoiKind,
     quest::{
-        BlueprintId, Objective, QuestItem, QuestReward, QuestText, QuestTier, TargetSpec, Twist,
+        BlueprintId, Objective, QuestItem, QuestReward, QuestText, QuestTier, StoryPlace,
+        TargetSpec, Twist,
     },
     terrain::MineralKind,
     worldgen::FeatureKind,
@@ -54,14 +55,113 @@ const fn log(offer: &'static str, progress: &'static str, complete: &'static str
     }
 }
 
-pub const ARC_TEMPLATES: &[ArcTemplate] = &[
+// The authoring kit the batches share.
+
+/// Pitch lines in three voices: `terse` for gruff and dry people, `warm` for cheerful and
+/// earnest ones, `soft` for nervous and poetic ones (the dialogue tone filter colours the rest).
+const fn voices(
+    terse: &'static [&'static str],
+    warm: &'static [&'static str],
+    soft: &'static [&'static str],
+) -> ToneLines {
+    ToneLines {
+        gruff: terse,
+        cheerful: warm,
+        nervous: soft,
+        poetic: soft,
+        dry: terse,
+        earnest: warm,
+    }
+}
+
+/// No arc-specific thanks: the giver's own opener (by tone) leads into the ending's line.
+const NO_THANKS: ToneLines = ToneLines {
+    gruff: &[],
+    cheerful: &[],
+    nervous: &[],
+    poetic: &[],
+    dry: &[],
+    earnest: &[],
+};
+
+/// A beat: the journal's text and the giver's nudge.
+const fn step(journal: &'static str, nudge: &'static str) -> ArcStep {
+    ArcStep {
+        journal,
+        nudge,
+        contact: "",
+    }
+}
+
+/// A beat that sends you to a contact ([`Objective::Speak`]), with what they say.
+const fn meet(journal: &'static str, nudge: &'static str, contact: &'static str) -> ArcStep {
+    ArcStep {
+        journal,
+        nudge,
+        contact,
+    }
+}
+
+/// The default ending.
+const fn ending(
+    label: &'static str,
+    effects: &'static [ArcEffect],
+    line: &'static str,
+    epilogue: &'static str,
+) -> ArcOutcome {
+    ArcOutcome {
+        label,
+        when: OutcomeWhen::Completed,
+        effects,
+        line,
+        epilogue,
+    }
+}
+
+/// An ending the player may choose instead at turn-in.
+const fn choice(
+    label: &'static str,
+    effects: &'static [ArcEffect],
+    line: &'static str,
+    epilogue: &'static str,
+) -> ArcOutcome {
+    ArcOutcome {
+        label,
+        when: OutcomeWhen::Choice,
+        effects,
+        line,
+        epilogue,
+    }
+}
+
+/// What giving the story up does.
+const fn give_up(effects: &'static [ArcEffect], epilogue: &'static str) -> ArcOutcome {
+    ArcOutcome {
+        label: "Give it up",
+        when: OutcomeWhen::Abandoned,
+        effects,
+        line: "",
+        epilogue,
+    }
+}
+
+/// A story place target.
+const fn place(place: StoryPlace) -> TargetSpec {
+    TargetSpec::Story(place)
+}
+
+/// Batch 0: the first arcs, one per classic story shape.
+pub const BATCH_FIRST: &[ArcTemplate] = &[
     ArcTemplate {
         id: ArcId(1),
         title: "The Long Way Down",
+        kind: ArcKind::Mystery,
+        contact_other: false,
         hook: "Someone's relative took a rig down and never came back. Find the wreck and bring home its last log.",
         twist: "The log says they went deeper on purpose, following blue lights, and left a message for home.",
         consequence: "The giver finally knows. They remember who found their family, and the lights become a lead deeper down.",
         tier: QuestTier::Mid,
+        prerequisites: &[],
         triggers: &[
             Trigger::Absent(AbsentFate::WentDeep),
             Trigger::Want(Want::FindRelative),
@@ -86,11 +186,31 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             "Recover the last log",
             "Bring the story home",
         ],
+        steps: &[
+            ArcStep {
+                journal: "{Giver} thinks {a place} {where} might be the rig {focus} drove down in. Ping it with the scanner and see what answers.",
+                nudge: "Did the scanner hear anything? Even a click?",
+                contact: "",
+            },
+            ArcStep {
+                journal: "The wreck answered with a weak, old ping. Its salvage core should still hold the last log. Drill it out gently.",
+                nudge: "If the core's still there, the log will be too. {Focus} always kept a log.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "The log is aboard, crackling. Get it up into daylight before it fades.",
+                nudge: "Bring it up. Please don't play it down there.",
+                contact: "",
+            },
+        ],
+        climax: "The log plays on the way up: {focus}'s voice, calm and delighted. 'Blue lights, below the slate. They move like they're waiting for someone. Tell {giver} I'm fine. Tell {giver} to look down sometimes.'",
         twists: &[],
         reward: QuestReward::credits(820, 14),
         outcomes: &[
             ArcOutcome {
                 label: "Bring the log home",
+                line: "",
+                epilogue: "{Giver} plays {focus}'s log every evening now, and says goodnight to the floor. Somewhere below, the blue lights keep their own time.",
                 when: OutcomeWhen::Completed,
                 effects: &[
                     ArcEffect::Reputation(20),
@@ -101,11 +221,15 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             },
             ArcOutcome {
                 label: "Keep the log's coordinates to yourself",
+                line: "You're keeping the coordinates? ...Fine. Maybe someone should follow {focus}. Just come back, will you?",
+                epilogue: "You kept the wreck's last coordinates to yourself. {Giver} pretends not to mind, and sells you things a little cheaper, as if paying in advance for news.",
                 when: OutcomeWhen::Choice,
                 effects: &[ArcEffect::Reputation(4), ArcEffect::UnlockOffer],
             },
             ArcOutcome {
                 label: "Give up the search",
+                line: "",
+                epilogue: "You stopped looking. {Giver} still asks every drifter who passes whether they've seen an old rig down deep.",
                 when: OutcomeWhen::Abandoned,
                 effects: &[ArcEffect::Reputation(-8), ArcEffect::Mood(-15)],
             },
@@ -157,10 +281,13 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
     ArcTemplate {
         id: ArcId(2),
         title: "Claim and Counterclaim",
+        kind: ArcKind::Village,
+        contact_other: false,
         hook: "Two neighbours both swear an old claim is theirs. Go see who's right.",
         twist: "Both names are scratched into the claim post, side by side: they staked it together, back when they were partners.",
         consequence: "Settle it and the rivals become partners again (or the giver wins and the rival sulks for a season).",
         tier: QuestTier::Shallow,
+        prerequisites: &[],
         triggers: &[
             Trigger::Want(Want::BeatRival),
             Trigger::Relationship(RelationshipKind::Rival),
@@ -184,11 +311,31 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             &[Objective::ReturnToSurface],
         ],
         beats: &["Find the claim", "Dig out the claim post", "Report back"],
+        steps: &[
+            ArcStep {
+                journal: "{Giver} and {other} both swear the old claim in {a place} {where} is theirs. Find it.",
+                nudge: "Found it yet? It's the one with the crooked post. Mine's the straight half.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "The claim post is buried in loose fill. Dig it out and read what's carved on it.",
+                nudge: "Read the post. It'll say {giver}. Probably. Mostly.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "Two names on one post, carved side by side years ago. Bring the news home.",
+                nudge: "Well? Whose name is it? Don't make that face.",
+                contact: "",
+            },
+        ],
+        climax: "Scratched into the post, side by side: '{giver} and {other}, partners, the summer of the big seam.' Somebody carved a little pick between the names.",
         twists: &[Twist::NoBombs],
         reward: QuestReward::credits(380, 10),
         outcomes: &[
             ArcOutcome {
                 label: "Show them both the post",
+                line: "",
+                epilogue: "{Giver} and {other} stood over the post for a long time. They work the claim together now, and argue about everything except whose it is.",
                 when: OutcomeWhen::Completed,
                 effects: &[
                     ArcEffect::Relationship(Some(RelationshipKind::Friend)),
@@ -198,6 +345,8 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             },
             ArcOutcome {
                 label: "Tell the giver it's theirs alone",
+                line: "Mine alone? Ha! I knew it. ...Don't tell {other} I said thank you.",
+                epilogue: "You told {giver} the claim was theirs alone. {Other} sulks at the inn, and the post sits in {giver}'s shed, face to the wall.",
                 when: OutcomeWhen::Choice,
                 effects: &[ArcEffect::Reputation(14), ArcEffect::Mood(20)],
             },
@@ -249,10 +398,13 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
     ArcTemplate {
         id: ArcId(3),
         title: "The Prototype",
+        kind: ArcKind::Frontier,
+        contact_other: false,
         hook: "An inventor needs their machine field-tested in a real hazard pocket, by someone brave or foolish.",
         twist: "It works too well: it starts sniffing out ore on its own and won't switch off.",
         consequence: "The inventor's one-of-a-kind part goes on offer, and the village hears about it for weeks.",
         tier: QuestTier::Shallow,
+        prerequisites: &[],
         triggers: &[
             Trigger::Want(Want::BuildInvention),
             Trigger::Value(Value::Craft),
@@ -279,11 +431,31 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             "Get it back in one piece",
             "Bring copper for repairs",
         ],
+        steps: &[
+            ArcStep {
+                journal: "{Giver}'s prototype needs a real test: hold it inside {a place} {where} until the needles stop twitching.",
+                nudge: "Keep it in the muck till the dial goes green. Or orange. Green's better.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "The test's done and the machine is ticking oddly. Get it to the surface.",
+                nudge: "Is it ticking? Ticking's fine. Whirring's fine. Singing would be new.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "It's sniffing for ore all by itself now. Bring {giver} what it asked for.",
+                nudge: "Bring the samples! It's never done that on the bench.",
+                contact: "",
+            },
+        ],
+        climax: "The prototype gives a happy little chirp and points straight at the nearest seam. It will not stop pointing. It has opinions now.",
         twists: &[Twist::Fragile { max_damage: 30 }],
         reward: QuestReward::credits(420, 10),
         outcomes: &[
             ArcOutcome {
                 label: "Hand back the prototype",
+                line: "",
+                epilogue: "{Giver}'s prototype sits in the workshop window, pointing at the ground. Tamer copies sell well, and {giver} tells everyone who tested the first.",
                 when: OutcomeWhen::Completed,
                 effects: &[
                     ArcEffect::UnlockOffer,
@@ -293,6 +465,8 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             },
             ArcOutcome {
                 label: "Abandon the test",
+                line: "",
+                epilogue: "The test never finished. {Giver} put the prototype under a sheet and stopped mentioning it.",
                 when: OutcomeWhen::Abandoned,
                 effects: &[ArcEffect::Mood(-10)],
             },
@@ -340,10 +514,13 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
     ArcTemplate {
         id: ArcId(4),
         title: "The Stranger's Map",
+        kind: ArcKind::Frontier,
+        contact_other: false,
         hook: "A map traded for a hot meal points at a humming formation and a vault beyond it.",
         twist: "The map was drawn decades ago by the giver's own grandparent, who never told anyone.",
         consequence: "A family secret comes to light; the giver shares the rest of the old maps.",
         tier: QuestTier::Mid,
+        prerequisites: &[],
         triggers: &[
             Trigger::Value(Value::Adventure),
             Trigger::Value(Value::Knowledge),
@@ -367,11 +544,26 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             &[Objective::OpenPoi { target: 1 }],
         ],
         beats: &["Read the formation", "Open the vault"],
+        steps: &[
+            ArcStep {
+                journal: "A stranger's map leads to {dest}, {where}. Pulse the scanner near it and see if the marks line up.",
+                nudge: "The map says 'listen to the stone'. I assume that means the scanner.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "The formation's echo points at a sealed vault {where2}. Open it.",
+                nudge: "A vault! The map has a little drawing of a key. It's no help at all.",
+                contact: "",
+            },
+        ],
+        climax: "Inside the vault door, scratched in an old hand: the same initials as the corner of the map. {Giver}'s grandparent's initials.",
         twists: &[],
         reward: QuestReward::credits(1_050, 12).fragment(BlueprintId::RefineryFrame),
         outcomes: &[
             ArcOutcome {
                 label: "Bring back what the vault held",
+                line: "",
+                epilogue: "{Giver} found the rest of the old maps in an attic trunk and pins one up every week. The family had a cartographer all along.",
                 when: OutcomeWhen::Completed,
                 effects: &[
                     ArcEffect::UnlockOffer,
@@ -381,6 +573,8 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             },
             ArcOutcome {
                 label: "Abandon the map",
+                line: "",
+                epilogue: "The map went back in a drawer. {Giver} still takes it out on long evenings and traces the line with a finger.",
                 when: OutcomeWhen::Abandoned,
                 effects: &[ArcEffect::Reputation(-4)],
             },
@@ -432,10 +626,13 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
     ArcTemplate {
         id: ArcId(5),
         title: "The Humming Stone",
+        kind: ArcKind::Mystery,
+        contact_other: false,
         hook: "Something in a relic bed hums at night and keeps half the village awake. Dig it out and bury it deeper.",
         twist: "Sealed deep, the hum doesn't stop. It changes key, as if answering something further down.",
         consequence: "The village sleeps again, but the giver starts listening at night, and the deep has noticed.",
         tier: QuestTier::Mid,
+        prerequisites: &[],
         triggers: &[
             Trigger::Fear(Fear::DeepThings),
             Trigger::Quirk(Quirk::SawTheDeepLights),
@@ -469,11 +666,31 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             }],
         ],
         beats: &["Find the hum", "Take the stone", "Bury it with the cave"],
+        steps: &[
+            ArcStep {
+                journal: "Something in {a place} {where} hums all night. Find it.",
+                nudge: "Can you hear it from here? I can. I always can now.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "It's a stone, warm and buzzing like a hive. Take it.",
+                nudge: "Don't hold it too long. It gets into your teeth.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "Bury it deeper: bomb the marked rock and bring the cave down over it.",
+                nudge: "Bury it. Deep. And please don't hum back at it.",
+                contact: "",
+            },
+        ],
+        climax: "The cave folds shut over the stone. For a moment there's silence. Then, far below, the hum starts again in a lower key, as if something down there just answered.",
         twists: &[],
         reward: QuestReward::credits(900, 12).bombs(3),
         outcomes: &[
             ArcOutcome {
                 label: "Seal the stone away",
+                line: "",
+                epilogue: "{Village} sleeps again. Only {giver} sits up some nights, ear to the floorboards, listening to a hum nobody else hears anymore.",
                 when: OutcomeWhen::Completed,
                 effects: &[
                     ArcEffect::Prosperity(1),
@@ -483,6 +700,8 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             },
             ArcOutcome {
                 label: "Keep the stone",
+                line: "You're keeping it? Then keep it far from me. And if it starts singing words, tell me which ones.",
+                epilogue: "The humming stone rides in your cargo bay and purrs when you drill. {Giver} won't stand within ten paces of your rig.",
                 when: OutcomeWhen::Choice,
                 effects: &[ArcEffect::Reputation(-6), ArcEffect::FollowUp(ArcId(1))],
             },
@@ -532,10 +751,13 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
     ArcTemplate {
         id: ArcId(6),
         title: "Bad Blood",
+        kind: ArcKind::Crew,
+        contact_other: false,
         hook: "A feud over an old boundary: two markers in a cave have to be struck at the same moment to split it fairly.",
         twist: "Both sides asked you separately, each hoping you'd quietly favour them.",
         consequence: "Strike it fair and the feud cools to grumbling; the whole village breathes out.",
         tier: QuestTier::Shallow,
+        prerequisites: &[],
         triggers: &[
             Trigger::Problem(VillageProblem::Feud),
             Trigger::Relationship(RelationshipKind::Rival),
@@ -563,11 +785,26 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             }],
         ],
         beats: &["Strike both markers at once", "Cut the new boundary"],
+        steps: &[
+            ArcStep {
+                journal: "The feud's boundary markers sit in {a place} {where}. Strike both at the same moment, or nobody will believe it was fair.",
+                nudge: "Both at once. Not one and then the other. Both.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "Fair strike. Now cut the new boundary through the rock.",
+                nudge: "Cut it straight. Everyone will be measuring.",
+                contact: "",
+            },
+        ],
+        climax: "The boundary runs dead straight through the rock. Both families check it twice, then shake hands, loudly, as if it hurts.",
         twists: &[],
         reward: QuestReward::credits(400, 10),
         outcomes: &[
             ArcOutcome {
                 label: "Split it fairly",
+                line: "",
+                epilogue: "The feud cooled to grumbling. {Giver} and {other} still don't wave, but they've stopped counting each other's buckets.",
                 when: OutcomeWhen::Completed,
                 effects: &[
                     ArcEffect::Relationship(None),
@@ -577,6 +814,8 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             },
             ArcOutcome {
                 label: "Quietly favour the giver",
+                line: "A little to my side, you say? Well. I didn't ask. But I won't complain.",
+                epilogue: "The boundary leans a hand's width toward {giver}. Nobody can prove it. Everybody suspects it.",
                 when: OutcomeWhen::Choice,
                 effects: &[ArcEffect::Reputation(12), ArcEffect::Prosperity(-1)],
             },
@@ -626,10 +865,13 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
     ArcTemplate {
         id: ArcId(7),
         title: "Heirloom Below",
+        kind: ArcKind::Frontier,
+        contact_other: false,
         hook: "A family keepsake was cached below generations ago. Open the cache and bring it home without a scratch.",
         twist: "The heirloom is, objectively, hideous. They love it more than anything.",
         consequence: "It takes pride of place in the giver's home; their whole family warms to you.",
         tier: QuestTier::Shallow,
+        prerequisites: &[],
         triggers: &[
             Trigger::Want(Want::RecoverHeirloom),
             Trigger::Value(Value::Tradition),
@@ -646,11 +888,26 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             &[Objective::ReturnToSurface],
         ],
         beats: &["Open the old cache", "Carry it home gently"],
+        steps: &[
+            ArcStep {
+                journal: "{Giver}'s family cached their keepsake in {a place} {where}, generations back. Open the cache.",
+                nudge: "It's wrapped in a blue shawl. Or it was. Shawls don't last.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "You have it. It is very ugly. Carry it home without a scratch.",
+                nudge: "Gently! It's survived three floods and an uncle.",
+                contact: "",
+            },
+        ],
+        climax: "Unwrapped in daylight, the heirloom is a brass frog with three legs and an expression of deep disappointment. It is perfect.",
         twists: &[Twist::Fragile { max_damage: 20 }],
         reward: QuestReward::credits(300, 9),
         outcomes: &[
             ArcOutcome {
                 label: "Bring the heirloom home",
+                line: "",
+                epilogue: "The frog sits in {giver}'s window. Children make faces back at it. {Giver}'s whole family nods to you in the street now.",
                 when: OutcomeWhen::Completed,
                 effects: &[
                     ArcEffect::Reputation(12),
@@ -660,6 +917,8 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             },
             ArcOutcome {
                 label: "Abandon the search",
+                line: "",
+                epilogue: "The cache stayed closed. {Giver} says the frog is safer down there anyway. Their voice says otherwise.",
                 when: OutcomeWhen::Abandoned,
                 effects: &[ArcEffect::Mood(-10)],
             },
@@ -711,10 +970,13 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
     ArcTemplate {
         id: ArcId(8),
         title: "The Sealed Mine",
+        kind: ArcKind::Frontier,
+        contact_other: false,
         hook: "The village's old mine caved in and took its living with it. Blast the rubble clear and open the way.",
         twist: "Behind the rubble, somebody has been keeping the old tunnels tidy, lamps trimmed and all.",
         consequence: "The mine reopens: the village prospers again, and someone in the deep has a new neighbour.",
         tier: QuestTier::Shallow,
+        prerequisites: &[],
         triggers: &[
             Trigger::Problem(VillageProblem::SealedMine),
             Trigger::Want(Want::ProtectVillage),
@@ -738,11 +1000,26 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             }],
         ],
         beats: &["Blast the rubble", "Clear the way through"],
+        steps: &[
+            ArcStep {
+                journal: "The old mine in {a place} {where} caved in. Bomb the marked rubble in order.",
+                nudge: "Mind the order. The old foreman always said: left, right, then pray.",
+                contact: "",
+            },
+            ArcStep {
+                journal: "The rubble's down. Dig on through to the old tunnels.",
+                nudge: "Can you see the old tunnels yet? Rails? Lamps?",
+                contact: "",
+            },
+        ],
+        climax: "Beyond the rubble the tunnels are swept clean. The lamps are trimmed. A tin mug sits on a crate, still warm.",
         twists: &[],
         reward: QuestReward::credits(450, 12).bombs(4),
         outcomes: &[
             ArcOutcome {
                 label: "Reopen the mine",
+                line: "",
+                epilogue: "The mine is working again and {village} has money for paint. The miners leave a mug of tea at the far end each night. By morning it's always empty.",
                 when: OutcomeWhen::Completed,
                 effects: &[
                     ArcEffect::Prosperity(2),
@@ -753,6 +1030,8 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             },
             ArcOutcome {
                 label: "Leave it sealed",
+                line: "",
+                epilogue: "The mine stayed shut. {Village} tightened its belt, and some nights people swear they hear tidy footsteps under the square.",
                 when: OutcomeWhen::Abandoned,
                 effects: &[ArcEffect::Prosperity(-1)],
             },
@@ -803,4 +1082,26 @@ pub const ARC_TEMPLATES: &[ArcTemplate] = &[
             "The mine is open. Somebody had been keeping its lamps lit.",
         ),
     },
+];
+
+mod crew;
+mod frontier;
+mod home;
+mod mystery;
+mod night;
+mod pilot;
+mod sky;
+mod village;
+
+/// Every batch of arcs, in authoring order ([`super::ARC_TEMPLATES`] chains them).
+pub const BATCHES: &[&[ArcTemplate]] = &[
+    BATCH_FIRST,
+    frontier::BATCH,
+    village::BATCH,
+    sky::BATCH,
+    mystery::BATCH,
+    home::BATCH,
+    night::BATCH,
+    pilot::BATCH,
+    crew::BATCH,
 ];

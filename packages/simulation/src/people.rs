@@ -77,8 +77,10 @@ pub use population::{
     Population, Relationship, RelationshipKind, generate_population, population_size,
 };
 pub use story::{
-    ArcId, ArcTemplate, SeedSource, SlotBinding, StorySeed, VillageProblem, WorldFact,
-    WorldFactKind, story_seeds,
+    ArcId, ArcKind, ArcTemplate, SeedSource, SlotBinding, StorySeed, VillageProblem, WorldFact,
+    WorldFactKind,
+    run::{ArcCast, ArcLog, ArcPlace, ArcRecord, ArcRun},
+    story_seeds,
 };
 pub use traits::{Fear, Personality, Quirk, Tone, Value, Want};
 

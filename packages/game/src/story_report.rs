@@ -3,11 +3,16 @@
 //! something memorable for them), then the story seeds their village grows, with pitches,
 //! beats, twists and endings. Rumours and story places come from the seed's generated world
 //! unless `--no-world` asks for stand-in places (faster).
+//!
+//! `fatherload --story-report --arcs [--seed S] [--count N] [--generator V5..V8]` instead walks
+//! the world's villages and prints full generated story arcs, bound to the real world exactly
+//! as play binds them: who offers it and why, the pitch, every beat's journal text, nudge and
+//! contact line, the climax, and every ending's reply and epilogue (WP-STORY).
 
 use fatherload_simulation::{
     people::{WorldFact, report},
     terrain::Terrain,
-    worldgen::{SPAWN_TILE_X, WorldSettings, parse_seed},
+    worldgen::{GeneratorVersion, SPAWN_TILE_X, WorldSettings, parse_seed},
 };
 
 /// Columns either side of town whose features feed the report's world facts.
@@ -19,6 +24,10 @@ pub struct StoryReportOptions {
     pub seed: u64,
     pub count: usize,
     pub world: bool,
+    /// Print full bound arcs instead of villages (`--arcs`).
+    pub arcs: bool,
+    /// The generator for `--arcs` (default: the current one).
+    pub generator: Option<GeneratorVersion>,
 }
 
 /// Parses the story report flags. `Ok(None)` when `--story-report` is absent.
@@ -34,6 +43,8 @@ pub fn parse_args(args: &[String]) -> Result<Option<StoryReportOptions>, String>
         seed: 1,
         count: 12,
         world: true,
+        arcs: false,
+        generator: None,
     };
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -51,6 +62,17 @@ pub fn parse_args(args: &[String]) -> Result<Option<StoryReportOptions>, String>
                     .ok_or("--count needs a number from 1 to 500")?;
             }
             "--no-world" => options.world = false,
+            "--arcs" => options.arcs = true,
+            "--generator" => {
+                let value = iter.next().ok_or("--generator needs a value")?;
+                options.generator = Some(match value.to_ascii_uppercase().as_str() {
+                    "V5" => GeneratorVersion::V5,
+                    "V6" => GeneratorVersion::V6,
+                    "V7" => GeneratorVersion::V7,
+                    "V8" => GeneratorVersion::V8,
+                    _ => return Err("--generator takes V5, V6, V7 or V8".to_owned()),
+                });
+            }
             other => return Err(format!("unknown story report argument {other}")),
         }
     }
@@ -63,6 +85,14 @@ pub fn parse_args(args: &[String]) -> Result<Option<StoryReportOptions>, String>
 ///
 /// Returns a message if writing fails.
 pub fn run(options: &StoryReportOptions, out: &mut impl std::io::Write) -> Result<(), String> {
+    if options.arcs {
+        let mut settings = WorldSettings::new(options.seed);
+        if let Some(generator) = options.generator {
+            settings.generator = generator;
+        }
+        let text = report::arc_report(&settings, options.count);
+        return write!(out, "{text}").map_err(|error| error.to_string());
+    }
     let facts = if options.world {
         let terrain = Terrain::generate(&WorldSettings::new(options.seed));
         // The classic world's span around town; endless worlds have no finite feature list.
@@ -76,7 +106,7 @@ pub fn run(options: &StoryReportOptions, out: &mut impl std::io::Write) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use super::{StoryReportOptions, parse_args};
+    use super::{GeneratorVersion, StoryReportOptions, parse_args};
 
     fn args(text: &str) -> Vec<String> {
         text.split_whitespace().map(str::to_owned).collect()
@@ -90,7 +120,19 @@ mod tests {
             Ok(Some(StoryReportOptions {
                 seed: 7,
                 count: 30,
-                world: false
+                world: false,
+                arcs: false,
+                generator: None,
+            }))
+        );
+        assert_eq!(
+            parse_args(&args("--story-report --arcs --generator v6")),
+            Ok(Some(StoryReportOptions {
+                seed: 1,
+                count: 12,
+                world: true,
+                arcs: true,
+                generator: Some(GeneratorVersion::V6),
             }))
         );
         assert!(parse_args(&args("--story-report --count 0")).is_err());

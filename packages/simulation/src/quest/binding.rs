@@ -16,8 +16,9 @@ use crate::{
 
 use super::{
     BOARD_TEMPLATES, Objective, ObjectiveProgress, QuestDef, QuestGiver, QuestId, QuestTarget,
-    SURFACE_ROW, TargetSpec,
+    SURFACE_ROW, StoryPlace, TargetSpec,
 };
+use crate::{people::VillageId, village::VillageSetting};
 
 const SALT_SPOTS: u64 = 0x0E57_0001;
 const SALT_BOARD: u64 = 0x0E57_0002;
@@ -234,6 +235,8 @@ fn candidates(
             }
             nearest_bands(all)
         }
+        // Story places bind through `story_place`.
+        TargetSpec::Story(_) => Vec::new(),
     };
     found.sort_by_key(|feature| {
         (
@@ -244,6 +247,295 @@ fn candidates(
         )
     });
     found
+}
+
+/// What a quest target was bound to (story text names it).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BoundTarget {
+    /// A feature from the index: a point of interest, cave, village, sky land or the Moon.
+    Feature(WorldFeature),
+    /// The town (the keepers' street).
+    Town,
+    /// A wanderers' camp.
+    Camp(VillageId),
+    /// The giver's own village, by id (no feature needed).
+    Village(VillageId),
+    /// The highest ground near the origin: the sky's stand-in on worlds without one.
+    Ridge,
+}
+
+/// Columns either side of the origin a story searches for villages, camps and halls.
+pub const STORY_PLACE_COLUMNS: i32 = 1_400;
+/// ... for sky islands.
+const STORY_ISLAND_COLUMNS: i32 = 3_000;
+/// ... for sky continents.
+const STORY_CONTINENT_COLUMNS: i32 = 14_000;
+/// Columns either side of the origin searched for the ridge (the highest ground).
+const RIDGE_COLUMNS: i32 = 240;
+
+const fn target_of(feature: &WorldFeature) -> QuestTarget {
+    QuestTarget {
+        feature: Some(feature.id),
+        center: feature.center,
+        bounds: feature.bounds,
+    }
+}
+
+/// The surface rectangle a settlement spanning `first..=last` on `ground` covers.
+const fn surface_target(first: i32, last: i32, ground: i32) -> QuestTarget {
+    QuestTarget {
+        feature: None,
+        center: TilePosition {
+            x: i32::midpoint(first, last),
+            y: ground - 1,
+        },
+        bounds: TileRect {
+            min: TilePosition {
+                x: first,
+                y: ground - 12,
+            },
+            max: TilePosition { x: last, y: ground },
+        },
+    }
+}
+
+fn town_target(terrain: &Terrain) -> (QuestTarget, BoundTarget) {
+    let (first, last) = crate::surface::town_span();
+    let ground = terrain.surface_row(i32::midpoint(first, last));
+    (surface_target(first, last, ground), BoundTarget::Town)
+}
+
+/// The nearest village of `setting` other than `home` and the features in `skip`.
+fn village_target(
+    terrain: &Terrain,
+    origin: TilePosition,
+    setting: VillageSetting,
+    home: Option<VillageId>,
+    skip: &BTreeSet<FeatureId>,
+) -> Option<(QuestTarget, BoundTarget)> {
+    let settings = terrain.settings();
+    if !settings.generator.has_villages() {
+        return None;
+    }
+    let feature = terrain.nearest_feature(
+        origin,
+        FeatureKind::Village,
+        STORY_PLACE_COLUMNS,
+        |feature| {
+            !skip.contains(&feature.id)
+                && feature.village().is_some_and(|id| {
+                    Some(id) != home
+                        && crate::village::village(settings, id)
+                            .is_some_and(|found| found.setting == setting)
+                })
+        },
+    )?;
+    let found = crate::village::village(settings, feature.village()?)?;
+    Some((
+        QuestTarget {
+            feature: Some(feature.id),
+            center: TilePosition {
+                x: found.center_column(),
+                y: found.ground_row - 1,
+            },
+            bounds: found.area(),
+        },
+        BoundTarget::Feature(feature),
+    ))
+}
+
+fn camp_target(
+    terrain: &Terrain,
+    origin: TilePosition,
+    home: Option<VillageId>,
+) -> Option<(QuestTarget, BoundTarget)> {
+    let camps = crate::people::camps::camps_between(
+        terrain.settings(),
+        origin.x - STORY_PLACE_COLUMNS,
+        origin.x + STORY_PLACE_COLUMNS,
+    );
+    let camp = camps
+        .iter()
+        .filter(|camp| Some(camp.id) != home)
+        .min_by_key(|camp| ((camp.column - origin.x).abs(), camp.id))?;
+    let (first, last) = camp.span();
+    Some((
+        surface_target(first, last, camp.ground_row),
+        BoundTarget::Camp(camp.id),
+    ))
+}
+
+/// The giver's own settlement.
+fn home_target(terrain: &Terrain, home: Option<VillageId>) -> (QuestTarget, BoundTarget) {
+    let settings = terrain.settings();
+    let Some(id) = home else {
+        return town_target(terrain);
+    };
+    if crate::people::camps::is_camp(id) {
+        if let Some(camp) = crate::people::camps::camp(settings, id) {
+            let (first, last) = camp.span();
+            return (
+                surface_target(first, last, camp.ground_row),
+                BoundTarget::Camp(id),
+            );
+        }
+    } else if id != crate::people::routine::TOWN_VILLAGE
+        && let Some(found) = crate::village::village(settings, id)
+    {
+        return (
+            QuestTarget {
+                feature: None,
+                center: TilePosition {
+                    x: found.center_column(),
+                    y: found.ground_row - 1,
+                },
+                bounds: found.area(),
+            },
+            BoundTarget::Village(id),
+        );
+    }
+    town_target(terrain)
+}
+
+/// The highest ground within [`RIDGE_COLUMNS`] of `origin` (the westmost on ties).
+fn ridge_target(terrain: &Terrain, origin: TilePosition) -> (QuestTarget, BoundTarget) {
+    let (x, row) = (origin.x - RIDGE_COLUMNS..=origin.x + RIDGE_COLUMNS)
+        .step_by(2)
+        .map(|x| (x, terrain.surface_row(x)))
+        .min_by_key(|(x, row)| (*row, *x))
+        .unwrap_or_else(|| (origin.x, terrain.surface_row(origin.x)));
+    (
+        QuestTarget {
+            feature: None,
+            center: TilePosition { x, y: row - 1 },
+            bounds: TileRect {
+                min: TilePosition {
+                    x: x - 3,
+                    y: row - 5,
+                },
+                max: TilePosition { x: x + 3, y: row },
+            },
+        },
+        BoundTarget::Ridge,
+    )
+}
+
+fn sky_target(
+    terrain: &Terrain,
+    origin: TilePosition,
+    kind: FeatureKind,
+    columns: i32,
+    skip: &BTreeSet<FeatureId>,
+) -> Option<(QuestTarget, BoundTarget)> {
+    if !terrain.settings().generator.has_sky() {
+        return None;
+    }
+    let feature =
+        terrain.nearest_feature(origin, kind, columns, |feature| !skip.contains(&feature.id))?;
+    Some((target_of(&feature), BoundTarget::Feature(feature)))
+}
+
+/// The nearest sky island, preferring the low isles (below the cloud archipelago): story
+/// islands are offered once a rig reaches the low isles
+/// ([`crate::milestone::island_capable`]), so the first hop stays the one it can make.
+fn island_target(
+    terrain: &Terrain,
+    origin: TilePosition,
+    skip: &BTreeSet<FeatureId>,
+) -> Option<(QuestTarget, BoundTarget)> {
+    if !terrain.settings().generator.has_sky() {
+        return None;
+    }
+    let archipelago = crate::worldgen::sky::row_of(crate::worldgen::sky::ARCHIPELAGO_BOTTOM_ROWS);
+    terrain
+        .nearest_feature(
+            origin,
+            FeatureKind::SkyIsland,
+            STORY_ISLAND_COLUMNS,
+            |feature| !skip.contains(&feature.id) && feature.center.y > archipelago,
+        )
+        .map(|feature| (target_of(&feature), BoundTarget::Feature(feature)))
+        .or_else(|| {
+            sky_target(
+                terrain,
+                origin,
+                FeatureKind::SkyIsland,
+                STORY_ISLAND_COLUMNS,
+                skip,
+            )
+        })
+}
+
+/// Binds a story place from `origin` (the giver's settlement), with its fallbacks.
+fn story_place(
+    place: StoryPlace,
+    terrain: &Terrain,
+    origin: TilePosition,
+    journal: &PoiJournal,
+    home: Option<VillageId>,
+    skip: &BTreeSet<FeatureId>,
+) -> Option<(QuestTarget, BoundTarget)> {
+    let feature_fallback = |kind: FeatureKind, bands: (u8, u8)| {
+        candidates(
+            TargetSpec::Feature { kind, bands },
+            terrain,
+            origin,
+            journal,
+            skip,
+        )
+        .into_iter()
+        .find(|feature| !skip.contains(&feature.id))
+        .map(|feature| (target_of(&feature), BoundTarget::Feature(feature)))
+    };
+    match place {
+        // Far out in the endless world the town may be tens of thousands of columns away, so
+        // a camp nearby stands in for a village before the town does.
+        StoryPlace::Village => Some(
+            village_target(terrain, origin, VillageSetting::Surface, home, skip)
+                .or_else(|| camp_target(terrain, origin, home))
+                .unwrap_or_else(|| town_target(terrain)),
+        ),
+        StoryPlace::Hall => {
+            village_target(terrain, origin, VillageSetting::Underground, home, skip)
+                .or_else(|| feature_fallback(FeatureKind::LargeCavern, (2, 4)))
+        }
+        StoryPlace::Camp => Some(
+            camp_target(terrain, origin, home)
+                .or_else(|| village_target(terrain, origin, VillageSetting::Surface, home, skip))
+                .unwrap_or_else(|| town_target(terrain)),
+        ),
+        StoryPlace::Town => Some(town_target(terrain)),
+        StoryPlace::Home => Some(home_target(terrain, home)),
+        StoryPlace::SkyIsland => Some(
+            island_target(terrain, origin, skip).unwrap_or_else(|| ridge_target(terrain, origin)),
+        ),
+        StoryPlace::SkyContinent => Some(
+            sky_target(
+                terrain,
+                origin,
+                FeatureKind::SkyContinent,
+                STORY_CONTINENT_COLUMNS,
+                skip,
+            )
+            .or_else(|| {
+                sky_target(
+                    terrain,
+                    origin,
+                    FeatureKind::SkyIsland,
+                    STORY_ISLAND_COLUMNS,
+                    skip,
+                )
+            })
+            .unwrap_or_else(|| ridge_target(terrain, origin)),
+        ),
+        StoryPlace::Moon => crate::worldgen::sky::moon(terrain.settings())
+            .map(|moon| {
+                let feature = moon.feature();
+                (target_of(&feature), BoundTarget::Feature(feature))
+            })
+            .or_else(|| feature_fallback(FeatureKind::Chamber, (6, 9)))
+            .or_else(|| feature_fallback(FeatureKind::LargeCavern, (4, 9))),
+    }
 }
 
 /// Binds `def` to the world: one place per target and the progress (with marked spots) of
@@ -261,10 +553,40 @@ pub fn bind_quest(
     salt: u64,
     taken: &BTreeSet<FeatureId>,
 ) -> Option<(Vec<QuestTarget>, Vec<ObjectiveProgress>)> {
+    bind_quest_from(def, terrain, origin, journal, salt, taken, None)
+        .map(|(targets, objectives, _)| (targets, objectives))
+}
+
+/// [`bind_quest`] for stories, from the giver's settlement.
+///
+/// `home` is the giver's settlement: story places search from `origin`, skip `home` where they
+/// want somewhere else, and [`StoryPlace::Home`] is it. What each target was bound to comes
+/// back too.
+#[must_use]
+pub fn bind_quest_from(
+    def: &QuestDef,
+    terrain: &Terrain,
+    origin: TilePosition,
+    journal: &PoiJournal,
+    salt: u64,
+    taken: &BTreeSet<FeatureId>,
+    home: Option<VillageId>,
+) -> Option<(Vec<QuestTarget>, Vec<ObjectiveProgress>, Vec<BoundTarget>)> {
     let mut used = taken.clone();
     let mut chosen = BTreeSet::new();
     let mut targets = Vec::with_capacity(def.targets.len());
+    let mut bound = Vec::with_capacity(def.targets.len());
     for (index, spec) in def.targets.iter().enumerate() {
+        if let TargetSpec::Story(place) = spec {
+            let (target, what) = story_place(*place, terrain, origin, journal, home, &chosen)?;
+            if let Some(feature) = target.feature {
+                chosen.insert(feature);
+                used.insert(feature);
+            }
+            targets.push(target);
+            bound.push(what);
+            continue;
+        }
         let options: Vec<WorldFeature> = candidates(*spec, terrain, origin, journal, &used)
             .into_iter()
             .filter(|feature| !chosen.contains(&feature.id))
@@ -282,18 +604,15 @@ pub fn bind_quest(
         let feature = options[pick];
         chosen.insert(feature.id);
         used.insert(feature.id);
-        targets.push(QuestTarget {
-            feature: Some(feature.id),
-            center: feature.center,
-            bounds: feature.bounds,
-        });
+        targets.push(target_of(&feature));
+        bound.push(BoundTarget::Feature(feature));
     }
     let seed = terrain.seed() ^ salt ^ u64::from(def.id.0);
     let mut objectives = Vec::new();
     for objective in def.objectives() {
         objectives.push(objective_progress(def, objective, &targets, terrain, seed)?);
     }
-    Some((targets, objectives))
+    Some((targets, objectives, bound))
 }
 
 /// Fresh progress for one objective, with its spots laid out.

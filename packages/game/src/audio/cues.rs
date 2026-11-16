@@ -230,6 +230,10 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::NightFalls => Patch::NightFallSting,
         SoundCue::DawnRelief => Patch::DawnRelief,
         SoundCue::Burrow => Patch::BurrowPuff,
+        SoundCue::StoryHook => Patch::StoryHook,
+        SoundCue::StoryQuill => Patch::StoryQuill,
+        SoundCue::StoryClimax => Patch::StoryClimax,
+        SoundCue::StoryResolved => Patch::StoryResolved,
     }
 }
 
@@ -613,6 +617,16 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
             SoundCue::UiBack
         }),
         GameplayEventKind::RumourMarked { .. } => Some(SoundCue::RumourHeard),
+        // Stories: a curious hook when a person pitches one, a quill for taking it on and for
+        // every beat, the music box at the climax, a warm cadence at the end, the back blip
+        // when one is given up.
+        GameplayEventKind::ArcOffered { .. } => Some(SoundCue::StoryHook),
+        GameplayEventKind::ArcAccepted { .. } | GameplayEventKind::ArcStepDone { .. } => {
+            Some(SoundCue::StoryQuill)
+        }
+        GameplayEventKind::ArcClimax { .. } => Some(SoundCue::StoryClimax),
+        GameplayEventKind::ArcCompleted { .. } => Some(SoundCue::StoryResolved),
+        GameplayEventKind::ArcAbandoned { .. } => Some(SoundCue::UiBack),
         // Upgrade reward moments: the purchase fanfare (a bomb pack is just the purchase
         // chime), a milestone's fanfare, and the big one when the sky opens.
         GameplayEventKind::UpgradeInstalled { upgrade, .. } => Some(
@@ -798,6 +812,12 @@ mod tests {
             | GameplayEventKind::AffinityChanged { .. }
             | GameplayEventKind::RumourMarked { .. }
             | GameplayEventKind::PeopleInteraction { .. }
+            | GameplayEventKind::ArcOffered { .. }
+            | GameplayEventKind::ArcAccepted { .. }
+            | GameplayEventKind::ArcStepDone { .. }
+            | GameplayEventKind::ArcClimax { .. }
+            | GameplayEventKind::ArcCompleted { .. }
+            | GameplayEventKind::ArcAbandoned { .. }
             | GameplayEventKind::UpgradeInstalled { .. }
             | GameplayEventKind::MilestoneEarned { .. }
             | GameplayEventKind::LightningArc { .. }
@@ -1275,6 +1295,23 @@ mod tests {
             feature,
         });
         events.push(GameplayEventKind::PeopleInteraction { player_id });
+        let arc = fatherload_simulation::people::ArcId(1);
+        events.extend([
+            GameplayEventKind::ArcOffered { player_id, arc },
+            GameplayEventKind::ArcAccepted { player_id, arc },
+            GameplayEventKind::ArcStepDone {
+                player_id,
+                arc,
+                step: 0,
+            },
+            GameplayEventKind::ArcClimax { player_id, arc },
+            GameplayEventKind::ArcCompleted {
+                player_id,
+                arc,
+                outcome: 0,
+            },
+            GameplayEventKind::ArcAbandoned { player_id, arc },
+        ]);
         events.extend(
             fatherload_simulation::economy::UpgradeKind::ALL.map(|upgrade| {
                 GameplayEventKind::UpgradeInstalled {
@@ -1624,6 +1661,10 @@ mod tests {
             SoundCue::NightFalls,
             SoundCue::DawnRelief,
             SoundCue::Burrow,
+            SoundCue::StoryHook,
+            SoundCue::StoryQuill,
+            SoundCue::StoryClimax,
+            SoundCue::StoryResolved,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

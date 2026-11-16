@@ -65,14 +65,33 @@ pub fn surface_row_at(terrain: &crate::terrain::Terrain, x: i32) -> i32 {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub struct QuestId(pub u16);
 
+/// Quest ids from here up name story arcs (WP-STORY): `ARC_QUEST_BASE + arc id`.
+///
+/// Arc quests run on the quest engine but live in the owner's [`crate::people::ArcLog`], never
+/// in [`QuestLog::active`], and are handed out and turned in by people, not keepers.
+pub const ARC_QUEST_BASE: u16 = 20_000;
+
 impl QuestId {
-    /// The definition this id names, among the authored quests and board templates.
+    /// The definition this id names, among the authored quests, board templates and story arcs.
     #[must_use]
     pub fn def(self) -> Option<&'static QuestDef> {
+        if self.0 >= ARC_QUEST_BASE {
+            return crate::people::story::arc_quest_def(self);
+        }
         QUESTS
             .iter()
             .chain(BOARD_TEMPLATES.iter())
             .find(|def| def.id == self)
+    }
+
+    /// The story arc this quest id runs, if it is an arc quest.
+    #[must_use]
+    pub const fn arc(self) -> Option<crate::people::ArcId> {
+        if self.0 >= ARC_QUEST_BASE {
+            Some(crate::people::ArcId(self.0 - ARC_QUEST_BASE))
+        } else {
+            None
+        }
     }
 }
 
@@ -425,6 +444,69 @@ pub enum TargetSpec {
     /// A generated feature (cavern, chamber, motherlode, artifact bed, hazard cluster, ...)
     /// centred in `bands`; the nearest is preferred.
     Feature { kind: FeatureKind, bands: BandRange },
+    /// A story place (WP-STORY): a village, camp, the town, a sky island, the Moon... found
+    /// from the binding origin, each with a fallback on worlds that lack it (see
+    /// [`StoryPlace`]).
+    Story(StoryPlace),
+}
+
+/// A place a story can send someone (WP-STORY).
+///
+/// Bound by [`binding`] through regional queries, so arcs bind anywhere in an endless world.
+/// Every place has a fallback, so an arc stays completable on worlds without villages, sky or
+/// Moon.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+pub enum StoryPlace {
+    /// The nearest surface village other than the giver's own; else a camp; else the town.
+    Village,
+    /// The nearest underground settlement; else a large cavern in the upper bands.
+    Hall,
+    /// The nearest wanderers' camp; else a village; else the town.
+    Camp,
+    /// The town (the keepers' street at the spawn).
+    Town,
+    /// The giver's own settlement (or the town when they have none).
+    Home,
+    /// The nearest sky island (V8); else the highest ground near the origin (a ridge).
+    SkyIsland,
+    /// The nearest sky continent; else a sky island; else the ridge.
+    SkyContinent,
+    /// The Moon; else the deepest chamber near the origin (the deep mystery).
+    Moon,
+}
+
+impl StoryPlace {
+    pub const ALL: [Self; 8] = [
+        Self::Village,
+        Self::Hall,
+        Self::Camp,
+        Self::Town,
+        Self::Home,
+        Self::SkyIsland,
+        Self::SkyContinent,
+        Self::Moon,
+    ];
+
+    /// What players call it before binding.
+    #[must_use]
+    pub const fn noun(self) -> &'static str {
+        match self {
+            Self::Village => "village",
+            Self::Hall => "underground settlement",
+            Self::Camp => "camp",
+            Self::Town => "town",
+            Self::Home => "home",
+            Self::SkyIsland => "sky island",
+            Self::SkyContinent => "sky continent",
+            Self::Moon => "Moon",
+        }
+    }
+
+    /// Whether it lies in the sky (its fallback may not).
+    #[must_use]
+    pub const fn is_sky(self) -> bool {
+        matches!(self, Self::SkyIsland | Self::SkyContinent | Self::Moon)
+    }
 }
 
 impl TargetSpec {
@@ -432,6 +514,8 @@ impl TargetSpec {
     pub const fn bands(self) -> BandRange {
         match self {
             Self::Poi { bands, .. } | Self::Feature { bands, .. } => bands,
+            // Surface and sky places sit above every band.
+            Self::Story(_) => (0, 0),
         }
     }
 
@@ -461,6 +545,7 @@ impl TargetSpec {
                 FeatureKind::SkyContinent => "sky continent",
                 FeatureKind::Moon => "moon",
             },
+            Self::Story(place) => place.noun(),
         }
     }
 }
@@ -540,6 +625,21 @@ pub enum Objective {
         window_ms: u32,
         solo_window_ms: u32,
     },
+    /// Pilot only (Part II F5): the owner climbs out and reaches the target on foot (a crevice
+    /// too tight for the rig, a ledge, a doorway).
+    OnFoot { target: u8 },
+    /// Pilot only: the owner carries `parcel` in by hand: on foot at a building door (or right
+    /// beside the fire of a camp) inside the target.
+    HandDeliver { target: u8, parcel: &'static str },
+    /// Keep watch: spend `seconds` at the target while it is night (Part II F4; only night
+    /// time counts).
+    Vigil { target: u8, seconds: u16 },
+    /// Find the story's contact in the target settlement and talk to them (story arcs; the
+    /// people tick marks it done). Bound with no contact (a fallback place nobody lives in),
+    /// reaching the target counts.
+    Speak { target: u8 },
+    /// Have a base module of `kind` standing in a claim the owner holds (homes and bases).
+    Settle { kind: crate::base::ModuleKind },
 }
 
 impl Objective {
@@ -554,6 +654,12 @@ impl Objective {
                 | Self::Escort { .. }
                 | Self::SplitDelivery { .. }
         )
+    }
+
+    /// Whether only the pilot on foot can do it.
+    #[must_use]
+    pub const fn is_on_foot(self) -> bool {
+        matches!(self, Self::OnFoot { .. } | Self::HandDeliver { .. })
     }
 
     /// Whether this is a basic primitive (the "filler" lint wants more than these).
@@ -607,12 +713,17 @@ impl Objective {
             | Self::RecoverLog { target }
             | Self::Simultaneous { target, .. }
             | Self::Relay { target, .. }
-            | Self::Escort { target, .. } => vec![target],
+            | Self::Escort { target, .. }
+            | Self::OnFoot { target }
+            | Self::HandDeliver { target, .. }
+            | Self::Vigil { target, .. }
+            | Self::Speak { target } => vec![target],
             Self::HoldAndClimb { switch, goal, .. } => vec![switch, goal],
             Self::Deliver { .. }
             | Self::ReachDepth { .. }
             | Self::ReturnToSurface
-            | Self::SplitDelivery { .. } => Vec::new(),
+            | Self::SplitDelivery { .. }
+            | Self::Settle { .. } => Vec::new(),
         }
     }
 }
@@ -1026,6 +1137,10 @@ pub struct QuestLog {
     /// Board jobs finished.
     #[serde(default)]
     pub board_completed: u32,
+    /// Story arcs (WP-STORY): the open offer, arcs in progress, follow-ups and history.
+    /// Serde default: older saves load with none.
+    #[serde(default)]
+    pub arcs: crate::people::ArcLog,
 }
 
 impl QuestLog {
