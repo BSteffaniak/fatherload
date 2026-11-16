@@ -539,6 +539,69 @@ fn burrowers_dig_real_tunnels_through_soft_rock_and_never_eat_ore() {
     }
 }
 
+/// Burrowers still live in the rock: one appearing inside solid dirt digs its den in place
+/// (open space, not moved out into a cave), the director still picks solid soft rock for them,
+/// and it digs its way to a drilling rig and bites it (the clay beds' early threat).
+#[test]
+fn burrowers_spawn_in_solid_soft_rock_by_digging_a_den_and_still_reach_drilling_rigs() {
+    let mut world = arena(60);
+    no_spawns(&mut world);
+    fill(&mut world, 258..290, FLOOR - 6..FLOOR, TileKind::Dirt);
+    fill(&mut world, 250..290, FLOOR..FLOOR + 16, TileKind::Stone);
+    fill(&mut world, 276..280, FLOOR..FLOOR + 1, TileKind::Dirt);
+    let den = TilePosition {
+        x: 270,
+        y: FLOOR - 2,
+    };
+    assert!(
+        world.site_fits(EnemyKind::Burrower, den),
+        "solid soft rock is burrower habitat"
+    );
+    let (x, y) = (
+        px(270.5),
+        px(f32::from(i16::try_from(FLOOR).expect("row")) - 1.5),
+    );
+    let burrower = world.spawn_enemy(EnemyKind::Burrower, x, y);
+    let (_, body, ..) = enemy_bodies(&world)
+        .into_iter()
+        .find(|e| e.0 == burrower)
+        .expect("burrower");
+    assert!(
+        (body.x - x).abs() < 0.5 && (body.y - y).abs() < 0.5,
+        "it stays in its den"
+    );
+    assert!(!physics::collides(world.terrain(), body.x, body.y, 8.0));
+    assert!(!world.terrain().is_solid_at(den), "the den is dug");
+    let player = world.player_mut(PLAYER).expect("player");
+    player.x = px(277.5);
+    let mut bitten = 0;
+    for tick in 0..60 * 12 {
+        let inputs = if tick % 120 < 45 {
+            TickInputs::held(PLAYER, ControlState::new(0.0, false, true))
+        } else {
+            TickInputs::default()
+        };
+        let output = world.simulate_tick(world.simulation_tick(), &inputs);
+        bitten += output
+            .events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    event.kind,
+                    GameplayEventKind::RigStruck {
+                        kind: EnemyKind::Burrower,
+                        ..
+                    }
+                )
+            })
+            .count();
+        let player = world.player_mut(PLAYER).expect("player");
+        player.hull = player.max_hull();
+        let _ = assert_bodies(&world, "burrower from its den");
+    }
+    assert!(bitten >= 1, "it dug to the drilling rig and bit it");
+}
+
 #[test]
 fn enemies_left_in_rock_move_out_the_short_way() {
     let mut world = arena(60);

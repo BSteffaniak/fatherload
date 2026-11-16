@@ -868,8 +868,8 @@ and danger grow with depth, and a Peaceful world has none.
   world's `HazardIntensity`) in a chunk on a ring 22-30 tiles out, which then cools down for
   40 s (less on Hard). The spot must be out of every rig's view, in the dark, outside safe
   zones and fit the kind (flyers and walkers need a cave around them, walkers a floor,
-  burrowers an open pocket against a soft wall) with the body in open space; bats come in
-  packs. Every two seconds lair chunks (one in seven, in
+  burrowers soft rock, where they dig their den as they appear, or an open pocket against a
+  soft wall) with the body in open space; bats come in packs. Every two seconds lair chunks (one in seven, in
   bands with lairs, holding a cavern) near a rig get their occupant (nests, turret pairs,
   elites with escorts) unless the lair was cleared (`EnemyDirector::cleared_lairs`).
   Everything is hashed from the seed, the tick and positions: no RNG state.
@@ -889,8 +889,9 @@ and danger grow with depth, and a Peaceful world has none.
   terrain (`diggable`: dirt, clay, stone, hard rock; never ore, fixtures, built pieces or
   bedrock, never in a safe zone; the tiles go through the terrain journal like the rogue
   excavator's), fall in open air, and lurk instead of wandering while idle. Spawns land only in
-  open space (`site_fits` checks the body; `spawn_enemy_with` moves an overlapping spot to the
-  nearest open one with `physics::free_spot_near`), and an enemy left inside rock by a terrain
+  open space (`site_fits` checks the body; `spawn_enemy_with` digs a burrower's den out of the
+  soft rock it appears in, then moves any other overlapping spot to the nearest open one with
+  `physics::free_spot_near`), and an enemy left inside rock by a terrain
   change (a boulder, a built piece, an old save) is resolved out the shortest way at the start
   of its tick (`free_from_rock`, up to a tile; a burrower with no room digs a pocket);
   knockback and blasts only change velocity, so they cannot embed one. Stationary fixtures

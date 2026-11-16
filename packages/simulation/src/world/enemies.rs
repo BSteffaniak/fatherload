@@ -382,6 +382,12 @@ impl WorldState {
         parent: Option<EntityId>,
     ) -> EntityId {
         let now = self.simulation_tick;
+        // A burrower appearing in soft rock digs its den there first (its mechanic: it lives
+        // in the rock and comes for drilling rigs through real tunnels), so it starts in open
+        // space without being moved out of the rock it lurks in.
+        if matches!(kind.stats().locomotion, Locomotion::Burrowing) {
+            let _dug = self.dig_box((x, y), kind.stats().radius);
+        }
         // Nothing appears inside rock: a spot that overlaps it (a brood hatching against a
         // ceiling, an escort above a lair floor, a scripted spawn) moves to the nearest open
         // space. Stationary fixtures stay where they were placed.
@@ -587,11 +593,13 @@ impl WorldState {
     }
 
     /// Whether an enemy of `kind` can appear at `tile`: the habitat fits and its body is in
-    /// open space there (nothing spawns inside rock).
-    fn site_fits(&self, kind: EnemyKind, tile: TilePosition) -> bool {
+    /// open space there (nothing spawns inside rock; a burrower digs its den out of the soft
+    /// tile it appears in, see [`Self::spawn_enemy_with`]).
+    pub(super) fn site_fits(&self, kind: EnemyKind, tile: TilePosition) -> bool {
         let (x, y) = Self::spawn_point(kind, tile);
         self.habitat_fits(kind, tile)
-            && !physics::collides(&self.terrain, x, y, kind.stats().radius)
+            && (matches!(kind.stats().locomotion, Locomotion::Burrowing)
+                || !physics::collides(&self.terrain, x, y, kind.stats().radius))
     }
 
     /// Whether the ground around `tile` suits an enemy of `kind`.
@@ -607,24 +615,24 @@ impl WorldState {
             y: tile.y + 1,
         };
         match spec.locomotion {
-            // A burrower lies in wait in an open pocket against a soft wall it can dig into.
+            // A burrower lies in wait inside soft rock (it digs its den there when it appears)
+            // or in an open pocket against a soft wall it can dig into.
             Locomotion::Burrowing => {
-                self.air(tile)
-                    && [(0, -1), (1, 0), (0, 1), (-1, 0)]
-                        .into_iter()
-                        .any(|(dx, dy)| {
-                            self.terrain
-                                .tile(TilePosition {
-                                    x: tile.x + dx,
-                                    y: tile.y + dy,
-                                })
-                                .is_some_and(|t| {
-                                    matches!(
-                                        t.kind,
-                                        TileKind::Dirt | TileKind::Clay | TileKind::Stone
-                                    )
-                                })
-                        })
+                let soft = |kind: TileKind| {
+                    matches!(kind, TileKind::Dirt | TileKind::Clay | TileKind::Stone)
+                };
+                self.terrain.tile(tile).is_some_and(|t| soft(t.kind))
+                    || self.air(tile)
+                        && [(0, -1), (1, 0), (0, 1), (-1, 0)]
+                            .into_iter()
+                            .any(|(dx, dy)| {
+                                self.terrain
+                                    .tile(TilePosition {
+                                        x: tile.x + dx,
+                                        y: tile.y + dy,
+                                    })
+                                    .is_some_and(|t| soft(t.kind))
+                            })
             }
             Locomotion::Flying => {
                 self.air(tile) && self.open_area(tile) >= if big { 20 } else { 12 }
