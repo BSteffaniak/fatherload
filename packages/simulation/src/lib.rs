@@ -35,6 +35,7 @@ pub mod item;
 pub mod mechanism;
 pub mod milestone;
 pub mod moon;
+pub mod night;
 pub mod people;
 pub mod physics;
 pub mod pilot;

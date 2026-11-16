@@ -265,6 +265,41 @@ impl WorldState {
                 return Err(HomeRefusal::Occupied);
             }
         }
+        // The Moon's colony and facility (T22), sky cities and temples (T21) are not for sale.
+        let span = crate::worldgen::TileRect {
+            min: TilePosition {
+                x: first,
+                y: ground_row - 12,
+            },
+            max: TilePosition {
+                x: last,
+                y: ground_row + 2,
+            },
+        };
+        if let Some(layout) = self.moon_layout()
+            && (layout.colony_area().expanded(8).intersects(&span)
+                || layout.facility.bounds().expanded(4).intersects(&span))
+        {
+            return Err(HomeRefusal::Occupied);
+        }
+        if settings.generator.has_sky_content() {
+            let in_city = [first, i32::midpoint(first, last), last].into_iter().any(|x| {
+                crate::worldgen::sky::continent::sky_city_at(
+                    settings,
+                    TilePosition { x, y: ground_row },
+                    8,
+                )
+                .is_some()
+            });
+            let on_temple = !crate::worldgen::sky::continent::temples_touching(settings, &span)
+                .into_iter()
+                .filter(|(_, temple)| temple.rect().expanded(4).intersects(&span))
+                .collect::<Vec<_>>()
+                .is_empty();
+            if in_city || on_temple {
+                return Err(HomeRefusal::Occupied);
+            }
+        }
         let claimed = self.bases.claims().any(|claim| {
             let (min, max) = claim.bounds();
             min.x <= last + 1

@@ -165,7 +165,7 @@ pub(super) fn draw_view_hud(
         top,
     );
     if let Some(bottom) = wallet_bottom {
-        clock_hud::draw_clock_badge(draw, snapshot, rect, bottom + 3);
+        clock_hud::draw_clock_badge(draw, snapshot, rect, bottom + 3, view.night_safe);
     }
     // Altitude air, cold and wind while flying a V8 sky (F6).
     super::sky_hud::draw_sky_gauge(draw, snapshot, view, rect, top + 74);

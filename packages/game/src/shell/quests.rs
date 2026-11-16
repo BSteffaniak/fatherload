@@ -35,6 +35,12 @@ pub enum FanfareKind {
     WelcomeBack,
     /// A moment on the Moon (WP-MOON): the landing, the Warden's fall, the core.
     Lunar,
+    /// Night monsters begin to rise on the open surface (WP-NIGHT).
+    NightFalls,
+    /// Dawn after a night with monsters about: they burrow and flee.
+    NightSurvived,
+    /// The rare spawn of a new-moon night walks.
+    AlphaHunts,
 }
 
 /// A banner across the top of a seat's view.

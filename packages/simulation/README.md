@@ -147,6 +147,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `drops` | WP-DROPS: drops from broken tiles (drill, blasts, fire, shattering boulders), the pickup pass (nearest rig with room, magnet pulls, "full" warnings), merging, per-cell and per-blast caps, lifetimes, ore shatter, dumping and selling blocks, the collect toggle |
 | `entities` | the world side of the entity store: spawn helpers, the two entity phases and each kind's update (gas clouds, boulders, drops), blasts, waking on terrain changes, entity replication |
 | `enemies` | enemy spawning (the director), AI, attacks on rigs, the enemy damage model (`damage_enemy`, reached through `damage_entity`), blasts and scares on enemies, deaths and loot, safe zones, difficulty (see [Enemies](#enemies-srcenemyrs-srcworldenemiesrs)) |
+| `night` | night-time gameplay (WP-NIGHT): night falling and lifting, night monsters rising round exposed actors and prowling, the rare new-moon spawn, burrowing at dawn, night safety (`night_safe_zone`, `hostile_safe_zone`, palisades), lures, nocturnal ore (see [Night-time gameplay](#night-time-gameplay-srcnightrs-srcworldnightrs)) |
 | `bombs` | the explosives pass over charge entities: chain reactions and every explosive kind (`crate::explosive`): sticking, remote/sequenced detonation (after a 250 ms arming delay), cluster bomblets, shaped tunnels, loot-safe mining blasts, incendiary rings, flare pulses, smoke screens (`smoke_at`, `smoke_screens`), scare bangs, blast pushes on rigs and blast-feeling entities (`push_from_blasts`), blast damage (`damage_from_blasts`) and the throw preview |
 | `weapons` | hardpoint weapons (`crate::weapon`): each rig's trigger, capacitor and aim per tick (free or auto-aim, `auto_aim_target`), projectiles as entities, hitscan rays (`active_beam`), hits on targets, charges, drops and plain rock, the damage API (`damage_entity`, `crate::combat`), practice targets (`spawn_target_dummy`) and the shack's weapon services |
 | `movement`, `commands`, `services`, `progression`, `hazards`, `rescue` | gameplay rules used by the tick |
@@ -1393,6 +1394,82 @@ ClockState::offset_millis`, so it is deterministic, tick-rate safe and replicate
 for the night, sleeping alone, the crew vote and the host's rule, getting up, departing players,
 light levels, saves (including version 8 files), replication and hashes.
 
+## Night-time gameplay (`src/night.rs`, `src/world/night.rs`)
+
+Expansion plan WP-NIGHT (wave 4, T25). The open surface is dangerous at night; towns,
+villages, camps, homes and lit bases are safe; Peaceful turns it off (plan §11 decision 4).
+
+- **Night monsters** (`EnemyKind::ShadowHound`, `DuneStalker`, `WillOWisp`, `MothSwarm`,
+  `UmbralAlpha`; `night::is_nocturnal`): ordinary enemies (stats, resistances, loot, the AI,
+  the damage model, replication) that only the night pass spawns. Hounds hunt in packs and
+  pounce; stalkers swim through soft surface crusts (`night::stalker_ground`) and feel
+  footsteps (`night::feels_footsteps`: anything within hearing, not just drills); wisps throw
+  `ShotKind::Wispfire`, shrug off kinetic hits and give light; moth swarms are one entity, a
+  contact swarmer that burns easily; the alpha is an elite. They drop night-only materials
+  (`StrategicResourceKind::MothSilk`, `ShadowPelt`, `StalkerFang`, `WispEssence`,
+  `UmbralHeart`). Tier (health and damage) grows with distance from town (`night::night_tier`).
+- **The night pass** (`WorldState::advance_night`, after the enemy director each tick): the
+  night under way is `night::night_of(clock)` (named by its dusk's day; monsters rise from the
+  second half of dusk, `night::monsters_rise`). Turning into a night records it in the
+  director's `NightLedger` and fires `NightFell { night, moon }`; the dawn after fires
+  `NightSurvived { night, kills }` and every night monster flees for
+  `RETREAT_MILLIS` (+ a stagger) and leaves with `NightMonsterBurrowed`. Each second, round
+  every **exposed actor** (a live, awake rig or pilot outside every night-safe place) a monster
+  of the biome's roster (`night::night_roster`, hounds in packs) may rise 24-34 columns away,
+  out of view, under a local cap (`NIGHT_LOCAL_CAP` + `night::moon_extra_cap` + Hard's extra)
+  and the world caps; the odds scale with difficulty, the world's hazards and
+  `night::moon_density_percent` (full moon 160 %). On a new moon (`is_rare_spawn_night`) the
+  umbral alpha and two hounds rise once a night (`RareNightSpawn`, `NightLedger::rare_night`).
+  Idle monsters scent the nearest exposed actor within `SCENT_TILES` and prowl to it by moving
+  their home; light-shunning kinds stop at the last spot before a safe place, so they lurk at
+  the edge of a lamp's pool or a fence. Shallow nocturnal ore (`night::glows_at_night`:
+  silver, emerald, diamond, platinum within `NOCTURNAL_GLOW_DEPTH` rows) near an exposed actor
+  reveals itself on that player's map. Everything is hashed from the seed, tick and positions.
+- **Safety** (`WorldState::night_safe_zone`): deeper than `NIGHT_SURFACE_DEPTH` rows under the
+  local ground or more than `NIGHT_SKY_ROWS` above it, the town, villages and halls,
+  infrastructure, wanderers' camps (`CAMP_SAFE_TILES`, the open item), homes (a claim holding
+  a bed or a homestead), a claim spot fenced by `BuiltTile::Palisade` posts on both sides
+  within `PALISADE_REACH` (`palisade_guarded`) and fixture light of at least
+  `NIGHT_SAFE_LIGHT` (`WorldState::fixture_light_at`: lamp fixtures, settlement streets,
+  campfires). `WorldState::hostile_safe_zone(attacker, tile)` is the rule every enemy check
+  uses (perception, giving up the chase, turning back, `strike_rig`, `strike_pilot_as`):
+  night monsters use the night rule, all others `enemy_safe_zone` (which still keeps the whole
+  surface strip safe from cave enemies).
+- **Light matters** (`night::light_response`): hounds, stalkers and the alpha shun light (the
+  safety rule above) and flee a lit flare within `FLARE_SCARE_TILES`; moth swarms circle the
+  nearest lamp or flare within `MOTH_LURE_TILES` instead of hunting (`WorldState::lure_for`,
+  shared with cave bats and flares); wisps don't care. `WorldState::light_at` now counts
+  pilots' helmet lamps (open item), turns off the lamps of rigs whose crew is in bed, and adds
+  wisps and, at night, nocturnal ore and campfires.
+- **Night economy** (`village::services::MarketTime`, `WorldState::market_time`,
+  `Village::offers_at`): from late dusk to dawn a village's trading post is the night market
+  (`services::night_market`: `VillageDeal::SellNightGoods` at 100 % + prosperity of
+  `night::night_material_value`, flares, scare charges, a ward, a rumour and a curio that
+  changes nightly) and the workshop, armory, tailor, assay office and map room are shut
+  (`VillageService::closes_at_night`, no offers); the inn, depot, shrine and hall trade as
+  ever. Deals are validated against the offers at the tick's time.
+- **People** keep the sky's night: `people::clock`'s night is the clock's 19:30-04:30 (open
+  item), derived from `clock::NIGHT_START_SLICE` / `DAWN_START_SLICE`.
+- **For story arcs (T26)**: `WorldState::night_ledger()` (`active_night`, `night_kills`,
+  `kills_by_kind` / `kills_of`, `nights_survived`, `rare_night`), `night::NightHook`
+  (`Hunt`, `Gather`, `SurviveTheNight`, `SlayTheAlpha`) with `night::night_hooks(biome, moon)`
+  and `signature_drop`, `night_is_dangerous()`, `night_monsters()`, and the events above.
+- **For homes (T24)**: a home is night-safe once its claim holds a bed or homestead; a
+  contracted home that should count earlier can be added to `in_home_claim`.
+- **Balance** (probe `night`, `BALANCE_ONLY=night`): a parked, unarmed stock rig on open
+  ground loses about 80 hull a minute on an ordinary night (first hit after ~30 s), about 140
+  under a full moon and about 220 on a new moon once the alpha finds it; under a lamp, nothing.
+- **Formats**: the ledger rides inside the `EnemyDirector` (serde default; the `Enemies`
+  section; hashed with it). `PROTOCOL_VERSION` 12 (new enemy, shot, material, tile and deal
+  variants and events 240-243) and save format 10 (version 9 files load as is).
+
+`world/night_tests.rs` covers rising after dusk and burrowing at dawn, nothing by day,
+underground, in town or on Peaceful, safety by lamps, palisades, homes, camps, villages and the
+town, a hound striking in the open but not under a lamp, moths circling a lamp, the pilot's
+lamp, flares scaring hounds, the Moon (brighter full moons, the alpha once on a new moon),
+night drops and the ledger, the night market and shut counters, nocturnal ore, people's night,
+determinism, saves, replication and tick-rate safety.
+
 ## The pilot on foot (`src/pilot.rs`, `src/world/pilot.rs`)
 
 Expansion plan Part II F5. A player who climbs out of the rig becomes a pilot: an
@@ -1565,7 +1642,7 @@ V6 to V8). Village residents and the town's folk are `EntityKind::Npc` entities.
   `WorldState::people_clock()` is the only place people ask the time, and it reads T14's world
   clock (`clock::WorldClock` implements `ClockSource`: day from 0, minute of its 24-hour face),
   so routines follow the world's day length and a skipped night wakes everyone at dawn. People's
-  own schedule calls 20:00 to 06:00 night. `TickClock` (tick, tick rate,
+  own schedule calls the clock's 19:30 to 04:30 night (WP-NIGHT aligned it). `TickClock` (tick, tick rate,
   `DEFAULT_DAY_LENGTH_MINUTES` = 48; tick 0 is 08:00) reads the same as a fresh standard world's
   clock, and `TickClock::tick_at(time, hz, day_length)` (its inverse) stays for tests and
   scenes.
@@ -1589,7 +1666,7 @@ V6 to V8). Village residents and the town's folk are `EntityKind::Npc` entities.
   camp as a `Settlement` with no lots (`Settlement::camp`), so wanderers sleep, work and gather
   around the fire and talk, trade, take gifts and remember players exactly like residents.
   `camps_between(settings, first, last)` lists them for population and the renderer. Camps are
-  not enemy safe zones (WP-NIGHT may want to make lit camps safe).
+  not enemy safe zones, but they are night-safe (WP-NIGHT `night_safe_zone`).
 - **NPC entities** (`world/people.rs`): `NpcState` (character, activity, `inside` lot, target,
   facing, `talking_to`, idle pause). Every `PEOPLE_REFRESH_MILLIS` the residents of every
   settlement an actor is within `SPAWN_MARGIN_COLUMNS` (and `NEAR_ROWS`) of spawn at their
@@ -1818,6 +1895,18 @@ Where the wave 2 tracks meet, for the tracks that build on them:
   90-95, bases 100-102. `PROTOCOL_VERSION` 10 (9 for wave 2, 10 for T8's V7 worlds, surface tiles at codes 0x500 and
   chunks above row 0) and save format 8 (unchanged: an older build rejects a V7 save by its
   unknown generator) cover all of wave 2.
+
+## Wave 4 seams: the night (T25)
+
+- **Event codes** 240-243 (`NightFell`, `NightSurvived`, `RareNightSpawn`,
+  `NightMonsterBurrowed`).
+- **Enemy kinds** are appended to `EnemyKind` (and `EnemyKind::ALL`); sky and Moon enemies
+  (T21, T22) append after them. Cave-habitat and safe-zone matches list them explicitly.
+- **Safe zones**: new enemy checks should call `hostile_safe_zone(Some(kind), tile)`; sky
+  enemies that hunt the open sky want a rule like `night_safe_zone` rather than
+  `enemy_safe_zone` (whose surface strip covers the whole sky).
+- **Light**: `fixture_light_at` is the fixed light other tracks' lamps (homes, sky towns)
+  should feed so night safety follows them.
 
 ## Wave 3 seams: the sky (T16)
 

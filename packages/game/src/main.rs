@@ -12,6 +12,7 @@ mod effects;
 mod input;
 mod input_mapping;
 mod local_game;
+mod night_text;
 mod online;
 mod pixel_scale;
 mod profile;

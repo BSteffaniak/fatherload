@@ -57,6 +57,11 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::CrystalMite => &moon_art::CRYSTAL_MITE,
         EnemyKind::DerelictAutomaton => &moon_art::DERELICT_AUTOMATON,
         EnemyKind::Warden => &moon_art::WARDEN,
+        EnemyKind::ShadowHound => &art::SHADOW_HOUND,
+        EnemyKind::DuneStalker => &art::DUNE_STALKER,
+        EnemyKind::WillOWisp => &art::WILL_O_WISP,
+        EnemyKind::MothSwarm => &art::NIGHT_MOTH,
+        EnemyKind::UmbralAlpha => &art::UMBRAL_ALPHA,
     }
 }
 
@@ -68,6 +73,7 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::Fireball => &art::SHOT_FIREBALL,
         ShotKind::Bolt => &art::SHOT_BOLT,
         ShotKind::Cannonball => &art::SHOT_CANNONBALL,
+        ShotKind::Wispfire => &art::SHOT_WISPFIRE,
     }
 }
 
@@ -139,7 +145,18 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
     let moving = entity.body.velocity_x.abs() > 4.0;
     let attacking = matches!(state.mode, EnemyMode::Windup | EnemyMode::Strike);
     match state.kind {
-        EnemyKind::Burrower | EnemyKind::BroodLord => usize::from(attacking),
+        EnemyKind::Burrower | EnemyKind::BroodLord | EnemyKind::DuneStalker => {
+            usize::from(attacking)
+        }
+        EnemyKind::ShadowHound => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 7.0) as usize) % 2
+            } else {
+                0
+            }
+        }
         EnemyKind::AcidSpitter => {
             if state.mode == EnemyMode::Windup {
                 2
@@ -157,7 +174,7 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         EnemyKind::SentryTurret => usize::from(
             state.mode == EnemyMode::Windup && ((phase * 12.0) as usize).is_multiple_of(2),
         ),
-        EnemyKind::Shellback | EnemyKind::RogueExcavator => {
+        EnemyKind::Shellback | EnemyKind::RogueExcavator | EnemyKind::UmbralAlpha => {
             if moving || attacking {
                 sprite.frame_at(phase)
             } else {
@@ -210,7 +227,9 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         | EnemyKind::StormElemental
         | EnemyKind::PirateAirship
         | EnemyKind::SkyPirate
-        | EnemyKind::HarpyNester => sprite.frame_at(phase),
+        | EnemyKind::HarpyNester
+        | EnemyKind::WillOWisp
+        | EnemyKind::MothSwarm => sprite.frame_at(phase),
     }
 }
 
@@ -229,6 +248,9 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::SkyPirate
             | EnemyKind::RegolithCrawler
             | EnemyKind::DerelictAutomaton
+            | EnemyKind::ShadowHound
+            | EnemyKind::DuneStalker
+            | EnemyKind::UmbralAlpha
     )
 }
 
@@ -265,6 +287,27 @@ fn draw_enemy(
     // A burrower inside rock is only cracks and dust.
     if stats.locomotion == Locomotion::Burrowing && in_rock(scene.terrain, x, y) {
         draw_burrow_trace(draw, state, x, y, seconds);
+        return;
+    }
+    // A dune stalker bursting out of the ground throws a plume of sand (WP-NIGHT).
+    if state.kind == EnemyKind::DuneStalker && state.mode == EnemyMode::Strike {
+        for grain in 0..14 {
+            let g = grain as f32;
+            let spread = (g * 2.399).sin();
+            let fall = (seconds * 3.0 + g * 0.37).fract() * 12.0;
+            disc(
+                draw,
+                spread.mul_add(stats.radius * 1.6, x),
+                (fall * ART).mul_add(-0.3, y + stats.radius + g * 0.9),
+                1 + (grain % 2),
+                with_alpha(if grain % 3 == 0 { SAND } else { CLAY }, 190),
+            );
+        }
+        disc(draw, x, y + stats.radius, 8, with_alpha(SAND, 45));
+    }
+    // A moth swarm is a whirl of moths round its centre (WP-NIGHT).
+    if state.kind == EnemyKind::MothSwarm {
+        draw_moth_swarm(draw, state, x, y, seconds, world_tick);
         return;
     }
     let hurt = state.hurt_until.get() > world_tick;
@@ -309,6 +352,31 @@ fn draw_enemy(
         EnemyKind::BroodNest => {
             disc(draw, x, y + ART * 4.0, 7, with_alpha(LIME, 25));
         }
+        // Night monsters (WP-NIGHT): a wisp's cold halo, the alpha's violet murk, a hound's
+        // trailing smoke.
+        EnemyKind::WillOWisp => {
+            let pulse = ((seconds * 3.0).sin() * 2.0) as i32;
+            disc(draw, x, y, 12 + pulse, with_alpha(MINT, 26));
+            disc(draw, x, y, 7, with_alpha(MINT, 40));
+        }
+        EnemyKind::UmbralAlpha => {
+            let pulse = ((seconds * 2.0).sin() * 2.0) as i32;
+            disc(draw, x, y - ART * 2.0, 20 + pulse, with_alpha(PLUM, 50));
+            disc(draw, x, y - ART * 2.0, 13, with_alpha(VIOLET, 40));
+        }
+        EnemyKind::ShadowHound => {
+            for puff in 0..3 {
+                let drift = (seconds * 1.5 + puff as f32 * 0.33).fract();
+                let side = -f32::from(state.facing);
+                disc(
+                    draw,
+                    side.mul_add(stats.radius + drift * 10.0, x),
+                    y - drift * 6.0,
+                    2 + (drift * 2.0) as i32,
+                    with_alpha(SLATE, (70.0 * (1.0 - drift)) as u8),
+                );
+            }
+        }
         _ => {}
     }
     sprite::draw_sprite_flipped(
@@ -343,7 +411,10 @@ fn draw_enemy(
             EnemyKind::RogueExcavator
             | EnemyKind::Shellback
             | EnemyKind::RockMimic
-            | EnemyKind::DerelictAutomaton => Some(RED),
+            | EnemyKind::DerelictAutomaton
+            | EnemyKind::UmbralAlpha => Some(RED),
+            EnemyKind::ShadowHound | EnemyKind::WillOWisp => Some(MINT),
+            EnemyKind::DuneStalker => Some(SAND),
             _ => None,
         };
         if let Some(glow) = glow {
@@ -477,6 +548,139 @@ fn draw_burrow_trace(draw: &mut impl RaylibDraw, state: &EnemyState, x: f32, y: 
     }
 }
 
+/// A moth swarm: a dozen moths whirling round the swarm's centre, each flapping on its own
+/// beat, a faint dust haze between them, and a pink flash when it is hurt.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    reason = "presentation math on small bounded values"
+)]
+fn draw_moth_swarm(
+    draw: &mut impl RaylibDraw,
+    state: &EnemyState,
+    x: f32,
+    y: f32,
+    seconds: f32,
+    world_tick: u64,
+) {
+    let sprite = &art::NIGHT_MOTH;
+    let hurt = state.hurt_until.get() > world_tick;
+    let tint = if hurt { PINK } else { Color::WHITE };
+    disc(draw, x, y, 9, with_alpha(MIST, 18));
+    let base = (state.seed % 97) as f32 * 0.07;
+    for moth in 0..12 {
+        let m = moth as f32;
+        let speed = 1.3 + (moth % 4) as f32 * 0.35;
+        let angle =
+            (seconds * speed).mul_add(if moth % 2 == 0 { 1.0 } else { -1.0 }, base + m * 0.52);
+        let reach = 4.0 + (moth % 3) as f32 * 3.5 + ((seconds * 2.0 + m).sin() * 1.5);
+        let (mx, my) = (
+            angle.cos().mul_add(reach * ART, x),
+            (angle * 1.3).sin().mul_add(reach * ART * 0.7, y),
+        );
+        let frame = sprite.frame_at(seconds + m * 0.031);
+        let (w, h) = (sprite.width() as f32 * ART, sprite.height() as f32 * ART);
+        sprite::draw_sprite(
+            draw,
+            sprite,
+            frame,
+            Vector2::new(snap(mx - w * 0.5), snap(my - h * 0.5)),
+            ART,
+            tint,
+        );
+    }
+}
+
+/// Glints that cut through the night (drawn over the light map, WP-NIGHT): the eyes of hounds,
+/// stalkers and the alpha shine in the dark, a wisp's core burns, and moth wings catch the
+/// light. Only what the view could see.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    reason = "presentation math on small bounded values"
+)]
+pub(super) fn draw_night_glints(draw: &mut impl RaylibDraw, scene: &EnemyScene<'_>, darkness: f32) {
+    if darkness < 0.15 {
+        return;
+    }
+    let seconds = scene.seconds();
+    let strength = ((darkness - 0.15) / 0.5).clamp(0.0, 1.0);
+    for entity in scene.entities {
+        let EntityState::Enemy(state) = &entity.state else {
+            continue;
+        };
+        let (x, y) = entity.body.lerp_position(scene.alpha);
+        if !scene.on_screen(x, y, TILE_SIZE * 2.0) || scene.hidden(x, y) {
+            continue;
+        }
+        let stats = state.kind.stats();
+        let sprite = enemy_sprite(state.kind);
+        let (width, height) = (sprite.width() as f32 * ART, sprite.height() as f32 * ART);
+        let left = x - width * 0.5;
+        let grounded = matches!(
+            stats.locomotion,
+            Locomotion::Walking | Locomotion::Stationary
+        );
+        let top = if grounded {
+            y + stats.radius - height + ART
+        } else {
+            y - height * 0.5
+        };
+        let eyes: Option<(i32, i32, Color)> = match state.kind {
+            EnemyKind::ShadowHound => Some((13, 4, MINT)),
+            EnemyKind::UmbralAlpha => Some((22, 3, RED)),
+            EnemyKind::DuneStalker if !in_rock(scene.terrain, x, y) => Some((8, 4, RED)),
+            _ => None,
+        };
+        if let Some((ex, ey, color)) = eyes {
+            // Blink now and then.
+            let blink = ((seconds + (state.seed % 13) as f32 * 0.37) % 4.0) < 0.12;
+            if !blink {
+                let flip = faces(state.kind) && state.facing < 0;
+                let column = if flip { sprite.width() - 1 - ex } else { ex };
+                let (gx, gy) = (left + column as f32 * ART, top + ey as f32 * ART);
+                let glow = (strength * 90.0) as u8;
+                disc(
+                    draw,
+                    gx + ART,
+                    gy + ART * 0.5,
+                    4,
+                    with_alpha(color, glow / 2),
+                );
+                draw.draw_rectangle_rec(
+                    Rectangle::new(snap(gx), snap(gy), ART * 2.0, ART),
+                    with_alpha(color, (strength * 230.0) as u8),
+                );
+            }
+        }
+        match state.kind {
+            EnemyKind::WillOWisp => {
+                let pulse = ((seconds * 4.0 + (state.seed % 7) as f32).sin() * 1.5) as i32;
+                disc(
+                    draw,
+                    x,
+                    y,
+                    6 + pulse,
+                    with_alpha(MINT, (strength * 60.0) as u8),
+                );
+                disc(
+                    draw,
+                    x,
+                    y + ART,
+                    2,
+                    with_alpha(BONE, (strength * 200.0) as u8),
+                );
+            }
+            EnemyKind::MothSwarm => {
+                // Pale wings catch the light: the swarm shows against the night.
+                disc(draw, x, y, 12, with_alpha(MIST, (strength * 26.0) as u8));
+                draw_moth_swarm(draw, state, x, y, seconds, scene.world_tick);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// A one-pixel ring of radius `radius` art pixels.
 #[allow(
     clippy::cast_precision_loss,
@@ -509,7 +713,7 @@ fn draw_shot(
     let glow = match shot.kind {
         ShotKind::Acid => LIME,
         ShotKind::Fireball | ShotKind::Cannonball => ORANGE,
-        ShotKind::Bolt => MINT,
+        ShotKind::Bolt | ShotKind::Wispfire => MINT,
     };
     disc(draw, x, y, 4, with_alpha(glow, 50));
     sprite::draw_sprite(

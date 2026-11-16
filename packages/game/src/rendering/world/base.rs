@@ -1283,6 +1283,7 @@ const fn built_colors(tile: BuiltTile) -> (Color, Color) {
             (TEAL_DARK, TEAL)
         }
         BuiltTile::Gate | BuiltTile::KeycardDoor(_) => (STEEL_DARK, STEEL_LIGHT),
+        BuiltTile::Palisade => (SOIL, AMBER),
     }
 }
 
@@ -1321,6 +1322,16 @@ pub(in crate::rendering) fn draw_item_icon(
                 if tile == BuiltTile::Glass {
                     px(&mut push, 4.0, 5.0, 2.0, 2.0, ICE);
                     px(&mut push, 7.5, 2.0, 1.0, 12.0, STEEL);
+                }
+                if tile == BuiltTile::Palisade {
+                    // Three sharpened logs and a lashing.
+                    px(&mut push, 1.0, 1.0, 14.0, 4.0, NIGHT);
+                    for log in [2.0, 7.0, 12.0] {
+                        px(&mut push, log, 4.0, 3.0, 10.0, SOIL);
+                        px(&mut push, log, 4.0, 1.0, 10.0, AMBER);
+                        px(&mut push, log + 1.0, 2.0, 1.0, 2.0, SOIL);
+                    }
+                    px(&mut push, 2.0, 9.0, 13.0, 1.0, SAND);
                 }
                 if tile == BuiltTile::VentGrate {
                     for slat in [4.0, 8.0, 12.0] {

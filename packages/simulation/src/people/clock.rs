@@ -18,10 +18,13 @@ pub const DEFAULT_DAY_LENGTH_MINUTES: u32 = 48;
 pub const CLOCK_MINUTES_PER_DAY: u32 = 24 * 60;
 /// The time of day at tick 0 (08:00), so a new world starts in the morning.
 pub const START_MINUTE: u32 = 8 * 60;
-/// Night starts at 20:00 ...
-pub const NIGHT_START_MINUTE: u32 = 20 * 60;
-/// ... and ends at 06:00.
-pub const NIGHT_END_MINUTE: u32 = 6 * 60;
+/// Night starts at 19:30, with the world clock's night (`crate::clock::NIGHT_START_SLICE`;
+/// WP-NIGHT aligned people's night with the sky's) ...
+pub const NIGHT_START_MINUTE: u32 =
+    crate::clock::NIGHT_START_SLICE * CLOCK_MINUTES_PER_DAY / crate::clock::DAY_SLICES;
+/// ... and ends at 04:30, when dawn begins (`crate::clock::DAWN_START_SLICE`).
+pub const NIGHT_END_MINUTE: u32 =
+    crate::clock::DAWN_START_SLICE * CLOCK_MINUTES_PER_DAY / crate::clock::DAY_SLICES;
 
 /// A moment on the clock: the day number (0 is the first day) and the minute of that day
 /// (`0..CLOCK_MINUTES_PER_DAY`, 0 is midnight).
@@ -47,7 +50,7 @@ impl DayTime {
         self.minute / 60
     }
 
-    /// Whether it is night (20:00 to 06:00).
+    /// Whether it is night (19:30 to 04:30, the world clock's night).
     #[must_use]
     pub const fn is_night(self) -> bool {
         let minute = self.minute as u32;
@@ -157,6 +160,24 @@ mod tests {
             let evening = TickClock::new(24 * 60 * u64::from(hz), hz, DEFAULT_DAY_LENGTH_MINUTES);
             assert_eq!(evening.day_time(), DayTime::at(0, 20, 0));
             assert!(evening.is_night());
+        }
+    }
+
+    #[test]
+    fn peoples_night_is_the_skys_night() {
+        // WP-NIGHT: villagers' night and the world clock's night start and end together.
+        let length = crate::clock::DayLength::Standard;
+        for slice in 0..crate::clock::DAY_SLICES {
+            let clock = crate::clock::WorldClock::from_world_millis(
+                u64::from(slice) * length.slice_millis() + 1,
+                length,
+                3,
+            );
+            assert_eq!(
+                ClockSource::is_night(&clock.day_time()),
+                clock.is_night(),
+                "slice {slice}"
+            );
         }
     }
 

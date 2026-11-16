@@ -65,7 +65,7 @@ pub const fn built_ramp(tile: BuiltTile) -> Ramp {
         | BuiltTile::VentGrate
         | BuiltTile::Gate
         | BuiltTile::KeycardDoor(_) => STEEL_RAMP,
-        BuiltTile::Plank | BuiltTile::Chest { .. } => TIMBER,
+        BuiltTile::Plank | BuiltTile::Chest { .. } | BuiltTile::Palisade => TIMBER,
         BuiltTile::RuinWall | BuiltTile::GateLintel(_) | BuiltTile::Lever { .. } => RUIN,
         BuiltTile::PressurePlate { .. } => BRONZE,
     }
@@ -194,6 +194,9 @@ pub(super) fn paint(
         BuiltTile::KeycardDoor(color) => paint_keycard_door(canvas, color, position),
         BuiltTile::Chest { open, card } => {
             paint_chest(canvas, strata, edges, open, card);
+        }
+        BuiltTile::Palisade => {
+            paint_palisade(canvas, strata, edges, position);
             return;
         }
     }
@@ -266,6 +269,61 @@ fn paint_glass(canvas: &mut TileCanvas, (tile_x, tile_y): (i32, i32)) {
                 } else {
                     index_of(DEEP_BLUE)
                 }
+            };
+            canvas.set(px, py, pixel);
+        }
+    }
+}
+
+/// A palisade (WP-NIGHT): three sharpened logs side by side, bark-dark with a lit edge, bound
+/// by a rope lashing; the top piece of a run is cut to points, and the slits between logs
+/// show whatever is behind.
+fn paint_palisade(
+    canvas: &mut TileCanvas,
+    strata: &Strata,
+    edges: Edges,
+    (tile_x, tile_y): (i32, i32),
+) {
+    let pointed = edges.up.is_open();
+    let behind = |canvas: &TileCanvas, px: i32, py: i32| {
+        if edges.up == Cell::Sky || edges.left == Cell::Sky || edges.right == Cell::Sky {
+            TRANSPARENT
+        } else {
+            backdrop_pixel(strata, canvas.origin_x + px, canvas.origin_y + py)
+        }
+    };
+    let lash = 9 + (hash(tile_x, tile_y, 263) % 3) as i32;
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            // Three logs five pixels wide with a one-pixel slit after each.
+            let log = px.div_euclid(5).min(2);
+            let across = px - log * 5;
+            let slit = px == 15 || across == 4 && log < 2;
+            // Each log's sharpened point: a triangle over its top five rows.
+            let height = (hash(tile_x * 3 + log, tile_y, 269) % 2) as i32;
+            let tip = if pointed {
+                let middle = 2 - (across - 2).abs();
+                5 - middle * 2 - height
+            } else {
+                0
+            };
+            let pixel = if slit || py < tip {
+                behind(canvas, px, py)
+            } else if across == 0 || across == 3 || py == tip && pointed {
+                index_of(INK)
+            } else if py == lash || py == lash + 1 {
+                // The rope lashing.
+                if (px + py) % 2 == 0 {
+                    index_of(SAND)
+                } else {
+                    index_of(CLAY)
+                }
+            } else if across == 1 {
+                TIMBER[3]
+            } else if hash(px + canvas.origin_x, py + canvas.origin_y, 271).is_multiple_of(7) {
+                TIMBER[0]
+            } else {
+                TIMBER[1]
             };
             canvas.set(px, py, pixel);
         }

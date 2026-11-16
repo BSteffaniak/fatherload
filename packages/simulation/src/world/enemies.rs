@@ -138,7 +138,8 @@ const BURN_DAMAGE_PER_SECOND: f32 = 6.0;
 /// How long a damage flash lasts (presentation).
 const HURT_FLASH_MILLIS: u64 = 160;
 /// How long a badly hurt creature runs.
-const FLEE_MILLIS: u64 = 2_000;
+pub(super) const FLEE_MILLIS: u64 = 2_000;
+
 /// How far a lit flare lures bats, pixels.
 const FLARE_LURE: f32 = TILE_SIZE * 10.0;
 /// Most bats a nest keeps alive.
@@ -236,6 +237,15 @@ const fn diggable(kind: TileKind) -> bool {
         kind,
         TileKind::Dirt | TileKind::Clay | TileKind::Stone | TileKind::HardRock
     )
+}
+
+/// Ground a burrowing `enemy` tunnels through: [`diggable`] rock for burrowers, the soft
+/// surface crusts for a dune stalker (WP-NIGHT, [`crate::night::stalker_ground`]).
+const fn diggable_by(enemy: EnemyKind, kind: TileKind) -> bool {
+    match enemy {
+        EnemyKind::DuneStalker => crate::night::stalker_ground(kind),
+        _ => diggable(kind),
+    }
 }
 
 /// The motion constants of a flying or walking enemy of `kind` (stunned flyers fall).
@@ -376,7 +386,7 @@ impl WorldState {
         self.spawn_enemy_with(kind, (x, y), tier, None, None)
     }
 
-    fn tier_at(&self, tile: TilePosition) -> u8 {
+    pub(super) fn tier_at(&self, tile: TilePosition) -> u8 {
         u8::try_from(self.terrain.band_at(tile).index()).unwrap_or(u8::MAX)
     }
 
@@ -400,7 +410,7 @@ impl WorldState {
         // in the rock and comes for drilling rigs through real tunnels), so it starts in open
         // space without being moved out of the rock it lurks in.
         if matches!(kind.stats().locomotion, Locomotion::Burrowing) {
-            let _dug = self.dig_box((x, y), kind.stats().radius);
+            let _dug = self.dig_box(kind, (x, y), kind.stats().radius);
         }
         // Nothing appears inside rock: a spot that overlaps it (a brood hatching against a
         // ceiling, an escort above a lair floor, a scripted spawn) moves to the nearest open
@@ -936,14 +946,14 @@ impl WorldState {
 
     // --- The AI -------------------------------------------------------------------------
 
-    fn enemy_parts(&self, id: EntityId) -> Option<(Body, EnemyState)> {
+    pub(super) fn enemy_parts(&self, id: EntityId) -> Option<(Body, EnemyState)> {
         self.entities.get(id).and_then(|entity| match entity.state {
             EntityState::Enemy(state) => Some((entity.body, state)),
             _ => None,
         })
     }
 
-    fn after(&self, now: SimulationTick, millis: u64) -> SimulationTick {
+    pub(super) fn after(&self, now: SimulationTick, millis: u64) -> SimulationTick {
         SimulationTick::new(
             now.get()
                 .saturating_add(self.timing.ticks_for_millis(millis).max(1)),
@@ -957,10 +967,12 @@ impl WorldState {
         let sight = spec.sight_tiles * TILE_SIZE;
         let hearing = spec.hearing_tiles * TILE_SIZE;
         let reach = sight.max(hearing);
-        if state.kind == EnemyKind::CaveBat && self.flare_near(body.x, body.y).is_some() {
-            // A lit flare is irresistible: bats see nothing else.
+        if self.lure_for(state.kind, body.x, body.y).is_some() {
+            // A lit flare is irresistible to bats, and any light to moths: they see nothing
+            // else.
             return None;
         }
+        let feels_steps = crate::night::feels_footsteps(state.kind);
         // Smoke screens (WP-WEAPONS) hide rigs inside them from sight (not from hearing).
         let smoke = self.smoke_screens();
         let hidden = |x: f32, y: f32| {
@@ -991,11 +1003,12 @@ impl WorldState {
             if best.is_some_and(|(nearest, _)| nearest <= distance) {
                 continue;
             }
-            if self.enemy_safe_zone(tile_of(x, y)) {
+            if self.hostile_safe_zone(Some(state.kind), tile_of(x, y)) {
                 continue;
             }
-            let heard =
-                is_rig && distance <= hearing && self.active_drills.contains_key(&player_id);
+            // Drills are heard through rock; a dune stalker feels footsteps too (WP-NIGHT).
+            let heard = distance <= hearing
+                && (feels_steps || is_rig && self.active_drills.contains_key(&player_id));
             let seen = distance <= sight
                 && !hidden(x, y)
                 && (matches!(spec.locomotion, Locomotion::Burrowing)
@@ -1009,7 +1022,7 @@ impl WorldState {
     }
 
     /// A lit flare within lure range of `(x, y)`, if any (bats circle it instead of hunting).
-    fn flare_near(&self, x: f32, y: f32) -> Option<(f32, f32)> {
+    pub(super) fn flare_near(&self, x: f32, y: f32) -> Option<(f32, f32)> {
         // Charges are entities (WP-WEAPONS): read the store directly, no `bombs()` copy.
         self.entities
             .of_kind(EntityKind::Charge)
@@ -1129,6 +1142,13 @@ impl WorldState {
         if matches!(state.mode, EnemyMode::Stunned | EnemyMode::Flee) {
             return;
         }
+        // A light-shunning night monster runs from a lit flare (WP-NIGHT).
+        if self.flare_scares(state.kind, body.x, body.y) {
+            state.mode = EnemyMode::Flee;
+            state.mode_until = self.after(now, FLEE_MILLIS);
+            state.waypoint = None;
+            return;
+        }
         let spec = state.kind.stats();
         let noticed = self.perceive(body, state);
         let noticed = self.sky_notice(id, body, state, noticed, output);
@@ -1152,7 +1172,7 @@ impl WorldState {
                 }
                 let target_safe = self
                     .rig_position(state.target, (body.x, body.y))
-                    .is_none_or(|(x, y)| self.enemy_safe_zone(tile_of(x, y)));
+                    .is_none_or(|(x, y)| self.hostile_safe_zone(Some(state.kind), tile_of(x, y)));
                 let forgotten = now.get().saturating_sub(state.last_seen.get())
                     > self.timing.ticks_for_millis(LOSE_TARGET_MILLIS);
                 if (leashed || target_safe || forgotten) && state.mode == EnemyMode::Chase {
@@ -1168,7 +1188,9 @@ impl WorldState {
             _ => {}
         }
         // An enemy that strayed into a safe zone turns back.
-        if state.mode == EnemyMode::Chase && self.enemy_safe_zone(tile_of(body.x, body.y)) {
+        if state.mode == EnemyMode::Chase
+            && self.hostile_safe_zone(Some(state.kind), tile_of(body.x, body.y))
+        {
             state.mode = EnemyMode::Return;
             state.target = None;
         }
@@ -1191,9 +1213,7 @@ impl WorldState {
         match state.mode {
             EnemyMode::Dormant | EnemyMode::Stunned => Intent::default(),
             EnemyMode::Idle => {
-                if state.kind == EnemyKind::CaveBat
-                    && let Some(flare) = self.flare_near(body.x, body.y)
-                {
+                if let Some(flare) = self.lure_for(state.kind, body.x, body.y) {
                     return Intent {
                         goal: Some(self.orbit(flare, state, now, TILE_SIZE * 2.0)),
                         speed: spec.speed,
@@ -1233,10 +1253,9 @@ impl WorldState {
                     state.mode = EnemyMode::Idle;
                     return Intent::default();
                 };
-                if state.kind == EnemyKind::CaveBat
-                    && let Some(flare) = self.flare_near(body.x, body.y)
-                {
-                    // A flare is irresistible: the swarm forgets the rig.
+                if let Some(flare) = self.lure_for(state.kind, body.x, body.y) {
+                    // A flare (or, to moths, any lamp) is irresistible: the swarm forgets
+                    // the rig.
                     state.target = None;
                     state.mode = EnemyMode::Idle;
                     return Intent {
@@ -1712,7 +1731,7 @@ impl WorldState {
                 nx.mul_add(step + DIG_LEAD_PIXELS, body.x),
                 ny.mul_add(step + DIG_LEAD_PIXELS, body.y),
             );
-            let _dug = self.dig_box(ahead, radius);
+            let _dug = self.dig_box(state.kind, ahead, radius);
         }
         let params = BodyParams {
             radius,
@@ -1727,13 +1746,13 @@ impl WorldState {
         let _report = physics::step_body(body, &params, &self.terrain, dt);
     }
 
-    /// Digs out every [`diggable`] tile a square body of half-size `radius` centred on
+    /// Digs out every tile a burrower of `kind` can tunnel ([`diggable_by`]) a square body of half-size `radius` centred on
     /// `(x, y)` overlaps (outside safe zones). Returns whether a tile was dug.
     #[allow(
         clippy::cast_possible_truncation,
         reason = "world pixels saturate into tile coordinates"
     )]
-    fn dig_box(&mut self, (x, y): (f32, f32), radius: f32) -> bool {
+    fn dig_box(&mut self, kind: EnemyKind, (x, y): (f32, f32), radius: f32) -> bool {
         let low = tile_of(x - radius, y - radius);
         let high = tile_of(x + radius, y + radius);
         let mut dug = false;
@@ -1743,7 +1762,7 @@ impl WorldState {
                 if self
                     .terrain
                     .tile(position)
-                    .is_some_and(|tile| diggable(tile.kind))
+                    .is_some_and(|tile| diggable_by(kind, tile.kind))
                     && !self.enemy_safe_zone(position)
                 {
                     dug |= self.terrain.set_kind(position, TileKind::Air);
@@ -1773,7 +1792,7 @@ impl WorldState {
             body.previous_x = x;
             body.previous_y = y;
         } else if matches!(spec.locomotion, Locomotion::Burrowing) {
-            let _dug = self.dig_box((body.x, body.y), spec.radius);
+            let _dug = self.dig_box(kind, (body.x, body.y), spec.radius);
         }
     }
 
@@ -1906,7 +1925,14 @@ impl WorldState {
             })
         {
             // A pilot on foot is softer: no hull between it and the teeth.
-            let landed = self.strike_pilot(pilot, damage, (body.x, body.y), spec.knockback, output);
+            let landed = self.strike_pilot_as(
+                Some(state.kind),
+                pilot,
+                damage,
+                (body.x, body.y),
+                spec.knockback,
+                output,
+            );
             (landed, middle)
         } else {
             return;
@@ -1953,7 +1979,7 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return false;
         };
-        if player.hull <= 0.0 || self.enemy_safe_zone(tile_of(player.x, player.y)) {
+        if player.hull <= 0.0 || self.hostile_safe_zone(Some(kind), tile_of(player.x, player.y)) {
             return false;
         }
         let guard = self.after(now, RIG_GUARD_MILLIS);
@@ -2129,8 +2155,14 @@ impl WorldState {
                 .first()
                 .copied()
             {
-                let _landed =
-                    self.strike_pilot(pilot, shot.damage, (body.x, body.y), 120.0, output);
+                let _landed = self.strike_pilot_as(
+                    Some(shot.shooter),
+                    pilot,
+                    shot.damage,
+                    (body.x, body.y),
+                    120.0,
+                    output,
+                );
                 if !self.damage_immune() {
                     self.entities.despawn(id);
                     return;
@@ -2213,7 +2245,11 @@ impl WorldState {
         }
         let skittish = matches!(
             state.kind,
-            EnemyKind::CaveBat | EnemyKind::AcidSpitter | EnemyKind::MagmaWisp
+            EnemyKind::CaveBat
+                | EnemyKind::AcidSpitter
+                | EnemyKind::MagmaWisp
+                | EnemyKind::WillOWisp
+                | EnemyKind::MothSwarm
         );
         if skittish && state.health_fraction() < 0.25 && state.mode != EnemyMode::Stunned {
             state.mode = EnemyMode::Flee;
@@ -2256,6 +2292,9 @@ impl WorldState {
         if state.kind == EnemyKind::Warden {
             // WP-MOON: the core seal opens.
             self.warden_fell(state.last_attacker, output);
+        }
+        if crate::night::is_nocturnal(state.kind) {
+            self.enemies.night.record_kill(state.kind);
         }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
@@ -2402,6 +2441,11 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::PirateAirship
         | EnemyKind::AirshipTurret
         | EnemyKind::SkyPirate
-        | EnemyKind::HarpyNester => false,
+        | EnemyKind::HarpyNester
+        | EnemyKind::ShadowHound
+        | EnemyKind::DuneStalker
+        | EnemyKind::WillOWisp
+        | EnemyKind::MothSwarm
+        | EnemyKind::UmbralAlpha => false,
     }
 }

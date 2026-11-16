@@ -10,7 +10,7 @@
 //!   pick toward the aim. Bomb buttons throw from the pilot's hands.
 //! * **Survival**: health (suit tiers), oxygen in water, gas and thin air
 //!   ([`WorldState::pilot_air_at`] is the seam for altitude physics and the Moon), lava, fall
-//!   damage, enemy strikes ([`WorldState::strike_pilot`]) and blasts. At zero health the pilot
+//!   damage, enemy strikes ([`WorldState::strike_pilot_as`]) and blasts. At zero health the pilot
 //!   drops part of its pack and respawns in the rig (at the home point if the rig is wrecked).
 //! * **Persistence**: parking a player parks the pilot too ([`ParkedPilot`]).
 
@@ -938,8 +938,23 @@ impl WorldState {
     /// An enemy's hit on a pilot from `from`: no hit in safe zones, in god mode or inside the
     /// pilot's strike guard; otherwise knockback, the guard starts and the (difficulty-scaled)
     /// damage lands. Returns whether the hit landed.
+    #[cfg(test)]
     pub(super) fn strike_pilot(
         &mut self,
+        id: EntityId,
+        damage: f32,
+        from: (f32, f32),
+        knockback: f32,
+        output: &mut TickOutput,
+    ) -> bool {
+        self.strike_pilot_as(None, id, damage, from, knockback, output)
+    }
+
+    /// [`Self::strike_pilot`] by an enemy of kind `attacker`: night monsters (WP-NIGHT) reach
+    /// pilots on the open surface, where the deep enemies' safe zones do not apply.
+    pub(super) fn strike_pilot_as(
+        &mut self,
+        attacker: Option<crate::enemy::EnemyKind>,
         id: EntityId,
         damage: f32,
         from: (f32, f32),
@@ -956,7 +971,7 @@ impl WorldState {
             return false;
         };
         let (mx, my) = state.middle(&body);
-        if state.hurt > 0.0 || self.enemy_safe_zone(tile_at(mx, my)) {
+        if state.hurt > 0.0 || self.hostile_safe_zone(attacker, tile_at(mx, my)) {
             return false;
         }
         let (dx, dy) = (mx - from.0, my - from.1);

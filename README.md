@@ -120,6 +120,27 @@ at a village inn. In split-screen or online everyone has to turn in before the n
 host can switch the pause menu's **Sleeping** row to let anyone sleep). The HUD shows a sun dial
 with the day count and the time.
 
+**The night is dangerous.** As dusk deepens, night monsters rise on the open surface (a
+"NIGHT FALLS" banner and a low sting warn you) and they burrow and flee at dawn ("DAWN", with
+the night's tally). Which ones depends on the land: packs of **shadow hounds** on the plains,
+tundra, badlands and mountains (they will not step into lamp light and run from flares),
+**dune stalkers** that feel footsteps and burst out of desert sand, **will-o'-wisps** drifting
+over marsh and forest throwing cold wispfire (bullets pass through them; blasts do not), and
+**moth swarms** drawn to every light (a lamp out past your camp lures them off). The Moon
+matters: a full moon brings more of them and brighter nights; on a new moon the **umbral alpha**
+walks once, a huge hound heard howling across the land, with an Umbral Heart to take from it.
+Towns, villages, wanderers' camps, homes (a claim with a bed or homestead) and the pools of
+light round lamps are safe; so is a claim fenced with **palisades** on both sides (a cheap
+sharpened-log wall in the build menu). Down a shaft or high in the sky you are out of their
+reach. A **Peaceful** world turns all of it off.
+
+Night has its own economy. After dark a village's trading post becomes the **night market**
+(lanterns and a pennant out front) while the smith, tailor, workshop, assayer and map room shut
+until morning. It buys the night's drops (moth silk, shadow pelts, stalker fangs, wisp essence,
+umbral hearts) that no one else wants, and sells flares, scare charges, a ward and a curio that
+changes every night. Shallow silver, emerald, diamond and platinum glow through the turf at
+night and show up on your map as you pass, and villagers keep the sky's hours.
+
 ### Rigs
 
 Every rig is drawn from layered parts that show its upgrades: a drill head per drill tier (steel,

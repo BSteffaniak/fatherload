@@ -504,6 +504,7 @@ impl LocalGame {
         self.announce_points_of_interest(&players);
         self.announce_villages(&players);
         self.announce_moon(&players);
+        self.announce_night(&players);
         self.announce_quests(&players);
         self.announce_rewards(&players);
     }
@@ -629,6 +630,45 @@ impl LocalGame {
             }
             if let Some(message) = message {
                 self.shell.seat_mut(seat).message = message;
+            }
+        }
+    }
+
+    /// Night-time banners (WP-NIGHT) for every local seat: night falling (with what the Moon
+    /// means tonight), the dawn after a night with monsters about, and the rare spawn's howl.
+    fn announce_night(&mut self, players: &[PlayerId]) {
+        use crate::shell::FanfareKind;
+        let mut news: Vec<(FanfareKind, String, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            match gameplay.kind {
+                GameplayEventKind::NightFell { moon, .. } => {
+                    news.push((
+                        FanfareKind::NightFalls,
+                        moon.name().to_owned(),
+                        crate::night_text::moon_warning(moon).to_owned(),
+                    ));
+                }
+                GameplayEventKind::NightSurvived { kills, .. } => news.push((
+                    FanfareKind::NightSurvived,
+                    "You made it through the night".to_owned(),
+                    crate::night_text::dawn_detail(kills),
+                )),
+                GameplayEventKind::RareNightSpawn { .. } => news.push((
+                    FanfareKind::AlphaHunts,
+                    "The Umbral Alpha hunts".to_owned(),
+                    "It walks only on a new moon. Stay lit, or bring it down for its heart."
+                        .to_owned(),
+                )),
+                _ => {}
+            }
+        }
+        for (kind, title, detail) in news {
+            for seat in 0..players.len() {
+                self.shell
+                    .quest_fanfare(seat, kind, title.clone(), detail.clone());
             }
         }
     }

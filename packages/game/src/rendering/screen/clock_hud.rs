@@ -36,6 +36,8 @@ const fn dial_sky(phase: DayPhase) -> Color {
 
 /// The clock badge: a little half-disc sun dial (the sun travels its arc by day, the Moon by
 /// night) beside the day count and the time. Right-aligned under the wallet panel at `top`.
+/// While night monsters are about (`night_safe` is `Some`, WP-NIGHT) a line under it says
+/// whether the seat is SAFE (in a town, camp, home, lamp light or behind palisades) or EXPOSED.
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -46,15 +48,22 @@ pub(super) fn draw_clock_badge(
     snapshot: &RenderSnapshot<'_>,
     rect: Rectangle,
     top: i32,
+    night_safe: Option<bool>,
 ) {
     let clock = snapshot.clock;
     let day = format!("DAY {}", clock.day());
     let (hours, minutes) = clock.hours_minutes();
     let time = format!("{hours:02}:{minutes:02}");
-    let text_width =
-        ui_kit::text_width(&day, TextStyle::Bold).max(ui_kit::text_width(&time, TextStyle::Body));
+    let label_width = if night_safe.is_some() {
+        ui_kit::text_width("EXPOSED", TextStyle::Body)
+    } else {
+        0
+    };
+    let text_width = ui_kit::text_width(&day, TextStyle::Bold)
+        .max(ui_kit::text_width(&time, TextStyle::Body))
+        .max(label_width);
     let width = ui_kit::PANEL_PADDING * 2 + DIAL_WIDTH + 5 + text_width;
-    let height = 26;
+    let height = if night_safe.is_some() { 36 } else { 26 };
     let x = (rect.x + rect.width) as i32 - 16 - width;
     if top + height > (rect.y + rect.height) as i32 - 8 {
         return;
@@ -71,6 +80,25 @@ pub(super) fn draw_clock_badge(
     ui_kit::text(draw, &day, text_x, top + 5, TextStyle::Bold, GOLD);
     let time_color = if clock.is_night() { LAVENDER } else { MIST };
     ui_kit::text(draw, &time, text_x, top + 15, TextStyle::Body, time_color);
+    if let Some(safe) = night_safe {
+        let (label, color) = if safe {
+            ("SAFE", MINT)
+        } else {
+            ("EXPOSED", ORANGE)
+        };
+        let row = top + 25;
+        // A little lamp (safe) or a pair of eyes in the dark (exposed).
+        let icon_x = dial_x + 8;
+        if safe {
+            draw.draw_rectangle(icon_x + 2, row + 1, 1, 2, INK);
+            draw.draw_rectangle(icon_x, row + 3, 5, 4, INK);
+            draw.draw_rectangle(icon_x + 1, row + 4, 3, 2, GOLD);
+        } else {
+            draw.draw_rectangle(icon_x - 1, row + 3, 3, 2, ORANGE);
+            draw.draw_rectangle(icon_x + 5, row + 3, 3, 2, ORANGE);
+        }
+        ui_kit::text(draw, label, text_x, row, TextStyle::Body, color);
+    }
 }
 
 /// The dial: a half disc of sky over a horizon line, with the sun (day) or the Moon (night)

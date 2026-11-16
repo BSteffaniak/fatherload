@@ -107,6 +107,17 @@ pub enum StrategicResourceKind {
     MoonIce,
     /// Alien alloy from veins deep in the Moon: endgame drill and weapon tiers.
     AlienAlloy,
+    // Night-only creature drops (WP-NIGHT, see `crate::night::night_material_value`).
+    /// Dust-silver silk from a moth swarm.
+    MothSilk,
+    /// The smoke-dark hide of a shadow hound.
+    ShadowPelt,
+    /// A dune stalker's glassy fang.
+    StalkerFang,
+    /// The cold light of a will-o'-wisp, bottled.
+    WispEssence,
+    /// The heart of an umbral alpha (new-moon nights only).
+    UmbralHeart,
 }
 
 impl StrategicResourceKind {
@@ -125,6 +136,11 @@ impl StrategicResourceKind {
             Self::Helium3 => "Helium-3",
             Self::MoonIce => "Moon Ice",
             Self::AlienAlloy => "Alien Alloy",
+            Self::MothSilk => "Moth Silk",
+            Self::ShadowPelt => "Shadow Pelt",
+            Self::StalkerFang => "Stalker Fang",
+            Self::WispEssence => "Wisp Essence",
+            Self::UmbralHeart => "Umbral Heart",
         }
     }
 }

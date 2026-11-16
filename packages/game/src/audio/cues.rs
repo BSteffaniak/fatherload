@@ -222,7 +222,30 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::HomeFanfare => Patch::HomeFanfare,
         SoundCue::SiteKnock => Patch::SiteKnock,
         SoundCue::FurnitureThunk => Patch::FurnitureThunk,
+        SoundCue::HoundHowl => Patch::HoundHowl,
+        SoundCue::AlphaHowl => Patch::AlphaHowl,
+        SoundCue::StalkerBurst => Patch::StalkerBurst,
+        SoundCue::WispChime => Patch::WispChime,
+        SoundCue::MothFlutter => Patch::MothFlutter,
+        SoundCue::NightFalls => Patch::NightFallSting,
+        SoundCue::DawnRelief => Patch::DawnRelief,
+        SoundCue::Burrow => Patch::BurrowPuff,
     }
+}
+
+/// The voice of a night monster (WP-NIGHT) for its tells and wind-ups: a hound's howl, the
+/// alpha's deeper one, sand bursting round a stalker, a wisp's glassy chime, a swarm's
+/// flutter. `None` for the deep enemies (they use their family's sounds).
+#[must_use]
+pub const fn night_voice(kind: EnemyKind) -> Option<SoundCue> {
+    Some(match kind {
+        EnemyKind::ShadowHound => SoundCue::HoundHowl,
+        EnemyKind::UmbralAlpha => SoundCue::AlphaHowl,
+        EnemyKind::DuneStalker => SoundCue::StalkerBurst,
+        EnemyKind::WillOWisp => SoundCue::WispChime,
+        EnemyKind::MothSwarm => SoundCue::MothFlutter,
+        _ => return None,
+    })
 }
 
 /// The cue of an enemy event: creatures screech, hiss, squelch and wail; machines beep, whine,
@@ -237,7 +260,7 @@ pub const fn enemy_cue(kind: EnemyKind, creature: SoundCue, machine: SoundCue) -
 pub const fn shot_cue(shot: ShotKind) -> SoundCue {
     match shot {
         ShotKind::Acid => SoundCue::AcidSpit,
-        ShotKind::Fireball => SoundCue::FireWhoosh,
+        ShotKind::Fireball | ShotKind::Wispfire => SoundCue::FireWhoosh,
         ShotKind::Bolt => SoundCue::MachineZap,
         ShotKind::Cannonball => SoundCue::CannonBoom,
     }
@@ -426,16 +449,23 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
             _ => None,
         },
         // Enemies: every tell, wind-up, shot, hit and death is heard from where it happens.
-        GameplayEventKind::EnemyAlerted { kind, .. } => Some(enemy_cue(
-            *kind,
-            SoundCue::CreatureScreech,
-            SoundCue::MachineAlert,
-        )),
-        GameplayEventKind::EnemyWindup { kind, .. } => Some(enemy_cue(
-            *kind,
-            SoundCue::CreatureHiss,
-            SoundCue::MachineCharge,
-        )),
+        // Night monsters (WP-NIGHT) have their own voices for the tell and the wind-up.
+        GameplayEventKind::EnemyAlerted { kind, .. } => match night_voice(*kind) {
+            Some(voice) => Some(voice),
+            None => Some(enemy_cue(
+                *kind,
+                SoundCue::CreatureScreech,
+                SoundCue::MachineAlert,
+            )),
+        },
+        GameplayEventKind::EnemyWindup { kind, .. } => match night_voice(*kind) {
+            Some(SoundCue::HoundHowl | SoundCue::AlphaHowl) | None => Some(enemy_cue(
+                *kind,
+                SoundCue::CreatureHiss,
+                SoundCue::MachineCharge,
+            )),
+            voice => voice,
+        },
         GameplayEventKind::EnemyFired { shot, .. } => Some(shot_cue(*shot)),
         GameplayEventKind::EnemyHurt { kind, .. } => Some(enemy_cue(
             *kind,
@@ -505,6 +535,12 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::WardenDefeated { .. } => Some(SoundCue::Milestone),
         GameplayEventKind::MoonCoreReached { .. } => Some(SoundCue::CoreReached),
         GameplayEventKind::UplinkBeamed { .. } => Some(SoundCue::UplinkWarp),
+        // Night (WP-NIGHT): a low sting as the monsters rise, warm relief at dawn, the
+        // alpha's long howl over the land, and a puff of dust as each one burrows.
+        GameplayEventKind::NightFell { .. } => Some(SoundCue::NightFalls),
+        GameplayEventKind::NightSurvived { .. } => Some(SoundCue::DawnRelief),
+        GameplayEventKind::RareNightSpawn { .. } => Some(SoundCue::AlphaHowl),
+        GameplayEventKind::NightMonsterBurrowed { .. } => Some(SoundCue::Burrow),
         // The pilot on foot (Part II F5): from the player, like the rig's own sounds.
         GameplayEventKind::PilotExited { .. } => Some(SoundCue::HatchOpen),
         GameplayEventKind::PilotBoarded { .. } => Some(SoundCue::HatchClose),
@@ -803,7 +839,11 @@ mod tests {
             | GameplayEventKind::FurniturePlaced { .. }
             | GameplayEventKind::FurnitureRemoved { .. }
             | GameplayEventKind::HomeRushed { .. }
-            | GameplayEventKind::HomeInteraction { .. } => {}
+            | GameplayEventKind::HomeInteraction { .. }
+            | GameplayEventKind::NightFell { .. }
+            | GameplayEventKind::NightSurvived { .. }
+            | GameplayEventKind::RareNightSpawn { .. }
+            | GameplayEventKind::NightMonsterBurrowed { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1011,6 +1051,22 @@ mod tests {
                 x: 0,
                 y: 0,
             },
+            GameplayEventKind::NightFell {
+                night: 1,
+                moon: fatherload_simulation::clock::MoonPhase::Full,
+            },
+            GameplayEventKind::NightSurvived { night: 1, kills: 2 },
+            GameplayEventKind::RareNightSpawn {
+                kind: EnemyKind::UmbralAlpha,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::NightMonsterBurrowed {
+                entity: 1,
+                kind: EnemyKind::ShadowHound,
+                x: 0,
+                y: 0,
+            },
         ]);
         for action in [
             fatherload_simulation::enemy::SkyEnemyAction::Swoop,
@@ -1031,6 +1087,7 @@ mod tests {
             ShotKind::Fireball,
             ShotKind::Bolt,
             ShotKind::Cannonball,
+            ShotKind::Wispfire,
         ] {
             events.push(GameplayEventKind::EnemyFired {
                 entity: 1,
@@ -1559,7 +1616,16 @@ mod tests {
             SoundCue::HomeFanfare,
             SoundCue::SiteKnock,
             SoundCue::FurnitureThunk,
+            SoundCue::HoundHowl,
+            SoundCue::AlphaHowl,
+            SoundCue::StalkerBurst,
+            SoundCue::WispChime,
+            SoundCue::MothFlutter,
+            SoundCue::NightFalls,
+            SoundCue::DawnRelief,
+            SoundCue::Burrow,
         ];
+
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));
         patches.sort();

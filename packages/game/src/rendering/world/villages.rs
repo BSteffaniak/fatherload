@@ -324,6 +324,120 @@ pub fn draw_villages(
     }
 }
 
+/// The night's dressing on surface villages (WP-NIGHT), drawn over the light map so it glows:
+/// the trading post strung with coloured lanterns under a "NIGHT MARKET" pennant, and a
+/// "SHUT" board hung on every day counter that closes for the night.
+pub fn draw_night_markets(
+    draw: &mut impl RaylibDraw,
+    terrain: &Terrain,
+    visible: Rectangle,
+    clock: fatherload_simulation::clock::WorldClock,
+    seconds: f32,
+) {
+    let time = village::services::MarketTime::of(clock);
+    if !time.night {
+        return;
+    }
+    for found in visible_villages(terrain, visible) {
+        if found.setting == VillageSetting::Underground {
+            continue;
+        }
+        let ground = tile_px(found.ground_row);
+        for building in &found.buildings {
+            let Some(service) = village::VillageService::of(building.kind) else {
+                continue;
+            };
+            let x = tile_px(building.first_column);
+            let width = building.width * TILE_ART;
+            if x + width as f32 * ART < visible.x || x > visible.x + visible.width {
+                continue;
+            }
+            let height = lot_height(building.kind);
+            let pen = Pen::at(x, ground - height as f32 * ART);
+            if service == village::VillageService::TradingPost {
+                night_market_stall(draw, pen, width, height, seconds, building.variant);
+            } else if time.closed(service) {
+                let board_x = width / 2 + 9;
+                let board_y = height - 22;
+                pen.rect(draw, board_x + 3, board_y - 3, 1, 3, INK);
+                pen.rect(draw, board_x + 13, board_y - 3, 1, 3, INK);
+                pen.boxed(draw, board_x, board_y, 17, 9, SOIL_DARK);
+                pen.text(
+                    draw,
+                    "SHUT",
+                    board_x + 2,
+                    board_y + 1,
+                    with_alpha(BONE, 200),
+                );
+            }
+        }
+    }
+}
+
+/// A string of swaying lanterns across a trading post's front and its night pennant.
+fn night_market_stall(
+    draw: &mut impl RaylibDraw,
+    pen: Pen,
+    width: i32,
+    height: i32,
+    seconds: f32,
+    variant: u32,
+) {
+    const LANTERNS: [Color; 5] = [AMBER, ROSE, MINT, GOLD, LAVENDER];
+    // Strung just above the awning, under the TRADE sign.
+    let line_y = height - 13;
+    let count = (width / 10).max(3);
+    let step = width / count;
+    for index in 0..count {
+        let lx = step / 2 + index * step;
+        // The rope sags between posts.
+        let sag = ((index as f32 / (count - 1).max(1) as f32 - 0.5).abs() * -6.0 + 3.0) as i32;
+        let sway = ((seconds * 1.6 + index as f32 * 0.9 + variant as f32).sin() * 1.2) as i32;
+        let y = line_y + sag;
+        if index + 1 < count {
+            pen.rect(draw, lx, y - 2, step, 1, with_alpha(INK, 160));
+        }
+        let color = LANTERNS[(index as usize + variant as usize) % LANTERNS.len()];
+        let flicker = 0.85 + 0.15 * (seconds * 7.0 + index as f32 * 1.7).sin();
+        pen.rect(
+            draw,
+            lx - 3 + sway,
+            y - 4,
+            7,
+            9,
+            with_alpha(color, (40.0 * flicker) as u8),
+        );
+        pen.rect(draw, lx - 1 + sway, y - 1, 3, 1, INK);
+        pen.boxed(draw, lx - 2 + sway, y, 5, 5, color);
+        pen.rect(
+            draw,
+            lx - 1 + sway,
+            y + 1,
+            1,
+            2,
+            with_alpha(CREAM, (220.0 * flicker) as u8),
+        );
+    }
+    let label = "NIGHT MARKET";
+    let label_width = text_art_width(label) + 8;
+    let px = width / 2 - label_width / 2;
+    // The pennant flies above the roof ridge.
+    let py = -9;
+    pen.boxed(draw, px, py, label_width, 13, PLUM);
+    pen.rect(
+        draw,
+        px + 1,
+        py + 1,
+        label_width - 2,
+        1,
+        with_alpha(LAVENDER, 120),
+    );
+    pen.text(draw, label, px + 4, py + 2, CREAM);
+    // Pennant tails.
+    pen.rect(draw, px - 3, py + 4, 3, 5, VIOLET);
+    pen.rect(draw, px + label_width, py + 4, 3, 5, VIOLET);
+}
+
 /// Where surface villages' light comes from at night (the light map, `world/lighting.rs`):
 /// each building's lit windows and every street lamp, as `(x, y, radius)` in world pixels.
 /// Underground halls keep their own lamps in the cave darkness.

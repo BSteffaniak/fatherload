@@ -95,7 +95,11 @@ impl WorldState {
         if VillageService::of(lot.kind) != Some(service) {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
-        let Some(deal) = found.offers(building).get(usize::from(offer)).copied() else {
+        let Some(deal) = found
+            .offers_at(building, self.market_time())
+            .get(usize::from(offer))
+            .copied()
+        else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
         if !self.players.contains_key(&player_id) {
@@ -134,6 +138,7 @@ impl WorldState {
             VillageDeal::Repair { percent } => self.village_repair(player_id, metered(percent)),
             VillageDeal::ChartRegion => self.village_chart(player_id, &found, price),
             VillageDeal::Rumour => self.village_rumour(player_id, &found, price),
+            VillageDeal::SellNightGoods { percent } => self.sell_night_goods(player_id, percent),
             VillageDeal::Room => {
                 if !self.clock().phase().sleepable()
                     || self.is_in_bed(player_id)
@@ -251,8 +256,41 @@ impl WorldState {
             | VillageDeal::ChartRegion
             | VillageDeal::Rumour
             | VillageDeal::Room
-            | VillageDeal::SkyCraft { .. } => PlayerScopedCommandOutcome::IgnoredUnavailable,
+            | VillageDeal::SkyCraft { .. }
+            | VillageDeal::SellNightGoods { .. } => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
+    }
+
+    /// The village counters' trading hours now (WP-NIGHT: the night market keeps the night
+    /// monsters' hours).
+    #[must_use]
+    pub const fn market_time(&self) -> crate::village::services::MarketTime {
+        crate::village::services::MarketTime::of(self.clock())
+    }
+
+    /// Sells every night-only material in the bay at `percent` of its night value (the night
+    /// market, WP-NIGHT).
+    fn sell_night_goods(
+        &mut self,
+        player_id: PlayerId,
+        percent: u32,
+    ) -> PlayerScopedCommandOutcome {
+        let percent = percent + self.sale_bonus_percent(player_id);
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        };
+        let mut payout = 0_u64;
+        for material in crate::night::NIGHT_MATERIALS {
+            let count = player.cargo_bay.take_all(material);
+            payout += u64::from(count) * u64::from(crate::night::night_material_value(material));
+        }
+        let payout = u32::try_from(payout * u64::from(percent) / 100).unwrap_or(u32::MAX);
+        if payout == 0 {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        }
+        player.credits = player.credits.saturating_add(payout);
+        self.progression.total_earnings = self.progression.total_earnings.saturating_add(payout);
+        PlayerScopedCommandOutcome::Applied
     }
 
     /// Takes `price` credits from `player_id` if they have them.

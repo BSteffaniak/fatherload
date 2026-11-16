@@ -483,6 +483,9 @@ pub struct ViewSnapshot<'w> {
     pub pilot_usable: Option<(TilePosition, fatherload_simulation::mechanism::Usable)>,
     /// On foot: the use button works that fixture before boarding the rig (it is nearer).
     pub fixture_first: bool,
+    /// While night monsters are rising on a hostile world (WP-NIGHT): whether the seat's rig or
+    /// pilot is somewhere safe from them (the HUD's SAFE / EXPOSED line). `None` by day.
+    pub night_safe: Option<bool>,
 }
 
 impl ViewSnapshot<'_> {
@@ -1065,6 +1068,10 @@ fn view_snapshot(
         can_exit: world.can_exit_rig(player_id),
         pilot_usable: world.pilot_usable(player_id),
         fixture_first: world.pilot_fixture_first(player_id),
+        night_safe: (world.night_is_dangerous() && world.enemy_difficulty().hostile())
+            .then(|| world.actor_tile(player_id))
+            .flatten()
+            .map(|tile| world.night_safe_zone(tile)),
     })
 }
 

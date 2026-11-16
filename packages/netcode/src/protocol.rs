@@ -92,7 +92,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   timers in `Bases`, `GeneratorVersion::V9` and the events 230-239;
 /// * T24 contractor homes: the `Homes` world field and `SectionKey::Homes` section,
 ///   `PlayerCommand::Home`, `NpcState::site` (site crews), `BedSpot::Home`,
-///   `BuildRefusal::OnPlot` and the home events 240-249.
+///   `BuildRefusal::OnPlot` and the home events 240-249;
+/// * T25 night: the night monster kinds (`EnemyKind::ShadowHound` .. `UmbralAlpha`) and
+///   `ShotKind::Wispfire` in entity records, the night materials
+///   (`StrategicResourceKind::MothSilk` ..), `BuiltTile::Palisade` in tile ops,
+///   `VillageDeal::SellNightGoods`, the `NightLedger` inside the enemies section and the night
+///   events 250-253.
 pub const PROTOCOL_VERSION: u8 = 12;
 
 /// One client input frame: the controls and actions for exactly one tick.

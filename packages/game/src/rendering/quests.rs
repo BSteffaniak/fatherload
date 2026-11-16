@@ -610,6 +610,9 @@ pub(super) fn draw_fanfare(draw: &mut RaylibDrawHandle<'_>, fanfare: &Fanfare, n
         FanfareKind::Blueprint => ("BLUEPRINT COMPLETE", VIOLET, PanelStyle::Accent),
         FanfareKind::WelcomeBack => ("CREW REUNITED", SKY_LIGHT, PanelStyle::Accent),
         FanfareKind::Lunar => ("THE MOON", MINT, PanelStyle::Accent),
+        FanfareKind::NightFalls => ("NIGHT FALLS", LAVENDER, PanelStyle::Standard),
+        FanfareKind::NightSurvived => ("DAWN", GOLD, PanelStyle::Accent),
+        FanfareKind::AlphaHunts => ("A HOWL IN THE DARK", RED, PanelStyle::Warning),
     };
     let mut details = ui_kit::wrap(&fanfare.detail, width - 16, TextStyle::Body);
     details.truncate(2);
@@ -633,6 +636,7 @@ pub(super) fn draw_fanfare(draw: &mut RaylibDrawHandle<'_>, fanfare: &Fanfare, n
             | FanfareKind::Blueprint
             | FanfareKind::WelcomeBack
             | FanfareKind::Lunar
+            | FanfareKind::NightSurvived
     ) {
         let twinkle = (age / 6).is_multiple_of(2);
         for (sx, sy) in [(x + 5, y + 5), (x + width - 8, y + 5)] {

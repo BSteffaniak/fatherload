@@ -521,7 +521,9 @@ impl WorldState {
         let settings = self.terrain.settings();
         let (mx, my) = state.middle(body);
         // The Moon's pressurized rooms (colony, facility) are heated (T22 x T23).
-        let cold = if settings.generator.has_sky() && !crate::moon::sheltered_at(settings, mx, my) {
+        let sheltered =
+            crate::moon::sheltered_at(settings, mx, my) || self.in_lunar_habitat(tile_at(mx, my));
+        let cold = if settings.generator.has_sky() && !sheltered {
             crate::environment::environment_at(settings, mx, my).cold
         } else {
             0

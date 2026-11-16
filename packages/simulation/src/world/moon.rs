@@ -146,6 +146,7 @@ impl WorldState {
         if self
             .moon_layout()
             .is_some_and(|layout| layout.pressurized(tile.x, tile.y))
+            || self.in_lunar_habitat(tile)
         {
             return true;
         }
@@ -650,7 +651,24 @@ impl WorldState {
         if !layout.moon.bounds().expanded(24).contains(tile) {
             return None;
         }
-        Some(layout.colony_area().expanded(6).contains(tile))
+        // The colony, and every home plot on the Moon (lunar habitats, T24).
+        Some(layout.colony_area().expanded(6).contains(tile) || self.homes.is_safe_zone(tile))
+    }
+
+    /// Whether tile `tile` is inside the airlocked shell of a finished lunar habitat (a
+    /// contractor-built home on the Moon, T24): the pilot breathes and keeps warm there like
+    /// in the colony.
+    #[must_use]
+    pub fn in_lunar_habitat(&self, tile: TilePosition) -> bool {
+        self.homes.plots_between(tile.x - 1, tile.x + 1).any(|plot| {
+            plot.home
+                .as_ref()
+                .is_some_and(|home| home.blueprint == crate::home::Blueprint::LunarHabitat)
+                && tile.x >= plot.site.left - 1
+                && tile.x <= plot.site.right() + 1
+                && tile.y <= plot.site.ground_row
+                && tile.y >= plot.site.ground_row - 10
+        })
     }
 
     /// Spawns Moon enemies around rigs and pilots on the Moon (the director's check).

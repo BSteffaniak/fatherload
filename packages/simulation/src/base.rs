@@ -225,10 +225,14 @@ pub enum BuiltTile {
     KeycardDoor(u8),
     /// A treasure chest that needs hands; a closed one may also hold a keycard (`card`).
     Chest { open: bool, card: Option<u8> },
+    /// A sharpened-log palisade (WP-NIGHT): a cheap wall that night monsters will not cross.
+    /// A claim fenced with palisades on both sides of a spot keeps night monsters off it
+    /// (`WorldState::night_safe_zone`).
+    Palisade,
 }
 
 impl BuiltTile {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Wall(BlockKind::Dirt),
         Self::Wall(BlockKind::Clay),
         Self::Wall(BlockKind::Stone),
@@ -237,6 +241,7 @@ impl BuiltTile {
         Self::Glass,
         Self::Plank,
         Self::VentGrate,
+        Self::Palisade,
     ];
 
     #[must_use]
@@ -258,6 +263,7 @@ impl BuiltTile {
             Self::KeycardDoor(_) => "Keycard Door",
             Self::Chest { open: false, .. } => "Treasure Chest",
             Self::Chest { open: true, .. } => "Empty Chest",
+            Self::Palisade => "Palisade",
         }
     }
 
@@ -291,7 +297,8 @@ impl BuiltTile {
             | Self::RuinWall
             | Self::Gate
             | Self::GateLintel(_)
-            | Self::PressurePlate { .. } => None,
+            | Self::PressurePlate { .. }
+            | Self::Palisade => None,
         }
     }
 
@@ -326,6 +333,7 @@ impl BuiltTile {
                 open: false,
                 card: Some(color),
             } => 66 + (color % crate::mechanism::KEYCARD_COLORS) as u64,
+            Self::Palisade => 70,
         }
     }
 
@@ -369,6 +377,7 @@ impl BuiltTile {
                 open: false,
                 card: Some((code - 66) as u8),
             },
+            70 => Self::Palisade,
             _ => return None,
         })
     }
@@ -859,7 +868,7 @@ impl BuildGroup {
 
 impl Buildable {
     /// The build menu, in order.
-    pub const PALETTE: [Self; 31] = [
+    pub const PALETTE: [Self; 32] = [
         Self::Module(ModuleKind::Beacon),
         Self::Tile(BuiltTile::Wall(BlockKind::Dirt)),
         Self::Tile(BuiltTile::Wall(BlockKind::Clay)),
@@ -869,6 +878,7 @@ impl Buildable {
         Self::Tile(BuiltTile::Glass),
         Self::Tile(BuiltTile::Plank),
         Self::Tile(BuiltTile::VentGrate),
+        Self::Tile(BuiltTile::Palisade),
         Self::BackWall(BlockKind::Dirt),
         Self::BackWall(BlockKind::Clay),
         Self::BackWall(BlockKind::Stone),
@@ -959,6 +969,8 @@ impl Buildable {
                 | BuiltTile::KeycardDoor(_)
                 | BuiltTile::Chest { .. },
             ) => BuildCost::credits(0),
+            Self::Tile(BuiltTile::Palisade) => BuildCost::credits(6),
+
             Self::Fixture(fixture) => BuildCost::credits(fixture.credits()),
             Self::Module(module) => BuildCost {
                 block: None,

@@ -122,7 +122,7 @@ impl DiscoveredTiles {
     }
 
     /// Inserts and journals a newly revealed tile for [`Self::take_revealed`].
-    fn reveal(&mut self, tile: TilePosition) {
+    pub(super) fn reveal(&mut self, tile: TilePosition) {
         if self.insert(tile) {
             self.revealed.push(tile);
         }

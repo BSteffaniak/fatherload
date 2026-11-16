@@ -257,6 +257,11 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::FurnitureRemoved { player_id, .. } => (247, Some(player_id)),
         GameplayEventKind::HomeRushed { player_id, .. } => (248, Some(player_id)),
         GameplayEventKind::HomeInteraction { player_id } => (249, Some(player_id)),
+        // Night-time gameplay (wave 4, T25 WP-NIGHT): 250-253.
+        GameplayEventKind::NightFell { .. } => (250, None),
+        GameplayEventKind::NightSurvived { .. } => (251, None),
+        GameplayEventKind::RareNightSpawn { .. } => (252, None),
+        GameplayEventKind::NightMonsterBurrowed { .. } => (253, None),
     }
 }
 

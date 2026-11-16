@@ -144,9 +144,12 @@ impl WorldState {
 
     /// Gameplay light level (permille, 0 dark to 1000 full daylight) at tile `(x, y)`: the open
     /// sky's light (falling off over [`SKY_LIGHT_DEPTH_TILES`] under the local ground, so the
-    /// underground stays dark whatever the time), or the brightest light source in reach: rig
-    /// lamps, lamp fixtures, the streets of villages and the town, lava, magma vents and glowing
-    /// cave growths. Integer math only, so night monsters and other rules may branch on it.
+    /// underground stays dark whatever the time), or the brightest light source in reach: the
+    /// fixed lights of [`Self::fixture_light_at`] (lamp fixtures, the streets of villages and the
+    /// town, wanderers' campfires), rig lamps (off while their crew sleeps), pilots' helmet
+    /// lamps, lava, magma vents, glowing cave growths and, at night, will-o'-wisps and shallow
+    /// nocturnal ore (WP-NIGHT). Integer math only, so night monsters and other rules may branch
+    /// on it.
     #[must_use]
     pub fn light_at(&self, x: i32, y: i32) -> u16 {
         let sky = self.clock().light_level();
@@ -165,27 +168,27 @@ impl WorldState {
             return light;
         }
         let at = TilePosition { x, y };
-        if depth > -SETTLEMENT_LIGHT_ROWS && depth <= 1 && self.in_lit_settlement(at) {
-            light = light.max(SETTLEMENT_LIGHT);
-        }
-        for player in self.players.values() {
+        light = light.max(self.fixture_light_at(x, y));
+        for (player_id, player) in &self.players {
+            // A rig whose crew is in bed has its lamps off for the night.
+            if self.clock.sleepers.contains_key(player_id) {
+                continue;
+            }
             let rig = player.tile_position(TILE_SIZE);
             light = light.max(falloff(rig, at, RIG_LIGHT_TILES, RIG_LIGHT));
         }
-        let reach = LAMP_LIGHT_TILES;
-        for (position, fixtures) in self.bases.fixtures_in(
-            TilePosition {
-                x: x - reach,
-                y: y - reach,
-            },
-            TilePosition {
-                x: x + reach,
-                y: y + reach,
-            },
-        ) {
-            if matches!(fixtures.front, Some((Fixture::Light, _))) {
-                light = light.max(falloff(position, at, reach, LAMP_LIGHT));
+        // Helmet lamps of pilots on foot (WP-NIGHT open item).
+        for (_, body, pilot) in self.pilots() {
+            if self.clock.sleepers.contains_key(&pilot.owner) {
+                continue;
             }
+            let (px, py) = pilot.middle(body);
+            light = light.max(falloff(
+                tile_from_pixels(px, py),
+                at,
+                crate::night::PILOT_LIGHT_TILES,
+                crate::night::PILOT_LIGHT,
+            ));
         }
         for dy in -3..=3 {
             for dx in -3..=3 {
@@ -207,7 +210,36 @@ impl WorldState {
                 light = light.max(falloff(position, at, reach, level));
             }
         }
+        light = light.max(self.night_glow_at(at));
         light.min(crate::clock::DAY_LIGHT)
+    }
+
+    /// The fixed lights at tile `(x, y)` (permille): lamp fixtures, the streets of villages and
+    /// the town and wanderers' campfires. Unlike rig and helmet lamps they stay put, so their
+    /// pools are where night monsters will not go (`crate::night::NIGHT_SAFE_LIGHT`).
+    #[must_use]
+    pub fn fixture_light_at(&self, x: i32, y: i32) -> u16 {
+        let at = TilePosition { x, y };
+        let depth = y - self.terrain.surface_row(x);
+        let street = depth > -SETTLEMENT_LIGHT_ROWS && depth <= 1 && self.in_lit_settlement(at);
+        let mut light = if street { SETTLEMENT_LIGHT } else { 0 };
+        light = light.max(self.campfire_light_at(at));
+        let reach = LAMP_LIGHT_TILES;
+        for (position, fixtures) in self.bases.fixtures_in(
+            TilePosition {
+                x: x - reach,
+                y: y - reach,
+            },
+            TilePosition {
+                x: x + reach,
+                y: y + reach,
+            },
+        ) {
+            if matches!(fixtures.front, Some((Fixture::Light, _))) {
+                light = light.max(falloff(position, at, reach, LAMP_LIGHT));
+            }
+        }
+        light
     }
 
     /// Whether `at` is in a village or the town, whose lamps and windows light the streets.
@@ -370,8 +402,20 @@ impl WorldState {
     }
 }
 
+/// The tile holding world pixel `(x, y)`.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "bounded world pixels address terrain tiles"
+)]
+fn tile_from_pixels(x: f32, y: f32) -> TilePosition {
+    TilePosition {
+        x: (x / TILE_SIZE).floor() as i32,
+        y: (y / TILE_SIZE).floor() as i32,
+    }
+}
+
 /// `level` at `source`, falling off linearly to nothing `reach` tiles away (integer).
-fn falloff(source: TilePosition, at: TilePosition, reach: i32, level: u16) -> u16 {
+pub(super) fn falloff(source: TilePosition, at: TilePosition, reach: i32, level: u16) -> u16 {
     let (dx, dy) = (
         i64::from(source.x - at.x).abs(),
         i64::from(source.y - at.y).abs(),

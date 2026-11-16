@@ -122,6 +122,10 @@ pub(super) struct LightScene<'a> {
     pub settlement_lights: &'a [(f32, f32, f32)],
     /// Players in bed: their rigs' lamps are off for the night.
     pub asleep: &'a std::collections::BTreeMap<PlayerId, Sleeper>,
+    /// Whether it is night (WP-NIGHT: shallow nocturnal ore glows).
+    pub night: bool,
+    /// Enemies (WP-NIGHT: will-o'-wisps are lights).
+    pub enemies: &'a [fatherload_simulation::entity::Entity],
     pub seconds: f32,
 }
 
@@ -525,6 +529,32 @@ fn gather_lights(scene: &LightScene<'_>) -> Vec<Light> {
                 let (cx, cy) = tile_centre(position);
                 lights.push(Light::pool(cx, cy, reach * TILE_SIZE, 0.8, true));
             }
+            // Nocturnal ore glows near the surface at night (WP-NIGHT).
+            if scene.night
+                && let fatherload_simulation::terrain::TileKind::Ore(mineral) = tile.kind
+                && fatherload_simulation::night::glows_at_night(mineral)
+                && (0..=fatherload_simulation::night::NOCTURNAL_GLOW_DEPTH)
+                    .contains(&(y - scene.terrain.surface_row(x)))
+            {
+                let (cx, cy) = tile_centre(position);
+                let pulse = (scene.seconds * 1.7 + (x * 7 + y * 3) as f32 * 0.3).sin() * 0.12;
+                lights.push(Light::pool(cx, cy, TILE_SIZE * (1.8 + pulse), 0.7, false));
+            }
+        }
+    }
+    for entity in scene.enemies {
+        if let fatherload_simulation::entity::EntityState::Enemy(state) = &entity.state
+            && state.kind == fatherload_simulation::EnemyKind::WillOWisp
+            && near(entity.body.x, entity.body.y)
+        {
+            let flicker = (scene.seconds * 6.0 + entity.id.get() as f32).sin() * 0.06;
+            lights.push(Light::pool(
+                entity.body.x,
+                entity.body.y,
+                TILE_SIZE * 3.2 * (1.0 + flicker),
+                0.75,
+                false,
+            ));
         }
     }
     for critter in scene.critters {

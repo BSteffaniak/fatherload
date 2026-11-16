@@ -276,14 +276,28 @@ pub fn interior_village(
     (building < found.buildings.len()).then_some((found, building))
 }
 
-/// The counter rows of `building`: its deals, then a row to talk to the keeper, then (in a
-/// meeting hall) the land office (WP-HOME).
+/// The counter rows of `building` at `time` (WP-NIGHT: the night market's stock after dark,
+/// none at a shut counter): its deals, then a row to talk to the keeper, then (in a meeting
+/// hall) the land office (WP-HOME).
 #[must_use]
-pub fn counter_rows(found: &Village, building: usize) -> usize {
-    let lot = found.buildings.get(building);
-    found.offers(building).len()
-        + usize::from(lot.is_some_and(|lot| lot.keeper.is_some()))
-        + usize::from(lot.is_some_and(|lot| lot.kind == BuildingKind::Hall))
+pub fn counter_rows(
+    found: &Village,
+    building: usize,
+    time: fatherload_simulation::village::services::MarketTime,
+) -> usize {
+    found.offers_at(building, time).len()
+        + usize::from(
+            found
+                .buildings
+                .get(building)
+                .is_some_and(|lot| lot.keeper.is_some()),
+        )
+        + usize::from(
+            found
+                .buildings
+                .get(building)
+                .is_some_and(|lot| lot.kind == BuildingKind::Hall),
+        )
 }
 
 /// The name plate of a village building ("Trading Post · Copperhollow").
@@ -676,12 +690,13 @@ impl SeatUi {
             self.modal = None;
             return;
         }
-        let rows = counter_rows(&found, building);
+        let time = ctx.world.market_time();
+        let rows = counter_rows(&found, building, time);
         self.move_selection(input, rows.saturating_sub(1));
         if !(input.confirm || input.interact) {
             return;
         }
-        let offers = found.offers(building);
+        let offers = found.offers_at(building, time);
         let lot = &found.buildings[building];
         let land_office = offers.len() + usize::from(lot.keeper.is_some());
         if lot.kind == BuildingKind::Hall && self.selected_menu_item == land_office {
@@ -729,7 +744,7 @@ impl SeatUi {
         };
         let found = village::village(ctx.world.world_settings(), id)?;
         let deal = found
-            .offers(usize::from(building))
+            .offers_at(usize::from(building), ctx.world.market_time())
             .get(usize::from(offer))?
             .deal;
         if deal != VillageDeal::Room {
@@ -766,7 +781,10 @@ impl SeatUi {
         };
         let found = village::village(ctx.world.world_settings(), id)?;
         let building = usize::from(building);
-        let deal = found.offers(building).get(usize::from(offer))?.deal;
+        let deal = found
+            .offers_at(building, ctx.world.market_time())
+            .get(usize::from(offer))?
+            .deal;
         let keeper = found
             .buildings
             .get(building)
@@ -779,6 +797,10 @@ impl SeatUi {
         Some(match deal {
             VillageDeal::SellCargo { .. } => (
                 format!("{keeper}: {earned} credits for the lot. Pleasure doing business."),
+                SoundCue::Sell,
+            ),
+            VillageDeal::SellNightGoods { .. } => (
+                format!("The night trader counts out {earned} credits by lantern light."),
                 SoundCue::Sell,
             ),
             VillageDeal::Refuel { .. } => {

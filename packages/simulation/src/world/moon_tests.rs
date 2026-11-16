@@ -1166,3 +1166,46 @@ fn a_bare_pilot_climbs_from_the_puzzle_hall_back_up_to_the_temple() {
         panic!("the pilot climbs out of the hall: {stuck} (shaft {shaft:?})");
     }
 }
+
+#[test]
+fn a_lunar_habitat_is_a_safe_breathable_home_on_the_moon() {
+    // Integration seam (T22 x T24): a contractor-built lunar habitat is a safe zone like the
+    // colony, and its airlocked shell holds air and warmth for the pilot.
+    use crate::home::{Blueprint, PlotSetting, PlotSize, plot::SiteKey, plot::PlotSite};
+    let mut world = world();
+    let plan = layout(&world);
+    let (pad_first, pad_last, _) = plan.pad();
+    // A flat spot well away from the colony and the facility.
+    let x = plan.moon.center_x + plan.moon.half_width / 2;
+    let ground_row = plan.surface_row(x).expect("moon ground");
+    assert!(x > pad_last + 40 || x < pad_first - 40);
+    let site = PlotSite {
+        key: SiteKey::Surveyed,
+        size: PlotSize::Medium,
+        setting: PlotSetting::Moon,
+        left: x - PlotSize::Medium.width() / 2,
+        ground_row,
+        price: 0,
+    };
+    let inside = TilePosition {
+        x,
+        y: ground_row - 2,
+    };
+    assert_eq!(world.lunar_safe_zone(inside), Some(false), "open regolith");
+    assert!(!world.lunar_air(PLAYER, px(inside.x), px(inside.y)));
+    let _ = world.scenario_home(PLAYER, site, Some(Blueprint::LunarHabitat));
+    assert_eq!(world.lunar_safe_zone(inside), Some(true), "home plots are safe");
+    assert!(world.in_lunar_habitat(inside));
+    if let Some(rig) = world.player_mut(PLAYER) {
+        rig.hazard_gear.life_support = 0;
+    }
+    assert!(
+        world.lunar_air(PLAYER, px(inside.x), px(inside.y)),
+        "the habitat holds air without the rig's air line"
+    );
+    let outside = TilePosition {
+        x: x + PlotSize::Medium.width() + 6,
+        y: ground_row - 2,
+    };
+    assert!(!world.in_lunar_habitat(outside));
+}

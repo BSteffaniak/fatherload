@@ -595,6 +595,18 @@ impl Effects {
                     }
                     continue;
                 }
+                // A night monster burrowing away at dawn (WP-NIGHT): a puff of dust where it
+                // went, heard from there.
+                GameplayEventKind::NightMonsterBurrowed { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    self.spawn_sparks(x, y + 6.0);
+                    if enemy_cues < 6 {
+                        cues.push(PlacedCue::world(SoundCue::Burrow, x, y));
+                        enemy_cues += 1;
+                    }
+                    continue;
+                }
                 GameplayEventKind::EntityDestroyed { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
                     let (x, y) = (x as f32, y as f32);
@@ -1025,7 +1037,11 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::Dusk { .. }
         | GameplayEventKind::NewDay { .. }
         | GameplayEventKind::NightSkipped { .. }
-        | GameplayEventKind::SkyEnemyAction { .. } => None,
+        | GameplayEventKind::SkyEnemyAction { .. }
+        | GameplayEventKind::NightFell { .. }
+        | GameplayEventKind::NightSurvived { .. }
+        | GameplayEventKind::RareNightSpawn { .. }
+        | GameplayEventKind::NightMonsterBurrowed { .. } => None,
     }
 }
 

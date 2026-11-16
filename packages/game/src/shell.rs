@@ -600,6 +600,23 @@ pub enum SoundCue {
     SiteKnock,
     /// A piece of furniture set down or picked up.
     FurnitureThunk,
+    // --- Night-time gameplay (WP-NIGHT) ---
+    /// A shadow hound's howl as it catches your scent.
+    HoundHowl,
+    /// The umbral alpha's long, deep howl (a new-moon night's rare spawn).
+    AlphaHowl,
+    /// Sand bursting round a dune stalker.
+    StalkerBurst,
+    /// A will-o'-wisp's glassy chime.
+    WispChime,
+    /// A moth swarm's soft flutter.
+    MothFlutter,
+    /// Night falls and the monsters rise: a low sting.
+    NightFalls,
+    /// Dawn after a night with monsters about: warm relief.
+    DawnRelief,
+    /// A night monster burrowing away at dawn: a puff of dust.
+    Burrow,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

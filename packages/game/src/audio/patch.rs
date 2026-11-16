@@ -294,6 +294,16 @@ patches! {
     HomeFanfare => "home_fanfare",
     SiteKnock => "site_knock",
     FurnitureThunk => "furniture_thunk",
+    // Night-time gameplay (WP-NIGHT), appended so earlier seeds stay put.
+    HoundHowl => "hound_howl",
+    AlphaHowl => "alpha_howl",
+    StalkerBurst => "stalker_burst",
+    WispChime => "wisp_chime",
+    MothFlutter => "moth_flutter",
+    NightFallSting => "night_fall",
+    DawnRelief => "dawn_relief",
+    BurrowPuff => "burrow_puff",
+    NightProwlLoop => "loop_night_prowl",
 }
 
 /// Playback metadata of a patch.
@@ -456,6 +466,25 @@ impl Patch {
                 .instances(1)
                 .jitter(0.0, 0.0)
                 .ducking(0.35),
+            Self::HoundHowl => PatchInfo::new(Alarm)
+                .instances(2)
+                .priority(6)
+                .send(0.45)
+                .jitter(0.05, 1.0),
+            Self::AlphaHowl | Self::NightFallSting => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.55)
+                .jitter(0.02, 0.5)
+                .ducking(0.35)
+                .priority(8),
+            Self::StalkerBurst => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.3)
+                .jitter(0.06, 1.0),
+            Self::WispChime | Self::MothFlutter | Self::BurrowPuff => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.35)
+                .jitter(0.06, 1.0),
             Self::ActTwoFanfare => PatchInfo::new(Big)
                 .instances(1)
                 .send(0.45)
@@ -567,12 +596,13 @@ impl Patch {
                 .jitter(0.05, 1.0)
                 .ducking(0.3),
 
+            | Self::NightProwlLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
             Self::DawnChorus | Self::DuskCrickets => PatchInfo::new(Feedback)
                 .instances(1)
                 .send(0.4)
                 .jitter(0.01, 0.5),
             Self::MidnightBell => PatchInfo::new(Big).instances(1).send(0.55).jitter(0.0, 0.3),
-            Self::NightSkip => PatchInfo::new(Big)
+            Self::NightSkip | Self::DawnRelief => PatchInfo::new(Big)
                 .instances(1)
                 .send(0.45)
                 .jitter(0.0, 0.0)
@@ -905,6 +935,15 @@ impl Patch {
             Self::HomeFanfare => home_fanfare(rng),
             Self::SiteKnock => site_knock(rng),
             Self::FurnitureThunk => furniture_thunk(rng),
+            Self::HoundHowl => hound_howl(rng, 1.0),
+            Self::AlphaHowl => hound_howl(rng, 0.62),
+            Self::StalkerBurst => stalker_burst(rng),
+            Self::WispChime => wisp_chime(rng),
+            Self::MothFlutter => moth_flutter(rng),
+            Self::NightFallSting => night_fall(rng),
+            Self::DawnRelief => dawn_relief(rng),
+            Self::BurrowPuff => burrow_puff(rng),
+            Self::NightProwlLoop => night_prowl_loop(rng),
         }
     }
 }
@@ -4686,6 +4725,191 @@ fn keycard_beep(rng: &mut Rng) -> Vec<f32> {
         });
         mix_into(&mut out, &beep, 0.05 + index as f32 * 0.09, 0.8);
     }
+    out
+}
+
+
+// --- Night-time gameplay (WP-NIGHT) -------------------------------------------------------
+
+/// A night hound's howl: a breathy voice sliding up to a held, wavering note and falling away,
+/// with a softer echo. `depth` below 1 lowers and lengthens it (the umbral alpha).
+fn hound_howl(rng: &mut Rng, depth: f32) -> Vec<f32> {
+    let length = 1.5 / depth.max(0.4);
+    let base = rng.range(420.0, 520.0) * depth;
+    let mut out = Vec::new();
+    for (voice, (delay, gain, detune)) in [(0.0, 0.55, 1.0), (0.35, 0.2, 0.985)]
+        .into_iter()
+        .enumerate()
+    {
+        let mut fm = Fm::default();
+        let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+        let mut breath = Svf::new(FilterMode::BandPass, 900.0, 1.4);
+        let wobble = rng.range(4.5, 6.0);
+        let howl = render(length, |t| {
+            let shape = segments(
+                t / length,
+                &[(0.0, 0.7), (0.22, 1.0), (0.7, 0.97), (1.0, 0.72)],
+            );
+            let pitch = base * detune * shape * (1.0 + 0.012 * sine(t, wobble));
+            let tone = fm.next(pitch, 1.0, 0.6 + 0.3 * decay(t, 0.4));
+            let air = breath.run(noise.next(), pitch * 2.2, 1.6) * 0.35;
+            (tone * 0.7 + air)
+                * segments(
+                    t / length,
+                    &[(0.0, 0.0), (0.12, 1.0), (0.75, 0.8), (1.0, 0.0)],
+                )
+        });
+        let _ = voice;
+        mix_into(&mut out, &howl, delay, gain);
+    }
+    out
+}
+
+/// Sand bursting up round a dune stalker: a low thump, a rushing hiss and grains pattering
+/// down.
+fn stalker_burst(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Sine);
+    let start = rng.range(110.0, 140.0);
+    let mut out = render(0.35, |t| {
+        osc.next(glide(t, start, start * 0.45, 0.2)) * perc(t, 0.004, 0.3)
+    });
+    let rush = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        rng.range(1_400.0, 2_000.0),
+        0.6,
+        0.45,
+    );
+    mix_into(&mut out, &rush, 0.01, 0.55);
+    for time in scatter(rng, 9, 0.12, 0.6, 1.3) {
+        let grain = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            rng.range(3_000.0, 5_500.0),
+            2.5,
+            0.01,
+        );
+        mix_into(&mut out, &grain, time, rng.range(0.15, 0.3));
+    }
+    out
+}
+
+/// A will-o'-wisp's chime: three detuned glassy bells in a strange interval, shimmering.
+fn wisp_chime(rng: &mut Rng) -> Vec<f32> {
+    let root = rng.range(880.0, 1_040.0);
+    let mut out = Vec::new();
+    for (index, ratio) in [1.0, 1.41, 1.89].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &bell(root * ratio, 3.5, 0.5, 0.9),
+            index as f32 * 0.07,
+            0.25,
+        );
+    }
+    let mut osc = Osc::new(Wave::Sine);
+    let shimmer = render(0.9, |t| {
+        osc.next(root * 2.0 * (1.0 + 0.01 * sine(t, 7.0)))
+            * segments(t, &[(0.0, 0.0), (0.3, 0.6), (0.9, 0.0)])
+    });
+    mix_into(&mut out, &shimmer, 0.0, 0.12);
+    out
+}
+
+/// A moth swarm: a soft papery flutter beating fast and drifting past.
+fn moth_flutter(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut band = Svf::new(FilterMode::BandPass, 1_800.0, 1.0);
+    let beat = rng.range(24.0, 32.0);
+    render(0.6, |t| {
+        let wings = (0.5 + 0.5 * sine(t, beat)).powi(3);
+        band.run(noise.next(), 1_400.0 + 900.0 * sine(t, 2.0), 1.0)
+            * wings
+            * segments(t, &[(0.0, 0.0), (0.12, 1.0), (0.45, 0.8), (0.6, 0.0)])
+    })
+}
+
+/// Night falls and the monsters rise: a dark minor swell in low brass under a far howl.
+fn night_fall(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for (index, note) in [220.0, 261.63, 329.63].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &brass(rng, note, 1.6, 0.45),
+            index as f32 * 0.12,
+            0.3,
+        );
+    }
+    let mut low = Osc::new(Wave::Triangle);
+    let drone = render(2.4, |t| {
+        low.next(110.0) * segments(t, &[(0.0, 0.0), (0.5, 1.0), (1.8, 0.7), (2.4, 0.0)])
+    });
+    mix_into(&mut out, &drone, 0.0, 0.18);
+    mix_into(&mut out, &bell(659.25, 1.41, 0.6, 1.4), 0.4, 0.08);
+    mix_into(&mut out, &hound_howl(rng, 0.9), 0.9, 0.22);
+    out
+}
+
+/// Dawn after a night with monsters about: a warm major chord blooming, a high bell, birds.
+fn dawn_relief(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for (index, note) in [261.63, 329.63, 392.0, 523.25].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &brass(rng, note, 1.1 - index as f32 * 0.12, 0.45),
+            index as f32 * 0.09,
+            0.22,
+        );
+    }
+    mix_into(&mut out, &bell(1_046.5, 2.0, 0.7, 1.2), 0.45, 0.18);
+    for chirp in 0..4 {
+        let mut osc = Osc::new(Wave::Sine);
+        let pitch = rng.range(2_600.0, 3_400.0);
+        let tweet = render(0.09, |t| {
+            osc.next(glide(t, pitch, pitch * 1.35, 0.07)) * perc(t, 0.005, 0.08)
+        });
+        mix_into(&mut out, &tweet, 0.7 + chirp as f32 * 0.17, 0.12);
+    }
+    out
+}
+
+/// A night monster burrowing away: a soft whump and a trickle of dust.
+fn burrow_puff(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Sine);
+    let start = rng.range(180.0, 230.0);
+    let mut out = render(0.2, |t| {
+        osc.next(glide(t, start, start * 0.5, 0.15)) * perc(t, 0.006, 0.18)
+    });
+    let dust = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::LowPass,
+        rng.range(1_200.0, 1_800.0),
+        0.7,
+        0.35,
+    );
+    mix_into(&mut out, &dust, 0.03, 0.4);
+    out
+}
+
+/// The prowl (looped by the director when night monsters are about): a low uneasy drone, wind
+/// in dry grass, and a far howl somewhere in the loop.
+fn night_prowl_loop(rng: &mut Rng) -> Vec<f32> {
+    const SECONDS: f32 = LOOP_SECONDS;
+    let mut low = Osc::new(Wave::Triangle);
+    let mut high = Osc::new(Wave::Sine);
+    let mut grass = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut grass_filter = Svf::new(FilterMode::BandPass, 2_400.0, 0.8);
+    let mut out = render(loop_length(), |t| {
+        // Whole cycles per loop so the seam lines up.
+        let swell = 0.6 + 0.4 * sine(t, 1.0 / SECONDS);
+        let drone = low.next(110.0) * 0.4 + high.next(165.0) * 0.2 * swell;
+        let rustle = grass_filter.process(grass.next()) * (0.5 + 0.5 * sine(t, 2.0 / SECONDS));
+        drone * swell * 0.45 + rustle * 0.35
+    });
+    let howl = hound_howl(rng, 0.85);
+    mix_into(&mut out, &howl, rng.range(0.4, 1.2), 0.12);
     out
 }
 

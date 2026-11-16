@@ -392,6 +392,12 @@ pub const ALL: &[&SpriteDef] = &[
     &moon::ICON_VOID_LANCE,
     &moon::MORTAR_SHELL,
     &moon::MOON_ICON,
+    &enemies::SHADOW_HOUND,
+    &enemies::DUNE_STALKER,
+    &enemies::WILL_O_WISP,
+    &enemies::NIGHT_MOTH,
+    &enemies::UMBRAL_ALPHA,
+    &enemies::SHOT_WISPFIRE,
 ];
 
 #[cfg(test)]

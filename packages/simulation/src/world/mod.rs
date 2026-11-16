@@ -79,6 +79,9 @@ mod moon;
 #[cfg(test)]
 mod moon_tests;
 mod movement;
+mod night;
+#[cfg(test)]
+mod night_tests;
 mod no_clip;
 mod people;
 #[cfg(test)]

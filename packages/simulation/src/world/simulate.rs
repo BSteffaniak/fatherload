@@ -458,6 +458,7 @@ impl WorldState {
         self.advance_enemy_director(next_tick);
         // The Warden's arena and the core (WP-MOON).
         self.advance_moon(&mut output);
+        self.advance_night(next_tick, &mut output);
         self.advance_entities(EntityPhase::Late, next_tick, &mut output);
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);

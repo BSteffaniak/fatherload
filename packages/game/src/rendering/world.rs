@@ -43,6 +43,7 @@ mod fx;
 mod homes;
 mod lighting;
 mod lunar;
+mod night;
 mod pilot;
 mod quest_marks;
 mod rig;
@@ -387,8 +388,35 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             powered: scene.powered_modules,
             settlement_lights: &settlement_lights,
             asleep: &scene.clock_state.sleepers,
+            night: scene.clock.is_night(),
+            enemies: scene.enemies,
             seconds,
         },
+    );
+    // Nocturnal ore glowing through the turf (WP-NIGHT).
+    night::draw_ore_glow(
+        draw,
+        scene.terrain,
+        scene.explored,
+        scene.visible,
+        scene.clock,
+        seconds,
+    );
+    // The night market's lanterns and shut day counters (WP-NIGHT).
+    villages::draw_night_markets(draw, scene.terrain, scene.visible, scene.clock, seconds);
+    // Eyes and wisp-light that cut through the night (WP-NIGHT).
+    enemies::draw_night_glints(
+        draw,
+        &enemies::EnemyScene {
+            entities: scene.enemies,
+            terrain: scene.terrain,
+            explored: scene.explored,
+            visible: scene.visible,
+            alpha: scene.bomb_alpha,
+            world_tick: scene.world_tick,
+            ticks: scene.ticks,
+        },
+        look.darkness,
     );
     caves::draw_cave_darkness(
         draw,

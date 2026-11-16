@@ -19,6 +19,7 @@ use crate::{
 };
 
 const SALT_OFFERS: u64 = 0x7111_A6E5_0201;
+const SALT_NIGHT_MARKET: u64 = 0x7111_A6E5_0202;
 
 /// The service a building's counter provides.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -67,6 +68,57 @@ impl VillageService {
             BuildingKind::Granary => Self::Granary,
             BuildingKind::Tower | BuildingKind::Farm | BuildingKind::MineHead => return None,
         })
+    }
+}
+
+impl VillageService {
+    /// Whether this counter shuts at night (WP-NIGHT): the trading post hands its counter to
+    /// the night market, and the workshop, armory, tailor, assay office and map room close
+    /// until morning. The inn, the fuel depot, the shrine and the hall stay open.
+    #[must_use]
+    pub const fn closes_at_night(self) -> bool {
+        matches!(
+            self,
+            Self::TradingPost
+                | Self::Workshop
+                | Self::Armory
+                | Self::CosmeticVendor
+                | Self::AssayOffice
+                | Self::Cartographer
+        )
+    }
+}
+
+/// When a counter is asked for its deals (WP-NIGHT): by day the usual list, at night (late
+/// dusk to dawn, [`crate::night::monsters_rise`]) the night market's stock or a closed counter.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct MarketTime {
+    /// Whether the night market is open (and the day counters shut).
+    pub night: bool,
+    /// The night's number (the night market's stock turns over every night).
+    pub day: u32,
+}
+
+impl MarketTime {
+    /// Daytime trading.
+    pub const DAY: Self = Self {
+        night: false,
+        day: 0,
+    };
+
+    /// The trading hours at `clock`.
+    #[must_use]
+    pub const fn of(clock: crate::clock::WorldClock) -> Self {
+        match crate::night::night_of(clock) {
+            Some(day) => Self { night: true, day },
+            None => Self::DAY,
+        }
+    }
+
+    /// Whether `service`'s counter is shut now.
+    #[must_use]
+    pub const fn closed(self, service: VillageService) -> bool {
+        self.night && service.closes_at_night() && !matches!(service, VillageService::TradingPost)
     }
 }
 
@@ -149,6 +201,9 @@ pub enum VillageDeal {
     /// A personal weapon or a pack of personal ammo for the pilot (WP-PILOT; armories are the
     /// villages' gunsmiths).
     PilotArms(crate::pilot::arsenal::PilotArmsPurchase),
+    /// The night market buys night-only creature drops ([`crate::night::NIGHT_MATERIALS`]) at
+    /// `percent` of their value (WP-NIGHT).
+    SellNightGoods { percent: u32 },
 }
 
 /// A deal and its price (credits; percentage deals price per unit when bought).
@@ -207,6 +262,9 @@ impl VillageOffer {
             VillageDeal::PilotArms(crate::pilot::arsenal::PilotArmsPurchase::Ammo(ammo)) => {
                 format!("{} x {}", ammo.pack().0, ammo.plural())
             }
+            VillageDeal::SellNightGoods { percent } => {
+                format!("Sell night goods ({percent}% of value)")
+            }
         }
     }
 }
@@ -256,6 +314,91 @@ pub const fn part_price(part: RigPartKind) -> u32 {
         | RigPartKind::RelicScanner
         | RigPartKind::CargoBalloon => 6_500,
     }
+}
+
+/// The offers of `building` in `village` at `time`.
+///
+/// By day the usual list; at night the trading post is the night market ([`night_market`]) and the day counters are shut (no
+/// deals), while the inn, depot, shrine and hall trade as ever.
+#[must_use]
+pub fn offers_at(
+    village: &Village,
+    building: &VillageBuilding,
+    time: MarketTime,
+) -> Vec<VillageOffer> {
+    match VillageService::of(building.kind) {
+        Some(VillageService::TradingPost) if time.night => night_market(village, time.day),
+        Some(service) if time.closed(service) => Vec::new(),
+        _ => offers(village, building),
+    }
+}
+
+/// The night market's stock in `village` on night `night` (WP-NIGHT).
+///
+/// It buys night goods well, sells flares and scare charges, a moonlit ward, a whisper of a buried site, and one
+/// curio that changes every night.
+#[must_use]
+pub fn night_market(village: &Village, night: u32) -> Vec<VillageOffer> {
+    let prosperity = u32::from(village.prosperity);
+    let mut rng = PeopleRng::new(
+        u64::from(village.id.0),
+        SALT_NIGHT_MARKET,
+        u64::from(night),
+        u64::from(village.prosperity),
+    );
+    let mut list = vec![
+        VillageOffer::metered(VillageDeal::SellNightGoods {
+            percent: 100 + prosperity * 5,
+        }),
+        VillageOffer::flat(
+            VillageDeal::Explosives {
+                kind: ExplosiveKind::Flare,
+                count: 6,
+            },
+            36,
+        ),
+        VillageOffer::flat(
+            VillageDeal::Explosives {
+                kind: ExplosiveKind::Scare,
+                count: 2,
+            },
+            70,
+        ),
+        VillageOffer::flat(VillageDeal::Blessing(BlessingKind::Ward), 110),
+        VillageOffer::flat(VillageDeal::Rumour, 15),
+    ];
+    let curio = match rng.below(3) {
+        0 => {
+            let part = RigPartKind::ALL[rng.below(RigPartKind::ALL.len())];
+            VillageOffer::flat(VillageDeal::Part(part), part_price(part) * 85 / 100)
+        }
+        1 => {
+            let items: Vec<CosmeticItem> = CosmeticItem::all()
+                .into_iter()
+                .filter(|item| item.is_vendor_stock())
+                .collect();
+            if items.is_empty() {
+                VillageOffer::flat(
+                    VillageDeal::Explosives {
+                        kind: ExplosiveKind::Incendiary,
+                        count: 3,
+                    },
+                    90,
+                )
+            } else {
+                VillageOffer::flat(VillageDeal::Cosmetic(items[rng.below(items.len())]), 480)
+            }
+        }
+        _ => VillageOffer::flat(
+            VillageDeal::Explosives {
+                kind: ExplosiveKind::Incendiary,
+                count: 3,
+            },
+            90,
+        ),
+    };
+    list.push(curio);
+    list
 }
 
 /// The offers of `building` in `village`.

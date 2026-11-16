@@ -42,6 +42,17 @@
 //! | [`EnemyKind::AirshipTurret`] | machine (airship part) | rides an airship | charge glow, then a lobbed cannonball | EMP, flak |
 //! | [`EnemyKind::SkyPirate`] | creature (boarder) | dropped by airships, jetpacks | cutlass lunge | anything; fight it on foot |
 //! | [`EnemyKind::HarpyNester`] | creature (guard) | nests on continent summits | only cares near its nest, unless its eggs are taken | keep away, or fight it at the nest |
+//!
+//! Night monsters (WP-NIGHT, [`crate::night`]) rise on the open surface at dusk and burrow or
+//! flee at dawn:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::ShadowHound`] | creature (pack) | plains, tundra, badlands, mountains | a howl, glinting eyes, then a pounce | light: it will not enter a lamp's pool; flares send it running |
+//! | [`EnemyKind::DuneStalker`] | creature (burrower) | desert and badlands sand | feels footsteps, a ripple in the sand, then it erupts | keep off the sand, palisades, explosives |
+//! | [`EnemyKind::WillOWisp`] | creature (spirit) | wetlands, forests, mountains | a chime and a brightening core before a wispfire bolt | close in; it shrugs off bullets, not blasts |
+//! | [`EnemyKind::MothSwarm`] | creature (swarm) | forests, wetlands, plains | drawn to light: circles lamps and headlights | a lamp away from camp lures it; fire |
+//! | [`EnemyKind::UmbralAlpha`] | creature (elite) | new-moon nights anywhere | a long howl heard across the land | explosives, keep moving, stay lit |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -87,6 +98,17 @@ pub enum EnemyKind {
     DerelictAutomaton,
     /// WP-MOON: the alien facility's guardian, the Moon's boss.
     Warden,
+    // --- Night monsters (WP-NIGHT, `crate::night`), appended -----------------------------
+    /// A pack hunter of the open surface at night that shuns lamp light.
+    ShadowHound,
+    /// A sand burrower that feels footsteps and erupts under its prey.
+    DuneStalker,
+    /// A drifting marsh light that throws wispfire.
+    WillOWisp,
+    /// A cloud of moths drawn to every light.
+    MothSwarm,
+    /// The pack leader that walks only on new-moon nights (a rare spawn).
+    UmbralAlpha,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -155,6 +177,8 @@ pub enum ShotKind {
     Bolt,
     /// A lobbed cannonball (airship turrets).
     Cannonball,
+    /// A slow, ghostly flame a will-o'-wisp throws (WP-NIGHT).
+    Wispfire,
 }
 
 impl ShotKind {
@@ -166,6 +190,7 @@ impl ShotKind {
             Self::Fireball => 170.0,
             Self::Bolt => 330.0,
             Self::Cannonball => 280.0,
+            Self::Wispfire => 140.0,
         }
     }
 
@@ -175,7 +200,7 @@ impl ShotKind {
         match self {
             Self::Acid => 320.0,
             Self::Cannonball => 160.0,
-            Self::Fireball | Self::Bolt => 0.0,
+            Self::Fireball | Self::Bolt | Self::Wispfire => 0.0,
         }
     }
 
@@ -185,6 +210,7 @@ impl ShotKind {
         match self {
             Self::Acid | Self::Bolt => 4.0,
             Self::Fireball | Self::Cannonball => 6.0,
+            Self::Wispfire => 5.0,
         }
     }
 
@@ -196,6 +222,7 @@ impl ShotKind {
             Self::Fireball => 10.0,
             Self::Bolt => 8.0,
             Self::Cannonball => 9.0,
+            Self::Wispfire => 6.0,
         }
     }
 
@@ -207,6 +234,7 @@ impl ShotKind {
             Self::Fireball => 4_000,
             Self::Bolt => 2_200,
             Self::Cannonball => 3_500,
+            Self::Wispfire => 3_500,
         }
     }
 }
@@ -358,7 +386,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 28] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -382,6 +410,11 @@ impl EnemyKind {
         Self::CrystalMite,
         Self::DerelictAutomaton,
         Self::Warden,
+        Self::ShadowHound,
+        Self::DuneStalker,
+        Self::WillOWisp,
+        Self::MothSwarm,
+        Self::UmbralAlpha,
     ];
 
     /// The kind's stats.
@@ -769,6 +802,89 @@ impl EnemyKind {
                     AttackStyle::Ranged(ShotKind::Bolt, 4),
                 )
             },
+            // Night monsters (WP-NIGHT): fast enough to make the open surface tense, soft
+            // enough that a rig with any weapon (or a lamp to stand under) wins. Balance probe
+            // (`night`): a parked stock rig loses well under 100 hull a minute on an ordinary
+            // night, so there is time to run for the light.
+            Self::ShadowHound => EnemyStats {
+                radius: 8.0,
+                health: 34.0,
+                speed: 112.0,
+                dash_speed: 300.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 40.0,
+                contact_damage: 5.0,
+                windup_millis: 650,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 4.0,
+                knockback: 170.0,
+                ..stats("Shadow Hound", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::DuneStalker => EnemyStats {
+                radius: 10.0,
+                health: 60.0,
+                speed: 80.0,
+                dash_speed: 320.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 11.0,
+                leash_tiles: 30.0,
+                contact_damage: 10.0,
+                windup_millis: 750,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 5.0,
+                knockback: 200.0,
+                ..stats("Dune Stalker", Creature, Burrowing, AttackStyle::Lunge)
+            },
+            Self::WillOWisp => EnemyStats {
+                radius: 7.0,
+                health: 24.0,
+                speed: 70.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 30.0,
+                contact_damage: 4.0,
+                windup_millis: 900,
+                cooldown_millis: 2_800,
+                attack_range_tiles: 11.0,
+                knockback: 90.0,
+                ..stats(
+                    "Will-o'-Wisp",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::Wispfire, 1),
+                )
+            },
+            Self::MothSwarm => EnemyStats {
+                radius: 10.0,
+                health: 26.0,
+                speed: 95.0,
+                sight_tiles: 16.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 40.0,
+                contact_damage: 2.0,
+                windup_millis: 0,
+                cooldown_millis: 1_200,
+                attack_range_tiles: 0.8,
+                knockback: 60.0,
+                ..stats("Moth Swarm", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::UmbralAlpha => EnemyStats {
+                radius: 14.0,
+                health: 300.0,
+                speed: 100.0,
+                dash_speed: 330.0,
+                sight_tiles: 16.0,
+                hearing_tiles: 12.0,
+                leash_tiles: 60.0,
+                contact_damage: 14.0,
+                windup_millis: 700,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 5.0,
+                knockback: 240.0,
+                elite: true,
+                ..stats("Umbral Alpha", Creature, Walking, AttackStyle::Lunge)
+            },
         }
     }
 
@@ -873,8 +989,10 @@ impl EnemyKind {
             (Self::Shellback, DamageKind::Kinetic) => 0.25,
             (Self::RockMimic | Self::Shellback, DamageKind::Explosive)
             | (Self::BroodNest, DamageKind::Explosive | DamageKind::Fire) => 1.6,
-            (Self::RockMimic | Self::Shellback, DamageKind::Fire) => 0.5,
-            (Self::MagmaWisp, DamageKind::Fire) => 0.0,
+            (Self::RockMimic | Self::Shellback, DamageKind::Fire)
+            | (Self::WillOWisp, DamageKind::Kinetic) => 0.5,
+            // A wisp is flame too (WP-NIGHT).
+            (Self::MagmaWisp | Self::WillOWisp, DamageKind::Fire) => 0.0,
             (Self::BroodLord | Self::CrystalMite, DamageKind::Kinetic) => 0.6,
             (
                 Self::SentryTurret
@@ -886,6 +1004,10 @@ impl EnemyKind {
             ) => 0.55,
             (Self::CrystalMite, DamageKind::Fire | DamageKind::Explosive) => 1.3,
             (Self::CaveBat, DamageKind::Fire) => 1.5,
+            // Night monsters: moths to the flame, shadows shrug off bullets.
+            (Self::MothSwarm, DamageKind::Fire) => 2.0,
+            (Self::MothSwarm, DamageKind::Explosive) => 1.2,
+            (Self::UmbralAlpha | Self::DuneStalker, DamageKind::Kinetic) => 0.7,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -1172,6 +1294,10 @@ pub struct EnemyDirector {
     /// Enemies killed in this world.
     #[serde(default)]
     pub kills: u64,
+    /// Night facts (WP-NIGHT): the night under way, night kills, nights survived, the last
+    /// rare night.
+    #[serde(default)]
+    pub night: crate::night::NightLedger,
 }
 
 impl EnemyDirector {
@@ -1532,6 +1658,47 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             add(
                 ItemKind::Material(StrategicResourceKind::AlienAlloy),
                 6 + extra,
+            );
+        }
+        // Night monsters drop night-only materials (WP-NIGHT): the night market pays well.
+        EnemyKind::ShadowHound => {
+            if rare < 65 {
+                add(ItemKind::Material(StrategicResourceKind::ShadowPelt), 1);
+            }
+            if rare >= 50 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::DuneStalker => {
+            add(ItemKind::Material(StrategicResourceKind::StalkerFang), 1);
+            add(ItemKind::Mineral(MineralKind::Gold), 1 + extra / 2);
+        }
+        EnemyKind::WillOWisp => {
+            add(ItemKind::Material(StrategicResourceKind::WispEssence), 1);
+            if rare < 30 {
+                add(richer, 1);
+            }
+        }
+        EnemyKind::MothSwarm => {
+            add(
+                ItemKind::Material(StrategicResourceKind::MothSilk),
+                1 + extra / 2,
+            );
+            if rare < 25 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::UmbralAlpha => {
+            add(ItemKind::Material(StrategicResourceKind::UmbralHeart), 1);
+            add(ItemKind::Material(StrategicResourceKind::ShadowPelt), 3);
+            add(richer, 4 + extra);
+            add(
+                ItemKind::Artifact(if rare < 50 {
+                    ArtifactKind::RadiantShell
+                } else {
+                    ArtifactKind::Fossil
+                }),
+                1,
             );
         }
     }

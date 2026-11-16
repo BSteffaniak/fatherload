@@ -89,7 +89,7 @@ impl WorldState {
     /// Whether `tile` in the hostile sky is safe anyway: inside a sky city's area
     /// ([`SKY_CITY_SAFE_TILES`] around it), in or near a sky town of the archipelago (T20,
     /// [`super::VILLAGE_SAFE_TILES`] around it, the village rule), around placed
-    /// infrastructure, or in a claimed base.
+    /// infrastructure, in a claimed base, or on a home plot (sky villas, T24).
     #[must_use]
     pub fn sky_safe_zone(&self, tile: TilePosition) -> bool {
         continent::sky_city_at(self.terrain.settings(), tile, SKY_CITY_SAFE_TILES).is_some()
@@ -103,6 +103,7 @@ impl WorldState {
                     && (item.position.y - tile.y).abs() <= BASE_SAFE_TILES
             })
             || self.bases.is_safe_zone(tile)
+            || self.homes.is_safe_zone(tile)
     }
 
     /// The director's sky pass (see the module docs): roaming sky enemies around actors in the
@@ -479,7 +480,14 @@ impl WorldState {
                         struck = Some(player);
                     }
                 } else if let Some((pilot, _, _)) = self.pilot_of(player)
-                    && self.strike_pilot(pilot, damage, (body.x, body.y), spec.knockback, output)
+                    && self.strike_pilot_as(
+                        Some(state.kind),
+                        pilot,
+                        damage,
+                        (body.x, body.y),
+                        spec.knockback,
+                        output,
+                    )
                 {
                     struck = Some(player);
                 }

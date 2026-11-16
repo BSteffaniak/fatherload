@@ -53,6 +53,7 @@ pub mod building;
 pub mod climb;
 pub mod combat;
 pub mod economy;
+pub mod night;
 #[cfg(test)]
 mod tests;
 pub mod trip;
@@ -283,6 +284,7 @@ pub fn standard_probes() -> Vec<Box<dyn BalanceProbe>> {
         Box::new(building::BuildingProbe),
         Box::new(climb::ClimbProbe),
         Box::new(trip::TripProbe),
+        Box::new(night::NightProbe),
     ]
 }
 

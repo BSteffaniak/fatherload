@@ -197,6 +197,8 @@ enum SeatLoop {
     SkyAir,
     /// A waterfall pouring off a sky isle nearby.
     Waterfall,
+    /// The uneasy drone and far howls while night monsters prowl near (WP-NIGHT).
+    Prowl,
 }
 
 /// Where a local seat hears from.
@@ -732,6 +734,7 @@ impl Director {
 
         self.surface_ambience(live, listener, terrain, snapshot.clock);
         self.sky_ambience(live, listener, terrain);
+        self.prowl_ambience(live, listener, &snapshot.enemies);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -890,6 +893,36 @@ impl Director {
             SeatLoop::Waterfall,
             Patch::WaterfallLoop,
             (roar.0 * roar.0 * 0.55, roar.1, 1.0, OPEN_CUTOFF),
+        );
+    }
+
+    /// The night's menace (WP-NIGHT): a low drone with far howls that swells as night monsters
+    /// gather near the seat's rig (silent with none about, so Peaceful worlds and towns stay
+    /// calm).
+    fn prowl_ambience(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        enemies: &[fatherload_simulation::entity::Entity],
+    ) {
+        use fatherload_simulation::{entity::EntityState, night, terrain::TILE_SIZE};
+        let reach = 40.0 * TILE_SIZE;
+        let near = enemies
+            .iter()
+            .filter(|entity| {
+                matches!(&entity.state, EntityState::Enemy(state) if night::is_nocturnal(state.kind))
+                    && (entity.body.x - listener.x).abs() < reach
+                    && (entity.body.y - listener.y).abs() < reach
+            })
+            .count();
+        #[allow(clippy::cast_precision_loss, reason = "a handful of monsters")]
+        let threat = (near as f32 / 3.0).min(1.0);
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Prowl,
+            Patch::NightProwlLoop,
+            (threat * 0.45, 0.0, 1.0, OPEN_CUTOFF),
         );
     }
 

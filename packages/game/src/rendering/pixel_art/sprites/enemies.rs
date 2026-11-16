@@ -1132,3 +1132,244 @@ pub const SHOT_CANNONBALL: SpriteDef = SpriteDef {
     ]],
     frame_seconds: 0.0,
 };
+
+// --- Night monsters (WP-NIGHT) ----------------------------------------------------------
+
+/// A shadow hound: a smoke-dark hound with a pale rim, violet ears and glowing mint eyes, facing
+/// right (trot A/B, pounce).
+pub const SHADOW_HOUND: SpriteDef = SpriteDef {
+    name: "enemy_shadow_hound",
+    legend: &[
+        ('o', INK),
+        ('d', SLATE),
+        ('s', FOG),
+        ('m', SLATE_DARK),
+        ('e', MINT),
+        ('t', BONE),
+        ('k', VIOLET),
+    ],
+    frames: &[
+        &[
+            ".................", //
+            "..........oo.oo..", //
+            ".........osdosdo.", //
+            "o.......osdddddo.", //
+            "do.....osddddedo.", //
+            ".do.oooddddddddtt", //
+            "..oddddddddddkoo.", //
+            "..osssddddddddo..", //
+            "..odddddddddddo..", //
+            "...odmmmmmmmdo...", //
+            "...odo.odo.odo...", //
+            "...od..od..od....", //
+            "...oo..oo..oo....", //
+        ],
+        &[
+            ".................", //
+            "..........oo.oo..", //
+            ".........osdosdo.", //
+            "o.......osdddddo.", //
+            "do.....osddddedo.", //
+            ".do.oooddddddddtt", //
+            "..oddddddddddkoo.", //
+            "..osssddddddddo..", //
+            "..odddddddddddo..", //
+            "...odmmmmmmmdo...", //
+            "..odo.odo..odo...", //
+            ".od...od....od...", //
+            ".oo...oo....oo...", //
+        ],
+        &[
+            ".........oo.oo...", //
+            "........osdosdo..", //
+            "o......osdddddo..", //
+            "do....osddddedoo.", //
+            ".dooooddddddddttt", //
+            ".oddddddddddddkoo", //
+            ".ossssddddddddo..", //
+            "..odddddddddddo..", //
+            "..odmmmmmmmmdo...", //
+            ".odo........odo..", //
+            "od............od.", //
+            "oo............oo.", //
+            ".................", //
+        ],
+    ],
+    frame_seconds: 0.16,
+};
+
+/// A dune stalker breaking out of the sand: a sand-hided burrower with red eyes and glassy
+/// fangs, facing right (jaws shut / open).
+pub const DUNE_STALKER: SpriteDef = SpriteDef {
+    name: "enemy_dune_stalker",
+    legend: &[
+        ('o', INK),
+        ('d', LOAM),
+        ('s', SAND),
+        ('m', SOIL),
+        ('e', RED),
+        ('t', BONE),
+    ],
+    frames: &[
+        &[
+            ".....oooooo.......", //
+            "...ooddddddoo.....", //
+            "..odsssdddddddoo..", //
+            ".odssdddddddddddo.", //
+            "odddddddeeoddddtto", //
+            "odmmddddoooddddtto", //
+            ".odmmmdddddddddoo.", //
+            "..oommmmmmmddoo...", //
+            "...o.oo.oo.oo.....", //
+        ],
+        &[
+            ".....oooooo.......", //
+            "...ooddddddoo.....", //
+            "..odsssdddddddoo..", //
+            ".odssdddddddddddoo", //
+            "odddddddeeoddddt.t", //
+            "odmmddddoooddddtt.", //
+            ".odmmmdddddddddttt", //
+            "..oommmmmmmddooo..", //
+            "...oo.oo.oo.o.....", //
+        ],
+    ],
+    frame_seconds: 0.2,
+};
+
+/// A will-o'-wisp: a teardrop of cold mint light with a bone-white heart and two dark eyes
+/// (flicker).
+pub const WILL_O_WISP: SpriteDef = SpriteDef {
+    name: "enemy_will_o_wisp",
+    legend: &[('o', TEAL), ('c', MINT), ('w', BONE), ('k', TEAL_DARK)],
+    frames: &[
+        &[
+            "....oo....", //
+            "...occo...", //
+            "..occcco..", //
+            ".occwwcco.", //
+            ".ocwwwwco.", //
+            ".ocwkwkco.", //
+            ".ocwwwwco.", //
+            "..ocwwco..", //
+            "..occcco..", //
+            "...occo...", //
+            "....oo....", //
+            ".....o....", //
+        ],
+        &[
+            "....oo....", //
+            "...occo...", //
+            "..occcco..", //
+            ".occwwcco.", //
+            ".ocwwwwco.", //
+            ".ocwkwkco.", //
+            ".ocwwwwco.", //
+            "..ocwwco..", //
+            "...occo...", //
+            "...oo.oo..", //
+            "...o...o..", //
+            "..........", //
+        ],
+    ],
+    frame_seconds: 0.14,
+};
+
+/// One moth of a moth swarm: dusty pale wings on a dark body (flap). The swarm is drawn as a
+/// whirl of them.
+pub const NIGHT_MOTH: SpriteDef = SpriteDef {
+    name: "enemy_night_moth",
+    legend: &[('o', INK), ('w', MIST), ('d', SOIL)],
+    frames: &[
+        &[
+            "o.....o", //
+            "oo.o.oo", //
+            "owoooww", //
+            "owwdwwo", //
+            ".oodoo.", //
+            "..ooo..", //
+        ],
+        &[
+            ".......", //
+            ".......", //
+            "oooooo.", //
+            "owwdwwo", //
+            "oowdwoo", //
+            "..ooo..", //
+        ],
+    ],
+    frame_seconds: 0.06,
+};
+
+/// The umbral alpha: a huge night-black hound with a violet mane rim and red eyes, facing right
+/// (stalk A/B).
+pub const UMBRAL_ALPHA: SpriteDef = SpriteDef {
+    name: "enemy_umbral_alpha",
+    legend: &[
+        ('o', INK),
+        ('d', SLATE_DARK),
+        ('s', LAVENDER),
+        ('m', PLUM),
+        ('e', RED),
+        ('t', BONE),
+        ('k', LAVENDER),
+    ],
+    frames: &[
+        &[
+            "...................oo.oo..", //
+            "..................osdosdo.", //
+            ".................osdddddoo", //
+            "o...............osddddeedo", //
+            "do.............osdddddddtt", //
+            ".do...ooooooooodddddddddtt", //
+            "..oooddddddddddddddddddkoo", //
+            "...osssssdddddddddddddddo.", //
+            "...odddddddddddddddddddo..", //
+            "...oddddddddddddddddddo...", //
+            "....odmmmmmmmmmmmmmmdo....", //
+            "....oddo..oddo..oddo.ddo..", //
+            "....odo...odo...odo...odo.", //
+            "....odo...odo...odo...odo.", //
+            "....ooo...ooo...ooo...ooo.", //
+        ],
+        &[
+            "...................oo.oo..", //
+            "..................osdosdo.", //
+            ".................osdddddoo", //
+            "o...............osddddeedo", //
+            "do.............osdddddddtt", //
+            ".do...ooooooooodddddddddtt", //
+            "..oooddddddddddddddddddkoo", //
+            "...osssssdddddddddddddddo.", //
+            "...odddddddddddddddddddo..", //
+            "...oddddddddddddddddddo...", //
+            "....odmmmmmmmmmmmmmmdo....", //
+            "...oddo...oddo..oddo..ddo.", //
+            "..odo....odo.....odo...odo", //
+            "..odo....odo.....odo...odo", //
+            "..ooo....ooo.....ooo...ooo", //
+        ],
+    ],
+    frame_seconds: 0.2,
+};
+
+/// A wispfire bolt: a cold mint flame.
+pub const SHOT_WISPFIRE: SpriteDef = SpriteDef {
+    name: "enemy_shot_wispfire",
+    legend: &[('o', TEAL), ('c', MINT), ('w', BONE)],
+    frames: &[
+        &[
+            ".oo.", //
+            "occo", //
+            "ocwo", //
+            ".oo.", //
+        ],
+        &[
+            ".oo.", //
+            "owco", //
+            "occo", //
+            ".oo.", //
+        ],
+    ],
+    frame_seconds: 0.08,
+};

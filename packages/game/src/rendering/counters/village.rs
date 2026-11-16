@@ -74,6 +74,27 @@ fn quote(snapshot: &RenderSnapshot<'_>, player: &Player, offer: VillageOffer) ->
                     "A trading post buys ore and relics at a little under the depot's price."
                 })
         }
+        VillageDeal::SellNightGoods { percent } => {
+            let value: u32 = fatherload_simulation::night::NIGHT_MATERIALS
+                .iter()
+                .map(|material| {
+                    player.cargo_bay.count(*material)
+                        * fatherload_simulation::night::night_material_value(*material)
+                })
+                .sum();
+            let payout = value * percent / 100;
+            Offer::new(
+                &icons::CARGO,
+                "Sell night goods",
+                format!("{percent}% of their value"),
+            )
+            .payout(payout)
+            .unavailable_if(payout == 0)
+            .about(
+                "Moth silk, shadow pelts, stalker fangs, wisp essence: only the night market \
+                 buys what the night drops.",
+            )
+        }
         VillageDeal::Refuel { percent } => {
             // Up in the sky, rigs that cannot cross the dead-air gap only top up partway
             // (the same rule the tick applies).
@@ -222,8 +243,14 @@ pub(in crate::rendering) fn draw_village_counter(
         return;
     };
     let lot = &found.buildings[building];
+    // WP-NIGHT: after dark the trading post is the night market and the day counters shut.
+    let time = fatherload_simulation::village::services::MarketTime::of(ui.snapshot.clock);
+    let service = fatherload_simulation::village::VillageService::of(lot.kind);
+    let night_market =
+        time.night && service == Some(fatherload_simulation::village::VillageService::TradingPost);
+    let shut = service.is_some_and(|service| time.closed(service));
     let mut offers: Vec<Offer> = found
-        .offers(building)
+        .offers_at(building, time)
         .into_iter()
         .map(|offer| quote(ui.snapshot, ui.player, offer))
         .collect();
@@ -256,21 +283,40 @@ pub(in crate::rendering) fn draw_village_counter(
     } else {
         status.push(SectionItem::stat("Village", found.name.clone(), GOLD));
     }
+    if shut {
+        status.push(SectionItem::stat("Hours", "Shut for the night", LAVENDER));
+        status.push(SectionItem::text(
+            "Come back at dawn. The night market trades at the trading post till then.",
+        ));
+    } else if night_market {
+        status.push(SectionItem::stat(
+            "Hours",
+            "Night market: dusk to dawn",
+            LAVENDER,
+        ));
+    }
     let (items, about) = offer_items(offers, ui.seat.selected_menu_item);
     let sections = vec![
         Section::new("Status", SKY_LIGHT, status),
         Section::new(
             if lot.kind == BuildingKind::Hall {
                 "The elder"
+            } else if night_market {
+                "The night market"
             } else {
                 "At the counter"
             },
-            GOLD,
+            if night_market { LAVENDER } else { GOLD },
             items,
         ),
     ];
+    let title = if night_market {
+        format!("Night Market, {}", found.name)
+    } else {
+        shell::building_title(&found, building)
+    };
     UiLayout::screen(draw).modal_with_render_plan(
-        &shell::building_title(&found, building),
+        &title,
         found.describe().as_str(),
         &ModalContent::new(sections)
             .footer(about)

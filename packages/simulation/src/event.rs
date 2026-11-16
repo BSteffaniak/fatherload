@@ -757,6 +757,33 @@ pub enum GameplayEventKind {
     HomeInteraction {
         player_id: PlayerId,
     },
+    // --- Night-time gameplay (WP-NIGHT, `world/night.rs`) ---------------------------------
+    /// Night monsters began to rise on the open surface (late dusk of day `night`) under
+    /// `moon`.
+    NightFell {
+        night: u32,
+        moon: crate::clock::MoonPhase,
+    },
+    /// Dawn came after night `night`: its monsters burrow and flee; `kills` night monsters fell
+    /// to the crew that night.
+    NightSurvived {
+        night: u32,
+        kills: u32,
+    },
+    /// The rare spawn of a new-moon night walks at world pixel `(x, y)`.
+    RareNightSpawn {
+        kind: crate::enemy::EnemyKind,
+        x: i32,
+        y: i32,
+    },
+    /// A night monster burrowed into the ground or fled into the dark at dawn (and left the
+    /// world) at world pixel `(x, y)`.
+    NightMonsterBurrowed {
+        entity: u64,
+        kind: crate::enemy::EnemyKind,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

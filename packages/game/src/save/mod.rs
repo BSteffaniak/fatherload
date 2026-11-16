@@ -1,6 +1,6 @@
 //! Settings and world saves.
 //!
-//! A save is the host's [`WorldState`] plus a little session metadata (format version 9). The
+//! A save is the host's [`WorldState`] plus a little session metadata (format version 10). The
 //! world's terrain is stored compactly: its generation settings (seed, size, richness, hazards,
 //! generator version), a digest and only the tiles that differ from freshly generated terrain;
 //! loading regenerates the rest and checks the digest. Rigs carry their goods in item containers
@@ -65,7 +65,9 @@ const SAVE_SLOTS: usize = 3;
 ///   ruin tiles in the terrain diffs and `GeneratorVersion::V9` worlds;
 /// * T24 contractor homes: the world's `homes` (plots, deeds, contracts, finished homes and
 ///   their decor, furniture stocks, home points), site-crew NPCs (`NpcState::site`) and home
-///   beds (`BedSpot::Home`).
+///   beds (`BedSpot::Home`);
+/// * T25 night: night monster kinds and wispfire shots in the entity store, night materials in
+///   cargo bays, palisade tiles and the night ledger inside the enemy director.
 pub const SAVE_VERSION: u32 = 10;
 
 /// Persisted user settings.
@@ -1558,6 +1560,49 @@ mod tests {
             rig.cosmetic_unlocks
                 .has(Milestone::FirstDeepLayer.rewards()[0]),
             "unlocks already earned stay"
+        );
+    }
+
+    #[test]
+    fn night_monsters_and_the_night_ledger_save_and_version_nine_files_load() {
+        use fatherload_simulation::{EnemyKind, entity::EntityKind};
+        let mut world = WorldState::new_game(PlayerId::new(1));
+        let plain = WorldSave {
+            world: world.clone(),
+            play_seconds: 2.0,
+        };
+        let _hound = world.spawn_enemy(EnemyKind::ShadowHound, 3_000.0, 60.0);
+        let _moths = world.spawn_enemy(EnemyKind::MothSwarm, 3_100.0, 20.0);
+        let save = WorldSave {
+            world,
+            play_seconds: 2.0,
+        };
+        let json = serde_json::to_string(&SaveFile {
+            version: SAVE_VERSION,
+            save: save.clone(),
+        })
+        .expect("serialize");
+        let loaded = parse_save(&json).expect("v10 loads");
+        assert_eq!(loaded.world.entities().count_of(EntityKind::Enemy), 2);
+        assert_eq!(loaded.world.night_ledger(), save.world.night_ledger());
+        assert_eq!(
+            loaded.world.simulation_state_hash(),
+            save.world.simulation_state_hash()
+        );
+        // A version 9 file (no night ledger in the director) loads as is.
+        let mut v9 = serde_json::to_value(&SaveFile {
+            version: 9,
+            save: plain.clone(),
+        })
+        .expect("serialize");
+        if let Some(director) = v9["save"]["world"]["enemies"].as_object_mut() {
+            director.remove("night");
+        }
+        let loaded = parse_save(&v9.to_string()).expect("v9 loads");
+        assert_eq!(loaded.world.night_ledger().nights_survived, 0);
+        assert_eq!(
+            loaded.world.simulation_state_hash(),
+            plain.world.simulation_state_hash()
         );
     }
 

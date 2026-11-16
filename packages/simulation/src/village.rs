@@ -161,6 +161,15 @@ impl Village {
             .map_or_else(Vec::new, |found| services::offers(self, found))
     }
 
+    /// The deals building `building` offers at `time` (WP-NIGHT: the night market after
+    /// dark, shut day counters; see [`services::offers_at`]).
+    #[must_use]
+    pub fn offers_at(&self, building: usize, time: services::MarketTime) -> Vec<VillageOffer> {
+        self.buildings
+            .get(building)
+            .map_or_else(Vec::new, |found| services::offers_at(self, found, time))
+    }
+
     /// A display line: "Copperhollow, a timber hamlet (fuel depot)".
     #[must_use]
     pub fn describe(&self) -> String {
