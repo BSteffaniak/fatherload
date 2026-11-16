@@ -240,6 +240,16 @@ pub(in crate::rendering) fn draw_village_counter(
             .about("Pass the time of day. Folk remember who stops to chat."),
         );
     }
+    if lot.kind == BuildingKind::Hall {
+        offers.push(
+            Offer::new(
+                &menu_icons::HOUSE,
+                "Land office",
+                "Building plots and furniture",
+            )
+            .about("Buy a plot by the village, hire a builder and make a home of it."),
+        );
+    }
     let mut status = vec![credits_item(ui.player.credits)];
     if lot.kind == BuildingKind::Hall {
         status.extend(village_news(settings, &found));

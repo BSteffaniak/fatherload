@@ -617,8 +617,7 @@ fn site_crews_work_in_working_hours_and_the_contractor_talks_about_the_job() {
         .and_then(|plot| plot.construction.as_ref())
         .expect("work")
         .character();
-    let characters: Vec<_> = crew.iter().map(|(_, state)| state.character).collect();
-    assert!(characters.contains(&boss));
+    assert!(crew.iter().any(|(_, state)| state.character == boss));
     // Nobody is spawned twice.
     let copies = world
         .entities()
@@ -668,6 +667,10 @@ fn site_crews_work_in_working_hours_and_the_contractor_talks_about_the_job() {
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one walk through decorating and the deed"
+)]
 fn decorating_places_moves_and_restyles_with_permissions() {
     let (mut world, plot) = cabin_world();
     world.grant_furniture(PLAYER, Furniture::Plant, 1);
@@ -792,6 +795,35 @@ fn decorating_places_moves_and_restyles_with_permissions() {
             add: false
         }
     )));
+    // An open house lets the crew decorate, but what they pick up stays the owner's.
+    assert!(applied(&act(
+        &mut world,
+        HomeCommand::SetAccess {
+            plot,
+            access: HomeAccess::Crew
+        }
+    )));
+    world.grant_furniture(PLAYER, Furniture::Plant, 1);
+    assert!(applied(&act(&mut world, place(4, Furniture::Plant))));
+    let owner_plants = world.homes().furniture_count(PLAYER, Furniture::Plant);
+    let other_plants = world.homes().furniture_count(OTHER, Furniture::Plant);
+    assert!(applied(&act_as(
+        &mut world,
+        OTHER,
+        HomeCommand::PickUp {
+            plot,
+            room: 0,
+            cell: 4
+        }
+    )));
+    assert_eq!(
+        world.homes().furniture_count(PLAYER, Furniture::Plant),
+        owner_plants + 1
+    );
+    assert_eq!(
+        world.homes().furniture_count(OTHER, Furniture::Plant),
+        other_plants
+    );
     assert!(applied(&act(
         &mut world,
         HomeCommand::SetAccess {
@@ -1049,7 +1081,7 @@ fn a_basement_digs_a_cellar_and_the_lift_rides_to_the_base() {
     world.place_pilot(
         PLAYER,
         column_x(site.middle()),
-        site.ground_row as f32 * TILE_SIZE,
+        f32::from(i16::try_from(site.ground_row).expect("a small row")) * TILE_SIZE,
     );
     assert!(applied(&act(
         &mut world,

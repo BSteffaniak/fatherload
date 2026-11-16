@@ -40,6 +40,7 @@ pub(super) use drops::drop_sprite;
 mod enemies;
 mod explosives;
 mod fx;
+mod homes;
 mod lighting;
 mod lunar;
 mod pilot;
@@ -147,6 +148,8 @@ pub(super) struct WorldScene<'a> {
     pub clock_state: &'a fatherload_simulation::clock::ClockState,
     /// The person the view's rig would talk to (name tag), if any (WP-PEOPLE).
     pub talk_target: Option<fatherload_simulation::entity::EntityId>,
+    /// Plots, building sites and homes (WP-HOME).
+    pub homes: &'a fatherload_simulation::home::Homes,
 }
 
 impl WorldScene<'_> {
@@ -206,6 +209,26 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         scene.visible,
         villages::VillagePass::Behind,
     );
+    // Contractor-built homes and their building sites (WP-HOME), behind the terrain.
+    let look_darkness = look.darkness;
+    homes::draw_homes(
+        draw,
+        &homes::HomesScene {
+            homes: scene.homes,
+            terrain: scene.terrain,
+            visible: scene.visible,
+            now: scene.clock.world_millis(),
+            darkness: look_darkness,
+            seconds,
+            working: {
+                let (hours, minutes) = scene.clock.hours_minutes();
+                let minute = u16::from(hours) * 60 + u16::from(minutes);
+                (fatherload_simulation::home::WORK_START_MINUTE
+                    ..fatherload_simulation::home::WORK_END_MINUTE)
+                    .contains(&minute)
+            },
+        },
+    );
     draw_world_edges(draw, scene.terrain, scene.visible);
     // V9 sky continents (T21): back walls in their caves and temples, and their cities.
     sky_continents::draw_continent_backs(draw, scene.terrain, scene.visible);
@@ -263,6 +286,14 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         scene.explored,
         (scene.world_tick, scene.bomb_alpha),
         scene.talk_target,
+        seconds,
+    );
+    homes::draw_crew_hats(
+        draw,
+        scene.terrain,
+        scene.entities,
+        scene.visible,
+        (scene.world_tick, scene.bomb_alpha),
         seconds,
     );
     drops::draw_drops(draw, scene);
@@ -335,6 +366,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     let settlement_lights = if look.darkness > 0.05 {
         let mut lights = buildings::town_lights(scene.visible);
         lights.extend(villages::village_lights(scene.terrain, scene.visible));
+        lights.extend(homes::home_lights(scene.homes, scene.visible));
         lights
     } else {
         Vec::new()

@@ -197,11 +197,14 @@ pub enum GameplayEventKind {
         feature: FeatureId,
         cave: CaveKind,
     },
-    /// A player drilled open a cave cache: `credits` paid, its loot spilled as item drops.
+    /// A player drilled open a cave cache: `credits` paid, its loot spilled as item drops,
+    /// and an antique piece of furniture for their home stock when it held one (WP-HOME).
     CaveCacheOpened {
         player_id: PlayerId,
         tile: CaveTile,
         credits: u32,
+        #[serde(default)]
+        furniture: Option<crate::home::Furniture>,
     },
     /// A stalactite broke off the ceiling above a rig at tile `(x, y)` and is falling.
     StalactiteFell {

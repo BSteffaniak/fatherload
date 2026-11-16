@@ -32,10 +32,44 @@ use super::{
 };
 use fatherload_simulation::economy::SurfaceZone;
 
+mod home;
 mod props;
 mod village;
 
+pub(super) use home::draw_home_interior;
 pub(super) use village::draw_village_interior;
+
+thread_local! {
+    /// The sky seen through door and window glass in walk-in rooms: `(glass, highlight)`.
+    static WINDOW_SKY: std::cell::Cell<(Color, Color)> =
+        const { std::cell::Cell::new((SKY, SKY_LIGHT)) };
+}
+
+/// Sets the sky every room's door glass shows this frame from the world clock, so walk-in
+/// interiors show the real time of day (dawn pinks, deep noon blue, dusk purples, night).
+pub(super) fn set_window_sky(clock: fatherload_simulation::clock::WorldClock) {
+    let look = super::world::daylight::DayLook::at(clock);
+    let blend = |mix: super::world::daylight::Mix| {
+        let t = f32::from(mix.t) / 255.0;
+        let channel = |a: u8, b: u8| {
+            (f32::from(a) + (f32::from(b) - f32::from(a)) * t)
+                .round()
+                .clamp(0.0, 255.0) as u8
+        };
+        Color::new(
+            channel(mix.base.r, mix.over.r),
+            channel(mix.base.g, mix.over.g),
+            channel(mix.base.b, mix.over.b),
+            255,
+        )
+    };
+    WINDOW_SKY.with(|sky| sky.set((blend(look.bands[2]), blend(look.bands[4]))));
+}
+
+/// The door glass's sky colours this frame.
+fn window_sky() -> (Color, Color) {
+    WINDOW_SKY.with(std::cell::Cell::get)
+}
 
 use crate::{
     input::prompts::Prompt,
@@ -465,8 +499,10 @@ fn draw_door(draw: &mut impl RaylibDraw) {
     draw.draw_rectangle(x + 3, y + 3, 1, height - 3, CLAY);
     draw.draw_rectangle(x + width - 4, y + 3, 1, height - 3, SOIL);
     draw.draw_rectangle(x + 7, y + 8, width - 14, 12, INK);
-    draw.draw_rectangle(x + 8, y + 9, width - 16, 10, SKY);
-    draw.draw_rectangle(x + 8, y + 9, 3, 10, SKY_LIGHT);
+    // The glass shows the sky outside at this time of day.
+    let (glass, highlight) = window_sky();
+    draw.draw_rectangle(x + 8, y + 9, width - 16, 10, glass);
+    draw.draw_rectangle(x + 8, y + 9, 3, 10, highlight);
     draw.draw_rectangle(x + 8, y + 13, width - 16, 1, INK);
     draw.draw_rectangle(x + width - 9, y + 26, 3, 3, INK);
     draw.draw_rectangle(x + width - 9, y + 26, 2, 2, GOLD);

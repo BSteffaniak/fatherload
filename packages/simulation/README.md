@@ -157,6 +157,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `player_sections` | how a `Player` splits into per-tick `PlayerRig`, public `RigBuild` (visible tiers and cosmetics) and private `PlayerInventory` |
 | `bases` | base building (WP-BASE): `check_build` / `apply_build_command` for every `BuildCommand`, fuel station synthesis, lift ladders, rescue home points (see Base building below) |
 | `pilot` | the pilot on foot (Part II F5): exit and board, the pilot pass (movement with the owner's controls, air, lava, regeneration, the hand pick), throws, pickups into the pack, damage, strikes and blasts, death and respawn, parking, gear, crawlways (see [The pilot on foot](#the-pilot-on-foot-srcpilotrs-srcworldpilotrs)) |
+| `homes` | contractor-built homes (WP-HOME): deeds at land offices and surveyed spots, contracts stepped in world time, site crews, decorating, beds, the garage bay, cellar and lift (see [Contractor-built homes](#contractor-built-homes-srchomers-srchome-srcworldhomesrs)) |
 | `garage` | the paint bay service (`SessionServiceRequest::CustomizeRig`, validated against the player's cosmetic unlocks; free) and `rig_cosmetics` |
 | `replication` | per-tick state, live entities, op log and on-change sections (`SectionKey` / `SectionPayload`) |
 | `visibility` | what one client may see: `SectionKey::visible_to`, `redacted_for`, `visible_state_hash` |
@@ -1853,6 +1854,99 @@ Where the wave 2 tracks meet, for the tracks that build on them:
   `Skystone`/`CloudSilver` and artifacts `WindAstrolabe`/`CloudPearl` appended (their tile
   codes follow), events 200-203, `PROTOCOL_VERSION` 12; save format unchanged (new fields
   default, an older build rejects a V9 save by its unknown generator).
+
+## Contractor-built homes (`src/home.rs`, `src/home/`, `src/world/homes.rs`)
+
+Expansion plan WP-HOME (wave 4, T24). One shared world field, [`home::Homes`] (serde default:
+older saves load with none), replicated as the `SectionKey::Homes` on-change section and hashed
+only once anything was bought.
+
+- **Plots and deeds** (`home::plot`, `home::Plot`, `home::Deed`). `PlotSize` (small 11, medium
+  16, large 24, estate 34 tiles wide) and `PlotSetting` (town, village outskirts, lakeside,
+  clifftop, meadow, wilds, sky island, Moon) price a deed. Listed sites are pure functions of the
+  settings: `plot::listed_sites_between(settings, first, last)` / `listed_site(settings, key)`
+  (`SiteKey::Town(i)`, `Village(id, end)`, `Scenic(slot)`; level ground clear of the town,
+  villages, camps and trail milestones; scenic spots every `SCENIC_SPACING` columns on biome
+  worlds). `WorldState::survey_plot(player, size)` checks a free spot under the actor (open
+  ground near the surface or on a sky land's turf, steps of at most 4 rows, clear of the town,
+  villages, claims, plots and listed sites) and prices it with `plot::survey_price` (cheaper far
+  from town, plus `GRADING_PRICE_PER_TILE` for earth moved). A `Deed` has the owner, co-owners
+  (decorate, hire, sleep) and a `HomeAccess` (`Crew` decorates, `Visitors` default, `Owners`).
+  Claims and plots never overlap (`BuildRefusal::OnPlot`; claims well under a plot are fine, the
+  lift runs to them). `Homes::is_safe_zone` is added to `enemy_safe_zone`.
+- **Blueprints and expansions** (`home::blueprint`). `Blueprint` (cabin, cottage, house,
+  workshop home, manor, sky villa only on a sky land, lunar habitat only on the Moon): footprint,
+  smallest plot, rooms by floor, `BuildJob` (usual tenth-days and price; big plots add grounds
+  time) and the blocks it uses. `Expansion`: a room (`ROOM_WIDTH_TILES` wider), a floor, a
+  garage bay, a basement (digs the cellar), a private lift (needs the basement and a claim of
+  the owner's within `LIFT_REACH_COLUMNS` below). `HomeJob` is either.
+- **Contracts** (`home::construction`). `HomeCommand::Hire` signs a `Construction` with a
+  contractor from `WorldState::contractors_for(plot, client)` (builders' trades of the town and
+  villages within `CONTRACTOR_REACH_COLUMNS`, nearest first; the builders' guild only where
+  there are none, as on worlds without people): `people::contractor` quotes the job by
+  personality; repeat clients (`Homes::jobs_with`) get `REPEAT_CLIENT_DISCOUNT_PERCENT` off and
+  supplied hopper blocks `SUPPLIED_BLOCK_DISCOUNT` each (capped). Progress is
+  `Construction::progress_per_mille(world_millis)`: elapsed **world time** minus holds plus
+  rushes, so sleeping moves it on and it is tick-rate safe. `BuildStage` (survey, foundation,
+  frame, walls, roof, finishing, done) is announced once each (`ConstructionStage`); reaching
+  the foundation levels the house's ground (terrain ops: rock cleared above, a masonry footing
+  on the ground row, dips filled). `plan_events` rolls story beats per contract
+  (`SiteEventKind::Shortage` holds work until answered or `shortage_patience`,
+  `Request { item }` raises quality by one when answered with the item, `Anecdote`); answering
+  is `HomeCommand::AnswerEvent`. `Construction::rush_quote` skips half the work left for
+  credits. Hand-over makes the `Home` (or applies the expansion), records the job, warms the
+  contractor (`HANDOVER_GOODWILL`) and gives a housewarming piece by quality.
+- **Site crews.** During `WORK_START_MINUTE..WORK_END_MINUTE` the contractor and helpers from
+  their settlement are NPC entities on site with `NpcState::site` set (the people pass leaves
+  them alone and their village copies step aside; `world/homes.rs` walks them between stations).
+  Talking to them is the ordinary `PeopleCommand::Talk`; the building-work topic with your own
+  contractor answers with the job's stage and finish (`site_talk`).
+- **Homes and decor** (`home::Home`, `home::decor`). Rooms by floor (basement -1) with a
+  `RoomDecor`: wallpaper, flooring and a `ROOM_COLUMNS` x `ROOM_ROWS` grid (floor, wall,
+  ceiling) of `Furniture` (widths, rows, rugs under floor pieces). Services:
+  `UsePiece` on a bed (owner: home point, `Homes::home_point_of`, used first by `rescue_home`;
+  at dusk or night `BedSpot::Home` puts the player to bed), a stove or fireplace (heals the
+  pilot), a telescope; `Stash` (chests and wardrobes, `Home::storage_capacity`), `Display`
+  (trophy cases take artifacts and rare ore from the bay), `CraftFurniture` (needs a workbench,
+  blocks plus credits), `Place` / `PickUp` / `Restyle`. Stocks (`Homes::furniture_of`) come from
+  `BuyFurniture` at a land office, crafting, housewarming gifts, antique pieces found in cave
+  caches (`decor::cache_find`: relic caches always, one treasure cache in three; reported on
+  `CaveCacheOpened::furniture`) and `WorldState::grant_furniture` (the seam for quest rewards). A rig parked in a garage bay regains
+  `GARAGE_REPAIR_PER_SECOND` hull. `Hatch` drops the pilot into the cellar under the house (vent
+  grate hatch: rigs cannot follow); `RideLift` runs between the basement and the claim
+  (`lift_claim`, `lift_home_from_here`). A home with a lamp lights its plot in `light_at`.
+- **Where actions happen.** `check_home(player, &command)` gives the verdict and `HomeQuote`
+  the tick applies (`HomeRefusal` says why not). Listed deeds and furniture: at a land office
+  (`at_land_office`: the town HQ or a village hall); everything else: the actor on the plot
+  (`Plot::at_site`), which is where the pilot stands while the game shows the interior.
+- **Events** (netcode codes 240-249): `PlotBought`, `ContractSigned`, `ConstructionStage`,
+  `HomeCompleted`, `SiteEventRaised`, `SiteEventAnswered`, `FurniturePlaced`,
+  `FurnitureRemoved`, `HomeRushed` and the generic `HomeInteraction`.
+- **Scenario helpers** (tests and screenshot scenes): `scenario_home` (a deed, optionally a
+  finished home), `scenario_edit_plot`, `scenario_expand`, `grant_furniture`.
+
+`home/*` unit tests cover sites, prices, stages, holds, rushes, events, supply caps and the
+decor grid; `world/home_tests.rs` covers deeds at the land office and surveyed spots, claims vs
+plots, scheduling in world time and sleeping, every stage and the foundation, shortages,
+requests, rushing, supplied blocks, blueprint rules, site crews and talking to the contractor,
+decorating and permissions, trophies, furniture buying and crafting, beds and home points, the
+garage, the basement, cellar and lift, saves (JSON, postcard, saves from before homes),
+replication, hashing and tick-rate safety.
+
+## Wave 4 seams: homes (T24)
+
+- **Sky islands and the Moon** (T20, T22): surveyed plots on a sky land's turf are
+  `PlotSetting::SkyIsland` / `Moon` (sky villas and lunar habitats need them); sky towns can list
+  their own sites by adding a `SiteKey` arm to `plot::listed_sites_between` and a land office
+  by extending `WorldState::at_land_office`.
+- **Night** (T25): plots are in `enemy_safe_zone` and a lit home lights its plot in `light_at`;
+  `Home::lit` says whether a lamp burns.
+- **Story arcs** (T26): `grant_furniture` pays furniture rewards; `GameplayEventKind::HomeCompleted`
+  and `ContractSigned` are hooks for home arcs; contractors remember clients
+  (`Homes::jobs_with`, `MemoryFact::Traded` at signing).
+- **Formats**: `PROTOCOL_VERSION` 12 (the `Homes` section, `PlayerCommand::Home`,
+  `NpcState::site`, `BedSpot::Home`, `BuildRefusal::OnPlot`, events 240-249) and save format 10
+  (versions 8 and 9 load).
 
 ## Wave 3 seams: the pilot (T15)
 

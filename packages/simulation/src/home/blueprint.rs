@@ -290,7 +290,7 @@ impl RoomKind {
             Self::Bedroom => &[(1, F::Bed), (5, F::Wardrobe), (8 + 4, F::WallLamp)],
             Self::Study => &[(2, F::Bookshelf), (5, F::Armchair)],
             Self::Workshop => &[(1, F::Workbench), (5, F::Chest)],
-            Self::GarageBay => &[(8 + 1, F::WallLamp)],
+            Self::GarageBay => &[(8 + 4, F::WallLamp)],
             Self::Hall => &[(16 + 3, F::Chandelier), (1, F::Armchair), (6, F::Plant)],
             Self::Library => &[(0, F::Bookshelf), (2, F::Bookshelf), (5, F::Armchair)],
             Self::Gallery => &[

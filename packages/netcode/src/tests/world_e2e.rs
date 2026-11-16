@@ -973,7 +973,7 @@ fn world_moon_replicates_and_colony_deals_cross_the_wire() {
         }
         rig.velocity_x = 0.0;
         rig.velocity_y = 0.0;
-        rig.hazard_gear.pressurized_hull = 1;
+        rig.hazard_gear.pressurized_hull = moon::VACUUM_SEAL_TIER;
         rig.hazard_gear.life_support = 1;
         rig.hazard_gear.de_icer = 6;
         rig.lunar.landed = true;
@@ -1059,4 +1059,90 @@ fn world_enemy_difficulty_is_the_hosts_call() {
         assert_eq!(seen.enemy_difficulty(), EnemyDifficulty::Normal);
     }
     assert_converged(&harness);
+}
+
+/// Contractor-built homes (WP-HOME) replicate to every client under latency: a client
+/// decorates its finished cabin and signs a contract for a new room through its own input
+/// stream, the host validates both at the plot, and every client sees the same plots, decor
+/// and contract in the shared homes section.
+#[test]
+fn world_homes_decor_and_contracts_replicate_to_every_client() {
+    use fatherload_simulation::{
+        PlayerCommand, TILE_SIZE,
+        home::{Blueprint, Expansion, Furniture, HomeCommand, HomeJob, RoomKind, plot},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(30, 4, 1.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    for client in &mut harness.clients {
+        client.bot.active = false;
+    }
+    let owner = crate::world::to_sim_player(harness.clients[0].session.player().expect("joined"));
+    let mut world = harness.world().clone();
+    let settings = *world.world_settings();
+    let site = plot::listed_sites_between(&settings, -2_000, 2_000)
+        .into_iter()
+        .find(|site| site.size >= fatherload_simulation::home::PlotSize::Small)
+        .expect("a listed site");
+    let plot = world.scenario_home(owner, site, Some(Blueprint::Cabin));
+    world.grant_furniture(owner, Furniture::Plant, 1);
+    if let Some(rig) = world.player_mut(owner) {
+        #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+        {
+            rig.x = (site.middle() as f32 + 0.5) * TILE_SIZE;
+            rig.y = (site.ground_row as f32 - 0.5) * TILE_SIZE;
+        }
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+        rig.credits = 50_000;
+    }
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(1));
+    let contractor = harness
+        .world()
+        .contractors_for(plot, owner)
+        .first()
+        .and_then(|offer| offer.character);
+    harness.clients[0]
+        .queued_actions
+        .push(PlayerCommand::Home(HomeCommand::Place {
+            plot,
+            room: 0,
+            cell: 3,
+            furniture: Furniture::Plant,
+        }));
+    harness.clients[0]
+        .queued_actions
+        .push(PlayerCommand::Home(HomeCommand::Hire {
+            plot,
+            job: HomeJob::Expand(Expansion::Room(RoomKind::Kitchen)),
+            contractor,
+            supply: false,
+        }));
+    harness.run_for(Duration::from_secs(2));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    harness.assert_actions_exactly_once();
+    let host = harness.world();
+    let found = host.homes().plot(plot).expect("the plot");
+    let home = found.home.as_ref().expect("the cabin");
+    assert_eq!(
+        home.rooms[0]
+            .decor
+            .piece_at(3)
+            .map(|(_, piece)| piece.furniture),
+        Some(Furniture::Plant),
+        "the plant was placed on the host"
+    );
+    assert!(found.construction.is_some(), "the contract was signed");
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(
+            seen.homes(),
+            host.homes(),
+            "every client sees the same homes"
+        );
+    }
 }

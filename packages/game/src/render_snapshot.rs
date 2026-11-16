@@ -444,6 +444,10 @@ pub struct ViewSnapshot<'w> {
     /// The village building whose door the rig stands at, as its door prompt ("Enter the
     /// Trading Post").
     pub village_door: Option<String>,
+    /// On foot at a home's front door (WP-HOME): its walk-in prompt ("Walk into your cabin").
+    pub home_door: Option<String>,
+    /// On a building plot: its site board prompt ("Site board: Walls 54%").
+    pub plot_board: Option<String>,
     /// The person the rig can talk to (the nearest within reach) and their short name, for the
     /// "Talk to Mara" prompt and the name tag (WP-PEOPLE).
     pub talk_target: Option<(fatherload_simulation::entity::EntityId, String)>,
@@ -678,6 +682,8 @@ pub struct RenderSnapshot<'w> {
     pub bases: &'w fatherload_simulation::base::Bases,
     /// What players did with people: memories, conversations, perks (WP-PEOPLE).
     pub people: &'w fatherload_simulation::people::PeopleLedger,
+    /// Plots, construction, homes and furniture (WP-HOME).
+    pub homes: &'w fatherload_simulation::home::Homes,
     /// The world day people live by (mood in the talk panel).
     pub people_day: u32,
     /// The base modules that have power this frame.
@@ -697,6 +703,10 @@ pub struct RenderSnapshot<'w> {
 impl<'w> RenderSnapshot<'w> {
     /// Builds the snapshot for `seats` laid out over `screen`.
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one field per part of the world shown"
+    )]
     pub fn build(
         world: &'w WorldState,
         seats: &[LocalSeat],
@@ -792,6 +802,7 @@ impl<'w> RenderSnapshot<'w> {
             enemy_difficulty: world.enemy_difficulty(),
             bases: world.bases(),
             people: world.people(),
+            homes: world.homes(),
             people_day: world.people_clock().day,
             powered_modules: world
                 .bases()
@@ -1036,6 +1047,8 @@ fn view_snapshot(
                     format!("Enter the {}", lot.kind.label())
                 }
             }),
+        home_door: home_door_prompt(world, player_id),
+        plot_board: plot_board_prompt(world, player_id),
         quests: world.visible_quests(player_id),
         quest_markers: world
             .visible_quests(player_id)
@@ -1299,4 +1312,42 @@ pub struct CritterPresentation {
     pub home_x: f32,
     pub home_y: f32,
     pub state: fatherload_simulation::entity::CritterState,
+}
+
+/// The walk-in prompt at a home's front door, for a pilot on foot who may enter.
+fn home_door_prompt(world: &WorldState, player: PlayerId) -> Option<String> {
+    if !world.is_on_foot(player) {
+        return None;
+    }
+    let plot = crate::shell::homes::home_door_here(world, player)?;
+    let plot = world.homes().plot(plot)?;
+    let home = plot.home.as_ref()?;
+    Some(if plot.deed.owns(player) {
+        format!("Walk into your {}", home.blueprint.name().to_lowercase())
+    } else {
+        format!(
+            "Visit Player {} at their {}",
+            plot.deed.owner.get() + 1,
+            home.blueprint.name().to_lowercase()
+        )
+    })
+}
+
+/// The site board prompt on a plot (on foot, away from the front door).
+fn plot_board_prompt(world: &WorldState, player: PlayerId) -> Option<String> {
+    if !world.is_on_foot(player) {
+        return None;
+    }
+    let plot = world.plot_here(player)?;
+    let now = world.world_millis();
+    Some(match (&plot.construction, &plot.home) {
+        (Some(work), _) => format!(
+            "Site board: {} {}%",
+            work.stage(now).name(),
+            work.progress_per_mille(now) / 10
+        ),
+        (None, Some(home)) => format!("{}: plans and the deed", home.blueprint.name()),
+        (None, None) if plot.deed.owns(player) => "Site board: hire a builder".to_owned(),
+        (None, None) => "Site board".to_owned(),
+    })
 }

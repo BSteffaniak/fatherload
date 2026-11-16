@@ -565,8 +565,12 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // warm chime when someone warms to you (a cooler standing gets the back blip), a hush
         // when a rumour marks your map. The command's generic event is silent.
         GameplayEventKind::PersonTalked { .. } => Some(SoundCue::PersonGreet),
-        GameplayEventKind::PersonTraded { .. } => Some(SoundCue::Sell),
-        GameplayEventKind::PersonGifted { .. } => Some(SoundCue::GiftGiven),
+        GameplayEventKind::PersonTraded { .. } | GameplayEventKind::HomeRushed { .. } => {
+            Some(SoundCue::Sell)
+        }
+        GameplayEventKind::PersonGifted { .. } | GameplayEventKind::SiteEventAnswered { .. } => {
+            Some(SoundCue::GiftGiven)
+        }
         GameplayEventKind::AffinityChanged { warmer, .. } => Some(if *warmer {
             SoundCue::AffinityUp
         } else {
@@ -630,8 +634,6 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         ),
         GameplayEventKind::HomeCompleted { .. } => Some(SoundCue::HomeFanfare),
         GameplayEventKind::SiteEventRaised { .. } => Some(SoundCue::SiteKnock),
-        GameplayEventKind::SiteEventAnswered { .. } => Some(SoundCue::GiftGiven),
-        GameplayEventKind::HomeRushed { .. } => Some(SoundCue::Sell),
         GameplayEventKind::FurniturePlaced { .. } | GameplayEventKind::FurnitureRemoved { .. } => {
             Some(SoundCue::FurnitureThunk)
         }
@@ -858,6 +860,7 @@ mod tests {
                 player_id,
                 tile: fatherload_simulation::cave::CaveTile::TreasureCache,
                 credits: 100,
+                furniture: None,
             },
             GameplayEventKind::StalactiteFell { x: 0, y: 0 },
             GameplayEventKind::VillageDiscovered {

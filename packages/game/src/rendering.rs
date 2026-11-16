@@ -22,6 +22,7 @@ mod counters;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
 mod garage;
+mod homes;
 mod interior;
 mod layout;
 mod menus;
@@ -451,9 +452,11 @@ impl GameRenderer {
     ) {
         let split = snapshot.views.len() > 1;
         let seat = shell.seat(view.seat_index);
+        // Inside a building, or walking the rooms of a home (WP-HOME).
+        let in_room = seat.inside() || seat.home.interior.is_some();
         let canvas = if split {
             UiCanvas::for_viewport(screen, view.viewport)
-        } else if !seat.inside() {
+        } else if !in_room {
             // The HUD keeps clear of a phone's notch and rounded corners; the world behind it
             // still fills the screen.
             screen.inset(ui_kit::safe_insets())
@@ -467,7 +470,7 @@ impl GameRenderer {
         if split {
             begin_view_clip(view.viewport);
         }
-        if seat.inside() {
+        if in_room {
             let area = if split {
                 let (x, y, width, height) = canvas.physical_rect(view.viewport);
                 RoomArea {
@@ -495,7 +498,18 @@ impl GameRenderer {
                 area.align_top
                     .then(|| interior::floor_canvas_y(area) as f32),
             );
-            if let Some(village) = seat.village.interior {
+            // Door and window glass shows the real time of day.
+            interior::set_window_sky(snapshot.clock);
+            if seat.home.interior.is_some() {
+                interior::draw_home_interior(
+                    draw,
+                    seat,
+                    view,
+                    snapshot,
+                    area,
+                    split.then_some(view.seat_index),
+                );
+            } else if let Some(village) = seat.village.interior {
                 interior::draw_village_interior(
                     draw,
                     seat,
@@ -519,7 +533,7 @@ impl GameRenderer {
             self.render_world(draw, shell, snapshot, view);
         }
         {
-            layout::set_modal_placement(if seat.inside() {
+            layout::set_modal_placement(if in_room {
                 layout::ModalPlacement::Counter
             } else {
                 layout::ModalPlacement::Centred
@@ -537,7 +551,7 @@ impl GameRenderer {
                 draw_modal(draw, &ui, modal);
             } else if shell.run_mode == RunMode::Playing
                 && shell.modal.is_none()
-                && !seat.inside()
+                && !in_room
                 && view.failure.is_some()
                 && view.pilot.is_none()
             {
@@ -545,14 +559,14 @@ impl GameRenderer {
                 // pickup (the "Radio for a pickup" prompt) back into the failed rig.
                 draw_rescue(draw, &ui);
             }
-            let docked = layout::take_last_dialog_rect().filter(|_| seat.inside());
+            let docked = layout::take_last_dialog_rect().filter(|_| in_room);
             if !shell.global_overlay()
                 && let Some((message, age)) = toast_message(shell, seat)
             {
                 draw_toast(draw, message, age, docked);
             }
             if !shell.global_overlay()
-                && !seat.inside()
+                && !in_room
                 && seat.modal.is_none()
                 && let Some(banner) = &seat.village.banner
             {
@@ -692,6 +706,7 @@ impl GameRenderer {
                     moon: snapshot.moon,
                     clock_state: snapshot.clock_state,
                     talk_target: view.talk_target.as_ref().map(|(npc, _)| *npc),
+                    homes: snapshot.homes,
                 },
             );
         }

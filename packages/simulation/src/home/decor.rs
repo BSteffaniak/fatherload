@@ -159,6 +159,16 @@ impl Furniture {
         Self::Lantern,
     ];
 
+    /// Antique pieces found in cave caches (never sold at the land office), rarest last.
+    pub const CACHE_FINDS: [Self; 6] = [
+        Self::HangingPlant,
+        Self::Banner,
+        Self::MountedPick,
+        Self::StarMobile,
+        Self::Telescope,
+        Self::Piano,
+    ];
+
     /// What a workbench can make, in listing order.
     pub const CRAFTABLE: [Self; 8] = [
         Self::Chair,
@@ -566,6 +576,36 @@ mod cell_list {
         let entries = Vec::<(u8, PlacedDecor)>::deserialize(deserializer)?;
         Ok(entries.into_iter().collect())
     }
+}
+
+/// One in this many treasure caches holds an antique piece of furniture (relic caches always
+/// do).
+pub const TREASURE_CACHE_FURNITURE_ODDS: u64 = 3;
+const SALT_CACHE_FURNITURE: u64 = 0x4655_524e_4954_5552;
+
+/// The antique piece of furniture a cave cache at `(x, y)` holds, if any.
+///
+/// WP-HOME furniture found as drops: deterministic in the seed and the tile; relic caches
+/// always hold one and favour the rarer pieces.
+#[must_use]
+pub const fn cache_find(seed: u64, x: i32, y: i32, relic: bool) -> Option<Furniture> {
+    let roll = crate::worldgen::noise::hash2(seed, SALT_CACHE_FURNITURE, x, y);
+    if !relic && !roll.is_multiple_of(TREASURE_CACHE_FURNITURE_ODDS) {
+        return None;
+    }
+    let finds = Furniture::CACHE_FINDS.len() as u64;
+    // Relic caches pick from the upper half of the list, treasure caches from all of it.
+    let index = if relic {
+        finds / 2 + (roll >> 8) % (finds - finds / 2)
+    } else {
+        (roll >> 8) % finds
+    };
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "an index below CACHE_FINDS.len()"
+    )]
+    let index = index as usize;
+    Some(Furniture::CACHE_FINDS[index])
 }
 
 #[cfg(test)]

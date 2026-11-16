@@ -215,6 +215,10 @@ impl WorldState {
         let (first, last) = crate::surface::town_span();
         (at.x >= first - 2 && at.x <= last + 2)
             || crate::worldgen::streamed::in_village_area(self.terrain.settings(), at, 2)
+            // A home with a lamp burning lights its plot (WP-HOME).
+            || self.homes.plot_at(at).is_some_and(|plot| {
+                plot.home.as_ref().is_some_and(crate::home::Home::lit)
+            })
     }
 
     /// Puts `player_id` in `bed` (the bed's service was validated by its caller). Only at dusk

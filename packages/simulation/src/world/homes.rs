@@ -34,7 +34,7 @@
     reason = "tile coordinates and world pixels stay far inside the f32 grid near plots"
 )]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     base::{BuiltTile, Fixture},
@@ -69,6 +69,9 @@ use super::WorldState;
 pub const CONTRACTOR_REACH_COLUMNS: i32 = 900;
 /// The most contractors the site board lists.
 pub const MAX_CONTRACTORS_LISTED: usize = 6;
+/// At most this many builders of one style are listed while builders of other styles are
+/// within reach (so the choice of contractor is a real one).
+pub const MAX_LISTED_PER_STYLE: usize = 2;
 /// Columns within which an actor brings a site crew to work (like a settlement's people).
 const CREW_NEAR_COLUMNS: i32 = 90;
 /// Rows within which an actor brings a site crew to work.
@@ -345,11 +348,7 @@ impl WorldState {
             }
         }
         found.sort_by_key(|(distance, offer)| (*distance, offer.character));
-        let mut offers: Vec<ContractorOffer> = found
-            .into_iter()
-            .map(|(_, offer)| offer)
-            .take(MAX_CONTRACTORS_LISTED)
-            .collect();
+        let mut offers = pick_contractors(found.into_iter().map(|(_, offer)| offer).collect());
         if offers.is_empty() {
             offers.push(guild_offer());
         }
@@ -1082,7 +1081,14 @@ impl WorldState {
                 {
                     let _ = player.stow(item, 1);
                 }
-                self.homes.add_furniture(player_id, piece.furniture, 1);
+                // Owners take the piece back into their stock; a crew member decorating an
+                // open house moves it, but it stays the house's: back to the deed owner.
+                let keeper = self
+                    .homes
+                    .plot(plot)
+                    .filter(|found| !found.deed.owns(player_id))
+                    .map_or(player_id, |found| found.deed.owner);
+                self.homes.add_furniture(keeper, piece.furniture, 1);
                 events.push(GameplayEventKind::FurnitureRemoved {
                     player_id,
                     plot,
@@ -1962,6 +1968,38 @@ fn crew_station_px(plot: &Plot, slot: usize, roll: u64) -> f32 {
 }
 
 /// The town builders' guild: hired where no person takes the work.
+/// Builders listed out of `nearest` (nearest first): everyone who built for this client
+/// before (they remember you), then a varied pick (at most [`MAX_LISTED_PER_STYLE`] of one
+/// style while others are about), then the nearest of the rest; listed nearest first.
+fn pick_contractors(nearest: Vec<ContractorOffer>) -> Vec<ContractorOffer> {
+    let mut picked = vec![false; nearest.len()];
+    let mut styles: BTreeMap<ContractorStyle, usize> = BTreeMap::new();
+    // Pass 0: past clients; pass 1: a varied pick; pass 2: the nearest of the rest.
+    for pass in 0..3 {
+        for (index, offer) in nearest.iter().enumerate() {
+            let count = picked.iter().filter(|kept| **kept).count();
+            if count >= MAX_CONTRACTORS_LISTED || picked[index] {
+                continue;
+            }
+            let style_count = styles.get(&offer.profile.style).copied().unwrap_or(0);
+            let wanted = match pass {
+                0 => offer.past_jobs > 0,
+                1 => style_count < MAX_LISTED_PER_STYLE,
+                _ => true,
+            };
+            if wanted {
+                picked[index] = true;
+                *styles.entry(offer.profile.style).or_default() += 1;
+            }
+        }
+    }
+    nearest
+        .into_iter()
+        .zip(picked)
+        .filter_map(|(offer, keep)| keep.then_some(offer))
+        .collect()
+}
+
 fn guild_offer() -> ContractorOffer {
     ContractorOffer {
         character: None,
@@ -2003,5 +2041,47 @@ impl WorldState {
             refined: 0,
         };
         let _ = self.bases.stake_claim(owner, center, false, beacon);
+    }
+}
+
+#[cfg(test)]
+mod pick_tests {
+    use super::*;
+
+    fn offer(index: u16, style: ContractorStyle, past_jobs: u32) -> ContractorOffer {
+        let mut offer = guild_offer();
+        let id = CharacterId {
+            village: TOWN_VILLAGE,
+            index,
+        };
+        offer.character = Some(id);
+        offer.profile.character = id;
+        offer.profile.style = style;
+        offer.past_jobs = past_jobs;
+        offer
+    }
+
+    #[test]
+    fn the_listing_is_varied_and_keeps_past_builders() {
+        use ContractorStyle::{Chatty, FastAndLoose, Grumpy, SlowAndPerfect};
+        // Nearest first: five perfectionists, then other styles; the farthest built for us.
+        let nearest = vec![
+            offer(0, SlowAndPerfect, 0),
+            offer(1, SlowAndPerfect, 0),
+            offer(2, SlowAndPerfect, 0),
+            offer(3, SlowAndPerfect, 0),
+            offer(4, SlowAndPerfect, 0),
+            offer(5, FastAndLoose, 0),
+            offer(6, Grumpy, 0),
+            offer(7, Chatty, 0),
+            offer(8, SlowAndPerfect, 1),
+        ];
+        let listed: Vec<u16> = pick_contractors(nearest)
+            .iter()
+            .filter_map(|offer| offer.character.map(|id| id.index))
+            .collect();
+        // The past builder, one more perfectionist, then the other styles, nearest first;
+        // the last place goes to the nearest of the rest.
+        assert_eq!(listed, vec![0, 1, 5, 6, 7, 8]);
     }
 }

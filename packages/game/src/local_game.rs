@@ -844,19 +844,10 @@ impl LocalGame {
                     player_id,
                     tile,
                     credits,
+                    furniture,
                 } => {
                     if let Some(seat) = seat_of(player_id) {
-                        messages.push((
-                            seat,
-                            format!(
-                                "{}: +{credits} credits, and loot spills out!",
-                                if tile == fatherload_simulation::cave::CaveTile::RelicCache {
-                                    "Relic cache"
-                                } else {
-                                    "Treasure cache"
-                                }
-                            ),
-                        ));
+                        messages.push((seat, cache_message(tile, credits, furniture)));
                     }
                 }
                 GameplayEventKind::VaultOpened { feature }
@@ -1389,6 +1380,28 @@ pub fn world_from_setup(
     world
 }
 
+/// The message for opening a cave cache (and the antique piece it held, WP-HOME).
+fn cache_message(
+    tile: fatherload_simulation::cave::CaveTile,
+    credits: u32,
+    furniture: Option<fatherload_simulation::home::Furniture>,
+) -> String {
+    let name = if tile == fatherload_simulation::cave::CaveTile::RelicCache {
+        "Relic cache"
+    } else {
+        "Treasure cache"
+    };
+    furniture.map_or_else(
+        || format!("{name}: +{credits} credits, and loot spills out!"),
+        |piece| {
+            format!(
+                "{name}: +{credits} credits, and an antique {} for your home!",
+                piece.name().to_lowercase()
+            )
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     //! Headless app-level tests: scripted input through `LocalGame::frame`, exactly the path the
@@ -1410,6 +1423,7 @@ mod tests {
     mod base_tests;
     mod crew_tests;
     mod garage_tests;
+    mod home_tests;
     mod pilot_tests;
     mod quest_tests;
     mod split_seat_tests;

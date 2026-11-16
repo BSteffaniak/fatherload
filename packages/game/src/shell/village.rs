@@ -276,16 +276,14 @@ pub fn interior_village(
     (building < found.buildings.len()).then_some((found, building))
 }
 
-/// The counter rows of `building`: its deals, then a row to talk to the keeper.
+/// The counter rows of `building`: its deals, then a row to talk to the keeper, then (in a
+/// meeting hall) the land office (WP-HOME).
 #[must_use]
 pub fn counter_rows(found: &Village, building: usize) -> usize {
+    let lot = found.buildings.get(building);
     found.offers(building).len()
-        + usize::from(
-            found
-                .buildings
-                .get(building)
-                .is_some_and(|lot| lot.keeper.is_some()),
-        )
+        + usize::from(lot.is_some_and(|lot| lot.keeper.is_some()))
+        + usize::from(lot.is_some_and(|lot| lot.kind == BuildingKind::Hall))
 }
 
 /// The name plate of a village building ("Trading Post · Copperhollow").
@@ -685,6 +683,12 @@ impl SeatUi {
         }
         let offers = found.offers(building);
         let lot = &found.buildings[building];
+        let land_office = offers.len() + usize::from(lot.keeper.is_some());
+        if lot.kind == BuildingKind::Hall && self.selected_menu_item == land_office {
+            self.open_home(super::homes::HomeScreen::LandOffice, None);
+            cues.push(SoundCue::Ui);
+            return;
+        }
         if offers.get(self.selected_menu_item).is_some() {
             let Some(service) = VillageService::of(lot.kind) else {
                 return;

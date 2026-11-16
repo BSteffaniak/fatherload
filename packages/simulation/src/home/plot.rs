@@ -211,6 +211,8 @@ pub const SCENIC_SPACING: i32 = 420;
 const SCENIC_CHANCE: u64 = 55;
 /// Tiles kept clear around villages, the town and camps.
 const CLEARANCE: i32 = 8;
+/// Columns kept between a listed site and a trail milestone (its board is wide).
+const MILESTONE_BOARD_CLEARANCE: i32 = 6;
 /// How far a site search slides looking for flat ground.
 const SEARCH_COLUMNS: i32 = 40;
 const SALT_SITES: u64 = 0x484F_4D45_0000_0010;
@@ -308,9 +310,11 @@ fn buildable(settings: &WorldSettings, left: i32, width: i32) -> Option<i32> {
         surface(settings, x) == row
             && (!settings.generator.has_biomes()
                 || crate::worldgen::biome::lake_row(settings, x).is_none())
-            && crate::village::milestone_at(settings, x).is_none()
     });
-    level.then_some(row)
+    // A trail milestone's board is several tiles wide: keep it clear of the house too.
+    let signed = (left - MILESTONE_BOARD_CLEARANCE..left + width + MILESTONE_BOARD_CLEARANCE)
+        .any(|x| crate::village::milestone_at(settings, x).is_some());
+    (level && !signed).then_some(row)
 }
 
 /// Slides from `start` (east when `east`, else west) looking for a buildable stretch.

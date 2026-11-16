@@ -19,7 +19,7 @@ use fatherload_simulation::{
 use super::pixel_art::palette::*;
 use super::{
     counters,
-    layout::{ModalContent, Section, SectionItem, UiLayout},
+    layout::{ItemEntry, ModalContent, Section, SectionItem, UiLayout},
     menus,
     pixel_art::{
         palette,
@@ -454,6 +454,8 @@ fn draw_view_prompt(
     } else if idle && view.pilot.is_some() && view.village_door.is_some() {
         let door = view.village_door.clone().unwrap_or_default();
         (Prompt::Climb, door.replacen("Enter", "Walk into", 1), true)
+    } else if idle && let Some(door) = &view.home_door {
+        (Prompt::Climb, door.clone(), true)
     } else if idle && view.pilot.is_some() && view.failure.is_some() {
         // On foot with the rig wrecked or dry: use (twice) radios for a pickup.
         (Prompt::Use, "Radio for a pickup".to_owned(), true)
@@ -529,6 +531,8 @@ fn draw_view_prompt(
         && let Some(module) = view.nearby_module
     {
         (Prompt::Use, format!("Use {}", module.name()), true)
+    } else if idle && let Some(board) = &view.plot_board {
+        (Prompt::Use, board.clone(), true)
     } else if exit_ready {
         (Prompt::ExitRig, "Climb out".to_owned(), false)
     } else {
@@ -1258,6 +1262,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::BaseModule => super::build::draw_base_module(draw, ui),
         ModalScreen::Achievements => super::rewards::draw_achievements(draw, ui),
         ModalScreen::Colony => super::moon_hud::draw_colony(draw, ui),
+        ModalScreen::Home => super::homes::draw_home_modal(draw, ui),
     }
 }
 
@@ -1541,6 +1546,38 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let (pack, pack_about) = counters::pack_section(ui);
     sections.insert(1, hopper);
     sections.insert(2, pack);
+    // A home plot (WP-HOME): the last selectable row surveys the spot the seat stands on.
+    let survey_row = crate::shell::hopper::hopper_rows(ui.player).len();
+    let stock: u32 = ui
+        .snapshot
+        .homes
+        .furniture_of(ui.view.player_id)
+        .values()
+        .sum();
+    sections.insert(
+        3,
+        Section::new(
+            "Home",
+            LEAF,
+            vec![
+                SectionItem::item(ItemEntry {
+                    icon: Some(&menu_icons::HOUSE),
+                    label: "Survey this spot".to_owned(),
+                    detail: "Stake a plot of open ground for a home".to_owned(),
+                    value: String::new(),
+                    value_color: GOLD,
+                    coin: false,
+                    selected: ui.seat.selected_menu_item == survey_row,
+                    disabled: false,
+                }),
+                SectionItem::stat(
+                    "Furniture in stock",
+                    stock.to_string(),
+                    if stock > 0 { LEAF } else { FOG },
+                ),
+            ],
+        ),
+    );
     UiLayout::screen(draw).modal_with_render_plan(
         "Inventory",
         "Cargo, blocks, the pilot's pack, artifacts, consumables and field kits.",

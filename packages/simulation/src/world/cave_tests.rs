@@ -191,19 +191,48 @@ fn drilling_a_cache_pays_credits_and_spills_loot() {
     let mut opened = None;
     for _ in 0..600 {
         for event in tick(&mut world, ControlState::new(0.0, false, true)) {
-            if let GameplayEventKind::CaveCacheOpened { credits, tile, .. } = event {
-                opened = Some((credits, tile));
+            if let GameplayEventKind::CaveCacheOpened {
+                credits,
+                tile,
+                furniture,
+                ..
+            } = event
+            {
+                opened = Some((credits, tile, furniture));
             }
         }
         if opened.is_some() {
             break;
         }
     }
-    let (paid, tile) = opened.expect("the cache opened");
+    let (paid, tile, furniture) = opened.expect("the cache opened");
     assert_eq!(tile, CaveTile::TreasureCache);
     assert!(paid > 0);
     assert_eq!(world.player(PLAYER).expect("rig").credits, credits + paid);
     assert!(loot(&world) > before, "the cache's loot spilled");
+    // WP-HOME: an antique piece, when the cache held one, went into the home stock.
+    assert_eq!(
+        furniture,
+        crate::home::decor::cache_find(world.terrain().seed(), cache.x, cache.y, false)
+    );
+    if let Some(piece) = furniture {
+        assert_eq!(world.homes().furniture_count(PLAYER, piece), 1);
+    }
+}
+
+#[test]
+fn caches_hold_antique_furniture_now_and_then() {
+    use crate::home::{Furniture, decor::cache_find};
+    let mut treasure = 0;
+    for x in 0..300 {
+        let relic = cache_find(7, x, 40, true).expect("relic caches always hold a piece");
+        assert!(Furniture::CACHE_FINDS[3..].contains(&relic));
+        assert!(!Furniture::CATALOGUE.contains(&relic));
+        assert_eq!(cache_find(7, x, 40, false), cache_find(7, x, 40, false));
+        treasure += usize::from(cache_find(7, x, 40, false).is_some());
+    }
+    // About one treasure cache in three.
+    assert!((60..=140).contains(&treasure), "{treasure} of 300");
 }
 
 fn critters_of(world: &WorldState, cave: &WorldFeature) -> usize {

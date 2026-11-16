@@ -306,7 +306,7 @@ pub fn touch_context(
         TouchMode::Menu
     } else if seat.build.is_some() {
         TouchMode::Build
-    } else if seat.inside() {
+    } else if seat.inside() || seat.home.interior.is_some() {
         TouchMode::Interior
     } else {
         TouchMode::Play
@@ -335,7 +335,9 @@ pub fn touch_context(
             || view.village_door.is_some()
             || view.nearby_module.is_some()
             || view.buoy.is_some()
-            || view.in_colony,
+            || view.in_colony
+            || view.home_door.is_some()
+            || view.plot_board.is_some(),
         kits: kits.map(|count| count > 0),
         pilot: TouchPilot::new(
             view.pilot.is_some(),

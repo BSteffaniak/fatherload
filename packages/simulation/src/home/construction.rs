@@ -165,15 +165,15 @@ impl SiteEventKind {
         match self {
             Self::Shortage { block, count } => match style {
                 ContractorStyle::Grumpy => format!(
-                    "Merchant shorted me again. {count} {} or we stand about. Your choice.",
+                    "Merchant shorted me again. {count} {}s or we stand about. Your choice.",
                     block.name().to_lowercase()
                 ),
                 ContractorStyle::Chatty => format!(
-                    "You'll never believe it: the wagon came without the {}! {count} would do. Or I'll send to the valley, but that's half a day.",
+                    "You'll never believe it: the wagon came without the {}s! {count} would do. Or I'll send to the valley, but that's half a day.",
                     block.name().to_lowercase()
                 ),
                 _ => format!(
-                    "We're short {count} {} blocks. Bring them, or pay for the stock, and we carry on.",
+                    "We're short {count} {}s. Bring them, or pay for the stock, and we carry on.",
                     block.name().to_lowercase()
                 ),
             },

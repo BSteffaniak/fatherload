@@ -623,6 +623,53 @@ services or only themselves. You hold two claims to start and one more every two
 reached; each extra beacon costs more. Bases save with the world and are shared online (the host
 checks every build action); nothing hostile spawns inside or near a claim.
 
+### Homes
+
+Buy a plot of land and have a house built on it. The **land office** is a row at the town
+**HQ**'s desk and at every village's meeting **hall**: it lists the plots for sale nearby (small,
+medium, large and estate plots at the edge of town, on each village's outskirts and at scenic
+lakesides, clifftops and meadows; their **FOR SALE** boards stand on the land) and sells
+furniture from a catalogue. Any other free stretch of open ground outside the town, villages and
+claims can be bought where you stand: open the inventory and choose **Survey this spot** (far from
+town is cheaper; levelling rough ground costs extra; floating sky islands and the Moon can be
+surveyed too). You hold up to four deeds.
+
+On foot on your plot, press use for the **site board**. Pick a blueprint (cabin, cottage, house,
+workshop home, manor, and on the right ground a sky villa or a lunar habitat), then a builder:
+the town's and nearby villages' builders each work in their own way (fast and loose, slow and
+perfect, chatty, grumpy, steady), which sets the time, the price and the quality. Hand over
+blocks from the hopper for a discount; builders who built for you before remember you and charge
+less. A cabin takes about an in-game day, a house about three, a manor a week, and big plots add
+time for the gardens. Work goes on in **world time** only: sleeping through the night moves it
+on, and nothing happens while the game is closed. Watch it go up in stages (survey stakes, the
+foundation, scaffolding and the frame, the walls, the roof, the finishing touches) with the
+builder and helpers on site in hard hats during working hours (07:00-18:00); talk to them about
+the job. Now and then the site needs you: a materials shortage stops work until you bring the
+blocks or pay for the stock (or the builder sources it after a long wait), a builder may ask for
+a piece of ore to set over the door (bring it and the house turns out better), or just tells a
+story. You can pay to rush the work at any time.
+
+When the keys are handed over, push up at the front door (or press use) to **walk in**. Walk the
+rooms with the movement keys; the front door is on the left of the ground floor, stairs stand at
+the right of each floor's first room, and walking off a room's edge goes through to the next.
+Windows show the real sky outside (dawn, noon, dusk, the stars and the Moon; space on the Moon,
+clouds on a sky island). Use the furniture: a **bed** makes the house your home point (the
+rescue crew brings you here) and, from dusk, puts you to bed; a **stove** or fireplace cooks a
+hot meal that patches the pilot up; **chests** and wardrobes store cargo; a **trophy case** shows
+off an artifact or a rare gem from the bay; a **workbench** crafts furniture from blocks; a
+telescope watches the Moon. Press use away from any furniture for the home menu: **decorate**
+the room (place pieces from your stock on the floor, the wall or the ceiling, pick them up again,
+change the wallpaper and the floor), the storage and the deed. Furniture comes from the land
+office catalogue, the workbench, and a housewarming gift from a builder proud of the work.
+
+Hire the builder again for **expansions**: more rooms, another floor, a garage bay (park the rig
+in it from outside and it is patched up for free), a basement with a hatch down into the mine
+below the house, and a private lift from the basement to your claim underground (ride it back
+up with use inside the claim). The deed sets who may come in: the crew decorates, visitors are
+welcome (the default), or owners only; add co-owners from the deed. Homes save with the world
+and are shared online, the house lights up its plot at night, and nothing hostile spawns on or
+near a plot.
+
 ### On foot
 
 Press `E` (controller `X`, the arrow-keys seat's `Right Ctrl`) with the rig at rest and the

@@ -29,6 +29,7 @@ mod build;
 mod colony;
 mod crew;
 mod garage;
+pub mod homes;
 pub mod hopper;
 pub mod options;
 mod pilot;
@@ -133,6 +134,10 @@ pub enum ModalScreen {
     Achievements,
     /// The lunar research colony's counter (WP-MOON, `shell/colony.rs`).
     Colony,
+    /// A home screen (WP-HOME): the land office, surveying, a plot's site board, contracts,
+    /// the deed, and inside a home its menu, decorating, storage, trophies and crafting
+    /// ([`SeatUi::home`]).
+    Home,
 }
 
 impl ModalScreen {
@@ -996,6 +1001,8 @@ pub struct SeatUi {
     /// When (shell tick) this seat's rig first landed on the Moon: the sunrise set piece
     /// plays for a few seconds from here (WP-MOON).
     pub moon_landing: Option<u64>,
+    /// Contractor-built homes: the home the seat is inside and the open home screen.
+    pub home: homes::SeatHome,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1038,6 +1045,7 @@ impl SeatUi {
             pickup_armed: 0.0,
             rewards: rewards::SeatRewards::new(),
             moon_landing: None,
+            home: homes::SeatHome::new(),
         }
     }
 
@@ -1050,13 +1058,14 @@ impl SeatUi {
     /// Whether a transaction from this seat is waiting for its tick.
     #[must_use]
     pub const fn has_pending_service(&self) -> bool {
-        !self.pending_services.is_empty() || self.village.people_pending()
+        !self.pending_services.is_empty() || self.village.people_pending() || self.home.pending()
     }
 
     /// Back outdoors with nothing open (new game, load, back to the title). Receipts and the
     /// last message stay.
     fn reset_outdoors(&mut self) {
         self.modal = None;
+        self.home = homes::SeatHome::new();
         self.interior_zone = None;
         self.village.interior = None;
         self.village.talk = None;
@@ -1085,6 +1094,10 @@ impl SeatUi {
 
     /// One frame of this seat's input while the game runs. Returns `true` when the seat asked
     /// for the (shared) pause menu.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the seat's whole frame, in priority order"
+    )]
     fn update(
         &mut self,
         input: PlayerInput,
@@ -1099,6 +1112,7 @@ impl SeatUi {
         );
         self.pickup_armed = (self.pickup_armed - delta_seconds).max(0.0);
         self.village.tick_pending();
+        self.home.tick_pending();
         if self.build.is_some() {
             return self.handle_build(input, ctx, cues, requests);
         }
@@ -1109,6 +1123,9 @@ impl SeatUi {
         toggle_modal(&mut self.modal, input.inventory, ModalScreen::Inventory);
         toggle_modal(&mut self.modal, input.map, ModalScreen::Map);
         toggle_modal(&mut self.modal, input.help, ModalScreen::Help);
+        if self.home.interior.is_some() {
+            return self.handle_home_interior(input, delta_seconds, ctx, cues, requests);
+        }
         if self.inside() {
             return self.handle_interior(input, delta_seconds, ctx, cues, requests);
         }
@@ -1160,7 +1177,11 @@ impl SeatUi {
             self.open_build(ctx, cues);
             return false;
         }
-        // On foot, pushing up at a door walks in (Part II F5).
+        // On foot, pushing up at a home's front door walks in (WP-HOME), as at a town or
+        // village door (Part II F5).
+        if self.walk_into_home(input, ctx, cues) {
+            return false;
+        }
         if self.walk_in(input, ctx, cues) {
             return false;
         }
@@ -1173,6 +1194,19 @@ impl SeatUi {
             if ctx.on_foot() && self.try_use_fixture(ctx, requests) {
                 return false;
             }
+            // A private lift from a base claim up to a home, and use at a home's front door
+            // walks in like pushing up does (WP-HOME; the touch prompt taps use).
+            if self.try_lift_home(ctx, requests) {
+                return false;
+            }
+            if let Some(plot) = ctx
+                .player
+                .filter(|_| ctx.on_foot())
+                .and_then(|player| homes::home_door_here(ctx.world, player))
+            {
+                self.enter_home(ctx, plot, 0, homes::HOME_DOOR_X + 46.0, cues);
+                return false;
+            }
             if let Some(zone) = ctx.current_zone() {
                 self.enter_interior(zone, ctx.device, cues);
             } else if !self.try_talk_outdoors(ctx, cues, requests)
@@ -1180,6 +1214,7 @@ impl SeatUi {
                 && !self.try_buoy(ctx, cues, requests)
                 && !self.open_colony(ctx, cues)
                 && !self.open_base_module(ctx, cues)
+                && (!ctx.on_foot() || !self.try_open_site(ctx, cues))
                 && !self.try_exit(ctx, requests)
             {
                 if ctx.on_foot() {
@@ -1328,6 +1363,10 @@ impl SeatUi {
             self.handle_colony(input, ctx, cues, requests);
             return true;
         }
+        if modal == ModalScreen::Home {
+            self.handle_home_modal(input, ctx, cues, requests);
+            return true;
+        }
         if input.backs_out() {
             self.modal = None;
             return true;
@@ -1342,17 +1381,19 @@ impl SeatUi {
         let max_item = match modal {
             // The depot's last row (index 5) sells the block hopper (WP-DROPS).
             ModalScreen::Depot | ModalScreen::Salvage => 5,
-            ModalScreen::Inventory => ctx.player().map_or(0, |player| {
-                hopper::hopper_rows(player).len().saturating_sub(1)
-            }),
+            // The last row surveys the spot for a home plot (WP-HOME).
+            ModalScreen::Inventory => ctx
+                .player()
+                .map_or(0, |player| hopper::hopper_rows(player).len()),
             ModalScreen::Fuel | ModalScreen::Bank => 2,
             ModalScreen::Repair => GARAGE_COUNTER_ROW,
             ModalScreen::Explosives => arms::ARMS_FIRST_ROW + arms::ARMS_ROWS.len() - 1,
+            // The last row is the land office (WP-HOME).
             ModalScreen::Headquarters => {
                 if ctx.deep_claim_unlocked() {
-                    6
+                    7
                 } else {
-                    2
+                    3
                 }
             }
             ModalScreen::Crafting => RecipeKind::ALL.len() - 1,
@@ -1529,7 +1570,17 @@ impl SeatUi {
             | ModalScreen::PersonTrade
             | ModalScreen::PersonGift
             | ModalScreen::BaseModule
-            | ModalScreen::Colony => None,
+            | ModalScreen::Colony
+            | ModalScreen::Home => None,
+            ModalScreen::Inventory
+                if ctx.player().is_some_and(|player| {
+                    self.selected_menu_item == hopper::hopper_rows(player).len()
+                }) =>
+            {
+                self.open_home(homes::HomeScreen::Survey, None);
+                cues.push(SoundCue::Ui);
+                None
+            }
             ModalScreen::Inventory => {
                 // The hopper rows (WP-DROPS): toggle collecting, dump blocks.
                 if let Some(player) = ctx.player()
@@ -1575,6 +1626,12 @@ impl SeatUi {
         cues: &mut Vec<SoundCue>,
     ) -> Option<SessionServiceRequest> {
         let unlocked = ctx.deep_claim_unlocked();
+        let land_office = if unlocked { 7 } else { 3 };
+        if self.selected_menu_item == land_office {
+            self.open_home(homes::HomeScreen::LandOffice, None);
+            cues.push(SoundCue::Ui);
+            return None;
+        }
         match self.selected_menu_item {
             0 => Some(SessionServiceRequest::CompleteDepotWork),
             1 => {
@@ -2142,6 +2199,7 @@ impl ShellState {
             && seat.modal.is_none()
             && !seat.inside()
             && seat.build.is_none()
+            && seat.home.interior.is_none()
     }
 
     /// Whether the local host should tick: while the game runs and at least one local seat is

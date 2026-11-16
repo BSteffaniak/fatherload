@@ -213,7 +213,9 @@ mod tests {
                 | Patch::TetherHook
                 // The Moon's big low moments: stone grinding, a machine waking, the core.
                 | Patch::WardenWake
-                | Patch::CoreHum => (40.0, 3_000.0),
+                | Patch::CoreHum
+                // Homes (T24): the furniture thud.
+                | Patch::FurnitureThunk => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

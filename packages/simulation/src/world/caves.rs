@@ -171,10 +171,21 @@ impl WorldState {
             // Through the drop rules (WP-DROPS): the kind's lifetime and the per-cell cap.
             let _ = self.spawn_loot(x, y, (spread, -150.0), *stack, None);
         }
+        // An antique piece of furniture for the home (WP-HOME), straight into the stock.
+        let furniture = crate::home::decor::cache_find(
+            self.terrain.seed(),
+            target.x,
+            target.y,
+            tile == CaveTile::RelicCache,
+        );
+        if let Some(piece) = furniture {
+            self.grant_furniture(player_id, piece, 1);
+        }
         output.push_event(GameplayEventKind::CaveCacheOpened {
             player_id,
             tile,
             credits: loot.credits,
+            furniture,
         });
     }
 

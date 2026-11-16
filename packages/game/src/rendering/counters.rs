@@ -1069,6 +1069,14 @@ pub(super) fn draw_headquarters(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
             ),
         ]);
     }
+    offers.push(
+        Offer::new(
+            &menu_icons::HOUSE,
+            "Land office",
+            "Building plots and furniture",
+        )
+        .about("Buy a plot of land, hire a builder and make a home of it."),
+    );
     let (items, about) = offer_items(offers, ui.seat.selected_menu_item);
     let mut sections = vec![
         Section::new(

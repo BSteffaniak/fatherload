@@ -659,7 +659,8 @@ pub enum HomeCommand {
         furniture: Furniture,
     },
     /// Pick up the piece covering `cell` (rugs last) back into your stock (a displayed trophy
-    /// goes back into the cargo bay).
+    /// goes back into the cargo bay). A crew member who does not own the house moves pieces
+    /// but cannot carry them off: they go back to the deed owner's stock.
     PickUp { plot: PlotId, room: u8, cell: u8 },
     /// Cycle the room's wallpaper (`wallpaper`) or floor.
     Restyle {
