@@ -789,7 +789,7 @@ impl Tile {
             MineralKind::Skystone,
             MineralKind::CloudSilver,
         ];
-        const ARTIFACTS: [ArtifactKind; 13] = [
+        const ARTIFACTS: [ArtifactKind; 15] = [
             ArtifactKind::Fossil,
             ArtifactKind::OldCircuit,
             ArtifactKind::BuriedIdol,
@@ -803,6 +803,8 @@ impl Tile {
             ArtifactKind::MantleHeart,
             ArtifactKind::WindAstrolabe,
             ArtifactKind::CloudPearl,
+            ArtifactKind::HarpyEgg,
+            ArtifactKind::SkyRelic,
         ];
         #[allow(clippy::cast_possible_truncation, reason = "masked to a byte")]
         let durability = (code & 0xFF) as u8;

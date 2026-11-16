@@ -113,21 +113,32 @@ impl Material {
             TileKind::Sky(tile) => match tile {
                 fatherload_simulation::sky::SkyTile::Crystal
                 | fatherload_simulation::sky::SkyTile::Cache
-                | fatherload_simulation::sky::SkyTile::Keystone => Self::Ore,
+                | fatherload_simulation::sky::SkyTile::Keystone
+                | fatherload_simulation::sky::SkyTile::AetherCrystal
+                | fatherload_simulation::sky::SkyTile::StormGlass
+                | fatherload_simulation::sky::SkyTile::HarpyEgg => Self::Ore,
                 fatherload_simulation::sky::SkyTile::Turf(_)
                 | fatherload_simulation::sky::SkyTile::Soil
                 | fatherload_simulation::sky::SkyTile::Roots
                 | fatherload_simulation::sky::SkyTile::Vines
                 | fatherload_simulation::sky::SkyTile::Nest
                 | fatherload_simulation::sky::SkyTile::Spring
-                | fatherload_simulation::sky::SkyTile::Regolith => Self::Soft,
+                | fatherload_simulation::sky::SkyTile::Regolith
+                | fatherload_simulation::sky::SkyTile::HarpyNest => Self::Soft,
                 fatherload_simulation::sky::SkyTile::Rock(_)
                 | fatherload_simulation::sky::SkyTile::ContinentRock
                 | fatherload_simulation::sky::SkyTile::RuinBrick
                 | fatherload_simulation::sky::SkyTile::RuinPillar
                 | fatherload_simulation::sky::SkyTile::Vent
                 | fatherload_simulation::sky::SkyTile::BuoyPad
-                | fatherload_simulation::sky::SkyTile::MoonRock => Self::Hard,
+                | fatherload_simulation::sky::SkyTile::MoonRock
+                | fatherload_simulation::sky::SkyTile::AetherCore
+                | fatherload_simulation::sky::SkyTile::TempleBrick
+                | fatherload_simulation::sky::SkyTile::TempleDoor
+                | fatherload_simulation::sky::SkyTile::KeystoneDoor
+                | fatherload_simulation::sky::SkyTile::TempleLever
+                | fatherload_simulation::sky::SkyTile::TempleKeystone
+                | fatherload_simulation::sky::SkyTile::TempleCache => Self::Hard,
             },
             TileKind::Cave(tile) => match tile {
                 fatherload_simulation::cave::CaveTile::Crystal

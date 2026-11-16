@@ -27,9 +27,10 @@
 //! deterministic column ([`moon_column`]) 3,200-4,800 tiles from town.
 //!
 //! **Shapes.** An island is a turf top over soil over a rock underside in its palette
-//! ([`SkyBiome`]), with crystal pockets and roots and crystal dangling below. Continents and the
-//! Moon are placeholder bodies (continent rock under turf; regolith over moon rock with
-//! craters) that Wave 4 fills with content.
+//! ([`SkyBiome`]), with crystal pockets and roots and crystal dangling below. On V8 worlds
+//! continents are placeholder bodies (continent rock under turf); V9 worlds fill them
+//! ([`continent`]: mountains, caves, lakes, an aether core, sky ores, a city, a temple and harpy
+//! nests). The Moon is regolith over moon rock with craters.
 //!
 //! **Streaming.** A chunk that touches no land is air ([`chunk_is_empty`]); the chunk
 //! assembler hands out one shared empty chunk for it, so empty sky costs no generation and no
@@ -337,14 +338,34 @@ pub struct SkyLand {
     shape: u64,
     /// What a V9 sky grows on the island (`None` on V8 skies, continents and the Moon).
     content: Option<IsleContent>,
+    /// The content of a V9 continent (`None` for islands, the Moon and V8 continents).
+    plan: Option<continent::ContinentPlan>,
 }
 
 impl SkyLand {
+    /// The content plan of a V9 continent ([`continent`]); `None` for everything else.
+    #[must_use]
+    pub const fn plan(&self) -> Option<continent::ContinentPlan> {
+        self.plan
+    }
+
+    /// The land's shape seed (presentation varies props with it).
+    #[must_use]
+    pub const fn shape_seed(&self) -> u64 {
+        self.shape
+    }
+
     /// Rows the top may rise above `top_row`.
     const fn rise(&self) -> i32 {
         let base = match self.kind {
             SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle => 2 + self.half_width / 10,
-            SkyLandKind::Continent => 18,
+            SkyLandKind::Continent => {
+                if self.plan.is_some() {
+                    continent::MAX_PEAK_ROWS + 4
+                } else {
+                    18
+                }
+            }
             SkyLandKind::Moon => MOON_HILL_ROWS + 2,
             SkyLandKind::TownIsle => 2,
         };
@@ -402,6 +423,18 @@ impl SkyLand {
         Some(self.top(x, dx))
     }
 
+    /// The underside row of column `x` (the lowest body row, before anything dangling), if
+    /// the land covers it.
+    #[must_use]
+    pub fn underside_row(&self, x: i32) -> Option<i32> {
+        let dx = x - self.center_x;
+        if dx.abs() > self.half_width {
+            return None;
+        }
+        let top = self.top(x, dx);
+        Some(self.bottom(x, dx, top))
+    }
+
     fn top(&self, x: i32, dx: i32) -> i32 {
         let hw = i64::from(self.half_width.max(1));
         let dx64 = i64::from(dx);
@@ -429,7 +462,10 @@ impl SkyLand {
             SkyLandKind::Continent => {
                 let hills = fractal_noise(self.shape, SALT_SHAPE, x, 0, 56, 1, 3) * 16 / NOISE_MAX;
                 let edge = (self.half_width - dx.abs()).clamp(0, 28);
-                self.top_row - hills + (28 - edge) / 4
+                let base = self.top_row - hills + (28 - edge) / 4;
+                self.plan
+                    .as_ref()
+                    .map_or(base, |plan| plan.surface(x, base, self.top_row))
             }
             SkyLandKind::Moon => {
                 let hills = fractal_noise(self.shape, SALT_SHAPE, x, 0, 120, 1, 3) * MOON_HILL_ROWS
@@ -470,6 +506,23 @@ impl SkyLand {
         let top = self.top(x, dx);
         if let Some(content) = &self.content {
             return content.tile_at(self, x, dx, y, top);
+        }
+        if let Some(plan) = &self.plan {
+            // A V9 continent: the temple shows through everything, nests sit on summits.
+            if let Some(temple) = plan.temple
+                && let Some(symbol) = temple.cell(x, y)
+                && let Some(tile) = continent::temple_tile(symbol)
+            {
+                return (tile != TileKind::Air).then_some(tile);
+            }
+            if y < top {
+                return plan.decor(x, y, top).map(TileKind::Sky);
+            }
+            let bottom = self.bottom(x, dx, top);
+            if y <= bottom {
+                return plan.body(self, x, y, y - top, bottom);
+            }
+            return self.dangling(x, dx, y - bottom).map(TileKind::Sky);
         }
         if y < top {
             return None;
@@ -680,6 +733,7 @@ fn low_isle_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Vec<SkyLand> 
             depth,
             shape: rng.next_u64(),
             content: None,
+            plan: None,
         };
         if lands
             .iter()
@@ -729,6 +783,7 @@ fn archipelago_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Vec<SkyLan
             depth,
             shape: rng.next_u64(),
             content: None,
+            plan: None,
         });
         cursor = center_x + half_width + rng.range(8, 26);
         alt += step * rng.range(6, 20);
@@ -780,9 +835,16 @@ fn cell_lands(
     })
 }
 
-/// The continent footprint of cell `rx`, if it has one.
-fn continent_cell(seed: u64, bands: &SkyBands, rx: i32) -> Option<SkyLand> {
-    let mut rng = RegionRng::new(seed, SALT_CONTINENT, rx, 0);
+/// The continent cell of a continent's feature id.
+fn continent_cell_of(id: FeatureId) -> Option<i32> {
+    let (layer, rx, ry, _) = super::streamed::index::decode(id)?;
+    (layer == Layer::Sky && ry.div_euclid(1000) == ID_CONTINENT).then_some(rx)
+}
+
+/// The continent footprint of cell `rx`, if it has one (with its content plan on V9 worlds).
+fn continent_cell(settings: &WorldSettings, rx: i32) -> Option<SkyLand> {
+    let bands = &bands_of(settings)?;
+    let mut rng = RegionRng::new(settings.seed, SALT_CONTINENT, rx, 0);
     if !rng.chance(520) {
         return None;
     }
@@ -795,21 +857,34 @@ fn continent_cell(seed: u64, bands: &SkyBands, rx: i32) -> Option<SkyLand> {
         x0 + CONTINENT_CELL_COLUMNS - half_width - 20,
     );
     let top_alt = rng.range(alt_bottom + depth + 16, alt_top - 20);
-    Some(SkyLand {
+    let biome = if rng.chance(500) {
+        SkyBiome::Meadow
+    } else {
+        SkyBiome::Frost
+    };
+    let shape = rng.next_u64();
+    let top_row = row_of(top_alt);
+    let mut land = SkyLand {
         id: feature_id(Layer::Sky, rx, ID_CONTINENT * 1000, 0),
         kind: SkyLandKind::Continent,
-        biome: if rng.chance(500) {
-            SkyBiome::Meadow
-        } else {
-            SkyBiome::Frost
-        },
+        biome,
         center_x,
-        top_row: row_of(top_alt),
+        top_row,
         half_width,
         depth,
-        shape: rng.next_u64(),
+        shape,
+        plan: settings
+            .generator
+            .has_sky_content()
+            .then(|| continent::ContinentPlan::new(center_x, half_width, top_row, depth, shape)),
         content: None,
-    })
+    };
+    // Nests go only on summits whose ledge really is the surface (needs the finished shape).
+    if let Some(mut plan) = land.plan {
+        plan.nests = continent::ledge_nests(&land, &plan);
+        land.plan = Some(plan);
+    }
+    Some(land)
 }
 
 /// The Moon of a world with a sky (`None` on older generators).
@@ -833,6 +908,7 @@ pub fn moon(settings: &WorldSettings) -> Option<SkyLand> {
         depth: MOON_DEPTH_ROWS,
         shape: rng.next_u64(),
         content: None,
+        plan: None,
     })
 }
 
@@ -887,11 +963,10 @@ pub fn lands_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<SkyLand>
             found.extend(cell_lands(settings, ID_ARCHIPELAGO, rx, ry).iter().copied());
         }
     }
-    let seed = settings.seed;
     let (continent_bottom, continent_top) = band_rows(bands, ID_CONTINENT);
     if -rect.max.y <= continent_top && -rect.min.y >= continent_bottom {
         for rx in cells(rect.min.x, rect.max.x, CONTINENT_CELL_COLUMNS) {
-            found.extend(continent_cell(seed, bands, rx));
+            found.extend(continent_cell(settings, rx));
         }
     }
     found.extend(moon(settings));
@@ -911,9 +986,7 @@ pub fn land(settings: &WorldSettings, id: FeatureId) -> Option<SkyLand> {
     let (band, row) = (ry.div_euclid(1000), ry.rem_euclid(1000));
     let lands = match band {
         ID_LOW | ID_ARCHIPELAGO => cell_lands(settings, band, rx, row).to_vec(),
-        ID_CONTINENT => continent_cell(settings.seed, bands, rx)
-            .into_iter()
-            .collect(),
+        ID_CONTINENT => continent_cell(settings, rx).into_iter().collect(),
         ID_MOON => moon(settings).into_iter().collect(),
         _ => Vec::new(),
     };
@@ -1080,6 +1153,8 @@ pub fn updraft_at(settings: &WorldSettings, x: i32, y: i32) -> i32 {
     updraft_cell(settings.seed, &bands, x.div_euclid(UPDRAFT_CELL.0), ry)
         .map_or(0, |updraft| updraft.acceleration_at(x, y))
 }
+
+pub mod continent;
 
 #[cfg(test)]
 mod isle_tests;

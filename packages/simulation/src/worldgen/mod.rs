@@ -99,13 +99,15 @@ pub enum GeneratorVersion {
     /// exactly V7's. V8 worlds also switch on altitude physics ([`crate::environment`]): thin
     /// air, cold, wind layers, updrafts and gravity fields.
     V8,
-    /// V8 with the low isles and cloud archipelagos filled in (WP-SKY, T20,
-    /// [`GeneratorVersion::has_sky_isles`]): skystone and cloud silver ore, sky treasure caches,
-    /// nests, ruins, springs that pour waterfalls into the void, vines, keystones of crumbling
-    /// isles, updraft vents and fuel buoys on the islands; one sky town per archipelago block on
-    /// a wide town isle ([`sky::sky_town_site`]); and jet streams along archipelago chains. Land
-    /// placement, the bands, continents and the Moon are exactly V8's except where a town isle
-    /// stands in for a chain island.
+    /// V8 with the sky filled in (Wave 4): the low isles and cloud archipelagos
+    /// ([`GeneratorVersion::has_sky_isles`], T20: skystone and cloud silver ore, sky treasure
+    /// caches, nests, ruins, springs that pour waterfalls into the void, vines, keystones of
+    /// crumbling isles, updraft vents and fuel buoys; one sky town per archipelago block on a
+    /// wide town isle ([`sky::sky_town_site`]); jet streams along archipelago chains) and the
+    /// sky continents ([`GeneratorVersion::has_sky_content`], T21, [`sky::continent`]:
+    /// mountains, caves, lakes, a bedrock-like aether core, aether crystal and storm glass, a
+    /// sky city, a sky temple and harpy nests). Land placement, the bands and everything below
+    /// the sky are exactly V8's except where a town isle stands in for a chain island.
     V9,
 }
 
@@ -209,6 +211,14 @@ impl GeneratorVersion {
     /// sky towns and jet streams; see [`sky`]). V8 skies keep their bare islands.
     #[must_use]
     pub const fn has_sky_isles(self) -> bool {
+        matches!(self, Self::V9)
+    }
+
+    /// Whether this generator fills the sky continents with content ([`sky::continent`]:
+    /// mountains, caves, lakes, the aether core, sky ores, a city, a temple and harpy nests)
+    /// and their sky enemies. V8 continents stay placeholder land.
+    #[must_use]
+    pub const fn has_sky_content(self) -> bool {
         matches!(self, Self::V9)
     }
 

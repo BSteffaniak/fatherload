@@ -377,6 +377,198 @@ pub const ICON_ROCKET_AMMO: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+// --- Act II weapons (Wave 4 T21) ------------------------------------------------------------
+
+/// An arc rifle: a storm-glass coil between two brass prongs.
+pub const ARC_RIFLE: SpriteDef = SpriteDef {
+    name: "weapon_arc_rifle",
+    legend: &[
+        ('o', INK),
+        ('s', STEEL_DARK),
+        ('S', STEEL),
+        ('y', AMBER),
+        ('b', OCEAN),
+        ('i', ICE),
+    ],
+    frames: &[&[
+        ".oooo..oooo.", //
+        "osSSobibiyyo", //
+        "osSSSbibiiio", //
+        "osSSobibiyyo", //
+        ".oooo..oooo.", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A gravity gun: a violet aether lens in a ring of fins.
+pub const GRAVITY_GUN: SpriteDef = SpriteDef {
+    name: "weapon_gravity_gun",
+    legend: &[
+        ('o', INK),
+        ('s', STEEL_DARK),
+        ('S', STEEL),
+        ('v', VIOLET),
+        ('l', LAVENDER),
+        ('p', PINK),
+    ],
+    frames: &[&[
+        "......oo.oo.", //
+        ".ooooovvolo.", //
+        "osSSSovllpvo", //
+        "osSSSovlppvo", //
+        ".ooooovvolo.", //
+        "......oo.oo.", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A tether harpoon: a crossbow-like launcher with a coiled line drum.
+pub const TETHER_HARPOON: SpriteDef = SpriteDef {
+    name: "weapon_tether_harpoon",
+    legend: &[
+        ('o', INK),
+        ('b', LOAM),
+        ('d', SOIL),
+        ('S', STEEL),
+        ('w', STEEL_LIGHT),
+        ('c', CREAM),
+    ],
+    frames: &[&[
+        ".ooo.....o..", //
+        "obcbo...oSo.", //
+        "odcdoSSSSSwo", //
+        "obcbo...oSo.", //
+        ".ooo.....o..", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A flak cannon: a fat twin barrel with a gold muzzle brake.
+pub const FLAK_CANNON: SpriteDef = SpriteDef {
+    name: "weapon_flak_cannon",
+    legend: &[
+        ('o', INK),
+        ('s', STEEL_DARK),
+        ('S', STEEL),
+        ('w', STEEL_LIGHT),
+        ('g', GOLD),
+        ('m', MOSS),
+    ],
+    frames: &[&[
+        ".oooooooooo..", //
+        "omSSSSSSSSgo.", //
+        "ommssssssswgo", //
+        "omSSSSSSSSgo.", //
+        "ommssssssswgo", //
+        ".oooooooooo..", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A flak shell in flight: a stubby olive round with a red fuse band.
+pub const FLAK_SHELL: SpriteDef = SpriteDef {
+    name: "projectile_flak_shell",
+    legend: &[('o', INK), ('m', MOSS), ('r', RED), ('g', GOLD)],
+    frames: &[&[
+        ".ooo.", //
+        "ommrg", //
+        ".ooo.", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_ARC_RIFLE: SpriteDef = SpriteDef {
+    name: "icon_arc_rifle",
+    legend: &[
+        ('o', INK),
+        ('S', STEEL),
+        ('b', OCEAN),
+        ('i', ICE),
+        ('y', GOLD),
+    ],
+    frames: &[&[
+        "......y..", //
+        ".....y...", //
+        "oooooyy..", //
+        "oSSbibiyo", //
+        "oSSbibiio", //
+        "ooooo.y..", //
+        "......y..", //
+        ".....y...", //
+        ".........", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_GRAVITY_GUN: SpriteDef = SpriteDef {
+    name: "icon_gravity_gun",
+    legend: &[
+        ('o', INK),
+        ('S', STEEL),
+        ('v', VIOLET),
+        ('l', LAVENDER),
+        ('p', PINK),
+    ],
+    frames: &[&[
+        ".......l.", //
+        "....oo.v.", //
+        "ooooovvl.", //
+        "oSSSovlpv", //
+        "oSSSovppv", //
+        "ooooovvl.", //
+        "....oo.v.", //
+        ".......l.", //
+        ".........", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_TETHER_HARPOON: SpriteDef = SpriteDef {
+    name: "icon_tether_harpoon",
+    legend: &[
+        ('o', INK),
+        ('b', LOAM),
+        ('c', CREAM),
+        ('S', STEEL),
+        ('w', STEEL_LIGHT),
+    ],
+    frames: &[&[
+        ".......o.", //
+        "......oSo", //
+        ".....oSwo", //
+        "....ocSo.", //
+        "...oc.o..", //
+        "..oc.....", //
+        ".obbo....", //
+        "obccbo...", //
+        ".obbo....", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_FLAK_CANNON: SpriteDef = SpriteDef {
+    name: "icon_flak_cannon",
+    legend: &[
+        ('o', INK),
+        ('S', STEEL),
+        ('m', MOSS),
+        ('g', GOLD),
+        ('a', AMBER),
+    ],
+    frames: &[&[
+        "......a.a", //
+        ".......g.", //
+        "oooooo.a.", //
+        "omSSSSgo.", //
+        "ommmmmmgo", //
+        "omSSSSgo.", //
+        "ommmmmmgo", //
+        "oooooooo.", //
+        ".........", //
+    ]],
+    frame_seconds: 0.0,
+};
+
 /// The world sprite of a mounted weapon.
 #[must_use]
 pub const fn mounted(weapon: WeaponKind) -> &'static SpriteDef {
@@ -387,6 +579,10 @@ pub const fn mounted(weapon: WeaponKind) -> &'static SpriteDef {
         WeaponKind::RocketLauncher => &ROCKET_LAUNCHER,
         WeaponKind::Harpoon => &HARPOON,
         WeaponKind::Railgun => &RAILGUN,
+        WeaponKind::ArcRifle => &ARC_RIFLE,
+        WeaponKind::GravityGun => &GRAVITY_GUN,
+        WeaponKind::TetherHarpoon => &TETHER_HARPOON,
+        WeaponKind::FlakCannon => &FLAK_CANNON,
     }
 }
 
@@ -400,6 +596,10 @@ pub const fn icon(weapon: WeaponKind) -> &'static SpriteDef {
         WeaponKind::RocketLauncher => &ICON_ROCKET_LAUNCHER,
         WeaponKind::Harpoon => &ICON_HARPOON,
         WeaponKind::Railgun => &ICON_RAILGUN,
+        WeaponKind::ArcRifle => &ICON_ARC_RIFLE,
+        WeaponKind::GravityGun => &ICON_GRAVITY_GUN,
+        WeaponKind::TetherHarpoon => &ICON_TETHER_HARPOON,
+        WeaponKind::FlakCannon => &ICON_FLAK_CANNON,
     }
 }
 
@@ -411,6 +611,11 @@ pub const fn projectile(weapon: WeaponKind) -> Option<&'static SpriteDef> {
         WeaponKind::ScatterBlaster => Some(&PELLET),
         WeaponKind::RocketLauncher => Some(&ROCKET),
         WeaponKind::Harpoon => Some(&SPEAR),
-        WeaponKind::PlasmaCutter | WeaponKind::Railgun => None,
+        WeaponKind::FlakCannon => Some(&FLAK_SHELL),
+        WeaponKind::PlasmaCutter
+        | WeaponKind::Railgun
+        | WeaponKind::ArcRifle
+        | WeaponKind::GravityGun
+        | WeaponKind::TetherHarpoon => None,
     }
 }

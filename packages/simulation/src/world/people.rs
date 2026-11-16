@@ -286,6 +286,16 @@ impl WorldState {
                     .iter()
                     .map(|camp| camp.id),
             );
+            // Sky cities (T21, V9 sky continents).
+            ids.extend(
+                crate::worldgen::sky::continent::sky_cities_between(
+                    &settings,
+                    column - reach,
+                    column + reach,
+                )
+                .iter()
+                .map(|city| city.id),
+            );
             ids.push(TOWN_VILLAGE);
             for id in ids {
                 if found.contains_key(&id) {

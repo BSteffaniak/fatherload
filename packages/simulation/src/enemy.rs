@@ -26,6 +26,18 @@
 //! | [`EnemyKind::SentryTurret`] | machine (ranged) | the machine layer | charge glow before each bolt | EMP, explosives |
 //! | [`EnemyKind::RogueExcavator`] | machine | deep layers; drills through rock toward you | engine rev before a charge | EMP, explosives |
 //! | [`EnemyKind::AncientGuardian`] | machine (elite) | machine-layer and mantle lairs | shielded until an EMP drops it | EMP, then explosives |
+//!
+//! # Sky families (Wave 4 T21, V9 skies)
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::SkyRay`] | creature (swooper) | archipelago to the continents | climbs above you, hangs, then dives | dodge the dive, then shoot |
+//! | [`EnemyKind::Wyvern`] | creature (swooper) | the sky continents | dives; spits fireballs from afar | arc rifle, flak |
+//! | [`EnemyKind::StormElemental`] | elemental | the dead-air gap and the continents | crackles, then a lightning arc that jolts machines (capacitor drained, weapon jammed) | kinetic, flak; immune to shock |
+//! | [`EnemyKind::PirateAirship`] | machine (elite, multi-part) | the dead-air gap and the continents | holds station above you, drops boarders | flak, rockets; down the turrets first |
+//! | [`EnemyKind::AirshipTurret`] | machine (airship part) | rides an airship | charge glow, then a lobbed cannonball | EMP, flak |
+//! | [`EnemyKind::SkyPirate`] | creature (boarder) | dropped by airships, jetpacks | cutlass lunge | anything; fight it on foot |
+//! | [`EnemyKind::HarpyNester`] | creature (guard) | nests on continent summits | only cares near its nest, unless its eggs are taken | keep away, or fight it at the nest |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -55,6 +67,28 @@ pub enum EnemyKind {
     SentryTurret,
     RogueExcavator,
     AncientGuardian,
+    // --- Sky families (Wave 4 T21) ----------------------------------------------------------
+    SkyRay,
+    Wyvern,
+    StormElemental,
+    PirateAirship,
+    AirshipTurret,
+    SkyPirate,
+    HarpyNester,
+}
+
+/// Something a sky enemy did that the game cues (see
+/// [`crate::event::GameplayEventKind::SkyEnemyAction`]).
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub enum SkyEnemyAction {
+    /// A swooper hangs above its prey and begins its dive.
+    Swoop,
+    /// An airship dropped a boarding party.
+    BoardersDropped,
+    /// An airship went down (its turrets with it).
+    AirshipDowned,
+    /// A harpy nester found its eggs gone.
+    NesterEnraged,
 }
 
 /// Creature or machine: machines feel EMPs, creatures burn.
@@ -88,6 +122,14 @@ pub enum AttackStyle {
     Ranged(ShotKind, u8),
     /// Spawns swarmers instead of attacking.
     Spawner,
+    /// Climbs above its prey, hangs (the wind-up), then dives through it and climbs away
+    /// (sky rays, wyverns, harpies; hurts on contact during the dive).
+    Swoop,
+    /// A telegraphed lightning arc: an instant strike at range that jolts machines (storm
+    /// elementals).
+    Lightning,
+    /// Holds station above its prey and drops boarders (airships).
+    Boarding,
 }
 
 /// A projectile enemies fire.
@@ -99,6 +141,8 @@ pub enum ShotKind {
     Fireball,
     /// A fast, straight energy bolt.
     Bolt,
+    /// A lobbed cannonball (airship turrets).
+    Cannonball,
 }
 
 impl ShotKind {
@@ -109,6 +153,7 @@ impl ShotKind {
             Self::Acid => 230.0,
             Self::Fireball => 170.0,
             Self::Bolt => 330.0,
+            Self::Cannonball => 280.0,
         }
     }
 
@@ -117,6 +162,7 @@ impl ShotKind {
     pub const fn gravity(self) -> f32 {
         match self {
             Self::Acid => 320.0,
+            Self::Cannonball => 160.0,
             Self::Fireball | Self::Bolt => 0.0,
         }
     }
@@ -126,7 +172,7 @@ impl ShotKind {
     pub const fn radius(self) -> f32 {
         match self {
             Self::Acid | Self::Bolt => 4.0,
-            Self::Fireball => 6.0,
+            Self::Fireball | Self::Cannonball => 6.0,
         }
     }
 
@@ -137,6 +183,7 @@ impl ShotKind {
             Self::Acid => 7.0,
             Self::Fireball => 10.0,
             Self::Bolt => 8.0,
+            Self::Cannonball => 9.0,
         }
     }
 
@@ -147,6 +194,7 @@ impl ShotKind {
             Self::Acid => 2_500,
             Self::Fireball => 4_000,
             Self::Bolt => 2_200,
+            Self::Cannonball => 3_500,
         }
     }
 }
@@ -164,6 +212,9 @@ pub enum DamageKind {
     Fire,
     /// Electromagnetic pulses (machines only).
     Emp,
+    /// Electric arcs (the arc rifle, lightning): machines conduct them, storm elementals
+    /// drink them.
+    Shock,
 }
 
 /// Who or what dealt a hit (kill credit, aggro).
@@ -295,7 +346,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 19] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -308,6 +359,13 @@ impl EnemyKind {
         Self::SentryTurret,
         Self::RogueExcavator,
         Self::AncientGuardian,
+        Self::SkyRay,
+        Self::Wyvern,
+        Self::StormElemental,
+        Self::PirateAirship,
+        Self::AirshipTurret,
+        Self::SkyPirate,
+        Self::HarpyNester,
     ];
 
     /// The kind's stats.
@@ -519,7 +577,130 @@ impl EnemyKind {
                     AttackStyle::Ranged(ShotKind::Bolt, 3),
                 )
             },
+            Self::SkyRay => EnemyStats {
+                radius: 10.0,
+                health: 24.0,
+                speed: 120.0,
+                dash_speed: 300.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 40.0,
+                contact_damage: 6.0,
+                windup_millis: 450,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 9.0,
+                knockback: 200.0,
+                ..stats("Sky Ray", Creature, Flying, AttackStyle::Swoop)
+            },
+            Self::Wyvern => EnemyStats {
+                radius: 16.0,
+                health: 70.0,
+                speed: 140.0,
+                dash_speed: 360.0,
+                sight_tiles: 16.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 44.0,
+                contact_damage: 12.0,
+                windup_millis: 500,
+                cooldown_millis: 2_800,
+                attack_range_tiles: 10.0,
+                knockback: 240.0,
+                ..stats("Wyvern", Creature, Flying, AttackStyle::Swoop)
+            },
+            Self::StormElemental => EnemyStats {
+                radius: 12.0,
+                health: 45.0,
+                speed: 70.0,
+                sight_tiles: 15.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 36.0,
+                contact_damage: 5.0,
+                windup_millis: 900,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 9.0,
+                knockback: 120.0,
+                ..stats("Storm Elemental", Creature, Flying, AttackStyle::Lightning)
+            },
+            Self::PirateAirship => EnemyStats {
+                radius: 20.0,
+                health: 220.0,
+                speed: 55.0,
+                sight_tiles: 18.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 48.0,
+                contact_damage: 10.0,
+                windup_millis: 1_200,
+                cooldown_millis: 9_000,
+                attack_range_tiles: 14.0,
+                knockback: 220.0,
+                elite: true,
+                ..stats("Pirate Airship", Machine, Flying, AttackStyle::Boarding)
+            },
+            Self::AirshipTurret => EnemyStats {
+                radius: 9.0,
+                health: 50.0,
+                speed: 0.0,
+                sight_tiles: 16.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 4.0,
+                windup_millis: 700,
+                cooldown_millis: 1_800,
+                attack_range_tiles: 14.0,
+                ..stats(
+                    "Airship Turret",
+                    Machine,
+                    Stationary,
+                    AttackStyle::Ranged(ShotKind::Cannonball, 1),
+                )
+            },
+            Self::SkyPirate => EnemyStats {
+                radius: 9.0,
+                health: 28.0,
+                speed: 90.0,
+                dash_speed: 240.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 30.0,
+                contact_damage: 7.0,
+                windup_millis: 450,
+                cooldown_millis: 1_500,
+                attack_range_tiles: 3.0,
+                knockback: 160.0,
+                ..stats("Sky Pirate", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::HarpyNester => EnemyStats {
+                radius: 12.0,
+                health: 55.0,
+                speed: 130.0,
+                dash_speed: 330.0,
+                // It sees far, but only cares near its nest (until its eggs are taken).
+                sight_tiles: 18.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 16.0,
+                contact_damage: 9.0,
+                windup_millis: 450,
+                cooldown_millis: 2_200,
+                attack_range_tiles: 8.0,
+                knockback: 220.0,
+                ..stats("Harpy Nester", Creature, Flying, AttackStyle::Swoop)
+            },
         }
+    }
+
+    /// Whether this is one of the sky families (Wave 4 T21).
+    #[must_use]
+    pub const fn is_sky(self) -> bool {
+        matches!(
+            self,
+            Self::SkyRay
+                | Self::Wyvern
+                | Self::StormElemental
+                | Self::PirateAirship
+                | Self::AirshipTurret
+                | Self::SkyPirate
+                | Self::HarpyNester
+        )
     }
 
     #[must_use]
@@ -567,9 +748,27 @@ impl EnemyKind {
     /// Damage multiplier of a hit of `kind` on this enemy (0: immune). Armoured kinds shrug off
     /// kinetic hits and fold to explosives; machines feel EMPs, creatures do not.
     #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "one arm per kind's quirk reads best"
+    )]
     pub const fn resistance(self, kind: DamageKind) -> f32 {
         let machine = self.is_machine();
         match (self, kind) {
+            // Storm elementals drink electricity and shrug off fire; airships fold to flak and
+            // rockets (their gas bags).
+            (Self::StormElemental, DamageKind::Shock | DamageKind::Fire) => 0.0,
+            (Self::StormElemental, DamageKind::Kinetic) => 1.2,
+            (Self::PirateAirship, DamageKind::Explosive) => 1.8,
+            (Self::PirateAirship, DamageKind::Kinetic) => 0.5,
+            (Self::Wyvern, DamageKind::Kinetic) => 0.75,
+            (_, DamageKind::Shock) => {
+                if machine {
+                    1.3
+                } else {
+                    1.0
+                }
+            }
             (_, DamageKind::Emp) => {
                 if machine {
                     1.0
@@ -991,6 +1190,41 @@ pub const fn band_roster(band: Band) -> &'static [(EnemyKind, u32)] {
     }
 }
 
+/// The kinds that roam sky band `band` of a V9 sky, with relative spawn weights.
+///
+/// Harpy nesters live at their nests, turrets and pirates come with airships. Empty for the
+/// ground, the low isles (early hopping stays calm), orbit and the Moon (WP-MOON's).
+#[must_use]
+pub const fn sky_roster(band: crate::sky::SkyBand) -> &'static [(EnemyKind, u32)] {
+    use crate::sky::SkyBand;
+    use EnemyKind::{PirateAirship, SkyRay, StormElemental, Wyvern};
+    match band {
+        SkyBand::Archipelago => &[(SkyRay, 5), (StormElemental, 1)],
+        SkyBand::DeadAir => &[(StormElemental, 4), (SkyRay, 2), (PirateAirship, 1)],
+        SkyBand::Continents => &[
+            (SkyRay, 4),
+            (Wyvern, 3),
+            (StormElemental, 2),
+            (PirateAirship, 1),
+        ],
+        SkyBand::Ground | SkyBand::LowIsles | SkyBand::Orbit | SkyBand::Lunar => &[],
+    }
+}
+
+/// The tier (health and damage scale, loot) of enemies in sky band `band`: about the deep
+/// layers' tiers, since the sky is Act II.
+#[must_use]
+pub const fn sky_tier(band: crate::sky::SkyBand) -> u8 {
+    use crate::sky::SkyBand;
+    match band {
+        SkyBand::Ground | SkyBand::LowIsles => 3,
+        SkyBand::Archipelago => 5,
+        SkyBand::DeadAir => 6,
+        SkyBand::Continents => 7,
+        SkyBand::Orbit | SkyBand::Lunar => 8,
+    }
+}
+
 /// The occupant of a lair cavern in band `band` (`roll` picks among the band's options), or
 /// `None` where the band has no lairs.
 #[must_use]
@@ -1041,6 +1275,7 @@ pub const fn tier_mineral(tier: u8) -> MineralKind {
 /// What an enemy of `kind` at depth tier `tier` drops when it dies; `roll` is a deterministic
 /// per-death hash (varies counts and the rare extras).
 #[must_use]
+#[allow(clippy::too_many_lines, reason = "the loot table, one arm per kind")]
 pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
     let mineral = ItemKind::Mineral(tier_mineral(tier));
     let richer = ItemKind::Mineral(tier_mineral(tier.saturating_add(1)));
@@ -1116,6 +1351,47 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
                 1 + extra / 2,
             );
             add(richer, 2 + extra);
+        }
+        EnemyKind::SkyRay => {
+            add(mineral, 1);
+            if rare < 25 {
+                add(ItemKind::Material(StrategicResourceKind::StormGlass), 1);
+            }
+        }
+        EnemyKind::Wyvern => {
+            add(richer, 2 + extra);
+            add(ItemKind::Material(StrategicResourceKind::StormGlass), 1);
+        }
+        EnemyKind::StormElemental => {
+            add(mineral, 1);
+            add(
+                ItemKind::Material(StrategicResourceKind::StormGlass),
+                2 + extra / 2,
+            );
+        }
+        EnemyKind::PirateAirship => {
+            add(richer, 6 + extra);
+            add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 2);
+            add(ItemKind::Material(StrategicResourceKind::MachineRelic), 1);
+            if rare < 30 {
+                add(ItemKind::Artifact(ArtifactKind::SkyRelic), 1);
+            }
+        }
+        EnemyKind::AirshipTurret => {
+            add(ItemKind::Material(StrategicResourceKind::MachineRelic), 1);
+            if rare < 50 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::SkyPirate => {
+            add(mineral, 1 + extra / 2);
+            if rare < 5 {
+                add(ItemKind::Artifact(ArtifactKind::SkyRelic), 1);
+            }
+        }
+        EnemyKind::HarpyNester => {
+            add(richer, 2);
+            add(ItemKind::Material(StrategicResourceKind::AetherCrystal), 1);
         }
         EnemyKind::AncientGuardian => {
             add(ItemKind::Material(StrategicResourceKind::MachineRelic), 3);

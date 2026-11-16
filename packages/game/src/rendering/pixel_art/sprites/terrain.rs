@@ -389,6 +389,56 @@ pub const VOID_PEARL: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+/// A harpy's egg (V9 sky continents): speckled cream shell.
+pub const HARPY_EGG: SpriteDef = SpriteDef {
+    name: "artifact_harpy_egg",
+    legend: &[
+        ('o', INK),
+        ('w', BONE),
+        ('c', CREAM),
+        ('s', SKY_LIGHT),
+        ('a', SAND),
+    ],
+    frames: &[&[
+        "...oooo...", //
+        "..owwcco..", //
+        ".owwcscco.", //
+        ".owcccsco.", //
+        "owscccccao", //
+        "owccsccsao", //
+        "occcccccao", //
+        ".occsccao.", //
+        "..oooooo..", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A sky relic (V9 sky temples): a gold-rimmed aether disc with a mint eye.
+pub const SKY_RELIC: SpriteDef = SpriteDef {
+    name: "artifact_sky_relic",
+    legend: &[
+        ('o', INK),
+        ('g', GOLD),
+        ('a', AMBER),
+        ('v', VIOLET),
+        ('l', LAVENDER),
+        ('m', MINT),
+        ('w', BONE),
+    ],
+    frames: &[&[
+        "...oooo...", //
+        "..oggggo..", //
+        ".oglllvao.", //
+        "ogllmmlvao", //
+        "oglmwmmvao", //
+        "ogllmmvvao", //
+        ".ogvvvvao.", //
+        "..oaaaao..", //
+        "...oooo...", //
+    ]],
+    frame_seconds: 0.0,
+};
+
 pub const MANTLE_HEART: SpriteDef = SpriteDef {
     name: "artifact_mantle_heart",
     legend: &[
@@ -476,6 +526,8 @@ pub const fn artifact_stamp(artifact: ArtifactKind) -> &'static SpriteDef {
         ArtifactKind::MantleHeart => &MANTLE_HEART,
         ArtifactKind::WindAstrolabe => &WIND_ASTROLABE,
         ArtifactKind::CloudPearl => &CLOUD_PEARL,
+        ArtifactKind::HarpyEgg => &HARPY_EGG,
+        ArtifactKind::SkyRelic => &SKY_RELIC,
     }
 }
 

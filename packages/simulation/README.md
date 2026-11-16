@@ -439,6 +439,89 @@ regional village features, jet streams and vents, the golden digest), `world/sky
 kind's offers, a gravity bomb collapsing a cluster, isles standing otherwise, jet stream
 riding, determinism and keyframes) and `skycraft.rs`.
 
+### Sky continents, sky enemies and Act II weapons (Wave 4 T21, generator V9)
+
+`GeneratorVersion::V9` (current, `has_sky_content`) is V8 with the sky continents filled in;
+everything else (ground, islands, the Moon) generates exactly as V8
+(`worldgen::sky::continent::tests::only_v9_fills_continents_and_v9_matches_v8_elsewhere`), and a
+V9 golden digest pins the continents (`chunk_digests_of_v9_continents_are_pinned`).
+
+**Continents** (`worldgen::sky::continent`): every V9 continent `SkyLand` carries a
+`ContinentPlan` (`SkyLand::plan`), a pure function of its shape seed and geometry. Its width
+(less a 30-column rim) is cut into five zones and one of four layouts assigns a **city** (two
+zones, flattened street with foundation paving), a **temple** plain, a **mountain** zone (one to
+three peaks up to `MAX_PEAK_ROWS`, storm glass veins, frosted summits) and a **lake** (water a
+row under the shore, `lake_water_at`, folded into `Terrain::water_at` so pilots swim and the
+renderer draws it). The body has winding caves, a bedrock-like **aether core**
+(`SkyTile::AetherCore`, `is_unbreakable`) wrapped in **aether crystal**, storm glass, and rare
+deep aether veins. Harpy nests (`ContinentPlan::nests`) sit on the tallest summits whose flat
+ledge really is the surface (`ledge_nests`), with eggs.
+New sky tiles (codes 0x26-0x30): `AetherCore`, `AetherCrystal`, `StormGlass` (break into the
+strategic materials `StrategicResourceKind::AetherCrystal` / `StormGlass`), `TempleBrick`,
+`TempleDoor`, `KeystoneDoor`, `TempleLever`, `TempleKeystone`, `TempleCache` (all
+indestructible: `SkyTile::is_indestructible`, honoured by `is_indestructible`, blasts and
+weapons), `HarpyNest` and `HarpyEgg` (breaks into `ArtifactKind::HarpyEgg`); temple vaults pay
+`ArtifactKind::SkyRelic`. Queries: `continents_touching`, `temples_touching`, `nests_touching`,
+`sky_city`, `sky_city_at`, `sky_cities_between`, `city_of`, `SkyLand::underside_row`.
+
+**Temples** (`TEMPLE`, `TemplePlan`): a 50x23 template stamped on the temple plain (mirrored
+at random). A shrine on the surface is entered by crawling through a vent grate
+(`poi::SpaceAccess::RequiresPilot`: rigs are stopped); a stair leads to the lever hall, a lever
+gate (`D`), the keystone hall (keystone `k` and a sentry), a crawlway down to the vault's
+keystone gate (`K`) and relic chests (`C`). `temples_open_in_order_on_foot_and_keep_rigs_out`
+walks it with a pilot reachability search. **Fittings** (`world/sky_temples.rs`,
+`WorldState::work_temple_fitting`) are worked with the hand pick's swing (no new input on any
+device): the lever opens gates within `LEVER_REACH`, the keystone drops as
+`item::TEMPLE_KEYSTONE` (quest item 210), a keystone gate spends one from the pilot's pack (or from the rig's hold, where boarding
+stows it), a
+chest spills `relic_loot` through the drop rules. Events `TempleLeverPulled`,
+`TempleGateOpened`, `RelicChestOpened`.
+
+**Sky cities** (`SkyCity`, `people::sky_city`): a long street of towers, halls, a market, a
+monastery, hangars and homes (presentation, like village buildings) and a plaza. Each city is a
+people `Settlement` (`Settlement::sky_city`, ids with `SKY_CITY_FLAG`) whose residents take sky
+trades (aeronauts, cloud monks, cloud merchants, smugglers, storm-chasers...) and live by the
+usual routines; `world/people.rs` populates cities near actors like villages and camps.
+
+**The hostile sky and sky enemies** (`enemy.rs`, `world/enemies/sky.rs`): on V9 worlds the sky
+from the archipelago up is hostile (`WorldState::hostile_sky`); `enemy_safe_zone` keeps it safe
+only in sky cities (`SKY_CITY_SAFE_TILES`), around infrastructure and in claimed bases
+(`sky_safe_zone`). New kinds: `SkyRay`, `Wyvern` (swoopers, `AttackStyle::Swoop`: climb to a
+perch above the prey, hang, dive, climb away; the wyvern also spits fireballs), `StormElemental`
+(`AttackStyle::Lightning`: a telegraphed instant arc; a struck rig is jolted, capacitor drained
+and weapon jammed for `JOLT_MILLIS`), `PirateAirship` (elite machine, `AttackStyle::Boarding`:
+holds station above the prey and drops `SkyPirate` boarders, jetpack cutlass fighters), its two
+`AirshipTurret`s (ride the hull, `TURRET_MOUNTS`, lob `ShotKind::Cannonball`; sink with it) and
+`HarpyNester` (guards its nest, `NEST_GUARD_TILES`, until an egg is gone). `sky_roster(band)` and
+`sky_tier(band)` set who roams each band and how tough; `DamageKind::Shock` is new (arcs:
+machines take more, storm elementals none). The director spawns them each second around actors
+in the hostile sky (`spawn_sky_enemies`) and keeps nesters on nests and a sentry and storm
+elemental at each temple (`fill_sky_lairs`, cleared like lairs). Gravity fields apply (stunned
+flyers fall by `BodyParams::at`); damage goes through `damage_entity`, loot through
+`spawn_loot`, Peaceful clears them. `WorldState::spawn_airship` spawns a hull with its turrets
+(scenes, tests). Event `SkyEnemyAction { action: Swoop | BoardersDropped | AirshipDowned |
+NesterEnraged }`, `LightningArc`.
+
+**Act II weapons** (`weapon.rs`, `world/sky_weapons.rs`): `WeaponKind::ArcRifle`
+(`Delivery::Chain`: hits the first target, then leaps `chains` times within `chain_reach`,
+losing a quarter a leap), `GravityGun` (`Delivery::Field`: while held, drains energy per second,
+pulls drops, live charges, boulders and non-elite enemies to a hold point `HOLD_REACH` ahead
+(held enemies are stunned; drops reach the rig and are collected), rips a loose soft block
+every `RIP_MILLIS`; on release flings what it holds and hurts thrown enemies), `TetherHarpoon`
+(`Delivery::Tether`: a fresh pull hooks rock within range; while held the rig cannot get farther
+than the line, `WorldState::apply_tether` after movement, thrust reels in to `MIN_TETHER`;
+`RigWeaponState::tether` is per-tick state so it predicts like movement) and `FlakCannon`
+(projectiles with `burst_radius`: proximity fuse, bursts on rock or at range, area damage with
+falloff; airships take explosive damage x1.8). They are `act_two()`: the shack sells them only
+on worlds with sky content and they cost `materials()` (storm glass, aether crystal) on top of
+credits. Events `ArcChained`, `GravityThrow`, `TetherAttached`, `TetherReleased`, `FlakBurst`.
+
+Tests: `worldgen/sky/continent/tests.rs` (V9 vs V8, plans, bodies, temples walked on foot,
+cities, the digest), `people/sky_city.rs`, `world/sky_continent_tests.rs` (hostile sky and
+safe cities, spawning and Peaceful, swoops, lightning jolts, airships with turrets and boarders
+sinking together, nesters, temple guards, temple fittings by pick swing, every Act II weapon,
+buying with materials, saves, keyframes and identical replay).
+
 ### Compact terrain (`terrain/persistence.rs`)
 
 A `Terrain` serializes as a `TerrainSnapshot`: its `WorldSettings`, size, digest and only the
@@ -1605,6 +1688,27 @@ Where the wave 2 tracks meet, for the tracks that build on them:
 - **Formats**: `PROTOCOL_VERSION` 11 (pilot entity, `ControlState::jump`, the new commands,
   services, events 120-133, pilot gear and pack in the loadout, vent grates, ropes) and save
   format 9 (version 8 files load unchanged).
+
+## Wave 4 seams: sky continents and sky enemies (T21)
+
+- **Generator V9** (`has_sky_content`) adds continent content only; T20 (islands, sky towns) and
+  T22 (the Moon) can share it (the integrator collapses generator bumps). V9 continents carry
+  `SkyLand::plan()`; V8 continents stay placeholders.
+- **Safe zones in the sky**: `WorldState::sky_safe_zone` is the one place sky towns (T20) and
+  lit bases/night rules (T25) add their safety; `hostile_sky` decides where sky enemies roam
+  (archipelago and up on V9).
+- **Lever doors** (T23 WP-PILOT): `WorldState::work_temple_fitting` is the single entry point
+  for levers, keystones, keystone gates and relic chests; today the pick swing calls it, a
+  pilot interact action can call it too, and ruins can reuse the temple tiles.
+- **Boarders on foot** (T23 personal weapons): sky pirates are ordinary enemies, so a pilot
+  fights them today with thrown bombs; T23's personal weapons reach them through
+  `damage_entity` with nothing sky-specific to add. (The hand pick does not hit enemies.)
+- **Sky folk** (T20 cultures): `people::sky_city::sky_city_population` uses Highland names and
+  existing roles standing in for sky trades; swap in T20's sky cultures there.
+- **Pilot cold** (T23) and **light** (T25): glowing sky tiles have `SkyTile::glows`; the game's
+  `tile_art::sky_glow` gives their colour for halos and the light map.
+- **Formats**: `PROTOCOL_VERSION` 12, save format 10 (version 9 files load as is), event codes
+  210-219.
 
 ## Replication
 

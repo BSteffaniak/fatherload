@@ -106,6 +106,7 @@ pub fn controls(horizontal: f32, thrust: bool, drill_down: bool) -> ControlState
     ControlState::new(horizontal, thrust, drill_down)
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm per gameplay event kind")]
 const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simulation::PlayerId>) {
     match *kind {
         GameplayEventKind::DrillStarted { player_id } => (0, Some(player_id)),
@@ -212,6 +213,17 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         // Upgrade reward moments (wave 3, T18): 180-181.
         GameplayEventKind::UpgradeInstalled { player_id, .. } => (180, Some(player_id)),
         GameplayEventKind::MilestoneEarned { player_id, .. } => (181, Some(player_id)),
+        // Sky continents, sky enemies and Act II weapons (wave 4, T21): 210-219.
+        GameplayEventKind::LightningArc { struck, .. } => (210, struck),
+        GameplayEventKind::ArcChained { player_id, .. } => (211, Some(player_id)),
+        GameplayEventKind::GravityThrow { player_id, .. } => (212, Some(player_id)),
+        GameplayEventKind::TetherAttached { player_id, .. } => (213, Some(player_id)),
+        GameplayEventKind::TetherReleased { player_id } => (214, Some(player_id)),
+        GameplayEventKind::FlakBurst { player_id, .. } => (215, Some(player_id)),
+        GameplayEventKind::TempleLeverPulled { player_id, .. } => (216, Some(player_id)),
+        GameplayEventKind::TempleGateOpened { player_id, .. } => (217, Some(player_id)),
+        GameplayEventKind::RelicChestOpened { player_id, .. } => (218, Some(player_id)),
+        GameplayEventKind::SkyEnemyAction { .. } => (219, None),
     }
 }
 

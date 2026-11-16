@@ -522,6 +522,34 @@ pub enum SoundCue {
     MilestoneFanfare,
     /// The Act I -> II unlock: the sky opens.
     ActTwoFanfare,
+    /// The arc rifle's crackle (and each chain link). (T21)
+    ArcZap,
+    /// The gravity gun taking hold. (T21)
+    GravityHum,
+    /// A gravity gun flinging what it held. (T21)
+    GravityThrow,
+    /// The tether harpoon firing its line. (T21)
+    TetherShot,
+    /// The tether harpoon biting rock. (T21)
+    TetherHook,
+    /// The flak cannon firing. (T21)
+    FlakShot,
+    /// A flak shell bursting. (T21)
+    FlakBurst,
+    /// A storm elemental's lightning arc. (T21)
+    Thunderclap,
+    /// A temple lever thrown. (T21)
+    LeverClunk,
+    /// A temple gate grinding open. (T21)
+    GateRumble,
+    /// A swooper beginning its dive. (T21)
+    SwoopScreech,
+    /// An airship's boarding horn. (T21)
+    PirateHorn,
+    /// A harpy finding its nest robbed. (T21)
+    HarpyScreech,
+    /// An airship turret's cannon. (T21)
+    CannonBoom,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

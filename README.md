@@ -226,7 +226,7 @@ keep their placeholder surface.
 
 ### The sky
 
-Generator v8 (the current one) is v7's ground with **a sky to explore**, the start of the
+Generator v8 is v7's ground with **a sky to explore**, the start of the
 game's second act. Fuel is the key: each altitude band is placed at a share of what the fuel
 tank tiers can climb (measured, not guessed), so every bigger tank opens more of the sky:
 
@@ -240,7 +240,15 @@ tank tiers can climb (measured, not guessed), so every bigger tank opens more of
 - **The dead-air gap**: no islands, strong crosswinds and thin air. Only a near-max tank with
   high-altitude intakes crosses it.
 - **Sky continents** (near max fuel): huge lands hundreds of tiles wide with slightly lower
-  gravity (their interiors come in a later update).
+  gravity. On generator v9 (the current one) each is a place: snow-capped mountains veined
+  with **storm glass** and topped by **harpy nests** full of eggs, a lake in its basin,
+  winding caves, an indestructible **aether core** glowing with **aether crystal**, a **sky
+  city** (aeronaut towers, a domed hall, a cloud market, a monastery with its bell, airship
+  hangars and sky folk to talk and trade with; enemies leave it alone) and a **sky temple**:
+  a shrine you can only crawl into on foot (vent grates stop the rig), a lever that opens a
+  bronze gate, a keystone to prise loose and carry to the vault's keystone gate, and relic
+  chests inside. Swing the hand pick at a lever, keystone, gate or chest to work it (the same
+  pick button on every device).
 - **Orbit and the Moon**: a near-zero-gravity band where rigs drift with heavy inertia, then
   the Moon itself: one giant landmass about 2,000-2,900 tiles wide hanging still above a fixed
   column a few thousand tiles from town, grey regolith and craters on top, a rocky underside
@@ -278,6 +286,15 @@ the docks, a pressurized hull (keeps the cold out) at the cloud farms and cloud-
 de-icers at the monasteries; the markets buy skystone and cloud silver dear. The sky gauge
 names the nearest sky town or buoy; up among the islands the music turns airy and you hear
 the waterfalls. On worlds without a sky the shop locks the Altitude Intake and De-Icer.
+**Sky enemies** (v9 worlds): the low isles stay calm, but from the cloud archipelago up the
+sky has its own hunters. **Sky rays** climb above you, hang for a beat and dive through;
+**wyverns** dive harder and spit fire from afar; **storm elementals** crackle and loose a
+lightning arc that drains your capacitor and jams your weapon; **pirate airships** hold
+station overhead, lob cannonballs from two brass turrets and drop jetpack **boarders** to fight
+you on foot (down the hull and the turrets go with it); **harpy nesters** only mind you near
+their nest, unless you take an egg. Temples keep a sentry and a storm elemental on guard.
+Sky cities, bases and outposts are safe, Peaceful turns it all off, and every kill drops
+loot (storm glass, aether crystal, sky relics).
 
 ### Balance
 
@@ -774,6 +791,13 @@ notch per upgrade tier and fires from the roof:
 | Plasma Cutter (2,400 cr) | 1 | A beam that melts targets and slowly slices through rock |
 | Rocket Launcher (3,600 cr) | 2 | Rockets that burst on impact (rocket ammo, six for 120 cr) |
 | Railgun (7,500 cr) | 3 | An instant slug that ignores armour, pierces targets and punches through soft rock |
+| Tether Harpoon (6,000 cr + 2 storm glass) | 2 | Hook rock and swing from the line while the trigger is held; thrust reels in |
+| Arc Rifle (9,000 cr + 6 storm glass) | 3 | Lightning that leaps from its first target to three more nearby; machines hate it |
+| Flak Cannon (10,000 cr + 3 storm glass, 3 aether crystal) | 3 | Proximity shells that burst into shrapnel; airships fold to it |
+| Gravity Gun (11,000 cr + 6 aether crystal) | 3 | Hold to pull in loot, loose blocks it rips out, charges and foes (held foes hang helpless); let go to fling them |
+
+The last four are **Act II weapons**: sold only on worlds with a sky to explore (generator
+v9), and paid partly in sky materials mined on the continents or looted from sky enemies.
 
 Each weapon upgrades from Mk I to Mk IV (harder hits, faster cycling, less energy). Energy
 weapons draw on the rig's capacitor (100 energy, up to 360 with capacitor upgrades), which

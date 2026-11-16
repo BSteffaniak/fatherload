@@ -46,6 +46,7 @@ mod quest_marks;
 mod rig;
 mod sky;
 pub mod sky_isles;
+mod sky_continents;
 pub mod sky_lands;
 mod speed_fx;
 mod surface;
@@ -205,7 +206,11 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         villages::VillagePass::Behind,
     );
     draw_world_edges(draw, scene.terrain, scene.visible);
+    // V9 sky continents (T21): back walls in their caves and temples, and their cities.
+    sky_continents::draw_continent_backs(draw, scene.terrain, scene.visible);
+    sky_continents::draw_sky_cities(draw, scene.terrain, scene.visible, seconds);
     scene.terrain_renderer.draw(draw, scene.visible);
+    sky_continents::draw_continent_fronts(draw, scene.terrain, scene.visible, seconds);
     surface::draw_flora(draw, &scene.sky.surface, scene.terrain, scene.visible);
     surface::draw_water(draw, scene.terrain, scene.visible, scene.ticks);
     // Flora, waterfalls, buoys and keystones on the sky isles (WP-SKY).
@@ -303,6 +308,12 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         seconds,
     );
     weapons::draw_beams(draw, scene.beams, seconds);
+    weapons::draw_sky_weapon_lines(
+        draw,
+        scene.players,
+        |player| scene.facings.facing_left(player),
+        seconds,
+    );
     weapons::draw_shots(draw, scene.shots);
     for cloud in scene.hazards {
         fx::draw_gas_cloud(draw, cloud, seconds);

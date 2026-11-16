@@ -21,13 +21,18 @@ pub enum ArmsRow {
 }
 
 /// The arms rack, in counter order.
-pub const ARMS_ROWS: [ArmsRow; 10] = [
+pub const ARMS_ROWS: [ArmsRow; 14] = [
     ArmsRow::Weapon(WeaponKind::RivetGun),
     ArmsRow::Weapon(WeaponKind::Harpoon),
     ArmsRow::Weapon(WeaponKind::ScatterBlaster),
     ArmsRow::Weapon(WeaponKind::PlasmaCutter),
     ArmsRow::Weapon(WeaponKind::RocketLauncher),
     ArmsRow::Weapon(WeaponKind::Railgun),
+    // Act II weapons (T21): sky worlds only, paid partly in sky materials.
+    ArmsRow::Weapon(WeaponKind::TetherHarpoon),
+    ArmsRow::Weapon(WeaponKind::ArcRifle),
+    ArmsRow::Weapon(WeaponKind::FlakCannon),
+    ArmsRow::Weapon(WeaponKind::GravityGun),
     ArmsRow::Battery,
     ArmsRow::Ammo(AmmoKind::Rocket),
     ArmsRow::Gear(PilotGearKind::Jetpack),

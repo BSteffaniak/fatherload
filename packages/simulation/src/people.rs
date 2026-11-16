@@ -62,6 +62,7 @@ pub mod offers;
 pub mod population;
 pub mod report;
 pub mod routine;
+pub mod sky_city;
 pub mod story;
 pub mod traits;
 

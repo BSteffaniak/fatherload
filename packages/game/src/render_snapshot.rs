@@ -287,6 +287,8 @@ pub struct WeaponPose {
     pub mounted: fatherload_simulation::MountedWeapon,
     pub aim: (f32, f32),
     pub firing: bool,
+    /// Where a tether harpoon's line is hooked, if it is (T21).
+    pub tether: Option<(f32, f32)>,
 }
 
 /// A projectile in flight (presentation copy of a projectile entity).
@@ -339,6 +341,7 @@ impl PlayerPresentation {
                 mounted,
                 aim: player.weapon.aim(),
                 firing: player.weapon.firing,
+                tether: player.weapon.tether.map(|tether| (tether.x, tether.y)),
             }),
         }
     }

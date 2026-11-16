@@ -49,19 +49,33 @@ pub struct ShotFlash {
     pub end_x: f32,
     pub end_y: f32,
     pub age: f32,
+    /// An electric bolt from `(x, y)` to `(end_x, end_y)` rather than a muzzle flash: an arc
+    /// rifle's chain link (`weapon` is `ArcRifle`) or, with `lightning`, a storm elemental's arc (T21).
+    pub bolt: bool,
+    /// A storm elemental's lightning (a fatter, longer-lived bolt).
+    pub lightning: bool,
 }
 
 impl ShotFlash {
     /// How long this flash stays on screen.
     #[must_use]
     pub fn lifetime(&self) -> f32 {
-        if self.weapon == WeaponKind::Railgun {
+        if self.lightning {
+            LIGHTNING_SECONDS
+        } else if self.bolt {
+            ARC_SECONDS
+        } else if self.weapon == WeaponKind::Railgun {
             RAIL_SECONDS
         } else {
             SHOT_SECONDS
         }
     }
 }
+
+/// How long an arc rifle's chain link stays on screen.
+pub const ARC_SECONDS: f32 = 0.24;
+/// How long a storm elemental's lightning stays on screen.
+pub const LIGHTNING_SECONDS: f32 = 0.36;
 
 /// Delivers each runtime event to presentation at most once, keyed by its stable identity
 /// `(epoch, tick, player, kind, ordinal)`. Host events are already unique; a predicting client
@@ -471,6 +485,8 @@ impl Effects {
                             end_x,
                             end_y,
                             age: 0.0,
+                            bolt: false,
+                            lightning: false,
                         });
                     }
                     // Everyone hears every gun: local rigs from their seat, others in the world.
@@ -564,6 +580,94 @@ impl Effects {
                         && let Some(cue) = event_cue(&gameplay.kind)
                     {
                         cues.push(PlacedCue::interface(cue));
+                    }
+                    continue;
+                }
+                // Sky continents and Act II weapons (T21).
+                GameplayEventKind::LightningArc {
+                    x, y, end_x, end_y, ..
+                }
+                | GameplayEventKind::ArcChained {
+                    x, y, end_x, end_y, ..
+                } => {
+                    let lightning = matches!(gameplay.kind, GameplayEventKind::LightningArc { .. });
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y, end_x, end_y) = (x as f32, y as f32, end_x as f32, end_y as f32);
+                    if self.shots.len() < 96 {
+                        self.shots.push(ShotFlash {
+                            weapon: WeaponKind::ArcRifle,
+                            x,
+                            y,
+                            end_x,
+                            end_y,
+                            age: 0.0,
+                            bolt: true,
+                            lightning,
+                        });
+                    }
+                    self.spawn_sparks(end_x, end_y);
+                    if impact_cues < 6
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::world(cue, end_x, end_y));
+                        impact_cues += 1;
+                    }
+                    continue;
+                }
+                GameplayEventKind::FlakBurst { x, y, .. }
+                | GameplayEventKind::GravityThrow { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    if matches!(gameplay.kind, GameplayEventKind::FlakBurst { .. }) {
+                        if self.explosions.len() < 64 {
+                            self.explosions.push(Explosion {
+                                x,
+                                y,
+                                age: 0.0,
+                                kind: ExplosiveKind::Bomblet,
+                                direction: BlastDirection::Down,
+                            });
+                        }
+                        self.spawn_blast_debris(x, y);
+                    } else {
+                        self.spawn_sparks(x, y);
+                    }
+                    if blast_cues < 8
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::world(cue, x, y));
+                        blast_cues += 1;
+                    }
+                    continue;
+                }
+                GameplayEventKind::TempleLeverPulled { x, y, .. }
+                | GameplayEventKind::TempleGateOpened { x, y, .. }
+                | GameplayEventKind::RelicChestOpened { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
+                    let (x, y) = (
+                        (x as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                        (y as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                    );
+                    self.spawn_sparks(x, y);
+                    if let Some(cue) = event_cue(&gameplay.kind) {
+                        cues.push(PlacedCue::world(cue, x, y));
+                    }
+                    continue;
+                }
+                GameplayEventKind::SkyEnemyAction { x, y, action, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    if action == fatherload_simulation::enemy::SkyEnemyAction::AirshipDowned
+                        && self.explosions.len() < 64
+                    {
+                        self.explosions.push(Explosion::bomb(x, y));
+                        self.spawn_blast_debris(x, y);
+                    }
+                    if enemy_cues < 6
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::world(cue, x, y));
+                        enemy_cues += 1;
                     }
                     continue;
                 }
@@ -724,6 +828,7 @@ impl Effects {
 }
 
 /// The player an event is about, if any.
+#[allow(clippy::too_many_lines, reason = "one arm per gameplay event kind")]
 const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
     match *kind {
         GameplayEventKind::DrillStarted { player_id }
@@ -793,7 +898,16 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::RumourMarked { player_id, .. }
         | GameplayEventKind::PeopleInteraction { player_id }
         | GameplayEventKind::UpgradeInstalled { player_id, .. }
-        | GameplayEventKind::MilestoneEarned { player_id, .. } => Some(player_id),
+        | GameplayEventKind::MilestoneEarned { player_id, .. }
+        | GameplayEventKind::ArcChained { player_id, .. }
+        | GameplayEventKind::GravityThrow { player_id, .. }
+        | GameplayEventKind::TetherAttached { player_id, .. }
+        | GameplayEventKind::TetherReleased { player_id }
+        | GameplayEventKind::FlakBurst { player_id, .. }
+        | GameplayEventKind::TempleLeverPulled { player_id, .. }
+        | GameplayEventKind::TempleGateOpened { player_id, .. }
+        | GameplayEventKind::RelicChestOpened { player_id, .. } => Some(player_id),
+        GameplayEventKind::LightningArc { struck, .. } => struck,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
@@ -819,7 +933,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::Dawn { .. }
         | GameplayEventKind::Dusk { .. }
         | GameplayEventKind::NewDay { .. }
-        | GameplayEventKind::NightSkipped { .. } => None,
+        | GameplayEventKind::NightSkipped { .. }
+        | GameplayEventKind::SkyEnemyAction { .. } => None,
     }
 }
 

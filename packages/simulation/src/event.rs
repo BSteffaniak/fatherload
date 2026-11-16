@@ -519,6 +519,76 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         milestone: crate::milestone::Milestone,
     },
+    // --- Sky continents, sky enemies and Act II weapons (Wave 4 T21) ----------------------
+    /// A storm elemental's lightning arc from `(x, y)` to `(end_x, end_y)`; `struck` is the
+    /// player whose rig or pilot it hit (rigs are jolted: capacitor drained, weapon jammed).
+    LightningArc {
+        x: i32,
+        y: i32,
+        end_x: i32,
+        end_y: i32,
+        struck: Option<PlayerId>,
+    },
+    /// One link of an arc rifle's chain lightning, `(x, y)` to `(end_x, end_y)`.
+    ArcChained {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+        end_x: i32,
+        end_y: i32,
+    },
+    /// A gravity gun let go of what it held, flinging `count` things from `(x, y)`.
+    GravityThrow {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+        count: u16,
+    },
+    /// A tether harpoon hooked terrain at `(x, y)`: the rig swings from it while the trigger
+    /// is held.
+    TetherAttached {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// A rig let go of its tether.
+    TetherReleased {
+        player_id: PlayerId,
+    },
+    /// A flak shell burst at `(x, y)`.
+    FlakBurst {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// A pilot pulled a temple lever at tile `(x, y)`, opening `opened` gate tiles.
+    TempleLeverPulled {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+        opened: u16,
+    },
+    /// A temple's keystone gate at tile `(x, y)` opened for a pilot carrying the keystone.
+    TempleGateOpened {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// A pilot broke open a temple's relic chest at tile `(x, y)`.
+    RelicChestOpened {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// A sky enemy did something worth a cue: an airship went down, dropped boarders, a harpy
+    /// nester flew into a rage, a flyer began a swoop.
+    SkyEnemyAction {
+        entity: u64,
+        kind: crate::enemy::EnemyKind,
+        action: crate::enemy::SkyEnemyAction,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

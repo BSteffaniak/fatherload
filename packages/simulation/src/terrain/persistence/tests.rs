@@ -120,7 +120,9 @@ const fn assert_payload_kinds_listed(mineral: MineralKind, artifact: ArtifactKin
         | ArtifactKind::VoidPearl
         | ArtifactKind::MantleHeart
         | ArtifactKind::WindAstrolabe
-        | ArtifactKind::CloudPearl => {}
+        | ArtifactKind::CloudPearl
+        | ArtifactKind::HarpyEgg
+        | ArtifactKind::SkyRelic => {}
     }
 }
 
@@ -158,6 +160,8 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
             ArtifactKind::MantleHeart,
             ArtifactKind::WindAstrolabe,
             ArtifactKind::CloudPearl,
+            ArtifactKind::HarpyEgg,
+            ArtifactKind::SkyRelic,
         ]
         .map(TileKind::Artifact),
     );
@@ -206,7 +210,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
     }
     for code in [
         12 << 8,
-        0x10C << 8,
+        0x10F << 8,
         0x20D << 8,
         0x3FF << 8,
         0x40F << 8,

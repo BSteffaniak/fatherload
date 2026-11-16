@@ -167,7 +167,24 @@ pub fn draw_projectiles(
                     );
                 }
             }
-            WeaponKind::PlasmaCutter | WeaponKind::Railgun => {}
+            WeaponKind::FlakCannon => {
+                // A short fuse spark trail.
+                for step in 1..=3_u8 {
+                    let back = f32::from(step) * 3.0 * ART;
+                    disc(
+                        draw,
+                        dx.mul_add(-back, x),
+                        dy.mul_add(-back, y),
+                        1,
+                        with_alpha(if step == 1 { GOLD } else { FOG }, 200 / step),
+                    );
+                }
+            }
+            WeaponKind::PlasmaCutter
+            | WeaponKind::Railgun
+            | WeaponKind::ArcRifle
+            | WeaponKind::GravityGun
+            | WeaponKind::TetherHarpoon => {}
         }
         if let Some(sprite) = art::projectile(projectile.weapon) {
             draw_sprite_rotated(
@@ -236,11 +253,164 @@ pub fn draw_beams(draw: &mut impl RaylibDraw, beams: &[BeamView], seconds: f32) 
     }
 }
 
+/// A jagged electric bolt from `from` to `to` (arc rifle links and lightning): a glow, a bright
+/// core and a fork or two, re-jagged every few frames.
+fn draw_bolt(
+    draw: &mut impl RaylibDraw,
+    from: (f32, f32),
+    to: (f32, f32),
+    fade: f32,
+    lightning: bool,
+    seed: u32,
+) {
+    let length = (to.0 - from.0).hypot(to.1 - from.1).max(1.0);
+    let (nx, ny) = (-(to.1 - from.1) / length, (to.0 - from.0) / length);
+    let steps = ((length / (ART * 6.0)).ceil() as i32).clamp(2, 40);
+    let amplitude = if lightning { 7.0 } else { 4.0 } * ART;
+    let (glow, core) = if lightning {
+        (GOLD, CREAM)
+    } else {
+        (SKY_LIGHT, ICE)
+    };
+    let width = if lightning { 3.0 } else { 2.0 };
+    let mut previous = Vector2::new(from.0, from.1);
+    let mut points = Vec::with_capacity(steps as usize);
+    for step in 1..=steps {
+        let t = step as f32 / steps as f32;
+        let h = (seed
+            .wrapping_mul(2_654_435_761)
+            .wrapping_add(step as u32 * 40_503))
+            >> 8;
+        let offset = if step == steps {
+            0.0
+        } else {
+            ((h % 200) as f32 / 100.0 - 1.0) * amplitude
+        };
+        let point = Vector2::new(
+            (to.0 - from.0).mul_add(t, from.0) + nx * offset,
+            (to.1 - from.1).mul_add(t, from.1) + ny * offset,
+        );
+        draw.draw_line_ex(
+            previous,
+            point,
+            ART * width * 2.5,
+            with_alpha(glow, (90.0 * fade) as u8),
+        );
+        draw.draw_line_ex(
+            previous,
+            point,
+            ART * width,
+            with_alpha(core, (255.0 * fade) as u8),
+        );
+        points.push(point);
+        previous = point;
+    }
+    // A fork off the middle.
+    if let Some(middle) = points.get(points.len() / 2) {
+        let fork = Vector2::new(
+            nx.mul_add(amplitude * 2.0, middle.x) + (to.0 - from.0) * 0.08,
+            ny.mul_add(amplitude * 2.0, middle.y) + (to.1 - from.1) * 0.08,
+        );
+        draw.draw_line_ex(*middle, fork, ART, with_alpha(core, (200.0 * fade) as u8));
+    }
+    disc(draw, to.0, to.1, 3, with_alpha(glow, (160.0 * fade) as u8));
+    disc(draw, to.0, to.1, 1, with_alpha(core, (255.0 * fade) as u8));
+}
+
+/// The tether harpoon's line from the rig's hardpoint to its hook, and the gravity gun's
+/// swirling field at its hold point while it is held (T21).
+pub fn draw_sky_weapon_lines(
+    draw: &mut impl RaylibDraw,
+    players: &[PlayerPresentation],
+    facing_left: impl Fn(&PlayerPresentation) -> bool,
+    seconds: f32,
+) {
+    for player in players {
+        let Some(pose) = player.weapon else {
+            continue;
+        };
+        let pivot = hardpoint(player, facing_left(player));
+        if let Some((hx, hy)) = pose.tether {
+            let length = (hx - pivot.0).hypot(hy - pivot.1).max(1.0);
+            let steps = (length / (ART * 2.0)).ceil().max(1.0) as i32;
+            for step in 0..=steps {
+                let t = step as f32 / steps as f32;
+                draw.draw_rectangle_rec(
+                    Rectangle::new(
+                        snap((hx - pivot.0).mul_add(t, pivot.0)),
+                        snap((hy - pivot.1).mul_add(t, pivot.1)),
+                        ART,
+                        ART,
+                    ),
+                    if step % 4 == 0 { CREAM } else { LOAM },
+                );
+            }
+            // The hook's barbs in the rock.
+            disc(draw, hx, hy, 2, STEEL_LIGHT);
+            disc(draw, hx, hy, 1, INK);
+        }
+        if pose.mounted.kind == WeaponKind::GravityGun && pose.firing {
+            let reach = fatherload_simulation::weapon::MUZZLE_REACH
+                + fatherload_simulation::world::HOLD_REACH;
+            let (cx, cy) = (
+                pose.aim.0.mul_add(reach, player.x),
+                pose.aim
+                    .1
+                    .mul_add(reach, player.y - fatherload_simulation::weapon::MUZZLE_RISE),
+            );
+            let pulse = (seconds * 6.0).sin().mul_add(0.5, 0.5);
+            disc(draw, cx, cy, 14, with_alpha(VIOLET, 40));
+            disc(
+                draw,
+                cx,
+                cy,
+                9 + (pulse * 3.0) as i32,
+                with_alpha(LAVENDER, 60),
+            );
+            for mote in 0..8_u8 {
+                let angle = f32::from(mote).mul_add(0.785, seconds * 5.0);
+                let radius = (1.0 - (seconds * 1.5 + f32::from(mote) * 0.125).fract()) * 18.0 * ART;
+                draw.draw_rectangle_rec(
+                    Rectangle::new(
+                        snap(angle.cos().mul_add(radius, cx)),
+                        snap(angle.sin().mul_add(radius, cy)),
+                        ART,
+                        ART,
+                    ),
+                    with_alpha(PINK, 200),
+                );
+            }
+            // The beam from the muzzle to the hold point.
+            draw.draw_line_ex(
+                Vector2::new(pivot.0, pivot.1),
+                Vector2::new(cx, cy),
+                ART * 2.0,
+                with_alpha(LAVENDER, 90),
+            );
+        }
+    }
+}
+
 /// Muzzle flashes, and the railgun's lingering tracer.
+#[allow(clippy::match_same_arms, reason = "one flash colour per weapon")]
 pub fn draw_shots(draw: &mut impl RaylibDraw, shots: &[ShotFlash]) {
     for shot in shots {
         let t = (shot.age / shot.lifetime()).clamp(0.0, 1.0);
         let fade = 1.0 - t;
+        if shot.bolt {
+            let seed = (shot.x as i32).unsigned_abs()
+                ^ ((shot.end_y as i32).unsigned_abs() << 7)
+                ^ ((shot.age * 30.0) as u32);
+            draw_bolt(
+                draw,
+                (shot.x, shot.y),
+                (shot.end_x, shot.end_y),
+                fade,
+                shot.lightning,
+                seed,
+            );
+            continue;
+        }
         let length = (shot.end_x - shot.x).hypot(shot.end_y - shot.y).max(1.0);
         let (dx, dy) = (
             (shot.end_x - shot.x) / length,
@@ -280,6 +450,10 @@ pub fn draw_shots(draw: &mut impl RaylibDraw, shots: &[ShotFlash]) {
             WeaponKind::RocketLauncher => (GOLD, ORANGE, 4),
             WeaponKind::Harpoon => (BONE, STEEL_LIGHT, 1),
             WeaponKind::Railgun => (BONE, MINT, 3),
+            WeaponKind::ArcRifle => (ICE, SKY_LIGHT, 3),
+            WeaponKind::GravityGun => (PINK, VIOLET, 3),
+            WeaponKind::TetherHarpoon => (BONE, STEEL_LIGHT, 1),
+            WeaponKind::FlakCannon => (GOLD, ORANGE, 4),
         };
         let reach = ART * 3.0;
         let (cx, cy) = (dx.mul_add(reach, shot.x), dy.mul_add(reach, shot.y));

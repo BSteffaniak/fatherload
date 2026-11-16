@@ -66,6 +66,10 @@ use crate::{
 
 use super::{WorldState, bombs::Blast, movement::AUTHORITATIVE_PLAYER_RADIUS};
 
+mod sky;
+
+pub use sky::{JOLT_MILLIS, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES, TURRET_MOUNTS};
+
 /// A rig hit by an enemy cannot be hit by another for this long (i-frames).
 pub const RIG_GUARD_MILLIS: u64 = 800;
 /// How often enemies look and listen for rigs.
@@ -331,6 +335,11 @@ impl WorldState {
     pub fn enemy_safe_zone(&self, tile: TilePosition) -> bool {
         let surface = self.terrain.surface_row(tile.x);
         if tile.y < surface + SAFE_SURFACE_ROWS {
+            // The hostile sky of a V9 world (archipelago and up, T21) is safe only in sky
+            // cities, bases and around infrastructure.
+            if self.hostile_sky(tile) {
+                return self.sky_safe_zone(tile);
+            }
             return true;
         }
         let (first, last) = town_span();
@@ -456,9 +465,11 @@ impl WorldState {
             let _changed = self.enemies.prune(next_tick);
             self.despawn_far_enemies();
             self.spawn_roaming_enemies(next_tick);
+            self.spawn_sky_enemies(next_tick);
         }
         if rate.schedule_fires(next_tick, LAIR_CHECK_MILLIS, 500) {
             self.fill_lairs();
+            self.fill_sky_lairs();
         }
     }
 
@@ -1036,6 +1047,12 @@ impl WorldState {
         let mut state = start_state;
         let dt = self.timing.delta_seconds;
 
+        // An airship's turret rides its hull, and falls with it.
+        if state.kind == EnemyKind::AirshipTurret && !self.ride_airship(&mut body, &state) {
+            self.entities.despawn(id);
+            return;
+        }
+
         // Fire eats creatures.
         if state.burning_until > now {
             state.health = BURN_DAMAGE_PER_SECOND.mul_add(-dt, state.health);
@@ -1101,6 +1118,7 @@ impl WorldState {
         }
         let spec = state.kind.stats();
         let noticed = self.perceive(body, state);
+        let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = tile_centre(state.home.0, state.home.1);
         let leashed = spec.leash_tiles > 0.0
             && (body.x - home_x).hypot(body.y - home_y) > spec.leash_tiles * TILE_SIZE;
@@ -1275,6 +1293,9 @@ impl WorldState {
                             speed: spec.speed,
                         }
                     }
+                    AttackStyle::Swoop | AttackStyle::Lightning | AttackStyle::Boarding => {
+                        self.sky_chase(id, body, state, (tx, ty), distance, now, output)
+                    }
                     AttackStyle::Spawner => {
                         if ready && distance <= range {
                             self.hatch_brood(id, body, state.tier);
@@ -1299,6 +1320,9 @@ impl WorldState {
                 }
                 state.attack_ready = self.after(now, cooldown);
                 match (spec.attack, target) {
+                    (AttackStyle::Swoop | AttackStyle::Lightning, Some(aim)) => {
+                        let _released = self.sky_release(body, state, aim, now, output);
+                    }
                     (AttackStyle::Ranged(shot, count), Some(aim)) => {
                         self.fire(id, body, state, shot, count, aim, output);
                         state.mode = EnemyMode::Recover;
@@ -1823,8 +1847,11 @@ impl WorldState {
         let spec = state.kind.stats();
         let live = match spec.attack {
             AttackStyle::Contact => now >= state.attack_ready && state.mode == EnemyMode::Chase,
-            AttackStyle::Lunge => state.mode == EnemyMode::Strike,
-            AttackStyle::Ranged(..) | AttackStyle::Spawner => false,
+            AttackStyle::Lunge | AttackStyle::Swoop => state.mode == EnemyMode::Strike,
+            AttackStyle::Ranged(..)
+            | AttackStyle::Spawner
+            | AttackStyle::Lightning
+            | AttackStyle::Boarding => false,
         };
         if !live {
             return;
@@ -2181,6 +2208,9 @@ impl WorldState {
     /// Removes a dead enemy, drops its loot, clears its lair and announces the kill.
     fn kill_enemy(&mut self, id: EntityId, body: Body, state: EnemyState, output: &mut TickOutput) {
         self.entities.despawn(id);
+        if state.kind == EnemyKind::PirateAirship {
+            self.sink_airship(id, &body, output);
+        }
         let roll = hash2(
             self.terrain.seed() ^ u64::from(state.seed),
             SALT_LOOT,
@@ -2337,5 +2367,13 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::RogueExcavator
         | EnemyKind::AncientGuardian => tags.machines,
         EnemyKind::BroodLord => tags.elite_lair,
+        // Sky families never live in caves.
+        EnemyKind::SkyRay
+        | EnemyKind::Wyvern
+        | EnemyKind::StormElemental
+        | EnemyKind::PirateAirship
+        | EnemyKind::AirshipTurret
+        | EnemyKind::SkyPirate
+        | EnemyKind::HarpyNester => false,
     }
 }

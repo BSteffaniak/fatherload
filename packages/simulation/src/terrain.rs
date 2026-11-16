@@ -97,6 +97,10 @@ pub enum StrategicResourceKind {
     MachineRelic,
     VoidGlass,
     RadiantFossil,
+    /// Glowing crystal from around a sky continent's aether core (V9 skies; Act II weapons).
+    AetherCrystal,
+    /// Lightning-fused glass from the sky continents' mountains (V9 skies; Act II weapons).
+    StormGlass,
 }
 
 impl StrategicResourceKind {
@@ -110,6 +114,8 @@ impl StrategicResourceKind {
             Self::MachineRelic => "Machine Relic",
             Self::VoidGlass => "Void Glass",
             Self::RadiantFossil => "Radiant Fossil",
+            Self::AetherCrystal => "Aether Crystal",
+            Self::StormGlass => "Storm Glass",
         }
     }
 }
@@ -183,6 +189,10 @@ pub enum ArtifactKind {
     WindAstrolabe,
     /// A sky artifact: a pearl grown in a cloud, found in the archipelagos' nests and caches.
     CloudPearl,
+    /// A harpy's egg, taken from a nest on a sky continent's peaks (V9 skies).
+    HarpyEgg,
+    /// A relic from a sky temple's vault (V9 skies).
+    SkyRelic,
 }
 
 impl ArtifactKind {
@@ -202,6 +212,8 @@ impl ArtifactKind {
             Self::MantleHeart => "Mantle Heart",
             Self::WindAstrolabe => "Wind Astrolabe",
             Self::CloudPearl => "Cloud Pearl",
+            Self::HarpyEgg => "Harpy Egg",
+            Self::SkyRelic => "Sky Relic",
         }
     }
 
@@ -221,6 +233,8 @@ impl ArtifactKind {
             Self::MantleHeart => 1_650,
             Self::WindAstrolabe => 640,
             Self::CloudPearl => 880,
+            Self::HarpyEgg => 1_200,
+            Self::SkyRelic => 2_400,
         }
     }
 }
@@ -846,10 +860,12 @@ impl Terrain {
         worldgen::streamed::caves_touching(&self.settings, rect)
     }
 
-    /// Whether `position` is open water: a flooded cave's generated water over an open tile.
+    /// Whether `position` is open water: a flooded cave's generated water (or a V9 sky
+    /// continent's lake) over an open tile.
     #[must_use]
     pub fn water_at(&self, position: TilePosition) -> bool {
-        self.cave_at(position).is_some_and(|sample| sample.water)
+        (self.cave_at(position).is_some_and(|sample| sample.water)
+            || worldgen::sky::continent::lake_water_at(&self.settings, position))
             && self
                 .tile(position)
                 .is_some_and(|tile| tile.kind == TileKind::Air)
@@ -1329,6 +1345,7 @@ impl Terrain {
                     | TileKind::Built(_) => {
                         continue;
                     }
+                    TileKind::Sky(sky) if sky.is_indestructible() => continue,
                     TileKind::Poi(poi) => match poi.after_blast() {
                         None => continue,
                         Some(left) => left,
@@ -1610,18 +1627,28 @@ pub const UNBREAKABLE_HARDNESS: u8 = u8::MAX;
 /// Whether `kind` can never be dug, drilled or blasted away by anything.
 #[must_use]
 pub const fn is_unbreakable(kind: TileKind) -> bool {
-    matches!(kind, TileKind::Bedrock)
+    matches!(
+        kind,
+        TileKind::Bedrock | TileKind::Sky(crate::sky::SkyTile::AetherCore)
+    )
 }
 
 /// Whether no drill can ever dig `kind`, not even a test-mode rig's: the bedrock floor and
 /// placed building pieces (which come down only by deconstruction).
 #[must_use]
 pub const fn is_indestructible(kind: TileKind) -> bool {
-    is_unbreakable(kind) || matches!(kind, TileKind::Built(_))
+    is_unbreakable(kind)
+        || match kind {
+            TileKind::Built(_) => true,
+            // Sky temples and the aether core (V9 continents).
+            TileKind::Sky(tile) => tile.is_indestructible(),
+            _ => false,
+        }
 }
 
 /// Drill strength needed to dig a tile.
 #[must_use]
+#[allow(clippy::match_same_arms, reason = "grouped by material family")]
 pub const fn tile_hardness(kind: TileKind) -> u8 {
     match kind {
         TileKind::Bedrock | TileKind::Built(_) => UNBREAKABLE_HARDNESS,
@@ -1661,8 +1688,10 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
             | ArtifactKind::ReactorBloom
             | ArtifactKind::MachineSigil
             | ArtifactKind::VoidPearl
-            | ArtifactKind::MantleHeart,
+            | ArtifactKind::MantleHeart
+            | ArtifactKind::SkyRelic,
         ) => 5,
+        TileKind::Artifact(ArtifactKind::HarpyEgg) => 1,
     }
 }
 

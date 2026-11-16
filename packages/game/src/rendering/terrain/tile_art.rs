@@ -44,7 +44,7 @@ mod sky_art;
 
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
 pub use poi_art::poi_color;
-pub use sky_art::sky_color;
+pub use sky_art::{sky_color, sky_glow};
 
 /// Art pixels per tile edge (a tile is 32 world pixels at 2 world pixels per art pixel).
 pub const TILE_ART: i32 = 16;
@@ -1062,6 +1062,19 @@ const fn grows_grass(material: TileKind) -> bool {
                     | fatherload_simulation::sky::SkyTile::ContinentRock
                     | fatherload_simulation::sky::SkyTile::Regolith
                     | fatherload_simulation::sky::SkyTile::MoonRock
+                    // Sky continent content (T21): no grass on crystal, temple stone and
+                    // fittings, or nests.
+                    | fatherload_simulation::sky::SkyTile::AetherCore
+                    | fatherload_simulation::sky::SkyTile::AetherCrystal
+                    | fatherload_simulation::sky::SkyTile::StormGlass
+                    | fatherload_simulation::sky::SkyTile::TempleBrick
+                    | fatherload_simulation::sky::SkyTile::TempleDoor
+                    | fatherload_simulation::sky::SkyTile::KeystoneDoor
+                    | fatherload_simulation::sky::SkyTile::TempleLever
+                    | fatherload_simulation::sky::SkyTile::TempleKeystone
+                    | fatherload_simulation::sky::SkyTile::TempleCache
+                    | fatherload_simulation::sky::SkyTile::HarpyNest
+                    | fatherload_simulation::sky::SkyTile::HarpyEgg
             )
     )
 }

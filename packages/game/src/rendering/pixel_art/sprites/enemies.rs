@@ -734,3 +734,401 @@ pub const SHOT_BOLT: SpriteDef = SpriteDef {
     ]],
     frame_seconds: 0.0,
 };
+
+// --- Sky families (Wave 4 T21) ---------------------------------------------------------------
+
+/// A sky ray: a blue manta gliding on wide wings, pale belly, gold eyes and a whip tail (wings up, level, down).
+pub const SKY_RAY: SpriteDef = SpriteDef {
+    name: "enemy_sky_ray",
+    legend: &[
+        ('o', INK),
+        ('b', SKY),
+        ('l', ICE),
+        ('w', BONE),
+        ('e', GOLD),
+        ('t', OCEAN),
+    ],
+    frames: &[
+        &[
+            "o...................o", //
+            "oo.................oo", //
+            "obo...............obo", //
+            "obbo.............obbo", //
+            ".obbo...ooooo...obbo.", //
+            ".obbbo.obbbbbo.obbbo.", //
+            "..obbbobbbebbbobbbo..", //
+            "..obbbbbbbbbbbbbbbo..", //
+            "...oolllllwllllloo...", //
+            ".....oolll.llloo.....", //
+            ".......oo.t.oo.......", //
+            "..........t..........", //
+        ],
+        &[
+            ".....................", //
+            ".....................", //
+            ".....................", //
+            "........ooooo........", //
+            "oo.....obbbbbo.....oo", //
+            "obboo.obbbebbbo.oobbo", //
+            ".obbbbbbbbbbbbbbbbbo.", //
+            "..obbbbbbbbbbbbbbbo..", //
+            "...oolllllwllllloo...", //
+            ".....oolll.llloo.....", //
+            ".......oo.t.oo.......", //
+            "..........t..........", //
+        ],
+        &[
+            ".....................", //
+            ".....................", //
+            ".....................", //
+            "........ooooo........", //
+            ".......obbbbbo.......", //
+            "......obbbebbbo......", //
+            "....oobbbbbbbbboo....", //
+            "..oobbbbbbbbbbbbboo..", //
+            ".obbbolllllllllobbbo.", //
+            "obbo..oollllloo..obbo", //
+            "obo....oo.t.oo....obo", //
+            "oo........t........oo", //
+        ],
+        &[
+            ".....................", //
+            ".....................", //
+            ".....................", //
+            "........ooooo........", //
+            "oo.....obbbbbo.....oo", //
+            "obboo.obbbebbbo.oobbo", //
+            ".obbbbbbbbbbbbbbbbbo.", //
+            "..obbbbbbbbbbbbbbbo..", //
+            "...oolllllwllllloo...", //
+            ".....oolll.llloo.....", //
+            ".......oo.t.oo.......", //
+            "..........t..........", //
+        ],
+    ],
+    frame_seconds: 0.16,
+};
+
+/// A wyvern: a rust-red sky drake with leathery green wings and a gold belly, facing right (wings up / down).
+pub const WYVERN: SpriteDef = SpriteDef {
+    name: "enemy_wyvern",
+    legend: &[
+        ('o', INK),
+        ('g', MOSS),
+        ('l', LEAF),
+        ('r', RUST),
+        ('y', AMBER),
+        ('e', GOLD),
+        ('w', BONE),
+    ],
+    frames: &[
+        &[
+            "....oo..........oo......", //
+            "...ogo.........ogo......", //
+            "..oggo........oggo......", //
+            ".ogggo.......ogggo..ooo.", //
+            ".oggggo.....oggggo.orrro", //
+            "oggllggo...ogglggoorrere", //
+            "ogglllggoooggllgorrrrrrw", //
+            ".oglllggrrrrrrrrrrrrooo.", //
+            "..oolggrrrrrrrrrrro.....", //
+            "....orrryyyyyrrrro......", //
+            "...orro.oyyyyoorro......", //
+            "..orro...oooo.orro......", //
+            ".oro.........oro.o......", //
+            "oo...........oo.........", //
+        ],
+        &[
+            "........................", //
+            "........................", //
+            "....................ooo.", //
+            "...................orrro", //
+            "..................orrere", //
+            "........oooooo...orrrrrw", //
+            "...ooooorrrrrrrrrrrrooo.", //
+            ".oogggggrrrrrrrrrrro....", //
+            "ogglllgrrryyyyyrrro.....", //
+            "ogglllggoryyyyoorro.....", //
+            ".ogglggo..oooo.orro.....", //
+            "..ogggo.......oro.o.....", //
+            "...ogo........oo........", //
+            "....o...................", //
+        ],
+    ],
+    frame_seconds: 0.18,
+};
+
+/// A storm elemental: a knot of thundercloud around a crackling gold core, sparks falling (flicker).
+pub const STORM_ELEMENTAL: SpriteDef = SpriteDef {
+    name: "enemy_storm_elemental",
+    legend: &[
+        ('o', NIGHT),
+        ('f', FOG),
+        ('m', SLATE_LIGHT),
+        ('s', SLATE),
+        ('y', GOLD),
+        ('w', CREAM),
+    ],
+    frames: &[
+        &[
+            "....ooooooooo....", //
+            "..ooffffmffffoo..", //
+            ".offfmmmmmmmfffo.", //
+            "offmmmmmmmmmmmffo", //
+            "ofmmssmmmmmssmmfo", //
+            "ofmssssyyyssssmfo", //
+            "omsssyywwwyysssmo", //
+            "omssyywwywwyyssmo", //
+            ".omsssyyyyysssmo.", //
+            "..oomsssssssmoo..", //
+            "....ooo.s.ooo....", //
+            "......y...y......", //
+            ".....y.....y.....", //
+            "......y...y......", //
+        ],
+        &[
+            "....ooooooooo....", //
+            "..oommffmffmmoo..", //
+            ".ofmmmfffffmmmfo.", //
+            "ofmmmmmmmmmmmmmfo", //
+            "ofmmssmmmmmssmmfo", //
+            "ommssyysssyyssmmo", //
+            "omssyywwywwyyssmo", //
+            "omsssyywwwyysssmo", //
+            ".omsssssysssssmo.", //
+            "..oomsssssssmoo..", //
+            "....ooo...ooo....", //
+            ".....y..s..y.....", //
+            "......y...y......", //
+            ".....y.....y.....", //
+        ],
+    ],
+    frame_seconds: 0.12,
+};
+
+/// A sky pirate airship: a patched crimson gas bag over a plank gondola with gun ports and a skull flag; the stern prop spins.
+pub const PIRATE_AIRSHIP: SpriteDef = SpriteDef {
+    name: "enemy_pirate_airship",
+    legend: &[
+        ('o', INK),
+        ('c', MAROON),
+        ('C', RED),
+        ('p', AMBER),
+        ('s', ROSE),
+        ('r', SOIL),
+        ('w', BONE),
+        ('d', LOAM),
+        ('y', GOLD),
+        ('k', SOIL_DARK),
+    ],
+    frames: &[
+        &[
+            "..............oooooooooooooo..............", //
+            "..........oooocccccccccccccccoooo.........", //
+            ".......ooocccCCCCCCCCCCCCCCCCcccccoo......", //
+            ".....oocccCCCCCCCCppppCCCCCCCCCCccccoo....", //
+            "....occcCCCCCCCCCCpppppCCCCCCCCCCCcccco...", //
+            "...occCCCCCCCCCCCCCppCCCCCCCCCCCCCCCccco..", //
+            "..occCCCCssssssssssssssssssssssCCCCCCcco..", //
+            "..occCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCccco.", //
+            "..occcCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCcco..", //
+            "...occcccCCCCCCCCCCCCCCCCCCCCCCCCCCccco...", //
+            "....oocccccccccccccccccccccccccccccco.....", //
+            "......ooocccccccccccccccccccccccoooo......", //
+            ".........oooooooooooooooooooooooo.........", //
+            "..........r.....r.........r.....r.........", //
+            "..........r.....r.........r.....r..owo....", //
+            "..........r.....r.........r.....r.owkwo...", //
+            "....oooooooooooooooooooooooooooooowwwwo...", //
+            "...owwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwowo....", //
+            "..owddyddddyddddyddddyddddyddddyddo.o.....", //
+            "..oddddddddddddddddddddddddddddddddo......", //
+            "o.oddkkddddkkddddkkddddkkddddkkdddo.......", //
+            "ooodddddddddddddddddddddddddddddddo.......", //
+            "o..oddddddddddddddddddddddddddddo.........", //
+            "....oooooooooooooooooooooooooooo..........", //
+        ],
+        &[
+            "..............oooooooooooooo..............", //
+            "..........oooocccccccccccccccoooo.........", //
+            ".......ooocccCCCCCCCCCCCCCCCCcccccoo......", //
+            ".....oocccCCCCCCCCppppCCCCCCCCCCccccoo....", //
+            "....occcCCCCCCCCCCpppppCCCCCCCCCCCcccco...", //
+            "...occCCCCCCCCCCCCCppCCCCCCCCCCCCCCCccco..", //
+            "..occCCCCssssssssssssssssssssssCCCCCCcco..", //
+            "..occCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCccco.", //
+            "..occcCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCcco..", //
+            "...occcccCCCCCCCCCCCCCCCCCCCCCCCCCCccco...", //
+            "....oocccccccccccccccccccccccccccccco.....", //
+            "......ooocccccccccccccccccccccccoooo......", //
+            ".........oooooooooooooooooooooooo.........", //
+            "..........r.....r.........r.....r.........", //
+            "..........r.....r.........r.....r..owo....", //
+            "..........r.....r.........r.....r.owkwo...", //
+            "....oooooooooooooooooooooooooooooowwwwo...", //
+            "...owwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwowo....", //
+            "..owddyddddyddddyddddyddddyddddyddo.o.....", //
+            "o.oddddddddddddddddddddddddddddddo........", //
+            "..oddkkddddkkddddkkddddkkddddkkdddo.......", //
+            "oooddddddddddddddddddddddddddddddo........", //
+            "...oddddddddddddddddddddddddddddo.........", //
+            "....oooooooooooooooooooooooooooo..........", //
+        ],
+    ],
+    frame_seconds: 0.1,
+};
+
+/// An airship's brass swivel cannon, barrel to the right (idle / charge glow).
+pub const AIRSHIP_TURRET: SpriteDef = SpriteDef {
+    name: "enemy_airship_turret",
+    legend: &[
+        ('o', INK),
+        ('y', AMBER),
+        ('a', GOLD),
+        ('d', STEEL_DARK),
+        ('k', NIGHT),
+        ('G', CREAM),
+    ],
+    frames: &[
+        &[
+            "....oooo....", //
+            "...oyyyyo...", //
+            "..oyyaayoooo", //
+            "..oyaaaaddko", //
+            "..oyyaayoooo", //
+            "...oyyyyo...", //
+            "....oddo....", //
+            "...oddddo...", //
+            "...oooooo...", //
+        ],
+        &[
+            "....oooo....", //
+            "...oyyyyo...", //
+            "..oyyaayoooo", //
+            "..oyaGGaddko", //
+            "..oyyaayoooo", //
+            "...oyyyyo...", //
+            "....oddo....", //
+            "...oddddo...", //
+            "...oooooo...", //
+        ],
+    ],
+    frame_seconds: 0.0,
+};
+
+/// A sky pirate boarder: red bandana, brass goggles, a green coat, a cutlass and a jetpack sputtering flame, facing right (flame flicker).
+pub const SKY_PIRATE: SpriteDef = SpriteDef {
+    name: "enemy_sky_pirate",
+    legend: &[
+        ('o', INK),
+        ('r', RED),
+        ('s', SAND),
+        ('w', BONE),
+        ('g', MOSS),
+        ('k', STEEL_DARK),
+        ('d', SOIL),
+        ('y', ORANGE),
+        ('Y', GOLD),
+    ],
+    frames: &[
+        &[
+            "....oooo....", //
+            "...orrrro...", //
+            "..orrrrrro..", //
+            "..ossswwso..", //
+            "..osssssso..", //
+            "...ossso....", //
+            "..oggggggo..", //
+            ".kogggggg.oo", //
+            ".kogggggoowo", //
+            ".kogggggo.ow", //
+            "..oddddo...w", //
+            "..oddoddo...", //
+            "..odo.odo...", //
+            "..oo...oo...", //
+            "..y.....y...", //
+        ],
+        &[
+            "....oooo....", //
+            "...orrrro...", //
+            "..orrrrrro..", //
+            "..ossswwso..", //
+            "..osssssso..", //
+            "...ossso....", //
+            "..oggggggo..", //
+            ".kogggggg.oo", //
+            ".kogggggoowo", //
+            ".kogggggo.ow", //
+            "..oddddo...w", //
+            "..oddoddo...", //
+            "..odo.odo...", //
+            "..oo...oo...", //
+            "..Y.....Y...", //
+        ],
+    ],
+    frame_seconds: 0.08,
+};
+
+/// A harpy nester: tawny wings, a pale feathered breast, a sharp face and gold talons (wings up / down).
+pub const HARPY_NESTER: SpriteDef = SpriteDef {
+    name: "enemy_harpy_nester",
+    legend: &[
+        ('o', INK),
+        ('b', COPPER),
+        ('f', BONE),
+        ('l', CREAM),
+        ('s', SAND),
+        ('e', RED),
+        ('y', GOLD),
+    ],
+    frames: &[
+        &[
+            "o.................o", //
+            "oo...............oo", //
+            "obo.............obo", //
+            "obbo...ooooo...obbo", //
+            ".obbo.ossfsso.obbo.", //
+            ".obbboosefesoobbbo.", //
+            "..obbbossfssobbbo..", //
+            "..obbbbbofobbbbbo..", //
+            "...oobbbbfbbbboo...", //
+            ".....obbblbbbo.....", //
+            "......oblllbo......", //
+            "......oyoooyo......", //
+            ".....oy.y.y.yo.....", //
+            ".....o...o...o.....", //
+        ],
+        &[
+            "...................", //
+            "...................", //
+            "...................", //
+            ".......ooooo.......", //
+            "......ossfsso......", //
+            ".....oosefesoo.....", //
+            "oooooobssfssboooooo", //
+            "obbbbbbbofobbbbbbbo", //
+            ".obbbbbbbfbbbbbbbo.", //
+            "..oobbbbblbbbbboo..", //
+            "....oobblllbboo....", //
+            "......oyoooyo......", //
+            ".....oy.y.y.yo.....", //
+            ".....o...o...o.....", //
+        ],
+    ],
+    frame_seconds: 0.14,
+};
+
+/// An iron cannonball with a glint.
+pub const SHOT_CANNONBALL: SpriteDef = SpriteDef {
+    name: "enemy_shot_cannonball",
+    legend: &[('o', INK), ('d', SLATE_DARK), ('s', SLATE), ('w', FOG)],
+    frames: &[&[
+        ".oooo.", //
+        "odwsdo", //
+        "odssdo", //
+        "oddddo", //
+        "odddo.", //
+        ".ooo..", //
+    ]],
+    frame_seconds: 0.0,
+};

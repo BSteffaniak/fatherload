@@ -39,10 +39,20 @@ const MOON_ROCK: Ramp = ramp([NIGHT, SLATE_DARK, SLATE, FOG]);
 const CRYSTAL: Ramp = ramp([TEAL_DARK, TEAL, MINT, ICE]);
 /// The aeronauts' carved ruin stone.
 const RUIN: Ramp = ramp([SLATE, FOG, MIST, BONE]);
-/// Aether glow (keystones).
-const AETHER: Ramp = ramp([PLUM, VIOLET, LAVENDER, PINK]);
 /// Buoy pad steel.
 const PAD: Ramp = ramp([NIGHT, STEEL_DARK, STEEL, STEEL_LIGHT]);
+/// The aether core: near-black violet rock (V9 continents).
+const CORE: Ramp = ramp([INK, NIGHT, PLUM, VIOLET]);
+/// Aether crystal (and the glow of crumbling isles' keystones): violet to rose-white facets.
+const AETHER: Ramp = ramp([PLUM, VIOLET, LAVENDER, PINK]);
+/// Storm glass: deep blue glass.
+const STORM: Ramp = ramp([NIGHT, DEEP_BLUE, OCEAN, SKY_LIGHT]);
+/// Temple stone: weathered ivory blocks.
+const TEMPLE: Ramp = ramp([STONE, STONE_LIGHT, MIST, BONE]);
+/// Temple bronze (gates).
+const BRONZE: Ramp = ramp([RUST, COPPER, AMBER, GOLD]);
+/// Woven twigs.
+const TWIGS: Ramp = ramp([SOIL_DARK, SOIL, LOAM, SAND]);
 
 /// The rock underside of an island in `biome`'s palette.
 pub const fn rock_ramp(biome: SkyBiome) -> Ramp {
@@ -71,6 +81,7 @@ pub const fn turf_colors(biome: SkyBiome) -> [PaletteIndex; 4] {
 }
 
 /// Representative colour of a sky tile (drill dust, debris, the map).
+#[allow(clippy::match_same_arms, reason = "one arm per tile family")]
 pub const fn sky_color(tile: SkyTile) -> Color {
     match tile {
         SkyTile::Turf(SkyBiome::Meadow | SkyBiome::Blossom) => LEAF,
@@ -92,6 +103,28 @@ pub const fn sky_color(tile: SkyTile) -> Color {
         SkyTile::Keystone => VIOLET,
         SkyTile::Vent => TEAL,
         SkyTile::BuoyPad => ORANGE,
+        SkyTile::AetherCore => PLUM,
+        SkyTile::AetherCrystal => LAVENDER,
+        SkyTile::StormGlass => OCEAN,
+        SkyTile::TempleBrick | SkyTile::TempleLever => STONE_LIGHT,
+        SkyTile::TempleDoor | SkyTile::KeystoneDoor => COPPER,
+        SkyTile::TempleKeystone => MINT,
+        SkyTile::TempleCache => GOLD,
+        SkyTile::HarpyNest => LOAM,
+        SkyTile::HarpyEgg => CREAM,
+    }
+}
+
+/// The glow of a glowing sky tile (the light map, halos), if it glows.
+#[must_use]
+pub const fn sky_glow(tile: SkyTile) -> Option<Color> {
+    match tile {
+        SkyTile::AetherCore => Some(VIOLET),
+        SkyTile::AetherCrystal => Some(LAVENDER),
+        SkyTile::StormGlass => Some(SKY_LIGHT),
+        SkyTile::TempleKeystone | SkyTile::KeystoneDoor => Some(MINT),
+        SkyTile::TempleCache => Some(GOLD),
+        _ => None,
     }
 }
 
@@ -149,6 +182,63 @@ fn body_pixel(tile: SkyTile, x: i32, y: i32) -> PaletteIndex {
                 MOON_ROCK[cobble_level(x, y)]
             }
         }
+        SkyTile::AetherCore => {
+            // Dark core rock threaded with glowing aether veins.
+            let vein = (noise(x, y, 7, 71) - 0.5).abs() < 0.035;
+            if hash(x, y, 72).is_multiple_of(61) {
+                index_of(BONE)
+            } else if vein {
+                AETHER[2 + usize::from(hash(x, y, 73).is_multiple_of(3))]
+            } else {
+                CORE[slab_level(x, y)]
+            }
+        }
+        SkyTile::AetherCrystal => {
+            if hash(x, y, 74).is_multiple_of(37) {
+                index_of(BONE)
+            } else {
+                AETHER[slab_level(x, y)]
+            }
+        }
+        SkyTile::StormGlass => {
+            // Dark glass with a gold lightning seam zig-zagging through it.
+            let seam = (x + ((y / 3) % 2) * 2 - y / 2).rem_euclid(13) == 0;
+            if seam {
+                index_of(if hash(x, y, 75).is_multiple_of(3) {
+                    CREAM
+                } else {
+                    GOLD
+                })
+            } else if hash(x, y, 76).is_multiple_of(47) {
+                index_of(ICE)
+            } else {
+                STORM[slab_level(x, y)]
+            }
+        }
+        SkyTile::TempleBrick
+        | SkyTile::TempleDoor
+        | SkyTile::KeystoneDoor
+        | SkyTile::TempleLever
+        | SkyTile::TempleKeystone
+        | SkyTile::TempleCache
+        | SkyTile::HarpyNest
+        | SkyTile::HarpyEgg => temple_pixel(x, y),
+    }
+}
+
+/// Temple stone: courses of big ivory blocks with dark mortar.
+fn temple_pixel(x: i32, y: i32) -> PaletteIndex {
+    let course = y.div_euclid(8);
+    let offset = if course % 2 == 0 { 0 } else { 6 };
+    let mortar = y.rem_euclid(8) == 7 || (x + offset).rem_euclid(12) == 11;
+    if mortar {
+        TEMPLE[0]
+    } else if y.rem_euclid(8) == 0 {
+        TEMPLE[3]
+    } else if noise(x, y, 5, 77) > 0.7 {
+        TEMPLE[1]
+    } else {
+        TEMPLE[2]
     }
 }
 
@@ -183,14 +273,34 @@ pub(super) fn paint(canvas: &mut TileCanvas, tile: SkyTile, strata: &Strata, edg
             paint_shaft(canvas);
             return;
         }
+        SkyTile::TempleDoor | SkyTile::KeystoneDoor => {
+            paint_gate(canvas, tile == SkyTile::KeystoneDoor, edges);
+            return;
+        }
+        SkyTile::TempleLever => {
+            paint_body(canvas, tile);
+            paint_lever(canvas);
+            return;
+        }
+        SkyTile::TempleKeystone => {
+            paint_temple_keystone(canvas);
+            return;
+        }
+        SkyTile::TempleCache => {
+            paint_relic_chest(canvas);
+            return;
+        }
+        SkyTile::HarpyNest => {
+            paint_harpy_nest(canvas, seed, edges);
+            return;
+        }
+        SkyTile::HarpyEgg => {
+            paint_egg(canvas, seed);
+            return;
+        }
         _ => {}
     }
-    for py in 0..TILE_ART {
-        for px in 0..TILE_ART {
-            let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
-            canvas.set(px, py, body_pixel(tile, gx, gy));
-        }
-    }
+    paint_body(canvas, tile);
     let (lip, shade) = match tile {
         SkyTile::Turf(biome) => (turf_colors(biome)[0], SOIL_RAMP[0]),
         SkyTile::Soil | SkyTile::Roots | SkyTile::Vines | SkyTile::Nest | SkyTile::Spring => {
@@ -207,6 +317,17 @@ pub(super) fn paint(canvas: &mut TileCanvas, tile: SkyTile, strata: &Strata, edg
             rock_ramp(SkyBiome::Meadow)[0],
         ),
         SkyTile::BuoyPad => (PAD[3], PAD[0]),
+        SkyTile::AetherCore => (CORE[3], CORE[0]),
+        SkyTile::AetherCrystal => (AETHER[3], AETHER[0]),
+        SkyTile::StormGlass => (STORM[3], STORM[0]),
+        SkyTile::TempleBrick
+        | SkyTile::TempleDoor
+        | SkyTile::KeystoneDoor
+        | SkyTile::TempleLever
+        | SkyTile::TempleKeystone
+        | SkyTile::TempleCache
+        | SkyTile::HarpyNest
+        | SkyTile::HarpyEgg => (TEMPLE[3], TEMPLE[0]),
     };
     match tile {
         SkyTile::Turf(biome) => paint_turf(canvas, biome, edges.up.is_open()),
@@ -228,6 +349,196 @@ pub(super) fn paint(canvas: &mut TileCanvas, tile: SkyTile, strata: &Strata, edg
         }
     }
     paint_edges(canvas, strata, edges, lip, shade, false);
+}
+
+/// Fills the tile with `tile`'s body pattern.
+fn paint_body(canvas: &mut TileCanvas, tile: SkyTile) {
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
+            canvas.set(px, py, body_pixel(tile, gx, gy));
+        }
+    }
+}
+
+/// A bronze temple gate: riveted vertical bars in a dark frame; a keystone gate has a glowing
+/// keystone socket.
+fn paint_gate(canvas: &mut TileCanvas, keystone: bool, edges: Edges) {
+    let ink = index_of(INK);
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let color = match px.rem_euclid(4) {
+                0 => ink,
+                1 => BRONZE[3],
+                2 => BRONZE[2],
+                _ => BRONZE[1],
+            };
+            canvas.set(px, py, color);
+        }
+        if py.rem_euclid(6) == 2 {
+            for px in (1..TILE_ART).step_by(4) {
+                canvas.set(px, py, index_of(CREAM));
+            }
+        }
+    }
+    if edges.up != Cell::Solid {
+        for px in 0..TILE_ART {
+            canvas.set(px, 0, ink);
+            canvas.set(px, 1, BRONZE[0]);
+        }
+    }
+    if keystone {
+        // A diamond socket glowing mint.
+        for dy in -4_i32..=4 {
+            let half = 4 - dy.abs();
+            for dx in -half..=half {
+                let color = if dx.abs() == half {
+                    INK
+                } else if dy < 0 {
+                    ICE
+                } else {
+                    MINT
+                };
+                canvas.set(8 + dx, 8 + dy, index_of(color));
+            }
+        }
+    }
+}
+
+/// A lever set in temple stone: a dark slot and a handle with a red knob.
+fn paint_lever(canvas: &mut TileCanvas) {
+    let ink = index_of(INK);
+    for py in 9..14 {
+        for px in 5..11 {
+            let color = if py == 9 || py == 13 {
+                ink
+            } else {
+                index_of(SLATE_DARK)
+            };
+            canvas.set(px, py, color);
+        }
+    }
+    for step in 0..7 {
+        canvas.set(8 + step / 2, 11 - step, index_of(STEEL_DARK));
+        canvas.set(9 + step / 2, 11 - step, index_of(STEEL_LIGHT));
+    }
+    for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1), (-1, 0), (0, -1)] {
+        canvas.set(12 + dx, 3 + dy, index_of(RED));
+    }
+    canvas.set(12, 3, index_of(PINK));
+}
+
+/// A temple keystone on its plinth: a glowing wedge with a gold rim.
+fn paint_temple_keystone(canvas: &mut TileCanvas) {
+    let ink = index_of(INK);
+    for py in 12..16 {
+        for px in 2..14 {
+            canvas.set(px, py, if py == 12 { TEMPLE[3] } else { TEMPLE[1] });
+        }
+    }
+    // The wedge: wide at the top, narrow at the bottom.
+    for py in 2..12 {
+        let half = 6 - (py - 2) / 3;
+        for px in 8 - half..8 + half {
+            let edge = px == 8 - half || px == 8 + half - 1 || py == 2;
+            let color = if edge {
+                index_of(GOLD)
+            } else if px < 8 {
+                index_of(ICE)
+            } else {
+                index_of(MINT)
+            };
+            canvas.set(px, py, color);
+        }
+    }
+    canvas.set(6, 5, index_of(BONE));
+    for px in 1..15 {
+        canvas.set(px, 11, if px % 3 == 0 { ink } else { TEMPLE[0] });
+    }
+}
+
+/// A sealed relic chest: carved stone with a gold band and a mint seal.
+fn paint_relic_chest(canvas: &mut TileCanvas) {
+    let ink = index_of(INK);
+    for py in 4..16 {
+        for px in 1..15 {
+            let edge = px == 1 || px == 14 || py == 4 || py == 15;
+            let color = if edge {
+                ink
+            } else if py == 8 || py == 9 {
+                index_of(GOLD)
+            } else if py < 8 {
+                TEMPLE[3]
+            } else {
+                TEMPLE[2]
+            };
+            canvas.set(px, py, color);
+        }
+    }
+    for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+        canvas.set(7 + dx, 8 + dy, index_of(MINT));
+    }
+    canvas.set(3, 6, index_of(BONE));
+}
+
+/// A woven harpy nest: crisscrossed twigs, ragged on top when open above.
+fn paint_harpy_nest(canvas: &mut TileCanvas, seed: u32, edges: Edges) {
+    let open_above = edges.up.is_open();
+    let seed = (seed % 97) as i32;
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            if open_above && py < 5 && (px + py + seed) % 5 != 0 {
+                continue;
+            }
+            let weave =
+                (px + py * 2 + seed).rem_euclid(5) < 2 || (px * 2 - py + seed).rem_euclid(7) == 0;
+            let level = if weave {
+                3
+            } else {
+                usize::from(hash(px, py, 79).is_multiple_of(3)) + 1
+            };
+            canvas.set(px, py, TWIGS[level]);
+        }
+    }
+    for strand in 0..3 {
+        let h = hash(seed, strand, 80);
+        let x = 2 + (h % 12) as i32;
+        canvas.set(x, 0, TWIGS[2]);
+        canvas.set(x + 1, 1, TWIGS[1]);
+    }
+}
+
+/// A speckled harpy egg sitting in twigs.
+fn paint_egg(canvas: &mut TileCanvas, seed: u32) {
+    let ink = index_of(INK);
+    let seed = (seed % 89) as i32;
+    for py in 2..15 {
+        let dy = py - 8;
+        let half = if dy < 0 {
+            4 - (dy * dy) / 9
+        } else {
+            5 - (dy * dy) / 8
+        };
+        for px in 8 - half..=8 + half {
+            let edge = px == 8 - half || px == 8 + half || py == 2 || py == 14;
+            let color = if edge {
+                ink
+            } else if (px * 7 + py * 3 + seed).rem_euclid(11) == 0 {
+                index_of(SKY_LIGHT)
+            } else if px < 7 {
+                index_of(BONE)
+            } else {
+                index_of(CREAM)
+            };
+            canvas.set(px, py, color);
+        }
+    }
+    for px in 0..TILE_ART {
+        if px % 3 != 1 {
+            canvas.set(px, 14, TWIGS[2]);
+        }
+        canvas.set(px, 15, TWIGS[1]);
+    }
 }
 
 /// A turf top: thick grass (snow, golden grass) over the soil, with flowers on blossom isles.

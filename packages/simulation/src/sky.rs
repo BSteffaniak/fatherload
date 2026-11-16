@@ -55,8 +55,10 @@ impl SkyBiome {
 /// A tile of the sky lands ([`crate::terrain::TileKind::Sky`]).
 ///
 /// Islands are a turf top over a few rows of soil over a rock underside, with crystal pockets
-/// in the rock and roots and crystal hanging under it. Sky continents are placeholder
-/// continent rock under turf (Wave 4 fills them); the Moon is grey regolith over moon rock.
+/// in the rock and roots and crystal hanging under it. Sky continents are continent rock under
+/// turf; on V9 worlds they hold an aether core, aether crystal and storm glass, temples and
+/// harpy nests (see [`crate::worldgen::sky::continent`]); the Moon is grey regolith over moon
+/// rock.
 /// Every sky tile can be mined (hardness on the classic ladder) and breaks into the classic
 /// block of the same hardness.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -98,11 +100,37 @@ pub enum SkyTile {
     Vent,
     /// The landing pad of a fuel buoy: a rig parked on it can buy a refill.
     BuoyPad,
+    // --- Sky continent content (generator V9, Wave 4 T21) ------------------------------------
+    /// The bedrock-like heart of a sky continent: nothing digs, drills or blasts it.
+    AetherCore,
+    /// Glowing aether crystal around a continent's core (and in rare deep veins): breaks into
+    /// the strategic material of the same name.
+    AetherCrystal,
+    /// Storm glass: fused, lightning-struck crystal veining the continents' mountains. Breaks
+    /// into the strategic material of the same name.
+    StormGlass,
+    /// The carved stone of a sky temple: indestructible (temples are entered on foot).
+    TempleBrick,
+    /// A temple gate: indestructible, slides open when a lever in its temple is pulled.
+    TempleDoor,
+    /// A vault gate with a keystone socket: opens for a pilot carrying a temple keystone.
+    KeystoneDoor,
+    /// A lever set in temple stone: a pilot's pick swing pulls it and opens the nearby gates.
+    TempleLever,
+    /// A temple keystone on its plinth: a pilot's pick swing prises it loose (it drops as an
+    /// item the pilot picks up).
+    TempleKeystone,
+    /// A sealed relic chest in a temple vault: a pilot's pick swing breaks it open.
+    TempleCache,
+    /// A harpy nest of woven twigs on a mountain ledge (soft).
+    HarpyNest,
+    /// A harpy egg in its nest: breaks out as a valuable artifact (and enrages the nester).
+    HarpyEgg,
 }
 
 impl SkyTile {
     /// Every sky tile, in code order.
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 34] = [
         Self::Turf(SkyBiome::Meadow),
         Self::Turf(SkyBiome::Blossom),
         Self::Turf(SkyBiome::Frost),
@@ -126,6 +154,17 @@ impl SkyTile {
         Self::Keystone,
         Self::Vent,
         Self::BuoyPad,
+        Self::AetherCore,
+        Self::AetherCrystal,
+        Self::StormGlass,
+        Self::TempleBrick,
+        Self::TempleDoor,
+        Self::KeystoneDoor,
+        Self::TempleLever,
+        Self::TempleKeystone,
+        Self::TempleCache,
+        Self::HarpyNest,
+        Self::HarpyEgg,
     ];
 
     #[must_use]
@@ -148,6 +187,17 @@ impl SkyTile {
             Self::Keystone => "aether keystone",
             Self::Vent => "updraft vent",
             Self::BuoyPad => "buoy pad",
+            Self::AetherCore => "aether core",
+            Self::AetherCrystal => "aether crystal",
+            Self::StormGlass => "storm glass",
+            Self::TempleBrick => "temple stone",
+            Self::TempleDoor => "temple gate",
+            Self::KeystoneDoor => "keystone gate",
+            Self::TempleLever => "temple lever",
+            Self::TempleKeystone => "temple keystone",
+            Self::TempleCache => "relic chest",
+            Self::HarpyNest => "harpy nest",
+            Self::HarpyEgg => "harpy egg",
         }
     }
 
@@ -172,6 +222,17 @@ impl SkyTile {
             Self::Keystone => 0x23,
             Self::Vent => 0x24,
             Self::BuoyPad => 0x25,
+            Self::AetherCore => 0x26,
+            Self::AetherCrystal => 0x27,
+            Self::StormGlass => 0x28,
+            Self::TempleBrick => 0x29,
+            Self::TempleDoor => 0x2A,
+            Self::KeystoneDoor => 0x2B,
+            Self::TempleLever => 0x2C,
+            Self::TempleKeystone => 0x2D,
+            Self::TempleCache => 0x2E,
+            Self::HarpyNest => 0x2F,
+            Self::HarpyEgg => 0x30,
         }
     }
 
@@ -200,24 +261,80 @@ impl SkyTile {
             | Self::Regolith
             | Self::Nest
             | Self::Vines
-            | Self::Spring => 1,
+            | Self::Spring
+            | Self::HarpyNest
+            | Self::HarpyEgg => 1,
             Self::Rock(_) | Self::Cache | Self::RuinBrick | Self::Vent | Self::Keystone => 2,
-            Self::Crystal | Self::MoonRock | Self::RuinPillar | Self::BuoyPad => 3,
-            Self::ContinentRock => 4,
+            Self::Crystal
+            | Self::MoonRock
+            | Self::RuinPillar
+            | Self::BuoyPad
+            | Self::StormGlass => 3,
+            Self::ContinentRock | Self::AetherCrystal => 4,
+            Self::AetherCore
+            | Self::TempleBrick
+            | Self::TempleDoor
+            | Self::KeystoneDoor
+            | Self::TempleLever
+            | Self::TempleKeystone
+            | Self::TempleCache => crate::terrain::UNBREAKABLE_HARDNESS,
         }
+    }
+
+    /// Whether nothing digs, drills or blasts this tile: the aether core and temple stone,
+    /// gates and fittings (temples open to a pilot's hands, see `world/sky_temples.rs`).
+    #[must_use]
+    pub const fn is_indestructible(self) -> bool {
+        matches!(
+            self,
+            Self::AetherCore
+                | Self::TempleBrick
+                | Self::TempleDoor
+                | Self::KeystoneDoor
+                | Self::TempleLever
+                | Self::TempleKeystone
+                | Self::TempleCache
+        )
+    }
+
+    /// Whether this is a temple fitting a pilot works with a pick swing (levers, keystones,
+    /// keystone gates and relic chests).
+    #[must_use]
+    pub const fn is_temple_fitting(self) -> bool {
+        matches!(
+            self,
+            Self::TempleLever | Self::TempleKeystone | Self::KeystoneDoor | Self::TempleCache
+        )
+    }
+
+    /// Whether the tile glows (light map, presentation): aether crystal and the core.
+    #[must_use]
+    pub const fn glows(self) -> bool {
+        matches!(
+            self,
+            Self::AetherCore | Self::AetherCrystal | Self::StormGlass
+        )
     }
 
     /// Chips a fresh tile takes.
     #[must_use]
     pub const fn durability(self) -> u8 {
         match self {
-            Self::Roots | Self::Vines | Self::Nest => 1,
+            Self::Roots | Self::Vines | Self::Nest | Self::HarpyNest | Self::HarpyEgg => 1,
             Self::Turf(_) | Self::Soil | Self::Regolith | Self::Spring => 2,
             Self::Rock(_) | Self::Cache | Self::Keystone | Self::Vent => 4,
             Self::RuinBrick => 5,
             Self::Crystal | Self::RuinPillar => 6,
-            Self::MoonRock => 7,
+            Self::MoonRock | Self::StormGlass => 7,
             Self::ContinentRock | Self::BuoyPad => 9,
+            Self::AetherCrystal => 10,
+            Self::AetherCore
+            | Self::TempleBrick
+            | Self::TempleDoor
+            | Self::KeystoneDoor
+            | Self::TempleLever
+            | Self::TempleKeystone
+            | Self::TempleCache => u8::MAX,
         }
     }
 

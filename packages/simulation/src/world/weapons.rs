@@ -104,6 +104,16 @@ fn segment_distance(point: (f32, f32), from: (f32, f32), to: (f32, f32)) -> f32 
         0.0
     };
     (sx.mul_add(t, from.0) - point.0).hypot(sy.mul_add(t, from.1) - point.1)
+/// What a ray found, for the Act II weapons (`world/sky_weapons.rs`).
+pub(super) struct RayFind {
+    /// Where the ray ended.
+    pub end: (f32, f32),
+    /// The first damageable entity it hit, and where.
+    pub first_target: Option<(EntityId, f32, f32)>,
+    /// The tile that stopped it, if any.
+    pub stopped_by: Option<TilePosition>,
+    /// Live chaining charges it passed close to.
+    pub charges: Vec<(EntityId, f32, f32)>,
 }
 
 /// Whether a weapon can break `kind`: plain soil and rock only (ore, artifacts, POI fixtures,
@@ -280,6 +290,30 @@ impl WorldState {
             player.weapon.aim_y = y;
         }
         let aim = player.weapon.aim();
+        // Act II weapons with held behaviour (T21, `world/sky_weapons.rs`).
+        match mounted.kind.stats(mounted.mk).delivery {
+            Delivery::Field => {
+                let spec = mounted.kind.stats(mounted.mk);
+                self.gravity_gun(
+                    player_id,
+                    &spec,
+                    (control.fire, held_before),
+                    aim,
+                    next_tick,
+                    output,
+                );
+                return;
+            }
+            Delivery::Tether => {
+                let spec = mounted.kind.stats(mounted.mk);
+                self.tether_trigger(player_id, &spec, control.fire, aim, next_tick, output);
+                return;
+            }
+            Delivery::Projectile | Delivery::Hitscan | Delivery::Chain => {}
+        }
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return;
+        };
         if !control.fire
             || next_tick < player.weapon.ready_tick
             || (!mounted.kind.automatic() && player.weapon.pull_spent)
@@ -338,6 +372,9 @@ impl WorldState {
                 next_tick,
                 output,
             ),
+            Delivery::Chain => self.fire_arc(player_id, &spec, (muzzle, aim), next_tick, output),
+            // Handled before the trigger checks above.
+            Delivery::Field | Delivery::Tether => muzzle,
         };
         output.push_event(GameplayEventKind::WeaponFired {
             player_id,
@@ -444,6 +481,11 @@ impl WorldState {
             return;
         };
         let spec = state.weapon.stats(state.mk);
+        if spec.burst_radius > 0.0 {
+            // Flak shells (T21) burst instead of hitting.
+            self.advance_flak(id, body, state, &spec, output);
+            return;
+        }
         let dt = self.timing.delta_seconds;
         body.previous_x = body.x;
         body.previous_y = body.y;
@@ -650,8 +692,28 @@ impl WorldState {
         None
     }
 
+    /// Marches a ray like a hitscan weapon's (read-only) and reports what it found (the Act
+    /// II weapons' view of [`Self::cast_ray`]).
+    pub(super) fn ray_cast(
+        &self,
+        muzzle: (f32, f32),
+        aim: (f32, f32),
+        spec: &WeaponStats,
+    ) -> RayFind {
+        let ray = self.cast_ray(muzzle, aim, spec);
+        RayFind {
+            end: ray.end,
+            first_target: ray
+                .hits
+                .first()
+                .map(|RayHit::Target(id, x, y)| (*id, *x, *y)),
+            stopped_by: ray.stopped_by,
+            charges: ray.charges,
+        }
+    }
+
     /// Sets off live charge `id` in the next bomb pass (a shot, beam or slug hit it).
-    fn trigger_charge(&mut self, id: EntityId, next_tick: SimulationTick) {
+    pub(super) fn trigger_charge(&mut self, id: EntityId, next_tick: SimulationTick) {
         let _ = self.entities.update(id, |entity| {
             if let EntityState::Charge(charge) = &mut entity.state {
                 charge.chain_triggered = true;
@@ -1020,6 +1082,7 @@ impl WorldState {
     /// source picks its [`DamageKind`] (railgun slugs and harpoons pierce, cutter beams burn,
     /// rockets blast, the rest is kinetic; armour piercing above one half also pierces) and the
     /// outcome maps back onto [`DamageOutcome`].
+    #[allow(clippy::match_same_arms, reason = "one arm per weapon family")]
     fn damage_enemy_from(
         &mut self,
         id: EntityId,
@@ -1031,8 +1094,12 @@ impl WorldState {
             DamageSource::Weapon { weapon, .. } => match weapon {
                 WeaponKind::Railgun | WeaponKind::Harpoon => DamageKind::Piercing,
                 WeaponKind::PlasmaCutter => DamageKind::Fire,
-                WeaponKind::RocketLauncher => DamageKind::Explosive,
-                WeaponKind::RivetGun | WeaponKind::ScatterBlaster => DamageKind::Kinetic,
+                WeaponKind::RocketLauncher | WeaponKind::FlakCannon => DamageKind::Explosive,
+                WeaponKind::RivetGun | WeaponKind::ScatterBlaster | WeaponKind::GravityGun => {
+                    DamageKind::Kinetic
+                }
+                WeaponKind::ArcRifle => DamageKind::Shock,
+                WeaponKind::TetherHarpoon => DamageKind::Piercing,
             },
             DamageSource::Explosive { kind, .. } => match kind {
                 ExplosiveKind::Incendiary => DamageKind::Fire,
@@ -1156,13 +1223,23 @@ impl WorldState {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
         let cost = weapon.cost();
+        // Act II weapons (T21) need a world with sky content and sky materials.
+        let sky = self.terrain.settings().generator.has_sky_content();
+        let materials = weapon.materials();
         if shack_level < weapon.shack_level()
             || player.weapon_rack.owned.contains_key(&weapon)
             || player.credits < cost
+            || (weapon.act_two() && !sky)
+            || materials
+                .iter()
+                .any(|(material, count)| player.cargo_bay.material(*material) < *count)
         {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
         player.credits -= cost;
+        for (material, count) in materials {
+            let _spent = player.cargo_bay.remove(*material, *count);
+        }
         let _ = player.receive_weapon(weapon);
         if weapon == WeaponKind::RocketLauncher {
             // A starter load so the launcher fires straight away.

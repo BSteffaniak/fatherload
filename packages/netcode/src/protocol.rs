@@ -71,7 +71,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   artifacts in tile codes and items, sky towns (`VillageSetting::Sky`, sky cultures and
 ///   roles, `VillageService` / `VillageDeal::SkyCraft`), `SessionServiceRequest::SkyBuoy`, the
 ///   aether thruster and pressurized hull tiers in `HazardGear` (loadout), drained buoys in the
-///   village journal and the sky isle events 200-203.
+///   village journal and the sky isle events 200-203;
+/// * T21 sky continents and sky enemies: new
+///   `SkyTile` codes (aether core, sky ores, temple stone and fittings, harpy nests and eggs),
+///   new `ArtifactKind`s and `StrategicResourceKind`s in tiles and loadouts, the sky
+///   `EnemyKind`s and `ShotKind::Cannonball` in entity records, the Act II `WeaponKind`s, the
+///   tether line in `RigWeaponState` (per-tick weapon state) and the events 210-219.
 pub const PROTOCOL_VERSION: u8 = 12;
 
 /// One client input frame: the controls and actions for exactly one tick.

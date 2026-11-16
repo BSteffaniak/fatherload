@@ -809,10 +809,10 @@ fn merge(into: &mut BlastResult, blast: BlastResult) {
 const fn blast_proof(kind: TileKind) -> bool {
     match kind {
         TileKind::Foundation | TileKind::Bedrock | TileKind::Built(_) => true,
+        TileKind::Sky(sky) => sky.is_indestructible() || sky.is_cache(),
         TileKind::Poi(poi) => poi.after_blast().is_none(),
         // Cave caches shrug off blasts (`Terrain::blast_radius` skips them), so lanes stop too.
         TileKind::Cave(cave) => cave.is_cache(),
-        TileKind::Sky(sky) => sky.is_cache(),
         _ => false,
     }
 }

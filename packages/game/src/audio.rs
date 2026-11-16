@@ -200,7 +200,16 @@ mod tests {
                 | Patch::ThrustLoop
                 | Patch::PilotLand
                 | Patch::PilotLandHard
-                | Patch::IsleCollapse => (40.0, 3_000.0),
+                | Patch::IsleCollapse
+                // T21: cannon reports, flak, thunder and temple stone.
+                | Patch::FlakThump
+                | Patch::FlakBurst
+                | Patch::CannonBoom
+                | Patch::Thunderclap
+                | Patch::LeverClunk
+                | Patch::GateRumble
+                | Patch::GravityThrow
+                | Patch::TetherHook => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

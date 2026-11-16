@@ -96,6 +96,10 @@ impl WorldState {
                         controls.thrust,
                     )
                 };
+                if !no_clip {
+                    // A tether harpoon's line holds the rig (T21).
+                    self.apply_tether(player_id, controls.thrust);
+                }
                 if let Some(before) = position_before {
                     // Sky bands, updrafts and icing (F6, V8 skies).
                     self.push_altitude_events(player_id, before, &mut output);

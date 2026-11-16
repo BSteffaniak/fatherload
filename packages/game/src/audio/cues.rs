@@ -188,6 +188,20 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::UpgradeFanfare => Patch::UpgradeFanfare,
         SoundCue::MilestoneFanfare => Patch::MilestoneFanfare,
         SoundCue::ActTwoFanfare => Patch::ActTwoFanfare,
+        SoundCue::ArcZap => Patch::ArcCrackle,
+        SoundCue::GravityHum => Patch::GravityHum,
+        SoundCue::GravityThrow => Patch::GravityThrow,
+        SoundCue::TetherShot => Patch::TetherShot,
+        SoundCue::TetherHook => Patch::TetherHook,
+        SoundCue::FlakShot => Patch::FlakThump,
+        SoundCue::FlakBurst => Patch::FlakBurst,
+        SoundCue::Thunderclap => Patch::Thunderclap,
+        SoundCue::LeverClunk => Patch::LeverClunk,
+        SoundCue::GateRumble => Patch::GateRumble,
+        SoundCue::SwoopScreech => Patch::SwoopScreech,
+        SoundCue::PirateHorn => Patch::PirateHorn,
+        SoundCue::HarpyScreech => Patch::HarpyScreech,
+        SoundCue::CannonBoom => Patch::CannonBoom,
     }
 }
 
@@ -205,6 +219,7 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::Acid => SoundCue::AcidSpit,
         ShotKind::Fireball => SoundCue::FireWhoosh,
         ShotKind::Bolt => SoundCue::MachineZap,
+        ShotKind::Cannonball => SoundCue::CannonBoom,
     }
 }
 
@@ -236,6 +251,10 @@ pub const fn weapon_cue(weapon: WeaponKind) -> SoundCue {
         WeaponKind::RocketLauncher => SoundCue::RocketLaunch,
         WeaponKind::Harpoon => SoundCue::HarpoonShot,
         WeaponKind::Railgun => SoundCue::RailgunShot,
+        WeaponKind::ArcRifle => SoundCue::ArcZap,
+        WeaponKind::GravityGun => SoundCue::GravityHum,
+        WeaponKind::TetherHarpoon => SoundCue::TetherShot,
+        WeaponKind::FlakCannon => SoundCue::FlakShot,
     }
 }
 
@@ -312,6 +331,7 @@ pub const fn service_cue(service: ModuleService) -> SoundCue {
 /// elsewhere (noted per arm).
 #[must_use]
 #[allow(clippy::too_many_lines, reason = "one arm per gameplay event kind")]
+#[allow(clippy::match_same_arms, reason = "one arm per event family")]
 pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
     match kind {
         GameplayEventKind::DrillStarted { .. } => Some(SoundCue::Drill),
@@ -478,6 +498,25 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
                 SoundCue::MilestoneFanfare
             },
         ),
+        // Sky continents, sky enemies and Act II weapons (T21): thunder for lightning, a
+        // crackle per arc link, the gravity gun's fling, the harpoon biting rock (the line
+        // letting go clicks like a menu back), shrapnel bursts, temple stone and bronze, and
+        // the sky enemies' calls (an airship going down is a big blast).
+        GameplayEventKind::LightningArc { .. } => Some(SoundCue::Thunderclap),
+        GameplayEventKind::ArcChained { .. } => Some(SoundCue::ArcZap),
+        GameplayEventKind::GravityThrow { .. } => Some(SoundCue::GravityThrow),
+        GameplayEventKind::TetherAttached { .. } => Some(SoundCue::TetherHook),
+        GameplayEventKind::TetherReleased { .. } => Some(SoundCue::UiBack),
+        GameplayEventKind::FlakBurst { .. } => Some(SoundCue::FlakBurst),
+        GameplayEventKind::TempleLeverPulled { .. } => Some(SoundCue::LeverClunk),
+        GameplayEventKind::TempleGateOpened { .. } => Some(SoundCue::GateRumble),
+        GameplayEventKind::RelicChestOpened { .. } => Some(SoundCue::CacheOpened),
+        GameplayEventKind::SkyEnemyAction { action, .. } => Some(match action {
+            fatherload_simulation::enemy::SkyEnemyAction::Swoop => SoundCue::SwoopScreech,
+            fatherload_simulation::enemy::SkyEnemyAction::BoardersDropped => SoundCue::PirateHorn,
+            fatherload_simulation::enemy::SkyEnemyAction::AirshipDowned => SoundCue::Explosion,
+            fatherload_simulation::enemy::SkyEnemyAction::NesterEnraged => SoundCue::HarpyScreech,
+        }),
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -603,7 +642,17 @@ mod tests {
             | GameplayEventKind::RumourMarked { .. }
             | GameplayEventKind::PeopleInteraction { .. }
             | GameplayEventKind::UpgradeInstalled { .. }
-            | GameplayEventKind::MilestoneEarned { .. } => {}
+            | GameplayEventKind::MilestoneEarned { .. }
+            | GameplayEventKind::LightningArc { .. }
+            | GameplayEventKind::ArcChained { .. }
+            | GameplayEventKind::GravityThrow { .. }
+            | GameplayEventKind::TetherAttached { .. }
+            | GameplayEventKind::TetherReleased { .. }
+            | GameplayEventKind::FlakBurst { .. }
+            | GameplayEventKind::TempleLeverPulled { .. }
+            | GameplayEventKind::TempleGateOpened { .. }
+            | GameplayEventKind::RelicChestOpened { .. }
+            | GameplayEventKind::SkyEnemyAction { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -762,7 +811,75 @@ mod tests {
             });
             events.push(GameplayEventKind::RigStruck { player_id, kind });
         }
-        for shot in [ShotKind::Acid, ShotKind::Fireball, ShotKind::Bolt] {
+        events.extend([
+            GameplayEventKind::LightningArc {
+                x: 0,
+                y: 0,
+                end_x: 9,
+                end_y: 9,
+                struck: Some(player_id),
+            },
+            GameplayEventKind::ArcChained {
+                player_id,
+                x: 0,
+                y: 0,
+                end_x: 5,
+                end_y: 0,
+            },
+            GameplayEventKind::GravityThrow {
+                player_id,
+                x: 0,
+                y: 0,
+                count: 2,
+            },
+            GameplayEventKind::TetherAttached {
+                player_id,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::TetherReleased { player_id },
+            GameplayEventKind::FlakBurst {
+                player_id,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::TempleLeverPulled {
+                player_id,
+                x: 0,
+                y: 0,
+                opened: 2,
+            },
+            GameplayEventKind::TempleGateOpened {
+                player_id,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::RelicChestOpened {
+                player_id,
+                x: 0,
+                y: 0,
+            },
+        ]);
+        for action in [
+            fatherload_simulation::enemy::SkyEnemyAction::Swoop,
+            fatherload_simulation::enemy::SkyEnemyAction::BoardersDropped,
+            fatherload_simulation::enemy::SkyEnemyAction::AirshipDowned,
+            fatherload_simulation::enemy::SkyEnemyAction::NesterEnraged,
+        ] {
+            events.push(GameplayEventKind::SkyEnemyAction {
+                entity: 1,
+                kind: EnemyKind::SkyRay,
+                action,
+                x: 0,
+                y: 0,
+            });
+        }
+        for shot in [
+            ShotKind::Acid,
+            ShotKind::Fireball,
+            ShotKind::Bolt,
+            ShotKind::Cannonball,
+        ] {
             events.push(GameplayEventKind::EnemyFired {
                 entity: 1,
                 shot,
@@ -1139,6 +1256,20 @@ mod tests {
             SoundCue::UpgradeFanfare,
             SoundCue::MilestoneFanfare,
             SoundCue::ActTwoFanfare,
+            SoundCue::ArcZap,
+            SoundCue::GravityHum,
+            SoundCue::GravityThrow,
+            SoundCue::TetherShot,
+            SoundCue::TetherHook,
+            SoundCue::FlakShot,
+            SoundCue::FlakBurst,
+            SoundCue::Thunderclap,
+            SoundCue::LeverClunk,
+            SoundCue::GateRumble,
+            SoundCue::SwoopScreech,
+            SoundCue::PirateHorn,
+            SoundCue::HarpyScreech,
+            SoundCue::CannonBoom,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

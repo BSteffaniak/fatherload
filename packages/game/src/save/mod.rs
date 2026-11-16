@@ -54,7 +54,13 @@ const SAVE_SLOTS: usize = 3;
 ///   memory of every player, conversations, bought offers, perks);
 /// * T18 upgrade reward moments: each player's milestone log and records and the
 ///   milestone-reward cosmetics.
-pub const SAVE_VERSION: u32 = 9;
+///
+/// 10 (expansion wave 4; the integrator collapses the wave's bumps into one), every new field
+/// with a serde default, so a version 9 file loads as is:
+///
+/// * T21: generator V9 worlds (sky continent content), new sky tile, artifact, material, enemy
+///   and weapon variants, and the tether line in each rig's weapon state.
+pub const SAVE_VERSION: u32 = 10;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -317,8 +323,9 @@ fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
         check_generator(json)?;
     }
     match probe.version {
-        // Version 8 files have the current layout minus serde-defaulted wave 3 fields.
-        8 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        // Version 8 and 9 files have the current layout minus serde-defaulted wave 3 and
+        // wave 4 fields.
+        8 | 9 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
         7 => serde_json::from_str::<legacy::V7SaveFile>(json)

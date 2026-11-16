@@ -22,7 +22,7 @@ use crate::{
     explosive::ExplosiveKind,
     ids::SimulationTick,
     item::{AmmoId, ItemKind, WeaponId},
-    terrain::TILE_SIZE,
+    terrain::{StrategicResourceKind, TILE_SIZE},
 };
 
 /// A hardpoint weapon.
@@ -40,6 +40,17 @@ pub enum WeaponKind {
     Harpoon,
     /// An instant piercing slug that punches through soft rock and armour.
     Railgun,
+    // --- Act II weapons (Wave 4 T21): sold on worlds with sky content, paid partly in sky
+    // materials ([`WeaponKind::materials`]).
+    /// An electric arc that leaps from its first target to the next ones nearby.
+    ArcRifle,
+    /// Holds what it points at (drops, charges, enemies, loose blocks it rips out) and flings
+    /// it on release.
+    GravityGun,
+    /// A harpoon on a line: hook terrain and swing from it while the trigger is held.
+    TetherHarpoon,
+    /// Shells with a proximity fuse that burst into shrapnel: the answer to airships.
+    FlakCannon,
 }
 
 /// How a weapon delivers its damage.
@@ -49,6 +60,15 @@ pub enum Delivery {
     Projectile,
     /// An instant ray every shot (the cutter's beam pulses, the railgun's slug).
     Hitscan,
+    /// An instant ray that chains from its first hit to [`WeaponStats::chains`] more targets
+    /// within [`WeaponStats::chain_reach`] (the arc rifle).
+    Chain,
+    /// A held field that pulls things toward the muzzle and flings them on release (the
+    /// gravity gun).
+    Field,
+    /// A line that hooks terrain within range; the rig swings from it while the trigger is
+    /// held (the tether harpoon).
+    Tether,
 }
 
 /// What a weapon shot does, at one upgrade tier.
@@ -85,6 +105,13 @@ pub struct WeaponStats {
     pub blast: Option<ExplosiveKind>,
     /// Hits drag targets and loose drops back toward the shooter.
     pub pulls: bool,
+    /// Extra targets a chain hit leaps to (arc rifle).
+    pub chains: u8,
+    /// How far a chain leaps, pixels.
+    pub chain_reach: f32,
+    /// A projectile's shrapnel burst radius, pixels (0: none; flak bursts near enemies, at
+    /// range or on terrain).
+    pub burst_radius: f32,
 }
 
 /// Ammunition types (stable item ids, see [`AmmoKind::item`]).
@@ -153,14 +180,43 @@ pub const MUZZLE_REACH: f32 = 11.0;
 
 impl WeaponKind {
     /// Every weapon, in shop order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 10] = [
         Self::RivetGun,
         Self::Harpoon,
         Self::ScatterBlaster,
         Self::PlasmaCutter,
         Self::RocketLauncher,
         Self::Railgun,
+        Self::TetherHarpoon,
+        Self::ArcRifle,
+        Self::FlakCannon,
+        Self::GravityGun,
     ];
+
+    /// Whether this is an Act II weapon (sold only on worlds with sky content, paid partly in
+    /// sky materials).
+    #[must_use]
+    pub const fn act_two(self) -> bool {
+        matches!(
+            self,
+            Self::ArcRifle | Self::GravityGun | Self::TetherHarpoon | Self::FlakCannon
+        )
+    }
+
+    /// The sky materials buying it takes on top of [`Self::cost`] (Act II weapons).
+    #[must_use]
+    pub const fn materials(self) -> &'static [(StrategicResourceKind, u32)] {
+        match self {
+            Self::ArcRifle => &[(StrategicResourceKind::StormGlass, 6)],
+            Self::GravityGun => &[(StrategicResourceKind::AetherCrystal, 6)],
+            Self::TetherHarpoon => &[(StrategicResourceKind::StormGlass, 2)],
+            Self::FlakCannon => &[
+                (StrategicResourceKind::StormGlass, 3),
+                (StrategicResourceKind::AetherCrystal, 3),
+            ],
+            _ => &[],
+        }
+    }
 
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -171,6 +227,10 @@ impl WeaponKind {
             Self::RocketLauncher => "Rocket Launcher",
             Self::Harpoon => "Harpoon",
             Self::Railgun => "Railgun",
+            Self::ArcRifle => "Arc Rifle",
+            Self::GravityGun => "Gravity Gun",
+            Self::TetherHarpoon => "Tether Harpoon",
+            Self::FlakCannon => "Flak Cannon",
         }
     }
 
@@ -184,6 +244,12 @@ impl WeaponKind {
             Self::RocketLauncher => "Rockets that burst on impact. Uses rocket ammo.",
             Self::Harpoon => "Spears small targets and loose loot and reels them in.",
             Self::Railgun => "An instant slug that pierces armour, foes and soft rock.",
+            Self::ArcRifle => "Lightning that leaps from foe to foe. Machines hate it.",
+            Self::GravityGun => {
+                "Hold to grab loot, charges, foes and loose blocks; let go to fling."
+            }
+            Self::TetherHarpoon => "Hook rock and swing from the line while you hold the trigger.",
+            Self::FlakCannon => "Proximity shells that burst into shrapnel. Downs airships.",
         }
     }
 
@@ -197,6 +263,10 @@ impl WeaponKind {
             Self::RocketLauncher => 4,
             Self::Harpoon => 5,
             Self::Railgun => 6,
+            Self::ArcRifle => 7,
+            Self::GravityGun => 8,
+            Self::TetherHarpoon => 9,
+            Self::FlakCannon => 10,
         }))
     }
 
@@ -209,6 +279,10 @@ impl WeaponKind {
             4 => Self::RocketLauncher,
             5 => Self::Harpoon,
             6 => Self::Railgun,
+            7 => Self::ArcRifle,
+            8 => Self::GravityGun,
+            9 => Self::TetherHarpoon,
+            10 => Self::FlakCannon,
             _ => return None,
         })
     }
@@ -223,6 +297,10 @@ impl WeaponKind {
             Self::PlasmaCutter => 2_400,
             Self::RocketLauncher => 3_600,
             Self::Railgun => 7_500,
+            Self::TetherHarpoon => 6_000,
+            Self::ArcRifle => 9_000,
+            Self::FlakCannon => 10_000,
+            Self::GravityGun => 11_000,
         }
     }
 
@@ -238,8 +316,8 @@ impl WeaponKind {
         match self {
             Self::RivetGun | Self::Harpoon => 0,
             Self::ScatterBlaster | Self::PlasmaCutter => 1,
-            Self::RocketLauncher => 2,
-            Self::Railgun => 3,
+            Self::RocketLauncher | Self::TetherHarpoon => 2,
+            Self::Railgun | Self::ArcRifle | Self::FlakCannon | Self::GravityGun => 3,
         }
     }
 
@@ -247,7 +325,7 @@ impl WeaponKind {
     /// the railgun repeats while held; those want a fresh pull).
     #[must_use]
     pub const fn automatic(self) -> bool {
-        !matches!(self, Self::Harpoon | Self::Railgun)
+        !matches!(self, Self::Harpoon | Self::Railgun | Self::TetherHarpoon)
     }
 
     /// The stats at upgrade tier `mk` (0: Mk I).
@@ -271,6 +349,10 @@ impl WeaponKind {
         }
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the stat table, one block per weapon"
+    )]
     const fn base_stats(self) -> WeaponStats {
         let plain = WeaponStats {
             delivery: Delivery::Projectile,
@@ -289,6 +371,9 @@ impl WeaponKind {
             knockback: 0.0,
             blast: None,
             pulls: false,
+            chains: 0,
+            chain_reach: 0.0,
+            burst_radius: 0.0,
         };
         match self {
             Self::RivetGun => WeaponStats {
@@ -357,6 +442,51 @@ impl WeaponKind {
                 terrain_bite: u8::MAX,
                 armor_piercing: 1.0,
                 knockback: 160.0,
+                ..plain
+            },
+            Self::ArcRifle => WeaponStats {
+                delivery: Delivery::Chain,
+                damage: 16.0,
+                cooldown_millis: 650,
+                energy: 14.0,
+                speed: 0.0,
+                range: TILE_SIZE * 10.0,
+                knockback: 40.0,
+                chains: 3,
+                chain_reach: TILE_SIZE * 5.0,
+                ..plain
+            },
+            Self::GravityGun => WeaponStats {
+                delivery: Delivery::Field,
+                // Damage of a thrown hit; the hold itself is harmless.
+                damage: 18.0,
+                cooldown_millis: 100,
+                // Energy per second while held.
+                energy: 9.0,
+                // Fling speed.
+                speed: 720.0,
+                range: TILE_SIZE * 7.0,
+                knockback: 0.0,
+                ..plain
+            },
+            Self::TetherHarpoon => WeaponStats {
+                delivery: Delivery::Tether,
+                damage: 0.0,
+                cooldown_millis: 350,
+                energy: 4.0,
+                speed: 0.0,
+                range: TILE_SIZE * 13.0,
+                ..plain
+            },
+            Self::FlakCannon => WeaponStats {
+                damage: 14.0,
+                cooldown_millis: 700,
+                energy: 12.0,
+                speed: 520.0,
+                range: TILE_SIZE * 16.0,
+                gravity: 60.0,
+                knockback: 90.0,
+                burst_radius: TILE_SIZE * 2.2,
                 ..plain
             },
         }
@@ -435,6 +565,18 @@ pub struct RigWeaponState {
     pub firing: bool,
     /// The current trigger pull already fired (semi-automatic weapons need a fresh pull).
     pub pull_spent: bool,
+    /// The tether harpoon's line while it is hooked (the rig swings from it).
+    #[serde(default)]
+    pub tether: Option<Tether>,
+}
+
+/// A tether harpoon's line: hooked at world pixel `(x, y)`, `length` pixels long (the rig
+/// cannot be farther; holding thrust reels it in).
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct Tether {
+    pub x: f32,
+    pub y: f32,
+    pub length: f32,
 }
 
 impl RigWeaponState {
@@ -511,7 +653,11 @@ mod tests {
             assert_eq!(WeaponKind::from_item_id(id), Some(kind));
             let mk1 = kind.stats(0);
             let mk4 = kind.stats(MAX_WEAPON_MK);
-            assert!(mk4.damage > mk1.damage, "{kind:?}");
+            // The tether harpoon deals no damage; everything else hits harder with upgrades.
+            assert!(
+                mk4.damage > mk1.damage || (mk1.damage == 0.0 && kind == WeaponKind::TetherHarpoon),
+                "{kind:?}"
+            );
             assert!(mk4.cooldown_millis <= mk1.cooldown_millis, "{kind:?}");
             assert!(mk4.energy <= mk1.energy, "{kind:?}");
             assert!(kind.upgrade_cost(1) < kind.upgrade_cost(MAX_WEAPON_MK));

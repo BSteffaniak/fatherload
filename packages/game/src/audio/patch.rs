@@ -254,6 +254,22 @@ patches! {
     JetStreamRush => "jet_stream_rush",
     SkyAirLoop => "loop_sky_air",
     WaterfallLoop => "loop_waterfall",
+    // Sky continents, sky enemies and Act II weapons (wave 4, T21), appended so every earlier
+    // patch keeps its variation seeds.
+    ArcCrackle => "arc_crackle",
+    GravityHum => "gravity_hum",
+    GravityThrow => "gravity_throw",
+    TetherShot => "tether_shot",
+    TetherHook => "tether_hook",
+    FlakThump => "flak_thump",
+    FlakBurst => "flak_burst",
+    Thunderclap => "thunderclap",
+    LeverClunk => "lever_clunk",
+    GateRumble => "gate_rumble",
+    SwoopScreech => "swoop_screech",
+    PirateHorn => "pirate_horn",
+    HarpyScreech => "harpy_screech",
+    CannonBoom => "cannon_boom",
 }
 
 /// Playback metadata of a patch.
@@ -594,6 +610,40 @@ impl Patch {
                 .send(0.35)
                 .jitter(0.0, 0.0)
                 .ducking(0.15),
+            // T21: weapons are impacts, enemy calls carry into the sky, thunder ducks the mix.
+            Self::ArcCrackle | Self::TetherShot | Self::FlakThump | Self::CannonBoom => {
+                PatchInfo::new(Impact)
+                    .instances(3)
+                    .send(0.25)
+                    .jitter(0.05, 1.0)
+            }
+            Self::GravityHum | Self::GravityThrow | Self::TetherHook => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.2)
+                .jitter(0.04, 1.0),
+            Self::FlakBurst => PatchInfo::new(Impact)
+                .instances(4)
+                .send(0.35)
+                .jitter(0.07, 1.5)
+                .ducking(0.15),
+            Self::Thunderclap => PatchInfo::new(Big)
+                .instances(2)
+                .send(0.5)
+                .jitter(0.05, 1.0)
+                .ducking(0.4)
+                .priority(8),
+            Self::GateRumble => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.02, 0.5),
+            Self::LeverClunk => PatchInfo::new(Impact)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.02, 0.5),
+            Self::SwoopScreech | Self::HarpyScreech | Self::PirateHorn => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.4)
+                .jitter(0.08, 1.0),
         }
     }
 
@@ -740,6 +790,20 @@ impl Patch {
             Self::JetStreamRush => jet_stream_rush(rng),
             Self::SkyAirLoop => sky_air_loop(rng),
             Self::WaterfallLoop => waterfall_loop(rng),
+            Self::ArcCrackle => arc_crackle(rng),
+            Self::GravityHum => gravity_hum(rng),
+            Self::GravityThrow => gravity_throw(rng),
+            Self::TetherShot => tether_shot(rng),
+            Self::TetherHook => tether_hook(rng),
+            Self::FlakThump => flak_thump(rng),
+            Self::FlakBurst => flak_burst(rng),
+            Self::Thunderclap => thunderclap(rng),
+            Self::LeverClunk => lever_clunk(rng),
+            Self::GateRumble => gate_rumble(rng),
+            Self::SwoopScreech => swoop_screech(rng),
+            Self::PirateHorn => pirate_horn(rng),
+            Self::HarpyScreech => harpy_screech(rng),
+            Self::CannonBoom => cannon_boom(rng),
         }
     }
 }
@@ -3859,6 +3923,247 @@ fn waterfall_loop(rng: &mut Rng) -> Vec<f32> {
         let level = surge();
         roar_filter.process(roar.next()) * 1.4 * level + spray_filter.process(spray.next()) * 0.4
     })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sky continents, sky enemies and Act II weapons (Wave 4 T21)
+// ---------------------------------------------------------------------------------------------
+
+/// The arc rifle: a sizzling electric crack with a crushed buzz.
+fn arc_crackle(rng: &mut Rng) -> Vec<f32> {
+    let mut saw = Osc::new(Wave::Saw);
+    let mut crush = Decimator::default();
+    let mut filter = Svf::new(FilterMode::HighPass, 900.0, 0.8);
+    let start = rng.range(3_200.0, 4_200.0);
+    let mut out = render(0.32, |t| {
+        let pitch = glide(t, start, 600.0, 0.06) * (1.0 + 0.3 * sine(t, 90.0));
+        filter.process(crush.process(saw.next(pitch), 5.0)) * perc(t, 0.001, 0.22) * 0.7
+    });
+    for time in scatter(rng, 8, 0.0, 0.2, 1.4) {
+        let spark = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::HighPass,
+            rng.range(5_000.0, 8_000.0),
+            0.8,
+            0.01,
+        );
+        mix_into(&mut out, &spark, time, rng.range(0.3, 0.6));
+    }
+    out
+}
+
+/// The gravity gun taking hold: a deep warbling hum that swells.
+fn gravity_hum(rng: &mut Rng) -> Vec<f32> {
+    let mut fm = Fm::default();
+    let mut filter = Svf::new(FilterMode::LowPass, 900.0, 1.2);
+    let base = rng.range(150.0, 175.0);
+    let mut shimmer = Osc::new(Wave::Triangle);
+    render(0.8, |t| {
+        let wobble = 1.0 + 0.06 * sine(t, 7.0);
+        let sparkle = shimmer.next(base * 6.0 * wobble) * 0.25;
+        let tone = fm.next(
+            base * wobble,
+            2.0,
+            1.6 * segments(t, &[(0.0, 0.2), (0.4, 1.0), (0.8, 0.6)]),
+        );
+        filter.run(
+            tone + sparkle,
+            900.0 + 1_600.0 * segments(t, &[(0.0, 0.0), (0.3, 1.0), (0.8, 0.5)]),
+            1.2,
+        ) * segments(t, &[(0.0, 0.0), (0.15, 0.8), (0.6, 0.6), (0.8, 0.0)])
+    })
+}
+
+/// A held load flung away: a rising whoosh with a hollow pop.
+fn gravity_throw(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(220.0 * rng.jitter(0.05), 90.0, 0.18, 1.6);
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 400.0, 1.2);
+    let rush = render(0.5, |t| {
+        filter.run(
+            noise.next(),
+            300.0 + 3_000.0 * segments(t, &[(0.0, 0.0), (0.2, 1.0), (0.5, 0.6)]),
+            1.2,
+        ) * segments(t, &[(0.0, 0.0), (0.06, 1.0), (0.5, 0.0)])
+    });
+    mix_into(&mut out, &rush, 0.0, 0.8);
+    out
+}
+
+/// The tether harpoon's shot: a sharp crossbow twang and the line paying out.
+fn tether_shot(rng: &mut Rng) -> Vec<f32> {
+    let mut out = {
+        let pitch = rng.range(260.0, 320.0);
+        clank(rng, pitch, 0.12)
+    };
+    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 2_000.0, 3.0);
+    let line = render(0.35, |t| {
+        filter.run(noise.next(), glide(t, 3_000.0, 900.0, 0.12), 3.0) * perc(t, 0.002, 0.3) * 0.6
+    });
+    mix_into(&mut out, &line, 0.0, 0.7);
+    out
+}
+
+/// The harpoon biting rock: a hard thunk and a taut line ringing.
+fn tether_hook(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(180.0 * rng.jitter(0.05), 70.0, 0.12, 2.0);
+    let line = bell(rng.range(520.0, 600.0), 2.0, 1.4, 0.5);
+    mix_into(&mut out, &line, 0.01, 0.35);
+    grains(rng, &mut out, 6, (0.0, 0.12), (1_500.0, 3_500.0), 0.4);
+    out
+}
+
+/// The flak cannon firing: a deep cough with a metallic bark.
+fn flak_thump(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(140.0 * rng.jitter(0.05), 50.0, 0.28, 2.4);
+    let bark = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        rng.range(900.0, 1_300.0),
+        1.0,
+        0.12,
+    );
+    mix_into(&mut out, &bark, 0.0, 0.8);
+    out
+}
+
+/// A flak shell bursting: a crisp crack and a spray of shrapnel ticks.
+fn flak_burst(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::LowPass,
+        rng.range(3_000.0, 4_500.0),
+        0.8,
+        0.25,
+    );
+    let boom = thump(110.0, 45.0, 0.3, 2.0);
+    mix_into(&mut out, &boom, 0.0, 0.7);
+    for time in scatter(rng, 10, 0.03, 0.4, 1.6) {
+        let tick = {
+            let pitch = rng.range(1_800.0, 3_600.0);
+            clank(rng, pitch, 0.015)
+        };
+        mix_into(&mut out, &tick, time, rng.range(0.15, 0.35));
+    }
+    out
+}
+
+/// A storm elemental's lightning: a ripping crack and a rolling rumble of thunder.
+fn thunderclap(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        2_000.0,
+        0.7,
+        0.08,
+    );
+    let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::LowPass, 300.0, 0.8);
+    let roll = rng.range(4.0, 7.0);
+    let rumble = render(1.6, |t| {
+        filter.run(noise.next(), 180.0 + 160.0 * sine(t, roll).abs(), 0.8)
+            * segments(t, &[(0.0, 0.0), (0.05, 1.0), (0.5, 0.7), (1.6, 0.0)])
+    });
+    mix_into(&mut out, &rumble, 0.02, 1.0);
+    let crack = arc_crackle(rng);
+    mix_into(&mut out, &crack, 0.0, 0.6);
+    out
+}
+
+/// A temple lever thrown: a heavy stone-and-iron clunk, then a ratchet.
+fn lever_clunk(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(120.0 * rng.jitter(0.04), 60.0, 0.2, 1.8);
+    let iron = {
+        let pitch = rng.range(300.0, 380.0);
+        clank(rng, pitch, 0.25)
+    };
+    mix_into(&mut out, &iron, 0.02, 0.6);
+    for index in 0..5 {
+        #[allow(clippy::cast_precision_loss, reason = "five ratchet clicks")]
+        let time = 0.18 + index as f32 * 0.06;
+        let click = {
+            let pitch = rng.range(1_200.0, 1_600.0);
+            clank(rng, pitch, 0.02)
+        };
+        mix_into(&mut out, &click, time, 0.3);
+    }
+    out
+}
+
+/// A temple gate grinding open: a long low stone rumble with a resonant chime at the end.
+fn gate_rumble(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::LowPass, 240.0, 1.0);
+    let mut out = render(1.6, |t| {
+        filter.run(noise.next(), 160.0 + 120.0 * sine(t, 3.0).abs(), 1.0)
+            * segments(t, &[(0.0, 0.0), (0.2, 1.0), (1.3, 0.8), (1.6, 0.0)])
+    });
+    grains(rng, &mut out, 18, (0.1, 1.4), (500.0, 1_800.0), 0.25);
+    let chime = bell(rng.range(392.0, 420.0), 3.0, 1.2, 1.4);
+    mix_into(&mut out, &chime, 1.2, 0.4);
+    out
+}
+
+/// A swooper beginning its dive: a thin falling screech and a wind rush.
+fn swoop_screech(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Triangle);
+    let mut filter = Svf::new(FilterMode::BandPass, 1_800.0, 2.0);
+    let start = rng.range(1_900.0, 2_400.0);
+    let mut out = render(0.55, |t| {
+        let pitch = glide(t, start, start * 0.45, 0.35) * (1.0 + 0.02 * sine(t, 30.0));
+        filter.run(osc.next(pitch), pitch, 2.0)
+            * segments(t, &[(0.0, 0.0), (0.04, 0.8), (0.55, 0.0)])
+    });
+    let rush = updraft_whoosh(rng);
+    mix_into(&mut out, &rush, 0.1, 0.4);
+    out
+}
+
+/// An airship's boarding horn: two brassy blasts.
+fn pirate_horn(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    let note = rng.range(146.0, 165.0);
+    for (offset, gate) in [(0.0, 0.35), (0.5, 0.6)] {
+        let voice = brass(rng, note, gate, 0.5);
+        mix_into(&mut out, &voice, offset, 0.5);
+        let fifth = brass(rng, note * 1.5, gate, 0.4);
+        mix_into(&mut out, &fifth, offset, 0.25);
+    }
+    out
+}
+
+/// A harpy finding its nest robbed: a furious shrieking wail.
+fn harpy_screech(rng: &mut Rng) -> Vec<f32> {
+    let mut saw = Osc::new(Wave::Saw);
+    let mut filter = Svf::new(FilterMode::BandPass, 2_400.0, 2.4);
+    let base = rng.range(1_100.0, 1_400.0);
+    render(0.9, |t| {
+        let pitch = base
+            * (1.0 + 0.25 * sine(t, 11.0))
+            * segments(t, &[(0.0, 0.8), (0.2, 1.3), (0.9, 0.9)]);
+        filter.run(saw.next(pitch), pitch * 1.6, 2.4)
+            * segments(t, &[(0.0, 0.0), (0.05, 0.9), (0.7, 0.6), (0.9, 0.0)])
+    })
+}
+
+/// An airship turret's cannon: a booming report with a smoky tail.
+fn cannon_boom(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(90.0 * rng.jitter(0.05), 38.0, 0.4, 2.6);
+    let smoke = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::LowPass,
+        1_200.0,
+        0.7,
+        0.5,
+    );
+    mix_into(&mut out, &smoke, 0.01, 0.6);
+    out
 }
 
 #[cfg(test)]

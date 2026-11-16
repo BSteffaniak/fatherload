@@ -100,7 +100,11 @@ mod simulate;
 mod sky_isle_tests;
 mod sky_isles;
 #[cfg(test)]
+mod sky_continent_tests;
+mod sky_temples;
+#[cfg(test)]
 mod sky_tests;
+mod sky_weapons;
 mod state_hash;
 #[cfg(test)]
 mod streaming_tests;
@@ -122,6 +126,7 @@ mod weapons;
 
 pub use bases::{BuildQuote, TOWN_NO_BUILD_MARGIN, TOWN_NO_BUILD_ROWS, payment_for};
 pub use discovery::{DiscoveredTiles, Discovery};
+pub use enemies::{JOLT_MILLIS, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES, TURRET_MOUNTS};
 pub use people::{
     DEFAULT_PLAYER_NAME, DESPAWN_MARGIN_COLUMNS, PEOPLE_REFRESH_MILLIS, SPAWN_MARGIN_COLUMNS,
     TALK_REACH_TILES,
@@ -138,6 +143,8 @@ pub use services::{
     BOMB_BUNDLES, MINING_ROCKETS_COST, MINING_ROCKETS_COUNT, MINING_ROCKETS_SHACK_LEVEL,
     command_services_rig,
 };
+pub use sky_temples::{GATE_REACH, LEVER_REACH, relic_loot};
+pub use sky_weapons::{HOLD_RADIUS, HOLD_REACH, MIN_TETHER, REEL_SPEED, RIP_MILLIS};
 pub use timing::TickTiming;
 
 pub use commands::{

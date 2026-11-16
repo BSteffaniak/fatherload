@@ -247,6 +247,38 @@ impl Settlement {
         )
     }
 
+    /// A sky city's routine view ([`super::sky_city`], V9 sky continents): its buildings as
+    /// lots people work by but do not enter, along the city's street.
+    #[must_use]
+    pub fn sky_city(
+        city: &crate::worldgen::sky::continent::SkyCity,
+        population: &Population,
+    ) -> Self {
+        let lots: Vec<Lot> = city
+            .buildings
+            .iter()
+            .map(|building| Lot {
+                kind: super::sky_city::lot_kind(building.kind),
+                first_column: building.first_column,
+                width: building.width,
+                enterable: false,
+            })
+            .collect();
+        let homes = vec![None; population.characters.len()];
+        let keepers = vec![None; population.characters.len()];
+        Self::assemble(
+            city.id,
+            city.street_row,
+            (city.first_column, city.last_column),
+            city.plaza,
+            lots,
+            population,
+            &homes,
+            &keepers,
+            false,
+        )
+    }
+
     #[allow(clippy::too_many_arguments, reason = "one internal assembly step")]
     fn assemble(
         village: VillageId,
@@ -539,6 +571,12 @@ pub fn settlement(settings: &WorldSettings, id: VillageId) -> Option<Arc<Settlem
     }
     let key = (*settings, id.0.cast_signed(), 0);
     let built = SETTLEMENTS.get_or_compute(key, || {
+        if crate::worldgen::sky::continent::is_sky_city(id) {
+            return crate::worldgen::sky::continent::sky_city(settings, id).map(|city| {
+                let population = super::sky_city::sky_city_population(settings.seed, &city);
+                Arc::new(Settlement::sky_city(&city, &population))
+            });
+        }
         if super::camps::is_camp(id) {
             return super::camps::camp(settings, id).map(|camp| {
                 let population = super::camps::camp_population(settings.seed, &camp);

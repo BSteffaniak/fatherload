@@ -46,6 +46,13 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::SentryTurret => &art::SENTRY_TURRET,
         EnemyKind::RogueExcavator => &art::ROGUE_EXCAVATOR,
         EnemyKind::AncientGuardian => &art::ANCIENT_GUARDIAN,
+        EnemyKind::SkyRay => &art::SKY_RAY,
+        EnemyKind::Wyvern => &art::WYVERN,
+        EnemyKind::StormElemental => &art::STORM_ELEMENTAL,
+        EnemyKind::PirateAirship => &art::PIRATE_AIRSHIP,
+        EnemyKind::AirshipTurret => &art::AIRSHIP_TURRET,
+        EnemyKind::SkyPirate => &art::SKY_PIRATE,
+        EnemyKind::HarpyNester => &art::HARPY_NESTER,
     }
 }
 
@@ -56,6 +63,7 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::Acid => &art::SHOT_ACID,
         ShotKind::Fireball => &art::SHOT_FIREBALL,
         ShotKind::Bolt => &art::SHOT_BOLT,
+        ShotKind::Cannonball => &art::SHOT_CANNONBALL,
     }
 }
 
@@ -120,6 +128,7 @@ pub(super) fn draw_enemies(draw: &mut impl RaylibDraw, scene: &EnemyScene<'_>) {
 
 /// The frame showing `state` (mode-driven poses, otherwise the loop).
 #[allow(clippy::cast_precision_loss, reason = "per-enemy animation phase")]
+#[allow(clippy::match_same_arms, reason = "one arm per kind's pose rule")]
 fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
     let sprite = enemy_sprite(state.kind);
     let phase = seconds + (state.seed % 97) as f32 * 0.013;
@@ -152,11 +161,34 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
             }
         }
         EnemyKind::MiningDrone if state.mode == EnemyMode::Stunned => 0,
+        EnemyKind::AirshipTurret => usize::from(
+            state.mode == EnemyMode::Windup && ((phase * 12.0) as usize).is_multiple_of(2),
+        ),
+        // A swooper folds its wings in the dive.
+        EnemyKind::SkyRay | EnemyKind::HarpyNester | EnemyKind::Wyvern
+            if state.mode == EnemyMode::Strike =>
+        {
+            sprite
+                .frames
+                .len()
+                .saturating_sub(1)
+                .min(if state.kind == EnemyKind::SkyRay {
+                    2
+                } else {
+                    1
+                })
+        }
         EnemyKind::CaveBat
         | EnemyKind::MagmaWisp
         | EnemyKind::BroodNest
         | EnemyKind::MiningDrone
-        | EnemyKind::AncientGuardian => sprite.frame_at(phase),
+        | EnemyKind::AncientGuardian
+        | EnemyKind::SkyRay
+        | EnemyKind::Wyvern
+        | EnemyKind::StormElemental
+        | EnemyKind::PirateAirship
+        | EnemyKind::SkyPirate
+        | EnemyKind::HarpyNester => sprite.frame_at(phase),
     }
 }
 
@@ -169,6 +201,10 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::Shellback
             | EnemyKind::SentryTurret
             | EnemyKind::RogueExcavator
+            | EnemyKind::Wyvern
+            | EnemyKind::PirateAirship
+            | EnemyKind::AirshipTurret
+            | EnemyKind::SkyPirate
     )
 }
 
@@ -427,7 +463,7 @@ fn draw_shot(
     let (width, height) = (sprite.width() as f32 * ART, sprite.height() as f32 * ART);
     let glow = match shot.kind {
         ShotKind::Acid => LIME,
-        ShotKind::Fireball => ORANGE,
+        ShotKind::Fireball | ShotKind::Cannonball => ORANGE,
         ShotKind::Bolt => MINT,
     };
     disc(draw, x, y, 4, with_alpha(glow, 50));

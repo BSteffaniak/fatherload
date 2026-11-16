@@ -151,6 +151,13 @@ item_id!(
     QuestItemId
 );
 
+/// The quest item id of a sky temple's keystone (Wave 4 T21; ids 210-219 are the sky
+/// temples').
+pub const TEMPLE_KEYSTONE_ID: u16 = 210;
+/// A sky temple's keystone: prised off its plinth by a pilot, it opens the temple's keystone
+/// gate (`world/sky_temples.rs`).
+pub const TEMPLE_KEYSTONE: ItemKind = ItemKind::Quest(QuestItemId(TEMPLE_KEYSTONE_ID));
+
 /// Broad item category (UI grouping, stowage rules, drop presentation).
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub enum ItemCategory {
@@ -236,9 +243,20 @@ impl ItemKind {
     /// The item a broken tile yields, if any (ore, artifacts and plain blocks).
     #[must_use]
     pub const fn from_tile(kind: TileKind) -> Option<Self> {
+        use crate::sky::SkyTile;
         match kind {
             TileKind::Ore(mineral) => Some(Self::Mineral(mineral)),
             TileKind::Artifact(artifact) => Some(Self::Artifact(artifact)),
+            // Sky continent content (V9): the sky ores are strategic materials, eggs are
+            // artifacts and a keystone is the temple's key.
+            TileKind::Sky(SkyTile::AetherCrystal) => {
+                Some(Self::Material(StrategicResourceKind::AetherCrystal))
+            }
+            TileKind::Sky(SkyTile::StormGlass) => {
+                Some(Self::Material(StrategicResourceKind::StormGlass))
+            }
+            TileKind::Sky(SkyTile::HarpyEgg) => Some(Self::Artifact(ArtifactKind::HarpyEgg)),
+            TileKind::Sky(SkyTile::TempleKeystone) => Some(TEMPLE_KEYSTONE),
             _ => match BlockKind::from_tile(kind) {
                 Some(block) => Some(Self::Block(block)),
                 None => None,
@@ -272,6 +290,7 @@ impl ItemKind {
                 None => "Explosive",
             },
             Self::Cosmetic(_) => "Cosmetic",
+            Self::Quest(QuestItemId(TEMPLE_KEYSTONE_ID)) => "Temple Keystone",
             Self::Quest(_) => "Quest Item",
         }
     }

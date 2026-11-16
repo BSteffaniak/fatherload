@@ -71,7 +71,7 @@ fn headless_host_and_bot_client_play_and_exit_cleanly() {
     let deadline = Instant::now() + DEADLINE;
     let mut host = Guard(Some(
         Command::new(BIN)
-            .args(["--headless-host", "127.0.0.1:0", "--duration", "8"])
+            .args(["--headless-host", "127.0.0.1:0", "--duration", "14"])
             .stdout(Stdio::piped())
             .spawn()
             .expect("host starts"),
@@ -88,7 +88,7 @@ fn headless_host_and_bot_client_play_and_exit_cleanly() {
 
     let mut bot = Guard(Some(
         Command::new(BIN)
-            .args(["--bot-client", &addr, "--count", "1", "--duration", "2"])
+            .args(["--bot-client", &addr, "--count", "1", "--duration", "5"])
             .stdout(Stdio::piped())
             .spawn()
             .expect("bot starts"),

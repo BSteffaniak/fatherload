@@ -627,7 +627,8 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         test,
     ];
     offers.extend(special_offers(shack, credits, &bomb_key));
-    offers.extend(arms_offers(ui.player, shack, credits));
+    let sky = ui.snapshot.terrain.settings().generator.has_sky_content();
+    offers.extend(arms_offers(ui.player, shack, credits, sky));
     if let Some(mounted) = ui.player.mounted_weapon {
         status.push(SectionItem::icon_stat(
             weapon_art::icon(mounted.kind),
@@ -654,7 +655,13 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
 }
 
 /// The shack's arms rack: each weapon (buy, then upgrade), the capacitor and rocket ammo.
-fn arms_offers(player: &fatherload_simulation::Player, shack: u8, credits: u32) -> Vec<Offer> {
+#[allow(clippy::too_many_lines, reason = "one arm per arms rack row")]
+fn arms_offers(
+    player: &fatherload_simulation::Player,
+    shack: u8,
+    credits: u32,
+    sky: bool,
+) -> Vec<Offer> {
     use crate::shell::arms::{ARMS_ROWS, ArmsRow, mk_name};
     use fatherload_simulation::weapon::{
         MAX_BATTERY_LEVEL, MAX_WEAPON_MK, battery_capacity, battery_upgrade_cost,
@@ -669,13 +676,26 @@ fn arms_offers(player: &fatherload_simulation::Player, shack: u8, credits: u32) 
         .iter()
         .map(|row| match *row {
             ArmsRow::Weapon(weapon) => {
-                let locked = shack < weapon.shack_level();
+                // Act II weapons (T21): a world with sky content, and sky materials.
+                let missing = weapon
+                    .materials()
+                    .iter()
+                    .find(|(material, count)| player.cargo_bay.material(*material) < *count)
+                    .map(|(material, count)| format!("Needs {count} {}", material.name()));
+                let no_sky = weapon.act_two() && !sky;
+                let locked = shack < weapon.shack_level() || no_sky || missing.is_some();
                 match player.weapon_rack.mk(weapon) {
                     None => Offer::new(
                         weapon_art::icon(weapon),
                         weapon.name(),
-                        if locked {
+                        if no_sky {
+                            "Sky worlds only".to_owned()
+                        } else if shack < weapon.shack_level() {
                             format!("Shack level {} needed", weapon.shack_level())
+                        } else if let Some(missing) = missing {
+                            missing
+                        } else if weapon.act_two() {
+                            "Act II hardpoint weapon".to_owned()
                         } else {
                             "Hardpoint weapon".to_owned()
                         },
@@ -699,7 +719,16 @@ fn arms_offers(player: &fatherload_simulation::Player, shack: u8, credits: u32) 
                         Offer::new(
                             weapon_art::icon(weapon),
                             format!("{} {}", weapon.name(), mk_name(mk + 1)),
-                            format!("Damage {:.0} -> {:.0}", now.damage, next.damage),
+                            if weapon == fatherload_simulation::weapon::WeaponKind::TetherHarpoon {
+                                // The line does no damage: its upgrades reach farther.
+                                format!(
+                                    "Line {:.0} -> {:.0} tiles",
+                                    now.range / fatherload_simulation::terrain::TILE_SIZE,
+                                    next.range / fatherload_simulation::terrain::TILE_SIZE
+                                )
+                            } else {
+                                format!("Damage {:.0} -> {:.0}", now.damage, next.damage)
+                            },
                         )
                         .price(weapon.upgrade_cost(mk + 1), credits)
                         .about(format!(

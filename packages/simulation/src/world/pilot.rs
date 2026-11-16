@@ -765,6 +765,20 @@ impl WorldState {
             return;
         };
         let kind = self.terrain.tile(target).map(|tile| tile.kind);
+        // Sky temple fittings (T21, `world/sky_temples.rs`): a swing works a lever, prises a
+        // keystone, opens a keystone gate or breaks a relic chest.
+        if let Some(TileKind::Sky(fitting)) = kind
+            && fitting.is_temple_fitting()
+        {
+            state.pick = None;
+            if state.pick_cooldown <= 0.0 {
+                state.pick_cooldown = PICK_CLINK_SECONDS;
+                if !self.work_temple_fitting(owner, target, fitting, output) {
+                    output.push_event(GameplayEventKind::PickClinked { player_id: owner });
+                }
+            }
+            return;
+        }
         let Some(needed) = kind.and_then(pick_seconds) else {
             state.pick = None;
             if state.pick_cooldown <= 0.0 {
