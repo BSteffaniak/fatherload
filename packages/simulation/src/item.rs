@@ -257,6 +257,7 @@ impl ItemKind {
             }
             TileKind::Sky(SkyTile::HarpyEgg) => Some(Self::Artifact(ArtifactKind::HarpyEgg)),
             TileKind::Sky(SkyTile::TempleKeystone) => Some(TEMPLE_KEYSTONE),
+            TileKind::Lunar(tile) => tile.item(),
             _ => match BlockKind::from_tile(kind) {
                 Some(block) => Some(Self::Block(block)),
                 None => None,

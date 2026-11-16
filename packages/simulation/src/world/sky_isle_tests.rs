@@ -818,3 +818,24 @@ fn sky_isle_play_is_deterministic_and_replicates() {
     let (_, buoy) = nearest_buoy();
     assert!(back.buoy_used(PLAYER, buoy.isle));
 }
+
+#[test]
+fn sky_towns_are_safe_in_the_hostile_sky() {
+    // Integration seam (T20 x T21): the archipelago is hostile sky on V9 worlds, but its sky
+    // towns keep the village rule, so nothing hunts in or around them.
+    let world = world();
+    let (found, _) = sky_town(SkyTownKind::AirshipDock);
+    let street = TilePosition {
+        x: found.center_column(),
+        y: found.ground_row - 2,
+    };
+    assert!(world.hostile_sky(street), "the archipelago is hostile sky");
+    assert!(world.sky_safe_zone(street));
+    assert!(world.enemy_safe_zone(street));
+    let open_air = TilePosition {
+        x: found.last_column + 200,
+        y: found.ground_row - 2,
+    };
+    assert!(world.hostile_sky(open_air));
+    assert!(!world.enemy_safe_zone(open_air), "open sky beyond the town is not safe");
+}

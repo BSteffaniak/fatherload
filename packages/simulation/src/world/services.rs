@@ -39,7 +39,8 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::Sleep(_)
         | PlayerCommand::TogglePilot
         | PlayerCommand::PilotPack { .. }
-        | PlayerCommand::People(_) => None,
+        | PlayerCommand::People(_)
+        | PlayerCommand::Moon(_) => None,
     }
 }
 

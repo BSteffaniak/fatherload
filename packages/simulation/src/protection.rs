@@ -65,9 +65,16 @@ pub struct HazardGear {
     /// Aether thrusters (sky-crafted, [`crate::skycraft`]): side thrust in thin air.
     #[serde(default)]
     pub aether_thrusters: u8,
-    /// Pressurized hull (sky-crafted): keeps out cold; the seal orbit and the Moon will ask for.
+    /// Pressurized hull, one ladder for the sky and the Moon: tier 1 (a cloud farm's sky craft
+    /// or the shop) keeps out cold, tier 2 seals the rig against the vacuum of orbit and the
+    /// Moon ([`crate::moon::VACUUM_SEAL_TIER`]) and tier 3 also turns a fifth of Moon enemies'
+    /// hits. See [`crate::moon::PRESSURIZED_HULL_MAX_LEVEL`].
     #[serde(default)]
     pub pressurized_hull: u8,
+    /// Life support: air for the crew in vacuum and an air line to the pilot on foot
+    /// ([`crate::moon::life_support_reach_tiles`]).
+    #[serde(default)]
+    pub life_support: u8,
 }
 
 impl HazardGear {
@@ -81,7 +88,8 @@ impl HazardGear {
         altitude_intake: crate::environment::ALTITUDE_INTAKE_MAX_LEVEL,
         de_icer: crate::environment::DE_ICER_MAX_LEVEL,
         aether_thrusters: crate::skycraft::AETHER_THRUSTERS_MAX_LEVEL,
-        pressurized_hull: crate::skycraft::PRESSURIZED_HULL_MAX_LEVEL,
+        pressurized_hull: crate::moon::PRESSURIZED_HULL_MAX_LEVEL,
+        life_support: crate::moon::LIFE_SUPPORT_MAX_LEVEL,
     };
 
     /// Cold levels this gear keeps off: the de-icer's cover plus the pressurized hull's

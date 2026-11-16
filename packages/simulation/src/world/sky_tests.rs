@@ -142,16 +142,29 @@ fn the_moon_has_low_gravity_on_top() {
     step(&mut world, 60 * 8, false);
     let rig = world.player(PLAYER).expect("player");
     let below = rig.tile_position(TILE_SIZE);
-    assert_eq!(
-        world
-            .terrain()
-            .tile(TilePosition {
-                x: below.x,
-                y: below.y + 1
-            })
-            .map(|tile| tile.kind),
-        Some(TileKind::Sky(SkyTile::Regolith)),
-        "standing on the Moon at {below:?}"
+    // The filled Moon of the current generator (V9) is lunar dust on top (V8's placeholder
+    // was sky regolith).
+    let ground = world
+        .terrain()
+        .tile(TilePosition {
+            x: below.x,
+            y: below.y + 1,
+        })
+        .map(|tile| tile.kind);
+    assert!(
+        matches!(
+            ground,
+            Some(
+                TileKind::Sky(SkyTile::Regolith)
+                    | TileKind::Lunar(
+                        crate::moon::LunarTile::Regolith
+                            | crate::moon::LunarTile::MareDust
+                            | crate::moon::LunarTile::Helium3
+                            | crate::moon::LunarTile::Ice
+                    )
+            )
+        ),
+        "standing on the Moon at {below:?}: {ground:?}"
     );
     assert!(rig.velocity_y.abs() < f32::EPSILON);
 }

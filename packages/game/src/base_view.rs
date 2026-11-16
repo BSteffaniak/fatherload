@@ -116,6 +116,7 @@ impl BaseModuleView {
 
     /// The menu of module `id` as `player_id` sees it.
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one value line per module service")]
     pub fn for_module(world: &WorldState, player_id: PlayerId, id: StructureId) -> Option<Self> {
         let module = world.bases().module(id)?.clone();
         let claim = *world.bases().claim(module.claim)?;
@@ -187,6 +188,20 @@ impl BaseModuleView {
                     ),
                     ModuleService::CollectRefined => format!("{} c ready", module.refined),
                     ModuleService::Sleep => Self::sleep_value(world, player_id).to_owned(),
+                    ModuleService::Beam => world.uplink_destination(player_id, id).map_or_else(
+                        || "No lunar uplink".to_owned(),
+                        |(_, y)| {
+                            if world.on_moon(module.anchor()) {
+                                if y > -40.0 * fatherload_simulation::TILE_SIZE {
+                                    "Down to town".to_owned()
+                                } else {
+                                    "Down to your uplink".to_owned()
+                                }
+                            } else {
+                                "Up to the Moon".to_owned()
+                            }
+                        },
+                    ),
                     ModuleService::Craft(kind) => {
                         workshop_recipe(*kind).map_or_else(String::new, |(blocks, credits)| {
                             format!(

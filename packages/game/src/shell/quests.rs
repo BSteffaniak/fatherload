@@ -33,6 +33,8 @@ pub enum FanfareKind {
     Blueprint,
     /// A returning player got their saved rig back in a resumed world (WP-PERSIST).
     WelcomeBack,
+    /// A moment on the Moon (WP-MOON): the landing, the Warden's fall, the core.
+    Lunar,
 }
 
 /// A banner across the top of a seat's view.

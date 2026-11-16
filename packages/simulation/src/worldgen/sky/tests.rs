@@ -34,9 +34,17 @@ fn print_bands() {
 }
 
 #[test]
-fn only_v8_and_later_have_a_sky() {
+fn v9_is_current_and_only_v8_and_v9_have_a_sky() {
+    assert_eq!(GeneratorVersion::CURRENT, GeneratorVersion::V9);
     for generator in GeneratorVersion::ALL {
-        assert_eq!(generator.has_sky(), generator >= GeneratorVersion::V8);
+        assert_eq!(
+            generator.has_sky(),
+            matches!(generator, GeneratorVersion::V8 | GeneratorVersion::V9)
+        );
+        assert_eq!(
+            generator.has_moon_content(),
+            generator == GeneratorVersion::V9
+        );
     }
     let v7 = WorldSettings {
         generator: GeneratorVersion::V7,

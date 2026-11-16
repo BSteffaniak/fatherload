@@ -928,6 +928,100 @@ fn world_people_and_conversations_replicate_to_every_client() {
     }
 }
 
+/// The Moon online (WP-MOON): rigs parked on the lunar colony's pad, a facility pylon lit on
+/// the host and the Moon gear in every loadout reach every client in the keyframe; a client's
+/// colony deal sent through its own input stream is validated and applied by the host, and
+/// everyone converges.
+#[test]
+fn world_moon_replicates_and_colony_deals_cross_the_wire() {
+    use fatherload_simulation::{
+        PlayerCommand, SimulationParams, TILE_SIZE, moon,
+        terrain::TileKind,
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(25, 3, 0.5));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    for client in &mut harness.clients {
+        client.bot.active = false;
+    }
+    // The same session on a world with the filled Moon (the harness's own world is a small
+    // bounded one).
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V9,
+        ..WorldSettings::new(0x5EED_0022)
+    };
+    let lunar = WorldState::new_game_with_settings(
+        fatherload_simulation::PlayerId::new(99),
+        &settings,
+        SimulationParams::new(60),
+    );
+    let mut world = harness.world().clone();
+    *world.terrain_mut() = lunar.terrain().clone();
+    let layout = world.moon_layout().expect("V9 fills the Moon");
+    let (first, last, row) = layout.pad();
+    let players: Vec<_> = world.player_ids().collect();
+    for (index, player_id) in players.iter().enumerate() {
+        let rig = world.player_mut(*player_id).expect("player");
+        let column = first + 2 + i32::try_from(index).unwrap_or(0) * 3;
+        assert!(column < last);
+        #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
+        {
+            rig.x = (column as f32 + 0.5) * TILE_SIZE;
+            rig.y = (row as f32).mul_add(TILE_SIZE, -11.0);
+        }
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+        rig.hazard_gear.pressurized_hull = 1;
+        rig.hazard_gear.life_support = 1;
+        rig.hazard_gear.de_icer = 6;
+        rig.lunar.landed = true;
+        rig.credits = 5_000;
+        rig.fuel = 10.0;
+    }
+    let plan = layout.facility;
+    let first_pylon = plan
+        .order
+        .iter()
+        .position(|place| *place == 0)
+        .expect("a first pylon");
+    let _ = world.strike_facility(players[0], plan.pylons[first_pylon]);
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(2));
+    for client in &mut harness.clients {
+        client
+            .queued_actions
+            .push(PlayerCommand::Moon(moon::MoonCommand::Colony(
+                moon::ColonyOffer::Refuel,
+            )));
+    }
+    harness.run_for(Duration::from_secs(3));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    let host = harness.world();
+    for player_id in &players {
+        let rig = host.player(*player_id).expect("player");
+        assert!(
+            rig.fuel > 90.0,
+            "the colony refuelled {player_id:?}: {}",
+            rig.fuel
+        );
+        assert!(rig.credits < 5_000);
+    }
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(
+            seen.terrain()
+                .tile(plan.pylons[first_pylon])
+                .map(|tile| tile.kind),
+            Some(TileKind::Lunar(moon::LunarTile::PylonLit)),
+            "the lit pylon travels with the terrain"
+        );
+    }
+}
+
 #[test]
 fn world_enemy_difficulty_is_the_hosts_call() {
     use fatherload_simulation::{EnemyDifficulty, PlayerCommand};

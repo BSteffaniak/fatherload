@@ -58,7 +58,9 @@ impl WorldState {
             // Test mode: every tile falls to a single chip.
             u8::MAX
         } else {
-            drill_bite(self.players.get(&player_id)?.drill_strength)
+            let player = self.players.get(&player_id)?;
+            // The lunar colony's Alloy Drill Head bites one layer deeper (WP-MOON).
+            drill_bite(player.drill_strength).saturating_add(player.lunar.drill_bonus())
         };
         let result = self.terrain_mut().chip_by(target, bite, unrestricted);
         if matches!(
@@ -432,12 +434,12 @@ impl WorldState {
             PlayerCommand::MountWeapon { weapon } => self.mount_weapon(player_id, weapon),
             PlayerCommand::Build(command) => self.apply_build_command(player_id, &command),
             PlayerCommand::Sleep(command) => self.apply_sleep_command(player_id, command),
-            // Resolved inside the tick by `pilot_command` (they emit their own events).
-            PlayerCommand::TogglePilot | PlayerCommand::PilotPack { .. } => {
-                PlayerScopedCommandOutcome::IgnoredUnavailable
-            }
-            // Resolved earlier in the tick by `people_command` (`world/people.rs`).
-            PlayerCommand::People(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
+            // Resolved earlier in the tick: by `pilot_command` (they emit their own events),
+            // `people_command` (`world/people.rs`) and `apply_moon_command` (`world/moon.rs`).
+            PlayerCommand::TogglePilot
+            | PlayerCommand::PilotPack { .. }
+            | PlayerCommand::People(_)
+            | PlayerCommand::Moon(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 }
@@ -548,6 +550,13 @@ pub const fn base_drill_seconds_per_chip(kind: TileKind) -> f32 {
             2 => 0.12,
             3 => 0.15,
             _ => 0.19,
+        },
+        TileKind::Lunar(tile) => match tile.hardness() {
+            1 => 0.08,
+            2 => 0.12,
+            3 => 0.15,
+            4 => 0.19,
+            _ => 0.22,
         },
     }
 }

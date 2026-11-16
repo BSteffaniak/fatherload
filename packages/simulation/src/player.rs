@@ -127,6 +127,10 @@ pub struct Player {
     /// Milestones earned and personal records (private; see [`crate::milestone`]).
     #[serde(default)]
     pub milestones: crate::milestone::MilestoneLog,
+    /// What the player has done on the Moon and the colony's one-off upgrades (private;
+    /// WP-MOON, see [`crate::moon::LunarProgress`]).
+    #[serde(default)]
+    pub lunar: crate::moon::LunarProgress,
 }
 
 #[allow(
@@ -186,6 +190,7 @@ impl Player {
             pilot_gear: crate::pilot::PilotGear::default(),
             pilot_pack: ItemContainer::new(),
             milestones: crate::milestone::MilestoneLog::default(),
+            lunar: crate::moon::LunarProgress::default(),
         }
     }
 

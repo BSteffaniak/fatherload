@@ -677,7 +677,11 @@ impl WorldState {
         output: &mut TickOutput,
     ) -> f32 {
         let (hx, hy) = state.head(body);
-        let air = self.pilot_air_at(hx, hy);
+        let mut air = self.pilot_air_at(hx, hy);
+        if air == PilotAir::Thin && self.lunar_air(owner, hx, hy) {
+            // WP-MOON: the colony's rooms and the rig's life-support air line.
+            air = PilotAir::Breathable;
+        }
         let before = state.oxygen;
         if air.drains() && !self.damage_immune() {
             state.oxygen = (state.oxygen - dt).max(0.0);
@@ -777,6 +781,22 @@ impl WorldState {
                     output.push_event(GameplayEventKind::PickClinked { player_id: owner });
                 }
             }
+            return;
+        }
+        // The alien facility's pylons and conduits answer the pick (WP-MOON).
+        if let Some(found) = kind
+            && matches!(found, TileKind::Lunar(_))
+            && state.pick_cooldown <= 0.0
+            && self.pick_facility(owner, target, found, output)
+        {
+            state.pick = None;
+            state.pick_cooldown = PICK_CLINK_SECONDS;
+            output.push_event(GameplayEventKind::PickStruck {
+                player_id: owner,
+                x: target.x,
+                y: target.y,
+                broke: false,
+            });
             return;
         }
         let Some(needed) = kind.and_then(pick_seconds) else {

@@ -140,6 +140,17 @@ impl Material {
                 | fatherload_simulation::sky::SkyTile::TempleKeystone
                 | fatherload_simulation::sky::SkyTile::TempleCache => Self::Hard,
             },
+            TileKind::Lunar(tile) => match tile {
+                fatherload_simulation::moon::LunarTile::Regolith
+                | fatherload_simulation::moon::LunarTile::MareDust
+                | fatherload_simulation::moon::LunarTile::Helium3 => Self::Soft,
+                fatherload_simulation::moon::LunarTile::Ice
+                | fatherload_simulation::moon::LunarTile::AlloyVein
+                | fatherload_simulation::moon::LunarTile::RelicCache
+                | fatherload_simulation::moon::LunarTile::CrystalBloom
+                | fatherload_simulation::moon::LunarTile::CrystalStalk => Self::Ore,
+                _ => Self::Hard,
+            },
             TileKind::Cave(tile) => match tile {
                 fatherload_simulation::cave::CaveTile::Crystal
                 | fatherload_simulation::cave::CaveTile::TreasureCache
@@ -199,7 +210,15 @@ struct Listener {
     pan: f32,
     /// Half the view's width in world pixels (panning scale for world sounds).
     half_width: f32,
+    /// The listener is in vacuum (orbit, the Moon): sound only reaches it through the hull or
+    /// the suit, muffled (WP-MOON).
+    vacuum: bool,
 }
+
+/// Low-pass cutoff of world sounds heard in vacuum (through the ground and the hull).
+const VACUUM_WORLD_CUTOFF: f32 = 700.0;
+/// Low-pass cutoff of a listener's own sounds in vacuum (felt through the frame).
+const VACUUM_OWN_CUTOFF: f32 = 2_600.0;
 
 #[derive(Clone, Debug, Default)]
 struct SeatState {
@@ -304,7 +323,12 @@ impl Director {
             SoundSource::Interface => Some((1.0, 0.0, 20_000.0)),
             SoundSource::Player(player) => {
                 if let Some(listener) = listeners.iter().find(|l| l.player_id == player) {
-                    return Some((1.0, listener.pan, 20_000.0));
+                    let cutoff = if listener.vacuum {
+                        VACUUM_OWN_CUTOFF
+                    } else {
+                        20_000.0
+                    };
+                    return Some((1.0, listener.pan, cutoff));
                 }
                 let presentation = snapshot.players.iter().find(|p| p.player_id == player)?;
                 spatial(presentation.x, presentation.y, listeners)
@@ -388,6 +412,11 @@ impl Director {
         params: (f32, f32, f32, f32),
     ) {
         let (gain, pan, rate, cutoff) = params;
+        let cutoff = if listener.vacuum {
+            cutoff.min(VACUUM_OWN_CUTOFF)
+        } else {
+            cutoff
+        };
         let key = LoopKey::new(listener.seat as u32 * 16 + slot as u32, patch);
         if gain > 1e-3 {
             live.insert(key);
@@ -968,6 +997,7 @@ fn listeners(snapshot: &RenderSnapshot<'_>) -> Vec<Listener> {
                 y,
                 pan,
                 half_width: (view.visible_world_size().0 * 0.5).max(TILE_SIZE),
+                vacuum: fatherload_simulation::moon::vacuum_at(snapshot.terrain.settings(), x, y),
             }
         })
         .collect()
@@ -1006,6 +1036,14 @@ fn spatial(x: f32, y: f32, listeners: &[Listener]) -> Option<(f32, f32, f32)> {
     let far =
         ((distance - FULL_LEVEL_DISTANCE) / (MAX_DISTANCE - FULL_LEVEL_DISTANCE)).clamp(0.0, 1.0);
     let cutoff = 20_000.0 * (1.0 - far).powi(2) + 1_200.0 * far;
+    if listener.vacuum {
+        // No air to carry it: a dull thud through the ground (WP-MOON).
+        return Some((
+            gain * 0.6,
+            side_pan(listener, x - listener.x),
+            cutoff.min(VACUUM_WORLD_CUTOFF),
+        ));
+    }
     Some((gain, side_pan(listener, x - listener.x), cutoff))
 }
 

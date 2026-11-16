@@ -26,6 +26,10 @@
 //! | [`EnemyKind::SentryTurret`] | machine (ranged) | the machine layer | charge glow before each bolt | EMP, explosives |
 //! | [`EnemyKind::RogueExcavator`] | machine | deep layers; drills through rock toward you | engine rev before a charge | EMP, explosives |
 //! | [`EnemyKind::AncientGuardian`] | machine (elite) | machine-layer and mantle lairs | shielded until an EMP drops it | EMP, then explosives |
+//! | [`EnemyKind::RegolithCrawler`] | creature | the Moon's surface and lava tubes | crouches, then a long low-g leap | anything; keep moving |
+//! | [`EnemyKind::CrystalMite`] | creature (swarmer) | the Moon, thickest in crystal forests | chitter, packs | blasts and fire; crystal shrugs off bullets |
+//! | [`EnemyKind::DerelictAutomaton`] | machine (ranged) | the Moon, around abandoned habitats | red eye charging | EMP, explosives |
+//! | [`EnemyKind::Warden`] | machine (boss) | the alien facility's arena (one per Moon) | shield up until a conduit breaks or an EMP lands | the arena's conduits or EMP, then explosives |
 //!
 //! # Sky families (Wave 4 T21, V9 skies)
 //!
@@ -75,6 +79,14 @@ pub enum EnemyKind {
     AirshipTurret,
     SkyPirate,
     HarpyNester,
+    /// WP-MOON: a pale many-legged leaper of the lunar dust.
+    RegolithCrawler,
+    /// WP-MOON: crystal-shelled mites that swarm out of the crystal forests.
+    CrystalMite,
+    /// WP-MOON: an abandoned colony's security robot, still on patrol.
+    DerelictAutomaton,
+    /// WP-MOON: the alien facility's guardian, the Moon's boss.
+    Warden,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -346,7 +358,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 23] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -366,6 +378,10 @@ impl EnemyKind {
         Self::AirshipTurret,
         Self::SkyPirate,
         Self::HarpyNester,
+        Self::RegolithCrawler,
+        Self::CrystalMite,
+        Self::DerelictAutomaton,
+        Self::Warden,
     ];
 
     /// The kind's stats.
@@ -685,6 +701,74 @@ impl EnemyKind {
                 knockback: 220.0,
                 ..stats("Harpy Nester", Creature, Flying, AttackStyle::Swoop)
             },
+            Self::RegolithCrawler => EnemyStats {
+                radius: 10.0,
+                health: 45.0,
+                speed: 70.0,
+                dash_speed: 250.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 30.0,
+                contact_damage: 12.0,
+                windup_millis: 650,
+                cooldown_millis: 2_300,
+                attack_range_tiles: 5.0,
+                knockback: 170.0,
+                ..stats("Regolith Crawler", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::CrystalMite => EnemyStats {
+                radius: 6.0,
+                health: 12.0,
+                speed: 140.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 26.0,
+                contact_damage: 5.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Crystal Mite", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::DerelictAutomaton => EnemyStats {
+                radius: 11.0,
+                health: 90.0,
+                speed: 40.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 22.0,
+                contact_damage: 12.0,
+                windup_millis: 800,
+                cooldown_millis: 2_100,
+                attack_range_tiles: 11.0,
+                ..stats(
+                    "Derelict Automaton",
+                    Machine,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Bolt, 2),
+                )
+            },
+            Self::Warden => EnemyStats {
+                radius: 20.0,
+                health: 520.0,
+                shield: 300.0,
+                speed: 55.0,
+                sight_tiles: 20.0,
+                hearing_tiles: 16.0,
+                leash_tiles: 40.0,
+                contact_damage: 30.0,
+                windup_millis: 900,
+                cooldown_millis: 1_900,
+                attack_range_tiles: 16.0,
+                knockback: 260.0,
+                elite: true,
+                ..stats(
+                    "The Warden",
+                    Machine,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::Bolt, 4),
+                )
+            },
         }
     }
 
@@ -700,6 +784,15 @@ impl EnemyKind {
                 | Self::AirshipTurret
                 | Self::SkyPirate
                 | Self::HarpyNester
+        )
+    }
+
+    /// Whether it lives on the Moon (WP-MOON).
+    #[must_use]
+    pub const fn is_lunar(self) -> bool {
+        matches!(
+            self,
+            Self::RegolithCrawler | Self::CrystalMite | Self::DerelictAutomaton | Self::Warden
         )
     }
 
@@ -782,11 +875,16 @@ impl EnemyKind {
             | (Self::BroodNest, DamageKind::Explosive | DamageKind::Fire) => 1.6,
             (Self::RockMimic | Self::Shellback, DamageKind::Fire) => 0.5,
             (Self::MagmaWisp, DamageKind::Fire) => 0.0,
-            (Self::BroodLord, DamageKind::Kinetic) => 0.6,
+            (Self::BroodLord | Self::CrystalMite, DamageKind::Kinetic) => 0.6,
             (
-                Self::SentryTurret | Self::RogueExcavator | Self::AncientGuardian,
+                Self::SentryTurret
+                | Self::RogueExcavator
+                | Self::AncientGuardian
+                | Self::DerelictAutomaton
+                | Self::Warden,
                 DamageKind::Kinetic,
             ) => 0.55,
+            (Self::CrystalMite, DamageKind::Fire | DamageKind::Explosive) => 1.3,
             (Self::CaveBat, DamageKind::Fire) => 1.5,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
@@ -1406,9 +1504,62 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             );
             add(richer, 4 + extra);
         }
+        EnemyKind::RegolithCrawler => {
+            add(
+                ItemKind::Material(StrategicResourceKind::Helium3),
+                1 + extra / 2,
+            );
+            if rare < 6 {
+                add(ItemKind::Artifact(ArtifactKind::LunarRelic), 1);
+            }
+        }
+        EnemyKind::CrystalMite => {
+            if rare < 40 {
+                add(ItemKind::Material(StrategicResourceKind::CrystalLens), 1);
+            } else {
+                add(ItemKind::Material(StrategicResourceKind::Helium3), 1);
+            }
+        }
+        EnemyKind::DerelictAutomaton => {
+            add(ItemKind::Material(StrategicResourceKind::AlienAlloy), 1);
+            add(
+                ItemKind::Material(StrategicResourceKind::MachineRelic),
+                1 + extra / 2,
+            );
+        }
+        EnemyKind::Warden => {
+            add(ItemKind::Artifact(ArtifactKind::WardenEye), 1);
+            add(
+                ItemKind::Material(StrategicResourceKind::AlienAlloy),
+                6 + extra,
+            );
+        }
     }
     drops
 }
+
+/// The kinds that roam the Moon with relative spawn weights: crawlers everywhere, mites
+/// thickest in the crystal forests, automatons around abandoned habitats.
+#[must_use]
+pub const fn lunar_roster(in_forest: bool, near_habitat: bool) -> &'static [(EnemyKind, u32)] {
+    use EnemyKind::{CrystalMite, DerelictAutomaton, RegolithCrawler};
+    match (in_forest, near_habitat) {
+        (_, true) => &[
+            (DerelictAutomaton, 5),
+            (RegolithCrawler, 2),
+            (CrystalMite, 1),
+        ],
+        (true, false) => &[(CrystalMite, 5), (RegolithCrawler, 2)],
+        (false, false) => &[
+            (RegolithCrawler, 5),
+            (CrystalMite, 2),
+            (DerelictAutomaton, 1),
+        ],
+    }
+}
+
+/// The depth tier Moon enemies scale at (between the deep strata and the mantle).
+pub const LUNAR_TIER: u8 = 7;
 
 /// Tiles to world pixels (centre of the tile).
 #[must_use]

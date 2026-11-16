@@ -208,8 +208,12 @@ mod tests {
                 | Patch::Thunderclap
                 | Patch::LeverClunk
                 | Patch::GateRumble
+                | Patch::FacilityGate
                 | Patch::GravityThrow
-                | Patch::TetherHook => (40.0, 3_000.0),
+                | Patch::TetherHook
+                // The Moon's big low moments: stone grinding, a machine waking, the core.
+                | Patch::WardenWake
+                | Patch::CoreHum => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

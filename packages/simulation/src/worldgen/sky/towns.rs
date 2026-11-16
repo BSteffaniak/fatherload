@@ -177,6 +177,7 @@ pub(super) fn town_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
             shape: rng.next_u64(),
             content: None,
             plan: None,
+            lunar: false,
         };
         local += 1;
         land

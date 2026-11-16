@@ -51,6 +51,15 @@ pub enum WeaponKind {
     TetherHarpoon,
     /// Shells with a proximity fuse that burst into shrapnel: the answer to airships.
     FlakCannon,
+    /// The plasma cutter's beam refocused through alien alloy (WP-MOON, sold at the lunar
+    /// colony): longer, hotter, and it cuts rock quickly.
+    LunarCutter,
+    /// Shells lobbed on a high arc that burst on impact; they sail far in low gravity (sold at
+    /// the lunar colony).
+    LowGMortar,
+    /// Alien tech from the Warden's facility: a lance of void light that passes through foes
+    /// and rock alike (dropped by the Warden).
+    VoidLance,
 }
 
 /// How a weapon delivers its damage.
@@ -180,7 +189,7 @@ pub const MUZZLE_REACH: f32 = 11.0;
 
 impl WeaponKind {
     /// Every weapon, in shop order.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 13] = [
         Self::RivetGun,
         Self::Harpoon,
         Self::ScatterBlaster,
@@ -191,6 +200,9 @@ impl WeaponKind {
         Self::ArcRifle,
         Self::FlakCannon,
         Self::GravityGun,
+        Self::LunarCutter,
+        Self::LowGMortar,
+        Self::VoidLance,
     ];
 
     /// Whether this is an Act II weapon (sold only on worlds with sky content, paid partly in
@@ -231,6 +243,9 @@ impl WeaponKind {
             Self::GravityGun => "Gravity Gun",
             Self::TetherHarpoon => "Tether Harpoon",
             Self::FlakCannon => "Flak Cannon",
+            Self::LunarCutter => "Lunar Cutter",
+            Self::LowGMortar => "Low-G Mortar",
+            Self::VoidLance => "Void Lance",
         }
     }
 
@@ -250,6 +265,9 @@ impl WeaponKind {
             }
             Self::TetherHarpoon => "Hook rock and swing from the line while you hold the trigger.",
             Self::FlakCannon => "Proximity shells that burst into shrapnel. Downs airships.",
+            Self::LunarCutter => "A long, hot alloy-focused beam that cuts rock quickly.",
+            Self::LowGMortar => "Lobs shells on a high arc; they sail far in low gravity.",
+            Self::VoidLance => "Alien tech: a lance of void light through foes and rock.",
         }
     }
 
@@ -267,6 +285,9 @@ impl WeaponKind {
             Self::GravityGun => 8,
             Self::TetherHarpoon => 9,
             Self::FlakCannon => 10,
+            Self::LunarCutter => 11,
+            Self::LowGMortar => 12,
+            Self::VoidLance => 13,
         }))
     }
 
@@ -283,6 +304,9 @@ impl WeaponKind {
             8 => Self::GravityGun,
             9 => Self::TetherHarpoon,
             10 => Self::FlakCannon,
+            11 => Self::LunarCutter,
+            12 => Self::LowGMortar,
+            13 => Self::VoidLance,
             _ => return None,
         })
     }
@@ -301,6 +325,11 @@ impl WeaponKind {
             Self::ArcRifle => 9_000,
             Self::FlakCannon => 10_000,
             Self::GravityGun => 11_000,
+            // Moon weapons: the colony's prices (credits; alloy and helium-3 on top, see
+            // `crate::moon::weapon_price`). The lance is never sold.
+            Self::LunarCutter => 12_000,
+            Self::LowGMortar => 9_000,
+            Self::VoidLance => 20_000,
         }
     }
 
@@ -318,6 +347,9 @@ impl WeaponKind {
             Self::ScatterBlaster | Self::PlasmaCutter => 1,
             Self::RocketLauncher | Self::TetherHarpoon => 2,
             Self::Railgun | Self::ArcRifle | Self::FlakCannon | Self::GravityGun => 3,
+            // Never stocked by the shack: the lunar colony sells the cutter and the mortar,
+            // the Warden drops the lance.
+            Self::LunarCutter | Self::LowGMortar | Self::VoidLance => u8::MAX,
         }
     }
 
@@ -325,7 +357,22 @@ impl WeaponKind {
     /// the railgun repeats while held; those want a fresh pull).
     #[must_use]
     pub const fn automatic(self) -> bool {
-        !matches!(self, Self::Harpoon | Self::Railgun | Self::TetherHarpoon)
+        !matches!(
+            self,
+            Self::Harpoon | Self::Railgun | Self::TetherHarpoon | Self::VoidLance
+        )
+    }
+
+    /// Whether it fires a continuous beam (the plasma cutter and its lunar refocus).
+    #[must_use]
+    pub const fn is_beam(self) -> bool {
+        matches!(self, Self::PlasmaCutter | Self::LunarCutter)
+    }
+
+    /// Whether it is a Moon weapon (WP-MOON: never sold by the shack).
+    #[must_use]
+    pub const fn is_lunar(self) -> bool {
+        matches!(self, Self::LunarCutter | Self::LowGMortar | Self::VoidLance)
     }
 
     /// The stats at upgrade tier `mk` (0: Mk I).
@@ -487,6 +534,44 @@ impl WeaponKind {
                 gravity: 60.0,
                 knockback: 90.0,
                 burst_radius: TILE_SIZE * 2.2,
+                ..plain
+            },
+            Self::LunarCutter => WeaponStats {
+                delivery: Delivery::Hitscan,
+                damage: 9.0,
+                cooldown_millis: 100,
+                energy: 3.0,
+                speed: 0.0,
+                range: TILE_SIZE * 10.0,
+                terrain_bite: 3,
+                armor_piercing: 0.7,
+                ..plain
+            },
+            Self::LowGMortar => WeaponStats {
+                damage: 26.0,
+                cooldown_millis: 1_100,
+                energy: 22.0,
+                speed: 420.0,
+                range: TILE_SIZE * 40.0,
+                // Heavy shells: a steep arc on the ground, a long lob on the Moon (projectile
+                // gravity follows the gravity fields).
+                gravity: 520.0,
+                blast: Some(ExplosiveKind::Rocket),
+                knockback: 90.0,
+                ..plain
+            },
+            Self::VoidLance => WeaponStats {
+                delivery: Delivery::Hitscan,
+                damage: 140.0,
+                cooldown_millis: 1_300,
+                energy: 45.0,
+                speed: 0.0,
+                range: TILE_SIZE * 24.0,
+                pierce: 8,
+                tunnel: 6,
+                terrain_bite: u8::MAX,
+                armor_piercing: 1.0,
+                knockback: 220.0,
                 ..plain
             },
         }

@@ -16,9 +16,10 @@
 //! harness and the dead-air gate, `milestone::crosses_dead_air`, stay honest): thrusters work
 //! sideways, the hull keeps out cold.
 //!
-//! **Seams.** Pressurized hull tiers 2-3 ([`PRESSURIZED_HULL_MAX_LEVEL`]) are reserved for the
-//! continents and the Moon (T21/T22): read `HazardGear::pressurized_hull` for "sealed for
-//! orbit". Aether thrusters' effect is [`aether_drive_factor`] and [`aether_wind_grip`].
+//! **The hull ladder.** The pressurized hull is one line shared with the shop: a cloud farm
+//! crafts tier 1 (the cold seal) from cloud silver; tiers 2 (the vacuum seal,
+//! [`crate::moon::VACUUM_SEAL_TIER`]) and 3 (void-rated plating) are the shop's Moon gear.
+//! Aether thrusters' effect is [`aether_drive_factor`] and [`aether_wind_grip`].
 
 use serde::{Deserialize, Serialize};
 
@@ -31,9 +32,9 @@ use crate::{
 
 /// Top aether thruster tier.
 pub const AETHER_THRUSTERS_MAX_LEVEL: u8 = 3;
-/// Top pressurized hull tier (tiers above [`PRESSURIZED_HULL_SKY_LEVEL`] are a seam for the
-/// sky continents and the Moon).
-pub const PRESSURIZED_HULL_MAX_LEVEL: u8 = 3;
+/// Top pressurized hull tier (tiers above [`PRESSURIZED_HULL_SKY_LEVEL`] are the shop's Moon
+/// gear, [`crate::moon::PRESSURIZED_HULL_MAX_LEVEL`]).
+pub const PRESSURIZED_HULL_MAX_LEVEL: u8 = crate::moon::PRESSURIZED_HULL_MAX_LEVEL;
 /// The pressurized hull tiers sky towns can seal.
 pub const PRESSURIZED_HULL_SKY_LEVEL: u8 = 1;
 /// Cold levels each pressurized hull tier keeps out (on top of the de-icer).

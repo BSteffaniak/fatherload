@@ -553,6 +553,7 @@ fn glyph(kind: TileKind) -> char {
         TileKind::Built(_) => 'B',
         TileKind::Surface(_) => 's',
         TileKind::Sky(_) => 'k',
+        TileKind::Lunar(_) => 'l',
     }
 }
 

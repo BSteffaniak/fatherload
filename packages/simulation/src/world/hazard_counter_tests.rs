@@ -96,7 +96,13 @@ fn hull(world: &WorldState) -> f32 {
 fn every_upgrade_line_has_many_tiers_with_rising_prices() {
     let mut player = Player::new(0.0, 0.0);
     for kind in UpgradeKind::ALL {
-        if matches!(kind, UpgradeKind::BombPack | UpgradeKind::DrillMount) {
+        if matches!(
+            kind,
+            UpgradeKind::BombPack
+                | UpgradeKind::DrillMount
+                | UpgradeKind::PressurizedHull
+                | UpgradeKind::LifeSupport
+        ) {
             continue;
         }
         let tiers = kind.max_level() - kind.starting_level();

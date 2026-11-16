@@ -333,6 +333,10 @@ impl WorldState {
     /// add villages and claimed bases (WP-VILLAGE, WP-BASE).
     #[must_use]
     pub fn enemy_safe_zone(&self, tile: TilePosition) -> bool {
+        // The Moon (WP-MOON): hostile everywhere but the colony.
+        if let Some(safe) = self.lunar_safe_zone(tile) {
+            return safe;
+        }
         let surface = self.terrain.surface_row(tile.x);
         if tile.y < surface + SAFE_SURFACE_ROWS {
             // The hostile sky of a V9 world (archipelago and up, T21) is safe only in sky
@@ -382,7 +386,7 @@ impl WorldState {
         extra.mul_add(0.3, 1.0).min(2.2)
     }
 
-    fn spawn_enemy_with(
+    pub(super) fn spawn_enemy_with(
         &mut self,
         kind: EnemyKind,
         (x, y): (f32, f32),
@@ -466,6 +470,7 @@ impl WorldState {
             self.despawn_far_enemies();
             self.spawn_roaming_enemies(next_tick);
             self.spawn_sky_enemies(next_tick);
+            self.spawn_lunar_enemies(next_tick);
         }
         if rate.schedule_fires(next_tick, LAIR_CHECK_MILLIS, 500) {
             self.fill_lairs();
@@ -474,7 +479,14 @@ impl WorldState {
     }
 
     fn despawn_far_enemies(&mut self) {
-        let rigs: Vec<(f32, f32)> = self.players.values().map(|p| (p.x, p.y)).collect();
+        // Rigs and pilots on foot both keep enemies around (a pilot deep in the Moon's facility
+        // keeps its Warden).
+        let rigs: Vec<(f32, f32)> = self
+            .players
+            .values()
+            .map(|p| (p.x, p.y))
+            .chain(self.pilots().map(|(_, body, pilot)| pilot.middle(body)))
+            .collect();
         let reach = DESPAWN_TILES * TILE_SIZE;
         let far: std::collections::BTreeSet<EntityId> = self
             .entities
@@ -739,7 +751,7 @@ impl WorldState {
     }
 
     /// The body centre of an enemy of `kind` standing in (or swimming through) `tile`.
-    fn spawn_point(kind: EnemyKind, tile: TilePosition) -> (f32, f32) {
+    pub(super) fn spawn_point(kind: EnemyKind, tile: TilePosition) -> (f32, f32) {
         let spec = kind.stats();
         let (x, y) = tile_centre(tile.x, tile.y);
         match spec.locomotion {
@@ -1958,7 +1970,16 @@ impl WorldState {
                     .clamp(-RIG_KNOCKBACK_MAX, RIG_KNOCKBACK_MAX),
             );
         }
-        let damage = damage * self.enemies.difficulty.damage();
+        let mut damage = damage * self.enemies.difficulty.damage();
+        if kind.is_lunar()
+            && self
+                .players
+                .get(&player_id)
+                .is_some_and(|player| player.hazard_gear.pressurized_hull >= crate::moon::HULL_ARMOUR_TIER)
+        {
+            // A void-rated hull turns a fifth of Moon creatures' bites (WP-MOON).
+            damage *= 0.8;
+        }
         if self.damage_player(player_id, damage) {
             if let Some(player) = self.players.get_mut(&player_id) {
                 player.hull = quantize(player.hull);
@@ -2231,6 +2252,10 @@ impl WorldState {
         if let Some(lair) = state.lair {
             self.enemies.cleared_lairs.insert(lair);
         }
+        if state.kind == EnemyKind::Warden {
+            // WP-MOON: the core seal opens.
+            self.warden_fell(state.last_attacker, output);
+        }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
         output.push_event(GameplayEventKind::EnemyKilled {
@@ -2357,15 +2382,17 @@ fn enemy_event(id: EntityId, kind: EnemyKind, body: &Body, shape: EventShape) ->
 /// guard built places.
 const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) -> bool {
     match kind {
-        EnemyKind::CaveBat => tags.swarmers,
-        EnemyKind::Burrower => tags.burrowers,
+        EnemyKind::CaveBat | EnemyKind::CrystalMite => tags.swarmers,
+        EnemyKind::Burrower | EnemyKind::RegolithCrawler => tags.burrowers,
         EnemyKind::AcidSpitter | EnemyKind::RockMimic | EnemyKind::BroodNest => tags.nests,
         EnemyKind::Shellback => tags.aquatic || tags.burrowers,
         EnemyKind::MagmaWisp => tags.heat,
         EnemyKind::MiningDrone
         | EnemyKind::SentryTurret
         | EnemyKind::RogueExcavator
-        | EnemyKind::AncientGuardian => tags.machines,
+        | EnemyKind::AncientGuardian
+        | EnemyKind::DerelictAutomaton
+        | EnemyKind::Warden => tags.machines,
         EnemyKind::BroodLord => tags.elite_lair,
         // Sky families never live in caves.
         EnemyKind::SkyRay

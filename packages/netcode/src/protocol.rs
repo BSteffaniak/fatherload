@@ -76,7 +76,15 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `SkyTile` codes (aether core, sky ores, temple stone and fittings, harpy nests and eggs),
 ///   new `ArtifactKind`s and `StrategicResourceKind`s in tiles and loadouts, the sky
 ///   `EnemyKind`s and `ShotKind::Cannonball` in entity records, the Act II `WeaponKind`s, the
-///   tether line in `RigWeaponState` (per-tick weapon state) and the events 210-219.
+///   tether line in `RigWeaponState` (per-tick weapon state) and the events 210-219;
+/// * T22 the Moon: `GeneratorVersion::V9` worlds in the session settings, `TileKind::Lunar`
+///   tiles (codes 0x700) in tile ops and chunk diffs, the Moon resources
+///   (`StrategicResourceKind::{Helium3, MoonIce, AlienAlloy}`) and relics
+///   (`ArtifactKind::{LunarRelic, WardenEye}`), the pressurized hull and life support tiers in
+///   `HazardGear` and `LunarProgress` in the loadout, `PlayerCommand::Moon`, the Moon weapons
+///   (`WeaponKind::{LunarCutter, LowGMortar, VoidLance}`), the Moon enemies
+///   (`EnemyKind::{RegolithCrawler, CrystalMite, DerelictAutomaton, Warden}`),
+///   `ModuleKind::LunarUplink` / `ModuleService::Beam` and the Moon events 220-229.
 pub const PROTOCOL_VERSION: u8 = 12;
 
 /// One client input frame: the controls and actions for exactly one tick.

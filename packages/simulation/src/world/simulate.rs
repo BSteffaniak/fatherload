@@ -103,6 +103,8 @@ impl WorldState {
                 if let Some(before) = position_before {
                     // Sky bands, updrafts and icing (F6, V8 skies).
                     self.push_altitude_events(player_id, before, &mut output);
+                    // Vacuum warnings and the first Moon landing (WP-MOON).
+                    self.push_moon_events(player_id, before, &mut output);
                 }
                 self.update_weapon(player_id, controls.weapon, tick.next(), &mut output);
                 if let Some(fuel_before) = fuel_before
@@ -123,6 +125,9 @@ impl WorldState {
                     self.pilot_command(player_id, &action.command, &mut output)
                 {
                     outcome
+                } else if let crate::PlayerCommand::Moon(command) = action.command {
+                    // The Moon (WP-MOON, `world/moon.rs`): it reports its own events.
+                    self.apply_moon_command(player_id, command, &mut output)
                 } else if let Some((outcome, events)) =
                     self.quest_command(player_id, &action.command)
                 {
@@ -154,6 +159,10 @@ impl WorldState {
                     }
                     // The shop's purchase moment (WP-FEEL part 2).
                     if let Some(event) = self.upgrade_installed_event(player_id, &action.command) {
+                        output.push_event(event);
+                    }
+                    // A lunar uplink's beam (WP-MOON).
+                    if let Some(event) = self.uplink_event(player_id, &action.command) {
                         output.push_event(event);
                     }
                 }
@@ -299,7 +308,9 @@ impl WorldState {
             } else {
                 0.0
             };
-            let total_damage = depth_damage + lava_damage + cold_damage;
+            // Vacuum (WP-MOON): no pressurized hull or no life support in orbit and on the Moon.
+            let vacuum_damage = self.vacuum_damage(player_id, delta_seconds);
+            let total_damage = depth_damage + lava_damage + cold_damage + vacuum_damage;
             if self.damage_player(player_id, total_damage) {
                 if let Some(player) = self.players.get_mut(&player_id) {
                     player.hull = quantize_simulation_scalar(player.hull);
@@ -425,6 +436,8 @@ impl WorldState {
         }
         self.trigger_stalactites(&mut output);
         self.advance_enemy_director(next_tick);
+        // The Warden's arena and the core (WP-MOON).
+        self.advance_moon(&mut output);
         self.advance_entities(EntityPhase::Late, next_tick, &mut output);
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);

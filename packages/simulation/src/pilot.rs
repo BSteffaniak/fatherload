@@ -497,7 +497,12 @@ pub trait PilotTerrain {
 /// solid to rigs, drops, charges and enemies but pilots crawl through them.
 #[must_use]
 pub const fn pilot_passable(kind: TileKind) -> bool {
-    matches!(kind, TileKind::Built(BuiltTile::VentGrate))
+    match kind {
+        TileKind::Built(BuiltTile::VentGrate) => true,
+        // The alien facility's energy veils (WP-MOON).
+        TileKind::Lunar(tile) => tile.pilot_passable(),
+        _ => false,
+    }
 }
 
 /// Whether the hand pick can break a tile of `kind`, and how long it takes (soft dirt and clay

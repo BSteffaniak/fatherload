@@ -271,7 +271,7 @@ pub const ARCHIPELAGO_CELL: (i32, i32) = (320, 176);
 /// Sky continent cells (columns; one cell row spans the band).
 pub const CONTINENT_CELL_COLUMNS: i32 = 1_400;
 /// Hills on the Moon's surface rise at most this many rows above its centre surface row.
-const MOON_HILL_ROWS: i32 = 16;
+pub const MOON_HILL_ROWS: i32 = 16;
 
 const SALT_LOW: u64 = 0x5C1E_0001;
 const SALT_ARCHIPELAGO: u64 = 0x5C1E_0002;
@@ -340,6 +340,8 @@ pub struct SkyLand {
     content: Option<IsleContent>,
     /// The content of a V9 continent (`None` for islands, the Moon and V8 continents).
     plan: Option<continent::ContinentPlan>,
+    /// The filled Moon of a V9 world ([`super::moon`]); `false` for every other land.
+    lunar: bool,
 }
 
 impl SkyLand {
@@ -349,7 +351,8 @@ impl SkyLand {
         self.plan
     }
 
-    /// The land's shape seed (presentation varies props with it).
+    /// The land's shape seed (presentation varies props with it; the filled Moon rolls its
+    /// layout from it).
     #[must_use]
     pub const fn shape_seed(&self) -> u64 {
         self.shape
@@ -366,7 +369,13 @@ impl SkyLand {
                     18
                 }
             }
-            SkyLandKind::Moon => MOON_HILL_ROWS + 2,
+            SkyLandKind::Moon => {
+                if self.lunar {
+                    MOON_HILL_ROWS + 2 + super::moon::LUNAR_STRUCTURE_ROWS
+                } else {
+                    MOON_HILL_ROWS + 2
+                }
+            }
             SkyLandKind::TownIsle => 2,
         };
         // Island props (nests, ruin pillars) stand on the turf.
@@ -375,6 +384,31 @@ impl SkyLand {
         } else {
             base
         }
+    }
+
+    /// Whether this is the filled Moon of a V9 world ([`super::moon`]).
+    #[must_use]
+    pub const fn is_lunar(&self) -> bool {
+        self.lunar
+    }
+
+    /// The Moon's hills at column `x` (rows above `top_row`, no craters or limb).
+    #[must_use]
+    pub const fn moon_hills(&self, x: i32) -> i32 {
+        fractal_noise(self.shape, SALT_SHAPE, x, 0, 120, 1, 3) * MOON_HILL_ROWS / NOISE_MAX
+    }
+
+    /// The V8 shape's top row at column `x` (craters and limb included; the filled Moon
+    /// flattens its sites on top of it).
+    #[must_use]
+    pub fn raw_top(&self, x: i32) -> i32 {
+        self.top(x, x - self.center_x)
+    }
+
+    /// The V8 shape's underside row at column `x` for a top at `top`.
+    #[must_use]
+    pub fn raw_bottom(&self, x: i32, top: i32) -> i32 {
+        self.bottom(x, x - self.center_x, top)
     }
 
     /// Rows anything may hang below `top_row + depth`.
@@ -419,6 +453,9 @@ impl SkyLand {
         let dx = x - self.center_x;
         if dx.abs() > self.half_width {
             return None;
+        }
+        if self.lunar {
+            return super::moon::layout_of(self).surface_row(x);
         }
         Some(self.top(x, dx))
     }
@@ -468,8 +505,7 @@ impl SkyLand {
                     .map_or(base, |plan| plan.surface(x, base, self.top_row))
             }
             SkyLandKind::Moon => {
-                let hills = fractal_noise(self.shape, SALT_SHAPE, x, 0, 120, 1, 3) * MOON_HILL_ROWS
-                    / NOISE_MAX;
+                let hills = self.moon_hills(x);
                 // The limb rounds off over the last 160 columns.
                 let edge = (self.half_width - dx.abs()).clamp(0, 160);
                 let limb = (160 - edge) * (160 - edge) / 640;
@@ -499,6 +535,12 @@ impl SkyLand {
     /// The tile of this land at `(x, y)`, or `None` where it has none (air around it).
     #[must_use]
     pub fn tile_at(&self, x: i32, y: i32) -> Option<TileKind> {
+        if self.lunar {
+            if y < self.top_row - self.rise() {
+                return None;
+            }
+            return super::moon::layout_of(self).tile_at(x, y);
+        }
         let dx = x - self.center_x;
         if dx.abs() > self.half_width || y < self.top_row - self.rise() {
             return None;
@@ -734,6 +776,7 @@ fn low_isle_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Vec<SkyLand> 
             shape: rng.next_u64(),
             content: None,
             plan: None,
+            lunar: false,
         };
         if lands
             .iter()
@@ -784,6 +827,7 @@ fn archipelago_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Vec<SkyLan
             shape: rng.next_u64(),
             content: None,
             plan: None,
+            lunar: false,
         });
         cursor = center_x + half_width + rng.range(8, 26);
         alt += step * rng.range(6, 20);
@@ -878,6 +922,7 @@ fn continent_cell(settings: &WorldSettings, rx: i32) -> Option<SkyLand> {
             .has_sky_content()
             .then(|| continent::ContinentPlan::new(center_x, half_width, top_row, depth, shape)),
         content: None,
+        lunar: false,
     };
     // Nests go only on summits whose ledge really is the surface (needs the finished shape).
     if let Some(mut plan) = land.plan {
@@ -909,6 +954,7 @@ pub fn moon(settings: &WorldSettings) -> Option<SkyLand> {
         shape: rng.next_u64(),
         content: None,
         plan: None,
+        lunar: settings.generator.has_moon_content(),
     })
 }
 

@@ -430,6 +430,54 @@ pub enum GameplayEventKind {
     JetStreamCaught {
         player_id: PlayerId,
     },
+    // --- The Moon (WP-MOON, `world/moon.rs`) -----------------------------------------------
+    /// A rig met vacuum (orbit or the Moon) without the gear for it: the hull starts to
+    /// buckle ([`crate::moon::VacuumBreach`] says what is missing).
+    MoonVacuumBreach {
+        player_id: PlayerId,
+        breach: crate::moon::VacuumBreach,
+    },
+    /// A rig touched down on the Moon's top side for the first time: the set-piece landing.
+    MoonLanded {
+        player_id: PlayerId,
+    },
+    /// A deal at the lunar research colony's counter.
+    ColonyServiceUsed {
+        player_id: PlayerId,
+        offer: crate::moon::ColonyOffer,
+    },
+    /// A pilot struck a pylon in the alien facility's puzzle hall: `lit` pylons now glow, or
+    /// the wrong one went dark and `reset` every pylon.
+    FacilityPylon {
+        player_id: PlayerId,
+        lit: u8,
+        reset: bool,
+    },
+    /// Every pylon glows: the facility's gate slid open.
+    FacilityGateOpened {
+        player_id: PlayerId,
+    },
+    /// The Warden woke in its arena (enemy entity `entity`).
+    WardenAwakened {
+        entity: u64,
+    },
+    /// A broken conduit (or an EMP) knocked the Warden's shield down.
+    WardenStaggered {
+        entity: u64,
+    },
+    /// The Warden fell: the core seal opens. `by` landed the last hit.
+    WardenDefeated {
+        by: Option<PlayerId>,
+    },
+    /// A pilot reached the strange core at the Moon's heart.
+    MoonCoreReached {
+        player_id: PlayerId,
+    },
+    /// A lunar uplink beamed a rig to (`to_moon`) or from the Moon.
+    UplinkBeamed {
+        player_id: PlayerId,
+        to_moon: bool,
+    },
     // --- The pilot on foot (Part II F5, `world/pilot.rs`) ---------------------------------
     /// The pilot climbed out of its rig at world pixel `(x, y)` (its feet).
     PilotExited {
@@ -649,7 +697,10 @@ pub(crate) const fn gameplay_event_for_applied_command(
 ) -> Option<GameplayEventKind> {
     Some(match command {
         // The pilot's exit / board and pack swaps report their own events (with what moved).
-        PlayerCommand::TogglePilot | PlayerCommand::PilotPack { .. } => return None,
+        // The colony reports its own event too (`ColonyServiceUsed`, with the offer).
+        PlayerCommand::TogglePilot | PlayerCommand::PilotPack { .. } | PlayerCommand::Moon(_) => {
+            return None;
+        }
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {
             GameplayEventKind::RigCustomized { player_id }
         }

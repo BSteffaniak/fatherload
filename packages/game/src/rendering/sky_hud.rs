@@ -221,6 +221,7 @@ mod tests {
     fn the_gauge_reads_the_sky_and_stays_away_on_the_ground() {
         let settings = WorldSettings::new(9);
         assert!(settings.generator.has_sky());
+        assert_eq!(settings.generator, GeneratorVersion::CURRENT);
         assert!(SkyGauge::read(&settings, (100.0, 50.0), 0, 0).is_none());
         #[allow(clippy::cast_precision_loss, reason = "band rows")]
         let y = -((sky::DEAD_AIR_BOTTOM_ROWS + 300) as f32) * TILE_SIZE;

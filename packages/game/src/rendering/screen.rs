@@ -169,6 +169,8 @@ pub(super) fn draw_view_hud(
     }
     // Altitude air, cold and wind while flying a V8 sky (F6).
     super::sky_hud::draw_sky_gauge(draw, snapshot, view, rect, top + 74);
+    // The Moon checklist, the vacuum warning and the landing's sunrise (WP-MOON).
+    super::moon_hud::draw_moon_hud(draw, shell, snapshot, view, rect, top + 124);
     draw_view_prompt(draw, shell, view, rect);
     draw_view_hud_rest(
         draw,
@@ -463,6 +465,13 @@ fn draw_view_prompt(
             format!("Enter {}", surface_zone_label(zone)),
             true,
         )
+    } else if shell.run_mode == RunMode::Playing
+        && shell.modal.is_none()
+        && shell.seat(view.seat_index).modal.is_none()
+        && view.failure.is_none()
+        && view.in_colony
+    {
+        (Prompt::Use, "Trade at Tranquility Station".to_owned(), true)
     } else if shell.run_mode == RunMode::Playing
         && shell.modal.is_none()
         && shell.seat(view.seat_index).modal.is_none()
@@ -921,6 +930,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Bedrock => PLUM,
         TileKind::Built(_) => CREAM,
         TileKind::Sky(tile) => super::terrain::tile_art::sky_color(tile),
+        TileKind::Lunar(tile) => super::terrain::tile_art::lunar_color(tile),
     }
 }
 
@@ -1223,6 +1233,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::PersonGift => counters::draw_person_gift(draw, ui),
         ModalScreen::BaseModule => super::build::draw_base_module(draw, ui),
         ModalScreen::Achievements => super::rewards::draw_achievements(draw, ui),
+        ModalScreen::Colony => super::moon_hud::draw_colony(draw, ui),
     }
 }
 
@@ -1475,6 +1486,16 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 UpgradeKind::AltitudeIntake,
             ),
             (&icons::DE_ICER, "De-Icer", UpgradeKind::DeIcer),
+            (
+                &crate::rendering::pixel_art::sprites::moon::PRESSURIZED_HULL,
+                "Pressurized Hull",
+                UpgradeKind::PressurizedHull,
+            ),
+            (
+                &crate::rendering::pixel_art::sprites::moon::LIFE_SUPPORT,
+                "Life Support",
+                UpgradeKind::LifeSupport,
+            ),
         ]
         .into_iter()
         .map(

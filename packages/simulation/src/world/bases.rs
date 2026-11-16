@@ -269,6 +269,9 @@ impl WorldState {
                 if kind.surface_only() && !claim.surface {
                     return Err(BuildRefusal::SurfaceOnly);
                 }
+                if kind == ModuleKind::LunarUplink && !player.lunar.landed && !self.is_test_mode() {
+                    return Err(BuildRefusal::NeedsMoonLanding);
+                }
                 self.check_footprint(origin, size)?;
             }
             Buildable::Tile(_) => {
@@ -533,6 +536,17 @@ impl WorldState {
                     return Err(BuildRefusal::NothingToDo);
                 }
             }
+            ModuleService::Beam => {
+                if self.is_on_foot(player_id) {
+                    return Err(BuildRefusal::BoardFirst);
+                }
+                if !self.base_module_powered(structure) {
+                    return Err(BuildRefusal::Unpowered);
+                }
+                if self.uplink_destination(player_id, structure).is_none() {
+                    return Err(BuildRefusal::NoUplinkTarget);
+                }
+            }
             ModuleService::Craft(kind) => {
                 let (blocks, credits) = workshop_recipe(kind).ok_or(BuildRefusal::NoSuchService)?;
                 let on_hand: u32 = BlockKind::ALL
@@ -721,6 +735,10 @@ impl WorldState {
                 let _outcome = self.lie_down(player_id, crate::clock::BedSpot::Module(structure));
                 return;
             }
+            ModuleService::Beam => {
+                self.beam_through_uplink(player_id, structure);
+                return;
+            }
             ModuleService::Craft(kind) => {
                 if let Some(player) = self.players.get_mut(&player_id) {
                     for (block, count) in cost.blocks.iter() {
@@ -821,6 +839,7 @@ impl WorldState {
             }
             ModuleService::SellCargo
             | ModuleService::Sleep
+            | ModuleService::Beam
             | ModuleService::SetHome
             | ModuleService::CycleAccess
             | ModuleService::Craft(_) => {}

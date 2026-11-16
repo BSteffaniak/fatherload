@@ -202,6 +202,13 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::PirateHorn => Patch::PirateHorn,
         SoundCue::HarpyScreech => Patch::HarpyScreech,
         SoundCue::CannonBoom => Patch::CannonBoom,
+        SoundCue::MoonLanding => Patch::MoonSting,
+        SoundCue::VacuumAlarm => Patch::VacuumAlarm,
+        SoundCue::PylonChime => Patch::PylonChime,
+        SoundCue::GateOpen => Patch::FacilityGate,
+        SoundCue::WardenWake => Patch::WardenWake,
+        SoundCue::CoreReached => Patch::CoreHum,
+        SoundCue::UplinkWarp => Patch::UplinkWarp,
     }
 }
 
@@ -243,6 +250,10 @@ pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
 
 /// The shot each weapon fires with (exhaustive: a new weapon needs a sound).
 #[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "a Moon weapon shares its family's sound, kept on its own line"
+)]
 pub const fn weapon_cue(weapon: WeaponKind) -> SoundCue {
     match weapon {
         WeaponKind::RivetGun => SoundCue::RivetShot,
@@ -250,11 +261,13 @@ pub const fn weapon_cue(weapon: WeaponKind) -> SoundCue {
         WeaponKind::PlasmaCutter => SoundCue::CutterZap,
         WeaponKind::RocketLauncher => SoundCue::RocketLaunch,
         WeaponKind::Harpoon => SoundCue::HarpoonShot,
-        WeaponKind::Railgun => SoundCue::RailgunShot,
+        WeaponKind::Railgun | WeaponKind::VoidLance => SoundCue::RailgunShot,
         WeaponKind::ArcRifle => SoundCue::ArcZap,
         WeaponKind::GravityGun => SoundCue::GravityHum,
         WeaponKind::TetherHarpoon => SoundCue::TetherShot,
         WeaponKind::FlakCannon => SoundCue::FlakShot,
+        WeaponKind::LunarCutter => SoundCue::CutterZap,
+        WeaponKind::LowGMortar => SoundCue::RocketLaunch,
     }
 }
 
@@ -323,6 +336,7 @@ pub const fn service_cue(service: ModuleService) -> SoundCue {
         ModuleService::CollectRefined => SoundCue::Sell,
         ModuleService::Craft(_) => SoundCue::WorkshopCraft,
         ModuleService::Sleep => SoundCue::BedDown,
+        ModuleService::Beam => SoundCue::UplinkWarp,
     }
 }
 
@@ -330,6 +344,10 @@ pub const fn service_cue(service: ModuleService) -> SoundCue {
 /// fails to compile until someone decides how it sounds. Events answered `None` are covered
 /// elsewhere (noted per arm).
 #[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "each event's sound reads next to its own comment"
+)]
 #[allow(clippy::too_many_lines, reason = "one arm per gameplay event kind")]
 #[allow(clippy::match_same_arms, reason = "one arm per event family")]
 pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
@@ -447,6 +465,24 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::BuoyRefuelled { .. } => Some(SoundCue::BuoyRefuel),
         GameplayEventKind::IsleCollapsing { .. } => Some(SoundCue::IsleCollapse),
         GameplayEventKind::JetStreamCaught { .. } => Some(SoundCue::JetStream),
+        // The Moon (WP-MOON): the vacuum siren, the landing's sunrise sting, the colony's
+        // till, the facility's chimes, rumble and the Warden's waking boom, a fanfare when it
+        // falls, the core's vast hum and the uplink's warp.
+        GameplayEventKind::MoonVacuumBreach { .. } => Some(SoundCue::VacuumAlarm),
+        GameplayEventKind::MoonLanded { .. } => Some(SoundCue::MoonLanding),
+        GameplayEventKind::ColonyServiceUsed {
+            offer: fatherload_simulation::moon::ColonyOffer::SellHaul,
+            ..
+        } => Some(SoundCue::Sell),
+        GameplayEventKind::ColonyServiceUsed { .. } => Some(SoundCue::Upgrade),
+        GameplayEventKind::FacilityPylon { reset: false, .. } => Some(SoundCue::PylonChime),
+        GameplayEventKind::FacilityPylon { reset: true, .. } => Some(SoundCue::UiError),
+        GameplayEventKind::FacilityGateOpened { .. } => Some(SoundCue::GateOpen),
+        GameplayEventKind::WardenAwakened { .. } => Some(SoundCue::WardenWake),
+        GameplayEventKind::WardenStaggered { .. } => Some(SoundCue::GateOpen),
+        GameplayEventKind::WardenDefeated { .. } => Some(SoundCue::Milestone),
+        GameplayEventKind::MoonCoreReached { .. } => Some(SoundCue::CoreReached),
+        GameplayEventKind::UplinkBeamed { .. } => Some(SoundCue::UplinkWarp),
         // The pilot on foot (Part II F5): from the player, like the rig's own sounds.
         GameplayEventKind::PilotExited { .. } => Some(SoundCue::HatchOpen),
         GameplayEventKind::PilotBoarded { .. } => Some(SoundCue::HatchClose),
@@ -652,7 +688,17 @@ mod tests {
             | GameplayEventKind::TempleLeverPulled { .. }
             | GameplayEventKind::TempleGateOpened { .. }
             | GameplayEventKind::RelicChestOpened { .. }
-            | GameplayEventKind::SkyEnemyAction { .. } => {}
+            | GameplayEventKind::SkyEnemyAction { .. }
+            | GameplayEventKind::MoonVacuumBreach { .. }
+            | GameplayEventKind::MoonLanded { .. }
+            | GameplayEventKind::ColonyServiceUsed { .. }
+            | GameplayEventKind::FacilityPylon { .. }
+            | GameplayEventKind::FacilityGateOpened { .. }
+            | GameplayEventKind::WardenAwakened { .. }
+            | GameplayEventKind::WardenStaggered { .. }
+            | GameplayEventKind::WardenDefeated { .. }
+            | GameplayEventKind::MoonCoreReached { .. }
+            | GameplayEventKind::UplinkBeamed { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1270,6 +1316,13 @@ mod tests {
             SoundCue::PirateHorn,
             SoundCue::HarpyScreech,
             SoundCue::CannonBoom,
+            SoundCue::MoonLanding,
+            SoundCue::VacuumAlarm,
+            SoundCue::PylonChime,
+            SoundCue::GateOpen,
+            SoundCue::WardenWake,
+            SoundCue::CoreReached,
+            SoundCue::UplinkWarp,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

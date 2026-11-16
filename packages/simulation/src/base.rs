@@ -436,10 +436,14 @@ pub enum ModuleKind {
     Refinery,
     /// A crafting bench: presses building blocks (plus a little credit) into explosives.
     Workshop,
+    /// A teleport pad (WP-MOON): one on the Moon beams the rig home (to the owner's crew's
+    /// uplinks on the ground, else the town); one anywhere else beams it up to a lunar one.
+    /// Built once its builder has landed on the Moon.
+    LunarUplink,
 }
 
 impl ModuleKind {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Beacon,
         Self::Storage,
         Self::Bed,
@@ -450,6 +454,7 @@ impl ModuleKind {
         Self::Homestead,
         Self::Refinery,
         Self::Workshop,
+        Self::LunarUplink,
     ];
 
     #[must_use]
@@ -465,6 +470,7 @@ impl ModuleKind {
             Self::Homestead => "Homestead",
             Self::Refinery => "Ore Refinery",
             Self::Workshop => "Workshop",
+            Self::LunarUplink => "Lunar Uplink",
         }
     }
 
@@ -482,6 +488,9 @@ impl ModuleKind {
             Self::Homestead => "A house on the surface: home point, pantry, trophy shelf.",
             Self::Refinery => "Leave ore here: refined while powered, worth 40% more.",
             Self::Workshop => "Presses building blocks into bombs and charges.",
+            Self::LunarUplink => {
+                "A teleport pad between the Moon and your uplinks below (or the town)."
+            }
         }
     }
 
@@ -496,6 +505,7 @@ impl ModuleKind {
             Self::FuelStation | Self::RepairBay | Self::Refinery => (3, 3),
             Self::CargoUplink => (2, 3),
             Self::Homestead => (7, 5),
+            Self::LunarUplink => (3, 2),
         }
     }
 
@@ -514,6 +524,7 @@ impl ModuleKind {
             Self::Homestead => 1_500,
             Self::Refinery => 1_800,
             Self::Workshop => 500,
+            Self::LunarUplink => 6_000,
         }
     }
 
@@ -530,6 +541,7 @@ impl ModuleKind {
             Self::CargoUplink => 20,
             Self::Homestead => 30,
             Self::Refinery => 18,
+            Self::LunarUplink => 24,
         }
     }
 
@@ -538,7 +550,7 @@ impl ModuleKind {
     pub const fn power_draw(self) -> u32 {
         match self {
             Self::FuelStation => 1,
-            Self::RepairBay | Self::CargoUplink | Self::Refinery => 2,
+            Self::RepairBay | Self::CargoUplink | Self::Refinery | Self::LunarUplink => 2,
             Self::Beacon
             | Self::Storage
             | Self::Bed
@@ -616,6 +628,7 @@ impl ModuleKind {
                 ModuleService::WithdrawAll,
             ],
             Self::Refinery => &[ModuleService::RefineOre, ModuleService::CollectRefined],
+            Self::LunarUplink => &[ModuleService::Beam],
             Self::Workshop => &[
                 ModuleService::Craft(ExplosiveKind::Bomb),
                 ModuleService::Craft(ExplosiveKind::C4),
@@ -691,6 +704,8 @@ pub enum ModuleService {
     /// Lie down in this bed or homestead for the night (see [`crate::clock`]: once everyone is
     /// in bed the night is skipped).
     Sleep,
+    /// Beam the rig through a lunar uplink ([`ModuleKind::LunarUplink`]).
+    Beam,
 }
 
 impl ModuleService {
@@ -713,6 +728,7 @@ impl ModuleService {
             Self::Craft(ExplosiveKind::Mining) => "Pack a mining charge",
             Self::Craft(_) => "Craft",
             Self::Sleep => "Sleep until dawn",
+            Self::Beam => "Beam the rig",
         }
     }
 }
@@ -747,7 +763,7 @@ impl BuildGroup {
 
 impl Buildable {
     /// The build menu, in order.
-    pub const PALETTE: [Self; 30] = [
+    pub const PALETTE: [Self; 31] = [
         Self::Module(ModuleKind::Beacon),
         Self::Tile(BuiltTile::Wall(BlockKind::Dirt)),
         Self::Tile(BuiltTile::Wall(BlockKind::Clay)),
@@ -778,6 +794,7 @@ impl Buildable {
         Self::Module(ModuleKind::Homestead),
         Self::Module(ModuleKind::Workshop),
         Self::Module(ModuleKind::Refinery),
+        Self::Module(ModuleKind::LunarUplink),
     ];
 
     #[must_use]
@@ -941,6 +958,12 @@ pub enum BuildRefusal {
     InVillage,
     /// Beds are for the night: lying down only works at dusk or night (see [`crate::clock`]).
     NotTired,
+    /// A lunar uplink is built once its builder has landed on the Moon (WP-MOON).
+    NeedsMoonLanding,
+    /// No uplink to beam to: a ground uplink needs one on the Moon.
+    NoUplinkTarget,
+    /// The pilot must board the rig to beam it.
+    BoardFirst,
 }
 
 impl BuildRefusal {
@@ -973,6 +996,11 @@ impl BuildRefusal {
             Self::NeedsBlocks(count) => format!("Needs {count} building blocks in the hopper."),
             Self::InVillage => "Village land: stake your claim outside the village.".to_owned(),
             Self::NotTired => "Too early to sleep: beds are for dusk and night.".to_owned(),
+            Self::NeedsMoonLanding => {
+                "Land on the Moon first: the uplink locks onto it.".to_owned()
+            }
+            Self::NoUplinkTarget => "No uplink to lock onto: build one on the Moon.".to_owned(),
+            Self::BoardFirst => "Board the rig to beam it.".to_owned(),
         }
     }
 }

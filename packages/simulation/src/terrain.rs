@@ -101,6 +101,12 @@ pub enum StrategicResourceKind {
     AetherCrystal,
     /// Lightning-fused glass from the sky continents' mountains (V9 skies; Act II weapons).
     StormGlass,
+    /// Helium-3 from lunar regolith (WP-MOON): the colony pays well, the reactor runs on it.
+    Helium3,
+    /// Moon ice: melts into premium fuel at the lunar colony.
+    MoonIce,
+    /// Alien alloy from veins deep in the Moon: endgame drill and weapon tiers.
+    AlienAlloy,
 }
 
 impl StrategicResourceKind {
@@ -116,6 +122,9 @@ impl StrategicResourceKind {
             Self::RadiantFossil => "Radiant Fossil",
             Self::AetherCrystal => "Aether Crystal",
             Self::StormGlass => "Storm Glass",
+            Self::Helium3 => "Helium-3",
+            Self::MoonIce => "Moon Ice",
+            Self::AlienAlloy => "Alien Alloy",
         }
     }
 }
@@ -193,6 +202,10 @@ pub enum ArtifactKind {
     HarpyEgg,
     /// A relic from a sky temple's vault (V9 skies).
     SkyRelic,
+    /// A relic of the Moon's first visitors, from caches in the lunar rock and habitats.
+    LunarRelic,
+    /// The Warden's eye: the alien facility guardian's core (WP-MOON boss).
+    WardenEye,
 }
 
 impl ArtifactKind {
@@ -214,6 +227,8 @@ impl ArtifactKind {
             Self::CloudPearl => "Cloud Pearl",
             Self::HarpyEgg => "Harpy Egg",
             Self::SkyRelic => "Sky Relic",
+            Self::LunarRelic => "Lunar Relic",
+            Self::WardenEye => "Warden's Eye",
         }
     }
 
@@ -235,7 +250,15 @@ impl ArtifactKind {
             Self::CloudPearl => 880,
             Self::HarpyEgg => 1_200,
             Self::SkyRelic => 2_400,
+            Self::LunarRelic => 1_900,
+            Self::WardenEye => 4_800,
         }
+    }
+
+    /// Whether it comes from the Moon (the lunar colony buys these).
+    #[must_use]
+    pub const fn is_lunar(self) -> bool {
+        matches!(self, Self::LunarRelic | Self::WardenEye)
     }
 }
 
@@ -271,6 +294,9 @@ pub enum TileKind {
     /// A sky-land tile (floating islands, sky continents and the Moon of
     /// [`GeneratorVersion::V8`](worldgen::GeneratorVersion::V8) worlds; see [`crate::sky`]).
     Sky(crate::sky::SkyTile),
+    /// A tile of the filled Moon ([`GeneratorVersion::V9`](worldgen::GeneratorVersion::V9)
+    /// worlds; see [`crate::moon`]).
+    Lunar(crate::moon::LunarTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -376,6 +402,7 @@ impl TileKind {
             Self::Built(tile) => tile.name(),
             Self::Surface(material) => material.name(),
             Self::Sky(tile) => tile.name(),
+            Self::Lunar(tile) => tile.name(),
         }
     }
 }
@@ -461,6 +488,7 @@ impl Tile {
             TileKind::Built(tile) => BUILT_TILE_CODE_BASE | tile.code(),
             TileKind::Surface(material) => 0x500 | material.code(),
             TileKind::Sky(tile) => 0x600 | tile.code(),
+            TileKind::Lunar(tile) => 0x700 | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -1248,6 +1276,24 @@ impl Terrain {
         true
     }
 
+    /// Writes a fresh tile of `kind` at `position` even over an unbreakable tile: the world's
+    /// own rules (the Moon's facility lighting a pylon, opening its gate and seal; never a
+    /// drill, blast or pick). Refused only outside the world.
+    pub(crate) fn set_kind_by_rule(&mut self, position: TilePosition, kind: TileKind) -> bool {
+        let Some(slot) = self.slot(position) else {
+            return false;
+        };
+        self.write_tile(
+            slot,
+            position,
+            Tile {
+                kind,
+                durability: tile_durability(kind),
+            },
+        );
+        true
+    }
+
     /// Takes one point of durability off the tile at `position` (one drill chip).
     pub fn chip(&mut self, position: TilePosition) -> MineResult {
         self.chip_by(position, 1, false)
@@ -1627,10 +1673,12 @@ pub const UNBREAKABLE_HARDNESS: u8 = u8::MAX;
 /// Whether `kind` can never be dug, drilled or blasted away by anything.
 #[must_use]
 pub const fn is_unbreakable(kind: TileKind) -> bool {
-    matches!(
-        kind,
-        TileKind::Bedrock | TileKind::Sky(crate::sky::SkyTile::AetherCore)
-    )
+    match kind {
+        TileKind::Bedrock | TileKind::Sky(crate::sky::SkyTile::AetherCore) => true,
+        // The colony, the alien facility and the Moon's core (WP-MOON).
+        TileKind::Lunar(tile) => tile.indestructible(),
+        _ => false,
+    }
 }
 
 /// Whether no drill can ever dig `kind`, not even a test-mode rig's: the bedrock floor and
@@ -1681,6 +1729,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Cave(tile) => tile.hardness(),
         TileKind::Surface(material) => material.hardness(),
         TileKind::Sky(tile) => tile.hardness(),
+        TileKind::Lunar(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1689,7 +1738,9 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
             | ArtifactKind::MachineSigil
             | ArtifactKind::VoidPearl
             | ArtifactKind::MantleHeart
-            | ArtifactKind::SkyRelic,
+            | ArtifactKind::SkyRelic
+            | ArtifactKind::LunarRelic
+            | ArtifactKind::WardenEye,
         ) => 5,
         TileKind::Artifact(ArtifactKind::HarpyEgg) => 1,
     }
@@ -1716,6 +1767,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Bedrock | TileKind::Built(_) => u8::MAX,
         TileKind::Surface(material) => material.durability(),
         TileKind::Sky(tile) => tile.durability(),
+        TileKind::Lunar(tile) => tile.durability(),
     }
 }
 

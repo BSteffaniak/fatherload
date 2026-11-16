@@ -71,6 +71,9 @@ mod hazard_counter_tests;
 mod hazards;
 mod import;
 mod milestones;
+mod moon;
+#[cfg(test)]
+mod moon_tests;
 mod movement;
 mod no_clip;
 mod people;

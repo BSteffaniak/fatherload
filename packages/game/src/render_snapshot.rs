@@ -466,6 +466,9 @@ pub struct ViewSnapshot<'w> {
     /// The sky isle fuel buoy the rig is parked on (WP-SKY): its island, and whether this
     /// player already drained it (the buoy prompt).
     pub buoy: Option<(fatherload_simulation::worldgen::FeatureId, bool)>,
+    /// The use button opens the lunar colony's counter: the pilot in the colony or the rig on
+    /// its pad (`WorldState::at_colony_counter`, its use prompt; WP-MOON).
+    pub in_colony: bool,
     /// The seat's pilot while it is on foot (Part II F5): HUD gauges and prompts.
     pub pilot: Option<PilotPresentation>,
     /// On foot and close enough to board the rig (the board prompt).
@@ -981,6 +984,7 @@ fn view_snapshot(
         nearby_module: crate::shell::module_at_rig(world, Some(player_id))
             .and_then(|id| world.bases().module(id))
             .map(|module| module.kind),
+        in_colony: world.at_colony_counter(player_id),
         seat_index,
         player_id,
         viewport,

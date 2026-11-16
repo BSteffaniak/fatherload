@@ -7,6 +7,7 @@ pub mod explosives;
 pub mod icons;
 pub mod interior;
 pub mod menu_icons;
+pub mod moon;
 pub mod poi;
 pub mod prompts;
 pub mod rig;
@@ -358,6 +359,23 @@ pub const ALL: &[&SpriteDef] = &[
     &enemies::SKY_PIRATE,
     &enemies::HARPY_NESTER,
     &enemies::SHOT_CANNONBALL,
+    // The Moon (WP-MOON).
+    &moon::REGOLITH_CRAWLER,
+    &moon::CRYSTAL_MITE,
+    &moon::DERELICT_AUTOMATON,
+    &moon::WARDEN,
+    &moon::PRESSURIZED_HULL,
+    &moon::LIFE_SUPPORT,
+    &moon::LUNAR_RELIC,
+    &moon::WARDEN_EYE,
+    &moon::LUNAR_CUTTER,
+    &moon::LOW_G_MORTAR,
+    &moon::VOID_LANCE,
+    &moon::ICON_LUNAR_CUTTER,
+    &moon::ICON_LOW_G_MORTAR,
+    &moon::ICON_VOID_LANCE,
+    &moon::MORTAR_SHELL,
+    &moon::MOON_ICON,
 ];
 
 #[cfg(test)]

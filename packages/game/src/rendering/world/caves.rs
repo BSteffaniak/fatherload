@@ -97,6 +97,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
         TileKind::Lava => 3.2,
         TileKind::MagmaVent => 2.2,
         TileKind::Cave(tile) => tile.light_radius() as f32 * 1.1,
+        // The Moon's blooms, glyphs, veils and core (WP-MOON).
+        TileKind::Lunar(tile) => super::lunar::lunar_light(tile),
         _ => 0.0,
     }
 }

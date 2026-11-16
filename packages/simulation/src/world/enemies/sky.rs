@@ -87,11 +87,17 @@ impl WorldState {
     }
 
     /// Whether `tile` in the hostile sky is safe anyway: inside a sky city's area
-    /// ([`SKY_CITY_SAFE_TILES`] around it), around placed infrastructure, or in a claimed
-    /// base. (Sky towns of the archipelago, T20, add theirs here.)
+    /// ([`SKY_CITY_SAFE_TILES`] around it), in or near a sky town of the archipelago (T20,
+    /// [`super::VILLAGE_SAFE_TILES`] around it, the village rule), around placed
+    /// infrastructure, or in a claimed base.
     #[must_use]
     pub fn sky_safe_zone(&self, tile: TilePosition) -> bool {
         continent::sky_city_at(self.terrain.settings(), tile, SKY_CITY_SAFE_TILES).is_some()
+            || crate::worldgen::streamed::in_village_area(
+                self.terrain.settings(),
+                tile,
+                super::VILLAGE_SAFE_TILES,
+            )
             || self.infrastructure.iter().any(|item| {
                 (item.position.x - tile.x).abs() <= BASE_SAFE_TILES
                     && (item.position.y - tile.y).abs() <= BASE_SAFE_TILES

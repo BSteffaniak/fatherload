@@ -39,10 +39,12 @@ use crate::rendering::pixel_art::{
 
 mod built_art;
 mod cave_art;
+mod lunar_art;
 mod poi_art;
 mod sky_art;
 
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
+pub use lunar_art::lunar_color;
 pub use poi_art::poi_color;
 pub use sky_art::{sky_color, sky_glow};
 
@@ -281,6 +283,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Cave(tile) => return cave_color(tile, band),
         TileKind::Built(tile) => built_art::built_ramp(tile)[2],
         TileKind::Sky(tile) => return sky_art::sky_color(tile),
+        TileKind::Lunar(tile) => return lunar_art::lunar_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -460,7 +463,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Poi(_)
         | TileKind::Cave(_)
         | TileKind::Built(_)
-        | TileKind::Sky(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Sky(_)
+        | TileKind::Lunar(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -536,7 +540,10 @@ fn cell_at(terrain: &Terrain, x: i32, y: i32) -> Cell {
             // ground above and below the classic sky rows; in a biome world a mountain's caves
             // and tunnels dug into it are caves wherever they are).
             let biomes = terrain.settings().generator.has_biomes();
-            if y < terrain.surface_row(x) || (!biomes && y <= SKY_MAX_TILE_Y) {
+            if lunar_art::lunar_enclosed(terrain, x, y) {
+                // Lava tubes and rooms inside the Moon (WP-MOON).
+                Cell::Cave
+            } else if y < terrain.surface_row(x) || (!biomes && y <= SKY_MAX_TILE_Y) {
                 Cell::Sky
             } else {
                 Cell::Cave
@@ -653,6 +660,9 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     let right = cell_at(terrain, x + 1, y);
 
     if kind == TileKind::Air {
+        if lunar_art::paint_lunar_air(&mut canvas, terrain, position) {
+            return canvas;
+        }
         if cell_at(terrain, x, y) == Cell::Sky {
             paint_grass_blades(&mut canvas, terrain, position, down);
         } else if !cave_art::paint_cave_air(&mut canvas, terrain, position, &strata, band, up) {
@@ -681,6 +691,23 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     }
     if let TileKind::Poi(tile) = kind {
         poi_art::paint(
+            &mut canvas,
+            terrain,
+            position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    if let TileKind::Lunar(tile) = kind {
+        lunar_art::paint(
             &mut canvas,
             terrain,
             position,
@@ -1054,6 +1081,7 @@ const fn grows_grass(material: TileKind) -> bool {
     !matches!(
         material,
         TileKind::Surface(_)
+            | TileKind::Lunar(_)
             | TileKind::Sky(
                 fatherload_simulation::sky::SkyTile::Rock(_)
                     | fatherload_simulation::sky::SkyTile::Soil

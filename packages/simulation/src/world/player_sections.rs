@@ -117,6 +117,9 @@ pub struct PlayerInventory {
     /// Milestones earned and personal records.
     #[serde(default)]
     pub milestones: MilestoneLog,
+    /// The lunar record and the colony's one-off upgrades (WP-MOON).
+    #[serde(default)]
+    pub lunar: crate::moon::LunarProgress,
 }
 
 /// Splits a player into its per-tick, public and private parts (exhaustive: every field goes to
@@ -174,6 +177,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         pilot_gear,
         pilot_pack,
         milestones,
+        lunar,
     } = player.clone();
     (
         PlayerRig {
@@ -227,12 +231,17 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             pilot_gear,
             pilot_pack,
             milestones,
+            lunar,
         },
     )
 }
 
 /// Reassembles a player from its three parts.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one exhaustive destructure, field by field"
+)]
 pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) -> Player {
     let PlayerRig {
         x,
@@ -285,6 +294,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         pilot_gear,
         pilot_pack,
         milestones,
+        lunar,
     } = inventory;
     Player {
         x,
@@ -333,6 +343,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         pilot_gear,
         pilot_pack,
         milestones,
+        lunar,
     }
 }
 

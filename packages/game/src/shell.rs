@@ -26,6 +26,7 @@ use crate::{
 
 pub mod arms;
 mod build;
+mod colony;
 mod crew;
 mod garage;
 pub mod hopper;
@@ -130,6 +131,8 @@ pub enum ModalScreen {
     /// The seat's progression screen: milestones, trophies, unlocks and records (WP-FEEL part
     /// 2; flips with the mine map, the collection log and the quest log).
     Achievements,
+    /// The lunar research colony's counter (WP-MOON, `shell/colony.rs`).
+    Colony,
 }
 
 impl ModalScreen {
@@ -550,6 +553,21 @@ pub enum SoundCue {
     HarpyScreech,
     /// An airship turret's cannon. (T21)
     CannonBoom,
+    // --- The Moon (WP-MOON) ---
+    /// The first landing on the Moon: the sunrise sting.
+    MoonLanding,
+    /// Vacuum without the gear for it.
+    VacuumAlarm,
+    /// A facility pylon lighting.
+    PylonChime,
+    /// The facility's gate grinding open.
+    GateOpen,
+    /// The Warden waking.
+    WardenWake,
+    /// A pilot reaching the core.
+    CoreReached,
+    /// A lunar uplink beaming a rig.
+    UplinkWarp,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -948,6 +966,9 @@ pub struct SeatUi {
     pub pickup_armed: f32,
     /// Upgrade reward moments: the purchase moment, milestone banners and NEW unlocks.
     pub rewards: rewards::SeatRewards,
+    /// When (shell tick) this seat's rig first landed on the Moon: the sunrise set piece
+    /// plays for a few seconds from here (WP-MOON).
+    pub moon_landing: Option<u64>,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -989,6 +1010,7 @@ impl SeatUi {
             interior_stride: 0.0,
             pickup_armed: 0.0,
             rewards: rewards::SeatRewards::new(),
+            moon_landing: None,
         }
     }
 
@@ -1125,6 +1147,7 @@ impl SeatUi {
             } else if !self.try_talk_outdoors(ctx, cues, requests)
                 && !self.try_enter_village(ctx, cues)
                 && !self.try_buoy(ctx, cues, requests)
+                && !self.open_colony(ctx, cues)
                 && !self.open_base_module(ctx, cues)
                 && !self.try_exit(ctx, requests)
             {
@@ -1268,6 +1291,10 @@ impl SeatUi {
         }
         if modal == ModalScreen::BaseModule {
             self.handle_base_module(input, ctx, cues, requests);
+            return true;
+        }
+        if modal == ModalScreen::Colony {
+            self.handle_colony(input, ctx, cues, requests);
             return true;
         }
         if input.backs_out() {
@@ -1470,7 +1497,8 @@ impl SeatUi {
             | ModalScreen::VillageTalk
             | ModalScreen::PersonTrade
             | ModalScreen::PersonGift
-            | ModalScreen::BaseModule => None,
+            | ModalScreen::BaseModule
+            | ModalScreen::Colony => None,
             ModalScreen::Inventory => {
                 // The hopper rows (WP-DROPS): toggle collecting, dump blocks.
                 if let Some(player) = ctx.player()

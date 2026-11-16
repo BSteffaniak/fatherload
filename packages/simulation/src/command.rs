@@ -83,6 +83,9 @@ pub enum PlayerCommand {
     /// Talk to, trade with or give a gift to a person (WP-PEOPLE, see
     /// [`crate::people::PeopleCommand`]).
     People(crate::people::PeopleCommand),
+    /// A Moon action (WP-MOON): a deal at the lunar colony's counter, validated inside the
+    /// tick (the rig or the pilot must be in the colony).
+    Moon(crate::moon::MoonCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

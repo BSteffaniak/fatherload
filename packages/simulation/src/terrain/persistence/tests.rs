@@ -122,7 +122,9 @@ const fn assert_payload_kinds_listed(mineral: MineralKind, artifact: ArtifactKin
         | ArtifactKind::WindAstrolabe
         | ArtifactKind::CloudPearl
         | ArtifactKind::HarpyEgg
-        | ArtifactKind::SkyRelic => {}
+        | ArtifactKind::SkyRelic
+        | ArtifactKind::LunarRelic
+        | ArtifactKind::WardenEye => {}
     }
 }
 
@@ -195,6 +197,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
     kinds.extend(crate::cave::CaveTile::ALL.map(TileKind::Cave));
     kinds.extend(SurfaceMaterial::ALL.map(TileKind::Surface));
     kinds.extend(crate::sky::SkyTile::ALL.map(TileKind::Sky));
+    kinds.extend(crate::moon::LunarTile::ALL.map(TileKind::Lunar));
     for material in SurfaceMaterial::ALL {
         assert_eq!(
             SurfaceMaterial::ALL[usize::try_from(material.code()).unwrap_or(99)],
@@ -210,12 +213,13 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
     }
     for code in [
         12 << 8,
-        0x10F << 8,
+        0x111 << 8,
         0x20D << 8,
         0x3FF << 8,
         0x40F << 8,
         0x506 << 8,
         0x6FF << 8,
+        0x7EE << 8,
         u64::MAX,
     ] {
         assert_eq!(Tile::from_code(code), None, "code {code:#x}");

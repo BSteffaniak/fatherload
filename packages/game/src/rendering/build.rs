@@ -368,6 +368,7 @@ const fn service_icon(service: ModuleService) -> &'static super::pixel_art::spri
         ModuleService::RefineOre => &icons::HEAT,
         ModuleService::Craft(_) => &icons::BOMB,
         ModuleService::Sleep => &icons::MOON,
+        ModuleService::Beam => &super::pixel_art::sprites::moon::MOON_ICON,
     }
 }
 
@@ -392,6 +393,9 @@ const fn service_about(service: ModuleService) -> &'static str {
         }
         ModuleService::Sleep => {
             "Sleep through the night. In a crew, everyone has to turn in (or the host allows it)."
+        }
+        ModuleService::Beam => {
+            "Beam the rig between the Moon and your uplinks below (or the town). Needs power."
         }
     }
 }

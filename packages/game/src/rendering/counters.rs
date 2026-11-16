@@ -300,6 +300,10 @@ pub(super) const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
         UpgradeKind::BoulderDeflector => &icons::BOULDER_DEFLECTOR,
         UpgradeKind::AltitudeIntake => &icons::ALTITUDE_INTAKE,
         UpgradeKind::DeIcer => &icons::DE_ICER,
+        UpgradeKind::PressurizedHull => {
+            &crate::rendering::pixel_art::sprites::moon::PRESSURIZED_HULL
+        }
+        UpgradeKind::LifeSupport => &crate::rendering::pixel_art::sprites::moon::LIFE_SUPPORT,
     }
 }
 

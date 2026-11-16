@@ -87,6 +87,7 @@ pub fn draw_mounted_weapon(
 }
 
 /// Projectiles in flight, interpolated between ticks, with their trails.
+#[allow(clippy::too_many_lines, reason = "one trail per weapon, in one pass")]
 pub fn draw_projectiles(
     draw: &mut impl RaylibDraw,
     projectiles: &[ProjectileView],
@@ -180,11 +181,28 @@ pub fn draw_projectiles(
                     );
                 }
             }
+            WeaponKind::LowGMortar => {
+                // A faint orange spark trail along the lob.
+                for puff in 1..=4_u8 {
+                    let back = f32::from(puff) * 3.0 * ART;
+                    draw.draw_rectangle_rec(
+                        Rectangle::new(
+                            snap(dx.mul_add(-back, x)),
+                            snap(dy.mul_add(-back, y)),
+                            ART,
+                            ART,
+                        ),
+                        with_alpha(ORANGE, 200 - puff * 40),
+                    );
+                }
+            }
             WeaponKind::PlasmaCutter
             | WeaponKind::Railgun
             | WeaponKind::ArcRifle
             | WeaponKind::GravityGun
-            | WeaponKind::TetherHarpoon => {}
+            | WeaponKind::TetherHarpoon
+            | WeaponKind::LunarCutter
+            | WeaponKind::VoidLance => {}
         }
         if let Some(sprite) = art::projectile(projectile.weapon) {
             draw_sprite_rotated(
@@ -416,7 +434,7 @@ pub fn draw_shots(draw: &mut impl RaylibDraw, shots: &[ShotFlash]) {
             (shot.end_x - shot.x) / length,
             (shot.end_y - shot.y) / length,
         );
-        if shot.weapon == WeaponKind::Railgun {
+        if matches!(shot.weapon, WeaponKind::Railgun | WeaponKind::VoidLance) {
             let from = Vector2::new(shot.x, shot.y);
             let to = Vector2::new(shot.end_x, shot.end_y);
             draw.draw_line_ex(
@@ -440,7 +458,7 @@ pub fn draw_shots(draw: &mut impl RaylibDraw, shots: &[ShotFlash]) {
                 );
             }
         }
-        if t > 0.6 && shot.weapon != WeaponKind::Railgun {
+        if t > 0.6 && !matches!(shot.weapon, WeaponKind::Railgun | WeaponKind::VoidLance) {
             continue;
         }
         let (core, glow, size) = match shot.weapon {
@@ -454,6 +472,9 @@ pub fn draw_shots(draw: &mut impl RaylibDraw, shots: &[ShotFlash]) {
             WeaponKind::GravityGun => (PINK, VIOLET, 3),
             WeaponKind::TetherHarpoon => (BONE, STEEL_LIGHT, 1),
             WeaponKind::FlakCannon => (GOLD, ORANGE, 4),
+            WeaponKind::LunarCutter => (ICE, MINT, 3),
+            WeaponKind::LowGMortar => (AMBER, ORANGE, 3),
+            WeaponKind::VoidLance => (PINK, VIOLET, 4),
         };
         let reach = ART * 3.0;
         let (cx, cy) = (dx.mul_add(reach, shot.x), dy.mul_add(reach, shot.y));

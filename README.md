@@ -226,7 +226,7 @@ keep their placeholder surface.
 
 ### The sky
 
-Generator v8 is v7's ground with **a sky to explore**, the start of the
+Generator v8 is v7's ground with **a sky to explore** (v9, the current one, adds the filled Moon), the start of the
 game's second act. Fuel is the key: each altitude band is placed at a share of what the fuel
 tank tiers can climb (measured, not guessed), so every bigger tank opens more of the sky:
 
@@ -286,6 +286,7 @@ the docks, a pressurized hull (keeps the cold out) at the cloud farms and cloud-
 de-icers at the monasteries; the markets buy skystone and cloud silver dear. The sky gauge
 names the nearest sky town or buoy; up among the islands the music turns airy and you hear
 the waterfalls. On worlds without a sky the shop locks the Altitude Intake and De-Icer.
+
 **Sky enemies** (v9 worlds): the low isles stay calm, but from the cloud archipelago up the
 sky has its own hunters. **Sky rays** climb above you, hang for a beat and dive through;
 **wyverns** dive harder and spit fire from afar; **storm elementals** crackle and loose a
@@ -295,6 +296,59 @@ you on foot (down the hull and the turrets go with it); **harpy nesters** only m
 their nest, unless you take an egg. Temples keep a sentry and a storm elemental on guard.
 Sky cities, bases and outposts are safe, Peaceful turns it all off, and every kill drops
 loot (storm glass, aether crystal, sky relics).
+
+### The Moon
+
+Generator v9 (the current one) fills the Moon in. Getting there is the end of Act II's climb:
+a top-tier fuel tank, high-altitude intakes, a de-icer for the cold of space, a **Pressurized
+Hull** (vacuum crushes anything else) and a **Life Support** module (air for the crew and an
+air line for the pilot). Both are new shop lines; a **Moon checklist** under the sky gauge shows
+what the rig still lacks from the dead-air gap up, and a **hull breach** warning and siren
+sound if it meets vacuum without them.
+
+- **The landing**: the first time a rig touches down on the Moon's top side the sun breaks
+  over the rim, a banner reads "The Moon" and a horn sting plays.
+- **The surface**: bright grey regolith and dark maria, craters (and every blast crater you
+  make stays), **lava tubes** under the dust (basalt-lined tunnels with skylights at both ends,
+  ice frozen on their floors, a relic or two), **ice fields**, **alien crystal forests** whose
+  blooms glow, three **abandoned habitats** with a relic cache each, and a rocky underside of
+  deep rock you can mine from below, crystal stalks hanging off it.
+- **Resources**: **helium-3** (gold-freckled dust), **moon ice**, **alien alloy** veins deep in
+  the rock, and **lunar relics**. The colony buys helium-3, spare ice and relics.
+- **Tranquility Station**, the lunar research colony: a landing pad, a glass dome (walk in on
+  foot: there is air inside), a hab module and a comms mast. Its counter (the use button
+  with the rig on the landing pad, or on foot anywhere in the colony) refuels and repairs at Moon prices, melts moon ice into premium fuel
+  for free, buys the lunar haul, and sells what you cannot get below: the **Helium-3 Reactor**
+  (a quarter less fuel on every engine), the **Alloy Drill Head** (the drill bites a layer
+  deeper), the **Lunar Cutter** (the plasma cutter refocused through alien alloy: a long, hot
+  beam that cuts rock quickly) and the **Low-G Mortar** (heavy shells on a high arc that sail
+  far in low gravity). They cost credits plus helium-3 or alien alloy. Enemies never come into
+  the colony.
+- **The alien facility** (on foot only: its door is an energy veil a rig cannot pass): a
+  stepped temple, a ledged shaft down to a hall of three dark **pylons** marked with one, two
+  and three dots. Strike them with the hand pick in the order of their marks (a wrong one puts
+  them all out) and the gate slides open on **the Warden's arena**: the facility's guardian
+  wakes, shielded. Break its two power **conduits** with the pick (or land an EMP charge) to drop
+  the shield, then bring it down with explosives. It drops the **Warden's Eye** and alien alloy,
+  everyone of its crew in the facility gets the **Void Lance** (alien tech: a lance of void light
+  through foes and rock), and the core seal falls.
+- **The core**: a long shaft down from the arena ends at a chamber at the Moon's heart, inside a
+  shell no drill can scratch. Something floats there, warm and humming. (The story has more to
+  say about it.) The shaft's ledges zigzag, so there is no straight (lethal) drop, and glowing
+  plinths beside the heart step back up to the shaft for a pilot without a jetpack.
+- **Moon creatures**: pale **regolith crawlers** leap far in the low gravity, **crystal mites**
+  swarm out of the crystal forests, and **derelict automatons** (old colony security robots, EMP
+  stuns them) still patrol around the habitats.
+- **On foot**: the pilot has no air out on the Moon except within the rig's life-support air
+  line (6, 12 or 24 tiles by tier), inside the colony, and behind the alien facility's veil
+  (it holds the old air in); it jumps about three times as high.
+- **Getting home**: fall off the edge (a long ride down; a sound rig shrugs off the landing, or
+  the wind lays it on an island), or build a **Lunar Uplink** (a new base module, once you have
+  landed): one on the Moon beams the rig to your uplinks below or to the town, one below beams
+  it up to the Moon. It needs power.
+
+Up there sound has no air to carry it: everything is muffled, world sounds to a dull thud
+through the ground.
 
 ### Balance
 

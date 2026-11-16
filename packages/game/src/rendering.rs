@@ -25,6 +25,7 @@ mod garage;
 mod interior;
 mod layout;
 mod menus;
+mod moon_hud;
 mod people_art;
 mod pilot_art;
 pub mod pixel_art;

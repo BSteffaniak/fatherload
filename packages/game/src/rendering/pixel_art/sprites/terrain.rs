@@ -528,6 +528,8 @@ pub const fn artifact_stamp(artifact: ArtifactKind) -> &'static SpriteDef {
         ArtifactKind::CloudPearl => &CLOUD_PEARL,
         ArtifactKind::HarpyEgg => &HARPY_EGG,
         ArtifactKind::SkyRelic => &SKY_RELIC,
+        ArtifactKind::LunarRelic => &super::moon::LUNAR_RELIC,
+        ArtifactKind::WardenEye => &super::moon::WARDEN_EYE,
     }
 }
 

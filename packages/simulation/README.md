@@ -522,6 +522,116 @@ safe cities, spawning and Peaceful, swoops, lightning jolts, airships with turre
 sinking together, nesters, temple guards, temple fittings by pick swing, every Act II weapon,
 buying with materials, saves, keyframes and identical replay).
 
+### The filled Moon (`moon.rs`, `worldgen/moon.rs`, `world/moon.rs`, generator V9)
+
+Expansion plan WP-MOON (wave 4, T22). `GeneratorVersion::V9` (current, `has_moon_content`) is
+V8 with the Moon filled in; everything below the Moon is exactly V8's
+(`worldgen::moon::tests::v9_ground_is_exactly_v8`), V1-V8 output is unchanged and a V9
+golden digest (`chunk_digests_of_v9_moons_are_pinned`) pins the Moon. The V8 footprint
+(`sky::moon`, `moon_column`) is unchanged: on V9 the `SkyLand` is `is_lunar()` and its
+`tile_at` / `surface_row` delegate to the layout.
+
+**Layout** (`worldgen::moon::layout(settings)` / `layout_of(land)`, memoized per thread, a
+pure function of the Moon's shape seed): `MoonLayout` { `colony` (a `Site` 40 columns each way,
+220-380 columns from the centre, flattened), `habitats` (3 sites), `facility`
+(`FacilityPlan`: the temple site on the other side of the centre, its `door`, `temple_room`,
+`shaft`, `hall`, `pylons` and lighting `order`, `gate`, `arena`, `conduits`, `seal`,
+`corridor`, `core_shaft`; `rooms()`, `bounds()`, `in_door`, `arena_center`), `core` (the
+chamber's middle, `CORE_DEPTH_ROWS` under the centre's surface), `tubes` (4 `LavaTube`s:
+`center_row(x)`, `is_open`, `skylight`, `placed`), `ice_fields`, `forests`, `maria` }. Queries:
+`surface_row(x)` (flattened under sites), `colony_area()`, `colony_pressurized(x, y)`,
+`pad()`, `tube_at`, `in_core_chamber`, `tile_at(x, y)`. Places never overlap (the test
+`layouts_are_deterministic_and_keep_their_places_apart`).
+
+**Tiles** (`moon::LunarTile`, `TileKind::Lunar`, codes `0x700`): regolith, mare dust, lunar
+rock, deep rock (the underside's last 28 rows), tube basalt, moon ice, helium-3 regolith, alien
+alloy veins, relic caches, crystal stalks and blooms; colony hull, glass and pad, habitat
+panels; facility wall and glyph, veil (`pilot_passable`), pylon / lit pylon, gate, conduit,
+core seal, core shell and the core. `indestructible()` tiles (colony, facility, core) report
+the bedrock hardness and are `terrain::is_unbreakable`: no drill, blast or pick breaks them;
+the world changes them by rule (`Terrain::set_kind_by_rule`, crate-only). Breaking a tile
+yields `LunarTile::item()` (moon ice, helium-3, alien alloy, lunar relics, crystal lenses, or
+the classic block of its hardness). `glow()` is the light it gives off.
+
+**Items**: `StrategicResourceKind::{Helium3, MoonIce, AlienAlloy}` and
+`ArtifactKind::{LunarRelic, WardenEye}` (appended; `ArtifactKind::is_lunar`).
+
+**Approach** (`moon::{MoonRequirement, approach_checklist, missing_requirements,
+vacuum_breach, vacuum_damage_per_second, vacuum_at}`): two shop lines appended after the
+de-icer (offer indices 16 and 17, `UPGRADE_OFFER_COUNT` 18): `UpgradeKind::PressurizedHull`
+(2 tiers; tier 2 turns a fifth of Moon enemies' hits) and `UpgradeKind::LifeSupport` (3 tiers,
+the pilot's air line `life_support_reach_tiles` 6 / 12 / 24), stored in
+`HazardGear::{pressurized_hull, life_support}` (serde defaults). In vacuum (`vacuum_at`: a V8+
+sky's air density under `VACUUM_AIR_DENSITY`, never inside the colony's pressurized rooms) a
+rig without them takes `VACUUM_HULL_DAMAGE_PER_SECOND` + `VACUUM_CREW_DAMAGE_PER_SECOND` in the
+hazard pass; `GameplayEventKind::MoonVacuumBreach` fires on the edge into vacuum. Fuel and
+intakes gate the climb physically (the climb table); the checklist names them too
+(`MOON_FUEL_TANK_TIER`, `MOON_INTAKE_TIER`, `MOON_DE_ICER_TIER`).
+
+**Progress** (`moon::LunarProgress`, `Player::lunar`, private loadout, serde defaults):
+`landed`, `core_reached`, `warden_defeated`, and the colony's one-offs `reactor`
+(`burn_factor`, in movement) and `alloy_drill` (`drill_bonus`, in the drill's bite).
+
+**World rules** (`world/moon.rs`): `moon_layout`, `in_vacuum`, `in_colony`, `on_moon`,
+`player_in_colony`, `at_colony_counter` (the use button opens the counter: on foot anywhere
+in the colony, the rig only over the pad, so elsewhere it still lets the pilot out),
+`lunar_air(owner, x, y)` (the pilot breathes in the colony, in the facility
+(`MoonLayout::pressurized` = `colony_pressurized` or `facility_air`, which `vacuum_at` also
+honours) and within its rig's air line; `breathe` asks it when the air is thin), `warden_awake`, `core_sealed`,
+`colony_offer_ready`, `uplink_destination`, `lunar_safe_zone` (`enemy_safe_zone` asks it
+first: on the Moon only the colony is safe), `strike_facility` (scenes). The first rest on the
+Moon's top emits `MoonLanded` (once per player). `PlayerCommand::Moon(MoonCommand::Colony(offer))`
+takes a `ColonyOffer` inside the colony (the rig within `RIG_SERVICE_REACH` when on foot):
+`Refuel`, `Repair`, `MeltIce` (`MOON_ICE_FUEL` each), `SellHaul` (`haul_value`), `Reactor`,
+`AlloyDrill`, `BuyWeapon` / `UpgradeWeapon` (the Lunar Cutter, the Low-G Mortar; prices
+`weapon_price`, credits plus helium-3 or alloy), emitting `ColonyServiceUsed`.
+
+**The way down**: the shafts' ledges cover two of their three columns, alternating sides, so
+nothing drops straight through (an 80-row fall in Moon gravity reaches terminal speed and kills
+a suitless pilot); the core shaft counts its ledges from `CORE_FOOT_LEDGE_ROWS` (a ledge inside
+the shell's veil), and the chamber has a floor (`CORE_FLOOR_ROWS`) and two glowing plinths
+(`CORE_SIDE_PLINTH_ROWS`, `CORE_PLINTH_ROWS`) stepping from the heart's crown back up to it
+(`world::moon_tests::a_bare_pilot_climbs_down_to_the_core_unhurt_and_back_up_without_a_jetpack`).
+
+**The facility**: the hand pick on a pylon (`pick_facility`) lights it if it is next in
+`order`, else puts every lit one out (`FacilityPylon`); the third opens the gate
+(`FacilityGateOpened`). A conduit struck by the pick becomes facility stone and hits every
+Warden with an EMP (shield gone, stunned: `WardenStaggered`). `advance_moon` (each tick, after
+the enemy director): someone in the arena while the seal stands and no Warden lives wakes one
+(`WardenAwakened`; shieldless if both conduits are gone), or on Peaceful opens the seal at
+once; a pilot within `CORE_REACH_TILES` of the core sets `core_reached` (`MoonCoreReached`,
+the story's hook). The Warden's death (`kill_enemy`) calls `warden_fell`: the seal opens, its
+killer and everyone in the facility get `warden_defeated` and the Void Lance
+(`WardenDefeated`). All facility state is terrain, so it saves and replicates with no new
+section.
+
+**Enemies**: `EnemyKind::{RegolithCrawler, CrystalMite, DerelictAutomaton, Warden}`
+(`is_lunar`), `enemy::lunar_roster` (mites in forests, automatons near habitats) at
+`LUNAR_TIER`; `spawn_lunar_enemies` runs on the director's spawn check around rigs and pilots on
+the Moon (surface or the tube they are in). `despawn_far_enemies` counts pilots too (a pilot
+deep in the facility keeps its Warden).
+
+**Weapons**: `WeaponKind::{LunarCutter, LowGMortar, VoidLance}` (`is_lunar`, `is_beam`; item ids
+7-9; `shack_level` `u8::MAX`, so the shack never stocks or tunes them).
+
+**The uplink**: `ModuleKind::LunarUplink` (3x2, 2 power, `ModuleService::Beam`), placed once the
+builder `landed` (`BuildRefusal::NeedsMoonLanding`); `Beam` refuses on foot (`BoardFirst`) and
+without a target (`NoUplinkTarget`): from the Moon to the first usable uplink below (the
+player's own first), else the town; from below to the first usable lunar uplink.
+`UplinkBeamed { to_moon }` follows the applied command.
+
+**Events** 220-229 (netcode): `MoonVacuumBreach`, `MoonLanded`, `ColonyServiceUsed`,
+`FacilityPylon`, `FacilityGateOpened`, `WardenAwakened`, `WardenStaggered`, `WardenDefeated`,
+`MoonCoreReached`, `UplinkBeamed`.
+
+Tests: `worldgen/moon/tests.rs` (V8 keeps its placeholder, layouts deterministic and apart, the
+colony on flat ground with air inside, the facility from veil to core, tubes and riches, chunks
+= layout across borders, V9 below the Moon = V8, the golden digest) and `world/moon_tests.rs`
+(vacuum damage and the breach warning, the landing once, low gravity for rigs and pilots, air
+on foot, the colony's rules and deals, reactor and drill, the pylon puzzle, the Warden and the
+seal, Peaceful, the core, Moon creatures and the colony's safety, uplinks both ways, falling
+home, saves and keyframes, determinism, precision at the Moon).
+
 ### Compact terrain (`terrain/persistence.rs`)
 
 A `Terrain` serializes as a `TerrainSnapshot`: its `WorldSettings`, size, digest and only the
@@ -1709,6 +1819,24 @@ Where the wave 2 tracks meet, for the tracks that build on them:
   `tile_art::sky_glow` gives their colour for halos and the light map.
 - **Formats**: `PROTOCOL_VERSION` 12, save format 10 (version 9 files load as is), event codes
   210-219.
+
+## Wave 4 seams: the Moon (T22)
+
+- **Generator V9** is current (V8 + the filled Moon). Other wave 4 tracks that also add a V9
+  (sky isles, continents) should merge into one version with every `has_*` switch on, re-pin
+  the digest, and keep `has_moon_content` true for it.
+- **Story (T26)**: `GameplayEventKind::MoonCoreReached` / `LunarProgress::core_reached` is the
+  endgame mystery hook, `WardenDefeated` and `LunarProgress::warden_defeated` the facility's
+  end; `MoonLanded` the landing. Quests can target `moon_layout()` places.
+- **Pilot gear (T23)**: the pilot breathes on the Moon only through `lunar_air`; a suit with its
+  own air can extend `breathe` there. The facility's veil is `pilot_passable`.
+- **Homes (T24)**: a lunar habitat plot can stand on `on_moon` ground outside
+  `colony_area()`.
+- **Night (T25)**: `lunar_safe_zone` answers first on the Moon (only the colony is safe).
+- **Sky lock reasons (T20)**: the Moon lines are not locked by world; a lock reason for worlds
+  without a sky should cover `PressurizedHull` and `LifeSupport` too.
+- **Formats**: `PROTOCOL_VERSION` 12 (see the protocol notes); save format unchanged (an older
+  build rejects a V9 save by its generator; every new field defaults).
 
 ## Replication
 

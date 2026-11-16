@@ -224,6 +224,17 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::TempleGateOpened { player_id, .. } => (217, Some(player_id)),
         GameplayEventKind::RelicChestOpened { player_id, .. } => (218, Some(player_id)),
         GameplayEventKind::SkyEnemyAction { .. } => (219, None),
+        // The Moon (wave 4, T22 WP-MOON): 220-229.
+        GameplayEventKind::MoonVacuumBreach { player_id, .. } => (220, Some(player_id)),
+        GameplayEventKind::MoonLanded { player_id } => (221, Some(player_id)),
+        GameplayEventKind::ColonyServiceUsed { player_id, .. } => (222, Some(player_id)),
+        GameplayEventKind::FacilityPylon { player_id, .. } => (223, Some(player_id)),
+        GameplayEventKind::FacilityGateOpened { player_id } => (224, Some(player_id)),
+        GameplayEventKind::WardenAwakened { .. } => (225, None),
+        GameplayEventKind::WardenStaggered { .. } => (226, None),
+        GameplayEventKind::WardenDefeated { by } => (227, by),
+        GameplayEventKind::MoonCoreReached { player_id } => (228, Some(player_id)),
+        GameplayEventKind::UplinkBeamed { player_id, .. } => (229, Some(player_id)),
     }
 }
 

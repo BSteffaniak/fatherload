@@ -270,6 +270,14 @@ patches! {
     PirateHorn => "pirate_horn",
     HarpyScreech => "harpy_screech",
     CannonBoom => "cannon_boom",
+    // The Moon (WP-MOON, wave 4 T22), appended so every earlier variation seed stays put.
+    MoonSting => "moon_sting",
+    VacuumAlarm => "alarm_vacuum",
+    PylonChime => "pylon_chime",
+    FacilityGate => "facility_gate",
+    WardenWake => "warden_wake",
+    CoreHum => "core_hum",
+    UplinkWarp => "uplink_warp",
 }
 
 /// Playback metadata of a patch.
@@ -438,6 +446,29 @@ impl Patch {
                 .jitter(0.0, 0.0)
                 .ducking(0.6)
                 .priority(9),
+            Self::MoonSting | Self::CoreHum => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.6)
+                .jitter(0.0, 0.0)
+                .ducking(0.5)
+                .priority(9),
+            Self::VacuumAlarm => PatchInfo::new(Alarm)
+                .instances(1)
+                .priority(8)
+                .jitter(0.0, 0.0),
+            Self::PylonChime => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.5)
+                .jitter(0.0, 0.5),
+            Self::FacilityGate | Self::WardenWake => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.02, 0.5)
+                .ducking(0.35),
+            Self::UplinkWarp => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.42)
+                .jitter(0.015, 0.5),
             Self::ThrowWhoosh | Self::ChargeStick | Self::FireCrackle => {
                 PatchInfo::new(Feedback).instances(3).jitter(0.06, 1.0)
             }
@@ -804,6 +835,13 @@ impl Patch {
             Self::PirateHorn => pirate_horn(rng),
             Self::HarpyScreech => harpy_screech(rng),
             Self::CannonBoom => cannon_boom(rng),
+            Self::MoonSting => moon_sting(rng),
+            Self::VacuumAlarm => vacuum_alarm(rng),
+            Self::PylonChime => pylon_chime(rng),
+            Self::FacilityGate => facility_gate(rng),
+            Self::WardenWake => warden_wake(rng),
+            Self::CoreHum => core_hum(rng),
+            Self::UplinkWarp => uplink_warp(rng),
         }
     }
 }
@@ -3748,6 +3786,169 @@ fn milestone_fanfare(rng: &mut Rng) -> Vec<f32> {
 /// The sky opens (Act I -> II): a deep swell and wind rush, then a broad rising brass anthem
 /// (C - G - C - E - G over a sustained C major chord, an octave higher at the top), crowned by
 /// slow high bells, long echo.
+/// The landing on the Moon: a hush, then a slow rising horn chord with a glassy bell
+/// shimmer over it, like the sun breaking over the rim (WP-MOON).
+fn moon_sting(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 300.0, 0.8);
+    let mut out = render(2.4, |t| {
+        let cutoff = 200.0 + 900.0 * segments(t, &[(0.0, 0.0), (1.2, 1.0), (2.4, 0.2)]);
+        filter.run(noise.next(), cutoff, 0.8) * segments(t, &[(0.0, 0.0), (0.9, 0.3), (2.4, 0.0)])
+    });
+    for (index, note) in [130.81_f32, 196.0, 261.63, 329.63, 392.0]
+        .into_iter()
+        .enumerate()
+    {
+        #[allow(clippy::cast_precision_loss, reason = "five notes")]
+        let offset = 0.3 + index as f32 * 0.16;
+        mix_into(
+            &mut out,
+            &brass(rng, note, 1.5 - offset * 0.5, 0.7),
+            offset,
+            0.2,
+        );
+    }
+    for (index, note) in [1_567.98_f32, 1_975.5, 2_349.3, 3_136.0, 2_637.0]
+        .into_iter()
+        .enumerate()
+    {
+        #[allow(clippy::cast_precision_loss, reason = "five notes")]
+        let offset = 1.0 + index as f32 * 0.14;
+        mix_into(&mut out, &bell(note, 3.5, 1.2, 1.0), offset, 0.1);
+    }
+    let mut echo = Delay::new(0.4).with_damping(0.5);
+    out.resize(out.len() + samples_for(0.3), 0.0);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.4, 0.45) * 0.35;
+        *sample = saturate(*sample, 1.1);
+    }
+    out
+}
+
+/// Vacuum: a low, urgent two-tone siren with a hiss of escaping air.
+fn vacuum_alarm(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        3_000.0,
+        0.7,
+        0.5,
+    );
+    for (index, frequency) in [440.0_f32, 330.0, 440.0, 330.0].into_iter().enumerate() {
+        let mut osc = Osc::new(Wave::Square);
+        let mut filter = Svf::new(FilterMode::LowPass, 1_400.0, 0.9);
+        let pip = render(0.16, |t| {
+            filter.process(osc.next(frequency))
+                * segments(t, &[(0.0, 0.0), (0.01, 0.5), (0.14, 0.4), (0.16, 0.0)])
+        });
+        #[allow(clippy::cast_precision_loss, reason = "four pips")]
+        mix_into(&mut out, &pip, index as f32 * 0.18, 0.5);
+    }
+    out
+}
+
+/// A pylon lighting: a pure, rising alien chime.
+fn pylon_chime(rng: &mut Rng) -> Vec<f32> {
+    let base = 880.0 * rng.jitter(0.01);
+    let mut out = bell(base, 2.76, 1.4, 1.1);
+    mix_into(&mut out, &bell(base * 1.5, 2.76, 1.0, 0.9), 0.08, 0.6);
+    let mut echo = Delay::new(0.27).with_damping(0.4);
+    out.resize(out.len() + samples_for(0.4), 0.0);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.45, 0.4) * 0.45;
+    }
+    out
+}
+
+/// The facility's gate grinding open: a deep stone rumble and a closing chord of chimes.
+fn facility_gate(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(52.0, 30.0, 1.6, 1.4);
+    let grind = burst(
+        rng.next_u64(),
+        NoiseColor::Brown,
+        FilterMode::LowPass,
+        400.0,
+        0.9,
+        1.8,
+    );
+    mix_into(&mut out, &grind, 0.05, 0.7);
+    for (index, note) in [523.25_f32, 659.25, 783.99, 1_046.5]
+        .into_iter()
+        .enumerate()
+    {
+        #[allow(clippy::cast_precision_loss, reason = "four notes")]
+        mix_into(
+            &mut out,
+            &bell(note, 2.76, 1.2, 1.2),
+            1.0 + index as f32 * 0.12,
+            0.18,
+        );
+    }
+    out
+}
+
+/// The Warden waking: a machine boom, a rising servo whine and a resonant hum.
+fn warden_wake(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(70.0, 28.0, 1.0, 1.8);
+    let mut saw = Osc::new(Wave::Saw);
+    let mut filter = Svf::new(FilterMode::LowPass, 600.0, 2.0);
+    let top = 520.0 * rng.jitter(0.05);
+    let whine = render(1.6, |t| {
+        let frequency = 90.0 + top * segments(t, &[(0.0, 0.0), (1.1, 1.0), (1.6, 0.85)]);
+        filter.process(saw.next(frequency))
+            * segments(t, &[(0.0, 0.0), (0.3, 0.4), (1.3, 0.5), (1.6, 0.0)])
+    });
+    mix_into(&mut out, &whine, 0.2, 0.6);
+    out
+}
+
+/// Reaching the core: a vast, slow, shimmering swell with a heartbeat under it.
+fn core_hum(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for (index, note) in [65.41_f32, 98.0, 130.81, 196.0, 261.63, 392.0]
+        .into_iter()
+        .enumerate()
+    {
+        let mut osc = Osc::new(Wave::Sine);
+        let detune = rng.jitter(0.004);
+        let voice = render(3.0, |t| {
+            osc.next(note * detune * (1.0 + 0.004 * (t * 3.0).sin()))
+                * segments(t, &[(0.0, 0.0), (1.4, 0.35), (2.3, 0.3), (3.0, 0.0)])
+        });
+        #[allow(clippy::cast_precision_loss, reason = "six voices")]
+        mix_into(&mut out, &voice, index as f32 * 0.1, 0.22);
+    }
+    for beat in [0.5_f32, 1.2, 1.9, 2.6] {
+        mix_into(&mut out, &thump(60.0, 40.0, 0.3, 1.2), beat, 0.35);
+    }
+    for (index, note) in [2_093.0_f32, 2_637.0, 3_136.0].into_iter().enumerate() {
+        #[allow(clippy::cast_precision_loss, reason = "three notes")]
+        mix_into(
+            &mut out,
+            &bell(note, 3.0, 0.8, 1.0),
+            1.2 + index as f32 * 0.3,
+            0.07,
+        );
+    }
+    out
+}
+
+/// An uplink's beam: a descending-then-rising warp sweep with a sparkle at the end.
+fn uplink_warp(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Triangle);
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 800.0, 1.5);
+    let mut out = render(1.1, |t| {
+        let frequency = 200.0 + 1_600.0 * segments(t, &[(0.0, 0.6), (0.4, 0.05), (1.0, 1.0)]);
+        let sweep = osc.next(frequency) * 0.3;
+        let air = filter.run(noise.next(), frequency * 1.5, 1.5) * 0.6;
+        (sweep + air) * segments(t, &[(0.0, 0.0), (0.1, 0.8), (0.9, 0.6), (1.1, 0.0)])
+    });
+    mix_into(&mut out, &bell(2_637.0, 2.0, 1.0, 0.7), 0.9, 0.2);
+    out
+}
+
 fn act_two_fanfare(rng: &mut Rng) -> Vec<f32> {
     let mut out = thump(48.0, 32.0, 1.2, 1.5);
     let rush = burst(

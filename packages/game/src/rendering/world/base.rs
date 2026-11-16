@@ -465,6 +465,7 @@ fn draw_module(draw: &mut impl RaylibDraw, scene: &BaseScene<'_>, module: &Place
         }
         ModuleKind::RepairBay => repair_bay(draw, &ctx),
         ModuleKind::CargoUplink => uplink(draw, &ctx),
+        ModuleKind::LunarUplink => lunar_uplink(draw, &ctx),
         ModuleKind::Homestead => {
             let inside = scene.local.is_some_and(|rig| {
                 let tile = TilePosition {
@@ -953,6 +954,59 @@ fn uplink(draw: &mut impl RaylibDraw, art: &ModuleArt) {
     r(draw, 22, 36, 3, 3, art.power_light());
 }
 
+/// A lunar uplink (WP-MOON): a ring gate on a pad between two pylons, its ring humming mint
+/// while powered.
+fn lunar_uplink(draw: &mut impl RaylibDraw, art: &ModuleArt) {
+    let w = 3 * T;
+    let r = |d: &mut _, x, y, ww, hh, c| art.rect(d, w, x, y, ww, hh, c);
+    // The pad.
+    r(draw, 1, 26, 46, 6, INK);
+    r(draw, 2, 27, 44, 4, STEEL_DARK);
+    r(draw, 2, 27, 44, 1, STEEL_LIGHT);
+    for x in (4..44).step_by(8) {
+        r(draw, x, 29, 4, 1, GOLD);
+    }
+    // Pylons.
+    for x in [3, 39] {
+        r(draw, x, 6, 6, 21, INK);
+        r(draw, x + 1, 7, 4, 19, STEEL);
+        r(draw, x + 1, 7, 1, 19, STEEL_LIGHT);
+        r(draw, x + 1, 4, 4, 3, art.power_light());
+    }
+    // The ring: drawn as stacked arcs.
+    let glow = if art.powered {
+        if art.blink(1.5, 0.0) { ICE } else { MINT }
+    } else {
+        SLATE
+    };
+    let rows: [(i32, i32); 11] = [
+        (16, 16),
+        (13, 22),
+        (11, 26),
+        (10, 28),
+        (10, 28),
+        (10, 28),
+        (10, 28),
+        (11, 26),
+        (13, 22),
+        (16, 16),
+        (19, 10),
+    ];
+    for (index, (x, width)) in rows.into_iter().enumerate() {
+        let y = 4 + i32::try_from(index).unwrap_or(0) * 2;
+        r(draw, x, y, width, 2, INK);
+        r(draw, x + 1, y, 2, 2, glow);
+        r(draw, x + width - 3, y, 2, 2, glow);
+    }
+    if art.powered {
+        // The field inside the ring.
+        let shimmer = (art.seconds * 3.0).fract();
+        let inner = if shimmer < 0.5 { TEAL } else { TEAL_DARK };
+        r(draw, 15, 8, 18, 12, inner);
+        r(draw, 18, 10, 12, 8, MINT);
+    }
+}
+
 fn homestead(draw: &mut impl RaylibDraw, art: &ModuleArt, inside: bool, stocked: bool) {
     let w = 7 * T;
     let r = |d: &mut _, x, y, ww, hh, c| art.rect(d, w, x, y, ww, hh, c);
@@ -1173,6 +1227,7 @@ pub(in crate::rendering) fn draw_build_ghost(
                 ModuleKind::FuelStation => fuel_station(draw, &art, 0.3),
                 ModuleKind::RepairBay => repair_bay(draw, &art),
                 ModuleKind::CargoUplink => uplink(draw, &art),
+                ModuleKind::LunarUplink => lunar_uplink(draw, &art),
                 ModuleKind::Homestead => homestead(draw, &art, false, false),
                 ModuleKind::Refinery => refinery(draw, &art, false, false),
                 ModuleKind::Workshop => workshop(draw, &art),
@@ -1320,6 +1375,7 @@ fn draw_module_icon(draw: &mut impl RaylibDraw, art: &ModuleArt, kind: ModuleKin
         ModuleKind::FuelStation => fuel_station(draw, art, 0.7),
         ModuleKind::RepairBay => repair_bay(draw, art),
         ModuleKind::CargoUplink => uplink(draw, art),
+        ModuleKind::LunarUplink => lunar_uplink(draw, art),
         ModuleKind::Homestead => homestead(draw, art, false, false),
         ModuleKind::Refinery => refinery(draw, art, true, true),
         ModuleKind::Workshop => workshop(draw, art),

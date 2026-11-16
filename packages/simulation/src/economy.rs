@@ -149,6 +149,10 @@ pub enum UpgradeKind {
     AltitudeIntake,
     /// Sky gear: a de-icer covers the cold high in the sky.
     DeIcer,
+    /// Moon gear: seals the rig against vacuum (WP-MOON, see [`crate::moon`]).
+    PressurizedHull,
+    /// Moon gear: air for the crew in vacuum and an air line to the pilot on foot.
+    LifeSupport,
 }
 
 impl UpgradeKind {
@@ -170,6 +174,8 @@ impl UpgradeKind {
         Self::BoulderDeflector,
         Self::AltitudeIntake,
         Self::DeIcer,
+        Self::PressurizedHull,
+        Self::LifeSupport,
     ];
 
     /// Highest level this upgrade line reaches.
@@ -185,6 +191,8 @@ impl UpgradeKind {
             Self::BoulderDeflector => BOULDER_DEFLECTOR_MAX_LEVEL,
             Self::AltitudeIntake => crate::environment::ALTITUDE_INTAKE_MAX_LEVEL,
             Self::DeIcer => crate::environment::DE_ICER_MAX_LEVEL,
+            Self::PressurizedHull => crate::moon::PRESSURIZED_HULL_MAX_LEVEL,
+            Self::LifeSupport => crate::moon::LIFE_SUPPORT_MAX_LEVEL,
             Self::Drill
             | Self::FuelTank
             | Self::CargoBay
@@ -215,7 +223,9 @@ impl UpgradeKind {
             | Self::PressureBracing
             | Self::BoulderDeflector
             | Self::AltitudeIntake
-            | Self::DeIcer => 0,
+            | Self::DeIcer
+            | Self::PressurizedHull
+            | Self::LifeSupport => 0,
         }
     }
 
@@ -252,7 +262,7 @@ pub const REFUEL_UNIT_COST: u32 = 1;
 pub const REPAIR_UNIT_COST: u32 = 2;
 
 /// Number of shop upgrade lines (the length of [`upgrade_offers`]).
-pub const UPGRADE_OFFER_COUNT: usize = 16;
+pub const UPGRADE_OFFER_COUNT: usize = 18;
 /// Shop index of the drill mount line.
 pub const DRILL_MOUNT_OFFER_INDEX: usize = 8;
 
@@ -299,7 +309,8 @@ pub const fn upgrade_locked_by(
 pub enum UpgradeLock {
     /// Late-game gear: on sale once someone reaches this band.
     Band(Band),
-    /// Sky gear (Altitude Intake, De-Icer) on a world without a sky to climb into
+    /// Sky and Moon gear (Altitude Intake, De-Icer, Pressurized Hull, Life Support) on a world
+    /// without a sky to climb into
     /// (generators before V8): there is nothing for it to do, so the shop does not sell it.
     NoSky,
 }
@@ -323,7 +334,13 @@ impl UpgradeLock {
 /// Whether `kind` is sky gear that only a world with a sky can use.
 #[must_use]
 pub const fn needs_sky(kind: UpgradeKind) -> bool {
-    matches!(kind, UpgradeKind::AltitudeIntake | UpgradeKind::DeIcer)
+    matches!(
+        kind,
+        UpgradeKind::AltitudeIntake
+            | UpgradeKind::DeIcer
+            | UpgradeKind::PressurizedHull
+            | UpgradeKind::LifeSupport
+    )
 }
 
 /// What keeps the shop from selling `offer` on world `settings` dug to `deepest_row`.
@@ -480,6 +497,8 @@ fn apply_upgrade(player: &mut Player, kind: UpgradeKind) {
         UpgradeKind::BoulderDeflector => gear.boulder_deflector += 1,
         UpgradeKind::AltitudeIntake => gear.altitude_intake += 1,
         UpgradeKind::DeIcer => gear.de_icer += 1,
+        UpgradeKind::PressurizedHull => gear.pressurized_hull += 1,
+        UpgradeKind::LifeSupport => gear.life_support += 1,
     }
 }
 
@@ -522,6 +541,8 @@ pub const fn current_level(player: &Player, kind: UpgradeKind) -> u8 {
         UpgradeKind::BoulderDeflector => gear.boulder_deflector,
         UpgradeKind::AltitudeIntake => gear.altitude_intake,
         UpgradeKind::DeIcer => gear.de_icer,
+        UpgradeKind::PressurizedHull => gear.pressurized_hull,
+        UpgradeKind::LifeSupport => gear.life_support,
     }
 }
 
@@ -553,6 +574,8 @@ const fn upgrade_name(kind: UpgradeKind) -> &'static str {
         UpgradeKind::BoulderDeflector => "Boulder Deflector",
         UpgradeKind::AltitudeIntake => "Altitude Intake",
         UpgradeKind::DeIcer => "De-Icer",
+        UpgradeKind::PressurizedHull => "Pressurized Hull",
+        UpgradeKind::LifeSupport => "Life Support",
     }
 }
 
@@ -594,6 +617,15 @@ const fn upgrade_description(kind: UpgradeKind) -> &'static str {
         UpgradeKind::DeIcer => {
             "Keeps the rig from icing up in the cold high sky; each tier covers two more cold \
              levels"
+        }
+        UpgradeKind::PressurizedHull => {
+            "A sealed cabin: the first tier keeps the high sky's cold out, the second seals \
+             the rig against the vacuum of orbit and the Moon (without it the frame buckles) \
+             and the third also turns a fifth of Moon creatures' bites"
+        }
+        UpgradeKind::LifeSupport => {
+            "Air for the crew in vacuum, and an air line that keeps the pilot breathing near \
+             the rig on the Moon; each tier reaches further"
         }
     }
 }
@@ -762,6 +794,13 @@ const DE_ICER_TIERS: [&str; crate::environment::DE_ICER_MAX_LEVEL as usize] = [
     "Plasma De-Icer",
     "Void-Rated De-Icer",
 ];
+const PRESSURIZED_HULL_TIERS: [&str; crate::moon::PRESSURIZED_HULL_MAX_LEVEL as usize] =
+    ["Sealed Cabin", "Vacuum-Sealed Hull", "Void-Rated Hull"];
+const LIFE_SUPPORT_TIERS: [&str; crate::moon::LIFE_SUPPORT_MAX_LEVEL as usize] = [
+    "Rebreather Module",
+    "Life-Support Module",
+    "Closed-Loop Biosphere",
+];
 const BOULDER_DEFLECTOR_TIERS: [&str; BOULDER_DEFLECTOR_MAX_LEVEL as usize] = [
     "Roll Cage",
     "Deflector Plate",
@@ -790,6 +829,8 @@ pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
         UpgradeKind::BoulderDeflector => &BOULDER_DEFLECTOR_TIERS,
         UpgradeKind::AltitudeIntake => &ALTITUDE_INTAKE_TIERS,
         UpgradeKind::DeIcer => &DE_ICER_TIERS,
+        UpgradeKind::PressurizedHull => &PRESSURIZED_HULL_TIERS,
+        UpgradeKind::LifeSupport => &LIFE_SUPPORT_TIERS,
         UpgradeKind::BombPack => return "Pack of 3 Bombs",
         UpgradeKind::DrillMount => {
             return if level == 0 {
@@ -871,7 +912,15 @@ pub fn upgrade_effect(player: &Player, kind: UpgradeKind) -> Option<String> {
             crate::environment::cold_cover(next).min(crate::environment::MAX_COLD),
             crate::environment::MAX_COLD
         ),
-        UpgradeKind::Scanner | UpgradeKind::BombPack | UpgradeKind::DrillMount => return None,
+        UpgradeKind::LifeSupport => format!(
+            "Pilot air line {:.0} -> {:.0} tiles",
+            crate::moon::life_support_reach_tiles(level),
+            crate::moon::life_support_reach_tiles(next)
+        ),
+        UpgradeKind::Scanner
+        | UpgradeKind::BombPack
+        | UpgradeKind::DrillMount
+        | UpgradeKind::PressurizedHull => return None,
     })
 }
 
@@ -898,6 +947,10 @@ pub fn upgrade_cost(kind: UpgradeKind, level: u8) -> u32 {
         // Sky gear: intakes are an Act II purchase (cheap to try, then steeply more).
         UpgradeKind::AltitudeIntake => (900, 230),
         UpgradeKind::DeIcer => (700, 190),
+        // Sky and Moon gear: the cold seal (cloud farms craft it too), then the vacuum seal and
+        // void-rated plating, the last purchases before the trip up (12,000 and 30,000 cr).
+        UpgradeKind::PressurizedHull => (4_800, 250),
+        UpgradeKind::LifeSupport => (8_000, 220),
     };
     // Tiers bought on this line so far (the stock part is free).
     let bought = level

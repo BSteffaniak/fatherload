@@ -650,6 +650,44 @@ fn preview_lines(
                 format!("Keeps ice off the hull up to cold {next} (was {now})")
             });
         }
+        // The Moon lines (T22, WP-MOON).
+        UpgradeKind::PressurizedHull => {
+            bars.push(bar(
+                "Hull seal",
+                f32::from(from),
+                f32::from(to),
+                f32::from(top),
+                "",
+                0,
+            ));
+            changes.push(if to < crate::moon::VACUUM_SEAL_TIER {
+                "A sealed cabin: the high sky's cold bites one level less".to_owned()
+            } else if to == crate::moon::VACUUM_SEAL_TIER {
+                "Seals the rig against vacuum: orbit and the Moon stop crushing the frame"
+                    .to_owned()
+            } else {
+                "Void-rated plating: Moon creatures bite a fifth softer".to_owned()
+            });
+        }
+        UpgradeKind::LifeSupport => {
+            let (now, next) = (
+                crate::moon::life_support_reach_tiles(from),
+                crate::moon::life_support_reach_tiles(to),
+            );
+            bars.push(bar(
+                "Pilot air line",
+                now,
+                next,
+                crate::moon::life_support_reach_tiles(top),
+                "tiles",
+                0,
+            ));
+            changes.push(if from == 0 {
+                "Air for the crew in vacuum, and for the pilot near the rig".to_owned()
+            } else {
+                format!("The pilot breathes up to {next:.0} tiles from the rig (was {now:.0})")
+            });
+        }
         UpgradeKind::Scanner => {
             bars.push(bar(
                 "Scanner",

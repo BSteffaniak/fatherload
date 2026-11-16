@@ -12,6 +12,7 @@
 mod clock_scenes;
 mod crew_scenes;
 mod enemy_scenes;
+mod moon_scenes;
 mod reward_scenes;
 mod rig_scenes;
 mod sky_isle_scenes;
@@ -364,6 +365,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(sky_scenes::SKY_SCENES)
         .chain(sky_isle_scenes::SKY_ISLE_SCENES)
         .chain(sky_continent_scenes::SKY_CONTINENT_SCENES)
+        .chain(moon_scenes::MOON_SCENES)
         .chain(pilot_scenes::PILOT_SCENES)
         .chain(reward_scenes::REWARD_SCENES)
 }

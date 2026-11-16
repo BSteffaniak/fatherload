@@ -499,6 +499,7 @@ impl LocalGame {
         }
         self.announce_points_of_interest(&players);
         self.announce_villages(&players);
+        self.announce_moon(&players);
         self.announce_quests(&players);
         self.announce_rewards(&players);
     }
@@ -648,6 +649,142 @@ impl LocalGame {
         for (seat, village) in found {
             self.shell
                 .village_discovered(seat, self.runtime.world(), village);
+        }
+    }
+
+    /// The Moon's moments for each local seat (WP-MOON): the vacuum warning, the landing's
+    /// banner and sunrise, the facility's pylons and gate, the Warden, the core and the uplink.
+    #[allow(clippy::too_many_lines, reason = "one arm per Moon event")]
+    fn announce_moon(&mut self, players: &[PlayerId]) {
+        use crate::shell::FanfareKind;
+        /// A seat, its banner, its message and whether it just landed.
+        type MoonNews = (
+            usize,
+            Option<(FanfareKind, String, String)>,
+            Option<String>,
+            bool,
+        );
+        let mut news: Vec<MoonNews> = Vec::new();
+        let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            match gameplay.kind {
+                GameplayEventKind::MoonVacuumBreach { player_id, breach } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        news.push((seat, None, Some(breach.message().to_owned()), false));
+                    }
+                }
+                GameplayEventKind::MoonLanded { player_id } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        news.push((
+                            seat,
+                            Some((
+                                FanfareKind::Lunar,
+                                "Landfall".to_owned(),
+                                "You stand on the Moon. The whole world hangs below you."
+                                    .to_owned(),
+                            )),
+                            None,
+                            true,
+                        ));
+                    }
+                }
+                GameplayEventKind::FacilityPylon {
+                    player_id,
+                    lit,
+                    reset,
+                } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        let text = if reset {
+                            "The pylons gutter out. The marks must mean something...".to_owned()
+                        } else {
+                            format!("A pylon hums to life ({lit} of 3).")
+                        };
+                        news.push((seat, None, Some(text), false));
+                    }
+                }
+                GameplayEventKind::FacilityGateOpened { player_id } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        news.push((
+                            seat,
+                            None,
+                            Some("The gate grinds open. Something waits beyond.".to_owned()),
+                            false,
+                        ));
+                    }
+                }
+                GameplayEventKind::WardenAwakened { .. } => {
+                    for seat in 0..players.len() {
+                        news.push((
+                            seat,
+                            None,
+                            Some(
+                                "The Warden wakes! Break its conduits to drop its shield."
+                                    .to_owned(),
+                            ),
+                            false,
+                        ));
+                    }
+                }
+                GameplayEventKind::WardenDefeated { by } => {
+                    for (seat, player) in players.iter().enumerate() {
+                        let mine = by == Some(*player);
+                        news.push((
+                            seat,
+                            Some((
+                                FanfareKind::Lunar,
+                                "The Warden falls".to_owned(),
+                                if mine {
+                                    "The core seal opens. The Void Lance is yours.".to_owned()
+                                } else {
+                                    "The core seal opens.".to_owned()
+                                },
+                            )),
+                            None,
+                            false,
+                        ));
+                    }
+                }
+                GameplayEventKind::MoonCoreReached { player_id } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        news.push((
+                            seat,
+                            Some((
+                                FanfareKind::Lunar,
+                                "The heart of the Moon".to_owned(),
+                                "It is warm. It hums. It is not rock at all.".to_owned(),
+                            )),
+                            None,
+                            false,
+                        ));
+                    }
+                }
+                GameplayEventKind::UplinkBeamed { player_id, to_moon } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        let text = if to_moon {
+                            "Beamed up to the Moon."
+                        } else {
+                            "Beamed back down."
+                        };
+                        news.push((seat, None, Some(text.to_owned()), false));
+                    }
+                }
+                _ => {}
+            }
+        }
+        let tick = self.shell.update_ticks;
+        for (seat, fanfare, message, landed) in news {
+            if let Some((kind, title, detail)) = fanfare {
+                self.shell.quest_fanfare(seat, kind, title, detail);
+            }
+            if let Some(message) = message {
+                self.shell.seat_mut(seat).message = message;
+            }
+            if landed {
+                self.shell.seat_mut(seat).moon_landing = Some(tick);
+            }
         }
     }
 

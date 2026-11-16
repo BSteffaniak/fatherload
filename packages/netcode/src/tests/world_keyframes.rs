@@ -228,6 +228,7 @@ fn a_keyframe_from_an_unknown_generator_is_a_codec_error() {
         .len();
     let generator = start + seed + 3;
     let original = bytes[generator];
+    // (Variant 99: no build has that many generators; a single varint byte.)
     bytes[generator] = 99;
 
     let mut client: ClientSession<WorldState> = ClientSession::new(ClientConfig::default());

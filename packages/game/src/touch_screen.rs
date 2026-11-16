@@ -334,7 +334,8 @@ pub fn touch_context(
             || view.surface_zone.is_some()
             || view.village_door.is_some()
             || view.nearby_module.is_some()
-            || view.buoy.is_some(),
+            || view.buoy.is_some()
+            || view.in_colony,
         kits: kits.map(|count| count > 0),
         pilot: TouchPilot::new(view.pilot.is_some(), view.can_exit, view.can_board),
     }

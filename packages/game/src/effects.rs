@@ -906,8 +906,19 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::FlakBurst { player_id, .. }
         | GameplayEventKind::TempleLeverPulled { player_id, .. }
         | GameplayEventKind::TempleGateOpened { player_id, .. }
-        | GameplayEventKind::RelicChestOpened { player_id, .. } => Some(player_id),
+        | GameplayEventKind::RelicChestOpened { player_id, .. }
+        | GameplayEventKind::MoonVacuumBreach { player_id, .. }
+        | GameplayEventKind::MoonLanded { player_id }
+        | GameplayEventKind::ColonyServiceUsed { player_id, .. }
+        | GameplayEventKind::FacilityPylon { player_id, .. }
+        | GameplayEventKind::FacilityGateOpened { player_id }
+        | GameplayEventKind::MoonCoreReached { player_id }
+        | GameplayEventKind::UplinkBeamed { player_id, .. } => Some(player_id),
+        GameplayEventKind::WardenDefeated { by } => by,
         GameplayEventKind::LightningArc { struck, .. } => struck,
+        GameplayEventKind::WardenAwakened { .. } | GameplayEventKind::WardenStaggered { .. } => {
+            None
+        }
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

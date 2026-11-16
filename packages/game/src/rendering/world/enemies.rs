@@ -25,7 +25,7 @@ use fatherload_simulation::{
 use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
-    sprites::enemies as art,
+    sprites::{enemies as art, moon as moon_art},
 };
 
 use super::{ART, Pen, fx::disc, snap};
@@ -53,6 +53,10 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::AirshipTurret => &art::AIRSHIP_TURRET,
         EnemyKind::SkyPirate => &art::SKY_PIRATE,
         EnemyKind::HarpyNester => &art::HARPY_NESTER,
+        EnemyKind::RegolithCrawler => &moon_art::REGOLITH_CRAWLER,
+        EnemyKind::CrystalMite => &moon_art::CRYSTAL_MITE,
+        EnemyKind::DerelictAutomaton => &moon_art::DERELICT_AUTOMATON,
+        EnemyKind::Warden => &moon_art::WARDEN,
     }
 }
 
@@ -160,7 +164,7 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
                 0
             }
         }
-        EnemyKind::MiningDrone if state.mode == EnemyMode::Stunned => 0,
+        EnemyKind::MiningDrone | EnemyKind::Warden if state.mode == EnemyMode::Stunned => 0,
         EnemyKind::AirshipTurret => usize::from(
             state.mode == EnemyMode::Windup && ((phase * 12.0) as usize).is_multiple_of(2),
         ),
@@ -178,7 +182,25 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
                     1
                 })
         }
-        EnemyKind::CaveBat
+        EnemyKind::RegolithCrawler => {
+            if attacking {
+                1
+            } else if moving {
+                sprite.frame_at(phase)
+            } else {
+                0
+            }
+        }
+        EnemyKind::DerelictAutomaton => {
+            if moving {
+                sprite.frame_at(phase)
+            } else {
+                0
+            }
+        }
+        EnemyKind::CrystalMite
+        | EnemyKind::Warden
+        | EnemyKind::CaveBat
         | EnemyKind::MagmaWisp
         | EnemyKind::BroodNest
         | EnemyKind::MiningDrone
@@ -205,6 +227,8 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::PirateAirship
             | EnemyKind::AirshipTurret
             | EnemyKind::SkyPirate
+            | EnemyKind::RegolithCrawler
+            | EnemyKind::DerelictAutomaton
     )
 }
 
@@ -266,6 +290,22 @@ fn draw_enemy(
         EnemyKind::AncientGuardian => {
             disc(draw, x, y - ART * 2.0, 8, with_alpha(MINT, 30));
         }
+        EnemyKind::Warden => {
+            // A slow violet pulse; brighter while its shield holds.
+            let pulse = ((seconds * 2.5).sin() * 2.0) as i32;
+            let shielded = state.shield > 0.0;
+            disc(
+                draw,
+                x,
+                y,
+                16 + pulse,
+                with_alpha(if shielded { MINT } else { VIOLET }, 28),
+            );
+            disc(draw, x, y, 10, with_alpha(VIOLET, 40));
+        }
+        EnemyKind::CrystalMite => {
+            disc(draw, x, y, 4, with_alpha(PINK, 40));
+        }
         EnemyKind::BroodNest => {
             disc(draw, x, y + ART * 4.0, 7, with_alpha(LIME, 25));
         }
@@ -298,7 +338,12 @@ fn draw_enemy(
             EnemyKind::SentryTurret | EnemyKind::AncientGuardian | EnemyKind::MiningDrone => {
                 Some(GOLD)
             }
-            EnemyKind::RogueExcavator | EnemyKind::Shellback | EnemyKind::RockMimic => Some(RED),
+            EnemyKind::Warden => Some(MINT),
+            EnemyKind::RegolithCrawler => Some(BONE),
+            EnemyKind::RogueExcavator
+            | EnemyKind::Shellback
+            | EnemyKind::RockMimic
+            | EnemyKind::DerelictAutomaton => Some(RED),
             _ => None,
         };
         if let Some(glow) = glow {

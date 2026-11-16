@@ -325,7 +325,9 @@ impl WorldState {
         }
         if thrusting {
             let thrust_efficiency = efficiency;
-            let mut efficiency = fuel_burn_efficiency(player.fuel_tank_level);
+            // The lunar colony's Helium-3 Reactor (WP-MOON) burns a quarter less.
+            let mut efficiency =
+                fuel_burn_efficiency(player.fuel_tank_level) * player.lunar.burn_factor();
             if parts.contains(&RigPartKind::BurstEngine) {
                 efficiency *= 1.22;
             }

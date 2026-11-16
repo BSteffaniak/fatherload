@@ -32,6 +32,7 @@ pub mod infrastructure;
 pub mod input;
 pub mod item;
 pub mod milestone;
+pub mod moon;
 pub mod people;
 pub mod physics;
 pub mod pilot;

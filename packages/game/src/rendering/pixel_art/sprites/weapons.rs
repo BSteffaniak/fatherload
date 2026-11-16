@@ -583,6 +583,9 @@ pub const fn mounted(weapon: WeaponKind) -> &'static SpriteDef {
         WeaponKind::GravityGun => &GRAVITY_GUN,
         WeaponKind::TetherHarpoon => &TETHER_HARPOON,
         WeaponKind::FlakCannon => &FLAK_CANNON,
+        WeaponKind::LunarCutter => &super::moon::LUNAR_CUTTER,
+        WeaponKind::LowGMortar => &super::moon::LOW_G_MORTAR,
+        WeaponKind::VoidLance => &super::moon::VOID_LANCE,
     }
 }
 
@@ -600,6 +603,9 @@ pub const fn icon(weapon: WeaponKind) -> &'static SpriteDef {
         WeaponKind::GravityGun => &ICON_GRAVITY_GUN,
         WeaponKind::TetherHarpoon => &ICON_TETHER_HARPOON,
         WeaponKind::FlakCannon => &ICON_FLAK_CANNON,
+        WeaponKind::LunarCutter => &super::moon::ICON_LUNAR_CUTTER,
+        WeaponKind::LowGMortar => &super::moon::ICON_LOW_G_MORTAR,
+        WeaponKind::VoidLance => &super::moon::ICON_VOID_LANCE,
     }
 }
 
@@ -612,10 +618,13 @@ pub const fn projectile(weapon: WeaponKind) -> Option<&'static SpriteDef> {
         WeaponKind::RocketLauncher => Some(&ROCKET),
         WeaponKind::Harpoon => Some(&SPEAR),
         WeaponKind::FlakCannon => Some(&FLAK_SHELL),
+        WeaponKind::LowGMortar => Some(&super::moon::MORTAR_SHELL),
         WeaponKind::PlasmaCutter
         | WeaponKind::Railgun
         | WeaponKind::ArcRifle
         | WeaponKind::GravityGun
-        | WeaponKind::TetherHarpoon => None,
+        | WeaponKind::TetherHarpoon
+        | WeaponKind::LunarCutter
+        | WeaponKind::VoidLance => None,
     }
 }

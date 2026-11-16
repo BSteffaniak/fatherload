@@ -213,7 +213,7 @@ impl WorldState {
     pub fn active_beam(&self, player_id: PlayerId) -> Option<((f32, f32), (f32, f32))> {
         let player = self.players.get(&player_id)?;
         let mounted = player.mounted_weapon?;
-        if mounted.kind != WeaponKind::PlasmaCutter || !player.weapon.firing {
+        if !mounted.kind.is_beam() || !player.weapon.firing {
             return None;
         }
         let aim = player.weapon.aim();
@@ -1092,9 +1092,13 @@ impl WorldState {
         use crate::enemy::{self, DamageKind};
         let kind = match damage.source {
             DamageSource::Weapon { weapon, .. } => match weapon {
-                WeaponKind::Railgun | WeaponKind::Harpoon => DamageKind::Piercing,
-                WeaponKind::PlasmaCutter => DamageKind::Fire,
-                WeaponKind::RocketLauncher | WeaponKind::FlakCannon => DamageKind::Explosive,
+                WeaponKind::Railgun | WeaponKind::Harpoon | WeaponKind::VoidLance => {
+                    DamageKind::Piercing
+                }
+                WeaponKind::PlasmaCutter | WeaponKind::LunarCutter => DamageKind::Fire,
+                WeaponKind::RocketLauncher | WeaponKind::FlakCannon | WeaponKind::LowGMortar => {
+                    DamageKind::Explosive
+                }
                 WeaponKind::RivetGun | WeaponKind::ScatterBlaster | WeaponKind::GravityGun => {
                     DamageKind::Kinetic
                 }
@@ -1261,7 +1265,8 @@ impl WorldState {
         let Some(mk) = player.weapon_rack.mk(weapon) else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
-        if mk >= MAX_WEAPON_MK {
+        // Moon weapons are tuned at the lunar colony (`crate::moon::ColonyOffer`).
+        if mk >= MAX_WEAPON_MK || weapon.is_lunar() {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
         let cost = weapon.upgrade_cost(mk + 1);
