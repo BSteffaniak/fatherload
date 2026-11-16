@@ -22,6 +22,8 @@
 //!   minute by strategy.
 //! - [`climb`]: the climb bot (the plan's T19 row): apex and turn-back altitude on one tank
 //!   per fuel-tank and engine tier, through the real tick.
+//! - [`trip`]: the everyday trip (drill 50 rows down, mine two minutes, fly home): the fuel
+//!   it burns against each tank, the yardstick of the fuel curve.
 //!
 //! The report: `fatherload --balance-report [--seeds N] [--minutes M] [--only a,b]` (the game
 //! binary), or `cargo test --release -p fatherload_simulation balance_report -- --ignored
@@ -53,6 +55,7 @@ pub mod combat;
 pub mod economy;
 #[cfg(test)]
 mod tests;
+pub mod trip;
 
 use std::{collections::BTreeMap, fmt::Write as _};
 
@@ -279,6 +282,7 @@ pub fn standard_probes() -> Vec<Box<dyn BalanceProbe>> {
         Box::new(combat::ExposureProbe),
         Box::new(building::BuildingProbe),
         Box::new(climb::ClimbProbe),
+        Box::new(trip::TripProbe),
     ]
 }
 
