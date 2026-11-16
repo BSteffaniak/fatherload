@@ -89,6 +89,7 @@ impl SkyGauge {
 }
 
 /// Draws the sky gauge right-aligned under the wallet panel, if the rig is in a V8 sky.
+#[allow(clippy::too_many_lines, reason = "one gauge line after another")]
 pub(super) fn draw_sky_gauge(
     draw: &mut RaylibDrawHandle<'_>,
     snapshot: &RenderSnapshot<'_>,
@@ -97,7 +98,7 @@ pub(super) fn draw_sky_gauge(
     top: i32,
 ) {
     let player = view.player;
-    let Some(gauge) = SkyGauge::read(
+    let Some(mut gauge) = SkyGauge::read(
         snapshot.terrain.settings(),
         (player.x, player.y),
         player.hazard_gear.altitude_intake,
@@ -105,6 +106,14 @@ pub(super) fn draw_sky_gauge(
     ) else {
         return;
     };
+    // A pressurized hull (WP-SKY) keeps out cold on top of the de-icer.
+    gauge.cold_cover = player.hazard_gear.cold_cover();
+    // Drained buoys are not worth a detour.
+    let nearest = super::world::sky_isles::nearest_sky_place(
+        snapshot.terrain.settings(),
+        (player.x, player.y),
+        &player.villages.buoys,
+    );
     let band = gauge.band.name().to_uppercase();
     let air = format!(
         "AIR {}%  THRUST {}%",
@@ -113,7 +122,10 @@ pub(super) fn draw_sky_gauge(
     let cold = (gauge.cold > 0).then(|| format!("COLD {} / {}", gauge.cold, gauge.cold_cover));
     let gravity = ((gauge.gravity - 1.0).abs() > 0.005).then(|| format!("G {:.2}", gauge.gravity));
     let arrows = gauge.wind_arrows();
-    let lines = 2 + i32::from(cold.is_some() || gravity.is_some());
+    let place = nearest
+        .as_ref()
+        .map(super::world::sky_isles::NearestSkyPlace::line);
+    let lines = 2 + i32::from(cold.is_some() || gravity.is_some()) + i32::from(place.is_some());
     let text_width = [
         ui_kit::text_width(&band, TextStyle::Bold)
             + ui_kit::text_width(arrows, TextStyle::Bold)
@@ -126,6 +138,9 @@ pub(super) fn draw_sky_gauge(
                 .map_or(0, |line| ui_kit::text_width(line, TextStyle::Body) + 8)
             + icons::ICON_SIZE
             + 4,
+        place.as_ref().map_or(0, |line| {
+            ui_kit::text_width(line, TextStyle::Body) + icons::ICON_SIZE + 4
+        }),
     ]
     .into_iter()
     .max()
@@ -176,6 +191,24 @@ pub(super) fn draw_sky_gauge(
             ui_kit::text(draw, line, text_x, y, TextStyle::Body, LAVENDER);
         }
     }
+    // The nearest sky town or unused fuel buoy (WP-SKY navigation).
+    if let (Some(line), Some(found)) = (&place, &nearest) {
+        let y = top + 5 + (lines - 1) * 12;
+        let icon = if found.is_town() {
+            &icons::CARGO
+        } else {
+            &icons::FUEL
+        };
+        ui_kit::icon(draw, icon, inner, y - 1);
+        ui_kit::text(
+            draw,
+            line,
+            inner + icons::ICON_SIZE + 3,
+            y,
+            TextStyle::Body,
+            if found.is_town() { GOLD } else { AMBER },
+        );
+    }
 }
 
 #[cfg(test)]
@@ -187,7 +220,7 @@ mod tests {
     #[test]
     fn the_gauge_reads_the_sky_and_stays_away_on_the_ground() {
         let settings = WorldSettings::new(9);
-        assert_eq!(settings.generator, GeneratorVersion::V8);
+        assert!(settings.generator.has_sky());
         assert!(SkyGauge::read(&settings, (100.0, 50.0), 0, 0).is_none());
         #[allow(clippy::cast_precision_loss, reason = "band rows")]
         let y = -((sky::DEAD_AIR_BOTTOM_ROWS + 300) as f32) * TILE_SIZE;

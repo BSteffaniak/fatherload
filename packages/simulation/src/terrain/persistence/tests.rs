@@ -103,7 +103,9 @@ const fn assert_payload_kinds_listed(mineral: MineralKind, artifact: ArtifactKin
         | MineralKind::Diamond
         | MineralKind::Platinum
         | MineralKind::Uranium
-        | MineralKind::Mythril => {}
+        | MineralKind::Mythril
+        | MineralKind::Skystone
+        | MineralKind::CloudSilver => {}
     }
     match artifact {
         ArtifactKind::Fossil
@@ -116,7 +118,9 @@ const fn assert_payload_kinds_listed(mineral: MineralKind, artifact: ArtifactKin
         | ArtifactKind::ReactorBloom
         | ArtifactKind::MachineSigil
         | ArtifactKind::VoidPearl
-        | ArtifactKind::MantleHeart => {}
+        | ArtifactKind::MantleHeart
+        | ArtifactKind::WindAstrolabe
+        | ArtifactKind::CloudPearl => {}
     }
 }
 
@@ -138,6 +142,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         TileKind::Bedrock,
     ];
     kinds.extend(crate::worldgen::deposits::MINERALS.map(TileKind::Ore));
+    kinds.extend([MineralKind::Skystone, MineralKind::CloudSilver].map(TileKind::Ore));
     kinds.extend(
         [
             ArtifactKind::Fossil,
@@ -151,6 +156,8 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
             ArtifactKind::MachineSigil,
             ArtifactKind::VoidPearl,
             ArtifactKind::MantleHeart,
+            ArtifactKind::WindAstrolabe,
+            ArtifactKind::CloudPearl,
         ]
         .map(TileKind::Artifact),
     );
@@ -199,8 +206,8 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
     }
     for code in [
         12 << 8,
-        0x10A << 8,
-        0x20B << 8,
+        0x10C << 8,
+        0x20D << 8,
         0x3FF << 8,
         0x40F << 8,
         0x506 << 8,
@@ -417,9 +424,9 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
 
     // An unknown generator version (from a newer build) is a decode error, not a panic.
     let mut json = serde_json::to_value(&terrain).expect("json");
-    json["settings"]["generator"] = serde_json::Value::String("V9".to_owned());
+    json["settings"]["generator"] = serde_json::Value::String("V99".to_owned());
     let error = serde_json::from_value::<Terrain>(json).expect_err("unknown generator");
-    assert!(error.to_string().contains("V9"), "{error}");
+    assert!(error.to_string().contains("V99"), "{error}");
 
     // The same in the binary keyframe codec: postcard encodes the variant as its index.
     let known = WireSnapshot {
@@ -444,7 +451,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
     );
     let unknown = WireSnapshot {
         settings: WireSettings {
-            generator: 9,
+            generator: 99,
             ..known.settings
         },
         ..known

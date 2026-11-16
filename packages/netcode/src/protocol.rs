@@ -64,7 +64,15 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * T18 upgrade reward moments: the milestone log in the loadout
 ///   (`PlayerInventory::milestones`), the milestone-reward cosmetics (new `RigCosmetics` option
 ///   variants in the rig build) and the `UpgradeInstalled` / `MilestoneEarned` events 180-181.
-pub const PROTOCOL_VERSION: u8 = 11;
+///
+/// Version 12 (wave 4):
+/// * T20 sky isles: `GeneratorVersion::V9` worlds, the new sky tiles (caches, nests, ruins,
+///   springs, vines, keystones, vents, buoy pads), skystone and cloud silver ore and the sky
+///   artifacts in tile codes and items, sky towns (`VillageSetting::Sky`, sky cultures and
+///   roles, `VillageService` / `VillageDeal::SkyCraft`), `SessionServiceRequest::SkyBuoy`, the
+///   aether thruster and pressurized hull tiers in `HazardGear` (loadout), drained buoys in the
+///   village journal and the sky isle events 200-203.
+pub const PROTOCOL_VERSION: u8 = 12;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

@@ -294,6 +294,58 @@ pub const fn upgrade_locked_by(
     }
 }
 
+/// Why the shop will not sell an upgrade offer yet ([`upgrade_lock`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UpgradeLock {
+    /// Late-game gear: on sale once someone reaches this band.
+    Band(Band),
+    /// Sky gear (Altitude Intake, De-Icer) on a world without a sky to climb into
+    /// (generators before V8): there is nothing for it to do, so the shop does not sell it.
+    NoSky,
+}
+
+impl UpgradeLock {
+    /// The counter's explanation.
+    #[must_use]
+    pub fn reason(self) -> String {
+        match self {
+            Self::Band(band) => format!(
+                "Late-game gear: on sale once anyone reaches the {}",
+                band.name()
+            ),
+            Self::NoSky => {
+                "Sky gear: this world has no sky to climb into (new worlds do)".to_owned()
+            }
+        }
+    }
+}
+
+/// Whether `kind` is sky gear that only a world with a sky can use.
+#[must_use]
+pub const fn needs_sky(kind: UpgradeKind) -> bool {
+    matches!(kind, UpgradeKind::AltitudeIntake | UpgradeKind::DeIcer)
+}
+
+/// What keeps the shop from selling `offer` on world `settings` dug to `deepest_row`.
+///
+/// `None` when it is on sale; otherwise a band still to reach ([`upgrade_locked_by`]) or, for sky gear, a world
+/// without a sky. Maxed lines are never locked. The shop, the purchase check and the balance
+/// bots all read this.
+#[must_use]
+pub const fn upgrade_lock(
+    offer: &UpgradeOffer,
+    settings: &WorldSettings,
+    deepest_row: i32,
+) -> Option<UpgradeLock> {
+    if let Some(band) = upgrade_locked_by(offer, settings, deepest_row) {
+        return Some(UpgradeLock::Band(band));
+    }
+    if !upgrade_maxed(offer) && needs_sky(offer.kind) && !settings.generator.has_sky() {
+        return Some(UpgradeLock::NoSky);
+    }
+    None
+}
+
 /// Whether `offer` is already at its line's top level (bomb packs never max out).
 #[must_use]
 pub const fn upgrade_maxed(offer: &UpgradeOffer) -> bool {
@@ -442,6 +494,9 @@ pub fn max_out_upgrades(player: &mut Player) {
             apply_upgrade(player, kind);
         }
     }
+    // The sky-crafted parts too (WP-SKY): a test-mode rig has everything.
+    player.hazard_gear.aether_thrusters = crate::skycraft::AETHER_THRUSTERS_MAX_LEVEL;
+    player.hazard_gear.pressurized_hull = crate::skycraft::PRESSURIZED_HULL_MAX_LEVEL;
     player.fuel = player.fuel_capacity;
     player.hull = player.max_hull();
 }

@@ -45,6 +45,7 @@ pub mod rig;
 pub mod rng;
 pub mod service;
 pub mod sky;
+pub mod skycraft;
 pub mod summary;
 pub mod surface;
 pub mod terrain;

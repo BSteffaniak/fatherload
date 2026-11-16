@@ -265,6 +265,15 @@ pub fn villages_between(
     villages::villages_between(settings, first, last)
 }
 
+/// Every sky town whose area overlaps `rect` (see [`villages::sky_towns_in`]).
+#[must_use]
+pub fn sky_towns_in(
+    settings: &WorldSettings,
+    rect: &crate::worldgen::TileRect,
+) -> Vec<std::sync::Arc<crate::village::Village>> {
+    villages::sky_towns_in(settings, rect)
+}
+
 /// The village whose area contains `position`.
 #[must_use]
 pub fn village_containing(

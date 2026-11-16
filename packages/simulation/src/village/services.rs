@@ -36,6 +36,14 @@ pub enum VillageService {
     Shrine,
     /// A house: residents to talk to.
     Home,
+    /// Sky town (WP-SKY): an airship dock (fuel, aether thrusters).
+    AirshipDock,
+    /// Sky town: a floating market (sky ore bought dear, smugglers' wares).
+    SkyMarket,
+    /// Sky town: a sky monastery (blessings, a cell for the night, cloud-silver de-icers).
+    Monastery,
+    /// Sky town: a cloud granary (cheap condensed fuel, pressurized hulls).
+    Granary,
 }
 
 impl VillageService {
@@ -53,6 +61,10 @@ impl VillageService {
             BuildingKind::Assay => Self::AssayOffice,
             BuildingKind::MapRoom => Self::Cartographer,
             BuildingKind::Shrine => Self::Shrine,
+            BuildingKind::AirshipDock => Self::AirshipDock,
+            BuildingKind::Bazaar => Self::SkyMarket,
+            BuildingKind::Monastery => Self::Monastery,
+            BuildingKind::Granary => Self::Granary,
             BuildingKind::Tower | BuildingKind::Farm | BuildingKind::MineHead => return None,
         })
     }
@@ -128,6 +140,12 @@ pub enum VillageDeal {
     /// A room at the inn for the night: puts you in bed (dusk and night only; see
     /// [`crate::clock`]).
     Room,
+    /// Sky crafting (WP-SKY, [`crate::skycraft`]): tier `tier` of `recipe`, paid in credits
+    /// (the offer's price) and sky ore from the bay. Only the next tier can be crafted.
+    SkyCraft {
+        recipe: crate::skycraft::SkyRecipe,
+        tier: u8,
+    },
 }
 
 /// A deal and its price (credits; percentage deals price per unit when bought).
@@ -170,8 +188,43 @@ impl VillageOffer {
             VillageDeal::Blessing(kind) => format!("{} ({})", kind.name(), kind.effect()),
             VillageDeal::Rumour => "Buy a round and ask for rumours".to_owned(),
             VillageDeal::Room => "A room for the night".to_owned(),
+            VillageDeal::SkyCraft { recipe, tier } => {
+                let cost = crate::skycraft::cost(recipe, tier);
+                format!(
+                    "{} {} ({} skystone, {} cloud silver)",
+                    recipe.name(),
+                    tier_numeral(tier),
+                    cost.skystone,
+                    cost.cloud_silver
+                )
+            }
         }
     }
+}
+
+/// A tier as a Roman numeral (I-VI).
+#[must_use]
+pub const fn tier_numeral(tier: u8) -> &'static str {
+    match tier {
+        0 | 1 => "I",
+        2 => "II",
+        3 => "III",
+        4 => "IV",
+        5 => "V",
+        _ => "VI",
+    }
+}
+
+/// The counter rows of every tier of `recipe` (each sells only after the one before).
+fn sky_craft_rows(recipe: crate::skycraft::SkyRecipe) -> Vec<VillageOffer> {
+    (1..=recipe.max_tier())
+        .map(|tier| {
+            VillageOffer::flat(
+                VillageDeal::SkyCraft { recipe, tier },
+                crate::skycraft::cost(recipe, tier).credits,
+            )
+        })
+        .collect()
 }
 
 /// Rare part prices by part.
@@ -317,5 +370,69 @@ pub fn offers(village: &Village, building: &VillageBuilding) -> Vec<VillageOffer
             .iter()
             .map(|kind| VillageOffer::flat(VillageDeal::Blessing(*kind), 90 + prosperity * 10))
             .collect(),
+        // Sky towns (WP-SKY): fuel is dear up here, except at the cloud farms.
+        VillageService::AirshipDock => {
+            let mut list = vec![
+                VillageOffer::metered(VillageDeal::Refuel {
+                    percent: 160 - prosperity * 4,
+                }),
+                VillageOffer::metered(VillageDeal::Repair { percent: 120 }),
+            ];
+            list.extend(sky_craft_rows(crate::skycraft::SkyRecipe::AetherThrusters));
+            list
+        }
+        VillageService::SkyMarket => {
+            let mut list = vec![
+                VillageOffer::metered(VillageDeal::SellCargo {
+                    percent: 160 + prosperity * 4,
+                    only: Some(MineralKind::Skystone),
+                }),
+                VillageOffer::metered(VillageDeal::SellCargo {
+                    percent: 160 + prosperity * 4,
+                    only: Some(MineralKind::CloudSilver),
+                }),
+            ];
+            // The smugglers' table: one part off the back of an airship, one pack of charges.
+            let part = RigPartKind::ALL[rng.below(RigPartKind::ALL.len())];
+            list.push(VillageOffer::flat(
+                VillageDeal::Part(part),
+                part_price(part) * 110 / 100,
+            ));
+            let kinds: Vec<_> = EXPLOSIVE_OFFERS
+                .iter()
+                .filter(|offer| offer.kind != ExplosiveKind::Flare)
+                .collect();
+            if !kinds.is_empty() {
+                let offer = kinds[rng.below(kinds.len())];
+                list.push(VillageOffer::flat(
+                    VillageDeal::Explosives {
+                        kind: offer.kind,
+                        count: offer.count * 2,
+                    },
+                    offer.cost * 2,
+                ));
+            }
+            list
+        }
+        VillageService::Monastery => {
+            let mut list: Vec<VillageOffer> = BlessingKind::ALL
+                .iter()
+                .map(|kind| VillageOffer::flat(VillageDeal::Blessing(*kind), 110 + prosperity * 10))
+                .collect();
+            list.push(VillageOffer::flat(
+                VillageDeal::Room,
+                crate::clock::INN_ROOM_PRICE,
+            ));
+            list.extend(sky_craft_rows(crate::skycraft::SkyRecipe::DeIcer));
+            list
+        }
+        VillageService::Granary => {
+            let mut list = vec![
+                VillageOffer::metered(VillageDeal::Refuel { percent: 85 }),
+                VillageOffer::metered(VillageDeal::Repair { percent: 100 }),
+            ];
+            list.extend(sky_craft_rows(crate::skycraft::SkyRecipe::PressurizedHull));
+            list
+        }
     }
 }

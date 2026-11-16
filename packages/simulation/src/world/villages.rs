@@ -103,7 +103,10 @@ impl WorldState {
         }
         if matches!(
             deal.deal,
-            VillageDeal::SellCargo { .. } | VillageDeal::Refuel { .. } | VillageDeal::Repair { .. }
+            VillageDeal::SellCargo { .. }
+                | VillageDeal::Refuel { .. }
+                | VillageDeal::Repair { .. }
+                | VillageDeal::SkyCraft { .. }
         ) && !self.rig_within_service_reach(player_id)
         {
             // On foot, the rig itself must be parked outside (Part II F5).
@@ -144,6 +147,7 @@ impl WorldState {
             | VillageDeal::Cosmetic(_)
             | VillageDeal::Explosives { .. }
             | VillageDeal::Blessing(_)) => self.apply_goods(player_id, goods, price),
+            VillageDeal::SkyCraft { recipe, tier } => self.apply_sky_craft(player_id, recipe, tier),
         }
     }
 
@@ -208,7 +212,8 @@ impl WorldState {
             VillageDeal::SellCargo { .. }
             | VillageDeal::ChartRegion
             | VillageDeal::Rumour
-            | VillageDeal::Room => PlayerScopedCommandOutcome::IgnoredUnavailable,
+            | VillageDeal::Room
+            | VillageDeal::SkyCraft { .. } => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 
@@ -300,7 +305,15 @@ impl WorldState {
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
-        let missing = (player.fuel_capacity - player.fuel).ceil().max(0.0);
+        // Up in the sky a rig that cannot cross the dead-air gap is only topped up to an
+        // honest level (sky towns and their traders; `milestone::sky_refuel_level`).
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "altitudes are a few thousand rows"
+        )]
+        let altitude = (-player.y / TILE_SIZE).floor() as i32;
+        let level = crate::milestone::sky_refuel_level(player, altitude);
+        let missing = (level - player.fuel).ceil().max(0.0);
         #[allow(
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss,

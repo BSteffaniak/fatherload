@@ -73,16 +73,23 @@ fn quote(snapshot: &RenderSnapshot<'_>, player: &Player, offer: VillageOffer) ->
                 })
         }
         VillageDeal::Refuel { percent } => {
-            let missing = (player.fuel_capacity - player.fuel).ceil().max(0.0) as u32;
+            // Up in the sky, rigs that cannot cross the dead-air gap only top up partway
+            // (the same rule the tick applies).
+            let altitude = (-player.y / fatherload_simulation::TILE_SIZE).floor() as i32;
+            let level = fatherload_simulation::milestone::sky_refuel_level(player, altitude);
+            let capped = level < player.fuel_capacity;
+            let missing = (level - player.fuel).ceil().max(0.0) as u32;
             let cost = (missing * REFUEL_UNIT_COST * percent).div_ceil(100);
             Offer::new(
                 &icons::FUEL,
-                "Fill the tank",
+                if capped { "Top up the tank" } else { "Fill the tank" },
                 format!("{missing} fuel at {percent}% of town price"),
             )
             .price(cost.min(credits.max(1)), credits)
             .unavailable_if(missing == 0)
-            .about(if percent < 100 {
+            .about(if capped {
+                "Fuel is rationed this high up: enough to hop the isles, never enough to brave the dead air."
+            } else if percent < 100 {
                 "Cheap fuel out here: the depot's whole reason for being."
             } else {
                 "Fuel hauled all the way out here costs a little more than in town."
@@ -134,6 +141,43 @@ fn quote(snapshot: &RenderSnapshot<'_>, player: &Player, offer: VillageOffer) ->
         VillageDeal::Rumour => Offer::new(&menu_icons::LETTER, "Buy a round", "ask for rumours")
             .about("The regulars always know of something buried nearby.")
             .price(offer.price, credits),
+        VillageDeal::SkyCraft { recipe, tier } => {
+            let cost = fatherload_simulation::skycraft::cost(recipe, tier);
+            let have = recipe.level(&player.hazard_gear);
+            let title = format!(
+                "{} {}",
+                recipe.name(),
+                fatherload_simulation::village::services::tier_numeral(tier)
+            );
+            let ore = format!(
+                "{} skystone, {} cloud silver",
+                cost.skystone, cost.cloud_silver
+            );
+            let row = Offer::new(&menu_icons::GEAR, title, ore.clone()).about(format!(
+                "Sky crafting: {}. Paid in credits and sky ore from the bay ({ore}).",
+                recipe.effect()
+            ));
+            if tier <= have {
+                row.tag("FITTED", LIME).unavailable_if(true)
+            } else if tier > have + 1 {
+                row.tag("LATER", LAVENDER).unavailable_if(true)
+            } else {
+                let short_of_ore = player
+                    .cargo_bay
+                    .mineral(fatherload_simulation::terrain::MineralKind::Skystone)
+                    < cost.skystone
+                    || player
+                        .cargo_bay
+                        .mineral(fatherload_simulation::terrain::MineralKind::CloudSilver)
+                        < cost.cloud_silver;
+                let row = row.price(offer.price, credits);
+                if short_of_ore {
+                    row.tag("NEED ORE", ORANGE).unavailable_if(true)
+                } else {
+                    row
+                }
+            }
+        }
         VillageDeal::Room => {
             let row = Offer::new(&icons::MOON, "A room for the night", "sleep until dawn")
                 .about("A warm bed upstairs. In a crew, everyone has to turn in before morning comes.");

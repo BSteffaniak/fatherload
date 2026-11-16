@@ -6,12 +6,12 @@
 //! step, so they replicate, predict and replay like any other event and need no saved state.
 
 use crate::{
-    environment::{cold_excess, environment_at},
+    environment::environment_at,
     event::{GameplayEventKind, TickOutput},
     ids::PlayerId,
     sky::SkyBand,
     terrain::TILE_SIZE,
-    worldgen::sky::updraft_at,
+    worldgen::sky::{jet_stream_at, updraft_at, vent_updraft_at},
 };
 
 use super::WorldState;
@@ -63,15 +63,22 @@ impl WorldState {
                 band: to_band,
             });
         }
-        if updraft_at(settings, column(before.0), from_row) == 0
-            && updraft_at(settings, column(player.x), to_row) > 0
-        {
+        // Classic updrafts and (V9) island vents.
+        let lift =
+            |x: i32, row: i32| updraft_at(settings, x, row) + vent_updraft_at(settings, x, row);
+        if lift(column(before.0), from_row) == 0 && lift(column(player.x), to_row) > 0 {
             output.push_event(GameplayEventKind::UpdraftCaught { player_id });
         }
-        let de_icer = player.hazard_gear.de_icer;
+        // V9 jet streams.
+        if jet_stream_at(settings, column(before.0), from_row) == 0
+            && jet_stream_at(settings, column(player.x), to_row) != 0
+        {
+            output.push_event(GameplayEventKind::JetStreamCaught { player_id });
+        }
+        let gear = player.hazard_gear;
         let cold_before = environment_at(settings, before.0, before.1).cold;
         let cold_after = environment_at(settings, player.x, player.y).cold;
-        if cold_excess(cold_before, de_icer) == 0 && cold_excess(cold_after, de_icer) > 0 {
+        if gear.cold_excess(cold_before) == 0 && gear.cold_excess(cold_after) > 0 {
             output.push_event(GameplayEventKind::RigIcing { player_id });
         }
     }

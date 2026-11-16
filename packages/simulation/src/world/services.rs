@@ -83,8 +83,9 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
         | SessionServiceRequest::AcceptExpedition { .. }
         | SessionServiceRequest::AbandonExpedition { .. } => &[SurfaceZone::Headquarters],
         // Every quest giver's counter; the quest's own giver is checked when it resolves.
-        // Village counters, not town buildings (validated by `command_allowed_here`).
-        SessionServiceRequest::Village { .. } => &[],
+        // Village counters and sky buoys, not town buildings (validated by
+        // `command_allowed_here`).
+        SessionServiceRequest::Village { .. } | SessionServiceRequest::SkyBuoy { .. } => &[],
         SessionServiceRequest::AcceptQuest { .. }
         | SessionServiceRequest::TurnInQuest { .. }
         | SessionServiceRequest::AbandonQuest { .. } => &[
@@ -161,6 +162,13 @@ impl WorldState {
                 .player_village_building(player_id)
                 .is_some_and(|(at, index)| at.id == *village && index == usize::from(*building));
         }
+        if let PlayerCommand::Service(SessionServiceRequest::SkyBuoy { isle }) = command {
+            // In the rig, parked on that buoy's pad.
+            return self.pilot_of(player_id).is_none()
+                && self
+                    .buoy_at_rig(player_id)
+                    .is_some_and(|buoy| buoy.isle == *isle);
+        }
         if command_services_rig(command) && !self.rig_within_service_reach(player_id) {
             return false;
         }
@@ -209,6 +217,9 @@ impl WorldState {
         } = request
         {
             return self.apply_village_deal(player_id, village, building, offer, service);
+        }
+        if let SessionServiceRequest::SkyBuoy { isle } = request {
+            return self.apply_buoy_refill(player_id, isle);
         }
         let direct = match request {
             SessionServiceRequest::Refuel { .. } => Some(PlayerCommand::Refuel),
@@ -342,6 +353,7 @@ impl WorldState {
             }
             // Handled by `apply_service_request` or the canonical progression/salvage services.
             SessionServiceRequest::Village { .. }
+            | SessionServiceRequest::SkyBuoy { .. }
             | SessionServiceRequest::Refuel { .. }
             | SessionServiceRequest::Repair { .. }
             | SessionServiceRequest::SellCargo

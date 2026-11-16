@@ -45,6 +45,7 @@ mod pilot;
 mod quest_marks;
 mod rig;
 mod sky;
+pub mod sky_isles;
 pub mod sky_lands;
 mod speed_fx;
 mod surface;
@@ -186,6 +187,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     );
     // The high sky of a V8 world: cloud seas, wind, updrafts and the Moon overhead (F6).
     sky_lands::draw_sky_backdrop(draw, scene.terrain.settings(), scene.visible, seconds);
+    // A V9 sky's islands: jet streams and vent columns behind them (WP-SKY).
+    sky_isles::draw_isle_backdrop(draw, scene.terrain.settings(), scene.visible, seconds);
     buildings::draw_town(draw, scene.visible, scene.local, seconds);
     villages::draw_villages(
         draw,
@@ -205,6 +208,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     scene.terrain_renderer.draw(draw, scene.visible);
     surface::draw_flora(draw, &scene.sky.surface, scene.terrain, scene.visible);
     surface::draw_water(draw, scene.terrain, scene.visible, scene.ticks);
+    // Flora, waterfalls, buoys and keystones on the sky isles (WP-SKY).
+    sky_isles::draw_isle_front(draw, scene.terrain, scene.visible, seconds);
     base::draw_back_walls(draw, &base_scene);
     villages::draw_trails(
         draw,

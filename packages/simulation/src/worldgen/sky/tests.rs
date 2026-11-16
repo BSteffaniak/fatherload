@@ -34,10 +34,9 @@ fn print_bands() {
 }
 
 #[test]
-fn v8_is_current_and_only_v8_has_a_sky() {
-    assert_eq!(GeneratorVersion::CURRENT, GeneratorVersion::V8);
+fn only_v8_and_later_have_a_sky() {
     for generator in GeneratorVersion::ALL {
-        assert_eq!(generator.has_sky(), generator == GeneratorVersion::V8);
+        assert_eq!(generator.has_sky(), generator >= GeneratorVersion::V8);
     }
     let v7 = WorldSettings {
         generator: GeneratorVersion::V7,
@@ -87,7 +86,7 @@ fn lands_are_deterministic_and_stay_in_their_bands() {
                     assert!(bottom >= LOW_ISLES_BOTTOM_ROWS, "{land:?}");
                     assert!(top < ARCHIPELAGO_BOTTOM_ROWS, "{land:?}");
                 }
-                SkyLandKind::ArchipelagoIsle => {
+                SkyLandKind::ArchipelagoIsle | SkyLandKind::TownIsle => {
                     archipelago += 1;
                     assert!(bottom >= ARCHIPELAGO_BOTTOM_ROWS, "{land:?}");
                     assert!(top < DEAD_AIR_BOTTOM_ROWS, "{land:?}");

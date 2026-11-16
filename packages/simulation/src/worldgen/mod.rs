@@ -99,14 +99,22 @@ pub enum GeneratorVersion {
     /// exactly V7's. V8 worlds also switch on altitude physics ([`crate::environment`]): thin
     /// air, cold, wind layers, updrafts and gravity fields.
     V8,
+    /// V8 with the low isles and cloud archipelagos filled in (WP-SKY, T20,
+    /// [`GeneratorVersion::has_sky_isles`]): skystone and cloud silver ore, sky treasure caches,
+    /// nests, ruins, springs that pour waterfalls into the void, vines, keystones of crumbling
+    /// isles, updraft vents and fuel buoys on the islands; one sky town per archipelago block on
+    /// a wide town isle ([`sky::sky_town_site`]); and jet streams along archipelago chains. Land
+    /// placement, the bands, continents and the Moon are exactly V8's except where a town isle
+    /// stands in for a chain island.
+    V9,
 }
 
 impl GeneratorVersion {
     /// The generator new worlds use.
-    pub const CURRENT: Self = Self::V8;
+    pub const CURRENT: Self = Self::V9;
 
     /// Every generator, oldest first.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Legacy,
         Self::V1,
         Self::V2,
@@ -116,6 +124,7 @@ impl GeneratorVersion {
         Self::V6,
         Self::V7,
         Self::V8,
+        Self::V9,
     ];
 
     /// Whether this generator stamps points of interest.
@@ -123,7 +132,7 @@ impl GeneratorVersion {
     pub const fn has_points_of_interest(self) -> bool {
         matches!(
             self,
-            Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8
+            Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9
         )
     }
 
@@ -131,28 +140,31 @@ impl GeneratorVersion {
     /// bedrock floor.
     #[must_use]
     pub const fn is_deep(self) -> bool {
-        matches!(self, Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8)
+        matches!(
+            self,
+            Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9
+        )
     }
 
     /// Whether worlds of this generator are streamed: unbounded horizontally and generated
     /// chunk by chunk on demand ([`streamed`]). Older generators build bounded worlds.
     #[must_use]
     pub const fn is_streamed(self) -> bool {
-        matches!(self, Self::V5 | Self::V6 | Self::V7 | Self::V8)
+        matches!(self, Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9)
     }
 
     /// Whether this generator places cave ecosystems ([`crate::cave::CaveKind`]): their
     /// tiles, water, light, loot and critters.
     #[must_use]
     pub const fn has_cave_biomes(self) -> bool {
-        matches!(self, Self::V6 | Self::V7 | Self::V8)
+        matches!(self, Self::V6 | Self::V7 | Self::V8 | Self::V9)
     }
 
     /// Whether worlds of this generator have villages ([`crate::village`]). The single switch
     /// for every village rule (placement, flattened ground, stamped tiles, feature index).
     #[must_use]
     pub const fn has_villages(self) -> bool {
-        matches!(self, Self::V6 | Self::V7 | Self::V8)
+        matches!(self, Self::V6 | Self::V7 | Self::V8 | Self::V9)
     }
 
     /// Whether worlds of this generator have surface biomes and a real heightmap
@@ -160,7 +172,7 @@ impl GeneratorVersion {
     /// placeholder surface.
     #[must_use]
     pub const fn has_biomes(self) -> bool {
-        matches!(self, Self::V7 | Self::V8)
+        matches!(self, Self::V7 | Self::V8 | Self::V9)
     }
 
     /// Whether worlds of this generator have the sky ([`sky`]: floating islands, sky
@@ -180,7 +192,7 @@ impl GeneratorVersion {
     #[must_use]
     pub const fn sky_bands(self) -> Option<sky::SkyBands> {
         match self {
-            Self::V8 => Some(sky::V8_SKY_BANDS),
+            Self::V8 | Self::V9 => Some(sky::V8_SKY_BANDS),
             Self::Legacy
             | Self::V1
             | Self::V2
@@ -190,6 +202,14 @@ impl GeneratorVersion {
             | Self::V6
             | Self::V7 => None,
         }
+    }
+
+    /// Whether worlds of this generator fill the low isles and cloud archipelagos with content
+    /// (WP-SKY, T20: sky ore, caches, nests, ruins, waterfalls, buoys, vents, crumbling isles,
+    /// sky towns and jet streams; see [`sky`]). V8 skies keep their bare islands.
+    #[must_use]
+    pub const fn has_sky_isles(self) -> bool {
+        matches!(self, Self::V9)
     }
 
     #[must_use]
@@ -204,6 +224,7 @@ impl GeneratorVersion {
             Self::V6 => "v6",
             Self::V7 => "v7",
             Self::V8 => "v8",
+            Self::V9 => "v9",
         }
     }
 }

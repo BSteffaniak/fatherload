@@ -42,6 +42,12 @@ pub enum MineralKind {
     Platinum,
     Uranium,
     Mythril,
+    /// Sky ore of the low isles and cloud archipelagos (WP-SKY, generator V9): pale blue
+    /// stone threaded with light, about as hard as clay.
+    Skystone,
+    /// Sky ore of the cloud archipelagos' deeper rock: silver that rings like a bell, as hard as
+    /// stone.
+    CloudSilver,
 }
 
 impl MineralKind {
@@ -58,6 +64,8 @@ impl MineralKind {
             Self::Platinum => "Platinum",
             Self::Uranium => "Uranium",
             Self::Mythril => "Mythril",
+            Self::Skystone => "Skystone",
+            Self::CloudSilver => "Cloud Silver",
         }
     }
 
@@ -74,6 +82,8 @@ impl MineralKind {
             Self::Platinum => 260,
             Self::Uranium => 360,
             Self::Mythril => 520,
+            Self::Skystone => 58,
+            Self::CloudSilver => 150,
         }
     }
 }
@@ -168,6 +178,11 @@ pub enum ArtifactKind {
     MachineSigil,
     VoidPearl,
     MantleHeart,
+    /// A sky artifact (WP-SKY, V9): a brass astrolabe from the first aeronauts, found in island
+    /// ruins and caches.
+    WindAstrolabe,
+    /// A sky artifact: a pearl grown in a cloud, found in the archipelagos' nests and caches.
+    CloudPearl,
 }
 
 impl ArtifactKind {
@@ -185,6 +200,8 @@ impl ArtifactKind {
             Self::MachineSigil => "Machine Sigil",
             Self::VoidPearl => "Void Pearl",
             Self::MantleHeart => "Mantle Heart",
+            Self::WindAstrolabe => "Wind Astrolabe",
+            Self::CloudPearl => "Cloud Pearl",
         }
     }
 
@@ -202,6 +219,8 @@ impl ArtifactKind {
             Self::MachineSigil => 1_260,
             Self::VoidPearl => 1_420,
             Self::MantleHeart => 1_650,
+            Self::WindAstrolabe => 640,
+            Self::CloudPearl => 880,
         }
     }
 }
@@ -1054,6 +1073,11 @@ impl Terrain {
         self.journal = Some(Vec::new());
     }
 
+    /// The tile writes recorded so far this tick (empty when not recording).
+    pub(crate) fn journal(&self) -> &[TileChange] {
+        self.journal.as_deref().unwrap_or(&[])
+    }
+
     /// Stops recording and returns the tile writes since [`Self::start_journal`], in order.
     pub(crate) fn finish_journal(&mut self) -> Vec<TileChange> {
         self.journal.take().unwrap_or_default()
@@ -1311,6 +1335,8 @@ impl Terrain {
                     },
                     // Cave caches shrug off blasts like POI loot: a bomb has no owner to pay.
                     TileKind::Cave(cave) if cave.is_cache() => continue,
+                    // So do sky caches and nests (WP-SKY): drill them, or bring their island down.
+                    TileKind::Sky(sky) if sky.is_cache() => continue,
                     _ => None,
                 };
                 let tile = left.map_or(
@@ -1607,10 +1633,13 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         | TileKind::MagmaVent
         | TileKind::Foundation => 0,
         TileKind::Dirt | TileKind::Ore(MineralKind::Copper | MineralKind::Iron) => 1,
-        TileKind::Clay | TileKind::Ore(MineralKind::Silver | MineralKind::Gold) => 2,
+        TileKind::Clay
+        | TileKind::Ore(MineralKind::Silver | MineralKind::Gold | MineralKind::Skystone) => 2,
         TileKind::Stone
-        | TileKind::Ore(MineralKind::Emerald | MineralKind::Ruby)
-        | TileKind::Artifact(ArtifactKind::Fossil | ArtifactKind::OldCircuit) => 3,
+        | TileKind::Ore(MineralKind::Emerald | MineralKind::Ruby | MineralKind::CloudSilver)
+        | TileKind::Artifact(
+            ArtifactKind::Fossil | ArtifactKind::OldCircuit | ArtifactKind::WindAstrolabe,
+        ) => 3,
         TileKind::HardRock
         | TileKind::Ore(
             MineralKind::Diamond
@@ -1618,7 +1647,9 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
             | MineralKind::Uranium
             | MineralKind::Mythril,
         )
-        | TileKind::Artifact(ArtifactKind::BuriedIdol | ArtifactKind::StarCore) => 4,
+        | TileKind::Artifact(
+            ArtifactKind::BuriedIdol | ArtifactKind::StarCore | ArtifactKind::CloudPearl,
+        ) => 4,
         TileKind::Poi(tile) => tile.hardness(),
         TileKind::Cave(tile) => tile.hardness(),
         TileKind::Surface(material) => material.hardness(),

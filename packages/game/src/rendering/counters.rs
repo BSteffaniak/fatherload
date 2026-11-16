@@ -9,7 +9,8 @@ use fatherload_simulation::{
     ExplosiveKind, RecipeKind,
     economy::{
         DeepClaimStatus, REFUEL_UNIT_COST, REPAIR_UNIT_COST, TownBuilding, UpgradeKind,
-        upgrade_effect, upgrade_locked_by, upgrade_maxed, upgrade_offers, upgrade_tier_name,
+        UpgradeLock, upgrade_effect, upgrade_lock, upgrade_maxed, upgrade_offers,
+        upgrade_tier_name,
     },
     explosive::EXPLOSIVE_OFFERS,
     item::BlockKind,
@@ -343,13 +344,17 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
                 || offer.description.to_owned(),
                 |effect| format!("{effect}. {}.", offer.description),
             );
-            if let Some(band) = upgrade_locked_by(offer, settings, deepest) {
+            if let Some(lock) = upgrade_lock(offer, settings, deepest) {
+                let tag = match lock {
+                    UpgradeLock::Band(_) => "LOCKED",
+                    UpgradeLock::NoSky => "NO SKY",
+                };
                 return Offer::new(icon, offer.name, tier)
-                    .tag("LOCKED", RED)
+                    .tag(tag, RED)
                     .unavailable_if(true)
                     .about(format!(
-                        "Late-game gear: on sale once anyone reaches the {} ({} cr). {}.",
-                        band.name(),
+                        "{} ({} cr). {}.",
+                        lock.reason(),
                         offer.cost,
                         offer.description
                     ));

@@ -468,6 +468,15 @@ pub enum SoundCue {
     Updraft,
     /// A rig's hull started icing up in uncovered cold.
     Icing,
+    // --- Sky isles (WP-SKY, T20) ---
+    /// A sky cache or nest drilled open: a brass lid and wind chimes.
+    SkyCache,
+    /// A fuel buoy's refill: a gurgling pump and a valve clunk.
+    BuoyRefuel,
+    /// A crumbling isle's keystone breaking: a deep groan and rock tearing loose.
+    IsleCollapse,
+    /// A rig slipping into a jet stream: a rising rush of air.
+    JetStream,
     // --- The pilot on foot (Part II F5) ---
     /// The canopy hatch popping open as the pilot climbs out.
     HatchOpen,
@@ -1087,6 +1096,7 @@ impl SeatUi {
                 self.enter_interior(zone, ctx.device, cues);
             } else if !self.try_talk_outdoors(ctx, cues, requests)
                 && !self.try_enter_village(ctx, cues)
+                && !self.try_buoy(ctx, cues, requests)
                 && !self.open_base_module(ctx, cues)
                 && !self.try_exit(ctx, requests)
             {
@@ -1506,6 +1516,47 @@ impl SeatUi {
         }
     }
 
+    /// At a sky isle fuel buoy (WP-SKY): buys its one refill.
+    fn try_buoy(
+        &mut self,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+        requests: &mut Vec<ShellRequest>,
+    ) -> bool {
+        let Some(player) = ctx.player else {
+            return false;
+        };
+        if ctx.on_foot() {
+            return false;
+        }
+        let Some(buoy) = ctx.world.buoy_at_rig(player) else {
+            return false;
+        };
+        let unusable = ctx.world.buoy_used(player, buoy.isle)
+            || ctx.world.player(player).is_none_or(|rig| {
+                fatherload_simulation::worldgen::sky::isles::buoy_refill(
+                    rig.fuel_capacity,
+                    rig.fuel,
+                ) < 1.0
+            });
+        if unusable {
+            // Nothing to buy: let use climb out (or whatever comes next) instead of nagging.
+            if ctx.world.buoy_used(player, buoy.isle) && !ctx.world.can_exit_rig(player) {
+                "This buoy is drained: one refill per buoy. Find another isle's."
+                    .clone_into(&mut self.message);
+                cues.push(SoundCue::UiError);
+                return true;
+            }
+            return false;
+        }
+        self.submit_service(
+            SessionServiceRequest::SkyBuoy { isle: buoy.isle },
+            ctx,
+            requests,
+        );
+        true
+    }
+
     fn submit_service(
         &mut self,
         request: SessionServiceRequest,
@@ -1781,6 +1832,13 @@ impl SeatUi {
             | SessionServiceRequest::TurnInQuest { .. }
             | SessionServiceRequest::AbandonQuest { .. }
             | SessionServiceRequest::Village { .. } => return,
+            SessionServiceRequest::SkyBuoy { .. } => {
+                // The pump plays from the world's `BuoyRefuelled` event.
+                self.service_animation = Some(ServiceAnimation::Fuel);
+                self.service_animation_seconds = 1.4;
+                cue = SoundCue::Ui;
+                format!("Buoy refill: the tank tops up for {spent} credits. One per buoy.")
+            }
             SessionServiceRequest::CustomizeRig { cosmetics } => {
                 // The spray can plays from the world's `RigCustomized` event.
                 self.service_animation = Some(ServiceAnimation::Paint);
@@ -2784,6 +2842,9 @@ const fn unavailable_message(request: SessionServiceRequest) -> &'static str {
         }
         SessionServiceRequest::Village { .. } => {
             "Not today: short of credits, nothing they'll take, or nothing new to offer."
+        }
+        SessionServiceRequest::SkyBuoy { .. } => {
+            "The buoy won't pump: tank full, credits short, or already drained."
         }
         _ => "Not enough credits or materials, or the service is locked.",
     }

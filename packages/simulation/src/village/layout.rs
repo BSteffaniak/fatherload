@@ -25,12 +25,37 @@ const SALT_LAYOUT: u64 = 0x7111_A6E5_0102;
 const SALT_LANDSCAPE: u64 = 0x7111_A6E5_0103;
 const SALT_RESIDENTS: u64 = 0x7111_A6E5_0104;
 
-/// Surface or underground.
+/// The [`Village::site`] of every sky town: they stand on no ladder site, and 0 is never a
+/// surface site.
+pub const SKY_TOWN_SITE: i32 = 0;
+
+/// Surface, underground or up in the sky.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub enum VillageSetting {
     Surface,
     /// A settlement in a hall carved into the strata.
     Underground,
+    /// A sky town on a town isle of the cloud archipelago (WP-SKY, V9; see
+    /// [`crate::worldgen::sky::towns`]).
+    Sky(crate::sky::SkyTownKind),
+}
+
+impl VillageSetting {
+    /// The sky town kind, for sky towns.
+    #[must_use]
+    pub const fn sky_town(self) -> Option<crate::sky::SkyTownKind> {
+        match self {
+            Self::Sky(kind) => Some(kind),
+            Self::Surface | Self::Underground => None,
+        }
+    }
+
+    /// Whether this village stands on open ground (surface villages and sky towns): it has a
+    /// landing pad, an open sky over its roofs and a street a rig flies over.
+    #[must_use]
+    pub const fn is_open_air(self) -> bool {
+        !matches!(self, Self::Underground)
+    }
 }
 
 /// The landscape a surface village stands in: the "biome flavour" that picks its culture.
@@ -47,6 +72,8 @@ pub enum Landscape {
     Scrapland,
     /// Underground settlements.
     Caverns,
+    /// Sky towns (the cloud archipelago).
+    Clouds,
 }
 
 impl Landscape {
@@ -59,6 +86,7 @@ impl Landscape {
             Self::Mesa => "mesa",
             Self::Scrapland => "scrapland",
             Self::Caverns => "caverns",
+            Self::Clouds => "clouds",
         }
     }
 }
@@ -76,6 +104,10 @@ pub enum BuildingStyle {
     Scrap,
     /// Rock-cut fronts lit by lamps (Deepfolk).
     Carved,
+    /// Canvas walls on brass frames under striped gas-bag roofs (Aeronaut sky towns).
+    Skyrig,
+    /// White stone with blue-tiled upswept roofs and bells (Cloudborn sky towns).
+    Cloister,
 }
 
 impl BuildingStyle {
@@ -87,6 +119,8 @@ impl BuildingStyle {
             Culture::Mesa => Self::Adobe,
             Culture::Scrapper => Self::Scrap,
             Culture::Deepfolk => Self::Carved,
+            Culture::Aeronaut => Self::Skyrig,
+            Culture::Cloudborn => Self::Cloister,
         }
     }
 
@@ -98,6 +132,8 @@ impl BuildingStyle {
             Self::Adobe => "adobe",
             Self::Scrap => "scrap-metal",
             Self::Carved => "rock-cut",
+            Self::Skyrig => "canvas-and-brass",
+            Self::Cloister => "white-stone",
         }
     }
 }
@@ -119,6 +155,14 @@ pub enum Specialty {
     InfoBroker,
     /// A shrine grants timed blessings.
     Shrine,
+    /// Sky town (WP-SKY): an airship dock fits aether thrusters.
+    SkyDock,
+    /// Sky town: a floating market buys sky ore dear and fences smugglers' wares.
+    SkyBazaar,
+    /// Sky town: a sky monastery blesses travellers and works cloud silver into de-icers.
+    SkyCloister,
+    /// Sky town: cloud farmers sell condensed fuel cheap and seal pressurized hulls.
+    SkyGranary,
 }
 
 impl Specialty {
@@ -132,6 +176,21 @@ impl Specialty {
             Self::FuelDepot => "fuel depot",
             Self::InfoBroker => "cartographer",
             Self::Shrine => "shrine",
+            Self::SkyDock => "airship dock",
+            Self::SkyBazaar => "floating market",
+            Self::SkyCloister => "sky monastery",
+            Self::SkyGranary => "cloud granary",
+        }
+    }
+
+    /// The specialty of a sky town of `kind`.
+    #[must_use]
+    pub const fn of_sky_town(kind: crate::sky::SkyTownKind) -> Self {
+        match kind {
+            crate::sky::SkyTownKind::AirshipDock => Self::SkyDock,
+            crate::sky::SkyTownKind::FloatingMarket => Self::SkyBazaar,
+            crate::sky::SkyTownKind::Monastery => Self::SkyCloister,
+            crate::sky::SkyTownKind::CloudFarm => Self::SkyGranary,
         }
     }
 
@@ -146,6 +205,10 @@ impl Specialty {
             Self::FuelDepot => BuildingKind::Depot,
             Self::InfoBroker => BuildingKind::MapRoom,
             Self::Shrine => BuildingKind::Shrine,
+            Self::SkyDock => BuildingKind::AirshipDock,
+            Self::SkyBazaar => BuildingKind::Bazaar,
+            Self::SkyCloister => BuildingKind::Monastery,
+            Self::SkyGranary => BuildingKind::Granary,
         }
     }
 }
@@ -180,6 +243,14 @@ pub enum BuildingKind {
     Farm,
     /// An old mine head (decoration, no door).
     MineHead,
+    /// Sky town (WP-SKY): moorings, a docked airship and the aether forge (specialty).
+    AirshipDock,
+    /// Sky town: the floating market's awnings (specialty).
+    Bazaar,
+    /// Sky town: the monastery and its bell tower (specialty).
+    Monastery,
+    /// Sky town: the cloud granary with its vapour nets (specialty).
+    Granary,
 }
 
 impl BuildingKind {
@@ -195,10 +266,17 @@ impl BuildingKind {
         match self {
             Self::Hall => 10,
             Self::House | Self::MineHead => 6,
-            Self::Market | Self::Inn | Self::Depot | Self::Smithy | Self::Assay => 8,
+            Self::Market
+            | Self::Inn
+            | Self::Depot
+            | Self::Smithy
+            | Self::Assay
+            | Self::Bazaar
+            | Self::Granary => 8,
             Self::Workshop | Self::Tailor | Self::MapRoom | Self::Shrine => 7,
             Self::Tower => 4,
-            Self::Farm => 9,
+            Self::Farm | Self::Monastery => 9,
+            Self::AirshipDock => 12,
         }
     }
 
@@ -220,6 +298,10 @@ impl BuildingKind {
             Self::Tower => "Lookout",
             Self::Farm => "Farm",
             Self::MineHead => "Old Mine",
+            Self::AirshipDock => "Airship Dock",
+            Self::Bazaar => "Floating Market",
+            Self::Monastery => "Sky Monastery",
+            Self::Granary => "Cloud Granary",
         }
     }
 
@@ -236,6 +318,10 @@ impl BuildingKind {
             Self::Assay => &[Role::Prospector, Role::RetiredMiner, Role::Scholar],
             Self::MapRoom => &[Role::Cartographer, Role::Scholar, Role::Courier],
             Self::Shrine => &[Role::ShrineKeeper, Role::Healer, Role::Hermit],
+            Self::AirshipDock => &[Role::Aeronaut, Role::Mechanic, Role::StormChaser],
+            Self::Bazaar => &[Role::Smuggler, Role::Trader, Role::Courier],
+            Self::Monastery => &[Role::Monk, Role::ShrineKeeper, Role::Healer],
+            Self::Granary => &[Role::Farmer, Role::Monk, Role::Brewer],
             Self::House | Self::Tower | Self::Farm | Self::MineHead => &[],
         }
     }
@@ -279,6 +365,14 @@ impl VillageBuilding {
 pub enum DecorKind {
     /// Plaza centrepieces.
     Well,
+    /// Sky towns: a brass wind vane on a mast (Aeronaut centrepiece).
+    WindVane,
+    /// Sky towns: a hanging bronze bell (Cloudborn centrepiece).
+    Bell,
+    /// Sky towns: a mooring post with a coiled line.
+    MooringPost,
+    /// Sky towns: a string of prayer flags.
+    PrayerFlags,
     Fountain,
     Statue,
     Bonfire,
@@ -372,6 +466,7 @@ fn culture_for(landscape: Landscape, rng: &mut PeopleRng) -> Culture {
         Landscape::Mesa => Culture::Mesa,
         Landscape::Scrapland => *rng.weighted(&[(Culture::Scrapper, 4), (Culture::Frontier, 1)]),
         Landscape::Caverns => Culture::Deepfolk,
+        Landscape::Clouds => *rng.weighted(&[(Culture::Aeronaut, 1), (Culture::Cloudborn, 1)]),
     }
 }
 
@@ -384,6 +479,10 @@ pub fn identity(settings: &WorldSettings, id: VillageId) -> Option<(String, Cult
 }
 
 fn landscape_and_culture(settings: &WorldSettings, id: VillageId) -> Option<(Landscape, Culture)> {
+    if placement::decode_sky_town(id).is_some() {
+        let site = crate::worldgen::sky::towns::sky_town_of(settings, id)?;
+        return Some((Landscape::Clouds, sky_culture(site.kind)));
+    }
     let (site, underground) = placement::decode_id(id);
     let surface = placement::surface_site(settings.seed, site)?;
     if underground {
@@ -403,6 +502,20 @@ fn landscape_and_culture(settings: &WorldSettings, id: VillageId) -> Option<(Lan
     Some((landscape, culture))
 }
 
+/// The culture of a sky town of `kind`: aeronauts run the docks and markets, the Cloudborn
+/// the monasteries and the cloud farms.
+#[must_use]
+pub const fn sky_culture(kind: crate::sky::SkyTownKind) -> Culture {
+    match kind {
+        crate::sky::SkyTownKind::AirshipDock | crate::sky::SkyTownKind::FloatingMarket => {
+            Culture::Aeronaut
+        }
+        crate::sky::SkyTownKind::Monastery | crate::sky::SkyTownKind::CloudFarm => {
+            Culture::Cloudborn
+        }
+    }
+}
+
 fn pick_specialty(culture: Culture, rng: &mut PeopleRng) -> Specialty {
     let table: &[(u8, u32)] = match culture {
         Culture::Frontier => &[(0, 3), (1, 2), (2, 1), (3, 2), (4, 3), (5, 2), (6, 1)],
@@ -411,6 +524,8 @@ fn pick_specialty(culture: Culture, rng: &mut PeopleRng) -> Specialty {
         Culture::Riverside => &[(0, 2), (1, 1), (2, 3), (3, 1), (4, 2), (5, 2), (6, 2)],
         Culture::Scrapper => &[(0, 1), (1, 4), (2, 2), (3, 4), (4, 2), (5, 1), (6, 0)],
         Culture::Deepfolk => &[(0, 4), (1, 2), (2, 1), (3, 1), (4, 3), (5, 2), (6, 3)],
+        // Sky towns take their specialty from their kind (`build`); this is never asked.
+        Culture::Aeronaut | Culture::Cloudborn => &[(1, 1), (2, 1), (4, 1)],
     };
     match *rng.weighted(table) {
         0 => {
@@ -449,6 +564,8 @@ const fn centrepiece(culture: Culture) -> DecorKind {
         Culture::Riverside => DecorKind::Totem,
         Culture::Scrapper => DecorKind::Bonfire,
         Culture::Deepfolk => DecorKind::CrystalCluster,
+        Culture::Aeronaut => DecorKind::WindVane,
+        Culture::Cloudborn => DecorKind::Bell,
     }
 }
 
@@ -474,6 +591,12 @@ const fn dressing(landscape: Landscape) -> &'static [DecorKind] {
             DecorKind::Lamp,
             DecorKind::CrystalCluster,
         ],
+        Landscape::Clouds => &[
+            DecorKind::MooringPost,
+            DecorKind::PrayerFlags,
+            DecorKind::Lamp,
+            DecorKind::Crates,
+        ],
     }
 }
 
@@ -487,6 +610,10 @@ pub enum SiteSpec {
         site: UndergroundSite,
         /// The hall's centre column after sliding clear of points of interest.
         center: i32,
+    },
+    /// A sky town on its town isle (WP-SKY).
+    Sky {
+        site: crate::worldgen::sky::SkyTownSite,
     },
 }
 
@@ -516,12 +643,25 @@ pub fn build(settings: &WorldSettings, spec: &SiteSpec) -> Village {
             center - HALL_WIDTH / 2 + HALL_WIDTH - 1,
             site.floor_row(),
         ),
+        // Sky towns have no ladder site: their neighbours are islands, not villages.
+        SiteSpec::Sky { site } => (
+            site.id,
+            SKY_TOWN_SITE,
+            VillageSetting::Sky(site.kind),
+            site.size,
+            site.first,
+            site.last,
+            site.ground_row,
+        ),
     };
     let (landscape, culture) =
         landscape_and_culture(settings, id).unwrap_or((Landscape::Plains, Culture::Frontier));
     let seed = settings.seed;
     let mut rng = PeopleRng::new(seed, SALT_LAYOUT, u64::from(id.0), 0);
-    let specialty = pick_specialty(culture, &mut rng);
+    let specialty = match setting {
+        VillageSetting::Sky(kind) => Specialty::of_sky_town(kind),
+        VillageSetting::Surface | VillageSetting::Underground => pick_specialty(culture, &mut rng),
+    };
     let problem = rng.chance(55).then(|| *rng.pick(&VillageProblem::ALL));
     let mut prosperity = 2 + i32::try_from(rng.below(3)).unwrap_or(0);
     if problem.is_none() {
@@ -569,7 +709,7 @@ pub fn build(settings: &WorldSettings, spec: &SiteSpec) -> Village {
                 }
             }
             Landscape::Scrapland => extras.push(BuildingKind::MineHead),
-            Landscape::Caverns => {}
+            Landscape::Caverns | Landscape::Clouds => {}
         }
         if culture == Culture::Highland && rng.chance(50) {
             extras.push(BuildingKind::MineHead);
@@ -580,11 +720,7 @@ pub fn build(settings: &WorldSettings, spec: &SiteSpec) -> Village {
         VillageSize::Village => 12,
         VillageSize::Town => 14,
     };
-    let pad_width = if setting == VillageSetting::Surface {
-        7
-    } else {
-        0
-    };
+    let pad_width = if setting.is_open_air() { 7 } else { 0 };
     let span = last - first + 1;
     let margin = 1;
     let gap = 2;
@@ -775,7 +911,7 @@ pub fn build(settings: &WorldSettings, spec: &SiteSpec) -> Village {
     };
     let relations = [site_index - 1, site_index + 1]
         .into_iter()
-        .filter(|neighbour| placement::valid_site(*neighbour))
+        .filter(|neighbour| setting.sky_town().is_none() && placement::valid_site(*neighbour))
         .map(|neighbour| {
             let other = placement::surface_id(neighbour);
             let (a, b) = if id.0 < other.0 {

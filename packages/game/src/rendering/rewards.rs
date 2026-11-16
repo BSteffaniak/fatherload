@@ -497,7 +497,7 @@ pub(super) fn draw_shop_showcase(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'
     let preview: Option<UpgradePreview> = install.as_ref().map_or_else(
         || upgrade_preview(player, kind, sky.as_ref()),
         |moment| {
-            Some(preview_between(
+            Some(preview_between_in(
                 player,
                 kind,
                 moment.from_level,

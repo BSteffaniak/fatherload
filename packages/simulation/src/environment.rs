@@ -44,7 +44,7 @@ use crate::{
         noise::{NOISE_MAX, hash2, line_noise},
         sky::{
             ARCHIPELAGO_BOTTOM_ROWS, CONTINENTS_BOTTOM_ROWS, DEAD_AIR_BOTTOM_ROWS,
-            MOON_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS, moon, updraft_at,
+            MOON_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS, jet_stream_at, moon, updraft_at, vent_updraft_at,
         },
     },
 };
@@ -393,12 +393,25 @@ pub fn environment_at(settings: &WorldSettings, x: f32, y: f32) -> Environment {
         clippy::cast_precision_loss,
         reason = "updraft strengths are small integers"
     )]
-    let updraft = updraft_at(settings, tile_x, tile_y) as f32;
+    let mut updraft = updraft_at(settings, tile_x, tile_y) as f32;
+    let mut wind_x = wind_at(settings, tile_x, altitude);
+    if settings.generator.has_sky_isles() {
+        // V9 (WP-SKY): island vents breathe updrafts and archipelago chains carry jet
+        // streams (`worldgen::sky::winds`).
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "vent strengths and stream speeds are small integers"
+        )]
+        {
+            updraft = updraft.max(vent_updraft_at(settings, tile_x, tile_y) as f32);
+            wind_x += jet_stream_at(settings, tile_x, tile_y) as f32;
+        }
+    }
     Environment {
         gravity: gravity_scale(settings, tile_x, altitude),
         air_density: air_density(altitude),
         cold: cold_level(altitude),
-        wind_x: wind_at(settings, tile_x, altitude),
+        wind_x,
         updraft,
     }
 }

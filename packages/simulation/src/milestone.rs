@@ -166,6 +166,48 @@ pub fn crosses_dead_air(player: &Player, bands: &SkyBands) -> bool {
     climb_reach(player) >= bands.dead_air_reach_rows()
 }
 
+/// The most fuel `player`'s rig may be filled to while it is `altitude_rows` above row 0.
+///
+/// The honest-gate rule for refuelling in the sky (WP-SKY rest stops): village counters,
+/// people's trades and base fuel stations all read it.
+///
+/// Sky towns hang high in the cloud archipelago, just under the dead-air gap: a full tank
+/// bought there would carry rigs that cannot cross on a full tank from the ground (tier 10-12
+/// tanks with intakes) over the gap, and [`crosses_dead_air`] would stop being the Act II gate.
+/// So in the island bands (from [`crate::worldgen::sky::LOW_ISLES_BOTTOM_ROWS`] up to the
+/// continents' floor) a rig that cannot cross the gap is only topped up to what a full-tank
+/// climb from the ground would still hold here, estimated from the climb table as the share of
+/// the rig's [`climb_reach`] still above it. Fuel per row only grows with altitude (thinner
+/// air), so this never leaves a rig better off than the climb the gate measured
+/// (`world::sky_isle_tests::sky_refuels_never_open_the_dead_air_gap`); every such rig may still
+/// fill [`SKY_REFUEL_FLOOR_PERCENT`] of its tank. Rigs that already cross the gap, and anything
+/// below the low isles or above the continents' floor, fill right up.
+#[must_use]
+pub fn sky_refuel_level(player: &Player, altitude_rows: i32) -> f32 {
+    let capacity = player.fuel_capacity;
+    if !(crate::worldgen::sky::LOW_ISLES_BOTTOM_ROWS..DEAD_AIR_REACH_ROWS).contains(&altitude_rows)
+        || crosses_dead_air(player)
+    {
+        return capacity;
+    }
+    // The climb harness starts at rest 100 rows up (`world::climb_tests::START_ALTITUDE_ROWS`).
+    let start = 100;
+    let reach = climb_reach(player);
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "altitudes are a few thousand rows"
+    )]
+    let share = (reach - altitude_rows).max(0) as f32 / (reach - start).max(1) as f32;
+    // A rig that rode updrafts or jet streams higher than its tank could lift it still gets a
+    // little: enough to hop to a nearby isle or ease down, far short of the gap.
+    let floor = capacity * SKY_REFUEL_FLOOR_PERCENT / 100.0;
+    (capacity * share.clamp(0.0, 1.0)).max(floor).floor()
+}
+
+/// The share of its tank (percent) a rig that cannot cross the dead-air gap may always be
+/// filled to in the sky ([`sky_refuel_level`]).
+pub const SKY_REFUEL_FLOOR_PERCENT: f32 = 25.0;
+
 /// What the world knows about a player this tick beyond the [`Player`] itself.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct MilestoneFacts {

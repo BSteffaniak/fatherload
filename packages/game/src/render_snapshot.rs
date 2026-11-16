@@ -59,7 +59,7 @@ pub fn world_scale_for_screen(screen: ScreenSize) -> f32 {
 }
 
 /// Every mineral, in market display order.
-pub const MINERALS: [MineralKind; 10] = [
+pub const MINERALS: [MineralKind; 12] = [
     MineralKind::Copper,
     MineralKind::Iron,
     MineralKind::Silver,
@@ -70,6 +70,8 @@ pub const MINERALS: [MineralKind; 10] = [
     MineralKind::Platinum,
     MineralKind::Uranium,
     MineralKind::Mythril,
+    MineralKind::Skystone,
+    MineralKind::CloudSilver,
 ];
 
 /// A screen rectangle in logical pixels.
@@ -458,6 +460,9 @@ pub struct ViewSnapshot<'w> {
     pub base_module: Option<crate::base_view::BaseModuleView>,
     /// The base module the rig stands at (its use prompt).
     pub nearby_module: Option<fatherload_simulation::base::ModuleKind>,
+    /// The sky isle fuel buoy the rig is parked on (WP-SKY): its island, and whether this
+    /// player already drained it (the buoy prompt).
+    pub buoy: Option<(fatherload_simulation::worldgen::FeatureId, bool)>,
     /// The seat's pilot while it is on foot (Part II F5): HUD gauges and prompts.
     pub pilot: Option<PilotPresentation>,
     /// On foot and close enough to board the rig (the board prompt).
@@ -966,6 +971,10 @@ fn view_snapshot(
         reticle: None,
         build_preview: None,
         base_module: None,
+        buoy: world
+            .buoy_at_rig(player_id)
+            .filter(|_| !world.is_on_foot(player_id))
+            .map(|buoy| (buoy.isle, world.buoy_used(player_id, buoy.isle))),
         nearby_module: crate::shell::module_at_rig(world, Some(player_id))
             .and_then(|id| world.bases().module(id))
             .map(|module| module.kind),

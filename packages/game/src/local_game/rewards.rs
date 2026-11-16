@@ -46,6 +46,7 @@ impl LocalGame {
                 _ => {}
             }
         }
+        let has_sky = world.terrain().settings().generator.has_sky();
         for (seat, player, upgrade, level) in installs {
             self.shell
                 .upgrade_installed(seat, &player, upgrade, level, sky.as_ref());

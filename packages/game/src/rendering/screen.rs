@@ -398,6 +398,10 @@ fn draw_view_hud_rest(
 
 /// The view's context prompt under the rig, for its seat's device: how to enter the building
 /// the rig stands at, or how a controller joins a seat nobody drives yet.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one arm per prompt, in priority order"
+)]
 fn draw_view_prompt(
     draw: &mut RaylibDrawHandle<'_>,
     shell: &ShellState,
@@ -409,6 +413,21 @@ fn draw_view_prompt(
         && shell.modal.is_none()
         && shell.seat(view.seat_index).modal.is_none()
         && shell.seat(view.seat_index).build.is_none();
+    let exit_ready = idle
+        && view.can_exit
+        && view.failure.is_none()
+        && view.active_drill.is_none()
+        && view.player.velocity_x.abs() < 1.0
+        && view.player.velocity_y.abs() < 1.0;
+    // A drained buoy (or a tank too full for it) does not stand in the way of climbing out:
+    // use falls through to the exit then (`SeatUi::try_buoy`).
+    let buoy_usable = view.buoy.is_some_and(|(_, used)| {
+        !used
+            && fatherload_simulation::worldgen::sky::isles::buoy_refill(
+                view.player.fuel_capacity,
+                view.player.fuel,
+            ) >= 1.0
+    });
     let (prompt, label, accent) = if device == InputDevice::Unassigned {
         (
             Prompt::Join,
@@ -461,19 +480,44 @@ fn draw_view_prompt(
     } else if shell.run_mode == RunMode::Playing
         && shell.modal.is_none()
         && shell.seat(view.seat_index).modal.is_none()
+        && let Some((_, used)) = view.buoy
+        && (buoy_usable || !exit_ready)
+    {
+        // A sky isle fuel buoy (WP-SKY): one pricey refill each, into a low tank only.
+        let adds = fatherload_simulation::worldgen::sky::isles::buoy_refill(
+            view.player.fuel_capacity,
+            view.player.fuel,
+        );
+        if used {
+            (Prompt::Use, "Buoy drained".to_owned(), false)
+        } else if adds < 1.0 {
+            (Prompt::Use, "Tank too full for the buoy".to_owned(), false)
+        } else {
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "a few hundred fuel"
+            )]
+            let adds = adds.round() as u32;
+            (
+                Prompt::Use,
+                format!(
+                    "Buoy refill: +{adds} fuel for {} cr",
+                    fatherload_simulation::worldgen::sky::isles::BUOY_PRICE
+                ),
+                true,
+            )
+        }
+    } else if shell.run_mode == RunMode::Playing
+        && shell.modal.is_none()
+        && shell.seat(view.seat_index).modal.is_none()
         && shell.seat(view.seat_index).build.is_none()
         && (view.failure.is_none()
             || view.nearby_module == Some(fatherload_simulation::base::ModuleKind::FuelStation))
         && let Some(module) = view.nearby_module
     {
         (Prompt::Use, format!("Use {}", module.name()), true)
-    } else if idle
-        && view.can_exit
-        && view.failure.is_none()
-        && view.active_drill.is_none()
-        && view.player.velocity_x.abs() < 1.0
-        && view.player.velocity_y.abs() < 1.0
-    {
+    } else if exit_ready {
         (Prompt::ExitRig, "Climb out".to_owned(), false)
     } else {
         return;

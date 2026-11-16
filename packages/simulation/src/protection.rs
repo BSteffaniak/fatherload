@@ -62,6 +62,12 @@ pub struct HazardGear {
     /// De-icer: covers altitude cold ([`crate::environment::cold_cover`]).
     #[serde(default)]
     pub de_icer: u8,
+    /// Aether thrusters (sky-crafted, [`crate::skycraft`]): side thrust in thin air.
+    #[serde(default)]
+    pub aether_thrusters: u8,
+    /// Pressurized hull (sky-crafted): keeps out cold; the seal orbit and the Moon will ask for.
+    #[serde(default)]
+    pub pressurized_hull: u8,
 }
 
 impl HazardGear {
@@ -74,7 +80,25 @@ impl HazardGear {
         boulder_deflector: BOULDER_DEFLECTOR_MAX_LEVEL,
         altitude_intake: crate::environment::ALTITUDE_INTAKE_MAX_LEVEL,
         de_icer: crate::environment::DE_ICER_MAX_LEVEL,
+        aether_thrusters: crate::skycraft::AETHER_THRUSTERS_MAX_LEVEL,
+        pressurized_hull: crate::skycraft::PRESSURIZED_HULL_MAX_LEVEL,
     };
+
+    /// Cold levels this gear keeps off: the de-icer's cover plus the pressurized hull's
+    /// (WP-SKY, [`crate::skycraft`]).
+    #[must_use]
+    pub const fn cold_cover(self) -> u8 {
+        crate::environment::cold_cover(self.de_icer).saturating_add(
+            self.pressurized_hull
+                .saturating_mul(crate::skycraft::PRESSURIZED_HULL_COLD_COVER),
+        )
+    }
+
+    /// Cold levels at `cold` this gear does not cover.
+    #[must_use]
+    pub const fn cold_excess(self, cold: u8) -> u8 {
+        cold.saturating_sub(self.cold_cover())
+    }
 
     /// `damage` from a lava burn after the plating.
     #[must_use]

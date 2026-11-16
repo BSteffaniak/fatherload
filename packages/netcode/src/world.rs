@@ -182,6 +182,11 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::SkyBandEntered { player_id, .. } => (116, Some(player_id)),
         GameplayEventKind::UpdraftCaught { player_id } => (117, Some(player_id)),
         GameplayEventKind::RigIcing { player_id } => (118, Some(player_id)),
+        // Sky isles (wave 4, T20): 200-203.
+        GameplayEventKind::SkyCacheOpened { player_id, .. } => (200, Some(player_id)),
+        GameplayEventKind::BuoyRefuelled { player_id } => (201, Some(player_id)),
+        GameplayEventKind::IsleCollapsing { .. } => (202, None),
+        GameplayEventKind::JetStreamCaught { player_id } => (203, Some(player_id)),
         // The pilot on foot (Part II F5): 120-133.
         GameplayEventKind::PilotExited { player_id, .. } => (120, Some(player_id)),
         GameplayEventKind::PilotBoarded { player_id, .. } => (121, Some(player_id)),

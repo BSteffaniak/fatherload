@@ -268,6 +268,19 @@ impl WorldState {
                     .iter()
                     .map(|found| found.id)
                     .collect();
+            // Sky towns (WP-SKY) near the actor, in two dimensions.
+            ids.extend(
+                village::sky_towns_in(
+                    &settings,
+                    &crate::worldgen::TileRect::around(
+                        crate::terrain::TilePosition { x: column, y: row },
+                        reach,
+                        rows + 30,
+                    ),
+                )
+                .iter()
+                .map(|found| found.id),
+            );
             ids.extend(
                 people::camps::camps_between(&settings, column - reach, column + reach)
                     .iter()

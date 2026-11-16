@@ -247,6 +247,13 @@ patches! {
     UpgradeFanfare => "upgrade_fanfare",
     MilestoneFanfare => "milestone_fanfare",
     ActTwoFanfare => "act_two_fanfare",
+    // Sky isles (WP-SKY, T20), appended so every earlier patch keeps its variation seeds.
+    SkyCacheOpen => "sky_cache_open",
+    BuoyRefuel => "buoy_refuel",
+    IsleCollapse => "isle_collapse",
+    JetStreamRush => "jet_stream_rush",
+    SkyAirLoop => "loop_sky_air",
+    WaterfallLoop => "loop_waterfall",
 }
 
 /// Playback metadata of a patch.
@@ -469,7 +476,19 @@ impl Patch {
             | Self::BoulderRumbleLoop
             | Self::WindLoop
             | Self::RainLoop
-            | Self::NightLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            | Self::NightLoop
+            | Self::SkyAirLoop
+            | Self::WaterfallLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::SkyCacheOpen | Self::BuoyRefuel => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.3)
+                .jitter(0.03, 1.0),
+            Self::IsleCollapse => PatchInfo::new(Big)
+                .instances(2)
+                .send(0.4)
+                .jitter(0.05, 1.0)
+                .ducking(0.3),
+
             Self::DawnChorus | Self::DuskCrickets => PatchInfo::new(Feedback)
                 .instances(1)
                 .send(0.4)
@@ -533,7 +552,7 @@ impl Patch {
                 .send(0.5)
                 .jitter(0.0, 0.0)
                 .ducking(0.3),
-            Self::UpdraftWhoosh => PatchInfo::new(Feedback)
+            Self::UpdraftWhoosh | Self::JetStreamRush => PatchInfo::new(Feedback)
                 .instances(1)
                 .send(0.35)
                 .jitter(0.05, 1.0),
@@ -715,6 +734,12 @@ impl Patch {
             Self::UpgradeFanfare => upgrade_fanfare(rng),
             Self::MilestoneFanfare => milestone_fanfare(rng),
             Self::ActTwoFanfare => act_two_fanfare(rng),
+            Self::SkyCacheOpen => sky_cache_open(rng),
+            Self::BuoyRefuel => buoy_refuel(rng),
+            Self::IsleCollapse => isle_collapse(rng),
+            Self::JetStreamRush => jet_stream_rush(rng),
+            Self::SkyAirLoop => sky_air_loop(rng),
+            Self::WaterfallLoop => waterfall_loop(rng),
         }
     }
 }
@@ -3701,6 +3726,139 @@ fn act_two_fanfare(rng: &mut Rng) -> Vec<f32> {
         *sample = saturate(*sample, 1.2);
     }
     out
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sky isles (WP-SKY, T20)
+// ---------------------------------------------------------------------------------------------
+
+/// A sky cache opening: the brass lid, a few coins, and wind chimes tumbling down a fifth.
+fn sky_cache_open(rng: &mut Rng) -> Vec<f32> {
+    let mut out = cache_open(rng);
+    for (index, note) in [2_637.0, 2_349.3, 1_975.5, 1_760.0, 1_318.5]
+        .into_iter()
+        .enumerate()
+    {
+        let chime = bell(note * rng.jitter(0.004), 3.5, 0.6, 0.9);
+        #[allow(clippy::cast_precision_loss, reason = "a handful of chimes")]
+        mix_into(&mut out, &chime, 0.32 + index as f32 * 0.07, 0.16);
+    }
+    out
+}
+
+/// A buoy refill: the valve clunks open, fuel gurgles through the hose, the valve shuts.
+fn buoy_refuel(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(140.0 * rng.jitter(0.05), 90.0, 0.08, 1.4);
+    let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut throat = Svf::new(FilterMode::BandPass, 380.0, 3.0);
+    let mut glug = flutter(rng, 9.0, 0.8);
+    let flow = render(1.1, |t| {
+        let center = 280.0 + 220.0 * glug();
+        throat.set(center.clamp(150.0, 900.0), 3.0);
+        throat.process(noise.next())
+            * segments(t, &[(0.0, 0.0), (0.1, 1.0), (0.9, 0.8), (1.1, 0.0)])
+    });
+    mix_into(&mut out, &flow, 0.06, 1.4);
+    mix_into(&mut out, &clank(rng, 620.0, 0.12), 1.15, 0.5);
+    out
+}
+
+/// A keystone breaking: a violet crack of aether, a long groan of rock, stones tearing loose.
+fn isle_collapse(rng: &mut Rng) -> Vec<f32> {
+    let mut out = bell(988.0 * rng.jitter(0.02), 1.41, 2.5, 0.6);
+    for sample in &mut out {
+        *sample *= 0.3;
+    }
+    let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut low = Svf::new(FilterMode::LowPass, 120.0, 1.2);
+    let mut groan = Osc::new(Wave::Saw);
+    let mut groan_filter = Svf::new(FilterMode::LowPass, 260.0, 2.0);
+    let base = 48.0 * rng.jitter(0.06);
+    let body = render(2.4, |t| {
+        let rumble = low.process(noise.next()) * segments(t, &[(0.0, 0.0), (0.3, 1.0), (2.4, 0.0)]);
+        let pitch = base * (1.0 - 0.25 * t / 2.4);
+        let moan = groan_filter.process(groan.next(pitch))
+            * segments(t, &[(0.0, 0.0), (0.4, 0.6), (1.6, 0.4), (2.4, 0.0)]);
+        rumble * 1.4 + moan * 0.35
+    });
+    mix_into(&mut out, &body, 0.05, 1.0);
+    for time in scatter(rng, 9, 0.3, 2.0, 1.2) {
+        let crack = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            rng.range(500.0, 1_300.0),
+            1.4,
+            0.06,
+        );
+        mix_into(&mut out, &crack, time, rng.range(0.2, 0.45));
+        mix_into(
+            &mut out,
+            &thump(rng.range(60.0, 95.0), 50.0, 0.12, 1.5),
+            time,
+            rng.range(0.2, 0.4),
+        );
+    }
+    out
+}
+
+/// Slipping into a jet stream: a rising rush of air with a whistle on top.
+fn jet_stream_rush(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 400.0, 1.2);
+    let mut whistle = Osc::new(Wave::Sine);
+    let top = 3_200.0 * rng.jitter(0.08);
+    render(1.3, |t| {
+        let rise = segments(t, &[(0.0, 0.0), (0.7, 1.0), (1.3, 0.8)]);
+        let air = filter.run(noise.next(), 300.0 + top * rise, 1.2);
+        let tone = whistle.next(900.0 + 700.0 * rise) * 0.08 * rise;
+        (air + tone) * segments(t, &[(0.0, 0.0), (0.2, 1.0), (1.3, 0.0)])
+    })
+}
+
+/// The high sky: a soft airy pad (fifths that complete whole cycles in the loop), a whisper of
+/// wind and wind chimes drifting by now and then. It fades in among the islands.
+fn sky_air_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut breeze = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut breeze_filter = Svf::new(FilterMode::BandPass, 900.0, 0.6);
+    let mut pad = [
+        Osc::new(Wave::Sine),
+        Osc::new(Wave::Sine),
+        Osc::new(Wave::Sine),
+        Osc::new(Wave::Sine),
+    ];
+    let mut out = render(loop_length(), |t| {
+        let swell = 0.65 + 0.35 * sine(t, 0.5);
+        let chord = pad[0].next(220.0) * 0.5
+            + pad[1].next(330.0) * 0.35
+            + pad[2].next(440.0) * 0.22 * swell
+            + pad[3].next(659.5) * 0.12 * (1.0 - swell * 0.5);
+        chord * 0.12 + breeze_filter.process(breeze.next()) * 0.35 * swell
+    });
+    let notes = [1_318.5, 1_568.0, 1_760.0, 1_975.5, 2_349.3, 2_637.0];
+    for time in scatter(rng, loop_events(0.9), 0.0, loop_length() - 1.0, 1.0) {
+        let note = notes[rng.index(notes.len())];
+        mix_into(
+            &mut out,
+            &bell(note, 3.5, 0.5, 1.0),
+            time,
+            rng.range(0.03, 0.07),
+        );
+    }
+    out
+}
+
+/// A waterfall pouring into the void: a broad rushing roar with a bright spray on top.
+fn waterfall_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut roar = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut roar_filter = Svf::new(FilterMode::LowPass, 900.0, 0.7);
+    let mut spray = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut spray_filter = Svf::new(FilterMode::BandPass, 3_800.0, 0.7);
+    let mut surge = flutter(rng, 1.5, 0.25);
+    render(loop_length(), |_| {
+        let level = surge();
+        roar_filter.process(roar.next()) * 1.4 * level + spray_filter.process(spray.next()) * 0.4
+    })
 }
 
 #[cfg(test)]

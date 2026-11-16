@@ -197,6 +197,12 @@ pub enum SessionServiceRequest {
     BuyPilotGear {
         gear: crate::pilot::PilotGearKind,
     },
+    /// The one refill of the fuel buoy moored to sky isle `isle` (WP-SKY, V9): valid only while
+    /// the rig is parked on that buoy's pad and the player has not drained it before
+    /// (`world/sky_isles.rs`).
+    SkyBuoy {
+        isle: crate::worldgen::FeatureId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

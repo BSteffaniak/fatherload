@@ -109,6 +109,25 @@ ore_stamp!(
     LAVENDER,
     PINK
 );
+// Sky ores (WP-SKY): skystone glows pale blue in island rock; cloud silver is a bright flake.
+ore_stamp!(
+    ORE_SKYSTONE,
+    "ore_skystone",
+    CHUNK,
+    OCEAN,
+    SKY,
+    SKY_LIGHT,
+    BONE
+);
+ore_stamp!(
+    ORE_CLOUD_SILVER,
+    "ore_cloud_silver",
+    FLAKE,
+    STEEL_DARK,
+    MIST,
+    BONE,
+    CREAM
+);
 // Mythril in the Void Geode Fields, whose rock shares its violet: a pale ice rim and a brighter
 // body keep the veins readable against the geode rock.
 pub const ORE_MYTHRIL_GEODE: SpriteDef = SpriteDef {
@@ -148,6 +167,8 @@ pub const fn ore_stamp(mineral: MineralKind) -> (&'static SpriteDef, u32) {
         MineralKind::Platinum => (&ORE_PLATINUM, 3),
         MineralKind::Uranium => (&ORE_URANIUM, 3),
         MineralKind::Mythril => (&ORE_MYTHRIL, 3),
+        MineralKind::Skystone => (&ORE_SKYSTONE, 3),
+        MineralKind::CloudSilver => (&ORE_CLOUD_SILVER, 4),
     }
 }
 
@@ -390,6 +411,54 @@ pub const MANTLE_HEART: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+pub const WIND_ASTROLABE: SpriteDef = SpriteDef {
+    name: "artifact_wind_astrolabe",
+    legend: &[
+        ('o', INK),
+        ('r', RUST),
+        ('a', AMBER),
+        ('g', GOLD),
+        ('w', CREAM),
+        ('s', SKY),
+    ],
+    frames: &[&[
+        "...oooo...", //
+        "..oaggao..", //
+        ".oarssrao.", //
+        "oagswsgsgo", //
+        "ogsgwgsrgo", //
+        "ogrsgwsgao", //
+        "oagsrsgaro", //
+        ".oarggaro.", //
+        "..oarrao..", //
+        "...oooo...", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const CLOUD_PEARL: SpriteDef = SpriteDef {
+    name: "artifact_cloud_pearl",
+    legend: &[
+        ('o', INK),
+        ('m', MIST),
+        ('b', BONE),
+        ('s', SKY_LIGHT),
+        ('w', CREAM),
+    ],
+    frames: &[&[
+        "..oooooo..", //
+        ".obbbbbbo.", //
+        "obwwbbbbmo", //
+        "obwsbbbbmo", //
+        "obbbbbbsmo", //
+        "obbbbbssmo", //
+        "ombbbbsmmo", //
+        ".ommsmmmo.", //
+        "..oooooo..", //
+    ]],
+    frame_seconds: 0.0,
+};
+
 /// The stamp for a buried `artifact`.
 #[must_use]
 pub const fn artifact_stamp(artifact: ArtifactKind) -> &'static SpriteDef {
@@ -405,6 +474,8 @@ pub const fn artifact_stamp(artifact: ArtifactKind) -> &'static SpriteDef {
         ArtifactKind::MachineSigil => &MACHINE_SIGIL,
         ArtifactKind::VoidPearl => &VOID_PEARL,
         ArtifactKind::MantleHeart => &MANTLE_HEART,
+        ArtifactKind::WindAstrolabe => &WIND_ASTROLABE,
+        ArtifactKind::CloudPearl => &CLOUD_PEARL,
     }
 }
 

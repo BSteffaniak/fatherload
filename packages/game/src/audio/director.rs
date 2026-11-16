@@ -111,13 +111,22 @@ impl Material {
             | TileKind::Built(_) => Self::Hard,
             TileKind::Ore(_) | TileKind::Artifact(_) => Self::Ore,
             TileKind::Sky(tile) => match tile {
-                fatherload_simulation::sky::SkyTile::Crystal => Self::Ore,
+                fatherload_simulation::sky::SkyTile::Crystal
+                | fatherload_simulation::sky::SkyTile::Cache
+                | fatherload_simulation::sky::SkyTile::Keystone => Self::Ore,
                 fatherload_simulation::sky::SkyTile::Turf(_)
                 | fatherload_simulation::sky::SkyTile::Soil
                 | fatherload_simulation::sky::SkyTile::Roots
+                | fatherload_simulation::sky::SkyTile::Vines
+                | fatherload_simulation::sky::SkyTile::Nest
+                | fatherload_simulation::sky::SkyTile::Spring
                 | fatherload_simulation::sky::SkyTile::Regolith => Self::Soft,
                 fatherload_simulation::sky::SkyTile::Rock(_)
                 | fatherload_simulation::sky::SkyTile::ContinentRock
+                | fatherload_simulation::sky::SkyTile::RuinBrick
+                | fatherload_simulation::sky::SkyTile::RuinPillar
+                | fatherload_simulation::sky::SkyTile::Vent
+                | fatherload_simulation::sky::SkyTile::BuoyPad
                 | fatherload_simulation::sky::SkyTile::MoonRock => Self::Hard,
             },
             TileKind::Cave(tile) => match tile {
@@ -162,6 +171,10 @@ enum SeatLoop {
     Rain,
     /// Night crickets on the surface (world clock).
     Night,
+    /// The high sky's airy pad and wind chimes among the islands (WP-SKY).
+    SkyAir,
+    /// A waterfall pouring off a sky isle nearby.
+    Waterfall,
 }
 
 /// Where a local seat hears from.
@@ -364,7 +377,7 @@ impl Director {
         params: (f32, f32, f32, f32),
     ) {
         let (gain, pan, rate, cutoff) = params;
-        let key = LoopKey::new(listener.seat as u32 * 8 + slot as u32, patch);
+        let key = LoopKey::new(listener.seat as u32 * 16 + slot as u32, patch);
         if gain > 1e-3 {
             live.insert(key);
         }
@@ -678,6 +691,7 @@ impl Director {
         );
 
         self.surface_ambience(live, listener, terrain, snapshot.clock);
+        self.sky_ambience(live, listener, terrain);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -765,6 +779,77 @@ impl Director {
                 1.0,
                 OPEN_CUTOFF,
             ),
+        );
+    }
+
+    /// The sky isles' ambience (WP-SKY, V9): the music shifts up high into an airy pad with
+    /// wind chimes that swells in among the islands and thins out toward the dead-air gap, and
+    /// the roar of the nearest waterfall, panned to its side.
+    fn sky_ambience(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        terrain: &fatherload_simulation::terrain::Terrain,
+    ) {
+        use fatherload_simulation::{
+            sky::SkyTile,
+            terrain::{TILE_SIZE, TileKind, TilePosition},
+            worldgen::{TileRect, sky},
+        };
+        let settings = terrain.settings();
+        let altitude = -listener.y / TILE_SIZE;
+        #[allow(clippy::cast_precision_loss, reason = "band rows are small integers")]
+        let (low, gap) = (
+            sky::LOW_ISLES_BOTTOM_ROWS as f32,
+            sky::DEAD_AIR_BOTTOM_ROWS as f32,
+        );
+        let share = if settings.generator.has_sky_isles() {
+            ((altitude - (low - 80.0)) / 120.0).clamp(0.0, 1.0)
+                * (1.0 - (altitude - gap) / 300.0).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::SkyAir,
+            Patch::SkyAirLoop,
+            (share * 0.5, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        let mut roar = (0.0_f32, 0.0_f32);
+        if share > 0.0 {
+            #[allow(clippy::cast_possible_truncation, reason = "world pixels to tiles")]
+            let here = TilePosition {
+                x: (listener.x / TILE_SIZE).floor() as i32,
+                y: (listener.y / TILE_SIZE).floor() as i32,
+            };
+            for land in sky::lands_touching(settings, &TileRect::around(here, 40, 70)) {
+                let Some(spring) = land.content().and_then(|content| content.spring) else {
+                    continue;
+                };
+                if terrain
+                    .tile(spring)
+                    .is_none_or(|tile| tile.kind != TileKind::Sky(SkyTile::Spring))
+                {
+                    continue;
+                }
+                // The water falls below the spring: hear it from the nearest point of the fall.
+                let fall_y = here.y.clamp(spring.y, spring.y + 50);
+                #[allow(clippy::cast_precision_loss, reason = "tile distances")]
+                let (dx, dy) = ((spring.x - here.x) as f32, (fall_y - here.y) as f32);
+                let distance = dx.hypot(dy);
+                let gain = (1.0 - distance / 36.0).clamp(0.0, 1.0);
+                if gain > roar.0 {
+                    roar = (gain, (dx / 24.0).clamp(-0.8, 0.8));
+                }
+            }
+        }
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Waterfall,
+            Patch::WaterfallLoop,
+            (roar.0 * roar.0 * 0.55, roar.1, 1.0, OPEN_CUTOFF),
         );
     }
 

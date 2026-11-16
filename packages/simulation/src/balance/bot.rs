@@ -21,7 +21,7 @@ use crate::{
     ControlState, ExplosiveKind, GameplayEventKind, PlayerCommand, PlayerId, SessionServiceRequest,
     ThrowAim, TickOutput, WeaponControl, WeaponKind, WorldState,
     economy::{
-        SurfaceZone, UpgradeKind, current_level, upgrade_locked_by, upgrade_maxed, upgrade_offers,
+        SurfaceZone, UpgradeKind, current_level, upgrade_lock, upgrade_maxed, upgrade_offers,
     },
     explosive::explosive_offer,
     player::Player,
@@ -1180,7 +1180,7 @@ impl MinerBot {
             .filter(|(_, offer)| {
                 !upgrade_maxed(offer)
                     && offer.cost <= budget
-                    && upgrade_locked_by(offer, world.terrain().settings(), deepest).is_none()
+                    && upgrade_lock(offer, world.terrain().settings(), deepest).is_none()
             })
             .filter_map(|(index, offer)| {
                 self.weight(offer.kind, rig)

@@ -355,6 +355,90 @@ harness) and `world/sky_tests.rs` (orbit drift, lunar gravity, bombs and drops i
 updrafts, wind, cold, reachability by tier in the real sky including flying up into the Moon,
 precision, saves and keyframes of island edits, determinism and tick-rate safety).
 
+### Sky isles and sky towns (`worldgen/sky/{isles,towns,winds}.rs`, `world/sky_isles.rs`, `skycraft.rs`, generator V9)
+
+Expansion plan WP-SKY (wave 4, T20). `GeneratorVersion::V9` (current, `has_sky_isles`) keeps
+V8's bands, continents, Moon and island placement (`worldgen::sky::isle_tests::
+v9_keeps_v8_placement_outside_town_cells`) and furnishes the low isles and archipelago; V8 and
+older output is unchanged and `GOLDEN_V9_DIGEST` pins the new output.
+
+- **Island content** (`isles`, `SkyLand::content() -> Option<&IsleContent>`): skystone ore
+  (`MineralKind::Skystone`, hardness 2) in every isle's rock, cloud silver
+  (`MineralKind::CloudSilver`, hardness 3) deeper in archipelago rock, rare sky artifacts
+  (`ArtifactKind::WindAstrolabe`, `CloudPearl`), and per island (rolled from its shape seed) a
+  sky cache, a nest on the turf, a ruin (two pillars and a stone floor), a spring at the rim
+  (the renderer pours a waterfall from it), an updraft vent, a keystone (a crumbling isle), a
+  fuel buoy pad (about half the low isle clusters, on the biggest isle, never crumbling) and
+  vines among the roots. New `SkyTile`s (codes 0x1D-0x25): `Cache`, `Nest`, `RuinBrick`,
+  `RuinPillar`, `Spring`, `Vines`, `Keystone`, `Vent`, `BuoyPad`. Island cells are memoized
+  (`cell_lands`); a buoy's pad is flat.
+- **Sky towns** (`towns`): the archipelago's cells form blocks of 3x2 (`TOWN_BLOCK`, 960
+  columns by 352 rows); one cell per block (a hash) holds a flat-topped `SkyLandKind::TownIsle`
+  with one or two isles beside it and a sky town on it. A sky town is a village
+  (`VillageSetting::Sky(SkyTownKind)`, built by `village::layout::build` from
+  `SiteSpec::Sky`) with id `placement::sky_town_id(bx, by)` (`SKY_TOWN_FLAG`, bit 30), so every
+  village API (lookups, `village_at`, `village::sky_towns_in` for 2D areas (column queries like
+  `villages_between` keep to the ground), `in_village_area` safe zones, regional
+  `FeatureKind::Village` features with `ry >= SKY_TOWN_RY`, people routines, NPCs, counters,
+  interiors, the journal) works for them. Kinds: airship dock, floating market, sky monastery,
+  cloud-farmer village (`sky::SkyTownKind`), in two sky cultures (`Culture::Aeronaut`,
+  `Culture::Cloudborn`, `layout::sky_culture`) whose residents roll from `Role::SKY_POOL`
+  (with the sky occupations `Role::Aeronaut`, `Monk`, `StormChaser`, `Smuggler`; ground
+  cultures keep `Role::ALL`, so old worlds' people are unchanged). Specialty buildings
+  (`BuildingKind::AirshipDock`, `Bazaar`, `Monastery`, `Granary`; `VillageService` likewise):
+  fuel and aether thrusters; skystone and cloud silver bought at 160 %+, a smuggled part and a
+  double pack of charges; blessings, a cell for the night and cloud-silver de-icers; cheap
+  condensed fuel and the pressurized hull. Lookups: `sky_town_site`, `sky_towns_touching`,
+  `sky_town_at`, `towns::sky_towns_between`, `towns::sky_town_of`.
+- **Sky crafting** (`skycraft`): `VillageDeal::SkyCraft { recipe, tier }` rows (every tier,
+  only the next sells) cost credits **and** sky ore from the bay (`skycraft::cost`):
+  `SkyRecipe::AetherThrusters` (tiers 1-3, `HazardGear::aether_thrusters`: in thin air they win
+  back side thrust, `aether_drive_factor`, and grip the wind, `aether_wind_grip`; never lift),
+  `PressurizedHull` (tier 1 of 3, `HazardGear::pressurized_hull`, keeps out one cold level per
+  tier: `HazardGear::cold_cover`/`cold_excess`; tiers 2-3 are a seam for T21/T22) and `DeIcer`
+  (the shop line's tiers at 60 % of the credits). Test mode maxes both new fields.
+- **Fuel buoys** (`BuoySite`, `isles::buoy_of`, `WorldState::buoy_at_rig` / `buoy_used`):
+  `SessionServiceRequest::SkyBuoy { isle }` from a rig parked on the pad buys one refill per
+  player per buoy (`VillageJournal::buoys`, serde default) for `BUOY_PRICE` (450): at most
+  `BUOY_FUEL` (160) and never past `buoy_fill_level` (a third of the tank plus 160). A rig
+  leaving a buoy is never better off than one that climbed to the band's top on a full tank,
+  so buoys cannot open the dead-air gap; `world::sky_isle_tests::
+  buoys_never_open_the_dead_air_gap` measures it for every near-gap loadout of the climb table
+  (and `milestone::crosses_dead_air` stays table-only).
+- **Sky refuels are rationed** (`milestone::sky_refuel_level`): sky town counters, sky
+  traders' metered fuel and base fuel stations in the island bands (low isles up to the
+  continents' floor) top a rig that cannot cross the dead-air gap up only to the share of
+  its tank a full-tank climb from the ground would still hold there (the share of its
+  `climb_reach` still above it), and at least `SKY_REFUEL_FLOOR_PERCENT` (25 %). Without it a
+  full tank bought at a high sky town carried tier 10-12 tanks with intakes over the gap.
+  Rigs that already cross fill right up. `world::sky_isle_tests::
+  sky_refuels_never_open_the_dead_air_gap` measures every near-gap loadout from the highest
+  sky town and from mid-archipelago.
+- **Collapsing isles** (`world/sky_isles.rs`, stateless): an island whose `Keystone` tile is
+  gone (drill, blast, gravity bomb, gun, pick) sheds its lowest tiles every
+  `COLLAPSE_STEP_MILLIS` near rigs: ore and finds fall as drops, rock as falling boulders;
+  half gone, it cracks the keystones of crumbling isles within `CHAIN_RADIUS` (chain
+  reactions). Keystones broken in a tick raise `IsleCollapsing` (read from the terrain
+  journal, so every way of breaking one counts).
+- **Wind-riding** (`winds`): every archipelago chain carries a `JetStream` (a 10-row ribbon a
+  few rows over its highest turf, `JET_STREAM_SPEED` 480 px/s one way, easing at the ends; it grabs an airborne rig with `JET_STREAM_GRIP` whatever the air's density) and
+  every vent breathes a column of rising air (`vent_updraft_at`, `VENT_RISE_ROWS` 60,
+  `VENT_STRENGTH` 860). `environment_at` adds both on V9 (`wind_x`, `updraft`).
+- **Events** (netcode 200-203): `SkyCacheOpened`, `BuoyRefuelled`, `IsleCollapsing`,
+  `JetStreamCaught`; `UpdraftCaught` also fires for vents. Sky crafting reports through
+  `VillageServiceUsed`.
+- **Shop** (open items from wave 3): `economy::upgrade_lock` (`UpgradeLock::{Band, NoSky}`)
+  locks the Altitude Intake and De-Icer on worlds without a sky (shop, purchase check and the
+  balance bots read it); `upgrade_preview::upgrade_preview_in` / `preview_between_in` take
+  `has_sky` and drop the island and dead-air lines on such worlds.
+
+Tests: `worldgen/sky/isle_tests.rs` (V9 switch, V8 placement kept, content, tiles where the
+content says, seamless deterministic chunks, one flat town per block with its village,
+regional village features, jet streams and vents, the golden digest), `world/sky_isle_tests.rs`
+(caches, buoy economics and the dead-air gate, saves, sky crafting at the dock, every town
+kind's offers, a gravity bomb collapsing a cluster, isles standing otherwise, jet stream
+riding, determinism and keyframes) and `skycraft.rs`.
+
 ### Compact terrain (`terrain/persistence.rs`)
 
 A `Terrain` serializes as a `TerrainSnapshot`: its `WorldSettings`, size, digest and only the
@@ -1481,6 +1565,21 @@ Where the wave 2 tracks meet, for the tracks that build on them:
   (`gradient_y` / `world_y_of_gradient`); the backdrop Moon fades out as the looming one fades in.
 - **Event codes** 116-118 (altitude), `PROTOCOL_VERSION` 11; save format unchanged (an older
   build rejects a V8 save by its unknown generator; `HazardGear` fields default).
+
+## Wave 4 seams: sky isles and towns (T20)
+
+- **Generator V9** is current (`has_sky_isles`); other wave 4 tracks that change generation
+  should extend V9 (the integrator re-pins `GOLDEN_V9_DIGEST`). Content lives in island cells
+  (`worldgen::sky::cell_lands`); continents and the Moon are untouched (T21/T22).
+- **Sky towns are villages** (`VillageSetting::Sky`): story arcs (T26) and night rules (T25)
+  get them through the village APIs; they are safe zones via `in_village_area`.
+- **Gear seams**: `HazardGear::pressurized_hull` (tiers 2-3 reserved for orbit and the Moon,
+  T22) and `HazardGear::cold_cover()` (pilot suits, T23, can add to it); aether thrusters
+  never change the climb table.
+- **Ids and codes**: `SKY_TOWN_FLAG` (bit 30 of `VillageId`), sky tiles 0x1D-0x25, minerals
+  `Skystone`/`CloudSilver` and artifacts `WindAstrolabe`/`CloudPearl` appended (their tile
+  codes follow), events 200-203, `PROTOCOL_VERSION` 12; save format unchanged (new fields
+  default, an older build rejects a V9 save by its unknown generator).
 
 ## Wave 3 seams: the pilot (T15)
 

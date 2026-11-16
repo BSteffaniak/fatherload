@@ -333,7 +333,8 @@ pub fn touch_context(
         prompt: view.failure.is_some()
             || view.surface_zone.is_some()
             || view.village_door.is_some()
-            || view.nearby_module.is_some(),
+            || view.nearby_module.is_some()
+            || view.buoy.is_some(),
         kits: kits.map(|count| count > 0),
         pilot: TouchPilot::new(view.pilot.is_some(), view.can_exit, view.can_board),
     }

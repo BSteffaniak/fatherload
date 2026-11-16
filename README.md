@@ -257,6 +257,28 @@ follows the rig among the islands, which show on it. Climbing into a new band, c
 updraft and icing up each have their own sound. Older worlds keep an empty sky and standard
 air.
 
+### Sky isles and sky towns
+
+New worlds (generator V9) fill the sky's lower bands. The **low isles** carry pale blue
+skystone in their rock, brass-bound sky caches to drill open, wind astrolabes, little
+waterfalls and vents that breathe a column of rising air; about half the clusters have a
+**fuel buoy**: park on its striped pad and press use for one pricey refill (450 credits, into a
+low tank only, one per buoy). Sky towns sell fuel too, but rationed: until your rig can cross
+the dead-air gap on its own, they only top you up to what a straight climb would have left. Some isles hang on an aether **keystone**: break it (drill it,
+shoot it, or drop a gravity bomb on it) and the island falls apart, ore raining down, and the
+shock brings down crumbling neighbours. The **cloud archipelago** adds cloud silver, nests,
+ruins and waterfalls pouring into the void, and every chain carries a **jet stream**: slip
+into the racing streaks and ride it to the next island.
+
+One island in every stretch of the archipelago holds a **sky town**: an aeronauts' airship
+dock, a floating market, a sky monastery or a cloud-farmer village, with its own people
+(aeronauts, monks, storm-chasers, smugglers and more). Sky towns sell **sky crafting**, paid
+in credits and sky ore: aether thrusters (side thrust and grip in thin air, three tiers) at
+the docks, a pressurized hull (keeps the cold out) at the cloud farms and cloud-silver
+de-icers at the monasteries; the markets buy skystone and cloud silver dear. The sky gauge
+names the nearest sky town or buoy; up among the islands the music turns airy and you hear
+the waterfalls. On worlds without a sky the shop locks the Altitude Intake and De-Icer.
+
 ### Balance
 
 The balance harness (`fatherload --balance-report [--seeds N] [--minutes M] [--only

@@ -425,6 +425,20 @@ impl Effects {
                     }
                     continue;
                 }
+                GameplayEventKind::IsleCollapsing { x, y } => {
+                    // A keystone breaking: sparks of aether and the groan, from the island.
+                    #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
+                    let (x, y) = (
+                        (x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                        (y as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                    );
+                    self.spawn_sparks(x, y);
+                    if impact_cues < 4 {
+                        cues.push(PlacedCue::world(SoundCue::IsleCollapse, x, y));
+                        impact_cues += 1;
+                    }
+                    continue;
+                }
                 GameplayEventKind::StalactiteFell { x, y } => {
                     // Tile coordinates: crack at the tile's centre.
                     #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
@@ -584,10 +598,12 @@ impl Effects {
                 }
                 GameplayEventKind::SkyBandEntered { player_id, .. }
                 | GameplayEventKind::UpdraftCaught { player_id }
+                | GameplayEventKind::JetStreamCaught { player_id }
                 | GameplayEventKind::RigIcing { player_id } => {
                     let kind = match gameplay.kind {
                         GameplayEventKind::SkyBandEntered { .. } => 0,
                         GameplayEventKind::UpdraftCaught { .. } => 1,
+                        GameplayEventKind::JetStreamCaught { .. } => 3,
                         _ => 2,
                     };
                     if let std::collections::btree_map::Entry::Vacant(entry) =
@@ -753,6 +769,9 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::SkyBandEntered { player_id, .. }
         | GameplayEventKind::UpdraftCaught { player_id }
         | GameplayEventKind::RigIcing { player_id }
+        | GameplayEventKind::SkyCacheOpened { player_id, .. }
+        | GameplayEventKind::BuoyRefuelled { player_id }
+        | GameplayEventKind::JetStreamCaught { player_id }
         | GameplayEventKind::PilotExited { player_id, .. }
         | GameplayEventKind::PilotBoarded { player_id, .. }
         | GameplayEventKind::PilotJumped { player_id }
@@ -787,6 +806,7 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::VaultOpened { .. }
         | GameplayEventKind::VaultLockReset { .. }
         | GameplayEventKind::StalactiteFell { .. }
+        | GameplayEventKind::IsleCollapsing { .. }
         | GameplayEventKind::EnemyAlerted { .. }
         | GameplayEventKind::EnemyWindup { .. }
         | GameplayEventKind::EnemyFired { .. }

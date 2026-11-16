@@ -97,6 +97,9 @@ mod roster;
 mod services;
 mod simulate;
 #[cfg(test)]
+mod sky_isle_tests;
+mod sky_isles;
+#[cfg(test)]
 mod sky_tests;
 mod state_hash;
 #[cfg(test)]

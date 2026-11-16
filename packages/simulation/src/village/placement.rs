@@ -159,6 +159,30 @@ const fn unzigzag(code: u32) -> i32 {
     (code >> 1).cast_signed() ^ -((code & 1).cast_signed())
 }
 
+/// Set on every sky town's [`VillageId`] (WP-SKY, V9).
+///
+/// Bits 8..30 hold the zigzagged block column, bits 0..8 the block row ([`crate::worldgen::sky::towns`]). Surface ids are small
+/// and camps use bit 31, so the ranges never meet.
+pub const SKY_TOWN_FLAG: u32 = 1 << 30;
+
+/// The id of the sky town of archipelago block `(bx, by)`.
+#[must_use]
+pub const fn sky_town_id(bx: i32, by: i32) -> VillageId {
+    VillageId(SKY_TOWN_FLAG | ((zigzag(bx) & 0x3F_FFFF) << 8) | (by.cast_unsigned() & 0xFF))
+}
+
+/// The archipelago block `(bx, by)` a sky town id names (`None` for other ids).
+#[must_use]
+pub const fn decode_sky_town(id: VillageId) -> Option<(i32, i32)> {
+    if id.0 & SKY_TOWN_FLAG == 0 || id.0 & (1 << 31) != 0 {
+        return None;
+    }
+    Some((
+        unzigzag((id.0 >> 8) & 0x3F_FFFF),
+        (id.0 & 0xFF).cast_signed(),
+    ))
+}
+
 /// The id of the surface village of site `site`.
 #[must_use]
 pub const fn surface_id(site: i32) -> VillageId {

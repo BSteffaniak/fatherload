@@ -752,7 +752,15 @@ impl WorldState {
         let capacity = module.kind.storage_capacity();
         match service {
             ModuleService::Refuel => {
-                let missing = (player.fuel_capacity - player.fuel).floor().max(0.0);
+                // An island base's station tops a rig up only as far as the sky allows
+                // (`milestone::sky_refuel_level`: the dead-air gate stays honest).
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "altitudes are a few thousand rows"
+                )]
+                let altitude = (-player.y / TILE_SIZE).floor() as i32;
+                let level = crate::milestone::sky_refuel_level(player, altitude);
+                let missing = (level - player.fuel).floor().max(0.0);
                 #[allow(
                     clippy::cast_possible_truncation,
                     clippy::cast_sign_loss,

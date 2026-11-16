@@ -410,6 +410,26 @@ pub enum GameplayEventKind {
     RigIcing {
         player_id: PlayerId,
     },
+    // --- Sky isles (WP-SKY, T20, `world/sky_isles.rs`) -----------------------------------
+    /// A player drilled open a sky cache or a nest: `credits` went to them, the loot spilled.
+    SkyCacheOpened {
+        player_id: PlayerId,
+        tile: crate::sky::SkyTile,
+        credits: u32,
+    },
+    /// A player bought a fuel buoy's refill.
+    BuoyRefuelled {
+        player_id: PlayerId,
+    },
+    /// A crumbling isle's keystone at tile `(x, y)` broke: the island falls apart.
+    IsleCollapsing {
+        x: i32,
+        y: i32,
+    },
+    /// A rig slipped into a jet stream (`worldgen::sky::winds`).
+    JetStreamCaught {
+        player_id: PlayerId,
+    },
     // --- The pilot on foot (Part II F5, `world/pilot.rs`) ---------------------------------
     /// The pilot climbed out of its rig at world pixel `(x, y)` (its feet).
     PilotExited {
@@ -562,6 +582,9 @@ pub(crate) const fn gameplay_event_for_applied_command(
         PlayerCommand::TogglePilot | PlayerCommand::PilotPack { .. } => return None,
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {
             GameplayEventKind::RigCustomized { player_id }
+        }
+        PlayerCommand::Service(crate::service::SessionServiceRequest::SkyBuoy { .. }) => {
+            GameplayEventKind::BuoyRefuelled { player_id }
         }
         PlayerCommand::Service(crate::service::SessionServiceRequest::Village {
             village,

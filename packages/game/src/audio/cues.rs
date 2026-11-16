@@ -79,6 +79,10 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::SkyBand => Patch::SkyBand,
         SoundCue::Updraft => Patch::UpdraftWhoosh,
         SoundCue::Icing => Patch::IceCrackle,
+        SoundCue::SkyCache => Patch::SkyCacheOpen,
+        SoundCue::BuoyRefuel => Patch::BuoyRefuel,
+        SoundCue::IsleCollapse => Patch::IsleCollapse,
+        SoundCue::JetStream => Patch::JetStreamRush,
         SoundCue::Sell => Patch::Coins,
         SoundCue::Upgrade => Patch::Purchase,
         SoundCue::Damage => Patch::HullHit,
@@ -362,7 +366,7 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // cartographer's chart pulse (other deals get the shell's coins / purchase chime).
         GameplayEventKind::VillageDiscovered { .. } => Some(SoundCue::VillageArrival),
         GameplayEventKind::VillageServiceUsed { service, .. } => match service {
-            VillageService::Shrine => Some(SoundCue::ShrineBlessing),
+            VillageService::Shrine | VillageService::Monastery => Some(SoundCue::ShrineBlessing),
             VillageService::Cartographer => Some(SoundCue::Scanner),
             _ => None,
         },
@@ -417,6 +421,12 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::SkyBandEntered { .. } => Some(SoundCue::SkyBand),
         GameplayEventKind::UpdraftCaught { .. } => Some(SoundCue::Updraft),
         GameplayEventKind::RigIcing { .. } => Some(SoundCue::Icing),
+        // Sky isles (WP-SKY): the cache's chimes, the buoy's pump, the collapse (placed in the
+        // world by the effects layer) and the jet stream's rush.
+        GameplayEventKind::SkyCacheOpened { .. } => Some(SoundCue::SkyCache),
+        GameplayEventKind::BuoyRefuelled { .. } => Some(SoundCue::BuoyRefuel),
+        GameplayEventKind::IsleCollapsing { .. } => Some(SoundCue::IsleCollapse),
+        GameplayEventKind::JetStreamCaught { .. } => Some(SoundCue::JetStream),
         // The pilot on foot (Part II F5): from the player, like the rig's own sounds.
         GameplayEventKind::PilotExited { .. } => Some(SoundCue::HatchOpen),
         GameplayEventKind::PilotBoarded { .. } => Some(SoundCue::HatchClose),
@@ -568,6 +578,10 @@ mod tests {
             | GameplayEventKind::SkyBandEntered { .. }
             | GameplayEventKind::UpdraftCaught { .. }
             | GameplayEventKind::RigIcing { .. }
+            | GameplayEventKind::SkyCacheOpened { .. }
+            | GameplayEventKind::BuoyRefuelled { .. }
+            | GameplayEventKind::IsleCollapsing { .. }
+            | GameplayEventKind::JetStreamCaught { .. }
             | GameplayEventKind::PilotExited { .. }
             | GameplayEventKind::PilotBoarded { .. }
             | GameplayEventKind::PilotJumped { .. }
@@ -841,6 +855,14 @@ mod tests {
         }
         events.push(GameplayEventKind::UpdraftCaught { player_id });
         events.push(GameplayEventKind::RigIcing { player_id });
+        events.push(GameplayEventKind::SkyCacheOpened {
+            player_id,
+            tile: fatherload_simulation::sky::SkyTile::Cache,
+            credits: 120,
+        });
+        events.push(GameplayEventKind::BuoyRefuelled { player_id });
+        events.push(GameplayEventKind::IsleCollapsing { x: 3, y: -300 });
+        events.push(GameplayEventKind::JetStreamCaught { player_id });
         events.extend([
             GameplayEventKind::PilotExited {
                 player_id,

@@ -57,6 +57,8 @@ impl BlockKind {
                 crate::sky::SkyTile::Turf(_)
                 | crate::sky::SkyTile::Soil
                 | crate::sky::SkyTile::Roots
+                | crate::sky::SkyTile::Vines
+                | crate::sky::SkyTile::Spring
                 | crate::sky::SkyTile::Regolith,
             )
             | TileKind::Cave(crate::cave::CaveTile::Mycelium | crate::cave::CaveTile::Silt) => {
@@ -64,10 +66,18 @@ impl BlockKind {
             }
             TileKind::Clay
             | TileKind::Surface(SurfaceMaterial::Sandstone | SurfaceMaterial::RedRock)
-            | TileKind::Sky(crate::sky::SkyTile::Rock(_)) => Some(Self::Clay),
+            | TileKind::Sky(crate::sky::SkyTile::Rock(_) | crate::sky::SkyTile::Vent) => {
+                Some(Self::Clay)
+            }
             TileKind::Stone
             | TileKind::Surface(SurfaceMaterial::Granite)
-            | TileKind::Sky(crate::sky::SkyTile::Crystal | crate::sky::SkyTile::MoonRock)
+            | TileKind::Sky(
+                crate::sky::SkyTile::Crystal
+                | crate::sky::SkyTile::MoonRock
+                | crate::sky::SkyTile::RuinBrick
+                | crate::sky::SkyTile::RuinPillar
+                | crate::sky::SkyTile::Keystone,
+            )
             | TileKind::Cave(
                 crate::cave::CaveTile::RuinBrick
                 | crate::cave::CaveTile::RuinPillar
@@ -77,7 +87,9 @@ impl BlockKind {
             ) => Some(Self::Stone),
             TileKind::HardRock
             | TileKind::Cave(crate::cave::CaveTile::Obsidian)
-            | TileKind::Sky(crate::sky::SkyTile::ContinentRock) => Some(Self::HardRock),
+            | TileKind::Sky(crate::sky::SkyTile::ContinentRock | crate::sky::SkyTile::BuoyPad) => {
+                Some(Self::HardRock)
+            }
             _ => None,
         }
     }

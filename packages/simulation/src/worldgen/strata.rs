@@ -389,7 +389,8 @@ pub const fn boundary_bases(settings: &WorldSettings) -> [i32; BOUNDARY_COUNT] {
         | GeneratorVersion::V5
         | GeneratorVersion::V6
         | GeneratorVersion::V7
-        | GeneratorVersion::V8 => {
+        | GeneratorVersion::V8
+        | GeneratorVersion::V9 => {
             let thickness = v4_thicknesses(settings);
             let mut row = SKY_ROWS;
             let mut index = 0;

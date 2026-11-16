@@ -41,10 +41,16 @@ pub fn village_report(settings: &WorldSettings, count: usize) -> String {
     out
 }
 
+#[allow(clippy::too_many_lines, reason = "one report section after another")]
 fn write_village(out: &mut String, settings: &WorldSettings, found: &Village) {
     let setting = match found.setting {
         VillageSetting::Surface => format!("surface, {} landscape", found.landscape.name()),
         VillageSetting::Underground => format!("underground, floor at row {}", found.ground_row),
+        VillageSetting::Sky(kind) => format!(
+            "{} in the clouds, ground at row {}",
+            kind.name(),
+            found.ground_row
+        ),
     };
     let _ = writeln!(out, "== {} ==", found.describe());
     let _ = writeln!(

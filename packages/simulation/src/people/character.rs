@@ -58,6 +58,14 @@ pub enum Role {
     Baker,
     Storyteller,
     Apprentice,
+    /// Sky occupation (WP-SKY): flies and fixes the airships of the sky towns.
+    Aeronaut,
+    /// Sky occupation: keeps the bells and the gardens of a sky monastery.
+    Monk,
+    /// Sky occupation: chases storms across the archipelago for the thrill and the readings.
+    StormChaser,
+    /// Sky occupation: runs goods between the islands without asking who owns them.
+    Smuggler,
 }
 
 /// The kind of one-of-a-kind thing a character can offer (WP-PEOPLE fills in the details).
@@ -123,6 +131,37 @@ impl Role {
         Self::Apprentice,
     ];
 
+    /// The sky occupations (WP-SKY). They are not in [`Self::ALL`] (which every ground culture
+    /// rolls from, so adding to it would reshuffle old worlds' people); sky cultures roll from
+    /// [`Self::SKY_POOL`].
+    pub const SKY: [Self; 4] = [
+        Self::Aeronaut,
+        Self::Monk,
+        Self::StormChaser,
+        Self::Smuggler,
+    ];
+
+    /// The roles sky-town residents roll from: the sky occupations and the trades a town in
+    /// the clouds still needs.
+    pub const SKY_POOL: [Self; 16] = [
+        Self::Aeronaut,
+        Self::Monk,
+        Self::StormChaser,
+        Self::Smuggler,
+        Self::Trader,
+        Self::Farmer,
+        Self::Innkeeper,
+        Self::Mechanic,
+        Self::Scholar,
+        Self::Cartographer,
+        Self::Healer,
+        Self::ShrineKeeper,
+        Self::Courier,
+        Self::Tinkerer,
+        Self::Brewer,
+        Self::Apprentice,
+    ];
+
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -145,6 +184,10 @@ impl Role {
             Self::Baker => "baker",
             Self::Storyteller => "storyteller",
             Self::Apprentice => "apprentice",
+            Self::Aeronaut => "aeronaut",
+            Self::Monk => "monk",
+            Self::StormChaser => "storm-chaser",
+            Self::Smuggler => "smuggler",
         }
     }
 
@@ -171,6 +214,10 @@ impl Role {
             Self::Baker => TraitBias::new(0, 10, 5, 15, 0),
             Self::Storyteller => TraitBias::new(15, -5, 20, 5, 0),
             Self::Apprentice => TraitBias::new(5, -5, 0, 5, 15),
+            Self::Aeronaut => TraitBias::new(15, 5, 10, 0, -10),
+            Self::Monk => TraitBias::new(15, 15, -15, 15, -10),
+            Self::StormChaser => TraitBias::new(20, -15, 15, -5, -15),
+            Self::Smuggler => TraitBias::new(5, -10, 10, -15, 5),
         }
     }
 
@@ -178,13 +225,18 @@ impl Role {
     #[must_use]
     pub const fn offer(self) -> OfferKind {
         match self {
-            Self::Smith | Self::Mechanic | Self::Tinkerer => OfferKind::PartVariant,
+            Self::Smith | Self::Mechanic | Self::Tinkerer | Self::Aeronaut => {
+                OfferKind::PartVariant
+            }
+            Self::StormChaser => OfferKind::Rumours,
             Self::Farmer | Self::Healer | Self::Brewer | Self::Baker => OfferKind::Recipe,
-            Self::Trader => OfferKind::Cosmetic,
+            Self::Trader | Self::Smuggler => OfferKind::Cosmetic,
             Self::Prospector | Self::Scholar | Self::Cartographer | Self::Hermit => {
                 OfferKind::MapSecret
             }
-            Self::ShrineKeeper | Self::RetiredMiner | Self::Warden => OfferKind::Apprenticeship,
+            Self::ShrineKeeper | Self::RetiredMiner | Self::Warden | Self::Monk => {
+                OfferKind::Apprenticeship
+            }
             Self::Innkeeper | Self::Courier | Self::Storyteller | Self::Apprentice => {
                 OfferKind::Rumours
             }
@@ -206,6 +258,7 @@ impl Role {
 
     /// Gerund phrases about the work ("Spent the morning {work}").
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "three phrases per role")]
     pub const fn work(self) -> &'static [&'static str] {
         match self {
             Self::Prospector => &[
@@ -297,6 +350,26 @@ impl Role {
                 "collecting stories from passing drillers",
                 "making up better endings",
                 "rehearsing the ghost story for Saturday",
+            ],
+            Self::Aeronaut => &[
+                "patching a gas envelope",
+                "trimming ballast for a crosswind",
+                "talking a nervous airship down onto a mooring",
+            ],
+            Self::Monk => &[
+                "ringing the noon bell for nobody in particular",
+                "weeding the cloud garden",
+                "copying out the old wind charts",
+            ],
+            Self::StormChaser => &[
+                "flying into a squall on purpose",
+                "reading a barometer like a love letter",
+                "drying out after the last storm",
+            ],
+            Self::Smuggler => &[
+                "moving crates that are definitely full of wool",
+                "forgetting where a shipment came from",
+                "paying a customs man in compliments",
             ],
             Self::Apprentice => &[
                 "learning the trade the hard way",
@@ -531,6 +604,8 @@ const fn culture_roles(culture: Culture) -> &'static [Role] {
         Culture::Riverside => &[Role::Farmer, Role::Baker, Role::Storyteller],
         Culture::Scrapper => &[Role::Mechanic, Role::Tinkerer, Role::Trader],
         Culture::Deepfolk => &[Role::ShrineKeeper, Role::Hermit, Role::Scholar],
+        Culture::Aeronaut => &[Role::Aeronaut, Role::Smuggler, Role::StormChaser],
+        Culture::Cloudborn => &[Role::Monk, Role::Farmer, Role::StormChaser],
     }
 }
 
@@ -550,7 +625,13 @@ pub fn generate_character(seed: u64, id: CharacterId, culture: Culture) -> Chara
         u64::from(id.village.0),
         u64::from(id.index),
     );
-    let mut roles: Vec<(Role, u32)> = Role::ALL.iter().map(|role| (*role, 2)).collect();
+    // Sky towns roll from their own pool (ground cultures keep the classic list exactly).
+    let pool: &[Role] = if culture.is_sky() {
+        &Role::SKY_POOL
+    } else {
+        &Role::ALL
+    };
+    let mut roles: Vec<(Role, u32)> = pool.iter().map(|role| (*role, 2)).collect();
     for favoured in culture_roles(culture) {
         if let Some(entry) = roles.iter_mut().find(|(role, _)| role == favoured) {
             entry.1 = 4;
@@ -666,9 +747,12 @@ fn pick_want(role: Role, values: &[Value], rng: &mut PeopleRng) -> Want {
     match role {
         Role::Tinkerer | Role::Mechanic => boost(Want::BuildInvention, 6),
         Role::Scholar | Role::ShrineKeeper | Role::Hermit => boost(Want::UncoverDeepSecret, 5),
-        Role::Prospector | Role::Trader => boost(Want::StrikeItRich, 4),
+        Role::Prospector | Role::Trader | Role::Smuggler => boost(Want::StrikeItRich, 4),
         Role::Warden | Role::Healer => boost(Want::ProtectVillage, 4),
-        Role::Cartographer | Role::Courier => boost(Want::SeeTheWorld, 5),
+        Role::Cartographer | Role::Courier | Role::Aeronaut | Role::StormChaser => {
+            boost(Want::SeeTheWorld, 5);
+        }
+        Role::Monk => boost(Want::UncoverDeepSecret, 4),
         Role::Apprentice => boost(Want::ProveThemselves, 5),
         _ => {}
     }

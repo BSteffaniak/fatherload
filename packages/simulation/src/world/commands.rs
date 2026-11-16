@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     command::PlayerCommand,
-    economy::{buy_upgrade, refuel_amount, repair_amount, upgrade_locked_by, upgrade_offers},
+    economy::{buy_upgrade, refuel_amount, repair_amount, upgrade_lock, upgrade_offers},
     hazard::{HazardCloud, PlacedBomb},
     ids::{PlayerId, SimulationTick},
     infrastructure::{InfrastructureKind, PlacedInfrastructure},
@@ -392,7 +392,7 @@ impl WorldState {
             }
             PlayerCommand::BuyUpgrade { index } => {
                 if upgrade_offers(player).get(index).is_some_and(|offer| {
-                    upgrade_locked_by(
+                    upgrade_lock(
                         offer,
                         self.terrain.settings(),
                         self.progression.deepest_tile_reached,

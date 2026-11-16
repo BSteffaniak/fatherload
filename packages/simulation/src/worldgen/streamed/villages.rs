@@ -99,6 +99,8 @@ pub struct VillageStamp {
 
 static GEOMETRY: MemoCache<Option<SiteGeometry>> = MemoCache::new(256);
 static VILLAGES: MemoCache<Option<Arc<Village>>> = MemoCache::new(64);
+/// Sky towns (WP-SKY, V9), keyed by their archipelago block.
+static SKY_TOWNS: MemoCache<Option<Arc<Village>>> = MemoCache::new(128);
 static STAMPS: MemoCache<VillageStamp> = MemoCache::new(64);
 static FACTS: MemoCache<Vec<WorldFact>> = MemoCache::new(64);
 
@@ -183,8 +185,20 @@ fn sites_reaching(first: i32, last: i32) -> impl Iterator<Item = i32> {
     (low..=high).filter(|site| placement::valid_site(*site))
 }
 
+/// The sky town of archipelago block `(bx, by)`, built on first use.
+fn sky_town(settings: &WorldSettings, bx: i32, by: i32) -> Option<Arc<Village>> {
+    let built = SKY_TOWNS.get_or_compute((*settings, bx, by), || {
+        let site = crate::worldgen::sky::sky_town_site(settings, bx, by)?;
+        Some(Arc::new(layout::build(settings, &SiteSpec::Sky { site })))
+    });
+    built.as_ref().clone()
+}
+
 /// The village `id`, built on first use.
 pub fn village(settings: &WorldSettings, id: VillageId) -> Option<Arc<Village>> {
+    if let Some((bx, by)) = placement::decode_sky_town(id) {
+        return sky_town(settings, bx, by);
+    }
     let ctx = ctx(settings);
     let (site, underground) = placement::decode_id(id);
     let geometry = geometry(&ctx, site)?;
@@ -226,11 +240,24 @@ pub fn villages_between(settings: &WorldSettings, first: i32, last: i32) -> Vec<
     found
 }
 
+/// Every sky town whose area overlaps `rect` (built on first use).
+pub fn sky_towns_in(settings: &WorldSettings, rect: &TileRect) -> Vec<Arc<Village>> {
+    crate::worldgen::sky::sky_towns_touching(settings, rect)
+        .iter()
+        .filter_map(|site| sky_town(settings, site.block.0, site.block.1))
+        .collect()
+}
+
 /// The village whose area contains `position`.
 pub fn village_containing(
     settings: &WorldSettings,
     position: TilePosition,
 ) -> Option<Arc<Village>> {
+    if position.y < 0
+        && let Some(site) = crate::worldgen::sky::sky_town_at(settings, position)
+    {
+        return sky_town(settings, site.block.0, site.block.1);
+    }
     let ctx = ctx(settings);
     if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, 0)
         && let Some(geometry) = geometry(&ctx, site.site)
@@ -260,6 +287,20 @@ pub fn in_village_area(settings: &WorldSettings, position: TilePosition, margin:
     if !settings.generator.has_villages() {
         return false;
     }
+    if position.y < 0
+        && settings.generator.has_sky_isles()
+        && !crate::worldgen::sky::sky_towns_touching(
+            settings,
+            &TileRect {
+                min: position,
+                max: position,
+            }
+            .expanded(margin),
+        )
+        .is_empty()
+    {
+        return true;
+    }
     let ctx = ctx(settings);
     if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, margin)
         && let Some(geometry) = geometry(&ctx, site.site)
@@ -286,6 +327,38 @@ pub fn layer_features(ctx: &Ctx, rect: &TileRect, out: &mut Vec<WorldFeature>) {
         };
         out.push(surface_feature(ctx, &geometry));
         out.extend(underground_feature(ctx, &geometry));
+    }
+    for site in crate::worldgen::sky::sky_towns_touching(&ctx.settings, rect) {
+        out.push(sky_town_feature(&site));
+    }
+}
+
+/// The regional `ry` of sky town features: block row `by` is `SKY_TOWN_RY + by` (`rx` is the
+/// block column).
+pub const SKY_TOWN_RY: i32 = 2;
+
+fn sky_town_feature(site: &crate::worldgen::sky::SkyTownSite) -> WorldFeature {
+    let center = TilePosition {
+        x: site.center(),
+        y: site.ground_row - 1,
+    };
+    WorldFeature {
+        id: feature_id(Layer::Village, site.block.0, SKY_TOWN_RY + site.block.1, 0),
+        kind: FeatureKind::Village,
+        detail: FeatureDetail::Village(site.id),
+        band: crate::worldgen::Band::Topsoil,
+        center,
+        bounds: TileRect {
+            min: TilePosition {
+                x: site.first,
+                y: site.ground_row - 6,
+            },
+            max: TilePosition {
+                x: site.last,
+                y: site.ground_row + 1,
+            },
+        },
+        size: u32::try_from(site.last - site.first + 1).unwrap_or(0),
     }
 }
 
@@ -335,6 +408,10 @@ fn underground_feature(ctx: &Ctx, geometry: &SiteGeometry) -> Option<WorldFeatur
 
 /// The feature of a regional village id (`ry` 0: surface, 1: underground).
 pub fn feature(ctx: &Ctx, site: i32, ry: i32) -> Option<WorldFeature> {
+    if ry >= SKY_TOWN_RY {
+        return crate::worldgen::sky::sky_town_site(&ctx.settings, site, ry - SKY_TOWN_RY)
+            .map(|town| sky_town_feature(&town));
+    }
     let geometry = geometry(ctx, site)?;
     match ry {
         0 => Some(surface_feature(ctx, &geometry)),
@@ -371,6 +448,19 @@ pub fn stamps_touching(ctx: &Ctx, rect: &TileRect) -> Vec<Arc<VillageStamp>> {
             found.push(
                 STAMPS.get_or_compute((ctx.settings, site, 0), || stamp(&ctx.settings, &geometry)),
             );
+        }
+    }
+    // Sky towns' foundations on their town isles (V9).
+    if rect.min.y < 0 {
+        for town in crate::worldgen::sky::sky_towns_touching(&ctx.settings, &rect.expanded(4)) {
+            let (bx, by) = town.block;
+            found.push(STAMPS.get_or_compute((ctx.settings, bx, 1_000 + by), || {
+                let mut out = VillageStamp::default();
+                if let Some(found) = sky_town(&ctx.settings, bx, by) {
+                    lot_foundations(ctx.seed(), &found, &mut out.cells);
+                }
+                out
+            }));
         }
     }
     found

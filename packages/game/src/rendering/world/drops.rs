@@ -63,6 +63,8 @@ fn shine(item: ItemKind) -> (Color, u8) {
                 fatherload_simulation::terrain::MineralKind::Platinum => MIST,
                 fatherload_simulation::terrain::MineralKind::Uranium => LIME,
                 fatherload_simulation::terrain::MineralKind::Mythril => LAVENDER,
+                fatherload_simulation::terrain::MineralKind::Skystone => SKY,
+                fatherload_simulation::terrain::MineralKind::CloudSilver => BONE,
             };
             // Cheap ore barely glows; jackpots shine.
             let strength = u8::try_from((value / 6).clamp(18, 80)).unwrap_or(80);

@@ -829,6 +829,14 @@ impl SeatUi {
                 format!("{keeper} hands you a key. Sleep well ({spent} credits)."),
                 SoundCue::BedDown,
             ),
+            VillageDeal::SkyCraft { recipe, tier } => (
+                format!(
+                    "{keeper} fits your {} {} ({spent} credits and the sky ore).",
+                    recipe.name(),
+                    village::services::tier_numeral(tier)
+                ),
+                SoundCue::Upgrade,
+            ),
         })
     }
 }
@@ -864,6 +872,7 @@ fn banner_for(found: &Village, first_visit: bool, tick: u64) -> VillageBanner {
     let kind = match found.setting {
         VillageSetting::Surface => found.size.name(),
         VillageSetting::Underground => "settlement",
+        VillageSetting::Sky(kind) => kind.name(),
     };
     let subtitle = if let village::Specialty::MineralBuyer(mineral) = found.specialty {
         format!(

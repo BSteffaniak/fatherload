@@ -112,7 +112,9 @@ impl Village {
     #[must_use]
     pub const fn area(&self) -> crate::worldgen::TileRect {
         let (top, bottom) = match self.setting {
-            VillageSetting::Surface => (self.ground_row - 24, self.ground_row + 1),
+            VillageSetting::Surface | VillageSetting::Sky(_) => {
+                (self.ground_row - 24, self.ground_row + 1)
+            }
             VillageSetting::Underground => {
                 (self.ground_row - placement::HALL_AIR_ROWS, self.ground_row)
             }
@@ -165,6 +167,7 @@ impl Village {
         let kind = match self.setting {
             VillageSetting::Surface => self.size.name(),
             VillageSetting::Underground => "settlement",
+            VillageSetting::Sky(kind) => kind.name(),
         };
         let style = self.style.name();
         let article = if style.starts_with(['a', 'e', 'i', 'o', 'u']) {
@@ -214,6 +217,10 @@ pub struct VillageJournal {
     pub charted: BTreeSet<VillageId>,
     #[serde(default)]
     pub blessing: Option<Blessing>,
+    /// Fuel buoys of the sky isles this player has drained (one refill each; WP-SKY, see
+    /// `world/sky_isles.rs`), by island feature id.
+    #[serde(default)]
+    pub buoys: BTreeSet<crate::worldgen::FeatureId>,
 }
 
 impl VillageJournal {
@@ -259,6 +266,23 @@ pub fn villages_between(settings: &WorldSettings, first: i32, last: i32) -> Vec<
     }
     let mut found = streamed::villages_between(settings, first, last);
     found.sort_by_key(|village| (village.center_column(), village.id));
+    found
+}
+
+/// Every sky town (WP-SKY, V9) whose area overlaps `rect`, west to east.
+///
+/// Sky towns hang above the ground's columns, so [`villages_between`] (a column query for ground villages, camps
+/// and trails) leaves them out; anything that looks at a 2D area asks here too.
+#[must_use]
+pub fn sky_towns_in(
+    settings: &WorldSettings,
+    rect: &crate::worldgen::TileRect,
+) -> Vec<Arc<Village>> {
+    if !settings.generator.has_sky_isles() {
+        return Vec::new();
+    }
+    let mut found = streamed::sky_towns_in(settings, rect);
+    found.sort_by_key(|village| (village.center_column(), village.ground_row, village.id));
     found
 }
 

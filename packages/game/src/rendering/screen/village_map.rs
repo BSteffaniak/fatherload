@@ -36,14 +36,25 @@ fn known_villages(
     first: i32,
     last: i32,
 ) -> Vec<(Arc<Village>, Known)> {
-    village::villages_between(terrain.settings(), first - 60, last + 60)
+    let settings = terrain.settings();
+    let sky_towns = fatherload_simulation::worldgen::sky::towns::sky_towns_between(
+        settings,
+        first - 60,
+        last + 60,
+    )
+    .into_iter()
+    .filter_map(|site| village::village(settings, site.id));
+    village::villages_between(settings, first - 60, last + 60)
         .into_iter()
+        .chain(sky_towns)
         .filter_map(|found| {
             let known = if player.villages.visited.contains(&found.id) {
                 Known::Visited
             } else if player.villages.charted.contains(&found.id) {
                 Known::Charted
-            } else if found.setting == VillageSetting::Surface {
+            } else if found.setting == VillageSetting::Surface || found.setting.sky_town().is_some()
+            {
+                // Rooftops on the horizon, or a town hanging in the sky overhead.
                 Known::Sighted
             } else {
                 return None;

@@ -241,8 +241,40 @@ const fn bar(
 /// `sky` is the bands of the world's sky (`GeneratorVersion::sky_bands`): the tank, engine and
 /// intake previews announce the sky gates against them, and say nothing of the sky without one.
 #[must_use]
-#[allow(clippy::too_many_lines, reason = "one arm per upgrade line")]
 pub fn preview_between(
+    player: &Player,
+    kind: UpgradeKind,
+    from_level: u8,
+    to_level: u8,
+    sky: Option<&SkyBands>,
+) -> UpgradePreview {
+    let mut preview = preview_lines(player, kind, from_level, to_level, sky);
+    if sky.is_none() {
+        // Without a sky no line promises islands or the dead-air gap, and the sky gear says it
+        // has nothing to do (T20: sky-aware previews).
+        preview.changes.retain(|line| !mentions_sky(line));
+        if crate::economy::needs_sky(kind) {
+            preview.changes.insert(
+                0,
+                "This world has no sky to climb into: nothing for it to do".to_owned(),
+            );
+        }
+    }
+    preview
+}
+
+/// Whether a preview line promises something only a sky has.
+fn mentions_sky(line: &str) -> bool {
+    line.contains("sky isles")
+        || line.contains("dead-air gap")
+        || line.contains("sky lands")
+        || line.contains("thin air")
+        || line.contains("cold of orbit")
+        || line.contains("ice off the hull")
+}
+
+#[allow(clippy::too_many_lines, reason = "one arm per upgrade line")]
+fn preview_lines(
     player: &Player,
     kind: UpgradeKind,
     from_level: u8,

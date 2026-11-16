@@ -1338,10 +1338,10 @@ mod tests {
         };
         let mut v6: serde_json::Value = serde_json::from_str(&v6_json(&save)).expect("json");
         v6["save"]["world"]["terrain"]["settings"]["generator"] =
-            serde_json::Value::String("V9".to_owned());
+            serde_json::Value::String("V99".to_owned());
         let error = parse_save(&v6.to_string()).expect_err("unknown generator");
         assert!(
-            matches!(&error, SaveError::UnknownGenerator(name) if name == "V9"),
+            matches!(&error, SaveError::UnknownGenerator(name) if name == "V99"),
             "{error}"
         );
         assert!(error.to_string().contains("unknown world generator"));

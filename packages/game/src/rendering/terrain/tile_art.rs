@@ -729,6 +729,39 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         return canvas;
     }
 
+    // Sky ore and finds (WP-SKY) sit in their island's rock, not in the band's dirt.
+    if matches!(kind, TileKind::Ore(_) | TileKind::Artifact(_))
+        && terrain.settings().generator.has_sky()
+        && y < -(fatherload_simulation::worldgen::sky::LOW_ISLES_BOTTOM_ROWS - 60)
+    {
+        let biome = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+            .into_iter()
+            .find_map(|(nx, ny)| {
+                terrain
+                    .tile(TilePosition { x: nx, y: ny })
+                    .and_then(|tile| match tile.kind {
+                        TileKind::Sky(fatherload_simulation::sky::SkyTile::Rock(biome)) => {
+                            Some(biome)
+                        }
+                        _ => None,
+                    })
+            })
+            .unwrap_or(fatherload_simulation::sky::SkyBiome::Meadow);
+        sky_art::paint(
+            &mut canvas,
+            fatherload_simulation::sky::SkyTile::Rock(biome),
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        paint_stamps(&mut canvas, kind, band, hash(x, y, 101));
+        return canvas;
+    }
+
     for py in 0..TILE_ART {
         for px in 0..TILE_ART {
             let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);

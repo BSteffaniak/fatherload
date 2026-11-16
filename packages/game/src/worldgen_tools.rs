@@ -579,6 +579,8 @@ const fn mineral_color(mineral: MineralKind) -> Color {
         MineralKind::Platinum => palette::CREAM,
         MineralKind::Uranium => palette::LEAF,
         MineralKind::Mythril => palette::LAVENDER,
+        MineralKind::Skystone => palette::SKY_LIGHT,
+        MineralKind::CloudSilver => palette::BONE,
     }
 }
 

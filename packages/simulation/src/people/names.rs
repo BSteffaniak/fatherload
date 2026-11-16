@@ -24,17 +24,31 @@ pub enum Culture {
     Scrapper,
     /// The underground settlements: quiet, vowel-rich names and lamp epithets.
     Deepfolk,
+    /// Sky culture (WP-SKY): the aeronauts of the airship docks and floating markets, brassy
+    /// names and nicknames earned in the wind.
+    Aeronaut,
+    /// Sky culture: the cloud farmers and monks of the high isles, soft airy names and
+    /// "of the" epithets for the winds they were born under.
+    Cloudborn,
 }
 
 impl Culture {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 8] = [
         Self::Frontier,
         Self::Highland,
         Self::Mesa,
         Self::Riverside,
         Self::Scrapper,
         Self::Deepfolk,
+        Self::Aeronaut,
+        Self::Cloudborn,
     ];
+
+    /// Whether this is a sky culture (the people of sky towns, WP-SKY).
+    #[must_use]
+    pub const fn is_sky(self) -> bool {
+        matches!(self, Self::Aeronaut | Self::Cloudborn)
+    }
 
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -45,6 +59,8 @@ impl Culture {
             Self::Riverside => "Riverside",
             Self::Scrapper => "Scrapper",
             Self::Deepfolk => "Deepfolk",
+            Self::Aeronaut => "Aeronaut",
+            Self::Cloudborn => "Cloudborn",
         }
     }
 
@@ -58,6 +74,8 @@ impl Culture {
             Self::Riverside => "timber",
             Self::Scrapper => "scrap metal",
             Self::Deepfolk => "carved rock",
+            Self::Aeronaut => "canvas and brass",
+            Self::Cloudborn => "white stone and blue tile",
         }
     }
 
@@ -69,6 +87,8 @@ impl Culture {
             Self::Riverside => &RIVERSIDE,
             Self::Scrapper => &SCRAPPER,
             Self::Deepfolk => &DEEPFOLK,
+            Self::Aeronaut => &AERONAUT,
+            Self::Cloudborn => &CLOUDBORN,
         }
     }
 }
@@ -435,6 +455,97 @@ const DEEPFOLK: NameTable = NameTable {
     ],
     place_tails: &[
         " Hall", " Hearth", "deep", " Grotto", " Lamp", " Stair", "well", " Reach",
+    ],
+};
+
+const AERONAUT: NameTable = NameTable {
+    given: &[
+        "Amelia", "Barnaby", "Wren", "Cyrus", "Ottoline", "Jasper", "Marlowe", "Hesper",
+        "Ignatius", "Rosalind", "Fletcher", "Isadora", "Lark", "Bastian",
+    ],
+    she: &["Amelia", "Ottoline", "Rosalind", "Isadora", "Hesper"],
+    he: &["Barnaby", "Cyrus", "Jasper", "Ignatius", "Bastian"],
+    onsets: &["Al", "B", "C", "F", "H", "J", "M", "R", "W", "Z"],
+    vowels: &["a", "e", "i", "o", "ay"],
+    endings: &["ton", "by", "ra", "lin", "sey", "mer"],
+    generated_percent: 25,
+    surname_heads: &[
+        "Gale", "Brass", "Cloud", "High", "Wind", "Spar", "Gas", "Sail",
+    ],
+    surname_tails: &[
+        "wright", "worth", "ley", "more", "field", "hook", "ford", "line",
+    ],
+    surnames: &[
+        "Montgolfier-Smythe",
+        "Ballastier",
+        "Updraft",
+        "Fairweather",
+        "Ropewalker",
+        "Quickfall",
+    ],
+    nickname_percent: 45,
+    nicknames: &[
+        "Gusty", "Ballast", "Skipper", "Sparrow", "Ace", "Lofty", "Ripcord", "Breezy", "Captain",
+        "Goggles", "Flapjack", "Kite",
+    ],
+    place_heads: &[
+        "Gale", "Brass", "Gull", "Sky", "Zephyr", "Updraft", "Cirrus", "Halyard",
+    ],
+    place_tails: &[
+        " Moorings",
+        " Port",
+        " Roost",
+        " Wharf",
+        " Landing",
+        "haven",
+        " Mast",
+        " Dock",
+    ],
+};
+
+const CLOUDBORN: NameTable = NameTable {
+    given: &[
+        "Aerin", "Soli", "Neve", "Ilia", "Caelo", "Mirai", "Sefa", "Oriel", "Tavi", "Luma",
+        "Aeris", "Nimbo", "Eira", "Vashti",
+    ],
+    she: &["Neve", "Ilia", "Mirai", "Eira", "Vashti"],
+    he: &["Caelo", "Nimbo"],
+    onsets: &["Ae", "C", "L", "M", "N", "S", "T", "V", "Ei", "Or"],
+    vowels: &["a", "e", "i", "o", "ae", "ia"],
+    endings: &["l", "n", "ra", "ri", "sa", "lo", "ne"],
+    generated_percent: 55,
+    surname_heads: &[],
+    surname_tails: &[],
+    surnames: &[
+        "of the East Wind",
+        "of the Silver Fog",
+        "of the Morning Bell",
+        "of the High Cloister",
+        "of the Long Rain",
+        "of the Still Air",
+        "of the White Terrace",
+        "of the Seventh Gust",
+        "of the Pale Dawn",
+        "of the Drifting Field",
+        "of the Hollow Gale",
+        "of the Bright Squall",
+        "of the Lantern Cloud",
+        "of the Slow Thaw",
+    ],
+    nickname_percent: 15,
+    nicknames: &["Feather", "Mist", "Bellringer", "Dewdrop", "Cloudcutter"],
+    place_heads: &[
+        "Cirrus", "Nimbus", "Halcyon", "Vapor", "Silver", "Bell", "Dew", "Lumen",
+    ],
+    place_tails: &[
+        " Terrace",
+        " Cloister",
+        "fold",
+        " Rest",
+        " Garden",
+        " Steps",
+        "mere",
+        " Fields",
     ],
 };
 

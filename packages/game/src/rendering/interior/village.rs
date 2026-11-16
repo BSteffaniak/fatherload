@@ -45,8 +45,9 @@ use crate::{
 
 const fn village_set(style: BuildingStyle) -> &'static InteriorSet {
     match style {
-        BuildingStyle::Timber => &art::village_timber::SET,
-        BuildingStyle::Stone => &art::village_stone::SET,
+        // Sky towns (WP-SKY): canvas-and-brass rooms read like timber, cloisters like stone.
+        BuildingStyle::Timber | BuildingStyle::Skyrig => &art::village_timber::SET,
+        BuildingStyle::Stone | BuildingStyle::Cloister => &art::village_stone::SET,
         BuildingStyle::Adobe => &art::village_adobe::SET,
         BuildingStyle::Scrap => &art::village_scrap::SET,
         BuildingStyle::Carved => &art::village_carved::SET,
@@ -225,6 +226,14 @@ fn greeting(found: &Village, kind: BuildingKind, name: &str) -> String {
         BuildingKind::Assay => format!("{name}: Bring me the good stuff. I pay for it."),
         BuildingKind::MapRoom => format!("{name}: Every hill and hole, if you've the coin."),
         BuildingKind::Shrine => format!("{name}: Rest a moment. The deep can wait."),
+        BuildingKind::AirshipDock => {
+            format!("{name}: Thin air up here. Let's give your rig some aether in its lungs.")
+        }
+        BuildingKind::Bazaar => {
+            format!("{name}: Skystone, cloud silver. And don't ask about the rest.")
+        }
+        BuildingKind::Monastery => format!("{name}: The bells keep the cold away. Mostly."),
+        BuildingKind::Granary => format!("{name}: Fuel wrung fresh from the clouds this morning."),
         BuildingKind::House | BuildingKind::Tower | BuildingKind::Farm | BuildingKind::MineHead => {
             format!("{name}: Make yourself at home.")
         }
@@ -262,12 +271,20 @@ fn draw_dressing(
 ) {
     // A window on the back wall, with the village outside (sky, or lamplit rock deep down).
     let underground = found.setting == fatherload_simulation::village::VillageSetting::Underground;
+    let sky_town = found.setting.sky_town().is_some();
     let (wx, wy) = (82, CEILING_Y + 20);
     draw.draw_rectangle(wx - 2, wy - 2, 40, 30, INK);
     draw.draw_rectangle(wx, wy, 36, 26, if underground { NIGHT } else { SKY });
     if underground {
         draw.draw_rectangle(wx + 6, wy + 8, 3, 3, AMBER);
         draw.draw_rectangle(wx + 24, wy + 14, 2, 2, MINT);
+    } else if sky_town {
+        // Up in the clouds: a cloud sea below and a far isle drifting by.
+        draw.draw_rectangle(wx, wy + 19, 36, 7, BONE);
+        draw.draw_rectangle(wx + 3, wy + 16, 12, 4, BONE);
+        draw.draw_rectangle(wx + 20, wy + 17, 10, 3, MIST);
+        draw.draw_rectangle(wx + 23, wy + 6, 8, 2, LEAF);
+        draw.draw_rectangle(wx + 24, wy + 8, 6, 2, SLATE);
     } else {
         draw.draw_rectangle(wx, wy + 18, 36, 8, LEAF);
         draw.draw_rectangle(wx + 4, wy + 4, 8, 3, BONE);
@@ -429,6 +446,53 @@ fn draw_dressing(
             );
         }
         BuildingKind::Tower | BuildingKind::Farm | BuildingKind::MineHead => {}
+        BuildingKind::AirshipDock | BuildingKind::Granary => {
+            // A brass aether forge: a glowing violet core in a cage, and coiled hose.
+            let x = 210;
+            draw.draw_rectangle(x - 1, FLOOR_Y - 37, 30, 37, INK);
+            draw.draw_rectangle(x, FLOOR_Y - 36, 28, 36, COPPER);
+            let glow = (150.0 + (seconds * 3.0).sin() * 60.0) as u8;
+            draw.draw_rectangle(x + 6, FLOOR_Y - 28, 16, 16, NIGHT);
+            draw.draw_rectangle(x + 8, FLOOR_Y - 26, 12, 12, with_alpha(VIOLET, glow));
+            draw.draw_rectangle(x + 11, FLOOR_Y - 23, 6, 6, with_alpha(PINK, glow));
+            for bar in 0..4 {
+                draw.draw_rectangle(x + 7 + bar * 4, FLOOR_Y - 28, 1, 16, GOLD);
+            }
+            draw.draw_rectangle(x + 30, FLOOR_Y - 6, 16, 6, STEEL_DARK);
+            draw.draw_rectangle(x + 32, FLOOR_Y - 4, 12, 2, STEEL);
+            if kind == BuildingKind::Granary {
+                // Sacks of condensed cloud.
+                for (index, x) in [120, 136, 152].into_iter().enumerate() {
+                    let i = index as i32;
+                    draw.draw_rectangle(x - 1, FLOOR_Y - 15 - i % 2 * 2, 14, 15 + i % 2 * 2, INK);
+                    draw.draw_rectangle(x, FLOOR_Y - 14 - i % 2 * 2, 12, 14 + i % 2 * 2, BONE);
+                }
+            }
+        }
+        BuildingKind::Bazaar => {
+            // Bolts of sky silk and a smuggler's crate.
+            for (index, color) in [SKY_LIGHT, ROSE, GOLD, TEAL].into_iter().enumerate() {
+                let x = 200 + index as i32 * 8;
+                draw.draw_rectangle(x - 1, FLOOR_Y - 23, 8, 23, INK);
+                draw.draw_rectangle(x, FLOOR_Y - 22, 6, 22, color);
+            }
+            draw.draw_rectangle(129, FLOOR_Y - 13, 26, 13, INK);
+            draw.draw_rectangle(130, FLOOR_Y - 12, 24, 12, LOAM);
+            draw.draw_rectangle(130, FLOOR_Y - 8, 24, 1, SOIL);
+        }
+        BuildingKind::Monastery => {
+            // A bell hanging from a beam, and cushions.
+            let swing = ((seconds * 1.4).sin() * 2.0) as i32;
+            draw.draw_rectangle(200, CEILING_Y + 8, 40, 3, LOAM);
+            draw.draw_rectangle(219, CEILING_Y + 11, 1, 10, INK);
+            draw.draw_rectangle(212 + swing, CEILING_Y + 21, 15, 14, INK);
+            draw.draw_rectangle(213 + swing, CEILING_Y + 22, 13, 12, GOLD);
+            draw.draw_rectangle(213 + swing, CEILING_Y + 22, 13, 2, CREAM);
+            for x in [130, 160] {
+                draw.draw_rectangle(x, FLOOR_Y - 4, 18, 4, SKY);
+                draw.draw_rectangle(x, FLOOR_Y - 4, 18, 1, SKY_LIGHT);
+            }
+        }
     }
     let _ = counter_x;
 }
@@ -442,7 +506,7 @@ fn draw_counter_goods(
 ) {
     let top = FLOOR_Y - COUNTER_HEIGHT;
     match kind {
-        BuildingKind::Market | BuildingKind::Assay => {
+        BuildingKind::Market | BuildingKind::Assay | BuildingKind::Bazaar => {
             // Scales.
             draw.draw_rectangle(counter_x + 10, top - 10, 1, 10, GOLD);
             draw.draw_rectangle(counter_x + 4, top - 10, 13, 1, GOLD);

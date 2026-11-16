@@ -95,6 +95,22 @@ const fn cloth(culture: Culture) -> &'static [(Color, Color)] {
             (TEAL_DARK, NIGHT),
             (STEEL_DARK, NIGHT),
         ],
+        // Sky cultures (WP-SKY): flight leathers and brass for the aeronauts, pale robes and
+        // sky blues for the Cloudborn.
+        Culture::Aeronaut => &[
+            (LOAM, SOIL),
+            (CLAY, LOAM),
+            (OCEAN, DEEP_BLUE),
+            (CREAM, SAND),
+            (RED, MAROON),
+        ],
+        Culture::Cloudborn => &[
+            (BONE, MIST),
+            (SKY_LIGHT, SKY),
+            (MIST, FOG),
+            (ICE, SKY_LIGHT),
+            (CREAM, SAND),
+        ],
     }
 }
 
@@ -108,6 +124,8 @@ const fn accent(culture: Culture, seed: u64) -> Color {
         Culture::Riverside => [GOLD, ROSE, CREAM][pick as usize],
         Culture::Scrapper => [ORANGE, AMBER, STEEL_LIGHT][pick as usize],
         Culture::Deepfolk => [MINT, GOLD, LAVENDER][pick as usize],
+        Culture::Aeronaut => [COPPER, GOLD, AMBER][pick as usize],
+        Culture::Cloudborn => [SKY, GOLD, TEAL][pick as usize],
     }
 }
 
@@ -375,6 +393,16 @@ pub fn draw_person_posed(
             pen.rect(draw, -half - 1, torso_top, 1, 3, shirt_shade);
             pen.rect(draw, right, torso_top, 1, 3, shirt_shade);
         }
+        Culture::Aeronaut => {
+            // A flight jacket: a fleece collar and a brass buckle.
+            pen.rect(draw, -half, torso_top + 1, wide, 1, CREAM);
+            pen.px(draw, 0, torso_top + torso - 2, trim);
+        }
+        Culture::Cloudborn => {
+            // A robe's sash, low on the waist.
+            pen.rect(draw, -half, torso_top + torso - 3, wide, 1, trim);
+            pen.px(draw, facing * (half - 1), torso_top + torso - 2, trim);
+        }
     }
     // The trade's garment.
     match role {
@@ -432,11 +460,28 @@ pub fn draw_person_posed(
             pen.px(draw, -half + 1, torso_top + torso - 1, STEEL_LIGHT);
             pen.px(draw, half - 1, torso_top + torso - 1, COPPER);
         }
-        Role::ShrineKeeper | Role::Healer | Role::Hermit => {
+        Role::ShrineKeeper | Role::Healer | Role::Hermit | Role::Monk => {
             pen.rect(draw, -1, torso_top + 2, 2, torso - 1, shirt_shade);
             if role == Role::Healer {
                 pen.rect(draw, -1, torso_top + 3, 2, 1, CREAM);
             }
+        }
+        Role::Aeronaut | Role::StormChaser => {
+            // Goggles pushed up on the brow... and a harness strap.
+            pen.rect(draw, -half + 1, torso_top + 1, 1, torso - 1, SOIL);
+            pen.px(draw, -half + 1, torso_top + 3, COPPER);
+        }
+        Role::Smuggler => {
+            // A long coat's lapels.
+            pen.rect(draw, -half, torso_top + 1, 1, body_bottom - 2, shirt_shade);
+            pen.rect(
+                draw,
+                half - 1,
+                torso_top + 1,
+                1,
+                body_bottom - 2,
+                shirt_shade,
+            );
         }
     }
 
@@ -677,6 +722,13 @@ pub fn draw_portrait(
         Culture::Deepfolk => {
             pen.rect(draw, sx, 23, sw, 2, shirt_shade);
         }
+        Culture::Aeronaut => {
+            pen.rect(draw, sx, 23, sw, 2, CREAM);
+            pen.rect(draw, 15, 29, 3, 2, trim);
+        }
+        Culture::Cloudborn => {
+            pen.rect(draw, sx, 29, sw, 2, trim);
+        }
     }
     match role {
         Role::Smith | Role::Baker | Role::Brewer => {
@@ -714,7 +766,15 @@ pub fn draw_portrait(
             pen.rect(draw, sx + 3, 27, 2, 4, STEEL_LIGHT);
             pen.rect(draw, sx + sw - 5, 26, 2, 5, COPPER);
         }
-        Role::ShrineKeeper | Role::Healer | Role::Hermit => {
+        Role::Aeronaut | Role::StormChaser => {
+            pen.rect(draw, 9, 23, 2, 9, SOIL);
+            pen.rect(draw, 9, 27, 2, 2, COPPER);
+        }
+        Role::Smuggler => {
+            pen.rect(draw, sx + 1, 24, 3, 8, shirt_shade);
+            pen.rect(draw, sx + sw - 4, 24, 3, 8, shirt_shade);
+        }
+        Role::ShrineKeeper | Role::Healer | Role::Hermit | Role::Monk => {
             pen.rect(draw, 14, 24, 4, 8, shirt_shade);
             if role == Role::Healer {
                 pen.rect(draw, 15, 26, 2, 4, CREAM);

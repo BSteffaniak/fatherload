@@ -287,7 +287,7 @@ impl WorldState {
             let cold =
                 crate::environment::environment_at(self.terrain.settings(), player_x, player_y)
                     .cold;
-            let cold_excess = crate::environment::cold_excess(cold, gear.de_icer);
+            let cold_excess = gear.cold_excess(cold);
             let cold_damage = if cold_excess > 0 {
                 crate::environment::COLD_DAMAGE_PER_EXCESS_LEVEL
                     * f32::from(cold_excess)
@@ -400,6 +400,9 @@ impl WorldState {
                 MineResult::Mined(TileKind::Cave(tile)) if tile.is_cache() => {
                     self.open_cave_cache(player_id, target, tile, &mut output);
                 }
+                MineResult::Mined(TileKind::Sky(tile)) if tile.is_cache() => {
+                    self.open_sky_cache(player_id, target, tile, &mut output);
+                }
                 MineResult::Activated(lit) => {
                     self.activate_vault_lock(target, lit, next_tick, &mut output);
                 }
@@ -431,6 +434,7 @@ impl WorldState {
         self.discover_villages(&mut output);
         self.advance_milestones(&mut output);
         self.apply_test_mode_refills();
+        self.advance_sky_isles(&mut output);
         output.terrain_ops = self.terrain.finish_journal();
         self.wake_entities_near(&output.terrain_ops);
         output.discoveries = self.take_discoveries();

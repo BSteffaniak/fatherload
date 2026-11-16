@@ -214,14 +214,54 @@ impl WorldState {
         let tuning = DriveTuning::new(top, grounded);
         let driven = if thin_air && !grounded {
             // Airborne in a V8 sky: thrusters push less in thin air, the air brakes less, and
-            // the rig moves relative to the wind (it coasts with it).
-            let air = environment.wind_x;
+            // the rig moves relative to the wind (it coasts with it). Aether thrusters (WP-SKY,
+            // sky-crafted) win back side thrust and grip the wind; they never add lift.
+            let aether = player.hazard_gear.aether_thrusters;
+            let air = if aether > 0 {
+                environment.wind_x * (1.0 - crate::skycraft::aether_wind_grip(aether))
+            } else {
+                environment.wind_x
+            };
+            let side_efficiency = if aether > 0 {
+                (1.0 - efficiency).mul_add(crate::skycraft::aether_drive_factor(aether), efficiency)
+            } else {
+                efficiency
+            };
             tuning
-                .in_thin_air(environment.air_density, efficiency)
+                .in_thin_air(environment.air_density, side_efficiency)
                 .step_tick(player.velocity_x - air, horizontal, timing.rate)
                 + air
         } else {
             tuning.step_tick(player.velocity_x, horizontal, timing.rate)
+        };
+        // A V9 jet stream grabs an airborne rig whatever the air's density (WP-SKY
+        // wind-riding): its velocity eases toward the stream's (aether thrusters hold some).
+        let driven = if thin_air && !grounded && settings.generator.has_sky_isles() {
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_precision_loss,
+                reason = "pixel positions map to tiles; stream speeds are small integers"
+            )]
+            let jet = crate::worldgen::sky::jet_stream_at(
+                &settings,
+                (player.x / TILE_SIZE).floor() as i32,
+                (player.y / TILE_SIZE).floor() as i32,
+            ) as f32;
+            if jet == 0.0 {
+                driven
+            } else {
+                let grip =
+                    1.0 - crate::skycraft::aether_wind_grip(player.hazard_gear.aether_thrusters);
+                let pull = (crate::worldgen::sky::winds::JET_STREAM_GRIP * delta_seconds).min(1.0);
+                // Only ever toward the stream (a rig flying faster with it keeps its speed).
+                if (jet > 0.0 && driven < jet) || (jet < 0.0 && driven > jet) {
+                    jet.mul_add(grip, -driven).mul_add(pull, driven)
+                } else {
+                    driven
+                }
+            }
+        } else {
+            driven
         };
         player.velocity_x = quantize_simulation_scalar(driven.clamp(
             -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,

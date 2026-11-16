@@ -43,10 +43,26 @@
 //! are placed on their own grid in the island and continent bands (never in the dead-air gap):
 //! a free ride up for a rig that finds one.
 //!
+//! **Island content (V9, WP-SKY).** [`GeneratorVersion::V9`] keeps V8's bands and land
+//! placement and fills the low isles and archipelago isles ([`isles`]): skystone and cloud
+//! silver ore, sky caches, nests, ruins, springs pouring waterfalls into the void, vines,
+//! keystones of crumbling isles, updraft vents and fuel buoys. One cell of every archipelago
+//! block ([`towns`]) grows a wide, flat town isle with a sky town on it, and archipelago chains
+//! carry jet streams and island vents breathe updrafts ([`winds`]).
+//!
 //! [`GeneratorVersion::V8`]: super::GeneratorVersion::V8
+//! [`GeneratorVersion::V9`]: super::GeneratorVersion::V9
 //! [`FeatureKind::SkyIsland`]: super::FeatureKind::SkyIsland
 //! [`FeatureKind::SkyContinent`]: super::FeatureKind::SkyContinent
 //! [`FeatureKind::Moon`]: super::FeatureKind::Moon
+
+pub mod isles;
+pub mod towns;
+pub mod winds;
+
+pub use isles::{BuoySite, IsleContent};
+pub use towns::{SkyTownSite, sky_town_at, sky_town_site, sky_towns_touching};
+pub use winds::{JetStream, jet_stream_at, jet_streams_touching, vent_updraft_at};
 
 use crate::{
     climb::{CLIMB_CEILINGS, ClimbTable, ceiling_in, fraction},
@@ -56,7 +72,10 @@ use crate::{
     worldgen::{
         Band, FeatureDetail, FeatureId, FeatureKind, TileRect, WorldFeature, WorldSettings,
         noise::{NOISE_MAX, RegionRng, centred, fractal_noise, hash2, line_noise},
-        streamed::index::{Layer, feature_id},
+        streamed::{
+            cache::MemoCache,
+            index::{Layer, feature_id},
+        },
     },
 };
 
@@ -277,6 +296,9 @@ pub enum SkyLandKind {
     Continent,
     /// The Moon.
     Moon,
+    /// The wide, flat-topped island a sky town stands on (V9: one per archipelago block,
+    /// see [`towns`]).
+    TownIsle,
 }
 
 impl SkyLandKind {
@@ -287,7 +309,14 @@ impl SkyLandKind {
             Self::ArchipelagoIsle => "archipelago isle",
             Self::Continent => "sky continent",
             Self::Moon => "the Moon",
+            Self::TownIsle => "town isle",
         }
+    }
+
+    /// Whether this is an island (a low isle, an archipelago isle or a town isle).
+    #[must_use]
+    pub const fn is_island(self) -> bool {
+        matches!(self, Self::Isle | Self::ArchipelagoIsle | Self::TownIsle)
     }
 }
 
@@ -306,24 +335,46 @@ pub struct SkyLand {
     pub half_width: i32,
     pub depth: i32,
     shape: u64,
+    /// What a V9 sky grows on the island (`None` on V8 skies, continents and the Moon).
+    content: Option<IsleContent>,
 }
 
 impl SkyLand {
     /// Rows the top may rise above `top_row`.
     const fn rise(&self) -> i32 {
-        match self.kind {
+        let base = match self.kind {
             SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle => 2 + self.half_width / 10,
             SkyLandKind::Continent => 18,
             SkyLandKind::Moon => MOON_HILL_ROWS + 2,
+            SkyLandKind::TownIsle => 2,
+        };
+        // Island props (nests, ruin pillars) stand on the turf.
+        if self.content.is_some() {
+            base + isles::PROP_ROWS
+        } else {
+            base
         }
     }
 
     /// Rows anything may hang below `top_row + depth`.
     const fn hang(&self) -> i32 {
         match self.kind {
-            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle => self.depth / 2 + 12,
+            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle | SkyLandKind::TownIsle => {
+                let vines = if self.content.is_some() {
+                    isles::VINE_EXTRA_ROWS
+                } else {
+                    0
+                };
+                self.depth / 2 + 12 + vines
+            }
             SkyLandKind::Continent | SkyLandKind::Moon => 16,
         }
+    }
+
+    /// The island's V9 content (`None` on V8 skies, continents and the Moon).
+    #[must_use]
+    pub const fn content(&self) -> Option<&IsleContent> {
+        self.content.as_ref()
     }
 
     /// Every tile the land can occupy.
@@ -358,9 +409,22 @@ impl SkyLand {
             |rows: i64| i32::try_from((hw * hw - dx64 * dx64) * rows / (hw * hw)).unwrap_or(0);
         match self.kind {
             SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle => {
-                let dome = falloff(i64::from(self.rise() - 2));
+                // A V9 buoy's pad is flat (five columns at the pad's row).
+                if let Some(pad) = self.content.as_ref().and_then(|content| content.buoy)
+                    && (x - pad.x).abs() <= 2
+                {
+                    return pad.y;
+                }
+                // (Props raise `rise` on V9 islands; the dome keeps V8's shape.)
+                let dome_rows = 2 + self.half_width / 10 - 2;
+                let dome = falloff(i64::from(dome_rows));
                 let bump = centred(line_noise(self.shape, SALT_SHAPE, x, 7), 1);
                 self.top_row - dome + bump
+            }
+            SkyLandKind::TownIsle => {
+                // Flat under the town, rounding off over the last few columns.
+                let edge = self.half_width - dx.abs();
+                self.top_row + (3 - edge).max(0)
             }
             SkyLandKind::Continent => {
                 let hills = fractal_noise(self.shape, SALT_SHAPE, x, 0, 56, 1, 3) * 16 / NOISE_MAX;
@@ -384,7 +448,7 @@ impl SkyLand {
         let lens =
             i32::try_from(i64::from(self.depth) * (hw * hw - dx64 * dx64) / (hw * hw)).unwrap_or(0);
         let jag = match self.kind {
-            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle => {
+            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle | SkyLandKind::TownIsle => {
                 // A teardrop: an extra keel under the middle third.
                 let third = (self.half_width / 3).max(1);
                 let keel = (third - dx.abs()).max(0) * (self.depth / 2) / third;
@@ -404,6 +468,9 @@ impl SkyLand {
             return None;
         }
         let top = self.top(x, dx);
+        if let Some(content) = &self.content {
+            return content.tile_at(self, x, dx, y, top);
+        }
         if y < top {
             return None;
         }
@@ -417,7 +484,7 @@ impl SkyLand {
 
     fn body_tile(&self, x: i32, y: i32, layer: i32) -> SkyTile {
         match self.kind {
-            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle => {
+            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle | SkyLandKind::TownIsle => {
                 let soil = 2 + i32::from(hash2(self.shape, SALT_SHAPE + 2, x, 0).is_multiple_of(3));
                 if layer == 0 {
                     SkyTile::Turf(self.biome)
@@ -456,7 +523,7 @@ impl SkyLand {
     fn dangling(&self, x: i32, dx: i32, below: i32) -> Option<SkyTile> {
         let roll = hash2(self.shape, SALT_SHAPE + 4, x, 0);
         match self.kind {
-            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle => {
+            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle | SkyLandKind::TownIsle => {
                 if roll.is_multiple_of(4) {
                     let length = 1
                         + i32::try_from((roll >> 8) % 4).unwrap_or(0)
@@ -484,7 +551,7 @@ impl SkyLand {
     #[must_use]
     pub fn feature(&self) -> WorldFeature {
         let (kind, detail) = match self.kind {
-            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle => {
+            SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle | SkyLandKind::TownIsle => {
                 (FeatureKind::SkyIsland, FeatureDetail::SkyIsland(self.biome))
             }
             SkyLandKind::Continent => (FeatureKind::SkyContinent, FeatureDetail::None),
@@ -612,6 +679,7 @@ fn low_isle_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Vec<SkyLand> 
             half_width,
             depth,
             shape: rng.next_u64(),
+            content: None,
         };
         if lands
             .iter()
@@ -660,11 +728,56 @@ fn archipelago_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Vec<SkyLan
             half_width,
             depth,
             shape: rng.next_u64(),
+            content: None,
         });
         cursor = center_x + half_width + rng.range(8, 26);
         alt += step * rng.range(6, 20);
     }
     lands
+}
+
+/// Island cells generated per process (a pure function of the key, so evictions only cost
+/// time): every chunk, environment sample and feature query of the island bands reads them.
+static CELLS: MemoCache<Vec<SkyLand>> = MemoCache::new(1_024);
+
+/// The islands of cell `(rx, ry)` of band `id_band` (low isles or the archipelago), with their
+/// V9 content and town isle on generators that have them.
+fn cell_lands(
+    settings: &WorldSettings,
+    id_band: i32,
+    rx: i32,
+    ry: i32,
+) -> std::sync::Arc<Vec<SkyLand>> {
+    CELLS.get_or_compute((*settings, rx, id_band * 1_000 + ry), || {
+        let seed = settings.seed;
+        let rich = settings.generator.has_sky_isles();
+        let Some(bands) = bands_of(settings) else {
+            return Vec::new();
+        };
+        let bands = &bands;
+        match id_band {
+            ID_LOW => {
+                let lands = low_isle_cell(seed, bands, rx, ry);
+                if rich {
+                    isles::furnish_low_cell(seed, rx, ry, lands)
+                } else {
+                    lands
+                }
+            }
+            _ => {
+                if rich && towns::is_town_cell(seed, rx, ry) {
+                    isles::furnish_archipelago_cell(towns::town_cell(seed, rx, ry))
+                } else {
+                    let lands = archipelago_cell(seed, bands, rx, ry);
+                    if rich {
+                        isles::furnish_archipelago_cell(lands)
+                    } else {
+                        lands
+                    }
+                }
+            }
+        }
+    })
 }
 
 /// The continent footprint of cell `rx`, if it has one.
@@ -695,6 +808,7 @@ fn continent_cell(seed: u64, bands: &SkyBands, rx: i32) -> Option<SkyLand> {
         half_width,
         depth,
         shape: rng.next_u64(),
+        content: None,
     })
 }
 
@@ -718,6 +832,7 @@ pub fn moon(settings: &WorldSettings) -> Option<SkyLand> {
         half_width,
         depth: MOON_DEPTH_ROWS,
         shape: rng.next_u64(),
+        content: None,
     })
 }
 
@@ -743,7 +858,9 @@ fn band_cells(
     let (alt_low, alt_high) = (-rect.max.y, -rect.min.y);
     let (bottom, _) = band_rows(bands, id_band);
     let rows = band_cell_rows(bands, id_band, cell_rows);
-    let first = ((alt_low - bottom).div_euclid(cell_rows)).clamp(0, rows);
+    // One cell row of margin below: a V9 island's props may poke a row above its cell (lands
+    // are kept by their bounds, so V8 results are unchanged).
+    let first = ((alt_low - bottom).div_euclid(cell_rows) - 1).clamp(0, rows);
     let last = ((alt_high - bottom).div_euclid(cell_rows) + 1).clamp(0, rows);
     first..last
 }
@@ -760,17 +877,17 @@ pub fn lands_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<SkyLand>
         return found;
     }
     let bands = &bands;
-    let seed = settings.seed;
     for ry in band_cells(bands, ID_LOW, LOW_ISLE_CELL.1, rect) {
         for rx in cells(rect.min.x, rect.max.x, LOW_ISLE_CELL.0) {
-            found.extend(low_isle_cell(seed, bands, rx, ry));
+            found.extend(cell_lands(settings, ID_LOW, rx, ry).iter().copied());
         }
     }
     for ry in band_cells(bands, ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1, rect) {
         for rx in cells(rect.min.x, rect.max.x, ARCHIPELAGO_CELL.0) {
-            found.extend(archipelago_cell(seed, bands, rx, ry));
+            found.extend(cell_lands(settings, ID_ARCHIPELAGO, rx, ry).iter().copied());
         }
     }
+    let seed = settings.seed;
     let (continent_bottom, continent_top) = band_rows(bands, ID_CONTINENT);
     if -rect.max.y <= continent_top && -rect.min.y >= continent_bottom {
         for rx in cells(rect.min.x, rect.max.x, CONTINENT_CELL_COLUMNS) {
@@ -793,8 +910,7 @@ pub fn land(settings: &WorldSettings, id: FeatureId) -> Option<SkyLand> {
     let bands = &bands_of(settings)?;
     let (band, row) = (ry.div_euclid(1000), ry.rem_euclid(1000));
     let lands = match band {
-        ID_LOW => low_isle_cell(settings.seed, bands, rx, row),
-        ID_ARCHIPELAGO => archipelago_cell(settings.seed, bands, rx, row),
+        ID_LOW | ID_ARCHIPELAGO => cell_lands(settings, band, rx, row).to_vec(),
         ID_CONTINENT => continent_cell(settings.seed, bands, rx)
             .into_iter()
             .collect(),
@@ -965,5 +1081,7 @@ pub fn updraft_at(settings: &WorldSettings, x: i32, y: i32) -> i32 {
         .map_or(0, |updraft| updraft.acceleration_at(x, y))
 }
 
+#[cfg(test)]
+mod isle_tests;
 #[cfg(test)]
 mod tests;

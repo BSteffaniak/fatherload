@@ -77,11 +77,32 @@ pub enum SkyTile {
     Regolith,
     /// The Moon's rocky body and underside.
     MoonRock,
+    /// A sky treasure cache bound in brass (WP-SKY, V9): drill it open for credits and sky
+    /// loot.
+    Cache,
+    /// A twig nest on an archipelago isle: drill it for a feather-light find (sometimes a
+    /// cloud pearl).
+    Nest,
+    /// Carved white stone of the aeronauts' ruins.
+    RuinBrick,
+    /// A broken ruin pillar standing on an island's turf.
+    RuinPillar,
+    /// A mossy spring at an island's rim: it pours a waterfall into the void below.
+    Spring,
+    /// Leafy vines dangling under an island (soft, like roots).
+    Vines,
+    /// The glowing aether keystone that holds a crumbling isle together: break it and the
+    /// island falls apart.
+    Keystone,
+    /// A vent in an island's turf that breathes a column of rising air (an updraft).
+    Vent,
+    /// The landing pad of a fuel buoy: a rig parked on it can buy a refill.
+    BuoyPad,
 }
 
 impl SkyTile {
     /// Every sky tile, in code order.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 23] = [
         Self::Turf(SkyBiome::Meadow),
         Self::Turf(SkyBiome::Blossom),
         Self::Turf(SkyBiome::Frost),
@@ -96,6 +117,15 @@ impl SkyTile {
         Self::ContinentRock,
         Self::Regolith,
         Self::MoonRock,
+        Self::Cache,
+        Self::Nest,
+        Self::RuinBrick,
+        Self::RuinPillar,
+        Self::Spring,
+        Self::Vines,
+        Self::Keystone,
+        Self::Vent,
+        Self::BuoyPad,
     ];
 
     #[must_use]
@@ -109,6 +139,15 @@ impl SkyTile {
             Self::ContinentRock => "continent rock",
             Self::Regolith => "regolith",
             Self::MoonRock => "moon rock",
+            Self::Cache => "sky cache",
+            Self::Nest => "nest",
+            Self::RuinBrick => "ruin stone",
+            Self::RuinPillar => "ruin pillar",
+            Self::Spring => "sky spring",
+            Self::Vines => "hanging vines",
+            Self::Keystone => "aether keystone",
+            Self::Vent => "updraft vent",
+            Self::BuoyPad => "buoy pad",
         }
     }
 
@@ -124,6 +163,15 @@ impl SkyTile {
             Self::ContinentRock => 0x1A,
             Self::Regolith => 0x1B,
             Self::MoonRock => 0x1C,
+            Self::Cache => 0x1D,
+            Self::Nest => 0x1E,
+            Self::RuinBrick => 0x1F,
+            Self::RuinPillar => 0x20,
+            Self::Spring => 0x21,
+            Self::Vines => 0x22,
+            Self::Keystone => 0x23,
+            Self::Vent => 0x24,
+            Self::BuoyPad => 0x25,
         }
     }
 
@@ -146,9 +194,15 @@ impl SkyTile {
     #[must_use]
     pub const fn hardness(self) -> u8 {
         match self {
-            Self::Turf(_) | Self::Soil | Self::Roots | Self::Regolith => 1,
-            Self::Rock(_) => 2,
-            Self::Crystal | Self::MoonRock => 3,
+            Self::Turf(_)
+            | Self::Soil
+            | Self::Roots
+            | Self::Regolith
+            | Self::Nest
+            | Self::Vines
+            | Self::Spring => 1,
+            Self::Rock(_) | Self::Cache | Self::RuinBrick | Self::Vent | Self::Keystone => 2,
+            Self::Crystal | Self::MoonRock | Self::RuinPillar | Self::BuoyPad => 3,
             Self::ContinentRock => 4,
         }
     }
@@ -157,12 +211,64 @@ impl SkyTile {
     #[must_use]
     pub const fn durability(self) -> u8 {
         match self {
-            Self::Roots => 1,
-            Self::Turf(_) | Self::Soil | Self::Regolith => 2,
-            Self::Rock(_) => 4,
-            Self::Crystal => 6,
+            Self::Roots | Self::Vines | Self::Nest => 1,
+            Self::Turf(_) | Self::Soil | Self::Regolith | Self::Spring => 2,
+            Self::Rock(_) | Self::Cache | Self::Keystone | Self::Vent => 4,
+            Self::RuinBrick => 5,
+            Self::Crystal | Self::RuinPillar => 6,
             Self::MoonRock => 7,
-            Self::ContinentRock => 9,
+            Self::ContinentRock | Self::BuoyPad => 9,
+        }
+    }
+
+    /// Whether drilling this tile opens it for loot instead of dropping a block (sky caches
+    /// and nests, see `world/sky_isles.rs`).
+    #[must_use]
+    pub const fn is_cache(self) -> bool {
+        matches!(self, Self::Cache | Self::Nest)
+    }
+}
+
+/// What a sky town is (WP-SKY, V9): one stands on the town isle of every archipelago block
+/// ([`crate::worldgen::sky::towns`]), built with the village grammar in a sky culture.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+pub enum SkyTownKind {
+    /// Aeronauts' moorings: an airship dock where aether thrusters are fitted.
+    AirshipDock,
+    /// A market floating on the clouds: sky ore bought dear, smugglers' wares.
+    FloatingMarket,
+    /// A sky monastery: blessings for the high air, de-icers wrought from cloud silver.
+    Monastery,
+    /// Cloud farmers harvesting condensed vapour: cheap fuel, pressurized hulls.
+    CloudFarm,
+}
+
+impl SkyTownKind {
+    pub const ALL: [Self; 4] = [
+        Self::AirshipDock,
+        Self::FloatingMarket,
+        Self::Monastery,
+        Self::CloudFarm,
+    ];
+
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::AirshipDock => "airship dock",
+            Self::FloatingMarket => "floating market",
+            Self::Monastery => "sky monastery",
+            Self::CloudFarm => "cloud-farmer village",
+        }
+    }
+
+    /// Stable code (map markers, events).
+    #[must_use]
+    pub const fn code(self) -> u8 {
+        match self {
+            Self::AirshipDock => 0,
+            Self::FloatingMarket => 1,
+            Self::Monastery => 2,
+            Self::CloudFarm => 3,
         }
     }
 }

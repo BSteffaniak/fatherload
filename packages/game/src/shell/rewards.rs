@@ -454,6 +454,13 @@ mod tests {
         player.fuel_tank_level = 3;
         let message = install_message(&player, UpgradeKind::FuelTank, 3, sky);
         assert!(message.contains("Climbs "), "{message}");
+        // Without a sky the tank promises no islands (T20: sky-aware previews).
+        player.fuel_tank_level = 2;
+        let grounded = install_message(&player, UpgradeKind::FuelTank, 2, None);
+        assert!(!grounded.contains("sky isles"), "{grounded}");
+        player.fuel_tank_level = 3;
+        let message = install_message(&player, UpgradeKind::FuelTank, 3, sky);
+        assert!(message.contains("Climbs "), "{message}");
         assert!(message.contains("% higher on a full tank"), "{message}");
     }
 }

@@ -228,7 +228,7 @@ fn a_keyframe_from_an_unknown_generator_is_a_codec_error() {
         .len();
     let generator = start + seed + 3;
     let original = bytes[generator];
-    bytes[generator] = 9;
+    bytes[generator] = 99;
 
     let mut client: ClientSession<WorldState> = ClientSession::new(ClientConfig::default());
     assert!(client.handle_server_bytes(&bytes).is_err());

@@ -775,7 +775,7 @@ impl Tile {
     /// Inverse of [`Tile::code`], or `None` for a code no tile has.
     #[must_use]
     pub const fn from_code(code: u64) -> Option<Self> {
-        const MINERALS: [MineralKind; 10] = [
+        const MINERALS: [MineralKind; 12] = [
             MineralKind::Copper,
             MineralKind::Iron,
             MineralKind::Silver,
@@ -786,8 +786,10 @@ impl Tile {
             MineralKind::Platinum,
             MineralKind::Uranium,
             MineralKind::Mythril,
+            MineralKind::Skystone,
+            MineralKind::CloudSilver,
         ];
-        const ARTIFACTS: [ArtifactKind; 11] = [
+        const ARTIFACTS: [ArtifactKind; 13] = [
             ArtifactKind::Fossil,
             ArtifactKind::OldCircuit,
             ArtifactKind::BuriedIdol,
@@ -799,6 +801,8 @@ impl Tile {
             ArtifactKind::MachineSigil,
             ArtifactKind::VoidPearl,
             ArtifactKind::MantleHeart,
+            ArtifactKind::WindAstrolabe,
+            ArtifactKind::CloudPearl,
         ];
         #[allow(clippy::cast_possible_truncation, reason = "masked to a byte")]
         let durability = (code & 0xFF) as u8;

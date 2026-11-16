@@ -113,6 +113,26 @@ fn look(style: BuildingStyle, culture: Culture, variant: u32) -> Look {
             trim: NIGHT,
             accent: pick(&[MINT, LAVENDER, TEAL]),
         },
+        // Sky towns (WP-SKY): canvas on brass under striped envelopes; white stone under blue
+        // tiles.
+        BuildingStyle::Skyrig => Look {
+            wall: CREAM,
+            wall_dark: SAND,
+            wall_light: BONE,
+            roof: pick(&[RED, OCEAN, TEAL, MAROON]),
+            roof_light: pick(&[GOLD, BONE, CREAM]),
+            trim: COPPER,
+            accent: pick(&[AMBER, TEAL, RED, OCEAN]),
+        },
+        BuildingStyle::Cloister => Look {
+            wall: BONE,
+            wall_dark: MIST,
+            wall_light: CREAM,
+            roof: pick(&[OCEAN, DEEP_BLUE, TEAL_DARK]),
+            roof_light: SKY,
+            trim: GOLD,
+            accent: pick(&[SKY, TEAL, GOLD]),
+        },
     }
 }
 
@@ -144,6 +164,10 @@ const fn lot_height(kind: BuildingKind) -> i32 {
         BuildingKind::Tower => 92,
         BuildingKind::Farm => 46,
         BuildingKind::MineHead => 78,
+        BuildingKind::AirshipDock => 104,
+        BuildingKind::Bazaar => 60,
+        BuildingKind::Monastery => 104,
+        BuildingKind::Granary => 74,
     }
 }
 
@@ -160,6 +184,10 @@ const fn sign_text(kind: BuildingKind) -> Option<&'static str> {
         BuildingKind::Assay => "ASSAY",
         BuildingKind::MapRoom => "MAPS",
         BuildingKind::Shrine => "SHRINE",
+        BuildingKind::AirshipDock => "DOCK",
+        BuildingKind::Bazaar => "MARKET",
+        BuildingKind::Monastery => "ABBEY",
+        BuildingKind::Granary => "GRANARY",
         BuildingKind::House | BuildingKind::Tower | BuildingKind::Farm | BuildingKind::MineHead => {
             return None;
         }
@@ -177,8 +205,19 @@ fn visible_villages(terrain: &Terrain, visible: Rectangle) -> Vec<std::sync::Arc
     }
     let first = (visible.x / TILE_SIZE).floor() as i32 - LOOKAHEAD_COLUMNS;
     let last = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + LOOKAHEAD_COLUMNS;
+    let sky = fatherload_simulation::worldgen::TileRect {
+        min: TilePosition {
+            x: first,
+            y: (visible.y / TILE_SIZE).floor() as i32 - 8,
+        },
+        max: TilePosition {
+            x: last,
+            y: ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 30,
+        },
+    };
     village::villages_between(settings, first, last)
         .into_iter()
+        .chain(village::sky_towns_in(settings, &sky))
         .filter(|found| {
             let ground = tile_px(found.ground_row);
             ground + 4.0 * TILE_SIZE >= visible.y
@@ -534,6 +573,34 @@ fn walls(draw: &mut impl RaylibDraw, lot: Lot, x: i32, y: i32, w: i32, h: i32) {
                 pen.px(draw, rivet, y + 1, INK);
             }
         }
+        BuildingStyle::Skyrig => {
+            // Canvas panels stretched between brass ribs, laced with rope.
+            let mut px = x + 5;
+            while px < x + w - 2 {
+                pen.rect(draw, px, y, 1, h, look.trim);
+                pen.rect(draw, px + 1, y, 1, h, look.wall_dark);
+                px += 9;
+            }
+            pen.rect(draw, x, y, w, 2, look.trim);
+            pen.rect(draw, x, y + h - 3, w, 1, look.trim);
+            for row in (y + 5..y + h - 4).step_by(6) {
+                pen.rect(draw, x + 2, row, w - 4, 1, with_alpha(look.wall_dark, 160));
+            }
+        }
+        BuildingStyle::Cloister => {
+            // Smooth white walls with a band of blue tiles at the foot and under the eaves.
+            pen.rect(draw, x, y, w, 2, look.wall_light);
+            pen.rect(draw, x, y + 3, w, 2, look.roof);
+            pen.rect(draw, x, y + h - 5, w, 3, look.roof);
+            let mut px = x + 1;
+            while px < x + w {
+                pen.px(draw, px, y + h - 4, look.roof_light);
+                pen.px(draw, px + 1, y + 4, look.trim);
+                px += 4;
+            }
+            pen.rect(draw, x, y, 1, h, look.wall_dark);
+            pen.rect(draw, x + w - 1, y, 1, h, look.wall_dark);
+        }
         BuildingStyle::Carved => {
             pen.rect(draw, x, y, w, 2, look.wall_light);
             for row in 0..h / 7 {
@@ -592,6 +659,57 @@ fn roof(draw: &mut impl RaylibDraw, lot: Lot, x: i32, y: i32, w: i32, rise: i32)
                 pen.rect(draw, x - 1, y + row, w + 2 - inset * 3, 1, look.roof);
             }
             pen.rect(draw, x - 2, y + rise, w + 4, 1, look.roof_light);
+        }
+        BuildingStyle::Skyrig => {
+            // A striped gas envelope: a half-dome of canvas stripes, tied down at the eaves.
+            let half = w / 2 + 2;
+            let rise = rise + 4;
+            let top = y - 4;
+            for row in 0..rise {
+                let t = (rise - row) as f32 / rise as f32;
+                let span = ((1.0 - t * t).max(0.0).sqrt() * half as f32) as i32;
+                let left = x + w / 2 - span;
+                pen.rect(draw, left - 1, top + row, span * 2 + 2, 1, INK);
+                let mut px = left;
+                while px < left + span * 2 {
+                    let stripe = ((px - (x + w / 2)).div_euclid(5)).rem_euclid(2) == 0;
+                    let color = if row == 1 {
+                        with_alpha(BONE, 200)
+                    } else if stripe {
+                        look.roof
+                    } else {
+                        look.roof_light
+                    };
+                    pen.px(draw, px, top + row, color);
+                    px += 1;
+                }
+            }
+            pen.rect(draw, x - 2, y + rise - 4, w + 4, 2, INK);
+            pen.rect(draw, x - 1, y + rise - 4, w + 2, 1, look.trim);
+            // Guy ropes to the corners.
+            for step in 0..4 {
+                pen.px(draw, x - 1 - step, y + rise - 3 + step, LOAM);
+                pen.px(draw, x + w + step, y + rise - 3 + step, LOAM);
+            }
+        }
+        BuildingStyle::Cloister => {
+            // Upswept blue-tiled eaves with gold finials.
+            for row in 0..rise {
+                let inset = (rise - 1 - row) * 2;
+                pen.rect(draw, x + inset - 1, y + row, w - inset * 2 + 2, 1, INK);
+                let color = if row % 2 == 0 {
+                    look.roof
+                } else {
+                    darken(look.roof)
+                };
+                pen.rect(draw, x + inset, y + row, w - inset * 2, 1, color);
+            }
+            pen.rect(draw, x - 5, y + rise - 1, w + 10, 3, INK);
+            pen.rect(draw, x - 4, y + rise, w + 8, 1, look.roof_light);
+            pen.rect(draw, x - 6, y + rise - 3, 3, 3, look.roof_light);
+            pen.rect(draw, x + w + 3, y + rise - 3, 3, 3, look.roof_light);
+            pen.rect(draw, x + w / 2 - 1, y - 4, 2, 4, look.trim);
+            pen.px(draw, x + w / 2, y - 5, CREAM);
         }
         BuildingStyle::Carved => {
             // An arched lintel cut into the rock.
@@ -671,6 +789,8 @@ fn sign(draw: &mut impl RaylibDraw, lot: Lot, cx: i32, y: i32, text: &str) {
         BuildingStyle::Adobe => (lot.look.accent, CREAM),
         BuildingStyle::Scrap => (INK, lot.look.accent),
         BuildingStyle::Carved => (NIGHT, MINT),
+        BuildingStyle::Skyrig => (COPPER, CREAM),
+        BuildingStyle::Cloister => (OCEAN, GOLD),
     };
     pen.boxed(draw, x, y, width, 13, board);
     pen.rect(draw, x + 1, y + 1, width - 2, 1, with_alpha(BONE, 50));
@@ -797,6 +917,8 @@ fn shopfront(draw: &mut impl RaylibDraw, lot: Lot, kind: BuildingKind) {
     let body_top = match kind {
         BuildingKind::Inn => 26,
         BuildingKind::MapRoom | BuildingKind::Shrine => 34,
+        BuildingKind::AirshipDock | BuildingKind::Monastery => 58,
+        BuildingKind::Granary => 30,
         _ => 22,
     };
     walls(draw, lot, 6, body_top, w - 12, lot.height - body_top);
@@ -943,6 +1065,10 @@ fn shopfront(draw: &mut impl RaylibDraw, lot: Lot, kind: BuildingKind) {
                 );
             }
         }
+        BuildingKind::AirshipDock => airship_dock(draw, lot, body_top),
+        BuildingKind::Bazaar => bazaar(draw, lot, body_top),
+        BuildingKind::Monastery => bell_tower(draw, lot, body_top),
+        BuildingKind::Granary => granary(draw, lot, body_top),
         BuildingKind::MapRoom => {
             // A domed observatory with a telescope.
             let cx = w / 2;
@@ -973,6 +1099,176 @@ fn shopfront(draw: &mut impl RaylibDraw, lot: Lot, kind: BuildingKind) {
         }
         _ => {}
     }
+}
+
+/// An airship dock: a mooring mast beside the shed and a little airship riding at anchor
+/// above it, bobbing in the wind.
+fn airship_dock(draw: &mut impl RaylibDraw, lot: Lot, body_top: i32) {
+    let pen = lot.pen;
+    let w = lot.width;
+    let bob = ((lot.seconds * 1.1 + (lot.variant % 7) as f32).sin() * 2.0) as i32;
+    // The mast.
+    let mast = w - 14;
+    pen.boxed(draw, mast, 6, 4, lot.height - 6, lot.look.trim);
+    for y in (10..lot.height).step_by(8) {
+        pen.rect(draw, mast - 2, y, 8, 1, LOAM);
+    }
+    pen.boxed(draw, mast - 2, 2, 8, 5, GOLD);
+    // The airship: a striped envelope, fins and a gondola.
+    let (ex, ey, ew, eh) = (10, 6 + bob, w - 32, 22);
+    for row in 0..eh {
+        let t = (row as f32 - eh as f32 / 2.0) / (eh as f32 / 2.0);
+        let span = ((1.0 - t * t).max(0.0).sqrt() * (ew / 2) as f32) as i32;
+        let cx = ex + ew / 2;
+        pen.rect(draw, cx - span - 1, ey + row, span * 2 + 2, 1, INK);
+        for px in cx - span..cx + span {
+            let stripe = (px - cx).div_euclid(6).rem_euclid(2) == 0;
+            let color = if row < 3 {
+                with_alpha(BONE, 230)
+            } else if stripe {
+                lot.look.roof
+            } else {
+                lot.look.roof_light
+            };
+            pen.px(draw, px, ey + row, color);
+        }
+    }
+    pen.boxed(draw, ex - 4, ey + 5, 6, 12, lot.look.roof);
+    pen.boxed(draw, ex - 6, ey + 8, 4, 6, lot.look.roof_light);
+    // Gondola on its rigging.
+    let gx = ex + ew / 2 - 10;
+    for rope in [gx + 2, gx + 18] {
+        pen.rect(draw, rope, ey + eh, 1, 5, LOAM);
+    }
+    pen.boxed(draw, gx, ey + eh + 5, 21, 7, lot.look.trim);
+    pen.rect(draw, gx + 3, ey + eh + 7, 3, 2, GOLD);
+    pen.rect(draw, gx + 9, ey + eh + 7, 3, 2, GOLD);
+    pen.rect(draw, gx + 15, ey + eh + 7, 3, 2, GOLD);
+    // The mooring line to the mast.
+    for step in 0..(mast - (ex + ew)).max(0) {
+        pen.px(draw, ex + ew + step, ey + eh / 2 + step / 4, LOAM);
+    }
+    // Propeller blur.
+    let spin = (lot.seconds * 18.0) as i32 % 3;
+    pen.rect(
+        draw,
+        ex - 8,
+        ey + 9 - spin,
+        2,
+        2 + spin * 2,
+        with_alpha(BONE, 160),
+    );
+    let _ = body_top;
+}
+
+/// A floating market: striped awnings over stalls, hanging lanterns and crates.
+fn bazaar(draw: &mut impl RaylibDraw, lot: Lot, body_top: i32) {
+    let pen = lot.pen;
+    let w = lot.width;
+    for (index, color) in [lot.look.accent, RED, TEAL].into_iter().enumerate() {
+        let x = 6 + index as i32 * ((w - 12) / 3);
+        let span = (w - 12) / 3 - 2;
+        let y = body_top + 20;
+        pen.rect(draw, x, y, span, 5, INK);
+        for stripe in 0..span / 4 {
+            pen.rect(
+                draw,
+                x + 1 + stripe * 4,
+                y + 1,
+                4,
+                3,
+                if stripe % 2 == 0 { color } else { BONE },
+            );
+        }
+        // A lantern under each awning.
+        let glow = 160 + ((lot.seconds * 2.0 + index as f32).sin() * 50.0) as i32;
+        pen.rect(draw, x + span / 2, y + 5, 1, 3, INK);
+        pen.boxed(
+            draw,
+            x + span / 2 - 2,
+            y + 8,
+            5,
+            5,
+            with_alpha(GOLD, glow.clamp(60, 230) as u8),
+        );
+    }
+    for (x, color) in [(9, LOAM), (w - 21, SKY_LIGHT)] {
+        pen.boxed(draw, x, lot.height - 9, 11, 9, color);
+        pen.rect(draw, x + 2, lot.height - 11, 3, 3, SKY);
+        pen.rect(draw, x + 6, lot.height - 11, 3, 3, BONE);
+    }
+}
+
+/// A sky monastery: a tall bell tower rising through the roof, its bell swinging.
+fn bell_tower(draw: &mut impl RaylibDraw, lot: Lot, body_top: i32) {
+    let pen = lot.pen;
+    let w = lot.width;
+    let cx = w / 2;
+    let tower_w = 22;
+    let tx = cx - tower_w / 2;
+    let top = 14;
+    walls(draw, lot, tx, top, tower_w, body_top - top);
+    roof(draw, lot, tx - 2, 2, tower_w + 4, 12);
+    // The belfry opening and the bell.
+    pen.rect(draw, tx + 4, top + 6, tower_w - 8, 14, NIGHT);
+    let swing = ((lot.seconds * 1.6).sin() * 2.0) as i32;
+    pen.boxed(draw, cx - 4 + swing, top + 9, 9, 8, GOLD);
+    pen.rect(draw, cx - 3 + swing, top + 9, 7, 1, CREAM);
+    // Prayer flags strung from the tower to the eaves.
+    for step in 0..10 {
+        let color = [SKY, GOLD, BONE, TEAL, ROSE][step % 5];
+        let x = 4 + step as i32 * 3;
+        pen.rect(draw, x, body_top - 6 + (step as i32 / 3), 2, 3, color);
+        pen.rect(
+            draw,
+            w - 6 - step as i32 * 3,
+            body_top - 6 + (step as i32 / 3),
+            2,
+            3,
+            color,
+        );
+    }
+}
+
+/// A cloud granary: a round silo of vapour, cloud nets on poles catching wisps of cloud.
+fn granary(draw: &mut impl RaylibDraw, lot: Lot, body_top: i32) {
+    let pen = lot.pen;
+    let w = lot.width;
+    // The silo.
+    let sx = w - 26;
+    pen.boxed(draw, sx, 8, 20, lot.height - 8, lot.look.wall_light);
+    for y in (12..lot.height).step_by(7) {
+        pen.rect(draw, sx + 1, y, 18, 1, lot.look.trim);
+    }
+    pen.boxed(draw, sx - 2, 4, 24, 6, lot.look.roof);
+    // Cloud nets on two poles, puffs of cloud drifting into them.
+    for pole in [6, 20] {
+        pen.rect(draw, pole, body_top - 26, 2, 26, LOAM);
+    }
+    for row in 0..5 {
+        pen.rect(
+            draw,
+            7,
+            body_top - 24 + row * 4,
+            14,
+            1,
+            with_alpha(STEEL_LIGHT, 170),
+        );
+    }
+    let drift = ((lot.seconds * 0.6 + (lot.variant % 5) as f32).fract() * 12.0) as i32;
+    for (dx, dy, size) in [(0, 0, 6), (7, 3, 5), (3, 8, 4)] {
+        pen.rect(
+            draw,
+            -4 + dx + drift,
+            body_top - 22 + dy,
+            size + 2,
+            size,
+            with_alpha(BONE, 210),
+        );
+    }
+    // A pipe from the silo to a tap at the counter.
+    pen.rect(draw, sx - 8, lot.height - 16, 8, 2, STEEL_DARK);
+    pen.boxed(draw, sx - 11, lot.height - 18, 4, 6, STEEL);
 }
 
 fn shrine_roof(draw: &mut impl RaylibDraw, lot: Lot, body_top: i32) {
@@ -1125,6 +1421,8 @@ fn draw_decor(
         Culture::Riverside => MOSS,
         Culture::Scrapper => AMBER,
         Culture::Deepfolk => LAVENDER,
+        Culture::Aeronaut => COPPER,
+        Culture::Cloudborn => SKY,
     };
     match decor.kind {
         DecorKind::Well => {
@@ -1285,6 +1583,67 @@ fn draw_decor(
             pen.rect(draw, 10, base - 12, 4, 3, MOSS);
             pen.rect(draw, 18, base - 15, 4, 3, MOSS);
             pen.px(draw, 15, base - 27, ROSE);
+        }
+        DecorKind::WindVane => {
+            // A brass mast and a vane swinging with the wind.
+            pen.boxed(draw, 14, base - 40, 4, 40, COPPER);
+            pen.boxed(draw, 10, base - 4, 12, 4, STEEL_DARK);
+            let swing = (seconds * 0.7).sin();
+            let reach = (swing * 9.0) as i32;
+            pen.rect(
+                draw,
+                16 - reach.abs().max(2),
+                base - 42,
+                reach.abs().max(2) * 2,
+                2,
+                GOLD,
+            );
+            pen.boxed(draw, 16 + reach - 2, base - 44, 5, 5, culture_color);
+            for (dx, label) in [(-6, 0), (8, 1)] {
+                pen.rect(
+                    draw,
+                    16 + dx,
+                    base - 34,
+                    3,
+                    1,
+                    if label == 0 { GOLD } else { CREAM },
+                );
+            }
+        }
+        DecorKind::Bell => {
+            pen.rect(draw, 4, base - 34, 3, 34, LOAM);
+            pen.rect(draw, 25, base - 34, 3, 34, LOAM);
+            pen.rect(draw, 2, base - 36, 28, 3, SOIL);
+            let swing = ((seconds * 1.5).sin() * 2.0) as i32;
+            pen.rect(draw, 16, base - 33, 1, 4, INK);
+            pen.boxed(draw, 10 + swing, base - 29, 13, 12, GOLD);
+            pen.rect(draw, 11 + swing, base - 28, 11, 2, CREAM);
+            pen.rect(draw, 15 + swing, base - 17, 3, 2, AMBER);
+        }
+        DecorKind::MooringPost => {
+            pen.boxed(draw, 12, base - 14, 7, 14, LOAM);
+            pen.rect(draw, 11, base - 15, 9, 2, COPPER);
+            for ring in 0..3 {
+                pen.rect(draw, 10 - ring, base - 5 + ring, 11 + ring * 2, 1, CLAY);
+            }
+        }
+        DecorKind::PrayerFlags => {
+            pen.rect(draw, 2, base - 30, 2, 30, LOAM);
+            pen.rect(draw, 28, base - 30, 2, 30, LOAM);
+            let flutter = ((seconds * 3.0) as i32) % 2;
+            for step in 0..6 {
+                let color = [SKY, GOLD, BONE, TEAL, ROSE, culture_color][step];
+                let x = 4 + step as i32 * 4;
+                let sag = [0, 2, 3, 3, 2, 0][step];
+                pen.rect(
+                    draw,
+                    x,
+                    base - 29 + sag,
+                    3,
+                    4 + (flutter + step as i32) % 2,
+                    color,
+                );
+            }
         }
     }
 }

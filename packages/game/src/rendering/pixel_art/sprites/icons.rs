@@ -474,6 +474,25 @@ mineral_icon!(
     PINK
 );
 
+mineral_icon!(
+    SKYSTONE_ORE,
+    "icon_skystone",
+    NUGGET,
+    OCEAN,
+    SKY,
+    SKY_LIGHT,
+    BONE
+);
+mineral_icon!(
+    CLOUD_SILVER_ORE,
+    "icon_cloud_silver",
+    GEM,
+    STEEL_DARK,
+    MIST,
+    BONE,
+    CREAM
+);
+
 /// The icon for `mineral`.
 #[must_use]
 pub const fn mineral(mineral: MineralKind) -> &'static SpriteDef {
@@ -488,6 +507,8 @@ pub const fn mineral(mineral: MineralKind) -> &'static SpriteDef {
         MineralKind::Platinum => &PLATINUM_ORE,
         MineralKind::Uranium => &URANIUM_ORE,
         MineralKind::Mythril => &MYTHRIL_ORE,
+        MineralKind::Skystone => &SKYSTONE_ORE,
+        MineralKind::CloudSilver => &CLOUD_SILVER_ORE,
     }
 }
 
