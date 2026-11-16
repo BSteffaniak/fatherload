@@ -156,6 +156,46 @@ fn shadow_hounds(stage: &mut SceneStage<'_>) {
     );
 }
 
+/// Night monsters pressing on the rig stop at contact (master's body rules hold for wave 4's
+/// families): two hounds dropped right beside it and a will-o'-wisp over it, all hunting it,
+/// are pushed out to touching (they still bite), never drawn inside it.
+fn night_contact(stage: &mut SceneStage<'_>) {
+    night_in(
+        stage,
+        Biome::Plains,
+        MoonPhase::WaxingGibbous,
+        24,
+        |world, player, x, _| {
+            let Some((rx, ry)) = world.player(player).map(|rig| (rig.x, rig.y)) else {
+                return;
+            };
+            let now = world.simulation_tick();
+            for (kind, dx, dy) in [
+                (EnemyKind::ShadowHound, 10.0, 0.0),
+                (EnemyKind::ShadowHound, -12.0, 0.0),
+                (EnemyKind::WillOWisp, 2.0, -26.0),
+            ] {
+                let column = x + if dx > 0.0 { 1 } else { -1 };
+                let ground = world.terrain().surface_row(column);
+                let y = if kind == EnemyKind::ShadowHound {
+                    standing_y(kind, ground)
+                } else {
+                    ry + dy
+                };
+                let id = world.spawn_enemy(kind, rx + dx, y);
+                world.entities_mut().update(id, |entity| {
+                    if let EntityState::Enemy(state) = &mut entity.state {
+                        state.mode = EnemyMode::Chase;
+                        state.target = Some(player);
+                        state.last_seen = now;
+                        state.attack_ready = now;
+                    }
+                });
+            }
+        },
+    );
+}
+
 fn dune_stalkers(stage: &mut SceneStage<'_>) {
     night_in(
         stage,
@@ -564,6 +604,11 @@ pub const NIGHT_SCENES: &[Scene] = &[
         name: "night_shadow_hounds",
         summary: "Shadow hounds on the plains at night: one gathering to pounce at the rig, its mint eyes glinting, the pack closing in from both sides",
         setup: shadow_hounds,
+    },
+    Scene {
+        name: "night_enemies_contact",
+        summary: "Shadow hounds and a will-o'-wisp hunting the rig at night press on it and stop at contact, never inside it",
+        setup: night_contact,
     },
     Scene {
         name: "night_dune_stalkers",

@@ -338,11 +338,19 @@ fn rig_far_above_the_surface_flies_online() {
         fatherload_simulation::SimulationParams::new(params.tick_rate_hz),
     );
     assert!(world.world_settings().generator.has_biomes());
-    // New rigs (the client's) spawn ten thousand tiles up.
-    let altitude = 10_000.0 * TILE_SIZE;
+    // New rigs (the client's) spawn in orbit, 300 tiles over the world's own orbit floor (V9's
+    // sky: about 13,700 tiles up).
+    let orbit = world
+        .world_settings()
+        .generator
+        .sky_bands()
+        .expect("a sky")
+        .orbit;
+    #[allow(clippy::cast_precision_loss, reason = "a whole-row altitude")]
+    let altitude = (orbit + 300) as f32 * TILE_SIZE;
     let mut template = world.player_template().clone();
     template.y = -altitude;
-    // A V8 sky is airless this high (orbit): only high-altitude intakes still give thrust.
+    // The sky is airless this high (orbit): only high-altitude intakes still give thrust.
     template.hazard_gear.altitude_intake =
         fatherload_simulation::environment::ALTITUDE_INTAKE_MAX_LEVEL;
     world.set_player_template(template);

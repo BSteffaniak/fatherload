@@ -953,12 +953,12 @@ impl EnemyKind {
             Self::CrystalMite => (7.0, 6.0),
             Self::DerelictAutomaton => (14.0, 14.0),
             Self::Warden => (26.0, 20.0),
-            Self::ShadowHound => (14.0, 11.0),
+            Self::ShadowHound => (16.0, 11.0),
             Self::DuneStalker => (15.0, 10.0),
             Self::WillOWisp => (7.0, 10.0),
             // A whirl of moths about its centre: the cloud's core.
             Self::MothSwarm => (14.0, 10.0),
-            Self::UmbralAlpha => (22.0, 14.0),
+            Self::UmbralAlpha => (25.0, 14.0),
         }
     }
 
