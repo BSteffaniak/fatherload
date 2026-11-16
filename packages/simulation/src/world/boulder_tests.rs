@@ -124,13 +124,7 @@ fn parked_world(seed: u64, column: i32, row: i32) -> WorldState {
         &WorldSettings::new(seed),
         SimulationParams::new(60),
     );
-    for x in column - 2..=column + 2 {
-        for y in row - 5..=row + 1 {
-            let open = (column - 1..=column + 1).contains(&x) && (row - 3..=row).contains(&y);
-            let kind = if open { TileKind::Air } else { TileKind::Stone };
-            let _ = world.terrain_mut().set_kind(TilePosition { x, y }, kind);
-        }
-    }
+    carve_pocket(&mut world, column, row);
     let player = world.player_mut(PARKED).expect("player");
     player.x = TILE_SIZE.mul_add(0.5, px(column));
     player.y = px(row + 1) - 11.0;
@@ -138,6 +132,17 @@ fn parked_world(seed: u64, column: i32, row: i32) -> WorldState {
     player.velocity_y = 0.0;
     player.hazard_gear = HazardGear::MAXED;
     world
+}
+
+/// Carves a 3 x 4 pocket whose floor is `row`, walled in stone.
+fn carve_pocket(world: &mut WorldState, column: i32, row: i32) {
+    for x in column - 2..=column + 2 {
+        for y in row - 5..=row + 1 {
+            let open = (column - 1..=column + 1).contains(&x) && (row - 3..=row).contains(&y);
+            let kind = if open { TileKind::Air } else { TileKind::Stone };
+            let _ = world.terrain_mut().set_kind(TilePosition { x, y }, kind);
+        }
+    }
 }
 
 fn run_parked(world: &mut WorldState, minutes: u32) -> BoulderTally {
@@ -184,6 +189,48 @@ fn deep_pressure_run(seed: u64, minutes: u32) -> BoulderTally {
     run_parked(&mut world, minutes)
 }
 
+/// A rig roaming the crystal faults with a diamond aboard: every minute it moves on to a fresh
+/// pocket 30 columns along (new, unsettled ground), the way an exploring rig keeps meeting
+/// deep-run cave-ins that a parked one sits out under settled ground.
+fn deep_roaming_run(seed: u64, minutes: u32) -> BoulderTally {
+    let settings = WorldSettings::new(seed);
+    let row_at = |column| {
+        crate::worldgen::strata::band_solid_top_row(
+            &settings,
+            Band::Deep(crate::terrain::DeepStratum::CrystalFaults),
+            column,
+        ) + 4
+    };
+    let mut column = 60;
+    let mut world = parked_world(seed, column, row_at(column));
+    world
+        .player_mut(PARKED)
+        .expect("player")
+        .cargo_bay
+        .insert(crate::terrain::MineralKind::Diamond, 1);
+    let mut watch = BoulderWatch::default();
+    let inputs = TickInputs::default();
+    for tick in 0..60 * 60 * u64::from(minutes) {
+        if tick > 0 && tick % (60 * 60) == 0 {
+            column += 30;
+            let row = row_at(column);
+            carve_pocket(&mut world, column, row);
+            let player = world.player_mut(PARKED).expect("player");
+            player.x = TILE_SIZE.mul_add(0.5, px(column));
+            player.y = px(row + 1) - 11.0;
+            player.velocity_x = 0.0;
+            player.velocity_y = 0.0;
+        }
+        if let Some(player) = world.player_mut(PARKED) {
+            player.hull = player.max_hull();
+            player.fuel = player.fuel_capacity;
+        }
+        let _ = world.simulate_tick(world.simulation_tick(), &inputs);
+        watch.observe(&world);
+    }
+    watch.tally
+}
+
 fn add(total: &mut BoulderTally, run: BoulderTally) {
     total.spawned += run.spawned;
     total.in_rock += run.in_rock;
@@ -212,6 +259,9 @@ fn boulder_frequency_report() {
         }),
         ("parked in the crystal faults", PARKED_MINUTES, &|seed| {
             deep_pressure_run(seed, PARKED_MINUTES)
+        }),
+        ("roaming the crystal faults", PARKED_MINUTES, &|seed| {
+            deep_roaming_run(seed, PARKED_MINUTES)
         }),
     ] {
         let mut total = BoulderTally::default();
