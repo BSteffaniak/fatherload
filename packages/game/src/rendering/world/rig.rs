@@ -271,8 +271,8 @@ pub fn draw_remote_tag(draw: &mut impl RaylibDraw, player: &PlayerPresentation, 
     let bar_width = width - 4;
     for (row, (value, color)) in [
         (
-            player.fuel / 100.0,
-            if player.fuel < 30.0 { ORANGE } else { AMBER },
+            player.fuel_fraction(),
+            if player.fuel_low() { ORANGE } else { AMBER },
         ),
         (
             player.hull / player.max_hull.max(1.0),
@@ -304,6 +304,7 @@ mod tests {
             velocity_x,
             velocity_y: 0.0,
             fuel: 1.0,
+            fuel_capacity: 1.0,
             hull: 1.0,
             max_hull: 1.0,
             scanner_level: 0,

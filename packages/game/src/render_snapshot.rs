@@ -204,6 +204,9 @@ impl RigTiers {
     }
 }
 
+/// Share of the tank at or below which fuel counts as low (HUD warning, nameplate danger).
+pub const LOW_FUEL_FRACTION: f32 = 0.2;
+
 /// One rig as drawn in the world.
 #[derive(Clone, Debug)]
 pub struct PlayerPresentation {
@@ -213,6 +216,8 @@ pub struct PlayerPresentation {
     pub velocity_x: f32,
     pub velocity_y: f32,
     pub fuel: f32,
+    /// The rig's tank size (its nameplate bar and danger read fuel as a share of it).
+    pub fuel_capacity: f32,
     pub hull: f32,
     pub max_hull: f32,
     pub scanner_level: u8,
@@ -321,6 +326,7 @@ impl PlayerPresentation {
             velocity_x: player.velocity_x,
             velocity_y: player.velocity_y,
             fuel: player.fuel,
+            fuel_capacity: player.fuel_capacity,
             hull: player.hull,
             max_hull: player.max_hull(),
             scanner_level: player.scanner_level,
@@ -335,12 +341,25 @@ impl PlayerPresentation {
         }
     }
 
+    /// Share of the tank left, 0..=1.
+    #[must_use]
+    pub fn fuel_fraction(&self) -> f32 {
+        (self.fuel / self.fuel_capacity.max(1.0)).clamp(0.0, 1.0)
+    }
+
+    /// Whether the tank is low enough to warn about: the HUD's low-fuel share
+    /// ([`LOW_FUEL_FRACTION`]), whatever the tank's size.
+    #[must_use]
+    pub fn fuel_low(&self) -> bool {
+        self.fuel_fraction() <= LOW_FUEL_FRACTION
+    }
+
     /// Danger shown on the rig for other players.
     #[must_use]
     pub fn danger_level(&self) -> DangerLevel {
         if self.hull <= 0.0 || self.fuel <= 0.0 {
             DangerLevel::Critical
-        } else if self.hull < 30.0 || self.fuel < 30.0 {
+        } else if self.hull < 30.0 || self.fuel_low() {
             DangerLevel::Warning
         } else {
             DangerLevel::Nominal
@@ -863,7 +882,7 @@ impl<'w> RenderSnapshot<'w> {
         // Warning depths are classic nominal rows (deep worlds stretch them with their bands).
         let depth = self.terrain.nominal_row(player.tile_position(TILE_SIZE).y);
         let mut warnings = Vec::new();
-        if player.fuel <= player.fuel_capacity * 0.2 {
+        if player.fuel <= player.fuel_capacity * LOW_FUEL_FRACTION {
             warnings.push("fuel");
         }
         if player.hull <= player.max_hull() * 0.35 {
@@ -1044,6 +1063,31 @@ mod tests {
         let view = snapshot.primary_view().expect("view");
         assert!((view.camera.x - (x - 640.0)).abs() < f32::EPSILON);
         assert!((view.camera.y - (y - 360.0)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_rigs_nameplate_reads_fuel_as_a_share_of_its_tank() {
+        let rig = PlayerId::new(1);
+        let mut world = WorldState::new_game(rig);
+        let presentation = |world: &WorldState| {
+            let player = world.player(rig).expect("rig");
+            PlayerPresentation::from_player(rig, player, world)
+        };
+        // A full stock tank (several hundred units) shows a full bar, not a clamped 100.
+        let full = presentation(&world);
+        assert_near(full.fuel_fraction(), 1.0);
+        assert_eq!(full.danger_level(), DangerLevel::Nominal);
+        // A big tank a quarter full is fine; under the HUD's low-fuel share it warns.
+        let player = world.player_mut(rig).expect("rig");
+        player.fuel_capacity = 10_000.0;
+        player.fuel = 2_500.0;
+        let quarter = presentation(&world);
+        assert_near(quarter.fuel_fraction(), 0.25);
+        assert_eq!(quarter.danger_level(), DangerLevel::Nominal);
+        world.player_mut(rig).expect("rig").fuel = 1_500.0;
+        assert_eq!(presentation(&world).danger_level(), DangerLevel::Warning);
+        world.player_mut(rig).expect("rig").fuel = 0.0;
+        assert_eq!(presentation(&world).danger_level(), DangerLevel::Critical);
     }
 
     const SCREEN_SIZES: [(i32, i32); 6] = [
