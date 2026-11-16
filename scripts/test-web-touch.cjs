@@ -92,7 +92,7 @@ async function play(browser, url, phone) {
   await page.locator('#canvas').focus();
   await key('Shift');
   await key('e');
-  for (let i = 0; i < 7; i++) await key('ArrowDown');
+  for (let i = 0; i < 8; i++) await key('ArrowDown');  // seed, re-roll, size, resources, hazards, enemies, day length, test mode -> Start Digging
   await shot('setup');
   await key('e');
   await page.waitForFunction(() => !document.body.classList.contains('menu'), { timeout: 20000 });

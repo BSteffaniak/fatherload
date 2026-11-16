@@ -105,7 +105,7 @@ pub enum JournalRow {
 }
 
 /// Stories told the journal lists (the newest).
-pub const TOLD_SHOWN: usize = 12;
+pub const TOLD_SHOWN: usize = fatherload_simulation::people::story::run::HISTORY_LIMIT;
 
 /// The journal's rows for `log`.
 #[must_use]

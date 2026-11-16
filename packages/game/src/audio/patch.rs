@@ -601,7 +601,8 @@ impl Patch {
             | Self::RainLoop
             | Self::NightLoop
             | Self::SkyAirLoop
-            | Self::WaterfallLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            | Self::WaterfallLoop
+            | Self::NightProwlLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
             Self::SkyCacheOpen | Self::BuoyRefuel => PatchInfo::new(Feedback)
                 .instances(2)
                 .send(0.3)
@@ -612,7 +613,6 @@ impl Patch {
                 .jitter(0.05, 1.0)
                 .ducking(0.3),
 
-            | Self::NightProwlLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
             Self::DawnChorus | Self::DuskCrickets => PatchInfo::new(Feedback)
                 .instances(1)
                 .send(0.4)
@@ -4747,7 +4747,6 @@ fn keycard_beep(rng: &mut Rng) -> Vec<f32> {
     }
     out
 }
-
 
 // --- Night-time gameplay (WP-NIGHT) -------------------------------------------------------
 

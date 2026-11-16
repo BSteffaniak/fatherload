@@ -130,7 +130,10 @@ impl SeatUi {
                 }
                 fatherload_simulation::sky::SkyTile::KeystoneDoor => {
                     let carried = ctx.player().is_some_and(|player| {
-                        player.pilot_pack.count(fatherload_simulation::item::TEMPLE_KEYSTONE) > 0
+                        player
+                            .pilot_pack
+                            .count(fatherload_simulation::item::TEMPLE_KEYSTONE)
+                            > 0
                             || player.carried(fatherload_simulation::item::TEMPLE_KEYSTONE) > 0
                     });
                     if carried {

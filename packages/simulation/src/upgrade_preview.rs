@@ -660,13 +660,17 @@ fn preview_lines(
                 "",
                 0,
             ));
-            changes.push(if to < crate::moon::VACUUM_SEAL_TIER {
-                "A sealed cabin: the high sky's cold bites one level less".to_owned()
-            } else if to == crate::moon::VACUUM_SEAL_TIER {
-                "Seals the rig against vacuum: orbit and the Moon stop crushing the frame"
-                    .to_owned()
-            } else {
-                "Void-rated plating: Moon creatures bite a fifth softer".to_owned()
+            changes.push(match to.cmp(&crate::moon::VACUUM_SEAL_TIER) {
+                std::cmp::Ordering::Less => {
+                    "A sealed cabin: the high sky's cold bites one level less".to_owned()
+                }
+                std::cmp::Ordering::Equal => {
+                    "Seals the rig against vacuum: orbit and the Moon stop crushing the frame"
+                        .to_owned()
+                }
+                std::cmp::Ordering::Greater => {
+                    "Void-rated plating: Moon creatures bite a fifth softer".to_owned()
+                }
             });
         }
         UpgradeKind::LifeSupport => {

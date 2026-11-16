@@ -1999,10 +1999,9 @@ impl WorldState {
         }
         let mut damage = damage * self.enemies.difficulty.damage();
         if kind.is_lunar()
-            && self
-                .players
-                .get(&player_id)
-                .is_some_and(|player| player.hazard_gear.pressurized_hull >= crate::moon::HULL_ARMOUR_TIER)
+            && self.players.get(&player_id).is_some_and(|player| {
+                player.hazard_gear.pressurized_hull >= crate::moon::HULL_ARMOUR_TIER
+            })
         {
             // A void-rated hull turns a fifth of Moon creatures' bites (WP-MOON).
             damage *= 0.8;

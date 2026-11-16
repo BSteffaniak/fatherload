@@ -243,6 +243,7 @@ fn temple_pixel(x: i32, y: i32) -> PaletteIndex {
 }
 
 /// Paints a sky-land tile.
+#[allow(clippy::too_many_lines, reason = "one arm per sky tile")]
 pub(super) fn paint(canvas: &mut TileCanvas, tile: SkyTile, strata: &Strata, edges: Edges) {
     let seed = hash(canvas.origin_x, canvas.origin_y, 431);
     // Hanging pieces (roots, a crystal shard under the rock) dangle over open sky.

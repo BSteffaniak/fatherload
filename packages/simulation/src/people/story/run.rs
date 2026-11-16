@@ -1011,18 +1011,42 @@ pub fn bind_arc(seed: &StorySeed, giver: &Character, ctx: &BindContext<'_>) -> O
 /// How a giver opens their thanks when the arc authored none, by voice.
 const fn thanks_openers(tone: Tone) -> &'static [&'static str] {
     match tone {
-        Tone::Gruff => &["Hm. Good work.", "Well. You came back. Good."],
-        Tone::Cheerful => &["You did it! You actually did it!", "Oh, look at you!"],
+        Tone::Gruff => &[
+            "Hm. Good work.",
+            "Well. You came back. Good.",
+            "Knew you'd manage. Mostly knew.",
+            "Sit. You've earned the chair.",
+        ],
+        Tone::Cheerful => &[
+            "You did it! You actually did it!",
+            "Oh, look at you!",
+            "There you are! I've been watching the trail all day!",
+            "Hooray! Sorry. Hooray, quietly.",
+        ],
         Tone::Nervous => &[
             "Oh, thank goodness. You're back.",
             "You're all right! Oh, good.",
+            "I didn't worry. Much. Constantly, actually.",
+            "Is it done? It's done? Oh, I can breathe again.",
         ],
         Tone::Poetic => &[
             "So the story comes home.",
             "And here you are, with the ending.",
+            "Every road bends back to the door it left from.",
+            "The trail brought you back. It usually knows best.",
         ],
-        Tone::Dry => &["Well. Look at that.", "Huh. It actually worked."],
-        Tone::Earnest => &["Thank you. Truly.", "I won't forget this."],
+        Tone::Dry => &[
+            "Well. Look at that.",
+            "Huh. It actually worked.",
+            "And with all your limbs. Impressive.",
+            "I had a small bet against you. I'm glad to lose it.",
+        ],
+        Tone::Earnest => &[
+            "Thank you. Truly.",
+            "I won't forget this.",
+            "You didn't have to do this, and you did.",
+            "I owe you more than I can say.",
+        ],
     }
 }
 

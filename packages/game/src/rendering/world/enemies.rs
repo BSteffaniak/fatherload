@@ -406,14 +406,13 @@ fn draw_enemy(
             EnemyKind::SentryTurret | EnemyKind::AncientGuardian | EnemyKind::MiningDrone => {
                 Some(GOLD)
             }
-            EnemyKind::Warden => Some(MINT),
             EnemyKind::RegolithCrawler => Some(BONE),
             EnemyKind::RogueExcavator
             | EnemyKind::Shellback
             | EnemyKind::RockMimic
             | EnemyKind::DerelictAutomaton
             | EnemyKind::UmbralAlpha => Some(RED),
-            EnemyKind::ShadowHound | EnemyKind::WillOWisp => Some(MINT),
+            EnemyKind::Warden | EnemyKind::ShadowHound | EnemyKind::WillOWisp => Some(MINT),
             EnemyKind::DuneStalker => Some(SAND),
             _ => None,
         };

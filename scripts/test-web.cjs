@@ -52,9 +52,15 @@ const server = http.createServer(async (req, res) => {
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
+    // Software rendering on a loaded machine can stall frames for longer than a fixed wait:
+    // hold each key for whole frames too, so the game always samples it (as the phone test).
+    const nextFrames = (target, count = 3) => target.evaluate(count => new Promise(resolve => {
+      const step = left => (left ? requestAnimationFrame(() => step(left - 1)) : resolve());
+      step(count);
+    }), count);
     const key = async name => {
-      await page.keyboard.down(name); await page.waitForTimeout(100);
-      await page.keyboard.up(name); await page.waitForTimeout(120);
+      await page.keyboard.down(name); await page.waitForTimeout(100); await nextFrames(page);
+      await page.keyboard.up(name); await page.waitForTimeout(120); await nextFrames(page);
     };
     const start = async () => {
       await page.waitForFunction(() => document.body.classList.contains('playing'), { timeout: 60000 });
@@ -140,8 +146,8 @@ const server = http.createServer(async (req, res) => {
     split.on('pageerror', error => errors.push(error.message));
     split.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     const splitKey = async name => {
-      await split.keyboard.down(name); await split.waitForTimeout(100);
-      await split.keyboard.up(name); await split.waitForTimeout(120);
+      await split.keyboard.down(name); await split.waitForTimeout(100); await nextFrames(split);
+      await split.keyboard.up(name); await split.waitForTimeout(120); await nextFrames(split);
     };
     await split.goto(page.url());
     await split.waitForFunction(() => document.body.classList.contains('playing'), { timeout: 60000 });

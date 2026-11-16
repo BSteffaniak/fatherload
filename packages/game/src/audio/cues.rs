@@ -393,7 +393,6 @@ pub const fn service_cue(service: ModuleService) -> SoundCue {
     reason = "each event's sound reads next to its own comment"
 )]
 #[allow(clippy::too_many_lines, reason = "one arm per gameplay event kind")]
-#[allow(clippy::match_same_arms, reason = "one arm per event family")]
 pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
     match kind {
         GameplayEventKind::DrillStarted { .. } => Some(SoundCue::Drill),

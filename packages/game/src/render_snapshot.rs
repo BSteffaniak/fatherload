@@ -418,6 +418,10 @@ pub struct CameraPosition {
 
 /// One local seat's view.
 #[derive(Clone, Debug)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "independent per-seat HUD and prompt flags, one per wave 4 feature"
+)]
 pub struct ViewSnapshot<'w> {
     /// Seat order index (0 = primary).
     pub seat_index: usize,
@@ -970,6 +974,7 @@ fn talk_target(
     Some((npc, character.name.short().to_owned()))
 }
 
+#[allow(clippy::too_many_lines, reason = "one field per view snapshot entry")]
 fn view_snapshot(
     world: &WorldState,
     seat_index: usize,

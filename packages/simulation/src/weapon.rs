@@ -372,13 +372,12 @@ impl WeaponKind {
             Self::RocketLauncher => 3_600,
             Self::Railgun => 7_500,
             Self::TetherHarpoon => 6_000,
-            Self::ArcRifle => 9_000,
-            Self::FlakCannon => 10_000,
-            Self::GravityGun => 11_000,
             // Moon weapons: the colony's prices (credits; alloy and helium-3 on top, see
             // `crate::moon::weapon_price`). The lance is never sold.
+            Self::ArcRifle | Self::LowGMortar => 9_000,
+            Self::FlakCannon => 10_000,
+            Self::GravityGun => 11_000,
             Self::LunarCutter => 12_000,
-            Self::LowGMortar => 9_000,
             Self::VoidLance => 20_000,
             Self::Sidearm => 300,
             Self::Wrench => 180,

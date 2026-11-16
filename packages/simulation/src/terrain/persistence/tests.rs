@@ -213,8 +213,8 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
     }
     for code in [
         12 << 8,
-        0x111 << 8,
-        0x20D << 8,
+        0x10C << 8,
+        0x211 << 8,
         0x3FF << 8,
         0x40F << 8,
         0x506 << 8,

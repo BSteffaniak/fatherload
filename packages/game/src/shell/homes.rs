@@ -336,6 +336,7 @@ impl SeatUi {
 
     /// Opens home screen `screen` about `plot` straight away (screenshot scenes and tests);
     /// the rows fill in on the next frame.
+    #[cfg(any(test, not(target_os = "emscripten")))]
     pub fn open_home_screen(&mut self, screen: HomeScreen, plot: Option<PlotId>) {
         self.open_home(screen, plot);
     }

@@ -809,6 +809,10 @@ impl SeatUi {
     }
 
     /// The message (and cue) for a village deal that went through.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one message per kind of village deal"
+    )]
     pub(super) fn village_resolved(
         &mut self,
         request: SessionServiceRequest,

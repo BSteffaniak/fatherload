@@ -357,6 +357,54 @@ harness) and `world/sky_tests.rs` (orbit drift, lunar gravity, bombs and drops i
 updrafts, wind, cold, reachability by tier in the real sky including flying up into the Moon,
 precision, saves and keyframes of island edits, determinism and tick-rate safety).
 
+### Wave 4 integrated: generator V9 and the shared rules
+
+The seven wave 4 tracks (T20-T26) land as one generator and one format bump. The sections
+below describe each track; this one lists what the integration unified.
+
+- **One generator V9** (`GeneratorVersion::V9`, current): V8 plus the furnished low isles,
+  archipelagos, sky towns and jet streams (`has_sky_isles`, T20), the filled sky continents
+  (`has_sky_content`, T21), the filled Moon (`has_moon_content`, T22) and pilot-only spaces in
+  the ground (`has_pilot_spaces`, T23). V1-V8 output and digests are unchanged. V9 output is
+  pinned by four digests: the isles (`worldgen::sky::isle_tests`), the continents
+  (`worldgen::sky::continent::tests`, re-pinned at integration because the continent tiles
+  moved), the Moon (`worldgen::moon::tests`) and the pilot spaces
+  (`worldgen::streamed::pilot_spaces::tests`). Changing what V9 generates now needs a V10.
+- **Codes**: sky tiles 0x1D-0x25 are the isles' (T20), 0x26-0x30 the continents' (T21);
+  built tiles 8-69 are the ruin pieces (T23) and 70 the palisade (T25); weapon item ids 7-10 are
+  the Act II weapons, 11-13 the Moon's and 101-105 the pilot's arms; artifacts and strategic
+  materials are appended in track order. Event codes: 200-203 sky isles, 210-219 continents and
+  sky enemies, 220-229 the Moon, 230-239 the pilot, 240-249 homes, 250-253 the night, 260-265
+  stories. `PROTOCOL_VERSION` 12 and save format 10 cover the whole wave (versions 8 and 9
+  load).
+- **The pressurized hull is one ladder** (`HazardGear::pressurized_hull`,
+  `moon::PRESSURIZED_HULL_MAX_LEVEL` = 3): tier 1 is the cold seal a cloud farm crafts from
+  cloud silver (T20) or the shop sells, tier 2 the vacuum seal the Moon needs
+  (`moon::VACUUM_SEAL_TIER`) and tier 3 the void-rated plating (`moon::HULL_ARMOUR_TIER`).
+  Every tier keeps one cold level out. The shop line starts at 4,800 cr (the vacuum seal and
+  plating keep T22's 12,000 and 30,000). The intake, de-icer, pressurized hull and life support
+  are all locked as `UpgradeLock::NoSky` on worlds without a sky; so is the pilot's thermal
+  lining.
+- **One pilot mechanism**: sky temple fittings (T21) are `mechanism::Usable::TempleFitting`, so
+  the use button (`PilotAction::Use`), the prompt and the touch USE button work them like ruin
+  levers, chests and keycard doors (T23), and a pick swing still does
+  (`WorldState::work_temple_fitting` is the one entry). Temple keystones ride the key ring like
+  keycards (`mechanism::rides_key_ring`). One `LeverClunk` sound serves every lever.
+- **Safe zones**: `enemy_safe_zone` answers the Moon first (`lunar_safe_zone`: the colony and
+  home plots), then the hostile sky (`sky_safe_zone`: sky cities, sky towns through the village
+  rule, infrastructure, claims and home plots), then the ground. Night monsters ask
+  `night_safe_zone`, which also keeps home plots safe. A finished lunar habitat holds air and
+  warmth (`WorldState::in_lunar_habitat`). The pilot's cold exposure spares the Moon's heated
+  rooms, habitats, sky town and sky city streets and temple halls (`WorldState::pilot_sheltered`).
+- **People**: sky cities (T21) are settlements of the sky towns' cultures (T20,
+  `Culture::Aeronaut` / `Cloudborn`) with the sky occupations.
+- **Stories** (T26) bind a Moon place at the lunar colony and a sky continent place in its sky
+  city on V9 worlds.
+- **Balance**: `balance::second_act` (`--balance-report --only second-act`) prices the climb
+  gates (low isles, dead-air gap, the Moon checklist), the sky refuel ceilings, the Act II and
+  Moon weapons, the pilot's Moon kit and homes, in credits and minutes of late-game mining.
+
+
 ### Sky isles and sky towns (`worldgen/sky/{isles,towns,winds}.rs`, `world/sky_isles.rs`, `skycraft.rs`, generator V9)
 
 Expansion plan WP-SKY (wave 4, T20). `GeneratorVersion::V9` (current, `has_sky_isles`) keeps
@@ -1758,8 +1806,11 @@ index, the giver (rebuilt from the seed) and the player's `ArcLog`, so every pee
   ridge within 240 columns), a sky continent (else an island, else the ridge) and the Moon
   (else the deepest chamber), all through regional queries from the giver's settlement
   (`bind_quest_from` returns what each target bound to as a `BoundTarget`). Every arc binds on
-  V5-V8 worlds, with and without sky (lint); worlds without a sky don't offer sky-continent
-  arcs.
+  V5-V8 worlds, with and without sky (lint), and from villages far out east and west; worlds
+  without a sky don't offer sky-continent arcs. On a world with a sky an arc is only offered
+  once the rig can climb to its sky places by the measured climb table
+  (`milestone::island_capable` for isles, the Act II gate `milestone::crosses_dead_air` for
+  continents and the Moon); the authored tank prerequisites still apply everywhere.
 - **New objective primitives** (`quest::Objective`): `OnFoot` (the pilot reaches the target),
   `HandDeliver` (the pilot at a building door, a town counter or a camp's fire inside the
   target), `Vigil` (seconds at the target counted only at night), `Speak` (talk to the arc's
@@ -1774,13 +1825,18 @@ index, the giver (rebuilt from the seed) and the player's `ArcLog`, so every pee
   `ArcPlace`, picks the `ArcContact`, starts relays at the giver), `ArcCast` (text kept as text:
   `vars`, `render`, `voiced`), `ArcRun` (cast + the `ActiveQuest`; `journal_text`,
   `story_so_far`, `objective_lines`), `ArcRecord` (history; `epilogue`), `ending_reply`, and
-  the `ArcLog` (open `offer`, `active` (at most `MAX_ACTIVE_ARCS` = 3), `history`, promised
-  `follow_ups`, `finished`).
+  the `ArcLog` (open `offer`, `active` (at most `MAX_ACTIVE_ARCS` = 3), `history` (the newest
+  `HISTORY_LIMIT` = 12: the log rides in the loadout section, resent whole on change), promised
+  `follow_ups`, `finished` (kept for good)).
 - **Rules** (`world/arcs.rs`): `PeopleCommand::AskWork { npc }` pitches (binding the offer) or
   nudges / asks how it went; `AcceptArc { npc }`; `TurnInArc { npc, outcome }` (only an outcome
   of `ArcTemplate::turn_in_choices`; deliveries handed over; the quest reward paid with its
-  reputation as goodwill; the ending's `ArcEffect`s: `Reputation`, `Mood`, `Prosperity` (the
-  ledger's `prosperity` per settlement), `Relationship` (the ledger's `bonds`), `UnlockOffer`
+  reputation as goodwill; missing deliveries get a reply naming them); the ending's
+  `ArcEffect`s: `Reputation`, `Mood`, `Prosperity` (the ledger's `prosperity` per settlement:
+  `WorldState::village_now` / `PeopleLedger::village_now` shift the village's 1-5 prosperity,
+  which prices its counters and fills the meeting hall's stars), `Relationship` (the ledger's
+  `bonds`: word of the player spreads between the pair on the new terms,
+  `RelationshipKind::reputation_share`), `UnlockOffer`
   (the journal's `unlocked`: that person's rows sell as to a friend), `FollowUp`, `Credits`,
   `Cosmetic`, `Settlement` (goodwill with every resident); the giver remembers
   `MemoryFact::ArcCompleted`, word spreads); `AbandonArc { arc }` (anywhere; the abandoned

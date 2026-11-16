@@ -508,6 +508,39 @@ impl WorldState {
 
     // --- Exposure ---------------------------------------------------------------------------
 
+    /// Whether world pixel `(x, y)` keeps a pilot out of the high sky's cold (wave 4
+    /// integration): the Moon colony's and facility's heated rooms and finished lunar habitats
+    /// (T22, T24), the streets of sky towns and sky cities (T20, T21: braziers and windbreaks,
+    /// like the ground's settlements are safe) and the halls of sky temples (T21, enclosed
+    /// stone). Out in the open sky the pilot needs a thermal lining.
+    #[must_use]
+    pub fn pilot_sheltered(&self, x: f32, y: f32) -> bool {
+        let settings = self.terrain.settings();
+        let tile = tile_at(x, y);
+        if crate::moon::sheltered_at(settings, x, y) || self.in_lunar_habitat(tile) {
+            return true;
+        }
+        if tile.y >= 0 {
+            return false;
+        }
+        if settings.generator.has_sky_isles()
+            && crate::worldgen::streamed::in_village_area(settings, tile, 4)
+        {
+            return true;
+        }
+        settings.generator.has_sky_content()
+            && (crate::worldgen::sky::continent::sky_city_at(settings, tile, 4).is_some()
+                || crate::worldgen::sky::continent::temples_touching(
+                    settings,
+                    &crate::worldgen::TileRect {
+                        min: tile,
+                        max: tile,
+                    },
+                )
+                .iter()
+                .any(|(_, temple)| temple.rect().contains(tile)))
+    }
+
     /// The cold and heat a pilot's suit fails to keep out this tick: health lost (none in god
     /// mode), and a [`GameplayEventKind::PilotExposed`] when it starts.
     pub(super) fn pilot_exposure(
@@ -520,9 +553,7 @@ impl WorldState {
     ) -> f32 {
         let settings = self.terrain.settings();
         let (mx, my) = state.middle(body);
-        // The Moon's pressurized rooms (colony, facility) are heated (T22 x T23).
-        let sheltered =
-            crate::moon::sheltered_at(settings, mx, my) || self.in_lunar_habitat(tile_at(mx, my));
+        let sheltered = settings.generator.has_sky() && self.pilot_sheltered(mx, my);
         let cold = if settings.generator.has_sky() && !sheltered {
             crate::environment::environment_at(settings, mx, my).cold
         } else {

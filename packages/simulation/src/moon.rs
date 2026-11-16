@@ -343,11 +343,10 @@ impl LunarTile {
 // The approach.
 // ---------------------------------------------------------------------------------------------
 
-/// Pressurized Hull tiers: one ladder for the sky and the Moon
-/// ([`crate::economy::UpgradeKind::PressurizedHull`] in the shop, and tier 1 also as a cloud
-/// farm's sky craft, [`crate::skycraft::SkyRecipe::PressurizedHull`]).
+/// Pressurized Hull tiers: one ladder for the sky and the Moon.
 ///
-/// Every tier keeps one cold level out ([`crate::skycraft::PRESSURIZED_HULL_COLD_COVER`]);
+/// The shop sells it ([`crate::economy::UpgradeKind::PressurizedHull`]), and a cloud farm
+/// crafts tier 1 too ([`crate::skycraft::SkyRecipe::PressurizedHull`]). Every tier keeps one cold level out ([`crate::skycraft::PRESSURIZED_HULL_COLD_COVER`]);
 /// tier [`VACUUM_SEAL_TIER`] seals the rig against vacuum and tier [`HULL_ARMOUR_TIER`] also
 /// turns a fifth of Moon enemies' hits.
 pub const PRESSURIZED_HULL_MAX_LEVEL: u8 = 3;
@@ -466,9 +465,10 @@ pub fn vacuum_at(settings: &crate::worldgen::WorldSettings, x: f32, y: f32) -> b
         .is_some_and(|layout| layout.pressurized(tile_x, tile_y))
 }
 
-/// Whether world pixel `(x, y)` is sheltered from the cold of space: inside the lunar
-/// colony's pressurized, heated rooms or behind the alien facility's veil
-/// ([`crate::worldgen::moon::MoonLayout::pressurized`]). A pilot on foot there needs no
+/// Whether world pixel `(x, y)` is sheltered from the cold of space.
+///
+/// That is inside the lunar colony's pressurized, heated rooms or behind the alien facility's
+/// veil ([`crate::worldgen::moon::MoonLayout::pressurized`]). A pilot on foot there needs no
 /// thermal lining (the pilot's exposure reads it, T23).
 #[must_use]
 #[allow(

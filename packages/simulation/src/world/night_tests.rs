@@ -823,7 +823,10 @@ fn a_contractor_built_home_keeps_the_night_off_its_plot() {
     let mut world = world();
     let column = exposed_column(&world);
     let row = ground(&world, column);
-    let spot = TilePosition { x: column, y: row - 1 };
+    let spot = TilePosition {
+        x: column,
+        y: row - 1,
+    };
     assert!(!world.night_safe_zone(spot), "open ground before the plot");
     let site = PlotSite {
         key: SiteKey::Surveyed,

@@ -200,6 +200,10 @@ fn run_for(host: &mut Host, peers: &mut [&mut Peer], duration: Duration) {
 }
 
 #[test]
+#[allow(
+    clippy::large_stack_arrays,
+    reason = "two test peers handed to the session-end helper by value"
+)]
 fn host_and_two_clients_play_over_real_quic_rejoin_and_end_cleanly() {
     let mut host = Host::start();
     let deadline = Instant::now() + WAIT;

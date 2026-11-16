@@ -123,10 +123,11 @@ impl Usable {
     #[must_use]
     pub const fn verb(self) -> &'static str {
         match self {
-            Self::Lever { .. } => "Pull the lever",
+            Self::Lever { .. } | Self::TempleFitting(crate::sky::SkyTile::TempleLever) => {
+                "Pull the lever"
+            }
             Self::Chest => "Open the chest",
             Self::KeycardDoor { .. } => "Swipe a keycard",
-            Self::TempleFitting(crate::sky::SkyTile::TempleLever) => "Pull the lever",
             Self::TempleFitting(crate::sky::SkyTile::TempleKeystone) => "Prise the keystone",
             Self::TempleFitting(crate::sky::SkyTile::KeystoneDoor) => "Set the keystone",
             Self::TempleFitting(_) => "Open the relic chest",

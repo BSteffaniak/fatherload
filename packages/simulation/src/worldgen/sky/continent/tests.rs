@@ -379,7 +379,9 @@ fn chunk_digests_of_v9_continents_are_pinned() {
     );
 }
 
-const GOLDEN_V9_CONTINENT_DIGEST: u64 = 0x042b_6cc4_948a_e3a4;
+// Re-pinned at the wave 4 integration: the continent tiles moved to codes 0x26-0x30 (after the
+// sky isles' tiles) when T20 and T21 were folded into one V9.
+const GOLDEN_V9_CONTINENT_DIGEST: u64 = 0x94b7_bf58_ab38_cab0;
 
 #[test]
 fn every_nest_sits_on_its_summit_with_both_eggs() {

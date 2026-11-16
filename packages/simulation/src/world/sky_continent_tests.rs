@@ -994,3 +994,22 @@ fn the_use_button_works_temple_fittings_like_ruin_mechanisms() {
     }
     assert!(crate::mechanism::rides_key_ring(TEMPLE_KEYSTONE));
 }
+
+#[test]
+fn temples_and_sky_cities_shelter_a_pilot_from_the_cold() {
+    // Integration seam (T21 x T23): the pilot's cold exposure spares enclosed temple halls and
+    // sky city streets; the open continent stays cold.
+    let (world, land, plan) = sky_world();
+    let temple = plan.temple.expect("temple");
+    let hall = temple.tiles_of('L')[0];
+    assert!(world.pilot_sheltered(pixel(hall.x), pixel(hall.y - 1)));
+    let city = continent::city_of(&land).expect("a city");
+    assert!(world.pilot_sheltered(pixel(city.plaza.0), pixel(city.street_row - 2)));
+    let (x, row) = plain_spot(&plan);
+    let open = (pixel(x), pixel(row - 30));
+    assert!(
+        !temple.rect().contains(TilePosition { x, y: row - 30 })
+            && !world.pilot_sheltered(open.0, open.1),
+        "the open sky over the continent is cold"
+    );
+}

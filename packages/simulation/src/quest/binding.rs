@@ -466,6 +466,45 @@ fn island_target(
         })
 }
 
+/// A sky continent story target in its sky city when the continent has one (V9, T21): a safe
+/// street of people to arrive in rather than the middle of the land.
+fn in_sky_city(terrain: &Terrain, mut feature: WorldFeature) -> WorldFeature {
+    let city = crate::worldgen::sky::land(terrain.settings(), feature.id)
+        .as_ref()
+        .and_then(crate::worldgen::sky::continent::city_of);
+    if let Some(city) = city {
+        feature.center = TilePosition {
+            x: city.plaza.0,
+            y: city.street_row - 1,
+        };
+        feature.bounds = TileRect {
+            min: TilePosition {
+                x: city.first_column,
+                y: city.street_row - 12,
+            },
+            max: TilePosition {
+                x: city.last_column,
+                y: city.street_row,
+            },
+        };
+    }
+    feature
+}
+
+/// The Moon story target at the lunar research colony when the Moon is filled (V9, T22): the
+/// landing pad and dome, safe and breathable, rather than the middle of the landmass.
+fn at_lunar_colony(terrain: &Terrain, mut feature: WorldFeature) -> WorldFeature {
+    if let Some(layout) = crate::worldgen::moon::layout(terrain.settings()) {
+        let (first, last, row) = layout.pad();
+        feature.center = TilePosition {
+            x: i32::midpoint(first, last),
+            y: row - 1,
+        };
+        feature.bounds = layout.colony_area();
+    }
+    feature
+}
+
 /// Binds a story place from `origin` (the giver's settlement), with its fallbacks.
 fn story_place(
     place: StoryPlace,
@@ -517,6 +556,13 @@ fn story_place(
                 STORY_CONTINENT_COLUMNS,
                 skip,
             )
+            .map(|(target, bound)| match bound {
+                BoundTarget::Feature(feature) => {
+                    let feature = in_sky_city(terrain, feature);
+                    (target_of(&feature), BoundTarget::Feature(feature))
+                }
+                other => (target, other),
+            })
             .or_else(|| {
                 sky_target(
                     terrain,
@@ -530,7 +576,7 @@ fn story_place(
         ),
         StoryPlace::Moon => crate::worldgen::sky::moon(terrain.settings())
             .map(|moon| {
-                let feature = moon.feature();
+                let feature = at_lunar_colony(terrain, moon.feature());
                 (target_of(&feature), BoundTarget::Feature(feature))
             })
             .or_else(|| feature_fallback(FeatureKind::Chamber, (6, 9)))
@@ -800,4 +846,61 @@ pub fn board_offers(seed: u64, day: u32) -> Vec<BoardOffer> {
         });
     }
     offers
+}
+
+#[cfg(test)]
+mod wave4_place_tests {
+    //! Story places bound to what the wave 4 tracks placed (integration seams T21/T22 x T26).
+    use std::collections::BTreeSet;
+
+    use super::{BoundTarget, StoryPlace, story_place};
+    use crate::{
+        PlayerId, SimulationParams, WorldState,
+        poi::PoiJournal,
+        terrain::TilePosition,
+        worldgen::{GeneratorVersion, WorldSettings, sky::continent},
+    };
+
+    fn v9_world() -> WorldState {
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V9,
+            ..WorldSettings::new(0x5EED)
+        };
+        WorldState::new_game_with_settings(PlayerId::new(1), &settings, SimulationParams::new(60))
+    }
+
+    #[test]
+    fn the_moon_binds_at_the_colony_and_continents_in_their_sky_city() {
+        let world = v9_world();
+        let terrain = world.terrain();
+        let origin = TilePosition { x: 0, y: 0 };
+        let journal = PoiJournal::default();
+        let (target, _) = story_place(
+            StoryPlace::Moon,
+            terrain,
+            origin,
+            &journal,
+            None,
+            &BTreeSet::new(),
+        )
+        .expect("the Moon");
+        let layout = world.moon_layout().expect("a filled Moon");
+        assert!(layout.colony_area().contains(target.center), "{target:?}");
+        let (target, bound) = story_place(
+            StoryPlace::SkyContinent,
+            terrain,
+            origin,
+            &journal,
+            None,
+            &BTreeSet::new(),
+        )
+        .expect("a sky place");
+        if let BoundTarget::Feature(feature) = bound
+            && feature.kind == crate::worldgen::FeatureKind::SkyContinent
+        {
+            let city = continent::sky_city_at(terrain.settings(), target.center, 2)
+                .expect("the target stands in the continent's sky city");
+            assert_eq!(target.center.y, city.street_row - 1);
+        }
+    }
 }

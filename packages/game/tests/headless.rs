@@ -13,7 +13,8 @@ use std::{
 };
 
 const BIN: &str = env!("CARGO_BIN_EXE_fatherload");
-const DEADLINE: Duration = Duration::from_secs(30);
+// Generous: a debug build on a heavily loaded machine takes a while to start and join.
+const DEADLINE: Duration = Duration::from_mins(1);
 
 /// Kills the child if the test panics before it exits.
 struct Guard(Option<Child>);

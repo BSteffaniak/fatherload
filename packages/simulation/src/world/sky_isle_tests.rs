@@ -837,5 +837,8 @@ fn sky_towns_are_safe_in_the_hostile_sky() {
         y: found.ground_row - 2,
     };
     assert!(world.hostile_sky(open_air));
-    assert!(!world.enemy_safe_zone(open_air), "open sky beyond the town is not safe");
+    assert!(
+        !world.enemy_safe_zone(open_air),
+        "open sky beyond the town is not safe"
+    );
 }

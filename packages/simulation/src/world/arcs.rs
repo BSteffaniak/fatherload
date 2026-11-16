@@ -450,11 +450,20 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
-        if deliveries
+        let missing: Vec<String> = deliveries
             .iter()
-            .any(|(item, count)| item.held(player) < *count)
-        {
-            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+            .filter(|(item, count)| item.held(player) < *count)
+            .map(|(item, count)| format!("{} x{}", item.name(), count - item.held(player)))
+            .collect();
+        if !missing.is_empty() {
+            // Not without the goods: they say so rather than the row doing nothing.
+            let lines = vec![
+                you(&format!("{}.", ending.label)),
+                them("And the goods? Bring them with you and we'll settle it.".to_owned()),
+                note_line(format!("Still to hand over: {}.", missing.join(", "))),
+            ];
+            self.converse(player_id, npc, character.id, lines);
+            return PlayerScopedCommandOutcome::Applied;
         }
         let day = self.people_clock().day;
         let before = self.people.standing(character.id, player_id);
@@ -746,8 +755,15 @@ impl WorldState {
                 {
                     lines.push(them(run.cast.render(step.contact, 5)));
                 }
+                // Not every Speak beat carries a message (some ask questions, some fetch an
+                // answer), so the note says only that the right person was found.
+                let name = run
+                    .cast
+                    .contact
+                    .as_ref()
+                    .map_or("them", |contact| contact.name.as_str());
                 lines.push(note_line(format!(
-                    "\"{}\": the message is delivered.",
+                    "\"{}\": you found {name}. Written in your journal.",
                     template.title
                 )));
             }

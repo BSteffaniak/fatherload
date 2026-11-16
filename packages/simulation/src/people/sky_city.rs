@@ -2,16 +2,17 @@
 //!
 //! Every V9 sky continent's city
 //! ([`crate::worldgen::sky::continent::SkyCity`]) is a settlement whose residents live by the
-//! same routines as village folk (talk, trade, gifts, memories), with sky trades: aeronauts
-//! (mechanics), cloud monks (shrine keepers), cloud merchants (traders), smugglers (couriers),
-//! storm-chasers (cartographers), innkeepers, tinkerers, scholars and wardens.
+//! same routines as village folk (talk, trade, gifts, memories), with sky trades: aeronauts,
+//! cloud monks (shrine keepers), cloud merchants (traders), smugglers, storm-chasers,
+//! innkeepers, tinkerers, scholars and wardens.
 //!
 //! Sky city ids carry [`SKY_CITY_FLAG`](crate::worldgen::sky::continent::SKY_CITY_FLAG) so
 //! they never name a village or a camp; [`super::routine::settlement`] builds them.
 //!
-//! **Seam for T20** (sky towns and sky cultures): the residents use the existing
-//! [`Culture::Highland`] names and existing roles standing in for sky occupations; when T20's
-//! sky cultures and occupations land, [`sky_city_population`] is the one place to switch them.
+//! The folk are the same people as the archipelago's sky towns (T20): each city is of one of
+//! the two sky cultures ([`Culture::Aeronaut`] or [`Culture::Cloudborn`], names and all) and
+//! its residents take the sky occupations ([`Role::Aeronaut`], [`Role::Smuggler`],
+//! [`Role::StormChaser`]) beside the trades a city still needs.
 
 use crate::{
     village::BuildingKind,
@@ -25,26 +26,24 @@ const SALT_SKY_FOLK: u64 = 0x5045_4F50_4C45_5C1E;
 /// The trades of a sky city's folk, in the order residents take them (the first few are in
 /// every city).
 const SKY_TRADES: [Role; 9] = [
-    Role::Mechanic,
+    Role::Aeronaut,
     Role::ShrineKeeper,
     Role::Trader,
-    Role::Courier,
-    Role::Cartographer,
+    Role::Smuggler,
+    Role::StormChaser,
     Role::Innkeeper,
     Role::Tinkerer,
     Role::Scholar,
     Role::Warden,
 ];
 
-/// What a sky trade is called up there (presentation; the role keeps its offers).
+/// What a ground trade is called up there (presentation; the role keeps its offers). The sky
+/// occupations carry their own names.
 #[must_use]
 pub const fn sky_trade_name(role: Role) -> Option<&'static str> {
     Some(match role {
-        Role::Mechanic => "aeronaut",
         Role::ShrineKeeper => "cloud monk",
         Role::Trader => "cloud merchant",
-        Role::Courier => "smuggler",
-        Role::Cartographer => "storm-chaser",
         _ => return None,
     })
 }
@@ -66,8 +65,9 @@ pub const fn lot_kind(kind: SkyBuildingKind) -> BuildingKind {
 /// ("Eldermoor Skyhold").
 #[must_use]
 pub fn sky_city_population(seed: u64, city: &SkyCity) -> Population {
-    let mut population = generate_population(seed, city.id, Culture::Highland, city.population());
     let mut rng = PeopleRng::new(seed, SALT_SKY_FOLK, u64::from(city.id.0), 1);
+    let culture = *rng.pick(&[Culture::Aeronaut, Culture::Cloudborn]);
+    let mut population = generate_population(seed, city.id, culture, city.population());
     for (index, character) in population.characters.iter_mut().enumerate() {
         let role = SKY_TRADES[index % SKY_TRADES.len()];
         if character.role != role {
@@ -105,7 +105,8 @@ mod tests {
             assert_eq!(settlement.residents.len(), city.population());
             assert_eq!(settlement.lots.len(), city.buildings.len());
             let population = &settlement.population;
-            assert_eq!(population.characters[0].role, Role::Mechanic);
+            assert_eq!(population.characters[0].role, Role::Aeronaut);
+            assert!(population.culture.is_sky(), "sky towns' cultures");
             assert!(population.village_name.contains(' '));
             for character in &population.characters {
                 assert_eq!(character.id.village, city.id);

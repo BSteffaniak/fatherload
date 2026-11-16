@@ -1171,7 +1171,7 @@ fn a_bare_pilot_climbs_from_the_puzzle_hall_back_up_to_the_temple() {
 fn a_lunar_habitat_is_a_safe_breathable_home_on_the_moon() {
     // Integration seam (T22 x T24): a contractor-built lunar habitat is a safe zone like the
     // colony, and its airlocked shell holds air and warmth for the pilot.
-    use crate::home::{Blueprint, PlotSetting, PlotSize, plot::SiteKey, plot::PlotSite};
+    use crate::home::{Blueprint, PlotSetting, PlotSize, plot::PlotSite, plot::SiteKey};
     let mut world = world();
     let plan = layout(&world);
     let (pad_first, pad_last, _) = plan.pad();
@@ -1194,7 +1194,11 @@ fn a_lunar_habitat_is_a_safe_breathable_home_on_the_moon() {
     assert_eq!(world.lunar_safe_zone(inside), Some(false), "open regolith");
     assert!(!world.lunar_air(PLAYER, px(inside.x), px(inside.y)));
     let _ = world.scenario_home(PLAYER, site, Some(Blueprint::LunarHabitat));
-    assert_eq!(world.lunar_safe_zone(inside), Some(true), "home plots are safe");
+    assert_eq!(
+        world.lunar_safe_zone(inside),
+        Some(true),
+        "home plots are safe"
+    );
     assert!(world.in_lunar_habitat(inside));
     if let Some(rig) = world.player_mut(PLAYER) {
         rig.hazard_gear.life_support = 0;

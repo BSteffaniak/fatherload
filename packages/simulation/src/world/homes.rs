@@ -283,19 +283,19 @@ impl WorldState {
             return Err(HomeRefusal::Occupied);
         }
         if settings.generator.has_sky_content() {
-            let in_city = [first, i32::midpoint(first, last), last].into_iter().any(|x| {
-                crate::worldgen::sky::continent::sky_city_at(
-                    settings,
-                    TilePosition { x, y: ground_row },
-                    8,
-                )
-                .is_some()
-            });
-            let on_temple = !crate::worldgen::sky::continent::temples_touching(settings, &span)
+            let in_city = [first, i32::midpoint(first, last), last]
                 .into_iter()
-                .filter(|(_, temple)| temple.rect().expanded(4).intersects(&span))
-                .collect::<Vec<_>>()
-                .is_empty();
+                .any(|x| {
+                    crate::worldgen::sky::continent::sky_city_at(
+                        settings,
+                        TilePosition { x, y: ground_row },
+                        8,
+                    )
+                    .is_some()
+                });
+            let on_temple = crate::worldgen::sky::continent::temples_touching(settings, &span)
+                .into_iter()
+                .any(|(_, temple)| temple.rect().expanded(4).intersects(&span));
             if in_city || on_temple {
                 return Err(HomeRefusal::Occupied);
             }

@@ -660,15 +660,17 @@ impl WorldState {
     /// in the colony.
     #[must_use]
     pub fn in_lunar_habitat(&self, tile: TilePosition) -> bool {
-        self.homes.plots_between(tile.x - 1, tile.x + 1).any(|plot| {
-            plot.home
-                .as_ref()
-                .is_some_and(|home| home.blueprint == crate::home::Blueprint::LunarHabitat)
-                && tile.x >= plot.site.left - 1
-                && tile.x <= plot.site.right() + 1
-                && tile.y <= plot.site.ground_row
-                && tile.y >= plot.site.ground_row - 10
-        })
+        self.homes
+            .plots_between(tile.x - 1, tile.x + 1)
+            .any(|plot| {
+                plot.home
+                    .as_ref()
+                    .is_some_and(|home| home.blueprint == crate::home::Blueprint::LunarHabitat)
+                    && tile.x >= plot.site.left - 1
+                    && tile.x <= plot.site.right() + 1
+                    && tile.y <= plot.site.ground_row
+                    && tile.y >= plot.site.ground_row - 10
+            })
     }
 
     /// Spawns Moon enemies around rigs and pilots on the Moon (the director's check).

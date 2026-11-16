@@ -447,8 +447,14 @@ fn every_arc_is_offered_by_someone() {
     ];
     let mut offered: BTreeMap<u16, u32> = BTreeMap::new();
     let mut givers = 0;
+    // The ground cultures here; sky towns' folk (T20) come from a smaller pool of trades and
+    // are checked below.
+    let ground: Vec<Culture> = Culture::ALL
+        .into_iter()
+        .filter(|culture| !culture.is_sky())
+        .collect();
     for village in 0..240_u32 {
-        let culture = Culture::ALL[village as usize % Culture::ALL.len()];
+        let culture = ground[village as usize % ground.len()];
         let population = generate_population(11, VillageId(village), culture, 9);
         let problems = [VillageProblem::ALL[village as usize % VillageProblem::ALL.len()]];
         let ctx = OfferContext {
@@ -483,6 +489,34 @@ fn every_arc_is_offered_by_someone() {
         .map(|arc| arc.title)
         .collect();
     assert!(missing.is_empty(), "never offered: {missing:?}");
+    // Sky towns' and sky cities' folk have stories too.
+    let mut sky_givers = 0;
+    for village in 0..24_u32 {
+        let culture = if village % 2 == 0 {
+            Culture::Aeronaut
+        } else {
+            Culture::Cloudborn
+        };
+        let population = generate_population(11, VillageId(1_000 + village), culture, 9);
+        let problems = [VillageProblem::ALL[village as usize % VillageProblem::ALL.len()]];
+        let ctx = OfferContext {
+            settings: &WorldSettings::new(11),
+            population: &population,
+            facts: &facts,
+            problems: &problems,
+            history: &history,
+            day: village % 9,
+        };
+        sky_givers += population
+            .characters
+            .iter()
+            .filter(|character| offer_for(character, &ctx, &ArcLog::default(), &player).is_some())
+            .count();
+    }
+    assert!(
+        sky_givers >= 24 * 9 / 2,
+        "sky folk tell stories ({sky_givers})"
+    );
     // No single arc crowds out the rest.
     let most = offered.values().copied().max().unwrap_or(0);
     assert!(

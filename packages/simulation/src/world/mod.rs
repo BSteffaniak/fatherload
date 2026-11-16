@@ -114,10 +114,10 @@ mod roster;
 mod services;
 mod simulate;
 #[cfg(test)]
+mod sky_continent_tests;
+#[cfg(test)]
 mod sky_isle_tests;
 mod sky_isles;
-#[cfg(test)]
-mod sky_continent_tests;
 mod sky_temples;
 #[cfg(test)]
 mod sky_tests;

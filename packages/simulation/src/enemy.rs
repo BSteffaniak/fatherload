@@ -233,8 +233,7 @@ impl ShotKind {
             Self::Acid => 2_500,
             Self::Fireball => 4_000,
             Self::Bolt => 2_200,
-            Self::Cannonball => 3_500,
-            Self::Wispfire => 3_500,
+            Self::Cannonball | Self::Wispfire => 3_500,
         }
     }
 }
