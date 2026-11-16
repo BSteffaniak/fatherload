@@ -784,6 +784,7 @@ impl WorldState {
             }
             _ => {}
         }
+        let sky = self.terrain.settings().generator.sky_bands();
         let (Some(player), Some(module)) = (
             self.players.get_mut(&player_id),
             self.bases.module_mut(structure),
@@ -800,7 +801,7 @@ impl WorldState {
                     reason = "altitudes are a few thousand rows"
                 )]
                 let altitude = (-player.y / TILE_SIZE).floor() as i32;
-                let level = crate::milestone::sky_refuel_level(player, altitude);
+                let level = crate::milestone::sky_refuel_level(player, altitude, sky.as_ref());
                 let missing = (level - player.fuel).floor().max(0.0);
                 #[allow(
                     clippy::cast_possible_truncation,

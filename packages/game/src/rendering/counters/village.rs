@@ -99,7 +99,9 @@ fn quote(snapshot: &RenderSnapshot<'_>, player: &Player, offer: VillageOffer) ->
             // Up in the sky, rigs that cannot cross the dead-air gap only top up partway
             // (the same rule the tick applies).
             let altitude = (-player.y / fatherload_simulation::TILE_SIZE).floor() as i32;
-            let level = fatherload_simulation::milestone::sky_refuel_level(player, altitude);
+            let sky = snapshot.terrain.settings().generator.sky_bands();
+            let level =
+                fatherload_simulation::milestone::sky_refuel_level(player, altitude, sky.as_ref());
             let capped = level < player.fuel_capacity;
             let missing = (level - player.fuel).ceil().max(0.0) as u32;
             let cost = (missing * REFUEL_UNIT_COST * percent).div_ceil(100);

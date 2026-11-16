@@ -174,7 +174,7 @@ pub fn crosses_dead_air(player: &Player, bands: &SkyBands) -> bool {
 /// Sky towns hang high in the cloud archipelago, just under the dead-air gap: a full tank
 /// bought there would carry rigs that cannot cross on a full tank from the ground (tier 10-12
 /// tanks with intakes) over the gap, and [`crosses_dead_air`] would stop being the Act II gate.
-/// So in the island bands (from [`crate::worldgen::sky::LOW_ISLES_BOTTOM_ROWS`] up to the
+/// So in the island bands of the world's sky `bands` (from [`SkyBands::low_isles`] up to the
 /// continents' floor) a rig that cannot cross the gap is only topped up to what a full-tank
 /// climb from the ground would still hold here, estimated from the climb table as the share of
 /// the rig's [`climb_reach`] still above it. Fuel per row only grows with altitude (thinner
@@ -183,10 +183,13 @@ pub fn crosses_dead_air(player: &Player, bands: &SkyBands) -> bool {
 /// fill [`SKY_REFUEL_FLOOR_PERCENT`] of its tank. Rigs that already cross the gap, and anything
 /// below the low isles or above the continents' floor, fill right up.
 #[must_use]
-pub fn sky_refuel_level(player: &Player, altitude_rows: i32) -> f32 {
+pub fn sky_refuel_level(player: &Player, altitude_rows: i32, bands: Option<&SkyBands>) -> f32 {
     let capacity = player.fuel_capacity;
-    if !(crate::worldgen::sky::LOW_ISLES_BOTTOM_ROWS..DEAD_AIR_REACH_ROWS).contains(&altitude_rows)
-        || crosses_dead_air(player)
+    let Some(bands) = bands else {
+        return capacity;
+    };
+    if !(bands.low_isles..bands.dead_air_reach_rows()).contains(&altitude_rows)
+        || crosses_dead_air(player, bands)
     {
         return capacity;
     }

@@ -386,6 +386,7 @@ impl WorldState {
     }
 
     fn village_refuel(&mut self, player_id: PlayerId, percent: u32) -> PlayerScopedCommandOutcome {
+        let sky = self.terrain.settings().generator.sky_bands();
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
@@ -396,7 +397,7 @@ impl WorldState {
             reason = "altitudes are a few thousand rows"
         )]
         let altitude = (-player.y / TILE_SIZE).floor() as i32;
-        let level = crate::milestone::sky_refuel_level(player, altitude);
+        let level = crate::milestone::sky_refuel_level(player, altitude, sky.as_ref());
         let missing = (level - player.fuel).ceil().max(0.0);
         #[allow(
             clippy::cast_possible_truncation,

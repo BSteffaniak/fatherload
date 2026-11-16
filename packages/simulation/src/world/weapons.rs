@@ -104,6 +104,8 @@ fn segment_distance(point: (f32, f32), from: (f32, f32), to: (f32, f32)) -> f32 
         0.0
     };
     (sx.mul_add(t, from.0) - point.0).hypot(sy.mul_add(t, from.1) - point.1)
+}
+
 /// What a ray found, for the Act II weapons (`world/sky_weapons.rs`).
 pub(super) struct RayFind {
     /// Where the ray ended.

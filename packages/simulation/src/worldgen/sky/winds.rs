@@ -16,7 +16,8 @@ use crate::{
 };
 
 use super::{
-    ARCHIPELAGO_CELL, ID_ARCHIPELAGO, ID_LOW, LOW_ISLE_CELL, SkyLand, band_cells, cell_lands, cells,
+    ARCHIPELAGO_CELL, ID_ARCHIPELAGO, ID_LOW, LOW_ISLE_CELL, SkyLand, band_cells, bands_of,
+    cell_lands, cells,
 };
 
 /// Top speed of the air in a jet stream (px/s): a quick ride between islands.
@@ -98,10 +99,10 @@ fn stream_of(lands: &[SkyLand]) -> Option<JetStream> {
 #[must_use]
 pub fn jet_streams_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<JetStream> {
     let mut found = Vec::new();
-    if !settings.generator.has_sky_isles() {
+    let Some(bands) = bands_of(settings).filter(|_| settings.generator.has_sky_isles()) else {
         return found;
-    }
-    for ry in band_cells(ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1, rect) {
+    };
+    for ry in band_cells(&bands, ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1, rect) {
         for rx in cells(rect.min.x, rect.max.x, ARCHIPELAGO_CELL.0) {
             if let Some(stream) = stream_of(&cell_lands(settings, ID_ARCHIPELAGO, rx, ry))
                 && stream.rect.intersects(rect)
@@ -131,9 +132,9 @@ pub fn jet_stream_at(settings: &WorldSettings, x: i32, y: i32) -> i32 {
 /// without sky isles.
 #[must_use]
 pub fn vent_updraft_at(settings: &WorldSettings, x: i32, y: i32) -> i32 {
-    if !settings.generator.has_sky_isles() {
+    let Some(bands) = bands_of(settings).filter(|_| settings.generator.has_sky_isles()) else {
         return 0;
-    }
+    };
     // Vents lie at most VENT_RISE_ROWS below the point.
     let rect = TileRect {
         min: TilePosition {
@@ -147,7 +148,7 @@ pub fn vent_updraft_at(settings: &WorldSettings, x: i32, y: i32) -> i32 {
     };
     let mut strength = 0;
     for (id_band, cell) in [(ID_LOW, LOW_ISLE_CELL), (ID_ARCHIPELAGO, ARCHIPELAGO_CELL)] {
-        for ry in band_cells(id_band, cell.1, &rect) {
+        for ry in band_cells(&bands, id_band, cell.1, &rect) {
             for rx in cells(rect.min.x, rect.max.x, cell.0) {
                 for land in cell_lands(settings, id_band, rx, ry).iter() {
                     let Some(vent) = land.content.and_then(|content| content.vent) else {

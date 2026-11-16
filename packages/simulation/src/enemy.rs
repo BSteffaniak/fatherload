@@ -940,6 +940,25 @@ impl EnemyKind {
             Self::SentryTurret => (12.0, 11.0),
             Self::RogueExcavator => (21.0, 14.0),
             Self::AncientGuardian => (22.0, 19.0),
+            // Wave 4 kinds, sized to their art like the rest (about 85 % of the drawn half
+            // extents, never under the terrain box).
+            Self::SkyRay => (18.0, 10.0),
+            Self::Wyvern => (20.0, 16.0),
+            Self::StormElemental => (14.0, 12.0),
+            Self::PirateAirship => (36.0, 20.0),
+            Self::AirshipTurret => (9.0, 9.0),
+            Self::SkyPirate => (9.0, 13.0),
+            Self::HarpyNester => (16.0, 12.0),
+            Self::RegolithCrawler => (16.0, 10.0),
+            Self::CrystalMite => (7.0, 6.0),
+            Self::DerelictAutomaton => (14.0, 14.0),
+            Self::Warden => (26.0, 20.0),
+            Self::ShadowHound => (14.0, 11.0),
+            Self::DuneStalker => (15.0, 10.0),
+            Self::WillOWisp => (7.0, 10.0),
+            // A whirl of moths about its centre: the cloud's core.
+            Self::MothSwarm => (14.0, 10.0),
+            Self::UmbralAlpha => (22.0, 14.0),
         }
     }
 

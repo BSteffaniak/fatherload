@@ -742,7 +742,7 @@ fn sky_arcs_wait_until_the_rig_can_climb_there() {
     // and the Moon. Without a sky the stand-ins are on the ground, so only the authored
     // prerequisites count.
     let sky = WorldSettings::new(11);
-    assert!(sky.generator.has_sky());
+    let bands = sky.generator.sky_bands().expect("a sky");
     let ground = WorldSettings {
         generator: GeneratorVersion::V7,
         ..WorldSettings::new(11)
@@ -752,16 +752,16 @@ fn sky_arcs_wait_until_the_rig_can_climb_there() {
     grounded.fuel_tank_level = 1;
     grounded.engine_level = 1;
     grounded.hazard_gear.altitude_intake = 0;
-    assert!(!crate::milestone::island_capable(&grounded));
+    assert!(!crate::milestone::island_capable(&grounded, &bands));
     // A big tank without altitude intakes meets the great lands' authored tank prerequisites
     // but stalls in the dead air.
     let mut island_hopper = veteran();
     island_hopper.fuel_tank_level = 12;
     island_hopper.hazard_gear.altitude_intake = 0;
-    assert!(crate::milestone::island_capable(&island_hopper));
-    assert!(!crate::milestone::crosses_dead_air(&island_hopper));
+    assert!(crate::milestone::island_capable(&island_hopper, &bands));
+    assert!(!crate::milestone::crosses_dead_air(&island_hopper, &bands));
     let veteran = veteran();
-    assert!(crate::milestone::crosses_dead_air(&veteran));
+    assert!(crate::milestone::crosses_dead_air(&veteran, &bands));
     let goes_up = |arc: &ArcTemplate| {
         arc.targets
             .iter()

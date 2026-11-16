@@ -47,6 +47,7 @@ use crate::{
         binding::{BoundTarget, bind_quest_from},
     },
     terrain::{Terrain, TilePosition},
+    worldgen::sky::SkyBands,
     worldgen::{Band, FeatureDetail, FeatureId, FeatureKind, WorldSettings},
 };
 
@@ -494,15 +495,19 @@ pub(crate) fn unlocked(template: &ArcTemplate, player: &Player, settings: &World
         .prerequisites
         .iter()
         .all(|prerequisite| prerequisite.met(player, settings))
-        && (!settings.generator.has_sky() || sky_reachable(template, player))
+        && settings
+            .generator
+            .sky_bands()
+            .is_none_or(|bands| sky_reachable(template, player, &bands))
 }
 
-/// Whether `player`'s rig climbs to every sky place `template` sends it to.
-fn sky_reachable(template: &ArcTemplate, player: &Player) -> bool {
+/// Whether `player`'s rig climbs to every sky place `template` sends it to in a sky with
+/// `bands`.
+fn sky_reachable(template: &ArcTemplate, player: &Player, bands: &SkyBands) -> bool {
     template.targets.iter().all(|target| match target {
-        TargetSpec::Story(StoryPlace::SkyIsland) => crate::milestone::island_capable(player),
+        TargetSpec::Story(StoryPlace::SkyIsland) => crate::milestone::island_capable(player, bands),
         TargetSpec::Story(StoryPlace::SkyContinent | StoryPlace::Moon) => {
-            crate::milestone::crosses_dead_air(player)
+            crate::milestone::crosses_dead_air(player, bands)
         }
         _ => true,
     })

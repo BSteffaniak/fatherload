@@ -319,7 +319,7 @@ impl WorldState {
         let aim =
             aim_vector(state.aim_x, state.aim_y).unwrap_or_else(|| (f32::from(state.facing), 0.0));
         let muzzle = Self::pilot_muzzle(body, state, aim);
-        self.launch_projectiles(owner, weapon, 0, muzzle, aim, next_tick);
+        self.launch_projectiles(owner, (weapon, 0), (muzzle, aim), next_tick, output);
         output.push_event(GameplayEventKind::PilotFired {
             player_id: owner,
             weapon,

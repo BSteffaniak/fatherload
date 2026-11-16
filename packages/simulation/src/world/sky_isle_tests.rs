@@ -17,7 +17,7 @@ use crate::{
     entity::EntityKind,
     environment,
     hazard::PlacedBomb,
-    milestone::{DEAD_AIR_REACH_ROWS, crosses_dead_air},
+    milestone::crosses_dead_air,
     player::{Player, fuel_capacity_for_level},
     sky::{SkyTile, SkyTownKind},
     skycraft::SkyRecipe,
@@ -26,14 +26,18 @@ use crate::{
     worldgen::{
         GeneratorVersion, TileRect, WorldSettings,
         sky::{
-            self, ARCHIPELAGO_BOTTOM_ROWS, BuoySite, DEAD_AIR_BOTTOM_ROWS, LOW_ISLES_BOTTOM_ROWS,
-            SkyLand,
+            self, BuoySite, SkyBands, SkyLand,
             isles::{BUOY_PRICE, buoy_fill_level, buoy_of, buoy_refill},
         },
     },
 };
 
 const PLAYER: PlayerId = PlayerId::new(1);
+/// The bands of the V9 sky these tests play in.
+const BANDS: SkyBands = match GeneratorVersion::V9.sky_bands() {
+    Some(bands) => bands,
+    None => panic!("V9 has a sky"),
+};
 const SEED: u64 = 0x5C1E_7020;
 
 fn settings() -> WorldSettings {
@@ -82,11 +86,11 @@ fn low_isles() -> Vec<SkyLand> {
         &TileRect {
             min: TilePosition {
                 x: -6_000,
-                y: sky::row_of(ARCHIPELAGO_BOTTOM_ROWS),
+                y: sky::row_of(BANDS.archipelago),
             },
             max: TilePosition {
                 x: 6_000,
-                y: sky::row_of(LOW_ISLES_BOTTOM_ROWS),
+                y: sky::row_of(BANDS.low_isles),
             },
         },
     )
@@ -334,12 +338,14 @@ fn buoys_never_open_the_dead_air_gap() {
     // still has at least as much fuel: buoys never put a rig in a better state than the
     // climb table already measured, so `crosses_dead_air` (the Act II gate) stays honest.
     let column = open_column();
-    let buoy_top = ARCHIPELAGO_BOTTOM_ROWS;
+    let buoy_top = BANDS.archipelago;
     for (t, tank) in TANK_TIERS.iter().enumerate() {
         for (e, engine) in ENGINE_TIERS.iter().enumerate() {
             for (i, intake) in INTAKE_TIERS.iter().enumerate() {
                 let ceiling = CLIMB_CEILINGS[t][e][i];
-                if !(DEAD_AIR_REACH_ROWS - 3_500..DEAD_AIR_REACH_ROWS).contains(&ceiling) {
+                if !(BANDS.dead_air_reach_rows() - 3_500..BANDS.dead_air_reach_rows())
+                    .contains(&ceiling)
+                {
                     continue;
                 }
                 let capacity = fuel_capacity_for_level(*tank);
@@ -366,13 +372,13 @@ fn buoys_never_open_the_dead_air_gap() {
     player.fuel_tank_level = 14;
     player.engine_level = 15;
     player.hazard_gear.altitude_intake = 4;
-    assert!(!crosses_dead_air(&player));
+    assert!(!crosses_dead_air(&player, &BANDS));
     let reached = fuel_left_at(
         (14, 15, 4),
         column,
         buoy_top,
         buoy_fill_level(fuel_capacity_for_level(14)),
-        DEAD_AIR_BOTTOM_ROWS,
+        BANDS.dead_air,
     );
     assert!(
         reached.is_none(),
@@ -389,8 +395,8 @@ fn sky_refuels_never_open_the_dead_air_gap() {
     // sky town stands and from the middle of the archipelago: no such rig reaches the
     // continents' floor.
     let column = open_column();
-    let top_town = DEAD_AIR_BOTTOM_ROWS - 24 - 34;
-    let middle = i32::midpoint(ARCHIPELAGO_BOTTOM_ROWS, DEAD_AIR_BOTTOM_ROWS);
+    let top_town = BANDS.dead_air - 24 - 34;
+    let middle = i32::midpoint(BANDS.archipelago, BANDS.dead_air);
     let mut measured = 0;
     for (t, tank) in TANK_TIERS.iter().enumerate() {
         for (e, engine) in ENGINE_TIERS.iter().enumerate() {
@@ -401,9 +407,9 @@ fn sky_refuels_never_open_the_dead_air_gap() {
                 player.fuel_capacity = fuel_capacity_for_level(*tank);
                 player.engine_level = *engine;
                 player.hazard_gear.altitude_intake = *intake;
-                if crosses_dead_air(&player) {
+                if crosses_dead_air(&player, &BANDS) {
                     assert!(
-                        (crate::milestone::sky_refuel_level(&player, top_town)
+                        (crate::milestone::sky_refuel_level(&player, top_town, Some(&BANDS))
                             - player.fuel_capacity)
                             .abs()
                             < f32::EPSILON,
@@ -415,14 +421,14 @@ fn sky_refuels_never_open_the_dead_air_gap() {
                     continue;
                 }
                 for from in [top_town, middle] {
-                    let level = crate::milestone::sky_refuel_level(&player, from);
+                    let level = crate::milestone::sky_refuel_level(&player, from, Some(&BANDS));
                     assert!(level < player.fuel_capacity);
                     let reached = fuel_left_at(
                         (*tank, *engine, *intake),
                         column,
                         from,
                         level,
-                        DEAD_AIR_REACH_ROWS,
+                        BANDS.dead_air_reach_rows(),
                     );
                     assert!(
                         reached.is_none(),
@@ -441,14 +447,14 @@ fn sky_refuels_never_open_the_dead_air_gap() {
     player.fuel_tank_level = 12;
     player.engine_level = 12;
     player.hazard_gear.altitude_intake = 6;
-    assert!(!crosses_dead_air(&player));
+    assert!(!crosses_dead_air(&player, &BANDS));
     assert!(
         fuel_left_at(
             (12, 12, 6),
             column,
             top_town,
             fuel_capacity_for_level(12),
-            DEAD_AIR_REACH_ROWS,
+            BANDS.dead_air_reach_rows(),
         )
         .is_some(),
         "the measurement sees a full tank cross"
@@ -480,7 +486,8 @@ fn a_sky_town_rations_fuel_for_rigs_that_cannot_cross() {
         rig.credits = 1_000_000;
     }
     let rig = world.player(PLAYER).expect("rig");
-    let level = crate::milestone::sky_refuel_level(rig, (-rig.y / TILE_SIZE).floor() as i32);
+    let level =
+        crate::milestone::sky_refuel_level(rig, (-rig.y / TILE_SIZE).floor() as i32, Some(&BANDS));
     assert!(level < fuel_capacity_for_level(10) - 1.0, "level {level}");
     let output = step(
         &mut world,
@@ -739,11 +746,11 @@ fn a_jet_stream_carries_a_rig_along_the_chain() {
         &TileRect {
             min: TilePosition {
                 x: -3_000,
-                y: sky::row_of(DEAD_AIR_BOTTOM_ROWS),
+                y: sky::row_of(BANDS.dead_air),
             },
             max: TilePosition {
                 x: 3_000,
-                y: sky::row_of(ARCHIPELAGO_BOTTOM_ROWS),
+                y: sky::row_of(BANDS.archipelago),
             },
         },
     )

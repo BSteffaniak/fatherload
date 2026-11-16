@@ -26,8 +26,8 @@ use crate::{
 };
 
 use super::{
-    ARCHIPELAGO_CELL, ID_ARCHIPELAGO, Layer, SkyLand, SkyLandKind, band_cell_rows, biome_for,
-    cell_altitudes, cell_lands, row_of,
+    ARCHIPELAGO_CELL, ID_ARCHIPELAGO, Layer, SkyBands, SkyLand, SkyLandKind, band_cell_rows,
+    bands_of, biome_for, cell_altitudes, cell_lands, row_of,
 };
 
 /// Archipelago cells per town block: `(columns, rows)`.
@@ -82,20 +82,20 @@ impl SkyTownSite {
 }
 
 /// Town block rows (the archipelago's cell rows, two to a block).
-const fn block_rows() -> i32 {
-    let rows = band_cell_rows(ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1);
+const fn block_rows(bands: &SkyBands) -> i32 {
+    let rows = band_cell_rows(bands, ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1);
     (rows + TOWN_BLOCK.1 - 1) / TOWN_BLOCK.1
 }
 
-/// The town cell `(rx, ry)` of block `(bx, by)`.
+/// The town cell `(rx, ry)` of block `(bx, by)` in a sky with `bands`.
 #[must_use]
 #[allow(
     clippy::cast_possible_truncation,
     reason = "the rolls are reduced below the block size"
 )]
-pub const fn town_cell_of_block(seed: u64, bx: i32, by: i32) -> (i32, i32) {
+pub const fn town_cell_of_block(seed: u64, bands: &SkyBands, bx: i32, by: i32) -> (i32, i32) {
     let roll = hash2(seed, SALT_TOWN_CELL, bx, by);
-    let rows = band_cell_rows(ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1);
+    let rows = band_cell_rows(bands, ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1);
     let mut ry = by * TOWN_BLOCK.1 + ((roll >> 8) & 1) as i32;
     if ry >= rows {
         ry = rows - 1;
@@ -104,25 +104,25 @@ pub const fn town_cell_of_block(seed: u64, bx: i32, by: i32) -> (i32, i32) {
 }
 
 /// Whether archipelago cell `(rx, ry)` is its block's town cell (and inside the streamed
-/// world).
+/// world) in a sky with `bands`.
 #[must_use]
-pub const fn is_town_cell(seed: u64, rx: i32, ry: i32) -> bool {
+pub const fn is_town_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> bool {
     let x0 = rx * ARCHIPELAGO_CELL.0;
     if ry < 0
-        || ry >= band_cell_rows(ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1)
+        || ry >= band_cell_rows(bands, ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1)
         || x0.abs() > STREAMED_COLUMN_LIMIT - ARCHIPELAGO_CELL.0
     {
         return false;
     }
     let (bx, by) = (rx.div_euclid(TOWN_BLOCK.0), ry.div_euclid(TOWN_BLOCK.1));
-    let (tx, ty) = town_cell_of_block(seed, bx, by);
+    let (tx, ty) = town_cell_of_block(seed, bands, bx, by);
     tx == rx && ty == ry
 }
 
 /// The kind and size of the town of town cell `(rx, ry)`.
-fn town_roll(seed: u64, rx: i32, ry: i32) -> (SkyTownKind, VillageSize) {
+fn town_roll(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> (SkyTownKind, VillageSize) {
     let mut rng = RegionRng::new(seed, SALT_TOWN_KIND, rx, ry);
-    let upper = ry * 2 >= band_cell_rows(ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1);
+    let upper = ry * 2 >= band_cell_rows(bands, ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1);
     // Low in the archipelago the farmers and markets; higher up the monks and the docks.
     let weights: [u32; 4] = if upper { [3, 2, 3, 1] } else { [2, 3, 1, 3] };
     let kind = SkyTownKind::ALL[rng.pick(&weights).unwrap_or(0)];
@@ -138,10 +138,10 @@ fn town_roll(seed: u64, rx: i32, ry: i32) -> (SkyTownKind, VillageSize) {
 
 /// The town cell `(rx, ry)`'s islands: a wide flat town isle with one or two small isles
 /// beside it (local ids 0.., west to east).
-pub(super) fn town_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
+pub(super) fn town_cell(seed: u64, bands: &SkyBands, rx: i32, ry: i32) -> Vec<SkyLand> {
     let mut rng = RegionRng::new(seed, SALT_TOWN, rx, ry);
-    let (_, size) = town_roll(seed, rx, ry);
-    let (alt_bottom, alt_top) = cell_altitudes(ID_ARCHIPELAGO, ry, ARCHIPELAGO_CELL.1);
+    let (_, size) = town_roll(seed, bands, rx, ry);
+    let (alt_bottom, alt_top) = cell_altitudes(bands, ID_ARCHIPELAGO, ry, ARCHIPELAGO_CELL.1);
     let x0 = rx * ARCHIPELAGO_CELL.0;
     let town_half = size.width_tiles() / 2 + 6;
     let west_half = rng.range(8, 16);
@@ -169,7 +169,7 @@ pub(super) fn town_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
         let land = SkyLand {
             id: feature_id(Layer::Sky, rx, ID_ARCHIPELAGO * 1000 + ry, local),
             kind,
-            biome: biome_for(top_alt, rng.next_u64()),
+            biome: biome_for(bands, top_alt, rng.next_u64()),
             center_x: cursor + half,
             top_row: row_of(top_alt),
             half_width: half,
@@ -216,18 +216,22 @@ pub(super) fn town_cell(seed: u64, rx: i32, ry: i32) -> Vec<SkyLand> {
 /// blocks outside the archipelago or the streamed world).
 #[must_use]
 pub fn sky_town_site(settings: &WorldSettings, bx: i32, by: i32) -> Option<SkyTownSite> {
-    if !settings.generator.has_sky_isles() || by < 0 || by >= block_rows() {
+    if !settings.generator.has_sky_isles() {
         return None;
     }
-    let (rx, ry) = town_cell_of_block(settings.seed, bx, by);
-    if !is_town_cell(settings.seed, rx, ry) {
+    let bands = &bands_of(settings)?;
+    if by < 0 || by >= block_rows(bands) {
+        return None;
+    }
+    let (rx, ry) = town_cell_of_block(settings.seed, bands, bx, by);
+    if !is_town_cell(settings.seed, bands, rx, ry) {
         return None;
     }
     let lands = cell_lands(settings, ID_ARCHIPELAGO, rx, ry);
     let isle = lands
         .iter()
         .find(|land| land.kind == SkyLandKind::TownIsle)?;
-    let (kind, size) = town_roll(settings.seed, rx, ry);
+    let (kind, size) = town_roll(settings.seed, bands, rx, ry);
     let first = isle.center_x - size.width_tiles() / 2;
     Some(SkyTownSite {
         id: placement::sky_town_id(bx, by),
@@ -249,10 +253,18 @@ pub fn sky_town_of(settings: &WorldSettings, id: VillageId) -> Option<SkyTownSit
 }
 
 /// The town blocks whose towns could reach `rect` (block rows from its altitudes).
-fn blocks_touching(rect: &TileRect) -> (std::ops::RangeInclusive<i32>, std::ops::Range<i32>) {
+fn blocks_touching(
+    bands: &SkyBands,
+    rect: &TileRect,
+) -> (std::ops::RangeInclusive<i32>, std::ops::Range<i32>) {
     let columns = (rect.min.x - 8).div_euclid(TOWN_BLOCK_COLUMNS)
         ..=(rect.max.x + 8).div_euclid(TOWN_BLOCK_COLUMNS);
-    let cell_rows = super::band_cells(ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1, &rect.expanded(32));
+    let cell_rows = super::band_cells(
+        bands,
+        ID_ARCHIPELAGO,
+        ARCHIPELAGO_CELL.1,
+        &rect.expanded(32),
+    );
     let rows = cell_rows.start.div_euclid(TOWN_BLOCK.1)
         ..(cell_rows.end + TOWN_BLOCK.1 - 1).div_euclid(TOWN_BLOCK.1);
     (columns, rows)
@@ -262,10 +274,13 @@ fn blocks_touching(rect: &TileRect) -> (std::ops::RangeInclusive<i32>, std::ops:
 /// generators without sky towns).
 #[must_use]
 pub fn sky_towns_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<SkyTownSite> {
-    if !settings.generator.has_sky_isles() || rect.min.y > -super::ARCHIPELAGO_BOTTOM_ROWS {
+    let Some(bands) = bands_of(settings).filter(|_| settings.generator.has_sky_isles()) else {
+        return Vec::new();
+    };
+    if rect.min.y > -bands.archipelago {
         return Vec::new();
     }
-    let (columns, rows) = blocks_touching(rect);
+    let (columns, rows) = blocks_touching(&bands, rect);
     let mut found = Vec::new();
     for bx in columns {
         for by in rows.clone() {
@@ -292,14 +307,17 @@ pub fn sky_town_at(settings: &WorldSettings, position: TilePosition) -> Option<S
 /// The sky towns whose centre column lies in `first..=last`, at any altitude.
 #[must_use]
 pub fn sky_towns_between(settings: &WorldSettings, first: i32, last: i32) -> Vec<SkyTownSite> {
-    if !settings.generator.has_sky_isles() || first > last {
+    let Some(bands) = bands_of(settings).filter(|_| settings.generator.has_sky_isles()) else {
+        return Vec::new();
+    };
+    if first > last {
         return Vec::new();
     }
     let mut found = Vec::new();
     let columns = (first - TOWN_BLOCK_COLUMNS).div_euclid(TOWN_BLOCK_COLUMNS)
         ..=(last + TOWN_BLOCK_COLUMNS).div_euclid(TOWN_BLOCK_COLUMNS);
     for bx in columns {
-        for by in 0..block_rows() {
+        for by in 0..block_rows(&bands) {
             if let Some(site) = sky_town_site(settings, bx, by)
                 && (first..=last).contains(&site.center())
             {

@@ -15,7 +15,6 @@ impl LocalGame {
     /// earned this frame, then advances every seat's reward moments.
     pub(super) fn announce_rewards(&mut self, players: &[PlayerId]) {
         let world = self.runtime.world();
-        let sky = world.terrain().settings().generator.sky_bands();
         let mut installs = Vec::new();
         let mut milestones = Vec::new();
         for event in &self.frame_events {
@@ -46,7 +45,7 @@ impl LocalGame {
                 _ => {}
             }
         }
-        let has_sky = world.terrain().settings().generator.has_sky();
+        let sky = world.terrain().settings().generator.sky_bands();
         for (seat, player, upgrade, level) in installs {
             self.shell
                 .upgrade_installed(seat, &player, upgrade, level, sky.as_ref());

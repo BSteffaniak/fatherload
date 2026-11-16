@@ -5,8 +5,8 @@
 //! table ([`crate::climb`]), so it is instant and seed-independent:
 //!
 //! - **Climb gates**: the cheapest fuel tank, engine and altitude intake (credits from stock)
-//!   whose full-tank climb reaches the low isles ([`milestone::ISLAND_REACH_ROWS`]) and crosses
-//!   the dead-air gap ([`milestone::DEAD_AIR_REACH_ROWS`], the Act II gate), and the Moon
+//!   whose full-tank climb reaches the low isles ([`SkyBands::island_reach_rows`] of the current generator's sky) and crosses
+//!   the dead-air gap ([`SkyBands::dead_air_reach_rows`], the Act II gate), and the Moon
 //!   checklist ([`moon::MoonRequirement`]: top tank, intakes, de-icer, the pressurized hull's
 //!   vacuum seal and life support).
 //! - **Sky refuels**: how far a sky town tops up rigs just short of the gap
@@ -27,6 +27,13 @@ use crate::{
     pilot::PilotGearKind,
     player::{Player, fuel_capacity_for_level},
     weapon::WeaponKind,
+    worldgen::{GeneratorVersion, sky::SkyBands},
+};
+
+/// The bands of the current generator's sky: the worlds the second act is played on.
+const BANDS: SkyBands = match GeneratorVersion::CURRENT.sky_bands() {
+    Some(bands) => bands,
+    None => panic!("the current generator has a sky"),
 };
 
 /// Credits to raise `kind` from its stock level to `tier`.
@@ -86,7 +93,7 @@ pub fn moon_checklist_credits() -> u32 {
         .into_iter()
         .find(|engine| {
             ceiling(moon::MOON_FUEL_TANK_TIER, *engine, INTAKE_TIERS[3])
-                >= milestone::DEAD_AIR_REACH_ROWS
+                >= BANDS.dead_air_reach_rows()
         })
         .unwrap_or(ENGINE_TIERS[ENGINE_TIERS.len() - 1]);
     line_cost(UpgradeKind::FuelTank, moon::MOON_FUEL_TANK_TIER)
@@ -169,8 +176,8 @@ impl BalanceProbe for SecondActProbe {
             ],
         );
         for (name, key, rows) in [
-            ("Low isles", "isles", milestone::ISLAND_REACH_ROWS),
-            ("Dead-air gap", "dead_air", milestone::DEAD_AIR_REACH_ROWS),
+            ("Low isles", "isles", BANDS.island_reach_rows()),
+            ("Dead-air gap", "dead_air", BANDS.dead_air_reach_rows()),
         ] {
             let Some(loadout) = cheapest_reaching(rows) else {
                 gates.row(vec![
@@ -237,7 +244,8 @@ impl BalanceProbe for SecondActProbe {
             let share = |rows: i32| {
                 format!(
                     "{:.0} %",
-                    milestone::sky_refuel_level(&rig, rows) / rig.fuel_capacity * 100.0
+                    milestone::sky_refuel_level(&rig, rows, Some(&BANDS)) / rig.fuel_capacity
+                        * 100.0
                 )
             };
             refuels.row(vec![
@@ -332,8 +340,8 @@ mod tests {
 
     #[test]
     fn act_two_gates_climb_in_price_and_the_moon_is_the_summit() {
-        let isles = cheapest_reaching(milestone::ISLAND_REACH_ROWS).expect("the isles");
-        let gap = cheapest_reaching(milestone::DEAD_AIR_REACH_ROWS).expect("the gap");
+        let isles = cheapest_reaching(BANDS.island_reach_rows()).expect("the isles");
+        let gap = cheapest_reaching(BANDS.dead_air_reach_rows()).expect("the gap");
         let moon = moon_checklist_credits();
         assert!(isles.credits < gap.credits, "{isles:?} {gap:?}");
         assert!(gap.credits < moon, "{gap:?} {moon}");
@@ -358,7 +366,7 @@ mod tests {
         rig.engine_level = 12;
         rig.hazard_gear.altitude_intake = 4;
         rig.fuel_capacity = fuel_capacity_for_level(10);
-        assert!(!milestone::crosses_dead_air(&rig));
-        assert!(milestone::sky_refuel_level(&rig, 4_400) < rig.fuel_capacity);
+        assert!(!milestone::crosses_dead_air(&rig, &BANDS));
+        assert!(milestone::sky_refuel_level(&rig, 4_400, Some(&BANDS)) < rig.fuel_capacity);
     }
 }

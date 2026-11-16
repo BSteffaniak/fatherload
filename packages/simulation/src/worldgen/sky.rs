@@ -864,8 +864,8 @@ fn cell_lands(
                 }
             }
             _ => {
-                if rich && towns::is_town_cell(seed, rx, ry) {
-                    isles::furnish_archipelago_cell(towns::town_cell(seed, rx, ry))
+                if rich && towns::is_town_cell(seed, bands, rx, ry) {
+                    isles::furnish_archipelago_cell(towns::town_cell(seed, bands, rx, ry))
                 } else {
                     let lands = archipelago_cell(seed, bands, rx, ry);
                     if rich {
@@ -1028,7 +1028,7 @@ pub fn land(settings: &WorldSettings, id: FeatureId) -> Option<SkyLand> {
     if layer != Layer::Sky {
         return None;
     }
-    let bands = &bands_of(settings)?;
+    bands_of(settings)?;
     let (band, row) = (ry.div_euclid(1000), ry.rem_euclid(1000));
     let lands = match band {
         ID_LOW | ID_ARCHIPELAGO => cell_lands(settings, band, rx, row).to_vec(),
