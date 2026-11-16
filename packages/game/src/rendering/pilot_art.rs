@@ -20,7 +20,7 @@
 use raylib::prelude::*;
 
 use fatherload_simulation::{
-    RigCosmetics,
+    RigCosmetics, WeaponKind,
     pilot::{PilotGear, PilotPose},
 };
 
@@ -31,11 +31,12 @@ use fatherload_simulation::{
 use super::pixel_art::palette::*;
 use super::rig_art::{Ramp, paint_accent, paint_ramp};
 
-/// Canvas bounds in art pixels around the feet.
-const X0: i32 = -10;
-const Y0: i32 = -30;
-const WIDTH: i32 = 21;
-const HEIGHT: i32 = 31;
+/// Canvas bounds in art pixels around the feet (wide enough for a rifle held out and a
+/// glider overhead).
+const X0: i32 = -17;
+const Y0: i32 = -34;
+const WIDTH: i32 = 34;
+const HEIGHT: i32 = 35;
 
 /// A pilot's colours and gear (from its owner's paint job and the pilot's gear).
 #[derive(Clone, Copy, Debug)]
@@ -45,6 +46,12 @@ pub struct PilotLook {
     pub trim: Color,
     pub jetpack: bool,
     pub suit_tier: u8,
+    /// Armour plates fitted (WP-PILOT): shoulder pads.
+    pub armor: bool,
+    /// The headlamp tier: a bigger lamp on the helmet.
+    pub headlamp: u8,
+    /// Climbing boots: cleats.
+    pub boots: bool,
 }
 
 impl PilotLook {
@@ -57,6 +64,9 @@ impl PilotLook {
             trim: paint_accent(cosmetics.trim),
             jetpack: gear.jetpack > 0,
             suit_tier: gear.suit,
+            armor: gear.armor > 0,
+            headlamp: gear.headlamp,
+            boots: gear.boots > 0,
         }
     }
 }
@@ -69,12 +79,36 @@ pub struct PilotFrame {
     pub seconds: f32,
     /// The hand pick is out (swinging at a tile).
     pub swinging: bool,
+    /// What the hands hold and where they point (WP-PILOT).
+    pub arms: PilotArms,
+}
+
+/// The weapon in a pilot's hands for one frame (WP-PILOT).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PilotArms {
+    /// The held personal arm (`None`: the hand pick, drawn only while it swings).
+    pub weapon: Option<WeaponKind>,
+    /// The aim in the pilot's facing space (x forward, y down), a unit vector.
+    pub aim: (f32, f32),
+    /// Share of a melee swing or a shot's recoil left (0..1).
+    pub swing: f32,
+}
+
+impl PilotArms {
+    /// The hand pick, nothing raised.
+    pub const NONE: Self = Self {
+        weapon: None,
+        aim: (1.0, 0.0),
+        swing: 0.0,
+    };
 }
 
 /// A small art-pixel grid around the pilot's feet.
 #[derive(Clone, Debug)]
 pub struct PilotCanvas {
     cells: Vec<Option<Color>>,
+    /// Where the front glove ended up (rope and weapon effects attach there).
+    pub hand: (i32, i32),
 }
 
 impl Default for PilotCanvas {
@@ -88,6 +122,7 @@ impl PilotCanvas {
     pub fn new() -> Self {
         Self {
             cells: vec![None; (WIDTH * HEIGHT) as usize],
+            hand: (2, -10),
         }
     }
 
@@ -307,15 +342,155 @@ pub fn paint_pilot(look: &PilotLook, frame: PilotFrame) -> PilotCanvas {
             rig.back_leg = (0, 0);
             rig.upper_dy = 0;
         }
+        PilotPose::Hover => {
+            // Legs together, arms out to the sides for balance.
+            rig.front_leg = (0, 0);
+            rig.back_leg = (0, 1);
+            rig.front_arm = (3, -4);
+            rig.back_arm = (-2, -4);
+        }
+        PilotPose::Glide => {
+            // Both hands up on the glider's bar, body trailing behind.
+            rig.front_arm = (0, -13);
+            rig.back_arm = (2, -13);
+            rig.front_leg = (-1, 1);
+            rig.back_leg = (-3, 2);
+            rig.upper_dx = 1;
+        }
+        PilotPose::Rope => {
+            // One hand up the rope, the other on it lower down, boots dangling.
+            rig.front_arm = (-1, -14);
+            rig.back_arm = (0, -9);
+            rig.front_leg = (0, 1);
+            rig.back_leg = (-1, 0);
+        }
+        PilotPose::WallSlide => {
+            // A palm flat on the wall ahead, knees bent, boots braking.
+            rig.front_arm = (3, -9);
+            rig.back_arm = (2, -3);
+            rig.front_leg = (1, 2);
+            rig.back_leg = (0, 0);
+            rig.upper_dx = 1;
+        }
         PilotPose::Climb => {}
     }
-    if frame.swinging {
+    let holds = frame.arms.weapon.is_some()
+        && !matches!(
+            frame.pose,
+            PilotPose::Glide | PilotPose::Rope | PilotPose::Hang | PilotPose::Swim
+        );
+    if holds {
+        rig.front_arm = held_arm(frame.arms);
+    }
+    if frame.swinging && !holds {
         // The pick goes up and comes down in a steady rhythm.
         rig.front_arm = if step(6.6, 2) == 0 { (1, -6) } else { (3, -1) };
     }
     paint_body(&mut canvas, look, &rig, frame);
+    if holds && let Some(weapon) = frame.arms.weapon {
+        paint_held(&mut canvas, weapon, frame.arms);
+    }
+    if frame.pose == PilotPose::Glide {
+        paint_glider(&mut canvas, look);
+    }
     canvas.outline();
     canvas
+}
+
+/// The glove offset (from the hanging position) for a weapon held along `arms.aim`, or for a
+/// melee arm partway through its swing.
+fn held_arm(arms: PilotArms) -> (i32, i32) {
+    let (x, y) = held_direction(arms);
+    // The hanging glove sits 1 forward and 5 down from the shoulder; reach 5 along the aim.
+    ((x * 5.0).round() as i32 - 1, (y * 5.0).round() as i32 - 5)
+}
+
+/// The direction the held thing points: the aim for a gun; for a melee arm, an arc from
+/// raised behind the head to struck forward as the swing plays out.
+fn held_direction(arms: PilotArms) -> (f32, f32) {
+    if let Some(WeaponKind::Wrench | WeaponKind::HandPick) = arms.weapon {
+        if arms.swing > 0.0 {
+            // Swing time runs out from 1 to 0: raised (-110 degrees) to struck (+35).
+            let angle = 145.0f32.mul_add(-arms.swing, 35.0).to_radians();
+            (angle.cos(), angle.sin())
+        } else {
+            // Carried low, head forward.
+            (0.55, 0.83)
+        }
+    } else {
+        {
+            let (x, y) = arms.aim;
+            let length = x.hypot(y);
+            if length < 0.01 {
+                (1.0, 0.0)
+            } else {
+                // Recoil kicks the muzzle up a touch.
+                let kick = arms.swing * 0.25;
+                let (x, y) = (x / length, y / length - kick);
+                let length = x.hypot(y);
+                (x / length, y / length)
+            }
+        }
+    }
+}
+
+/// Paints the held weapon's sprite into the canvas from the glove, rotated along its
+/// direction (sampled back through the rotation, so no pixel gaps at diagonals).
+fn paint_held(canvas: &mut PilotCanvas, weapon: WeaponKind, arms: PilotArms) {
+    let Some(sprite) = super::pixel_art::sprites::weapons::in_hand(weapon) else {
+        return;
+    };
+    let rows = sprite.frames[0];
+    let height = rows.len() as i32;
+    let width = rows.iter().map(|row| row.len()).max().unwrap_or(0) as i32;
+    let (dx, dy) = held_direction(arms);
+    // The grip pivot: second column, the row under the barrel.
+    let pivot = (1.0_f32, 1.5_f32);
+    let (hx, hy) = canvas.hand;
+    let reach = width.max(height) + 2;
+    for oy in -reach..=reach {
+        for ox in -reach..=reach {
+            // Inverse-rotate the canvas offset into sprite space.
+            let (fx, fy) = (ox as f32, oy as f32);
+            let sx = fx.mul_add(dx, fy * dy) + pivot.0;
+            let sy = fy.mul_add(dx, -fx * dy) + pivot.1;
+            let (column, row) = (sx.floor() as i32, sy.floor() as i32);
+            if column < 0 || row < 0 || column >= width || row >= height {
+                continue;
+            }
+            let Some(cell) = rows[row as usize].chars().nth(column as usize) else {
+                continue;
+            };
+            if cell == '.' || cell == ' ' {
+                continue;
+            }
+            if let Some((_, color)) = sprite.legend.iter().find(|(key, _)| *key == cell) {
+                canvas.set(hx + ox, hy + oy, *color);
+            }
+        }
+    }
+    // The glove stays on top of the grip.
+    let _ = (hx, hy);
+}
+
+/// The glider: a bright canvas wing over the pilot's raised hands, ribs in the suit's trim.
+fn paint_glider(canvas: &mut PilotCanvas, look: &PilotLook) {
+    let (hx, hy) = canvas.hand;
+    let top = hy - 4;
+    for x in -13..=13 {
+        // A shallow arch: highest in the middle.
+        let sag = (x * x) / 40;
+        let y = top + sag;
+        canvas.set(hx + x, y, if x % 4 == 0 { look.trim } else { ROSE });
+        canvas.set(hx + x, y + 1, if x.abs() > 10 { MAROON } else { PINK });
+        if x.abs() <= 9 {
+            canvas.set(hx + x, y - 1, PINK);
+        }
+    }
+    // The control bar down to the hands.
+    for y in top + 2..hy {
+        canvas.set(hx, y, STEEL_LIGHT);
+    }
 }
 
 /// The side view: back arm, legs, pack, torso, helmet, front arm (and pick).
@@ -342,6 +517,9 @@ fn paint_body(canvas: &mut PilotCanvas, look: &PilotLook, rig: &Rig, frame: Pilo
         } else {
             canvas.rect(x + dx, leg_top - lift, 2, leg_rows, color);
             canvas.rect(x + dx, -2 - lift, 3, 2, boot);
+            if look.boots {
+                canvas.set(x + dx + 2, -1 - lift, STEEL_LIGHT);
+            }
             if front && look.suit_tier >= 1 {
                 canvas.set(x + dx + 1, -5 - lift, look.trim);
             }
@@ -418,8 +596,27 @@ fn paint_body(canvas: &mut PilotCanvas, look: &PilotLook, rig: &Rig, frame: Pilo
     // Front arm, then the pick in its glove.
     let front_shoulder = (1 + up_x, top + 1);
     let glove = paint_arm(canvas, front_shoulder, rig.front_arm, suit.body, gear.body);
-    if frame.swinging {
+    canvas.hand = glove;
+    if frame.swinging && frame.arms.weapon.is_none() {
         paint_pick(canvas, glove, rig.front_arm.1 < -3);
+    }
+    if look.armor && !rig.folded {
+        // Shoulder pads over both shoulders.
+        canvas.rect(-3 + up_x, top - 1, 2, 2, STEEL);
+        canvas.set(-3 + up_x, top - 1, STEEL_LIGHT);
+        canvas.rect(up_x, top - 1, 2, 2, STEEL);
+        canvas.set(1 + up_x, top - 1, STEEL_LIGHT);
+    }
+    if look.headlamp > 0 {
+        // A bigger lamp on the brow: brighter with the tier.
+        let hx = up_x;
+        let hy = up_y + squash + i32::from(rig.folded);
+        canvas.rect(2 + hx, -23 + hy, 2, 2, STEEL);
+        canvas.set(
+            3 + hx,
+            -22 + hy,
+            if look.headlamp >= 2 { CREAM } else { GOLD },
+        );
     }
 }
 
@@ -511,6 +708,7 @@ mod tests {
             PilotGear {
                 jetpack: 1,
                 suit: 3,
+                ..PilotGear::default()
             },
         )
     }
@@ -530,6 +728,9 @@ mod tests {
             PilotPose::Hurt,
             PilotPose::Jetpack,
             PilotPose::Hang,
+            PilotPose::Hover,
+            PilotPose::Rope,
+            PilotPose::WallSlide,
         ] {
             for seconds in [0.0, 0.13, 0.26, 0.4] {
                 let canvas = paint_pilot(
@@ -538,6 +739,7 @@ mod tests {
                         pose,
                         seconds,
                         swinging: false,
+                        arms: PilotArms::NONE,
                     },
                 );
                 let (min_x, min_y, max_x, max_y) = canvas.bounds().expect("painted");
@@ -564,6 +766,7 @@ mod tests {
                     pose: PilotPose::Walk,
                     seconds,
                     swinging: false,
+                    arms: PilotArms::NONE,
                 },
             )
             .cells

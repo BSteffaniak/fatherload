@@ -177,6 +177,10 @@ impl WorldState {
         if !self.people.is_empty() {
             hash.write_serialized(&self.people);
         }
+        // Absent until a plot is bought, so worlds without homes keep their hashes.
+        if !self.homes.is_empty() {
+            hash.write_serialized(&self.homes);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

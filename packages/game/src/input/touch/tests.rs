@@ -18,6 +18,9 @@ const PLAY: TouchContext = TouchContext {
     prompt: false,
     kits: [false; KIT_COUNT],
     pilot: TouchPilot::Seated,
+    pilot_armed: false,
+    rope: false,
+    usable: false,
 };
 
 const ARMED: TouchContext = TouchContext {
@@ -544,6 +547,9 @@ fn contexts() -> Vec<TouchContext> {
                     armed: bits & 1 != 0,
                     charges_out: bits & 2 != 0,
                     prompt: bits & 4 != 0,
+                    pilot_armed: bits & 1 != 0,
+                    rope: bits & 2 != 0,
+                    usable: bits & 4 != 0,
                     kits: if bits & 8 == 0 {
                         [false; KIT_COUNT]
                     } else {
@@ -731,6 +737,7 @@ fn every_input_field_has_a_touch_answer() {
         aim_y: _,
         fire: _,
         cycle_weapon: _,
+        rope: _,
         scan: _,
         place_relay: _,
         place_drone: _,

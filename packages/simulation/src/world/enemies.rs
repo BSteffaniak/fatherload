@@ -359,8 +359,9 @@ impl WorldState {
         }) {
             return true;
         }
-        // Claimed bases (WP-BASE) and villages (WP-VILLAGE).
+        // Claimed bases (WP-BASE), home plots (WP-HOME) and villages (WP-VILLAGE).
         self.bases.is_safe_zone(tile)
+            || self.homes.is_safe_zone(tile)
             || crate::worldgen::streamed::in_village_area(
                 self.terrain.settings(),
                 tile,

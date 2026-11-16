@@ -60,9 +60,15 @@ impl WorldState {
             // On foot the held controls drive the pilot (`advance_pilots`); the parked rig
             // gets neutral ones.
             let on_foot = self.is_on_foot(player_id);
+            // WP-PILOT: a rig-linked rig's gun covers its pilot (the sentry).
+            let sentry = if on_foot {
+                self.rig_sentry_control(player_id)
+            } else {
+                None
+            };
             if let Some(controls) = input.controls.map(|controls| {
                 if on_foot {
-                    ControlState::default()
+                    ControlState::default().with_weapon(sentry.unwrap_or_default())
                 } else {
                     controls
                 }
@@ -84,7 +90,11 @@ impl WorldState {
                     .get(&player_id)
                     .map(|player| (player.x, player.y));
                 let no_clip = self.no_clip_active();
-                let _step = if no_clip {
+                // WP-PILOT: a recalled rig flies itself to its pilot instead.
+                let recalled = on_foot && self.step_rig_recall(player_id, &mut output);
+                let _step = if recalled {
+                    None
+                } else if no_clip {
                     // Test-mode no-clip: thrust flies up, drill flies down.
                     let vertical =
                         f32::from(i8::from(controls.drill_down) - i8::from(controls.thrust));
@@ -143,6 +153,14 @@ impl WorldState {
                         output.push_event(event);
                     }
                     outcome
+                } else if let Some((outcome, events)) =
+                    self.home_command(player_id, &action.command)
+                {
+                    // WP-HOME: plots, contracts, decorating (`world/homes.rs`).
+                    for event in events {
+                        output.push_event(event);
+                    }
+                    outcome
                 } else {
                     self.apply_player_command(player_id, &action.command)
                 };
@@ -171,6 +189,8 @@ impl WorldState {
         let next_tick = tick.next();
         // Pilots on foot (Part II F5) move with their owners' held controls.
         self.advance_pilots(inputs, next_tick, &mut output);
+        // Ruin pressure plates under their feet (WP-PILOT).
+        self.advance_plates(next_tick, &mut output);
         let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in recovery_player_ids {
             if self.recover_lost_cargo_for_player(player_id) {
@@ -442,6 +462,8 @@ impl WorldState {
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);
         self.advance_people(next_tick);
+        // WP-HOME: construction in world time, site crews, garage bays.
+        self.advance_homes(next_tick, &mut output);
         self.advance_bases(next_tick);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);

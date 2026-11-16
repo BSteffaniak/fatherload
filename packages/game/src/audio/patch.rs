@@ -278,6 +278,22 @@ patches! {
     WardenWake => "warden_wake",
     CoreHum => "core_hum",
     UplinkWarp => "uplink_warp",
+    // The pilot's arms and gear and ruin mechanisms (WP-PILOT), appended so every earlier
+    // patch keeps its variation seeds.
+    PistolPop => "pistol_pop",
+    RifleCrack => "rifle_crack",
+    ShotgunBoom => "shotgun_boom",
+    WrenchSwing => "wrench_swing",
+    GrappleFire => "grapple_fire",
+    GliderOpen => "glider_open",
+    GateGrind => "gate_grind",
+    KeycardBeep => "keycard_beep",
+    // Contractor homes (WP-HOME, wave 4 T24), appended so every earlier seed stays put.
+    DeedStamp => "deed_stamp",
+    BuildersHammer => "builders_hammer",
+    HomeFanfare => "home_fanfare",
+    SiteKnock => "site_knock",
+    FurnitureThunk => "furniture_thunk",
 }
 
 /// Playback metadata of a patch.
@@ -469,6 +485,21 @@ impl Patch {
                 .instances(1)
                 .send(0.42)
                 .jitter(0.015, 0.5),
+            Self::PistolPop | Self::RifleCrack | Self::WrenchSwing => {
+                PatchInfo::new(Impact).instances(4).jitter(0.05, 1.0)
+            }
+            Self::ShotgunBoom => PatchInfo::new(Impact)
+                .instances(2)
+                .jitter(0.04, 1.0)
+                .ducking(0.15),
+            Self::GrappleFire | Self::GliderOpen => {
+                PatchInfo::new(Feedback).instances(2).jitter(0.05, 1.0)
+            }
+            Self::GateGrind => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.4)
+                .jitter(0.04, 0.5),
+            Self::KeycardBeep => PatchInfo::new(Feedback).instances(1).jitter(0.0, 0.0),
             Self::ThrowWhoosh | Self::ChargeStick | Self::FireCrackle => {
                 PatchInfo::new(Feedback).instances(3).jitter(0.06, 1.0)
             }
@@ -675,6 +706,25 @@ impl Patch {
                 .instances(2)
                 .send(0.4)
                 .jitter(0.08, 1.0),
+            // Homes: a stamp and a knock are crisp feedback, hammers ring a little, the keys'
+            // fanfare is a big moment, furniture is a soft thud that may stack.
+            Self::DeedStamp | Self::SiteKnock => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.2)
+                .jitter(0.03, 0.5),
+            Self::BuildersHammer => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.3)
+                .jitter(0.06, 1.0),
+            Self::HomeFanfare => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.4)
+                .jitter(0.0, 0.0)
+                .ducking(0.4),
+            Self::FurnitureThunk => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.15)
+                .jitter(0.08, 1.0),
         }
     }
 
@@ -842,6 +892,19 @@ impl Patch {
             Self::WardenWake => warden_wake(rng),
             Self::CoreHum => core_hum(rng),
             Self::UplinkWarp => uplink_warp(rng),
+            Self::PistolPop => pistol_pop(rng),
+            Self::RifleCrack => rifle_crack(rng),
+            Self::ShotgunBoom => shotgun_boom(rng),
+            Self::WrenchSwing => wrench_swing(rng),
+            Self::GrappleFire => grapple_fire(rng),
+            Self::GliderOpen => glider_open(rng),
+            Self::GateGrind => gate_grind(rng),
+            Self::KeycardBeep => keycard_beep(rng),
+            Self::DeedStamp => deed_stamp(rng),
+            Self::BuildersHammer => builders_hammer(rng),
+            Self::HomeFanfare => home_fanfare(rng),
+            Self::SiteKnock => site_knock(rng),
+            Self::FurnitureThunk => furniture_thunk(rng),
         }
     }
 }
@@ -2390,6 +2453,115 @@ fn rumour_heard(rng: &mut Rng) -> Vec<f32> {
     }
     mix_into(&mut out, &bell(293.66, 1.5, 1.4, 0.8), 0.12, 0.35);
     mix_into(&mut out, &bell(349.23, 1.5, 1.4, 1.0), 0.34, 0.32);
+    out
+}
+
+/// A deed or a contract signed: two quick quill strokes, then a rubber stamp thumped down and
+/// a little bell from the clerk's desk.
+fn deed_stamp(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        4_200.0 * rng.jitter(0.05),
+        2.2,
+        0.11,
+    );
+    for sample in &mut out {
+        *sample *= 0.3;
+    }
+    let stroke = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        5_100.0,
+        2.2,
+        0.09,
+    );
+    mix_into(&mut out, &stroke, 0.13, 0.26);
+    mix_into(
+        &mut out,
+        &thump(150.0 * rng.jitter(0.04), 70.0, 0.12, 2.2),
+        0.3,
+        0.85,
+    );
+    let pad = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::LowPass,
+        900.0,
+        0.8,
+        0.07,
+    );
+    mix_into(&mut out, &pad, 0.3, 0.45);
+    mix_into(&mut out, &bell(1_046.5, 2.0, 0.7, 0.45), 0.42, 0.1);
+    out
+}
+
+/// Builders at work: three hammer knocks on timber and a stroke of the saw.
+fn builders_hammer(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for index in 0..3 {
+        let at = index as f32 * 0.17 + rng.range(0.0, 0.02);
+        let pitch = 1_250.0 * rng.jitter(0.06);
+        mix_into(&mut out, &clank(rng, pitch, 0.05), at, 0.3);
+        mix_into(&mut out, &thump(230.0, 120.0, 0.06, 1.8), at, 0.6);
+    }
+    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 2_600.0, 1.3);
+    let saw = render(0.42, |t| {
+        filter.process(noise.next()) * (0.5 + 0.5 * sine(t, 7.5)).max(0.0) * perc(t, 0.03, 0.42)
+    });
+    mix_into(&mut out, &saw, 0.56, 0.32);
+    out
+}
+
+/// The keys handed over: a two-tone doorbell, then a warm brass phrase rising to the octave and
+/// a bright bell on top, like a front door opening on a new home.
+fn home_fanfare(rng: &mut Rng) -> Vec<f32> {
+    let mut out = bell(783.99 * rng.jitter(0.003), 2.0, 1.2, 0.8);
+    mix_into(&mut out, &bell(622.25, 2.0, 1.2, 0.9), 0.22, 0.85);
+    for (index, note) in [261.63, 329.63, 392.0, 523.25].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &brass(rng, note, 0.5 - index as f32 * 0.07, 0.6),
+            0.46 + index as f32 * 0.12,
+            0.2,
+        );
+    }
+    mix_into(&mut out, &bell(2_093.0, 2.0, 0.9, 0.6), 0.9, 0.14);
+    out
+}
+
+/// A building site needs you: knock-knock on a door frame and a short whistle that rises like
+/// a question.
+fn site_knock(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(190.0 * rng.jitter(0.04), 110.0, 0.07, 2.0);
+    mix_into(&mut out, &clank(rng, 900.0, 0.04), 0.0, 0.25);
+    mix_into(&mut out, &thump(200.0, 115.0, 0.07, 2.0), 0.14, 1.0);
+    mix_into(&mut out, &clank(rng, 950.0, 0.04), 0.14, 0.25);
+    let mut osc = Osc::new(Wave::Sine);
+    let whistle = render(0.36, |t| {
+        osc.next(glide(t, 1_300.0, 1_850.0, 0.12)) * perc(t, 0.03, 0.36) * 0.5
+    });
+    mix_into(&mut out, &whistle, 0.36, 0.5);
+    out
+}
+
+/// A piece of furniture set down: a soft wooden thud with a creak of joinery.
+fn furniture_thunk(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(120.0 * rng.jitter(0.06), 65.0, 0.1, 1.6);
+    let pitch = 620.0 * rng.jitter(0.05);
+    mix_into(&mut out, &clank(rng, pitch, 0.06), 0.004, 0.22);
+    let creak = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        1_400.0,
+        3.0,
+        0.12,
+    );
+    mix_into(&mut out, &creak, 0.06, 0.18);
     out
 }
 
@@ -4364,6 +4536,156 @@ fn cannon_boom(rng: &mut Rng) -> Vec<f32> {
         0.5,
     );
     mix_into(&mut out, &smoke, 0.01, 0.6);
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// The pilot's arms and gear, ruin mechanisms (WP-PILOT)
+// ---------------------------------------------------------------------------------------------
+
+/// The sidearm: a tight pop, a short band-passed snap and a small room tail.
+fn pistol_pop(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        2_600.0 * rng.jitter(0.08),
+        0.9,
+        0.045,
+    );
+    mix_into(
+        &mut out,
+        &thump(420.0 * rng.jitter(0.05), 160.0, 0.05, 2.2),
+        0.0,
+        0.6,
+    );
+    let mut echo = Delay::new(0.2).with_damping(0.5);
+    out.resize(out.len() + samples_for(0.12), 0.0);
+    for sample in &mut out {
+        *sample += echo.process(*sample, 0.07, 0.25) * 0.25;
+    }
+    out
+}
+
+/// The rifle: a hard supersonic crack, a body thump and a long rolling tail.
+fn rifle_crack(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        3_200.0 * rng.jitter(0.05),
+        0.8,
+        0.03,
+    );
+    mix_into(
+        &mut out,
+        &thump(300.0 * rng.jitter(0.04), 120.0, 0.07, 2.2),
+        0.0,
+        0.55,
+    );
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut low = Svf::new(FilterMode::BandPass, 1_400.0, 0.6);
+    let tail = render(0.45, |t| {
+        low.process(noise.next()) * perc(t, 0.01, 0.32) * 1.2
+    });
+    mix_into(&mut out, &tail, 0.02, 0.6);
+    out
+}
+
+/// The shotgun: a big boom of low-passed pink noise over a sub thump, then the pump's clack.
+fn shotgun_boom(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(180.0 * rng.jitter(0.05), 55.0, 0.16, 3.0);
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut low = Svf::new(FilterMode::LowPass, 2_400.0, 0.7);
+    let blast = render(0.3, |t| {
+        low.run(noise.next(), 2_400.0 - 1_800.0 * (t / 0.3), 0.7) * perc(t, 0.001, 0.22) * 1.6
+    });
+    mix_into(&mut out, &blast, 0.0, 0.9);
+    let pump = clank(rng, 900.0, 0.05);
+    mix_into(&mut out, &pump, 0.32, 0.35);
+    mix_into(&mut out, &clank(rng, 1_150.0, 0.05), 0.4, 0.3);
+    out
+}
+
+/// A wrench swing: an airy whoosh and a heavy metal clang.
+fn wrench_swing(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut band = Svf::new(FilterMode::BandPass, 900.0, 1.2);
+    let mut out = render(0.16, |t| {
+        band.run(noise.next(), 600.0 + 2_200.0 * (t / 0.16), 1.2) * perc(t, 0.06, 0.08)
+    });
+    let base = 640.0 * rng.jitter(0.05);
+    mix_into(&mut out, &clank(rng, base, 0.18), 0.1, 0.7);
+    out
+}
+
+/// The grapple: a pneumatic thunk, the hook whistling out and a metal bite.
+fn grapple_fire(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(220.0 * rng.jitter(0.05), 120.0, 0.05, 1.8);
+    let mut osc = Osc::new(Wave::Saw);
+    let mut band = Svf::new(FilterMode::BandPass, 1_800.0, 3.0);
+    let zip = render(0.22, |t| {
+        band.process(osc.next(glide(t, 1_400.0, 2_600.0, 0.18))) * perc(t, 0.01, 0.18) * 0.5
+    });
+    mix_into(&mut out, &zip, 0.01, 0.7);
+    let base = 2_100.0 * rng.jitter(0.04);
+    mix_into(&mut out, &clank(rng, base, 0.08), 0.2, 0.45);
+    out
+}
+
+/// A glider opening: a cloth snap and a soft rush of air.
+fn glider_open(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        1_100.0 * rng.jitter(0.1),
+        1.6,
+        0.04,
+    );
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut low = Svf::new(FilterMode::LowPass, 1_200.0, 0.6);
+    let rush = render(0.5, |t| {
+        low.process(noise.next()) * segments(t, &[(0.0, 0.0), (0.08, 0.8), (0.5, 0.0)])
+    });
+    mix_into(&mut out, &rush, 0.02, 0.8);
+    out
+}
+
+/// A gate grinding open or shut: a low sawtooth groan over rattling chains and a final clang.
+fn gate_grind(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Saw);
+    let mut low = Svf::new(FilterMode::LowPass, 1_800.0, 1.4);
+    let base = 120.0 * rng.jitter(0.05);
+    let mut out = render(0.7, |t| {
+        let wobble = 1.0 + 0.04 * sine(t, 7.0);
+        saturate(low.process(osc.next(base * wobble)) * 1.5, 2.0)
+            * segments(t, &[(0.0, 0.0), (0.06, 0.9), (0.6, 0.7), (0.7, 0.0)])
+    });
+    grains(rng, &mut out, 16, (0.05, 0.6), (1_500.0, 4_000.0), 0.35);
+    mix_into(&mut out, &clank(rng, 520.0, 0.25), 0.62, 0.7);
+    out
+}
+
+/// A keycard swipe: a reader chirp and two rising confirm beeps.
+fn keycard_beep(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        4_000.0,
+        0.7,
+        0.03,
+    );
+    for (index, note) in [1_320.0_f32, 1_760.0].into_iter().enumerate() {
+        let mut osc = Osc::new(Wave::Square);
+        osc.width = 0.4;
+        let mut low = Svf::new(FilterMode::LowPass, 3_000.0, 0.7);
+        let beep = render(0.08, |t| {
+            low.process(osc.next(note)) * perc(t, 0.002, 0.07) * 0.5
+        });
+        mix_into(&mut out, &beep, 0.05 + index as f32 * 0.09, 0.8);
+    }
     out
 }
 

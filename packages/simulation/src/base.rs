@@ -209,6 +209,22 @@ pub enum BuiltTile {
     /// through it ([`crate::pilot::pilot_passable`]). Capping a 1-tile tunnel with grates
     /// makes a crawlway, a pilot-only space ([`crate::poi::SpaceAccess::RequiresPilot`]).
     VentGrate,
+    // --- Ruin pieces (WP-PILOT, [`crate::mechanism`]): stamped by generators and scenarios,
+    // never built, never deconstructed. ---------------------------------------------------
+    /// Ancient ruin masonry.
+    RuinWall,
+    /// Closed gate bars under a [`Self::GateLintel`] (an open gate is air).
+    Gate,
+    /// The lintel over a gate column; names the channel its gate answers to.
+    GateLintel(u8),
+    /// A lever set in a wall: a pilot flips it and every gate of its channel in reach.
+    Lever { channel: u8, on: bool },
+    /// A pressure-plate floor tile: weight on it holds its channel's gates open.
+    PressurePlate { channel: u8, down: bool },
+    /// A keycard door (a column of these): opens for a pilot carrying its colour's card.
+    KeycardDoor(u8),
+    /// A treasure chest that needs hands; a closed one may also hold a keycard (`card`).
+    Chest { open: bool, card: Option<u8> },
 }
 
 impl BuiltTile {
@@ -234,15 +250,48 @@ impl BuiltTile {
             Self::Glass => "Glass Window",
             Self::Plank => "Plank Floor",
             Self::VentGrate => "Vent Grate",
+            Self::RuinWall => "Ruin Masonry",
+            Self::Gate => "Gate",
+            Self::GateLintel(_) => "Gate Lintel",
+            Self::Lever { .. } => "Lever",
+            Self::PressurePlate { .. } => "Pressure Plate",
+            Self::KeycardDoor(_) => "Keycard Door",
+            Self::Chest { open: false, .. } => "Treasure Chest",
+            Self::Chest { open: true, .. } => "Empty Chest",
         }
+    }
+
+    /// Whether this is a ruin piece ([`crate::mechanism`]): stamped, never built or
+    /// deconstructed by players.
+    #[must_use]
+    pub const fn is_ruin(self) -> bool {
+        matches!(
+            self,
+            Self::RuinWall
+                | Self::Gate
+                | Self::GateLintel(_)
+                | Self::Lever { .. }
+                | Self::PressurePlate { .. }
+                | Self::KeycardDoor(_)
+                | Self::Chest { .. }
+        )
     }
 
     /// Who gets through this piece (Part II F5): vent grates let only pilots by.
     #[must_use]
     pub const fn access(self) -> Option<crate::poi::SpaceAccess> {
         match self {
-            Self::VentGrate => Some(crate::poi::SpaceAccess::RequiresPilot),
-            Self::Wall(_) | Self::Plating | Self::Glass | Self::Plank => None,
+            Self::VentGrate | Self::Chest { .. } | Self::Lever { .. } | Self::KeycardDoor(_) => {
+                Some(crate::poi::SpaceAccess::RequiresPilot)
+            }
+            Self::Wall(_)
+            | Self::Plating
+            | Self::Glass
+            | Self::Plank
+            | Self::RuinWall
+            | Self::Gate
+            | Self::GateLintel(_)
+            | Self::PressurePlate { .. } => None,
         }
     }
 
@@ -258,11 +307,34 @@ impl BuiltTile {
             Self::Glass => 5,
             Self::Plank => 6,
             Self::VentGrate => 7,
+            Self::RuinWall => 8,
+            Self::Gate => 9,
+            Self::GateLintel(channel) => 16 + (channel % crate::mechanism::CHANNELS) as u64,
+            Self::Lever { channel, on } => {
+                24 + (channel % crate::mechanism::CHANNELS) as u64 * 2 + on as u64
+            }
+            Self::PressurePlate { channel, down } => {
+                40 + (channel % crate::mechanism::CHANNELS) as u64 * 2 + down as u64
+            }
+            Self::KeycardDoor(color) => 56 + (color % crate::mechanism::KEYCARD_COLORS) as u64,
+            Self::Chest { open: true, .. } => 65,
+            Self::Chest {
+                open: false,
+                card: None,
+            } => 64,
+            Self::Chest {
+                open: false,
+                card: Some(color),
+            } => 66 + (color % crate::mechanism::KEYCARD_COLORS) as u64,
         }
     }
 
     /// The built tile with [`Self::code`] `code`.
     #[must_use]
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "the channel and colour codes are below 4"
+    )]
     pub const fn from_code(code: u64) -> Option<Self> {
         Some(match code {
             0 => Self::Wall(BlockKind::Dirt),
@@ -273,6 +345,30 @@ impl BuiltTile {
             5 => Self::Glass,
             6 => Self::Plank,
             7 => Self::VentGrate,
+            8 => Self::RuinWall,
+            9 => Self::Gate,
+            16..=19 => Self::GateLintel((code - 16) as u8),
+            24..=31 => Self::Lever {
+                channel: ((code - 24) / 2) as u8,
+                on: (code - 24) % 2 == 1,
+            },
+            40..=47 => Self::PressurePlate {
+                channel: ((code - 40) / 2) as u8,
+                down: (code - 40) % 2 == 1,
+            },
+            56..=59 => Self::KeycardDoor((code - 56) as u8),
+            64 => Self::Chest {
+                open: false,
+                card: None,
+            },
+            65 => Self::Chest {
+                open: true,
+                card: None,
+            },
+            66..=69 => Self::Chest {
+                open: false,
+                card: Some((code - 66) as u8),
+            },
             _ => return None,
         })
     }
@@ -853,6 +949,16 @@ impl Buildable {
             Self::Tile(BuiltTile::Glass) => BuildCost::credits(8),
             Self::Tile(BuiltTile::Plank) => BuildCost::credits(4),
             Self::Tile(BuiltTile::VentGrate) => BuildCost::credits(10),
+            // Ruin pieces are never sold (they refund nothing either).
+            Self::Tile(
+                BuiltTile::RuinWall
+                | BuiltTile::Gate
+                | BuiltTile::GateLintel(_)
+                | BuiltTile::Lever { .. }
+                | BuiltTile::PressurePlate { .. }
+                | BuiltTile::KeycardDoor(_)
+                | BuiltTile::Chest { .. },
+            ) => BuildCost::credits(0),
             Self::Fixture(fixture) => BuildCost::credits(fixture.credits()),
             Self::Module(module) => BuildCost {
                 block: None,
@@ -956,6 +1062,8 @@ pub enum BuildRefusal {
     NeedsBlocks(u32),
     /// The claim would overlap a village (WP-VILLAGE): villages are not for claiming.
     InVillage,
+    /// Overlaps a home plot (WP-HOME).
+    OnPlot,
     /// Beds are for the night: lying down only works at dusk or night (see [`crate::clock`]).
     NotTired,
     /// A lunar uplink is built once its builder has landed on the Moon (WP-MOON).
@@ -995,6 +1103,7 @@ impl BuildRefusal {
             Self::NothingToDo => "Nothing to do.".to_owned(),
             Self::NeedsBlocks(count) => format!("Needs {count} building blocks in the hopper."),
             Self::InVillage => "Village land: stake your claim outside the village.".to_owned(),
+            Self::OnPlot => "Someone's home plot: stake your claim off the deed.".to_owned(),
             Self::NotTired => "Too early to sleep: beds are for dusk and night.".to_owned(),
             Self::NeedsMoonLanding => {
                 "Land on the Moon first: the uplink locks onto it.".to_owned()
@@ -1116,6 +1225,9 @@ pub struct Bases {
     /// Each player's home point (a bed or homestead).
     #[serde(default)]
     homes: BTreeMap<PlayerId, StructureId>,
+    /// Pressure plates held down in ruins (WP-PILOT, [`crate::mechanism`]).
+    #[serde(default)]
+    plates: crate::mechanism::PlateTimers,
 }
 
 impl Bases {
@@ -1128,7 +1240,18 @@ impl Bases {
             modules: BTreeMap::new(),
             fixtures: BTreeMap::new(),
             homes: BTreeMap::new(),
+            plates: crate::mechanism::PlateTimers { held: Vec::new() },
         }
+    }
+
+    /// The pressure plates held down in ruins ([`crate::mechanism::PlateTimers`]).
+    #[must_use]
+    pub const fn plates(&self) -> &crate::mechanism::PlateTimers {
+        &self.plates
+    }
+
+    pub(crate) const fn plates_mut(&mut self) -> &mut crate::mechanism::PlateTimers {
+        &mut self.plates
     }
 
     /// Whether nothing has been built anywhere.

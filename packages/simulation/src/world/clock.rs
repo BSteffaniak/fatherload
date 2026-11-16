@@ -45,7 +45,7 @@ impl WorldState {
     }
 
     /// The clock reading at `tick` with the current clock state.
-    const fn clock_at(&self, tick: SimulationTick) -> WorldClock {
+    pub(super) const fn clock_at(&self, tick: SimulationTick) -> WorldClock {
         WorldClock::at(tick, self.timing.rate, &self.clock, self.terrain.seed())
     }
 
@@ -343,6 +343,11 @@ impl WorldState {
             let bed_stands = match sleeper.bed {
                 BedSpot::Module(structure) => self.bases.module(structure).is_some(),
                 BedSpot::Inn(_) => true,
+                BedSpot::Home(plot) => self
+                    .homes
+                    .plot(plot)
+                    .and_then(|plot| plot.home.as_ref())
+                    .is_some_and(crate::home::Home::has_bed),
             };
             let stayed = rig.is_some_and(|rig| {
                 (rig.x - sleeper.x).abs() <= BED_DRIFT_TILES

@@ -705,3 +705,131 @@ pub const SUN: SpriteDef = SpriteDef {
     ]],
     frame_seconds: 0.0,
 };
+
+// --- WP-PILOT gear icons (9x9) -------------------------------------------------------------
+
+/// Armour plates: a riveted chest plate.
+pub const PILOT_ARMOR: SpriteDef = SpriteDef {
+    name: "icon_pilot_armor",
+    legend: &[
+        ('o', INK),
+        ('w', STEEL_LIGHT),
+        ('s', STEEL),
+        ('k', STEEL_DARK),
+        ('a', AMBER),
+    ],
+    frames: &[&[
+        ".oo...oo.",
+        "owso.oswo",
+        "owssosswo",
+        "owsasasso",
+        "owssssso.",
+        ".osasaso.",
+        ".oskskso.",
+        "..ookoo..",
+        "....o....",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Headlamp: a lamp on a strap with a beam.
+pub const HEADLAMP: SpriteDef = SpriteDef {
+    name: "icon_headlamp",
+    legend: &[
+        ('o', INK),
+        ('c', CREAM),
+        ('g', GOLD),
+        ('s', STEEL),
+        ('l', LOAM),
+    ],
+    frames: &[&[
+        ".........",
+        "......cc.",
+        "..oooc...",
+        ".osgggcc.",
+        ".osgggc..",
+        "..oooc...",
+        "lll...cc.",
+        "l........",
+        ".........",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Climbing boots: a cleated boot.
+pub const BOOTS: SpriteDef = SpriteDef {
+    name: "icon_boots",
+    legend: &[('o', INK), ('l', LOAM), ('c', CLAY), ('s', STEEL_LIGHT)],
+    frames: &[&[
+        "..ooo....",
+        "..olco...",
+        "..olco...",
+        "..olco...",
+        "..olcoo..",
+        ".olllcco.",
+        ".olllllo.",
+        ".oooooooo",
+        "..s.s.s..",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Glider: a folded wing of bright canvas.
+pub const GLIDER: SpriteDef = SpriteDef {
+    name: "icon_glider",
+    legend: &[('o', INK), ('r', ROSE), ('p', PINK), ('s', STEEL)],
+    frames: &[&[
+        ".........",
+        "....o....",
+        "...oro...",
+        "..orppo..",
+        ".orpppro.",
+        "orrppprro",
+        "ooo.s.ooo",
+        "....s....",
+        "...sss...",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Grapple launcher: a three-pronged hook on a coil of rope.
+pub const GRAPPLE: SpriteDef = SpriteDef {
+    name: "icon_grapple",
+    legend: &[
+        ('o', INK),
+        ('s', STEEL_LIGHT),
+        ('d', STEEL),
+        ('l', LOAM),
+        ('a', AMBER),
+    ],
+    frames: &[&[
+        "s...s...s",
+        "so..s..os",
+        ".sd.s.ds.",
+        "..ssdss..",
+        "....d....",
+        "....l....",
+        "..lal....",
+        ".l...l...",
+        "..lll....",
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// Rig link: a little rig with a signal arc over it.
+pub const RIG_LINK: SpriteDef = SpriteDef {
+    name: "icon_rig_link",
+    legend: &[('o', INK), ('m', MINT), ('a', AMBER), ('s', STEEL)],
+    frames: &[&[
+        "..mmmmm..",
+        ".m.....m.",
+        "...mmm...",
+        "..m...m..",
+        "....m....",
+        "..ooooo..",
+        ".oaaaaao.",
+        ".oasssao.",
+        "..o...o..",
+    ]],
+    frame_seconds: 0.0,
+};

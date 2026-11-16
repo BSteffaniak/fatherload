@@ -235,6 +235,28 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::WardenDefeated { by } => (227, by),
         GameplayEventKind::MoonCoreReached { player_id } => (228, Some(player_id)),
         GameplayEventKind::UplinkBeamed { player_id, .. } => (229, Some(player_id)),
+        // WP-PILOT (wave 4, T23): 230-239.
+        GameplayEventKind::PilotFired { player_id, .. } => (230, Some(player_id)),
+        GameplayEventKind::PilotWeaponDry { player_id, .. } => (231, Some(player_id)),
+        GameplayEventKind::PilotWeaponSwapped { player_id, .. } => (232, Some(player_id)),
+        GameplayEventKind::PilotRope { player_id, .. } => (233, Some(player_id)),
+        GameplayEventKind::PilotGlide { player_id, .. } => (234, Some(player_id)),
+        GameplayEventKind::MechanismUsed { player_id, .. } => (235, player_id),
+        GameplayEventKind::ChestOpened { player_id, .. } => (236, Some(player_id)),
+        GameplayEventKind::RigRecall { player_id, .. } => (237, Some(player_id)),
+        GameplayEventKind::PilotExposed { player_id, .. } => (238, Some(player_id)),
+        GameplayEventKind::PilotWallJumped { player_id } => (239, Some(player_id)),
+        // Contractor-built homes (WP-HOME, wave 4 T24): 240-249.
+        GameplayEventKind::PlotBought { player_id, .. } => (240, Some(player_id)),
+        GameplayEventKind::ContractSigned { player_id, .. } => (241, Some(player_id)),
+        GameplayEventKind::ConstructionStage { owner, .. } => (242, Some(owner)),
+        GameplayEventKind::HomeCompleted { owner, .. } => (243, Some(owner)),
+        GameplayEventKind::SiteEventRaised { owner, .. } => (244, Some(owner)),
+        GameplayEventKind::SiteEventAnswered { player_id, .. } => (245, Some(player_id)),
+        GameplayEventKind::FurniturePlaced { player_id, .. } => (246, Some(player_id)),
+        GameplayEventKind::FurnitureRemoved { player_id, .. } => (247, Some(player_id)),
+        GameplayEventKind::HomeRushed { player_id, .. } => (248, Some(player_id)),
+        GameplayEventKind::HomeInteraction { player_id } => (249, Some(player_id)),
     }
 }
 

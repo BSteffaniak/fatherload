@@ -663,6 +663,34 @@ On foot you are slow vertically and weak at digging, but you fit where the rig c
 - The camera, HUD (pilot health, air, jetpack and pack), prompts and controller bindings all
   switch while you are on foot, in every split-screen seat and online.
 
+#### Arms, gear and ruins (on foot)
+
+- **Personal arms**: the town gunsmith (the Explosives Shack's rack) and village armories sell
+  a **wrench**, a **sidearm** (never runs dry), a **shotgun** (shells) and a **rifle**
+  (cartridges). Personal ammo is the pilot's own, apart from the rig's capacitor and rockets.
+  The fire button shoots what the pilot holds (mouse / right stick aim, auto-aim for the
+  arrow-keys seat); `X` (controller tap `L3`) swaps between the pick and every owned arm. The
+  bare pick swings at a creature in reach instead of the floor. The pilot is much weaker than
+  the rig in a straight fight, but nimble.
+- **Gear** (all on the same rack, in tiers): armour plates, a thermal lining against the cold
+  of the high sky (it hurts without one), a heat weave for the deep bands, a headlamp, climbing
+  boots (push into a wall while falling to slide, jump to kick off it), a glider (hold jump
+  while falling, with down or once the jetpack is dry), a hovering jetpack (Mk II: jump +
+  down), a grapple launcher and the **rig link**.
+- **Rope**: `R` (controller `LB`, the arrow-keys seat's `Numpad 9`, a ROPE button on touch).
+  Beside the rig it clips you onto the rig's **winch**: walk off into a shaft and hold down to
+  be lowered, up to be hauled back. Elsewhere it fires the grapple along your aim (or up and
+  forward): up reels in, sideways swings, the button again (or jump) lets go.
+- **Rig link**: away from the rig, `E` calls it over on autopilot along an open path (press
+  again to radio for a pickup instead); Mk II turns its mounted gun into a sentry that covers
+  you while you walk.
+- **Ruins** (new worlds): sealed rooms of ancient masonry deep underground, entered on foot
+  through a vent grate. **Levers** open gates (`E` beside them), **pressure plates** hold a
+  gate open while weighted (park the rig on one), **keycard doors** want the card from a chest,
+  and **chests** open only by hand. **Rig vaults** hide a rig-sized ore chamber behind a gate
+  whose lever is up a crawlway: hop out, pull it, fly in. **Crawlway caves** are pockets in
+  hardpan reached only through a crawlway.
+
 ## Controls
 
 - `A` / `D` or left/right arrows: move horizontally and drill sideways while resting on the
@@ -684,6 +712,7 @@ On foot you are slow vertically and weak at digging, but you fit where the rig c
   ("Talk to Mara"), confirm menus, or start game; with nothing else to use, climb out of the
   rig (and board it again on foot, see On foot)
 - `Space`: on foot, jump (held in the air: the jetpack)
+- `R`: on foot, the rope (grapple / the rig's winch / let go)
 - `Backspace` / `Esc`: close menus; `P` pauses/resumes
 - `M`: large mine map with ore, hazard, rescue, and lost-cargo markers
 - `H`: help screen
@@ -712,7 +741,9 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 | Use building, counter, door | `X` | `E` |
 | Climb out of the rig / board it | `X` (with nothing else to use) | `E` |
 | On foot: jump (jetpack held in the air) / climb / crouch | `A` / stick up, down / stick down | `Space` / `W` `S` / `S` |
-| On foot: hand pick | `RT` (held) | left mouse button / `V` |
+| On foot: hand pick or held arm | `RT` (held) | left mouse button / `V` |
+| On foot: swap held arm | tap `L3` | `X` |
+| On foot: rope (grapple, winch, let go) | `LB` | `R` |
 | Confirm in menus / call rescue | `A` | `Enter` |
 | Back / close / leave building | `B` (never pauses or quits) | `Esc` / `Backspace` |
 | Menu navigation (auto-repeats) | Left stick or d-pad | arrows / `W` `S` |

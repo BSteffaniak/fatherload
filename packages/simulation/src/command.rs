@@ -86,6 +86,12 @@ pub enum PlayerCommand {
     /// A Moon action (WP-MOON): a deal at the lunar colony's counter, validated inside the
     /// tick (the rig or the pilot must be in the colony).
     Moon(crate::moon::MoonCommand),
+    /// An on-foot action (WP-PILOT, see [`crate::pilot::PilotAction`]): use a lever, chest or
+    /// keycard door, fire or drop a rope, recall the rig, swap the weapon in hand.
+    Pilot(crate::pilot::PilotAction),
+    /// Plots, contracts, decorating and the home's services (WP-HOME, see
+    /// [`crate::home::HomeCommand`]).
+    Home(crate::home::HomeCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

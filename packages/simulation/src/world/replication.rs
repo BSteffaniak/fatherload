@@ -195,6 +195,8 @@ pub enum SectionKey {
     /// What players did with people: characters' memories of players, conversations, bought
     /// offers and perks (WP-PEOPLE; the people themselves are entities).
     People,
+    /// Plots, deeds, construction, homes and furniture (WP-HOME; site crews are entities).
+    Homes,
 }
 
 impl SectionKey {
@@ -214,7 +216,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 16] = [
+    pub const SHARED: [Self; 17] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -231,6 +233,7 @@ impl SectionKey {
         Self::Bases,
         Self::Clock,
         Self::People,
+        Self::Homes,
     ];
 }
 
@@ -255,6 +258,7 @@ pub enum SectionPayload {
     Bases(Box<crate::base::Bases>),
     Clock(Box<crate::clock::ClockState>),
     People(Box<crate::people::PeopleLedger>),
+    Homes(Box<crate::home::Homes>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -428,6 +432,7 @@ impl WorldState {
             crew: _,
             clock,
             people,
+            homes,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -522,6 +527,7 @@ impl WorldState {
             SectionKey::Bases => SectionPayload::Bases(Box::new(bases.clone())),
             SectionKey::Clock => SectionPayload::Clock(Box::new(clock.clone())),
             SectionKey::People => SectionPayload::People(Box::new(people.clone())),
+            SectionKey::Homes => SectionPayload::Homes(Box::new(homes.clone())),
         })
     }
 
@@ -672,6 +678,9 @@ impl WorldState {
             }
             (SectionKey::People, SectionPayload::People(people)) => {
                 self.people = *people;
+            }
+            (SectionKey::Homes, SectionPayload::Homes(homes)) => {
+                self.homes = *homes;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

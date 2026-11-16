@@ -435,11 +435,14 @@ impl WorldState {
             PlayerCommand::Build(command) => self.apply_build_command(player_id, &command),
             PlayerCommand::Sleep(command) => self.apply_sleep_command(player_id, command),
             // Resolved earlier in the tick: by `pilot_command` (they emit their own events),
-            // `people_command` (`world/people.rs`) and `apply_moon_command` (`world/moon.rs`).
+            // `people_command` (`world/people.rs`), `apply_moon_command` (`world/moon.rs`) and
+            // `home_command` (`world/homes.rs`).
             PlayerCommand::TogglePilot
             | PlayerCommand::PilotPack { .. }
+            | PlayerCommand::Pilot(_)
             | PlayerCommand::People(_)
-            | PlayerCommand::Moon(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
+            | PlayerCommand::Moon(_)
+            | PlayerCommand::Home(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 }

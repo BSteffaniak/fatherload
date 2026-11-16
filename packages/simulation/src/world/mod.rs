@@ -69,7 +69,11 @@ mod god_mode_tests;
 #[cfg(test)]
 mod hazard_counter_tests;
 mod hazards;
+#[cfg(test)]
+mod home_tests;
+mod homes;
 mod import;
+mod mechanisms;
 mod milestones;
 mod moon;
 #[cfg(test)]
@@ -82,6 +86,10 @@ mod people_tests;
 #[cfg(test)]
 mod persistence_tests;
 pub mod pilot;
+mod pilot_arms;
+#[cfg(test)]
+mod pilot_content_tests;
+mod pilot_gear;
 #[cfg(test)]
 mod pilot_tests;
 mod player_sections;
@@ -130,6 +138,9 @@ mod weapons;
 pub use bases::{BuildQuote, TOWN_NO_BUILD_MARGIN, TOWN_NO_BUILD_ROWS, payment_for};
 pub use discovery::{DiscoveredTiles, Discovery};
 pub use enemies::{JOLT_MILLIS, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES, TURRET_MOUNTS};
+pub use homes::{
+    CELLAR_ROWS, CONTRACTOR_REACH_COLUMNS, ContractorOffer, HireQuote, MAX_CONTRACTORS_LISTED,
+};
 pub use people::{
     DEFAULT_PLAYER_NAME, DESPAWN_MARGIN_COLUMNS, PEOPLE_REFRESH_MILLIS, SPAWN_MARGIN_COLUMNS,
     TALK_REACH_TILES,
@@ -179,6 +190,8 @@ pub use movement::{
     GOD_MODE_THRUST_MULTIPLIER, collision_steps, engine_top_speed_tiles,
 };
 pub use no_clip::NO_CLIP_SPEED;
+pub use pilot_arms::{PILOT_AUTO_AIM_RANGE, SWING_SHOW_SECONDS as PILOT_SWING_SHOW_SECONDS};
+pub use pilot_gear::{RECALL_SPEED, SENTRY_COVER};
 /// Tick deadline of a rig's next drill chip.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub struct ActiveDrillTimer {
@@ -355,6 +368,10 @@ pub struct WorldState {
     /// people themselves are [`crate::entity::EntityKind::Npc`] entities.
     #[serde(default)]
     people: crate::people::PeopleLedger,
+    /// Plots, deeds, contracted construction, finished homes and furniture (WP-HOME, see
+    /// [`crate::home`]); the site crews are NPC entities.
+    #[serde(default)]
+    homes: crate::home::Homes,
 }
 
 impl WorldState {

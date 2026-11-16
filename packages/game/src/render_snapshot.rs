@@ -475,6 +475,10 @@ pub struct ViewSnapshot<'w> {
     pub can_board: bool,
     /// In the rig and slow enough to climb out (the exit prompt).
     pub can_exit: bool,
+    /// On foot (WP-PILOT): the lever, chest or keycard door in reach (the use prompt).
+    pub pilot_usable: Option<(TilePosition, fatherload_simulation::mechanism::Usable)>,
+    /// On foot: the use button works that fixture before boarding the rig (it is nearer).
+    pub fixture_first: bool,
 }
 
 impl ViewSnapshot<'_> {
@@ -1046,6 +1050,8 @@ fn view_snapshot(
         pilot,
         can_board: world.can_board_rig(player_id),
         can_exit: world.can_exit_rig(player_id),
+        pilot_usable: world.pilot_usable(player_id),
+        fixture_first: world.pilot_fixture_first(player_id),
     })
 }
 

@@ -175,6 +175,10 @@ pub enum TouchMode {
 
 /// What the controls need to know about the game this frame.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "independent facts about what is on screen"
+)]
 pub struct TouchContext {
     pub mode: TouchMode,
     /// A weapon is mounted (shows the fire button and weapon chip).
@@ -188,6 +192,13 @@ pub struct TouchContext {
     pub kits: [bool; KIT_COUNT],
     /// Where the pilot is (Part II F5): in the rig or on foot.
     pub pilot: TouchPilot,
+    /// On foot (WP-PILOT): the pilot owns a personal weapon (the swap button shows).
+    pub pilot_armed: bool,
+    /// On foot: a rope can be thrown or let go (grapple owned, beside the rig, or roped).
+    pub rope: bool,
+    /// On foot: a lever, chest or keycard door is in reach, or a rig link can call the rig
+    /// (the USE button shows).
+    pub usable: bool,
 }
 
 /// Where the first seat's pilot is, as the touch controls see it.
@@ -279,6 +290,9 @@ pub enum TouchControl {
     ExitRig,
     /// On foot beside the rig: climb back in.
     BoardRig,
+    /// On foot (WP-PILOT): the rope. Tap fires the grapple up and forward (or clips onto the
+    /// winch beside the rig, or lets go); drag and release aims the grapple.
+    Rope,
     /// The context prompt under the rig.
     Prompt,
     /// Use the counter or door the rig stands at inside a building.
@@ -470,8 +484,9 @@ impl TouchLayout {
         self.button * STICK_RADIUS
     }
 
-    /// On foot: the pilot jumps where the rig would fire, swings the pick (or fires) beside
-    /// it, and throws explosives above.
+    /// On foot: the pilot jumps where the rig would fire, swings the pick (or fires the held
+    /// weapon) beside it, and throws explosives above. The rope, the weapon swap and the use
+    /// button join when they mean something (WP-PILOT).
     fn push_foot(&mut self, cluster: Cluster, context: TouchContext) {
         let mut push = |control, slot| self.controls.push((control, cluster.place(slot)));
         push(TouchControl::Jump, PRIMARY);
@@ -480,9 +495,19 @@ impl TouchLayout {
         push(TouchControl::CycleExplosive, FAR_UPPER);
         if context.pilot == TouchPilot::CanBoard {
             push(TouchControl::BoardRig, FAR_SIDE);
+        } else if context.usable {
+            push(TouchControl::Use, FAR_SIDE);
         }
         if context.charges_out {
             push(TouchControl::Detonate, DIAGONAL);
+        } else if context.rope {
+            push(TouchControl::Rope, DIAGONAL);
+        }
+        if context.charges_out && context.rope {
+            push(TouchControl::Rope, FAR_DIAGONAL);
+        }
+        if context.pilot_armed {
+            push(TouchControl::CycleWeapon, OUTER);
         }
     }
 
@@ -895,12 +920,13 @@ impl TouchInput {
             TouchControl::BuildRotate => input.build_rotate = true,
             TouchControl::BuildPrevious => input.build_previous = true,
             // Held (fire, thrust), timed by the pad mapping (detonate) or acting on release
-            // (bomb).
+            // (bomb, rope).
             TouchControl::Fire
             | TouchControl::Thrust
             | TouchControl::Jump
             | TouchControl::Detonate
-            | TouchControl::Bomb => {}
+            | TouchControl::Bomb
+            | TouchControl::Rope => {}
         }
     }
 
@@ -920,7 +946,7 @@ impl TouchInput {
                         view.aim = Some((control, aim));
                     }
                 }
-                TouchControl::Bomb => {
+                TouchControl::Bomb | TouchControl::Rope => {
                     // Aiming shows the throw before the release commits it.
                     if let Some(aim) = finger.aim(layout) {
                         input.aim_x = aim.0;
@@ -939,7 +965,7 @@ impl TouchInput {
 /// A control was let go: the explosive is dropped (a tap) or thrown (a drag still held out).
 /// A drag pulled back onto the button cancels.
 fn release(control: TouchControl, finger: Finger, layout: &TouchLayout, input: &mut PlayerInput) {
-    if control != TouchControl::Bomb {
+    if control != TouchControl::Bomb && control != TouchControl::Rope {
         return;
     }
     let aim = finger.aim(layout);
@@ -947,7 +973,11 @@ fn release(control: TouchControl, finger: Finger, layout: &TouchLayout, input: &
     if cancelled {
         return;
     }
-    input.bomb = true;
+    if control == TouchControl::Rope {
+        input.rope = true;
+    } else {
+        input.bomb = true;
+    }
     if let Some((x, y)) = aim {
         input.aim_x = x;
         input.aim_y = y;
@@ -1053,6 +1083,7 @@ pub const fn pad_action_control(action: PadAction) -> TouchReach {
         PadAction::BuildRotate => Control(C::BuildRotate),
         PadAction::Jump => Control(C::Jump),
         PadAction::BoardRig => Control(C::BoardRig),
+        PadAction::Rope => Control(C::Rope),
     }
 }
 
@@ -1096,6 +1127,7 @@ pub const fn touch_labels(prompt: Prompt) -> &'static [&'static str] {
         | Prompt::Pick
         | Prompt::ExitRig
         | Prompt::BoardRig
+        | Prompt::Rope
         // Not on touch: desktop hotkeys, text editing keys and controller seat claims.
         | Prompt::Help
         | Prompt::Fullscreen

@@ -371,6 +371,11 @@ pub struct NpcState {
     pub talking_to: Option<PlayerId>,
     /// They stand still until this tick (idle pauses between strolls).
     pub idle_until: SimulationTick,
+    /// The plot (a [`crate::home::PlotId`]) whose building site they work on: a contractor
+    /// or helper on a site crew (WP-HOME), managed by `world/homes.rs` instead of their
+    /// settlement's routine.
+    #[serde(default)]
+    pub site: Option<u32>,
 }
 
 impl NpcState {

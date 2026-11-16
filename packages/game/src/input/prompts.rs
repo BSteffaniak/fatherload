@@ -94,6 +94,8 @@ pub enum Prompt {
     ExitRig,
     /// Board the rig.
     BoardRig,
+    /// The rope: grapple, winch, let go (on foot, WP-PILOT).
+    Rope,
 }
 
 /// A controller glyph: a button or a direction cluster.
@@ -236,11 +238,13 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::BuildMode, Arrows) => &["Num8"],
         (Prompt::BuildPlace, Full) => &["Click", "E"],
         (Prompt::BuildRemove, Full) => &["RClick", "X"],
-        (Prompt::BuildRotate, Full | Wasd) => &["R"],
+        // On foot R throws the rope; in build mode it rotates.
+        (Prompt::BuildRotate | Prompt::Rope, Full | Wasd) => &["R"],
         (Prompt::BuildCycle, Full | Wasd) => &["Z", "Q"],
         (Prompt::BuildCycle, Arrows) => &["Num9", "Num3"],
         (Prompt::BuildCursor, Full) => &["Mouse", "W", "A", "S", "D"],
         (Prompt::Jump, Full | Wasd) => &["Space"],
+        (Prompt::Rope, Arrows) => &["Num9"],
         // The arrow-keys seat leaves the global hotkeys and scrolling to the main keyboard,
         // and keyboards never "join".
         (
@@ -303,6 +307,7 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
         Prompt::Jump => button(PadAction::Jump).into_iter().collect(),
         Prompt::Pick => button(PadAction::SwingPick).into_iter().collect(),
         Prompt::ExitRig | Prompt::BoardRig => button(PadAction::BoardRig).into_iter().collect(),
+        Prompt::Rope => button(PadAction::Rope).into_iter().collect(),
         // Keyboard-only: no controller binding.
         Prompt::Help
         | Prompt::Fullscreen

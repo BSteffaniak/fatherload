@@ -436,9 +436,12 @@ fn draw_view_prompt(
             format!("to join as Player {}", view.seat_index + 1),
             false,
         )
-    } else if idle && view.can_board {
+    } else if idle && view.can_board && !view.fixture_first {
         // On foot beside the rig (Part II F5): boarding comes first.
         (Prompt::BoardRig, "Board the rig".to_owned(), true)
+    } else if idle && let Some((_, usable)) = view.pilot_usable {
+        // A ruin's lever, chest or keycard door in reach (WP-PILOT).
+        (Prompt::Use, usable.verb().to_owned(), true)
     } else if idle && view.pilot.is_some() && view.surface_zone.is_some() {
         let zone = view
             .surface_zone
@@ -701,6 +704,27 @@ struct WeaponRow {
 }
 
 fn weapon_row(view: &ViewSnapshot<'_>) -> Option<WeaponRow> {
+    if let Some(pilot) = &view.pilot {
+        // On foot (WP-PILOT): what the pilot holds and its personal ammo.
+        let arsenal = &view.player.pilot_arsenal;
+        let held = pilot.state.weapon;
+        if held.is_none() && arsenal.owned.is_empty() {
+            return None;
+        }
+        let weapon = held.unwrap_or(fatherload_simulation::WeaponKind::HandPick);
+        let ammo = weapon.stats(0).ammo.map(|ammo| arsenal.ammo(ammo));
+        return Some(WeaponRow {
+            weapon,
+            label: weapon.name().to_uppercase(),
+            ammo,
+            energy: if pilot.state.fire_cooldown > 0.0 {
+                0.4
+            } else {
+                1.0
+            },
+            ready: ammo.is_none_or(|count| count > 0),
+        });
+    }
     let mounted = view.player.mounted_weapon?;
     let stats = mounted.kind.stats(mounted.mk);
     let ammo = stats.ammo.map(|ammo| view.player.ammo(ammo));
@@ -1829,7 +1853,8 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 (Prompt::Jump, "Jump / jetpack (on foot)"),
                 (Prompt::Climb, "Climb ladders (on foot)"),
                 (Prompt::Crouch, "Crouch / crawl (on foot)"),
-                (Prompt::Pick, "Hand pick (on foot)"),
+                (Prompt::Pick, "Pick / weapon (on foot)"),
+                (Prompt::Rope, "Grapple / winch (on foot)"),
                 (Prompt::Pause, "Pause"),
             ],
         ),

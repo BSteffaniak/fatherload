@@ -318,12 +318,22 @@ impl WorldState {
     fn refresh_population(&mut self, next_tick: SimulationTick) {
         let keep =
             self.settlements_near_actors((DESPAWN_MARGIN_COLUMNS, NEAR_ROWS + KEEP_EXTRA_ROWS));
+        // Site crews (WP-HOME) are managed by `world/homes.rs`; their village copies step aside.
+        let crew = self.crew_characters();
         let mut leaving = BTreeSet::new();
         let mut present = BTreeSet::new();
         for entity in self.entities.of_kind(EntityKind::Npc) {
             let EntityState::Npc(state) = entity.state else {
                 continue;
             };
+            if state.site.is_some() {
+                present.insert(state.character);
+                continue;
+            }
+            if crew.contains(&state.character) {
+                leaving.insert(entity.id);
+                continue;
+            }
             if keep.contains_key(&state.character.village) && present.insert(state.character) {
                 continue;
             }
@@ -366,6 +376,7 @@ impl WorldState {
                     facing: if index % 2 == 0 { 1 } else { -1 },
                     talking_to: None,
                     idle_until: next_tick,
+                    site: None,
                 };
                 self.spawn_entity(
                     Body::at(x, ground_px(settlement.ground_row)),
@@ -397,6 +408,10 @@ impl WorldState {
             };
             let body = entity.body;
             let village = state.character.village;
+            if state.site.is_some() {
+                // On a building site: `world/homes.rs` walks them.
+                continue;
+            }
             let Some(settlement) = settlements
                 .entry(village)
                 .or_insert_with(|| people::routine::settlement(&settings, village))
@@ -756,6 +771,8 @@ impl WorldState {
             .people
             .conversation(player_id)
             .is_some_and(|conversation| conversation.npc == npc);
+        // A contractor building for this player talks about the job (WP-HOME).
+        let site_line = self.site_talk(id, player_id);
         let mut lines: Vec<ConversationLine> = Vec::new();
         let mut marked = None;
         {
@@ -805,13 +822,15 @@ impl WorldState {
                     if state.memory(player_id).first_met_day.is_none() {
                         state.remember(player_id, time.day, MemoryFact::Met);
                     }
-                    let text = people::contractor::contractor_profile(&character).map_or_else(
-                        || {
-                            "Building? Not me. Ask someone with calluses in the right places."
-                                .to_owned()
-                        },
-                        |profile| profile.pitch(&character),
-                    );
+                    let text = site_line.unwrap_or_else(|| {
+                        people::contractor::contractor_profile(&character).map_or_else(
+                            || {
+                                "Building? Not me. Ask someone with calluses in the right places."
+                                    .to_owned()
+                            },
+                            |profile| profile.pitch(&character),
+                        )
+                    });
                     lines.push(ConversationLine {
                         speaker: Speaker::Them,
                         text,

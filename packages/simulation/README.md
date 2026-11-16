@@ -1475,6 +1475,86 @@ continuation), replication (redacted keyframes, entity deltas, identical predict
 tick-rate independence; the netcode harness bots climb out, jump, pick and board every cycle
 (zero corrections at zero latency, convergence under loss).
 
+## Pilot content (`src/pilot/arsenal.rs`, `src/mechanism.rs`, `src/world/{pilot_arms,pilot_gear,mechanisms}.rs`, `src/worldgen/streamed/pilot_spaces.rs`)
+
+Expansion plan WP-PILOT (wave 4, T23), on top of F5.
+
+- **Personal arms** ([`pilot::arsenal`]): `WeaponKind::{Sidearm, Rifle, Shotgun, Wrench,
+  HandPick}` (`WeaponKind::is_personal`, never in `WeaponKind::ALL`, never mounted). A
+  player's `pilot_arsenal` (private loadout: owned arms, personal ammo
+  `AmmoKind::{Cartridge, Shell}` up to `MAX_PILOT_AMMO`, the held arm) is mirrored onto
+  `PilotState::weapon` (public). On foot the trigger (`WorldState::use_pilot_hands`) fires the
+  held gun through the rig's projectile entities (kills, drops and `damage_entity` work as for
+  rig weapons; friendly fire stays off), swings the wrench, or works the hand pick (a creature
+  in reach takes the swing as `HandPick`). Guns repeat while held at their cooldown; aim is the
+  free aim or `pilot_auto_aim_target`. `PlayerCommand::Pilot(PilotAction::{Equip,
+  CycleWeapon})` swaps (also from the rig). Bought with `SessionServiceRequest::PilotArms` at
+  the Explosives Shack and `VillageDeal::PilotArms` at armories. Balance: every arm is below
+  the starter rivet gun's damage per second.
+- **Gear** (`PilotGear`, every field `serde(default)`): armour (`armor_factor` on strikes and
+  blasts), thermal lining (`cold_cover`; cold damage at altitude, the F6 open item), heat weave
+  (`heat_cover` vs `band_heat_level`), headlamp (`headlamp_radius_tiles`, the game's light map),
+  climbing boots (wall slide, wall jump, `fall_damage_in`), glider, a hovering jetpack from
+  `HOVER_JETPACK_TIER`, grapple reach and the rig link (recall; sentry at `RIG_SENTRY_TIER`).
+  `PilotGearKind` lists every piece with tiers, prices and blurbs (`upgraded`); gear that only
+  matters under a sky (`needs_sky`: the thermal lining) is refused on skyless worlds.
+- **Rope** (`PilotMode::Tether`, `PilotState::tether`): `PilotAction::Rope { aim }` lets go,
+  clips onto the own rig's winch within `BOARD_REACH` (`WINCH_LENGTH`, anchor =
+  `winch_anchor`, followed every tick through `PilotControls::anchor`), or casts the grapple
+  (`grapple_hit`). The body step keeps the pilot within the rope's length (`apply_rope`); up
+  reels in, down pays out. A grapple whose rock is mined away, or a winch whose rig is wrecked,
+  lets go (`refresh_rope`).
+- **Recall** (`PilotAction::RecallRig`): a budgeted breadth-first tile path from rig to pilot,
+  recomputed every tick (`rig_recall_waypoint`); the rig flies it kinematically instead of its
+  movement step (`step_rig_recall`, `RECALL_SPEED`, a little fuel) and stops beside the pilot.
+  **Sentry** (`rig_sentry_control`): the parked rig's controls get a weapon control aimed at the
+  nearest creature within `SENTRY_COVER` of its pilot.
+- **Mechanisms** ([`mechanism`]): ruin `BuiltTile`s (codes 8-69 of the built range, all
+  unbreakable, never built or deconstructed: `BuiltTile::is_ruin`): `RuinWall`, `Gate` under a
+  `GateLintel(channel)`, `Lever { channel, on }`, `PressurePlate { channel, down }`,
+  `KeycardDoor(color)`, `Chest { open, card }`. `PilotAction::Use` works the nearest
+  (`pilot_usable`, `USE_REACH`; beside the rig, `pilot_fixture_first` says whether the use
+  button works the fixture or boards: the nearer wins). Levers flip every gate of their channel
+  within `REACH_COLUMNS` x `REACH_ROWS`; plates (`advance_plates`, once a tick) are pressed by pilots'
+  feet and resting rigs and release `PLATE_HOLD_SECONDS` after the weight leaves (timers in
+  `Bases::plates`, so they save and replicate), never closing a gate on a body. Keycards are
+  quest items `0xC100 + colour` (`keycard_item`) on the key ring: always picked up, even into a
+  full pack, and a card that rode into the rig on boarding still opens its door. Chests spill
+  `chest_loot(seed, tile)` (richer deeper) and their card. `WorldState::stamp_tiles` writes
+  hand-made ruins for tests and scenes.
+- **Generation** (`GeneratorVersion::V9`, `has_pilot_spaces`): `pilot_spaces::spaces_touching`
+  places one space per `REGION` cell (`SPACE_PERCENT`), underground, off the town and clear of
+  villages: `PilotSpaceKind::{Ruin, RigVault, CrawlwayCave}` with fixed layouts (mirrored at
+  random), stamped last in `assemble`. Access tags: `PilotSpaceKind::access`
+  (`RequiresPilot`; the vault `Both`); `nearest_space` binds quests. Golden digest
+  `GOLDEN_V9_DIGEST`; V1-V8 output is unchanged.
+- **Events** 230-239: `PilotFired`, `PilotWeaponDry`, `PilotWeaponSwapped`, `PilotRope`,
+  `PilotGlide`, `MechanismUsed`, `ChestOpened`, `RigRecall`, `PilotExposed`, `PilotWallJumped`.
+- Not built: the co-op ride-along seat (optional in the plan; a second player can stand on a
+  rig's roof only as its own pilot).
+
+`pilot/arsenal.rs`, `mechanism.rs` and `pilot_spaces.rs` test the data and the generator
+(layouts, placement, chunk seams, the V9 digest); `world/pilot_content_tests.rs` covers the
+arms (shots, ammo, dry clicks, melee, swaps, shops), gear (hover, glide, boots, grapple,
+winch, armour, cold), levers, plates (incl. a rig on a plate), chests and keycards, recall
+and the sentry, and saves (JSON, postcard), replication (private arsenal, public pilot) and
+identical continuation.
+
+## Wave 4 seams: pilot content (T23)
+
+- **Generator V9** is mine; other wave 4 tracks that also need a new generator should fold
+  into the same V9 at integration (my content is gated on `has_pilot_spaces`, the digest test
+  lives in `pilot_spaces.rs`).
+- **Sky / Moon (T20-T22)**: cold damage reads `environment_at(..).cold` against
+  `PilotGear::cold_cover` (four thermal tiers cover the Moon's `MAX_COLD`); sky towns can sell
+  personal arms through `VillageDeal::PilotArms`; Moon facilities can stamp ruin pieces
+  (`stamp_tiles` / `BuiltTile` mechanisms) and `PilotSpace` layouts.
+- **Night (T25)**: the headlamp tier is `PilotGear::headlamp_radius_tiles` (the game's light
+  map uses it); `WorldState::light_at` still has no pilot lamp.
+- **Story (T26)**: `pilot_spaces::nearest_space` and `PilotSpaceKind::access` bind pilot-only
+  arcs; keycard quest items sit at `0xC100+`.
+- **Formats**: `PROTOCOL_VERSION` 12 and save format 10 (versions 8 and 9 load unchanged).
+
 ## People in the world (`src/people/{clock,routine,camps,offers,contractor,ledger}.rs`, `src/world/people.rs`)
 
 Expansion plan WP-PEOPLE (wave 3, T17), on worlds with villages (`GeneratorVersion::has_villages`,

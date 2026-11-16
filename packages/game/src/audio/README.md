@@ -144,6 +144,15 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `upgrade_fanfare` | big | An upgrade fitted at the shop: ratchet clicks and an air-tool hiss as the part bolts on, a square-wave power-up sweep, then a rising C-E-G-C brass fanfare onto a held chord with sparkle bells. |
 | `milestone_fanfare` | big | A first-time milestone and its cosmetic unlock: a G-B-D brass call, a bell answer and a glittering high shimmer. |
 | `act_two_fanfare` | big | The sky opens (Act I -> II): a deep swell and wind rush, a broad rising brass anthem over a sustained C major chord, slow high bells and a long echo; ducks everything else. |
+| `pistol_pop` | impact | The pilot's sidearm: a band-passed snap over a small thump and a short room echo. |
+| `rifle_crack` | impact | The pilot's rifle: a high-passed supersonic crack, a body thump and a rolling brown-noise tail. |
+| `shotgun_boom` | impact | The pilot's shotgun: a sub thump under a falling low-passed pink-noise blast, then the pump's two clacks. |
+| `wrench_swing` | impact | A melee swing: a rising band-passed whoosh into a heavy metal clang. |
+| `grapple_fire` | feedback | The grapple or the winch: a pneumatic thunk, a whistling saw zip gliding up and a metal bite. |
+| `glider_open` | feedback | The glider opening: a cloth snap and a soft low-passed rush of air. |
+| `lever_clunk` | feedback | A ruin lever or plate: a heavy thump and clank, a four-tick ratchet and a settling knock. |
+| `gate_grind` | impact | A ruin gate moving: a wobbling low saw groan, rattling grains and a final clang. |
+| `keycard_beep` | feedback | A keycard door accepting its card: a reader chirp and two rising square beeps. |
 | `loop_rain` | loop | Rain: a soft band-passed pink-noise hiss over a lower body, ~70 droplet ticks a second and a few heavier drips. |
 
 Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes of drilling). Periodic parts use frequencies with whole cycles in the loop (multiples of 0.5 Hz); scattered events (pops, knocks, grit) are spread evenly at a steady density, so nothing marks the restart.

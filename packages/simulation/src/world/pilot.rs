@@ -27,7 +27,7 @@ use crate::{
         PILOT_RECALL_FEE, PILOT_STAND_HEIGHT, PickProgress, PilotControls, PilotGear,
         PilotGearKind, PilotMode, PilotState, PilotTerrain, REGEN_AFTER_SECONDS, REGEN_PER_SECOND,
         STRIKE_GUARD_SECONDS, SUFFOCATION_DAMAGE_PER_SECOND, THIN_AIR_ROW, THROW_COOLDOWN_SECONDS,
-        THROW_SPEED, box_blocked, fall_damage, pick_seconds, pilot_passable, step_pilot,
+        THROW_SPEED, box_blocked, fall_damage_in, pick_seconds, pilot_passable, step_pilot,
     },
     quantize::quantize_simulation_scalar as quantize,
     summary::PlayerScopedCommandOutcome,
@@ -331,6 +331,7 @@ impl WorldState {
         let facing = if x < player.x { -1 } else { 1 };
         let mut state = PilotState::new(player_id, player.pilot_gear, facing);
         state.crouching = crouched;
+        state.weapon = player.pilot_arsenal.equipped;
         let body = Body::at(x, feet).moving(
             quantize(player.velocity_x * 0.5),
             quantize(player.velocity_y.min(0.0)),
@@ -451,9 +452,14 @@ impl WorldState {
         player_id: PlayerId,
         gear: PilotGearKind,
     ) -> PlayerScopedCommandOutcome {
+        let skyless = !self.terrain.settings().generator.has_sky();
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
+        if gear.needs_sky() && skyless {
+            // No high cold on this world: the lining would be money thrown away.
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        }
         let owned = gear.tier(player.pilot_gear);
         let Some(price) = gear.price(owned) else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
@@ -462,10 +468,7 @@ impl WorldState {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         }
         player.credits -= price;
-        match gear {
-            PilotGearKind::Jetpack => player.pilot_gear.jetpack += 1,
-            PilotGearKind::Suit => player.pilot_gear.suit += 1,
-        }
+        player.pilot_gear = gear.upgraded(player.pilot_gear);
         let new_gear = player.pilot_gear;
         // A pilot already out (buying on foot at the counter) gets the new gear at once.
         if let Some((id, _, _)) = self.pilot_of(player_id) {
@@ -490,6 +493,18 @@ impl WorldState {
         use crate::PlayerCommand;
         match *command {
             PlayerCommand::TogglePilot => Some(self.toggle_pilot(player_id, output)),
+            // Swapping the weapon in hand also works from the rig (for the next climb out).
+            PlayerCommand::Pilot(
+                action @ (crate::pilot::PilotAction::Equip(_)
+                | crate::pilot::PilotAction::CycleWeapon),
+            ) => Some(self.equip_pilot_weapon(player_id, action, output)),
+            PlayerCommand::Pilot(_) if !self.is_on_foot(player_id) => {
+                Some(PlayerScopedCommandOutcome::IgnoredUnavailable)
+            }
+            PlayerCommand::Pilot(crate::pilot::PilotAction::Use) => {
+                Some(self.pilot_use(player_id, output))
+            }
+            PlayerCommand::Pilot(action) => self.pilot_gear_action(player_id, action, output),
             PlayerCommand::PilotPack {
                 item,
                 count,
@@ -575,6 +590,7 @@ impl WorldState {
 
     /// Moves every pilot one tick with its owner's held controls, then applies breathing,
     /// hazards, the hand pick and deaths. Runs right after the tick's inputs.
+    #[allow(clippy::too_many_lines, reason = "one pilot's tick in order")]
     pub(super) fn advance_pilots(
         &mut self,
         inputs: &TickInputs,
@@ -606,11 +622,13 @@ impl WorldState {
                 .get(&owner)
                 .and_then(|input| input.controls)
                 .unwrap_or_default();
+            let anchor = self.refresh_rope(&mut state, owner, output);
             let foot = PilotControls {
                 horizontal: controls.horizontal(),
                 up: controls.thrust,
                 down: controls.drill_down,
                 jump: controls.jump,
+                anchor,
             };
             let report = {
                 let view = self.pilot_view(Some(owner));
@@ -634,9 +652,26 @@ impl WorldState {
             if report.splashed {
                 output.push_event(GameplayEventKind::PilotSplashed { player_id: owner });
             }
+            if report.hover_started || report.glide_started {
+                output.push_event(GameplayEventKind::PilotGlide {
+                    player_id: owner,
+                    hover: report.hover_started,
+                });
+            }
+            if report.wall_jumped {
+                output.push_event(GameplayEventKind::PilotWallJumped { player_id: owner });
+            }
+            if report.rope_released {
+                output.push_event(GameplayEventKind::PilotRope {
+                    player_id: owner,
+                    action: crate::pilot::RopeEvent::Released,
+                    x: px(body.x),
+                    y: px(body.y),
+                });
+            }
             let mut damage = 0.0;
             if report.landed && report.landing_speed > 300.0 {
-                let hurt = fall_damage(report.landing_speed);
+                let hurt = fall_damage_in(report.landing_speed, state.gear);
                 output.push_event(GameplayEventKind::PilotLanded {
                     player_id: owner,
                     hard: hurt > 0.0,
@@ -644,6 +679,7 @@ impl WorldState {
                 damage += hurt;
             }
             damage += self.breathe(&body, &mut state, dt, owner, output);
+            damage += self.pilot_exposure(&body, &mut state, dt, owner, output);
             if self.touches_lava(&body, &state) {
                 damage = LAVA_DAMAGE_PER_SECOND.mul_add(dt, damage);
             }
@@ -652,7 +688,7 @@ impl WorldState {
                     .mul_add(dt, state.health)
                     .min(state.max_health);
             }
-            self.swing_pick(&body, &mut state, controls, owner, dt, output);
+            self.use_pilot_hands(&body, &mut state, controls, owner, next_tick, dt, output);
             state.health = quantize(state.health);
             state.oxygen = quantize(state.oxygen);
             state.jetpack_fuel = quantize(state.jetpack_fuel);
@@ -664,7 +700,6 @@ impl WorldState {
                 let _ = self.damage_pilot(id, damage, output);
             }
         }
-        let _ = next_tick;
     }
 
     /// Oxygen for one tick; returns suffocation damage.
@@ -751,7 +786,7 @@ impl WorldState {
         })
     }
 
-    fn swing_pick(
+    pub(super) fn swing_pick(
         &mut self,
         body: &Body,
         state: &mut PilotState,
@@ -941,7 +976,7 @@ impl WorldState {
                 }
             }
         });
-        let scaled = damage * self.enemy_difficulty().damage();
+        let scaled = damage * self.enemy_difficulty().damage() * state.gear.armor_factor();
         let _ = self.damage_pilot(id, scaled, output);
         true
     }
@@ -993,7 +1028,15 @@ impl WorldState {
                     });
                 }
                 let distance = (mx - blast.x).hypot(my - blast.y);
-                let amount = peak * (1.0 - distance / reach);
+                let armor = self
+                    .entities
+                    .get(id)
+                    .and_then(|entity| match entity.state {
+                        EntityState::Pilot(state) => Some(state.gear.armor_factor()),
+                        _ => None,
+                    })
+                    .unwrap_or(1.0);
+                let amount = peak * (1.0 - distance / reach) * armor;
                 if amount > 0.0 {
                     let _ = self.damage_pilot(id, amount, output);
                 }
@@ -1050,11 +1093,12 @@ impl WorldState {
                 quantize(home_x),
                 quantize(TILE_SIZE.mul_add(0.5, home_y) - 0.5),
             );
-            let _ = self.spawn_entity(
-                body,
-                EntityState::Pilot(PilotState::new(owner, gear, 1)),
-                None,
-            );
+            let mut state = PilotState::new(owner, gear, 1);
+            state.weapon = self
+                .players
+                .get(&owner)
+                .and_then(|player| player.pilot_arsenal.equipped);
+            let _ = self.spawn_entity(body, EntityState::Pilot(state), None);
         }
     }
 
@@ -1095,10 +1139,16 @@ impl WorldState {
                 let Some(player) = self.players.get_mut(&owner) else {
                     continue;
                 };
-                let room = player
-                    .pilot_gear
-                    .pack_capacity()
-                    .saturating_sub(player.pilot_pack.total());
+                // Keycards and temple keystones ride on the key ring, not in the pack: a
+                // chest's loot filling the pack must never strand the key that opens the vault.
+                let room = if crate::mechanism::rides_key_ring(stack.kind) {
+                    stack.count
+                } else {
+                    player
+                        .pilot_gear
+                        .pack_capacity()
+                        .saturating_sub(player.pilot_pack.total())
+                };
                 let taken = stack.count.min(room);
                 if taken == 0 {
                     continue;
@@ -1162,13 +1212,16 @@ impl WorldState {
     /// Spawns `player_id`'s pilot out of its rig at feet position `(x, y)` (tests, screenshot
     /// scenes and scripted set pieces). Replaces a pilot already out. Returns its entity.
     pub fn place_pilot(&mut self, player_id: PlayerId, x: f32, y: f32) -> Option<EntityId> {
-        let gear = self.players.get(&player_id)?.pilot_gear;
+        let player = self.players.get(&player_id)?;
+        let gear = player.pilot_gear;
+        let mut state = PilotState::new(player_id, gear, 1);
+        state.weapon = player.pilot_arsenal.equipped;
         if let Some((id, _, _)) = self.pilot_of(player_id) {
             let _ = self.entities.despawn(id);
         }
         Some(self.spawn_entity(
             Body::at(quantize(x), quantize(y)),
-            EntityState::Pilot(PilotState::new(player_id, gear, 1)),
+            EntityState::Pilot(state),
             None,
         ))
     }

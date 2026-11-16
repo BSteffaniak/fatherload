@@ -161,24 +161,67 @@ pub fn draw_rig_sheet(draw: &mut RaylibDrawHandle<'_>, sheet: RigSheet) {
 }
 
 /// The pilot's poses (rows of frames) and paint jobs, large.
+#[allow(clippy::too_many_lines, reason = "one sheet, row by row")]
 fn draw_pilots(draw: &mut RaylibDrawHandle<'_>, width: i32) {
-    use crate::rendering::pilot_art::{PilotFrame, PilotLook, paint_pilot};
-    use fatherload_simulation::pilot::{PilotGear, PilotPose};
+    use crate::rendering::pilot_art::{PilotArms, PilotFrame, PilotLook, paint_pilot};
+    use fatherload_simulation::{
+        WeaponKind,
+        pilot::{PilotGear, PilotPose},
+    };
     ui_kit::text(draw, "Pilot on foot", 8, 6, TextStyle::Bold, GOLD);
-    let poses: [(&str, PilotPose, f32, bool); 13] = [
-        ("Idle", PilotPose::Idle, 1.5, false),
-        ("Walk", PilotPose::Walk, 8.0, false),
-        ("Run", PilotPose::Run, 12.0, false),
-        ("Jump", PilotPose::Jump, 1.0, false),
-        ("Fall", PilotPose::Fall, 1.0, false),
-        ("Climb", PilotPose::Climb, 6.0, false),
-        ("Crouch", PilotPose::Crouch, 1.0, false),
-        ("Crawl", PilotPose::Crawl, 6.0, false),
-        ("Swim", PilotPose::Swim, 4.0, false),
-        ("Hurt", PilotPose::Hurt, 1.0, false),
-        ("Jetpack", PilotPose::Jetpack, 10.0, false),
-        ("Hang", PilotPose::Hang, 1.0, false),
-        ("Pick", PilotPose::Idle, 6.6, true),
+    let none = PilotArms::NONE;
+    let held = |weapon, aim: (f32, f32), swing| PilotArms {
+        weapon: Some(weapon),
+        aim,
+        swing,
+    };
+    let poses: [(&str, PilotPose, f32, bool, PilotArms); 21] = [
+        ("Idle", PilotPose::Idle, 1.5, false, none),
+        ("Walk", PilotPose::Walk, 8.0, false, none),
+        ("Run", PilotPose::Run, 12.0, false, none),
+        ("Jump", PilotPose::Jump, 1.0, false, none),
+        ("Fall", PilotPose::Fall, 1.0, false, none),
+        ("Climb", PilotPose::Climb, 6.0, false, none),
+        ("Crouch", PilotPose::Crouch, 1.0, false, none),
+        ("Crawl", PilotPose::Crawl, 6.0, false, none),
+        ("Swim", PilotPose::Swim, 4.0, false, none),
+        ("Hurt", PilotPose::Hurt, 1.0, false, none),
+        ("Jetpack", PilotPose::Jetpack, 10.0, false, none),
+        ("Hang", PilotPose::Hang, 1.0, false, none),
+        ("Pick", PilotPose::Idle, 6.6, true, none),
+        // WP-PILOT: gear poses and the personal arms.
+        ("Hover", PilotPose::Hover, 1.0, false, none),
+        ("Glide", PilotPose::Glide, 1.0, false, none),
+        ("Rope", PilotPose::Rope, 1.0, false, none),
+        ("Wall", PilotPose::WallSlide, 1.0, false, none),
+        (
+            "Sidearm",
+            PilotPose::Idle,
+            1.5,
+            false,
+            held(WeaponKind::Sidearm, (1.0, -0.2), 0.0),
+        ),
+        (
+            "Rifle",
+            PilotPose::Walk,
+            8.0,
+            false,
+            held(WeaponKind::Rifle, (1.0, 0.0), 0.0),
+        ),
+        (
+            "Shotgun",
+            PilotPose::Idle,
+            1.5,
+            false,
+            held(WeaponKind::Shotgun, (0.9, 0.4), 0.6),
+        ),
+        (
+            "Wrench",
+            PilotPose::Idle,
+            1.5,
+            false,
+            held(WeaponKind::Wrench, (1.0, 0.0), 0.5),
+        ),
     ];
     let scale = 2;
     let columns = 7;
@@ -188,9 +231,13 @@ fn draw_pilots(draw: &mut RaylibDrawHandle<'_>, width: i32) {
         PilotGear {
             jetpack: 1,
             suit: 2,
+            armor: 1,
+            headlamp: 2,
+            boots: 1,
+            ..PilotGear::default()
         },
     );
-    for (index, (name, pose, rate, swinging)) in poses.into_iter().enumerate() {
+    for (index, (name, pose, rate, swinging, arms)) in poses.into_iter().enumerate() {
         let column = index as i32 % columns;
         let row = index as i32 / columns;
         let cx = 8 + column * column_width + column_width / 2;
@@ -213,6 +260,14 @@ fn draw_pilots(draw: &mut RaylibDrawHandle<'_>, width: i32) {
                     pose,
                     seconds,
                     swinging,
+                    arms: PilotArms {
+                        swing: if frame == 0 {
+                            arms.swing
+                        } else {
+                            arms.swing * 0.3
+                        },
+                        ..arms
+                    },
                 },
             );
             let x = cx - 14 + frame * 28;
@@ -227,7 +282,7 @@ fn draw_pilots(draw: &mut RaylibDrawHandle<'_>, width: i32) {
     }
     // Paint jobs and suit tiers.
     let jobs = paint_jobs();
-    let top = 78 + 2 * 84 + 14;
+    let top = 78 + 3 * 84 + 14;
     ui_kit::text(draw, "Suit paint and tiers", 8, top, TextStyle::Bold, GOLD);
     for (index, (name, cosmetics)) in jobs.into_iter().take(8).enumerate() {
         let cx = 8 + index as i32 * ((width - 16) / 8) + (width - 16) / 16;
@@ -236,6 +291,7 @@ fn draw_pilots(draw: &mut RaylibDrawHandle<'_>, width: i32) {
             PilotGear {
                 jetpack: u8::from(index % 2 == 0),
                 suit: (index % 4) as u8,
+                ..PilotGear::default()
             },
         );
         let canvas = paint_pilot(
@@ -244,6 +300,7 @@ fn draw_pilots(draw: &mut RaylibDrawHandle<'_>, width: i32) {
                 pose: PilotPose::Walk,
                 seconds: index as f32 * 0.13,
                 swinging: false,
+                arms: crate::rendering::pilot_art::PilotArms::NONE,
             },
         );
         canvas.draw(

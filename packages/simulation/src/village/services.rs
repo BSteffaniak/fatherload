@@ -146,6 +146,9 @@ pub enum VillageDeal {
         recipe: crate::skycraft::SkyRecipe,
         tier: u8,
     },
+    /// A personal weapon or a pack of personal ammo for the pilot (WP-PILOT; armories are the
+    /// villages' gunsmiths).
+    PilotArms(crate::pilot::arsenal::PilotArmsPurchase),
 }
 
 /// A deal and its price (credits; percentage deals price per unit when bought).
@@ -197,6 +200,12 @@ impl VillageOffer {
                     cost.skystone,
                     cost.cloud_silver
                 )
+            }
+            VillageDeal::PilotArms(crate::pilot::arsenal::PilotArmsPurchase::Weapon(weapon)) => {
+                format!("Pilot's {}", weapon.name())
+            }
+            VillageDeal::PilotArms(crate::pilot::arsenal::PilotArmsPurchase::Ammo(ammo)) => {
+                format!("{} x {}", ammo.pack().0, ammo.plural())
             }
         }
     }
@@ -337,6 +346,20 @@ pub fn offers(village: &Village, building: &VillageBuilding) -> Vec<VillageOffer
                 ));
             }
             list.sort_by_key(|offer| offer.price);
+            // The gunsmith's corner (WP-PILOT): one personal weapon and one box of ammo,
+            // rolled after the charges so the charge offers stay what they were.
+            let weapons = crate::pilot::arsenal::PILOT_WEAPONS;
+            let weapon = weapons[rng.below(weapons.len())];
+            list.push(VillageOffer::flat(
+                VillageDeal::PilotArms(crate::pilot::arsenal::PilotArmsPurchase::Weapon(weapon)),
+                weapon.cost() + weapon.cost() / 10,
+            ));
+            let ammo =
+                crate::weapon::AmmoKind::PILOT[rng.below(crate::weapon::AmmoKind::PILOT.len())];
+            list.push(VillageOffer::flat(
+                VillageDeal::PilotArms(crate::pilot::arsenal::PilotArmsPurchase::Ammo(ammo)),
+                ammo.pack().1 + ammo.pack().1 / 5,
+            ));
             list
         }
         VillageService::CosmeticVendor => {

@@ -631,8 +631,9 @@ pub(super) fn draw_explosives(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         test,
     ];
     offers.extend(special_offers(shack, credits, &bomb_key));
-    let sky = ui.snapshot.terrain.settings().generator.has_sky_content();
-    offers.extend(arms_offers(ui.player, shack, credits, sky));
+    let sky_content = ui.snapshot.terrain.settings().generator.has_sky_content();
+    let has_sky = ui.snapshot.terrain.settings().generator.has_sky();
+    offers.extend(arms_offers(ui.player, shack, credits, sky_content, has_sky));
     if let Some(mounted) = ui.player.mounted_weapon {
         status.push(SectionItem::icon_stat(
             weapon_art::icon(mounted.kind),
@@ -664,7 +665,8 @@ fn arms_offers(
     player: &fatherload_simulation::Player,
     shack: u8,
     credits: u32,
-    sky: bool,
+    sky_content: bool,
+    has_sky: bool,
 ) -> Vec<Offer> {
     use crate::shell::arms::{ARMS_ROWS, ArmsRow, mk_name};
     use fatherload_simulation::weapon::{
@@ -686,7 +688,7 @@ fn arms_offers(
                     .iter()
                     .find(|(material, count)| player.cargo_bay.material(*material) < *count)
                     .map(|(material, count)| format!("Needs {count} {}", material.name()));
-                let no_sky = weapon.act_two() && !sky;
+                let no_sky = weapon.act_two() && !sky_content;
                 let locked = shack < weapon.shack_level() || no_sky || missing.is_some();
                 match player.weapon_rack.mk(weapon) {
                     None => Offer::new(
@@ -778,22 +780,94 @@ fn arms_offers(
                 .price(cost, credits)
                 .about("Ammunition for the rocket launcher. Takes no cargo space.")
             }
-            ArmsRow::Gear(gear) => gear_offer(player, gear, credits),
+            ArmsRow::Gear(gear) => gear_offer(player, gear, credits, has_sky),
+            ArmsRow::PilotArms(purchase) => pilot_arms_offer(player, purchase, credits),
         })
         .collect()
 }
 
-/// A pilot gear row (Part II F5): the next jetpack or suit tier, or "top tier".
+/// A gunsmith row (WP-PILOT): a personal weapon (owned once) or a box of personal ammo.
+fn pilot_arms_offer(
+    player: &fatherload_simulation::Player,
+    purchase: fatherload_simulation::pilot::arsenal::PilotArmsPurchase,
+    credits: u32,
+) -> Offer {
+    use fatherload_simulation::pilot::arsenal::{MAX_PILOT_AMMO, PilotArmsPurchase};
+    match purchase {
+        PilotArmsPurchase::Weapon(weapon) => {
+            let owned = player.pilot_arsenal.owned.contains(&weapon);
+            let stats = weapon.stats(0);
+            let detail = stats.ammo.map_or_else(
+                || format!("Pilot's arm, {:.0} damage", stats.damage),
+                |ammo| format!("Pilot's arm, uses {}", ammo.plural()),
+            );
+            let row = Offer::new(weapon_art::icon(weapon), weapon.name(), detail).about(format!(
+                "{} Swap what you hold on foot with {}.",
+                weapon.description(),
+                crate::input::prompts::inline_text(
+                    Prompt::CycleWeapon,
+                    super::prompts::menu_device()
+                )
+                .unwrap_or_else(|| "the next-weapon button".to_owned())
+            ));
+            if owned {
+                row.tag("OWNED", MINT).unavailable_if(true)
+            } else {
+                row.price(purchase.price(), credits)
+            }
+        }
+        PilotArmsPurchase::Ammo(ammo) => {
+            let (count, cost) = ammo.pack();
+            let carried = player.pilot_arsenal.ammo(ammo);
+            Offer::new(
+                &weapon_art::ICON_ROCKET_AMMO,
+                format!("{} box", ammo.name()),
+                format!("+{count} (carrying {carried})"),
+            )
+            .price(cost, credits)
+            .unavailable_if(carried >= MAX_PILOT_AMMO)
+            .about("Personal ammunition for the pilot's guns, kept apart from the rig's.")
+        }
+    }
+}
+
+/// The icon of a piece of pilot gear.
+#[must_use]
+pub const fn gear_icon(
+    gear: fatherload_simulation::pilot::PilotGearKind,
+) -> &'static crate::rendering::pixel_art::sprite::SpriteDef {
+    use fatherload_simulation::pilot::PilotGearKind;
+    match gear {
+        PilotGearKind::Jetpack => &icons::JETPACK,
+        PilotGearKind::Suit | PilotGearKind::Thermal | PilotGearKind::HeatWeave => &icons::HELMET,
+        PilotGearKind::Armor => &icons::PILOT_ARMOR,
+        PilotGearKind::Headlamp => &icons::HEADLAMP,
+        PilotGearKind::Boots => &icons::BOOTS,
+        PilotGearKind::Glider => &icons::GLIDER,
+        PilotGearKind::Grapple => &icons::GRAPPLE,
+        PilotGearKind::RigLink => &icons::RIG_LINK,
+    }
+}
+
+/// A pilot gear row (Part II F5): the next tier of a piece of pilot gear, or "top tier".
 fn gear_offer(
     player: &fatherload_simulation::Player,
     gear: fatherload_simulation::pilot::PilotGearKind,
     credits: u32,
+    has_sky: bool,
 ) -> Offer {
     let owned = gear.tier(player.pilot_gear);
-    let icon = match gear {
-        fatherload_simulation::pilot::PilotGearKind::Jetpack => &icons::JETPACK,
-        fatherload_simulation::pilot::PilotGearKind::Suit => &icons::HELMET,
-    };
+    let icon = gear_icon(gear);
+    if gear.needs_sky() && !has_sky {
+        // The simulation refuses it too: this world has no high cold to keep out.
+        return Offer::new(icon, gear.name(), "No sky on this world")
+            .tag("NO SKY", RED)
+            .unavailable_if(true)
+            .about(format!(
+                "{}. This world has no high sky, so there is no cold to keep out.",
+                gear.blurb()
+            ));
+    }
     gear.price(owned).map_or_else(
         || {
             Offer::new(icon, format!("{} tier {owned}", gear.name()), "Top tier")

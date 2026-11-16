@@ -318,7 +318,11 @@ impl LocalGame {
                     }
                     frame
                         .actions
-                        .extend(crate::weapon_aim::cycle_command(sampled, player));
+                        .extend(crate::weapon_aim::cycle_command(sampled, player, on_foot));
+                    // WP-PILOT: the rope button on foot (grapple, winch, let go).
+                    frame
+                        .actions
+                        .extend(crate::weapon_aim::rope_command(sampled, &aim, on_foot));
                     self.seat_aims[index] = aim;
                     frame
                 }

@@ -113,6 +113,9 @@ pub enum PadAction {
     /// Pressed: climb out of the rig, or board it on foot (the use button: buildings, doors
     /// and modules claim it first in the rig, boarding first on foot).
     BoardRig,
+    /// On foot, pressed (WP-PILOT): the rope: fire the grapple, clip onto the rig's winch, or
+    /// let go (the scanner's bumper, which is rig-only).
+    Rope,
 }
 
 /// The controller layout: every `(action, button)` pair. An action may have several buttons
@@ -140,6 +143,7 @@ pub const PAD_BINDINGS: &[(PadAction, PadButton)] = &[
     (PadAction::Jump, PadButton::A),
     (PadAction::SwingPick, PadButton::RightTrigger),
     (PadAction::BoardRig, PadButton::X),
+    (PadAction::Rope, PadButton::LeftBumper),
 ];
 
 /// How long the detonator button is held before it fires charges in sequence (a shorter tap
@@ -362,6 +366,7 @@ impl PadMapper {
             ui_scroll: state.scroll_notches(delta_seconds),
             build_mode,
             build_rotate: pressed(PadAction::BuildRotate),
+            rope: pressed(PadAction::Rope),
             ..PlayerInput::default()
         };
         self.previous.clone_from(state);

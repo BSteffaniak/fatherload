@@ -431,17 +431,17 @@ fn gather_lights(scene: &LightScene<'_>) -> Vec<Light> {
             continue;
         }
         let ahead = if pilot.state.facing < 0 { -1.0 } else { 1.0 };
-        lights.push(Light::pool(
-            pilot.x,
-            head_y,
-            PILOT_LAMP_TILES * TILE_SIZE,
-            0.85,
-            false,
-        ));
+        // A bought headlamp (WP-PILOT) throws a wider pool and a longer beam.
+        let lamp = if pilot.state.gear.headlamp == 0 {
+            PILOT_LAMP_TILES
+        } else {
+            pilot.state.gear.headlamp_radius_tiles()
+        };
+        lights.push(Light::pool(pilot.x, head_y, lamp * TILE_SIZE, 0.85, false));
         lights.push(Light {
             x: pilot.x + ahead * TILE_SIZE * 0.3,
             y: head_y,
-            radius: PILOT_LAMP_TILES * TILE_SIZE * 1.8,
+            radius: lamp * TILE_SIZE * 1.8,
             strength: 0.9,
             beam: Some((ahead * 0.97, 0.22)),
             warm: true,

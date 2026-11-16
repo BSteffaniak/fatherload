@@ -115,6 +115,14 @@ impl WorldState {
     /// stands, else `None` (town).
     #[must_use]
     pub fn rescue_home(&self, player_id: PlayerId) -> Option<(f32, f32)> {
+        // A contractor-built home with a bed the player made theirs comes first (WP-HOME).
+        if let Some(plot) = self.homes.home_point_of(player_id) {
+            #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
+            let x = (plot.door_column() as f32 + 0.5) * TILE_SIZE;
+            #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
+            let y = (plot.site.ground_row as f32 - 0.5) * TILE_SIZE;
+            return Some((x, y));
+        }
         let home = self.bases.home_of(player_id)?;
         let (width, _) = home.kind.footprint();
         let anchor = home.anchor();
@@ -248,6 +256,17 @@ impl WorldState {
                 }) {
                     return Err(BuildRefusal::OverlapsClaim);
                 }
+                // Home plots (WP-HOME) are claims of their own.
+                let on_plot = self
+                    .homes
+                    .plots_between(at.x - CLAIM_RADIUS, at.x + CLAIM_RADIUS)
+                    .any(|plot| {
+                        plot.site.ground_row >= at.y - CLAIM_RADIUS - 3
+                            && plot.site.ground_row <= at.y + CLAIM_RADIUS + 14
+                    });
+                if on_plot {
+                    return Err(BuildRefusal::OnPlot);
+                }
                 self.check_footprint(origin, size)?;
                 cost.credits = beacon_price(held);
             }
@@ -344,6 +363,10 @@ impl WorldState {
             refund.credits = module.paid_credits.saturating_mul(MODULE_REFUND_PERCENT) / 100;
             refund.blocks = module.paid_blocks.clone();
         } else if let Some(TileKind::Built(tile)) = self.terrain.tile(at).map(|tile| tile.kind) {
+            if tile.is_ruin() {
+                // Ruin pieces (WP-PILOT) belong to the ruin, not the claim.
+                return Err(BuildRefusal::NotPermitted);
+            }
             if self.supports_something(at) {
                 return Err(BuildRefusal::Supporting);
             }

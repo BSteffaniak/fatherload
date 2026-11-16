@@ -541,7 +541,7 @@ pub enum SoundCue {
     FlakBurst,
     /// A storm elemental's lightning arc. (T21)
     Thunderclap,
-    /// A temple lever thrown. (T21)
+    /// A lever thrown: a sky temple lever (T21), a ruin lever or a pressure plate (T23).
     LeverClunk,
     /// A temple gate grinding open. (T21)
     GateRumble,
@@ -568,6 +568,33 @@ pub enum SoundCue {
     CoreReached,
     /// A lunar uplink beaming a rig.
     UplinkWarp,
+    // --- WP-PILOT -------------------------------------------------------------------------
+    /// The pilot's sidearm.
+    PistolPop,
+    /// The pilot's rifle.
+    RifleCrack,
+    /// The pilot's shotgun.
+    ShotgunBoom,
+    /// A melee swing (wrench or pick at a creature).
+    WrenchSwing,
+    /// The grapple firing or the winch clipping on.
+    GrappleFire,
+    /// The glider opening.
+    GliderOpen,
+    /// A ruin gate grinding open or shut.
+    GateGrind,
+    /// A keycard door accepting its card.
+    KeycardBeep,
+    /// A deed or a building contract signed: a quill scratch and a stamp (WP-HOME).
+    DeedSigned,
+    /// Builders at work: a new construction stage on your plot.
+    BuildersHammer,
+    /// The keys handed over: your home (or its new wing) is finished.
+    HomeFanfare,
+    /// A building site needs you: a knock and a questioning whistle.
+    SiteKnock,
+    /// A piece of furniture set down or picked up.
+    FurnitureThunk,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -1140,6 +1167,10 @@ impl SeatUi {
         if input.interact {
             // On foot boarding comes first; in the rig climbing out comes last.
             if ctx.on_foot() && self.try_board(ctx, cues, requests) {
+                return false;
+            }
+            // A ruin's lever, chest or keycard door in reach (WP-PILOT).
+            if ctx.on_foot() && self.try_use_fixture(ctx, requests) {
                 return false;
             }
             if let Some(zone) = ctx.current_zone() {
@@ -1758,15 +1789,22 @@ impl SeatUi {
                 "Bought the {} (tier {}). {}",
                 gear.name(),
                 gear.tier(player.pilot_gear),
-                match gear {
-                    fatherload_simulation::pilot::PilotGearKind::Jetpack => {
-                        "Hold jump in the air to fly; it recharges on the ground."
-                    }
-                    fatherload_simulation::pilot::PilotGearKind::Suit => {
-                        "More health, air and pack space on foot."
-                    }
-                }
+                pilot_gear_hint(gear, ctx.device)
             ),
+            SessionServiceRequest::PilotArms(purchase) => match purchase {
+                fatherload_simulation::pilot::arsenal::PilotArmsPurchase::Weapon(weapon) => {
+                    format!(
+                        "Nix hands you a {}. {} swaps what you hold on foot.",
+                        weapon.name().to_lowercase(),
+                        key_for(Prompt::CycleWeapon, ctx.device)
+                    )
+                }
+                fatherload_simulation::pilot::arsenal::PilotArmsPurchase::Ammo(ammo) => format!(
+                    "Nix boxes your {}. You now carry {}.",
+                    ammo.plural(),
+                    player.pilot_arsenal.ammo(ammo)
+                ),
+            },
             SessionServiceRequest::BuyBombBundle { .. }
             | SessionServiceRequest::BuyMiningRockets
             | SessionServiceRequest::ClaimFreeTestCharge => {
@@ -2967,6 +3005,40 @@ pub const fn interior_service_x(zone: SurfaceZone) -> f32 {
         SurfaceZone::Bank => 380.0,
         SurfaceZone::Explosives => 431.0,
         SurfaceZone::Salvage => 410.0,
+    }
+}
+
+/// What a newly bought piece of pilot gear does, with the controls that use it.
+fn pilot_gear_hint(
+    gear: fatherload_simulation::pilot::PilotGearKind,
+    device: InputDevice,
+) -> String {
+    use fatherload_simulation::pilot::PilotGearKind;
+    match gear {
+        PilotGearKind::Jetpack => {
+            "Hold jump in the air to fly; it recharges on the ground. Mk II hovers with jump and down."
+                .to_owned()
+        }
+        PilotGearKind::Suit => "More health, air and pack space on foot.".to_owned(),
+        PilotGearKind::Armor => "Bites, shots and blasts hurt less on foot.".to_owned(),
+        PilotGearKind::Thermal => "The high cold bites less on foot.".to_owned(),
+        PilotGearKind::HeatWeave => "The deep heat bites less on foot.".to_owned(),
+        PilotGearKind::Headlamp => "A brighter beam for caves and nights.".to_owned(),
+        PilotGearKind::Boots => {
+            "Push into a wall while falling to slide; jump off it to kick away.".to_owned()
+        }
+        PilotGearKind::Glider => {
+            "Hold jump while falling to glide (with down, or once the jetpack is dry).".to_owned()
+        }
+        PilotGearKind::Grapple => format!(
+            "{} fires the hook; up reels in, down pays out, {} again lets go.",
+            key_for(Prompt::Rope, device),
+            key_for(Prompt::Rope, device)
+        ),
+        PilotGearKind::RigLink => format!(
+            "On foot, {} away from the rig calls it over on autopilot.",
+            key_for(Prompt::Use, device)
+        ),
     }
 }
 

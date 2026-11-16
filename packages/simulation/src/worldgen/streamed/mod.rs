@@ -37,6 +37,7 @@ pub mod cave_biomes;
 #[cfg(test)]
 mod cave_tests;
 pub mod index;
+pub mod pilot_spaces;
 mod regions;
 #[cfg(test)]
 mod tests;

@@ -307,7 +307,7 @@ pub fn wrapped_height(rows: usize) -> i32 {
 pub fn draw_prompt_sheet(draw: &mut impl RaylibDraw) {
     use super::pixel_art::sprite::draw_sprite;
     use crate::input::devices::KeyboardLayout;
-    const ALL: [Prompt; 33] = [
+    const ALL: [Prompt; 34] = [
         Prompt::Navigate,
         Prompt::Adjust,
         Prompt::Confirm,
@@ -341,6 +341,7 @@ pub fn draw_prompt_sheet(draw: &mut impl RaylibDraw) {
         Prompt::Pick,
         Prompt::ExitRig,
         Prompt::Climb,
+        Prompt::Rope,
     ];
     let canvas = ui_kit::canvas();
     draw.draw_rectangle_rec(canvas.rect(), NIGHT);
@@ -499,5 +500,6 @@ const fn prompt_name(prompt: Prompt) -> &'static str {
         Prompt::Pick => "pick",
         Prompt::ExitRig => "climb out",
         Prompt::BoardRig => "board",
+        Prompt::Rope => "rope",
     }
 }

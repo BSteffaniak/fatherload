@@ -84,7 +84,15 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `HazardGear` and `LunarProgress` in the loadout, `PlayerCommand::Moon`, the Moon weapons
 ///   (`WeaponKind::{LunarCutter, LowGMortar, VoidLance}`), the Moon enemies
 ///   (`EnemyKind::{RegolithCrawler, CrystalMite, DerelictAutomaton, Warden}`),
-///   `ModuleKind::LunarUplink` / `ModuleService::Beam` and the Moon events 220-229.
+///   `ModuleKind::LunarUplink` / `ModuleService::Beam` and the Moon events 220-229;
+/// * T23 pilot content: `PlayerCommand::Pilot(PilotAction)`, `SessionServiceRequest::PilotArms`,
+///   `VillageDeal::PilotArms`, the personal `WeaponKind`s and `AmmoKind`s, the new `PilotGear`
+///   fields, `PilotState`'s arms / rope / recall fields and `PilotMode::Tether`, the pilot
+///   arsenal in `PlayerInventory`, ruin `BuiltTile`s (codes 8-69 of the built range), plate
+///   timers in `Bases`, `GeneratorVersion::V9` and the events 230-239;
+/// * T24 contractor homes: the `Homes` world field and `SectionKey::Homes` section,
+///   `PlayerCommand::Home`, `NpcState::site` (site crews), `BedSpot::Home`,
+///   `BuildRefusal::OnPlot` and the home events 240-249.
 pub const PROTOCOL_VERSION: u8 = 12;
 
 /// One client input frame: the controls and actions for exactly one tick.

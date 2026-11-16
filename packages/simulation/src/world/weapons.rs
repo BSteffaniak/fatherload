@@ -391,7 +391,7 @@ impl WorldState {
     /// projectile spawned at the muzzle and flying outward would never meet it, so each pellet
     /// first sweeps the hardpoint-to-muzzle stretch of the aim line ([`Self::point_blank`]) and
     /// hits what it finds there; a spent pellet never spawns.
-    fn launch_projectiles(
+    pub(super) fn launch_projectiles(
         &mut self,
         player_id: PlayerId,
         (weapon, mk): (WeaponKind, u8),
@@ -1099,9 +1099,14 @@ impl WorldState {
                 WeaponKind::RocketLauncher | WeaponKind::FlakCannon | WeaponKind::LowGMortar => {
                     DamageKind::Explosive
                 }
-                WeaponKind::RivetGun | WeaponKind::ScatterBlaster | WeaponKind::GravityGun => {
-                    DamageKind::Kinetic
-                }
+                WeaponKind::RivetGun
+                | WeaponKind::ScatterBlaster
+                | WeaponKind::GravityGun
+                | WeaponKind::Sidearm
+                | WeaponKind::Rifle
+                | WeaponKind::Shotgun
+                | WeaponKind::Wrench
+                | WeaponKind::HandPick => DamageKind::Kinetic,
                 WeaponKind::ArcRifle => DamageKind::Shock,
                 WeaponKind::TetherHarpoon => DamageKind::Piercing,
             },

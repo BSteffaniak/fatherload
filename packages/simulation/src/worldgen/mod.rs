@@ -40,6 +40,7 @@ pub mod report;
 pub mod sky;
 pub mod strata;
 pub mod streamed;
+pub use streamed::pilot_spaces;
 #[cfg(test)]
 mod tests;
 
@@ -110,9 +111,12 @@ pub enum GeneratorVersion {
     /// sky city, a sky temple and harpy nests) and the Moon ([`GeneratorVersion::has_moon_content`],
     /// T22, [`moon`]: regolith and maria, craters, lava tubes, ice fields, crystal forests,
     /// helium-3 and alien alloy, a deep-rock underside, abandoned habitats, the lunar research
-    /// colony, the alien facility and the core at the Moon's heart). Land placement, the bands
-    /// and everything below the sky are exactly V8's except where a town isle stands in for a
-    /// chain island.
+    /// colony, the alien facility and the core at the Moon's heart), and pilot-only spaces in the
+    /// ground ([`GeneratorVersion::has_pilot_spaces`], T23, [`pilot_spaces`]: sealed ruins with
+    /// lever gates, pressure plates, keycard doors and treasure chests behind vent-grate
+    /// entrances, and crawlway caves reached only through 1-tile crawlways). Land placement,
+    /// the bands and the rest of the ground are exactly V8's except where a town isle stands
+    /// in for a chain island.
     V9,
 }
 
@@ -231,6 +235,14 @@ impl GeneratorVersion {
     /// keeps its placeholder Moon (regolith over moon rock with craters).
     #[must_use]
     pub const fn has_moon_content(self) -> bool {
+        matches!(self, Self::V9)
+    }
+
+    /// Whether worlds of this generator place pilot-only spaces ([`pilot_spaces`]: ruins with
+    /// mechanisms and crawlway caves, WP-PILOT). Older worlds keep none (a pilot still finds
+    /// player-built crawlways and scenario ruins).
+    #[must_use]
+    pub const fn has_pilot_spaces(self) -> bool {
         matches!(self, Self::V9)
     }
 

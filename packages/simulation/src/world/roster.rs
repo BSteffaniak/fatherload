@@ -101,6 +101,9 @@ impl WorldState {
             crew,
             clock,
             people,
+            // Deeds, homes and furniture stay keyed by the player id (a returning player owns
+            // their house again).
+            homes: _,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);

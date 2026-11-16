@@ -179,6 +179,14 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::PickChip => Patch::PickChip,
         SoundCue::PickBreak => Patch::BreakSoft,
         SoundCue::PickClink => Patch::PickClink,
+        SoundCue::PistolPop => Patch::PistolPop,
+        SoundCue::RifleCrack => Patch::RifleCrack,
+        SoundCue::ShotgunBoom => Patch::ShotgunBoom,
+        SoundCue::WrenchSwing => Patch::WrenchSwing,
+        SoundCue::GrappleFire => Patch::GrappleFire,
+        SoundCue::GliderOpen => Patch::GliderOpen,
+        SoundCue::GateGrind => Patch::GateGrind,
+        SoundCue::KeycardBeep => Patch::KeycardBeep,
         SoundCue::Splash => Patch::Splash,
         SoundCue::LedgeGrab => Patch::LedgeGrab,
         SoundCue::PersonGreet => Patch::PersonGreet,
@@ -209,6 +217,11 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::WardenWake => Patch::WardenWake,
         SoundCue::CoreReached => Patch::CoreHum,
         SoundCue::UplinkWarp => Patch::UplinkWarp,
+        SoundCue::DeedSigned => Patch::DeedStamp,
+        SoundCue::BuildersHammer => Patch::BuildersHammer,
+        SoundCue::HomeFanfare => Patch::HomeFanfare,
+        SoundCue::SiteKnock => Patch::SiteKnock,
+        SoundCue::FurnitureThunk => Patch::FurnitureThunk,
     }
 }
 
@@ -268,6 +281,10 @@ pub const fn weapon_cue(weapon: WeaponKind) -> SoundCue {
         WeaponKind::FlakCannon => SoundCue::FlakShot,
         WeaponKind::LunarCutter => SoundCue::CutterZap,
         WeaponKind::LowGMortar => SoundCue::RocketLaunch,
+        WeaponKind::Sidearm => SoundCue::PistolPop,
+        WeaponKind::Rifle => SoundCue::RifleCrack,
+        WeaponKind::Shotgun => SoundCue::ShotgunBoom,
+        WeaponKind::Wrench | WeaponKind::HandPick => SoundCue::WrenchSwing,
     }
 }
 
@@ -434,9 +451,14 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::RigStruck { .. } => Some(SoundCue::EnemyBite),
         // Weapons: each gun's shot, the empty click, the hardpoint clack, impacts and a
         // target breaking apart. Damage numbers are silent: the impact or blast is the sound.
-        GameplayEventKind::WeaponFired { weapon, .. } => Some(weapon_cue(*weapon)),
-        GameplayEventKind::WeaponDry { .. } => Some(SoundCue::WeaponDry),
-        GameplayEventKind::WeaponMounted { .. } => Some(SoundCue::WeaponMount),
+        GameplayEventKind::WeaponFired { weapon, .. }
+        | GameplayEventKind::PilotFired { weapon, .. } => Some(weapon_cue(*weapon)),
+        GameplayEventKind::WeaponDry { .. } | GameplayEventKind::PilotWeaponDry { .. } => {
+            Some(SoundCue::WeaponDry)
+        }
+        GameplayEventKind::WeaponMounted { .. } | GameplayEventKind::PilotWeaponSwapped { .. } => {
+            Some(SoundCue::WeaponMount)
+        }
         GameplayEventKind::ProjectileImpact { surface, .. } => Some(impact_cue(*surface)),
         GameplayEventKind::EntityDestroyed { .. } => Some(SoundCue::TargetDestroyed),
         // Base building: placed where the piece went (the whole crew hears it), services from
@@ -486,7 +508,9 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // The pilot on foot (Part II F5): from the player, like the rig's own sounds.
         GameplayEventKind::PilotExited { .. } => Some(SoundCue::HatchOpen),
         GameplayEventKind::PilotBoarded { .. } => Some(SoundCue::HatchClose),
-        GameplayEventKind::PilotJumped { .. } => Some(SoundCue::PilotJump),
+        GameplayEventKind::PilotJumped { .. } | GameplayEventKind::PilotWallJumped { .. } => {
+            Some(SoundCue::PilotJump)
+        }
         GameplayEventKind::PilotLanded { hard: false, .. } => Some(SoundCue::PilotLand),
         GameplayEventKind::PilotLanded { hard: true, .. } => Some(SoundCue::PilotLandHard),
         GameplayEventKind::PilotLedgeGrab { .. } => Some(SoundCue::LedgeGrab),
@@ -499,6 +523,43 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::PickStruck { broke: false, .. } => Some(SoundCue::PickChip),
         GameplayEventKind::PickStruck { broke: true, .. } => Some(SoundCue::PickBreak),
         GameplayEventKind::PickClinked { .. } => Some(SoundCue::PickClink),
+        // WP-PILOT (shots, dry clicks, swaps and wall jumps share the arms above).
+        GameplayEventKind::PilotRope { action, .. } => Some(match action {
+            fatherload_simulation::pilot::RopeEvent::Hooked
+            | fatherload_simulation::pilot::RopeEvent::Winched => SoundCue::GrappleFire,
+            fatherload_simulation::pilot::RopeEvent::Missed => SoundCue::ExplosiveThrow,
+            fatherload_simulation::pilot::RopeEvent::Released => SoundCue::LedgeGrab,
+        }),
+        GameplayEventKind::PilotGlide { hover, .. } => Some(if *hover {
+            SoundCue::JetpackBurst
+        } else {
+            SoundCue::GliderOpen
+        }),
+        GameplayEventKind::MechanismUsed { mechanism, .. } => Some(match mechanism {
+            fatherload_simulation::mechanism::MechanismEvent::LeverPulled { .. }
+            | fatherload_simulation::mechanism::MechanismEvent::PlatePressed
+            | fatherload_simulation::mechanism::MechanismEvent::PlateReleased => {
+                SoundCue::LeverClunk
+            }
+            fatherload_simulation::mechanism::MechanismEvent::GateOpened
+            | fatherload_simulation::mechanism::MechanismEvent::GateClosed => SoundCue::GateGrind,
+            fatherload_simulation::mechanism::MechanismEvent::KeycardAccepted { .. } => {
+                SoundCue::KeycardBeep
+            }
+            fatherload_simulation::mechanism::MechanismEvent::Locked { .. } => SoundCue::UiError,
+        }),
+        GameplayEventKind::ChestOpened { .. } => Some(SoundCue::CrateOpened),
+        GameplayEventKind::RigRecall { outcome, .. } => Some(match outcome {
+            fatherload_simulation::pilot::RecallOutcome::Started => SoundCue::UplinkBeam,
+            fatherload_simulation::pilot::RecallOutcome::Arrived => SoundCue::HomeSet,
+            fatherload_simulation::pilot::RecallOutcome::NoPath => SoundCue::UiError,
+        }),
+        GameplayEventKind::PilotExposed { heat, .. } => Some(if *heat {
+            SoundCue::FireCrackle
+        } else {
+            SoundCue::Icing
+        }),
+
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
         // warm chime when someone warms to you (a cooler standing gets the back blip), a hush
@@ -553,6 +614,27 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
             fatherload_simulation::enemy::SkyEnemyAction::AirshipDowned => SoundCue::Explosion,
             fatherload_simulation::enemy::SkyEnemyAction::NesterEnraged => SoundCue::HarpyScreech,
         }),
+        // Homes: a stamp for a deed or a contract, hammers for each new stage, the keys'
+        // fanfare when it is finished, a knock when the site needs you, coins for a rush, a
+        // handover sparkle for an answer and a wooden thunk for furniture. The command's
+        // generic event is silent.
+        GameplayEventKind::PlotBought { .. } | GameplayEventKind::ContractSigned { .. } => {
+            Some(SoundCue::DeedSigned)
+        }
+        GameplayEventKind::ConstructionStage { stage, .. } => Some(
+            if matches!(stage, fatherload_simulation::home::BuildStage::Done) {
+                SoundCue::HomeFanfare
+            } else {
+                SoundCue::BuildersHammer
+            },
+        ),
+        GameplayEventKind::HomeCompleted { .. } => Some(SoundCue::HomeFanfare),
+        GameplayEventKind::SiteEventRaised { .. } => Some(SoundCue::SiteKnock),
+        GameplayEventKind::SiteEventAnswered { .. } => Some(SoundCue::GiftGiven),
+        GameplayEventKind::HomeRushed { .. } => Some(SoundCue::Sell),
+        GameplayEventKind::FurniturePlaced { .. } | GameplayEventKind::FurnitureRemoved { .. } => {
+            Some(SoundCue::FurnitureThunk)
+        }
         // The shell plays coins/purchase when the service it requested resolves. Hazards are
         // continuous: the director's gas-hiss and boulder-rumble loops follow them directly.
         // Tunnel edits are terrain changes with no sound of their own. Accepting a quest and
@@ -562,6 +644,7 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         | GameplayEventKind::QuestAccepted { .. }
         | GameplayEventKind::TestModeChanged { .. }
         | GameplayEventKind::PeopleInteraction { .. }
+        | GameplayEventKind::HomeInteraction { .. }
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
         | GameplayEventKind::EscapeTunnelChanged => None,
@@ -698,7 +781,27 @@ mod tests {
             | GameplayEventKind::WardenStaggered { .. }
             | GameplayEventKind::WardenDefeated { .. }
             | GameplayEventKind::MoonCoreReached { .. }
-            | GameplayEventKind::UplinkBeamed { .. } => {}
+            | GameplayEventKind::UplinkBeamed { .. }
+            | GameplayEventKind::PilotFired { .. }
+            | GameplayEventKind::PilotWeaponDry { .. }
+            | GameplayEventKind::PilotWeaponSwapped { .. }
+            | GameplayEventKind::PilotRope { .. }
+            | GameplayEventKind::PilotGlide { .. }
+            | GameplayEventKind::MechanismUsed { .. }
+            | GameplayEventKind::ChestOpened { .. }
+            | GameplayEventKind::RigRecall { .. }
+            | GameplayEventKind::PilotExposed { .. }
+            | GameplayEventKind::PilotWallJumped { .. }
+            | GameplayEventKind::PlotBought { .. }
+            | GameplayEventKind::ContractSigned { .. }
+            | GameplayEventKind::ConstructionStage { .. }
+            | GameplayEventKind::HomeCompleted { .. }
+            | GameplayEventKind::SiteEventRaised { .. }
+            | GameplayEventKind::SiteEventAnswered { .. }
+            | GameplayEventKind::FurniturePlaced { .. }
+            | GameplayEventKind::FurnitureRemoved { .. }
+            | GameplayEventKind::HomeRushed { .. }
+            | GameplayEventKind::HomeInteraction { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1129,11 +1232,125 @@ mod tests {
                 }
             }),
         );
+        // WP-PILOT.
+        for weapon in fatherload_simulation::pilot::arsenal::PILOT_WEAPONS {
+            events.push(GameplayEventKind::PilotFired {
+                player_id,
+                weapon,
+                x: 0,
+                y: 0,
+                end_x: 1,
+                end_y: 0,
+            });
+            events.push(GameplayEventKind::PilotWeaponDry { player_id, weapon });
+        }
+        events.push(GameplayEventKind::PilotWeaponSwapped {
+            player_id,
+            weapon: None,
+        });
+        for action in [
+            fatherload_simulation::pilot::RopeEvent::Hooked,
+            fatherload_simulation::pilot::RopeEvent::Missed,
+            fatherload_simulation::pilot::RopeEvent::Winched,
+            fatherload_simulation::pilot::RopeEvent::Released,
+        ] {
+            events.push(GameplayEventKind::PilotRope {
+                player_id,
+                action,
+                x: 0,
+                y: 0,
+            });
+        }
+        for hover in [true, false] {
+            events.push(GameplayEventKind::PilotGlide { player_id, hover });
+            events.push(GameplayEventKind::PilotExposed {
+                player_id,
+                heat: hover,
+            });
+        }
+        {
+            use fatherload_simulation::mechanism::MechanismEvent;
+            for mechanism in [
+                MechanismEvent::LeverPulled { on: true },
+                MechanismEvent::PlatePressed,
+                MechanismEvent::PlateReleased,
+                MechanismEvent::GateOpened,
+                MechanismEvent::GateClosed,
+                MechanismEvent::KeycardAccepted { color: 1 },
+                MechanismEvent::Locked { color: 1 },
+            ] {
+                events.push(GameplayEventKind::MechanismUsed {
+                    player_id: Some(player_id),
+                    x: 0,
+                    y: 0,
+                    mechanism,
+                });
+            }
+        }
+        events.push(GameplayEventKind::ChestOpened {
+            player_id,
+            x: 0,
+            y: 0,
+        });
+        for outcome in [
+            fatherload_simulation::pilot::RecallOutcome::Started,
+            fatherload_simulation::pilot::RecallOutcome::Arrived,
+            fatherload_simulation::pilot::RecallOutcome::NoPath,
+        ] {
+            events.push(GameplayEventKind::RigRecall { player_id, outcome });
+        }
+        events.push(GameplayEventKind::PilotWallJumped { player_id });
         events.extend(PoiKind::ALL.map(|poi| GameplayEventKind::PoiOpened {
             player_id,
             poi,
             reward: PoiReward::default(),
         }));
+        let plot = fatherload_simulation::home::PlotId(0);
+        events.push(GameplayEventKind::PlotBought {
+            player_id,
+            plot,
+            size: fatherload_simulation::home::PlotSize::Small,
+            setting: fatherload_simulation::home::PlotSetting::Town,
+        });
+        events.push(GameplayEventKind::ContractSigned {
+            player_id,
+            plot,
+            job: fatherload_simulation::home::HomeJob::Build(
+                fatherload_simulation::home::Blueprint::Cabin,
+            ),
+        });
+        events.extend(fatherload_simulation::home::BuildStage::ALL.map(|stage| {
+            GameplayEventKind::ConstructionStage {
+                plot,
+                owner: player_id,
+                stage,
+            }
+        }));
+        events.push(GameplayEventKind::HomeCompleted {
+            plot,
+            owner: player_id,
+            job: fatherload_simulation::home::HomeJob::Build(
+                fatherload_simulation::home::Blueprint::Cabin,
+            ),
+        });
+        events.push(GameplayEventKind::SiteEventRaised {
+            plot,
+            owner: player_id,
+            event: fatherload_simulation::home::SiteEventKind::Anecdote { index: 0 },
+        });
+        events.push(GameplayEventKind::SiteEventAnswered { player_id, plot });
+        events.push(GameplayEventKind::FurniturePlaced {
+            player_id,
+            plot,
+            furniture: fatherload_simulation::home::Furniture::Bed,
+        });
+        events.push(GameplayEventKind::FurnitureRemoved {
+            player_id,
+            plot,
+            furniture: fatherload_simulation::home::Furniture::Bed,
+        });
+        events.push(GameplayEventKind::HomeRushed { player_id, plot });
+        events.push(GameplayEventKind::HomeInteraction { player_id });
         events
     }
 
@@ -1166,6 +1383,9 @@ mod tests {
                     service: VillageService::TradingPost,
                 },
                 GameplayEventKind::PeopleInteraction {
+                    player_id: PlayerId::new(1)
+                },
+                GameplayEventKind::HomeInteraction {
                     player_id: PlayerId::new(1)
                 },
             ]
@@ -1323,6 +1543,19 @@ mod tests {
             SoundCue::WardenWake,
             SoundCue::CoreReached,
             SoundCue::UplinkWarp,
+            SoundCue::PistolPop,
+            SoundCue::RifleCrack,
+            SoundCue::ShotgunBoom,
+            SoundCue::WrenchSwing,
+            SoundCue::GrappleFire,
+            SoundCue::GliderOpen,
+            SoundCue::GateGrind,
+            SoundCue::KeycardBeep,
+            SoundCue::DeedSigned,
+            SoundCue::BuildersHammer,
+            SoundCue::HomeFanfare,
+            SoundCue::SiteKnock,
+            SoundCue::FurnitureThunk,
         ];
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();
         assert!(patches.iter().all(|patch| !patch.looped()));

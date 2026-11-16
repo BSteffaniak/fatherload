@@ -1,10 +1,13 @@
 //! The Explosives Shack's arms rack: hardpoint weapons, their upgrades, the capacitor and
-//! rocket ammo. The shack's counter lists these rows after the explosive packs; the shell and
-//! the counter panel both read [`ARMS_ROWS`], so a row's label always matches its request.
+//! rocket ammo, then the town gunsmith's corner (WP-PILOT): the pilot's personal arms and ammo
+//! and every piece of pilot gear. The shack's counter lists these rows after the explosive
+//! packs; the shell and the counter panel both read [`ARMS_ROWS`], so a row's label always
+//! matches its request.
 
 use fatherload_simulation::{
-    AmmoKind, Player, SessionServiceRequest, WeaponKind, explosive::EXPLOSIVE_OFFERS,
-    pilot::PilotGearKind,
+    AmmoKind, Player, SessionServiceRequest, WeaponKind,
+    explosive::EXPLOSIVE_OFFERS,
+    pilot::{PilotGearKind, arsenal::PilotArmsPurchase},
 };
 
 /// One arms rack row.
@@ -16,12 +19,14 @@ pub enum ArmsRow {
     Battery,
     /// A pack of ammunition.
     Ammo(AmmoKind),
-    /// The next tier of the pilot's own gear (Part II F5: jetpack, suit).
+    /// The next tier of the pilot's own gear (Part II F5, WP-PILOT).
     Gear(PilotGearKind),
+    /// A personal weapon or a box of personal ammo (WP-PILOT).
+    PilotArms(PilotArmsPurchase),
 }
 
 /// The arms rack, in counter order.
-pub const ARMS_ROWS: [ArmsRow; 14] = [
+pub const ARMS_ROWS: [ArmsRow; 28] = [
     ArmsRow::Weapon(WeaponKind::RivetGun),
     ArmsRow::Weapon(WeaponKind::Harpoon),
     ArmsRow::Weapon(WeaponKind::ScatterBlaster),
@@ -37,6 +42,20 @@ pub const ARMS_ROWS: [ArmsRow; 14] = [
     ArmsRow::Ammo(AmmoKind::Rocket),
     ArmsRow::Gear(PilotGearKind::Jetpack),
     ArmsRow::Gear(PilotGearKind::Suit),
+    ArmsRow::PilotArms(PilotArmsPurchase::TOWN[0]),
+    ArmsRow::PilotArms(PilotArmsPurchase::TOWN[1]),
+    ArmsRow::PilotArms(PilotArmsPurchase::TOWN[2]),
+    ArmsRow::PilotArms(PilotArmsPurchase::TOWN[3]),
+    ArmsRow::PilotArms(PilotArmsPurchase::TOWN[4]),
+    ArmsRow::PilotArms(PilotArmsPurchase::TOWN[5]),
+    ArmsRow::Gear(PilotGearKind::Armor),
+    ArmsRow::Gear(PilotGearKind::Thermal),
+    ArmsRow::Gear(PilotGearKind::HeatWeave),
+    ArmsRow::Gear(PilotGearKind::Headlamp),
+    ArmsRow::Gear(PilotGearKind::Boots),
+    ArmsRow::Gear(PilotGearKind::Glider),
+    ArmsRow::Gear(PilotGearKind::Grapple),
+    ArmsRow::Gear(PilotGearKind::RigLink),
 ];
 
 /// Shack counter rows before the arms rack: four bomb rows, then the explosive packs.
@@ -63,6 +82,7 @@ pub fn request(row: ArmsRow, player: Option<&Player>) -> SessionServiceRequest {
         ArmsRow::Battery => SessionServiceRequest::UpgradeBattery,
         ArmsRow::Ammo(ammo) => SessionServiceRequest::BuyAmmo { ammo },
         ArmsRow::Gear(gear) => SessionServiceRequest::BuyPilotGear { gear },
+        ArmsRow::PilotArms(purchase) => SessionServiceRequest::PilotArms(purchase),
     }
 }
 

@@ -808,6 +808,13 @@ impl SeatUi {
                 format!("{count} {} stowed ({spent} credits).", kind.name()),
                 SoundCue::Upgrade,
             ),
+            VillageDeal::PilotArms(purchase) => (
+                format!(
+                    "{keeper} hands over the {} ({spent} credits).",
+                    purchase.name().to_lowercase()
+                ),
+                SoundCue::Upgrade,
+            ),
             VillageDeal::ChartRegion => (
                 format!("{keeper} inks nearby sites and villages onto your map."),
                 SoundCue::Ui,

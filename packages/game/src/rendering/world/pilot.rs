@@ -6,12 +6,12 @@
 use raylib::prelude::*;
 
 use fatherload_simulation::{
-    pilot::{PilotPose, STRIKE_GUARD_SECONDS},
+    pilot::{PilotPose, STRIKE_GUARD_SECONDS, TetherKind},
     terrain::TILE_SIZE,
 };
 
 use crate::render_snapshot::{PilotPresentation, PlayerPresentation};
-use crate::rendering::pilot_art::{PilotFrame, PilotLook, paint_pilot};
+use crate::rendering::pilot_art::{PilotArms, PilotFrame, PilotLook, paint_pilot};
 #[allow(
     clippy::wildcard_imports,
     reason = "art code names colours from the whole palette"
@@ -41,15 +41,38 @@ pub(super) fn draw_pilots(
 }
 
 /// Draws one pilot: flames behind, the sprite, then bubbles and gauges.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the pilot and its gear effects in draw order"
+)]
 pub(super) fn draw_pilot(draw: &mut impl RaylibDraw, pilot: &PilotPresentation, ticks: u64) {
     let look = PilotLook::new(pilot.cosmetics, pilot.state.gear);
-    let swinging = pilot.pick.is_some() || pilot.state.pick_cooldown > 0.0;
+    let state = &pilot.state;
+    let swinging = pilot.pick.is_some() || state.pick_cooldown > 0.0 || state.swing > 0.0;
+    let facing = if state.facing < 0 { -1.0 } else { 1.0 };
+    let length = f32::from(state.aim_x)
+        .hypot(f32::from(state.aim_y))
+        .max(1.0);
+    // A pick swung at a creature draws like a melee arm.
+    let weapon = state.weapon.or_else(|| {
+        (state.swing > 0.0 && pilot.pick.is_none())
+            .then_some(fatherload_simulation::WeaponKind::HandPick)
+    });
     let frame = PilotFrame {
         pose: pilot.pose,
-        seconds: pilot.state.anim,
+        seconds: state.anim,
         swinging,
+        arms: PilotArms {
+            weapon,
+            aim: (
+                f32::from(state.aim_x) / length * facing,
+                f32::from(state.aim_y) / length,
+            ),
+            swing: (state.swing / fatherload_simulation::world::PILOT_SWING_SHOW_SECONDS)
+                .clamp(0.0, 1.0),
+        },
     };
-    let flip = pilot.state.facing < 0 && pilot.pose != PilotPose::Climb;
+    let flip = state.facing < 0 && pilot.pose != PilotPose::Climb;
     let feet = Vector2::new(snap(pilot.x), snap(pilot.y));
     let pen = Pen {
         x: feet.x,
@@ -58,7 +81,47 @@ pub(super) fn draw_pilot(draw: &mut impl RaylibDraw, pilot: &PilotPresentation, 
     let column = |x: i32| if flip { -x - 1 } else { x };
     let tint = (pilot.state.hurt > STRIKE_GUARD_SECONDS * 0.2 && (ticks / 3).is_multiple_of(2))
         .then_some(BONE);
-    paint_pilot(&look, frame).draw(draw, feet, ART, flip, tint);
+    let canvas = paint_pilot(&look, frame);
+    if let Some(rope) = state.tether {
+        // The rope from the glove to its anchor: a taut line with a hook (grapple) or the
+        // rig's winch drum at the top.
+        let (hand_x, hand_y) = canvas.hand;
+        let hand_x = if flip { -hand_x - 1 } else { hand_x };
+        let from = (
+            (hand_x as f32 + 0.5).mul_add(ART, feet.x),
+            (hand_y as f32 + 0.5).mul_add(ART, feet.y),
+        );
+        draw_rope(draw, from, (rope.anchor_x, rope.anchor_y), rope.kind);
+    }
+    canvas.draw(draw, feet, ART, flip, tint);
+    if pilot.pose == PilotPose::Hover {
+        // A steady, short blue-white plume holding altitude.
+        let flicker = (ticks / 3 % 2) as i32;
+        pen.rect(
+            draw,
+            column(-8).min(column(-6)),
+            -6,
+            3,
+            5 + flicker,
+            with_alpha(SKY_LIGHT, 90),
+        );
+        pen.rect(draw, column(-7), -6, 1, 3 + flicker, CREAM);
+        pen.rect(draw, column(-7), -3 + flicker, 1, 2, SKY_LIGHT);
+    }
+    if pilot.pose == PilotPose::Glide {
+        // Wind streaks trailing behind the wing.
+        for streak in 0..3_i32 {
+            let age = ((ticks as i32) + streak * 7) % 18;
+            pen.rect(
+                draw,
+                column(-12 - age).min(column(-9 - age)),
+                -30 + streak * 3,
+                4,
+                1,
+                with_alpha(BONE, (150 - age * 8).max(0) as u8),
+            );
+        }
+    }
     if pilot.pose == PilotPose::Jetpack {
         // A flickering plume from the pack's nozzles, over the boots: white-hot at the nozzle,
         // through gold and orange to a red tip, with a soft glow around it.
@@ -192,5 +255,35 @@ pub(super) fn draw_parked_rig(
         pen.rect(draw, 17, 0, 1, 2, AMBER);
         pen.px(draw, 0, -1, with_alpha(GOLD, 120));
         pen.px(draw, 17, -1, with_alpha(GOLD, 120));
+    }
+}
+
+/// A rope from `from` to `anchor` (world pixels): a taut, slightly kinked line in rope brown
+/// with a lighter twist, a three-pronged hook at a grapple's end or a winch drum at the rig.
+fn draw_rope(draw: &mut impl RaylibDraw, from: (f32, f32), anchor: (f32, f32), kind: TetherKind) {
+    let (dx, dy) = (anchor.0 - from.0, anchor.1 - from.1);
+    let length = dx.hypot(dy).max(1.0);
+    let steps = (length / ART).ceil() as i32;
+    for step in 0..=steps {
+        let t = step as f32 / steps.max(1) as f32;
+        let x = dx.mul_add(t, from.0);
+        let y = dy.mul_add(t, from.1);
+        let color = if step % 3 == 0 { SAND } else { LOAM };
+        draw.draw_rectangle_rec(Rectangle::new(snap(x), snap(y), ART, ART), color);
+    }
+    let pen = Pen::at(snap(anchor.0), snap(anchor.1));
+    match kind {
+        TetherKind::Grapple => {
+            pen.rect(draw, -2, -1, 5, 1, STEEL_LIGHT);
+            pen.rect(draw, -2, -2, 1, 1, STEEL);
+            pen.rect(draw, 2, -2, 1, 1, STEEL);
+            pen.rect(draw, 0, -3, 1, 2, STEEL_LIGHT);
+            pen.px(draw, 0, 0, INK);
+        }
+        TetherKind::Winch => {
+            pen.rect(draw, -2, -1, 5, 3, STEEL_DARK);
+            pen.rect(draw, -1, 0, 3, 1, STEEL_LIGHT);
+            pen.px(draw, 0, 2, AMBER);
+        }
     }
 }

@@ -637,6 +637,123 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // --- WP-PILOT (T23, `world/pilot_arms.rs`, `world/pilot_gear.rs`, `world/mechanisms.rs`) --
+    /// The pilot fired (or swung) a personal arm from `(x, y)` toward `(end_x, end_y)`.
+    PilotFired {
+        player_id: PlayerId,
+        weapon: crate::weapon::WeaponKind,
+        x: i32,
+        y: i32,
+        end_x: i32,
+        end_y: i32,
+    },
+    /// The pilot pulled the trigger with no ammo for `weapon`.
+    PilotWeaponDry {
+        player_id: PlayerId,
+        weapon: crate::weapon::WeaponKind,
+    },
+    /// The pilot took `weapon` in hand (`None`: the hand pick).
+    PilotWeaponSwapped {
+        player_id: PlayerId,
+        weapon: Option<crate::weapon::WeaponKind>,
+    },
+    /// A rope action at world pixel `(x, y)` (the hook or the winch).
+    PilotRope {
+        player_id: PlayerId,
+        action: crate::pilot::RopeEvent,
+        x: i32,
+        y: i32,
+    },
+    /// The glider opened, or (`hover`) the jetpack started hovering.
+    PilotGlide {
+        player_id: PlayerId,
+        hover: bool,
+    },
+    /// Something happened at a ruin mechanism at tile `(x, y)` (`player_id`: who caused it,
+    /// if anyone; plates release on their own).
+    MechanismUsed {
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+        mechanism: crate::mechanism::MechanismEvent,
+    },
+    /// A pilot opened the treasure chest at tile `(x, y)`.
+    ChestOpened {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// A rig recall started, arrived or found no path.
+    RigRecall {
+        player_id: PlayerId,
+        outcome: crate::pilot::RecallOutcome,
+    },
+    /// The pilot's suit stopped keeping out the cold (or, `heat`, the deep heat).
+    PilotExposed {
+        player_id: PlayerId,
+        heat: bool,
+    },
+    /// The pilot kicked off a wall (climbing boots).
+    PilotWallJumped {
+        player_id: PlayerId,
+    },
+    /// A player bought the deed to a plot (WP-HOME, see [`crate::home`]).
+    PlotBought {
+        player_id: PlayerId,
+        plot: crate::home::PlotId,
+        size: crate::home::PlotSize,
+        setting: crate::home::PlotSetting,
+    },
+    /// A contract was signed: a contractor starts work on a plot.
+    ContractSigned {
+        player_id: PlayerId,
+        plot: crate::home::PlotId,
+        job: crate::home::HomeJob,
+    },
+    /// Construction on a plot reached a new visible stage.
+    ConstructionStage {
+        plot: crate::home::PlotId,
+        owner: PlayerId,
+        stage: crate::home::BuildStage,
+    },
+    /// The work on a plot is finished: a new home, or an expansion.
+    HomeCompleted {
+        plot: crate::home::PlotId,
+        owner: PlayerId,
+        job: crate::home::HomeJob,
+    },
+    /// A small story beat on a building site (a shortage, a request, an anecdote).
+    SiteEventRaised {
+        plot: crate::home::PlotId,
+        owner: PlayerId,
+        event: crate::home::SiteEventKind,
+    },
+    /// A player answered a building site open event.
+    SiteEventAnswered {
+        player_id: PlayerId,
+        plot: crate::home::PlotId,
+    },
+    /// A piece of furniture (or a trophy) went into a home.
+    FurniturePlaced {
+        player_id: PlayerId,
+        plot: crate::home::PlotId,
+        furniture: crate::home::Furniture,
+    },
+    /// A piece of furniture was picked up.
+    FurnitureRemoved {
+        player_id: PlayerId,
+        plot: crate::home::PlotId,
+        furniture: crate::home::Furniture,
+    },
+    /// A player paid to rush construction.
+    HomeRushed {
+        player_id: PlayerId,
+        plot: crate::home::PlotId,
+    },
+    /// Any applied home command (the specific events above carry the detail).
+    HomeInteraction {
+        player_id: PlayerId,
+    },
 }
 
 /// What a weapon shot struck.
@@ -698,7 +815,10 @@ pub(crate) const fn gameplay_event_for_applied_command(
     Some(match command {
         // The pilot's exit / board and pack swaps report their own events (with what moved).
         // The colony reports its own event too (`ColonyServiceUsed`, with the offer).
-        PlayerCommand::TogglePilot | PlayerCommand::PilotPack { .. } | PlayerCommand::Moon(_) => {
+        PlayerCommand::TogglePilot
+        | PlayerCommand::PilotPack { .. }
+        | PlayerCommand::Moon(_)
+        | PlayerCommand::Pilot(_) => {
             return None;
         }
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {
@@ -773,6 +893,7 @@ pub(crate) const fn gameplay_event_for_applied_command(
             }
         }
         PlayerCommand::People(_) => GameplayEventKind::PeopleInteraction { player_id },
+        PlayerCommand::Home(_) => GameplayEventKind::HomeInteraction { player_id },
         PlayerCommand::Build(crate::base::BuildCommand::Use { structure, service }) => {
             GameplayEventKind::BaseServiceUsed {
                 player_id,

@@ -128,6 +128,7 @@ fn beside_rig(stage: &mut SceneStage<'_>) {
             PilotGear {
                 jetpack: 1,
                 suit: 1,
+                ..PilotGear::default()
             },
             tile_centre(20) + 34.0,
             GROUND as f32 * TILE_SIZE,
@@ -148,6 +149,7 @@ fn ladder(stage: &mut SceneStage<'_>) {
             PilotGear {
                 jetpack: 0,
                 suit: 2,
+                ..PilotGear::default()
             },
             tile_centre(ROOM_RIGHT - 1),
             (FLOOR - 4) as f32 * TILE_SIZE,
@@ -196,6 +198,7 @@ fn crawlway(stage: &mut SceneStage<'_>) {
             PilotGear {
                 jetpack: 0,
                 suit: 1,
+                ..PilotGear::default()
             },
             tile_centre(107),
             (CRAWL_ROW + 1) as f32 * TILE_SIZE,
@@ -227,6 +230,7 @@ fn jetpack(stage: &mut SceneStage<'_>) {
             PilotGear {
                 jetpack: 2,
                 suit: 2,
+                ..PilotGear::default()
             },
             tile_centre(22),
             (GROUND as f32 - 2.5) * TILE_SIZE,
@@ -266,6 +270,7 @@ fn village_interior(stage: &mut SceneStage<'_>) {
             PilotGear {
                 jetpack: 1,
                 suit: 0,
+                ..PilotGear::default()
             },
             tile_centre(door),
             found.ground_row as f32 * TILE_SIZE,
@@ -297,6 +302,7 @@ fn inventory_pack(stage: &mut SceneStage<'_>) {
             PilotGear {
                 jetpack: 1,
                 suit: 1,
+                ..PilotGear::default()
             },
             tile_centre(20) + 34.0,
             GROUND as f32 * TILE_SIZE,
@@ -320,6 +326,7 @@ fn split_screen(stage: &mut SceneStage<'_>) {
             PilotGear {
                 jetpack: 1,
                 suit: 1,
+                ..PilotGear::default()
             },
             tile_centre(20) + 30.0,
             GROUND as f32 * TILE_SIZE,

@@ -60,6 +60,7 @@ fn moon_rig(world: &mut WorldState, player: PlayerId) {
         rig.pilot_gear = PilotGear {
             jetpack: 2,
             suit: 2,
+            ..PilotGear::default()
         };
     }
 }

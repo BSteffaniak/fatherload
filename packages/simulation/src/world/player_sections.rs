@@ -114,6 +114,9 @@ pub struct PlayerInventory {
     /// The pilot's personal pack.
     #[serde(default)]
     pub pilot_pack: ItemContainer,
+    /// The pilot's personal arms and ammo.
+    #[serde(default)]
+    pub pilot_arsenal: crate::pilot::arsenal::PilotArsenal,
     /// Milestones earned and personal records.
     #[serde(default)]
     pub milestones: MilestoneLog,
@@ -176,6 +179,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         weapon,
         pilot_gear,
         pilot_pack,
+        pilot_arsenal,
         milestones,
         lunar,
     } = player.clone();
@@ -230,6 +234,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             weapon_rack,
             pilot_gear,
             pilot_pack,
+            pilot_arsenal,
             milestones,
             lunar,
         },
@@ -293,6 +298,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         weapon_rack,
         pilot_gear,
         pilot_pack,
+        pilot_arsenal,
         milestones,
         lunar,
     } = inventory;
@@ -342,6 +348,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         weapon,
         pilot_gear,
         pilot_pack,
+        pilot_arsenal,
         milestones,
         lunar,
     }

@@ -39,8 +39,10 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::Sleep(_)
         | PlayerCommand::TogglePilot
         | PlayerCommand::PilotPack { .. }
+        | PlayerCommand::Pilot(_)
         | PlayerCommand::People(_)
-        | PlayerCommand::Moon(_) => None,
+        | PlayerCommand::Moon(_)
+        | PlayerCommand::Home(_) => None,
     }
 }
 
@@ -66,6 +68,7 @@ pub const fn service_request_zones(request: SessionServiceRequest) -> &'static [
         }
         SessionServiceRequest::BuyBombBundle { .. }
         | SessionServiceRequest::BuyPilotGear { .. }
+        | SessionServiceRequest::PilotArms(_)
         | SessionServiceRequest::BuyExplosives { .. }
         | SessionServiceRequest::BuyWeapon { .. }
         | SessionServiceRequest::UpgradeWeapon { .. }
@@ -209,6 +212,9 @@ impl WorldState {
         }
         if let SessionServiceRequest::BuyPilotGear { gear } = request {
             return self.buy_pilot_gear(player_id, gear);
+        }
+        if let SessionServiceRequest::PilotArms(purchase) = request {
+            return self.buy_pilot_arms(player_id, purchase);
         }
         if let SessionServiceRequest::Village {
             village,
@@ -360,6 +366,7 @@ impl WorldState {
             | SessionServiceRequest::SellCargo
             | SessionServiceRequest::SellBlocks
             | SessionServiceRequest::BuyPilotGear { .. }
+            | SessionServiceRequest::PilotArms(_)
             | SessionServiceRequest::BuyUpgrade { .. }
             | SessionServiceRequest::Finance
             | SessionServiceRequest::BuyInsurance

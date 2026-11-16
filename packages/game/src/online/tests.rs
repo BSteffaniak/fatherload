@@ -226,11 +226,20 @@ fn host_and_two_clients_play_over_real_quic_rejoin_and_end_cleanly() {
     let bob_player = bob.player().expect("bob has a player");
     assert_ne!(alice_player, bob_player);
 
-    // A few seconds of scripted play, then a quiet settle so every action resolves.
-    run_for(
+    // A few seconds of scripted play, then a quiet settle so every action resolves. The
+    // script counts frames, so on a loaded machine the window stretches until each peer has
+    // issued its scanner pulse and bomb (bounded by `WAIT`).
+    let window = Instant::now() + Duration::from_millis(2_500);
+    run_until(
         &mut host,
         &mut [&mut alice, &mut bob],
-        Duration::from_millis(2_500),
+        "the scripted play window",
+        |_, peers| {
+            Instant::now() >= window
+                && peers
+                    .iter()
+                    .all(|peer| peer.client.session().actions_issued() >= 2)
+        },
     );
     alice.scripted = false;
     bob.scripted = false;

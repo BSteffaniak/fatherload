@@ -945,3 +945,52 @@ fn a_sky_battle_saves_replicates_and_replays_identically() {
         world.simulation_state_hash()
     );
 }
+
+#[test]
+fn the_use_button_works_temple_fittings_like_ruin_mechanisms() {
+    // Integration seam (T21 x T23): one mechanism for every pilot-only space. A temple lever
+    // answers the pilot's use button (`PilotAction::Use`) as well as a pick swing, and its
+    // keystone rides the key ring like a ruin keycard.
+    let (mut world, _land, plan) = sky_world();
+    let temple = plan.temple.expect("temple");
+    let lever = temple.tiles_of('L')[0];
+    stand(&mut world, lever.x, lever.y + 1);
+    world.stream_terrain_near_players();
+    let side = if temple.mirrored { -1.0 } else { 1.0 };
+    let _ = world
+        .place_pilot(
+            PLAYER,
+            pixel(lever.x) + side * TILE_SIZE,
+            (lever.y + 1) as f32 * TILE_SIZE,
+        )
+        .expect("pilot");
+    assert!(matches!(
+        world.pilot_usable(PLAYER),
+        Some((
+            _,
+            crate::mechanism::Usable::TempleFitting(SkyTile::TempleLever)
+        ))
+    ));
+    let output = tick(
+        &mut world,
+        &TickInputs::default().act(
+            PLAYER,
+            crate::PlayerCommand::Pilot(crate::pilot::PilotAction::Use),
+        ),
+    );
+    assert!(
+        output
+            .events
+            .iter()
+            .any(|event| matches!(event.kind, GameplayEventKind::TempleLeverPulled { .. })),
+        "{:?}",
+        output.events
+    );
+    for gate in temple.tiles_of('D') {
+        assert_eq!(
+            world.terrain().tile(gate).map(|tile| tile.kind),
+            Some(TileKind::Air)
+        );
+    }
+    assert!(crate::mechanism::rides_key_ring(TEMPLE_KEYSTONE));
+}

@@ -218,7 +218,7 @@ const fn rim(control: TouchControl) -> Color {
         TouchControl::Bomb | TouchControl::CycleExplosive | TouchControl::Detonate => {
             palette::ORANGE
         }
-        TouchControl::Scan => palette::MINT,
+        TouchControl::Scan | TouchControl::Rope => palette::MINT,
         TouchControl::Use
         | TouchControl::BuildPlace
         | TouchControl::Build
@@ -265,6 +265,7 @@ const fn label(control: TouchControl) -> &'static str {
         TouchControl::Jump => "JUMP",
         TouchControl::ExitRig => "OUT",
         TouchControl::BoardRig => "IN",
+        TouchControl::Rope => "ROPE",
         TouchControl::Prompt => "",
         TouchControl::Use => "USE",
         TouchControl::Pause => "II",

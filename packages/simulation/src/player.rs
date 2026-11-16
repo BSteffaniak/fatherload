@@ -124,6 +124,10 @@ pub struct Player {
     /// ([`crate::PlayerCommand::PilotPack`]). Capacity: [`crate::pilot::PilotGear::pack_capacity`].
     #[serde(default)]
     pub pilot_pack: ItemContainer,
+    /// The pilot's personal arms and ammo (private, WP-PILOT; see
+    /// [`crate::pilot::arsenal::PilotArsenal`]).
+    #[serde(default)]
+    pub pilot_arsenal: crate::pilot::arsenal::PilotArsenal,
     /// Milestones earned and personal records (private; see [`crate::milestone`]).
     #[serde(default)]
     pub milestones: crate::milestone::MilestoneLog,
@@ -189,6 +193,7 @@ impl Player {
             },
             pilot_gear: crate::pilot::PilotGear::default(),
             pilot_pack: ItemContainer::new(),
+            pilot_arsenal: crate::pilot::arsenal::PilotArsenal::default(),
             milestones: crate::milestone::MilestoneLog::default(),
             lunar: crate::moon::LunarProgress::default(),
         }

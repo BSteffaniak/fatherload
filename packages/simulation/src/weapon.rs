@@ -60,6 +60,19 @@ pub enum WeaponKind {
     /// Alien tech from the Warden's facility: a lance of void light that passes through foes
     /// and rock alike (dropped by the Warden).
     VoidLance,
+    // --- The pilot's personal arms (WP-PILOT, see `crate::pilot::arsenal`) ----------------
+    // Never mounted on a hardpoint and never in [`WeaponKind::ALL`]: they fire from the
+    // pilot's hands, reuse the projectile entities, and credit kills like rig weapons.
+    /// A pilot's pistol: free, slow, always there.
+    Sidearm,
+    /// A pilot's long gun: rifle cartridges, accurate and long-ranged.
+    Rifle,
+    /// A pilot's pump gun: shells, a short fan of pellets.
+    Shotgun,
+    /// A heavy wrench swung in an arc (melee).
+    Wrench,
+    /// The hand pick swung at a creature (melee; tiles are the pick's own business).
+    HandPick,
 }
 
 /// How a weapon delivers its damage.
@@ -128,15 +141,24 @@ pub struct WeaponStats {
 pub enum AmmoKind {
     /// Rocket launcher ammunition.
     Rocket,
+    /// The pilot's rifle cartridges (kept in the pilot's arsenal, not the cargo bay).
+    Cartridge,
+    /// The pilot's shotgun shells (kept in the pilot's arsenal).
+    Shell,
 }
 
 impl AmmoKind {
+    /// Rig ammunition (the cargo bay's).
     pub const ALL: [Self; 1] = [Self::Rocket];
+    /// The pilot's personal ammunition (WP-PILOT, kept in [`crate::pilot::arsenal::PilotArsenal`]).
+    pub const PILOT: [Self; 2] = [Self::Cartridge, Self::Shell];
 
     #[must_use]
     pub const fn item(self) -> ItemKind {
         ItemKind::Ammo(match self {
             Self::Rocket => AmmoId(1),
+            Self::Cartridge => AmmoId(2),
+            Self::Shell => AmmoId(3),
         })
     }
 
@@ -144,6 +166,8 @@ impl AmmoKind {
     pub const fn from_item_id(id: AmmoId) -> Option<Self> {
         match id.0 {
             1 => Some(Self::Rocket),
+            2 => Some(Self::Cartridge),
+            3 => Some(Self::Shell),
             _ => None,
         }
     }
@@ -152,6 +176,8 @@ impl AmmoKind {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Rocket => "Rocket",
+            Self::Cartridge => "Rifle Cartridge",
+            Self::Shell => "Shotgun Shell",
         }
     }
 
@@ -159,6 +185,8 @@ impl AmmoKind {
     pub const fn plural(self) -> &'static str {
         match self {
             Self::Rocket => "rockets",
+            Self::Cartridge => "cartridges",
+            Self::Shell => "shells",
         }
     }
 
@@ -167,6 +195,8 @@ impl AmmoKind {
     pub const fn pack(self) -> (u32, u32) {
         match self {
             Self::Rocket => (6, 120),
+            Self::Cartridge => (20, 90),
+            Self::Shell => (12, 80),
         }
     }
 }
@@ -246,6 +276,11 @@ impl WeaponKind {
             Self::LunarCutter => "Lunar Cutter",
             Self::LowGMortar => "Low-G Mortar",
             Self::VoidLance => "Void Lance",
+            Self::Sidearm => "Sidearm",
+            Self::Rifle => "Rifle",
+            Self::Shotgun => "Shotgun",
+            Self::Wrench => "Wrench",
+            Self::HandPick => "Hand Pick",
         }
     }
 
@@ -268,6 +303,11 @@ impl WeaponKind {
             Self::LunarCutter => "A long, hot alloy-focused beam that cuts rock quickly.",
             Self::LowGMortar => "Lobs shells on a high arc; they sail far in low gravity.",
             Self::VoidLance => "Alien tech: a lance of void light through foes and rock.",
+            Self::Sidearm => "A pilot's pistol. Never runs dry, never hits hard.",
+            Self::Rifle => "A pilot's long gun: far, straight and true. Uses cartridges.",
+            Self::Shotgun => "A pilot's pump gun: a close fan of pellets. Uses shells.",
+            Self::Wrench => "A heavy wrench swung in an arc. Clangs off armour, flattens critters.",
+            Self::HandPick => "The pilot's pick, swung at whatever bites.",
         }
     }
 
@@ -288,6 +328,11 @@ impl WeaponKind {
             Self::LunarCutter => 11,
             Self::LowGMortar => 12,
             Self::VoidLance => 13,
+            Self::Sidearm => 101,
+            Self::Rifle => 102,
+            Self::Shotgun => 103,
+            Self::Wrench => 104,
+            Self::HandPick => 105,
         }))
     }
 
@@ -307,6 +352,11 @@ impl WeaponKind {
             11 => Self::LunarCutter,
             12 => Self::LowGMortar,
             13 => Self::VoidLance,
+            101 => Self::Sidearm,
+            102 => Self::Rifle,
+            103 => Self::Shotgun,
+            104 => Self::Wrench,
+            105 => Self::HandPick,
             _ => return None,
         })
     }
@@ -330,6 +380,11 @@ impl WeaponKind {
             Self::LunarCutter => 12_000,
             Self::LowGMortar => 9_000,
             Self::VoidLance => 20_000,
+            Self::Sidearm => 300,
+            Self::Wrench => 180,
+            Self::Shotgun => 950,
+            Self::Rifle => 1_300,
+            Self::HandPick => 0,
         }
     }
 
@@ -343,7 +398,13 @@ impl WeaponKind {
     #[must_use]
     pub const fn shack_level(self) -> u8 {
         match self {
-            Self::RivetGun | Self::Harpoon => 0,
+            Self::RivetGun
+            | Self::Harpoon
+            | Self::Sidearm
+            | Self::Wrench
+            | Self::HandPick
+            | Self::Shotgun
+            | Self::Rifle => 0,
             Self::ScatterBlaster | Self::PlasmaCutter => 1,
             Self::RocketLauncher | Self::TetherHarpoon => 2,
             Self::Railgun | Self::ArcRifle | Self::FlakCannon | Self::GravityGun => 3,
@@ -353,13 +414,30 @@ impl WeaponKind {
         }
     }
 
+    /// Whether this is one of the pilot's personal arms (WP-PILOT): never on a hardpoint.
+    #[must_use]
+    pub const fn is_personal(self) -> bool {
+        matches!(
+            self,
+            Self::Sidearm | Self::Rifle | Self::Shotgun | Self::Wrench | Self::HandPick
+        )
+    }
+
     /// Whether the trigger can be held for continuous fire (everything but the harpoon and
     /// the railgun repeats while held; those want a fresh pull).
     #[must_use]
     pub const fn automatic(self) -> bool {
         !matches!(
             self,
-            Self::Harpoon | Self::Railgun | Self::TetherHarpoon | Self::VoidLance
+            Self::Harpoon
+                | Self::Railgun
+                | Self::TetherHarpoon
+                | Self::VoidLance
+                | Self::Sidearm
+                | Self::Rifle
+                | Self::Shotgun
+                | Self::Wrench
+                | Self::HandPick
         )
     }
 
@@ -572,6 +650,55 @@ impl WeaponKind {
                 terrain_bite: u8::MAX,
                 armor_piercing: 1.0,
                 knockback: 220.0,
+                ..plain
+            },
+            // The pilot's arms: noticeably weaker than the rig's (the pilot is agile, not
+            // armoured). Melee reach is the `range`.
+            Self::Sidearm => WeaponStats {
+                damage: 6.0,
+                cooldown_millis: 320,
+                speed: 700.0,
+                range: TILE_SIZE * 10.0,
+                gravity: 30.0,
+                knockback: 30.0,
+                ..plain
+            },
+            Self::Rifle => WeaponStats {
+                damage: 15.0,
+                cooldown_millis: 550,
+                ammo: Some(AmmoKind::Cartridge),
+                speed: 1_050.0,
+                range: TILE_SIZE * 17.0,
+                gravity: 10.0,
+                pierce: 1,
+                armor_piercing: 0.4,
+                knockback: 70.0,
+                ..plain
+            },
+            Self::Shotgun => WeaponStats {
+                damage: 4.5,
+                cooldown_millis: 800,
+                ammo: Some(AmmoKind::Shell),
+                speed: 620.0,
+                range: TILE_SIZE * 5.0,
+                pellets: 5,
+                knockback: 90.0,
+                ..plain
+            },
+            Self::Wrench => WeaponStats {
+                damage: 16.0,
+                cooldown_millis: 420,
+                speed: 0.0,
+                range: TILE_SIZE * 1.5,
+                knockback: 180.0,
+                ..plain
+            },
+            Self::HandPick => WeaponStats {
+                damage: 7.0,
+                cooldown_millis: 380,
+                speed: 0.0,
+                range: TILE_SIZE * 1.3,
+                knockback: 90.0,
                 ..plain
             },
         }

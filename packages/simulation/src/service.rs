@@ -203,6 +203,9 @@ pub enum SessionServiceRequest {
     SkyBuoy {
         isle: crate::worldgen::FeatureId,
     },
+    /// A personal weapon or a pack of personal ammo from the town gunsmith (the Explosives
+    /// Shack's arms rack; WP-PILOT, [`crate::pilot::arsenal`]).
+    PilotArms(crate::pilot::arsenal::PilotArmsPurchase),
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

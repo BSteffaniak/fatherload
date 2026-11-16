@@ -213,6 +213,14 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if rect.max.y >= 0 && rect.min.y < ctx.height {
+        // Pilot-only spaces (V9, WP-PILOT) go in last, over whatever the strata held.
+        for space in super::pilot_spaces::spaces_touching(&ctx.settings, &rect) {
+            for (tile, kind) in space.cells() {
+                chunk_kinds.set(tile.x, tile.y, kind);
+            }
+        }
+    }
     chunk_kinds
         .kinds
         .into_iter()

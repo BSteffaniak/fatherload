@@ -72,6 +72,11 @@ pub const TOUCH_SCENES: &[Scene] = &[
         setup: |stage| restage(stage, "interior_shop", TouchView::default()),
     },
     Scene {
+        name: "touch_pilot_ruin",
+        summary: "On foot in a ruin on a touch screen: jump, fire, bomb, the USE button at the lever, ROPE and the weapon swap",
+        setup: |stage| restage(stage, "pilot_lever_ruin", TouchView::default()),
+    },
+    Scene {
         name: "touch_pause",
         summary: "The pause menu on a touch screen",
         setup: |stage| restage(stage, "pause_menu", TouchView::default()),

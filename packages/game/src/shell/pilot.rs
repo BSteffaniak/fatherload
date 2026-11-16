@@ -41,7 +41,8 @@ impl SeatUi {
         let Some(player) = ctx.player else {
             return false;
         };
-        if !ctx.world.can_board_rig(player) {
+        // A lever or chest nearer than the rig takes the press (WP-PILOT).
+        if !ctx.world.can_board_rig(player) || ctx.world.pilot_fixture_first(player) {
             return false;
         }
         requests.push(ShellRequest::Action {
@@ -75,19 +76,101 @@ impl SeatUi {
             command: PlayerCommand::TogglePilot,
         });
         self.message = format!(
-            "On foot. {} jumps, the trigger swings your pick; {} beside the rig boards it.",
+            "On foot. {} jumps, the trigger swings your pick or fires your gun, {} throws a rope; {} beside the rig boards it.",
             super::key_for(Prompt::Jump, ctx.device),
+            super::key_for(Prompt::Rope, ctx.device),
             super::key_for(Prompt::Use, ctx.device),
         );
         true
     }
 
+    /// The use button on foot at a ruin's lever, chest or keycard door (WP-PILOT): works it.
+    /// Returns whether one was in reach.
+    pub(super) fn try_use_fixture(
+        &mut self,
+        ctx: SeatContext<'_>,
+        requests: &mut Vec<ShellRequest>,
+    ) -> bool {
+        use fatherload_simulation::mechanism::{Usable, keycard_item, keycard_name};
+        let Some(player) = ctx.player else {
+            return false;
+        };
+        let Some((_, usable)) = ctx.world.pilot_usable(player) else {
+            return false;
+        };
+        requests.push(ShellRequest::Action {
+            seat: ctx.seat,
+            command: PlayerCommand::Pilot(fatherload_simulation::pilot::PilotAction::Use),
+        });
+        let line = match usable {
+            Usable::Lever { on: false, .. } => "The lever grinds over. Somewhere a gate moves.",
+            Usable::Lever { on: true, .. } => "You throw the lever back.",
+            Usable::Chest => "You heave the old lid open.",
+            Usable::KeycardDoor { color } => {
+                let carried = ctx.player().is_some_and(|player| {
+                    let card = keycard_item(color);
+                    player.pilot_pack.count(card) > 0 || player.carried(card) > 0
+                });
+                if carried {
+                    "The reader blinks green and the door slides away."
+                } else {
+                    self.message = format!(
+                        "Locked. It wants the {} keycard: search the ruin's chests.",
+                        keycard_name(color)
+                    );
+                    return true;
+                }
+            }
+            Usable::TempleFitting(fitting) => match fitting {
+                fatherload_simulation::sky::SkyTile::TempleLever => {
+                    "The temple lever groans over. Stone grinds somewhere below."
+                }
+                fatherload_simulation::sky::SkyTile::TempleKeystone => {
+                    "You prise the keystone off its plinth."
+                }
+                fatherload_simulation::sky::SkyTile::KeystoneDoor => {
+                    let carried = ctx.player().is_some_and(|player| {
+                        player.pilot_pack.count(fatherload_simulation::item::TEMPLE_KEYSTONE) > 0
+                            || player.carried(fatherload_simulation::item::TEMPLE_KEYSTONE) > 0
+                    });
+                    if carried {
+                        "The keystone settles into its socket and the vault gate rolls aside."
+                    } else {
+                        "A keystone-shaped socket. The temple's keystone must be somewhere above."
+                    }
+                }
+                _ => "You break the relic chest's seal.",
+            },
+        };
+        line.clone_into(&mut self.message);
+        true
+    }
+
     /// The use button on foot away from the rig: the first press says how to board and arms
-    /// the radio; a second press within [`PICKUP_CONFIRM_SECONDS`] radios for a pickup
-    /// ([`PlayerCommand::Rescue`] on foot: hauled back aboard for a small fee), the way out of
-    /// a pit the pick cannot dig or back to a wrecked rig.
+    /// the radio (with a rig link it also calls the rig over on autopilot, WP-PILOT); a second
+    /// press within [`PICKUP_CONFIRM_SECONDS`] radios for a pickup ([`PlayerCommand::Rescue`]
+    /// on foot: hauled back aboard for a small fee), the way out of a pit the pick cannot dig
+    /// or back to a wrecked rig.
     pub(super) fn radio_pickup(&mut self, ctx: SeatContext<'_>, requests: &mut Vec<ShellRequest>) {
         let use_key = super::key_for(Prompt::Use, ctx.device);
+        let linked = ctx.player.is_some_and(|player| {
+            ctx.world
+                .pilot_of(player)
+                .is_some_and(|(_, _, state)| state.gear.rig_link > 0)
+        });
+        let wrecked_now = ctx.player().is_some_and(|player| player.hull <= 0.0);
+        if linked && !wrecked_now && self.pickup_armed <= 0.0 {
+            requests.push(ShellRequest::Action {
+                seat: ctx.seat,
+                command: PlayerCommand::Pilot(fatherload_simulation::pilot::PilotAction::RecallRig),
+            });
+            self.pickup_armed = PICKUP_CONFIRM_SECONDS;
+            self.message = format!(
+                "Rig link: calling the rig over. Press {use_key} again to radio for a pickup ({} cr).",
+                fatherload_simulation::pilot::PILOT_RECALL_FEE
+            );
+            return;
+        }
         if self.pickup_armed > 0.0 {
             self.pickup_armed = 0.0;
             requests.push(ShellRequest::Action {

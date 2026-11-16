@@ -586,6 +586,11 @@ pub const fn mounted(weapon: WeaponKind) -> &'static SpriteDef {
         WeaponKind::LunarCutter => &super::moon::LUNAR_CUTTER,
         WeaponKind::LowGMortar => &super::moon::LOW_G_MORTAR,
         WeaponKind::VoidLance => &super::moon::VOID_LANCE,
+        // Personal arms never mount; their in-hand sprites stand in.
+        WeaponKind::Sidearm => &PILOT_SIDEARM,
+        WeaponKind::Rifle => &PILOT_RIFLE,
+        WeaponKind::Shotgun => &PILOT_SHOTGUN,
+        WeaponKind::Wrench | WeaponKind::HandPick => &PILOT_WRENCH,
     }
 }
 
@@ -606,6 +611,10 @@ pub const fn icon(weapon: WeaponKind) -> &'static SpriteDef {
         WeaponKind::LunarCutter => &super::moon::ICON_LUNAR_CUTTER,
         WeaponKind::LowGMortar => &super::moon::ICON_LOW_G_MORTAR,
         WeaponKind::VoidLance => &super::moon::ICON_VOID_LANCE,
+        WeaponKind::Sidearm => &ICON_PILOT_SIDEARM,
+        WeaponKind::Rifle => &ICON_PILOT_RIFLE,
+        WeaponKind::Shotgun => &ICON_PILOT_SHOTGUN,
+        WeaponKind::Wrench | WeaponKind::HandPick => &ICON_PILOT_WRENCH,
     }
 }
 
@@ -614,17 +623,215 @@ pub const fn icon(weapon: WeaponKind) -> &'static SpriteDef {
 pub const fn projectile(weapon: WeaponKind) -> Option<&'static SpriteDef> {
     match weapon {
         WeaponKind::RivetGun => Some(&RIVET),
-        WeaponKind::ScatterBlaster => Some(&PELLET),
+        WeaponKind::ScatterBlaster | WeaponKind::Shotgun => Some(&PELLET),
         WeaponKind::RocketLauncher => Some(&ROCKET),
         WeaponKind::Harpoon => Some(&SPEAR),
         WeaponKind::FlakCannon => Some(&FLAK_SHELL),
         WeaponKind::LowGMortar => Some(&super::moon::MORTAR_SHELL),
+        WeaponKind::Sidearm => Some(&PISTOL_ROUND),
+        WeaponKind::Rifle => Some(&RIFLE_ROUND),
         WeaponKind::PlasmaCutter
         | WeaponKind::Railgun
         | WeaponKind::ArcRifle
         | WeaponKind::GravityGun
         | WeaponKind::TetherHarpoon
         | WeaponKind::LunarCutter
+        | WeaponKind::VoidLance
+        | WeaponKind::Wrench
+        | WeaponKind::HandPick => None,
+    }
+}
+
+// --- The pilot's personal arms (WP-PILOT): small in-hand sprites (pointing right, the pivot
+// at the grip, the left-middle art pixel) and 9x9 icons. -----------------------------------
+
+/// The sidearm: a stubby pistol.
+pub const PILOT_SIDEARM: SpriteDef = SpriteDef {
+    name: "pilot_sidearm",
+    legend: &[('o', INK), ('S', STEEL), ('w', STEEL_LIGHT), ('r', RUST)],
+    frames: &[&[
+        "ooooooo", //
+        "oSwwwwo", //
+        "orooooo", //
+        "oro....", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// The rifle: a long barrel over a wooden stock, a little scope on top.
+pub const PILOT_RIFLE: SpriteDef = SpriteDef {
+    name: "pilot_rifle",
+    legend: &[
+        ('o', INK),
+        ('S', STEEL),
+        ('w', STEEL_LIGHT),
+        ('l', LOAM),
+        ('c', CLAY),
+        ('k', SKY_LIGHT),
+    ],
+    frames: &[&[
+        "....oko.......", //
+        "ooooooooooooo.", //
+        "lccSSSwwwwwwwo", //
+        "llooSoooooooo.", //
+        "lo..o.........", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// The shotgun: a fat double barrel over a pump grip.
+pub const PILOT_SHOTGUN: SpriteDef = SpriteDef {
+    name: "pilot_shotgun",
+    legend: &[
+        ('o', INK),
+        ('s', STEEL_DARK),
+        ('S', STEEL),
+        ('w', STEEL_LIGHT),
+        ('l', LOAM),
+        ('c', COPPER),
+    ],
+    frames: &[&[
+        "oooooooooooo", //
+        "llSSSwwwwwwo", //
+        "lcsSSSSSSSso", //
+        "lloocccoooo.", //
+        "lo..ooo.....", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// The wrench: a heavy adjustable spanner, jaw forward.
+pub const PILOT_WRENCH: SpriteDef = SpriteDef {
+    name: "pilot_wrench",
+    legend: &[('o', INK), ('S', STEEL), ('w', STEEL_LIGHT), ('r', RED)],
+    frames: &[&[
+        "........ooo", //
+        "oooooooowSo", //
+        "orrrSSSSS.o", //
+        "oooooooowSo", //
+        "........ooo", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A rifle round in flight: a thin bright streak.
+pub const RIFLE_ROUND: SpriteDef = SpriteDef {
+    name: "projectile_rifle_round",
+    legend: &[('w', STEEL_LIGHT), ('c', CREAM), ('g', GOLD)],
+    frames: &[&["gwwwcc"]],
+    frame_seconds: 0.0,
+};
+
+/// A sidearm bullet.
+pub const PISTOL_ROUND: SpriteDef = SpriteDef {
+    name: "projectile_pistol_round",
+    legend: &[('g', GOLD), ('c', CREAM)],
+    frames: &[&["gcc", "gcc"]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_PILOT_SIDEARM: SpriteDef = SpriteDef {
+    name: "icon_pilot_sidearm",
+    legend: &[('o', INK), ('S', STEEL), ('w', STEEL_LIGHT), ('r', RUST)],
+    frames: &[&[
+        ".........", //
+        ".........", //
+        ".oooooooo", //
+        ".oSwwwwwo", //
+        ".orooooo.", //
+        ".oro.....", //
+        ".oro.....", //
+        ".ooo.....", //
+        ".........", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_PILOT_RIFLE: SpriteDef = SpriteDef {
+    name: "icon_pilot_rifle",
+    legend: &[
+        ('o', INK),
+        ('S', STEEL),
+        ('w', STEEL_LIGHT),
+        ('l', LOAM),
+        ('k', SKY_LIGHT),
+    ],
+    frames: &[&[
+        ".........", //
+        "...oko...", //
+        "ooooooooo", //
+        "llSSwwwwo", //
+        "lloSooooo", //
+        "lo.o.....", //
+        "oo.......", //
+        ".........", //
+        ".........", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_PILOT_SHOTGUN: SpriteDef = SpriteDef {
+    name: "icon_pilot_shotgun",
+    legend: &[
+        ('o', INK),
+        ('S', STEEL),
+        ('w', STEEL_LIGHT),
+        ('l', LOAM),
+        ('c', COPPER),
+    ],
+    frames: &[&[
+        ".........", //
+        ".........", //
+        "ooooooooo", //
+        "lSSwwwwwo", //
+        "lSSSSSSSo", //
+        "loocccoo.", //
+        "lo.ooo...", //
+        "oo.......", //
+        ".........", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+pub const ICON_PILOT_WRENCH: SpriteDef = SpriteDef {
+    name: "icon_pilot_wrench",
+    legend: &[('o', INK), ('S', STEEL), ('w', STEEL_LIGHT), ('r', RED)],
+    frames: &[&[
+        "......ooo", //
+        ".....owSo", //
+        "....oS.oo", //
+        "...oSSo..", //
+        "..oSSo...", //
+        ".orSo....", //
+        "orro.....", //
+        "oro......", //
+        "oo.......", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// The in-hand sprite of a personal arm (`None` for rig weapons and the hand pick, which the
+/// pilot art draws itself).
+#[must_use]
+pub const fn in_hand(weapon: WeaponKind) -> Option<&'static SpriteDef> {
+    match weapon {
+        WeaponKind::Sidearm => Some(&PILOT_SIDEARM),
+        WeaponKind::Rifle => Some(&PILOT_RIFLE),
+        WeaponKind::Shotgun => Some(&PILOT_SHOTGUN),
+        WeaponKind::Wrench => Some(&PILOT_WRENCH),
+        WeaponKind::HandPick
+        | WeaponKind::RivetGun
+        | WeaponKind::ScatterBlaster
+        | WeaponKind::PlasmaCutter
+        | WeaponKind::RocketLauncher
+        | WeaponKind::Harpoon
+        | WeaponKind::Railgun
+        | WeaponKind::ArcRifle
+        | WeaponKind::GravityGun
+        | WeaponKind::TetherHarpoon
+        | WeaponKind::FlakCannon
+        | WeaponKind::LunarCutter
+        | WeaponKind::LowGMortar
         | WeaponKind::VoidLance => None,
     }
 }

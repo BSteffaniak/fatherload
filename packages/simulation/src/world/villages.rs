@@ -146,7 +146,8 @@ impl WorldState {
             goods @ (VillageDeal::Part(_)
             | VillageDeal::Cosmetic(_)
             | VillageDeal::Explosives { .. }
-            | VillageDeal::Blessing(_)) => self.apply_goods(player_id, goods, price),
+            | VillageDeal::Blessing(_)
+            | VillageDeal::PilotArms(_)) => self.apply_goods(player_id, goods, price),
             VillageDeal::SkyCraft { recipe, tier } => self.apply_sky_craft(player_id, recipe, tier),
         }
     }
@@ -205,6 +206,43 @@ impl WorldState {
                 );
                 if let Some(player) = self.players.get_mut(&player_id) {
                     player.villages.blessing = Some(Blessing { kind, until });
+                }
+                PlayerScopedCommandOutcome::Applied
+            }
+            VillageDeal::PilotArms(purchase) => {
+                let Some(player) = self.players.get(&player_id) else {
+                    return PlayerScopedCommandOutcome::UnknownPlayer;
+                };
+                let room = match purchase {
+                    crate::pilot::arsenal::PilotArmsPurchase::Weapon(weapon) => {
+                        crate::pilot::arsenal::PILOT_WEAPONS.contains(&weapon)
+                            && !player.pilot_arsenal.owned.contains(&weapon)
+                    }
+                    crate::pilot::arsenal::PilotArmsPurchase::Ammo(ammo) => {
+                        crate::weapon::AmmoKind::PILOT.contains(&ammo)
+                            && player.pilot_arsenal.ammo(ammo)
+                                < crate::pilot::arsenal::MAX_PILOT_AMMO
+                    }
+                };
+                if !room || !self.charge(player_id, price) {
+                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
+                }
+                if let Some(player) = self.players.get_mut(&player_id) {
+                    match purchase {
+                        crate::pilot::arsenal::PilotArmsPurchase::Weapon(weapon) => {
+                            let _ = player.pilot_arsenal.receive(weapon);
+                        }
+                        crate::pilot::arsenal::PilotArmsPurchase::Ammo(ammo) => {
+                            let _ = player.pilot_arsenal.add_ammo(ammo, ammo.pack().0);
+                        }
+                    }
+                }
+                let held = self
+                    .players
+                    .get(&player_id)
+                    .and_then(|player| player.pilot_arsenal.equipped);
+                if let Some((id, _, _)) = self.pilot_of(player_id) {
+                    self.edit_pilot(id, |_, state| state.weapon = held);
                 }
                 PlayerScopedCommandOutcome::Applied
             }

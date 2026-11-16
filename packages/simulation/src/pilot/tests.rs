@@ -473,6 +473,7 @@ fn the_jetpack_burns_a_few_seconds_and_recharges_only_on_the_ground() {
     let gear = PilotGear {
         jetpack: 1,
         suit: 0,
+        ..PilotGear::default()
     };
     let mut state = PilotState {
         grounded: true,
@@ -581,6 +582,7 @@ fn gear_tiers_raise_health_air_and_pack() {
     let suited = PilotGear {
         jetpack: 2,
         suit: 2,
+        ..PilotGear::default()
     };
     assert!(suited.max_health() > bare.max_health());
     assert!(suited.max_oxygen() > bare.max_oxygen());

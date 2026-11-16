@@ -1274,8 +1274,15 @@ const fn built_colors(tile: BuiltTile) -> (Color, Color) {
         BuiltTile::Wall(BlockKind::HardRock) => (SLATE, SLATE_LIGHT),
         BuiltTile::Plating => (STEEL, STEEL_LIGHT),
         BuiltTile::Glass => (OCEAN, ICE),
-        BuiltTile::Plank => (RUST, AMBER),
+        BuiltTile::Plank | BuiltTile::PressurePlate { .. } | BuiltTile::Chest { .. } => {
+            (RUST, AMBER)
+        }
         BuiltTile::VentGrate => (NIGHT, STEEL_LIGHT),
+        // Ruin pieces are never built; their ghosts never show.
+        BuiltTile::RuinWall | BuiltTile::GateLintel(_) | BuiltTile::Lever { .. } => {
+            (TEAL_DARK, TEAL)
+        }
+        BuiltTile::Gate | BuiltTile::KeycardDoor(_) => (STEEL_DARK, STEEL_LIGHT),
     }
 }
 

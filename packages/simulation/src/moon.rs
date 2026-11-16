@@ -466,6 +466,26 @@ pub fn vacuum_at(settings: &crate::worldgen::WorldSettings, x: f32, y: f32) -> b
         .is_some_and(|layout| layout.pressurized(tile_x, tile_y))
 }
 
+/// Whether world pixel `(x, y)` is sheltered from the cold of space: inside the lunar
+/// colony's pressurized, heated rooms or behind the alien facility's veil
+/// ([`crate::worldgen::moon::MoonLayout::pressurized`]). A pilot on foot there needs no
+/// thermal lining (the pilot's exposure reads it, T23).
+#[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "bounded world pixels address terrain tiles"
+)]
+pub fn sheltered_at(settings: &crate::worldgen::WorldSettings, x: f32, y: f32) -> bool {
+    if !settings.generator.has_moon_content() || y > 0.0 {
+        return false;
+    }
+    let (tile_x, tile_y) = (
+        (x / crate::terrain::TILE_SIZE).floor() as i32,
+        (y / crate::terrain::TILE_SIZE).floor() as i32,
+    );
+    crate::worldgen::moon::layout(settings).is_some_and(|layout| layout.pressurized(tile_x, tile_y))
+}
+
 /// The requirements `player` still lacks.
 #[must_use]
 pub fn missing_requirements(player: &Player) -> Vec<MoonRequirement> {

@@ -290,6 +290,7 @@ mod tests {
         fire: false,
         fire_thrusts_unarmed: false,
         cycle_weapon: false,
+        rope: false,
         pointer: None,
         auto_aim: false,
         scan: false,

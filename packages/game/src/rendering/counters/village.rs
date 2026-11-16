@@ -16,7 +16,9 @@ use super::super::pixel_art::palette::*;
 use super::{
     super::{
         layout::{ModalContent, Section, SectionItem, UiLayout},
-        pixel_art::sprites::{explosives as explosive_art, icons, menu_icons},
+        pixel_art::sprites::{
+            explosives as explosive_art, icons, menu_icons, weapons as weapon_art,
+        },
         screen::UiFrame,
     },
     COUNTER_HELP, Offer, credits_item, offer_items,
@@ -132,6 +134,21 @@ fn quote(snapshot: &RenderSnapshot<'_>, player: &Player, offer: VillageOffer) ->
                 .about("Bigger packs than the town shack, whatever its stock level.")
                 .price(offer.price, credits)
         }
+        VillageDeal::PilotArms(fatherload_simulation::pilot::arsenal::PilotArmsPurchase::Weapon(
+            weapon,
+        )) => Offer::new(weapon_art::icon(weapon), format!("Pilot's {}", weapon.name()), "for your own hands")
+            .about(weapon.description())
+            .unavailable_if(player.pilot_arsenal.owned.contains(&weapon))
+            .price(offer.price, credits),
+        VillageDeal::PilotArms(fatherload_simulation::pilot::arsenal::PilotArmsPurchase::Ammo(
+            ammo,
+        )) => Offer::new(
+            &weapon_art::ICON_ROCKET_AMMO,
+            format!("{} x {}", ammo.pack().0, ammo.plural()),
+            format!("carrying {}", player.pilot_arsenal.ammo(ammo)),
+        )
+        .about("Personal ammunition for the pilot's guns, kept apart from the rig's.")
+        .price(offer.price, credits),
         VillageDeal::ChartRegion => Offer::new(&menu_icons::GLOBE, "Chart the region", "nearby sites and villages")
             .about("The cartographer inks the nearest unknown sites and neighbouring villages onto your map.")
             .price(offer.price, credits),

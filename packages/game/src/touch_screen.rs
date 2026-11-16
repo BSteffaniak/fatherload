@@ -337,6 +337,20 @@ pub fn touch_context(
             || view.buoy.is_some()
             || view.in_colony,
         kits: kits.map(|count| count > 0),
-        pilot: TouchPilot::new(view.pilot.is_some(), view.can_exit, view.can_board),
+        pilot: TouchPilot::new(
+            view.pilot.is_some(),
+            view.can_exit,
+            view.can_board && !view.fixture_first,
+        ),
+        pilot_armed: !player.pilot_arsenal.owned.is_empty(),
+        rope: view.pilot.as_ref().is_some_and(|pilot| {
+            pilot.state.gear.grapple > 0 || pilot.state.tether.is_some() || view.can_board
+        }),
+        // A fixture in reach, or a rig link to call the rig over with (WP-PILOT).
+        usable: view.pilot_usable.is_some()
+            || view
+                .pilot
+                .as_ref()
+                .is_some_and(|pilot| pilot.state.gear.rig_link > 0),
     }
 }

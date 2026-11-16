@@ -124,7 +124,11 @@ pub fn draw_projectiles(
                     );
                 }
             }
-            WeaponKind::RivetGun | WeaponKind::ScatterBlaster => {
+            WeaponKind::RivetGun
+            | WeaponKind::ScatterBlaster
+            | WeaponKind::Sidearm
+            | WeaponKind::Rifle
+            | WeaponKind::Shotgun => {
                 for step in 1..=4_u8 {
                     let back = f32::from(step) * 2.0 * ART;
                     draw.draw_rectangle_rec(
@@ -202,7 +206,9 @@ pub fn draw_projectiles(
             | WeaponKind::GravityGun
             | WeaponKind::TetherHarpoon
             | WeaponKind::LunarCutter
-            | WeaponKind::VoidLance => {}
+            | WeaponKind::VoidLance
+            | WeaponKind::Wrench
+            | WeaponKind::HandPick => {}
         }
         if let Some(sprite) = art::projectile(projectile.weapon) {
             draw_sprite_rotated(
@@ -462,7 +468,7 @@ pub fn draw_shots(draw: &mut impl RaylibDraw, shots: &[ShotFlash]) {
             continue;
         }
         let (core, glow, size) = match shot.weapon {
-            WeaponKind::RivetGun => (CREAM, AMBER, 2),
+            WeaponKind::RivetGun | WeaponKind::Rifle => (CREAM, AMBER, 2),
             WeaponKind::ScatterBlaster => (CREAM, ORANGE, 4),
             WeaponKind::PlasmaCutter => (PINK, VIOLET, 2),
             WeaponKind::RocketLauncher => (GOLD, ORANGE, 4),
@@ -475,6 +481,8 @@ pub fn draw_shots(draw: &mut impl RaylibDraw, shots: &[ShotFlash]) {
             WeaponKind::LunarCutter => (ICE, MINT, 3),
             WeaponKind::LowGMortar => (AMBER, ORANGE, 3),
             WeaponKind::VoidLance => (PINK, VIOLET, 4),
+            WeaponKind::Sidearm | WeaponKind::Wrench | WeaponKind::HandPick => (CREAM, GOLD, 1),
+            WeaponKind::Shotgun => (CREAM, ORANGE, 3),
         };
         let reach = ART * 3.0;
         let (cx, cy) = (dx.mul_add(reach, shot.x), dy.mul_add(reach, shot.y));

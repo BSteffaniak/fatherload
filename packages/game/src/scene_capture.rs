@@ -255,6 +255,7 @@ mod cave_scenes;
 mod drop_scenes;
 mod explosive_scenes;
 mod people_scenes;
+mod pilot_content_scenes;
 mod pilot_scenes;
 mod sky_continent_scenes;
 mod touch_scenes;
@@ -367,6 +368,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(sky_continent_scenes::SKY_CONTINENT_SCENES)
         .chain(moon_scenes::MOON_SCENES)
         .chain(pilot_scenes::PILOT_SCENES)
+        .chain(pilot_content_scenes::PILOT_CONTENT_SCENES)
         .chain(reward_scenes::REWARD_SCENES)
 }
 

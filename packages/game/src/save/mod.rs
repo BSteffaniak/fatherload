@@ -55,11 +55,17 @@ const SAVE_SLOTS: usize = 3;
 /// * T18 upgrade reward moments: each player's milestone log and records and the
 ///   milestone-reward cosmetics.
 ///
-/// 10 (expansion wave 4; the integrator collapses the wave's bumps into one), every new field
-/// with a serde default, so a version 9 file loads as is:
+/// 10 (expansion wave 4; the integrator collapses the wave's bumps into one); every new field
+/// has a serde default, so version 8 and 9 files load as is:
 ///
 /// * T21: generator V9 worlds (sky continent content), new sky tile, artifact, material, enemy
-///   and weapon variants, and the tether line in each rig's weapon state.
+///   and weapon variants, and the tether line in each rig's weapon state;
+/// * T23 pilot content: the pilot arsenal (personal arms and ammo) on players, the new pilot
+///   gear tiers, pilot entities' arms / rope / recall state, pressure-plate timers in the bases,
+///   ruin tiles in the terrain diffs and `GeneratorVersion::V9` worlds;
+/// * T24 contractor homes: the world's `homes` (plots, deeds, contracts, finished homes and
+///   their decor, furniture stocks, home points), site-crew NPCs (`NpcState::site`) and home
+///   beds (`BedSpot::Home`).
 pub const SAVE_VERSION: u32 = 10;
 
 /// Persisted user settings.

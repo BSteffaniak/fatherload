@@ -73,8 +73,12 @@ pub struct PlayerInput {
     /// `fire` comes from a controller trigger that thrusts when the rig has no weapon mounted
     /// (the trigger's meaning before weapons existed).
     pub fire_thrusts_unarmed: bool,
-    /// Pressed: swap the next owned weapon onto the hardpoint.
+    /// Pressed: swap the next owned weapon onto the hardpoint (on foot: the next personal arm).
     pub cycle_weapon: bool,
+    /// Pressed (on foot, WP-PILOT): the rope button: fire the grapple, clip onto the rig's
+    /// winch beside it, or let go of a rope. Shares a key with a rig-only control (R / Num9 /
+    /// LB), which means nothing on foot.
+    pub rope: bool,
     /// The mouse pointer in screen points, while the mouse is this seat's aim (it moved or
     /// clicked recently); `None` otherwise.
     pub pointer: Option<(f32, f32)>,
@@ -180,6 +184,7 @@ impl PlayerInput {
             fire,
             fire_thrusts_unarmed: _,
             cycle_weapon,
+            rope,
             pointer: _,
             auto_aim: _,
             scan,
@@ -245,6 +250,7 @@ impl PlayerInput {
                 detonate_sequence,
                 fire,
                 cycle_weapon,
+                rope,
                 scan,
                 place_relay,
                 place_drone,
@@ -357,6 +363,7 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
             primary.fire_thrusts_unarmed
         },
         cycle_weapon: primary.cycle_weapon || secondary.cycle_weapon,
+        rope: primary.rope || secondary.rope,
         pointer: primary.pointer.or(secondary.pointer),
         auto_aim: primary.auto_aim && secondary.auto_aim,
         scan: primary.scan || secondary.scan,
@@ -462,6 +469,8 @@ fn read_primary_keyboard_input_with_options(
             || raylib.is_key_down(FIRE_KEY),
         fire_thrusts_unarmed: false,
         cycle_weapon: raylib.is_key_pressed(KeyboardKey::KEY_X),
+        // On foot R throws the rope (the relay kit it places from the rig is rig-only).
+        rope: raylib.is_key_pressed(KeyboardKey::KEY_R),
         // Filled in by the app from its mouse tracker (see `crate::input::MouseAim`).
         pointer: None,
         auto_aim: false,
@@ -513,6 +522,7 @@ fn read_primary_keyboard_input_with_options(
 /// | Bomb, scanner | Numpad 0, Numpad . |
 /// | Next explosive, detonate, detonate in sequence | Numpad 3, Numpad 4, Numpad 5 |
 /// | Fire the weapon (auto-aimed), next weapon | Numpad 6, Numpad 7 |
+/// | On foot: rope (grapple / winch) | Numpad 9 |
 /// | Build mode | Numpad 8 |
 /// | In build mode: remove, rotate, previous piece (next piece: Numpad 3) | Numpad 6, Numpad 7, Numpad 9 |
 ///
@@ -548,6 +558,8 @@ pub fn read_secondary_keyboard_input(raylib: &RaylibHandle) -> PlayerInput {
         scan: raylib.is_key_pressed(KeyboardKey::KEY_KP_DECIMAL),
         fire: raylib.is_key_down(KeyboardKey::KEY_KP_6),
         cycle_weapon: raylib.is_key_pressed(KeyboardKey::KEY_KP_7),
+        // On foot Numpad 9 throws the rope (in build mode it picks the previous piece).
+        rope: raylib.is_key_pressed(KeyboardKey::KEY_KP_9),
         auto_aim: true,
         // Build mode shares the weapon keys (weapons hold fire while a seat builds).
         build_mode: raylib.is_key_pressed(KeyboardKey::KEY_KP_8),

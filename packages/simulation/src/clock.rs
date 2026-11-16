@@ -277,6 +277,8 @@ pub enum BedSpot {
     Module(crate::base::StructureId),
     /// A rented room at a village inn.
     Inn(crate::village::VillageId),
+    /// A bed in a contractor-built home (WP-HOME).
+    Home(crate::home::PlotId),
 }
 
 /// A player in bed: where, and the rig's tile when they lay down (moving away gets them up).

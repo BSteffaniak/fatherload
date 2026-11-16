@@ -498,6 +498,65 @@ impl Effects {
                     });
                     continue;
                 }
+                GameplayEventKind::PilotFired {
+                    player_id,
+                    weapon,
+                    x,
+                    y,
+                    end_x,
+                    end_y,
+                } => {
+                    // A pilot's shot (WP-PILOT): the same muzzle flash as a rig gun, smaller;
+                    // melee swings throw a few sparks where they land.
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y, end_x, end_y) = (x as f32, y as f32, end_x as f32, end_y as f32);
+                    if fatherload_simulation::pilot::arsenal::is_melee(weapon) {
+                        self.spawn_dust(end_x, end_y);
+                    } else if self.shots.len() < 96 {
+                        self.shots.push(ShotFlash {
+                            weapon,
+                            x,
+                            y,
+                            end_x,
+                            end_y,
+                            age: 0.0,
+                            bolt: false,
+                            lightning: false,
+                        });
+                    }
+                    let cue = weapon_cue(weapon);
+                    cues.push(if local_players.contains(&player_id) {
+                        PlacedCue::player(cue, player_id)
+                    } else {
+                        PlacedCue::world(cue, x, y)
+                    });
+                    continue;
+                }
+                GameplayEventKind::ChestOpened { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
+                    let (x, y) = (
+                        (x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                        (y as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                    );
+                    self.spawn_sparks(x, y - 8.0);
+                    self.spawn_sparks(x, y - 8.0);
+                }
+                GameplayEventKind::MechanismUsed {
+                    x,
+                    y,
+                    mechanism:
+                        fatherload_simulation::mechanism::MechanismEvent::GateOpened
+                        | fatherload_simulation::mechanism::MechanismEvent::GateClosed,
+                    ..
+                } => {
+                    // Grit shaken off the lintel as the gate moves.
+                    #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
+                    let (x, y) = (
+                        (x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                        (y as f32 + 1.0) * fatherload_simulation::terrain::TILE_SIZE,
+                    );
+                    self.spawn_dust(x, y);
+                }
                 GameplayEventKind::ProjectileImpact { x, y, surface, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
                     let (x, y) = (x as f32, y as f32);
@@ -913,12 +972,33 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::FacilityPylon { player_id, .. }
         | GameplayEventKind::FacilityGateOpened { player_id }
         | GameplayEventKind::MoonCoreReached { player_id }
-        | GameplayEventKind::UplinkBeamed { player_id, .. } => Some(player_id),
+        | GameplayEventKind::UplinkBeamed { player_id, .. }
+        | GameplayEventKind::PilotFired { player_id, .. }
+        | GameplayEventKind::PilotWeaponDry { player_id, .. }
+        | GameplayEventKind::PilotWeaponSwapped { player_id, .. }
+        | GameplayEventKind::PilotRope { player_id, .. }
+        | GameplayEventKind::PilotGlide { player_id, .. }
+        | GameplayEventKind::ChestOpened { player_id, .. }
+        | GameplayEventKind::RigRecall { player_id, .. }
+        | GameplayEventKind::PilotExposed { player_id, .. }
+        | GameplayEventKind::PilotWallJumped { player_id }
+        | GameplayEventKind::PlotBought { player_id, .. }
+        | GameplayEventKind::ContractSigned { player_id, .. }
+        | GameplayEventKind::SiteEventAnswered { player_id, .. }
+        | GameplayEventKind::FurniturePlaced { player_id, .. }
+        | GameplayEventKind::FurnitureRemoved { player_id, .. }
+        | GameplayEventKind::HomeRushed { player_id, .. }
+        | GameplayEventKind::HomeInteraction { player_id } => Some(player_id),
+        // Building news reaches the plot's owner wherever they are.
+        GameplayEventKind::ConstructionStage { owner, .. }
+        | GameplayEventKind::HomeCompleted { owner, .. }
+        | GameplayEventKind::SiteEventRaised { owner, .. } => Some(owner),
         GameplayEventKind::WardenDefeated { by } => by,
         GameplayEventKind::LightningArc { struck, .. } => struck,
         GameplayEventKind::WardenAwakened { .. } | GameplayEventKind::WardenStaggered { .. } => {
             None
         }
+        GameplayEventKind::MechanismUsed { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

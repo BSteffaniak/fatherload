@@ -88,6 +88,7 @@ fn headless_host_and_bot_client_play_and_exit_cleanly() {
 
     let mut bot = Guard(Some(
         Command::new(BIN)
+            // Long enough to get in game on a loaded machine (joining takes ~3 s there).
             .args(["--bot-client", &addr, "--count", "1", "--duration", "5"])
             .stdout(Stdio::piped())
             .spawn()

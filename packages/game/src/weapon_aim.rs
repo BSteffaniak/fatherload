@@ -166,16 +166,47 @@ pub fn trigger_thrusts(input: &PlayerInput, player: Option<&Player>) -> bool {
 }
 
 /// The command the next-weapon button sends: mount the next owned weapon (`None` when the rig
-/// owns nothing else to swap to).
+/// owns nothing else to swap to). On foot (`on_foot`, WP-PILOT) it swaps what the pilot holds.
 #[must_use]
-pub fn cycle_command(input: &PlayerInput, player: Option<&Player>) -> Option<PlayerCommand> {
+pub fn cycle_command(
+    input: &PlayerInput,
+    player: Option<&Player>,
+    on_foot: bool,
+) -> Option<PlayerCommand> {
     if !input.cycle_weapon {
         return None;
     }
     let player = player?;
+    if on_foot {
+        return (!player.pilot_arsenal.owned.is_empty()).then_some(PlayerCommand::Pilot(
+            fatherload_simulation::pilot::PilotAction::CycleWeapon,
+        ));
+    }
     let current = player.mounted_weapon.map(|mounted| mounted.kind);
     let next = player.weapon_rack.next_after(current)?;
     (Some(next) != current).then_some(PlayerCommand::MountWeapon { weapon: Some(next) })
+}
+
+/// The command the rope button sends on foot (WP-PILOT): fire the grapple along the seat's
+/// free aim (zero when auto-aiming: up and forward), clip onto the winch or let go; the
+/// simulation picks which.
+#[must_use]
+pub const fn rope_command(
+    input: &PlayerInput,
+    aim: &SeatAim,
+    on_foot: bool,
+) -> Option<PlayerCommand> {
+    if !input.rope || !on_foot {
+        return None;
+    }
+    let (aim_x, aim_y) = if aim.control.auto_aim {
+        (0, 0)
+    } else {
+        (aim.control.aim_x, aim.control.aim_y)
+    };
+    Some(PlayerCommand::Pilot(
+        fatherload_simulation::pilot::PilotAction::Rope { aim_x, aim_y },
+    ))
 }
 
 /// What a view's aim reticle shows.
@@ -202,11 +233,45 @@ pub fn reticle(
     aim: &SeatAim,
 ) -> Option<Reticle> {
     let player = world.player(player_id)?;
-    let weapon = player.mounted_weapon?.kind;
-    if world.is_on_foot(player_id) {
-        // On foot the trigger swings the pick: its cracks show on the tile instead.
-        return None;
+    if let Some((_, body, state)) = world.pilot_of(player_id) {
+        // On foot a held gun shows its reticle from the pilot's hand (WP-PILOT); the pick
+        // shows its cracks on the tile instead, and melee arms need none.
+        let weapon = state
+            .weapon
+            .filter(|weapon| !fatherload_simulation::pilot::arsenal::is_melee(*weapon))?;
+        let (hx, hy) = state.middle(body);
+        if let Some((x, y)) = aim.pointer {
+            return Some(Reticle {
+                x,
+                y,
+                locked: false,
+                auto: false,
+                weapon,
+            });
+        }
+        let control = aim.control;
+        let direction = fatherload_simulation::weapon::aim_vector(control.aim_x, control.aim_y)
+            .unwrap_or_else(|| (f32::from(state.facing), 0.0));
+        if control.auto_aim
+            && let Some((_, x, y)) = world.pilot_auto_aim_target((hx, hy), direction)
+        {
+            return Some(Reticle {
+                x,
+                y,
+                locked: true,
+                auto: true,
+                weapon,
+            });
+        }
+        return Some(Reticle {
+            x: direction.0.mul_add(RETICLE_REACH, hx),
+            y: direction.1.mul_add(RETICLE_REACH, hy),
+            locked: false,
+            auto: control.auto_aim,
+            weapon,
+        });
     }
+    let weapon = player.mounted_weapon?.kind;
     let base = (player.x, player.y - MUZZLE_RISE);
     if let Some((x, y)) = aim.pointer {
         return Some(Reticle {
@@ -340,16 +405,73 @@ mod tests {
             ..PlayerInput::default()
         };
         assert_eq!(
-            cycle_command(&press, Some(&player)),
+            cycle_command(&press, Some(&player), false),
             None,
             "only one weapon"
         );
         let _ = player.receive_weapon(WeaponKind::Railgun);
         assert_eq!(
-            cycle_command(&press, Some(&player)),
+            cycle_command(&press, Some(&player), false),
             Some(PlayerCommand::MountWeapon {
                 weapon: Some(WeaponKind::Railgun)
             })
+        );
+    }
+
+    #[test]
+    fn on_foot_the_buttons_swap_personal_arms_and_throw_the_rope() {
+        use fatherload_simulation::pilot::PilotAction;
+        let mut player = Player::new(320.0, 320.0);
+        let press = PlayerInput {
+            cycle_weapon: true,
+            rope: true,
+            ..PlayerInput::default()
+        };
+        assert_eq!(
+            cycle_command(&press, Some(&player), true),
+            None,
+            "no personal arms yet"
+        );
+        let _ = player.pilot_arsenal.receive(WeaponKind::Sidearm);
+        assert_eq!(
+            cycle_command(&press, Some(&player), true),
+            Some(PlayerCommand::Pilot(PilotAction::CycleWeapon))
+        );
+        let aimed = SeatAim {
+            control: WeaponControl {
+                fire: false,
+                auto_aim: false,
+                aim_x: 40,
+                aim_y: -120,
+            },
+            pointer: None,
+        };
+        assert_eq!(
+            rope_command(&press, &aimed, true),
+            Some(PlayerCommand::Pilot(PilotAction::Rope {
+                aim_x: 40,
+                aim_y: -120
+            }))
+        );
+        let auto = SeatAim {
+            control: WeaponControl {
+                auto_aim: true,
+                ..aimed.control
+            },
+            pointer: None,
+        };
+        assert_eq!(
+            rope_command(&press, &auto, true),
+            Some(PlayerCommand::Pilot(PilotAction::Rope {
+                aim_x: 0,
+                aim_y: 0
+            })),
+            "auto-aiming seats throw up and forward"
+        );
+        assert_eq!(
+            rope_command(&press, &aimed, false),
+            None,
+            "rig-only key in the rig"
         );
     }
 }
