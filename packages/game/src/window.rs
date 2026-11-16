@@ -32,9 +32,11 @@ pub fn restored_window_size(saved: WindowSettings, monitor: Option<(i32, i32)>) 
 }
 
 /// A rectangle in GLFW window/monitor units: `(x, y, width, height)`.
+#[cfg_attr(target_os = "emscripten", allow(dead_code))]
 pub type ScreenRect = (i32, i32, i32, i32);
 
 /// How much of the window's top edge (its title bar) must be on the monitor to drag it.
+#[cfg_attr(target_os = "emscripten", allow(dead_code))]
 const TITLE_GRAB: i32 = 48;
 
 /// Where to move a window whose title bar is not on `monitor` (its work area or bounds), or
@@ -43,6 +45,7 @@ const TITLE_GRAB: i32 = 48;
 /// pixels off-screen: it opens, but nothing of it is visible. The fix centres the window on the
 /// monitor, top-left anchored when it does not fit, leaving room above it for the title bar
 /// (window positions are the content area's corner).
+#[cfg_attr(target_os = "emscripten", allow(dead_code))]
 #[must_use]
 pub fn recentred_window_position(window: ScreenRect, monitor: ScreenRect) -> Option<(i32, i32)> {
     let (mx, my, mw, mh) = monitor;
