@@ -95,7 +95,7 @@ fn point_blank_samples(origin: (f32, f32), muzzle: (f32, f32)) -> impl Iterator<
 }
 
 /// Distance from `point` to the segment `from`-`to`.
-fn segment_distance(point: (f32, f32), from: (f32, f32), to: (f32, f32)) -> f32 {
+pub(super) fn segment_distance(point: (f32, f32), from: (f32, f32), to: (f32, f32)) -> f32 {
     let (sx, sy) = (to.0 - from.0, to.1 - from.1);
     let length_sq = sx.mul_add(sx, sy * sy);
     let t = if length_sq > 0.0 {

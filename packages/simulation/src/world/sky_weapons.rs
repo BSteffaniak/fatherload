@@ -37,7 +37,7 @@ use crate::{
     physics::{line_clear, solid_at},
     quantize::quantize_simulation_scalar as quantize,
     terrain::{TILE_SIZE, TileKind, TilePosition, is_indestructible, tile_hardness},
-    weapon::{Tether, WeaponKind, WeaponStats},
+    weapon::{MUZZLE_REACH, Tether, WeaponKind, WeaponStats},
 };
 
 use super::{WorldState, movement::authoritative_player_collides};
@@ -248,8 +248,9 @@ impl WorldState {
     }
 
     /// What a gravity gun at `muzzle` aiming `aim` grabs: drops, live charges, boulders and
-    /// ordinary enemies (no elites, nothing stationary) in its cone within `range`, or already
-    /// near the hold point. In id order.
+    /// ordinary enemies (no elites, nothing stationary) in its cone within `range`, already
+    /// near the hold point, or point blank (touching the hardpoint-to-muzzle stretch of the
+    /// aim line, where an enemy pressed against the rig sits behind the muzzle). In id order.
     fn gravity_targets(
         &self,
         muzzle: (f32, f32),
@@ -257,6 +258,10 @@ impl WorldState {
         range: f32,
         hold: (f32, f32),
     ) -> Vec<EntityId> {
+        let hardpoint = (
+            aim.0.mul_add(-MUZZLE_REACH, muzzle.0),
+            aim.1.mul_add(-MUZZLE_REACH, muzzle.1),
+        );
         self.entities
             .ids_in_radius(muzzle.0, muzzle.1, range)
             .into_iter()
@@ -282,7 +287,12 @@ impl WorldState {
                 let distance = dx.hypot(dy).max(1.0);
                 let near_hold = (x - hold.0).hypot(y - hold.1) <= HOLD_RADIUS;
                 let in_cone = dy.mul_add(aim.1, dx * aim.0) / distance >= 0.6;
-                (near_hold || in_cone) && line_clear(&self.terrain, muzzle.0, muzzle.1, x, y)
+                let point_blank = entity.state.health().is_some_and(|health| {
+                    super::weapons::segment_distance((x, y), hardpoint, muzzle) <= health.radius
+                });
+                point_blank
+                    || ((near_hold || in_cone)
+                        && line_clear(&self.terrain, muzzle.0, muzzle.1, x, y))
             })
             .collect()
     }

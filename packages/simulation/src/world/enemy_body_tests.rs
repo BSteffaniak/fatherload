@@ -14,6 +14,10 @@ use crate::{
     physics,
     terrain::{MineralKind, TILE_SIZE, TileKind, TilePosition},
     weapon::{MUZZLE_RISE, WeaponKind},
+    worldgen::{
+        TileRect, WorldSettings,
+        sky::{self, SkyLandKind},
+    },
 };
 
 use super::{enemies::RIG_CONTACT_HALF, movement::AUTHORITATIVE_PLAYER_RADIUS};
@@ -107,10 +111,19 @@ fn arena(hz: u32) -> WorldState {
     world
 }
 
-/// One of every kind at an open spot in the arena.
+/// Whether `kind` lives in the caves (the arena); the wave 4 families have their own habitats
+/// (the sky, the night surface, the Moon), soaked below.
+const fn lives_underground(kind: EnemyKind) -> bool {
+    !kind.is_sky() && !kind.is_lunar() && !crate::night::is_nocturnal(kind)
+}
+
+/// One of every cave kind at an open spot in the arena.
 fn spawn_every_kind(world: &mut WorldState) -> Vec<EntityId> {
     let mut ids = Vec::new();
-    for (index, kind) in (0_u16..).zip(EnemyKind::ALL) {
+    let cave_kinds = EnemyKind::ALL
+        .into_iter()
+        .filter(|kind| lives_underground(*kind));
+    for (index, kind) in (0_u16..).zip(cave_kinds) {
         let column = f32::from(index).mul_add(6.0, 258.5);
         let column = if (295.0..299.0).contains(&column) {
             column + 4.0
@@ -203,6 +216,13 @@ fn long_fight(difficulty: EnemyDifficulty, hz: u32, seconds: u64) -> (f32, usize
     let mut world = arena(hz);
     world.set_enemy_difficulty(difficulty);
     let _ = spawn_every_kind(&mut world);
+    fight(world, hz, seconds, &format!("{difficulty:?}"))
+}
+
+/// Runs `world`'s fight for `seconds` at `hz` (the rig dancing and shooting, a bomb by the
+/// first enemy every four seconds), checking the body invariants after every tick. Returns the
+/// deepest rig overlap seen, the rig hits and how many enemy-ticks were checked.
+fn fight(mut world: WorldState, hz: u32, seconds: u64, label: &str) -> (f32, usize, usize) {
     let hz = u64::from(hz);
     let mut deepest: f32 = 0.0;
     let mut struck = 0;
@@ -241,7 +261,7 @@ fn long_fight(difficulty: EnemyDifficulty, hz: u32, seconds: u64) -> (f32, usize
         checked += world.entities().count_of(EntityKind::Enemy);
         deepest = deepest.max(assert_bodies(
             &world,
-            &format!("{difficulty:?} at {hz} Hz, tick {tick}"),
+            &format!("{label} at {hz} Hz, tick {tick}"),
         ));
     }
     (deepest, struck, checked)
@@ -259,6 +279,173 @@ fn no_enemy_ever_ends_a_tick_inside_rock_or_inside_the_rig() {
         assert!(
             deepest <= OVERLAP_TOLERANCE,
             "{difficulty:?}: an enemy overlapped the rig by {deepest} px"
+        );
+    }
+}
+
+/// Fits the rig for any habitat (it is kept topped up through the fight) and arms it.
+fn arm_rig(world: &mut WorldState) {
+    let player = world.player_mut(PLAYER).expect("player");
+    player.hazard_gear.pressurized_hull = crate::moon::VACUUM_SEAL_TIER;
+    player.hazard_gear.life_support = 1;
+    player.hazard_gear.de_icer = 6;
+    player.hazard_gear.altitude_intake = 6;
+    let _ = player.receive_weapon(WeaponKind::RivetGun);
+    player.weapon.energy = player.battery_capacity();
+}
+
+/// Parks the rig on the floor whose top row is `floor_row` at column `x`, and streams the
+/// terrain around it.
+#[allow(clippy::cast_precision_loss, reason = "small tile indices")]
+fn park_on(world: &mut WorldState, x: i32, floor_row: i32) {
+    let player = world.player_mut(PLAYER).expect("player");
+    player.x = px(x as f32 + 0.5);
+    player.x_remainder = 0.0;
+    player.y = px(floor_row as f32) - AUTHORITATIVE_PLAYER_RADIUS - 0.5;
+    player.velocity_x = 0.0;
+    player.velocity_y = 0.0;
+    world.stream_terrain_near_players();
+}
+
+/// Spawns `kinds` around the rig: walkers and burrowers on the ground beside it, fliers in the
+/// air over it (spawns move any spot in rock to the nearest open one).
+fn spawn_around_rig(world: &mut WorldState, kinds: &[EnemyKind]) {
+    let rig = world.player(PLAYER).expect("player");
+    let (x, y) = (rig.x, rig.y);
+    for (index, kind) in (0_u16..).zip(kinds.iter().copied()) {
+        let side = if index % 2 == 0 { 1.0 } else { -1.0 };
+        let reach = f32::from(index / 2).mul_add(3.0, 4.0);
+        let dx = px(side * reach);
+        let at = match kind.stats().locomotion {
+            Locomotion::Flying => (x + dx, y - px(f32::from(index % 3).mul_add(2.0, 3.0))),
+            Locomotion::Burrowing => (x + dx, y + px(1.5)),
+            Locomotion::Walking | Locomotion::Stationary => (
+                x + dx,
+                y + AUTHORITATIVE_PLAYER_RADIUS - kind.stats().radius - 1.0,
+            ),
+        };
+        if kind == EnemyKind::PirateAirship {
+            let _ = world.spawn_airship(at.0, at.1 - px(4.0));
+        } else if kind != EnemyKind::AirshipTurret {
+            let _ = world.spawn_enemy(kind, at.0, at.1);
+        }
+    }
+}
+
+/// The wave 4 kinds of the habitat `pick` selects.
+fn kinds_where(pick: fn(EnemyKind) -> bool) -> Vec<EnemyKind> {
+    EnemyKind::ALL
+        .into_iter()
+        .filter(|kind| pick(*kind))
+        .collect()
+}
+
+/// A V9 world with the rig on a cloud archipelago isle (the hostile sky, away from sky towns
+/// and cities) and every sky family around it: the isle's rock to collide with above and below.
+fn sky_arena(hz: u32) -> WorldState {
+    let settings = WorldSettings::new(0x5C1E_B0D1);
+    let mut world =
+        WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::new(hz));
+    let bands = settings.generator.sky_bands().expect("V9 has a sky");
+    let search = TileRect {
+        min: TilePosition {
+            x: -6_000,
+            y: sky::row_of(bands.archipelago + 900),
+        },
+        max: TilePosition {
+            x: 6_000,
+            y: sky::row_of(bands.archipelago + 40),
+        },
+    };
+    let isle = sky::lands_touching(&settings, &search)
+        .into_iter()
+        .filter(|land| land.kind == SkyLandKind::ArchipelagoIsle && land.half_width >= 16)
+        .filter(|land| {
+            let top = TilePosition {
+                x: land.center_x,
+                y: land.top_row - 2,
+            };
+            world.hostile_sky(top) && !world.sky_safe_zone(top) && !world.enemy_safe_zone(top)
+        })
+        .min_by_key(|land| land.center_x.abs())
+        .expect("an archipelago isle in the hostile sky");
+    let floor = isle.surface_row(isle.center_x).expect("turf");
+    park_on(&mut world, isle.center_x, floor);
+    arm_rig(&mut world);
+    spawn_around_rig(&mut world, &kinds_where(EnemyKind::is_sky));
+    world
+}
+
+/// A V9 world at night with the rig on open, exposed ground and every night monster around
+/// it (the dune stalker digs its way through the topsoil).
+fn night_arena(hz: u32) -> WorldState {
+    let settings = WorldSettings::new(0x416E_B0D1);
+    let mut world =
+        WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::new(hz));
+    let length = world.day_length();
+    // 21:00 on the first day.
+    world.set_world_time_millis(length.millis() + 84 * length.slice_millis());
+    let column = (300..6_000)
+        .find(|column| {
+            let row = world.terrain().surface_row(*column);
+            (column - 40..=column + 40).all(|x| {
+                !world.night_safe_zone(TilePosition {
+                    x,
+                    y: world.terrain().surface_row(x) - 1,
+                })
+            }) && (column - 4..=column + 4).all(|x| world.terrain().surface_row(x) == row)
+        })
+        .expect("an exposed stretch of surface");
+    let floor = world.terrain().surface_row(column);
+    park_on(&mut world, column, floor);
+    arm_rig(&mut world);
+    spawn_around_rig(&mut world, &kinds_where(crate::night::is_nocturnal));
+    world
+}
+
+/// A V9 world with the rig on open ground on the Moon and every lunar creature around it.
+fn moon_arena(hz: u32) -> WorldState {
+    let mut world = WorldState::new_game_with_params(PLAYER, SimulationParams::new(hz));
+    let layout = world
+        .moon_layout()
+        .expect("the current generator fills the Moon");
+    let moon = layout.moon;
+    let column = (moon.center_x + 300..moon.center_x + moon.half_width - 300)
+        .find(|x| {
+            let row = layout.surface_row(*x).expect("covered");
+            (-12..=12).all(|dx| layout.surface_row(x + dx) == Some(row))
+                && !layout
+                    .colony_area()
+                    .expanded(40)
+                    .contains(TilePosition { x: *x, y: row })
+        })
+        .expect("flat ground on the Moon");
+    let floor = layout.surface_row(column).expect("covered");
+    park_on(&mut world, column, floor);
+    arm_rig(&mut world);
+    spawn_around_rig(&mut world, &kinds_where(EnemyKind::is_lunar));
+    world
+}
+
+#[test]
+fn wave_four_families_keep_their_bodies_in_their_habitats() {
+    // The sky families (wyverns, storm elementals, airships and their turrets, boarders,
+    // nesters), the night monsters and the Moon's creatures obey the same body rules as the
+    // cave kinds: never inside rock (the isles, the surface, the regolith), never over the rig.
+    for (label, world) in [
+        ("sky", sky_arena(60)),
+        ("night", night_arena(60)),
+        ("Moon", moon_arena(60)),
+    ] {
+        let spawned = world.entities().count_of(EntityKind::Enemy);
+        assert!(spawned >= 4, "{label}: only {spawned} enemies spawned");
+        let (deepest, _, checked) = fight(world, 60, 30, label);
+        // (The rig's gun thins a pack fast: at least two enemies on average for the half
+        // minute.)
+        assert!(checked > 60 * 30 * 2, "{label}: a real fight: {checked}");
+        assert!(
+            deepest <= OVERLAP_TOLERANCE,
+            "{label}: an enemy overlapped the rig by {deepest} px"
         );
     }
 }

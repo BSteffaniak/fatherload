@@ -83,7 +83,7 @@ impl WorldState {
     #[must_use]
     pub fn hostile_sky(&self, tile: TilePosition) -> bool {
         self.terrain.settings().generator.has_sky_content()
-            && SkyBand::at_row(tile.y) >= SkyBand::Archipelago
+            && SkyBand::at_row_of(self.terrain.settings(), tile.y) >= SkyBand::Archipelago
     }
 
     /// Whether `tile` in the hostile sky is safe anyway: inside a sky city's area
@@ -128,7 +128,7 @@ impl WorldState {
             if !self.hostile_sky(*tile) || self.enemy_safe_zone(*tile) {
                 continue;
             }
-            let band = SkyBand::at_row(tile.y);
+            let band = SkyBand::at_row_of(self.terrain.settings(), tile.y);
             let roster = sky_roster(band);
             if roster.is_empty() {
                 continue;
@@ -253,7 +253,7 @@ impl WorldState {
     /// of that sky band (scenes and tests; gameplay spawns through the director). Returns the
     /// hull.
     pub fn spawn_airship(&mut self, x: f32, y: f32) -> EntityId {
-        let tier = sky_tier(SkyBand::at_row(tile_of(x, y).y));
+        let tier = sky_tier(SkyBand::at_row_of(self.terrain.settings(), tile_of(x, y).y));
         let id = self.spawn_enemy_with(EnemyKind::PirateAirship, (x, y), tier, None, None);
         self.mount_turrets(id, (x, y), tier);
         id
@@ -318,7 +318,7 @@ impl WorldState {
                 {
                     continue;
                 }
-                let tier = sky_tier(SkyBand::at_row(post.y));
+                let tier = sky_tier(SkyBand::at_row_of(self.terrain.settings(), post.y));
                 let point = Self::spawn_point(kind, post);
                 let _id = self.spawn_enemy_with(kind, point, tier, Some(lair), None);
             }
@@ -555,6 +555,10 @@ impl WorldState {
 
     /// Moves turret `state` onto its hull (its mount offset in `home`). Returns `false` when
     /// the hull is gone (the turret falls with it).
+    ///
+    /// The mount is a teleport, so it keeps the body rules: where the hull hugs rock and the
+    /// mount point would sit in it, the turret takes the nearest open spot instead (at most
+    /// [`super::UNSTICK_PIXELS`] off), or stays put until there is room.
     pub(super) fn ride_airship(&self, body: &mut Body, state: &EnemyState) -> bool {
         let Some(hull) = state
             .parent
@@ -568,6 +572,13 @@ impl WorldState {
             hull.body.x + state.home.0 as f32,
             hull.body.y + state.home.1 as f32,
         );
+        let radius = state.kind.stats().radius;
+        let (x, y) = if physics::collides(&self.terrain, x, y, radius) {
+            physics::free_spot_near(&self.terrain, x, y, radius, super::UNSTICK_PIXELS)
+                .unwrap_or((body.x, body.y))
+        } else {
+            (x, y)
+        };
         body.previous_x = body.x;
         body.previous_y = body.y;
         body.x = quantize(x);

@@ -418,7 +418,13 @@ impl WorldState {
         let (x, y) = if matches!(kind.stats().locomotion, Locomotion::Stationary) {
             (x, y)
         } else {
-            physics::free_spot_near(&self.terrain, x, y, kind.stats().radius, UNSTICK_PIXELS)
+            let radius = kind.stats().radius;
+            // The nearest open spot within a tile, else within a few (a scripted spawn deep in
+            // ground a burrower cannot dig, such as a stalker under hard surface rock).
+            physics::free_spot_near(&self.terrain, x, y, radius, UNSTICK_PIXELS)
+                .or_else(|| {
+                    physics::free_spot_near(&self.terrain, x, y, radius, 4.0 * UNSTICK_PIXELS)
+                })
                 .unwrap_or((x, y))
         };
         let home = tile_of(x, y);
