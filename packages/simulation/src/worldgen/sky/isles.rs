@@ -43,11 +43,13 @@ pub const BUOY_PRICE: u32 = 450;
 /// Fuel a buoy holds: one refill adds at most this much.
 ///
 /// A small, fixed amount, and a buoy only fills a tank up to [`buoy_fill_level`] (a third of
-/// it plus this much): enough to carry early rigs from isle to isle (a tier 1-3 tank fills
-/// right up), next to nothing for a big tank. A rig leaving a buoy is never better off than
-/// one that climbed to the buoy's altitude on a full tank, so buoys never open the dead-air
-/// gap (`world::sky_isle_tests::buoys_never_open_the_dead_air_gap`).
-pub const BUOY_FUEL: f32 = 160.0;
+/// it plus this much): enough to carry early rigs from isle to isle (a tier 1-3 tank, up to
+/// 1,070 fuel, fills right up), little for a big tank. Sized for the second fuel curve (about
+/// 4.7 times the first's tanks: it was 160 then) and V9's taller low isle band. A rig leaving
+/// a buoy is never better off than one that climbed to the buoy's altitude on a full tank, so
+/// buoys never open the dead-air gap
+/// (`world::sky_isle_tests::buoys_never_open_the_dead_air_gap`).
+pub const BUOY_FUEL: f32 = 720.0;
 
 /// The most fuel a buoy fills a tank of `capacity` up to: a third of the tank plus
 /// [`BUOY_FUEL`] (never more than the tank).

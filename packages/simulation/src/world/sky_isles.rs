@@ -358,7 +358,13 @@ impl WorldState {
             ) {
                 let _ = self.spawn_tile_drop(*position, *kind, (0.0, 40.0));
             }
-            if rocks < ROCKS_PER_STEP && index % 5 == 0 {
+            // A rock falls only where the boulder rules allow (`world/hazards.rs`): in the open
+            // tile just emptied, centred so it clears its neighbours, with open air under it to
+            // fall through (never one that would shatter on the rock under it unfallen).
+            if rocks < ROCKS_PER_STEP
+                && index % 5 == 0
+                && self.boulder_hang_tile(*position, 0, true).is_some()
+            {
                 #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
                 let (x, y) = (
                     (position.x as f32 + 0.5) * TILE_SIZE,
