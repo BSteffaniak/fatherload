@@ -75,22 +75,30 @@ every boulder source follows (new ones must too):
   the local surface): mining boulders, collapse surges, deep-run cave-ins, earthquakes and
   stalactites (`try_cave_in` for cave-ins). Scripted ones (an explosive pocket's blast, the Star
   Core escape) call `spawn_cave_in` directly: they ignore settled ground but still settle it.
-- *Rates*: a collapse surge rolls a cave-in every 45 s (was every 3 s for its whole three-to-four
-  market days, the "falling over and over" of the playtest); a full deep-run instability meter
-  empties (was: back to 45, refilling within minutes) and its 4-hull jolt only lands with an
-  actual cave-in; one stalactite in three is loose (`stalactite_is_loose`, a fixed per-tile
+- *Rates*: a collapse surge rolls a cave-in every 90 s (`COLLAPSE_SURGE_PERIOD_MILLIS`; was
+  every 3 s for its whole three-to-four market days, the "falling over and over" of the
+  playtest); deep-run instability builds at half its old rate (`DEEP_INSTABILITY_BUILD_SCALE`),
+  a full meter empties (was: back to 45, refilling within a minute or two) and its 4-hull jolt
+  only lands with an actual cave-in; one stalactite in three is loose (`stalactite_is_loose`, a fixed per-tile
   roll; the rest never fall); cave-in warnings are 1.5 s plus 0.25 s per column out (were 0.9 s
   and 0.2 s). The renderer adds ceiling dust that thickens and a harder shake near the drop.
 - `boulder_frequency_report` (`cargo test -p fatherload_simulation --release
   boulder_frequency_report -- --ignored --nocapture`; 4 seeds, the economy bot mining 20 min,
-  rigs parked 30 min) before / after this fix:
+  rigs parked or roaming 30 min; every seed's world hits a collapse surge about 16 min in)
+  before / after this fix:
 
   | Scenario | Boulders per hour before | after | Spawned in rock before | after | Broke without falling before | after |
   |---|---|---|---|---|---|---|
-  | Mining (prospector bot, one seed hit a collapse surge) | 407 | 15 | 153 | 0 | 176 | 0 |
+  | Mining (prospector bot, one seed hit a collapse surge) | 407 | 13.5 | 153 | 0 | 176 | 0 |
   | Mining (shaft bot) | 9 | 0 | 8 | 0 | 8 | 0 |
   | Parked under a collapse surge | 3,600 | 60 | 0 | 0 | 0 | 0 |
-  | Parked in the crystal faults (deep-run pressure, world events) | 1,866 | 42 | 0 | 0 | 0 | 0 |
+  | Parked in the crystal faults (deep-run pressure, world events) | 1,866 | 30 | 0 | 0 | 0 | 0 |
+  | Roaming the crystal faults (a fresh pocket every minute) | not measured | 72 | - | 0 | - | 0 |
+
+  The roaming row is the worst case for settled ground (the rig always stands on fresh ground
+  in a room tall enough to hang boulders; a one-high tunnel gets no cave-in at all). With a
+  45 s surge roll and the old instability build it was 102 per hour, a cave-in about every
+  minute and a half for the whole run, which is why both were cut further.
 
 Test mode (`test_mode.rs`, `world/test_mode.rs`): `WorldState::enable_test_mode` (before play)
 maxes every rig (hazard counters included) and the player template, fills the parts locker and

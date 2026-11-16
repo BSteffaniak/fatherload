@@ -21,8 +21,9 @@ use super::{
 
 /// Period of the collapse-surge cave-in roll near an underground rig. Was 3 s, which rained a
 /// cave-in on the rig every 3 s for the whole multi-day event; each one also has to find
-/// unsettled ground now ([`SETTLED_GROUND_MILLIS`]).
-pub const COLLAPSE_SURGE_PERIOD_MILLIS: u64 = 45_000;
+/// unsettled ground now ([`SETTLED_GROUND_MILLIS`]). 45 s still met an exploring rig (always
+/// on fresh ground) with a cave-in most rolls, about one a minute for the event's 15-20 min.
+pub const COLLAPSE_SURGE_PERIOD_MILLIS: u64 = 90_000;
 /// Period of gas-bloom clouds near a deep rig.
 const GAS_BLOOM_PERIOD_MILLIS: u64 = 4_000;
 /// Period of gas clouds released by rare cargo on a deep run.
@@ -32,6 +33,10 @@ const DEEP_PRESSURE_SCANNER_LOCKOUT_MILLIS: u64 = 1_200;
 /// Instability per second added for each band below the slate shelves (a full meter
 /// triggers a cave-in).
 const DEEP_PRESSURE_PER_BAND: f32 = 0.05;
+/// Scale on everything that builds deep-run instability (bands, trip time, rare cargo). Was
+/// 1.0: with the meter refilling from 45 an exploring rig met a cave-in about once a minute
+/// in the crystal faults; halved (and emptying when full) it is about one every four.
+const DEEP_INSTABILITY_BUILD_SCALE: f32 = 0.5;
 /// Hull damage of a falling boulder hitting a rig (before the boulder deflector).
 pub const BOULDER_HIT_DAMAGE: f32 = 8.0;
 /// Radius of a falling boulder (px, the sprite's half height): it hangs this far under the top
@@ -137,7 +142,8 @@ impl WorldState {
             DEEP_PRESSURE_PER_BAND,
             trip_seconds.mul_add(0.0003, rare_cargo as f32 * 0.01),
         );
-        state.instability = delta_seconds.mul_add(pressure, state.instability);
+        state.instability =
+            (delta_seconds * DEEP_INSTABILITY_BUILD_SCALE).mul_add(pressure, state.instability);
         if band.index() >= Band::Deep(DeepStratum::FossilOceans).index() {
             if let Some(player) = self.players.get_mut(&player_id) {
                 player.fuel =

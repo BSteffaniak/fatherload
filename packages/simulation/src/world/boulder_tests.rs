@@ -537,7 +537,7 @@ fn collapses_keep_the_same_schedule_at_every_tick_rate() {
         let mut watch = BoulderWatch::default();
         let mut times = Vec::new();
         let inputs = TickInputs::default();
-        for _ in 0..u64::from(hz) * 230 {
+        for _ in 0..u64::from(hz) * 400 {
             let output = world.simulate_tick(world.simulation_tick(), &inputs);
             if output
                 .events
@@ -551,7 +551,7 @@ fn collapses_keep_the_same_schedule_at_every_tick_rate() {
         (times, watch.tally.spawned, watch.tally.broke_unfallen)
     };
     let reference = run(60);
-    assert_eq!(reference.0, [45_000, 225_000], "{reference:?}");
+    assert_eq!(reference.0, [90_000, 270_000], "{reference:?}");
     for hz in [30, 120] {
         let other = run(hz);
         assert_eq!(other.0.len(), reference.0.len(), "{hz} Hz: {other:?}");
@@ -568,7 +568,7 @@ fn collapses_are_deterministic() {
     let run = || {
         let mut world = surge_world(60);
         let mut watch = BoulderWatch::default();
-        let _ = idle(&mut world, 60 * 100, &mut watch);
+        let _ = idle(&mut world, 60 * 200, &mut watch);
         world.simulation_state_hash()
     };
     assert_eq!(run(), run());
@@ -578,7 +578,7 @@ fn collapses_are_deterministic() {
 fn settled_ground_saves_replicates_and_old_saves_load() {
     let mut world = surge_world(60);
     let mut watch = BoulderWatch::default();
-    let _ = idle(&mut world, 60 * 46, &mut watch);
+    let _ = idle(&mut world, 60 * 91, &mut watch);
     let settled = world.progression().settled_ground.clone();
     assert!(!settled.is_empty());
 
