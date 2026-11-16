@@ -8,8 +8,8 @@
 //! the climb harness's measurements ([`crate::climb`], [`SkyBands::calibrated`]), so fuel tank
 //! tiers unlock the sky in order. Each sky generator has its own frozen band table
 //! ([`SkyBands`], [`super::GeneratorVersion::sky_bands`]) and placement reads the world's:
-//! V8's is [`V8_SKY_BANDS`] (the `*_BOTTOM_ROWS` constants), the next generator adopts
-//! [`NEXT_SKY_BANDS`], recalibrated to the second fuel curve. In a V8 sky:
+//! V8's is [`V8_SKY_BANDS`] (the `*_BOTTOM_ROWS` constants), V9's [`V9_SKY_BANDS`]
+//! (recalibrated to the second fuel curve in V9's steeper thin air). In a V8 sky:
 //!
 //! | Band | Rows above row 0 | Holds |
 //! |---|---|---|
@@ -66,7 +66,7 @@ pub use towns::{SkyTownSite, sky_town_at, sky_town_site, sky_towns_touching};
 pub use winds::{JetStream, jet_stream_at, jet_streams_touching, vent_updraft_at};
 
 use crate::{
-    climb::{CLIMB_CEILINGS, ClimbTable, ceiling_in, fraction},
+    climb::{CLIMB_CEILINGS, ClimbTable, V9_CLIMB_CEILINGS, ceiling_in, fraction},
     sky::{SkyBand, SkyBiome, SkyTile},
     terrain::{CHUNK_SIZE_TILES, TileKind, TilePosition},
     village::placement::TOWN_CENTER_COLUMN,
@@ -109,6 +109,10 @@ pub struct SkyBands {
     pub orbit: i32,
     /// The lowest point of the Moon's underside.
     pub moon: i32,
+    /// The climb table rigs of today's fuel curve reach in this sky's physics: what the sky
+    /// gates (`milestone::island_capable`, `crosses_dead_air`, sky refuels, previews) compare
+    /// with these bands. Not part of the frozen placement: it follows the fuel curve.
+    pub climb: &'static ClimbTable,
 }
 
 impl SkyBands {
@@ -127,7 +131,7 @@ impl SkyBands {
     /// - the Moon: 85 % of a maxed rig's still-air reach (the last climb through near-zero-g
     ///   orbit is cheap).
     #[must_use]
-    pub const fn calibrated(table: &ClimbTable) -> Self {
+    pub const fn calibrated(table: &'static ClimbTable) -> Self {
         let low_isles = max(fraction(ceiling_in(table, 2, 4, 0), 65), 200);
         let archipelago = max(
             fraction(ceiling_in(table, 4, 4, 0), 100),
@@ -153,7 +157,14 @@ impl SkyBands {
             continents,
             orbit,
             moon,
+            climb: table,
         }
+    }
+
+    /// These bands with `climb` as their gate table (the placement unchanged).
+    #[must_use]
+    pub const fn with_climb(self, climb: &'static ClimbTable) -> Self {
+        Self { climb, ..self }
     }
 
     /// Rows of sky a world with these bands holds above row 0 (its first row is minus this):
@@ -199,25 +210,46 @@ pub const V8_SKY_BANDS: SkyBands = SkyBands {
     continents: 8_080,
     orbit: 9_030,
     moon: 10_320,
+    // Gates on V8 worlds compare today's rigs in V8's physics.
+    climb: &CLIMB_CEILINGS,
 };
 
-/// The bands for the **next** sky generator (the one after V8).
+/// The bands of [`GeneratorVersion::V9`](super::GeneratorVersion::V9) skies. **Frozen.**
 ///
-/// Calibrated by the same rule as V8's ([`SkyBands::calibrated`]) from the current fuel curve's climb table
-/// ([`crate::climb::CLIMB_CEILINGS`]): the low isles open around tank tier 2-4, the cloud
-/// archipelago spans the mid tiers, the dead-air gap is crossed only with a near-max tank and
-/// altitude intakes, the continents sit near the max and the Moon at the top.
+/// Calibrated by the band rule ([`SkyBands::calibrated`]) from V9's own climb table
+/// ([`crate::climb::V9_CLIMB_CEILINGS`]: the second fuel curve in V9's steeper thin air,
+/// [`crate::environment::V9_THIN_AIR_BURN`]). The low isles from the first tank upgrade (a
+/// stock rig climbs 330 rows, just short of the lowest isles' turf at 350; a tier 2 tank 380),
+/// the cloud archipelago from a tier 4 tank and engine, the dead-air gap crossed only by a tier
+/// 13+ tank with a tier 8+ engine and top intakes, and the Moon (its top about 15,600 rows up)
+/// only by a tier 14+ tank with a tier 12+ engine (or 15 with 8) and top intakes. The whole
+/// sky's content stays under 16,384 rows, the precision V8's sky (and every pilot space) was
+/// built for: world pixels resolve 1/32 px there. (The literal next bands on V8's burn, 500 /
+/// 1,350 / 4,720 / 35,500 / 39,680 / 46,010, put the continents and the Moon where they resolve
+/// only 1/8 px, and pilots stick on the Moon's ledges.) Never change them, or every V9 world's
+/// sky moves.
+pub const V9_SKY_BANDS: SkyBands = SkyBands {
+    low_isles: 310,
+    archipelago: 740,
+    dead_air: 4_710,
+    continents: 12_010,
+    orbit: 13_430,
+    moon: 15_360,
+    climb: &V9_CLIMB_CEILINGS,
+};
+
+/// The bands for the **next** sky generator (the one after V9).
 ///
-/// The bigger tanks of the second fuel curve climb about four times higher at the top, so these
-/// bands are far taller than V8's (500 / 1,350 / 4,720 / 35,500 / 39,680 / 46,010 rows). A
-/// generator adopting them returns them from [`GeneratorVersion::sky_bands`] and freezes the
-/// values as literals like [`V8_SKY_BANDS`] (a test pins today's values). Its altitude physics
-/// must follow its bands (the vacuum fade, cold and gravity fields read V8's constants today,
-/// [`crate::environment`]), and the climb table must be re-measured if that physics changes
-/// below the Moon.
+/// Calibrated by the same rule as V8's and V9's ([`SkyBands::calibrated`]) from the current
+/// fuel curve's climb table in V9's physics ([`crate::climb::V9_CLIMB_CEILINGS`]); today they
+/// equal [`V9_SKY_BANDS`] (a test pins them). A generator adopting new bands returns them from
+/// [`GeneratorVersion::sky_bands`] and freezes the values as literals. The altitude physics
+/// follows each world's bands ([`crate::environment`]: the vacuum fade, cold, gravity fields,
+/// wind bands and breathable air), and the climb table must be re-measured if that physics
+/// changes below the Moon.
 ///
 /// [`GeneratorVersion::sky_bands`]: super::GeneratorVersion::sky_bands
-pub const NEXT_SKY_BANDS: SkyBands = SkyBands::calibrated(&CLIMB_CEILINGS);
+pub const NEXT_SKY_BANDS: SkyBands = SkyBands::calibrated(&V9_CLIMB_CEILINGS);
 
 /// Where the low isles start in a V8 sky ([`V8_SKY_BANDS`]).
 pub const LOW_ISLES_BOTTOM_ROWS: i32 = V8_SKY_BANDS.low_isles;
@@ -666,10 +698,15 @@ impl SkyLand {
         }
     }
 
-    /// The altitude band the land hangs in.
+    /// The altitude band the land hangs in (by its kind, so it holds in any band table).
     #[must_use]
     pub const fn band(&self) -> SkyBand {
-        SkyBand::at_row(self.top_row)
+        match self.kind {
+            SkyLandKind::Isle => SkyBand::LowIsles,
+            SkyLandKind::ArchipelagoIsle | SkyLandKind::TownIsle => SkyBand::Archipelago,
+            SkyLandKind::Continent => SkyBand::Continents,
+            SkyLandKind::Moon => SkyBand::Lunar,
+        }
     }
 }
 

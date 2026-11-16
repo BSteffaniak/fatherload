@@ -61,9 +61,12 @@ fn tiles_of(visible: Rectangle, margin: i32) -> TileRect {
 
 /// Whether the view reaches the furnished island bands.
 fn in_isle_bands(settings: &WorldSettings, visible: Rectangle) -> bool {
+    let Some(bands) = settings.generator.sky_bands() else {
+        return false;
+    };
     settings.generator.has_sky_isles()
-        && visible.y < -((sky::LOW_ISLES_BOTTOM_ROWS - 40) as f32) * TILE_SIZE
-        && visible.y + visible.height > -(sky::DEAD_AIR_BOTTOM_ROWS as f32) * TILE_SIZE
+        && visible.y < -((bands.low_isles - 40) as f32) * TILE_SIZE
+        && visible.y + visible.height > -(bands.dead_air as f32) * TILE_SIZE
 }
 
 fn tile_is(terrain: &Terrain, position: TilePosition, kind: TileKind) -> bool {
@@ -561,12 +564,13 @@ pub fn nearest_sky_place(
     if !settings.generator.has_sky_isles() {
         return None;
     }
+    let bands = settings.generator.sky_bands()?;
     let rig = TilePosition {
         x: (x / TILE_SIZE).floor() as i32,
         y: (y / TILE_SIZE).floor() as i32,
     };
     let altitude = -rig.y;
-    if !(sky::LOW_ISLES_BOTTOM_ROWS - 80..=sky::DEAD_AIR_BOTTOM_ROWS).contains(&altitude) {
+    if !(bands.low_isles - 80..=bands.dead_air).contains(&altitude) {
         return None;
     }
     let reach = TileRect::around(rig, 700, 420);

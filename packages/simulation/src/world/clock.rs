@@ -97,13 +97,16 @@ impl WorldState {
     /// landmass, so their backdrop Moon hangs above the seed's default column.
     #[must_use]
     pub fn moon_anchor(&self) -> MoonAnchor {
-        crate::worldgen::sky::moon(self.terrain.settings()).map_or_else(
-            || default_moon_anchor(self.terrain.seed()),
-            |moon| MoonAnchor {
-                column: moon.center_x,
-                row: crate::worldgen::sky::row_of(crate::worldgen::sky::MOON_BOTTOM_ROWS),
-            },
-        )
+        let settings = self.terrain.settings();
+        crate::worldgen::sky::moon(settings)
+            .zip(settings.generator.sky_bands())
+            .map_or_else(
+                || default_moon_anchor(self.terrain.seed()),
+                |(moon, bands)| MoonAnchor {
+                    column: moon.center_x,
+                    row: crate::worldgen::sky::row_of(bands.moon),
+                },
+            )
     }
 
     /// Whether `player_id` is in bed.

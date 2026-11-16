@@ -805,8 +805,9 @@ pub fn sky_city_at(settings: &WorldSettings, tile: TilePosition, margin: i32) ->
     if !settings.generator.has_sky_content() {
         return None;
     }
+    let bands = settings.generator.sky_bands()?;
     let altitude = -tile.y;
-    if !(super::CONTINENTS_BOTTOM_ROWS - 40..=super::ORBIT_BOTTOM_ROWS + 40).contains(&altitude) {
+    if !(bands.continents - 40..=bands.orbit + 40).contains(&altitude) {
         return None;
     }
     sky_cities_between(settings, tile.x - margin, tile.x + margin)
@@ -877,11 +878,14 @@ pub fn nests_touching(settings: &WorldSettings, rect: &TileRect) -> Vec<TilePosi
 /// Whether `position` is lake water on a V9 continent (an open tile under a lake's surface).
 #[must_use]
 pub fn lake_water_at(settings: &WorldSettings, position: TilePosition) -> bool {
+    let Some(bands) = settings.generator.sky_bands() else {
+        return false;
+    };
     if !settings.generator.has_sky_content() {
         return false;
     }
     let altitude = -position.y;
-    if !(super::CONTINENTS_BOTTOM_ROWS..=super::ORBIT_BOTTOM_ROWS).contains(&altitude) {
+    if !(bands.continents..=bands.orbit).contains(&altitude) {
         return false;
     }
     let rect = TileRect {

@@ -19,7 +19,7 @@ use fatherload_simulation::{
     worldgen::{
         TileRect,
         sky::{
-            self, CONTINENTS_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS, SkyLand,
+            self, SkyLand,
             continent::{self, ContinentPlan},
         },
     },
@@ -27,6 +27,15 @@ use fatherload_simulation::{
 
 use super::{Scene, SceneStage, reveal};
 use crate::input::PlayerInput;
+
+/// The bands of the scene world's own sky (each sky generator has its own table).
+fn bands(world: &WorldState) -> fatherload_simulation::worldgen::sky::SkyBands {
+    world
+        .world_settings()
+        .generator
+        .sky_bands()
+        .unwrap_or(fatherload_simulation::worldgen::sky::V8_SKY_BANDS)
+}
 
 fn pixel(tile: i32) -> f32 {
     (tile as f32 + 0.5) * TILE_SIZE
@@ -38,11 +47,11 @@ fn nearest_continent(world: &WorldState) -> Option<(SkyLand, ContinentPlan)> {
     let band = TileRect {
         min: fatherload_simulation::terrain::TilePosition {
             x: -12_000,
-            y: sky::row_of(ORBIT_BOTTOM_ROWS),
+            y: sky::row_of(bands(world).orbit),
         },
         max: fatherload_simulation::terrain::TilePosition {
             x: 12_000,
-            y: sky::row_of(CONTINENTS_BOTTOM_ROWS),
+            y: sky::row_of(bands(world).continents),
         },
     };
     continent::continents_touching(&settings, &band)

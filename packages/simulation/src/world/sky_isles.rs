@@ -29,7 +29,7 @@ use crate::{
     summary::PlayerScopedCommandOutcome,
     terrain::{ArtifactKind, MineralKind, TILE_SIZE, TileKind, TilePosition},
     worldgen::{
-        FeatureId, TileRect,
+        FeatureId, TileRect, WorldSettings,
         noise::hash2,
         sky::{
             self, BuoySite, SkyLand,
@@ -61,12 +61,15 @@ pub struct SkyLoot {
     pub items: Vec<ItemStack>,
 }
 
-/// The loot of the sky cache or nest `tile` at `position` (archipelago caches, above
-/// [`sky::ARCHIPELAGO_BOTTOM_ROWS`], hold more).
+/// The loot of the sky cache or nest `tile` at `position` in `settings`' sky (archipelago
+/// caches, from the world's [`sky::SkyBands::archipelago`] up, hold more).
 #[must_use]
-pub fn sky_cache_loot(seed: u64, position: TilePosition, tile: SkyTile) -> SkyLoot {
-    let roll = hash2(seed, SALT_SKY_CACHE, position.x, position.y);
-    let high = -position.y >= sky::ARCHIPELAGO_BOTTOM_ROWS;
+pub fn sky_cache_loot(settings: &WorldSettings, position: TilePosition, tile: SkyTile) -> SkyLoot {
+    let roll = hash2(settings.seed, SALT_SKY_CACHE, position.x, position.y);
+    let high = settings
+        .generator
+        .sky_bands()
+        .is_some_and(|bands| -position.y >= bands.archipelago);
     let part = |shift: u32, modulo: u64| u32::try_from((roll >> shift) % modulo).unwrap_or(0);
     let mut items = Vec::new();
     let credits = match tile {
@@ -129,7 +132,7 @@ impl WorldState {
         tile: SkyTile,
         output: &mut TickOutput,
     ) {
-        let loot = sky_cache_loot(self.terrain.seed(), target, tile);
+        let loot = sky_cache_loot(self.terrain.settings(), target, tile);
         if let Some(player) = self.players.get_mut(&player_id) {
             player.credits = player.credits.saturating_add(loot.credits);
         }
@@ -157,8 +160,9 @@ impl WorldState {
         if !settings.generator.has_sky_isles() {
             return None;
         }
+        let bands = settings.generator.sky_bands()?;
         let rig = self.players.get(&player_id)?.tile_position(TILE_SIZE);
-        if -rig.y < sky::LOW_ISLES_BOTTOM_ROWS - 8 {
+        if -rig.y < bands.low_isles - 8 {
             return None;
         }
         sky::lands_touching(settings, &TileRect::around(rig, 4, 4))
@@ -231,6 +235,9 @@ impl WorldState {
     /// taken, so its own writes replicate with the tick.
     pub(super) fn advance_sky_isles(&mut self, output: &mut TickOutput) {
         let settings = *self.terrain.settings();
+        let Some(bands) = settings.generator.sky_bands() else {
+            return;
+        };
         if !settings.generator.has_sky_isles() || self.players.is_empty() {
             return;
         }
@@ -241,7 +248,7 @@ impl WorldState {
             .iter()
             .filter(|change| {
                 change.tile.kind != TileKind::Sky(SkyTile::Keystone)
-                    && -change.position.y >= sky::LOW_ISLES_BOTTOM_ROWS
+                    && -change.position.y >= bands.low_isles
             })
             .map(|change| change.position)
             .collect();
@@ -268,7 +275,7 @@ impl WorldState {
         let mut near: Vec<SkyLand> = Vec::new();
         for player in self.players.values() {
             let rig = player.tile_position(TILE_SIZE);
-            if -rig.y < sky::LOW_ISLES_BOTTOM_ROWS - COLLAPSE_REACH.1 {
+            if -rig.y < bands.low_isles - COLLAPSE_REACH.1 {
                 continue;
             }
             near.extend(
@@ -316,7 +323,8 @@ impl WorldState {
         if left.is_empty() {
             return;
         }
-        let seed = self.terrain.seed();
+        let settings = *self.terrain.settings();
+        let seed = settings.seed;
         // Lowest first, shuffled within a row.
         left.sort_by_key(|(position, _)| {
             (
@@ -339,7 +347,7 @@ impl WorldState {
                     (position.x as f32 + 0.5) * TILE_SIZE,
                     (position.y as f32 + 0.5) * TILE_SIZE,
                 );
-                for stack in sky_cache_loot(seed, *position, *tile).items {
+                for stack in sky_cache_loot(&settings, *position, *tile).items {
                     let _ = self.spawn_loot(x, y, (0.0, 40.0), stack, None);
                 }
             }

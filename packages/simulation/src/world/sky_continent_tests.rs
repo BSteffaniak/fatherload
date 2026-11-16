@@ -24,7 +24,7 @@ use crate::{
     worldgen::{
         GeneratorVersion, TileRect, WorldSettings,
         sky::{
-            self, CONTINENTS_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS, SkyLand,
+            self, SkyLand, V9_SKY_BANDS,
             continent::{self, ContinentPlan},
         },
     },
@@ -43,11 +43,11 @@ fn band() -> TileRect {
     TileRect {
         min: TilePosition {
             x: -8_000,
-            y: sky::row_of(ORBIT_BOTTOM_ROWS),
+            y: sky::row_of(V9_SKY_BANDS.orbit),
         },
         max: TilePosition {
             x: 8_000,
-            y: sky::row_of(CONTINENTS_BOTTOM_ROWS),
+            y: sky::row_of(V9_SKY_BANDS.continents),
         },
     }
 }
@@ -179,12 +179,12 @@ fn the_sky_is_hostile_from_the_archipelago_up_except_in_cities() {
     assert!(!world.enemy_safe_zone(TilePosition { x, y: row - 1 }));
     let low = TilePosition {
         x: 0,
-        y: sky::row_of(sky::LOW_ISLES_BOTTOM_ROWS + 20),
+        y: sky::row_of(V9_SKY_BANDS.low_isles + 20),
     };
     assert!(world.enemy_safe_zone(low), "the low isles stay calm");
     let arch = TilePosition {
         x: 0,
-        y: sky::row_of(sky::ARCHIPELAGO_BOTTOM_ROWS + 20),
+        y: sky::row_of(V9_SKY_BANDS.archipelago + 20),
     };
     assert!(!world.enemy_safe_zone(arch));
     // A V8 sky stays safe everywhere (as it was).

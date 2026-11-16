@@ -42,10 +42,7 @@ use crate::{
     worldgen::{
         WorldSettings,
         noise::{NOISE_MAX, hash2, line_noise},
-        sky::{
-            ARCHIPELAGO_BOTTOM_ROWS, CONTINENTS_BOTTOM_ROWS, DEAD_AIR_BOTTOM_ROWS,
-            MOON_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS, jet_stream_at, moon, updraft_at, vent_updraft_at,
-        },
+        sky::{SkyBands, V8_SKY_BANDS, bands_of, jet_stream_at, moon, updraft_at, vent_updraft_at},
     },
 };
 
@@ -54,14 +51,22 @@ use crate::{
 pub struct Environment {
     /// Gravity relative to the ground's (1.0): multiply any body's gravity constant by it.
     pub gravity: f32,
-    /// Air density relative to the ground's, `0.0..=1.0`.
+    /// Air density relative to the ground's, `0.0..=1.0`: what thrust, burn and drag read
+    /// (the climb tables are measured in it).
     pub air_density: f32,
+    /// The air a pilot breathes and a hull must seal against, `0.0..=1.0`: the density at the
+    /// matching height of a V8 sky ([`breathable_air`]), so each band keeps its air whatever
+    /// its generator's band table (the same as `air_density` in a V8 sky).
+    pub breathable: f32,
     /// Cold level, from 0 to [`MAX_COLD`].
     pub cold: u8,
     /// Velocity of the air (px/s, positive to the right): an airborne rig coasts toward it.
     pub wind_x: f32,
     /// Upward acceleration of an updraft (px/s²; 0 outside updrafts).
     pub updraft: f32,
+    /// Extra fuel burn per unit of lost thrust efficiency in this world's sky
+    /// ([`thin_air_burn_of`]).
+    pub thin_air_burn: f32,
 }
 
 impl Environment {
@@ -69,9 +74,11 @@ impl Environment {
     pub const STANDARD: Self = Self {
         gravity: 1.0,
         air_density: 1.0,
+        breathable: 1.0,
         cold: 0,
         wind_x: 0.0,
         updraft: 0.0,
+        thin_air_burn: THIN_AIR_BURN,
     };
 
     /// Whether this is exactly [`Self::STANDARD`] (movement then takes the classic path).
@@ -80,6 +87,7 @@ impl Environment {
     pub fn is_standard(&self) -> bool {
         self.gravity == 1.0
             && self.air_density == 1.0
+            && self.breathable == 1.0
             && self.cold == 0
             && self.wind_x == 0.0
             && self.updraft == 0.0
@@ -99,10 +107,11 @@ impl Environment {
         efficiency.mul_add(0.7, 0.3) * (1.0 - self.air_density).mul_add(THIN_AIR_CLIMB_BONUS, 1.0)
     }
 
-    /// Multiplier on fuel burn at thrust efficiency `efficiency` (thin air runs rich).
+    /// Multiplier on fuel burn at thrust efficiency `efficiency` (thin air runs rich, by this
+    /// sky's [`Self::thin_air_burn`]).
     #[must_use]
-    pub fn burn_factor(efficiency: f32) -> f32 {
-        (1.0 - efficiency).mul_add(THIN_AIR_BURN, 1.0)
+    pub fn burn_factor(&self, efficiency: f32) -> f32 {
+        (1.0 - efficiency).mul_add(self.thin_air_burn, 1.0)
     }
 
     /// Multiplier on the terminal fall speed (thin air drags less).
@@ -134,8 +143,27 @@ pub const AIR_SCALE_ROWS: f32 = 600.0;
 pub const VACUUM_FADE_ROWS: f32 = 240.0;
 /// How much faster a rig may climb in vacuum than in full air (at full efficiency).
 pub const THIN_AIR_CLIMB_BONUS: f32 = 2.2;
-/// Extra fuel burn per unit of lost thrust efficiency.
+/// Extra fuel burn per unit of lost thrust efficiency (V8 skies).
 pub const THIN_AIR_BURN: f32 = 8.0;
+/// Extra fuel burn per unit of lost thrust efficiency in V9 skies.
+///
+/// Steeper than V8's: the second fuel curve's tanks are about 4.7 times bigger, and on V8's
+/// burn a maxed rig climbs about 54,000 rows, where world pixels (`f32`) resolve only 1/8 px
+/// and pilots stick on ledges. V9's thirstier thin air keeps its whole sky, the Moon
+/// included, under 16,384 rows (1/32 px, as in V8's sky) with the tier design intact (a maxed
+/// rig climbs about 18,000 rows); V9's climb table ([`crate::climb::V9_CLIMB_CEILINGS`]) is
+/// measured on it. Thin air starts thinning at 200 rows, so trips underground and on the
+/// surface never feel it.
+pub const V9_THIN_AIR_BURN: f32 = 30.0;
+
+/// Extra fuel burn per unit of lost thrust efficiency in skies of `generator`.
+#[must_use]
+pub const fn thin_air_burn_of(generator: crate::worldgen::GeneratorVersion) -> f32 {
+    match generator {
+        crate::worldgen::GeneratorVersion::V9 => V9_THIN_AIR_BURN,
+        _ => THIN_AIR_BURN,
+    }
+}
 /// How much faster a rig may fall in vacuum than in full air.
 pub const THIN_AIR_FALL_BONUS: f32 = 2.0;
 /// Below this altitude (rows above row 0) the environment is always standard.
@@ -210,19 +238,67 @@ pub fn air_density_profile(altitude_rows: f32) -> f32 {
     AIR_SCALE_ROWS / (AIR_SCALE_ROWS + above)
 }
 
-/// Air density at `altitude_rows` in a V8 sky: the profile, fading to vacuum across the orbit
-/// band's floor.
+/// Air density at `altitude_rows` in a sky with `bands`: the profile, fading to vacuum across
+/// the orbit band's floor.
 #[must_use]
 #[allow(clippy::cast_precision_loss, reason = "band rows are small integers")]
-pub fn air_density(altitude_rows: f32) -> f32 {
-    let orbit = ORBIT_BOTTOM_ROWS as f32;
+pub fn air_density(altitude_rows: f32, bands: &SkyBands) -> f32 {
+    let orbit = bands.orbit as f32;
     let fade =
         ((orbit + VACUUM_FADE_ROWS / 2.0 - altitude_rows) / VACUUM_FADE_ROWS).clamp(0.0, 1.0);
     air_density_profile(altitude_rows) * fade
 }
 
-/// Cold level at `altitude_rows`: none below the cloud archipelago, rising through it and the
-/// dead-air gap, bitter in the continent band, and [`MAX_COLD`] in orbit and on the Moon.
+/// The altitude in a V8 sky matching `altitude_rows` in a sky with `bands`.
+///
+/// Piecewise linear between the two tables' band floors (row 0 to row 0, low isles to low
+/// isles, ..., the Moon to the Moon), one row per row above the Moon. The identity on V8's own
+/// bands.
+#[must_use]
+#[allow(clippy::cast_precision_loss, reason = "band rows are small integers")]
+pub fn v8_equivalent_rows(altitude_rows: f32, bands: &SkyBands) -> f32 {
+    if *bands == V8_SKY_BANDS || altitude_rows <= 0.0 {
+        return altitude_rows;
+    }
+    let knots = |table: &SkyBands| {
+        [
+            0,
+            table.low_isles,
+            table.archipelago,
+            table.dead_air,
+            table.continents,
+            table.orbit,
+            table.moon,
+        ]
+    };
+    let (from, to) = (knots(bands), knots(&V8_SKY_BANDS));
+    for index in 1..from.len() {
+        let (low, high) = (from[index - 1] as f32, from[index] as f32);
+        if altitude_rows < high {
+            let t = (altitude_rows - low) / (high - low);
+            let (v8_low, v8_high) = (to[index - 1] as f32, to[index] as f32);
+            return (v8_high - v8_low).mul_add(t, v8_low);
+        }
+    }
+    altitude_rows - bands.moon as f32 + V8_SKY_BANDS.moon as f32
+}
+
+/// The air a pilot breathes and a hull seals against at `altitude_rows` in a sky with
+/// `bands`: [`air_density`] at the matching height of a V8 sky ([`v8_equivalent_rows`]).
+///
+/// Thrust reads the density profile itself, which the climb tables (and so every band table)
+/// are measured in; but a taller sky's bands sit higher in that profile, where its absolute
+/// density would put the sky continents in vacuum. Breathing and the hull's seal follow the
+/// bands instead: thin air for a pilot from the lower cloud archipelago up, vacuum just above
+/// the orbit band's floor, in every sky.
+#[must_use]
+pub fn breathable_air(altitude_rows: f32, bands: &SkyBands) -> f32 {
+    air_density(v8_equivalent_rows(altitude_rows, bands), &V8_SKY_BANDS)
+}
+
+/// Cold level at `altitude_rows` in a sky with `bands`: none below the cloud archipelago,
+/// rising through it and the dead-air gap, bitter in the continent band, and [`MAX_COLD`] in
+/// orbit and on the Moon.
 #[must_use]
 #[allow(
     clippy::cast_precision_loss,
@@ -230,12 +306,12 @@ pub fn air_density(altitude_rows: f32) -> f32 {
     clippy::cast_sign_loss,
     reason = "band rows are small integers and the level is clamped to 0..=10"
 )]
-pub fn cold_level(altitude_rows: f32) -> u8 {
+pub fn cold_level(altitude_rows: f32, bands: &SkyBands) -> u8 {
     let (arch, gap, continents, orbit) = (
-        ARCHIPELAGO_BOTTOM_ROWS as f32,
-        DEAD_AIR_BOTTOM_ROWS as f32,
-        CONTINENTS_BOTTOM_ROWS as f32,
-        ORBIT_BOTTOM_ROWS as f32,
+        bands.archipelago as f32,
+        bands.dead_air as f32,
+        bands.continents as f32,
+        bands.orbit as f32,
     );
     let level = if altitude_rows < arch {
         0.0
@@ -255,15 +331,19 @@ pub fn cold_level(altitude_rows: f32) -> u8 {
     (level.floor() as u8).min(MAX_COLD)
 }
 
-/// Gravity relative to the ground at column `x` (tile) and `altitude_rows`.
+/// Gravity relative to the ground at column `x` (tile) and `altitude_rows` (1.0 everywhere
+/// without a sky).
 #[must_use]
 #[allow(
     clippy::cast_precision_loss,
     reason = "band rows and columns are small integers"
 )]
 pub fn gravity_scale(settings: &WorldSettings, x: i32, altitude_rows: f32) -> f32 {
-    let continents = CONTINENTS_BOTTOM_ROWS as f32;
-    let orbit = ORBIT_BOTTOM_ROWS as f32;
+    let Some(bands) = bands_of(settings) else {
+        return 1.0;
+    };
+    let continents = bands.continents as f32;
+    let orbit = bands.orbit as f32;
     let mut gravity = if altitude_rows < continents - 120.0 {
         1.0
     } else if altitude_rows < continents {
@@ -281,7 +361,7 @@ pub fn gravity_scale(settings: &WorldSettings, x: i32, altitude_rows: f32) -> f3
             (altitude_rows - orbit) / 160.0,
         )
     };
-    let moon_floor = (MOON_BOTTOM_ROWS - MOON_HALO_ROWS) as f32;
+    let moon_floor = (bands.moon - MOON_HALO_ROWS) as f32;
     if altitude_rows > moon_floor
         && let Some(moon) = moon(settings)
     {
@@ -295,9 +375,9 @@ pub fn gravity_scale(settings: &WorldSettings, x: i32, altitude_rows: f32) -> f3
     gravity
 }
 
-/// Peak wind speed (px/s) of the band at `altitude_rows`.
-const fn band_wind(altitude_rows: i32) -> f32 {
-    match SkyBand::at_altitude(altitude_rows) {
+/// Peak wind speed (px/s) of the band at `altitude_rows` in a sky with `bands`.
+const fn band_wind(altitude_rows: i32, bands: &SkyBands) -> f32 {
+    match SkyBand::at_altitude_in(altitude_rows, bands) {
         SkyBand::Ground => 28.0,
         SkyBand::LowIsles => 52.0,
         SkyBand::Archipelago => 96.0,
@@ -309,11 +389,11 @@ const fn band_wind(altitude_rows: i32) -> f32 {
 
 /// The steady wind (px/s) of wind layer `layer`.
 #[allow(clippy::cast_precision_loss, reason = "a hashed per-mille value")]
-fn layer_wind(seed: u64, layer: i32) -> f32 {
+fn layer_wind(seed: u64, bands: &SkyBands, layer: i32) -> f32 {
     let roll = hash2(seed, SALT_WIND, layer, 0);
     let sign = if roll & 1 == 0 { 1.0 } else { -1.0 };
     let strength = ((roll >> 8) % 650 + 350) as f32 / 1000.0;
-    sign * strength * band_wind(layer * WIND_LAYER_ROWS + WIND_LAYER_ROWS / 2)
+    sign * strength * band_wind(layer * WIND_LAYER_ROWS + WIND_LAYER_ROWS / 2, bands)
 }
 
 /// The wind (air velocity, px/s) at column `x` (tile) and `altitude_rows`: layered, blended
@@ -325,6 +405,9 @@ fn layer_wind(seed: u64, layer: i32) -> f32 {
     reason = "layer indices are small integers"
 )]
 pub fn wind_at(settings: &WorldSettings, x: i32, altitude_rows: f32) -> f32 {
+    let Some(bands) = bands_of(settings) else {
+        return 0.0;
+    };
     if altitude_rows < WIND_FLOOR_ROWS {
         return 0.0;
     }
@@ -333,7 +416,11 @@ pub fn wind_at(settings: &WorldSettings, x: i32, altitude_rows: f32) -> f32 {
     let t = position - layer;
     let layer = layer as i32;
     let seed = settings.seed;
-    let steady = lerp(layer_wind(seed, layer), layer_wind(seed, layer + 1), t);
+    let steady = lerp(
+        layer_wind(seed, &bands, layer),
+        layer_wind(seed, &bands, layer + 1),
+        t,
+    );
     let gust = line_noise(
         seed,
         SALT_GUST.wrapping_add(u64::from(layer.unsigned_abs())),
@@ -369,9 +456,10 @@ pub(crate) fn with_still_air<T>(body: impl FnOnce() -> T) -> T {
     reason = "pixel positions map to tiles"
 )]
 pub fn environment_at(settings: &WorldSettings, x: f32, y: f32) -> Environment {
-    if !settings.generator.has_sky() {
+    // Every band edge comes from the world's own table (V8's frozen one, V9's, ...).
+    let Some(bands) = bands_of(settings) else {
         return Environment::STANDARD;
-    }
+    };
     let altitude = -y / TILE_SIZE;
     #[allow(clippy::cast_precision_loss, reason = "a small constant")]
     if altitude < STANDARD_BELOW_ROWS as f32 {
@@ -384,9 +472,11 @@ pub fn environment_at(settings: &WorldSettings, x: f32, y: f32) -> Environment {
         return Environment {
             gravity: 1.0,
             air_density: air_density_profile(altitude),
-            cold: cold_level(altitude),
+            breathable: breathable_air(altitude, &bands),
+            cold: cold_level(altitude, &bands),
             wind_x: 0.0,
             updraft: 0.0,
+            thin_air_burn: thin_air_burn_of(settings.generator),
         };
     }
     #[allow(
@@ -409,10 +499,12 @@ pub fn environment_at(settings: &WorldSettings, x: f32, y: f32) -> Environment {
     }
     Environment {
         gravity: gravity_scale(settings, tile_x, altitude),
-        air_density: air_density(altitude),
-        cold: cold_level(altitude),
+        air_density: air_density(altitude, &bands),
+        breathable: breathable_air(altitude, &bands),
+        cold: cold_level(altitude, &bands),
         wind_x,
         updraft,
+        thin_air_burn: thin_air_burn_of(settings.generator),
     }
 }
 

@@ -67,6 +67,29 @@ pub const CLIMB_CEILINGS: ClimbTable = [
     [[960, 1490, 3250, 18910], [2100, 7920, 23880, 33780], [3300, 24590, 34490, 49320], [4420, 26900, 37930, 54140], [5250, 26900, 37930, 54140]], // tank 15
 ];
 
+/// Measured ceilings on the current fuel curve in a **V9** sky, indexed like [`CLIMB_CEILINGS`].
+///
+/// V9's thin air is thirstier ([`crate::environment::V9_THIN_AIR_BURN`]): V9's bands are
+/// calibrated from this table and V9 worlds' sky gates read it.
+#[rustfmt::skip]
+pub const V9_CLIMB_CEILINGS: ClimbTable = [
+    [[330, 340, 360, 380], [400, 430, 460, 500], [480, 510, 560, 620], [500, 540, 590, 660], [500, 540, 590, 660]], // tank 1
+    [[380, 410, 430, 470], [490, 530, 580, 650], [580, 640, 710, 820], [610, 680, 750, 870], [610, 680, 750, 870]], // tank 2
+    [[460, 500, 540, 600], [600, 660, 740, 850], [730, 820, 930, 1090], [770, 870, 980, 1160], [770, 870, 980, 1160]], // tank 3
+    [[550, 610, 670, 760], [740, 830, 940, 1110], [910, 1040, 1200, 1440], [960, 1100, 1280, 1550], [960, 1100, 1280, 1550]], // tank 4
+    [[660, 740, 820, 960], [900, 1030, 1190, 1430], [1120, 1310, 1540, 1890], [1180, 1390, 1650, 2040], [1180, 1390, 1650, 2040]], // tank 5
+    [[780, 890, 1010, 1200], [1090, 1270, 1490, 1830], [1370, 1630, 1950, 2450], [1450, 1740, 2100, 2650], [1450, 1740, 2100, 2650]], // tank 6
+    [[870, 1070, 1240, 1490], [1310, 1560, 1860, 2320], [1660, 2020, 2460, 3150], [1760, 2160, 2650, 3410], [1760, 2160, 2650, 3410]], // tank 7
+    [[920, 1230, 1510, 1850], [1570, 1890, 2300, 2930], [2000, 2480, 3080, 4010], [2130, 2660, 3320, 4350], [2130, 2660, 3320, 4350]], // tank 8
+    [[940, 1350, 1830, 2280], [1850, 2300, 2840, 3670], [2400, 3040, 3830, 5070], [2570, 3260, 4140, 5510], [2570, 3260, 4140, 5510]], // tank 9
+    [[950, 1420, 2210, 2820], [2020, 2790, 3490, 4600], [2880, 3710, 4760, 6400], [3080, 4000, 5150, 6960], [3080, 4000, 5150, 6960]], // tank 10
+    [[960, 1460, 2550, 3480], [2080, 3390, 4300, 5750], [3200, 4550, 5910, 8060], [3710, 4900, 6410, 8790], [3710, 4900, 6410, 8790]], // tank 11
+    [[960, 1480, 2830, 4310], [2100, 4120, 5320, 7210], [3300, 5580, 7370, 10180], [4280, 6040, 8010, 11120], [4480, 6040, 8010, 11120]], // tank 12
+    [[960, 1490, 3040, 5370], [2100, 5060, 6630, 9100], [3300, 6900, 9240, 12930], [4400, 7480, 10060, 14140], [5160, 7480, 10060, 14140]], // tank 13
+    [[960, 1490, 3110, 6040], [2100, 5640, 7440, 10290], [3300, 7720, 10410, 14660], [4410, 8370, 11350, 16050], [5240, 8370, 11350, 16050]], // tank 14
+    [[960, 1490, 3160, 6750], [2100, 6240, 8310, 11560], [3300, 8590, 11660, 16510], [4410, 9320, 12720, 18080], [5240, 9320, 12720, 18080]], // tank 15
+];
+
 /// The climb table V8 skies were calibrated from. Frozen.
 ///
 /// Measured on the first fifteen-tier fuel curve ([`crate::player::fuel_capacity_v2`], 100 to
@@ -131,10 +154,16 @@ pub const fn ceiling_in(table: &ClimbTable, tank: u8, engine: u8, intake: u8) ->
 /// it (`milestone::climb_reach`).
 #[must_use]
 pub fn reach(tank: u8, engine: u8, intake: u8) -> i32 {
+    reach_in(&CLIMB_CEILINGS, tank, engine, intake)
+}
+
+/// [`reach`] read from `table` (a sky's own climb table, [`crate::worldgen::sky::SkyBands::climb`]).
+#[must_use]
+pub fn reach_in(table: &ClimbTable, tank: u8, engine: u8, intake: u8) -> i32 {
     let floor_tier =
         |tiers: &[u8], level: u8| tiers.iter().rposition(|tier| *tier <= level).unwrap_or(0);
     let tank = usize::from(tank.clamp(TANK_TIERS[0], TANK_TIERS[TANK_TIERS.len() - 1]) - 1);
-    CLIMB_CEILINGS[tank][floor_tier(&ENGINE_TIERS, engine)][floor_tier(&INTAKE_TIERS, intake)]
+    table[tank][floor_tier(&ENGINE_TIERS, engine)][floor_tier(&INTAKE_TIERS, intake)]
 }
 
 /// `percent` of `rows`, rounded down to a multiple of 10 rows.

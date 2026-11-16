@@ -443,10 +443,8 @@ fn island_target(
     origin: TilePosition,
     skip: &BTreeSet<FeatureId>,
 ) -> Option<(QuestTarget, BoundTarget)> {
-    if !terrain.settings().generator.has_sky() {
-        return None;
-    }
-    let archipelago = crate::worldgen::sky::row_of(crate::worldgen::sky::ARCHIPELAGO_BOTTOM_ROWS);
+    let bands = terrain.settings().generator.sky_bands()?;
+    let archipelago = crate::worldgen::sky::row_of(bands.archipelago);
     terrain
         .nearest_feature(
             origin,

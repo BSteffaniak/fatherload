@@ -70,7 +70,7 @@ pub(super) fn draw_moon_hud(
     }
     let player = view.player;
     let row = (player.y / TILE_SIZE).floor() as i32;
-    let band = SkyBand::at_row(row);
+    let band = SkyBand::at_row_of(settings, row);
     let missing = moon::missing_requirements(player);
     let vacuum = view.pilot.is_none() && moon::vacuum_at(settings, player.x, player.y);
     let breach = vacuum.then(|| moon::vacuum_breach(player)).flatten();

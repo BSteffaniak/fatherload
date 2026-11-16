@@ -30,10 +30,7 @@ use fatherload_simulation::{
     terrain::TILE_SIZE,
     worldgen::{
         TileRect, WorldSettings,
-        sky::{
-            self, ARCHIPELAGO_BOTTOM_ROWS, CONTINENTS_BOTTOM_ROWS, DEAD_AIR_BOTTOM_ROWS,
-            LOW_ISLES_BOTTOM_ROWS, MOON_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS,
-        },
+        sky::{self, SkyBands},
     },
 };
 
@@ -54,16 +51,17 @@ fn y_of(altitude_rows: i32) -> f32 {
 
 /// Knots of the gradient scale: (real altitude in rows, gradient world y in pixels). Between
 /// knots the scale is linear; below the first it is the identity; above the last it continues
-/// at one gradient pixel per world pixel.
-const fn gradient_knots() -> [(i32, f32); 7] {
+/// at one gradient pixel per world pixel. The knots are the world's own band edges, so every
+/// sky generator's bands get the same colours.
+const fn gradient_knots(bands: &SkyBands) -> [(i32, f32); 7] {
     [
         (0, 0.0),
-        (LOW_ISLES_BOTTOM_ROWS, -900.0),
-        (ARCHIPELAGO_BOTTOM_ROWS, -1_800.0),
-        (DEAD_AIR_BOTTOM_ROWS, -3_900.0),
-        (CONTINENTS_BOTTOM_ROWS, -10_500.0),
-        (ORBIT_BOTTOM_ROWS, -17_000.0),
-        (MOON_BOTTOM_ROWS, -22_000.0),
+        (bands.low_isles, -900.0),
+        (bands.archipelago, -1_800.0),
+        (bands.dead_air, -3_900.0),
+        (bands.continents, -10_500.0),
+        (bands.orbit, -17_000.0),
+        (bands.moon, -22_000.0),
     ]
 }
 
@@ -71,10 +69,13 @@ const fn gradient_knots() -> [(i32, f32); 7] {
 /// authored in) of real world y `world_y`: the identity on worlds without a sky.
 #[must_use]
 pub fn gradient_y(settings: &WorldSettings, world_y: f32) -> f32 {
-    if !settings.generator.has_sky() || world_y >= 0.0 {
+    let Some(bands) = settings.generator.sky_bands() else {
+        return world_y;
+    };
+    if world_y >= 0.0 {
         return world_y;
     }
-    let knots = gradient_knots();
+    let knots = gradient_knots(&bands);
     for pair in knots.windows(2) {
         let (low, high) = (y_of(pair[0].0), y_of(pair[1].0));
         if world_y >= high {
@@ -89,10 +90,13 @@ pub fn gradient_y(settings: &WorldSettings, world_y: f32) -> f32 {
 /// The real world y whose sky-gradient y is `gradient` (the inverse of [`gradient_y`]).
 #[must_use]
 pub fn world_y_of_gradient(settings: &WorldSettings, gradient: f32) -> f32 {
-    if !settings.generator.has_sky() || gradient >= 0.0 {
+    let Some(bands) = settings.generator.sky_bands() else {
+        return gradient;
+    };
+    if gradient >= 0.0 {
         return gradient;
     }
-    let knots = gradient_knots();
+    let knots = gradient_knots(&bands);
     for pair in knots.windows(2) {
         if gradient >= pair[1].1 {
             let t = (gradient - pair[0].1) / (pair[1].1 - pair[0].1);
@@ -104,9 +108,12 @@ pub fn world_y_of_gradient(settings: &WorldSettings, gradient: f32) -> f32 {
     y_of(last_rows) + (gradient - last_gradient)
 }
 
-/// Whether the view reaches into a V8 sky's island bands or above.
+/// Whether the view reaches into the sky's island bands or above.
 fn in_high_sky(settings: &WorldSettings, visible: Rectangle) -> bool {
-    settings.generator.has_sky() && visible.y < y_of(LOW_ISLES_BOTTOM_ROWS - 120)
+    settings
+        .generator
+        .sky_bands()
+        .is_some_and(|bands| visible.y < y_of(bands.low_isles - 120))
 }
 
 /// Everything of the high sky drawn behind the terrain (after the sky's gradient, stars and
@@ -121,7 +128,9 @@ pub fn draw_sky_backdrop(
         return;
     }
     draw_moon_from_below(draw, settings, visible);
-    draw_cloud_seas(draw, visible, seconds);
+    if let Some(bands) = settings.generator.sky_bands() {
+        draw_cloud_seas(draw, &bands, visible, seconds);
+    }
     draw_updrafts(draw, settings, visible, seconds);
     draw_wind(draw, settings, visible, seconds);
 }
@@ -140,11 +149,11 @@ struct CloudSea {
 }
 
 /// The cloud seas, low to high.
-const fn cloud_seas() -> [CloudSea; 4] {
+const fn cloud_seas(bands: &SkyBands) -> [CloudSea; 4] {
     [
         // Just under the low isles: the first sea a climbing rig breaks through.
         CloudSea {
-            top_rows: LOW_ISLES_BOTTOM_ROWS - 10,
+            top_rows: bands.low_isles - 10,
             thickness: 26,
             light: BONE,
             body: ICE,
@@ -153,7 +162,7 @@ const fn cloud_seas() -> [CloudSea; 4] {
         },
         // Inside the archipelago: islands' waterfalls pour into it.
         CloudSea {
-            top_rows: ARCHIPELAGO_BOTTOM_ROWS + 260,
+            top_rows: bands.archipelago + 260,
             thickness: 40,
             light: BONE,
             body: MIST,
@@ -162,7 +171,7 @@ const fn cloud_seas() -> [CloudSea; 4] {
         },
         // The dead-air gap's floor: the last soft cloud before the empty, windy dark.
         CloudSea {
-            top_rows: DEAD_AIR_BOTTOM_ROWS - 40,
+            top_rows: bands.dead_air - 40,
             thickness: 60,
             light: MIST,
             body: FOG,
@@ -171,7 +180,7 @@ const fn cloud_seas() -> [CloudSea; 4] {
         },
         // The continents ride on a sea of their own, high and cold.
         CloudSea {
-            top_rows: CONTINENTS_BOTTOM_ROWS - 60,
+            top_rows: bands.continents - 60,
             thickness: 44,
             light: ICE,
             body: FOG,
@@ -186,10 +195,10 @@ const PUFF_STEP: f32 = 96.0;
 /// The seas drift sideways at this share of the camera's motion.
 const SEA_PARALLAX: f32 = 0.55;
 
-fn draw_cloud_seas(draw: &mut impl RaylibDraw, visible: Rectangle, seconds: f32) {
+fn draw_cloud_seas(draw: &mut impl RaylibDraw, bands: &SkyBands, visible: Rectangle, seconds: f32) {
     let left = snap(visible.x) - ART * 2.0;
     let width = visible.width + ART * 6.0;
-    for sea in cloud_seas() {
+    for sea in cloud_seas(bands) {
         let top = y_of(sea.top_rows);
         #[allow(clippy::cast_precision_loss, reason = "a few dozen rows")]
         let bottom = top + sea.thickness as f32 * TILE_SIZE;
@@ -400,20 +409,23 @@ fn draw_updrafts(
 // ---------------------------------------------------------------------------------------------
 // The Moon from below.
 
-/// Rows below the Moon from which its looming underside starts to show.
-const MOON_LOOM_ROWS: i32 = MOON_BOTTOM_ROWS - CONTINENTS_BOTTOM_ROWS + 400;
+/// Rows below the Moon from which its looming underside starts to show: from just under the
+/// continents' floor of the world's sky.
+const fn moon_loom_rows(bands: &SkyBands) -> i32 {
+    bands.moon - bands.continents + 400
+}
 
 /// How much of the clock's phased backdrop Moon (`sky::draw_moon`) still shows in `visible`:
 /// 1 on older worlds and from the ground up to where the looming underside starts to show, then
 /// fading to 0 over the same stretch the looming Moon fades in, so the two never show at once
 /// at full strength.
 pub fn backdrop_moon_share(settings: &WorldSettings, visible: Rectangle) -> f32 {
-    if !settings.generator.has_sky() {
+    let Some(bands) = settings.generator.sky_bands() else {
         return 1.0;
-    }
-    let distance = visible.y - y_of(MOON_BOTTOM_ROWS);
+    };
+    let distance = visible.y - y_of(bands.moon);
     #[allow(clippy::cast_precision_loss, reason = "band rows are small integers")]
-    let reach = MOON_LOOM_ROWS as f32 * TILE_SIZE;
+    let reach = moon_loom_rows(&bands) as f32 * TILE_SIZE;
     (1.0 - (reach - distance) / (reach * 0.25)).clamp(0.0, 1.0)
 }
 
@@ -421,14 +433,14 @@ pub fn backdrop_moon_share(settings: &WorldSettings, visible: Rectangle) -> f32 
 /// small grey lens near the top of the view; it grows and drops toward its true place as the
 /// view climbs, then gives way to its real tiles.
 fn draw_moon_from_below(draw: &mut impl RaylibDraw, settings: &WorldSettings, visible: Rectangle) {
-    let Some(moon) = sky::moon(settings) else {
+    let (Some(moon), Some(bands)) = (sky::moon(settings), settings.generator.sky_bands()) else {
         return;
     };
-    let underside = y_of(MOON_BOTTOM_ROWS);
+    let underside = y_of(bands.moon);
     let view_top = visible.y;
     let distance = view_top - underside;
     #[allow(clippy::cast_precision_loss, reason = "band rows are small integers")]
-    let reach = MOON_LOOM_ROWS as f32 * TILE_SIZE;
+    let reach = moon_loom_rows(&bands) as f32 * TILE_SIZE;
     if distance <= visible.height * 0.15 || distance > reach {
         return;
     }

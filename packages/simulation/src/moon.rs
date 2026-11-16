@@ -363,13 +363,15 @@ pub const LIFE_SUPPORT_MAX_LEVEL: u8 = 3;
 pub const VACUUM_HULL_DAMAGE_PER_SECOND: f32 = 14.0;
 /// Hull damage per second without life support (the crew struggles at the controls).
 pub const VACUUM_CREW_DAMAGE_PER_SECOND: f32 = 9.0;
-/// Air density under which a place counts as vacuum (orbit and the Moon).
+/// Breathable air ([`crate::environment::Environment::breathable`]) under which a place
+/// counts as vacuum (orbit and the Moon, in every sky's bands).
 pub const VACUUM_AIR_DENSITY: f32 = 0.02;
 /// The fuel tank tier the checklist asks for (the Moon is 85 % of a maxed rig's still-air
 /// reach; the last climb through orbit is cheap).
 pub const MOON_FUEL_TANK_TIER: u8 = 14;
-/// The Altitude Intake tier the checklist asks for.
-pub const MOON_INTAKE_TIER: u8 = 5;
+/// The Altitude Intake tier the checklist asks for: the top tier (V9's climb table: nothing
+/// less lifts a tier 14 tank to the Moon).
+pub const MOON_INTAKE_TIER: u8 = 6;
 /// The De-Icer tier that covers the Moon's cold ([`crate::environment::MAX_COLD`]).
 pub const MOON_DE_ICER_TIER: u8 = 5;
 
@@ -454,7 +456,7 @@ pub fn vacuum_at(settings: &crate::worldgen::WorldSettings, x: f32, y: f32) -> b
     if !settings.generator.has_sky() || y > 0.0 {
         return false;
     }
-    if crate::environment::environment_at(settings, x, y).air_density >= VACUUM_AIR_DENSITY {
+    if crate::environment::environment_at(settings, x, y).breathable >= VACUUM_AIR_DENSITY {
         return false;
     }
     let (tile_x, tile_y) = (

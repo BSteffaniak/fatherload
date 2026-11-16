@@ -758,8 +758,11 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
 
     // Sky ore and finds (WP-SKY) sit in their island's rock, not in the band's dirt.
     if matches!(kind, TileKind::Ore(_) | TileKind::Artifact(_))
-        && terrain.settings().generator.has_sky()
-        && y < -(fatherload_simulation::worldgen::sky::LOW_ISLES_BOTTOM_ROWS - 60)
+        && terrain
+            .settings()
+            .generator
+            .sky_bands()
+            .is_some_and(|bands| y < -(bands.low_isles - 60))
     {
         let biome = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
             .into_iter()

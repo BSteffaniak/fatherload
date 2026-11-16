@@ -28,8 +28,21 @@ use crate::{
 
 const PLAYER: PlayerId = PlayerId::new(1);
 
+/// A V8 world: these tests pin V8's sky (its frozen bands, the `*_BOTTOM_ROWS` constants);
+/// V9's own bands are checked in `environment::tests` and the V9 suites.
+fn v8() -> WorldSettings {
+    WorldSettings {
+        generator: crate::worldgen::GeneratorVersion::V8,
+        ..WorldSettings::default()
+    }
+}
+
 fn world() -> WorldState {
-    WorldState::new_game_with_params(PLAYER, SimulationParams::new(60))
+    world_at(60)
+}
+
+fn world_at(hz: u32) -> WorldState {
+    WorldState::new_game_with_settings(PLAYER, &v8(), SimulationParams::new(hz))
 }
 
 #[allow(clippy::cast_precision_loss, reason = "small tile coordinates")]
@@ -317,7 +330,7 @@ fn cold_ices_the_hull_unless_the_de_icer_covers_it() {
 fn the_real_sky_unlocks_by_tier() {
     // V8's bands were calibrated on the first fifteen-tier fuel curve: on that curve the real
     // sky (wind, thin air, vacuum) unlocks by tier as designed.
-    let settings = WorldSettings::default();
+    let settings = v8();
     let climb_on = |capacity: fn(u8) -> f32, tank: u8, engine: u8, intake: u8, column: i32| {
         let mut world = world();
         fit(&mut world, tank, engine, intake);
@@ -530,7 +543,7 @@ fn island_edits_survive_saves_and_keyframes() {
 #[test]
 fn sky_flight_is_deterministic_and_tick_rate_safe() {
     let run = |hz: u32| {
-        let mut world = WorldState::new_game_with_params(PLAYER, SimulationParams::new(hz));
+        let mut world = world_at(hz);
         let settings = *world.world_settings();
         let column = clear_column(&settings, 600, 1_400);
         fit(&mut world, 8, 8, 2);

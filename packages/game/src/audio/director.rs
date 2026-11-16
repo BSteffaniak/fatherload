@@ -841,11 +841,9 @@ impl Director {
         };
         let settings = terrain.settings();
         let altitude = -listener.y / TILE_SIZE;
+        let bands = settings.generator.sky_bands().unwrap_or(sky::V8_SKY_BANDS);
         #[allow(clippy::cast_precision_loss, reason = "band rows are small integers")]
-        let (low, gap) = (
-            sky::LOW_ISLES_BOTTOM_ROWS as f32,
-            sky::DEAD_AIR_BOTTOM_ROWS as f32,
-        );
+        let (low, gap) = (bands.low_isles as f32, bands.dead_air as f32);
         let share = if settings.generator.has_sky_isles() {
             ((altitude - (low - 80.0)) / 120.0).clamp(0.0, 1.0)
                 * (1.0 - (altitude - gap) / 300.0).clamp(0.0, 1.0)

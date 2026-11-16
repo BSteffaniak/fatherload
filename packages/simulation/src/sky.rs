@@ -490,6 +490,23 @@ impl SkyBand {
         Self::at_altitude(row.saturating_neg())
     }
 
+    /// The band of tile row `row` in a sky with `bands`.
+    #[must_use]
+    pub const fn at_row_in(row: i32, bands: &SkyBands) -> Self {
+        Self::at_altitude_in(row.saturating_neg(), bands)
+    }
+
+    /// The band of tile row `row` in `settings`' own sky ([`Self::Ground`] on generators
+    /// without one): what gameplay and the HUD should ask, since every sky generator has its
+    /// own band table.
+    #[must_use]
+    pub const fn at_row_of(settings: &crate::worldgen::WorldSettings, row: i32) -> Self {
+        match settings.generator.sky_bands() {
+            Some(bands) => Self::at_row_in(row, &bands),
+            None => Self::Ground,
+        }
+    }
+
     /// Stable code (event payloads, the wire).
     #[must_use]
     pub const fn code(self) -> u8 {

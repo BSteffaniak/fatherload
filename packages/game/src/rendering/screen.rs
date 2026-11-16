@@ -1094,11 +1094,8 @@ pub(super) fn draw_minimap_for_view(
 /// of the map above its bottom edge instead of showing nothing but empty sky.
 fn map_focus_row(terrain: &Terrain, tile: TilePosition, rows: i32) -> i32 {
     // Among a V8 sky's islands the map follows the rig, so the isles around it show.
-    if terrain.settings().generator.has_sky()
-        && tile.y
-            <= fatherload_simulation::worldgen::sky::row_of(
-                fatherload_simulation::worldgen::sky::LOW_ISLES_BOTTOM_ROWS - 40,
-            )
+    if let Some(bands) = terrain.settings().generator.sky_bands()
+        && tile.y <= fatherload_simulation::worldgen::sky::row_of(bands.low_isles - 40)
     {
         return tile.y;
     }

@@ -20,7 +20,7 @@
 
 use super::{BalanceProbe, ProbeContext, ReportSection, Table, grouped};
 use crate::{
-    climb::{ENGINE_TIERS, INTAKE_TIERS, TANK_TIERS, ceiling},
+    climb::{ENGINE_TIERS, INTAKE_TIERS, TANK_TIERS, ceiling_in},
     economy::{UpgradeKind, upgrade_cost},
     home::{Blueprint, PlotSetting, PlotSize, plot::list_price},
     milestone, moon,
@@ -63,7 +63,7 @@ pub fn cheapest_reaching(rows: i32) -> Option<ClimbLoadout> {
     for tank in TANK_TIERS {
         for engine in ENGINE_TIERS {
             for intake in INTAKE_TIERS {
-                let reach = ceiling(tank, engine, intake);
+                let reach = ceiling_in(BANDS.climb, tank, engine, intake);
                 if reach < rows {
                     continue;
                 }
@@ -86,14 +86,19 @@ pub fn cheapest_reaching(rows: i32) -> Option<ClimbLoadout> {
 }
 
 /// The Moon checklist's credits from stock (top tank, intakes, de-icer, the vacuum seal and the
-/// first life-support tier), with the cheapest engine that crosses the gap on that tank.
+/// first life-support tier), with the cheapest engine that climbs to the Moon's top on that
+/// tank.
 #[must_use]
 pub fn moon_checklist_credits() -> u32 {
     let engine = ENGINE_TIERS
         .into_iter()
         .find(|engine| {
-            ceiling(moon::MOON_FUEL_TANK_TIER, *engine, INTAKE_TIERS[3])
-                >= BANDS.dead_air_reach_rows()
+            ceiling_in(
+                BANDS.climb,
+                moon::MOON_FUEL_TANK_TIER,
+                *engine,
+                moon::MOON_INTAKE_TIER,
+            ) >= BANDS.moon + crate::worldgen::sky::MOON_DEPTH_ROWS
         })
         .unwrap_or(ENGINE_TIERS[ENGINE_TIERS.len() - 1]);
     line_cost(UpgradeKind::FuelTank, moon::MOON_FUEL_TANK_TIER)
@@ -250,7 +255,7 @@ impl BalanceProbe for SecondActProbe {
             };
             refuels.row(vec![
                 format!("{tank} / {engine} / {intake}"),
-                grouped(f64::from(milestone::climb_reach(&rig))),
+                grouped(f64::from(milestone::climb_reach(&rig, &BANDS))),
                 share(3_000),
                 share(4_400),
             ]);

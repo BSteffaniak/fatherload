@@ -245,11 +245,11 @@ impl WorldState {
         if in_cloud || beside_pocket {
             return PilotAir::Gas;
         }
-        // A V8 sky decides by its air density (vacuum in orbit and on the Moon); older worlds
-        // keep the fixed thin-air row.
+        // A sky decides by its breathable air (band-relative: thin from the lower archipelago,
+        // vacuum in orbit and on the Moon); older worlds keep the fixed thin-air row.
         let settings = self.terrain.settings();
         let thin = if settings.generator.has_sky() {
-            crate::environment::environment_at(settings, x, y).air_density
+            crate::environment::environment_at(settings, x, y).breathable
                 < crate::pilot::PILOT_THIN_AIR_DENSITY
         } else {
             tile.y < THIN_AIR_ROW

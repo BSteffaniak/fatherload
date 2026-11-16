@@ -198,12 +198,14 @@ impl GeneratorVersion {
     ///
     /// Each sky generator has its own frozen entry, so its worlds keep generating identically
     /// when the fuel curve and the climb table move: V8 keeps [`sky::V8_SKY_BANDS`] (calibrated
-    /// on the first fifteen-tier fuel curve). The next sky generator adds its arm here with the
-    /// bands calibrated on the current curve ([`sky::NEXT_SKY_BANDS`]), frozen as literals.
+    /// on the first fifteen-tier fuel curve), V9 [`sky::V9_SKY_BANDS`] (calibrated on the second
+    /// one). The next sky generator adds its arm here with the bands calibrated on the current
+    /// curve ([`sky::NEXT_SKY_BANDS`]), frozen as literals.
     #[must_use]
     pub const fn sky_bands(self) -> Option<sky::SkyBands> {
         match self {
-            Self::V8 | Self::V9 => Some(sky::V8_SKY_BANDS),
+            Self::V8 => Some(sky::V8_SKY_BANDS),
+            Self::V9 => Some(sky::V9_SKY_BANDS),
             Self::Legacy
             | Self::V1
             | Self::V2

@@ -183,16 +183,21 @@ pub fn climb_ceiling_tiles(fuel_tank_level: u8, engine_level: u8) -> f32 {
 
 /// How many tiles a rig climbs straight up on one full tank in a sky with thin air.
 ///
-/// The measured climb table ([`crate::climb::reach`], engine and intake rounded down to its
-/// tiers) above the harness's starting altitude. Without altitude intakes thin air caps every
+/// The measured climb table of the world's sky (`bands.climb`, [`crate::climb::reach_in`],
+/// engine and intake rounded down to its tiers) above the harness's starting altitude. Without altitude intakes thin air caps every
 /// climb, so this is far below [`climb_ceiling_tiles`] for big tanks.
 #[must_use]
 #[allow(
     clippy::cast_precision_loss,
     reason = "altitudes are some thousands of rows"
 )]
-pub fn thin_air_ceiling_tiles(fuel_tank_level: u8, engine_level: u8, intake_level: u8) -> f32 {
-    (crate::climb::reach(fuel_tank_level, engine_level, intake_level)
+pub fn thin_air_ceiling_tiles(
+    bands: &SkyBands,
+    fuel_tank_level: u8,
+    engine_level: u8,
+    intake_level: u8,
+) -> f32 {
+    (crate::climb::reach_in(bands.climb, fuel_tank_level, engine_level, intake_level)
         - crate::climb::START_ALTITUDE_ROWS)
         .max(0) as f32
 }
@@ -354,11 +359,10 @@ fn preview_lines(
             let intake = player.hazard_gear.altitude_intake;
             // In a sky with thin air the measured table, at sea level the plain formula.
             let climb_ceiling_tiles = |tank: u8, engine: u8| {
-                if sky.is_some() {
-                    thin_air_ceiling_tiles(tank, engine, intake)
-                } else {
-                    climb_ceiling_tiles(tank, engine)
-                }
+                sky.map_or_else(
+                    || climb_ceiling_tiles(tank, engine),
+                    |bands| thin_air_ceiling_tiles(bands, tank, engine, intake),
+                )
             };
             let (fuel_now, fuel_next) =
                 (fuel_capacity_for_level(from), fuel_capacity_for_level(to));
@@ -834,8 +838,12 @@ mod tests {
             .iter()
             .find(|bar| bar.label == "Climb ceiling")
             .expect("ceiling bar");
-        let table =
-            |tank| f32::from(u16::try_from(crate::climb::ceiling(tank, 1, 0) - 100).expect("rows"));
+        let climb = SKY.expect("a sky").climb;
+        let table = |tank| {
+            f32::from(
+                u16::try_from(crate::climb::ceiling_in(climb, tank, 1, 0) - 100).expect("rows"),
+            )
+        };
         assert!((ceiling.now - table(1)).abs() < 1e-3, "{ceiling:?}");
         assert!((ceiling.next - table(2)).abs() < 1e-3, "{ceiling:?}");
         assert!((ceiling.max - table(15)).abs() < 1e-3, "{ceiling:?}");

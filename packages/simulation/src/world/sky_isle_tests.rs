@@ -378,11 +378,11 @@ fn buoys_never_open_the_dead_air_gap() {
         column,
         buoy_top,
         buoy_fill_level(fuel_capacity_for_level(14)),
-        BANDS.dead_air,
+        BANDS.dead_air_reach_rows(),
     );
     assert!(
         reached.is_none(),
-        "a buoy-filled tank reaches the dead-air gap"
+        "a buoy-filled tank crosses the dead-air gap"
     );
 }
 

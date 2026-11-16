@@ -8,14 +8,21 @@ use fatherload_simulation::{
     terrain::{TileKind, TilePosition},
     worldgen::{
         TileRect,
-        sky::{
-            self, ARCHIPELAGO_BOTTOM_ROWS, DEAD_AIR_BOTTOM_ROWS, LOW_ISLES_BOTTOM_ROWS, SkyLand,
-        },
+        sky::{self, SkyLand},
     },
 };
 
 use super::{Scene, SceneStage, place_rig, reveal};
 use crate::input::PlayerInput;
+
+/// The bands of the scene world's own sky (each sky generator has its own table).
+fn bands(world: &WorldState) -> fatherload_simulation::worldgen::sky::SkyBands {
+    world
+        .world_settings()
+        .generator
+        .sky_bands()
+        .unwrap_or(fatherload_simulation::worldgen::sky::V8_SKY_BANDS)
+}
 
 const fn band(first: i32, last: i32, bottom: i32, top: i32) -> TileRect {
     TileRect {
@@ -106,7 +113,8 @@ pub const SKY_ISLE_SCENES: &[Scene] = &[
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
                 fit(world, player);
-                let lands = isles_near_town(world, LOW_ISLES_BOTTOM_ROWS, ARCHIPELAGO_BOTTOM_ROWS);
+                let lands =
+                    isles_near_town(world, bands(world).low_isles, bands(world).archipelago);
                 let buoy = lands.iter().find_map(sky::isles::buoy_of);
                 let (x, row) = buoy.map_or((100, -320), |buoy| (buoy.pad.x + 9, buoy.pad.y - 4));
                 hover_at(world, player, x, row);
@@ -126,8 +134,8 @@ pub const SKY_ISLE_SCENES: &[Scene] = &[
                 fit(world, player);
                 let lands = isles_near_town(
                     world,
-                    ARCHIPELAGO_BOTTOM_ROWS,
-                    ARCHIPELAGO_BOTTOM_ROWS + 1_400,
+                    bands(world).archipelago,
+                    bands(world).archipelago + 1_400,
                 );
                 // The isle with a spring and the most neighbours with springs.
                 let spring = lands
@@ -210,7 +218,12 @@ pub const SKY_ISLE_SCENES: &[Scene] = &[
                 let settings = *world.world_settings();
                 let stream = sky::jet_streams_touching(
                     &settings,
-                    &band(-3_000, 3_000, ARCHIPELAGO_BOTTOM_ROWS, DEAD_AIR_BOTTOM_ROWS),
+                    &band(
+                        -3_000,
+                        3_000,
+                        bands(world).archipelago,
+                        bands(world).dead_air,
+                    ),
                 )
                 .into_iter()
                 .filter(|stream| stream.rect.max.x - stream.rect.min.x > 80)
@@ -233,7 +246,8 @@ pub const SKY_ISLE_SCENES: &[Scene] = &[
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
                 fit(world, player);
-                let lands = isles_near_town(world, LOW_ISLES_BOTTOM_ROWS, ARCHIPELAGO_BOTTOM_ROWS);
+                let lands =
+                    isles_near_town(world, bands(world).low_isles, bands(world).archipelago);
                 let crumbling = lands
                     .iter()
                     .filter(|land| land.half_width >= 8)

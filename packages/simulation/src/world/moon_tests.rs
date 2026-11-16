@@ -151,7 +151,7 @@ fn the_breach_warning_fires_climbing_into_orbit() {
     let moon = crate::worldgen::sky::moon(&settings).expect("a moon");
     // A column well clear of the Moon, climbing through the orbit floor's vacuum fade.
     let x = moon.center_x - moon.half_width - 600;
-    let orbit = crate::worldgen::sky::ORBIT_BOTTOM_ROWS;
+    let orbit = settings.generator.sky_bands().expect("a sky").orbit;
     // Just under where the air gives out.
     let edge = (orbit - 200..orbit + 300)
         .find(|altitude| world.in_vacuum(px(x), -(*altitude as f32) * TILE_SIZE))

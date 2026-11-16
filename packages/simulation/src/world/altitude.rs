@@ -46,9 +46,9 @@ impl WorldState {
         output: &mut TickOutput,
     ) {
         let settings = self.terrain.settings();
-        if !settings.generator.has_sky() {
+        let Some(bands) = settings.generator.sky_bands() else {
             return;
-        }
+        };
         let Some(player) = self.players.get(&player_id) else {
             return;
         };
@@ -56,7 +56,10 @@ impl WorldState {
         if from_row == to_row && column(before.0) == column(player.x) {
             return;
         }
-        let (from_band, to_band) = (SkyBand::at_row(from_row), SkyBand::at_row(to_row));
+        let (from_band, to_band) = (
+            SkyBand::at_row_in(from_row, &bands),
+            SkyBand::at_row_in(to_row, &bands),
+        );
         if to_band > from_band {
             output.push_event(GameplayEventKind::SkyBandEntered {
                 player_id,

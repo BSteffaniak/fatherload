@@ -136,8 +136,10 @@ fn bigger_tanks_and_engines_climb_higher() {
     let engine = climb(11, 1, 6, 30).expect("engine 6 climb");
     assert!(stock.apex_tiles > 200, "{stock:?}");
     assert!(tank.apex_tiles > stock.apex_tiles, "{tank:?} vs {stock:?}");
+    // (V9's thirstier thin air narrows the engine's lead: about 40 % higher on the stock
+    // tank, where V8's sky gave more than half again.)
     assert!(
-        engine.apex_tiles > stock.apex_tiles * 3 / 2,
+        engine.apex_tiles > stock.apex_tiles * 4 / 3,
         "{engine:?} vs {stock:?}"
     );
     for result in [stock, engine] {

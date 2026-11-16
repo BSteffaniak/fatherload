@@ -145,8 +145,9 @@ pub const HIGH_FLYER_ALTITUDE_TILES: i32 = 420;
 /// How high `player`'s rig climbs on a full tank in still air (T16's measured climb table,
 /// conservatively rounded down between its engine and intake tiers).
 #[must_use]
-pub fn climb_reach(player: &Player) -> i32 {
-    crate::climb::reach(
+pub fn climb_reach(player: &Player, bands: &SkyBands) -> i32 {
+    crate::climb::reach_in(
+        bands.climb,
         player.fuel_tank_level,
         player.engine_level,
         player.hazard_gear.altitude_intake,
@@ -156,14 +157,14 @@ pub fn climb_reach(player: &Player) -> i32 {
 /// Whether `player`'s rig climbs into the low sky isles of a sky with `bands` on a full tank.
 #[must_use]
 pub fn island_capable(player: &Player, bands: &SkyBands) -> bool {
-    climb_reach(player) >= bands.island_reach_rows()
+    climb_reach(player, bands) >= bands.island_reach_rows()
 }
 
 /// Whether `player`'s tank, engine and altitude intake carry the rig over the dead-air gap of a
 /// sky with `bands` to the sky continents and the Moon: the Act I -> II unlock.
 #[must_use]
 pub fn crosses_dead_air(player: &Player, bands: &SkyBands) -> bool {
-    climb_reach(player) >= bands.dead_air_reach_rows()
+    climb_reach(player, bands) >= bands.dead_air_reach_rows()
 }
 
 /// The most fuel `player`'s rig may be filled to while it is `altitude_rows` above row 0.
@@ -195,7 +196,7 @@ pub fn sky_refuel_level(player: &Player, altitude_rows: i32, bands: Option<&SkyB
     }
     // The climb harness starts at rest 100 rows up (`world::climb_tests::START_ALTITUDE_ROWS`).
     let start = 100;
-    let reach = climb_reach(player);
+    let reach = climb_reach(player, bands);
     #[allow(
         clippy::cast_precision_loss,
         reason = "altitudes are a few thousand rows"

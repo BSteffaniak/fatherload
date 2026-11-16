@@ -36,13 +36,31 @@ fn rect(min_x: i32, min_y: i32, max_x: i32, max_y: i32) -> TileRect {
     }
 }
 
-/// The island bands over columns `first..=last`.
+/// V8's bare island placement (no furnishings, no town cells) in a sky with `bands`.
+fn bare_lands(seed: u64, bands: &SkyBands, area: &TileRect) -> Vec<SkyLand> {
+    let mut found = Vec::new();
+    for ry in band_cells(bands, ID_LOW, LOW_ISLE_CELL.1, area) {
+        for rx in cells(area.min.x, area.max.x, LOW_ISLE_CELL.0) {
+            found.extend(low_isle_cell(seed, bands, rx, ry));
+        }
+    }
+    for ry in band_cells(bands, ID_ARCHIPELAGO, ARCHIPELAGO_CELL.1, area) {
+        for rx in cells(area.min.x, area.max.x, ARCHIPELAGO_CELL.0) {
+            found.extend(archipelago_cell(seed, bands, rx, ry));
+        }
+    }
+    found.retain(|land| land.bounds().intersects(area));
+    found.sort_by_key(|land| land.id);
+    found
+}
+
+/// The island bands of a V9 sky over columns `first..=last`.
 fn island_bands(first: i32, last: i32) -> TileRect {
     rect(
         first,
-        row_of(DEAD_AIR_BOTTOM_ROWS),
+        row_of(V9_SKY_BANDS.dead_air),
         last,
-        row_of(LOW_ISLES_BOTTOM_ROWS),
+        row_of(V9_SKY_BANDS.low_isles),
     )
 }
 
@@ -68,11 +86,22 @@ fn v9_is_current_and_only_v9_furnishes_the_isles() {
 }
 
 #[test]
-fn v9_keeps_v8_placement_outside_town_cells() {
+fn v9_keeps_the_bare_placement_outside_town_cells() {
+    // V9 furnishes V8's island placement (in its own, taller bands) and swaps one cell per
+    // block for a town cell; everything else is where the bare generator puts it.
     for seed in [3_u64, 0xD1_11_6A_4E] {
         let area = island_bands(-4_000, 4_000);
-        let old: Vec<SkyLand> = lands_touching(&v8(seed), &area);
-        let new: Vec<SkyLand> = lands_touching(&v9(seed), &area);
+        let old: Vec<SkyLand> = bare_lands(seed, &V9_SKY_BANDS, &area);
+        let new: Vec<SkyLand> = lands_touching(&v9(seed), &area)
+            .into_iter()
+            .filter(|land| land.bounds().intersects(&area))
+            .filter(|land| {
+                matches!(
+                    land.kind,
+                    SkyLandKind::Isle | SkyLandKind::ArchipelagoIsle | SkyLandKind::TownIsle
+                )
+            })
+            .collect();
         let town_cells: BTreeSet<(i32, i32)> = new
             .iter()
             .filter(|land| land.kind == SkyLandKind::TownIsle)
@@ -252,7 +281,10 @@ fn every_block_has_one_sky_town_on_a_flat_town_isle() {
                 kinds.insert(site.kind);
                 let isle = land(&settings, site.isle).expect("isle");
                 assert_eq!(isle.kind, SkyLandKind::TownIsle);
-                assert_eq!(SkyBand::at_row(site.ground_row), SkyBand::Archipelago);
+                assert_eq!(
+                    SkyBand::at_row_in(site.ground_row, &V9_SKY_BANDS),
+                    SkyBand::Archipelago
+                );
                 for x in site.first..=site.last {
                     assert_eq!(isle.surface_row(x), Some(site.ground_row), "flat at {x}");
                 }
@@ -300,7 +332,8 @@ fn sky_content_sits_in_its_tank_tier_band() {
     // the low isles a tier 4 tank and engine climb to, and some within a tier 3 tank's reach;
     // every sky town stands below the dead-air gap, within what a rig without intakes can
     // climb to, and the lowest row of towns is open to mid tiers (tank 7, engine 8).
-    use crate::climb::reach;
+    let reach =
+        |tank, engine, intake| crate::climb::reach_in(V9_SKY_BANDS.climb, tank, engine, intake);
     for seed in [3_u64, 0x5EED, 0x00C0_FFEE] {
         let settings = v9(seed);
         let mut buoys = Vec::new();
@@ -313,7 +346,7 @@ fn sky_content_sits_in_its_tank_tier_band() {
         assert!(buoys.len() >= 6, "seed {seed}: {} buoys", buoys.len());
         for altitude in &buoys {
             assert!(
-                (LOW_ISLES_BOTTOM_ROWS..ARCHIPELAGO_BOTTOM_ROWS).contains(altitude),
+                (V9_SKY_BANDS.low_isles..V9_SKY_BANDS.archipelago).contains(altitude),
                 "seed {seed}: a buoy at {altitude} rows"
             );
             assert!(
@@ -333,7 +366,7 @@ fn sky_content_sits_in_its_tank_tier_band() {
                 };
                 let altitude = -site.ground_row;
                 assert!(
-                    altitude + towns::SKY_TOWN_AIR_ROWS < DEAD_AIR_BOTTOM_ROWS,
+                    altitude + towns::SKY_TOWN_AIR_ROWS < V9_SKY_BANDS.dead_air,
                     "seed {seed}: a sky town in the dead-air gap ({altitude} rows)"
                 );
                 assert!(
@@ -428,11 +461,11 @@ fn chunk_digests_of_v9_skies_are_pinned() {
         let chunks = [
             (
                 5,
-                row_of(LOW_ISLES_BOTTOM_ROWS + 150).div_euclid(CHUNK_SIZE_TILES),
+                row_of(V9_SKY_BANDS.low_isles + 150).div_euclid(CHUNK_SIZE_TILES),
             ),
             (
                 -9,
-                row_of(ARCHIPELAGO_BOTTOM_ROWS + 500).div_euclid(CHUNK_SIZE_TILES),
+                row_of(V9_SKY_BANDS.archipelago + 500).div_euclid(CHUNK_SIZE_TILES),
             ),
             (
                 town.center().div_euclid(CHUNK_SIZE_TILES),
@@ -465,4 +498,4 @@ fn chunk_digests_of_v9_skies_are_pinned() {
     );
 }
 
-const GOLDEN_V9_DIGEST: u64 = 0x0186_cacd_5dc8_27ec;
+const GOLDEN_V9_DIGEST: u64 = 0xcf20_9927_7491_267f;

@@ -7,15 +7,21 @@ use fatherload_simulation::{
     terrain::TilePosition,
     worldgen::{
         TileRect,
-        sky::{
-            self, ARCHIPELAGO_BOTTOM_ROWS, CONTINENTS_BOTTOM_ROWS, DEAD_AIR_BOTTOM_ROWS,
-            LOW_ISLES_BOTTOM_ROWS, MOON_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS, SkyLand, SkyLandKind,
-        },
+        sky::{self, SkyLand, SkyLandKind},
     },
 };
 
 use super::{Scene, SceneStage, place_rig, reveal};
 use crate::input::PlayerInput;
+
+/// The bands of the scene world's own sky (each sky generator has its own table).
+fn bands(world: &WorldState) -> fatherload_simulation::worldgen::sky::SkyBands {
+    world
+        .world_settings()
+        .generator
+        .sky_bands()
+        .unwrap_or(fatherload_simulation::worldgen::sky::V8_SKY_BANDS)
+}
 
 /// The rect of altitude band `bottom..top` (rows above row 0) over columns `first..=last`.
 const fn band(first: i32, last: i32, bottom: i32, top: i32) -> TileRect {
@@ -97,8 +103,8 @@ pub const SKY_SCENES: &[Scene] = &[
                 let area = band(
                     -1_500,
                     1_500,
-                    LOW_ISLES_BOTTOM_ROWS,
-                    ARCHIPELAGO_BOTTOM_ROWS,
+                    bands(world).low_isles,
+                    bands(world).archipelago,
                 );
                 let group = best_group(world, &area, SkyLandKind::Isle);
                 // Just off the cluster's westmost isle, level with its top.
@@ -123,8 +129,8 @@ pub const SKY_SCENES: &[Scene] = &[
                 let area = band(
                     -3_000,
                     3_000,
-                    ARCHIPELAGO_BOTTOM_ROWS,
-                    ARCHIPELAGO_BOTTOM_ROWS + 1_200,
+                    bands(world).archipelago,
+                    bands(world).archipelago + 1_200,
                 );
                 let group = best_group(world, &area, SkyLandKind::ArchipelagoIsle);
                 let (x, row) = group
@@ -146,7 +152,7 @@ pub const SKY_SCENES: &[Scene] = &[
                 let settings = *world.world_settings();
                 // The windiest layer a third of the way up the gap.
                 let start =
-                    DEAD_AIR_BOTTOM_ROWS + (CONTINENTS_BOTTOM_ROWS - DEAD_AIR_BOTTOM_ROWS) / 3;
+                    bands(world).dead_air + (bands(world).continents - bands(world).dead_air) / 3;
                 #[allow(
                     clippy::cast_precision_loss,
                     clippy::cast_possible_truncation,
@@ -171,7 +177,7 @@ pub const SKY_SCENES: &[Scene] = &[
                 let player = seats[0].player;
                 fit(world, player, 6, 4);
                 let settings = *world.world_settings();
-                let area = band(-12_000, 12_000, CONTINENTS_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS);
+                let area = band(-12_000, 12_000, bands(world).continents, bands(world).orbit);
                 let continent = sky::lands_touching(&settings, &area)
                     .into_iter()
                     .filter(|land| land.kind == SkyLandKind::Continent)
@@ -194,7 +200,7 @@ pub const SKY_SCENES: &[Scene] = &[
                 fit(world, player, 6, 6);
                 let settings = *world.world_settings();
                 let x = sky::moon_column(&settings).unwrap_or(4_000) + 300;
-                hover_at(world, player, x, sky::row_of(MOON_BOTTOM_ROWS - 1_200));
+                hover_at(world, player, x, sky::row_of(bands(world).moon - 1_200));
             });
             hang(stage, 12);
         },
@@ -255,7 +261,7 @@ pub const SKY_SCENES: &[Scene] = &[
             stage.play(1, |world, seats| {
                 let player = seats[0].player;
                 fit(world, player, 0, 0);
-                hover_at(world, player, 100, sky::row_of(LOW_ISLES_BOTTOM_ROWS - 4));
+                hover_at(world, player, 100, sky::row_of(bands(world).low_isles - 4));
             });
             hang(stage, 12);
         },
@@ -271,8 +277,8 @@ pub const SKY_SCENES: &[Scene] = &[
                 let area = band(
                     -2_000,
                     2_000,
-                    LOW_ISLES_BOTTOM_ROWS,
-                    ARCHIPELAGO_BOTTOM_ROWS + 400,
+                    bands(world).low_isles,
+                    bands(world).archipelago + 400,
                 );
                 // An updraft with an island nearby, nearest the town.
                 let updraft = sky::updrafts_touching(&settings, &area)

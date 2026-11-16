@@ -62,7 +62,7 @@ impl SkyGauge {
         #[allow(clippy::cast_possible_truncation, reason = "pixel to row")]
         let row = (y / TILE_SIZE).floor() as i32;
         Some(Self {
-            band: SkyBand::at_row(row),
+            band: SkyBand::at_row_of(settings, row),
             air_percent: percent(air.air_density),
             thrust_percent: percent(air.thrust_efficiency(intake)),
             cold: air.cold,
@@ -213,7 +213,7 @@ pub(super) fn draw_sky_gauge(
 
 #[cfg(test)]
 mod tests {
-    use fatherload_simulation::worldgen::{GeneratorVersion, WorldSettings, sky};
+    use fatherload_simulation::worldgen::{GeneratorVersion, WorldSettings};
 
     use super::*;
 
@@ -224,7 +224,8 @@ mod tests {
         assert_eq!(settings.generator, GeneratorVersion::CURRENT);
         assert!(SkyGauge::read(&settings, (100.0, 50.0), 0, 0).is_none());
         #[allow(clippy::cast_precision_loss, reason = "band rows")]
-        let y = -((sky::DEAD_AIR_BOTTOM_ROWS + 300) as f32) * TILE_SIZE;
+        let bands = settings.generator.sky_bands().expect("a sky");
+        let y = -((bands.dead_air + 300) as f32) * TILE_SIZE;
         let gauge = SkyGauge::read(&settings, (-60_000.0, y), 6, 0).expect("in the gap");
         assert_eq!(gauge.band, SkyBand::DeadAir);
         assert!(gauge.air_percent < 20);

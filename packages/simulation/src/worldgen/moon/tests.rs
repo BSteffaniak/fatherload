@@ -102,10 +102,14 @@ fn only_v9_fills_the_moon_and_v8_keeps_its_placeholder() {
     assert!(!placeholder.is_lunar());
     let filled = sky::moon(&v9(5)).expect("v9 has a moon");
     assert!(filled.is_lunar());
-    // Same footprint: the Moon hangs in the same place over the same column.
+    // Same footprint over the same column; it hangs at each sky's own Moon band (V9's is
+    // higher), the same depth above it.
     assert_eq!(filled.center_x, placeholder.center_x);
     assert_eq!(filled.half_width, placeholder.half_width);
-    assert_eq!(filled.top_row, placeholder.top_row);
+    assert_eq!(
+        filled.top_row - sky::row_of(sky::V9_SKY_BANDS.moon),
+        placeholder.top_row - sky::row_of(sky::V8_SKY_BANDS.moon)
+    );
     let top = placeholder
         .surface_row(placeholder.center_x + 500)
         .expect("covered");
@@ -480,4 +484,4 @@ fn chunk_digests_of_v9_moons_are_pinned() {
     );
 }
 
-const GOLDEN_V9_DIGEST: u64 = 0xabc9_4aa9_21c4_08e2;
+const GOLDEN_V9_DIGEST: u64 = 0x8bb2_753f_0845_9f09;

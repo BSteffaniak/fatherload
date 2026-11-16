@@ -342,7 +342,7 @@ impl WorldState {
             }
             if thin_air {
                 // Thin air runs the engine rich.
-                efficiency *= crate::environment::Environment::burn_factor(thrust_efficiency);
+                efficiency *= environment.burn_factor(thrust_efficiency);
             }
             player.fuel = quantize_simulation_scalar(
                 (AUTHORITATIVE_FUEL_BURN_PER_SECOND * efficiency)

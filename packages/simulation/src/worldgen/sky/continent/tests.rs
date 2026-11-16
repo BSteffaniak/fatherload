@@ -5,10 +5,7 @@ use crate::{
     terrain::ChunkPosition,
     worldgen::{
         GeneratorVersion,
-        sky::{
-            CONTINENTS_BOTTOM_ROWS, ORBIT_BOTTOM_ROWS, SKY_CEILING_ROWS, SkyLandKind,
-            lands_touching, row_of,
-        },
+        sky::{SkyLandKind, V9_SKY_BANDS, lands_touching, row_of},
         streamed,
     },
 };
@@ -24,11 +21,11 @@ fn band() -> TileRect {
     TileRect {
         min: TilePosition {
             x: -8_000,
-            y: row_of(ORBIT_BOTTOM_ROWS),
+            y: row_of(V9_SKY_BANDS.orbit),
         },
         max: TilePosition {
             x: 8_000,
-            y: row_of(CONTINENTS_BOTTOM_ROWS),
+            y: row_of(V9_SKY_BANDS.continents),
         },
     }
 }
@@ -54,13 +51,14 @@ fn only_v9_fills_continents_and_keeps_v8_placement() {
         };
         assert!(continents(&eight).is_empty());
         assert!(!continents(&nine).is_empty(), "seed {seed}");
-        // Every continent is placed the same; only its content differs. (The islands are
+        // Every continent is placed in the same columns, as wide and as deep; only its
+        // altitude (V9's own, taller continent band) and its content differ. (The islands are
         // furnished by V9 too, see `worldgen::sky::isle_tests`, and the Moon by the Moon
         // generator, see `worldgen::sky::moon`.)
         let area = TileRect {
             min: TilePosition {
                 x: -6_000,
-                y: -SKY_CEILING_ROWS,
+                y: -V9_SKY_BANDS.ceiling_rows(),
             },
             max: TilePosition { x: 6_000, y: 0 },
         };
@@ -74,8 +72,8 @@ fn only_v9_fills_continents_and_keeps_v8_placement() {
         assert_eq!(a.len(), b.len());
         for (old, new) in a.iter().zip(&b) {
             assert_eq!(
-                (old.id, old.center_x, old.top_row, old.half_width, old.depth),
-                (new.id, new.center_x, new.top_row, new.half_width, new.depth)
+                (old.id, old.center_x, old.half_width, old.depth),
+                (new.id, new.center_x, new.half_width, new.depth)
             );
         }
         // The ground generates the same tiles.
@@ -381,7 +379,7 @@ fn chunk_digests_of_v9_continents_are_pinned() {
 
 // Re-pinned at the wave 4 integration: the continent tiles moved to codes 0x26-0x30 (after the
 // sky isles' tiles) when T20 and T21 were folded into one V9.
-const GOLDEN_V9_CONTINENT_DIGEST: u64 = 0x94b7_bf58_ab38_cab0;
+const GOLDEN_V9_CONTINENT_DIGEST: u64 = 0x00b0_081e_60ca_29bf;
 
 #[test]
 fn every_nest_sits_on_its_summit_with_both_eggs() {
