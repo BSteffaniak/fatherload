@@ -390,19 +390,42 @@ pub fn settle(
 /// Samples at most every three pixels and ignores the start point's own tile. A rock wall
 /// blocks a blast even if that rock is about to be removed by it.
 #[must_use]
+pub fn line_clear(terrain: &Terrain, x: f32, y: f32, end_x: f32, end_y: f32) -> bool {
+    ray_clear(terrain, (x, y), (end_x, end_y), false)
+}
+
+/// Whether an eye at `from` sees the point `to`.
+///
+/// [`line_clear`], and the line never slips between two solid tiles that touch only at a
+/// corner (stepping diagonally from one tile to the next is blocked when both tiles beside the
+/// step are solid).
+#[must_use]
+pub fn sight_clear(terrain: &Terrain, from: (f32, f32), to: (f32, f32)) -> bool {
+    ray_clear(terrain, from, to, true)
+}
+
+/// The sampled line test behind [`line_clear`] and [`sight_clear`] (`sealed_corners`: whether
+/// a diagonal step between two solid tiles blocks the line).
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
     clippy::cast_precision_loss,
-    reason = "blast rays are bounded to a few tiles"
+    reason = "rays are bounded to a few tiles"
 )]
-pub fn line_clear(terrain: &Terrain, x: f32, y: f32, end_x: f32, end_y: f32) -> bool {
+fn ray_clear(
+    terrain: &Terrain,
+    (x, y): (f32, f32),
+    (end_x, end_y): (f32, f32),
+    sealed_corners: bool,
+) -> bool {
     let distance = (end_x - x).hypot(end_y - y);
     let steps = (distance / 3.0).ceil().max(1.0) as u32;
     let origin = (
         (x / TILE_SIZE).floor() as i32,
         (y / TILE_SIZE).floor() as i32,
     );
+    let centre = |tile: i32| (tile as f32 + 0.5) * TILE_SIZE;
+    let mut previous = origin;
     (1..=steps).all(|step| {
         let t = step as f32 / steps as f32;
         let px = (end_x - x).mul_add(t, x);
@@ -411,7 +434,13 @@ pub fn line_clear(terrain: &Terrain, x: f32, y: f32, end_x: f32, end_y: f32) -> 
             (px / TILE_SIZE).floor() as i32,
             (py / TILE_SIZE).floor() as i32,
         );
-        tile == origin || !solid_at(terrain, px, py)
+        let squeezed = sealed_corners
+            && tile.0 != previous.0
+            && tile.1 != previous.1
+            && solid_at(terrain, centre(tile.0), centre(previous.1))
+            && solid_at(terrain, centre(previous.0), centre(tile.1));
+        previous = tile;
+        !squeezed && (tile == origin || !solid_at(terrain, px, py))
     })
 }
 
@@ -580,6 +609,26 @@ pub fn find_tile_path(
 mod tests {
     use super::*;
     use crate::terrain::TileKind;
+
+    #[test]
+    fn sight_never_slips_between_two_blocks_touching_at_a_corner() {
+        let mut terrain = room();
+        // Two stones touching only at the corner between tiles (5, 4) and (6, 5).
+        let _ = terrain.set_kind(TilePosition { x: 6, y: 4 }, TileKind::Stone);
+        let _ = terrain.set_kind(TilePosition { x: 5, y: 5 }, TileKind::Stone);
+        let centre = |x: f32, y: f32| ((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE);
+        let (eye, prey) = (centre(5.0, 4.0), centre(6.0, 5.0));
+        // The sampled line threads the corner; an eye does not see through it.
+        assert!(line_clear(&terrain, eye.0, eye.1, prey.0, prey.1));
+        assert!(!sight_clear(&terrain, eye, prey));
+        assert!(!sight_clear(&terrain, prey, eye));
+        // With one of the two gone there is a real gap to see through.
+        let _ = terrain.set_kind(TilePosition { x: 6, y: 4 }, TileKind::Air);
+        assert!(sight_clear(&terrain, eye, prey));
+        // Plain open air and a plain wall behave like `line_clear`.
+        assert!(sight_clear(&terrain, centre(3.0, 8.0), centre(15.0, 8.0)));
+        assert!(!sight_clear(&terrain, centre(3.0, 5.0), centre(8.0, 5.0)));
+    }
 
     /// A small closed room: stone everywhere, an air box from (2, 2) to (17, 9).
     fn room() -> Terrain {

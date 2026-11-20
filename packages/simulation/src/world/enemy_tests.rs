@@ -1,6 +1,6 @@
 //! Enemies inside the world tick: spawn rules (caves, darkness, caps, safe zones, out of view,
-//! difficulty), AI (chase, telegraphed attacks, i-frames and knockback, leash, mimics, burrowers
-//! drawn by drilling, flares luring bats, nests), damage (resistances, explosives, EMP, shields,
+//! difficulty), AI (chase, telegraphed attacks, i-frames and knockback, leash, mimics, line of
+//! sight, flares luring bats, nests), damage (resistances, explosives, EMP, shields,
 //! loot, lairs), god mode, determinism, saves and replication.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -424,14 +424,143 @@ fn enemies_give_up_beyond_their_leash_and_go_home() {
 }
 
 #[test]
-fn burrowers_feel_drilling_through_rock() {
+fn nothing_notices_a_rig_through_rock_until_the_way_is_open() {
     let mut world = cavern();
     no_spawns(&mut world);
     // Soft ground under the rig to drill into.
     fill(&mut world, 279..283, FLOOR..FLOOR + 3, TileKind::Dirt);
-    // A burrower in the stone under the floor, 7 tiles off (inside its 10-tile hearing): no
-    // line of sight.
+    // A wall across the whole cavern, four tiles from the rig, a bat right behind it; and a
+    // burrower in the stone under the floor, seven tiles off.
+    fill(&mut world, 276..277, TOP..FLOOR, TileKind::Stone);
+    let bat = world.spawn_enemy(EnemyKind::CaveBat, px(274.5), px(228.5));
     let burrower = world.spawn_enemy(EnemyKind::Burrower, px(274.0), px(236.5));
+    let _ = run(&mut world, 60);
+    // Drilling gives nothing away any more.
+    let drilling = TickInputs::held(PLAYER, ControlState::new(0.0, false, true));
+    for _ in 0..60 {
+        let events = tick_with(&mut world, &drilling);
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, GameplayEventKind::EnemyAlerted { .. })),
+            "alerted through rock"
+        );
+    }
+    for id in [bat, burrower] {
+        let (_, state) = enemy(&world, id).expect("enemy");
+        assert!(state.target.is_none(), "{:?} noticed the rig", state.kind);
+    }
+    // The wall comes down (the rig back on a whole floor, out of the hole it drilled): the
+    // bat has a clear line now; the burrower is still sealed in.
+    fill(&mut world, 279..283, FLOOR..FLOOR + 3, TileKind::Stone);
+    park_on_floor(&mut world, PLAYER, 280.5);
+    fill(&mut world, 276..277, TOP..FLOOR, TileKind::Air);
+    let _ = run(&mut world, 60);
+    let (_, state) = enemy(&world, bat).expect("bat");
+    assert_eq!(state.target, Some(PLAYER), "seen in plain sight");
+    let (_, state) = enemy(&world, burrower).expect("burrower");
+    assert!(state.target.is_none(), "still sealed in its den");
+}
+
+#[test]
+fn a_chase_is_given_up_once_rock_blocks_the_view() {
+    let mut world = cavern();
+    no_spawns(&mut world);
+    let bat = world.spawn_enemy(EnemyKind::CaveBat, px(286.5), px(228.5));
+    let _ = run(&mut world, 30);
+    assert_eq!(enemy(&world, bat).expect("bat").1.target, Some(PLAYER));
+    // The rig ends up far behind a wall across the whole cavern.
+    park_on_floor(&mut world, PLAYER, 240.5);
+    fill(&mut world, 250..251, TOP..FLOOR, TileKind::Stone);
+    let _ = run(&mut world, 60 * 8);
+    let (_, state) = enemy(&world, bat).expect("bat");
+    assert!(state.target.is_none(), "forgotten out of sight");
+    assert_ne!(state.mode, EnemyMode::Chase);
+}
+
+/// A flat stretch of open surface at night (where dune stalkers hunt): a stalker eight tiles
+/// from the rig (beyond its sight, within its hearing) and a wall three tiles high halfway
+/// between them. `sealed` roofs the stalker's side over and walls its back: a closed chamber.
+#[allow(clippy::cast_precision_loss, reason = "small tile indices")]
+fn stalker_behind_wall(sealed: bool) -> (WorldState, EntityId) {
+    let mut world = WorldState::new_game_with_settings(
+        PLAYER,
+        &crate::worldgen::WorldSettings::new(0x416E_B0D1),
+        crate::SimulationParams::new(60),
+    );
+    let length = world.day_length();
+    // 21:00 on the first day.
+    world.set_world_time_millis(length.millis() + 84 * length.slice_millis());
+    let column = (300..6_000)
+        .find(|column| {
+            let row = world.terrain().surface_row(*column);
+            (column - 40..=column + 40).all(|x| {
+                !world.night_safe_zone(TilePosition {
+                    x,
+                    y: world.terrain().surface_row(x) - 1,
+                })
+            }) && (column - 10..=column + 10).all(|x| world.terrain().surface_row(x) == row)
+        })
+        .expect("an exposed flat stretch of surface");
+    let floor = world.terrain().surface_row(column);
+    fill(
+        &mut world,
+        column - 10..column + 11,
+        floor - 12..floor,
+        TileKind::Air,
+    );
+    fill(
+        &mut world,
+        column - 10..column + 11,
+        floor..floor + 3,
+        TileKind::Stone,
+    );
+    fill(
+        &mut world,
+        column..column + 1,
+        floor - 3..floor,
+        TileKind::Stone,
+    );
+    if sealed {
+        fill(
+            &mut world,
+            column - 8..column + 1,
+            floor - 4..floor - 3,
+            TileKind::Stone,
+        );
+        fill(
+            &mut world,
+            column - 8..column - 7,
+            floor - 4..floor,
+            TileKind::Stone,
+        );
+    }
+    let rest = |radius: f32| (floor as f32).mul_add(TILE_SIZE, -radius) - 1.0;
+    let rig = world.player_mut(PLAYER).expect("player");
+    rig.x = px(column as f32 + 4.5);
+    rig.y = rest(10.0);
+    rig.velocity_x = 0.0;
+    rig.velocity_y = 0.0;
+    let stalker = world.spawn_enemy(EnemyKind::DuneStalker, px(column as f32 - 3.5), rest(10.0));
+    (world, stalker)
+}
+
+#[test]
+fn a_dune_stalker_hears_around_a_corner_but_never_through_a_sealed_wall() {
+    // A low wall: no line of sight (and too far to see anyway), but an open way over it.
+    let (mut world, stalker) = stalker_behind_wall(false);
+    let _ = run(&mut world, 30);
+    let (_, state) = enemy(&world, stalker).expect("stalker");
+    assert_eq!(state.target, Some(PLAYER), "heard over the wall");
+    // Sealed in a chamber behind the same wall, it hears nothing.
+    let (mut world, stalker) = stalker_behind_wall(true);
+    let _ = run(&mut world, 60 * 3);
+    let (_, state) = enemy(&world, stalker).expect("stalker");
+    assert!(state.target.is_none(), "heard through rock");
+    // Other kinds have no such ears: a burrower beyond its sight, the way wide open.
+    let mut world = cavern();
+    no_spawns(&mut world);
+    let burrower = world.spawn_enemy(EnemyKind::Burrower, px(272.5), floor_y(9.0));
     let _ = run(&mut world, 60);
     assert!(
         enemy(&world, burrower)
@@ -440,12 +569,6 @@ fn burrowers_feel_drilling_through_rock() {
             .target
             .is_none()
     );
-    let drilling = TickInputs::held(PLAYER, ControlState::new(0.0, false, true));
-    for _ in 0..60 {
-        let _ = tick_with(&mut world, &drilling);
-    }
-    let (_, state) = enemy(&world, burrower).expect("burrower");
-    assert_eq!(state.target, Some(PLAYER), "the drill gave the rig away");
 }
 
 #[test]

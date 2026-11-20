@@ -422,7 +422,8 @@ pub struct EnemyStats {
     pub dash_speed: f32,
     /// How far it sees a rig (with a clear line of sight), tiles.
     pub sight_tiles: f32,
-    /// How far it feels a drilling rig through rock, tiles.
+    /// How far a footstep-feeling kind ([`crate::night::feels_footsteps`]) hears prey around
+    /// corners along an open path, tiles (nothing is heard through rock; unused by other kinds).
     pub hearing_tiles: f32,
     /// How far from home it chases before giving up, tiles.
     pub leash_tiles: f32,

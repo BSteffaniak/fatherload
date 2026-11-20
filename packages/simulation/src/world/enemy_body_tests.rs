@@ -668,12 +668,21 @@ fn point_blank_shots_hit_an_enemy_touching_the_rig() {
     }
 }
 
+/// Solid tiles of the dirt bank the burrower tests bury the rig's corner in.
+fn bank_tiles(world: &WorldState) -> usize {
+    (258..290)
+        .flat_map(|x| (FLOOR - 6..FLOOR).map(move |y| TilePosition { x, y }))
+        .filter(|tile| world.terrain().is_solid_at(*tile))
+        .count()
+}
+
 #[test]
-fn burrowers_dig_real_tunnels_through_soft_rock_and_never_eat_ore() {
+fn a_hunting_burrower_chews_through_a_block_only_rarely_and_never_eats_ore() {
+    use crate::enemy::{Damage, DamageKind, DamageSource};
     let mut world = arena(60);
     no_spawns(&mut world);
-    // Bury the rig's corner of the arena in dirt: the burrower must dig to it.
-    fill(&mut world, 258..276, FLOOR - 6..FLOOR, TileKind::Dirt);
+    // Bury the rig's corner of the arena in dirt: the only way to it is through the bank.
+    fill(&mut world, 258..290, FLOOR - 6..FLOOR, TileKind::Dirt);
     fill(
         &mut world,
         263..264,
@@ -683,45 +692,34 @@ fn burrowers_dig_real_tunnels_through_soft_rock_and_never_eat_ore() {
     let ore_before: Vec<TilePosition> = (FLOOR - 6..FLOOR)
         .map(|y| TilePosition { x: 263, y })
         .collect();
-    // A pocket in the dirt, nine tiles from the rig (inside its hearing).
-    fill(&mut world, 268..269, FLOOR - 2..FLOOR - 1, TileKind::Air);
-    // Soft ground under the rig to drill into (a stock drill hears like this).
     fill(&mut world, 250..290, FLOOR..FLOOR + 16, TileKind::Stone);
-    fill(&mut world, 276..280, FLOOR..FLOOR + 1, TileKind::Dirt);
+    // The rig in a pocket of its own, nine tiles from the burrower's den.
+    fill(&mut world, 277..278, FLOOR - 1..FLOOR, TileKind::Air);
     let burrower = world.spawn_enemy(EnemyKind::Burrower, px(268.5), px(229.5));
     let player = world.player_mut(PLAYER).expect("player");
     player.x = px(277.5);
-    let air_before = (258..276)
-        .flat_map(|x| (FLOOR - 6..FLOOR).map(move |y| TilePosition { x, y }))
-        .filter(|tile| !world.terrain().is_solid_at(*tile))
-        .count();
-    // Drilling draws it (it hears the drill through the dirt).
-    let drilling = TickInputs::held(PLAYER, ControlState::new(0.0, false, true));
-    let mut moved: f32 = 0.0;
-    for tick in 0..60 * 10 {
-        // A short burst gives the rig away; then it sits still (and the burrower comes to it).
-        let inputs = if tick < 45 {
-            drilling.clone()
-        } else {
-            TickInputs::default()
-        };
-        let _ = world.simulate_tick(world.simulation_tick(), &inputs);
+    player.velocity_x = 0.0;
+    let solid_before = bank_tiles(&world);
+    let seconds = 30;
+    for tick in 0..60 * seconds {
+        // Stung again and again it keeps hunting the rig (out of sight it would forget it).
+        if tick % 120 == 0 {
+            let mut output = crate::TickOutput::default();
+            let _ = world.damage_enemy(
+                burrower,
+                Damage::new(0.01, DamageKind::Kinetic, DamageSource::Player(PLAYER)),
+                &mut output,
+            );
+        }
+        let _ = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
         let player = world.player_mut(PLAYER).expect("player");
         player.hull = player.max_hull();
         let _ = assert_bodies(&world, "burrower");
-        if let Some((_, body, ..)) = enemy_bodies(&world).into_iter().find(|e| e.0 == burrower) {
-            moved = moved.max((body.x - px(268.5)).abs());
-        }
     }
-    let air_after = (258..276)
-        .flat_map(|x| (FLOOR - 6..FLOOR).map(move |y| TilePosition { x, y }))
-        .filter(|tile| !world.terrain().is_solid_at(*tile))
-        .count();
-    assert!(moved > px(3.0), "it dug toward the rig: {moved}");
-    assert!(
-        air_after > air_before + 3,
-        "a visible tunnel: {air_before} -> {air_after}"
-    );
+    let dug = solid_before - bank_tiles(&world);
+    let most = usize::try_from(seconds * 1_000 / super::enemies::BITE_MILLIS).expect("few") + 1;
+    assert!(dug >= 1, "it can still bite its way toward its prey");
+    assert!(dug <= most, "one tile a bite, a bite now and then: {dug}");
     for tile in ore_before {
         assert!(
             matches!(
@@ -734,10 +732,11 @@ fn burrowers_dig_real_tunnels_through_soft_rock_and_never_eat_ore() {
 }
 
 /// Burrowers still live in the rock: one appearing inside solid dirt digs its den in place
-/// (open space, not moved out into a cave), the director still picks solid soft rock for them,
-/// and it digs its way to a drilling rig and bites it (the clay beds' early threat).
+/// (open space, not moved out into a cave), the director still picks solid soft rock for
+/// them, and sealed in there it lies in wait: a rig drilling nearby is never noticed and the
+/// ground around the den stays whole.
 #[test]
-fn burrowers_spawn_in_solid_soft_rock_by_digging_a_den_and_still_reach_drilling_rigs() {
+fn burrowers_spawn_in_solid_soft_rock_by_digging_a_den_and_lie_in_wait() {
     let mut world = arena(60);
     no_spawns(&mut world);
     fill(&mut world, 258..290, FLOOR - 6..FLOOR, TileKind::Dirt);
@@ -766,9 +765,14 @@ fn burrowers_spawn_in_solid_soft_rock_by_digging_a_den_and_still_reach_drilling_
     );
     assert!(!physics::collides(world.terrain(), body.x, body.y, 8.0));
     assert!(!world.terrain().is_solid_at(den), "the den is dug");
+    fill(&mut world, 277..278, FLOOR - 1..FLOOR, TileKind::Air);
     let player = world.player_mut(PLAYER).expect("player");
     player.x = px(277.5);
-    let mut bitten = 0;
+    player.velocity_x = 0.0;
+    let solid_before = (258..276)
+        .flat_map(|x| (FLOOR - 6..FLOOR).map(move |y| TilePosition { x, y }))
+        .filter(|tile| world.terrain().is_solid_at(*tile))
+        .count();
     for tick in 0..60 * 12 {
         let inputs = if tick % 120 < 45 {
             TickInputs::held(PLAYER, ControlState::new(0.0, false, true))
@@ -776,24 +780,62 @@ fn burrowers_spawn_in_solid_soft_rock_by_digging_a_den_and_still_reach_drilling_
             TickInputs::default()
         };
         let output = world.simulate_tick(world.simulation_tick(), &inputs);
+        assert!(
+            !output
+                .events
+                .iter()
+                .any(|event| matches!(event.kind, GameplayEventKind::EnemyAlerted { .. })),
+            "the drill gave the rig away through rock"
+        );
+        let _ = assert_bodies(&world, "burrower in its den");
+    }
+    let solid_after = (258..276)
+        .flat_map(|x| (FLOOR - 6..FLOOR).map(move |y| TilePosition { x, y }))
+        .filter(|tile| world.terrain().is_solid_at(*tile))
+        .count();
+    assert_eq!(
+        solid_after, solid_before,
+        "the ground around the den is whole"
+    );
+}
+
+#[test]
+fn a_burrower_with_an_open_way_to_its_prey_digs_nothing() {
+    let mut world = arena(60);
+    no_spawns(&mut world);
+    // A flat open room: stone floor, the rig five tiles from the burrower, in plain sight.
+    fill(&mut world, 258..290, FLOOR - 6..FLOOR, TileKind::Air);
+    fill(&mut world, 250..296, FLOOR..FLOOR + 4, TileKind::Stone);
+    let burrower = world.spawn_enemy(EnemyKind::Burrower, px(270.5), floor_y(9.0));
+    let player = world.player_mut(PLAYER).expect("player");
+    player.x = px(275.5);
+    player.velocity_x = 0.0;
+    let floor = |world: &WorldState| {
+        (250..296)
+            .flat_map(|x| (FLOOR..FLOOR + 4).map(move |y| TilePosition { x, y }))
+            .filter(|tile| world.terrain().is_solid_at(*tile))
+            .count()
+    };
+    let before = floor(&world);
+    let mut bitten = 0;
+    for _ in 0..60 * 20 {
+        let output = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
         bitten += output
             .events
             .iter()
-            .filter(|event| {
-                matches!(
-                    event.kind,
-                    GameplayEventKind::RigStruck {
-                        kind: EnemyKind::Burrower,
-                        ..
-                    }
-                )
-            })
+            .filter(|event| matches!(event.kind, GameplayEventKind::RigStruck { .. }))
             .count();
         let player = world.player_mut(PLAYER).expect("player");
         player.hull = player.max_hull();
-        let _ = assert_bodies(&world, "burrower from its den");
+        let _ = assert_bodies(&world, "burrower in the open");
+        assert!(enemy_bodies(&world).iter().any(|e| e.0 == burrower));
     }
-    assert!(bitten >= 1, "it dug to the drilling rig and bit it");
+    assert!(bitten >= 1, "it crawled to the rig and bit it");
+    assert_eq!(
+        floor(&world),
+        before,
+        "and ate none of the floor on the way"
+    );
 }
 
 #[test]

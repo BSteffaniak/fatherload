@@ -127,8 +127,8 @@ pub const fn light_response(kind: EnemyKind) -> LightResponse {
     }
 }
 
-/// Whether `kind` feels footsteps through the ground (it hears anything walking or resting
-/// on the surface within its hearing, not only drills).
+/// Whether `kind` hears footsteps: prey within its hearing that an open path reaches (around
+/// corners, never through rock), not only prey in plain sight.
 #[must_use]
 pub const fn feels_footsteps(kind: EnemyKind) -> bool {
     matches!(kind, EnemyKind::DuneStalker)

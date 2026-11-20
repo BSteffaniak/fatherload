@@ -206,7 +206,9 @@ fn drop_economy_report() {
 
 #[test]
 fn bombing_stays_balanced_against_drilling() {
-    let seeds = [4_242];
+    // Averaged over a few worlds: one run swings widely with what the blasts happen to free
+    // (and with every creature that wanders by).
+    let seeds = [11, 4_242, 90_001, 777_777];
     // A mid-game rig (drill tier 8) in the middle strata: plain bombs and mining charges earn
     // their keep but never dwarf drilling (drops made blasts lucrative; ore shatter and charge
     // prices hold them in line). Near the surface bombs are for tunnels, not income.

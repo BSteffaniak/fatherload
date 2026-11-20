@@ -10,18 +10,18 @@
 //!   per-rig caps and per-chunk cooldowns) and fills lair caverns near rigs with their occupant
 //!   (nests, turrets, elites). Peaceful removes every hostile.
 //! * Each enemy updates in the late entity phase ([`WorldState::advance_enemy`]): perception
-//!   (sight with line of sight, drilling vibration through rock, flares luring bats) every
+//!   (sight with a clear line, never through rock; flares luring bats) every
 //!   [`THINK_MILLIS`], a small state machine ([`EnemyMode`]: idle, chase, wind-up, strike,
 //!   recover, return home on the leash, flee, EMP stun, dormant mimics), movement by
-//!   locomotion (flying, walking with step hops, burrowing by digging real tunnels through soft
-//!   rock, stationary) with budgeted path searches ([`physics::find_tile_path`], at most one per
+//!   locomotion (flying, walking with step hops, burrowing: crawling along rock and now and then
+//!   biting a tile of soft rock out of the way, stationary) with budgeted path searches ([`physics::find_tile_path`], at most one per
 //!   enemy every [`PATH_SLOT_TICKS`] ticks, staggered by id) and contact attacks.
 //!
 //! # Bodies
 //!
 //! Enemies collide with exactly the tiles a rig does (swept [`physics::step_body`] motion):
-//! nothing passes through rock, built pieces or closed doors. Burrowers dig the soft rock they
-//! move through out of the terrain instead of ghosting. Spawns land in open space, and an enemy
+//! nothing passes through rock, built pieces or closed doors. Burrowers bite the soft rock in
+//! their way out of the terrain (one tile, rarely) instead of ghosting. Spawns land in open space, and an enemy
 //! left in rock by a terrain change is resolved out the shortest way at the start of its tick.
 //! Enemies touch rigs and pilots on foot but are pushed out of them to exactly touching after
 //! moving; contact attacks reach `CONTACT_MARGIN` beyond that, a landed hit springs the
@@ -154,13 +154,18 @@ const ENEMY_GRAVITY: f32 = 560.0;
 const HOP_SPEED: f32 = 250.0;
 /// Fastest push a hit leaves a rig with (under the safe landing speed: no crash damage).
 const RIG_KNOCKBACK_MAX: f32 = 260.0;
-/// How often an excavator bites a tile out of its way.
-const DIG_MILLIS: u64 = 350;
+/// How often a digging enemy (a burrower, an excavator) may bite one tile out of its way while
+/// it hunts. Was every 350 ms for excavators and every tick for burrowers, which riddled the
+/// ground around any rig they chased; chewing through a block is now a rare thing.
+pub const BITE_MILLIS: u64 = 4_000;
+/// Sound reaches a footstep-feeling enemy along an open path at most this many times its
+/// hearing range long (around corners, never through rock).
+const SOUND_PATH_STRETCH: f32 = 1.5;
 /// A burrower clings to rock (no gravity) while solid terrain is within this many pixels of its
 /// body: anywhere inside a tunnel it dug (whole tiles around a smaller body), not in a cavern.
 const CLING_PIXELS: f32 = 8.0;
 /// How far ahead of its body a burrower bites rock out of its way, pixels.
-const DIG_LEAD_PIXELS: f32 = 3.0;
+const DIG_LEAD_PIXELS: f32 = 6.0;
 /// Farthest an enemy left inside rock is moved out of it, pixels.
 const UNSTICK_PIXELS: f32 = TILE_SIZE;
 /// Half extents of a rig's contact box (its drawn body, a little wider than its terrain square),
@@ -978,8 +983,11 @@ impl WorldState {
         )
     }
 
-    /// The nearest rig `body` notices (seen with a clear line, or felt drilling within
-    /// earshot), skipping rigs in safe zones and disabled rigs.
+    /// The nearest rig `body` notices, skipping rigs in safe zones and disabled rigs. Nothing
+    /// is noticed through rock: prey is seen within sight with a clear line
+    /// ([`physics::line_clear`]), and a footstep-feeling enemy ([`crate::night::feels_footsteps`])
+    /// also hears prey within earshot around corners, along an open path
+    /// ([`Self::sound_reaches`]). Drilling gives nothing away any more.
     fn perceive(&self, body: &Body, state: &EnemyState) -> Option<PlayerId> {
         let spec = state.kind.stats();
         let sight = spec.sight_tiles * TILE_SIZE;
@@ -1004,18 +1012,17 @@ impl WorldState {
             })
         };
         let mut best: Option<(f32, PlayerId)> = None;
-        // Rigs (parked ones too) and pilots on foot (Part II F5) are both prey; only a
-        // drilling rig is heard through rock.
+        // Rigs (parked ones too) and pilots on foot (Part II F5) are both prey.
         let bodies = self
             .players
             .iter()
             .filter(|(_, player)| player.hull > 0.0)
-            .map(|(id, player)| (*id, player.x, player.y, true))
+            .map(|(id, player)| (*id, player.x, player.y))
             .chain(self.pilots().map(|(_, pilot_body, pilot)| {
                 let (x, y) = pilot.middle(pilot_body);
-                (pilot.owner, x, y, false)
+                (pilot.owner, x, y)
             }));
-        for (player_id, x, y, is_rig) in bodies {
+        for (player_id, x, y) in bodies {
             let dx = x - body.x;
             let dy = y - body.y;
             if dx.abs() > reach || dy.abs() > reach {
@@ -1028,19 +1035,38 @@ impl WorldState {
             if self.hostile_safe_zone(Some(state.kind), tile_of(x, y)) {
                 continue;
             }
-            // Drills are heard through rock; a dune stalker feels footsteps too (WP-NIGHT).
-            let heard = distance <= hearing
-                && (feels_steps || is_rig && self.active_drills.contains_key(&player_id));
             let seen = distance <= sight
                 && !hidden(x, y)
-                && (matches!(spec.locomotion, Locomotion::Burrowing)
-                    && distance <= TILE_SIZE * 3.0
-                    || physics::line_clear(&self.terrain, body.x, body.y, x, y));
+                && physics::sight_clear(&self.terrain, (body.x, body.y), (x, y));
+            // A dune stalker hears footsteps around corners (WP-NIGHT), never through rock.
+            let heard = !seen
+                && feels_steps
+                && distance <= hearing
+                && self.sound_reaches((body.x, body.y), (x, y), spec.hearing_tiles);
             if heard || seen {
                 best = Some((distance, player_id));
             }
         }
         best.map(|(_, id)| id)
+    }
+
+    /// Whether a sound at `to` carries to a listener at `from`: an open path of tiles joins them
+    /// (around corners, never through rock) no longer than [`SOUND_PATH_STRETCH`] times
+    /// `hearing_tiles`. A listener sealed off behind blocks hears nothing.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a small positive tile count"
+    )]
+    fn sound_reaches(&self, from: (f32, f32), to: (f32, f32), hearing_tiles: f32) -> bool {
+        let longest = (hearing_tiles * SOUND_PATH_STRETCH).ceil().max(1.0) as usize;
+        physics::find_tile_path(
+            &self.terrain,
+            tile_of(from.0, from.1),
+            tile_of(to.0, to.1),
+            PATH_NODES,
+        )
+        .is_some_and(|path| path.len() <= longest)
     }
 
     /// A lit flare within lure range of `(x, y)`, if any (bats circle it instead of hunting).
@@ -1587,7 +1613,7 @@ impl WorldState {
                 let _report = physics::step_body(body, &params, &self.terrain, dt);
             }
             Locomotion::Walking => self.walk(id, body, state, goal, intent.speed, now),
-            Locomotion::Burrowing => self.burrow(body, state, goal, intent.speed),
+            Locomotion::Burrowing => self.burrow(id, now, body, state, goal, intent.speed),
         }
         if let Some((gx, _)) = goal
             && (gx - body.x).abs() > 2.0
@@ -1608,10 +1634,7 @@ impl WorldState {
         now: SimulationTick,
     ) -> (f32, f32) {
         let spec = state.kind.stats();
-        if matches!(
-            spec.locomotion,
-            Locomotion::Burrowing | Locomotion::Stationary
-        ) {
+        if matches!(spec.locomotion, Locomotion::Stationary) {
             return goal;
         }
         // Follow a waypoint until it is reached or goes stale (no line test per tick while
@@ -1691,8 +1714,11 @@ impl WorldState {
                 let blocked = physics::solid_at(&self.terrain, ahead_x, body.y)
                     || physics::solid_at(&self.terrain, ahead_x, body.y + spec.radius - 2.0);
                 let goal_above = goal.is_some_and(|(_, gy)| gy < TILE_SIZE.mul_add(-0.75, body.y));
-                if blocked && state.kind == EnemyKind::RogueExcavator {
-                    self.dig_ahead(id, body, desired.signum(), now);
+                if blocked
+                    && state.kind == EnemyKind::RogueExcavator
+                    && self.bite_due(id, state, now)
+                {
+                    self.dig_ahead(body, desired.signum());
                 } else if blocked || goal_above {
                     let room =
                         !physics::collides(&self.terrain, body.x, body.y - TILE_SIZE, spec.radius);
@@ -1709,13 +1735,20 @@ impl WorldState {
         let _report = physics::step_body(body, &params, &self.terrain, dt);
     }
 
-    /// An excavator chews the tiles in front of it (soft rock only; never ore, fixtures or
-    /// bedrock).
-    fn dig_ahead(&mut self, id: EntityId, body: &Body, side: f32, now: SimulationTick) {
-        let period = self.timing.ticks_for_millis(DIG_MILLIS).max(1);
-        if !(now.get() + id.get()).is_multiple_of(period) {
-            return;
-        }
+    /// Whether the digging enemy `id` may bite a tile out of its way on the tick `now`: only
+    /// while it hunts (never idling, returning or fleeing), and only on its own slot of the
+    /// [`BITE_MILLIS`] cycle (staggered by id, like path searches).
+    fn bite_due(&self, id: EntityId, state: &EnemyState, now: SimulationTick) -> bool {
+        matches!(
+            state.mode,
+            EnemyMode::Chase | EnemyMode::Windup | EnemyMode::Strike
+        ) && (now.get() + id.get()).is_multiple_of(self.timing.ticks_for_millis(BITE_MILLIS).max(1))
+    }
+
+    /// An excavator bites the one tile in front of it (its own row first, else the row above;
+    /// soft rock only, never ore, fixtures or bedrock). The caller rations it
+    /// ([`Self::bite_due`]).
+    fn dig_ahead(&mut self, body: &Body, side: f32) {
         let radius = EnemyKind::RogueExcavator.stats().radius;
         let ahead = tile_of(side.mul_add(radius + 6.0, body.x), body.y);
         for dy in [0, -1] {
@@ -1728,20 +1761,24 @@ impl WorldState {
                 .tile(position)
                 .is_some_and(|tile| diggable(tile.kind))
                 && !self.enemy_safe_zone(position)
+                && self.terrain.set_kind(position, TileKind::Air)
             {
-                let _dug = self.terrain.set_kind(position, TileKind::Air);
+                return;
             }
         }
     }
 
-    /// Burrowing: a burrower digs real tunnels. Clinging to rock (any solid tile within a few
-    /// pixels of its body) it crawls toward the goal without gravity, biting the soft rock right
-    /// ahead of it out of the terrain ([`diggable`]: never ore, fixtures, built pieces or
-    /// bedrock, never inside a safe zone); in open air (a lunge, a cave) it falls. Its body
-    /// collides with everything it has not dug, like any other enemy: nothing ghosts through
-    /// rock.
+    /// Burrowing: clinging to rock (any solid tile within a few pixels of its body) a burrower
+    /// crawls toward the goal without gravity, along the open tunnels and caves its route finds;
+    /// in open air (a lunge, a cave) it falls. Only now and then, while it hunts
+    /// ([`Self::bite_due`]), does it bite the one tile of soft rock right ahead of it out of the
+    /// terrain ([`diggable`]: never ore, fixtures, built pieces or bedrock, never inside a safe
+    /// zone). Its body collides with everything it has not dug, like any other enemy: nothing
+    /// ghosts through rock.
     fn burrow(
         &mut self,
+        id: EntityId,
+        now: SimulationTick,
         body: &mut Body,
         state: &EnemyState,
         goal: Option<(f32, f32)>,
@@ -1760,10 +1797,13 @@ impl WorldState {
             let (gx, gy) = goal.unwrap_or((body.x, body.y));
             physics::steer_toward(body, gx, gy, speed, speed * 20.0, dt);
         }
-        // Dig the rock just ahead along the way it means to go (toward the goal, or along a
-        // lunge): one step at its speed plus a short lead, so it opens its way from rest too.
-        // Falling through open air digs nothing (it would bore through the floor it lands on).
-        let heading = if striking {
+        // A rare bite at the rock just ahead along the way it means to go (toward the goal, or
+        // along a lunge): one step at its speed plus a short lead, so it opens its way from
+        // rest too. Falling through open air digs nothing (it would bore through the floor it
+        // lands on).
+        let heading = if !self.bite_due(id, state, now) {
+            None
+        } else if striking {
             let ((nx, ny), _) = direction((0.0, 0.0), (body.velocity_x, body.velocity_y));
             let step = body.velocity_x.hypot(body.velocity_y) * dt;
             Some((nx, ny, step))
@@ -1780,7 +1820,7 @@ impl WorldState {
                 nx.mul_add(step + DIG_LEAD_PIXELS, body.x),
                 ny.mul_add(step + DIG_LEAD_PIXELS, body.y),
             );
-            let _dug = self.dig_box(state.kind, ahead, radius);
+            let _dug = self.bite_box(state.kind, ahead, radius);
         }
         let params = BodyParams {
             radius,
@@ -1795,8 +1835,42 @@ impl WorldState {
         let _report = physics::step_body(body, &params, &self.terrain, dt);
     }
 
-    /// Digs out every tile a burrower of `kind` can tunnel ([`diggable_by`]) a square body of half-size `radius` centred on
-    /// `(x, y)` overlaps (outside safe zones). Returns whether a tile was dug.
+    /// Bites out one tile a burrower of `kind` can tunnel ([`diggable_by`]): of those a square
+    /// body of half-size `radius` centred on `(x, y)` overlaps (outside safe zones), the one
+    /// nearest that centre. Returns whether a tile was dug.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        reason = "world pixels saturate into tile coordinates; tile coordinates are small"
+    )]
+    fn bite_box(&mut self, kind: EnemyKind, (x, y): (f32, f32), radius: f32) -> bool {
+        let low = tile_of(x - radius, y - radius);
+        let high = tile_of(x + radius, y + radius);
+        let mut nearest: Option<(f32, TilePosition)> = None;
+        for ty in low.y..=high.y {
+            for tx in low.x..=high.x {
+                let position = TilePosition { x: tx, y: ty };
+                if !self
+                    .terrain
+                    .tile(position)
+                    .is_some_and(|tile| diggable_by(kind, tile.kind))
+                    || self.enemy_safe_zone(position)
+                {
+                    continue;
+                }
+                let (cx, cy) = tile_centre(tx, ty);
+                let distance = (cx - x).hypot(cy - y);
+                if nearest.is_none_or(|(best, _)| distance < best) {
+                    nearest = Some((distance, position));
+                }
+            }
+        }
+        nearest.is_some_and(|(_, position)| self.terrain.set_kind(position, TileKind::Air))
+    }
+
+    /// Digs out every tile a burrower of `kind` can tunnel ([`diggable_by`]) a square body of
+    /// half-size `radius` centred on `(x, y)` overlaps (outside safe zones): its den when it
+    /// appears, a pocket when it is wedged. Returns whether a tile was dug.
     #[allow(
         clippy::cast_possible_truncation,
         reason = "world pixels saturate into tile coordinates"
