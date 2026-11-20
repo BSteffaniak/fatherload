@@ -513,7 +513,7 @@ fn bombs_spray_loot_and_mining_charges_keep_most_ore() {
 }
 
 #[test]
-fn blasting_the_star_core_free_starts_the_escape() {
+fn blasting_the_star_core_free_announces_it_and_starts_no_countdown() {
     let mut world = loaded_blast(ExplosiveKind::Mining);
     let _ = world.terrain_mut().set_kind(
         TilePosition { x: 21, y: 20 },
@@ -526,14 +526,43 @@ fn blasting_the_star_core_free_starts_the_escape() {
             .events
             .iter()
             .any(|event| event.kind == GameplayEventKind::EscapeStarted { player_id: PLAYER }),
-        "freeing the core is no shortcut past the escape"
+        "freeing the core is announced like drilling it"
     );
-    assert!(world.progression().escape_deadline.is_some());
+    assert!(world.progression().escape_deadline.is_none());
     assert_eq!(
         total_dropped(&world, ItemKind::Artifact(ArtifactKind::StarCore)),
         1,
         "the core drops intact"
     );
+}
+
+#[test]
+fn freeing_the_star_core_rains_no_boulders_and_wrecks_nobody() {
+    let mut world = loaded_blast(ExplosiveKind::Mining);
+    let _ = world.terrain_mut().set_kind(
+        TilePosition { x: 21, y: 20 },
+        TileKind::Artifact(ArtifactKind::StarCore),
+    );
+    world.add_player(OTHER);
+    park(&mut world, OTHER, 37.5, 9.5);
+    // Well past the old two-minute countdown that buried the first rig in cave-ins and then
+    // wrecked every rig at once.
+    for _ in 0..60 * 125 {
+        let _ = tick(&mut world);
+        assert!(world.falling_boulders().is_empty(), "a boulder fell");
+        assert!(world.collapse_warnings().is_empty());
+        for id in [PLAYER, OTHER] {
+            let rig = world.player_mut(id).expect("rig");
+            assert!(rig.hull > 0.0, "{id:?} was wrecked");
+            rig.fuel = rig.fuel_capacity;
+        }
+    }
+    // One rig's wreck is its own: the other's hull is untouched.
+    let before = world.player(OTHER).expect("rig").hull;
+    let _ = world.damage_player(PLAYER, 1.0e6);
+    let _ = tick(&mut world);
+    assert!(world.player(PLAYER).expect("rig").hull <= 0.0);
+    assert!((world.player(OTHER).expect("rig").hull - before).abs() < f32::EPSILON);
 }
 
 #[test]

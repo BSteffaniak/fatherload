@@ -401,7 +401,7 @@ fn classic_row_y(world: &WorldState, row: i32) -> f32 {
 }
 
 #[test]
-fn canonical_deep_rewards_and_escape_sequence_are_tick_deterministic() {
+fn canonical_deep_rewards_are_tick_deterministic_and_a_stale_escape_countdown_is_dropped() {
     let game = WorldImport::new_game(LOCAL_PLAYER_ID);
     let mut first = WorldState::from_import(&game);
     let mut second = first.clone();
@@ -431,15 +431,15 @@ fn canonical_deep_rewards_and_escape_sequence_are_tick_deterministic() {
             .cargo_bay
             .contains(crate::terrain::StrategicResourceKind::PressurePearl)
     );
-    let output = first.simulate_tick(SimulationTick::new(1), &crate::TickInputs::default());
-    assert!(first.failure_state(LOCAL_PLAYER_ID).is_some());
+    // The countdown an old save carried in is dropped at once: its deadline passes, nobody is
+    // wrecked and nothing falls.
     assert!(first.progression.escape_deadline.is_none());
-    assert!(output.events.iter().any(|event| {
-        event.kind
-            == crate::GameplayEventKind::PlayerDamaged {
-                player_id: LOCAL_PLAYER_ID,
-            }
-    }));
+    let hull = first.player(LOCAL_PLAYER_ID).expect("player exists").hull;
+    let _output = first.simulate_tick(SimulationTick::new(1), &crate::TickInputs::default());
+    let _output = first.simulate_tick(SimulationTick::new(2), &crate::TickInputs::default());
+    assert!(first.falling_boulders().is_empty());
+    assert!(hull > 0.0);
+    assert!(first.player(LOCAL_PLAYER_ID).expect("player exists").hull > hull - 5.0);
 }
 
 #[test]

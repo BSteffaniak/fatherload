@@ -340,13 +340,12 @@ impl WorldState {
             self.spawn_blast_drops(bomb.kind, bomb.x, bomb.y, &blast.broken);
             // A blast that frees the Star Core (it now drops intact instead of vanishing)
             // starts the escape just as drilling it does, so bombing it is no shortcut.
-            if self.progression.escape_deadline.is_none()
-                && blast.broken.iter().any(|(_, kind)| {
-                    *kind == TileKind::Artifact(crate::terrain::ArtifactKind::StarCore)
-                })
-                && let Some(player_id) = bomb.owner.or_else(|| self.players.keys().next().copied())
+            if blast.broken.iter().any(|(_, kind)| {
+                *kind == TileKind::Artifact(crate::terrain::ArtifactKind::StarCore)
+            }) && let Some(player_id) =
+                bomb.owner.or_else(|| self.players.keys().next().copied())
             {
-                self.start_escape(next_tick, player_id, output);
+                Self::start_escape(player_id, output);
             }
             self.vent_vault_seals(&blast.changed_tiles, output);
         }

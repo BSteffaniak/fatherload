@@ -1,7 +1,5 @@
 //! The fixed-tick [`WorldState::simulate_tick`] transition.
 
-use std::mem;
-
 use crate::{
     entity::{EntityKind, EntityPhase, EntityState},
     event::{ActionOutcome, GameplayEventKind, TickOutput, gameplay_event_for_applied_command},
@@ -24,15 +22,6 @@ use super::{
     movement::{AUTHORITATIVE_BOULDER_SPAWN_CHANCE, boulder_spawn_chance},
     quests::QuestNotes,
 };
-
-/// Time the rigs have to escape after the star core is mined.
-const ESCAPE_DURATION_MILLIS: u64 = 120_000;
-/// Period of the cave-ins chasing the rigs during the escape.
-const ESCAPE_CAVE_IN_PERIOD_MILLIS: u64 = 750;
-/// Period of the escape-tunnel collapse cycle.
-const ESCAPE_COLLAPSE_PERIOD_MILLIS: u64 = 1_500;
-/// Point in each collapse cycle at which the next collapse is announced.
-const ESCAPE_COLLAPSE_WARNING_PHASE_MILLIS: u64 = 1_250;
 
 impl WorldState {
     /// Advances the canonical world exactly one fixed tick.
@@ -407,7 +396,7 @@ impl WorldState {
             match result {
                 // Ore and artifacts now drop: the pickup pass reports them (`ItemsCollected`).
                 MineResult::Mined(TileKind::Artifact(ArtifactKind::StarCore)) => {
-                    self.start_escape(next_tick, player_id, &mut output);
+                    Self::start_escape(player_id, &mut output);
                 }
                 MineResult::Mined(TileKind::Stone | TileKind::HardRock) => {
                     let chance = self
@@ -431,7 +420,7 @@ impl WorldState {
                 MineResult::Blast => {
                     if let Some(player) = self.players.get(&player_id) {
                         let (player_x, player_y) = (player.x, player.y);
-                        let _loose = self.spawn_cave_in(player_x, player_y);
+                        let _loose = self.try_cave_in(player_x, player_y);
                     }
                     output.push_event(GameplayEventKind::HazardChanged);
                     output.push_event(GameplayEventKind::BouldersChanged);
@@ -454,7 +443,7 @@ impl WorldState {
         self.advance_canonical_day_if_due(next_tick, &mut output);
         let clock_before = self.clock();
         self.advance_clock(clock_before, next_tick, &mut output);
-        self.advance_escape_sequence(next_tick, &mut output);
+        self.clear_legacy_escape();
         self.advance_progression_depth(&mut output);
         let pressure_player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in pressure_player_ids {
@@ -513,85 +502,18 @@ impl WorldState {
         self.terrain.stream_around(&centers);
     }
 
-    /// Breaking the Star Core out of the rock (drilled, or freed by a blast) starts the escape
-    /// countdown.
-    pub(super) fn start_escape(
-        &mut self,
-        next_tick: SimulationTick,
-        player_id: PlayerId,
-        output: &mut TickOutput,
-    ) {
-        self.progression.escape_deadline =
-            Some(SimulationTick::new(next_tick.get().saturating_add(
-                self.timing.ticks_for_millis(ESCAPE_DURATION_MILLIS),
-            )));
+    /// Breaking the Star Core out of the rock (drilled, or freed by a blast) is announced, and
+    /// nothing more: the old escape countdown (cave-ins raining on the first rig wherever it
+    /// went, the tunnel filling in under it, every rig wrecked when the time ran out) is gone.
+    pub(super) fn start_escape(player_id: PlayerId, output: &mut TickOutput) {
         output.push_event(GameplayEventKind::EscapeStarted { player_id });
     }
 
-    pub(super) fn advance_escape_sequence(
-        &mut self,
-        next_tick: SimulationTick,
-        output: &mut TickOutput,
-    ) {
-        let Some(deadline) = self.progression.escape_deadline else {
-            return;
-        };
-        if next_tick >= deadline {
-            let immune = self.damage_immune();
-            for (player_id, player) in &mut self.players {
-                if immune {
-                    continue;
-                }
-                player.hull = 0.0;
-                output.push_event(GameplayEventKind::PlayerDamaged {
-                    player_id: *player_id,
-                });
-            }
-            self.progression.escape_deadline = None;
-            return;
-        }
-        let rate = self.timing.rate;
-        if rate.schedule_fires(next_tick, ESCAPE_CAVE_IN_PERIOD_MILLIS, 0)
-            && let Some(player) = self.players.values().next()
-        {
-            let (x, y) = (player.x, player.y);
-            if self.spawn_cave_in(x, y) {
-                output.push_event(GameplayEventKind::BouldersChanged);
-            }
-        }
-        if rate.schedule_fires(
-            next_tick,
-            ESCAPE_COLLAPSE_PERIOD_MILLIS,
-            ESCAPE_COLLAPSE_WARNING_PHASE_MILLIS,
-        ) {
+    /// Drops an escape countdown (and its pending tunnel collapses) carried in by a save or a
+    /// replica from before the escape sequence was removed.
+    pub(super) fn clear_legacy_escape(&mut self) {
+        if self.progression.escape_deadline.take().is_some() {
             self.collapse_warnings.clear();
-            if let Some(player) = self.players.values().next() {
-                let center = player.tile_position(TILE_SIZE);
-                for dx in -2..=2 {
-                    let position = TilePosition {
-                        x: center.x + dx,
-                        y: center.y + 5,
-                    };
-                    if position.y > 7
-                        && !self.terrain.is_solid_at(position)
-                        && !self.infrastructure.iter().any(|item| {
-                            item.kind == InfrastructureKind::TunnelSupport
-                                && (item.position.x - position.x).abs() <= 3
-                                && (item.position.y - position.y).abs() <= 3
-                        })
-                    {
-                        self.collapse_warnings.push(position);
-                    }
-                }
-            }
-        } else if rate.schedule_fires(next_tick, ESCAPE_COLLAPSE_PERIOD_MILLIS, 0) {
-            for position in mem::take(&mut self.collapse_warnings) {
-                if self.terrain.set_kind(position, TileKind::Stone) {
-                    self.scan_markers
-                        .retain(|marker| marker.position != position);
-                }
-            }
-            output.push_event(GameplayEventKind::EscapeTunnelChanged);
         }
     }
 

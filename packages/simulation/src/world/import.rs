@@ -148,8 +148,8 @@ impl WorldState {
             progression: CanonicalProgressionState {
                 contracts: import.contracts.clone(),
                 deep_claim_status: import.deep_claim_status,
-                escape_deadline: (import.escape_sequence_seconds > 0.0)
-                    .then(|| SimulationTick::new(ticks(import.escape_sequence_seconds))),
+                // The escape countdown is gone: an old save's running one is dropped.
+                escape_deadline: None,
                 deep_reward_milestones: BTreeMap::from([(player_id, import.deep_reward_milestone)]),
                 town_development: import.town_development.clone(),
                 active_side_contracts: import.active_side_contracts.clone(),

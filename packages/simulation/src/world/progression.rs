@@ -93,7 +93,14 @@ impl WorldState {
                 }
             }
             WorldEventKind::Earthquake => {
-                if let Some(player) = self.players.values().next() {
+                // One cave-in over the deepest rig (it used to pick the first player, wherever
+                // that rig was); `try_cave_in` keeps it underground on unsettled ground.
+                if let Some(player) = self
+                    .players
+                    .values()
+                    .filter(|player| player.hull > 0.0)
+                    .max_by(|a, b| a.y.total_cmp(&b.y))
+                {
                     let x = player.x;
                     let y = player.y;
                     if self.try_cave_in(x, y) {

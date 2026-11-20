@@ -22,8 +22,9 @@ use super::{
 /// Period of the collapse-surge cave-in roll near an underground rig. Was 3 s, which rained a
 /// cave-in on the rig every 3 s for the whole multi-day event; each one also has to find
 /// unsettled ground now ([`SETTLED_GROUND_MILLIS`]). 45 s still met an exploring rig (always
-/// on fresh ground) with a cave-in most rolls, about one a minute for the event's 15-20 min.
-pub const COLLAPSE_SURGE_PERIOD_MILLIS: u64 = 90_000;
+/// on fresh ground) with a cave-in most rolls, about one a minute for the event's 15-20 min;
+/// 90 s was still a steady drizzle. Five minutes makes it a few per event.
+pub const COLLAPSE_SURGE_PERIOD_MILLIS: u64 = 300_000;
 /// Period of gas-bloom clouds near a deep rig.
 const GAS_BLOOM_PERIOD_MILLIS: u64 = 4_000;
 /// Period of gas clouds released by rare cargo on a deep run.
@@ -35,8 +36,9 @@ const DEEP_PRESSURE_SCANNER_LOCKOUT_MILLIS: u64 = 1_200;
 const DEEP_PRESSURE_PER_BAND: f32 = 0.05;
 /// Scale on everything that builds deep-run instability (bands, trip time, rare cargo). Was
 /// 1.0: with the meter refilling from 45 an exploring rig met a cave-in about once a minute
-/// in the crystal faults; halved (and emptying when full) it is about one every four.
-const DEEP_INSTABILITY_BUILD_SCALE: f32 = 0.5;
+/// in the crystal faults; halved (and emptying when full) it was about one every four, and
+/// halved again about one every eight.
+const DEEP_INSTABILITY_BUILD_SCALE: f32 = 0.25;
 /// Hull damage of a falling boulder hitting a rig (before the boulder deflector).
 pub const BOULDER_HIT_DAMAGE: f32 = 8.0;
 /// Radius of a falling boulder (px, the sprite's half height): it hangs this far under the top
@@ -44,7 +46,7 @@ pub const BOULDER_HIT_DAMAGE: f32 = 8.0;
 pub const BOULDER_RADIUS: f32 = 11.0;
 /// How long ground that came down holds: no random collapse (mining boulder, collapse surge,
 /// deep-run cave-in, earthquake, stalactite) starts in or next to its cell for this long.
-pub const SETTLED_GROUND_MILLIS: u64 = 180_000;
+pub const SETTLED_GROUND_MILLIS: u64 = 600_000;
 /// Rows above the rig a cave-in boulder may hang (under the ceiling when it is that close; the
 /// old spawn was always two rows up, ceiling or not).
 const CAVE_IN_RISE_ROWS: i32 = 3;
@@ -178,13 +180,11 @@ impl WorldState {
             // A full meter empties (it used to drop to 45 and refill within a couple of
             // minutes); the cave-in itself still needs unsettled ground.
             state.instability = 0.0;
+            // The cave-in hurts only through its boulders, which can be dodged (it used to
+            // cost hull outright as well).
             let player = self.players.get(&player_id).expect("player remains valid");
             let (player_x, player_y) = (player.x, player.y);
-            let damage = player.hazard_gear.boulder_damage(4.0);
             if self.try_cave_in(player_x, player_y) {
-                if self.damage_player(player_id, damage) {
-                    output.push_event(GameplayEventKind::PlayerDamaged { player_id });
-                }
                 output.push_event(GameplayEventKind::BouldersChanged);
             }
         }
