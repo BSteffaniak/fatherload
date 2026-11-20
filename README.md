@@ -99,7 +99,7 @@ Saves and settings go to `%LOCALAPPDATA%\fatherload`.
 
 Drill below the surface, gather minerals and artifacts, manage fuel/hull/cargo/debt, complete HQ contracts, buy upgrades, use scanners and bombs, and push deeper toward the Star Core. Deeper layers add harder rock, richer ore, artifacts, gas, lava, magma vents, pressure pockets, explosive pockets, falling boulders, cave-ins, and stronger heat pressure.
 
-The dark caves below the topsoil are home to enemies, creatures and machines that grow tougher with depth: bat swarms, burrowers that hear your drill through the rock, acid spitters, rock mimics posing as boulders, armoured shellbacks, magma wisps in the mantle, brood nests and their brood lords, rogue mining drones, sentry turrets, excavators that chew toward you and shielded ancient guardians. Each has a tell before it strikes (a screech, a wind-up, a charge glow) and a counter: bombs crack armour, EMP charges knock machines out and drop shields, flares lure bats away. A hit knocks the rig back and leaves it a moment of invulnerability; the surface, the town and your outposts stay safe, kills drop ore and materials, and cleared lairs stay cleared. The New World dialog (and the host's pause menu) sets enemies to Peaceful, Normal or Hard; god mode makes rigs immune.
+The dark caves below the topsoil are home to enemies, creatures and machines that grow tougher with depth: bat swarms, burrowers lying in wait in dens in the rock, acid spitters, rock mimics posing as boulders, armoured shellbacks, magma wisps in the mantle, brood nests and their brood lords, rogue mining drones, sentry turrets, excavators that now and then chew a block out of their way and shielded ancient guardians. Each has a tell before it strikes (a screech, a wind-up, a charge glow) and a counter: bombs crack armour, EMP charges knock machines out and drop shields, flares lure bats away. A hit knocks the rig back and leaves it a moment of invulnerability; the surface, the town and your outposts stay safe, kills drop ore and materials, and cleared lairs stay cleared. The New World dialog (and the host's pause menu) sets enemies to Peaceful, Normal or Hard; god mode makes rigs immune.
 
 The upgrade shop sells long upgrade lines (up to 15 tiers: endgame bays of ~600 slots, tanks of ~15,000 fuel, hulls of ~2,500, drills that plow through the hardest rock) and a hazard counter for every danger: Heat Shielding (each layer runs hotter; radiator and shielding together decide how deep you stay cool), Lava Plating (lava is drillable but burns; the top tier is lava-proof), Gas Scrubber, Pressure Bracing (pressure pockets, explosive pockets, magma vents) and Boulder Deflector.
 
@@ -124,7 +124,7 @@ with the day count and the time.
 "NIGHT FALLS" banner and a low sting warn you) and they burrow and flee at dawn ("DAWN", with
 the night's tally). Which ones depends on the land: packs of **shadow hounds** on the plains,
 tundra, badlands and mountains (they will not step into lamp light and run from flares),
-**dune stalkers** that feel footsteps and burst out of desert sand, **will-o'-wisps** drifting
+**dune stalkers** that hear footsteps around corners (never through solid ground), **will-o'-wisps** drifting
 over marsh and forest throwing cold wispfire (bullets pass through them; blasts do not), and
 **moth swarms** drawn to every light (a lamp out past your camp lures them off). The Moon
 matters: a full moon brings more of them and brighter nights; on a new moon the **umbral alpha**

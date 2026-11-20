@@ -86,16 +86,21 @@ every boulder source follows (new ones must too):
   meets solid ground, leaving its rubble on top of what it hit; nothing else breaks it.
 - *Settled ground* (`hazard::SettledGround`, `CanonicalProgressionState::settled_ground`, saved,
   hashed only once non-empty, replicated in the timers section): every collapse settles its
-  8 x 8-tile cell for `SETTLED_GROUND_MILLIS` (3 min), and no random collapse starts in or next
+  8 x 8-tile cell for `SETTLED_GROUND_MILLIS` (10 min; was 3), and no random collapse starts in or next
   to a settled cell. Random collapses go through `loosen_ground` (underground only: 3+ rows under
   the local surface): mining boulders, collapse surges, deep-run cave-ins, earthquakes and
-  stalactites (`try_cave_in` for cave-ins). Scripted ones (an explosive pocket's blast, the Star
-  Core escape) call `spawn_cave_in` directly: they ignore settled ground but still settle it.
-- *Rates*: a collapse surge rolls a cave-in every 90 s (`COLLAPSE_SURGE_PERIOD_MILLIS`; was
+  stalactites (`try_cave_in` for cave-ins). Nothing calls `spawn_cave_in` directly any more (an explosive pocket's
+  blast goes through `try_cave_in` too), so no boulder ever starts above ground. The Star Core
+  escape is gone: it rained a cave-in on the first player every 750 ms wherever that rig went
+  (the surface included), filled the tunnel in under it and wrecked every rig when its hidden
+  two minutes ran out. Freeing the core now only emits `EscapeStarted`; a countdown carried in
+  by an old save or replica is dropped (`clear_legacy_escape`). An earthquake's one cave-in
+  falls over the deepest rig, not the first player.
+- *Rates*: a collapse surge rolls a cave-in every 5 min (`COLLAPSE_SURGE_PERIOD_MILLIS`; was
   every 3 s for its whole three-to-four market days, the "falling over and over" of the
-  playtest); deep-run instability builds at half its old rate (`DEEP_INSTABILITY_BUILD_SCALE`),
-  a full meter empties (was: back to 45, refilling within a minute or two) and its 4-hull jolt
-  only lands with an actual cave-in; one stalactite in three is loose (`stalactite_is_loose`, a fixed per-tile
+  playtest, then every 90 s); deep-run instability builds at a quarter of its first rate
+  (`DEEP_INSTABILITY_BUILD_SCALE`), a full meter empties (was: back to 45, refilling within a
+  minute or two) and its cave-in hurts only through its boulders (the 4-hull jolt is gone); one stalactite in three is loose (`stalactite_is_loose`, a fixed per-tile
   roll; the rest never fall); cave-in warnings are 1.5 s plus 0.25 s per column out (were 0.9 s
   and 0.2 s). The renderer adds ceiling dust that thickens and a harder shake near the drop.
 - `boulder_frequency_report` (`cargo test -p fatherload_simulation --release
@@ -431,8 +436,8 @@ below describe each track; this one lists what the integration unified.
 - *Enemy bodies*: every wave 4 kind moves through the shared enemy step (`step_body`,
   `free_from_rock`, `keep_off_bodies`) and has a real `EnemyKind::contact_half` sized to its
   art; airship turrets riding their hull take the nearest open spot when the mount point would
-  sit in rock; dune stalkers dig real tunnels through the crust they hunt in
-  (`diggable_by`); spawns search up to four tiles for open space. `world::enemy_body_tests::
+  sit in rock; dune stalkers den in the crust they hunt in and bite through it rarely
+  (`diggable_by`, `BITE_MILLIS`); spawns search up to four tiles for open space. `world::enemy_body_tests::
   wave_four_families_keep_their_bodies_in_their_habitats` soaks the sky families on a cloud
   archipelago isle, the night monsters on the night surface and the Moon's creatures on the
   regolith. Pilot weapons go through `launch_projectiles` and the Act II and Moon guns through
@@ -1127,8 +1132,7 @@ overhead of placing, retreating, waiting and trips to the surface (the economy b
 strategy measures that loop). A base workshop presses them for 12 blocks and 90 cr (was 8
 and 30, a fifth of the shack price, which made crafted charges the money printer).
 `bombing_stays_balanced_against_drilling` pins both, shack and workshop price. (One mid-depth
-bomb run frees a Star Core, which starts the escape and its cave-ins, just as drilling it
-would.) Block sales add at most a few percent to drilling income.
+bomb run frees a Star Core, which is announced just as drilling it would be.) Block sales add at most a few percent to drilling income.
 
 ### Performance
 
@@ -1246,7 +1250,7 @@ and danger grow with depth, and a Peaceful world has none.
 | Kind | Family | Moves | Attack (tell) | Counter |
 |---|---|---|---|---|
 | Cave bat | creature | flies in packs | bites on contact | anything; a lit flare lures the swarm |
-| Burrower | creature | digs real tunnels through soft rock (never ore) | lunges (rumble, glinting eyes) | stop drilling (it hears drills through rock), bombs |
+| Burrower | creature | dens in soft rock, crawls open tunnels; hunting, bites one tile out of its way every few seconds at most (never ore) | lunges (rumble, glinting eyes) | break line of sight, bombs |
 | Acid spitter | creature | walks | lobbed acid (puffs up) | close in or break line of sight |
 | Rock mimic | creature, armoured | dormant boulder, then walks | lunge (wakes when you come close) | explosives |
 | Shellback | creature, armoured | slow walker | charge (wind-up) | explosives, armour piercing |
@@ -1255,7 +1259,7 @@ and danger grow with depth, and a Peaceful world has none.
 | Brood lord | creature, elite | walks (lairs) | acid volleys and charges | explosives, keep moving |
 | Mining drone | machine | flies | ram (beep) | EMP |
 | Sentry turret | machine | stationary | energy bolts (charge glow) | EMP, explosives |
-| Rogue excavator | machine | walks, chews through soft rock | charge (engine rev) | EMP, explosives |
+| Rogue excavator | machine | walks; hunting, bites one tile of soft rock out of its way every few seconds at most | charge (engine rev) | EMP, explosives |
 | Ancient guardian | machine, elite | hovers (lairs) | bolt volleys; shielded | EMP drops the shield, then explosives |
 
 - **Data** (`enemy.rs`): `EnemyKind::stats` (family, locomotion, attack style, radius, health,
@@ -1265,6 +1269,17 @@ and danger grow with depth, and a Peaceful world has none.
   `loot(kind, tier, roll)` and `ShotKind` (acid lobs, fireballs, bolts). Health and damage
   scale with the depth tier the enemy spawned at (`tier_scale`, the band index), the crew size
   (+30 % health per extra rig) and the difficulty.
+- **Perception** (`perceive`): nothing is noticed through rock. Prey is seen within
+  `sight_tiles` with a clear line (`physics::sight_clear`, which also refuses to look between
+  two blocks touching at a corner), and kept for `LOSE_TARGET_MILLIS` (4 s) out of sight; a hit
+  turns an enemy on its attacker. Drilling gives nothing away (burrowers used to hear drills
+  through rock and sense rigs within three tiles of any rock). Only footstep-feeling kinds
+  (the dune stalker) use `hearing_tiles`, along an open path at most 1.5 times that long.
+- **Digging** (`bite_due`, `bite_box`, `dig_ahead`): burrowers and excavators path through
+  open tiles like everything else. While hunting, one may bite a single diggable tile out of
+  its way on its slot of the `BITE_MILLIS` (4 s) cycle; they used to clear every tile they
+  touched, every tick (burrowers) or every 350 ms (excavators). A burrower still digs its den
+  when it appears.
 - **Entities**: an enemy is `EntityState::Enemy(EnemyState)` (mode, deadlines, target, home
   tile, path waypoint, facing, hurt / burn timers, lair, parent nest, seed, last attacker); a
   projectile is `EntityState::EnemyShot` with an expiry. Both update in the late entity phase,
@@ -1492,8 +1507,9 @@ villages, camps, homes and lit bases are safe; Peaceful turns it off (plan §11 
 - **Night monsters** (`EnemyKind::ShadowHound`, `DuneStalker`, `WillOWisp`, `MothSwarm`,
   `UmbralAlpha`; `night::is_nocturnal`): ordinary enemies (stats, resistances, loot, the AI,
   the damage model, replication) that only the night pass spawns. Hounds hunt in packs and
-  pounce; stalkers swim through soft surface crusts (`night::stalker_ground`) and feel
-  footsteps (`night::feels_footsteps`: anything within hearing, not just drills); wisps throw
+  pounce; stalkers swim through soft surface crusts (`night::stalker_ground`) and hear
+  footsteps (`night::feels_footsteps`: prey within hearing that an open path of tiles reaches,
+  around corners but never through rock; `sound_reaches`); wisps throw
   `ShotKind::Wispfire`, shrug off kinetic hits and give light; moth swarms are one entity, a
   contact swarmer that burns easily; the alpha is an elite. They drop night-only materials
   (`StrategicResourceKind::MothSilk`, `ShadowPelt`, `StalkerFang`, `WispEssence`,
