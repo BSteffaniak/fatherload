@@ -443,7 +443,11 @@ impl WorldState {
         };
         state.facing = if tx < body.x { -1 } else { 1 };
         let (_, distance) = direction((body.x, body.y), (tx, ty));
-        if now >= state.attack_ready && distance <= spec.attack_range_tiles * TILE_SIZE {
+        // A golem only winds up at prey it can see: no slams through a wall.
+        if now >= state.attack_ready
+            && distance <= spec.attack_range_tiles * TILE_SIZE
+            && physics::line_clear(&self.terrain, body.x, body.y, tx, ty)
+        {
             state.mode = EnemyMode::Windup;
             state.mode_until = self.after(now, spec.windup_millis);
             body.velocity_x = 0.0;
@@ -464,7 +468,7 @@ impl WorldState {
         }
     }
 
-    /// A golem's slam: everyone standing within [`SLAM_REACH`] is struck.
+    /// A golem's slam: everyone standing within [`SLAM_REACH`] in its line of sight is struck.
     fn golem_slam(
         &mut self,
         body: &Body,
@@ -474,7 +478,14 @@ impl WorldState {
     ) {
         let spec = state.kind.stats();
         let damage = spec.contact_damage * tier_scale(state.tier);
-        for (pilot, _) in self.pilots_near(body.x, body.y, SLAM_REACH) {
+        let struck: Vec<EntityId> = self
+            .pilots_near(body.x, body.y, SLAM_REACH)
+            .into_iter()
+            // The shock runs along the floor, not through masonry.
+            .filter(|(_, (mx, my))| physics::line_clear(&self.terrain, body.x, body.y, *mx, *my))
+            .map(|(pilot, _)| pilot)
+            .collect();
+        for pilot in struck {
             let _ = self.strike_pilot_as(
                 Some(state.kind),
                 pilot,
