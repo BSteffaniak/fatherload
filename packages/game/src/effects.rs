@@ -1057,7 +1057,9 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::NightSurvived { .. }
         | GameplayEventKind::RareNightSpawn { .. }
         | GameplayEventKind::NightMonsterBurrowed { .. }
-        | GameplayEventKind::TombAmbush { .. } => None,
+        | GameplayEventKind::TombAmbush { .. }
+        | GameplayEventKind::TombTrapSprung { .. }
+        | GameplayEventKind::TombGuardianPhase { .. } => None,
     }
 }
 

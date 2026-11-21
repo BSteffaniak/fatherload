@@ -25,7 +25,7 @@ use fatherload_simulation::{
 use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
-    sprites::{enemies as art, moon as moon_art},
+    sprites::{enemies as art, moon as moon_art, tomb as tomb_art},
 };
 
 use super::{ART, Pen, fx::disc, snap};
@@ -62,6 +62,12 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::WillOWisp => &art::WILL_O_WISP,
         EnemyKind::MothSwarm => &art::NIGHT_MOTH,
         EnemyKind::UmbralAlpha => &art::UMBRAL_ALPHA,
+        EnemyKind::Mummy => &tomb_art::MUMMY,
+        EnemyKind::CryptBat => &tomb_art::CRYPT_BAT,
+        EnemyKind::SkeletalArcher => &tomb_art::SKELETAL_ARCHER,
+        EnemyKind::AnimatedStatue => &tomb_art::ANIMATED_STATUE,
+        EnemyKind::SunColossus => &tomb_art::SUN_COLOSSUS,
+        EnemyKind::HollowMatriarch => &tomb_art::HOLLOW_MATRIARCH,
     }
 }
 
@@ -74,6 +80,9 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::Bolt => &art::SHOT_BOLT,
         ShotKind::Cannonball => &art::SHOT_CANNONBALL,
         ShotKind::Wispfire => &art::SHOT_WISPFIRE,
+        ShotKind::Arrow => &tomb_art::SHOT_ARROW,
+        ShotKind::Rubble => &tomb_art::SHOT_RUBBLE,
+        ShotKind::Hex => &tomb_art::SHOT_HEX,
     }
 }
 
@@ -130,7 +139,9 @@ pub(super) fn draw_enemies(draw: &mut impl RaylibDraw, scene: &EnemyScene<'_>) {
         }
         match &entity.state {
             EntityState::Enemy(state) => draw_enemy(draw, scene, entity, state, (x, y)),
-            EntityState::EnemyShot(shot) => draw_shot(draw, scene, *shot, (x, y)),
+            EntityState::EnemyShot(shot) => {
+                draw_shot(draw, scene, *shot, (x, y), entity.body.velocity_x < 0.0);
+            }
             _ => {}
         }
     }
@@ -166,11 +177,37 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
                 0
             }
         }
-        EnemyKind::RockMimic => match state.mode {
+        EnemyKind::RockMimic | EnemyKind::AnimatedStatue => match state.mode {
             EnemyMode::Dormant => 0,
             EnemyMode::Windup | EnemyMode::Strike => 2,
             _ => 1,
         },
+        // Tomb walkers (T28): a stride while moving, their attack pose winding up.
+        EnemyKind::Mummy | EnemyKind::SkeletalArcher => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 4.5) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::SunColossus => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 2.5) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::HollowMatriarch => {
+            if attacking {
+                2
+            } else {
+                ((phase * 3.0) as usize) % 2
+            }
+        }
         EnemyKind::SentryTurret => usize::from(
             state.mode == EnemyMode::Windup && ((phase * 12.0) as usize).is_multiple_of(2),
         ),
@@ -229,7 +266,8 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         | EnemyKind::SkyPirate
         | EnemyKind::HarpyNester
         | EnemyKind::WillOWisp
-        | EnemyKind::MothSwarm => sprite.frame_at(phase),
+        | EnemyKind::MothSwarm
+        | EnemyKind::CryptBat => sprite.frame_at(phase),
     }
 }
 
@@ -251,6 +289,8 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::ShadowHound
             | EnemyKind::DuneStalker
             | EnemyKind::UmbralAlpha
+            | EnemyKind::Mummy
+            | EnemyKind::SkeletalArcher
     )
 }
 
@@ -364,6 +404,20 @@ fn draw_enemy(
             disc(draw, x, y - ART * 2.0, 20 + pulse, with_alpha(PLUM, 50));
             disc(draw, x, y - ART * 2.0, 13, with_alpha(VIOLET, 40));
         }
+        // Tomb guardians (T28): the colossus' sun glows through its chest, the matriarch
+        // trails a violet murk.
+        EnemyKind::SunColossus => {
+            let pulse = ((seconds * 3.0).sin() * 2.0) as i32;
+            disc(draw, x, y - ART * 4.0, 14 + pulse, with_alpha(AMBER, 34));
+        }
+        EnemyKind::HollowMatriarch => {
+            let pulse = ((seconds * 2.0).sin() * 2.0) as i32;
+            disc(draw, x, y, 22 + pulse, with_alpha(PLUM, 46));
+            disc(draw, x, y - ART * 6.0, 9, with_alpha(MINT, 26));
+        }
+        EnemyKind::AnimatedStatue if state.mode != EnemyMode::Dormant => {
+            disc(draw, x, y - ART * 6.0, 5, with_alpha(AMBER, 40));
+        }
         EnemyKind::ShadowHound => {
             for puff in 0..3 {
                 let drift = (seconds * 1.5 + puff as f32 * 0.33).fract();
@@ -414,6 +468,9 @@ fn draw_enemy(
             | EnemyKind::UmbralAlpha => Some(RED),
             EnemyKind::Warden | EnemyKind::ShadowHound | EnemyKind::WillOWisp => Some(MINT),
             EnemyKind::DuneStalker => Some(SAND),
+            EnemyKind::Mummy | EnemyKind::AnimatedStatue | EnemyKind::SunColossus => Some(AMBER),
+            EnemyKind::SkeletalArcher => Some(RED),
+            EnemyKind::HollowMatriarch => Some(LAVENDER),
             _ => None,
         };
         if let Some(glow) = glow {
@@ -706,6 +763,7 @@ fn draw_shot(
     scene: &EnemyScene<'_>,
     shot: EnemyShotState,
     (x, y): (f32, f32),
+    westward: bool,
 ) {
     let sprite = shot_sprite(shot.kind);
     let (width, height) = (sprite.width() as f32 * ART, sprite.height() as f32 * ART);
@@ -713,14 +771,26 @@ fn draw_shot(
         ShotKind::Acid => LIME,
         ShotKind::Fireball | ShotKind::Cannonball => ORANGE,
         ShotKind::Bolt | ShotKind::Wispfire => MINT,
+        // Tomb shots (T28): a faint glint on an arrow, dust round rubble, a hex's violet halo.
+        ShotKind::Arrow => STEEL_LIGHT,
+        ShotKind::Rubble => SAND,
+        ShotKind::Hex => VIOLET,
     };
-    disc(draw, x, y, 4, with_alpha(glow, 50));
-    sprite::draw_sprite(
+    disc(
+        draw,
+        x,
+        y,
+        if shot.kind == ShotKind::Hex { 7 } else { 4 },
+        with_alpha(glow, 50),
+    );
+    // An arrow points the way it flies.
+    sprite::draw_sprite_flipped(
         draw,
         sprite,
         sprite.frame_at(scene.seconds()),
         Vector2::new(snap(x - width * 0.5), snap(y - height * 0.5)),
         ART,
+        shot.kind == ShotKind::Arrow && westward,
         Color::WHITE,
     );
 }

@@ -234,7 +234,48 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::StoryQuill => Patch::StoryQuill,
         SoundCue::StoryClimax => Patch::StoryClimax,
         SoundCue::StoryResolved => Patch::StoryResolved,
+        SoundCue::BladeSwish => Patch::BladeSwish,
+        SoundCue::CrusherSlam => Patch::CrusherSlam,
+        SoundCue::DartFire => Patch::DartFire,
+        SoundCue::FloorCrumble => Patch::FloorCrumble,
+        SoundCue::SandPour => Patch::SandPour,
+        SoundCue::FogBurst => Patch::FogBurst,
+        SoundCue::MummyGroan => Patch::MummyGroan,
+        SoundCue::BoneRattle => Patch::BoneRattle,
+        SoundCue::StatueGrind => Patch::StatueGrind,
+        SoundCue::ColossusSlam => Patch::ColossusSlam,
+        SoundCue::MatriarchWail => Patch::MatriarchWail,
     }
+}
+
+/// The voice of a side-view tomb creature (WP-TOMBS T28) for its tell and wind-up: a mummy's
+/// groan, an archer's rattling bones, a statue's grinding stone, the guardians' slam and wail.
+/// `None` for every other kind.
+#[must_use]
+pub const fn tomb_voice(kind: EnemyKind) -> Option<SoundCue> {
+    Some(match kind {
+        EnemyKind::Mummy => SoundCue::MummyGroan,
+        EnemyKind::SkeletalArcher => SoundCue::BoneRattle,
+        EnemyKind::AnimatedStatue => SoundCue::StatueGrind,
+        EnemyKind::SunColossus => SoundCue::ColossusSlam,
+        EnemyKind::HollowMatriarch => SoundCue::MatriarchWail,
+        _ => return None,
+    })
+}
+
+/// The sound of a side-view trap going off (WP-TOMBS T28).
+#[must_use]
+pub const fn trap_cue(kind: fatherload_simulation::tomb::realize::TrapKind) -> Option<SoundCue> {
+    use fatherload_simulation::tomb::realize::TrapKind;
+    Some(match kind {
+        TrapKind::Blade => SoundCue::BladeSwish,
+        TrapKind::Crusher => SoundCue::CrusherSlam,
+        TrapKind::DartWall => SoundCue::DartFire,
+        TrapKind::Crumble => SoundCue::FloorCrumble,
+        TrapKind::SandSluice => SoundCue::SandPour,
+        TrapKind::FogVent => SoundCue::FogBurst,
+        TrapKind::Spikes | TrapKind::FalseWall => return None,
+    })
 }
 
 /// The voice of a night monster (WP-NIGHT) for its tells and wind-ups: a hound's howl, the
@@ -267,6 +308,9 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::Fireball | ShotKind::Wispfire => SoundCue::FireWhoosh,
         ShotKind::Bolt => SoundCue::MachineZap,
         ShotKind::Cannonball => SoundCue::CannonBoom,
+        ShotKind::Arrow => SoundCue::DartFire,
+        ShotKind::Rubble => SoundCue::FloorCrumble,
+        ShotKind::Hex => SoundCue::FogBurst,
     }
 }
 
@@ -455,6 +499,7 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // Night monsters (WP-NIGHT) have their own voices for the tell and the wind-up.
         GameplayEventKind::EnemyAlerted { kind, .. } => match night_voice(*kind) {
             Some(voice) => Some(voice),
+            None if tomb_voice(*kind).is_some() => tomb_voice(*kind),
             None => Some(enemy_cue(
                 *kind,
                 SoundCue::CreatureScreech,
@@ -462,6 +507,7 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
             )),
         },
         GameplayEventKind::EnemyWindup { kind, .. } => match night_voice(*kind) {
+            None if tomb_voice(*kind).is_some() => tomb_voice(*kind),
             Some(SoundCue::HoundHowl | SoundCue::AlphaHowl) | None => Some(enemy_cue(
                 *kind,
                 SoundCue::CreatureHiss,
@@ -598,13 +644,21 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         } else {
             SoundCue::Icing
         }),
-        // Tombs and crypts (WP-TOMBS, T27): placeholder cues from the existing patches; T28 /
-        // T29 add the run music, traps and boss themes.
+        // Tombs and crypts (WP-TOMBS, T27): cues from the existing patches; T28 added the
+        // side-view traps and creatures below (and the run music and guardian theme, looped by
+        // the director); T29 adds the crypts'.
         GameplayEventKind::TombEntered { .. } => Some(SoundCue::VaultOpened),
         GameplayEventKind::TombSeal { opened: true, .. } => Some(SoundCue::GateGrind),
         GameplayEventKind::TombSeal { opened: false, .. } => Some(SoundCue::UiError),
         GameplayEventKind::TombAmbush { boss: false, .. } => Some(SoundCue::CreatureScreech),
         GameplayEventKind::TombAmbush { boss: true, .. } => Some(SoundCue::AlphaHowl),
+        // Side-view tombs (T28): each trap's own sound where it went off, the guardian's
+        // voice as it turns.
+        GameplayEventKind::TombTrapSprung { kind, .. } => trap_cue(*kind),
+        GameplayEventKind::TombGuardianPhase { kind, .. } => match tomb_voice(*kind) {
+            Some(voice) => Some(voice),
+            None => Some(SoundCue::AlphaHowl),
+        },
         GameplayEventKind::TombGuardianDefeated { .. } => Some(SoundCue::Milestone),
         GameplayEventKind::TombFloorCleared { .. } => Some(SoundCue::PoiDiscovered),
         GameplayEventKind::TombRelicPicked { relic: Some(_), .. }
@@ -892,7 +946,9 @@ mod tests {
             | GameplayEventKind::TombShrineRested { .. }
             | GameplayEventKind::TombCacheOpened { .. }
             | GameplayEventKind::TombMemberDowned { .. }
-            | GameplayEventKind::TombRunEnded { .. } => {}
+            | GameplayEventKind::TombRunEnded { .. }
+            | GameplayEventKind::TombTrapSprung { .. }
+            | GameplayEventKind::TombGuardianPhase { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1164,6 +1220,17 @@ mod tests {
                 outcome: fatherload_simulation::tomb::RunOutcome::Finished,
                 banked: 10,
                 lost: 0,
+            },
+            GameplayEventKind::TombTrapSprung {
+                kind: fatherload_simulation::tomb::realize::TrapKind::Crusher,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::TombGuardianPhase {
+                kind: EnemyKind::SunColossus,
+                phase: 2,
+                x: 0,
+                y: 0,
             },
         ]);
         for action in [
@@ -1743,6 +1810,17 @@ mod tests {
             SoundCue::StoryQuill,
             SoundCue::StoryClimax,
             SoundCue::StoryResolved,
+            SoundCue::BladeSwish,
+            SoundCue::CrusherSlam,
+            SoundCue::DartFire,
+            SoundCue::FloorCrumble,
+            SoundCue::SandPour,
+            SoundCue::FogBurst,
+            SoundCue::MummyGroan,
+            SoundCue::BoneRattle,
+            SoundCue::StatueGrind,
+            SoundCue::ColossusSlam,
+            SoundCue::MatriarchWail,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

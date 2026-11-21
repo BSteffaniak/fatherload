@@ -309,6 +309,20 @@ patches! {
     StoryQuill => "story_quill",
     StoryClimax => "story_climax",
     StoryResolved => "story_resolved",
+    // Side-view tombs (WP-TOMBS T28), appended so earlier seeds stay put.
+    TombRunLoop => "loop_tomb_run",
+    TombBossLoop => "loop_tomb_boss",
+    BladeSwish => "blade_swish",
+    CrusherSlam => "crusher_slam",
+    DartFire => "dart_fire",
+    FloorCrumble => "floor_crumble",
+    SandPour => "sand_pour",
+    FogBurst => "fog_burst",
+    MummyGroan => "mummy_groan",
+    BoneRattle => "bone_rattle",
+    StatueGrind => "statue_grind",
+    ColossusSlam => "colossus_slam",
+    MatriarchWail => "matriarch_wail",
 }
 
 /// Playback metadata of a patch.
@@ -602,7 +616,29 @@ impl Patch {
             | Self::NightLoop
             | Self::SkyAirLoop
             | Self::WaterfallLoop
-            | Self::NightProwlLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            | Self::NightProwlLoop
+            | Self::TombRunLoop
+            | Self::TombBossLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            // Side-view tombs (T28): traps and tomb creatures heard from where they are.
+            Self::BladeSwish | Self::DartFire | Self::BoneRattle => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.3)
+                .jitter(0.05, 1.0),
+            Self::FloorCrumble | Self::SandPour | Self::FogBurst | Self::StatueGrind => {
+                PatchInfo::new(Feedback)
+                    .instances(2)
+                    .send(0.35)
+                    .jitter(0.04, 1.0)
+            }
+            Self::MummyGroan | Self::MatriarchWail => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.4)
+                .jitter(0.05, 1.0),
+            Self::CrusherSlam | Self::ColossusSlam => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.4)
+                .jitter(0.04, 1.0)
+                .ducking(0.2),
             Self::SkyCacheOpen | Self::BuoyRefuel => PatchInfo::new(Feedback)
                 .instances(2)
                 .send(0.3)
@@ -964,6 +1000,19 @@ impl Patch {
             Self::StoryQuill => story_quill(rng),
             Self::StoryClimax => story_climax(rng),
             Self::StoryResolved => story_resolved(rng),
+            Self::TombRunLoop => tomb_run_loop(rng),
+            Self::TombBossLoop => tomb_boss_loop(rng),
+            Self::BladeSwish => blade_swish(rng),
+            Self::CrusherSlam => crusher_slam(rng),
+            Self::DartFire => dart_fire(rng),
+            Self::FloorCrumble => floor_crumble(rng),
+            Self::SandPour => sand_pour(rng),
+            Self::FogBurst => fog_burst(rng),
+            Self::MummyGroan => mummy_groan(rng),
+            Self::BoneRattle => bone_rattle(rng),
+            Self::StatueGrind => statue_grind(rng),
+            Self::ColossusSlam => colossus_slam(rng),
+            Self::MatriarchWail => matriarch_wail(rng),
         }
     }
 }
@@ -5026,6 +5075,290 @@ fn story_resolved(rng: &mut Rng) -> Vec<f32> {
     }
     mix_into(&mut out, &bell(1_046.5, 2.0, 1.4, 1.1), 0.74, 0.2);
     mix_into(&mut out, &bell(1_567.98, 2.0, 1.2, 1.2), 0.86, 0.1);
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// Side-view tombs (WP-TOMBS T28): run music, the guardian's theme, traps and tomb creatures.
+// ---------------------------------------------------------------------------------------------
+
+/// Mixes `note` at `start` into a loop render, and again a loop later (into the crossfade tail
+/// that `fold_loop` folds over the head), so notes near the seam ring across it.
+fn loop_note(out: &mut Vec<f32>, note: &[f32], start: f32, gain: f32) {
+    mix_into(out, note, start, gain);
+    if start + LOOP_SECONDS < loop_length() {
+        mix_into(out, note, start + LOOP_SECONDS, gain);
+    }
+}
+
+/// A side-view tomb's run music (looped while a seat explores one): a low D and A drone under
+/// a slow plucked line in D phrygian (90 bpm, two bars of three), a frame drum on the bar.
+fn tomb_run_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut low = Osc::new(Wave::Triangle);
+    let mut fifth = Osc::new(Wave::Triangle);
+    let mut air = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut air_filter = Svf::new(FilterMode::BandPass, 700.0, 0.6);
+    let mut out = render(loop_length(), |t| {
+        // Whole cycles per loop (73.5 and 110 Hz, swells at 0.25 and 0.5 Hz).
+        let swell = 0.75 + 0.25 * sine(t, 0.25);
+        (low.next(73.5) * 0.5 + fifth.next(110.0) * 0.22) * swell * 0.4
+            + air_filter.process(air.next()) * 0.05 * (0.6 + 0.4 * sine(t, 0.5))
+    });
+    let eighth = LOOP_SECONDS / 12.0;
+    let line: [Option<f32>; 12] = [
+        Some(293.66),
+        None,
+        Some(440.0),
+        Some(466.16),
+        Some(440.0),
+        None,
+        Some(349.23),
+        Some(392.0),
+        Some(311.13),
+        None,
+        Some(293.66),
+        Some(261.63),
+    ];
+    for (step, note) in line.into_iter().enumerate() {
+        let Some(note) = note else {
+            continue;
+        };
+        #[allow(clippy::cast_precision_loss, reason = "twelve steps")]
+        let start = step as f32 * eighth;
+        let pluck = bell(note * rng.jitter(0.002), 1.0, 1.6, 0.9);
+        loop_note(&mut out, &pluck, start, 0.16);
+    }
+    for (beat, gain) in [(0.0, 0.5), (2.0, 0.42), (1.333, 0.18), (3.333, 0.18)] {
+        let drum = thump(120.0, 55.0, 0.35, 1.2);
+        loop_note(&mut out, &drum, beat, gain);
+    }
+    out
+}
+
+/// The guardian's theme (looped while a side-view guardian is awake): driving toms on every
+/// eighth (120 bpm), a low D ostinato and brass stabs a half step apart, D to E flat.
+fn tomb_boss_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut out = render(loop_length(), |_| 0.0);
+    let eighth = LOOP_SECONDS / 16.0;
+    for step in 0..16_u8 {
+        let accent = step % 4 == 0;
+        #[allow(clippy::cast_precision_loss, reason = "sixteen steps")]
+        let start = f32::from(step) * eighth;
+        let tom = thump(
+            if accent { 150.0 } else { 190.0 },
+            if accent { 52.0 } else { 80.0 },
+            0.22,
+            1.6,
+        );
+        loop_note(&mut out, &tom, start, if accent { 0.5 } else { 0.24 });
+        let bass = bell(73.42 * 2.0, 1.0, 0.9, 0.2);
+        loop_note(&mut out, &bass, start, 0.12);
+    }
+    for (bar, root) in [
+        (0.0, 293.66_f32),
+        (1.0, 311.13),
+        (2.0, 293.66),
+        (3.0, 277.18),
+    ] {
+        for note in [root, root * 1.5] {
+            let stab = brass(rng, note * 0.5, 0.28, 0.8);
+            loop_note(&mut out, &stab, bar, 0.13);
+        }
+    }
+    out
+}
+
+/// A swinging blade passing: a band-passed whoosh sweeping up and back down, a thin ring.
+fn blade_swish(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 800.0, 2.2);
+    let peak = rng.range(2_200.0, 2_800.0);
+    let mut out = render(0.45, |t| {
+        let sweep = segments(t, &[(0.0, 600.0), (0.18, peak), (0.42, 700.0)]);
+        filter.run(noise.next(), sweep, 2.2) * segments(t, &[(0.0, 0.0), (0.16, 1.0), (0.42, 0.0)])
+    });
+    mix_into(
+        &mut out,
+        &bell(1_850.0 * rng.jitter(0.02), 2.76, 0.8, 0.5),
+        0.16,
+        0.12,
+    );
+    out
+}
+
+/// A crusher slamming down: a heavy stone thud, a crunch and settling grit.
+fn crusher_slam(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(95.0 * rng.jitter(0.05), 34.0, 0.55, 2.2);
+    let crunch = burst(
+        rng.next_u64(),
+        NoiseColor::Brown,
+        FilterMode::LowPass,
+        900.0,
+        0.8,
+        0.3,
+    );
+    mix_into(&mut out, &crunch, 0.0, 0.7);
+    grains(rng, &mut out, 18, (0.02, 0.6), (900.0, 3_000.0), 0.3);
+    out
+}
+
+/// A dart loosed from a wall: a dry click and a short falling whistle.
+fn dart_fire(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        3_500.0,
+        0.8,
+        0.02,
+    );
+    let mut osc = Osc::new(Wave::Sine);
+    let start = rng.range(2_300.0, 2_700.0);
+    let whistle = render(0.2, |t| {
+        osc.next(glide(t, start, start * 0.62, 0.12)) * perc(t, 0.004, 0.18)
+    });
+    mix_into(&mut out, &whistle, 0.01, 0.35);
+    out
+}
+
+/// A floor slab giving way: a crack, a soft thud and a patter of falling grit.
+fn floor_crumble(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        2_400.0,
+        1.2,
+        0.05,
+    );
+    mix_into(&mut out, &thump(140.0, 60.0, 0.3, 1.4), 0.03, 0.6);
+    grains(rng, &mut out, 26, (0.02, 0.8), (1_200.0, 4_200.0), 0.35);
+    out
+}
+
+/// Sand (or water) starting to pour from a sluice: a hiss swelling under a low rush.
+fn sand_pour(rng: &mut Rng) -> Vec<f32> {
+    let mut hiss = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut hiss_filter = Svf::new(FilterMode::BandPass, 1_900.0, 0.9);
+    let mut rush = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut rush_filter = Svf::new(FilterMode::LowPass, 420.0, 0.7);
+    let mut out = render(1.3, |t| {
+        let shape = segments(t, &[(0.0, 0.0), (0.4, 0.8), (1.0, 1.0), (1.3, 0.0)]);
+        (hiss_filter.process(hiss.next()) * 0.6 + rush_filter.process(rush.next()) * 0.8) * shape
+    });
+    grains(rng, &mut out, 20, (0.1, 1.2), (2_000.0, 5_000.0), 0.15);
+    out
+}
+
+/// A cursed vent bursting: a breathy rush of fog and a hollow, ghostly tone bending down.
+fn fog_burst(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::LowPass, 600.0, 0.9);
+    let mut out = render(0.9, |t| {
+        let open = segments(t, &[(0.0, 300.0), (0.15, 1_600.0), (0.9, 500.0)]);
+        filter.run(noise.next(), open, 0.9) * segments(t, &[(0.0, 0.0), (0.1, 1.0), (0.9, 0.0)])
+    });
+    let mut fm = Fm::default();
+    let base = rng.range(330.0, 380.0);
+    let tone = render(0.8, |t| {
+        fm.next(glide(t, base, base * 0.7, 0.5), 1.5, 0.8) * perc(t, 0.08, 0.7)
+    });
+    mix_into(&mut out, &tone, 0.05, 0.2);
+    out
+}
+
+/// A mummy's groan: a low saw voice through two shifting formants.
+fn mummy_groan(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Saw);
+    let mut first = Svf::new(FilterMode::BandPass, 500.0, 3.0);
+    let mut second = Svf::new(FilterMode::BandPass, 900.0, 3.5);
+    let base = rng.range(92.0, 110.0);
+    render(0.9, |t| {
+        let pitch = base * segments(t, &[(0.0, 1.0), (0.5, 1.08), (0.9, 0.82)]);
+        let raw = osc.next(pitch);
+        let vowel = segments(t, &[(0.0, 0.0), (0.9, 1.0)]);
+        let voice = first.run(raw, 450.0 + 250.0 * vowel, 3.0) * 0.6
+            + second.run(raw, 1_000.0 - 250.0 * vowel, 3.5) * 0.4;
+        saturate(voice * 1.4, 1.5) * segments(t, &[(0.0, 0.0), (0.12, 1.0), (0.7, 0.8), (0.9, 0.0)])
+    })
+}
+
+/// Bones rattling (a skeletal archer drawing or falling): a run of dry clicks.
+fn bone_rattle(rng: &mut Rng) -> Vec<f32> {
+    let mut out = vec![0.0; samples_for(0.35)];
+    for time in scatter(rng, 7, 0.0, 0.3, 1.2) {
+        let click = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            rng.range(2_400.0, 3_800.0),
+            3.0,
+            0.018,
+        );
+        mix_into(&mut out, &click, time, rng.range(0.4, 0.8));
+    }
+    out
+}
+
+/// Stone grinding as an animated statue wakes or swings.
+fn statue_grind(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 380.0, 1.6);
+    let mut out = render(0.6, |t| {
+        let chatter = 0.6 + 0.4 * sine(t, 23.0);
+        filter.process(noise.next()) * chatter * segments(t, &[(0.0, 0.0), (0.08, 1.0), (0.6, 0.0)])
+    });
+    grains(rng, &mut out, 12, (0.05, 0.55), (700.0, 2_200.0), 0.3);
+    out
+}
+
+/// The colossus landing: a very low boom, a stone crack and rubble raining down.
+fn colossus_slam(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(72.0, 26.0, 0.9, 3.0);
+    mix_into(
+        &mut out,
+        &burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::HighPass,
+            2_000.0,
+            0.8,
+            0.04,
+        ),
+        0.0,
+        0.5,
+    );
+    mix_into(
+        &mut out,
+        &burst(
+            rng.next_u64(),
+            NoiseColor::Brown,
+            FilterMode::LowPass,
+            600.0,
+            0.7,
+            0.8,
+        ),
+        0.02,
+        0.8,
+    );
+    grains(rng, &mut out, 30, (0.05, 1.1), (800.0, 3_200.0), 0.35);
+    out
+}
+
+/// The matriarch's wail: two FM voices rising and falling with a slow, uneasy vibrato.
+fn matriarch_wail(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    let base = rng.range(560.0, 640.0);
+    for (delay, gain, detune) in [(0.0, 0.5, 1.0), (0.12, 0.3, 1.5)] {
+        let mut fm = Fm::default();
+        let wail = render(1.3, |t| {
+            let shape = segments(t / 1.3, &[(0.0, 0.8), (0.3, 1.25), (0.8, 1.0), (1.0, 0.7)]);
+            let pitch = base * detune * shape * (1.0 + 0.02 * sine(t, 5.5));
+            fm.next(pitch, 1.0, 1.1)
+                * segments(t / 1.3, &[(0.0, 0.0), (0.15, 1.0), (0.8, 0.7), (1.0, 0.0)])
+        });
+        mix_into(&mut out, &wail, delay, gain);
+    }
     out
 }
 

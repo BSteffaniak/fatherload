@@ -12,6 +12,7 @@ pub mod poi;
 pub mod prompts;
 pub mod rig;
 pub mod terrain;
+pub mod tomb;
 pub mod ui;
 pub mod weapons;
 pub mod world;
@@ -398,6 +399,15 @@ pub const ALL: &[&SpriteDef] = &[
     &enemies::NIGHT_MOTH,
     &enemies::UMBRAL_ALPHA,
     &enemies::SHOT_WISPFIRE,
+    &tomb::MUMMY,
+    &tomb::CRYPT_BAT,
+    &tomb::SKELETAL_ARCHER,
+    &tomb::ANIMATED_STATUE,
+    &tomb::SUN_COLOSSUS,
+    &tomb::HOLLOW_MATRIARCH,
+    &tomb::SHOT_ARROW,
+    &tomb::SHOT_RUBBLE,
+    &tomb::SHOT_HEX,
 ];
 
 #[cfg(test)]

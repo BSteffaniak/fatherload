@@ -641,6 +641,29 @@ pub enum SoundCue {
     StoryClimax,
     /// A story's end, back with whoever told it.
     StoryResolved,
+    // --- Side-view tombs (WP-TOMBS T28) ---
+    /// A swinging blade sweeping past.
+    BladeSwish,
+    /// A crusher slamming down.
+    CrusherSlam,
+    /// A dart loosed from a wall.
+    DartFire,
+    /// A floor slab giving way.
+    FloorCrumble,
+    /// A sluice starting to pour sand or water.
+    SandPour,
+    /// A cursed vent bursting.
+    FogBurst,
+    /// A mummy's groan.
+    MummyGroan,
+    /// Bones rattling.
+    BoneRattle,
+    /// Stone grinding as a statue moves.
+    StatueGrind,
+    /// The colossus landing.
+    ColossusSlam,
+    /// The matriarch's wail.
+    MatriarchWail,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

@@ -199,6 +199,10 @@ enum SeatLoop {
     Waterfall,
     /// The uneasy drone and far howls while night monsters prowl near (WP-NIGHT).
     Prowl,
+    /// A side-view tomb's run music while the seat explores one (WP-TOMBS T28).
+    TombRun,
+    /// The guardian's theme while a side-view tomb's guardian is awake.
+    TombBoss,
 }
 
 /// Where a local seat hears from.
@@ -735,6 +739,7 @@ impl Director {
         self.surface_ambience(live, listener, terrain, snapshot.clock);
         self.sky_ambience(live, listener, terrain);
         self.prowl_ambience(live, listener, &snapshot.enemies);
+        self.tomb_music(live, listener, snapshot.tombs);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -921,6 +926,42 @@ impl Director {
             SeatLoop::Prowl,
             Patch::NightProwlLoop,
             (threat * 0.45, 0.0, 1.0, OPEN_CUTOFF),
+        );
+    }
+
+    /// A side-view tomb's music (WP-TOMBS T28): the run loop while the seat's player explores
+    /// one, the guardian's theme instead while its guardian is awake. Crypts (T29) bring their
+    /// own.
+    fn tomb_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        tombs: &fatherload_simulation::tomb::Tombs,
+    ) {
+        use fatherload_simulation::tomb::{RunPhase, SiteStyle};
+        let run = tombs
+            .run_of(listener.player_id)
+            .filter(|run| run.site.style == SiteStyle::SideView);
+        let boss = run.is_some_and(|run| run.boss.is_some() && !run.boss_defeated);
+        let exploring = run.is_some_and(|run| run.phase == RunPhase::Exploring);
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::TombRun,
+            Patch::TombRunLoop,
+            (
+                if exploring && !boss { 0.42 } else { 0.0 },
+                0.0,
+                1.0,
+                OPEN_CUTOFF,
+            ),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::TombBoss,
+            Patch::TombBossLoop,
+            (if boss { 0.5 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
         );
     }
 
