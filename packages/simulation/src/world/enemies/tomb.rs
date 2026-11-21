@@ -41,6 +41,8 @@ pub const MAX_BATS: usize = 3;
 /// The colossus' leap: upward speed (px/s) and how long it flies before it slams.
 const LEAP_SPEED: f32 = 430.0;
 const LEAP_MILLIS: u64 = 720;
+/// How far past prey under its ledge the colossus leaps (tiles), to come down off the ledge.
+const LEDGE_OVERSHOOT_TILES: f32 = 3.0;
 /// The matriarch's dive lasts this long.
 const DIVE_MILLIS: u64 = 650;
 /// Where the matriarch hovers: columns to the side, rows above her prey.
@@ -147,7 +149,10 @@ impl WorldState {
         let ready = now >= state.attack_ready;
         let clear = physics::line_clear(&self.terrain, body.x, body.y, tx, ty);
         let range = spec.attack_range_tiles * TILE_SIZE;
-        if ready && distance <= range && clear {
+        // The colossus also winds up with rock in the way (a platform between it and its
+        // prey): its leap carries it over or off the ledge, where walking would leave it stuck.
+        let sighted = clear || state.kind == EnemyKind::SunColossus;
+        if ready && distance <= range && sighted {
             self.start_windup(id, body, state, now, output);
             return Intent::default();
         }
@@ -194,9 +199,18 @@ impl WorldState {
         let ((nx, ny), distance) = direction((body.x, body.y), aim);
         match action {
             GuardianMove::LeapSlam => {
-                // Leap to land on the prey: cover the distance over the flight.
+                // Leap to land on the prey: cover the distance over the flight. Prey below it
+                // behind rock (under the ledge it stands on) is leapt past, off the ledge.
                 let flight = LEAP_MILLIS as f32 / 1_000.0;
-                let run = ((aim.0 - body.x) / flight).clamp(-spec.dash_speed, spec.dash_speed);
+                let under_ledge = aim.1 > body.y + TILE_SIZE
+                    && !physics::line_clear(&self.terrain, body.x, body.y, aim.0, aim.1);
+                let landing = if under_ledge {
+                    let side: f32 = if aim.0 < body.x { -1.0 } else { 1.0 };
+                    side.mul_add(TILE_SIZE * LEDGE_OVERSHOOT_TILES, aim.0)
+                } else {
+                    aim.0
+                };
+                let run = ((landing - body.x) / flight).clamp(-spec.dash_speed, spec.dash_speed);
                 body.velocity_x = quantize(run);
                 body.velocity_y = quantize(-LEAP_SPEED);
                 state.mode = EnemyMode::Strike;

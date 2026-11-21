@@ -988,7 +988,11 @@ impl WorldState {
             // else.
             return None;
         }
-        let feels_steps = crate::night::feels_footsteps(state.kind);
+        // A tomb guardian (WP-TOMBS T28) knows where intruders in its crypt are without seeing
+        // them: otherwise a pilot under one of the crypt's platforms makes it forget them, walk
+        // home and heal.
+        let feels_steps =
+            crate::night::feels_footsteps(state.kind) || tomb::is_tomb_guardian(state.kind);
         // Smoke screens (WP-WEAPONS) hide rigs inside them from sight (not from hearing).
         let smoke = self.smoke_screens();
         let hidden = |x: f32, y: f32| {
@@ -1548,9 +1552,15 @@ impl WorldState {
     ) {
         let spec = state.kind.stats();
         let dt = self.timing.delta_seconds;
-        let goal = intent
-            .goal
-            .map(|goal| self.route(id, body, state, goal, now));
+        // The colossus (WP-TOMBS T28) heads straight for its prey across its crypt: paths round
+        // the arena's platforms stalled its wide body against them; its leap clears ledges.
+        let goal = if state.kind == EnemyKind::SunColossus {
+            intent.goal
+        } else {
+            intent
+                .goal
+                .map(|goal| self.route(id, body, state, goal, now))
+        };
         match spec.locomotion {
             Locomotion::Stationary => {}
             Locomotion::Flying => {

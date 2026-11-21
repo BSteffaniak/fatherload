@@ -716,3 +716,91 @@ fn tomb_creatures_keep_their_bodies_against_a_moving_pilot_at_every_tick_rate() 
         );
     }
 }
+
+/// A pilot sheltering under one of the crypt's platforms never makes a guardian forget them,
+/// walk home and heal: it keeps after its prey (the colossus leaps off the ledge above them)
+/// and its wounds stay.
+#[test]
+fn a_guardian_never_forgets_a_pilot_under_its_crypts_platforms_or_heals() {
+    // The default world's first mesa tomb (its crypt's west platform shelters the pilot).
+    let settings = settings(crate::worldgen::DEFAULT_WORLD_SEED);
+    let site = tomb_sites::sites_touching(
+        &settings,
+        &TileRect {
+            min: TilePosition { x: -9_000, y: -100 },
+            max: TilePosition { x: 9_000, y: 900 },
+        },
+    )
+    .into_iter()
+    .find(|site| {
+        site.style == SiteStyle::SideView && site.setting == crate::tomb::SiteSetting::Mesa
+    })
+    .expect("a mesa tomb");
+    for kind in [EnemyKind::SunColossus, EnemyKind::HollowMatriarch] {
+        let mut world = world_on(&settings, 60, EnemyDifficulty::Normal);
+        enter(&mut world, &site, 0, &[PLAYER]);
+        world.scenario_tomb_floor(PLAYER, site.floors() - 1);
+        no_creatures(&mut world);
+        let room = world
+            .tomb_run_of(PLAYER)
+            .and_then(|run| run.rooms.iter().find(|room| room.kind == RoomKind::Boss))
+            .map(|room| room.interior)
+            .expect("the guardian's crypt");
+        // Under the west platform (the realizer's left + 2 ..= left + 4, four rows up).
+        let shelter = TilePosition {
+            x: room.min.x + 3,
+            y: room.max.y,
+        };
+        let boss = world
+            .scenario_tomb_guardian(PLAYER, kind)
+            .expect("the guardian wakes");
+        world.scenario_hurt_enemy_to(boss, 0.5);
+        let wounded = world
+            .enemies()
+            .find(|(entity, _)| entity.id == boss)
+            .map(|(_, state)| state.health)
+            .expect("the guardian");
+        let mut hunted = false;
+        let mut came_down = false;
+        for tick in 0..60 * 20 {
+            stand(&mut world, PLAYER, shelter);
+            if let Some((id, _, _)) = world.pilot_of(PLAYER) {
+                world.edit_pilot(id, |_, state| state.health = state.max_health);
+            }
+            let now = world.simulation_tick();
+            let _ = world.simulate_tick(now, &TickInputs::default());
+            let Some((_, state)) = world.enemies().find(|(entity, _)| entity.id == boss) else {
+                break;
+            };
+            assert_ne!(
+                state.mode,
+                crate::enemy::EnemyMode::Return,
+                "{kind:?} walked home at tick {tick}"
+            );
+            assert!(
+                state.health <= wounded,
+                "{kind:?} healed at tick {tick}: {} > {wounded}",
+                state.health
+            );
+            hunted |= state.target.is_some();
+            let floor = (shelter.y + 1) as f32 * TILE_SIZE;
+            let (_, body, _) = world.pilot_of(PLAYER).expect("a pilot");
+            if let Some((guardian, _)) = world.enemies().find(|(entity, _)| entity.id == boss) {
+                came_down |= tick > 300
+                    && guardian.body.y > floor - TILE_SIZE * 1.5
+                    && (guardian.body.x - body.x).abs() < TILE_SIZE * 5.0;
+            }
+            assert!(
+                !hunted || state.target.is_some(),
+                "{kind:?} lost its prey at tick {tick}"
+            );
+        }
+        assert!(hunted, "{kind:?} went after the pilot");
+        if kind == EnemyKind::SunColossus {
+            assert!(
+                came_down,
+                "the colossus came down off the ledge to the pilot"
+            );
+        }
+    }
+}
