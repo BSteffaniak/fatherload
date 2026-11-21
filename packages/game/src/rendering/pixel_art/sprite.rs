@@ -113,15 +113,20 @@ pub struct AtlasLayout {
     pub width: i32,
     pub height: i32,
     frames: BTreeMap<&'static str, Vec<AtlasRect>>,
+    /// White silhouettes of [`super::sprites::SILHOUETTED`] (rim lights and outlines, tinted
+    /// at draw time).
+    silhouettes: BTreeMap<&'static str, Vec<AtlasRect>>,
 }
 
 impl AtlasLayout {
-    /// Shelf-packs `sprites` in order.
+    /// Shelf-packs `sprites` in order, then a white silhouette of every sprite in
+    /// `silhouetted`.
     #[must_use]
-    pub fn pack(sprites: &[&'static SpriteDef]) -> Self {
+    pub fn pack_with(sprites: &[&'static SpriteDef], silhouetted: &[&'static SpriteDef]) -> Self {
         let mut frames = BTreeMap::new();
+        let mut silhouettes = BTreeMap::new();
         let (mut x, mut y, mut shelf_height) = (ATLAS_PADDING, ATLAS_PADDING, 0);
-        for sprite in sprites {
+        for (index, sprite) in sprites.iter().chain(silhouetted).enumerate() {
             let (width, height) = (sprite.width(), sprite.height());
             let rects = (0..sprite.frames.len())
                 .map(|_| {
@@ -141,7 +146,11 @@ impl AtlasLayout {
                     rect
                 })
                 .collect();
-            frames.insert(sprite.name, rects);
+            if index < sprites.len() {
+                frames.insert(sprite.name, rects);
+            } else {
+                silhouettes.insert(sprite.name, rects);
+            }
         }
         Self {
             width: ATLAS_WIDTH,
@@ -152,7 +161,15 @@ impl AtlasLayout {
             )
             .unwrap_or(i32::MAX),
             frames,
+            silhouettes,
         }
+    }
+
+    /// Frame `frame` of the white silhouette of the sprite called `name`, if it has one.
+    #[must_use]
+    pub fn silhouette(&self, name: &str, frame: usize) -> Option<AtlasRect> {
+        let rects = self.silhouettes.get(name)?;
+        rects.get(frame % rects.len().max(1)).copied()
     }
 
     /// Frame `frame` of the sprite called `name` (wrapping around the frame count).
@@ -166,7 +183,7 @@ impl AtlasLayout {
 /// The atlas layout of [`super::sprites::ALL`], computed once.
 pub fn layout() -> &'static AtlasLayout {
     static LAYOUT: OnceLock<AtlasLayout> = OnceLock::new();
-    LAYOUT.get_or_init(|| AtlasLayout::pack(super::sprites::ALL))
+    LAYOUT.get_or_init(|| AtlasLayout::pack_with(super::sprites::ALL, super::sprites::SILHOUETTED))
 }
 
 /// Rasterizes every sprite into one point-filtered texture.
@@ -187,6 +204,23 @@ pub fn load_atlas(raylib: &mut RaylibHandle, thread: &RaylibThread) -> Option<Te
                     let px = rect.x + i32::try_from(column).unwrap_or(0);
                     let py = rect.y + i32::try_from(row_index).unwrap_or(0);
                     image.draw_pixel(px, py, color);
+                }
+            }
+        }
+    }
+    for sprite in super::sprites::SILHOUETTED {
+        for (index, rows) in sprite.frames.iter().enumerate() {
+            let Some(rect) = layout.silhouette(sprite.name, index) else {
+                continue;
+            };
+            for (row_index, row) in rows.iter().enumerate() {
+                for (column, symbol) in row.chars().enumerate() {
+                    if sprite.color_of(symbol).unwrap_or(CLEAR).a == 0 {
+                        continue;
+                    }
+                    let px = rect.x + i32::try_from(column).unwrap_or(0);
+                    let py = rect.y + i32::try_from(row_index).unwrap_or(0);
+                    image.draw_pixel(px, py, Color::WHITE);
                 }
             }
         }
@@ -272,6 +306,30 @@ pub fn draw_sprite_flipped(
         rect.height as f32 * scale,
     );
     blit(rect.source(), dest, flip_x, tint);
+}
+
+/// Draws the white silhouette of `sprite` (registered in [`super::sprites::SILHOUETTED`])
+/// tinted `color`, like [`draw_sprite_flipped`]: rim lights and outlines that read against a
+/// dark sky. Does nothing for a sprite without a silhouette.
+pub fn draw_silhouette(
+    _draw: &mut impl RaylibDraw,
+    sprite: &SpriteDef,
+    frame: usize,
+    position: Vector2,
+    scale: f32,
+    flip_x: bool,
+    color: Color,
+) {
+    let Some(rect) = layout().silhouette(sprite.name, frame) else {
+        return;
+    };
+    let dest = Rectangle::new(
+        position.x,
+        position.y,
+        rect.width as f32 * scale,
+        rect.height as f32 * scale,
+    );
+    blit(rect.source(), dest, flip_x, color);
 }
 
 /// Draws an atlas sprite rotating around its centre (loose physical props).

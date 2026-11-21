@@ -20,6 +20,22 @@ pub mod world;
 
 use super::sprite::SpriteDef;
 
+/// Sprites the atlas also packs as white silhouettes (Wave 6 art pass): small or dark enemies
+/// that get a rim light and an outline so they read against a night or space sky.
+pub const SILHOUETTED: &[&SpriteDef] = &[
+    &enemies::SHADOW_HOUND,
+    &enemies::DUNE_STALKER,
+    &enemies::UMBRAL_ALPHA,
+    &enemies::WILL_O_WISP,
+    &enemies::WYVERN,
+    &enemies::SKY_RAY,
+    &enemies::HARPY_NESTER,
+    &moon::WARDEN,
+    &moon::REGOLITH_CRAWLER,
+    &moon::CRYSTAL_MITE,
+    &moon::DERELICT_AUTOMATON,
+];
+
 /// Every sprite the atlas packs, in packing order.
 pub const ALL: &[&SpriteDef] = &[
     &ui::PANEL_STANDARD_SPRITE,
@@ -519,7 +535,7 @@ mod tests {
 
     #[test]
     fn atlas_packs_every_frame_without_overlap() {
-        let layout = AtlasLayout::pack(ALL);
+        let layout = AtlasLayout::pack_with(ALL, SILHOUETTED);
         let mut rects = Vec::new();
         for sprite in ALL {
             for frame in 0..sprite.frames.len() {
@@ -530,6 +546,16 @@ mod tests {
                 rects.push(rect);
             }
         }
+        for sprite in SILHOUETTED {
+            assert!(ALL.contains(sprite), "{} is registered", sprite.name);
+            for frame in 0..sprite.frames.len() {
+                let rect = layout.silhouette(sprite.name, frame).expect("packed");
+                assert!(rect.y + rect.height <= layout.height);
+                rects.push(rect);
+            }
+        }
+        // WebGL 1 (the browser build) guarantees textures up to 4096 pixels.
+        assert!(layout.height <= 4_096, "atlas {} px tall", layout.height);
         for (index, a) in rects.iter().enumerate() {
             for b in &rects[index + 1..] {
                 let disjoint = a.x + a.width <= b.x

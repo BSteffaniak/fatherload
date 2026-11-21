@@ -139,6 +139,65 @@ impl EnemyScene<'_> {
     }
 }
 
+/// The rim light of a kind that gets one (Wave 6 art pass): small or dark enemies outlined so
+/// they read at game scale against a night, space or Moon sky. Their sprites are in
+/// `sprites::SILHOUETTED`.
+const fn rim_color(kind: EnemyKind) -> Option<Color> {
+    match kind {
+        EnemyKind::ShadowHound => Some(SKY_LIGHT),
+        EnemyKind::DuneStalker => Some(SAND),
+        EnemyKind::UmbralAlpha => Some(LAVENDER),
+        EnemyKind::WillOWisp | EnemyKind::Warden => Some(MINT),
+        EnemyKind::Wyvern | EnemyKind::SkyRay | EnemyKind::HarpyNester => Some(CREAM),
+        EnemyKind::RegolithCrawler | EnemyKind::CrystalMite | EnemyKind::DerelictAutomaton => {
+            Some(ICE)
+        }
+        _ => None,
+    }
+}
+
+/// How dark the backdrop behind an enemy at world y `y` is regardless of the hour (0..1): the
+/// sky darkens to space from ~300 tiles up, and the Moon's creatures live under a black sky or
+/// in the dark facility. (Night darkness adds its own rim in [`draw_night_glints`].)
+fn dark_backdrop(kind: EnemyKind, y: f32) -> f32 {
+    if kind.is_lunar() {
+        return 1.0;
+    }
+    ((-y / TILE_SIZE - 300.0) / 300.0).clamp(0.0, 1.0)
+}
+
+/// An outline one art pixel wide around a sprite's silhouette, in `color`.
+fn draw_rim(
+    draw: &mut impl RaylibDraw,
+    sprite: &SpriteDef,
+    frame: usize,
+    position: Vector2,
+    scale: f32,
+    flip: bool,
+    color: Color,
+) {
+    for (dx, dy) in [
+        (-1.0, 0.0),
+        (1.0, 0.0),
+        (0.0, -1.0),
+        (0.0, 1.0),
+        (-1.0, -1.0),
+        (1.0, -1.0),
+        (-1.0, 1.0),
+        (1.0, 1.0),
+    ] {
+        sprite::draw_silhouette(
+            draw,
+            sprite,
+            frame,
+            Vector2::new(position.x + dx * scale, position.y + dy * scale),
+            scale,
+            flip,
+            color,
+        );
+    }
+}
+
 /// Draws every visible enemy and shot.
 pub(super) fn draw_enemies(draw: &mut impl RaylibDraw, scene: &EnemyScene<'_>) {
     for entity in scene.entities {
@@ -461,15 +520,25 @@ fn draw_enemy(
         }
         _ => {}
     }
-    sprite::draw_sprite_flipped(
-        draw,
-        sprite,
-        enemy_frame(entity, state, seconds),
-        Vector2::new(snap(left + shake), snap(top)),
-        scale,
-        faces(state.kind) && state.facing < 0,
-        tint,
-    );
+    let frame = enemy_frame(entity, state, seconds);
+    let position = Vector2::new(snap(left + shake), snap(top));
+    let flip = faces(state.kind) && state.facing < 0;
+    // A rim light against a dark backdrop (Wave 6): the black sky up high and the Moon's.
+    if let Some(rim) = rim_color(state.kind) {
+        let backdrop = dark_backdrop(state.kind, y);
+        if backdrop > 0.0 {
+            draw_rim(
+                draw,
+                sprite,
+                frame,
+                position,
+                scale,
+                flip,
+                with_alpha(rim, (backdrop * 170.0) as u8),
+            );
+        }
+    }
+    sprite::draw_sprite_flipped(draw, sprite, frame, position, scale, flip, tint);
     let pen = Pen::at(left, top);
     let art_width = sprite.width();
     // Wind-up tells.
@@ -713,6 +782,31 @@ pub(super) fn draw_night_glints(draw: &mut impl RaylibDraw, scene: &EnemyScene<'
         } else {
             y - height * 0.5
         };
+        // A moonlit rim and the body lifted out of the dark (Wave 6): the rim first, then the
+        // sprite again, dimly lit, over the darkness that swallowed it.
+        if let Some(rim) = rim_color(state.kind) {
+            let frame = enemy_frame(entity, state, seconds);
+            let position = Vector2::new(snap(left), snap(top));
+            let flip = faces(state.kind) && state.facing < 0;
+            draw_rim(
+                draw,
+                sprite,
+                frame,
+                position,
+                ART,
+                flip,
+                with_alpha(rim, (strength * 210.0) as u8),
+            );
+            sprite::draw_sprite_flipped(
+                draw,
+                sprite,
+                frame,
+                position,
+                ART,
+                flip,
+                Color::new(150, 156, 196, (strength * 190.0) as u8),
+            );
+        }
         let eyes: Option<(i32, i32, Color)> = match state.kind {
             EnemyKind::ShadowHound => Some((13, 4, MINT)),
             EnemyKind::UmbralAlpha => Some((22, 3, RED)),
