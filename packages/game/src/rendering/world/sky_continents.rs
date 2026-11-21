@@ -368,8 +368,10 @@ fn draw_building(draw: &mut impl RaylibDraw, building: &SkyBuilding, street: f32
                 pen.rect(draw, x + 18, h - 32, 1, 32, SOIL);
                 pen.boxed(draw, x + 3, h - 12, 14, 12, LOAM);
                 for fruit in 0..4 {
-                    let color =
-                        [ORANGE, LIME, PINK, GOLD][((seed as i32 + fruit + stall) % 4) as usize];
+                    // Reduce the seed while it is still unsigned: cast whole, half of all
+                    // seeds go negative and the remainder would index before the palette.
+                    let pick = ((seed % 4) as i32 + fruit + stall) % 4;
+                    let color = [ORANGE, LIME, PINK, GOLD][pick as usize];
                     pen.rect(draw, x + 4 + fruit * 3, h - 14, 2, 2, color);
                 }
             }
