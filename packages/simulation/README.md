@@ -2125,7 +2125,7 @@ entrances stay T27's set-0 masonry on the map and are painted, doors included, i
   shoves a pilot out from under a crusher, crumbles slabs a grounded member stands on
   (`TombRun::crumbling`, `CrumblingSlab`: falls after `CRUMBLE_MILLIS`, sets again
   `REFORM_MILLIS` later when nothing stands in the hole) and reports `TombTrapSprung` near the
-  party.
+  party (a blade as it swishes through the bottom of its swing, so `BladeSwish` plays).
 - **Creatures** (`EnemyKind::{Mummy, CryptBat, SkeletalArcher, AnimatedStatue}`, appended; tomb
   runs only, never in caves or the director's rosters): the shared enemy machinery and body
   rules (`step_body`, `free_from_rock`, `keep_off_bodies`, `contact_half`). Statues start

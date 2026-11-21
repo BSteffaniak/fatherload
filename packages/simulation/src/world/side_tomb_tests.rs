@@ -194,7 +194,16 @@ fn under_a_blade(hz: u32) -> (f32, crate::SimulationStateHash) {
         let tick = world.simulation_tick();
         events.extend(world.simulate_tick(tick, &TickInputs::default()).events);
     }
-    let _ = events;
+    assert!(
+        events.iter().any(|event| matches!(
+            event.kind,
+            GameplayEventKind::TombTrapSprung {
+                kind: TrapKind::Blade,
+                ..
+            }
+        )),
+        "the blade swishes past at {hz} Hz"
+    );
     (
         start - health(&world, PLAYER),
         world.simulation_state_hash(),

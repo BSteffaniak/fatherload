@@ -12,7 +12,8 @@
 //!   ([`crate::tomb::TombRun::crumbling`]), falls [`CRUMBLE_MILLIS`] later and sets again
 //!   [`REFORM_MILLIS`] after that once nothing stands in its place.
 //! * **Cues**: a trap that goes off near the party reports [`GameplayEventKind::TombTrapSprung`]
-//!   (the slam, the dart, the burst, the pour, the fall).
+//!   (a blade's swish through the bottom of its swing, the slam, the dart, the burst, the
+//!   pour, the fall).
 //! * **The guardian's phases**: as the guardian's health falls past
 //!   [`crate::tomb::side_view::guardian_phase`]'s thresholds the run records the phase and
 //!   reports [`GameplayEventKind::TombGuardianPhase`].
@@ -40,7 +41,7 @@ use crate::{
         traps::{
             BLADE_DPS, BLADE_RADIUS, Bounds, CRUMBLE_MILLIS, CRUSHER_DPS, CRUSHER_MAX_REACH,
             CrumblingSlab, CrusherStage, DART_DPS, DART_MAX_REACH, FOG_DPS, FogStage,
-            REFORM_MILLIS, SAND_DPS, SAND_WADE_PIXELS, SandStage, TrapKind, blade_tip,
+            REFORM_MILLIS, SAND_DPS, SAND_WADE_PIXELS, SandStage, TrapKind, blade_angle, blade_tip,
             crusher_block, crusher_state, dart_bounds, dart_position, dart_state, fog_centre,
             fog_hurts, fog_state, sand_state, sand_surface, world_millis,
         },
@@ -209,6 +210,12 @@ impl WorldState {
                                 .touches_disc(blade_tip(tile, now), BLADE_RADIUS)
                             {
                                 blade = BLADE_DPS;
+                            }
+                            // The swish as it sweeps through the bottom of its swing.
+                            let swept =
+                                (blade_angle(tile, before) < 0.0) != (blade_angle(tile, now) < 0.0);
+                            if swept && sprung.insert(tile) {
+                                events.push((kind, blade_tip(tile, now)));
                             }
                         }
                         TrapKind::Crusher => {

@@ -1255,6 +1255,10 @@ fn world_tomb_runs_replicate_and_relic_picks_cross_the_wire() {
 /// `TombTrapSprung` cue), the clock-driven traps and the tomb creatures play out, and every
 /// client converges on the same run, slabs and tiles with no hash mismatch.
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one online scenario, set up and checked"
+)]
 fn world_side_view_tomb_traps_replicate() {
     use fatherload_simulation::{
         SimulationParams,
@@ -1328,7 +1332,7 @@ fn world_side_view_tomb_traps_replicate() {
     #[allow(clippy::cast_precision_loss, reason = "tile coordinates")]
     let (x, feet) = (
         (slab.x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
-        slab.y as f32 * fatherload_simulation::terrain::TILE_SIZE - 0.25,
+        (slab.y as f32).mul_add(fatherload_simulation::terrain::TILE_SIZE, -0.25),
     );
     world.edit_pilot(pilot, |body, _| {
         body.x = x;
