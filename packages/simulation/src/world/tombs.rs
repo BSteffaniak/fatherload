@@ -196,9 +196,15 @@ impl WorldState {
         realizer_for(run.site.style).realize(&plan_floor(&run.site, run.run, run.floor))
     }
 
-    /// Damage taken scale for `player` (relics); `None` while downed (no damage at all).
+    /// Damage taken scale for `player` (relics); `None` (no damage at all) while downed, and
+    /// for the whole party while it picks relics on the stairs (the pick screen is up, and a
+    /// partner may still be choosing).
     pub(super) fn tomb_damage_taken(&self, player: PlayerId) -> Option<f32> {
-        match self.tombs.member_of(player) {
+        let Some(run) = self.tombs.run_of(player) else {
+            return Some(1.0);
+        };
+        match run.member(player) {
+            _ if run.phase == RunPhase::Picking => None,
             Some(member) if member.is_downed() => None,
             Some(member) => Some(RelicEffects::scale(member.effects().taken_pct)),
             None => Some(1.0),

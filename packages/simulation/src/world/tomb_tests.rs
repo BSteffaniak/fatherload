@@ -719,6 +719,36 @@ fn the_guardian_waits_in_its_room_and_its_fall_opens_the_way_out() {
 }
 
 #[test]
+fn nothing_hurts_the_party_while_it_picks_relics() {
+    let site = site_of(SiteStyle::SideView);
+    let mut world = world();
+    enter(&mut world, &site, &[PLAYER]);
+    world.scenario_tomb_stairs(PLAYER);
+    assert_eq!(
+        world.tomb_run_of(PLAYER).map(|run| run.phase),
+        Some(RunPhase::Picking)
+    );
+    let id = world.pilot_of(PLAYER).expect("pilot").0;
+    let mut output = TickOutput::default();
+    assert!(!world.damage_pilot(id, 10_000.0, &mut output));
+    assert!(!world.tomb_downed(PLAYER));
+    act(
+        &mut world,
+        PLAYER,
+        PlayerCommand::Tomb(TombCommand::PickRelic(None)),
+    );
+    run_ticks(&mut world, &TickInputs::default(), 1);
+    assert_eq!(
+        world.tomb_run_of(PLAYER).map(|run| run.phase),
+        Some(RunPhase::Exploring)
+    );
+    assert!(
+        world.damage_pilot(id, 10.0, &mut output),
+        "the next floor bites"
+    );
+}
+
+#[test]
 fn the_floor_keeps_its_creatures_and_its_guardian_however_far_the_party_walks() {
     let site = site_of(SiteStyle::SideView);
     let mut world = world();

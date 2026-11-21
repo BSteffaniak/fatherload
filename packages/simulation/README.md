@@ -1995,7 +1995,9 @@ entrance art and map marker, and is the same for every floor of that place.
   (`TombAmbush`); rooms reveal on the map for the whole party as they walk in; traps hurt
   pilots inside them. The stairs end the floor (the last floor's once the guardian is down:
   the run is won, `Finished`), relic picks follow (`TombCommand::PickRelic`, timed out after
-  `PICK_TIMEOUT_MILLIS`), then the next floor is written over the last one. The first floor's
+  `PICK_TIMEOUT_MILLIS`; nothing hurts the party while it picks, and creatures in the vault
+  never fall to the enemy director's far-despawn, so a guardian is felled only by killing it),
+  then the next floor is written over the last one. The first floor's
   way out ends the run with everything banked (`Retreated`).
 - **Roguelite stakes**: caches pay `cache_value` (tier squared) times the loot relics into the
   member's unbanked loot (sometimes a tomb key or a lore page); a shrine banks everyone's
