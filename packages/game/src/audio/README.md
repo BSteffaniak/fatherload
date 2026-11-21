@@ -160,6 +160,15 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `crusher_slam` / `colossus_slam` | impact | A crusher (a heavy stone thud, a crunch, grit); the colossus landing (a very low boom, a stone crack, a long rubble rain). |
 | `floor_crumble` / `sand_pour` / `fog_burst` / `statue_grind` | feedback | A slab giving way; sand or water starting to pour (a swelling hiss over a low rush); a cursed vent (a breathy rush and a ghostly bending tone); stone grinding. |
 | `mummy_groan` / `matriarch_wail` | impact | A mummy's low saw voice through shifting formants; the matriarch's two FM voices rising and falling with an uneasy vibrato. |
+| `dodge_roll` | feedback | A crypt dodge roll (T29): a pink-noise cloth swish sweeping up and down and a soft shoulder thud. |
+| `arrow_twang` | feedback | A trap's arrow loosed (also its shot cue): a plucked saw string dropping a little in pitch and the shaft's hiss. |
+| `spike_shing` | impact | Floor spikes rising: a bright metallic clank, a stony knock and a high scrape. |
+| `pit_drop` | impact | A fall into a pit: a whistle dropping away, a far thud and pebbles. |
+| `lord_roar` | big | The crypt lord waking or changing phase: a growling saw through a sweeping vowel filter over a sub and breath noise. |
+| `stone_slam` | impact | A golem's slam or a boulder let loose: a damped low thump under a band-passed crack and a spray of debris grains. |
+| `hex_bolt` | feedback | A hex being cast (cultists, the lord's tells and shots): an FM swirl rising an octave. |
+| `loop_crypt` | loop | A crypt's music: a breathing triangle drone on D and A, a hollow low-passed saw choir and a four-note bell motif with a far echo, over cold air. |
+| `loop_crypt_boss` | loop | The crypt lord's theme: a war drum twice a second with a tom answer and bright sixteenth ticks, a growling saw ostinato (D D F E) and dissonant brass stabs on the downbeats. |
 
 Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes of drilling). Periodic parts use frequencies with whole cycles in the loop (multiples of 0.5 Hz); scattered events (pops, knocks, grit) are spread evenly at a steady density, so nothing marks the restart.
 
@@ -176,6 +185,7 @@ Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes
 | Tomb music | each seat's player in a side-view tomb run (WP-TOMBS T28) | `loop_tomb_run` while exploring, swapped for `loop_tomb_boss` while the run's guardian is awake; silent while picking relics. |
 | Bomb fuses | each bomb | Ticks every 0.08-0.5 s as the fuse burns, placed in the world (C4 only once the detonator fires it; flares and burning fires never). |
 | Toasts | new shell or seat message | A chime 0.2 s later, cancelled if another sound plays first (so purchases and saves do not double up). |
+| Crypt music | each seat whose player is in a top-down crypt run (T29) | `loop_crypt` while exploring; `loop_crypt_boss` instead once the crypt lord is up and until it falls. |
 
 Spatialization: interface sounds are centred. A local seat's own sounds pan toward its
 split-screen view (±0.6 at the view centres). World sounds (explosions, fuses, other players'

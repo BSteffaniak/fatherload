@@ -5492,17 +5492,20 @@ fn lord_roar(rng: &mut Rng) -> Vec<f32> {
 
 /// Stone on stone: a golem's slam or a boulder let loose (a deep saturated thump and debris).
 fn stone_slam(rng: &mut Rng) -> Vec<f32> {
-    let mut out = thump(95.0 * rng.jitter(0.05), 38.0, 0.45, 2.4);
+    let mut out = thump(110.0 * rng.jitter(0.05), 48.0, 0.4, 2.4);
+    for sample in &mut out {
+        *sample *= 0.45;
+    }
     let crack = burst(
         rng.next_u64(),
-        NoiseColor::Brown,
-        FilterMode::LowPass,
-        1_400.0,
-        0.9,
-        0.3,
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        1_800.0,
+        0.8,
+        0.25,
     );
-    mix_into(&mut out, &crack, 0.0, 0.7);
-    grains(rng, &mut out, 18, (0.05, 0.7), (900.0, 3_000.0), 0.35);
+    mix_into(&mut out, &crack, 0.0, 0.8);
+    grains(rng, &mut out, 22, (0.03, 0.7), (1_200.0, 4_000.0), 0.6);
     out
 }
 
@@ -5530,7 +5533,7 @@ fn crypt_loop(rng: &mut Rng) -> Vec<f32> {
     ];
     let mut pad_filter = Svf::new(FilterMode::LowPass, 700.0, 0.8);
     let mut wind = Noise::new(NoiseColor::Pink, rng.next_u64());
-    let mut wind_band = Svf::new(FilterMode::BandPass, 600.0, 0.7);
+    let mut wind_band = Svf::new(FilterMode::BandPass, 1_600.0, 0.7);
     let mut out = render(loop_length(), |t| {
         let breath = 0.75 + 0.25 * sine(t, 1.0 / SECONDS);
         let drone = root.next(73.5) * 0.5 + fifth.next(110.0) * 0.3 * breath;
@@ -5541,13 +5544,13 @@ fn crypt_loop(rng: &mut Rng) -> Vec<f32> {
             .sum::<f32>()
             / 3.0;
         let choir = pad_filter.process(choir) * (0.55 + 0.45 * sine(t, 0.5 / SECONDS).abs());
-        let air = wind_band.process(wind.next()) * 0.25;
-        drone * 0.45 + choir * 0.3 * breath + air
+        let air = wind_band.process(wind.next()) * 0.3;
+        drone * 0.3 + choir * 0.3 * breath + air
     });
-    for (index, note) in [293.75_f32, 349.25, 329.5, 220.0].into_iter().enumerate() {
+    for (index, note) in [587.5_f32, 698.5, 659.0, 440.0].into_iter().enumerate() {
         let start = index as f32 * (SECONDS / 4.0) + 0.05;
-        mix_into(&mut out, &bell(note, 2.0, 0.9, 1.4), start, 0.16);
-        mix_into(&mut out, &bell(note, 2.0, 0.6, 1.0), start + 0.42, 0.06);
+        mix_into(&mut out, &bell(note, 2.0, 0.9, 1.4), start, 0.2);
+        mix_into(&mut out, &bell(note, 2.0, 0.6, 1.0), start + 0.42, 0.08);
     }
     out
 }
@@ -5569,26 +5572,39 @@ fn crypt_boss_loop(rng: &mut Rng) -> Vec<f32> {
         let local = t % (SECONDS / 8.0);
         let note = notes[step / 2];
         let gate = perc(local, 0.004, 0.35);
-        saturate(bass_filter.process(bass.next(note)) * gate * 1.4, 1.6) * 0.5
+        saturate(bass_filter.process(bass.next(note)) * gate * 1.4, 1.6) * 0.3
     });
     for beat in 0..8 {
         let at = beat as f32 * (SECONDS / 8.0);
-        mix_into(&mut out, &thump(80.0, 42.0, 0.28, 2.0), at, 0.75);
+        mix_into(&mut out, &thump(80.0, 42.0, 0.28, 2.0), at, 0.4);
         if beat % 2 == 1 {
             mix_into(
                 &mut out,
                 &thump(160.0, 110.0, 0.16, 1.4),
                 at + SECONDS / 16.0,
-                0.35,
+                0.3,
             );
         }
     }
+    // A bright tick on every sixteenth: the drums' metal.
+    for step in 0..16_u8 {
+        let tick = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::HighPass,
+            6_000.0,
+            0.8,
+            0.04,
+        );
+        let level = if step % 4 == 0 { 0.35 } else { 0.2 };
+        mix_into(&mut out, &tick, f32::from(step) * (SECONDS / 16.0), level);
+    }
     for (start, chord) in [
-        (0.0, [293.75_f32, 311.25, 440.0]),
-        (2.0, [261.75, 277.25, 392.0]),
+        (0.0, [587.5_f32, 622.5, 880.0]),
+        (2.0, [523.5, 554.5, 784.0]),
     ] {
         for note in chord {
-            mix_into(&mut out, &brass(rng, note, 0.35, 0.8), start, 0.1);
+            mix_into(&mut out, &brass(rng, note, 0.35, 0.9), start, 0.16);
         }
     }
     grains_loop(rng, &mut out);
