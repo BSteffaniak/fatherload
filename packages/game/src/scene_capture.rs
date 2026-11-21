@@ -1,5 +1,11 @@
-//! `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`: renders scripted game
-//! states to PNG files without user input, then exits.
+//! `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list] [--frame-timing N]`:
+//! renders scripted game states to PNG files without user input, then exits. With
+//! `--frame-timing N` each scene then draws N more frames and prints the CPU time of the frame
+//! work (snapshot, renderer sync and draw calls, not the buffer swap): a quick way to find
+//! renderer hotspots (lighting, sky chunks, night, tombs) before measuring the browser build.
+//! With `--export-saves` no window opens: each selected scene's staged world is written as a
+//! save file `<dir>/<scene name>.json` instead (the browser frame-timing script,
+//! `scripts/perf-web.cjs`, loads them to time the WASM build in those states).
 //!
 //! Each [`Scene`] builds a deterministic state through the same [`LocalGame`] the app runs (fixed
 //! frame time, fixed world seed), renders it with the real [`GameRenderer`] for a few frames and
@@ -69,6 +75,10 @@ pub struct CaptureOptions {
     pub only: Option<Vec<String>>,
     /// Print the scene names and exit.
     pub list: bool,
+    /// Frames to time after each capture (`--frame-timing N`; none when 0).
+    pub timing_frames: usize,
+    /// Write each scene's world as a save file instead of capturing it (`--export-saves`).
+    pub export_saves: bool,
 }
 
 /// Parses the scene-capture flags. `Ok(None)` when `--screenshot-scenes` is absent.
@@ -89,6 +99,8 @@ pub fn parse_args(args: &[String]) -> Result<Option<CaptureOptions>, String> {
         size: DEFAULT_SIZE,
         only: None,
         list: false,
+        timing_frames: 0,
+        export_saves: false,
     };
     let mut iter = args
         .iter()
@@ -107,6 +119,15 @@ pub fn parse_args(args: &[String]) -> Result<Option<CaptureOptions>, String> {
                 options.only = Some(value.split(',').map(str::to_owned).collect());
             }
             "--list" => options.list = true,
+            "--export-saves" => options.export_saves = true,
+            "--frame-timing" => {
+                let (_, value) = iter.next().ok_or("--frame-timing needs a frame count")?;
+                options.timing_frames = value
+                    .parse()
+                    .ok()
+                    .filter(|frames| (1..=100_000).contains(frames))
+                    .ok_or_else(|| format!("invalid --frame-timing {value}"))?;
+            }
             other => return Err(format!("unknown scene-capture argument {other}")),
         }
     }
@@ -155,6 +176,9 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
     }
     std::fs::create_dir_all(&options.dir)
         .map_err(|error| format!("cannot create {}: {error}", options.dir.display()))?;
+    if options.export_saves {
+        return export_saves(&options.dir, &scenes);
+    }
     let (width, height) = options.size;
     let (mut raylib, thread) = raylib::init()
         .size(width, height)
@@ -228,6 +252,71 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             }
         }
         println!("captured {}", path.display());
+        if options.timing_frames > 0
+            && !(gallery || ui_sheet || prompt_sheet || rig_sheet.is_some())
+        {
+            let mut times = Vec::with_capacity(options.timing_frames);
+            for _ in 0..options.timing_frames {
+                let started = std::time::Instant::now();
+                let screen = crate::window::DesktopWindow::screen(&raylib);
+                let snapshot = game.snapshot(screen);
+                renderer.sync(&mut raylib, &thread, &snapshot, &FrameReport::default());
+                let mut draw = raylib.begin_drawing(&thread);
+                renderer.render(&mut draw, &game.shell, &snapshot);
+                times.push(started.elapsed().as_secs_f64() * 1_000.0);
+                drop(draw);
+            }
+            times.sort_by(f64::total_cmp);
+            #[allow(
+                clippy::cast_precision_loss,
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "frame counts and percentiles"
+            )]
+            let at = |fraction: f64| times[((times.len() - 1) as f64 * fraction).round() as usize];
+            #[allow(clippy::cast_precision_loss, reason = "frame counts")]
+            let mean = times.iter().sum::<f64>() / times.len() as f64;
+            println!(
+                "timing {:<28} mean {mean:6.2} ms  median {:6.2}  p95 {:6.2}  max {:6.2}",
+                scene.name,
+                at(0.5),
+                at(0.95),
+                at(1.0)
+            );
+        }
+    }
+    let _ = std::fs::remove_file(&scratch_save);
+    Ok(())
+}
+
+/// Stages every scene and writes its world as a save file (no window).
+fn export_saves(dir: &Path, scenes: &[&Scene]) -> Result<(), String> {
+    let scratch_save = dir.join(".scene-capture-save.json");
+    for scene in scenes {
+        let mut game = LocalGame::new(
+            SettingsFile::default(),
+            SaveTarget::File(scratch_save.clone()),
+        );
+        let mut stage = SceneStage {
+            game: &mut game,
+            report: FrameReport::default(),
+            gallery: false,
+            ui_sheet: false,
+            prompt_sheet: false,
+            rig_sheet: None,
+            touch_view: crate::input::touch::TouchView::default(),
+        };
+        (scene.setup)(&mut stage);
+        let path = dir.join(format!("{}.json", scene.name));
+        crate::save::save_world_to_path(
+            &crate::save::WorldSave {
+                world: game.world().clone(),
+                play_seconds: 60.0,
+            },
+            &path,
+        )
+        .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+        println!("exported {}", path.display());
     }
     let _ = std::fs::remove_file(&scratch_save);
     Ok(())
@@ -2991,6 +3080,20 @@ mod tests {
         assert!(parse_args(&args("--screenshot-scenes")).is_err());
         assert!(parse_args(&args("--screenshot-scenes out --size big")).is_err());
         assert!(parse_args(&args("--screenshot-scenes out --only nope")).is_err());
+        assert_eq!(
+            parse_args(&args("--screenshot-scenes out --frame-timing 240"))
+                .unwrap()
+                .unwrap()
+                .timing_frames,
+            240
+        );
+        assert!(parse_args(&args("--screenshot-scenes out --frame-timing 0")).is_err());
+        assert!(
+            parse_args(&args("--screenshot-scenes out --export-saves"))
+                .unwrap()
+                .unwrap()
+                .export_saves
+        );
     }
 
     #[test]
