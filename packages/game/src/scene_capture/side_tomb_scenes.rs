@@ -256,7 +256,7 @@ fn entrance_scene(stage: &mut SceneStage<'_>, setting: SiteSetting) {
         let (x, feet) = WorldState::outside_spot(&site, 0);
         if let Some(rig) = world.player_mut(player) {
             let outward = if site.mirrored { 1.0 } else { -1.0 };
-            rig.x = outward * TILE_SIZE * 4.0 + x;
+            rig.x = (outward * TILE_SIZE).mul_add(4.0, x);
             rig.y = feet - 11.5;
             rig.velocity_x = 0.0;
             rig.velocity_y = 0.0;
