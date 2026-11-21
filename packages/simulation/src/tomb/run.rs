@@ -167,6 +167,9 @@ pub struct TombRun {
     /// fires as it rises).
     #[serde(default)]
     pub boss_phase: u8,
+    /// A crypt floor's trap overlays and their state (T29; empty on side-view runs).
+    #[serde(default)]
+    pub crypt: super::crypt::CryptState,
 }
 
 impl TombRun {

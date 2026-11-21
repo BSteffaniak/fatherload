@@ -111,7 +111,12 @@ impl WorldState {
         controls: ControlState,
     ) -> (f32, f32) {
         let weapon = controls.weapon;
-        let facing = (f32::from(state.facing), 0.0);
+        // Seen from above (a crypt, WP-TOMBS T29) the pilot faces where it last walked.
+        let facing = if state.view == crate::pilot::PilotView::TopDown {
+            crate::pilot::top_down::heading_of(state)
+        } else {
+            (f32::from(state.facing), 0.0)
+        };
         let free = (!weapon.auto_aim)
             .then(|| aim_vector(weapon.aim_x, weapon.aim_y))
             .flatten();
@@ -154,7 +159,8 @@ impl WorldState {
         state.swing = quantize((state.swing - dt).max(0.0));
         let fresh_pull = controls.weapon.fire && !state.trigger_held;
         state.trigger_held = controls.weapon.fire;
-        let busy = matches!(state.mode, PilotMode::Ledge | PilotMode::Climb);
+        // A crypt's dodge roll (WP-TOMBS T29) keeps the hands busy too.
+        let busy = matches!(state.mode, PilotMode::Ledge | PilotMode::Climb) || state.roll > 0.0;
         let held = state.weapon;
         if held.is_some() || controls.weapon.fire {
             let _ = self.resolve_pilot_aim(body, state, controls);

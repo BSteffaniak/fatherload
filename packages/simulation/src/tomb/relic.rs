@@ -26,17 +26,27 @@ use super::SiteStyle;
 const SALT_OFFERS: u64 = 0x70B5_4E11_0003;
 
 impl Relic {
-    /// Whether the relic does anything in a run of `style`: jumping, gliding and falling are
-    /// side-view things, so a top-down crypt never offers Spring Heels, Glider Boost or
-    /// Featherfall (T29: revisit when the crypt's own movement has a dodge or a hop).
+    /// Whether the relic does anything in a run of `style`. Every relic does since the crypts
+    /// got their own movement (T29): in a top-down crypt an extra jump rolls longer, the glider
+    /// boost dashes further and Featherfall takes the hurt out of pits
+    /// ([`Self::blurb_in`] says so on the pick screen).
     #[must_use]
     pub const fn suits(self, style: SiteStyle) -> bool {
-        match style {
-            SiteStyle::SideView => true,
-            SiteStyle::TopDown => !matches!(
-                self,
-                Self::SpringHeels | Self::GliderBoost | Self::Featherfall
-            ),
+        let _ = (self, style);
+        true
+    }
+
+    /// The relic's blurb for a run of `style` (the crypt meaning of side-view movement perks).
+    #[must_use]
+    pub fn blurb_in(self, style: SiteStyle) -> &'static str {
+        match (style, self) {
+            (SiteStyle::TopDown, Self::SpringHeels) => "Your dodge roll goes longer.",
+            (SiteStyle::TopDown, Self::GliderBoost) => "Your dodge roll dashes further.",
+            (SiteStyle::TopDown, Self::Featherfall) => "Pits no longer hurt you.",
+            (SiteStyle::TopDown, Self::RestlessSoul) => {
+                "Much faster with a far longer roll, but no healing at all."
+            }
+            _ => self.blurb(),
         }
     }
 }
@@ -586,20 +596,20 @@ mod tests {
     }
 
     #[test]
-    fn crypts_never_offer_side_view_movement() {
+    fn crypts_offer_movement_relics_with_their_top_down_meaning() {
+        let mut offered = std::collections::BTreeSet::new();
         for seed in 0..64 {
-            for relic in offers(seed, 0, 0, &[], SiteStyle::TopDown) {
-                assert!(relic.suits(SiteStyle::TopDown), "{relic:?}");
-                assert!(!matches!(
-                    relic,
-                    Relic::SpringHeels | Relic::GliderBoost | Relic::Featherfall
-                ));
-            }
+            offered.extend(offers(seed, 0, 0, &[], SiteStyle::TopDown));
+        }
+        for relic in [Relic::SpringHeels, Relic::GliderBoost, Relic::Featherfall] {
+            assert!(offered.contains(&relic), "{relic:?}");
+            assert_ne!(relic.blurb_in(SiteStyle::TopDown), relic.blurb());
         }
         assert!(
             Relic::ALL
                 .iter()
-                .all(|relic| relic.suits(SiteStyle::SideView))
+                .all(|relic| relic.suits(SiteStyle::SideView)
+                    && relic.blurb_in(SiteStyle::SideView) == relic.blurb())
         );
     }
 }

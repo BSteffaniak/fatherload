@@ -283,6 +283,14 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         // Side-view tombs (wave 5, T28): 280-289.
         GameplayEventKind::TombTrapSprung { .. } => (280, None),
         GameplayEventKind::TombGuardianPhase { .. } => (281, None),
+        // Top-down crypts (wave 5, T29 WP-TOMBS): 290-296.
+        GameplayEventKind::CryptRoll { player_id, .. } => (290, Some(player_id)),
+        GameplayEventKind::CryptTrap { .. } => (291, None),
+        GameplayEventKind::CryptPitFall { player_id, .. } => (292, Some(player_id)),
+        GameplayEventKind::CryptLordPhase { .. } => (293, None),
+        GameplayEventKind::CryptTell { .. } => (294, None),
+        GameplayEventKind::CryptSlam { .. } => (295, None),
+        GameplayEventKind::CryptSummon { .. } => (296, None),
     }
 }
 

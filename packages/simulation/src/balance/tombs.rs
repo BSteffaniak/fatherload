@@ -40,11 +40,13 @@ pub struct TombBot {
     floor: u8,
     /// T28: what the bot knows of a side-view floor's traps.
     side: super::tomb_side::SideBot,
+    /// The top-down crypt half (T29, [`super::crypt_bot`]).
+    crypt: super::crypt_bot::CryptBot,
 }
 
 impl TombBot {
     #[must_use]
-    pub const fn new(player: PlayerId, armed: bool) -> Self {
+    pub fn new(player: PlayerId, armed: bool) -> Self {
         Self {
             player,
             armed,
@@ -54,6 +56,7 @@ impl TombBot {
             use_cooldown: 0,
             floor: 0,
             side: super::tomb_side::SideBot::new(),
+            crypt: super::crypt_bot::CryptBot::default(),
         }
     }
 
@@ -90,6 +93,10 @@ impl TombBot {
                 inputs.act_as(player, PlayerCommand::Tomb(TombCommand::PickRelic(Some(0))));
             }
             return inputs;
+        }
+        // Crypts play top-down (T29).
+        if run.site.style == SiteStyle::TopDown {
+            return self.crypt.inputs(world, run, player, self.armed);
         }
         self.use_cooldown = self.use_cooldown.saturating_sub(1);
         if self.use_cooldown == 0
@@ -708,6 +715,75 @@ impl BalanceProbe for TombsProbe {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "debug: follows the crypt bot and prints where it stalls"]
+    fn trace_crypt_bot() {
+        let seed: u64 = std::env::var("SEED")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(11);
+        let tier: u8 = std::env::var("TIER")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(2);
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V10,
+            ..WorldSettings::new(seed)
+        };
+        let site = find_site(&settings, SiteStyle::TopDown, tier).expect("site");
+        let player = PlayerId::new(0);
+        let mut world =
+            WorldState::new_game_with_settings(player, &settings, SimulationParams::new(60));
+        world.set_enemy_difficulty(EnemyDifficulty::Normal);
+        if let Some(rig) = world.player_mut(player) {
+            let _ = rig.pilot_arsenal.receive(WeaponKind::Rifle);
+            rig.pilot_arsenal.equipped = Some(WeaponKind::Rifle);
+            let _ = rig.pilot_arsenal.add_ammo(AmmoKind::Cartridge, 200);
+        }
+        let _ = world.place_pilot(player, 0.0, 0.0);
+        let _ = world.scenario_enter_tomb(&site, &[player]);
+        let mut bot = TombBot::new(player, true);
+        let mut still = 0;
+        let mut last = (0.0, 0.0);
+        for tick in 0..60 * 60 * 6 {
+            let Some(run) = world.tomb_run_of(player).cloned() else {
+                println!(
+                    "run over at {tick}: {:?}",
+                    world.tombs().summaries.get(&player)
+                );
+                return;
+            };
+            let inputs = bot.inputs(&world);
+            let now = world.simulation_tick();
+            let _ = world.simulate_tick(now, &inputs);
+            let Some((_, body, _)) = world.pilot_of(player) else {
+                continue;
+            };
+            if (body.x - last.0).hypot(body.y - last.1) < 0.5 {
+                still += 1;
+            } else {
+                still = 0;
+            }
+            last = (body.x, body.y);
+            if still == 300 {
+                let tile = TilePosition {
+                    x: (body.x / TILE_SIZE).floor() as i32,
+                    y: ((body.y - 12.5) / TILE_SIZE).floor() as i32,
+                };
+                println!(
+                    "stalled at tick {tick} floor {} phase {:?} boss {:?} defeated {}\n{}",
+                    run.floor,
+                    run.phase,
+                    run.boss,
+                    run.boss_defeated,
+                    super::super::crypt_bot::floor_text(&world, &run, Some(tile))
+                );
+                return;
+            }
+        }
+        println!("still running");
+    }
 
     #[test]
     #[ignore = "debug: prints a few probe runs"]

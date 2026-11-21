@@ -66,6 +66,7 @@ use crate::{
 
 use super::{WorldState, bombs::Blast, movement::AUTHORITATIVE_PLAYER_RADIUS};
 
+mod crypt;
 mod sky;
 mod tomb;
 
@@ -1089,6 +1090,11 @@ impl WorldState {
         let Some((start_body, start_state)) = self.enemy_parts(id) else {
             return;
         };
+        // Crypt creatures (WP-TOMBS T29) move on the room grid seen from above.
+        if start_state.kind.is_crypt() {
+            self.advance_crypt_enemy(id, now, output);
+            return;
+        }
         let mut body = start_body;
         let mut state = start_state;
         let dt = self.timing.delta_seconds;
@@ -2150,6 +2156,11 @@ impl WorldState {
         }) else {
             return;
         };
+        // Hex bolts, arrows and boulders of the crypts (WP-TOMBS T29).
+        if shot.kind.is_crypt() {
+            self.advance_crypt_shot(id, now, output);
+            return;
+        }
         let dt = self.timing.delta_seconds;
         body.previous_x = body.x;
         body.previous_y = body.y;
@@ -2495,5 +2506,11 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::AnimatedStatue
         | EnemyKind::SunColossus
         | EnemyKind::HollowMatriarch => false,
+        // Crypt creatures live only in crypt runs.
+        | EnemyKind::CryptSkeleton
+        | EnemyKind::Spectre
+        | EnemyKind::Cultist
+        | EnemyKind::CryptGolem
+        | EnemyKind::CryptLord => false,
     }
 }

@@ -444,6 +444,7 @@ impl WorldState {
             leaving: false,
             crumbling: Vec::new(),
             boss_phase: 0,
+            crypt: crate::tomb::crypt::CryptState::default(),
         };
         let _ = self.tombs.runs.insert(id, run);
         for member in &party {
@@ -549,6 +550,8 @@ impl WorldState {
         for member in members {
             self.refresh_tomb_pilot(member);
         }
+        // A crypt floor's trap overlays (T29, `world/crypts.rs`).
+        self.prepare_crypt_floor(id);
     }
 
     /// Despawns every non-pilot entity inside run slot `slot` (creatures, shots, drops).
@@ -957,6 +960,7 @@ impl WorldState {
             // T28: the side-view traps that move on the clock, crumbling floors and the
             // guardian's phases (`world/tomb_traps.rs`).
             self.advance_side_view_run(id, next_tick, output);
+            self.advance_crypt(id, next_tick, output);
             self.advance_revives(id, next_tick, output);
             if self.tombs.runs.get(&id).is_some_and(TombRun::wiped) {
                 self.end_tomb_run(id, RunOutcome::Wiped, output);

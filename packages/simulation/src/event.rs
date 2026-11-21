@@ -894,6 +894,55 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // --- Top-down crypts (WP-TOMBS, Wave 5 T29; netcode codes 290-299) ------------------
+    /// A crypt pilot dodge-rolled at world pixel `(x, y)` (its feet).
+    CryptRoll {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// A crypt trap at tile `(x, y)` gave its warning (`fired: false`: a rattle, a glow, a
+    /// click, a rumble, cracks) or went off (one event per room and trap kind at a time).
+    CryptTrap {
+        kind: crate::tomb::crypt::CryptTrapKind,
+        x: i32,
+        y: i32,
+        fired: bool,
+    },
+    /// A crypt pilot fell into a pit at tile `(x, y)` (it climbs out at the nearest safe floor).
+    CryptPitFall {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+    },
+    /// The crypt lord woke or entered phase `phase` (1..=3) at world pixel `(x, y)`.
+    CryptLordPhase {
+        phase: u8,
+        x: i32,
+        y: i32,
+    },
+    /// A crypt creature began a telegraphed attack at world pixel `(x, y)`, aimed at
+    /// `(aim_x, aim_y)`.
+    CryptTell {
+        kind: crate::enemy::EnemyKind,
+        attack: crate::tomb::crypt::CryptAttack,
+        x: i32,
+        y: i32,
+        aim_x: i32,
+        aim_y: i32,
+    },
+    /// A golem's slam landed around world pixel `(x, y)` (reach `radius` px).
+    CryptSlam {
+        x: i32,
+        y: i32,
+        radius: u16,
+    },
+    /// The crypt lord called `count` creatures up out of the floor around `(x, y)`.
+    CryptSummon {
+        x: i32,
+        y: i32,
+        count: u8,
+    },
 }
 
 /// What a weapon shot struck.

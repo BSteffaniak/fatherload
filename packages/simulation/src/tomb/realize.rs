@@ -226,8 +226,9 @@ pub use super::side_view::SideViewRealizer;
 #[must_use]
 pub fn realizer_for(style: SiteStyle) -> &'static dyn FloorRealizer {
     match style {
-        SiteStyle::SideView => &super::side_view::SideViewRealizer,
-        SiteStyle::TopDown => &TopDownRealizer,
+        SiteStyle::SideView => &SideViewRealizer,
+        // T29: the crypt's room grid (`TopDownRealizer` below is T27's superseded placeholder).
+        SiteStyle::TopDown => &super::crypt::CryptRealizer,
     }
 }
 
@@ -242,9 +243,8 @@ pub const fn bestiary(style: SiteStyle, role: SpawnRole, variant: u32) -> EnemyK
     match (style, role) {
         // T28: mummies, crypt bats, skeletal archers, animated statues and two guardians.
         (SiteStyle::SideView, _) => super::side_view::bestiary(role, variant),
-        (SiteStyle::TopDown, SpawnRole::Ambusher) => EnemyKind::CaveBat,
-        (SiteStyle::TopDown, SpawnRole::Boss) => EnemyKind::AncientGuardian,
-        (SiteStyle::TopDown, SpawnRole::Guard) => EnemyKind::MagmaWisp,
+        // T29: skeleton packs, spectres, cultists, golems and the crypt lord.
+        (SiteStyle::TopDown, role) => super::crypt::bestiary(role, variant),
     }
 }
 

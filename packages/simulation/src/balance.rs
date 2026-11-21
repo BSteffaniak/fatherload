@@ -54,6 +54,7 @@ pub mod bot;
 pub mod building;
 pub mod climb;
 pub mod combat;
+pub mod crypt_bot;
 pub mod economy;
 pub mod night;
 pub mod second_act;

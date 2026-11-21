@@ -26,6 +26,10 @@
 //!   secrets), [`culture`] (tile sets per site: sandstone, catacomb, sky temple, lunar vault)
 //!   and [`traps`] (blades, crushers, crumbling floors, dart walls, rising sand, cursed fog:
 //!   pure functions of the world clock).
+//!   platformer rooms the pilot's existing movement plays; the crypt realizer
+//!   ([`crypt::CryptRealizer`], T29) lays a room grid out walked in the pilot's top-down mode
+//!   ([`crate::pilot::PilotView::TopDown`], [`crate::pilot::top_down`]).
+//! * **Crypts** ([`crypt`], T29): the top-down layout, tile sets, trap overlays and bestiary.
 //! * **Relics** ([`relic`]): run-only perks picked between floors, with synergies, and
 //!   blessing/curse bargains; their effects hook into the pilot's body
 //!   ([`crate::pilot::PilotBoons`]), weapons and damage.
@@ -37,6 +41,7 @@
 //! The world side (entering, the run's tick, banking, death and revives, relic picks, leaving)
 //! lives in `world/tombs.rs`.
 
+pub mod crypt;
 pub mod culture;
 pub mod floor;
 pub mod realize;

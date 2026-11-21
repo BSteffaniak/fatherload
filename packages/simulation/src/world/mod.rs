@@ -45,6 +45,9 @@ mod clock_tests;
 mod commands;
 mod crew;
 #[cfg(test)]
+mod crypt_tests;
+mod crypts;
+#[cfg(test)]
 mod determinism_tests;
 mod discovery;
 #[cfg(test)]
@@ -149,6 +152,7 @@ mod weapons;
 
 pub use arcs::{ArcTalk, tile_center_px};
 pub use bases::{BuildQuote, TOWN_NO_BUILD_MARGIN, TOWN_NO_BUILD_ROWS, payment_for};
+pub use crypts::{CRUMBLE_MILLIS, PIT_FALL_SHARE, PLATE_DELAY_MILLIS, PLATE_REARM_MILLIS};
 pub use discovery::{DiscoveredTiles, Discovery};
 pub use enemies::{
     GuardianMove, JOLT_MILLIS, MAX_BATS, MAX_RAISED, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES,

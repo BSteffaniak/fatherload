@@ -672,6 +672,13 @@ impl WorldState {
             if report.wall_jumped {
                 output.push_event(GameplayEventKind::PilotWallJumped { player_id: owner });
             }
+            if report.rolled {
+                output.push_event(GameplayEventKind::CryptRoll {
+                    player_id: owner,
+                    x: px(body.x),
+                    y: px(body.y),
+                });
+            }
             if report.rope_released {
                 output.push_event(GameplayEventKind::PilotRope {
                     player_id: owner,
@@ -933,6 +940,13 @@ impl WorldState {
         let Some(scale) = self.tomb_damage_taken(owner) else {
             return false;
         };
+        // A crypt pilot's dodge roll (WP-TOMBS T29): nothing lands mid-roll.
+        if matches!(
+            self.entities.get(id).map(|entity| entity.state),
+            Some(EntityState::Pilot(state)) if state.roll_guarded()
+        ) {
+            return false;
+        }
         let amount = amount * scale;
         let Some((owner, health, x, y)) = self
             .entities
@@ -1007,9 +1021,23 @@ impl WorldState {
             return false;
         };
         let (mx, my) = state.middle(&body);
-        if state.hurt > 0.0 || self.hostile_safe_zone(attacker, tile_at(mx, my)) {
+        if state.hurt > 0.0
+            || state.roll_guarded()
+            || self.hostile_safe_zone(attacker, tile_at(mx, my))
+        {
             return false;
         }
+        // Seen from above (a crypt, WP-TOMBS T29) a knock has no "up": straight away.
+        let lift = if state.view == crate::pilot::PilotView::TopDown {
+            0.0
+        } else {
+            -0.35
+        };
+        let along_y = if state.view == crate::pilot::PilotView::TopDown {
+            1.0
+        } else {
+            0.4
+        };
         let (dx, dy) = (mx - from.0, my - from.1);
         let distance = dx.hypot(dy).max(1.0);
         let push = knockback.min(260.0);
@@ -1017,8 +1045,8 @@ impl WorldState {
             entity.body.velocity_x =
                 quantize((dx / distance).mul_add(push, entity.body.velocity_x));
             entity.body.velocity_y = quantize(push.mul_add(
-                -0.35,
-                (dy / distance).mul_add(push * 0.4, entity.body.velocity_y),
+                lift,
+                (dy / distance).mul_add(push * along_y, entity.body.velocity_y),
             ));
             if let EntityState::Pilot(state) = &mut entity.state {
                 state.hurt = STRIKE_GUARD_SECONDS;

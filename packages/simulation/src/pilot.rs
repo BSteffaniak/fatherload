@@ -22,6 +22,9 @@
 //! step, so 30, 60 and 120 Hz sessions trace the same path for the same held input.
 
 pub mod arsenal;
+pub mod top_down;
+
+pub use top_down::{TOP_DOWN_FOOTPRINT, TOP_DOWN_SPEED, step_top_down};
 
 use serde::{Deserialize, Serialize};
 
@@ -570,8 +573,8 @@ pub enum PilotMode {
 
 /// How the pilot's body moves: the side-view platformer, or a crypt run's top-down mode.
 ///
-/// WP-TOMBS: no gravity, eight-way walking; [`step_pilot`] hands it to [`step_top_down`], the
-/// placeholder T29 replaces with the real top-down movement, dodge roll and collision.
+/// WP-TOMBS: no gravity, eight-way walking, a dodge roll; [`step_pilot`] hands it to
+/// [`step_top_down`] (see [`top_down`]).
 #[derive(
     Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
 )]
@@ -775,6 +778,23 @@ pub struct PilotState {
     /// Mid-air jumps used since the pilot last stood on something.
     #[serde(default)]
     pub air_jumps: u8,
+    // --- WP-TOMBS crypts (T29, [`top_down`]; all default for pilots saved before it) -------
+    /// Seconds left of the current dodge roll (0: not rolling).
+    #[serde(default)]
+    pub roll: f32,
+    /// The roll's direction (quantized, 127 per unit, +y down).
+    #[serde(default)]
+    pub roll_x: i8,
+    #[serde(default)]
+    pub roll_y: i8,
+    /// Seconds before the next roll.
+    #[serde(default)]
+    pub roll_cooldown: f32,
+    /// The last direction walked in the top-down mode (quantized; zero: the side facing).
+    #[serde(default)]
+    pub heading_x: i8,
+    #[serde(default)]
+    pub heading_y: i8,
 }
 
 impl PilotState {
@@ -830,13 +850,21 @@ impl PilotState {
                 trap_sight: false,
             },
             air_jumps: 0,
+            roll: 0.0,
+            roll_x: 0,
+            roll_y: 0,
+            roll_cooldown: 0.0,
+            heading_x: 0,
+            heading_y: 0,
         }
     }
 
-    /// Current hitbox height.
+    /// Current hitbox height (the square footprint's depth in the top-down mode).
     #[must_use]
     pub const fn height(&self) -> f32 {
-        if self.crouching {
+        if matches!(self.view, PilotView::TopDown) {
+            TOP_DOWN_FOOTPRINT
+        } else if self.crouching {
             PILOT_CROUCH_HEIGHT
         } else {
             PILOT_STAND_HEIGHT
@@ -890,6 +918,13 @@ impl PilotState {
         } else {
             PilotPose::Idle
         }
+    }
+
+    /// Whether a dodge roll's i-frames cover the pilot now (top-down mode: every hit, trap and
+    /// pit passes through it for all but the roll's last moment).
+    #[must_use]
+    pub fn roll_guarded(&self) -> bool {
+        matches!(self.view, PilotView::TopDown) && self.roll > top_down::ROLL_RECOVERY_SECONDS
     }
 
     /// The pilot's middle (chest height), for reach, pickups, boarding and enemy sight.
@@ -1017,6 +1052,8 @@ pub struct PilotStepReport {
     pub wall_jumped: bool,
     /// Let go of a rope with the jump button this tick.
     pub rope_released: bool,
+    /// Started a dodge roll this tick (the top-down mode, [`top_down`]).
+    pub rolled: bool,
 }
 
 const FLUSH: f32 = 0.25;
@@ -1109,7 +1146,7 @@ pub fn step_pilot(
     body.previous_y = body.y;
     if state.view == PilotView::TopDown {
         for _ in 0..steps {
-            step_top_down(body, state, world, controls, step);
+            step_top_down(body, state, world, controls, step, &mut report);
         }
         return report;
     }
@@ -1121,91 +1158,6 @@ pub fn step_pilot(
     report.hover_started = state.hovering && !was_hovering;
     report.glide_started = state.gliding && !was_gliding;
     report
-}
-
-/// Walking speed in the top-down mode (px/s).
-pub const TOP_DOWN_SPEED: f32 = 170.0;
-
-/// One internal step of the top-down placeholder mode (WP-TOMBS crypts).
-///
-/// No gravity: the held directions walk eight ways (up is `controls.up`, down
-/// `controls.down`), swept against the same box as the side view. **T29 replaces this** with
-/// the real top-down movement (dodge roll, its own collision footprint and camera); the
-/// [`PilotView`] flag on the state is the switch, and nothing else in the body step needs to
-/// know.
-pub fn step_top_down(
-    body: &mut Body,
-    state: &mut PilotState,
-    world: &impl PilotTerrain,
-    controls: PilotControls,
-    dt: f32,
-) {
-    let horizontal = controls.horizontal.clamp(-1.0, 1.0);
-    let vertical = f32::from(i8::from(controls.down) - i8::from(controls.up));
-    state.anim = (state.anim + dt) % 600.0;
-    state.hurt = (state.hurt - dt).max(0.0);
-    state.mode = PilotMode::Free;
-    state.grounded = true;
-    state.crouching = false;
-    state.jetting = false;
-    state.hovering = false;
-    state.gliding = false;
-    state.tether = None;
-    state.air_jumps = 0;
-    state.jump_held = controls.jump;
-    if horizontal.abs() > 0.2 {
-        state.facing = if horizontal < 0.0 { -1 } else { 1 };
-        state.run_time += dt;
-    } else {
-        state.run_time = 0.0;
-    }
-    let length = horizontal.hypot(vertical);
-    let speed = TOP_DOWN_SPEED * boon_scale(state.boons.move_pct);
-    let (vx, vy) = if length > 0.2 {
-        (
-            horizontal / length.max(1.0) * speed,
-            vertical / length.max(1.0) * speed,
-        )
-    } else {
-        (0.0, 0.0)
-    };
-    body.velocity_x = vx;
-    body.velocity_y = vy;
-    let height = state.height();
-    for (delta, horizontal_axis) in [(vx * dt, true), (vy * dt, false)] {
-        if delta == 0.0 {
-            continue;
-        }
-        let pieces = (delta.abs() / SWEEP).ceil().max(1.0);
-        #[allow(
-            clippy::cast_possible_truncation,
-            clippy::cast_sign_loss,
-            reason = "a few pieces"
-        )]
-        let count = pieces as u32;
-        let part = delta / pieces;
-        for _ in 0..count {
-            let (next_x, next_y) = if horizontal_axis {
-                (body.x + part, body.y)
-            } else {
-                (body.x, body.y + part)
-            };
-            if box_blocked(world, next_x, next_y, height) {
-                if horizontal_axis {
-                    body.velocity_x = 0.0;
-                } else {
-                    body.velocity_y = 0.0;
-                }
-                break;
-            }
-            body.x = next_x;
-            body.y = next_y;
-        }
-    }
-    body.x = quantize(body.x);
-    body.y = quantize(body.y);
-    body.velocity_x = quantize(body.velocity_x);
-    body.velocity_y = quantize(body.velocity_y);
 }
 
 #[allow(

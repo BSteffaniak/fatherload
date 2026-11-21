@@ -65,6 +65,16 @@
 //! | [`EnemyKind::AnimatedStatue`] | machine (stone, armoured) | stands dormant in tomb rooms | its eyes light when you come close | explosives, EMP; bullets chip it |
 //! | [`EnemyKind::SunColossus`] | machine (boss) | a side-view tomb's crypt | crouches, then a leaping slam that throws rubble; raises mummies when hurt; enrages | jump the rubble, explosives |
 //! | [`EnemyKind::HollowMatriarch`] | creature (boss) | a side-view tomb's crypt | a wail before a fan of hexes; rings of hexes and crypt bats when hurt; dives at the end | dodge between the hexes, fire |
+//! Crypt creatures (WP-TOMBS T29, [`crate::tomb::crypt`]) live only in top-down crypt runs and
+//! move on the room grid seen from above (no gravity):
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::CryptSkeleton`] | creature (pack) | crypt ambushes and guards | a rattle and a raised blade, then a lunge | anything; roll through the lunge |
+//! | [`EnemyKind::Spectre`] | creature (spirit) | crypt ambushes | drifts through walls; a shriek before it swoops | wait for it to leave the wall, then shoot |
+//! | [`EnemyKind::Cultist`] | creature (caster) | crypt ambushes and guards | glowing hands, then a hex bolt (a fan of three every third cast) | close in, break line of sight |
+//! | [`EnemyKind::CryptGolem`] | machine (construct) | crypt ambushes, vaults | raises its fists, a ring on the floor, then a slam | keep out of the ring; EMP stuns it, explosives crack it |
+//! | [`EnemyKind::CryptLord`] | creature (boss) | the last floor's hall | a pattern tell before every attack; three phases | roll through the volleys, use the pillars |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -134,6 +144,17 @@ pub enum EnemyKind {
     SunColossus,
     /// Boss: a floating wraith queen (hex fans, hex rings, crypt bats, dives).
     HollowMatriarch,
+    // --- Crypt creatures (WP-TOMBS T29, `crate::tomb::crypt`), appended ----------------
+    /// A rattling skeleton that hunts in packs and lunges with a blade.
+    CryptSkeleton,
+    /// A spirit that drifts through crypt walls and swoops on the living.
+    Spectre,
+    /// A robed caster that keeps its distance and throws hex bolts.
+    Cultist,
+    /// A slow stone construct whose slam shakes the floor.
+    CryptGolem,
+    /// The crypt's boss: three phases of hex volleys, charges and summons.
+    CryptLord,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -210,6 +231,12 @@ pub enum ShotKind {
     Rubble,
     /// The Hollow Matriarch's slow hex orb.
     Hex,
+    /// A crypt caster's hex bolt (WP-TOMBS T29; cultists and the crypt lord).
+    CryptHex,
+    /// A crypt trap's arrow, loosed from the wall by a pressure plate.
+    CryptArrow,
+    /// A crypt trap's rolling boulder: it crushes what it meets and only a wall stops it.
+    Boulder,
 }
 
 impl ShotKind {
@@ -225,6 +252,9 @@ impl ShotKind {
             Self::Arrow => 360.0,
             Self::Rubble => 250.0,
             Self::Hex => 150.0,
+            Self::CryptHex => 165.0,
+            Self::CryptArrow => 380.0,
+            Self::Boulder => 150.0,
         }
     }
 
@@ -236,7 +266,13 @@ impl ShotKind {
             Self::Cannonball => 160.0,
             Self::Arrow => 90.0,
             Self::Rubble => 520.0,
-            Self::Fireball | Self::Bolt | Self::Wispfire | Self::Hex => 0.0,
+            Self::Fireball
+            | Self::Bolt
+            | Self::Wispfire
+            | Self::Hex
+            | Self::CryptHex
+            | Self::CryptArrow
+            | Self::Boulder => 0.0,
         }
     }
 
@@ -246,8 +282,10 @@ impl ShotKind {
         match self {
             Self::Acid | Self::Bolt | Self::Arrow => 4.0,
             Self::Fireball | Self::Cannonball | Self::Hex => 6.0,
-            Self::Wispfire => 5.0,
+            Self::Wispfire | Self::CryptHex => 5.0,
             Self::Rubble => 7.0,
+            Self::CryptArrow => 3.0,
+            Self::Boulder => 12.0,
         }
     }
 
@@ -257,10 +295,12 @@ impl ShotKind {
         match self {
             Self::Acid => 7.0,
             Self::Fireball => 10.0,
-            Self::Bolt => 8.0,
+            Self::Bolt | Self::CryptHex => 8.0,
             Self::Rubble => 7.5,
             Self::Cannonball => 9.0,
             Self::Wispfire | Self::Hex | Self::Arrow => 6.0,
+            Self::CryptArrow => 11.0,
+            Self::Boulder => 24.0,
         }
     }
 
@@ -268,12 +308,21 @@ impl ShotKind {
     #[must_use]
     pub const fn life_millis(self) -> u64 {
         match self {
-            Self::Acid => 2_500,
+            Self::Acid | Self::CryptArrow => 2_500,
             Self::Fireball => 4_000,
             Self::Bolt | Self::Arrow => 2_200,
             Self::Cannonball | Self::Wispfire | Self::Rubble => 3_500,
             Self::Hex => 4_500,
+            Self::CryptHex => 3_200,
+            Self::Boulder => 7_000,
         }
+    }
+
+    /// A crypt shot (WP-TOMBS T29): it flies over trap overlays and only crypt masonry, gates
+    /// and fixtures stop it; boulders roll through what they hit.
+    #[must_use]
+    pub const fn is_crypt(self) -> bool {
+        matches!(self, Self::CryptHex | Self::CryptArrow | Self::Boulder)
     }
 }
 
@@ -424,7 +473,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 39] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -459,6 +508,11 @@ impl EnemyKind {
         Self::AnimatedStatue,
         Self::SunColossus,
         Self::HollowMatriarch,
+        Self::CryptSkeleton,
+        Self::Spectre,
+        Self::Cultist,
+        Self::CryptGolem,
+        Self::CryptLord,
     ];
 
     /// The kind's stats.
@@ -1030,7 +1084,115 @@ impl EnemyKind {
                     AttackStyle::Ranged(ShotKind::Hex, 3),
                 )
             },
+            // Crypt creatures (WP-TOMBS T29): seen from above, so "flying" is how they move
+            // (no gravity on the room grid; `world/enemies/crypt.rs` drives them). No leash:
+            // a crypt's dead follow you through the rooms.
+            Self::CryptSkeleton => EnemyStats {
+                radius: 9.0,
+                health: 24.0,
+                speed: 92.0,
+                dash_speed: 330.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 0.0,
+                contact_damage: 7.0,
+                windup_millis: 420,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 2.0,
+                knockback: 170.0,
+                ..stats("Crypt Skeleton", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::Spectre => EnemyStats {
+                radius: 8.0,
+                health: 20.0,
+                speed: 70.0,
+                dash_speed: 270.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 12.0,
+                leash_tiles: 0.0,
+                contact_damage: 8.0,
+                windup_millis: 520,
+                cooldown_millis: 1_800,
+                attack_range_tiles: 2.4,
+                knockback: 120.0,
+                ..stats("Spectre", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::Cultist => EnemyStats {
+                radius: 9.0,
+                health: 30.0,
+                speed: 66.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 0.0,
+                contact_damage: 4.0,
+                windup_millis: 700,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 7.5,
+                knockback: 100.0,
+                ..stats(
+                    "Cultist",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::CryptHex, 1),
+                )
+            },
+            Self::CryptGolem => EnemyStats {
+                radius: 13.0,
+                health: 150.0,
+                speed: 44.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 0.0,
+                contact_damage: 16.0,
+                windup_millis: 950,
+                cooldown_millis: 2_500,
+                attack_range_tiles: 1.9,
+                knockback: 260.0,
+                ..stats("Crypt Golem", Machine, Flying, AttackStyle::Lunge)
+            },
+            Self::CryptLord => EnemyStats {
+                radius: 16.0,
+                health: 640.0,
+                speed: 58.0,
+                dash_speed: 380.0,
+                sight_tiles: 18.0,
+                hearing_tiles: 18.0,
+                leash_tiles: 0.0,
+                contact_damage: 14.0,
+                windup_millis: 850,
+                cooldown_millis: 1_600,
+                attack_range_tiles: 11.0,
+                knockback: 240.0,
+                elite: true,
+                ..stats(
+                    "The Crypt Lord",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::CryptHex, 5),
+                )
+            },
         }
+    }
+
+    /// Whether it lives in top-down crypts (WP-TOMBS T29): driven by the crypt AI on the room
+    /// grid (`world/enemies/crypt.rs`).
+    #[must_use]
+    pub const fn is_crypt(self) -> bool {
+        matches!(
+            self,
+            Self::CryptSkeleton
+                | Self::Spectre
+                | Self::Cultist
+                | Self::CryptGolem
+                | Self::CryptLord
+        )
+    }
+
+    /// Whether it drifts through walls (spectres: by design the one exception to the body
+    /// rules' "never inside rock").
+    #[must_use]
+    pub const fn passes_walls(self) -> bool {
+        matches!(self, Self::Spectre)
     }
 
     /// Whether this is one of the sky families (Wave 4 T21).
@@ -1127,6 +1289,12 @@ impl EnemyKind {
             // Drawn half as large again as their art (the game scales the guardians up).
             Self::SunColossus => (32.0, 40.0),
             Self::HollowMatriarch => (26.0, 30.0),
+            // Crypt creatures: seen from above, the box is the footprint.
+            Self::CryptSkeleton => (11.0, 11.0),
+            Self::Spectre => (10.0, 11.0),
+            Self::Cultist => (11.0, 11.0),
+            Self::CryptGolem => (17.0, 16.0),
+            Self::CryptLord => (22.0, 21.0),
         }
     }
 
@@ -1205,6 +1373,12 @@ impl EnemyKind {
             (Self::AnimatedStatue, DamageKind::Kinetic) => 0.45,
             (Self::SunColossus, DamageKind::Kinetic) => 0.7,
             (Self::CryptBat | Self::HollowMatriarch, DamageKind::Fire) => 1.4,
+            // Crypt creatures (WP-TOMBS T29): bullets whistle through a spectre, stone shrugs
+            // them off but cracks under blasts, and the dead burn.
+            (Self::Spectre, DamageKind::Kinetic) => 0.75,
+            (Self::CryptGolem, DamageKind::Kinetic | DamageKind::Piercing) => 0.55,
+            (Self::CryptGolem, DamageKind::Explosive) => 1.5,
+            (Self::CryptSkeleton | Self::Spectre, DamageKind::Fire) => 1.4,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -1288,6 +1462,16 @@ pub struct EnemyState {
     pub seed: u32,
     /// Last player that hurt it (kill credit).
     pub last_attacker: Option<PlayerId>,
+    // --- Crypt creatures (WP-TOMBS T29; zero for every other enemy and older saves) ------
+    /// The crypt lord's phase (0 before it woke, then 1..=3 as its health falls).
+    #[serde(default)]
+    pub phase: u8,
+    /// Which attack of its pattern a crypt creature is on (cycles).
+    #[serde(default)]
+    pub pattern: u8,
+    /// Waves left of a multi-wave attack (the lord's spiral), or the casts since a fan.
+    #[serde(default)]
+    pub volley: u8,
 }
 
 impl EnemyState {
@@ -1332,6 +1516,9 @@ impl EnemyState {
             parent: None,
             seed,
             last_attacker: None,
+            phase: 0,
+            pattern: 0,
+            volley: 0,
         }
     }
 
@@ -1884,6 +2071,26 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             if rare < 25 {
                 add(mineral, 1);
             }
+        }
+        // Crypt creatures (WP-TOMBS T29): bone and grave goods; the run's caches are the
+        // real prize.
+        EnemyKind::CryptSkeleton | EnemyKind::Spectre => {
+            if rare < 30 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::Cultist => {
+            add(mineral, 1);
+            if rare < 15 {
+                add(ItemKind::Material(StrategicResourceKind::CrystalLens), 1);
+            }
+        }
+        EnemyKind::CryptGolem => {
+            add(richer, 2 + extra);
+        }
+        EnemyKind::CryptLord => {
+            add(richer, 6 + extra);
+            add(ItemKind::Artifact(ArtifactKind::Fossil), 1);
         }
         EnemyKind::UmbralAlpha => {
             add(ItemKind::Material(StrategicResourceKind::UmbralHeart), 1);
