@@ -232,12 +232,11 @@ pub fn realizer_for(style: SiteStyle) -> &'static dyn FloorRealizer {
     }
 }
 
-/// The enemy kind for a spawn slot: the placeholder tomb bestiary.
+/// The enemy kind for a spawn slot: each style's own bestiary.
 ///
-/// T28 (mummies, crypt bats, skeletal archers, animated statues, tomb guardians) and T29
-/// (skeleton packs, spectres, cultists, golems, the crypt lord) return their own kinds here.
-/// Top-down placeholders fly (no floor to stand on seen from above); both styles' guardian is
-/// the flying ancient guardian for now.
+/// Side view: T28's mummies, crypt bats, skeletal archers, animated statues and the two tomb
+/// guardians ([`super::side_view::bestiary`]); top down: T29's skeleton packs, spectres,
+/// cultists, golems and the crypt lord ([`super::crypt::bestiary`]).
 #[must_use]
 pub const fn bestiary(style: SiteStyle, role: SpawnRole, variant: u32) -> EnemyKind {
     match (style, role) {

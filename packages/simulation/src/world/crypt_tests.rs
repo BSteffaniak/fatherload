@@ -834,3 +834,44 @@ fn a_golem_never_slams_through_a_wall() {
         assert_eq!(hurt_total(&events), 0, "nothing reached the pilot");
     }
 }
+
+/// Wave 5 seam: relics are shared by both styles, so Sandwalker Sandals (T28's "traps hurt half
+/// as much") blunt a crypt's trap overlays and pit falls too, not only the side-view traps.
+#[test]
+fn sandwalker_sandals_blunt_crypt_traps_as_in_side_view_tombs() {
+    let lost = |sandals: bool| {
+        let site = crypt(1);
+        let mut world = quiet_crypt(&site, 60);
+        if sandals {
+            world.scenario_edit_tomb_member(PLAYER, |member| {
+                member.relics.push(crate::tomb::relic::Relic::Sandwalker);
+            });
+        }
+        let interior = room(&world, RoomKind::Entry);
+        // Spikes always up (as in the roll test above).
+        world.scenario_crypt_traps(PLAYER, field(interior, CryptTrapKind::Spikes, 1_700), 0);
+        stand_at(
+            &mut world,
+            TilePosition {
+                x: interior.center().x,
+                y: interior.center().y,
+            },
+        );
+        let still = TickInputs::held(PLAYER, ControlState::default());
+        let mut lost = 0.0_f32;
+        for _ in 0..60 {
+            let _ = tick(&mut world, &still);
+            let (id, _, state) = world.pilot_of(PLAYER).expect("pilot");
+            lost += state.max_health - state.health;
+            world.edit_pilot(id, |_, state| state.health = state.max_health);
+        }
+        lost
+    };
+    let bare = lost(false);
+    let shod = lost(true);
+    assert!(bare > 0.0, "spikes bite");
+    assert!(
+        (shod / bare - 0.5).abs() < 0.05,
+        "Sandwalker halves crypt spikes: {shod} vs {bare}"
+    );
+}

@@ -84,6 +84,9 @@ struct Walker {
     rolling: bool,
     max_health: f32,
     featherfall: bool,
+    /// The member's relic trap scale (Sandwalker Sandals and their synergies, shared with the
+    /// side-view traps): overlays and pit falls hurt this much.
+    trap_scale: f32,
 }
 
 impl Walker {
@@ -168,6 +171,9 @@ impl WorldState {
                 rolling: state.roll_guarded(),
                 max_health: state.max_health,
                 featherfall: state.boons.featherfall,
+                trap_scale: crate::tomb::relic::RelicEffects::scale(
+                    self.tombs.effects_of(member.player).trap_pct,
+                ),
             });
         }
         walkers
@@ -223,7 +229,8 @@ impl WorldState {
                 _ if now == TrapStage::Active => {
                     for walker in &walkers {
                         if !walker.rolling && walker.covers(trap.at) {
-                            let amount = trap.kind.damage_per_second() * dt * scale;
+                            let amount =
+                                trap.kind.damage_per_second() * dt * scale * walker.trap_scale;
                             match hurt.iter_mut().find(|(pilot, _)| *pilot == walker.pilot) {
                                 // The worst trap a member stands in counts, not every tile.
                                 Some((_, worst)) => *worst = worst.max(amount),
@@ -413,7 +420,7 @@ impl WorldState {
         if !walker.featherfall {
             let _ = self.damage_pilot(
                 walker.pilot,
-                walker.max_health * PIT_FALL_SHARE * scale,
+                walker.max_health * PIT_FALL_SHARE * scale * walker.trap_scale,
                 output,
             );
         }
