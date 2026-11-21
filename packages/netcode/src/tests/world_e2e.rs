@@ -1474,3 +1474,85 @@ fn world_crypt_runs_predict_rolls_and_converge() {
         "the party played the crypt from above"
     );
 }
+
+/// Wave 6 QA: co-op online at the far ends of the world. One crewmate lands on the Moon's
+/// colony pad (low gravity; the bot climbs out, walks, jumps and picks at the regolith), the
+/// other flies just under the Moon's underside, the highest open sky (`y` past -100,000 px),
+/// under a lossy, jittery link. Prediction and reconciliation must stay bounded and every
+/// client must converge on the host.
+#[test]
+fn world_pilots_on_the_moon_and_in_the_high_sky_predict_and_converge() {
+    use fatherload_simulation::{
+        SimulationParams, TILE_SIZE, moon,
+        worldgen::{GeneratorVersion, WorldSettings, sky},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(60, 10, 2.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V10,
+        ..WorldSettings::new(0x5EED_0060)
+    };
+    let lunar = WorldState::new_game_with_settings(
+        fatherload_simulation::PlayerId::new(99),
+        &settings,
+        SimulationParams::new(60),
+    );
+    let mut world = harness.world().clone();
+    *world.terrain_mut() = lunar.terrain().clone();
+    let layout = world.moon_layout().expect("V10 fills the Moon");
+    let (first, _last, pad_row) = layout.pad();
+    let players: Vec<_> = harness
+        .clients
+        .iter()
+        .map(|client| crate::world::to_sim_player(client.session.player().expect("joined")))
+        .collect();
+    let high_row = sky::row_of(sky::MOON_BOTTOM_ROWS - 40);
+    for (index, player_id) in players.iter().enumerate() {
+        let rig = world.player_mut(*player_id).expect("player");
+        #[allow(clippy::cast_precision_loss, reason = "tile coordinates")]
+        if index == 0 {
+            rig.x = (first as f32 + 2.5) * TILE_SIZE;
+            rig.y = (pad_row as f32).mul_add(TILE_SIZE, -11.0);
+            rig.lunar.landed = true;
+        } else {
+            rig.x = (first as f32 + 6.5) * TILE_SIZE;
+            rig.y = (high_row as f32 + 0.5) * TILE_SIZE;
+        }
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+        rig.hazard_gear.pressurized_hull = moon::VACUUM_SEAL_TIER;
+        rig.hazard_gear.life_support = 1;
+        rig.hazard_gear.de_icer = 6;
+        rig.fuel = rig.fuel_capacity;
+    }
+    harness.host.new_epoch(world);
+    harness.event_counts.clear();
+    harness.run_for(Duration::from_secs(25));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    assert_bounded(&harness);
+    let host = harness.world();
+    let high = host.player(players[1]).expect("the high rig");
+    assert!(
+        high.y < -100_000.0,
+        "the second crewmate stayed in the high sky: y = {}",
+        high.y
+    );
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+    }
+    for label in ["pilot exited", "pilot jumped"] {
+        assert!(
+            harness.event_counts.get(label).copied().unwrap_or(0) > 0,
+            "{label}: {:?}",
+            harness.event_counts
+        );
+    }
+    let summary = harness.summary();
+    assert!(
+        summary.max_correction.is_finite(),
+        "corrections stay finite: {summary:?}"
+    );
+}

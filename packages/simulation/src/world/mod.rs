@@ -127,6 +127,8 @@ mod sky_temples;
 #[cfg(test)]
 mod sky_tests;
 mod sky_weapons;
+#[cfg(test)]
+mod soak_tests;
 mod state_hash;
 #[cfg(test)]
 mod streaming_tests;
