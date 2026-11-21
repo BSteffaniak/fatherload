@@ -27,7 +27,7 @@ const FRAME: Duration = Duration::from_millis(5);
 /// Upper bound for any single wait in the test. Every wait ends as soon as its condition holds,
 /// so this only has to outlast a debug build on a heavily loaded machine (a welcome of the
 /// heavily dug world regenerates its terrain client side); it never makes a check weaker.
-const WAIT: Duration = Duration::from_secs(60);
+const WAIT: Duration = Duration::from_mins(1);
 
 struct Host {
     session: HostSession<WorldState>,

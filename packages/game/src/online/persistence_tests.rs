@@ -21,7 +21,7 @@ use crate::{
 const FRAME: Duration = Duration::from_millis(5);
 /// Upper bound for one wait: each ends as soon as its condition holds, so this only has to
 /// outlast a debug build on a heavily loaded machine (it never weakens a check).
-const WAIT: Duration = Duration::from_secs(60);
+const WAIT: Duration = Duration::from_mins(1);
 
 fn host_identity() -> LocalIdentity {
     LocalIdentity {

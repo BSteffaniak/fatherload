@@ -159,6 +159,10 @@ fn parse_size(value: &str) -> Result<(i32, i32), String> {
 /// # Errors
 ///
 /// Returns a message if the output directory cannot be created or a capture is not written.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one capture loop: stage, draw, save, optionally time"
+)]
 pub fn run(options: &CaptureOptions) -> Result<(), String> {
     let scenes: Vec<&Scene> = all_scenes()
         .filter(|scene| {
@@ -255,38 +259,55 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
         if options.timing_frames > 0
             && !(gallery || ui_sheet || prompt_sheet || rig_sheet.is_some())
         {
-            let mut times = Vec::with_capacity(options.timing_frames);
-            for _ in 0..options.timing_frames {
-                let started = std::time::Instant::now();
-                let screen = crate::window::DesktopWindow::screen(&raylib);
-                let snapshot = game.snapshot(screen);
-                renderer.sync(&mut raylib, &thread, &snapshot, &FrameReport::default());
-                let mut draw = raylib.begin_drawing(&thread);
-                renderer.render(&mut draw, &game.shell, &snapshot);
-                times.push(started.elapsed().as_secs_f64() * 1_000.0);
-                drop(draw);
-            }
-            times.sort_by(f64::total_cmp);
-            #[allow(
-                clippy::cast_precision_loss,
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                reason = "frame counts and percentiles"
-            )]
-            let at = |fraction: f64| times[((times.len() - 1) as f64 * fraction).round() as usize];
-            #[allow(clippy::cast_precision_loss, reason = "frame counts")]
-            let mean = times.iter().sum::<f64>() / times.len() as f64;
-            println!(
-                "timing {:<28} mean {mean:6.2} ms  median {:6.2}  p95 {:6.2}  max {:6.2}",
+            time_frames(
+                (&mut raylib, &thread),
+                renderer,
+                &game,
                 scene.name,
-                at(0.5),
-                at(0.95),
-                at(1.0)
+                options.timing_frames,
             );
         }
     }
     let _ = std::fs::remove_file(&scratch_save);
     Ok(())
+}
+
+/// Draws `frames` more frames of a captured scene and prints the CPU time of the frame work
+/// (snapshot, renderer sync and draw calls; the buffer swap is left out).
+fn time_frames(
+    (raylib, thread): (&mut raylib::RaylibHandle, &raylib::RaylibThread),
+    renderer: &mut GameRenderer,
+    game: &LocalGame,
+    name: &str,
+    frames: usize,
+) {
+    let mut times = Vec::with_capacity(frames);
+    for _ in 0..frames {
+        let started = std::time::Instant::now();
+        let screen = crate::window::DesktopWindow::screen(raylib);
+        let snapshot = game.snapshot(screen);
+        renderer.sync(raylib, thread, &snapshot, &FrameReport::default());
+        let mut draw = raylib.begin_drawing(thread);
+        renderer.render(&mut draw, &game.shell, &snapshot);
+        times.push(started.elapsed().as_secs_f64() * 1_000.0);
+        drop(draw);
+    }
+    times.sort_by(f64::total_cmp);
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "frame counts and percentiles"
+    )]
+    let at = |fraction: f64| times[((times.len() - 1) as f64 * fraction).round() as usize];
+    #[allow(clippy::cast_precision_loss, reason = "frame counts")]
+    let mean = times.iter().sum::<f64>() / times.len() as f64;
+    println!(
+        "timing {name:<28} mean {mean:6.2} ms  median {:6.2}  p95 {:6.2}  max {:6.2}",
+        at(0.5),
+        at(0.95),
+        at(1.0)
+    );
 }
 
 /// Stages every scene and writes its world as a save file (no window).

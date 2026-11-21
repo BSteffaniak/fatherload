@@ -21,7 +21,9 @@
 //! lit by the sun in its phase, that grows as the camera climbs toward it.
 //!
 //! Every texture is rasterized once at startup ([`SkyArt`]) into small point-filtered images
-//! and tiled across the view; only rectangles and those textures are drawn per frame.
+//! and tiled across the view; only rectangles and those textures are drawn per frame. The Moon
+//! disc is the exception: its art depends on its size and phase, so it is rasterized when they
+//! change ([`MoonDiscs`]) and drawn as two textures, never as thousands of rectangles.
 
 use raylib::prelude::*;
 
@@ -107,6 +109,48 @@ pub struct SkyArt {
     clouds: Option<Texture2D>,
     /// Flora sprites, water and weather art.
     pub(super) surface: SurfaceArt,
+    /// The Moon discs drawn lately.
+    moon: MoonDiscs,
+}
+
+/// Up to [`MOON_DISC_CACHE`] rasterized Moon discs (split-screen views may each show their own),
+/// the least recently drawn replaced first.
+///
+/// Wave 6 QA: the disc used to be drawn as runs of rectangles every frame, broken up by its
+/// speckles and dither, about ten thousand rectangles once it loomed large in the high sky.
+/// That was the browser build's worst frame by far (software WebGL: 190 ms of frame work under
+/// the Moon against about 2 ms anywhere else).
+#[derive(Default)]
+struct MoonDiscs {
+    discs: std::cell::RefCell<Vec<MoonDisc>>,
+    clock: std::cell::Cell<u64>,
+}
+
+/// How many Moon discs stay rasterized.
+const MOON_DISC_CACHE: usize = 4;
+
+/// What a Moon disc's art depends on.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MoonKey {
+    /// Radius in art pixels.
+    radius: i32,
+    waxing: bool,
+    /// The terminator in steps of `1 / MOON_TERMINATOR_STEPS` (under a twentieth of an art
+    /// pixel at the largest disc: the phase moves continuously, so an exact key would rebuild
+    /// every frame; this one rebuilds about once a second of play).
+    terminator: i32,
+}
+
+/// Steps of the terminator's position (`cos` of the phase angle, -1..1).
+const MOON_TERMINATOR_STEPS: f32 = 4_096.0;
+
+/// One rasterized disc: the sunlit side and the dark side as separate layers, each tinted with
+/// its own alpha when drawn.
+struct MoonDisc {
+    key: MoonKey,
+    lit: Option<Texture2D>,
+    dark: Option<Texture2D>,
+    used: u64,
 }
 
 impl SkyArt {
@@ -157,6 +201,7 @@ impl SkyArt {
             near_rims,
             clouds,
             surface,
+            moon: MoonDiscs::default(),
         }
     }
 }
@@ -607,7 +652,7 @@ pub fn draw_sky(
     draw_sky_bands(draw, art, settings, visible, &time.look);
     draw_stars(draw, settings, visible, seconds, time);
     draw_horizon_glow(draw, art, visible, horizon, &time.look);
-    draw_moon(draw, settings, visible, time);
+    draw_moon(draw, &art.moon, settings, visible, time);
     draw_sun(draw, visible, horizon, time.clock);
     if let Some(clouds) = &art.clouds {
         draw_clouds(draw, clouds, settings, visible, seconds, time.look.clouds);
@@ -886,6 +931,7 @@ fn moon_disc(visible: Rectangle, moon: MoonAnchor) -> (f32, f32, i32) {
 
 fn draw_moon(
     draw: &mut impl RaylibDraw,
+    discs: &MoonDiscs,
     settings: &WorldSettings,
     visible: Rectangle,
     time: &SkyTime,
@@ -898,62 +944,119 @@ fn draw_moon(
     }
     let (cx, cy, radius) = moon_disc(visible, time.moon);
     let r = radius as f32 * ART;
-    if cx + r < visible.x
+    if radius <= 0
+        || cx + r < visible.x
         || cx - r > visible.x + visible.width
         || cy - r > visible.y + visible.height
     {
         return;
     }
-    // Only the rows inside the view are walked (the disc is huge up close).
-    let first_row = (((visible.y - cy) / ART).floor() as i32).max(-radius);
-    let last_row = (((visible.y + visible.height - cy) / ART).ceil() as i32).min(radius);
     let night = time.look.stars.max(star_share(center_y));
     let lit_alpha = (night.mul_add(175.0, 80.0) * share).round() as u8;
     let dark_alpha = (night * 200.0 * share).round() as u8;
     let cycle = time.clock.moon_cycle();
-    let terminator = (cycle * std::f32::consts::TAU).cos();
-    let waxing = cycle < 0.5;
-    let craters = [
-        (-0.3, -0.25, 0.18),
-        (0.25, 0.15, 0.22),
-        (-0.05, 0.42, 0.14),
-        (0.42, -0.35, 0.1),
-        (-0.48, 0.28, 0.11),
-        (0.05, -0.05, 0.08),
-    ];
-    for row in first_row..=last_row {
+    let key = MoonKey {
+        radius,
+        waxing: cycle < 0.5,
+        terminator: ((cycle * std::f32::consts::TAU).cos() * MOON_TERMINATOR_STEPS).round() as i32,
+    };
+    discs.with(key, |disc| {
+        let size = (2 * radius + 1) as f32;
+        let source = Rectangle::new(0.0, 0.0, size, size);
+        let dest = Rectangle::new(
+            (-radius as f32).mul_add(ART, cx),
+            (-radius as f32).mul_add(ART, cy),
+            size * ART,
+            size * ART,
+        );
+        for (texture, alpha) in [(&disc.dark, dark_alpha), (&disc.lit, lit_alpha)] {
+            if let Some(texture) = texture
+                && alpha > 0
+            {
+                draw.draw_texture_pro(
+                    texture,
+                    source,
+                    dest,
+                    Vector2::zero(),
+                    0.0,
+                    // The exact alpha the rectangles had (`alpha()` rounds through a float).
+                    Color::new(255, 255, 255, alpha),
+                );
+            }
+        }
+    });
+}
+
+impl MoonDiscs {
+    /// Runs `draw` with the disc for `key`, rasterizing it first if it is not cached.
+    fn with(&self, key: MoonKey, draw: impl FnOnce(&MoonDisc)) {
+        let now = self.clock.get().wrapping_add(1);
+        self.clock.set(now);
+        let mut discs = self.discs.borrow_mut();
+        let found = discs.iter().position(|disc| disc.key == key);
+        let index = found.unwrap_or_else(|| {
+            let (lit, dark) = moon_layers(key);
+            let disc = MoonDisc {
+                key,
+                lit: pixels_texture(&lit, 2 * key.radius + 1),
+                dark: pixels_texture(&dark, 2 * key.radius + 1),
+                used: now,
+            };
+            if discs.len() < MOON_DISC_CACHE {
+                discs.push(disc);
+                discs.len() - 1
+            } else {
+                let oldest = discs
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, disc)| disc.used)
+                    .map_or(0, |(index, _)| index);
+                discs[oldest] = disc;
+                oldest
+            }
+        });
+        discs[index].used = now;
+        draw(&discs[index]);
+    }
+}
+
+/// Craters on the Moon's face: centre and size in disc radii.
+const MOON_CRATERS: [(f32, f32, f32); 6] = [
+    (-0.3, -0.25, 0.18),
+    (0.25, 0.15, 0.22),
+    (-0.05, 0.42, 0.14),
+    (0.42, -0.35, 0.1),
+    (-0.48, 0.28, 0.11),
+    (0.05, -0.05, 0.08),
+];
+
+/// The Moon disc of `key` as two RGBA layers (`2 * radius + 1` art pixels square, opaque where
+/// the layer shows): the sunlit side with its rim, craters and speckles, and the dark side's
+/// dithered shade. The disc's art pixel `(column, row)` from its centre is texel
+/// `(column + radius, row + radius)`.
+fn moon_layers(key: MoonKey) -> (Vec<u8>, Vec<u8>) {
+    let radius = key.radius;
+    let size = (2 * radius + 1) as usize;
+    let mut lit = vec![0_u8; size * size * 4];
+    let mut dark = vec![0_u8; size * size * 4];
+    let terminator = key.terminator as f32 / MOON_TERMINATOR_STEPS;
+    for row in -radius..=radius {
         let v = row as f32 / radius as f32;
         let half_width = (1.0 - v * v).max(0.0).sqrt();
         let half = (half_width * radius as f32).round() as i32;
-        let mut run: Option<(i32, Option<Color>)> = None;
-        let flush =
-            |draw: &mut dyn FnMut(Rectangle, Color), start: i32, end: i32, color: Option<Color>| {
-                if let Some(color) = color {
-                    draw(
-                        Rectangle::new(
-                            (start as f32).mul_add(ART, cx),
-                            (row as f32).mul_add(ART, cy),
-                            (end - start) as f32 * ART,
-                            ART,
-                        ),
-                        color,
-                    );
-                }
-            };
-        let mut paint = |rect: Rectangle, color: Color| draw.draw_rectangle_rec(rect, color);
         for column in -half..=half {
             let u = column as f32 / radius as f32;
-            let lit = if waxing {
+            let sunlit = if key.waxing {
                 u > terminator * half_width
             } else {
                 u < -terminator * half_width
             };
-            let crater = craters.iter().any(|(x, y, size)| {
+            let crater = MOON_CRATERS.iter().any(|(x, y, size)| {
                 let (dx, dy) = (u - x, v - y);
                 dx * dx + dy * dy <= size * size
             });
             let rim = half - column.abs() <= 1;
-            let color = if lit {
+            let (layer, color) = if sunlit {
                 let base = if crater {
                     FOG
                 } else if rim {
@@ -963,30 +1066,45 @@ fn draw_moon(
                 } else {
                     ICE
                 };
-                Some(with_alpha(base, lit_alpha))
-            } else if dark_alpha > 0 {
+                (&mut lit, base)
+            } else {
                 let base = if crater || bayer4(column, row) < 3 {
                     SLATE_DARK
                 } else {
                     NIGHT
                 };
-                Some(with_alpha(base, dark_alpha))
-            } else {
-                None
+                (&mut dark, base)
             };
-            match run {
-                Some((_, run_color)) if run_color == color => {}
-                Some((start, run_color)) => {
-                    flush(&mut paint, start, column, run_color);
-                    run = Some((column, color));
-                }
-                None => run = Some((column, color)),
-            }
-        }
-        if let Some((start, run_color)) = run {
-            flush(&mut paint, start, half + 1, run_color);
+            let texel = ((row + radius) as usize * size + (column + radius) as usize) * 4;
+            layer[texel..texel + 4].copy_from_slice(&[color.r, color.g, color.b, 255]);
         }
     }
+    (lit, dark)
+}
+
+/// A point-filtered texture of `size` x `size` RGBA texels.
+fn pixels_texture(pixels: &[u8], size: i32) -> Option<Texture2D> {
+    let mut copy = pixels.to_vec();
+    let image = ffi::Image {
+        data: copy.as_mut_ptr().cast(),
+        width: size,
+        height: size,
+        mipmaps: 1,
+        format: ffi::PixelFormat::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 as i32,
+    };
+    // SAFETY: `image` borrows `copy` (size * size RGBA texels) for the call only;
+    // LoadTextureFromImage copies the texels to the GPU and never frees them.
+    let raw = unsafe { ffi::LoadTextureFromImage(image) };
+    if raw.id == 0 {
+        return None;
+    }
+    // SAFETY: a freshly loaded texture that the wrapper now owns (and unloads on drop).
+    let texture = unsafe { Texture2D::from_raw(raw) };
+    // SAFETY: a valid texture; point filtering keeps the art pixels crisp.
+    unsafe {
+        ffi::SetTextureFilter(raw, TextureFilter::TEXTURE_FILTER_POINT as i32);
+    }
+    Some(texture)
 }
 
 /// The sun on its arc (presentation of [`WorldClock::sun_angle`]): rising on the left horizon,

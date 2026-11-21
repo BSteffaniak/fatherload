@@ -2349,13 +2349,6 @@ impl ShellState {
         self.message = message.into();
     }
 
-    /// Handles one frame of shell input: `inputs` holds every local seat's input in seat order
-    /// (seat 0 first; its keyboard owns the global hotkeys). While the game runs each seat's
-    /// input drives only that seat's menus; the global menus take the menu seat's input.
-    #[allow(
-        clippy::too_many_lines,
-        reason = "top-level shell dispatcher keeps frame order explicit"
-    )]
     /// Advances [`Self::update_ticks`] by `delta_seconds` of real time (see its docs).
     #[allow(
         clippy::cast_possible_truncation,
@@ -2376,6 +2369,13 @@ impl ShellState {
         self.update_ticks = self.update_ticks.saturating_add(whole as u64);
     }
 
+    /// Handles one frame of shell input: `inputs` holds every local seat's input in seat order
+    /// (seat 0 first; its keyboard owns the global hotkeys). While the game runs each seat's
+    /// input drives only that seat's menus; the global menus take the menu seat's input.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "top-level shell dispatcher keeps frame order explicit"
+    )]
     pub fn update(
         &mut self,
         inputs: &[PlayerInput],
