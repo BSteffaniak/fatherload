@@ -112,6 +112,8 @@ mod replication_tests;
 mod rescue;
 mod roster;
 mod services;
+#[cfg(test)]
+mod side_tomb_tests;
 mod simulate;
 #[cfg(test)]
 mod sky_continent_tests;

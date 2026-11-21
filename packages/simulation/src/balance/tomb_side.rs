@@ -189,6 +189,46 @@ impl SideBot {
         })
     }
 
+    /// The middle of the lever the bot walked past, when the gate ahead in its room is still
+    /// shut (it goes back for it).
+    #[must_use]
+    pub fn lever_behind(world: &WorldState, run: &TombRun, (x, feet): (f32, f32)) -> Option<f32> {
+        let here = TilePosition {
+            x: (x / TILE_SIZE).floor() as i32,
+            y: ((feet - 4.0) / TILE_SIZE).floor() as i32,
+        };
+        let room = run.rooms.iter().find(|room| {
+            let mut reach = room.interior;
+            reach.max.x += 1;
+            reach.contains(here)
+        })?;
+        let door = room.interior.max.x + 1;
+        let shut = (room.interior.min.y..=room.interior.max.y + 1).any(|y| {
+            matches!(
+                world
+                    .terrain()
+                    .tile(TilePosition { x: door, y })
+                    .map(|found| found.kind),
+                Some(TileKind::Built(BuiltTile::Gate))
+            )
+        });
+        if !shut {
+            return None;
+        }
+        (room.interior.min.y..=room.interior.max.y)
+            .flat_map(|y| (room.interior.min.x..=room.interior.max.x).map(move |x| (x, y)))
+            .find(|(x, y)| {
+                matches!(
+                    world
+                        .terrain()
+                        .tile(TilePosition { x: *x, y: *y })
+                        .map(|found| found.kind),
+                    Some(TileKind::Built(BuiltTile::Lever { on: false, .. }))
+                )
+            })
+            .map(|(x, _)| (x as f32 + 0.5) * TILE_SIZE)
+    }
+
     /// What to do this tick, for a pilot with feet at `(x, feet)` and body `height` tall that
     /// means to jump (`jumping`).
     #[must_use]
@@ -245,5 +285,219 @@ impl SideBot {
             return Advice::Back;
         }
         Advice::Go
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        PlayerId, SimulationParams,
+        enemy::EnemyDifficulty,
+        tomb::SiteStyle,
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
+
+    /// The run's floor around the pilot as text (debugging the bot).
+    fn around(world: &WorldState, run: &TombRun) -> String {
+        let origin = tomb_sites::slot_origin(run.slot);
+        let (x, y) = world
+            .pilot_of(run.members[0].player)
+            .map_or((0, 0), |(_, body, _)| {
+                ((body.x / TILE_SIZE) as i32, (body.y / TILE_SIZE) as i32)
+            });
+        let mut text = format!("pilot at {:?}\n", (x - origin.x, y - origin.y));
+        for row in y - 12..y + 5 {
+            for column in x - 30..x + 30 {
+                let tile = TilePosition { x: column, y: row };
+                let glyph = if column == x && row == y - 1 {
+                    '@'
+                } else {
+                    match world.terrain().tile(tile).map(|found| found.kind) {
+                        Some(TileKind::Air) => '.',
+                        Some(TileKind::Built(BuiltTile::TombTrap { kind, .. })) => {
+                            ['^', 'B', 'C', 'K', 'D', 'S', 'F', 'W'][usize::from(kind % 8)]
+                        }
+                        Some(TileKind::Built(BuiltTile::Gate)) => 'G',
+                        Some(TileKind::Built(BuiltTile::Lever { .. })) => '/',
+                        Some(TileKind::Built(BuiltTile::PressurePlate { .. })) => '_',
+                        Some(TileKind::Built(BuiltTile::TombCache { .. })) => '$',
+                        Some(TileKind::Built(BuiltTile::TombStairs)) => '>',
+                        Some(TileKind::Built(BuiltTile::TombShrine { .. })) => 'A',
+                        Some(TileKind::Built(BuiltTile::TombPillar(_))) => '|',
+                        _ => '#',
+                    }
+                };
+                text.push(glyph);
+            }
+            text.push('\n');
+        }
+        text
+    }
+
+    #[test]
+    #[ignore = "debug: shows where the tombs bot sticks in side-view runs"]
+    fn print_where_the_bot_sticks() {
+        for (seed, tier, armed) in [
+            (11_u64, 2_u8, false),
+            (4_242, 2, false),
+            (4_242, 3, false),
+            (90_001, 3, false),
+            (11, 3, false),
+            (90_001, 4, true),
+            (90_001, 5, true),
+            (11, 4, false),
+            (11, 5, false),
+            (4_242, 5, false),
+        ] {
+            let settings = WorldSettings {
+                generator: GeneratorVersion::V10,
+                ..WorldSettings::new(seed)
+            };
+            let Some(site) = super::super::tombs::find_site(&settings, SiteStyle::SideView, tier)
+            else {
+                continue;
+            };
+            let player = PlayerId::new(0);
+            let mut world =
+                WorldState::new_game_with_settings(player, &settings, SimulationParams::new(60));
+            world.set_enemy_difficulty(if armed {
+                EnemyDifficulty::Normal
+            } else {
+                EnemyDifficulty::Peaceful
+            });
+            if let Some(rig) = world.player_mut(player) {
+                rig.pilot_gear.suit = 3;
+                rig.pilot_gear.armor = 3;
+                rig.pilot_gear.jetpack = 1;
+                let _ = rig.pilot_arsenal.receive(crate::WeaponKind::Rifle);
+                rig.pilot_arsenal.equipped = Some(crate::WeaponKind::Rifle);
+                let _ = rig.pilot_arsenal.add_ammo(
+                    crate::weapon::AmmoKind::Cartridge,
+                    crate::pilot::arsenal::MAX_PILOT_AMMO,
+                );
+            }
+            let _ = world.place_pilot(player, 0.0, 0.0);
+            let _ = world.scenario_enter_tomb(&site, &[player]);
+            let mut bot = super::super::tombs::TombBot::new(player, armed);
+            let mut best = (0_u8, f32::MIN, 0_u32);
+            for tick in 0..60 * 60 * 4 {
+                let Some(run) = world.tomb_run_of(player) else {
+                    println!("{seed} t{tier}: run over at tick {tick}");
+                    break;
+                };
+                if let Some((_, body, _)) = world.pilot_of(player)
+                    && (run.floor > best.0 || body.x > best.1 + 8.0)
+                {
+                    best = (run.floor, body.x, tick);
+                }
+                if tick - best.2 > 60 * 40 {
+                    println!(
+                        "{seed} t{tier} stuck on floor {}:\n{}",
+                        run.floor,
+                        around(&world, run)
+                    );
+                    break;
+                }
+                let inputs = bot.inputs(&world);
+                let now = world.simulation_tick();
+                let output = world.simulate_tick(now, &inputs);
+                for event in output.events {
+                    if let crate::GameplayEventKind::MechanismUsed {
+                        x, y, mechanism, ..
+                    } = event.kind
+                    {
+                        let origin = tomb_sites::slot_origin(0);
+                        println!(
+                            "  tick {tick}: {mechanism:?} at {:?}",
+                            (x - origin.x, y - origin.y)
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "debug: where an armed bot loses health in side-view runs (Normal enemies)"]
+    fn print_what_hurts_the_bot() {
+        for seed in [11_u64, 4_242, 90_001] {
+            for tier in 1..=5_u8 {
+                let settings = WorldSettings {
+                    generator: GeneratorVersion::V10,
+                    ..WorldSettings::new(seed)
+                };
+                let Some(site) =
+                    super::super::tombs::find_site(&settings, SiteStyle::SideView, tier)
+                else {
+                    continue;
+                };
+                let player = PlayerId::new(0);
+                let mut world = WorldState::new_game_with_settings(
+                    player,
+                    &settings,
+                    SimulationParams::new(60),
+                );
+                world.set_enemy_difficulty(EnemyDifficulty::Normal);
+                if let Some(rig) = world.player_mut(player) {
+                    let kit = tier.saturating_sub(1).min(3);
+                    rig.pilot_gear.suit = kit;
+                    rig.pilot_gear.armor = kit;
+                    rig.pilot_gear.jetpack = 1;
+                    let _ = rig.pilot_arsenal.receive(crate::WeaponKind::Rifle);
+                    rig.pilot_arsenal.equipped = Some(crate::WeaponKind::Rifle);
+                    let _ = rig.pilot_arsenal.add_ammo(
+                        crate::weapon::AmmoKind::Cartridge,
+                        crate::pilot::arsenal::MAX_PILOT_AMMO,
+                    );
+                }
+                let _ = world.place_pilot(player, 0.0, 0.0);
+                let _ = world.scenario_enter_tomb(&site, &[player]);
+                let mut bot = super::super::tombs::TombBot::new(player, true);
+                let mut hurt: std::collections::BTreeMap<String, f32> =
+                    std::collections::BTreeMap::new();
+                let mut last = None;
+                let mut end = String::from("timeout");
+                for _ in 0..60 * 60 * 8 {
+                    let Some(run) = world.tomb_run_of(player) else {
+                        break;
+                    };
+                    let floor = run.floor;
+                    let room = world.pilot_of(player).and_then(|(_, body, state)| {
+                        let (x, y) = state.middle(body);
+                        let tile = TilePosition {
+                            x: (x / TILE_SIZE).floor() as i32,
+                            y: (y / TILE_SIZE).floor() as i32,
+                        };
+                        run.rooms
+                            .iter()
+                            .find(|room| room.interior.contains(tile))
+                            .map(|room| room.kind)
+                    });
+                    let near_enemy = world.pilot_of(player).is_some_and(|(_, body, _)| {
+                        !world
+                            .enemies_near(body.x, body.y - 20.0, TILE_SIZE * 3.0)
+                            .is_empty()
+                    });
+                    let inputs = bot.inputs(&world);
+                    let now = world.simulation_tick();
+                    let output = world.simulate_tick(now, &inputs);
+                    for event in &output.events {
+                        if let crate::GameplayEventKind::TombRunEnded { outcome, .. } = event.kind {
+                            end = format!("{outcome:?} on floor {floor} in {room:?}");
+                        }
+                    }
+                    let health = world.pilot_of(player).map(|(_, _, state)| state.health);
+                    if let (Some(before), Some(after)) = (last, health)
+                        && after < before
+                    {
+                        let cause = if near_enemy { "enemy" } else { "trap/shot" };
+                        *hurt.entry(format!("{cause} in {room:?}")).or_default() += before - after;
+                    }
+                    last = health;
+                }
+                println!("{seed} t{tier}: {end}; hurt {hurt:?}");
+            }
+        }
     }
 }

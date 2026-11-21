@@ -119,6 +119,27 @@ impl TombBot {
         let column = ((x + PILOT_HALF_WIDTH + 6.0) / TILE_SIZE).floor() as i32;
         let mut controls = if state.view == PilotView::TopDown {
             Self::top_down(world, run, x, feet, column)
+        } else if let Some(lever) = super::tomb_side::SideBot::lever_behind(world, run, (x, feet))
+            && (lever - x).abs() > TILE_SIZE * 0.9
+        {
+            // T28: the gate ahead is shut and its lever is behind: go back up for it.
+            let side = (lever - x).signum();
+            let feet_row = ((feet - 4.0) / TILE_SIZE).floor() as i32;
+            let ahead = ((x + side * (PILOT_HALF_WIDTH + 6.0)) / TILE_SIZE).floor() as i32;
+            let blocked = Self::solid(
+                world,
+                TilePosition {
+                    x: ahead,
+                    y: feet_row,
+                },
+            );
+            if blocked && self.jump == 0 && state.grounded {
+                self.jump = 14;
+            }
+            let jumping = self.jump > 0;
+            self.jump = self.jump.saturating_sub(1);
+            self.stall = 0;
+            ControlState::new(side, false, false).with_jump(jumping)
         } else {
             let feet_row = ((feet - 4.0) / TILE_SIZE).floor() as i32;
             let blocked = Self::solid(
@@ -155,14 +176,19 @@ impl TombBot {
                     }))
                 )
             };
-            let here = (x / TILE_SIZE).floor() as i32;
-            let over_plate = !Self::solid(
-                world,
-                TilePosition {
-                    x: here,
-                    y: feet_row + 1,
-                },
-            ) && plate_at(here, 2);
+            // Stop once the whole body hangs over the plate pit (it drops onto a plate).
+            let over_plate = [x - PILOT_HALF_WIDTH + 1.0, x + PILOT_HALF_WIDTH - 1.0]
+                .into_iter()
+                .map(|edge| (edge / TILE_SIZE).floor() as i32)
+                .all(|here| {
+                    !Self::solid(
+                        world,
+                        TilePosition {
+                            x: here,
+                            y: feet_row + 1,
+                        },
+                    ) && plate_at(here, 2)
+                });
             let pit = pit && !plate_at(column + 1, 2) && !plate_at(column + 1, 3);
             let wants_jump = (blocked || pit) && self.jump == 0 && state.grounded;
             // T28: read the traps ahead (blades, crushers, darts, fog, sand) before stepping.

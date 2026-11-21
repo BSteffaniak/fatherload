@@ -255,11 +255,11 @@ impl ShotKind {
     #[must_use]
     pub const fn damage(self) -> f32 {
         match self {
-            Self::Acid | Self::Arrow => 7.0,
-            Self::Fireball | Self::Rubble => 10.0,
-            Self::Bolt | Self::Hex => 8.0,
+            Self::Acid => 7.0,
+            Self::Fireball => 10.0,
+            Self::Bolt | Self::Rubble => 8.0,
             Self::Cannonball => 9.0,
-            Self::Wispfire => 6.0,
+            Self::Wispfire | Self::Hex | Self::Arrow => 6.0,
         }
     }
 
@@ -931,15 +931,15 @@ impl EnemyKind {
             // --- Side-view tomb creatures (T28): sized for pilots on foot ------------------
             Self::Mummy => EnemyStats {
                 radius: 10.0,
-                health: 55.0,
+                health: 45.0,
                 speed: 42.0,
                 dash_speed: 150.0,
                 sight_tiles: 9.0,
                 hearing_tiles: 5.0,
                 leash_tiles: 18.0,
-                contact_damage: 10.0,
-                windup_millis: 700,
-                cooldown_millis: 1_900,
+                contact_damage: 7.0,
+                windup_millis: 800,
+                cooldown_millis: 2_100,
                 attack_range_tiles: 2.2,
                 knockback: 170.0,
                 ..stats("Mummy", Creature, Walking, AttackStyle::Lunge)
@@ -951,9 +951,9 @@ impl EnemyKind {
                 sight_tiles: 10.0,
                 hearing_tiles: 4.0,
                 leash_tiles: 20.0,
-                contact_damage: 5.0,
+                contact_damage: 4.0,
                 windup_millis: 0,
-                cooldown_millis: 1_000,
+                cooldown_millis: 1_100,
                 attack_range_tiles: 0.6,
                 knockback: 90.0,
                 ..stats("Crypt Bat", Creature, Flying, AttackStyle::Contact)
@@ -984,8 +984,8 @@ impl EnemyKind {
                 sight_tiles: 4.0,
                 hearing_tiles: 3.0,
                 leash_tiles: 16.0,
-                contact_damage: 16.0,
-                windup_millis: 650,
+                contact_damage: 12.0,
+                windup_millis: 750,
                 cooldown_millis: 2_000,
                 attack_range_tiles: 3.0,
                 knockback: 220.0,
@@ -993,13 +993,13 @@ impl EnemyKind {
             },
             Self::SunColossus => EnemyStats {
                 radius: 18.0,
-                health: 520.0,
+                health: 460.0,
                 speed: 55.0,
                 dash_speed: 230.0,
                 sight_tiles: 18.0,
                 hearing_tiles: 18.0,
                 leash_tiles: 40.0,
-                contact_damage: 26.0,
+                contact_damage: 20.0,
                 windup_millis: 900,
                 cooldown_millis: 2_600,
                 attack_range_tiles: 8.0,
@@ -1009,7 +1009,7 @@ impl EnemyKind {
             },
             Self::HollowMatriarch => EnemyStats {
                 radius: 16.0,
-                health: 430.0,
+                health: 380.0,
                 speed: 85.0,
                 dash_speed: 300.0,
                 sight_tiles: 18.0,

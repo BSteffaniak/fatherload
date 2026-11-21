@@ -345,11 +345,9 @@ impl Draw<'_> {
                     self.spike_pit(left + span * pit - 1, hidden);
                 }
                 if danger >= 5 {
-                    // Dart throwers above the doorways fire across the hall at jump height.
+                    // A dart thrower above the east doorway fires across the hall at jump
+                    // height (never above the west one: that is the room before's lintel).
                     self.canvas.put(right + 1, floor - 4, dart_wall(-1));
-                    if danger >= 9 {
-                        self.canvas.put(left - 1, floor - 4, dart_wall(1));
-                    }
                 }
             }
             TrapTemplate::Blades => {
@@ -427,8 +425,9 @@ impl Draw<'_> {
         }
         match template {
             PuzzleTemplate::LeverMound => {
-                // A one, a two, then a three-high plateau with the lever at its east edge.
-                let mound = left + 2;
+                // A one, a two, then a three-high plateau with the lever at its east edge, the
+                // lever within a mechanism's reach of the gate (`mechanism::REACH_COLUMNS`).
+                let mound = (left + 2).max(right + 1 - crate::mechanism::REACH_COLUMNS + 2 - 4);
                 self.wall(mound, floor - 1);
                 self.wall(mound + 1, floor - 1);
                 self.wall(mound + 1, floor - 2);
@@ -451,16 +450,18 @@ impl Draw<'_> {
                 // A short dash from the gate (under a vault climb's ledges, if there is one:
                 // they start high enough).
                 let pit = (right - 6).max(left + 2);
-                self.canvas.put(pit, floor, TileKind::Air);
-                self.canvas.put(pit + 1, floor, TileKind::Air);
-                self.canvas.put(
-                    pit,
-                    floor + 1,
-                    TileKind::Built(BuiltTile::PressurePlate {
-                        channel,
-                        down: false,
-                    }),
-                );
+                // Plates across the whole pit floor: whoever drops in presses one.
+                for x in [pit, pit + 1] {
+                    self.canvas.put(x, floor, TileKind::Air);
+                    self.canvas.put(
+                        x,
+                        floor + 1,
+                        TileKind::Built(BuiltTile::PressurePlate {
+                            channel,
+                            down: false,
+                        }),
+                    );
+                }
                 if danger >= 5 {
                     self.spawn(left + 2, floor - 1, SpawnRole::Guard);
                 }
@@ -481,12 +482,13 @@ impl Draw<'_> {
                 }
             }
             AmbushTemplate::Gallery => {
-                // Steps up to a mezzanine over the room's east half.
+                // Steps up to a mezzanine over the room's east half; it stops two short of
+                // the east wall, so the way on drops back down to the doorway.
                 let mid = i32::midpoint(left, content_right);
                 self.wall(mid - 2, floor - 1);
                 self.wall(mid - 1, floor - 1);
                 self.wall(mid - 1, floor - 2);
-                for x in mid + 1..=content_right {
+                for x in mid + 1..=content_right - 2 {
                     self.wall(x, floor - 4);
                 }
             }
@@ -891,6 +893,64 @@ mod tests {
                                 assert_eq!(cell(tile.x, tile.y - 1), Some(TileKind::Air));
                             }
                             _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_gate_has_its_lintel_and_a_mechanism_in_reach() {
+        for setting in SiteSetting::ALL {
+            for tier in 1..=5 {
+                let site = site(setting, tier);
+                for run in 0..6 {
+                    for floor in 0..site.floors() {
+                        let plan = plan_floor(&site, run, floor);
+                        let realized = realizer_for(SiteStyle::SideView).realize(&plan);
+                        for (tile, kind) in &realized.cells {
+                            let TileKind::Built(BuiltTile::GateLintel(channel)) = kind else {
+                                continue;
+                            };
+                            let below = realized.cell(TilePosition {
+                                x: tile.x,
+                                y: tile.y + 1,
+                            });
+                            assert_eq!(below, Some(TileKind::Built(BuiltTile::Gate)));
+                            let answered = realized.cells.iter().any(|(at, cell)| {
+                                let in_reach = (at.x - tile.x).abs()
+                                    <= crate::mechanism::REACH_COLUMNS
+                                    && (at.y - tile.y).abs() <= crate::mechanism::REACH_ROWS;
+                                in_reach
+                                    && matches!(cell,
+                                        TileKind::Built(
+                                            BuiltTile::Lever { channel: c, .. }
+                                            | BuiltTile::PressurePlate { channel: c, .. },
+                                        ) if c == channel)
+                            });
+                            assert!(answered, "{setting:?} t{tier} run {run} floor {floor}");
+                        }
+                        // And every gate stands under a lintel.
+                        for (tile, kind) in &realized.cells {
+                            if *kind != TileKind::Built(BuiltTile::Gate) {
+                                continue;
+                            }
+                            let top = (1..=3)
+                                .map(|dy| {
+                                    realized.cell(TilePosition {
+                                        x: tile.x,
+                                        y: tile.y - dy,
+                                    })
+                                })
+                                .find(|cell| *cell != Some(TileKind::Built(BuiltTile::Gate)));
+                            assert!(
+                                matches!(
+                                    top,
+                                    Some(Some(TileKind::Built(BuiltTile::GateLintel(_))))
+                                ),
+                                "a gate without its lintel at {tile:?}"
+                            );
                         }
                     }
                 }
