@@ -263,7 +263,7 @@ fn draw_rig_bars(draw: &mut RaylibDrawHandle<'_>, view: &ViewSnapshot<'_>, at: (
 }
 
 /// The pilot's gauges on foot: health, air, the jetpack's burn (or the rig's hull when there
-/// is no jetpack) and the personal pack.
+/// is no jetpack; in a top-down crypt the dodge roll's recovery) and the personal pack.
 fn draw_pilot_bars(
     draw: &mut RaylibDrawHandle<'_>,
     view: &ViewSnapshot<'_>,
@@ -296,7 +296,23 @@ fn draw_pilot_bars(
         BarColors::AIR,
         0.25,
     );
-    y += if state.jetpack_capacity > 0.0 {
+    y += if state.view == fatherload_simulation::pilot::PilotView::TopDown {
+        // A crypt seen from above (WP-TOMBS T29): no jetpack to burn, so the bar shows the
+        // dodge roll coming back (full: ready).
+        let full = fatherload_simulation::pilot::top_down::ROLL_COOLDOWN_SECONDS;
+        ui_kit::stat_bar(
+            draw,
+            inner_x,
+            y,
+            inner_width,
+            &icons::BOOTS,
+            "ROLL",
+            (full - state.roll_cooldown).clamp(0.0, full),
+            full,
+            BarColors::PILOT,
+            0.0,
+        )
+    } else if state.jetpack_capacity > 0.0 {
         ui_kit::stat_bar(
             draw,
             inner_x,
