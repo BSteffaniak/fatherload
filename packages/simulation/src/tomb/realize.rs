@@ -247,14 +247,18 @@ pub const fn bestiary(style: SiteStyle, role: SpawnRole, variant: u32) -> EnemyK
 
 /// The boss's health multiplier over its kind's stock health, by site tier.
 ///
-/// A mesa tomb's guardian (tier 1, entered with starter gear) has half its stock health, a
-/// lunar one half again as much. The probe (`--balance-report --only tombs`) showed a flat 1.5x
-/// guardian ending nearly every tier-1 run at the boss.
+/// A mesa tomb's guardian (tier 1, entered with starter gear) has half its stock health. The
+/// creature tier (`world::tombs::enemy_tier`) already grows its health with the site
+/// tier and the floor, so this only adds a gentle step per tier: the wave 5 line (0.25 + 0.25
+/// x tier, 1.5x at tier 5) stacked on the creature tier walled off tiers 3-5 at the boss
+/// (wave 6 retune against `--balance-report --only tombs`).
 #[must_use]
-#[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
 pub fn boss_health_scale(site_tier: u8) -> f32 {
-    f32::from(site_tier.clamp(1, super::MAX_TIER)).mul_add(0.25, 0.25)
+    BOSS_HEALTH_SCALE[usize::from(site_tier.clamp(1, super::MAX_TIER) - 1)]
 }
+
+/// [`boss_health_scale`] by site tier (1-5).
+pub const BOSS_HEALTH_SCALE: [f32; super::MAX_TIER as usize] = [0.5, 0.55, 0.6, 0.65, 0.7];
 
 /// A cell writer that keeps the latest write per tile and walls in every open cell.
 pub(super) struct Canvas {
@@ -357,6 +361,32 @@ pub(super) const fn rect(x0: i32, y0: i32, x1: i32, y1: i32) -> TileRect {
 mod tests {
     use super::*;
     use crate::tomb::floor::plan_floor;
+
+    /// The guardian's effective health (creature tier on the last floor times the boss scale)
+    /// climbs gently with the site tier: the wave 5 line stacked both and walled tiers 3-5
+    /// off at the boss (6.6x tier 1's at tier 5); the wave 6 table keeps tier 5 near 3x.
+    #[test]
+    fn the_guardians_health_climbs_gently_with_the_tier() {
+        let effective = |tier: u8| {
+            let last_floor = crate::tomb::floors_for_tier(tier) - 1;
+            let creature_tier = tier - 1 + last_floor / 2;
+            crate::enemy::tier_scale(creature_tier) * boss_health_scale(tier)
+        };
+        let base = effective(1);
+        let ratios: Vec<f32> = (1..=crate::tomb::MAX_TIER)
+            .map(|tier| effective(tier) / base)
+            .collect();
+        assert!(
+            ratios.windows(2).all(|pair| pair[1] > pair[0]),
+            "every tier is a step up: {ratios:?}"
+        );
+        assert!(ratios[2] < 2.0, "tier 3 under twice tier 1: {ratios:?}");
+        assert!(ratios[4] < 3.5, "tier 5 under 3.5x tier 1: {ratios:?}");
+        assert!((boss_health_scale(1) - 0.5).abs() < f32::EPSILON);
+        // Out-of-range tiers clamp.
+        assert!((boss_health_scale(0) - boss_health_scale(1)).abs() < f32::EPSILON);
+        assert!((boss_health_scale(9) - boss_health_scale(5)).abs() < f32::EPSILON);
+    }
 
     #[test]
     fn every_plan_realizes_inside_the_slot_with_every_room() {

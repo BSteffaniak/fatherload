@@ -437,6 +437,7 @@ pub fn play_run(settings: &WorldSettings, site: &TombSite, hz: u32) -> ProbeRun 
             break;
         }
         let inputs = bot.inputs(&world);
+        let last_room = room_of(&world, player);
         let tick = world.simulation_tick();
         let output = world.simulate_tick(tick, &inputs);
         for event in output.events {
@@ -447,16 +448,9 @@ pub fn play_run(settings: &WorldSettings, site: &TombSite, hz: u32) -> ProbeRun 
                 GameplayEventKind::EnemyKilled { .. } => result.kills += 1,
                 GameplayEventKind::PilotFired { .. } => result.shots += 1,
                 GameplayEventKind::TombMemberDowned { revived: false, .. } => {
-                    result.downed_in = world.tomb_run_of(player).and_then(|run| {
-                        let (_, body, state) = world.pilot_of(player)?;
-                        let (x, y) = state.middle(body);
-                        let tile = TilePosition {
-                            x: (x / TILE_SIZE).floor() as i32,
-                            y: (y / TILE_SIZE).floor() as i32,
-                        };
-                        let room = run.rooms.iter().find(|room| room.interior.contains(tile))?;
-                        Some((run.floor, room.kind))
-                    });
+                    // A lone member's wipe ends the run in the same tick: fall back on the
+                    // room the pilot stood in when the tick began.
+                    result.downed_in = room_of(&world, player).or(last_room);
                 }
                 _ => {}
             }
@@ -483,6 +477,19 @@ pub fn play_run(settings: &WorldSettings, site: &TombSite, hz: u32) -> ProbeRun 
         result.floors = summary.floors;
     }
     result
+}
+
+/// The floor and kind of the room `player`'s pilot stands in, if in a run and a room.
+fn room_of(world: &WorldState, player: PlayerId) -> Option<(u8, crate::tomb::RoomKind)> {
+    let run = world.tomb_run_of(player)?;
+    let (_, body, state) = world.pilot_of(player)?;
+    let (x, y) = state.middle(body);
+    let tile = TilePosition {
+        x: (x / TILE_SIZE).floor() as i32,
+        y: (y / TILE_SIZE).floor() as i32,
+    };
+    let room = run.rooms.iter().find(|room| room.interior.contains(tile))?;
+    Some((run.floor, room.kind))
 }
 
 /// Loot on offer in a whole run of `site` (run 0): every cache of every floor at its value,
@@ -686,17 +693,44 @@ impl BalanceProbe for TombsProbe {
         // Crypts (T29) apart: their rooms tell a different story.
         let mut crypt_wipes: std::collections::BTreeMap<&str, usize> =
             std::collections::BTreeMap::new();
+        // Per tier and style: where the curve bends.
+        let mut by_tier: std::collections::BTreeMap<
+            (u8, &str),
+            std::collections::BTreeMap<&str, usize>,
+        > = std::collections::BTreeMap::new();
         for run in runs
             .iter()
             .filter(|run| run.outcome == Some(RunOutcome::Wiped))
         {
             let place = run
                 .downed_in
-                .map_or("between rooms (a pit)", |(_, room)| room.name());
+                .map_or("between rooms", |(_, room)| room.name());
             *wipes.entry(place).or_default() += 1;
             if run.style == SiteStyle::TopDown {
                 *crypt_wipes.entry(place).or_default() += 1;
             }
+            *by_tier
+                .entry((run.tier, run.style.noun()))
+                .or_default()
+                .entry(place)
+                .or_default() += 1;
+        }
+        if !by_tier.is_empty() {
+            section.notes.push(format!(
+                "Wipes by tier and style: {}.",
+                by_tier
+                    .iter()
+                    .map(|((tier, style), places)| format!(
+                        "t{tier} {style} ({})",
+                        places
+                            .iter()
+                            .map(|(place, count)| format!("{place} {count}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
         }
         if !crypt_wipes.is_empty() {
             section.notes.push(format!(
@@ -720,9 +754,9 @@ impl BalanceProbe for TombsProbe {
         }
         section.notes.push(format!(
             "{} runs; cache value per tier is (30 + 25 x floor + d40) x tier^2 credits, the \
-             guardian's hoard 300 x tier^2, the guardian's health 0.25 + 0.25 x tier of its \
-             stock.",
-            runs.len()
+             guardian's hoard 300 x tier^2, the guardian's health {:?} x its stock by tier.",
+            runs.len(),
+            crate::tomb::realize::BOSS_HEALTH_SCALE
         ));
         section
     }
