@@ -68,8 +68,7 @@ impl SeatUi {
         if picking && self.modal.is_none() {
             self.modal = Some(ModalScreen::RelicPick);
             self.selected_menu_item = 0;
-            "The stairs lead down. Choose a relic for the next floor."
-                .clone_into(&mut self.message);
+            // No toast: the pick's own title says it, and a toast would cover its footer.
             cues.push(SoundCue::Ui);
         } else if !picking && self.modal == Some(ModalScreen::RelicPick) {
             self.modal = None;
