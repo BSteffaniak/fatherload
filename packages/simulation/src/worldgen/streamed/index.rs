@@ -78,22 +78,6 @@ impl Layer {
             Self::Village => &[FeatureKind::Village],
         }
     }
-
-    #[allow(dead_code, reason = "kept beside `kinds` for single-kind layers")]
-    const fn kind(self) -> FeatureKind {
-        match self {
-            Self::Chamber => FeatureKind::Chamber,
-            Self::Hazard => FeatureKind::HazardCluster,
-            Self::Poi => FeatureKind::PointOfInterest,
-            Self::Motherlode => FeatureKind::Motherlode,
-            Self::Bed => FeatureKind::ArtifactBed,
-            Self::Transition => FeatureKind::StratumTransition,
-            Self::Cavern => FeatureKind::LargeCavern,
-            Self::Cave => FeatureKind::Cave,
-            Self::Village => FeatureKind::Village,
-            Self::Sky => FeatureKind::SkyIsland,
-        }
-    }
 }
 
 /// Marks a regional id (bounded worlds number their features from 0).

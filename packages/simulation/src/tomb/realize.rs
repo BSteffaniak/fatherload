@@ -9,10 +9,8 @@
 //!
 //! * [`SideViewRealizer`] (T28, [`super::side_view`]): platformer rooms in the site's culture
 //!   with trap halls, puzzles, ambushes, secrets, the vault climb, the guardian's arena.
-//! * [`TopDownRealizer`] (T29 replaces it): a row of square rooms seen from above with the
-//!   vault north of its parent, walked in the pilot's top-down placeholder mode (no gravity,
-//!   8-way): spike floors, lever gates on the east doorways, the shrine, caches, the boss and
-//!   the stairs.
+//! * [`super::crypt::CryptRealizer`] (T29): the crypt's room grid seen from above, with
+//!   trap overlays, lever gates, the shrine, caches, the crypt lord and the stairs.
 //!
 //! Tiles are [`BuiltTile`] tomb pieces (masonry [`BuiltTile::TombWall`] in the style's index,
 //! traps [`BuiltTile::TombTrap`], the shrine, stairs, exit and caches) plus the ruin
@@ -227,7 +225,7 @@ pub use super::side_view::SideViewRealizer;
 pub fn realizer_for(style: SiteStyle) -> &'static dyn FloorRealizer {
     match style {
         SiteStyle::SideView => &SideViewRealizer,
-        // T29: the crypt's room grid (`TopDownRealizer` below is T27's superseded placeholder).
+        // T29: the crypt's room grid.
         SiteStyle::TopDown => &super::crypt::CryptRealizer,
     }
 }
@@ -266,10 +264,6 @@ pub(super) struct Canvas {
 }
 
 impl Canvas {
-    pub(super) const fn new(style: SiteStyle) -> Self {
-        Self::with_masonry(style.index())
-    }
-
     /// A canvas whose walls are masonry set `masonry` ([`BuiltTile::TombWall`]).
     pub(super) const fn with_masonry(masonry: u8) -> Self {
         Self {
@@ -356,193 +350,6 @@ pub(super) const fn rect(x0: i32, y0: i32, x1: i32, y1: i32) -> TileRect {
     TileRect {
         min: TilePosition { x: x0, y: y0 },
         max: TilePosition { x: x1, y: y1 },
-    }
-}
-
-/// The top-down placeholder realizer (see the module docs).
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TopDownRealizer;
-
-/// Interior size of a top-down room (columns, rows).
-const CRYPT_ROOM: (i32, i32) = (13, 9);
-/// Top row of the main path's rooms (the vault row is above).
-const CRYPT_PATH_TOP: i32 = CRYPT_ROOM.1 + 3;
-
-impl FloorRealizer for TopDownRealizer {
-    fn style(&self) -> SiteStyle {
-        SiteStyle::TopDown
-    }
-
-    #[allow(clippy::too_many_lines, reason = "one room kind after another")]
-    fn realize(&self, plan: &FloorPlan) -> RealizedFloor {
-        let style = SiteStyle::TopDown;
-        let mut canvas = Canvas::new(style);
-        let (width, height) = CRYPT_ROOM;
-        let top = CRYPT_PATH_TOP;
-        let bottom = top + height - 1;
-        let mid = top + height / 2;
-        let mut rooms = Vec::new();
-        let mut spawns = Vec::new();
-        let mut start = TilePosition { x: 4, y: mid };
-        let path = plan.main_path();
-        let mut puzzles = 0_u8;
-        for (step, &index) in path.iter().enumerate() {
-            let node = &plan.rooms[index];
-            let x = 2 + i32::try_from(step).unwrap_or(0) * (width + 1);
-            let interior = rect(x, top, x + width - 1, bottom);
-            canvas.open(interior);
-            let door_x = x + width;
-            if step + 1 < path.len() {
-                // A three-row doorway east.
-                canvas.open(rect(door_x, mid - 1, door_x, mid + 1));
-            }
-            let room_index = rooms.len();
-            rooms.push(RealizedRoom {
-                plan: index,
-                kind: node.kind,
-                interior,
-            });
-            let danger = i32::from(node.danger);
-            let centre = TilePosition {
-                x: x + width / 2,
-                y: mid,
-            };
-            match node.kind {
-                RoomKind::Entry => {
-                    start = TilePosition { x: x + 3, y: mid };
-                    if plan.floor == 0 {
-                        canvas.put(x - 1, mid, TileKind::Built(BuiltTile::TombExit));
-                    }
-                }
-                RoomKind::TrapHall => {
-                    // A spike floor with one safe lane that changes row each column band.
-                    let lane = i32::try_from(node.variant % 3).unwrap_or(0) - 1;
-                    for column in x + 2..x + width - 2 {
-                        let band = (column - x) / 3;
-                        let safe = mid + if band % 2 == 0 { lane } else { -lane };
-                        for row in top..=bottom {
-                            if (row - safe).abs() <= 1 {
-                                continue;
-                            }
-                            let hidden = (node.variant >> (column & 7)).trailing_zeros() >= 2;
-                            canvas.put(
-                                column,
-                                row,
-                                TileKind::Built(BuiltTile::TombTrap {
-                                    kind: TrapKind::Spikes.index(),
-                                    hidden,
-                                }),
-                            );
-                        }
-                    }
-                    if danger >= 4 {
-                        spawns.push(SpawnSlot {
-                            room: room_index,
-                            at: TilePosition {
-                                x: x + width - 2,
-                                y: top + 1,
-                            },
-                            role: SpawnRole::Guard,
-                        });
-                    }
-                }
-                RoomKind::Puzzle => {
-                    let channel = puzzles % crate::mechanism::CHANNELS;
-                    puzzles += 1;
-                    if step + 1 < path.len() {
-                        canvas.put(
-                            door_x,
-                            mid - 2,
-                            TileKind::Built(BuiltTile::GateLintel(channel)),
-                        );
-                        for dy in -1..=1 {
-                            canvas.put(door_x, mid + dy, TileKind::Built(BuiltTile::Gate));
-                        }
-                    }
-                    // A lever on a plinth in the room.
-                    let lever_x = door_x - 3 - i32::try_from(node.variant % 4).unwrap_or(0);
-                    let lever_y = if node.variant & 0x10 == 0 {
-                        top + 1
-                    } else {
-                        bottom - 1
-                    };
-                    canvas.put(
-                        lever_x,
-                        lever_y,
-                        TileKind::Built(BuiltTile::Lever { channel, on: false }),
-                    );
-                }
-                RoomKind::Ambush => {
-                    let count = (1 + danger / 4).clamp(1, 4);
-                    for index in 0..count {
-                        spawns.push(SpawnSlot {
-                            room: room_index,
-                            at: TilePosition {
-                                x: x + 2 + (index * (width - 4)) / count.max(1),
-                                y: if index % 2 == 0 { top + 1 } else { bottom - 1 },
-                            },
-                            role: SpawnRole::Ambusher,
-                        });
-                    }
-                    // Four pillars to dodge around.
-                    for (dx, dy) in [(-3, -2), (3, -2), (-3, 2), (3, 2)] {
-                        canvas.put(centre.x + dx, centre.y + dy, canvas.wall());
-                    }
-                }
-                RoomKind::Shrine => {
-                    canvas.put(
-                        centre.x,
-                        centre.y,
-                        TileKind::Built(BuiltTile::TombShrine { lit: false }),
-                    );
-                }
-                RoomKind::Boss => {
-                    spawns.push(SpawnSlot {
-                        room: room_index,
-                        at: TilePosition {
-                            x: centre.x + 3,
-                            y: centre.y,
-                        },
-                        role: SpawnRole::Boss,
-                    });
-                }
-                RoomKind::Stairs => {
-                    canvas.put(centre.x, centre.y, TileKind::Built(BuiltTile::TombStairs));
-                }
-                RoomKind::Vault => {}
-            }
-            // The vault is the room north of its parent, through a doorway in the wall.
-            for branch in plan.branches_of(index) {
-                let vault = rect(x, top - height - 1, x + width - 1, top - 2);
-                canvas.open(vault);
-                canvas.open(rect(centre.x - 1, top - 1, centre.x + 1, top - 1));
-                let caches = (2 + i32::from(plan.rooms[branch].danger) / 4).clamp(2, 5);
-                for cache in 0..caches {
-                    canvas.put(
-                        x + 2 + cache * 2,
-                        vault.min.y + 1,
-                        TileKind::Built(BuiltTile::TombCache { open: false }),
-                    );
-                }
-                rooms.push(RealizedRoom {
-                    plan: branch,
-                    kind: RoomKind::Vault,
-                    interior: vault,
-                });
-            }
-        }
-        let columns = 2 + i32::try_from(path.len()).unwrap_or(0) * (width + 1) + 2;
-        RealizedFloor {
-            style,
-            size: (columns, bottom + 3),
-            cells: {
-                canvas.settle(&mut spawns);
-                canvas.finish()
-            },
-            rooms,
-            start,
-            spawns,
-        }
     }
 }
 
