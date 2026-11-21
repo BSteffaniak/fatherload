@@ -208,6 +208,8 @@ impl RigTiers {
 
 /// Share of the tank at or below which fuel counts as low (HUD warning, nameplate danger).
 pub const LOW_FUEL_FRACTION: f32 = 0.2;
+/// Share of the hull at or below which it counts as low (HUD warning, nameplate danger).
+pub const LOW_HULL_FRACTION: f32 = 0.35;
 
 /// One rig as drawn in the world.
 #[derive(Clone, Debug)]
@@ -359,12 +361,25 @@ impl PlayerPresentation {
         self.fuel_fraction() <= LOW_FUEL_FRACTION
     }
 
+    /// Share of the hull left, 0..=1.
+    #[must_use]
+    pub fn hull_fraction(&self) -> f32 {
+        (self.hull / self.max_hull.max(1.0)).clamp(0.0, 1.0)
+    }
+
+    /// Whether the hull is low enough to warn about: the HUD's low-hull share
+    /// ([`LOW_HULL_FRACTION`]), whatever the hull's size (a tier 12 hull is far past 30).
+    #[must_use]
+    pub fn hull_low(&self) -> bool {
+        self.hull_fraction() <= LOW_HULL_FRACTION
+    }
+
     /// Danger shown on the rig for other players.
     #[must_use]
     pub fn danger_level(&self) -> DangerLevel {
         if self.hull <= 0.0 || self.fuel <= 0.0 {
             DangerLevel::Critical
-        } else if self.hull < 30.0 || self.fuel_low() {
+        } else if self.hull_low() || self.fuel_low() {
             DangerLevel::Warning
         } else {
             DangerLevel::Nominal
@@ -927,7 +942,7 @@ impl<'w> RenderSnapshot<'w> {
         if player.fuel <= player.fuel_capacity * LOW_FUEL_FRACTION {
             warnings.push("fuel");
         }
-        if player.hull <= player.max_hull() * 0.35 {
+        if player.hull <= player.max_hull() * LOW_HULL_FRACTION {
             warnings.push("hull");
         }
         if depth >= 60 {
@@ -1163,6 +1178,27 @@ mod tests {
         assert_eq!(presentation(&world).danger_level(), DangerLevel::Warning);
         world.player_mut(rig).expect("rig").fuel = 0.0;
         assert_eq!(presentation(&world).danger_level(), DangerLevel::Critical);
+    }
+
+    #[test]
+    fn a_rigs_nameplate_reads_hull_as_a_share_of_its_max() {
+        let rig = PlayerId::new(1);
+        let mut world = WorldState::new_game(rig);
+        let presentation = |world: &WorldState| {
+            let player = world.player(rig).expect("rig");
+            PlayerPresentation::from_player(rig, player, world)
+        };
+        // A big hull (well past the old fixed 30) is graded by its share.
+        world.player_mut(rig).expect("rig").hull_level = 12;
+        let max = world.player(rig).expect("rig").max_hull();
+        assert!(max > 100.0, "tier 12 hull {max}");
+        world.player_mut(rig).expect("rig").hull = max * 0.5;
+        assert_eq!(presentation(&world).danger_level(), DangerLevel::Nominal);
+        world.player_mut(rig).expect("rig").hull = max * 0.3;
+        let low = presentation(&world);
+        assert!(low.hull > 30.0, "still above the old fixed line");
+        assert!(low.hull_low());
+        assert_eq!(low.danger_level(), DangerLevel::Warning);
     }
 
     const SCREEN_SIZES: [(i32, i32); 6] = [

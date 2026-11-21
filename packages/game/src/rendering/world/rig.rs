@@ -275,8 +275,8 @@ pub fn draw_remote_tag(draw: &mut impl RaylibDraw, player: &PlayerPresentation, 
             if player.fuel_low() { ORANGE } else { AMBER },
         ),
         (
-            player.hull / player.max_hull.max(1.0),
-            if player.hull < 30.0 { RED } else { LEAF },
+            player.hull_fraction(),
+            if player.hull_low() { RED } else { LEAF },
         ),
     ]
     .into_iter()
