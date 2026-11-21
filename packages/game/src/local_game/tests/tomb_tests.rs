@@ -10,7 +10,9 @@ use fatherload_simulation::{
     worldgen::{features::TileRect, tomb_sites},
 };
 
-use super::{LocalGame, PLAYER, PlayerInput, confirm_input, down, idle, interact, playing, press};
+use super::{
+    LocalGame, PLAYER, PlayerInput, confirm_input, down, idle, interact, playing, press, press_seat,
+};
 use crate::shell::ModalScreen;
 
 fn site(world: &WorldState, style: SiteStyle) -> TombSite {
@@ -81,6 +83,63 @@ fn the_relic_pick_opens_between_floors_and_takes_a_keyboard_pick() {
         Some(vec![offered[1]])
     );
     assert_ne!(game.shell.seat(0).modal, Some(ModalScreen::RelicPick));
+}
+
+#[test]
+fn a_sent_pick_never_reopens_the_pick_while_it_travels() {
+    let (mut game, site) = at_the_door();
+    game.edit_world(|world| {
+        let _ = world.scenario_enter_tomb(&site, &[PLAYER]);
+        world.scenario_tomb_stairs(PLAYER);
+    });
+    idle(&mut game, 2);
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::RelicPick));
+    let _ = press(&mut game, confirm_input());
+    for _ in 0..4 {
+        assert_ne!(game.shell.seat(0).modal, Some(ModalScreen::RelicPick));
+        idle(&mut game, 1);
+    }
+    // The next floor's pick opens again.
+    game.edit_world(|world| world.scenario_tomb_stairs(PLAYER));
+    idle(&mut game, 2);
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::RelicPick));
+}
+
+#[test]
+fn a_split_screen_pick_in_flight_keeps_the_pick_closed() {
+    let (game, site) = at_the_door();
+    let world = game.world().clone();
+    let mut game = playing(world, 2, "tombs-split");
+    idle(&mut game, 2);
+    let players: Vec<_> = game.seats().iter().map(|seat| seat.player).collect();
+    assert_eq!(players.len(), 2, "{players:?}");
+    let (seat, first) = (0, players[0]);
+    game.edit_world(|world| {
+        let _ = world.scenario_enter_tomb(&site, &players);
+        world.scenario_tomb_stairs(first);
+    });
+    idle(&mut game, 2);
+    assert_eq!(game.shell.seat(seat).modal, Some(ModalScreen::RelicPick));
+    let offered = game
+        .world()
+        .tombs()
+        .member_of(first)
+        .map(|member| member.offers.clone())
+        .expect("offers");
+    press_seat(&mut game, seat, confirm_input());
+    // The partner has not picked, so the run still waits. Put the member back to unpicked as
+    // a client sees it while its pick is still on the wire: the pick must stay closed.
+    game.edit_world(|world| {
+        world.scenario_edit_tomb_member(first, |member| {
+            member.picked = false;
+            member.relics.clear();
+            member.offers.clone_from(&offered);
+        });
+    });
+    for _ in 0..3 {
+        idle(&mut game, 1);
+        assert_ne!(game.shell.seat(seat).modal, Some(ModalScreen::RelicPick));
+    }
 }
 
 #[test]

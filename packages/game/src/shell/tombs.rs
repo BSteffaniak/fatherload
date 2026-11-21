@@ -28,6 +28,9 @@ pub struct SeatTomb {
     pub summary_seen: Option<u32>,
     /// The seat has looked at the summaries once (old ones never pop up).
     pub primed: bool,
+    /// The (run, floor) whose relic pick this seat has sent and not yet seen applied: the
+    /// pick does not reopen while the command travels (a tick locally, a round trip online).
+    pub pick_sent: Option<(u32, u8)>,
 }
 
 impl SeatTomb {
@@ -36,6 +39,7 @@ impl SeatTomb {
         Self {
             summary_seen: None,
             primed: false,
+            pick_sent: None,
         }
     }
 }
@@ -53,8 +57,10 @@ impl SeatUi {
             self.tomb.primed = true;
             self.tomb.summary_seen = summary;
         }
+        let pick_sent = self.tomb.pick_sent;
         let picking = tombs.run_of(player).is_some_and(|run| {
             run.phase == RunPhase::Picking
+                && pick_sent != Some((run.id, run.floor))
                 && run
                     .member(player)
                     .is_some_and(|member| !member.picked && !member.offers.is_empty())
@@ -111,6 +117,11 @@ impl SeatUi {
             seat: ctx.seat,
             command: PlayerCommand::Tomb(TombCommand::PickRelic(choice)),
         });
+        self.tomb.pick_sent = ctx
+            .world
+            .tombs()
+            .run_of(player)
+            .map(|run| (run.id, run.floor));
         self.message = choice
             .and_then(|index| offers.get(usize::from(index)))
             .map_or_else(
