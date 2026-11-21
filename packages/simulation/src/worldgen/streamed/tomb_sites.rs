@@ -116,9 +116,10 @@ pub const fn in_vault(settings: &WorldSettings, tile: TilePosition) -> bool {
     settings.generator.has_tombs() && VAULT.contains(tile)
 }
 
-/// Whether a generated feature or pilot space with `bounds` is left out of a world with tombs
-/// because it would lie in the vault's sealed bedrock: the feature index, the points of
-/// interest and the pilot spaces never point quests, markers or scanners into it.
+/// Whether a feature or pilot space with `bounds` is left out of a tomb world (the vault).
+///
+/// It would lie in the vault's sealed bedrock, so the feature index, the points of interest
+/// and the pilot spaces leave it out and nothing points quests, markers or scanners into it.
 #[must_use]
 pub const fn vault_hides(settings: &WorldSettings, bounds: &TileRect) -> bool {
     settings.generator.has_tombs() && bounds.intersects(&VAULT)

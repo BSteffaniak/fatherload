@@ -180,9 +180,10 @@ pub const fn bestiary(style: SiteStyle, role: SpawnRole, variant: u32) -> EnemyK
     }
 }
 
-/// The boss's health multiplier over its kind's stock health, by site tier: a mesa tomb's
-/// guardian (tier 1, entered with starter gear) has well under its stock health, a lunar
-/// one half again as much. The probe (`--balance-report --only tombs`) showed a flat 1.5x
+/// The boss's health multiplier over its kind's stock health, by site tier.
+///
+/// A mesa tomb's guardian (tier 1, entered with starter gear) has half its stock health, a
+/// lunar one half again as much. The probe (`--balance-report --only tombs`) showed a flat 1.5x
 /// guardian ending nearly every tier-1 run at the boss.
 #[must_use]
 #[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
