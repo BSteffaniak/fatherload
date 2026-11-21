@@ -1248,3 +1248,127 @@ fn world_tomb_runs_replicate_and_relic_picks_cross_the_wire() {
         }
     }
 }
+
+/// Side-view tomb traps online (WP-TOMBS T28): a party of two clients enters a side-view tomb
+/// whose first floor has a collapsing bridge, with the first pilot standing on one of its
+/// slabs. The slab crumbles and falls on the host's clock (a terrain change and a
+/// `TombTrapSprung` cue), the clock-driven traps and the tomb creatures play out, and every
+/// client converges on the same run, slabs and tiles with no hash mismatch.
+#[test]
+fn world_side_view_tomb_traps_replicate() {
+    use fatherload_simulation::{
+        SimulationParams,
+        balance::tombs::find_site,
+        base::BuiltTile,
+        terrain::{TileKind, TilePosition},
+        tomb::{
+            SiteStyle,
+            floor::plan_floor,
+            realize::{TrapKind, realizer_for},
+        },
+        worldgen::{GeneratorVersion, WorldSettings, tomb_sites},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(25, 3, 0.5));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    for client in &mut harness.clients {
+        client.bot.active = false;
+    }
+    let is_slab = |kind: &TileKind| matches!(kind, TileKind::Built(BuiltTile::TombTrap { kind, .. }) if *kind == TrapKind::Crumble.index());
+    let (settings, site) = [7_u64, 11, 4_242, 90_001]
+        .into_iter()
+        .find_map(|seed| {
+            let settings = WorldSettings {
+                generator: GeneratorVersion::V10,
+                ..WorldSettings::new(seed)
+            };
+            find_site(&settings, SiteStyle::SideView, 1).map(|site| (settings, site))
+        })
+        .expect("a side-view site");
+    let run = (0..400)
+        .find(|run| {
+            realizer_for(SiteStyle::SideView)
+                .realize(&plan_floor(&site, *run, 0))
+                .cells
+                .iter()
+                .any(|(_, kind)| is_slab(kind))
+        })
+        .expect("a floor with a collapsing bridge");
+    let tombed = WorldState::new_game_with_settings(
+        fatherload_simulation::PlayerId::new(99),
+        &settings,
+        SimulationParams::new(60),
+    );
+    let mut world = harness.world().clone();
+    *world.terrain_mut() = tombed.terrain().clone();
+    let party: Vec<_> = harness
+        .clients
+        .iter()
+        .map(|client| crate::world::to_sim_player(client.session.player().expect("joined")))
+        .collect();
+    world.scenario_next_tomb_run(site.id, run);
+    let id = world
+        .scenario_enter_tomb(&site, &party)
+        .expect("the run starts");
+    let slab = {
+        let tomb = world.tombs().runs.get(&id).expect("the run");
+        let origin = tomb_sites::slot_origin(tomb.slot);
+        WorldState::tomb_floor_of(tomb)
+            .cells
+            .iter()
+            .find(|(_, kind)| is_slab(kind))
+            .map(|(tile, _)| TilePosition {
+                x: origin.x + tile.x,
+                y: origin.y + tile.y,
+            })
+            .expect("a slab")
+    };
+    let (pilot, _, _) = world.pilot_of(party[0]).expect("a pilot");
+    #[allow(clippy::cast_precision_loss, reason = "tile coordinates")]
+    let (x, feet) = (
+        (slab.x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+        slab.y as f32 * fatherload_simulation::terrain::TILE_SIZE - 0.25,
+    );
+    world.edit_pilot(pilot, |body, _| {
+        body.x = x;
+        body.y = feet;
+        body.previous_x = x;
+        body.previous_y = feet;
+        body.velocity_x = 0.0;
+        body.velocity_y = 0.0;
+    });
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(3));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    let host = harness.world();
+    assert_eq!(
+        host.terrain().tile(slab).map(|found| found.kind),
+        Some(TileKind::Air),
+        "the slab fell on the host"
+    );
+    assert!(
+        host.tombs()
+            .runs
+            .get(&id)
+            .is_some_and(|run| run.crumbling.iter().any(|fallen| fallen.tile == slab)),
+        "the run remembers the fallen slab"
+    );
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        // The fight goes on to the last tick (a pilot may be downed a tick before the end), so
+        // the whole run is compared through the hashes; the slabs settled seconds ago.
+        assert_eq!(
+            seen.tombs().runs.get(&id).map(|run| &run.crumbling),
+            host.tombs().runs.get(&id).map(|run| &run.crumbling),
+            "every client sees the same fallen slabs"
+        );
+        assert_eq!(
+            seen.terrain().tile(slab).map(|found| found.kind),
+            host.terrain().tile(slab).map(|found| found.kind),
+            "the fallen slab travels with the terrain"
+        );
+    }
+}
