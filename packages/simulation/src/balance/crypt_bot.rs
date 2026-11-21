@@ -236,7 +236,13 @@ impl CryptBot {
         if let Some(path) = &path {
             // Wait on safe ground for the spikes or flames ahead to drop.
             let waiting = !hot(here) && path.iter().skip(1).take(2).any(|tile| hot(*tile));
-            if !waiting && let Some(next) = path.get(1).or_else(|| path.first()) {
+            // Waiting: stand square on the safe tile (the footprint off the trap beside it).
+            let next = if waiting {
+                Some(&here)
+            } else {
+                path.get(1).or_else(|| path.first())
+            };
+            if let Some(next) = next {
                 let (tx, ty) = centre(*next);
                 let dx = tx - middle.0;
                 let dy = ty - middle.1;
@@ -256,21 +262,31 @@ impl CryptBot {
             }
         }
 
-        // Rolls: through lunges, slams and incoming shots, and out when stuck.
+        // Rolls: through lunges, slams, the lord's charge and incoming shots, and out when
+        // stuck; never into a pit.
         let mut roll = false;
         for (ex, ey, kind, mode) in &enemies {
             let distance = (ex - middle.0).hypot(ey - middle.1);
             let close = match kind {
                 EnemyKind::CryptGolem => TILE_SIZE * 2.6,
-                EnemyKind::CryptLord => TILE_SIZE * 2.5,
+                // The lord's charge runs the length of the hall: get off its line.
+                EnemyKind::CryptLord => TILE_SIZE * 9.0,
                 _ => TILE_SIZE * 2.2,
             };
             if *mode == EnemyMode::Windup && distance < close {
                 roll = true;
-                // Away from it.
-                horizontal = (middle.0 - ex).signum();
-                up = middle.1 < *ey;
-                down = !up;
+                if *kind == EnemyKind::CryptLord {
+                    // Sideways to the lord.
+                    let (dx, dy) = (middle.0 - ex, middle.1 - ey);
+                    horizontal = if dy.abs() > dx.abs() { 1.0 } else { 0.0 };
+                    up = dx.abs() >= dy.abs();
+                    down = false;
+                } else {
+                    // Away from it.
+                    horizontal = (middle.0 - ex).signum();
+                    up = middle.1 < *ey;
+                    down = !up;
+                }
             }
         }
         for shot in world.entities().of_kind(EntityKind::EnemyShot) {
@@ -297,6 +313,36 @@ impl CryptBot {
             } else {
                 -1.0
             };
+        }
+        if roll {
+            // Only where the roll lands on safe floor (else the other way, else not at all).
+            let vertical = f32::from(i8::from(down) - i8::from(up));
+            let lands_safe = |dx: f32, dy: f32| {
+                let length = dx.hypot(dy);
+                if length < 0.1 {
+                    return false;
+                }
+                let (ux, uy) = (dx / length, dy / length);
+                let mut landing = here;
+                for step in 1..=10 {
+                    let reach = step as f32 * TILE_SIZE * 0.5;
+                    let tile = tile_at(middle.0 + ux * reach, middle.1 + uy * reach);
+                    if blocked(tile) {
+                        break;
+                    }
+                    landing = tile;
+                }
+                !deadly(landing)
+            };
+            if !lands_safe(horizontal, vertical) {
+                if lands_safe(-horizontal, -vertical) {
+                    horizontal = -horizontal;
+                    up = vertical > 0.0;
+                    down = vertical < 0.0;
+                } else {
+                    roll = false;
+                }
+            }
         }
         let jump = roll && !self.jump_held;
         self.jump_held = jump;

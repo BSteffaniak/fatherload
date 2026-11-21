@@ -251,8 +251,7 @@ impl ShotKind {
             Self::Wispfire => 140.0,
             Self::Arrow => 360.0,
             Self::Rubble => 250.0,
-            Self::Hex => 150.0,
-            Self::CryptHex => 165.0,
+            Self::Hex | Self::CryptHex => 150.0,
             Self::CryptArrow => 380.0,
             Self::Boulder => 150.0,
         }
@@ -1152,7 +1151,7 @@ impl EnemyKind {
             },
             Self::CryptLord => EnemyStats {
                 radius: 16.0,
-                health: 640.0,
+                health: 480.0,
                 speed: 58.0,
                 dash_speed: 380.0,
                 sight_tiles: 18.0,
@@ -1160,7 +1159,7 @@ impl EnemyKind {
                 leash_tiles: 0.0,
                 contact_damage: 14.0,
                 windup_millis: 850,
-                cooldown_millis: 1_600,
+                cooldown_millis: 2_000,
                 attack_range_tiles: 11.0,
                 knockback: 240.0,
                 elite: true,

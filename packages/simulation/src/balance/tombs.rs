@@ -683,6 +683,9 @@ impl BalanceProbe for TombsProbe {
                 / total,
         );
         let mut wipes: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+        // Crypts (T29) apart: their rooms tell a different story.
+        let mut crypt_wipes: std::collections::BTreeMap<&str, usize> =
+            std::collections::BTreeMap::new();
         for run in runs
             .iter()
             .filter(|run| run.outcome == Some(RunOutcome::Wiped))
@@ -691,6 +694,19 @@ impl BalanceProbe for TombsProbe {
                 .downed_in
                 .map_or("between rooms (a pit)", |(_, room)| room.name());
             *wipes.entry(place).or_default() += 1;
+            if run.style == SiteStyle::TopDown {
+                *crypt_wipes.entry(place).or_default() += 1;
+            }
+        }
+        if !crypt_wipes.is_empty() {
+            section.notes.push(format!(
+                "Crypt wipes by room: {}.",
+                crypt_wipes
+                    .iter()
+                    .map(|(place, count)| format!("{place} {count}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
         }
         if !wipes.is_empty() {
             section.notes.push(format!(
@@ -737,15 +753,23 @@ mod tests {
             WorldState::new_game_with_settings(player, &settings, SimulationParams::new(60));
         world.set_enemy_difficulty(EnemyDifficulty::Normal);
         if let Some(rig) = world.player_mut(player) {
+            let kit = site.tier.saturating_sub(1).min(3);
+            rig.pilot_gear.suit = kit;
+            rig.pilot_gear.armor = kit;
+            rig.pilot_gear.jetpack = 1;
             let _ = rig.pilot_arsenal.receive(WeaponKind::Rifle);
+            let _ = rig.pilot_arsenal.receive(WeaponKind::Sidearm);
             rig.pilot_arsenal.equipped = Some(WeaponKind::Rifle);
-            let _ = rig.pilot_arsenal.add_ammo(AmmoKind::Cartridge, 200);
+            let _ = rig
+                .pilot_arsenal
+                .add_ammo(AmmoKind::Cartridge, crate::pilot::arsenal::MAX_PILOT_AMMO);
         }
         let _ = world.place_pilot(player, 0.0, 0.0);
         let _ = world.scenario_enter_tomb(&site, &[player]);
         let mut bot = TombBot::new(player, true);
         let mut still = 0;
         let mut last = (0.0, 0.0);
+        let mut hurts: Vec<String> = Vec::new();
         for tick in 0..60 * 60 * 6 {
             let Some(run) = world.tomb_run_of(player).cloned() else {
                 println!(
@@ -756,7 +780,50 @@ mod tests {
             };
             let inputs = bot.inputs(&world);
             let now = world.simulation_tick();
-            let _ = world.simulate_tick(now, &inputs);
+            let output = world.simulate_tick(now, &inputs);
+            for event in &output.events {
+                match event.kind {
+                    GameplayEventKind::CryptPitFall { x, y, .. }
+                        if std::env::var("PITS").is_ok() =>
+                    {
+                        println!(
+                            "pit fall at tick {tick} into ({x}, {y}), previous {last:?} inputs {:?}\n{}",
+                            inputs.players.get(&player),
+                            super::super::crypt_bot::floor_text(
+                                &world,
+                                &run,
+                                Some(TilePosition { x, y })
+                            )
+                        );
+                    }
+                    GameplayEventKind::PilotHurt { amount, .. } => {
+                        let near: Vec<String> = world
+                            .enemies()
+                            .filter(|(entity, _)| {
+                                world.pilot_of(player).is_some_and(|(_, body, _)| {
+                                    (entity.body.x - body.x).hypot(entity.body.y - body.y)
+                                        < TILE_SIZE * 4.0
+                                })
+                            })
+                            .map(|(_, state)| format!("{:?}/{:?}", state.kind, state.mode))
+                            .collect();
+                        hurts.push(format!("t{tick} -{amount} near {near:?}"));
+                    }
+                    GameplayEventKind::TombMemberDowned { revived: false, .. } => {
+                        let tile = world.pilot_of(player).map(|(_, body, _)| TilePosition {
+                            x: (body.x / TILE_SIZE).floor() as i32,
+                            y: ((body.y - 12.5) / TILE_SIZE).floor() as i32,
+                        });
+                        println!(
+                            "downed at tick {tick} floor {}\nlast hurts: {:?}\n{}",
+                            run.floor,
+                            &hurts[hurts.len().saturating_sub(12)..],
+                            super::super::crypt_bot::floor_text(&world, &run, tile)
+                        );
+                    }
+                    _ => {}
+                }
+            }
             let Some((_, body, _)) = world.pilot_of(player) else {
                 continue;
             };

@@ -642,7 +642,7 @@ impl WorldState {
     fn lord_cooldown(&self, state: &EnemyState) -> u64 {
         let base = self.attack_cooldown_millis(state.kind);
         if state.phase >= 3 {
-            base * 7 / 10
+            base * 8 / 10
         } else {
             base
         }
@@ -744,7 +744,7 @@ impl WorldState {
         let Some(pilot) = hit else {
             return;
         };
-        let damage = spec.contact_damage * tier_scale(state.tier) * 1.5;
+        let damage = spec.contact_damage * tier_scale(state.tier);
         if self.strike_pilot_as(
             Some(state.kind),
             pilot,
