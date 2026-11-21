@@ -260,6 +260,7 @@ mod people_scenes;
 mod pilot_content_scenes;
 mod pilot_scenes;
 mod second_act_scenes;
+mod side_tomb_scenes;
 mod sky_continent_scenes;
 mod story_scenes;
 mod tomb_scenes;
@@ -375,6 +376,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(pilot_scenes::PILOT_SCENES)
         .chain(pilot_content_scenes::PILOT_CONTENT_SCENES)
         .chain(tomb_scenes::TOMB_SCENES)
+        .chain(side_tomb_scenes::SIDE_TOMB_SCENES)
         .chain(reward_scenes::REWARD_SCENES)
         .chain(home_scenes::HOME_SCENES)
         .chain(night_scenes::NIGHT_SCENES)

@@ -53,6 +53,7 @@ pub mod sky_isles;
 pub mod sky_lands;
 mod speed_fx;
 mod surface;
+mod tomb_traps;
 mod tombs;
 mod villages;
 mod weapons;
@@ -154,6 +155,8 @@ pub(super) struct WorldScene<'a> {
     pub homes: &'a fatherload_simulation::home::Homes,
     /// Tomb runs (WP-TOMBS): crypt floors, trap sight and downed members.
     pub tombs: &'a fatherload_simulation::tomb::Tombs,
+    /// World milliseconds of the drawn moment (side-view traps move on the world clock).
+    pub world_millis: u64,
 }
 
 impl WorldScene<'_> {
@@ -253,6 +256,21 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         scene.pilots,
         scene.visible,
         seconds,
+    );
+    // Side-view tomb traps in motion (WP-TOMBS T28).
+    tomb_traps::draw_side_traps(
+        draw,
+        &tomb_traps::TrapScene {
+            terrain: scene.terrain,
+            tombs: scene.tombs,
+            explored: scene.explored,
+            visible: scene.visible,
+            millis: scene.world_millis,
+            trap_sight: scene
+                .pilots
+                .iter()
+                .any(|pilot| pilot.state.boons.trap_sight),
+        },
     );
     sky_continents::draw_continent_fronts(draw, scene.terrain, scene.visible, seconds);
     surface::draw_flora(draw, &scene.sky.surface, scene.terrain, scene.visible);

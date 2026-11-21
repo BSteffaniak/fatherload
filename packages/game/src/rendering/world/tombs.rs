@@ -122,7 +122,12 @@ pub(super) fn draw_tomb_marks(
             }
             let (cx, cy) = ((x as f32 + 0.5) * TILE_SIZE, (y as f32 + 0.5) * TILE_SIZE);
             match terrain.tile(tile).map(|found| found.kind) {
-                Some(TileKind::Built(BuiltTile::TombTrap { hidden: true, .. })) if trap_sight => {
+                // (A dart thrower's hidden bit is its facing, T28: it is never hidden.)
+                Some(TileKind::Built(BuiltTile::TombTrap { hidden: true, kind }))
+                    if trap_sight
+                        && fatherload_simulation::tomb::realize::TrapKind::from_index(kind)
+                            != fatherload_simulation::tomb::realize::TrapKind::DartWall =>
+                {
                     draw.draw_rectangle_lines_ex(
                         Rectangle::new(
                             x as f32 * TILE_SIZE + 2.0,

@@ -19,6 +19,11 @@ use super::{
     Cell, Edges, Ramp, Strata, TILE_ART, TileCanvas, backdrop_pixel, hash, paint_edges, ramp,
 };
 
+mod tomb_art;
+
+pub use tomb_art::{culture_colors, masonry_near};
+pub(super) use tomb_art::{paint_backdrop, paint_piece};
+
 const EARTH: Ramp = ramp([SOIL_DARK, SOIL, LOAM, SAND]);
 const BRICK: Ramp = ramp([MAROON, RUST, COPPER, CLAY]);
 const DRESSED: Ramp = ramp([STONE_DARK, STONE, STONE_LIGHT, MIST]);

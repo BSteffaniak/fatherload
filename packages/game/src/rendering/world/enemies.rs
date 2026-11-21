@@ -150,6 +150,7 @@ pub(super) fn draw_enemies(draw: &mut impl RaylibDraw, scene: &EnemyScene<'_>) {
 /// The frame showing `state` (mode-driven poses, otherwise the loop).
 #[allow(clippy::cast_precision_loss, reason = "per-enemy animation phase")]
 #[allow(clippy::match_same_arms, reason = "one arm per kind's pose rule")]
+#[allow(clippy::too_many_lines, reason = "one pose rule per kind")]
 fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
     let sprite = enemy_sprite(state.kind);
     let phase = seconds + (state.seed % 97) as f32 * 0.013;
@@ -271,6 +272,15 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
     }
 }
 
+/// World pixels per art pixel of a kind's sprite: the side-view tomb guardians (T28) are drawn
+/// half as large again, towering over a pilot on foot.
+const fn sprite_scale(kind: EnemyKind) -> f32 {
+    match kind {
+        EnemyKind::SunColossus | EnemyKind::HollowMatriarch => ART * 1.5,
+        _ => ART,
+    }
+}
+
 /// Whether a kind's art faces right and should mirror to face left.
 const fn faces(kind: EnemyKind) -> bool {
     matches!(
@@ -310,7 +320,11 @@ fn draw_enemy(
     let seconds = scene.seconds();
     let stats = state.kind.stats();
     let sprite = enemy_sprite(state.kind);
-    let (width, height) = (sprite.width() as f32 * ART, sprite.height() as f32 * ART);
+    let scale = sprite_scale(state.kind);
+    let (width, height) = (
+        sprite.width() as f32 * scale,
+        sprite.height() as f32 * scale,
+    );
     let grounded = matches!(
         stats.locomotion,
         Locomotion::Walking | Locomotion::Stationary
@@ -438,7 +452,7 @@ fn draw_enemy(
         sprite,
         enemy_frame(entity, state, seconds),
         Vector2::new(snap(left + shake), snap(top)),
-        ART,
+        scale,
         faces(state.kind) && state.facing < 0,
         tint,
     );
@@ -456,7 +470,11 @@ fn draw_enemy(
         let charge = (seconds * 6.0).fract();
         let glow = match state.kind {
             EnemyKind::AcidSpitter | EnemyKind::BroodLord => Some(LIME),
-            EnemyKind::MagmaWisp => Some(AMBER),
+            // Tomb creatures (T28): ember eyes, the archer's red spark.
+            EnemyKind::MagmaWisp
+            | EnemyKind::Mummy
+            | EnemyKind::AnimatedStatue
+            | EnemyKind::SunColossus => Some(AMBER),
             EnemyKind::SentryTurret | EnemyKind::AncientGuardian | EnemyKind::MiningDrone => {
                 Some(GOLD)
             }
@@ -465,11 +483,10 @@ fn draw_enemy(
             | EnemyKind::Shellback
             | EnemyKind::RockMimic
             | EnemyKind::DerelictAutomaton
-            | EnemyKind::UmbralAlpha => Some(RED),
+            | EnemyKind::UmbralAlpha
+            | EnemyKind::SkeletalArcher => Some(RED),
             EnemyKind::Warden | EnemyKind::ShadowHound | EnemyKind::WillOWisp => Some(MINT),
             EnemyKind::DuneStalker => Some(SAND),
-            EnemyKind::Mummy | EnemyKind::AnimatedStatue | EnemyKind::SunColossus => Some(AMBER),
-            EnemyKind::SkeletalArcher => Some(RED),
             EnemyKind::HollowMatriarch => Some(LAVENDER),
             _ => None,
         };

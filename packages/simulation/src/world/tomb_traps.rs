@@ -19,6 +19,7 @@
 
 #![allow(
     clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
     clippy::cast_precision_loss,
     reason = "world pixels and small tile offsets convert freely here"
 )]
@@ -428,7 +429,11 @@ impl WorldState {
                     body.y,
                 ))
             }) || !self
-                .enemies_near(left + TILE_SIZE * 0.5, top + TILE_SIZE * 0.5, TILE_SIZE)
+                .enemies_near(
+                    TILE_SIZE.mul_add(0.5, left),
+                    TILE_SIZE.mul_add(0.5, top),
+                    TILE_SIZE,
+                )
                 .is_empty();
             if occupied {
                 continue;
@@ -480,5 +485,81 @@ impl WorldState {
             x: body.x as i32,
             y: body.y as i32,
         });
+    }
+
+    // --- Scenarios (T28) --------------------------------------------------------------------
+
+    /// Sets enemy `id`'s health to `fraction` of its maximum (tests and scenes: a guardian in
+    /// its later phases).
+    pub fn scenario_hurt_enemy_to(&mut self, id: EntityId, fraction: f32) {
+        self.entities.update(id, |entity| {
+            if let EntityState::Enemy(state) = &mut entity.state {
+                state.health = crate::quantize::quantize_simulation_scalar(
+                    (state.max_health * fraction.clamp(0.01, 1.0)).max(1.0),
+                );
+            }
+        });
+    }
+
+    /// Sets `site`'s run counter so the next run there is run `run` (tests and screenshot
+    /// scenes pick a floor that shows what they need).
+    pub fn scenario_next_tomb_run(&mut self, site: crate::tomb::SiteId, run: u32) {
+        let _ = self.tombs.site_runs.insert(site, run);
+    }
+
+    /// Moves `player`'s run straight to floor `floor` (written over the current one, the party
+    /// at its start): tests and scenes reach the guardian's floor.
+    pub fn scenario_tomb_floor(&mut self, player: PlayerId, floor: u8) {
+        let Some(id) = self.tombs.run_id_of(player) else {
+            return;
+        };
+        let previous = self.tombs.runs.get(&id).map(Self::tomb_floor_of);
+        if let Some(run) = self.tombs.runs.get_mut(&id) {
+            run.floor = floor.min(run.site.floors().saturating_sub(1));
+        }
+        self.write_tomb_floor(id, previous);
+    }
+
+    /// Wakes `kind` as `player`'s run's guardian at the boss room's spawn (its health scaled
+    /// like a real one, the room's ambush marked sprung). Returns the guardian, if the floor has
+    /// a boss room.
+    pub fn scenario_tomb_guardian(
+        &mut self,
+        player: PlayerId,
+        kind: crate::enemy::EnemyKind,
+    ) -> Option<EntityId> {
+        let id = self.tombs.run_id_of(player)?;
+        let run = self.tombs.runs.get(&id)?;
+        let spawn = run
+            .spawns
+            .iter()
+            .find(|spawn| spawn.role == crate::tomb::realize::SpawnRole::Boss)
+            .copied()?;
+        let tier = super::tombs::enemy_tier(run);
+        let scale = crate::tomb::realize::boss_health_scale(run.site.tier);
+        if let Some(old) = run.boss {
+            self.entities.despawn(EntityId(old));
+        }
+        let at = (
+            (spawn.at.x as f32 + 0.5) * TILE_SIZE,
+            (spawn.at.y as f32 + 0.5) * TILE_SIZE,
+        );
+        let enemy = self.spawn_enemy_with(kind, at, tier, None, None);
+        self.entities.update(enemy, |entity| {
+            if let EntityState::Enemy(state) = &mut entity.state {
+                state.health = crate::quantize::quantize_simulation_scalar(state.health * scale);
+                state.max_health =
+                    crate::quantize::quantize_simulation_scalar(state.max_health * scale);
+            }
+        });
+        if let Some(run) = self.tombs.runs.get_mut(&id) {
+            if let Some(flag) = run.sprung.get_mut(spawn.room) {
+                *flag = true;
+            }
+            run.boss = Some(enemy.get());
+            run.boss_defeated = false;
+            run.boss_phase = 0;
+        }
+        Some(enemy)
     }
 }

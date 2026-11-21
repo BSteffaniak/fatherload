@@ -384,7 +384,7 @@ pub fn sand_surface(room: TileRect, level: f32) -> f32 {
 
 /// Milliseconds until a sluice room's sand next starts to rise (0 while it is up).
 #[must_use]
-pub fn sand_clear_for(room: TileRect, millis: u64) -> u64 {
+pub const fn sand_clear_for(room: TileRect, millis: u64) -> u64 {
     let at = into_cycle(
         millis,
         hashed_phase(room.min, SAND_PERIOD_MILLIS),
@@ -600,14 +600,14 @@ mod tests {
         // at pilot height, at the end of its swing it is above a standing pilot's head.
         let pivot = TilePosition { x: 10, y: 0 };
         let floor = (1 + BLADE_ROOM_ROWS) as f32 * TILE_SIZE;
-        let pilot = |x: f32| Bounds::new(x - 12.5, floor - 50.0, x + 12.5, floor);
+        let body_at = |x: f32| Bounds::new(x - 12.5, floor - 50.0, x + 12.5, floor);
         let (px, _) = blade_pivot(pivot);
         let low = (px, blade_pivot(pivot).1 + BLADE_LENGTH);
-        assert!(pilot(px).touches_disc(low, BLADE_RADIUS));
+        assert!(body_at(px).touches_disc(low, BLADE_RADIUS));
         let high = (
             px + BLADE_LENGTH * sin_small(BLADE_SWING),
             blade_pivot(pivot).1 + BLADE_LENGTH * cos_small(BLADE_SWING),
         );
-        assert!(!pilot(high.0).touches_disc(high, BLADE_RADIUS));
+        assert!(!body_at(high.0).touches_disc(high, BLADE_RADIUS));
     }
 }

@@ -716,6 +716,19 @@ impl GameRenderer {
                     talk_target: view.talk_target.as_ref().map(|(npc, _)| *npc),
                     homes: snapshot.homes,
                     tombs: snapshot.tombs,
+                    world_millis: {
+                        // Between the last two ticks, like the entities drawn with it.
+                        let hz = f64::from(snapshot.tick_rate.hz().max(1));
+                        let ticks = snapshot.tick.saturating_sub(1) as f64
+                            + f64::from(snapshot.bomb_alpha.clamp(0.0, 1.0));
+                        #[allow(
+                            clippy::cast_possible_truncation,
+                            clippy::cast_sign_loss,
+                            reason = "milliseconds of play"
+                        )]
+                        let millis = (ticks * 1_000.0 / hz) as u64;
+                        millis
+                    },
                 },
             );
         }

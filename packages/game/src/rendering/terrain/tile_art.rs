@@ -43,6 +43,7 @@ mod lunar_art;
 mod poi_art;
 mod sky_art;
 
+pub use built_art::{culture_colors, masonry_near};
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
 pub use lunar_art::lunar_color;
 pub use poi_art::poi_color;
@@ -667,6 +668,20 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             paint_grass_blades(&mut canvas, terrain, position, down);
         } else if !cave_art::paint_cave_air(&mut canvas, terrain, position, &strata, band, up) {
             paint_cave(&mut canvas, &strata, up, left, right);
+            // Inside a side-view tomb run: the culture's back wall (WP-TOMBS T28).
+            if built_art::paint_backdrop(
+                &mut canvas,
+                terrain,
+                position,
+                Edges {
+                    up,
+                    down,
+                    left,
+                    right,
+                },
+            ) {
+                return canvas;
+            }
             if poi_art::inside_vault(terrain, position) {
                 paint_vault_room(&mut canvas, &strata, up, left, right);
             }
@@ -675,6 +690,22 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         return canvas;
     }
     if let TileKind::Built(tile) = kind {
+        // Side-view tomb pieces in their culture's tile set (WP-TOMBS T28).
+        if built_art::paint_piece(
+            &mut canvas,
+            terrain,
+            position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        ) {
+            return canvas;
+        }
         built_art::paint(
             &mut canvas,
             tile,

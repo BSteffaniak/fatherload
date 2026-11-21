@@ -186,8 +186,7 @@ impl SideViewRealizer {
         );
         let wiggle = i32::try_from(node.variant % 3).unwrap_or(0);
         let (layout, min_width, rows) = match node.kind {
-            RoomKind::Entry => (Layout::Plain, 8, ROOM_ROWS),
-            RoomKind::Shrine => (Layout::Plain, 8, ROOM_ROWS),
+            RoomKind::Entry | RoomKind::Shrine => (Layout::Plain, 8, ROOM_ROWS),
             RoomKind::Stairs => (Layout::Plain, 7, ROOM_ROWS),
             RoomKind::Boss => (Layout::Plain, 20, BOSS_ROWS),
             RoomKind::Vault => (Layout::Plain, 8, VAULT_ROWS),
@@ -380,7 +379,7 @@ impl Draw<'_> {
                     if x == middle {
                         continue;
                     }
-                    let hidden = danger >= 8 && (variant >> (x - from)) & 3 == 0;
+                    let hidden = danger >= 8 && (variant >> (x - from)).trailing_zeros() >= 2;
                     self.canvas.put(x, floor, trap(TrapKind::Crumble, hidden));
                     self.canvas.put(x, floor + 1, trap(TrapKind::Spikes, false));
                 }
@@ -710,7 +709,7 @@ impl FloorRealizer for SideViewRealizer {
             });
             if let Some(branch) = room.vault {
                 let caches = (2 + i32::from(plan.rooms[branch].danger) / 4).clamp(2, 4);
-                let hidden = plan.rooms[branch].variant % 3 == 0;
+                let hidden = plan.rooms[branch].variant.is_multiple_of(3);
                 let frame = Frame {
                     room: room_index,
                     left,
@@ -721,6 +720,14 @@ impl FloorRealizer for SideViewRealizer {
             }
             x += room.width + 1;
         }
+        // A clean masonry hull round the whole floor: two courses under the floor line and
+        // over the rooms, so pits and vents never poke out into the sealed rock.
+        canvas.hull(rect(
+            1,
+            FLOOR_ROW - BOSS_ROWS - VAULT_ROWS - 4,
+            x,
+            floor + 3,
+        ));
         // The vaults go after the main path (their room indices follow it).
         for (branch, caches, hidden, danger, frame) in vaults {
             let vault_room = rooms.len();
@@ -766,9 +773,10 @@ pub const GUARDIAN_PHASE_TWO: f32 = 0.6;
 /// Health fraction at or below which it is enraged (its third phase).
 pub const GUARDIAN_PHASE_THREE: f32 = 0.3;
 
-/// A side-view guardian's phase (1-3) at health fraction `fraction`: the Sunwrought Colossus
-/// adds thrown rubble and raises mummies in phase 2 and enrages in 3; the Hollow Matriarch
-/// adds hex rings and crypt bats in phase 2 and dives in 3.
+/// A side-view guardian's phase (1-3) at health fraction `fraction`.
+///
+/// The Sunwrought Colossus adds thrown rubble and raises mummies in phase 2 and enrages in 3;
+/// the Hollow Matriarch adds hex rings and crypt bats in phase 2 and dives in 3.
 #[must_use]
 pub fn guardian_phase(fraction: f32) -> u8 {
     if fraction > GUARDIAN_PHASE_TWO {
@@ -780,16 +788,16 @@ pub fn guardian_phase(fraction: f32) -> u8 {
     }
 }
 
-/// The side-view bestiary ([`super::realize::bestiary`] for [`SiteStyle::SideView`]): mummies
-/// and skeletal archers guard, animated statues stand dormant in some rooms, crypt bats and
-/// mummies spring the ambushes, and the guardian is the Sunwrought Colossus or the Hollow
+/// The side-view bestiary ([`super::realize::bestiary`] for [`SiteStyle::SideView`]).
+///
+/// Mummies and skeletal archers guard, animated statues stand dormant in some rooms, crypt bats
+/// and mummies spring the ambushes, and the guardian is the Sunwrought Colossus or the Hollow
 /// Matriarch (by the spawn's roll: each run of a tomb wakes one of the two).
 #[must_use]
 pub const fn bestiary(role: SpawnRole, variant: u32) -> EnemyKind {
     match role {
         SpawnRole::Guard => match variant % 5 {
             0 | 4 => EnemyKind::Mummy,
-            1 => EnemyKind::SkeletalArcher,
             2 => EnemyKind::AnimatedStatue,
             _ => EnemyKind::SkeletalArcher,
         },
@@ -903,7 +911,7 @@ mod tests {
     }
 
     /// The floor as text (`#` masonry, `|` pillars, traps by initial, lower case hidden).
-    pub(crate) fn ascii(realized: &RealizedFloor, from_row: i32) -> String {
+    pub fn ascii(realized: &RealizedFloor, from_row: i32) -> String {
         let mut out = String::new();
         for y in from_row..realized.size.1 {
             for x in 0..realized.size.0 {

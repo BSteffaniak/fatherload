@@ -46,16 +46,19 @@ const DIVE_MILLIS: u64 = 650;
 /// Where the matriarch hovers: columns to the side, rows above her prey.
 const HOVER: (f32, f32) = (TILE_SIZE * 4.0, TILE_SIZE * 3.5);
 /// Eight directions of a hex ring (unit vectors, no trigonometry).
-const RING8: [(f32, f32); 8] = [
-    (1.0, 0.0),
-    (0.707_107, 0.707_107),
-    (0.0, 1.0),
-    (-0.707_107, 0.707_107),
-    (-1.0, 0.0),
-    (-0.707_107, -0.707_107),
-    (0.0, -1.0),
-    (0.707_107, -0.707_107),
-];
+const RING8: [(f32, f32); 8] = {
+    use std::f32::consts::FRAC_1_SQRT_2 as D;
+    [
+        (1.0, 0.0),
+        (D, D),
+        (0.0, 1.0),
+        (-D, D),
+        (-1.0, 0.0),
+        (-D, -D),
+        (0.0, -1.0),
+        (D, -D),
+    ]
+};
 
 /// One of a guardian's moves.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -104,7 +107,7 @@ pub fn guardian_move(kind: EnemyKind, fraction: f32, deadline: u64) -> GuardianM
 }
 
 impl WorldState {
-    fn world_millis_at(&self, tick: SimulationTick) -> u64 {
+    const fn world_millis_at(&self, tick: SimulationTick) -> u64 {
         world_millis(tick.get(), self.timing.rate.hz())
     }
 
@@ -125,8 +128,12 @@ impl WorldState {
     }
 
     /// A guardian's chase: where it goes, and when it starts a wind-up.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the chase arm's own arguments, like the sky chase"
+    )]
     pub(super) fn guardian_chase(
-        &mut self,
+        &self,
         id: EntityId,
         body: &mut Body,
         state: &mut EnemyState,
@@ -147,7 +154,7 @@ impl WorldState {
         match state.kind {
             EnemyKind::HollowMatriarch => {
                 // Hang above and to one side, switching sides every few seconds.
-                let side = if (self.world_millis_at(now) / 3_500) % 2 == 0 {
+                let side = if (self.world_millis_at(now) / 3_500).is_multiple_of(2) {
                     -1.0
                 } else {
                     1.0
@@ -225,14 +232,15 @@ impl WorldState {
                         break;
                     }
                     let side = if index == 0 { -1.0 } else { 1.0 };
-                    let at = (side * TILE_SIZE * 1.5 + body.x, body.y - TILE_SIZE);
+                    let at = ((side * TILE_SIZE).mul_add(1.5, body.x), body.y - TILE_SIZE);
                     let _ =
                         self.spawn_enemy_with(EnemyKind::CryptBat, at, state.tier, None, Some(id));
                 }
             }
             GuardianMove::Dive => {
                 let dash = spec.dash_speed;
-                let reach = (distance / dash.max(1.0) * 1_000.0) as u64 + 150;
+                #[allow(clippy::cast_sign_loss, reason = "a positive fraction of a second")]
+                let reach = (distance / dash.max(1.0) * 1_000.0).max(0.0) as u64 + 150;
                 body.velocity_x = quantize(nx * dash);
                 body.velocity_y = quantize(ny * dash);
                 state.mode = EnemyMode::Strike;

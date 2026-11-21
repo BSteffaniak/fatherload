@@ -255,14 +255,11 @@ impl ShotKind {
     #[must_use]
     pub const fn damage(self) -> f32 {
         match self {
-            Self::Acid => 7.0,
-            Self::Fireball => 10.0,
-            Self::Bolt => 8.0,
+            Self::Acid | Self::Arrow => 7.0,
+            Self::Fireball | Self::Rubble => 10.0,
+            Self::Bolt | Self::Hex => 8.0,
             Self::Cannonball => 9.0,
             Self::Wispfire => 6.0,
-            Self::Arrow => 7.0,
-            Self::Rubble => 10.0,
-            Self::Hex => 8.0,
         }
     }
 
@@ -1110,8 +1107,9 @@ impl EnemyKind {
             Self::CryptBat => (10.0, 7.0),
             Self::SkeletalArcher => (10.0, 15.0),
             Self::AnimatedStatue => (13.0, 18.0),
-            Self::SunColossus => (24.0, 30.0),
-            Self::HollowMatriarch => (20.0, 22.0),
+            // Drawn half as large again as their art (the game scales the guardians up).
+            Self::SunColossus => (32.0, 40.0),
+            Self::HollowMatriarch => (26.0, 30.0),
         }
     }
 

@@ -290,6 +290,16 @@ impl Canvas {
         let _ = self.cells.insert(TilePosition { x, y }, kind);
     }
 
+    /// Writes masonry into every cell of `rect` (inclusive) not written yet (a room's hull).
+    pub(super) fn hull(&mut self, rect: TileRect) {
+        let wall = self.wall();
+        for y in rect.min.y..=rect.max.y {
+            for x in rect.min.x..=rect.max.x {
+                self.cells.entry(TilePosition { x, y }).or_insert(wall);
+            }
+        }
+    }
+
     /// Opens `rect` (inclusive) to air.
     pub(super) fn open(&mut self, rect: TileRect) {
         for y in rect.min.y..=rect.max.y {
