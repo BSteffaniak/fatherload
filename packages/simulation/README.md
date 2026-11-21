@@ -2161,8 +2161,8 @@ entrances stay T27's set-0 masonry on the map and are painted, doors included, i
   guardian that hung back. Debug: `print_where_the_bot_sticks`, `print_what_hurts_the_bot`
   (ignored tests).
 - **Balance** (`--balance-report --only tombs`, 4 seeds): side-view tombs clear 4/4 at tier 1
-  (0.9 min), 2/4 at tiers 2 and 3 (1-1.2 min), 1/4 at tier 4 and 0/4 at tier 5 (2.3-3 min),
-  wipes nearly all at the guardian (the bot never dodges and fights with the rifle alone: a
+  (0.9 min), 2/4 at tiers 2 and 3 (1-1.2 min), 1/4 at tier 4 (2.3 min) and 0/4 at tier 5 (3
+  wipes, 1 timeout against the guardian), wipes nearly all at the guardian (the bot never dodges and fights with the rifle alone: a
   tier-5 floor-6 guardian has about 1,500-1,750 health against the rifle's ~27 per second).
 - **Scenario helpers**: `scenario_next_tomb_run(site, run)`, `scenario_tomb_floor(player,
   floor)`, `scenario_tomb_guardian(player, kind)`, `scenario_hurt_enemy_to(id, fraction)`.
