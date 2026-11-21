@@ -51,17 +51,19 @@ const fn relic_color(relic: Relic, kind: RelicKind) -> Color {
 }
 
 /// The run HUD across the top middle of the view while its player is in a run, and the
-/// entrance banner when the pilot stands at a site's door.
+/// entrance banner when the pilot stands at a site's door. The run banner steps down below any
+/// of `keep_clear` (the stats and wallet panels, a phone's top-row buttons) it would cover.
 pub(super) fn draw_tomb_hud(
     draw: &mut RaylibDrawHandle<'_>,
     snapshot: &RenderSnapshot<'_>,
     view: &ViewSnapshot<'_>,
     rect: Rectangle,
+    keep_clear: &[Rectangle],
 ) {
     if let Some(run) = snapshot.tombs.run_of(view.player_id) {
-        draw_run_banner(draw, snapshot, view, run, rect);
+        draw_run_banner(draw, snapshot, view, run, (rect, keep_clear));
     } else if let Some(site) = view.tomb_door {
-        draw_door_banner(draw, view, &site, rect);
+        draw_door_banner(draw, view, &site, (rect, keep_clear));
     }
 }
 
@@ -74,7 +76,7 @@ fn draw_run_banner(
     snapshot: &RenderSnapshot<'_>,
     view: &ViewSnapshot<'_>,
     run: &TombRun,
-    rect: Rectangle,
+    (rect, keep_clear): (Rectangle, &[Rectangle]),
 ) {
     let site = &run.site;
     let accent = style_color(site.style);
@@ -158,15 +160,41 @@ fn draw_run_banner(
             BONE,
         ));
     }
-    let width = lines
-        .iter()
-        .map(|(text, style, _)| ui_kit::text_width(text, *style))
-        .max()
-        .unwrap_or(0)
-        + ui_kit::PANEL_PADDING * 2;
-    let height = 6 + lines.len() as i32 * 11;
-    let x = (rect.x + rect.width / 2.0) as i32 - width / 2;
-    let y = rect.y as i32 + 4;
+    let measure = |lines: &[(String, TextStyle, Color)]| {
+        let width = lines
+            .iter()
+            .map(|(text, style, _)| ui_kit::text_width(text, *style))
+            .max()
+            .unwrap_or(0)
+            + ui_kit::PANEL_PADDING * 2;
+        (width, 6 + lines.len() as i32 * 11)
+    };
+    // The boss bar hangs under the banner: it keeps clear too.
+    let bar = if boss.is_some() { 9 } else { 0 };
+    let top = rect.y as i32 + 4;
+    let (mut width, mut height) = measure(&lines);
+    let (mut x, mut y) = banner_place(rect, (width, height + bar), top, keep_clear);
+    // Too crowded up top (a phone's top-row buttons, a narrow split-screen view): a compact
+    // banner that fits between the panels rather than one hanging over the middle of the view.
+    if y > top + COMPACT_DROP {
+        let full = lines.clone();
+        lines[0].0 = format!("FLOOR {}/{}", run.floor + 1, site.floors());
+        lines[1].0 = format!("{unbanked} cr  ({banked} BANKED)");
+        if !relics.is_empty() {
+            lines[2].0 = format!("{} RELICS", relics.len());
+        }
+        if downed {
+            lines[4].0 = "YOU ARE DOWN".to_owned();
+        }
+        let (compact_width, compact_height) = measure(&lines);
+        let (compact_x, compact_y) =
+            banner_place(rect, (compact_width, compact_height + bar), top, keep_clear);
+        if compact_y < y {
+            (width, height, x, y) = (compact_width, compact_height, compact_x, compact_y);
+        } else {
+            lines = full;
+        }
+    }
     ui_kit::panel(
         draw,
         Rectangle::new(x as f32, y as f32, width as f32, height as f32),
@@ -203,6 +231,63 @@ fn draw_run_banner(
     }
 }
 
+/// A run banner pushed further down than this (art pixels) switches to its compact lines.
+const COMPACT_DROP: i32 = 40;
+
+/// Where a banner `width` x `height` goes in `rect`: centred at `top` if that is clear of
+/// `keep_clear`, else as near the middle as it fits in a clear gap at that height, else the
+/// same just below the nearest panel in its way, and so on down.
+fn banner_place(
+    rect: Rectangle,
+    (width, height): (i32, i32),
+    top: i32,
+    keep_clear: &[Rectangle],
+) -> (i32, i32) {
+    let (left, right) = (rect.x as i32, (rect.x + rect.width) as i32);
+    let centred = (rect.x + rect.width / 2.0) as i32 - width / 2;
+    let mut y = top;
+    for _ in 0..=keep_clear.len() {
+        let band: Vec<(i32, i32, i32)> = keep_clear
+            .iter()
+            .filter(|clear| clear.y < (y + height) as f32 && clear.y + clear.height > y as f32)
+            .map(|clear| {
+                (
+                    clear.x.floor() as i32 - 3,
+                    (clear.x + clear.width).ceil() as i32 + 3,
+                    (clear.y + clear.height).ceil() as i32 + 3,
+                )
+            })
+            .collect();
+        // The clear gaps along this band, widest first.
+        let mut edges: Vec<(i32, i32)> = band.iter().map(|(a, b, _)| (*a, *b)).collect();
+        edges.sort_unstable();
+        let mut gaps = Vec::new();
+        let mut from = left;
+        for (start, end) in edges {
+            if start > from {
+                gaps.push((from, start));
+            }
+            from = from.max(end);
+        }
+        if right > from {
+            gaps.push((from, right));
+        }
+        if let Some((lo, hi)) = gaps
+            .into_iter()
+            .filter(|(lo, hi)| hi - lo >= width)
+            .min_by_key(|(lo, hi)| (centred.clamp(*lo, hi - width) - centred).abs())
+        {
+            return (centred.clamp(lo, hi - width), y);
+        }
+        // Step below the nearest panel in the way and look again.
+        let Some(bottom) = band.iter().map(|(_, _, bottom)| *bottom).min() else {
+            break;
+        };
+        y = bottom.max(y + 1);
+    }
+    (centred, y)
+}
+
 /// The run's boss while it is up (its enemy state).
 fn boss_state(
     snapshot: &RenderSnapshot<'_>,
@@ -224,7 +309,7 @@ fn draw_door_banner(
     draw: &mut RaylibDrawHandle<'_>,
     view: &ViewSnapshot<'_>,
     site: &fatherload_simulation::tomb::TombSite,
-    rect: Rectangle,
+    (rect, keep_clear): (Rectangle, &[Rectangle]),
 ) {
     let accent = style_color(site.style);
     let sealed = matches!(
@@ -268,8 +353,7 @@ fn draw_door_banner(
         .unwrap_or(0)
         + ui_kit::PANEL_PADDING * 2;
     let height = 6 + lines.len() as i32 * 11;
-    let x = (rect.x + rect.width / 2.0) as i32 - width / 2;
-    let y = rect.y as i32 + 4;
+    let (x, y) = banner_place(rect, (width, height), rect.y as i32 + 4, keep_clear);
     ui_kit::panel(
         draw,
         Rectangle::new(x as f32, y as f32, width as f32, height as f32),

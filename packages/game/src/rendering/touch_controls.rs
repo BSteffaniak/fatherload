@@ -87,6 +87,34 @@ pub fn upright_controls_top() -> Option<i32> {
     })
 }
 
+/// The small top-row buttons (pause, bag, map, ...) in the current canvas's art pixels, so a
+/// banner across the top can step below them. Empty without touch controls.
+#[must_use]
+pub fn top_row_rects() -> Vec<Rectangle> {
+    OVERLAY.with(|current| {
+        let current = current.borrow();
+        let Some(overlay) = current.as_ref() else {
+            return Vec::new();
+        };
+        let canvas = ui_kit::canvas();
+        let pixel = canvas.pixel.max(1) as f32;
+        overlay
+            .layout
+            .controls
+            .iter()
+            .filter(|(control, _)| is_top_row(*control))
+            .map(|(_, rect)| {
+                Rectangle::new(
+                    rect.x.mul_add(canvas.density, -(canvas.origin_x as f32)) / pixel,
+                    rect.y.mul_add(canvas.density, -(canvas.origin_y as f32)) / pixel,
+                    rect.w * canvas.density / pixel,
+                    rect.h * canvas.density / pixel,
+                )
+            })
+            .collect()
+    })
+}
+
 const fn is_top_row(control: TouchControl) -> bool {
     matches!(
         control,

@@ -164,7 +164,7 @@ pub(super) fn draw_view_hud(
         left + width + 4,
         top,
     );
-    if let Some(bottom) = wallet_bottom {
+    if let Some((_, bottom)) = wallet_bottom {
         clock_hud::draw_clock_badge(draw, snapshot, rect, bottom + 3, view.night_safe);
     }
     // Altitude air, cold and wind while flying a V8 sky (F6).
@@ -172,7 +172,25 @@ pub(super) fn draw_view_hud(
     // The Moon checklist, the vacuum warning and the landing's sunrise (WP-MOON).
     super::moon_hud::draw_moon_hud(draw, shell, snapshot, view, rect, top + 124);
     // Tomb runs (WP-TOMBS): the run banner, or the entrance banner at a site's door.
-    super::tomb_hud::draw_tomb_hud(draw, snapshot, view, rect);
+    // It keeps clear of the stats panel, the wallet column (with its clock badge) and the
+    // phone's top-row buttons, dropping below them where the view is too narrow.
+    let mut keep_clear = vec![Rectangle::new(
+        left as f32,
+        top as f32,
+        width as f32,
+        panel_height as f32,
+    )];
+    if let Some((wallet_x, bottom)) = wallet_bottom {
+        let badge = if view.night_safe.is_some() { 36 } else { 26 };
+        keep_clear.push(Rectangle::new(
+            wallet_x as f32,
+            top as f32,
+            rect.x + rect.width - wallet_x as f32,
+            (bottom + 3 + badge - top) as f32,
+        ));
+    }
+    keep_clear.extend(super::touch_controls::top_row_rects());
+    super::tomb_hud::draw_tomb_hud(draw, snapshot, view, rect, &keep_clear);
     draw_view_prompt(draw, shell, view, rect);
     draw_view_hud_rest(
         draw,
@@ -581,7 +599,7 @@ fn draw_wallet_panel(
     rect: Rectangle,
     min_x: i32,
     top: i32,
-) -> Option<i32> {
+) -> Option<(i32, i32)> {
     let hud = view.hud;
     let money = format!("{}", hud.credits);
     // Underground (or on the ground): depth below the local surface; in the air: altitude
@@ -696,7 +714,7 @@ fn draw_wallet_panel(
             chip_y,
         );
     }
-    Some(top + height)
+    Some((x, top + height))
 }
 
 /// The HUD's weapon row: the mounted gun, its label, its ammo (ammo weapons) or capacitor
