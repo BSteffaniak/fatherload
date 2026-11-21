@@ -245,7 +245,47 @@ fn culture_scene(
     stage.settle(10);
 }
 
+/// The pilot at the door of the first side-view site in `setting`, everything around revealed.
+fn entrance_scene(stage: &mut SceneStage<'_>, setting: SiteSetting) {
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        let Some(site) = side_site(world, setting) else {
+            return;
+        };
+        kit(world, player);
+        let (x, feet) = WorldState::outside_spot(&site, 0);
+        if let Some(rig) = world.player_mut(player) {
+            let outward = if site.mirrored { 1.0 } else { -1.0 };
+            rig.x = outward * TILE_SIZE * 4.0 + x;
+            rig.y = feet - 11.5;
+            rig.velocity_x = 0.0;
+            rig.velocity_y = 0.0;
+            rig.x_remainder = 0.0;
+            rig.lunar.landed = setting == SiteSetting::Moon;
+        }
+        let _ = world.place_pilot(player, x, feet);
+        reveal(
+            world,
+            player,
+            site.door.x - 50..site.door.x + 50,
+            site.door.y - 30..site.door.y + 20,
+        );
+        world.stream_terrain_near_players();
+    });
+    stage.settle(8);
+}
+
 pub const SIDE_TOMB_SCENES: &[Scene] = &[
+    Scene {
+        name: "side_tomb_entrance_lunar",
+        summary: "A side-view tomb's entrance on the Moon, painted as a lunar vault (alloy panels, teal seams)",
+        setup: |stage| entrance_scene(stage, SiteSetting::Moon),
+    },
+    Scene {
+        name: "side_tomb_entrance_catacomb",
+        summary: "A side-view tomb's entrance in the deep strata, painted as a catacomb",
+        setup: |stage| entrance_scene(stage, SiteSetting::Deep),
+    },
     Scene {
         name: "side_tomb_sandstone",
         summary: "A sandstone tomb (mesa): a blade gallery in sun-baked ashlars, glyph bands and sconces on the back wall",
