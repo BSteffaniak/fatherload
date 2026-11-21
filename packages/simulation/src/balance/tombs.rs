@@ -67,6 +67,10 @@ impl TombBot {
 
     /// This tick's inputs for the bot's player.
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the bot's whole decision in reading order"
+    )]
     pub fn inputs(&mut self, world: &WorldState) -> TickInputs {
         let player = self.player;
         let mut inputs = TickInputs::default();
@@ -142,14 +146,44 @@ impl TombBot {
             ControlState::new(if backing { -1.0 } else { 1.0 }, false, false).with_jump(jumping)
         };
         if self.armed {
+            // Aim straight at the nearest creature in sight within nine tiles and fire.
             let (mx, my) = state.middle(body);
-            let near = !world.enemies_near(mx, my, TILE_SIZE * 9.0).is_empty();
-            controls = controls.with_weapon(WeaponControl {
-                fire: near,
-                auto_aim: true,
-                aim_x: 127,
-                aim_y: 0,
+            let target = world
+                .enemies()
+                .map(|(entity, _)| (entity.body.x - mx, entity.body.y - my))
+                .filter(|(dx, dy)| {
+                    dx.hypot(*dy) <= TILE_SIZE * 9.0
+                        && crate::physics::line_clear(world.terrain(), mx, my, mx + dx, my + dy)
+                })
+                .min_by(|a, b| a.0.hypot(a.1).total_cmp(&b.0.hypot(b.1)));
+            // The rifle dry: the sidearm never runs out.
+            let dry = world.player(player).is_some_and(|rig| {
+                rig.pilot_arsenal.equipped == Some(WeaponKind::Rifle)
+                    && rig.pilot_arsenal.ammo(AmmoKind::Cartridge) == 0
+                    && rig.pilot_arsenal.owned.contains(&WeaponKind::Sidearm)
             });
+            if dry && self.use_cooldown == 0 {
+                inputs.act_as(
+                    player,
+                    PlayerCommand::Pilot(PilotAction::Equip(Some(WeaponKind::Sidearm))),
+                );
+                self.use_cooldown = 10;
+            }
+            if let Some((dx, dy)) = target {
+                let length = dx.hypot(dy).max(1.0);
+                controls = controls.with_weapon(WeaponControl {
+                    fire: true,
+                    auto_aim: false,
+                    aim_x: (dx / length * 127.0) as i8,
+                    aim_y: (dy / length * 127.0) as i8,
+                });
+                // Hold ground against a guardian: the stairs wait until it falls.
+                if run.on_last_floor() && !run.boss_defeated && run.boss.is_some() {
+                    controls = ControlState::new(0.0, false, false)
+                        .with_jump(controls.jump)
+                        .with_weapon(controls.weapon);
+                }
+            }
         }
         inputs.hold_as(player, controls)
     }
@@ -230,6 +264,12 @@ pub struct ProbeRun {
     pub banked: u32,
     pub lost: u32,
     pub floors: u8,
+    /// Health the pilot lost over the run.
+    pub hurt: u32,
+    /// Creatures the bot killed.
+    pub kills: u32,
+    /// Shots and swings the bot made.
+    pub shots: u32,
 }
 
 /// The first site of `style` and `tier` on `settings`' world, if any (ground, then sky).
@@ -266,7 +306,14 @@ pub fn play_run(settings: &WorldSettings, site: &TombSite, hz: u32) -> ProbeRun 
     let mut world = WorldState::new_game_with_settings(player, settings, SimulationParams::new(hz));
     world.set_enemy_difficulty(EnemyDifficulty::Normal);
     if let Some(rig) = world.player_mut(player) {
+        // Kit that fits the tier: deeper and higher tombs are entered by better-equipped
+        // pilots (suit and armour tier one below the site's, a jetpack).
+        let kit = site.tier.saturating_sub(1).min(3);
+        rig.pilot_gear.suit = kit;
+        rig.pilot_gear.armor = kit;
+        rig.pilot_gear.jetpack = 1;
         let _ = rig.pilot_arsenal.receive(WeaponKind::Rifle);
+        let _ = rig.pilot_arsenal.receive(WeaponKind::Sidearm);
         rig.pilot_arsenal.equipped = Some(WeaponKind::Rifle);
         let _ = rig
             .pilot_arsenal
@@ -284,6 +331,9 @@ pub fn play_run(settings: &WorldSettings, site: &TombSite, hz: u32) -> ProbeRun 
         banked: 0,
         lost: 0,
         floors: 0,
+        hurt: 0,
+        kills: 0,
+        shots: 0,
     };
     for _ in 0..hz * 60 * RUN_MINUTES {
         if world.tomb_run_of(player).is_none() {
@@ -293,6 +343,14 @@ pub fn play_run(settings: &WorldSettings, site: &TombSite, hz: u32) -> ProbeRun 
         let tick = world.simulation_tick();
         let output = world.simulate_tick(tick, &inputs);
         for event in output.events {
+            match event.kind {
+                GameplayEventKind::PilotHurt { amount, .. } => {
+                    result.hurt += u32::from(amount);
+                }
+                GameplayEventKind::EnemyKilled { .. } => result.kills += 1,
+                GameplayEventKind::PilotFired { .. } => result.shots += 1,
+                _ => {}
+            }
             if let GameplayEventKind::TombRunEnded {
                 outcome,
                 banked,
@@ -440,5 +498,31 @@ impl BalanceProbe for TombsProbe {
             runs.len()
         ));
         section
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "debug: prints a few probe runs"]
+    fn print_probe_runs() {
+        for seed in [11_u64, 4_242] {
+            let settings = WorldSettings {
+                generator: GeneratorVersion::V10,
+                ..WorldSettings::new(seed)
+            };
+            for tier in [1, 3, 5] {
+                for style in SiteStyle::ALL {
+                    if let Some(site) = find_site(&settings, style, tier) {
+                        println!(
+                            "{seed} t{tier} {style:?}: {:?}",
+                            play_run(&settings, &site, 60)
+                        );
+                    }
+                }
+            }
+        }
     }
 }

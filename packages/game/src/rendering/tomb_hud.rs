@@ -469,3 +469,66 @@ pub(super) fn draw_tomb_codex(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         ]),
     );
 }
+
+/// Tomb and crypt markers on the mine map: every site in view whose door the seat has seen or
+/// whose map it holds (entered once). A gold pyramid marks a side-view tomb, a violet arch a
+/// top-down crypt; a red pip is a seal still unbroken, a mint pip a site cleared.
+pub(super) fn draw_map_tombs(
+    draw: &mut RaylibDrawHandle<'_>,
+    ui: &UiFrame<'_, '_>,
+    clip: Rectangle,
+    origin: (i32, i32),
+    pixel: i32,
+) {
+    let terrain = ui.snapshot.terrain;
+    if !terrain.settings().generator.has_tombs() || pixel <= 0 {
+        return;
+    }
+    let rect = fatherload_simulation::worldgen::features::TileRect {
+        min: fatherload_simulation::terrain::TilePosition {
+            x: origin.0,
+            y: origin.1,
+        },
+        max: fatherload_simulation::terrain::TilePosition {
+            x: origin.0 + clip.width as i32 / pixel,
+            y: origin.1 + clip.height as i32 / pixel,
+        },
+    };
+    let unlocks = ui.snapshot.tombs.unlocks_of(ui.view.player_id);
+    ui_kit::begin_clip(clip);
+    for site in
+        fatherload_simulation::worldgen::tomb_sites::sites_touching(terrain.settings(), &rect)
+    {
+        let mapped = unlocks.is_some_and(|unlocks| unlocks.maps.contains(&site.id));
+        if !mapped && !ui.view.is_explored(site.door) {
+            continue;
+        }
+        let x = clip.x as i32 + (site.door.x - origin.0) * pixel;
+        let y = clip.y as i32 + (site.door.y - origin.1) * pixel;
+        let color = style_color(site.style);
+        match site.style {
+            SiteStyle::SideView => {
+                // A little stepped pyramid.
+                for step in 0..4 {
+                    draw.draw_rectangle(x - 1 - step, y - 6 + step * 2, 3 + step * 2, 2, INK);
+                    draw.draw_rectangle(x - step, y - 6 + step * 2, 1 + step * 2, 1, color);
+                }
+            }
+            SiteStyle::TopDown => {
+                // A mausoleum arch.
+                draw.draw_rectangle(x - 4, y - 6, 9, 8, INK);
+                draw.draw_rectangle(x - 3, y - 5, 7, 2, color);
+                draw.draw_rectangle(x - 3, y - 3, 1, 4, color);
+                draw.draw_rectangle(x + 3, y - 3, 1, 4, color);
+            }
+        }
+        let sealed = !ui.snapshot.tombs.is_unsealed(site.id);
+        let cleared = unlocks.is_some_and(|unlocks| unlocks.cleared.contains(&site.id));
+        if cleared || sealed {
+            draw.draw_rectangle(x + 4, y - 8, 3, 3, if cleared { MINT } else { RED });
+        }
+        let label = format!("{} {}", site.style.noun(), site.tier);
+        ui_kit::text(draw, &label, x + 7, y - 6, TextStyle::Body, color);
+    }
+    ui_kit::end_clip();
+}

@@ -1146,3 +1146,105 @@ fn world_homes_decor_and_contracts_replicate_to_every_client() {
         );
     }
 }
+
+/// Tomb runs online (WP-TOMBS): both clients' pilots enter a V10 tomb site together on the
+/// host, the party reaches the relic picks, each client sends its own pick through its input
+/// stream, and when both have picked the host builds the next floor in the run slot. The run
+/// (floor, relics, loot), the floor's tiles and the pilots' top-down or side view converge on
+/// every client with no hash mismatch.
+#[test]
+fn world_tomb_runs_replicate_and_relic_picks_cross_the_wire() {
+    use fatherload_simulation::{
+        PlayerCommand, SimulationParams,
+        tomb::{RunPhase, TombCommand},
+        worldgen::{GeneratorVersion, WorldSettings, features::TileRect, tomb_sites},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(25, 3, 0.5));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    for client in &mut harness.clients {
+        client.bot.active = false;
+    }
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V10,
+        ..WorldSettings::new(0x5EED_0027)
+    };
+    let tombed = WorldState::new_game_with_settings(
+        fatherload_simulation::PlayerId::new(99),
+        &settings,
+        SimulationParams::new(60),
+    );
+    let mut world = harness.world().clone();
+    *world.terrain_mut() = tombed.terrain().clone();
+    let site = tomb_sites::sites_touching(
+        &settings,
+        &TileRect {
+            min: fatherload_simulation::terrain::TilePosition { x: -6_000, y: -100 },
+            max: fatherload_simulation::terrain::TilePosition { x: 6_000, y: 900 },
+        },
+    )
+    .into_iter()
+    .next()
+    .expect("a tomb site");
+    let party: Vec<_> = harness
+        .clients
+        .iter()
+        .map(|client| crate::world::to_sim_player(client.session.player().expect("joined")))
+        .collect();
+    let id = world
+        .scenario_enter_tomb(&site, &party)
+        .expect("the run starts");
+    world.scenario_tomb_stairs(party[0]);
+    assert_eq!(
+        world.tombs().runs.get(&id).map(|run| run.phase),
+        Some(RunPhase::Picking)
+    );
+    harness.host.new_epoch(world);
+    harness.run_for(Duration::from_secs(2));
+    for client in &mut harness.clients {
+        client
+            .queued_actions
+            .push(PlayerCommand::Tomb(TombCommand::PickRelic(Some(0))));
+    }
+    harness.run_for(Duration::from_secs(3));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    harness.assert_actions_exactly_once();
+    let host = harness.world();
+    let run = host.tombs().runs.get(&id).expect("the run goes on");
+    assert_eq!(run.floor, 1, "both picked: the party went down");
+    assert_eq!(run.phase, RunPhase::Exploring);
+    for member in &run.members {
+        assert_eq!(
+            member.relics.len(),
+            1,
+            "{:?} picked its own relic",
+            member.player
+        );
+    }
+    let origin = tomb_sites::slot_origin(run.slot);
+    let floor = WorldState::tomb_floor_of(run);
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(seen.tombs(), host.tombs(), "every client sees the same run");
+        for (tile, kind) in floor.cells.iter().take(64) {
+            let at = fatherload_simulation::terrain::TilePosition {
+                x: origin.x + tile.x,
+                y: origin.y + tile.y,
+            };
+            assert_eq!(
+                seen.terrain().tile(at).map(|found| found.kind),
+                host.terrain().tile(at).map(|found| found.kind),
+                "the floor's tiles travel with the terrain ({kind:?} at {at:?})"
+            );
+        }
+        for player in &party {
+            assert_eq!(
+                seen.pilot_of(*player).map(|(_, _, state)| state.view),
+                host.pilot_of(*player).map(|(_, _, state)| state.view)
+            );
+        }
+    }
+}

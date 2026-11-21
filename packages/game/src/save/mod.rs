@@ -71,7 +71,17 @@ const SAVE_SLOTS: usize = 3;
 /// * T26 story arcs: each player's arc log in the quest log (the open offer, running arcs,
 ///   history, promised follow-ups) and the people ledger's story marks (prosperity shifts,
 ///   changed relationships, unlocked offers).
-pub const SAVE_VERSION: u32 = 10;
+///
+/// 11 (expansion wave 5; the integrator collapses the wave's bumps into one); every new field
+/// has a serde default, so version 8 to 10 files load as is:
+///
+/// * T27 tombs core: `GeneratorVersion::V10` worlds (tomb sites and the run vault), the
+///   world's `tombs` (live runs with their party, relics, loot and downed members, each site's
+///   run counter and seal, every player's tomb unlocks and last run summary), the tomb tiles
+///   in the terrain diffs (entrances, and the floor of a run saved mid-floor), pilot entities'
+///   view and relic boons, projectiles' bounces and the tomb key in packs and bays. A run in
+///   progress saves and loads as it stands (the game also saves at every shrine).
+pub const SAVE_VERSION: u32 = 11;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -334,9 +344,9 @@ fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
         check_generator(json)?;
     }
     match probe.version {
-        // Version 8 and 9 files have the current layout minus serde-defaulted wave 3 and
-        // wave 4 fields.
-        8 | 9 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        // Version 8 to 10 files have the current layout minus serde-defaulted wave 3, 4 and
+        // 5 fields.
+        8..=10 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
         7 => serde_json::from_str::<legacy::V7SaveFile>(json)

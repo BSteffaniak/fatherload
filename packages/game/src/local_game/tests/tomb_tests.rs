@@ -1,0 +1,142 @@
+//! Tomb runs end to end through `LocalGame::frame` (WP-TOMBS): the use button at an open door
+//! takes the pilot in, the relic pick opens by itself between floors and takes a pick from the
+//! keyboard (and from a tapped row), the run summary pops up when the run ends, the codex sits
+//! after the milestones in the map's page cycle, and resting at a shrine saves the run.
+
+use fatherload_simulation::{
+    WorldState,
+    terrain::TilePosition,
+    tomb::{RunOutcome, RunPhase, SiteStyle, TombSite},
+    worldgen::{features::TileRect, tomb_sites},
+};
+
+use super::{LocalGame, PLAYER, PlayerInput, confirm_input, down, idle, interact, playing, press};
+use crate::shell::ModalScreen;
+
+fn site(world: &WorldState, style: SiteStyle) -> TombSite {
+    tomb_sites::sites_touching(
+        world.world_settings(),
+        &TileRect {
+            min: TilePosition { x: -6_000, y: -100 },
+            max: TilePosition { x: 6_000, y: 900 },
+        },
+    )
+    .into_iter()
+    .find(|site| site.style == style)
+    .expect("a site of the style")
+}
+
+/// A local game whose pilot stands at the (unsealed) door of the first side-view site.
+fn at_the_door() -> (LocalGame, TombSite) {
+    let mut world = WorldState::new_game(PLAYER);
+    let site = site(&world, SiteStyle::SideView);
+    let _ = world.unseal_tomb_site(
+        &site,
+        None,
+        &mut fatherload_simulation::TickOutput::default(),
+    );
+    let (x, feet) = WorldState::outside_spot(&site, 0);
+    let _ = world.place_pilot(PLAYER, x, feet);
+    (playing(world, 1, "tombs"), site)
+}
+
+#[test]
+fn the_use_button_at_an_open_door_takes_the_pilot_into_the_run() {
+    let (mut game, site) = at_the_door();
+    idle(&mut game, 2);
+    let _ = press(&mut game, interact());
+    idle(&mut game, 2);
+    let run = game.world().tomb_run_of(PLAYER).expect("in the run");
+    assert_eq!(run.site.id, site.id);
+    assert!(
+        game.shell.seat(0).message.contains("floors"),
+        "{}",
+        game.shell.seat(0).message
+    );
+}
+
+#[test]
+fn the_relic_pick_opens_between_floors_and_takes_a_keyboard_pick() {
+    let (mut game, site) = at_the_door();
+    game.edit_world(|world| {
+        let _ = world.scenario_enter_tomb(&site, &[PLAYER]);
+        world.scenario_tomb_stairs(PLAYER);
+    });
+    idle(&mut game, 2);
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::RelicPick));
+    let offered = game
+        .world()
+        .tombs()
+        .member_of(PLAYER)
+        .map(|member| member.offers.clone())
+        .expect("offers");
+    let _ = press(&mut game, down());
+    let _ = press(&mut game, confirm_input());
+    idle(&mut game, 3);
+    let run = game.world().tomb_run_of(PLAYER).expect("still in the run");
+    assert_eq!(run.floor, 1, "the only member picked: the next floor");
+    assert_eq!(run.phase, RunPhase::Exploring);
+    assert_eq!(
+        run.member(PLAYER).map(|member| member.relics.clone()),
+        Some(vec![offered[1]])
+    );
+    assert_ne!(game.shell.seat(0).modal, Some(ModalScreen::RelicPick));
+}
+
+#[test]
+fn a_tapped_row_picks_too_and_the_last_row_takes_nothing() {
+    let (mut game, site) = at_the_door();
+    game.edit_world(|world| {
+        let _ = world.scenario_enter_tomb(&site, &[PLAYER]);
+        world.scenario_tomb_stairs(PLAYER);
+    });
+    idle(&mut game, 2);
+    let rows = game
+        .world()
+        .tombs()
+        .member_of(PLAYER)
+        .map_or(0, |member| member.offers.len());
+    let _ = press(
+        &mut game,
+        PlayerInput {
+            menu_pick: Some(rows),
+            ..PlayerInput::default()
+        },
+    );
+    idle(&mut game, 3);
+    let run = game.world().tomb_run_of(PLAYER).expect("still in the run");
+    assert_eq!(run.floor, 1);
+    assert!(
+        run.member(PLAYER)
+            .is_some_and(|member| member.relics.is_empty())
+    );
+}
+
+#[test]
+fn the_summary_pops_up_when_the_run_ends_and_closes_with_confirm() {
+    let (mut game, site) = at_the_door();
+    game.edit_world(|world| {
+        let _ = world.scenario_enter_tomb(&site, &[PLAYER]);
+    });
+    idle(&mut game, 2);
+    game.edit_world(|world| {
+        if let Some(id) = world.tomb_run_of(PLAYER).map(|run| run.id) {
+            world.scenario_end_tomb_run(id, RunOutcome::Wiped);
+        }
+    });
+    idle(&mut game, 2);
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::TombSummary));
+    let _ = press(&mut game, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, None);
+}
+
+#[test]
+fn the_codex_follows_the_milestones_in_the_map_cycle() {
+    let (mut game, _) = at_the_door();
+    idle(&mut game, 1);
+    game.shell.seat_mut(0).modal = Some(ModalScreen::Achievements);
+    let _ = press(&mut game, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::TombCodex));
+    let _ = press(&mut game, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Map));
+}

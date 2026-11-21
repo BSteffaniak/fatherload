@@ -158,6 +158,7 @@ are authored per second and derived per tick once at world creation (`TickTiming
 | `player_sections` | how a `Player` splits into per-tick `PlayerRig`, public `RigBuild` (visible tiers and cosmetics) and private `PlayerInventory` |
 | `bases` | base building (WP-BASE): `check_build` / `apply_build_command` for every `BuildCommand`, fuel station synthesis, lift ladders, rescue home points (see Base building below) |
 | `pilot` | the pilot on foot (Part II F5): exit and board, the pilot pass (movement with the owner's controls, air, lava, regeneration, the hand pick), throws, pickups into the pack, damage, strikes and blasts, death and respawn, parking, gear, crawlways (see [The pilot on foot](#the-pilot-on-foot-srcpilotrs-srcworldpilotrs)) |
+| `tombs` | tomb and crypt runs (WP-TOMBS): seals, entering as a party, writing floors into the run vault, ambushes, the guardian, traps, shrines, caches, relic picks, downed members and revives, wipes, unlocks and summaries (see [Tombs and crypts](#tombs-and-crypts-srctombrs-srctomb-srcworldtombsrs-srcworldgenstreamedtomb_sitesrs-generator-v10)) |
 | `homes` | contractor-built homes (WP-HOME): deeds at land offices and surveyed spots, contracts stepped in world time, site crews, decorating, beds, the garage bay, cellar and lift (see [Contractor-built homes](#contractor-built-homes-srchomers-srchome-srcworldhomesrs)) |
 | `garage` | the paint bay service (`SessionServiceRequest::CustomizeRig`, validated against the player's cosmetic unlocks; free) and `rig_cosmetics` |
 | `replication` | per-tick state, live entities, op log and on-change sections (`SectionKey` / `SectionPayload`) |
@@ -378,7 +379,7 @@ precision, saves and keyframes of island edits, determinism and tick-rate safety
 The seven wave 4 tracks (T20-T26) land as one generator and one format bump. The sections
 below describe each track; this one lists what the integration unified.
 
-- **One generator V9** (`GeneratorVersion::V9`, current): V8 plus the furnished low isles,
+- **One generator V9** (`GeneratorVersion::V9`, current until V10 added tombs): V8 plus the furnished low isles,
   archipelagos, sky towns and jet streams (`has_sky_isles`, T20), the filled sky continents
   (`has_sky_content`, T21), the filled Moon (`has_moon_content`, T22) and pilot-only spaces in
   the ground (`has_pilot_spaces`, T23). V1-V8 output and digests are unchanged. V9 output is
@@ -1918,6 +1919,153 @@ determinism, two seats with their own stories).
 - **Formats:** `PROTOCOL_VERSION` 12 (the people commands, objectives, story places, arc log in
   the loadout, ledger story marks, events 260-265) and save format 10 (serde defaults: version
   8 and 9 files load).
+
+## Tombs and crypts (`src/tomb.rs`, `src/tomb/`, `src/world/tombs.rs`, `src/worldgen/streamed/tomb_sites.rs`, generator V10)
+
+Expansion plan WP-TOMBS, wave 5 T27: the shared core that the side-view tombs (T28) and the
+top-down crypts (T29) build on. **Each place is one or the other** (user decision): a site's
+[`SiteStyle`](src/tomb.rs) (`SideView` or `TopDown`) is fixed by the seed, drawn on its
+entrance art and map marker, and is the same for every floor of that place.
+
+- **Generator V10** (`GeneratorVersion::V10`, now current, `has_tombs`): V9 plus tomb sites and
+  the run vault; V9's sky bands, climb table and thin air are kept, so everything else is
+  exactly V9's (V1-V9 output and digests are unchanged; V10 is pinned by
+  `worldgen::streamed::tomb_sites::tests::v10_generation_is_pinned`).
+- **Sites** (`tomb_sites::sites_touching`, pure per placement cell): `SiteSetting::Deep` (a
+  third of the `DEEP_REGION` cells below row 140, carved into its own pocket; tier 1-5 by
+  depth), `Mesa` (one per `MESA_CELL` columns where the biome is badlands or desert and the
+  ground is level, tier 1), `OldQuarter` (about half the surface villages, 22 rows under the
+  village, tier 2), `SkyContinent` (most continents, clear of the city, temple, lake and
+  nests, tier 4) and `Moon` (two, one of each style, clear of the colony, habitats, facility
+  and lava tubes, tier 5). About half of each tier is each style (bit 40 of the site roll). A
+  `TombSite` carries its id (`SiteId`: setting and cell), style, tier, `SiteOpening`, entrance
+  origin, door tile, mirroring and seed. Entrances (`entrance_cells`): a stepped sandstone
+  pyramid with a sealed door in an alcove (side view) or a crypt-stone mausoleum on carved
+  pillars over a sealed floor hatch (top down); surface sites stand on the highest ground of
+  their footprint on a `PLINTH_ROWS` plinth, underground ones carve a pocket a rig can dig
+  to. Stamped last in `assemble`. `site_with_door`, `nearest_site` look them up.
+- **Openings** (`SiteOpening`, rolled per site): `Key` (half: a `TOMB_KEY` quest item, used
+  up; keys ride the key ring, one ruin chest in five holds one on V10 worlds, one tomb cache
+  in six), `Explosives` (three in ten: a blast within `SEAL_BLAST_REACH` of the door,
+  `WorldState::blast_tomb_seals` from the bomb pass) and `Story` (two in ten: a player who has
+  seen a story arc through; `WorldState::unseal_tomb_site(site, by, output)` is the arc
+  binding's entry point).
+- **The run vault** (`tomb_sites::VAULT`): `SLOTS` (16) run slots of `SLOT_SIZE` (168 x 48)
+  tiles of sealed bedrock under columns -15,000.. (f32 keeps 1/32 px there), rows 180..276.
+  Nothing digs, blasts or picks bedrock, so a slot is reached only through a site.
+  `in_vault` / `WorldState::in_run_space` mark run spaces: no cave water or critters
+  (`Terrain::cave_at` answers `None`), no band heat on the pilot, never an enemy safe zone,
+  torchlight in `light_at` (`tomb::RUN_SPACE_LIGHT`).
+- **Floors** (`tomb::floor`): `plan_floor(site, run, floor)` is a pure room graph
+  (`FloorPlan`, `RoomNode`, `RoomKind`): entry, a shuffle of trap hall, puzzle and ambush (more
+  rolled with difficulty), a shrine in the middle of the main path, the vault branching off a
+  puzzle or ambush room, the boss room before the stairs on the last floor. `floor_seed(site
+  seed, run counter, floor)`; `floor_difficulty(tier, floor)` ramps per floor; `floors_for_tier`
+  gives 3-6 floors. The site's run counter (`Tombs::site_runs`) makes every run fresh.
+- **Realizers** (`tomb::realize`, **the T28 / T29 seam**): `FloorRealizer` (`style`,
+  `realize(&FloorPlan) -> RealizedFloor`), chosen by `realizer_for(style)`. A
+  `RealizedFloor` is cells relative to the slot corner (the rest stays bedrock), the rooms'
+  interiors, the party's start tile and `SpawnSlot`s (`SpawnRole::{Guard, Ambusher, Boss}`);
+  it must stay inside `MAX_FLOOR_SIZE` and be pure. `SideViewRealizer` builds platformer rooms
+  on one floor line (three-tall doorways, spike pits two deep, lever or plate gates, the vault
+  up a step and ledge stair through a ceiling hole, the shrine, caches, the boss room, the
+  stairs), all reachable by the stock pilot. `TopDownRealizer` builds a row of rooms seen from
+  above (the vault north of its parent, spike floors with a safe lane, lever gates on the east
+  doorways). `bestiary(style, role, variant)` names the enemy kind (placeholders: shellbacks,
+  acid spitters, cave bats and the ancient guardian in side view; magma wisps, cave bats and a
+  will-o-wisp guardian, all flyers, in top down); the guardian has `BOSS_HEALTH_SCALE` health.
+  `TrapKind` (`Spikes`, `TRAP_KINDS` codes reserved) with `damage_per_second`.
+- **Tiles** (`BuiltTile` codes 72-119): `TombWall(style)`, `TombPillar(style)` (pilots pass),
+  `TombDoor { style, sealed }`, `TombShrine { lit }`, `TombStairs`, `TombExit`,
+  `TombCache { open }`, `TombTrap { kind, hidden }` (pilots pass into it and are hurt). All
+  unbreakable (`is_ruin`), `access` pilot-only. Doors, shrines, stairs, the way out and caches
+  are `mechanism::Usable` tomb variants, so the use button (keyboard, gamepad, the touch USE
+  button) works them and the prompt shows their verb.
+- **Runs** (`world/tombs.rs`): the use button at an open door starts a run for the opener and
+  every crewmate on foot within `PARTY_REACH`, in the lowest free slot; the party arrives at
+  the floor's start, the pilot's `PilotView` follows the style and the rig waits outside (it
+  takes no damage while its player is in a run). `TombRun` holds the site, run counter, slot,
+  floor, `RunPhase` (`Exploring`, `Picking`), members (`RunMember`: relics, offers, unbanked
+  and banked loot, downed state), rooms, spawns, sprung ambushes, the guardian. Guards spawn
+  with the floor, ambushes and the guardian when a standing member walks into their room
+  (`TombAmbush`); rooms reveal on the map for the whole party as they walk in; traps hurt
+  pilots inside them. The stairs end the floor (the last floor's once the guardian is down:
+  the run is won, `Finished`), relic picks follow (`TombCommand::PickRelic`, timed out after
+  `PICK_TIMEOUT_MILLIS`), then the next floor is written over the last one. The first floor's
+  way out ends the run with everything banked (`Retreated`).
+- **Roguelite stakes**: caches pay `cache_value` (tier squared) times the loot relics into the
+  member's unbanked loot (sometimes a tomb key or a lore page); a shrine banks everyone's
+  loot (credits paid at once), revives the downed, heals once and saves the run (the game
+  writes the save on `TombShrineRested`). A member at zero health is downed
+  (`down_tomb_member`, from `kill_pilot`); a standing crewmate beside them for
+  `REVIVE_MILLIS` (`REVIVE_REACH`) or a shrine revives them (`REVIVE_SHARE` health); when every
+  member is down the run ends (`Wiped`) and unbanked loot is lost. Finishing pays the
+  `guardian_hoard`. Leaving the session or being parked mid-run abandons it.
+- **Relics** (`tomb::relic`, data in `RELICS`): 12 perks (Spring Heels double jump, Ricochet
+  Rounds, Trap-Sight Lantern, Vampiric Pick, Glider Boost, Iron Lungs, Quickstep, Featherfall,
+  Gravedigger, Bone Charm, Hunter's Mark, Second Wind) and 3 bargains (blessing plus curse:
+  Pact of Greed, Glass Cannon, Restless Soul), with `SYNERGIES` (Skywalker, Trick Shot,
+  Bloodbound). `offers(seed, floor, member, held)` gives each member their own 3 perks and a
+  bargain. Effects (`RelicEffects`) hook in through `PilotBoons` on the pilot entity (extra
+  jumps, move and jump speed, glide, featherfall, trap sight; `step_pilot` reads them), the
+  pilot's max health and regeneration, `damage_pilot` (damage taken), `damage_entity`
+  (damage dealt, the vampiric heal), projectiles (`ProjectileState::bounces`, ricochets off
+  rock) and caches (loot).
+- **Unlocks** (`TombUnlocks`, per player, permanent): the relic codex, tomb maps (sites
+  entered: their markers stay on the map), cleared sites, guardians defeated (each grants a
+  `TrophyCase` through `grant_furniture` and the Crown decal), lore pages (`LORE_PAGES`, the
+  builders of the Moon and the deep core), runs, finishes and the best haul. `RunSummary`
+  (per player, with a serial) feeds the death / summary screen.
+- **The world field** `Tombs` (`runs`, `site_runs`, `unsealed`, `unlocks`, `summaries`):
+  serde default, saved, hashed only once non-empty, replicated as `SectionKey::Tombs` to
+  everyone; floors travel as terrain ops, the party as pilot entities.
+- **Events** (codes 270-279): `TombEntered`, `TombSeal`, `TombAmbush`, `TombGuardianDefeated`,
+  `TombFloorCleared`, `TombRelicPicked`, `TombShrineRested`, `TombCacheOpened`,
+  `TombMemberDowned`, `TombRunEnded`.
+- **Balance** (`balance::tombs`, `--balance-report --only tombs`): `TombBot` (also used by the
+  world tests) plays one run per seed, tier and style on Normal enemies; the report gives run
+  length, cleared / wiped / timeout counts and banked and lost loot per tier and style.
+- **Scenario helpers**: `scenario_enter_tomb`, `scenario_edit_tomb_member`,
+  `scenario_tomb_stairs`, `scenario_end_tomb_run`, `scenario_tomb_unlocks`,
+  `scenario_down_tomb_member`.
+
+`tomb/*` unit tests cover the grammar, determinism and fresh runs, every plan realizing inside
+the slot with every room, relic data, synergies and offers; `tomb_sites` tests cover V10-only
+placement in every setting, both styles on the sky and the Moon, chunk seams and fixed styles,
+the vault and the V10 digest; `world/tomb_tests.rs` covers keys, blasts and story seals,
+entering as a party, a scripted bot clearing a side-view and a top-down run, the top-down walk,
+shrines and the way out, wipes, the safe rig, co-op revives and wipes, individual relic picks,
+relic effects, the guardian, saves mid-floor (JSON and postcard), replication and hashing,
+tick-rate safety; the netcode e2e test plays relic picks over the wire.
+
+## Wave 5 seams: tombs core (T27) for T28 and T29
+
+- **T28 side-view content**: replace `SideViewRealizer` (keep the `FloorRealizer` contract:
+  pure, inside `MAX_FLOOR_SIZE`, the start tile open, every room reachable with the stock
+  pilot). New traps: append `TrapKind` variants (tile `kind` index, at most `TRAP_KINDS`),
+  give them `damage_per_second` or a behaviour in `WorldState::advance_traps`; their art goes
+  in the game's `tile_art/built_art.rs` (`paint_tomb_trap`). New enemies and bosses: add
+  `EnemyKind`s as usual and return them from `realize::bestiary` for `SiteStyle::SideView`.
+  Tile sets: `BuiltTile::TombWall(style)` is the masonry (art `paint_tomb_wall`, ramps
+  `tomb_ramp`); add culture variants by new built codes or by drawing per site setting. Run
+  music: the game's `audio::cues::event_cue` maps the tomb events to placeholder cues today;
+  the director can switch music on `world.tomb_run_of(player)`.
+- **T29 top-down crypts**: the pilot's top-down mode is `PilotState::view ==
+  PilotView::TopDown` (set by `refresh_tomb_pilot` from the run's style); replace
+  `pilot::step_top_down` (movement, dodge roll, collision footprint) and the game's
+  placeholder floor (`rendering/world/tombs.rs::draw_tomb_floors`) and camera. Replace
+  `TopDownRealizer`; crypt enemies and the crypt lord come from `bestiary` for
+  `SiteStyle::TopDown` (top-down placeholders fly because enemies still fall under gravity
+  in the vault). Touch: the top-down mode reads the same held directions (up / down /
+  horizontal), so the d-pad already walks eight ways.
+- **Both**: rooms and spawns arrive in `TombRun::rooms` / `spawns` (absolute tiles); ambushes
+  spring per room (`TombRun::sprung`); the guardian is `TombRun::boss`, its fall sets
+  `boss_defeated`. Relics: add `Relic` variants and `RELICS` rows (append only: the index is
+  the codex entry). Story arcs (T26) bind a site with `tomb_sites::nearest_site` and open it
+  with `unseal_tomb_site`; lore pages are `tomb::LORE_PAGES`.
+- **Formats**: `PROTOCOL_VERSION` 13 and save format 11 for the whole wave (the integrator
+  collapses T28 / T29 bumps into these); events 270-279 are T27's, T28 has 280-289 and T29
+  290-299.
 
 ## Upgrade rewards and milestones (`src/milestone.rs`, `src/upgrade_preview.rs`, `src/world/milestones.rs`)
 

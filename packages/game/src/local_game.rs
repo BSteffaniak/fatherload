@@ -346,6 +346,7 @@ impl LocalGame {
         report.changed_tiles.extend(frame.changed_tiles);
         self.frame_events = self.events.present(frame.events);
         self.observe_events();
+        self.save_at_shrines();
         self.show_pending_welcome();
         let local_players = self.local_players();
         self.effects.update(delta_seconds);
@@ -1353,6 +1354,22 @@ impl LocalGame {
         }
     }
 
+    /// A tomb shrine saves the run (WP-TOMBS): whoever can write the session save (a local
+    /// game or the host) writes it when any member rests at one. Clients never save.
+    fn save_at_shrines(&mut self) {
+        let rested = self.frame_events.iter().any(|event| {
+            matches!(
+                &event.event,
+                RuntimeEventKind::Gameplay(gameplay)
+                    if matches!(gameplay.kind, GameplayEventKind::TombShrineRested { .. })
+            )
+        });
+        if rested && self.runtime.can_save() && self.shell.run_mode != RunMode::Title {
+            let result = self.write_save(None);
+            self.report_save(result, "The shrine keeps your run: saved.");
+        }
+    }
+
     fn autosave(&mut self, delta_seconds: f32) {
         let hosting = self.runtime.online_role() == Some(OnlineRole::Host)
             && self.shell.online.started()
@@ -1571,6 +1588,7 @@ mod tests {
     mod quest_tests;
     mod split_seat_tests;
     mod test_mode_tests;
+    mod tomb_tests;
     mod village_tests;
 
     const DT: f32 = 1.0 / 60.0;

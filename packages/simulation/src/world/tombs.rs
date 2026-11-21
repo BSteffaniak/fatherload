@@ -67,7 +67,19 @@ pub const PICK_TIMEOUT_MILLIS: u64 = 90_000;
 /// A blast this close to a sealed explosives door (px) cracks it.
 pub const SEAL_BLAST_REACH: f32 = TILE_SIZE * 3.0;
 /// Highest enemy tier a run spawns.
-const MAX_ENEMY_TIER: u8 = 12;
+const MAX_ENEMY_TIER: u8 = 8;
+
+/// The depth tier (health and damage scale) of a run's creatures: one below the site's tier,
+/// plus one every two floors down. Tomb creatures fight pilots, not rigs, so they sit well
+/// under the band tiers of the strata around them.
+#[must_use]
+pub fn enemy_tier(run: &TombRun) -> u8 {
+    run.site
+        .tier
+        .saturating_sub(1)
+        .saturating_add(run.floor / 2)
+        .min(MAX_ENEMY_TIER)
+}
 
 const SALT_CACHE: u64 = 0x70B5_CAC4_000A;
 const SALT_KEY: u64 = 0x70B5_CAC4_000B;
@@ -452,12 +464,7 @@ impl WorldState {
         let origin = tomb_sites::slot_origin(run.slot);
         let realized = Self::tomb_floor_of(run);
         let plan_last = run.on_last_floor();
-        let tier = run
-            .site
-            .tier
-            .saturating_mul(2)
-            .saturating_add(run.floor)
-            .min(MAX_ENEMY_TIER);
+        let tier = enemy_tier(run);
         let style = run.site.style;
         let seed = run.site.seed;
         self.clear_slot_entities(run.slot);
@@ -1022,12 +1029,7 @@ impl WorldState {
         }
         let style = run.site.style;
         let seed = run.site.seed;
-        let tier = run
-            .site
-            .tier
-            .saturating_mul(2)
-            .saturating_add(run.floor)
-            .min(MAX_ENEMY_TIER);
+        let tier = enemy_tier(run);
         let spawns: Vec<SpawnSlot> = run
             .spawns
             .iter()

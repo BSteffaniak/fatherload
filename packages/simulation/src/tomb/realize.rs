@@ -162,7 +162,8 @@ pub fn realizer_for(style: SiteStyle) -> &'static dyn FloorRealizer {
 ///
 /// T28 (mummies, crypt bats, skeletal archers, animated statues, tomb guardians) and T29
 /// (skeleton packs, spectres, cultists, golems, the crypt lord) return their own kinds here.
-/// Top-down placeholders fly (no floor to stand on seen from above).
+/// Top-down placeholders fly (no floor to stand on seen from above); both styles' guardian is
+/// the flying ancient guardian for now.
 #[must_use]
 pub const fn bestiary(style: SiteStyle, role: SpawnRole, variant: u32) -> EnemyKind {
     match (style, role) {
@@ -174,14 +175,13 @@ pub const fn bestiary(style: SiteStyle, role: SpawnRole, variant: u32) -> EnemyK
             }
         }
         (SiteStyle::SideView | SiteStyle::TopDown, SpawnRole::Ambusher) => EnemyKind::CaveBat,
-        (SiteStyle::SideView, SpawnRole::Boss) => EnemyKind::AncientGuardian,
+        (SiteStyle::SideView | SiteStyle::TopDown, SpawnRole::Boss) => EnemyKind::AncientGuardian,
         (SiteStyle::TopDown, SpawnRole::Guard) => EnemyKind::MagmaWisp,
-        (SiteStyle::TopDown, SpawnRole::Boss) => EnemyKind::WillOWisp,
     }
 }
 
 /// The boss's health multiplier over its kind's stock health.
-pub const BOSS_HEALTH_SCALE: f32 = 4.0;
+pub const BOSS_HEALTH_SCALE: f32 = 1.5;
 
 /// A cell writer that keeps the latest write per tile and walls in every open cell.
 struct Canvas {
@@ -413,7 +413,7 @@ impl FloorRealizer for SideViewRealizer {
                         canvas.put(x + width / 2, floor_row - 3, canvas.wall());
                         canvas.put(x + width / 2 + 1, floor_row - 3, canvas.wall());
                     }
-                    let count = (2 + danger / 3).clamp(2, 6);
+                    let count = (1 + danger / 4).clamp(1, 4);
                     for index in 0..count {
                         spawns.push(SpawnSlot {
                             room: room_index,
@@ -627,7 +627,7 @@ impl FloorRealizer for TopDownRealizer {
                     );
                 }
                 RoomKind::Ambush => {
-                    let count = (2 + danger / 3).clamp(2, 6);
+                    let count = (1 + danger / 4).clamp(1, 4);
                     for index in 0..count {
                         spawns.push(SpawnSlot {
                             room: room_index,

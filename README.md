@@ -807,6 +807,40 @@ On foot you are slow vertically and weak at digging, but you fit where the rig c
   whose lever is up a crawlway: hop out, pull it, fly in. **Crawlway caves** are pockets in
   hardpan reached only through a crawlway.
 
+### Tombs and crypts
+
+New worlds (generator V10) hide sealed **tomb sites**: deep in the strata, cut into badland and
+desert mesas, under villages' old quarters, on sky continents and on the Moon. Every place is
+one of two kinds, fixed by the world seed and the same on every floor: a **side-view tomb** (a
+sandstone pyramid; a platformer run on the pilot's own movement) or a **top-down crypt** (a
+crypt-stone mausoleum over a floor hatch; a dungeon crawl seen from above). The entrance banner
+and the map marker say which, its tier (depth or altitude: 1 on the mesas to 5 on the Moon)
+and how the seal breaks: a **tomb key** (found in ruin chests and tomb vaults), a **blast**
+beside a cracked seal, or a **story** seen through.
+
+- **Going in**: on foot, `E` (the use button, `A` on a controller, USE on touch) at an open
+  door takes you and every crewmate standing near the door inside together (split-screen and
+  online). The rig waits outside and takes no damage. Floors (3 to 6 by tier) are fresh every
+  run: trap halls, lever and pressure-plate puzzles, ambushes, a **shrine** halfway, a
+  **treasure vault** off the main path, and the tomb's **guardian** before the way out on the
+  last floor. Rooms light up on your map as you walk in.
+- **Loot and death**: caches fill your **unbanked** loot; resting at a shrine banks everyone's
+  loot (paid at once), revives the downed, heals once and **saves the game**. At zero health
+  you are **downed**: a crewmate standing beside you for a moment (or a shrine) stands you up.
+  If the whole party is down the run ends and the unbanked loot is lost. The first floor's way
+  out, or the stairs after the guardian, leave with everything.
+- **Relics**: taking the stairs offers each member their own three perks and a bargain (a
+  blessing tied to a curse), picked with the menu keys, a controller or a tap: double jump,
+  ricochet shots, the trap-sight lantern (hidden spikes glow), the vampiric pick, the glider
+  boost and more, with synergies (Spring Heels and Glider Boost make Skywalker). Relics last
+  the run.
+- **Unlocks**: the **tomb codex** (after the milestones in the map's pages: `Enter` from the
+  milestones) lists every relic you have carried, the tombs you have mapped and cleared,
+  guardians felled and the builders' **lore pages** found in vaults. Each guardian felled also
+  leaves a trophy case for your home and the Crown decal for the rig.
+- Top-down crypts walk eight ways with the movement keys (up and down included) for now; their
+  own controls, camera and art come with the next wave.
+
 ## Controls
 
 - `A` / `D` or left/right arrows: move horizontally and drill sideways while resting on the

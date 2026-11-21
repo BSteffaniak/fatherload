@@ -1817,6 +1817,8 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         pixel,
     );
     village_map::draw_map_villages(draw, terrain, ui.player, clip, (origin_x, origin_y), pixel);
+    // Tomb and crypt sites the seat has found or mapped (WP-TOMBS).
+    super::tomb_hud::draw_map_tombs(draw, ui, clip, (origin_x, origin_y), pixel);
     quests::draw_map_quest_markers(
         draw,
         &ui.view.quest_markers,

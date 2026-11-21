@@ -279,6 +279,9 @@ fn the_quest_log_tracks_the_selected_job_and_flips_with_the_map() {
     // An empty journal's only row turns the page.
     let _report = press(&mut game, confirm_input());
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Achievements));
+    // The tomb codex (WP-TOMBS) comes after the milestones, then the map again.
+    let _report = press(&mut game, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::TombCodex));
     let _report = press(&mut game, confirm_input());
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Map));
 }
