@@ -2161,7 +2161,14 @@ pub struct ShellState {
     pub settings_dirty: bool,
     pub save_dirty: bool,
     pub request_exit: bool,
+    /// The presentation clock: sixtieths of a second of real time the shell has run (toasts,
+    /// banners and world animations age by it). It follows real time, not frames: a frame of
+    /// about 1/60 s advances it exactly one, so a 60 Hz display counts frames as before, while
+    /// a 120 Hz screen (the browser build runs at the display's refresh rate) or a slow frame
+    /// no longer runs every animation and toast at twice or half speed.
     pub update_ticks: u64,
+    /// Sixtieths of a second not yet counted into `update_ticks`.
+    update_clock: f64,
     pub play_seconds: f32,
     pub sound_cues: Vec<SoundCue>,
     pub online: OnlineShell,
@@ -2215,6 +2222,7 @@ impl ShellState {
             save_dirty: false,
             request_exit: false,
             update_ticks: 0,
+            update_clock: 0.0,
             play_seconds: 0.0,
             sound_cues: Vec::new(),
             online: OnlineShell::default(),
@@ -2348,6 +2356,26 @@ impl ShellState {
         clippy::too_many_lines,
         reason = "top-level shell dispatcher keeps frame order explicit"
     )]
+    /// Advances [`Self::update_ticks`] by `delta_seconds` of real time (see its docs).
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "whole sixtieths of a second, non-negative and small per frame"
+    )]
+    fn advance_presentation_clock(&mut self, delta_seconds: f32) {
+        let sixtieths = f64::from(delta_seconds.max(0.0)) * 60.0;
+        // A 60 Hz frame (a little jitter either way) is exactly one tick.
+        let sixtieths = if (0.9..=1.1).contains(&sixtieths) {
+            1.0
+        } else {
+            sixtieths
+        };
+        self.update_clock += sixtieths;
+        let whole = self.update_clock.floor();
+        self.update_clock -= whole;
+        self.update_ticks = self.update_ticks.saturating_add(whole as u64);
+    }
+
     pub fn update(
         &mut self,
         inputs: &[PlayerInput],
@@ -2361,7 +2389,7 @@ impl ShellState {
         let primary = inputs.first().copied().unwrap_or_default();
         let mut requests = Vec::new();
         self.set_seat_count(ctx.players.len().max(inputs.len()));
-        self.update_ticks = self.update_ticks.saturating_add(1);
+        self.advance_presentation_clock(delta_seconds);
         if self.message != self.message_seen {
             self.message_seen.clone_from(&self.message);
             self.message_tick = self.update_ticks;
@@ -3266,6 +3294,34 @@ mod tests {
         shell.online.role = Some(OnlineRole::Client);
         shell.request_exit_or_prompt();
         assert_eq!(shell.modal, Some(ModalScreen::ExitConfirm));
+    }
+
+    /// Wave 6 QA: the browser build runs one frame per display refresh, so on a 120 Hz screen
+    /// the old frame-counting clock ran every toast, banner and world animation at double
+    /// speed (and at half speed at 30 frames per second).
+    #[test]
+    fn the_presentation_clock_follows_real_time_at_any_frame_rate() {
+        let world = WorldState::new_game(PlayerId::new(0));
+        for fps in [30_u32, 60, 75, 120, 144] {
+            let mut shell = ShellState::new(crate::save::SettingsFile::default());
+            #[allow(clippy::cast_precision_loss, reason = "small frame rates")]
+            let frame = 1.0 / fps as f32;
+            for _ in 0..fps * 2 {
+                let _requests = shell.update(&[PlayerInput::default()], frame, ctx(&world));
+            }
+            assert!(
+                shell.update_ticks.abs_diff(120) <= 1,
+                "{fps} fps: two seconds read {} sixtieths",
+                shell.update_ticks
+            );
+        }
+        // A 60 Hz frame with a little jitter is exactly one tick, as before.
+        let mut shell = ShellState::new(crate::save::SettingsFile::default());
+        for frame in 0..600 {
+            let dt = if frame % 2 == 0 { 0.016 } else { 0.0175 };
+            let _requests = shell.update(&[PlayerInput::default()], dt, ctx(&world));
+        }
+        assert_eq!(shell.update_ticks, 600);
     }
 
     fn ctx(world: &WorldState) -> ShellContext<'_> {
