@@ -718,6 +718,59 @@ fn the_guardian_waits_in_its_room_and_its_fall_opens_the_way_out() {
     );
 }
 
+#[test]
+fn the_floor_keeps_its_creatures_and_its_guardian_however_far_the_party_walks() {
+    let site = site_of(SiteStyle::SideView);
+    let mut world = world();
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    enter(&mut world, &site, &[PLAYER]);
+    for _ in 1..site.floors() {
+        world.scenario_tomb_stairs(PLAYER);
+        act(
+            &mut world,
+            PLAYER,
+            PlayerCommand::Tomb(TombCommand::PickRelic(None)),
+        );
+        run_ticks(&mut world, &TickInputs::default(), 1);
+    }
+    let run = world.tomb_run_of(PLAYER).expect("run").clone();
+    let room = run.rooms[run
+        .spawns
+        .iter()
+        .find(|spawn| spawn.role == SpawnRole::Boss)
+        .map(|spawn| spawn.room)
+        .expect("the guardian's room")];
+    let id = world.pilot_of(PLAYER).expect("pilot").0;
+    let stand = |world: &mut WorldState, x: f32| {
+        world.edit_pilot(id, |body, _| {
+            body.x = x;
+            body.previous_x = x;
+            body.y = (room.interior.max.y + 1) as f32 * TILE_SIZE - 0.25;
+            body.previous_y = body.y;
+        });
+    };
+    stand(&mut world, (room.interior.min.x as f32 + 1.5) * TILE_SIZE);
+    run_ticks(&mut world, &TickInputs::default(), 2);
+    let boss = world.tomb_run_of(PLAYER).and_then(|run| run.boss);
+    assert!(boss.is_some(), "the guardian woke");
+    let creatures = world.enemies().count();
+    // Back to the start, far past the director's despawn reach, for several of its passes.
+    let start = (run.start.x as f32 + 0.5) * TILE_SIZE;
+    assert!((room.interior.min.x - run.start.x) as f32 > super::enemies::DESPAWN_TILES);
+    for _ in 0..4 {
+        stand(&mut world, start);
+        run_ticks(&mut world, &TickInputs::default(), 60);
+    }
+    let run = world.tomb_run_of(PLAYER).expect("still in the run");
+    assert!(!run.boss_defeated, "walking away fells no guardian");
+    assert!(
+        world
+            .entities
+            .contains(crate::entity::EntityId(boss.expect("boss")))
+    );
+    assert_eq!(world.enemies().count(), creatures, "nothing despawned");
+}
+
 // --- Saves, replication, tick rates ---------------------------------------------------------
 
 #[test]

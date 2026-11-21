@@ -518,6 +518,10 @@ impl WorldState {
                     (entity.body.x - x).abs() > reach || (entity.body.y - y).abs() > reach
                 })
             })
+            // A tomb floor's creatures (WP-TOMBS) stay however far the party walks: the floor
+            // is wider than the despawn reach, and a guardian that vanished would count as
+            // felled. Floors clear their own slot when they change or the run ends.
+            .filter(|entity| !self.in_run_space(tile_of(entity.body.x, entity.body.y)))
             .map(|entity| entity.id)
             .collect();
         if !far.is_empty() {
