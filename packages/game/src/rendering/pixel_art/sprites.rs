@@ -138,6 +138,8 @@ pub const ALL: &[&SpriteDef] = &[
     &weapons::ICON_RAILGUN,
     &weapons::ICON_BATTERY,
     &weapons::ICON_ROCKET_AMMO,
+    &weapons::ICON_CARTRIDGE_AMMO,
+    &weapons::ICON_SHELL_AMMO,
     &icons::PILOT_ARMOR,
     &icons::HEADLAMP,
     &icons::BOOTS,

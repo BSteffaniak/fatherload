@@ -848,3 +848,42 @@ pub(super) fn draw_rig_hits(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The painted columns `(first, last)` of a sprite across all its frames.
+    fn painted_columns(sprite: &SpriteDef) -> (usize, usize) {
+        let mut span = (usize::MAX, 0);
+        for rows in sprite.frames {
+            for row in *rows {
+                for (column, symbol) in row.chars().enumerate() {
+                    if symbol != '.' && symbol != ' ' {
+                        span = (span.0.min(column), span.1.max(column));
+                    }
+                }
+            }
+        }
+        span
+    }
+
+    /// Wave 6: the colossus' drawn body stays inside its contact box, so a pilot standing
+    /// beside it (pushed to exactly touching) is never drawn inside its arms.
+    #[test]
+    #[allow(clippy::cast_precision_loss, reason = "small art sizes")]
+    fn the_colossus_is_drawn_no_wider_than_its_contact_box() {
+        let kind = EnemyKind::SunColossus;
+        let sprite = enemy_sprite(kind);
+        let scale = sprite_scale(kind);
+        let (first, last) = painted_columns(sprite);
+        let half = sprite.width() as f32 * scale * 0.5;
+        let left = first as f32 * scale - half;
+        let right = (last + 1) as f32 * scale - half;
+        let (contact, _) = kind.contact_half();
+        assert!(
+            left >= -contact && right <= contact,
+            "drawn {left}..{right} vs contact ±{contact}"
+        );
+    }
+}

@@ -1048,22 +1048,51 @@ fn draw_wagon(draw: &mut impl RaylibDraw, pen: Pen, x: i32, seconds: f32) {
     pen.boxed(draw, x + 24, -16, 4, 4, STONE_LIGHT);
     // Shafts to the mule.
     pen.rect(draw, x + 30, -10, 10, 1, SOIL);
-    // The mule: body, legs, neck and head, harness and a flicking tail.
-    let m = x + 40;
-    pen.rect(draw, m, -14, 14, 6, LOAM);
-    pen.rect(draw, m, -9, 14, 1, SOIL);
-    for leg in [1, 4, 9, 12] {
-        pen.rect(draw, m + leg, -8, 2, 8, SOIL);
+    draw_mule(draw, pen, x + 40, seconds);
+}
+
+/// The wagon's mule at art x `m` (Wave 6 art pass): a stocky grey-brown barrel on short, thick
+/// legs with dark hooves, the head carried low and forward on a short neck, a pale muzzle and
+/// belly, a dark mane strip, the long upright ears that make it a mule (not a deer), a collar
+/// with the harness and a tufted tail flicking now and then.
+fn draw_mule(draw: &mut impl RaylibDraw, pen: Pen, m: i32, seconds: f32) {
+    const COAT: Color = STONE;
+    const COAT_DARK: Color = STONE_DARK;
+    // Ink outline first, so the coat reads against snow, sand and night alike.
+    pen.rect(draw, m - 1, -15, 17, 9, INK);
+    pen.rect(draw, m + 13, -19, 6, 6, INK);
+    pen.rect(draw, m + 16, -17, 7, 5, INK);
+    // Short, thick legs (the far pair darker) with hooves.
+    for (leg, color) in [(1, COAT_DARK), (4, COAT), (10, COAT_DARK), (13, COAT)] {
+        pen.rect(draw, leg + m - 1, -7, 4, 7, INK);
+        pen.rect(draw, leg + m, -7, 2, 6, color);
+        pen.rect(draw, leg + m, -1, 2, 1, SOIL_DARK);
     }
-    pen.rect(draw, m + 6, -14, 1, 6, RED);
-    pen.rect(draw, m + 12, -19, 3, 6, LOAM);
-    pen.rect(draw, m + 13, -21, 7, 4, LOAM);
-    pen.rect(draw, m + 18, -19, 2, 2, BONE);
-    pen.rect(draw, m + 13, -23, 1, 2, SOIL);
-    pen.rect(draw, m + 15, -23, 1, 2, SOIL);
-    pen.px(draw, m + 17, -20, INK);
+    // The barrel: deep and round-backed, pale under the belly.
+    pen.rect(draw, m, -14, 15, 7, COAT);
+    pen.rect(draw, m + 1, -15, 12, 1, COAT);
+    pen.rect(draw, m, -14, 15, 1, STONE_LIGHT);
+    pen.rect(draw, m + 2, -8, 11, 1, MIST);
+    // The harness: a red collar at the shoulder, a breeching strap behind.
+    pen.rect(draw, m + 12, -15, 2, 8, RED);
+    pen.rect(draw, m + 2, -12, 10, 1, SOIL);
+    // A short neck reaching forward, the head low and long with a pale muzzle.
+    pen.rect(draw, m + 14, -18, 4, 5, COAT);
+    pen.rect(draw, m + 14, -18, 4, 1, SOIL_DARK);
+    pen.rect(draw, m + 17, -16, 5, 3, COAT);
+    pen.rect(draw, m + 20, -15, 2, 2, MIST);
+    pen.px(draw, m + 21, -15, INK);
+    pen.px(draw, m + 18, -16, INK);
+    // The long ears, upright and a little splayed.
+    pen.rect(draw, m + 14, -24, 3, 6, INK);
+    pen.rect(draw, m + 16, -23, 3, 5, INK);
+    pen.rect(draw, m + 15, -23, 1, 5, COAT);
+    pen.rect(draw, m + 17, -22, 1, 4, COAT_DARK);
+    pen.px(draw, m + 15, -21, PINK);
+    // The tail: a thin switch with a dark tuft, flicking now and then.
     let flick = i32::from((seconds * 1.3).sin() > 0.7);
-    pen.rect(draw, m - 1 - flick, -14, 1, 6, SOIL);
+    pen.rect(draw, m - 1, -14, 1, 4, COAT_DARK);
+    pen.rect(draw, m - 2 - flick, -10 - flick, 2, 3, SOIL_DARK);
 }
 
 /// A cement mixer drum turning.

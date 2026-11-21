@@ -516,6 +516,11 @@ pub const SIDE_TOMB_SCENES: &[Scene] = &[
         setup: |stage| boss_scene(stage, EnemyKind::SunColossus),
     },
     Scene {
+        name: "side_tomb_colossus_beside_pilot",
+        summary: "Wave 6: the Sunwrought Colossus standing right beside a pilot, drawn inside its contact box (no overlap)",
+        setup: colossus_beside_pilot,
+    },
+    Scene {
         name: "side_tomb_matriarch",
         summary: "The Hollow Matriarch over her crypt: hexes flying, crypt bats about her (phase 2)",
         setup: |stage| boss_scene(stage, EnemyKind::HollowMatriarch),
@@ -613,4 +618,62 @@ fn boss_scene(stage: &mut SceneStage<'_>, kind: EnemyKind) {
         });
         stage.settle(1);
     }
+}
+
+/// The colossus woken and the pilot put down right against its contact box (Wave 6 art pass:
+/// its sprite must end where the box does, never over the pilot).
+fn colossus_beside_pilot(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        let Some(site) = side_site(world, SiteSetting::Mesa) else {
+            return;
+        };
+        enter(world, &[player], &site, 0);
+        world.scenario_tomb_floor(player, site.floors() - 1);
+        world.set_enemy_difficulty(fatherload_simulation::enemy::EnemyDifficulty::Normal);
+        if let Some(room) = room_of(world, player, RoomKind::Boss) {
+            stand(
+                world,
+                player,
+                TilePosition {
+                    x: room.min.x + 3,
+                    y: room.max.y,
+                },
+            );
+            let _ = world.scenario_tomb_guardian(player, EnemyKind::SunColossus);
+        }
+        reveal_run(world, player);
+    });
+    // Let it drop onto the floor, then stand the pilot touching its left side.
+    stage.settle(40);
+    stage.play_on(|world| {
+        let player = runner(world);
+        let Some(boss) = world
+            .tomb_run_of(player)
+            .and_then(|run| run.boss)
+            .and_then(|id| {
+                world
+                    .entities()
+                    .get(fatherload_simulation::entity::EntityId(id))
+            })
+            .map(|entity| (entity.body.x, entity.body.y))
+        else {
+            return;
+        };
+        let (half, _) = EnemyKind::SunColossus.contact_half();
+        let x = boss.0 - half - fatherload_simulation::pilot::PILOT_HALF_WIDTH;
+        let feet = boss.1 + EnemyKind::SunColossus.stats().radius;
+        if let Some((id, _, _)) = world.pilot_of(player) {
+            world.edit_pilot(id, |body, state| {
+                body.x = x;
+                body.y = feet;
+                body.previous_x = x;
+                body.previous_y = feet;
+                body.velocity_x = 0.0;
+                body.velocity_y = 0.0;
+                state.facing = 1;
+            });
+        }
+    });
+    stage.settle(1);
 }

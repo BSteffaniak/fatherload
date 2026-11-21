@@ -166,7 +166,7 @@ fn quote(snapshot: &RenderSnapshot<'_>, player: &Player, offer: VillageOffer) ->
         VillageDeal::PilotArms(fatherload_simulation::pilot::arsenal::PilotArmsPurchase::Ammo(
             ammo,
         )) => Offer::new(
-            &weapon_art::ICON_ROCKET_AMMO,
+            weapon_art::ammo_icon(ammo),
             format!("{} x {}", ammo.pack().0, ammo.plural()),
             format!("carrying {}", player.pilot_arsenal.ammo(ammo)),
         )

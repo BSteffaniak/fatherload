@@ -265,6 +265,8 @@ pub const ANIMATED_STATUE: SpriteDef = SpriteDef {
 };
 
 /// The Sunwrought Colossus: a sandstone giant with a gold crown and a burning sun set in its chest (stand, stride, crouch to leap).
+/// 21 art pixels wide, so drawn half as large again it spans its 64-pixel contact box exactly and
+/// never overlaps a pilot standing beside it (Wave 6); the crouch keeps its feet on the floor.
 pub const SUN_COLOSSUS: SpriteDef = SpriteDef {
     name: "enemy_sun_colossus",
     legend: &[
@@ -278,100 +280,88 @@ pub const SUN_COLOSSUS: SpriteDef = SpriteDef {
     ],
     frames: &[
         &[
-            "..........oooooo..........", //
-            ".........ogggggo..........", //
-            "........oggaggggo.........", //
-            "........ossssssso.........", //
-            ".......oscassscaso........", //
-            ".......osssssssso.........", //
-            "........ocssssco..........", //
-            "....ooooocccccooooo.......", //
-            "...osllssscccsssllso......", //
-            "..osllsssooooossssllso....", //
-            "..osssssogaaagosssssso....", //
-            ".osssssogaalaagossssso....", //
-            ".osscssogaaaaagosscssso...", //
-            ".oscccsoggaaaggoscccsso...", //
-            ".occo.ossgggssso.occco....", //
-            ".occo.osssssssso..occo....", //
-            ".occo.oscsssscso..occo....", //
-            ".oddo.osssssssso..oddo....", //
-            "oddddoocccccccco.oddddo...", //
-            "olllloosssssssso.ollllo...", //
-            ".oooo.osssoossso..oooo....", //
-            "......ossso.ossso.........", //
-            "......oscso.oscso.........", //
-            "......ossso.ossso.........", //
-            "......oscso.oscso.........", //
-            "......ossso.ossso.........", //
-            ".....occcco.occcco........", //
-            ".....oddddo.oddddo........", //
-            "....odddddo.oddddddo......", //
-            "....ooooooo.oooooooo......", //
+            "........ooooo........", //
+            ".......ogggggo.......", //
+            ".......oggaggo.......", //
+            ".......ossssso.......", //
+            "......oscasacso......", //
+            "......ossssssso......", //
+            ".......ocsssco.......", //
+            "...ooooocccccooooo...", //
+            "..osllssscccsssllso..", //
+            ".osllssooogooossllso.", //
+            ".osssssogaaagossssso.", //
+            "oscssosgaalaagsosscso", //
+            "oscssosgaaaaagsosscso", //
+            "occoossogggggossoocco", //
+            "occo.ossssssssso.occo", //
+            "oddo.ossssssssso.oddo", //
+            "ollloocccccccccoolllo", //
+            ".oooosssssosssssoooo.", //
+            ".....ossso.ossso.....", //
+            ".....oscso.oscso.....", //
+            ".....ossso.ossso.....", //
+            ".....oscso.oscso.....", //
+            "....occcco.occcco....", //
+            "....oddddo.oddddo....", //
+            "...oddddddoddddddo...", //
+            "...ooooooooooooooo...", //
         ],
         &[
-            "..........oooooo..........", //
-            ".........ogggggo..........", //
-            "........oggaggggo.........", //
-            "........ossssssso.........", //
-            ".......oscassscaso........", //
-            ".......osssssssso.........", //
-            "........ocssssco..........", //
-            "....ooooocccccooooo.......", //
-            "...osllssscccsssllso......", //
-            "..osllsssooooossssllso....", //
-            "..osssssogaaagosssssso....", //
-            ".osssssogaalaagossssso....", //
-            ".osscssogaaaaagosscssso...", //
-            ".oscccsoggaaaggoscccsso...", //
-            ".occo.ossgggssso.occco....", //
-            ".occo.osssssssso..occo....", //
-            ".occo.oscsssscso..occo....", //
-            ".oddo.osssssssso..oddo....", //
-            "oddddoocccccccco.oddddo...", //
-            "olllloosssssssso.ollllo...", //
-            ".oooo.osssoossso..oooo....", //
-            ".....ossso...ossso........", //
-            ".....oscso...oscso........", //
-            "....ossso.....ossso.......", //
-            "....oscso.....oscso.......", //
-            "...ossso.......ossso......", //
-            "...occco.......occcco.....", //
-            "..oddddo.......oddddo.....", //
-            ".oddddddo......odddddo....", //
-            ".ooooooo.......ooooooo....", //
+            "........ooooo........", //
+            ".......ogggggo.......", //
+            ".......oggaggo.......", //
+            ".......ossssso.......", //
+            "......oscasacso......", //
+            "......ossssssso......", //
+            ".......ocsssco.......", //
+            "...ooooocccccooooo...", //
+            "..osllssscccsssllso..", //
+            ".osllssooogooossllso.", //
+            ".osssssogaaagossssso.", //
+            "oscssosgaalaagsosscso", //
+            "oscssosgaaaaagsosscso", //
+            "occoossogggggossoocco", //
+            "occo.ossssssssso.occo", //
+            "oddo.ossssssssso.oddo", //
+            "ollloocccccccccoolllo", //
+            ".oooosssssosssssoooo.", //
+            "....ossso...ossso....", //
+            "....oscso...oscso....", //
+            "...ossso.....ossso...", //
+            "...oscso.....oscso...", //
+            "..occcco.....occcco..", //
+            "..oddddo.....oddddo..", //
+            ".oddddddo...oddddddo.", //
+            ".oooooooo...oooooooo.", //
         ],
         &[
-            "..........................", //
-            "..........................", //
-            "..........................", //
-            "..........oooooo..........", //
-            ".........ogggggo..........", //
-            "........oggaggggo.........", //
-            "........ossssssso.........", //
-            ".......oscassscaso........", //
-            ".......osssssssso.........", //
-            "oo..oooooccccccooooo...oo.", //
-            "lso.osllsscccsssllso..osl.", //
-            "llsoosllsooooossllso.osll.", //
-            ".lssosssogaaagossssoossl..", //
-            "..oscssogaalaagosssscso...", //
-            "...osssogaaaaagosscsso....", //
-            "...osccoggaaaggoscccso....", //
-            "....oo.ossgggssso.oo......", //
-            "......osssssssssso........", //
-            ".....oscssssssscso........", //
-            "....osssssoossssso........", //
-            "...ossso......ossso.......", //
-            "..oscso........oscso......", //
-            "..occco........occcco.....", //
-            ".oddddo........oddddo.....", //
-            "odddddo........odddddo....", //
-            "ooooooo........ooooooo....", //
-            "..........................", //
-            "..........................", //
-            "..........................", //
-            "..........................", //
+            ".....................", //
+            ".....................", //
+            ".....................", //
+            ".....................", //
+            ".....................", //
+            "........ooooo........", //
+            ".......ogggggo.......", //
+            ".......oggaggo.......", //
+            ".......ossssso.......", //
+            "......oscasacso......", //
+            "......ossssssso......", //
+            "...ooooocccccooooo...", //
+            ".osllssooogooossllso.", //
+            ".osssssogaaagossssso.", //
+            "oscssosgaalaagsosscso", //
+            "oscssosgaaaaagsosscso", //
+            "occoossogggggossoocco", //
+            "occo.ossssssssso.occo", //
+            "oddo.ossssssssso.oddo", //
+            "ollloocccccccccoolllo", //
+            ".oooosssssosssssoooo.", //
+            "...osssso...osssso...", //
+            "..osscso.....oscsso..", //
+            "..occcco.....occcco..", //
+            ".oddddddo...oddddddo.", //
+            ".oooooooo...oooooooo.", //
         ],
     ],
     frame_seconds: 0.4,

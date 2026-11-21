@@ -377,6 +377,58 @@ pub const ICON_ROCKET_AMMO: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+/// A rifle cartridge (Wave 6 art pass): a long brass case with a copper bullet, standing on
+/// a darker rim, with a second round leaning behind it.
+pub const ICON_CARTRIDGE_AMMO: SpriteDef = SpriteDef {
+    name: "icon_cartridge_ammo",
+    legend: &[
+        ('o', INK),
+        ('c', COPPER),
+        ('r', RUST),
+        ('g', GOLD),
+        ('y', AMBER),
+        ('w', CREAM),
+    ],
+    frames: &[&[
+        "....o.o..", //
+        "...ocooco", //
+        "...ocrocr", //
+        "...owgowg", //
+        "...ogyogy", //
+        "...ogyogy", //
+        "...ogyogy", //
+        "..oyyyyyo", //
+        "..ooooooo", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// A shotgun shell (Wave 6 art pass): a stubby red hull with a brass head, two shells side by
+/// side.
+pub const ICON_SHELL_AMMO: SpriteDef = SpriteDef {
+    name: "icon_shell_ammo",
+    legend: &[
+        ('o', INK),
+        ('r', RED),
+        ('m', MAROON),
+        ('p', PINK),
+        ('g', GOLD),
+        ('y', AMBER),
+    ],
+    frames: &[&[
+        ".........", //
+        ".ooo.ooo.", //
+        "oprmoprmo", //
+        "orrmorrmo", //
+        "orrmorrmo", //
+        "orrmorrmo", //
+        "oggyoggyo", //
+        "oyyyoyyyo", //
+        ".ooo.ooo.", //
+    ]],
+    frame_seconds: 0.0,
+};
+
 // --- Act II weapons (Wave 4 T21) ------------------------------------------------------------
 
 /// An arc rifle: a storm-glass coil between two brass prongs.
@@ -615,6 +667,17 @@ pub const fn icon(weapon: WeaponKind) -> &'static SpriteDef {
         WeaponKind::Rifle => &ICON_PILOT_RIFLE,
         WeaponKind::Shotgun => &ICON_PILOT_SHOTGUN,
         WeaponKind::Wrench | WeaponKind::HandPick => &ICON_PILOT_WRENCH,
+    }
+}
+
+/// The icon of an ammunition type (Wave 6: each its own, not the rocket's for all).
+#[must_use]
+pub const fn ammo_icon(ammo: fatherload_simulation::AmmoKind) -> &'static SpriteDef {
+    use fatherload_simulation::AmmoKind;
+    match ammo {
+        AmmoKind::Rocket => &ICON_ROCKET_AMMO,
+        AmmoKind::Cartridge => &ICON_CARTRIDGE_AMMO,
+        AmmoKind::Shell => &ICON_SHELL_AMMO,
     }
 }
 

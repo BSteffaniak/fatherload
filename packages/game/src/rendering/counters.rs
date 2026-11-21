@@ -769,7 +769,7 @@ fn arms_offers(
             ArmsRow::Ammo(ammo) => {
                 let (count, cost) = ammo.pack();
                 Offer::new(
-                    &weapon_art::ICON_ROCKET_AMMO,
+                    weapon_art::ammo_icon(ammo),
                     format!("{} pack", ammo.name()),
                     format!(
                         "+{count} {} (carrying {})",
@@ -820,7 +820,7 @@ fn pilot_arms_offer(
             let (count, cost) = ammo.pack();
             let carried = player.pilot_arsenal.ammo(ammo);
             Offer::new(
-                &weapon_art::ICON_ROCKET_AMMO,
+                weapon_art::ammo_icon(ammo),
                 format!("{} box", ammo.name()),
                 format!("+{count} (carrying {carried})"),
             )

@@ -754,6 +754,8 @@ struct WeaponRow {
     weapon: fatherload_simulation::WeaponKind,
     label: String,
     ammo: Option<u32>,
+    /// Which ammunition `ammo` counts (its icon sits beside the count).
+    ammo_kind: Option<fatherload_simulation::AmmoKind>,
     energy: f32,
     ready: bool,
 }
@@ -767,11 +769,13 @@ fn weapon_row(view: &ViewSnapshot<'_>) -> Option<WeaponRow> {
             return None;
         }
         let weapon = held.unwrap_or(fatherload_simulation::WeaponKind::HandPick);
-        let ammo = weapon.stats(0).ammo.map(|ammo| arsenal.ammo(ammo));
+        let ammo_kind = weapon.stats(0).ammo;
+        let ammo = ammo_kind.map(|ammo| arsenal.ammo(ammo));
         return Some(WeaponRow {
             weapon,
             label: weapon.name().to_uppercase(),
             ammo,
+            ammo_kind,
             energy: if pilot.state.fire_cooldown > 0.0 {
                 0.4
             } else {
@@ -791,6 +795,7 @@ fn weapon_row(view: &ViewSnapshot<'_>) -> Option<WeaponRow> {
             crate::shell::arms::mk_name(mounted.mk).trim_start_matches("Mk ")
         ),
         ammo,
+        ammo_kind: stats.ammo,
         energy: (view.player.weapon.energy / view.player.battery_capacity().max(1.0))
             .clamp(0.0, 1.0),
         ready: ammo.map_or(view.player.weapon.energy >= stats.energy, |count| count > 0),
@@ -813,14 +818,24 @@ fn draw_weapon_row(draw: &mut RaylibDrawHandle<'_>, row: &WeaponRow, x: i32, rig
         if row.ready { MINT } else { FOG },
     );
     if let Some(count) = row.ammo {
+        let label = format!("x{count}");
         ui_kit::text_right(
             draw,
-            &format!("x{count}"),
+            &label,
             right,
             y + 1,
             TextStyle::Bold,
             if count > 0 { ORANGE } else { ROSE },
         );
+        if let Some(kind) = row.ammo_kind {
+            // The round itself beside the count (Wave 6: each ammo type its own icon).
+            ui_kit::icon(
+                draw,
+                crate::rendering::pixel_art::sprites::weapons::ammo_icon(kind),
+                right - ui_kit::text_width(&label, TextStyle::Bold) - icons::ICON_SIZE - 1,
+                y,
+            );
+        }
     } else {
         // The capacitor gauge.
         let (bar_width, bar_x) = (28, right - 28);
@@ -1443,7 +1458,9 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             MINT,
         ));
         items.push(SectionItem::icon_stat(
-            &crate::rendering::pixel_art::sprites::weapons::ICON_ROCKET_AMMO,
+            crate::rendering::pixel_art::sprites::weapons::ammo_icon(
+                fatherload_simulation::AmmoKind::Rocket,
+            ),
             "Rockets",
             format!("x{rockets}"),
             if rockets > 0 { ORANGE } else { MIST },
