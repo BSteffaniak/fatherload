@@ -160,6 +160,13 @@ pub struct TombRun {
     /// The way out was taken this tick: the run ends in the tombs pass.
     #[serde(default)]
     pub leaving: bool,
+    /// T28: the floor's crumbling and fallen slabs (side view; cleared with each floor).
+    #[serde(default)]
+    pub crumbling: Vec<super::traps::CrumblingSlab>,
+    /// T28: the guardian's phase so far (0 until it is hurt into its second; the phase event
+    /// fires as it rises).
+    #[serde(default)]
+    pub boss_phase: u8,
 }
 
 impl TombRun {

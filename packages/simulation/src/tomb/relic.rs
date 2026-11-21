@@ -83,6 +83,8 @@ pub enum Relic {
     GlassCannon,
     /// Bargain: much faster with a triple jump, but no healing at all.
     RestlessSoul,
+    /// T28: traps hurt half as much (sand, fog, blades, darts, crushers, spikes).
+    Sandwalker,
 }
 
 /// What a relic (or a set of them) does. Additive; zero is no effect.
@@ -114,6 +116,9 @@ pub struct RelicEffects {
     pub regen_pct: i16,
     /// Cache loot, percent.
     pub loot_pct: i16,
+    /// T28: damage from tomb traps, percent (negative: less).
+    #[serde(default)]
+    pub trap_pct: i16,
 }
 
 impl RelicEffects {
@@ -134,6 +139,7 @@ impl RelicEffects {
             featherfall: self.featherfall || other.featherfall,
             regen_pct: self.regen_pct.saturating_add(other.regen_pct),
             loot_pct: self.loot_pct.saturating_add(other.loot_pct),
+            trap_pct: self.trap_pct.saturating_add(other.trap_pct),
         }
     }
 
@@ -158,6 +164,7 @@ const NONE: RelicEffects = RelicEffects {
     featherfall: false,
     regen_pct: 0,
     loot_pct: 0,
+    trap_pct: 0,
 };
 
 /// One relic's data.
@@ -171,7 +178,7 @@ pub struct RelicDef {
 }
 
 /// Every relic's data, in [`Relic`] order.
-pub const RELICS: [RelicDef; 15] = [
+pub const RELICS: [RelicDef; 16] = [
     RelicDef {
         relic: Relic::SpringHeels,
         name: "Spring Heels",
@@ -326,6 +333,16 @@ pub const RELICS: [RelicDef; 15] = [
             ..NONE
         },
     },
+    RelicDef {
+        relic: Relic::Sandwalker,
+        name: "Sandwalker Sandals",
+        blurb: "Traps hurt half as much.",
+        kind: RelicKind::Perk,
+        effects: RelicEffects {
+            trap_pct: -50,
+            ..NONE
+        },
+    },
 ];
 
 /// A pair of relics that does more together.
@@ -336,8 +353,9 @@ pub struct Synergy {
     pub bonus: RelicEffects,
 }
 
-/// Relic pairs with a bonus on top.
-pub const SYNERGIES: [Synergy; 3] = [
+/// Relic pairs with a bonus on top (T28 appended four that play in side-view tombs: a third
+/// jump and a higher leap, a faster glide, and trap-proof runners).
+pub const SYNERGIES: [Synergy; 7] = [
     Synergy {
         pair: (Relic::SpringHeels, Relic::GliderBoost),
         name: "Skywalker",
@@ -365,11 +383,47 @@ pub const SYNERGIES: [Synergy; 3] = [
             ..NONE
         },
     },
+    Synergy {
+        pair: (Relic::SpringHeels, Relic::Featherfall),
+        name: "Cloud Dancer",
+        bonus: RelicEffects {
+            extra_jumps: 1,
+            jump_pct: 15,
+            ..NONE
+        },
+    },
+    Synergy {
+        pair: (Relic::GliderBoost, Relic::Featherfall),
+        name: "Updraft",
+        bonus: RelicEffects {
+            glide_pct: 25,
+            move_pct: 10,
+            ..NONE
+        },
+    },
+    Synergy {
+        pair: (Relic::Quickstep, Relic::Sandwalker),
+        name: "Tomb Runner",
+        bonus: RelicEffects {
+            move_pct: 10,
+            trap_pct: -25,
+            ..NONE
+        },
+    },
+    Synergy {
+        pair: (Relic::TrapSightLantern, Relic::Sandwalker),
+        name: "Seer's Path",
+        bonus: RelicEffects {
+            trap_pct: -25,
+            loot_pct: 15,
+            ..NONE
+        },
+    },
 ];
 
 impl Relic {
     /// Every relic, in codex order.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::SpringHeels,
         Self::RicochetRounds,
         Self::TrapSightLantern,
@@ -385,6 +439,7 @@ impl Relic {
         Self::PactOfGreed,
         Self::GlassCannon,
         Self::RestlessSoul,
+        Self::Sandwalker,
     ];
 
     /// The relic's codex index.

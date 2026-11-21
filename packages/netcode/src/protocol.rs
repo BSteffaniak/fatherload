@@ -108,7 +108,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   the way out, caches, traps) in tile ops and chunk diffs, the `Tombs` world field and
 ///   `SectionKey::Tombs` section (runs, site counters, seals, unlocks, summaries),
 ///   `PlayerCommand::Tomb`, the tomb `Usable`s, `PilotState::{view, boons, air_jumps}`,
-///   `ProjectileState::bounces`, the tomb key quest item and the tomb events 270-279.
+///   `ProjectileState::bounces`, the tomb key quest item and the tomb events 270-279;
+/// * T28 side-view tombs: the side-view `TrapKind`s (trap tile kinds 1-7), the culture masonry
+///   `BuiltTile::{TombWall, TombPillar}` sets 2-4 (built codes 120-125), `TombRun::{crumbling,
+///   boss_phase}`, `RelicEffects::trap_pct` and `Relic::Sandwalker`, the tomb creatures
+///   (`EnemyKind::Mummy` .. `HollowMatriarch`) and `ShotKind::{Arrow, Rubble, Hex}` in entity
+///   records, and the side-view tomb events 280-281.
 pub const PROTOCOL_VERSION: u8 = 13;
 
 /// One client input frame: the controls and actions for exactly one tick.

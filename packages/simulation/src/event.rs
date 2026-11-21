@@ -877,6 +877,23 @@ pub enum GameplayEventKind {
         banked: u32,
         lost: u32,
     },
+    // --- Side-view tombs (WP-TOMBS, Wave 5 T28; netcode codes 280-289) -------------------
+    /// A side-view trap near the party went off at world pixel `(x, y)`: a crusher slammed, a
+    /// dart flew, a vent burst, a sluice began to pour, a slab fell (presentation: cues and
+    /// dust; the traps themselves are pure functions of the clock).
+    TombTrapSprung {
+        kind: crate::tomb::realize::TrapKind,
+        x: i32,
+        y: i32,
+    },
+    /// A tomb guardian was hurt into phase `phase` (2: its second pattern, 3: enraged) at world
+    /// pixel `(x, y)`.
+    TombGuardianPhase {
+        kind: crate::enemy::EnemyKind,
+        phase: u8,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

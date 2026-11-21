@@ -950,9 +950,13 @@ pub trait PilotTerrain {
 #[must_use]
 pub const fn pilot_passable(kind: TileKind) -> bool {
     match kind {
-        TileKind::Built(
-            BuiltTile::VentGrate | BuiltTile::TombPillar(_) | BuiltTile::TombTrap { .. },
-        ) => true,
+        TileKind::Built(BuiltTile::VentGrate | BuiltTile::TombPillar(_)) => true,
+        // Tomb traps (WP-TOMBS): spikes and false walls let a pilot in; the side-view traps
+        // set in masonry (blade pivots, crusher housings, crumbling slabs, dart throwers,
+        // sluices, vents) stand like it.
+        TileKind::Built(BuiltTile::TombTrap { kind, .. }) => {
+            crate::tomb::realize::TrapKind::from_index(kind).pilot_passable()
+        }
         // The alien facility's energy veils (WP-MOON).
         TileKind::Lunar(tile) => tile.pilot_passable(),
         _ => false,

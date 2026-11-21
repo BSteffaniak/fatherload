@@ -59,6 +59,7 @@ pub mod night;
 pub mod second_act;
 #[cfg(test)]
 mod tests;
+pub mod tomb_side;
 pub mod tombs;
 pub mod trip;
 

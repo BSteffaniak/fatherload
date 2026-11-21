@@ -53,6 +53,18 @@
 //! | [`EnemyKind::WillOWisp`] | creature (spirit) | wetlands, forests, mountains | a chime and a brightening core before a wispfire bolt | close in; it shrugs off bullets, not blasts |
 //! | [`EnemyKind::MothSwarm`] | creature (swarm) | forests, wetlands, plains | drawn to light: circles lamps and headlights | a lamp away from camp lures it; fire |
 //! | [`EnemyKind::UmbralAlpha`] | creature (elite) | new-moon nights anywhere | a long howl heard across the land | explosives, keep moving, stay lit |
+//!
+//! Side-view tomb creatures (WP-TOMBS T28, [`crate::tomb::side_view::bestiary`]) live only in
+//! tomb runs (never roaming): they fight pilots on foot.
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::Mummy`] | creature (undead) | tomb rooms and ambushes | a groan, arms raised, then a lurching grab | fire, keep your distance |
+//! | [`EnemyKind::CryptBat`] | creature (swarmer) | dropped from tomb ceilings | screech, packs | anything; fire |
+//! | [`EnemyKind::SkeletalArcher`] | creature (undead, ranged) | tomb ledges and halls | draws its bow (a long pull) before each arrow | close in, duck the arrow, blasts |
+//! | [`EnemyKind::AnimatedStatue`] | machine (stone, armoured) | stands dormant in tomb rooms | its eyes light when you come close | explosives, EMP; bullets chip it |
+//! | [`EnemyKind::SunColossus`] | machine (boss) | a side-view tomb's crypt | crouches, then a leaping slam that throws rubble; raises mummies when hurt; enrages | jump the rubble, explosives |
+//! | [`EnemyKind::HollowMatriarch`] | creature (boss) | a side-view tomb's crypt | a wail before a fan of hexes; rings of hexes and crypt bats when hurt; dives at the end | dodge between the hexes, fire |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -109,6 +121,19 @@ pub enum EnemyKind {
     MothSwarm,
     /// The pack leader that walks only on new-moon nights (a rare spawn).
     UmbralAlpha,
+    // --- Side-view tomb creatures (WP-TOMBS T28), appended ---------------------------------
+    /// A wrapped dead walker that lurches at pilots.
+    Mummy,
+    /// A tomb bat: a fast, frail swarmer dropped from ceilings.
+    CryptBat,
+    /// A skeleton with a bow that keeps its distance.
+    SkeletalArcher,
+    /// A stone guardian standing dormant until a pilot comes close.
+    AnimatedStatue,
+    /// Boss: a walking sandstone colossus (leaping slams, thrown rubble, raises the dead).
+    SunColossus,
+    /// Boss: a floating wraith queen (hex fans, hex rings, crypt bats, dives).
+    HollowMatriarch,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -179,6 +204,12 @@ pub enum ShotKind {
     Cannonball,
     /// A slow, ghostly flame a will-o'-wisp throws (WP-NIGHT).
     Wispfire,
+    /// A skeletal archer's arrow: fast, dropping a little (WP-TOMBS T28).
+    Arrow,
+    /// A chunk of rubble the Sunwrought Colossus throws or shakes loose (lobbed).
+    Rubble,
+    /// The Hollow Matriarch's slow hex orb.
+    Hex,
 }
 
 impl ShotKind {
@@ -191,6 +222,9 @@ impl ShotKind {
             Self::Bolt => 330.0,
             Self::Cannonball => 280.0,
             Self::Wispfire => 140.0,
+            Self::Arrow => 360.0,
+            Self::Rubble => 250.0,
+            Self::Hex => 150.0,
         }
     }
 
@@ -200,7 +234,9 @@ impl ShotKind {
         match self {
             Self::Acid => 320.0,
             Self::Cannonball => 160.0,
-            Self::Fireball | Self::Bolt | Self::Wispfire => 0.0,
+            Self::Arrow => 90.0,
+            Self::Rubble => 520.0,
+            Self::Fireball | Self::Bolt | Self::Wispfire | Self::Hex => 0.0,
         }
     }
 
@@ -208,9 +244,10 @@ impl ShotKind {
     #[must_use]
     pub const fn radius(self) -> f32 {
         match self {
-            Self::Acid | Self::Bolt => 4.0,
-            Self::Fireball | Self::Cannonball => 6.0,
+            Self::Acid | Self::Bolt | Self::Arrow => 4.0,
+            Self::Fireball | Self::Cannonball | Self::Hex => 6.0,
             Self::Wispfire => 5.0,
+            Self::Rubble => 7.0,
         }
     }
 
@@ -223,6 +260,9 @@ impl ShotKind {
             Self::Bolt => 8.0,
             Self::Cannonball => 9.0,
             Self::Wispfire => 6.0,
+            Self::Arrow => 7.0,
+            Self::Rubble => 10.0,
+            Self::Hex => 8.0,
         }
     }
 
@@ -232,8 +272,9 @@ impl ShotKind {
         match self {
             Self::Acid => 2_500,
             Self::Fireball => 4_000,
-            Self::Bolt => 2_200,
-            Self::Cannonball | Self::Wispfire => 3_500,
+            Self::Bolt | Self::Arrow => 2_200,
+            Self::Cannonball | Self::Wispfire | Self::Rubble => 3_500,
+            Self::Hex => 4_500,
         }
     }
 }
@@ -385,7 +426,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 34] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -414,6 +455,12 @@ impl EnemyKind {
         Self::WillOWisp,
         Self::MothSwarm,
         Self::UmbralAlpha,
+        Self::Mummy,
+        Self::CryptBat,
+        Self::SkeletalArcher,
+        Self::AnimatedStatue,
+        Self::SunColossus,
+        Self::HollowMatriarch,
     ];
 
     /// The kind's stats.
@@ -884,6 +931,106 @@ impl EnemyKind {
                 elite: true,
                 ..stats("Umbral Alpha", Creature, Walking, AttackStyle::Lunge)
             },
+            // --- Side-view tomb creatures (T28): sized for pilots on foot ------------------
+            Self::Mummy => EnemyStats {
+                radius: 10.0,
+                health: 55.0,
+                speed: 42.0,
+                dash_speed: 150.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 18.0,
+                contact_damage: 10.0,
+                windup_millis: 700,
+                cooldown_millis: 1_900,
+                attack_range_tiles: 2.2,
+                knockback: 170.0,
+                ..stats("Mummy", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::CryptBat => EnemyStats {
+                radius: 6.0,
+                health: 12.0,
+                speed: 135.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 20.0,
+                contact_damage: 5.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Crypt Bat", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::SkeletalArcher => EnemyStats {
+                radius: 8.0,
+                health: 32.0,
+                speed: 40.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 16.0,
+                contact_damage: 4.0,
+                windup_millis: 850,
+                cooldown_millis: 2_300,
+                attack_range_tiles: 10.0,
+                ..stats(
+                    "Skeletal Archer",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Arrow, 1),
+                )
+            },
+            Self::AnimatedStatue => EnemyStats {
+                radius: 11.0,
+                health: 110.0,
+                speed: 46.0,
+                dash_speed: 200.0,
+                sight_tiles: 4.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 16.0,
+                contact_damage: 16.0,
+                windup_millis: 650,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 3.0,
+                knockback: 220.0,
+                ..stats("Animated Statue", Machine, Walking, AttackStyle::Lunge)
+            },
+            Self::SunColossus => EnemyStats {
+                radius: 18.0,
+                health: 520.0,
+                speed: 55.0,
+                dash_speed: 230.0,
+                sight_tiles: 18.0,
+                hearing_tiles: 18.0,
+                leash_tiles: 40.0,
+                contact_damage: 26.0,
+                windup_millis: 900,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 8.0,
+                knockback: 260.0,
+                elite: true,
+                ..stats("Sunwrought Colossus", Machine, Walking, AttackStyle::Lunge)
+            },
+            Self::HollowMatriarch => EnemyStats {
+                radius: 16.0,
+                health: 430.0,
+                speed: 85.0,
+                dash_speed: 300.0,
+                sight_tiles: 18.0,
+                hearing_tiles: 18.0,
+                leash_tiles: 40.0,
+                contact_damage: 18.0,
+                windup_millis: 800,
+                cooldown_millis: 2_100,
+                attack_range_tiles: 12.0,
+                knockback: 200.0,
+                elite: true,
+                ..stats(
+                    "Hollow Matriarch",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::Hex, 3),
+                )
+            },
         }
     }
 
@@ -959,6 +1106,12 @@ impl EnemyKind {
             // A whirl of moths about its centre: the cloud's core.
             Self::MothSwarm => (14.0, 10.0),
             Self::UmbralAlpha => (25.0, 14.0),
+            Self::Mummy => (11.0, 15.0),
+            Self::CryptBat => (10.0, 7.0),
+            Self::SkeletalArcher => (10.0, 15.0),
+            Self::AnimatedStatue => (13.0, 18.0),
+            Self::SunColossus => (24.0, 30.0),
+            Self::HollowMatriarch => (20.0, 22.0),
         }
     }
 
@@ -1026,6 +1179,17 @@ impl EnemyKind {
             (Self::MothSwarm, DamageKind::Fire) => 2.0,
             (Self::MothSwarm, DamageKind::Explosive) => 1.2,
             (Self::UmbralAlpha | Self::DuneStalker, DamageKind::Kinetic) => 0.7,
+            // Tomb creatures (T28): the wrapped dead burn, bones shrug off bullets, stone
+            // folds to blasts.
+            (Self::Mummy, DamageKind::Fire) => 1.8,
+            (Self::SkeletalArcher, DamageKind::Kinetic) => 0.8,
+            (
+                Self::SkeletalArcher | Self::AnimatedStatue | Self::SunColossus,
+                DamageKind::Explosive,
+            ) => 1.5,
+            (Self::AnimatedStatue, DamageKind::Kinetic) => 0.45,
+            (Self::SunColossus, DamageKind::Kinetic) => 0.7,
+            (Self::CryptBat | Self::HollowMatriarch, DamageKind::Fire) => 1.4,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -1127,7 +1291,7 @@ impl EnemyState {
         let health = (stats.health * tier_scale(tier) * health_scale)
             .round()
             .max(1.0);
-        let dormant = matches!(kind, EnemyKind::RockMimic);
+        let dormant = matches!(kind, EnemyKind::RockMimic | EnemyKind::AnimatedStatue);
         Self {
             kind,
             tier,
@@ -1715,6 +1879,47 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
                     ArtifactKind::RadiantShell
                 } else {
                     ArtifactKind::Fossil
+                }),
+                1,
+            );
+        }
+        // Tomb creatures (T28): their drops fall in the run and ride out with the pilot.
+        EnemyKind::Mummy => {
+            add(mineral, 1 + extra / 2);
+            if rare < 6 {
+                add(ItemKind::Artifact(ArtifactKind::BuriedIdol), 1);
+            }
+        }
+        EnemyKind::CryptBat => {
+            if rare < 40 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::SkeletalArcher => {
+            add(mineral, 1);
+            if rare < 8 {
+                add(ItemKind::Artifact(ArtifactKind::Fossil), 1);
+            }
+        }
+        EnemyKind::AnimatedStatue => {
+            add(richer, 1 + extra);
+            if rare < 15 {
+                add(ItemKind::Artifact(ArtifactKind::PressureGlyph), 1);
+            }
+        }
+        EnemyKind::SunColossus => {
+            add(richer, 5 + extra);
+            add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 2);
+            add(ItemKind::Artifact(ArtifactKind::BuriedIdol), 1);
+        }
+        EnemyKind::HollowMatriarch => {
+            add(richer, 4 + extra);
+            add(ItemKind::Material(StrategicResourceKind::CrystalLens), 2);
+            add(
+                ItemKind::Artifact(if rare < 50 {
+                    ArtifactKind::RadiantShell
+                } else {
+                    ArtifactKind::VoidPearl
                 }),
                 1,
             );

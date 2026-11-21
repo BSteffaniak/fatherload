@@ -38,6 +38,8 @@ pub struct TombBot {
     jump: u32,
     use_cooldown: u32,
     floor: u8,
+    /// T28: what the bot knows of a side-view floor's traps.
+    side: super::tomb_side::SideBot,
 }
 
 impl TombBot {
@@ -51,6 +53,7 @@ impl TombBot {
             jump: 0,
             use_cooldown: 0,
             floor: 0,
+            side: super::tomb_side::SideBot::new(),
         }
     }
 
@@ -136,14 +139,58 @@ impl TombBot {
                 )
             };
             let pit = open_below(1) && open_below(2) && !open_below(3);
-            if (blocked || pit) && self.jump == 0 && state.grounded {
+            // T28: a pressure plate down a pit is for stepping on, not jumping over.
+            let plate_at = |column: i32, depth: i32| {
+                matches!(
+                    world
+                        .terrain()
+                        .tile(TilePosition {
+                            x: column,
+                            y: feet_row + depth,
+                        })
+                        .map(|found| found.kind),
+                    Some(TileKind::Built(BuiltTile::PressurePlate {
+                        down: false,
+                        ..
+                    }))
+                )
+            };
+            let here = (x / TILE_SIZE).floor() as i32;
+            let over_plate = !Self::solid(
+                world,
+                TilePosition {
+                    x: here,
+                    y: feet_row + 1,
+                },
+            ) && plate_at(here, 2);
+            let pit = pit && !plate_at(column + 1, 2) && !plate_at(column + 1, 3);
+            let wants_jump = (blocked || pit) && self.jump == 0 && state.grounded;
+            // T28: read the traps ahead (blades, crushers, darts, fog, sand) before stepping.
+            let advice = self.side.advise(
+                world,
+                run,
+                (x, feet),
+                state.height(),
+                wants_jump || self.jump > 0,
+            );
+            if advice != super::tomb_side::Advice::Go {
+                self.stall = 0;
+            }
+            if wants_jump && advice == super::tomb_side::Advice::Go {
                 self.jump = 14;
             }
             let jumping = self.jump > 0;
             self.jump = self.jump.saturating_sub(1);
             // Long stuck: back off a little to come at it again.
             let backing = self.stall > 150 && self.stall % 120 < 20;
-            ControlState::new(if backing { -1.0 } else { 1.0 }, false, false).with_jump(jumping)
+            let horizontal = match advice {
+                _ if jumping => 1.0,
+                _ if over_plate => 0.0,
+                super::tomb_side::Advice::Go if !backing => 1.0,
+                super::tomb_side::Advice::Wait => 0.0,
+                _ => -1.0,
+            };
+            ControlState::new(horizontal, false, false).with_jump(jumping)
         };
         if self.armed {
             // Aim straight at the nearest creature in sight within fourteen tiles (past the

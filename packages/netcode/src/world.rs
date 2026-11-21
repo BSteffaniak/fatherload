@@ -280,6 +280,9 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::TombCacheOpened { player_id, .. } => (277, Some(player_id)),
         GameplayEventKind::TombMemberDowned { player_id, .. } => (278, Some(player_id)),
         GameplayEventKind::TombRunEnded { player_id, .. } => (279, Some(player_id)),
+        // Side-view tombs (wave 5, T28): 280-289.
+        GameplayEventKind::TombTrapSprung { .. } => (280, None),
+        GameplayEventKind::TombGuardianPhase { .. } => (281, None),
     }
 }
 

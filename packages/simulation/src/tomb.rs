@@ -22,6 +22,10 @@
 //!   platformer rooms the pilot's existing movement plays; the top-down realizer builds a room
 //!   grid walked in the pilot's top-down mode ([`crate::pilot::PilotView::TopDown`], a
 //!   placeholder T29 replaces with the real movement, collision and camera).
+//! * **Side-view content** (T28): [`side_view`] (the realizer: room templates, platforming,
+//!   secrets), [`culture`] (tile sets per site: sandstone, catacomb, sky temple, lunar vault)
+//!   and [`traps`] (blades, crushers, crumbling floors, dart walls, rising sand, cursed fog:
+//!   pure functions of the world clock).
 //! * **Relics** ([`relic`]): run-only perks picked between floors, with synergies, and
 //!   blessing/curse bargains; their effects hook into the pilot's body
 //!   ([`crate::pilot::PilotBoons`]), weapons and damage.
@@ -33,10 +37,13 @@
 //! The world side (entering, the run's tick, banking, death and revives, relic picks, leaving)
 //! lives in `world/tombs.rs`.
 
+pub mod culture;
 pub mod floor;
 pub mod realize;
 pub mod relic;
 pub mod run;
+pub mod side_view;
+pub mod traps;
 
 use serde::{Deserialize, Serialize};
 

@@ -67,8 +67,10 @@ use crate::{
 use super::{WorldState, bombs::Blast, movement::AUTHORITATIVE_PLAYER_RADIUS};
 
 mod sky;
+mod tomb;
 
 pub use sky::{JOLT_MILLIS, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES, TURRET_MOUNTS};
+pub use tomb::{GuardianMove, MAX_BATS, MAX_RAISED, guardian_move, is_tomb_guardian};
 
 /// A rig hit by an enemy cannot be hit by another for this long (i-frames).
 pub const RIG_GUARD_MILLIS: u64 = 800;
@@ -1101,6 +1103,10 @@ impl WorldState {
                 return;
             }
         }
+        // A side-view tomb guardian's landing slam (WP-TOMBS T28).
+        if tomb::is_tomb_guardian(state.kind) {
+            self.guardian_tick(id, &body, &state, now, output);
+        }
         self.advance_timers(&mut state, now);
         let think_ticks = self.timing.ticks_for_millis(THINK_MILLIS).max(1);
         if (now.get() + id.get()).is_multiple_of(think_ticks) {
@@ -1281,6 +1287,10 @@ impl WorldState {
                 let (_, distance) = direction((body.x, body.y), (tx, ty));
                 let range = spec.attack_range_tiles * TILE_SIZE;
                 let ready = now >= state.attack_ready;
+                // Side-view tomb guardians have patterns of their own (WP-TOMBS T28).
+                if tomb::is_tomb_guardian(state.kind) {
+                    return self.guardian_chase(id, body, state, (tx, ty), distance, now, output);
+                }
                 match spec.attack {
                     AttackStyle::Contact => {
                         let goal = if ready {
@@ -1361,6 +1371,14 @@ impl WorldState {
                 if now < state.mode_until {
                     if let Some((tx, _)) = target {
                         state.facing = if tx < body.x { -1 } else { 1 };
+                    }
+                    return Intent::default();
+                }
+                if tomb::is_tomb_guardian(state.kind) {
+                    if let Some(aim) = target {
+                        self.guardian_release(id, body, state, aim, now, output);
+                    } else {
+                        state.mode = EnemyMode::Idle;
                     }
                     return Intent::default();
                 }
@@ -1893,11 +1911,11 @@ impl WorldState {
         let spec = state.kind.stats();
         let live = match spec.attack {
             AttackStyle::Contact => now >= state.attack_ready && state.mode == EnemyMode::Chase,
-            AttackStyle::Lunge | AttackStyle::Swoop => state.mode == EnemyMode::Strike,
-            AttackStyle::Ranged(..)
-            | AttackStyle::Spawner
-            | AttackStyle::Lightning
-            | AttackStyle::Boarding => false,
+            // A ranged enemy only strikes in a tomb guardian's dive (WP-TOMBS T28).
+            AttackStyle::Lunge | AttackStyle::Swoop | AttackStyle::Ranged(..) => {
+                state.mode == EnemyMode::Strike
+            }
+            AttackStyle::Spawner | AttackStyle::Lightning | AttackStyle::Boarding => false,
         };
         if !live {
             return;
@@ -2459,6 +2477,13 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::DuneStalker
         | EnemyKind::WillOWisp
         | EnemyKind::MothSwarm
-        | EnemyKind::UmbralAlpha => false,
+        | EnemyKind::UmbralAlpha
+        // Tomb creatures (T28) live only in tomb runs.
+        | EnemyKind::Mummy
+        | EnemyKind::CryptBat
+        | EnemyKind::SkeletalArcher
+        | EnemyKind::AnimatedStatue
+        | EnemyKind::SunColossus
+        | EnemyKind::HollowMatriarch => false,
     }
 }

@@ -442,6 +442,8 @@ impl WorldState {
             started: now,
             picking_since: None,
             leaving: false,
+            crumbling: Vec::new(),
+            boss_phase: 0,
         };
         let _ = self.tombs.runs.insert(id, run);
         for member in &party {
@@ -515,6 +517,8 @@ impl WorldState {
             run.spawns = spawns;
             run.start = start;
             run.boss = None;
+            run.boss_phase = 0;
+            run.crumbling.clear();
             run.boss_defeated = !plan_last;
             run.checkpoint = None;
             run.phase = RunPhase::Exploring;
@@ -950,6 +954,9 @@ impl WorldState {
             self.spring_ambushes(id, output);
             self.track_guardian(id, output);
             self.advance_traps(id, output);
+            // T28: the side-view traps that move on the clock, crumbling floors and the
+            // guardian's phases (`world/tomb_traps.rs`).
+            self.advance_side_view_run(id, next_tick, output);
             self.advance_revives(id, next_tick, output);
             if self.tombs.runs.get(&id).is_some_and(TombRun::wiped) {
                 self.end_tomb_run(id, RunOutcome::Wiped, output);
@@ -1143,7 +1150,9 @@ impl WorldState {
                 }
             }
             if worst > 0.0 {
-                hurt.push((pilot, worst * dt * self.enemy_difficulty().damage()));
+                // T28: Sandwalker sandals and their synergies blunt every trap.
+                let traps = RelicEffects::scale(member.effects().trap_pct);
+                hurt.push((pilot, worst * dt * self.enemy_difficulty().damage() * traps));
             }
         }
         for (pilot, amount) in hurt {

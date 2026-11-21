@@ -232,9 +232,12 @@ pub enum BuiltTile {
     // --- Tomb pieces (WP-TOMBS, [`crate::tomb`]): stamped by the tomb generator and the run
     // realizers, never built or deconstructed. `style` is a [`crate::tomb::SiteStyle`]
     // index (0 side-view tomb, 1 top-down crypt). -----------------------------------------
-    /// Tomb masonry (sandstone for tombs, crypt stone for crypts).
+    /// Tomb masonry: set 0 sandstone (side-view tombs), 1 crypt stone (top-down crypts), and
+    /// T28's side-view cultures 2 catacomb, 3 sky temple, 4 lunar vault
+    /// ([`crate::tomb::culture::TombCulture::masonry`]; codes 120-122).
     TombWall(u8),
-    /// A carved pillar: decoration a pilot walks through (rigs, drops and creatures stop).
+    /// A carved pillar: decoration a pilot walks through (rigs, drops and creatures stop), in
+    /// the same masonry sets as [`Self::TombWall`] (T28's cultures: codes 123-125).
     TombPillar(u8),
     /// A tomb's entrance door; a sealed one waits for its opening (key, story, explosives).
     TombDoor { style: u8, sealed: bool },
@@ -389,8 +392,16 @@ impl BuiltTile {
                 card: Some(color),
             } => 66 + (color % crate::mechanism::KEYCARD_COLORS) as u64,
             Self::Palisade => 70,
-            Self::TombWall(style) => 72 + (style % 2) as u64,
-            Self::TombPillar(style) => 74 + (style % 2) as u64,
+            // Masonry sets 0-1 are the styles' own (T27); 2-4 are T28's side-view cultures
+            // (catacomb, sky temple, lunar vault: [`crate::tomb::culture::TombCulture`]).
+            Self::TombWall(set) => match set {
+                0 | 1 => 72 + set as u64,
+                _ => 120 + (crate::tomb::culture::masonry_extra(set)) as u64,
+            },
+            Self::TombPillar(set) => match set {
+                0 | 1 => 74 + set as u64,
+                _ => 123 + (crate::tomb::culture::masonry_extra(set)) as u64,
+            },
             Self::TombDoor { style, sealed } => 76 + (style % 2) as u64 * 2 + sealed as u64,
             Self::TombShrine { lit } => 80 + lit as u64,
             Self::TombStairs => 82,
@@ -457,6 +468,8 @@ impl BuiltTile {
                 kind: ((code - 88) / 2) as u8,
                 hidden: (code - 88) % 2 == 1,
             },
+            120..=122 => Self::TombWall((code - 120) as u8 + 2),
+            123..=125 => Self::TombPillar((code - 123) as u8 + 2),
             _ => return None,
         })
     }

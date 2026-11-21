@@ -135,6 +135,7 @@ mod tick_rate_tests;
 mod timing;
 #[cfg(test)]
 mod tomb_tests;
+mod tomb_traps;
 mod tombs;
 #[cfg(test)]
 mod village_tests;
@@ -147,7 +148,10 @@ mod weapons;
 pub use arcs::{ArcTalk, tile_center_px};
 pub use bases::{BuildQuote, TOWN_NO_BUILD_MARGIN, TOWN_NO_BUILD_ROWS, payment_for};
 pub use discovery::{DiscoveredTiles, Discovery};
-pub use enemies::{JOLT_MILLIS, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES, TURRET_MOUNTS};
+pub use enemies::{
+    GuardianMove, JOLT_MILLIS, MAX_BATS, MAX_RAISED, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES,
+    TURRET_MOUNTS, guardian_move, is_tomb_guardian,
+};
 pub use homes::{
     CELLAR_ROWS, CONTRACTOR_REACH_COLUMNS, ContractorOffer, HireQuote, MAX_CONTRACTORS_LISTED,
 };

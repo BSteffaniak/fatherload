@@ -86,6 +86,9 @@ pub struct RoomNode {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FloorPlan {
     pub style: SiteStyle,
+    /// Where the site is (T28: side-view floors are built in the setting's culture,
+    /// [`super::culture::TombCulture::of_setting`]).
+    pub setting: super::SiteSetting,
     pub tier: u8,
     /// 0-based floor number.
     pub floor: u8,
@@ -246,6 +249,7 @@ pub fn plan_floor(site: &TombSite, run: u32, floor: u8) -> FloorPlan {
 
     FloorPlan {
         style: site.style,
+        setting: site.setting,
         tier: site.tier,
         floor,
         floors,
