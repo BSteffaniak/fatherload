@@ -734,6 +734,10 @@ mod tests {
 
     #[test]
     #[ignore = "debug: follows the crypt bot and prints where it stalls"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "a debug trace, printed in reading order"
+    )]
     fn trace_crypt_bot() {
         let seed: u64 = std::env::var("SEED")
             .ok()

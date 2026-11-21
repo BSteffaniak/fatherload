@@ -149,6 +149,10 @@ impl WorldState {
             _ => self.melee_behave(id, &mut body, &mut state, now, output),
         };
         self.crypt_move(id, &mut body, &mut state, intent, now);
+        if !ghost {
+            // Rounding a body flush against a wall can tip its edge a hair into the masonry.
+            self.free_from_rock(&mut body, state.kind);
+        }
         if ghost {
             self.keep_ghost_off(id, &mut body, &state);
         } else {

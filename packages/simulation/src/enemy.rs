@@ -251,9 +251,8 @@ impl ShotKind {
             Self::Wispfire => 140.0,
             Self::Arrow => 360.0,
             Self::Rubble => 250.0,
-            Self::Hex | Self::CryptHex => 150.0,
+            Self::Hex | Self::CryptHex | Self::Boulder => 150.0,
             Self::CryptArrow => 380.0,
-            Self::Boulder => 150.0,
         }
     }
 

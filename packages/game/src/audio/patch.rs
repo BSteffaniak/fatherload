@@ -5554,6 +5554,11 @@ fn crypt_loop(rng: &mut Rng) -> Vec<f32> {
 
 /// The crypt lord's theme: a war drum pulsing twice a second with a tom answer, a growling saw
 /// ostinato (D D F E) and dissonant brass stabs on the downbeats.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the loop's step index"
+)]
 fn crypt_boss_loop(rng: &mut Rng) -> Vec<f32> {
     const SECONDS: f32 = LOOP_SECONDS;
     let mut bass = Osc::new(Wave::Saw);

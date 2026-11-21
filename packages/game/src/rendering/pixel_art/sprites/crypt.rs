@@ -1,7 +1,13 @@
 //! Top-down crypt creatures and trap shots (WP-TOMBS T29), seen from above with a little of
 //! their front showing (the crypt's 3/4 view).
 
-use super::super::{palette::*, sprite::SpriteDef};
+use super::super::{
+    palette::{
+        AMBER, BONE, FOG, GOLD, INK, LAVENDER, MAROON, MINT, MIST, MOSS, PINK, PLUM, RED, ROSE,
+        SLATE, SOIL_DARK, STEEL_LIGHT, STONE, STONE_DARK, STONE_LIGHT, TEAL, VIOLET,
+    },
+    sprite::SpriteDef,
+};
 
 pub const CRYPT_SKELETON: SpriteDef = SpriteDef {
     name: "crypt_skeleton",

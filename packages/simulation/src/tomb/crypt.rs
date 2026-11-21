@@ -249,9 +249,36 @@ pub struct CryptState {
     /// When the floor was written: trap cycles count from here.
     pub started: SimulationTick,
     /// Cracked floors a pilot stepped on, and the tick they give way.
+    #[serde(with = "tile_map")]
     pub crumbling: BTreeMap<TilePosition, SimulationTick>,
     /// Arrow plates pressed: the tick their arrows fly, and whether they have.
+    #[serde(with = "tile_map")]
     pub plates: BTreeMap<TilePosition, (SimulationTick, bool)>,
+}
+
+/// A tile-keyed map saved as a list of pairs (JSON object keys must be strings; saves are
+/// JSON).
+mod tile_map {
+    use std::collections::BTreeMap;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use crate::terrain::TilePosition;
+
+    pub fn serialize<S: Serializer, V: Serialize>(
+        map: &BTreeMap<TilePosition, V>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(map.iter())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>, V: Deserialize<'de>>(
+        deserializer: D,
+    ) -> Result<BTreeMap<TilePosition, V>, D::Error> {
+        Ok(Vec::<(TilePosition, V)>::deserialize(deserializer)?
+            .into_iter()
+            .collect())
+    }
 }
 
 impl CryptState {

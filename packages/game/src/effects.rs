@@ -1056,11 +1056,6 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::TombRunEnded { player_id, .. }
         | GameplayEventKind::CryptRoll { player_id, .. }
         | GameplayEventKind::CryptPitFall { player_id, .. } => Some(player_id),
-        GameplayEventKind::CryptTrap { .. }
-        | GameplayEventKind::CryptLordPhase { .. }
-        | GameplayEventKind::CryptTell { .. }
-        | GameplayEventKind::CryptSlam { .. }
-        | GameplayEventKind::CryptSummon { .. } => None,
         // Building news reaches the plot's owner wherever they are.
         GameplayEventKind::ConstructionStage { owner, .. }
         | GameplayEventKind::HomeCompleted { owner, .. }
@@ -1106,7 +1101,12 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::NightMonsterBurrowed { .. }
         | GameplayEventKind::TombAmbush { .. }
         | GameplayEventKind::TombTrapSprung { .. }
-        | GameplayEventKind::TombGuardianPhase { .. } => None,
+        | GameplayEventKind::TombGuardianPhase { .. }
+        | GameplayEventKind::CryptTrap { .. }
+        | GameplayEventKind::CryptLordPhase { .. }
+        | GameplayEventKind::CryptTell { .. }
+        | GameplayEventKind::CryptSlam { .. }
+        | GameplayEventKind::CryptSummon { .. } => None,
     }
 }
 

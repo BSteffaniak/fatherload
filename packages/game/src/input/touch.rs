@@ -723,6 +723,7 @@ impl TouchInput {
     }
 
     /// Maps this frame's `points` against `layout` (`delta_seconds` since the last frame).
+    #[allow(clippy::too_many_lines, reason = "one frame of fingers in order")]
     pub fn update(
         &mut self,
         points: &[TouchPoint],

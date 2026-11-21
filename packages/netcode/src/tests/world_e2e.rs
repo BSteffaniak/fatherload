@@ -1376,3 +1376,101 @@ fn world_side_view_tomb_traps_replicate() {
         );
     }
 }
+
+/// Top-down crypts online (WP-TOMBS T29): both clients' pilots crawl a crypt floor seen from
+/// above, walking eight ways and dodge-rolling under client prediction while crypt creatures
+/// hunt them and the floor's traps cycle; every client's world converges on the host's with no
+/// hash mismatch, the pilots' rolls and headings included.
+#[test]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "small tile coordinates to world pixels"
+)]
+fn world_crypt_runs_predict_rolls_and_converge() {
+    use fatherload_simulation::{
+        SimulationParams,
+        pilot::PilotView,
+        tomb::SiteStyle,
+        worldgen::{GeneratorVersion, WorldSettings, features::TileRect, tomb_sites},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(40, 5, 1.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V10,
+        ..WorldSettings::new(0x5EED_0029)
+    };
+    let crypted = WorldState::new_game_with_settings(
+        fatherload_simulation::PlayerId::new(99),
+        &settings,
+        SimulationParams::new(60),
+    );
+    let mut world = harness.world().clone();
+    *world.terrain_mut() = crypted.terrain().clone();
+    let site = tomb_sites::sites_touching(
+        &settings,
+        &TileRect {
+            min: fatherload_simulation::terrain::TilePosition { x: -9_000, y: -100 },
+            max: fatherload_simulation::terrain::TilePosition { x: 9_000, y: 900 },
+        },
+    )
+    .into_iter()
+    .find(|site| site.style == SiteStyle::TopDown)
+    .expect("a crypt site");
+    let party: Vec<_> = harness
+        .clients
+        .iter()
+        .map(|client| crate::world::to_sim_player(client.session.player().expect("joined")))
+        .collect();
+    let id = world
+        .scenario_enter_tomb(&site, &party)
+        .expect("the run starts");
+    // A pack waiting in the entry room.
+    if let Some(run) = world.tombs().runs.get(&id).cloned()
+        && let Some(room) = run.rooms.first()
+    {
+        for (dx, kind) in [
+            (1, fatherload_simulation::EnemyKind::CryptSkeleton),
+            (9, fatherload_simulation::EnemyKind::Cultist),
+        ] {
+            let x = ((room.interior.min.x + dx) as f32).mul_add(32.0, 16.0);
+            let y = ((room.interior.min.y + 1) as f32).mul_add(32.0, 16.0);
+            let _ = world.spawn_enemy(kind, x, y);
+        }
+    }
+    harness.host.new_epoch(world);
+    // The bots walk, hop (roll) and swing on their usual script, without one-shot actions.
+    for client in &mut harness.clients {
+        client.bot.issue_actions = false;
+    }
+    harness.run_for(Duration::from_secs(20));
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    let host = harness.world();
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(
+            seen.tombs(),
+            host.tombs(),
+            "every client sees the same crypt"
+        );
+        for player in &party {
+            let (Some(theirs), Some(ours)) = (seen.pilot_of(*player), host.pilot_of(*player))
+            else {
+                continue;
+            };
+            // Positions are compared by the per-tick hashes above (the authority may trail
+            // the host by a tick or two here); the view is settled.
+            assert_eq!(theirs.2.view, ours.2.view);
+        }
+    }
+    assert!(
+        party.iter().any(|player| host
+            .pilot_of(*player)
+            .is_some_and(|(_, _, state)| state.view == PilotView::TopDown)
+            || host.tomb_run_of(*player).is_none()),
+        "the party played the crypt from above"
+    );
+}

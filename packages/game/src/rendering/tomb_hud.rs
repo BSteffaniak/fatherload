@@ -65,6 +65,10 @@ pub(super) fn draw_tomb_hud(
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "the banner's lines, then the boss bar"
+)]
 fn draw_run_banner(
     draw: &mut RaylibDrawHandle<'_>,
     snapshot: &RenderSnapshot<'_>,

@@ -11,7 +11,8 @@ use fatherload_simulation::{
 };
 
 use super::{
-    LocalGame, PLAYER, PlayerInput, confirm_input, down, idle, interact, playing, press, press_seat,
+    LocalGame, PLAYER, PlayerInput, confirm_input, down, idle, interact, playing, press,
+    press_seat, step_seats,
 };
 use crate::shell::ModalScreen;
 
@@ -198,4 +199,68 @@ fn the_codex_follows_the_milestones_in_the_map_cycle() {
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::TombCodex));
     let _ = press(&mut game, confirm_input());
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Map));
+}
+
+/// Split screen with mixed view modes (WP-TOMBS T29): seat one's pilot crawls a crypt from
+/// above (eight-way, no gravity, its view zoomed in) while seat two flies its rig in the side
+/// view outside; each seat's input drives its own mode.
+#[test]
+fn split_screen_seats_play_a_crypt_from_above_and_the_world_from_the_side() {
+    let mut world = WorldState::new_game(PLAYER);
+    let crypt = site(&world, SiteStyle::TopDown);
+    let _ = world.place_pilot(PLAYER, 0.0, 0.0);
+    let mut game = playing(world, 2, "crypt-split");
+    idle(&mut game, 2);
+    let players: Vec<_> = game.seats().iter().map(|seat| seat.player).collect();
+    let (first, second) = (players[0], players[1]);
+    game.edit_world(|world| {
+        let _ = world.scenario_enter_tomb(&crypt, &[first]);
+        world.set_enemy_difficulty(fatherload_simulation::enemy::EnemyDifficulty::Peaceful);
+    });
+    idle(&mut game, 2);
+    assert!(
+        game.world().tomb_run_of(second).is_none(),
+        "seat two stayed outside"
+    );
+    let feet = |game: &LocalGame, player| {
+        game.world()
+            .pilot_of(player)
+            .map(|(_, body, state)| (body.x, body.y, state.view))
+    };
+    let (_, before, view) = feet(&game, first).expect("seat one on foot");
+    assert_eq!(view, fatherload_simulation::pilot::PilotView::TopDown);
+    let rig_before = game.world().player(second).map(|rig| rig.y).expect("rig");
+    // Seat one holds up (north, seen from above); seat two holds thrust (up, in the sky).
+    let up = PlayerInput {
+        thrust: true,
+        ..PlayerInput::default()
+    };
+    for _ in 0..20 {
+        let _ = step_seats(&mut game, &[up, up]);
+    }
+    let (_, after, _) = feet(&game, first).expect("seat one on foot");
+    assert!(
+        after < before - 20.0,
+        "seat one walked north: {before} -> {after}"
+    );
+    let rig_after = game.world().player(second).map(|rig| rig.y).expect("rig");
+    assert!(
+        rig_after < rig_before,
+        "seat two's rig flew up in the side view"
+    );
+    // Seat one's view is the crypt's closer one; seat two's the side view's.
+    let snapshot = game.snapshot((1280, 720));
+    let scale = |player| {
+        snapshot
+            .views
+            .iter()
+            .find(|view| view.player_id == player)
+            .map(|view| view.world_scale)
+            .expect("a view")
+    };
+    let ratio = scale(first) / scale(second);
+    assert!(
+        (ratio - crate::render_snapshot::CRYPT_ZOOM).abs() < 1e-3,
+        "{ratio}"
+    );
 }

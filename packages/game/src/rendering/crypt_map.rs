@@ -43,6 +43,7 @@ const fn room_color(kind: RoomKind) -> Color {
 
 /// Draws the crypt minimap for `view` when its player is in a top-down crypt; returns whether
 /// it did (the caller draws the ordinary minimap otherwise).
+#[allow(clippy::too_many_lines, reason = "rooms, doorways, then the party")]
 pub(super) fn draw_crypt_minimap(
     draw: &mut RaylibDrawHandle<'_>,
     snapshot: &RenderSnapshot<'_>,

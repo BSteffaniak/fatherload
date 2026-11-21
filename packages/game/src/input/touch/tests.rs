@@ -836,3 +836,52 @@ fn on_foot_layout_jumps_and_the_hatch_buttons_follow_the_pilot() {
             .is_some()
     );
 }
+
+/// On foot in a top-down crypt (WP-TOMBS T29).
+const CRYPT: TouchContext = TouchContext {
+    pilot: TouchPilot::OnFoot,
+    pilot_armed: true,
+    crypt: true,
+    ..PLAY
+};
+
+#[test]
+fn a_crypt_gets_an_aim_stick_fire_and_a_roll_button() {
+    let mut rig = Rig::new(CRYPT);
+    let layout = rig.layout();
+    assert!(layout.rect(TouchControl::Fire).is_some());
+    assert!(layout.rect(TouchControl::Roll).is_some());
+    assert!(
+        layout.rect(TouchControl::Jump).is_none(),
+        "ROLL replaces JUMP"
+    );
+    // The fire button is the biggest under the thumb: it is the aim stick.
+    let fire = layout.rect(TouchControl::Fire).expect("fire");
+    let roll = layout.rect(TouchControl::Roll).expect("roll");
+    assert!(fire.w > roll.w);
+    // ROLL is the jump input (the simulation's roll); held fire dragged aims anywhere.
+    let (down, _) = rig.tap(TouchControl::Roll);
+    assert!(down.jump);
+    let at = rig.centre(TouchControl::Fire);
+    let unit = rig.layout().button;
+    rig.frame(&[(1, at)]);
+    let aimed = rig.frame(&[(1, (at.0 - unit, at.1 - unit * 0.5))]).input;
+    assert!(aimed.fire && aimed.aim_x < -0.5 && aimed.aim_y < 0.0);
+    rig.frame(&[]);
+    // USE joins when something is in reach.
+    rig.context.usable = true;
+    assert!(rig.layout().rect(TouchControl::Use).is_some());
+}
+
+#[test]
+fn a_crypt_stick_walks_eight_ways_without_the_drill_lock() {
+    let mut rig = Rig::new(CRYPT);
+    let base = rig.stick_point();
+    let radius = rig.layout().stick_radius();
+    rig.frame(&[(1, base)]);
+    // Steeply down and a little right: a rig would drill straight down; a crypt walker drifts.
+    let down = rig
+        .frame(&[(1, (base.0 + radius * 0.3, base.1 + radius * 0.9))])
+        .input;
+    assert!(down.drill_down && down.horizontal > 0.1, "{down:?}");
+}

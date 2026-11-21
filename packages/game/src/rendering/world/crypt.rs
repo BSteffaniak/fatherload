@@ -24,6 +24,7 @@
     clippy::cast_sign_loss,
     clippy::suboptimal_flops,
     clippy::too_many_lines,
+    clippy::while_float,
     reason = "world drawing mixes tile indices and float pixels"
 )]
 
@@ -165,9 +166,11 @@ impl Crypt<'_, '_> {
     fn wall(&self, tile: TilePosition) -> bool {
         matches!(
             self.kind(tile),
-            Some(TileKind::Built(
-                BuiltTile::TombWall(_) | BuiltTile::TombPillar(_) | BuiltTile::GateLintel(_)
-            )) | Some(TileKind::Bedrock)
+            Some(
+                TileKind::Built(
+                    BuiltTile::TombWall(_) | BuiltTile::TombPillar(_) | BuiltTile::GateLintel(_)
+                ) | TileKind::Bedrock
+            )
         )
     }
 
@@ -189,7 +192,7 @@ impl Crypt<'_, '_> {
         )
     }
 
-    fn trap_shown(&self, trap: &CryptTrap) -> bool {
+    const fn trap_shown(&self, trap: &CryptTrap) -> bool {
         !trap.hidden || self.trap_sight
     }
 }
@@ -303,7 +306,7 @@ fn draw_floors(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>) {
                 Vector2::new(2.0, TILE_SIZE / 2.0),
                 look.grout,
             );
-            if roll % 11 == 0 {
+            if roll.is_multiple_of(11) {
                 // A worn chip.
                 draw.draw_rectangle_v(
                     Vector2::new(px + 6.0 + (roll % 17) as f32, py + 8.0),
@@ -728,10 +731,10 @@ fn draw_rows(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>) {
             }
             if crypt.wall(tile) {
                 draw_wall(draw, crypt, tile);
-            } else if let Some(TileKind::Built(built)) = crypt.kind(tile) {
-                if crypt.revealed(tile) {
-                    draw_fixture(draw, crypt, tile, built);
-                }
+            } else if let Some(TileKind::Built(built)) = crypt.kind(tile)
+                && crypt.revealed(tile)
+            {
+                draw_fixture(draw, crypt, tile, built);
             }
         }
         if let Some(bodies) = rows.get_mut(&y) {
@@ -795,7 +798,7 @@ fn draw_wall(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>, tile: TilePositi
             look.face_dark,
         );
         // The set's mark on a few faces.
-        if roll % 4 == 0 {
+        if roll.is_multiple_of(4) {
             match CryptTileset::of(crypt.run.site.setting) {
                 CryptTileset::Catacomb => {
                     // A skull in a niche.
@@ -887,7 +890,7 @@ fn draw_wall(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>, tile: TilePositi
             look.face_dark,
         );
     }
-    if roll % 7 == 0 {
+    if roll.is_multiple_of(7) {
         draw.draw_rectangle_v(
             Vector2::new(px + 8.0 + (roll % 13) as f32, cap_top + 10.0),
             Vector2::new(5.0, 1.0),
@@ -1206,7 +1209,7 @@ fn draw_pilot(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>, pilot: &PilotPr
     }
 }
 
-fn darken(color: Color) -> Color {
+const fn darken(color: Color) -> Color {
     Color::new(
         color.r / 2 + 10,
         color.g / 2 + 10,
@@ -1397,8 +1400,8 @@ fn draw_light(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>) {
     let (left, top, right, bottom) = crypt.tiles;
     for y in top..bottom {
         for x in left..right {
-            if let Some(TileKind::Built(BuiltTile::TombShrine { lit: true })) =
-                crypt.kind(TilePosition { x, y })
+            if crypt.kind(TilePosition { x, y })
+                == Some(TileKind::Built(BuiltTile::TombShrine { lit: true }))
             {
                 lights.push((
                     (x as f32 + 0.5) * TILE_SIZE,
