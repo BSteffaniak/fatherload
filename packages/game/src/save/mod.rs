@@ -1632,4 +1632,120 @@ mod tests {
             Err(SaveError::UnsupportedVersion(99))
         ));
     }
+
+    /// Wave 6 QA: a file of every supported save format (1 to 11) loads, plays two minutes with
+    /// the mining bot, saves, reloads as it was saved, and its rigs are sane (the capacity curve
+    /// catch-up applied, fuel and cargo within their capacities).
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one table of formats, then one loop over it"
+    )]
+    fn every_supported_save_format_loads_plays_and_round_trips() {
+        use fatherload_simulation::{
+            balance::{
+                bot::{MinerBot, Strategy},
+                economy::inputs_for,
+            },
+            player::{cargo_capacity_for_level, fuel_capacity_for_level},
+            worldgen::GeneratorVersion,
+        };
+        fn as_version(save: &WorldSave, version: u32, strip: &[&str]) -> String {
+            let mut file = serde_json::to_value(SaveFile {
+                version,
+                save: save.clone(),
+            })
+            .expect("serialize");
+            let world = file["save"]["world"].as_object_mut().expect("world");
+            for field in strip {
+                let _ = world.remove(*field);
+            }
+            file.to_string()
+        }
+        let classic = WorldSave {
+            world: heavily_dug_world(),
+            play_seconds: 30.0,
+        };
+        let streamed = WorldSave {
+            world: WorldState::new_game_with_settings(
+                LEGACY_PLAYER_ID,
+                &WorldSettings {
+                    generator: GeneratorVersion::V9,
+                    ..WorldSettings::new(0x5A7E_0009)
+                },
+                SimulationParams::default(),
+            ),
+            play_seconds: 30.0,
+        };
+        let v3: serde_json::Value = serde_json::from_str(V3).expect("v3 json");
+        let files: Vec<(u32, String)> = vec![
+            (1, V1.to_owned()),
+            (2, V2.to_owned()),
+            (3, V3.to_owned()),
+            (
+                4,
+                serde_json::json!({
+                    "version": 4,
+                    "save": { "world": v3["world"]["canonical_world"].clone(), "play_seconds": 1.0 },
+                })
+                .to_string(),
+            ),
+            (5, v5_json(&classic).to_string()),
+            (6, as_v6_json(&classic).to_string()),
+            (7, as_version(&classic, 7, &["enemies"])),
+            (
+                8,
+                as_version(&streamed, 8, &["clock", "people", "homes", "tombs"]),
+            ),
+            (9, as_version(&streamed, 9, &["homes", "tombs"])),
+            (10, as_version(&streamed, 10, &["tombs"])),
+            (11, as_version(&streamed, SAVE_VERSION, &[])),
+        ];
+        for (version, json) in files {
+            let mut save = parse_save(&json).unwrap_or_else(|error| panic!("v{version}: {error}"));
+            let world = &mut save.world;
+            let player = world.player_ids().next().expect("a rig");
+            let mut bot = MinerBot::new(player, Strategy::Prospector);
+            for _ in 0..u64::from(world.tick_rate_hz()) * 120 {
+                let (controls, actions) = bot.decide(world);
+                let output = world.simulate_tick(
+                    world.simulation_tick(),
+                    &inputs_for(player, controls, actions),
+                );
+                bot.observe(world, &output);
+            }
+            let path = std::env::temp_dir().join(format!(
+                "fatherload-every-format-v{version}-{}.json",
+                std::process::id()
+            ));
+            save_world_to_path(&save, &path).expect("write");
+            let reloaded = load_world_from_path(&path).expect("reload");
+            let _ignored = fs::remove_file(&path);
+            assert_eq!(
+                serde_json::to_value(&reloaded.world).expect("json"),
+                serde_json::to_value(&save.world).expect("json"),
+                "v{version}: reloaded as saved"
+            );
+            for id in save.world.player_ids() {
+                let rig = save.world.player(id).expect("rig");
+                assert!(
+                    rig.fuel_capacity >= fuel_capacity_for_level(rig.fuel_tank_level)
+                        && rig.cargo_capacity >= cargo_capacity_for_level(rig.cargo_bay_level),
+                    "v{version}: the rig is on the current curves"
+                );
+                assert!(
+                    rig.fuel.is_finite() && (0.0..=rig.fuel_capacity).contains(&rig.fuel),
+                    "v{version}: fuel {} of {}",
+                    rig.fuel,
+                    rig.fuel_capacity
+                );
+                assert!(rig.hull.is_finite() && rig.x.is_finite() && rig.y.is_finite());
+                assert!(rig.cargo_used() <= rig.cargo_capacity, "v{version}: cargo");
+            }
+            assert!(
+                bot.stats().deepest_row > 0,
+                "v{version}: the bot played the loaded world"
+            );
+        }
+    }
 }
