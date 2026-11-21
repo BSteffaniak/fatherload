@@ -318,8 +318,7 @@ fn step(
         body.velocity_x = 0.0;
         body.velocity_y = 0.0;
     }
-    body.x = quantize(body.x);
-    body.y = quantize(body.y);
+    (body.x, body.y) = on_subpixel_grid(terrain, body.x, body.y, radius);
     body.velocity_x = quantize(body.velocity_x);
     body.velocity_y = quantize(body.velocity_y);
     StepReport {
@@ -327,6 +326,32 @@ fn step(
         wedged: false,
         stuck,
     }
+}
+
+/// `(x, y)` quantized to the subpixel grid. Rounding to the nearest subpixel can tip a body
+/// resting flush against a tile (a hair short of its edge) a hair into it; such a body is
+/// rounded the other way on the axis that clears it instead, so a step never ends in rock.
+fn on_subpixel_grid(terrain: &Terrain, x: f32, y: f32, radius: f32) -> (f32, f32) {
+    use crate::quantize::SIMULATION_SUBPIXELS_PER_PIXEL as SUBPIXELS;
+    let nearest = (quantize(x), quantize(y));
+    if !collides(terrain, nearest.0, nearest.1, radius) || collides(terrain, x, y, radius) {
+        return nearest;
+    }
+    let down = |value: f32| (value * SUBPIXELS).floor() / SUBPIXELS;
+    let up = |value: f32| (value * SUBPIXELS).ceil() / SUBPIXELS;
+    [
+        (nearest.0, down(y)),
+        (nearest.0, up(y)),
+        (down(x), nearest.1),
+        (up(x), nearest.1),
+        (down(x), down(y)),
+        (down(x), up(y)),
+        (up(x), down(y)),
+        (up(x), up(y)),
+    ]
+    .into_iter()
+    .find(|(cx, cy)| !collides(terrain, *cx, *cy, radius))
+    .unwrap_or(nearest)
 }
 
 /// Rest bookkeeping after a step.
@@ -599,6 +624,34 @@ mod tests {
             body.y
         );
         assert!(body.x > px(8), "it slid along the floor");
+    }
+
+    #[test]
+    fn a_step_never_rounds_a_body_into_the_floor_it_rests_flush_against() {
+        // A hair short of the floor (closer than half a subpixel): plain rounding would put the
+        // body's edge on the floor tile.
+        let terrain = room();
+        let floor = 10.0 * TILE_SIZE;
+        let radius = 11.0;
+        let params = BodyParams {
+            radius,
+            gravity: 0.0,
+            max_speed: 480.0,
+            bounce: 0.0,
+            rest_speed: 60.0,
+            floor_friction: 0.0,
+            stop_speed: 0.0,
+        };
+        let y = floor - radius - 0.000_2;
+        assert!(!collides(&terrain, px(8), y, radius));
+        assert!(collides(&terrain, px(8), quantize(y), radius));
+        let mut body = Body::at(px(8), y);
+        let _ = step_body(&mut body, &params, &terrain, 1.0 / 60.0);
+        assert!(!collides(&terrain, body.x, body.y, radius), "{}", body.y);
+        assert!(
+            (body.y - quantize(body.y)).abs() < f32::EPSILON,
+            "still on the subpixel grid"
+        );
     }
 
     #[test]
