@@ -1766,7 +1766,7 @@ const fn expansion_blurb(expansion: Expansion) -> &'static str {
     match expansion {
         Expansion::Room(_) => "One more room on the ground floor",
         Expansion::Floor => "A new storey: a bedroom and a study",
-        Expansion::Garage => "A bay to park the rig in (free repairs)",
+        Expansion::Garage => "A bay to park the rig in (repairs at cost, 1 cr a point)",
         Expansion::Basement => "A cellar under the house, with a hatch down into the mine",
         Expansion::Lift => "A private lift from the basement to your claim below",
     }

@@ -1001,9 +1001,66 @@ fn a_garage_bay_repairs_a_parked_rig() {
     park(&mut world, PLAYER, first + 1, site.ground_row);
     let rig = world.player_mut(PLAYER).expect("rig");
     rig.hull = 10.0;
+    rig.credits = 1_000;
     let _ = run(&mut world, 120);
-    let hull = world.player(PLAYER).expect("rig").hull;
+    let rig = world.player(PLAYER).expect("rig");
+    let hull = rig.hull;
     assert!(hull > 15.0, "repaired to {hull}");
+    // The bay is not free: every point started into is paid for at the bay's rate.
+    let points = (hull.ceil() - 10.0) as u32;
+    assert_eq!(
+        rig.credits,
+        1_000 - points * crate::home::GARAGE_REPAIR_UNIT_COST,
+        "billed for {points} points"
+    );
+    // Out of credits, the rig waits at the last point paid for.
+    let rig = world.player_mut(PLAYER).expect("rig");
+    rig.hull = 10.0;
+    rig.credits = 2 * crate::home::GARAGE_REPAIR_UNIT_COST;
+    let _ = run(&mut world, 240);
+    let rig = world.player(PLAYER).expect("rig");
+    assert!((rig.hull - 12.0).abs() < 1e-3, "stopped at {}", rig.hull);
+    assert_eq!(rig.credits, 0);
+}
+
+#[test]
+fn a_garage_bays_bill_does_not_depend_on_the_tick_rate() {
+    let mut bills = Vec::new();
+    for hz in [30_u32, 60, 240] {
+        let mut world = world_at(hz);
+        let settings = *world.world_settings();
+        let site = plot::listed_sites_between(&settings, -3_000, 3_000)
+            .into_iter()
+            .find(|site| site.size >= PlotSize::Medium)
+            .expect("a medium site");
+        let plot = world.scenario_home(PLAYER, site, Some(Blueprint::WorkshopHome));
+        let (first, _) = world
+            .homes()
+            .plot(plot)
+            .expect("plot")
+            .garage_columns()
+            .expect("bay");
+        park(&mut world, PLAYER, first + 1, site.ground_row);
+        let rig = world.player_mut(PLAYER).expect("rig");
+        rig.hull = 10.0;
+        rig.credits = 1_000;
+        // Two seconds of game time at every rate.
+        let _ = run(&mut world, 2 * u64::from(hz));
+        let rig = world.player(PLAYER).expect("rig");
+        let bill = 1_000 - rig.credits;
+        // Exactly the points started into, at any rate.
+        assert_eq!(
+            bill,
+            (rig.hull.ceil() - 10.0) as u32 * crate::home::GARAGE_REPAIR_UNIT_COST,
+            "{hz} Hz"
+        );
+        bills.push(bill);
+    }
+    // The same two seconds cost the same, give or take the point the clock is part-way into.
+    assert!(
+        bills.windows(2).all(|pair| pair[0].abs_diff(pair[1]) <= 1),
+        "bills by rate: {bills:?}"
+    );
 }
 
 #[test]

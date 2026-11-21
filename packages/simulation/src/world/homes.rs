@@ -1853,11 +1853,23 @@ impl WorldState {
             if let Some(rig) = self.players.get_mut(&id) {
                 let max = rig.max_hull();
                 if rig.hull < max {
-                    rig.hull = crate::quantize::quantize_simulation_scalar(
-                        crate::home::GARAGE_REPAIR_PER_SECOND
-                            .mul_add(dt, rig.hull)
-                            .min(max),
-                    );
+                    // Each whole point is paid as the hull starts into it, so the bill sums to
+                    // the points mended whatever the tick rate, and a rig whose player runs out
+                    // of credits stops at the last point paid for.
+                    let unit = crate::home::GARAGE_REPAIR_UNIT_COST;
+                    let paid_to = rig.hull.ceil();
+                    let affordable = (rig.credits / unit.max(1)) as f32;
+                    let target = crate::home::GARAGE_REPAIR_PER_SECOND
+                        .mul_add(dt, rig.hull)
+                        .min(max)
+                        .min(paid_to + affordable);
+                    if target <= rig.hull {
+                        continue;
+                    }
+                    let hull = crate::quantize::quantize_simulation_scalar(target);
+                    let points = (hull.ceil() - paid_to).max(0.0) as u32;
+                    rig.credits = rig.credits.saturating_sub(points * unit);
+                    rig.hull = hull;
                 }
             }
         }
