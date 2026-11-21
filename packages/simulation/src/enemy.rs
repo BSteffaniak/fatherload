@@ -1048,6 +1048,21 @@ impl EnemyKind {
         )
     }
 
+    /// Whether it is a side-view tomb creature or guardian (WP-TOMBS T28): it lives only in
+    /// tomb runs.
+    #[must_use]
+    pub const fn is_tomb(self) -> bool {
+        matches!(
+            self,
+            Self::Mummy
+                | Self::CryptBat
+                | Self::SkeletalArcher
+                | Self::AnimatedStatue
+                | Self::SunColossus
+                | Self::HollowMatriarch
+        )
+    }
+
     /// Whether it lives on the Moon (WP-MOON).
     #[must_use]
     pub const fn is_lunar(self) -> bool {

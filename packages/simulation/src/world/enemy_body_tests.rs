@@ -114,7 +114,8 @@ fn arena(hz: u32) -> WorldState {
 /// Whether `kind` lives in the caves (the arena); the wave 4 families have their own habitats
 /// (the sky, the night surface, the Moon), soaked below.
 const fn lives_underground(kind: EnemyKind) -> bool {
-    !kind.is_sky() && !kind.is_lunar() && !crate::night::is_nocturnal(kind)
+    // Tomb creatures (T28) have their own body test in `side_tomb_tests`.
+    !kind.is_sky() && !kind.is_lunar() && !crate::night::is_nocturnal(kind) && !kind.is_tomb()
 }
 
 /// One of every cave kind at an open spot in the arena.
