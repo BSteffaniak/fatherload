@@ -2087,7 +2087,7 @@ tick-rate safety; the netcode e2e test plays relic picks over the wire.
 
 The side-view half of WP-TOMBS on T27's core: a platformer roguelite on the pilot's own
 movement and personal weapons. Nothing here changes generation (V1-V10 digests unchanged: the
-entrances stay T27's set-0 masonry on the map and are painted in their culture by the game).
+entrances stay T27's set-0 masonry on the map and are painted, doors included, in their culture by the game).
 
 - **Cultures** (`tomb::culture::TombCulture`, from `TombSite::setting`): `Sandstone` (mesas),
   `Catacomb` (deep strata, old quarters), `SkyTemple` (sky continents), `LunarVault` (the
@@ -2140,7 +2140,13 @@ entrances stay T27's set-0 masonry on the map and are painted in their culture b
   cooldowns). Matriarch: `HexFan`, then `HexRing` and `SummonBats` (up to `MAX_BATS`), then a
   `Dive` that hurts on contact. Hooks in `advance_enemy` / `behave` (three guarded lines) and a
   ranged enemy's contact now counts in `Strike` (only the dive ever strikes). The run tracks the
-  phase (`TombRun::boss_phase`) and reports `TombGuardianPhase`.
+  phase (`TombRun::boss_phase`) and reports `TombGuardianPhase`. Guardians **sense intruders
+  without line of sight** (`perceive` treats them like footstep-feelers, within their hearing):
+  otherwise a pilot under a crypt platform made them forget, walk home (`EnemyMode::Return`)
+  and regenerate back into phase 1. The colossus **skips path routing** (`move_enemy` steers
+  it straight at its goal: paths round the arena's platforms stalled its wide body), may wind
+  up with rock in the way, and its leap overshoots prey under its ledge by
+  `LEDGE_OVERSHOOT_TILES` so it comes down beside them.
 - **Relics**: `Relic::Sandwalker` (appended: traps hurt half), `RelicEffects::trap_pct` (serde
   default; also scales T27's spike damage), and four appended `SYNERGIES`: Cloud Dancer (Spring
   Heels + Featherfall), Updraft (Glider Boost + Featherfall), Tomb Runner (Quickstep +
@@ -2155,8 +2161,9 @@ entrances stay T27's set-0 masonry on the map and are painted in their culture b
   guardian that hung back. Debug: `print_where_the_bot_sticks`, `print_what_hurts_the_bot`
   (ignored tests).
 - **Balance** (`--balance-report --only tombs`, 4 seeds): side-view tombs clear 4/4 at tier 1
-  (0.9 min), 2/4 at tier 2, 3/4 at tier 3, 1/4 at tier 4 and 0/4 at tier 5 (2.5-3 min), wipes
-  nearly all at the guardian (the bot never dodges).
+  (0.9 min), 2/4 at tiers 2 and 3 (1-1.2 min), 1/4 at tier 4 and 0/4 at tier 5 (2.3-3 min),
+  wipes nearly all at the guardian (the bot never dodges and fights with the rifle alone: a
+  tier-5 floor-6 guardian has about 1,500-1,750 health against the rifle's ~27 per second).
 - **Scenario helpers**: `scenario_next_tomb_run(site, run)`, `scenario_tomb_floor(player,
   floor)`, `scenario_tomb_guardian(player, kind)`, `scenario_hurt_enemy_to(id, fraction)`.
 
@@ -2166,9 +2173,19 @@ against the library, tick-rate safety, tells and safe windows, a blade clearing 
 pilot at the top of its swing), `tomb::culture` (codes round-trip, T27's codes unmoved),
 `world::enemies::tomb` (distinct patterns per phase), `world/side_tomb_tests.rs` (blades at
 30/60/120 Hz and on two peers, the safe strip, a crusher's tell, slam and shove, crumbling
-slabs, the sand basin, tomb creatures never in rock or on the pilot, both guardians beaten by
-the scripted bot through phases 2 and 3, a run cleared on every tier, an armed tier-1 clear on
-Normal, a party of two clearing together, the phase saved in the run).
+slabs, the sand basin, tomb creatures never in rock or on the pilot (also against a moving,
+shooting pilot at 30/60/120 Hz with raised and summoned creatures), both guardians beaten by
+the scripted bot through phases 2 and 3, a guardian never forgetting or healing while a pilot
+shelters under a platform, a run cleared on every tier, an armed tier-1 clear on Normal, a
+party of two clearing together, the phase saved in the run), and the netcode end-to-end
+`world_side_view_tomb_traps_replicate` (a collapsing bridge falls online and every client
+converges).
+
+**Physics seam (found by the tomb creature test):** `physics::step_body` quantizes positions
+to the subpixel grid at the end of a step; rounding to the nearest subpixel could tip a body
+resting a hair short of a tile into it (an animated statue's lunge at 30 Hz ended a tick in the
+floor). The step now rounds the other way on the axis that clears it in that case only
+(`on_subpixel_grid`); every step that did not end in rock is unchanged.
 
 ## Wave 5 seams: side-view tombs (T28)
 

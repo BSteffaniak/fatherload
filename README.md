@@ -872,9 +872,11 @@ beside a cracked seal, or a **story** seen through.
   sidearm, aiming at what it sees within 14 tiles, first relic each floor, no dodging, no
   detours to the vault) reads the side-view traps ahead (it waits out blades, crushers, darts,
   fog and the sand, never stops on a crumbling slab) and goes back for a lever it passed. In
-  side-view tombs it clears all 4 tier 1 runs in about 0.9 minutes, 5 of 8 at tiers 2-3 (1-1.3
-  minutes) and 1 of 8 at tiers 4-5 (2.5-3 minutes): nearly all its wipes are at the guardian,
-  which it fights standing still. Crypts are still T27's placeholders (T29). The bot is far
+  side-view tombs it clears all 4 tier 1 runs in about 0.9 minutes, 4 of 8 at tiers 2-3 (1-1.2
+  minutes) and 1 of 8 at tiers 4-5 (2.3-3 minutes): nearly all its wipes are at the guardian,
+  which it fights standing still with the rifle alone. Guardians sense intruders anywhere in
+  their crypt (hiding under a platform does not make them forget you and heal), and the
+  colossus leaps down off a ledge to reach you. Crypts are still T27's placeholders (T29). The bot is far
   weaker than a player, so read these as relative numbers. Loot on offer in a whole run
   (every cache plus the guardian's hoard): about 1,000 cr at tier 1, 4,000-4,700 at tier 2,
   13,000-15,000 at tier 3, 35,000-42,000 at tier 4 and 70,000-90,000 at tier 5 (8-29 caches
