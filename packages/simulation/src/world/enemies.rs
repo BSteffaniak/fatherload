@@ -70,6 +70,7 @@ mod crypt;
 mod sky;
 mod tomb;
 
+pub use crypt::SLAM_REACH;
 pub use sky::{JOLT_MILLIS, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES, TURRET_MOUNTS};
 pub use tomb::{GuardianMove, MAX_BATS, MAX_RAISED, guardian_move, is_tomb_guardian};
 

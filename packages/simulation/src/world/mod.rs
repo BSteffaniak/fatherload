@@ -156,7 +156,7 @@ pub use crypts::{CRUMBLE_MILLIS, PIT_FALL_SHARE, PLATE_DELAY_MILLIS, PLATE_REARM
 pub use discovery::{DiscoveredTiles, Discovery};
 pub use enemies::{
     GuardianMove, JOLT_MILLIS, MAX_BATS, MAX_RAISED, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES,
-    TURRET_MOUNTS, guardian_move, is_tomb_guardian,
+    SLAM_REACH, TURRET_MOUNTS, guardian_move, is_tomb_guardian,
 };
 pub use homes::{
     CELLAR_ROWS, CONTRACTOR_REACH_COLUMNS, ContractorOffer, HireQuote, MAX_CONTRACTORS_LISTED,

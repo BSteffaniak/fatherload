@@ -125,7 +125,16 @@ impl SeatUi {
             .and_then(|index| offers.get(usize::from(index)))
             .map_or_else(
                 || "You leave the relics where they lie.".to_owned(),
-                |relic| format!("{}: {}", relic.name(), relic.blurb()),
+                |relic| {
+                    let style = ctx
+                        .world
+                        .tombs()
+                        .run_of(player)
+                        .map_or(fatherload_simulation::tomb::SiteStyle::SideView, |run| {
+                            run.site.style
+                        });
+                    format!("{}: {}", relic.name(), relic.blurb_in(style))
+                },
             );
         cues.push(SoundCue::Ui);
         self.modal = None;
@@ -195,12 +204,18 @@ pub(super) fn use_line(ctx: SeatContext<'_>, usable: Usable) -> String {
             .and_then(|player| ctx.world.tomb_door_in_reach(player))
             .map_or_else(
                 || "You step inside.".to_owned(),
-                |site| {
-                    format!(
+                |site| match site.style {
+                    fatherload_simulation::tomb::SiteStyle::TopDown => format!(
+                        "Into the {}: {} floors seen from above. {} rolls through traps and blows, aim anywhere; the rig waits outside.",
+                        site.title(),
+                        site.floors(),
+                        super::key_for(crate::input::prompts::Prompt::Jump, ctx.device),
+                    ),
+                    fatherload_simulation::tomb::SiteStyle::SideView => format!(
                         "Into the {}: {} floors. The rig waits outside.",
                         site.title(),
                         site.floors()
-                    )
+                    ),
                 },
             ),
         Usable::TombShrine { .. } => {

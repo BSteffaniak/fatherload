@@ -323,6 +323,16 @@ patches! {
     StatueGrind => "statue_grind",
     ColossusSlam => "colossus_slam",
     MatriarchWail => "matriarch_wail",
+    // Top-down crypts (WP-TOMBS T29), appended so earlier seeds stay put.
+    DodgeRoll => "dodge_roll",
+    ArrowTwang => "arrow_twang",
+    SpikeShing => "spike_shing",
+    PitDrop => "pit_drop",
+    LordRoar => "lord_roar",
+    StoneSlam => "stone_slam",
+    HexBolt => "hex_bolt",
+    CryptLoop => "loop_crypt",
+    CryptBossLoop => "loop_crypt_boss",
 }
 
 /// Playback metadata of a patch.
@@ -559,6 +569,28 @@ impl Patch {
                 .send(0.4)
                 .jitter(0.0, 0.0)
                 .ducking(0.3),
+            Self::DodgeRoll | Self::ArrowTwang | Self::HexBolt => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.25)
+                .jitter(0.05, 1.0),
+            Self::SpikeShing | Self::PitDrop => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.35)
+                .jitter(0.04, 1.0),
+            Self::StoneSlam => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.45)
+                .jitter(0.04, 1.0)
+                .ducking(0.2),
+            Self::LordRoar => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.55)
+                .jitter(0.0, 0.3)
+                .ducking(0.4)
+                .priority(8),
+            Self::CryptLoop | Self::CryptBossLoop => {
+                PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0)
+            }
             Self::ThrowWhoosh | Self::ChargeStick | Self::FireCrackle => {
                 PatchInfo::new(Feedback).instances(3).jitter(0.06, 1.0)
             }
@@ -1013,6 +1045,15 @@ impl Patch {
             Self::StatueGrind => statue_grind(rng),
             Self::ColossusSlam => colossus_slam(rng),
             Self::MatriarchWail => matriarch_wail(rng),
+            Self::DodgeRoll => dodge_roll(rng),
+            Self::ArrowTwang => arrow_twang(rng),
+            Self::SpikeShing => spike_shing(rng),
+            Self::PitDrop => pit_drop(rng),
+            Self::LordRoar => lord_roar(rng),
+            Self::StoneSlam => stone_slam(rng),
+            Self::HexBolt => hex_bolt(rng),
+            Self::CryptLoop => crypt_loop(rng),
+            Self::CryptBossLoop => crypt_boss_loop(rng),
         }
     }
 }
@@ -5360,6 +5401,206 @@ fn matriarch_wail(rng: &mut Rng) -> Vec<f32> {
         mix_into(&mut out, &wail, delay, gain);
     }
     out
+}
+
+// --- Top-down crypts (WP-TOMBS T29) -------------------------------------------------------
+
+/// A dodge roll: cloth and gear swishing past (a pink-noise sweep) and a soft shoulder thud.
+fn dodge_roll(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut band = Svf::new(FilterMode::BandPass, 900.0, 1.2);
+    let top = 2_400.0 * rng.jitter(0.1);
+    let mut out = render(0.32, |t| {
+        let cutoff = segments(t, &[(0.0, 600.0), (0.12, top), (0.3, 700.0)]);
+        band.run(noise.next(), cutoff, 1.2) * segments(t, &[(0.0, 0.0), (0.05, 0.8), (0.3, 0.0)])
+    });
+    mix_into(&mut out, &thump(150.0, 70.0, 0.12, 1.3), 0.2, 0.5);
+    out
+}
+
+/// A trap's arrow loosed: a taut string's twang (a plucked saw dropping in pitch) and the
+/// shaft hissing away.
+fn arrow_twang(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Saw);
+    let mut low = Svf::new(FilterMode::LowPass, 2_400.0, 2.0);
+    let base = 196.0 * rng.jitter(0.05);
+    let mut out = render(0.35, |t| {
+        low.process(osc.next(glide(t, base * 1.08, base, 0.02))) * perc(t, 0.001, 0.25) * 0.8
+    });
+    let hiss = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        5_200.0,
+        1.5,
+        0.18,
+    );
+    mix_into(&mut out, &hiss, 0.03, 0.35);
+    out
+}
+
+/// Floor spikes shooting up: a bright metallic shing over a stony knock.
+fn spike_shing(rng: &mut Rng) -> Vec<f32> {
+    let mut out = clank(rng, 1_250.0, 0.35);
+    for sample in &mut out {
+        *sample *= 0.6;
+    }
+    mix_into(&mut out, &thump(260.0, 120.0, 0.08, 1.6), 0.0, 0.5);
+    let scrape = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        3_500.0,
+        0.8,
+        0.12,
+    );
+    mix_into(&mut out, &scrape, 0.0, 0.4);
+    out
+}
+
+/// A fall into a pit: a whistle dropping away, then a far thud and loose pebbles.
+fn pit_drop(rng: &mut Rng) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Sine);
+    let start = 900.0 * rng.jitter(0.05);
+    let mut out = render(0.6, |t| {
+        osc.next(glide(t, start, start * 0.35, 0.25))
+            * segments(t, &[(0.0, 0.0), (0.04, 0.4), (0.55, 0.0)])
+    });
+    mix_into(&mut out, &thump(110.0, 45.0, 0.3, 1.8), 0.55, 0.9);
+    grains(rng, &mut out, 10, (0.6, 1.0), (1_200.0, 3_500.0), 0.3);
+    out
+}
+
+/// The crypt lord's roar: a growling low saw through a sweeping vowel filter, breath noise and a
+/// tail of reverb-ready rumble.
+fn lord_roar(rng: &mut Rng) -> Vec<f32> {
+    let mut saw = Osc::new(Wave::Saw);
+    let mut sub = Osc::new(Wave::Triangle);
+    let mut formant = Svf::new(FilterMode::BandPass, 500.0, 2.5);
+    let mut breath = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut breath_band = Svf::new(FilterMode::BandPass, 1_200.0, 1.0);
+    let base = 62.0 * rng.jitter(0.03);
+    render(1.7, |t| {
+        let wobble = 1.0 + 0.06 * sine(t, 9.0) + 0.03 * sine(t, 23.0);
+        let pitch = glide(t, base * 0.8, base * 1.15, 0.3) * wobble;
+        let vowel = segments(t, &[(0.0, 380.0), (0.4, 900.0), (1.2, 650.0), (1.7, 300.0)]);
+        let voice = formant.run(saw.next(pitch), vowel, 2.5) * 1.6 + sub.next(pitch * 0.5) * 0.5;
+        let air = breath_band.process(breath.next()) * 0.35;
+        saturate(voice + air, 2.2) * segments(t, &[(0.0, 0.0), (0.15, 1.0), (1.2, 0.8), (1.7, 0.0)])
+    })
+}
+
+/// Stone on stone: a golem's slam or a boulder let loose (a deep saturated thump and debris).
+fn stone_slam(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(95.0 * rng.jitter(0.05), 38.0, 0.45, 2.4);
+    let crack = burst(
+        rng.next_u64(),
+        NoiseColor::Brown,
+        FilterMode::LowPass,
+        1_400.0,
+        0.9,
+        0.3,
+    );
+    mix_into(&mut out, &crack, 0.0, 0.7);
+    grains(rng, &mut out, 18, (0.05, 0.7), (900.0, 3_000.0), 0.35);
+    out
+}
+
+/// A hex being cast: an FM swirl rising to a ringing point.
+fn hex_bolt(rng: &mut Rng) -> Vec<f32> {
+    let mut fm = Fm::default();
+    let base = 330.0 * rng.jitter(0.04);
+    render(0.45, |t| {
+        let frequency = glide(t, base, base * 2.0, 0.15);
+        fm.next(frequency, 1.41, 3.0 * decay(t, 0.2))
+            * segments(t, &[(0.0, 0.0), (0.06, 0.7), (0.45, 0.0)])
+    })
+}
+
+/// The crypt's music: a low organ drone (D and A, breathing over the loop), a hollow choir pad
+/// and a slow bell motif (D, F, E, A) with a far echo. Frequencies are on the loop's grid.
+fn crypt_loop(rng: &mut Rng) -> Vec<f32> {
+    const SECONDS: f32 = LOOP_SECONDS;
+    let mut root = Osc::new(Wave::Triangle);
+    let mut fifth = Osc::new(Wave::Triangle);
+    let mut pad = [
+        Osc::new(Wave::Saw),
+        Osc::new(Wave::Saw),
+        Osc::new(Wave::Saw),
+    ];
+    let mut pad_filter = Svf::new(FilterMode::LowPass, 700.0, 0.8);
+    let mut wind = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut wind_band = Svf::new(FilterMode::BandPass, 600.0, 0.7);
+    let mut out = render(loop_length(), |t| {
+        let breath = 0.75 + 0.25 * sine(t, 1.0 / SECONDS);
+        let drone = root.next(73.5) * 0.5 + fifth.next(110.0) * 0.3 * breath;
+        let choir: f32 = pad
+            .iter_mut()
+            .zip([146.75_f32, 174.5, 220.0])
+            .map(|(osc, note)| osc.next(note))
+            .sum::<f32>()
+            / 3.0;
+        let choir = pad_filter.process(choir) * (0.55 + 0.45 * sine(t, 0.5 / SECONDS).abs());
+        let air = wind_band.process(wind.next()) * 0.25;
+        drone * 0.45 + choir * 0.3 * breath + air
+    });
+    for (index, note) in [293.75_f32, 349.25, 329.5, 220.0].into_iter().enumerate() {
+        let start = index as f32 * (SECONDS / 4.0) + 0.05;
+        mix_into(&mut out, &bell(note, 2.0, 0.9, 1.4), start, 0.16);
+        mix_into(&mut out, &bell(note, 2.0, 0.6, 1.0), start + 0.42, 0.06);
+    }
+    out
+}
+
+/// The crypt lord's theme: a war drum pulsing twice a second with a tom answer, a growling saw
+/// ostinato (D D F E) and dissonant brass stabs on the downbeats.
+fn crypt_boss_loop(rng: &mut Rng) -> Vec<f32> {
+    const SECONDS: f32 = LOOP_SECONDS;
+    let mut bass = Osc::new(Wave::Saw);
+    let mut bass_filter = Svf::new(FilterMode::LowPass, 400.0, 1.4);
+    let notes = [73.5_f32, 73.5, 87.25, 82.5];
+    let mut out = render(loop_length(), |t| {
+        let step = ((t / (SECONDS / 8.0)) as usize) % 8;
+        let local = t % (SECONDS / 8.0);
+        let note = notes[step / 2];
+        let gate = perc(local, 0.004, 0.35);
+        saturate(bass_filter.process(bass.next(note)) * gate * 1.4, 1.6) * 0.5
+    });
+    for beat in 0..8 {
+        let at = beat as f32 * (SECONDS / 8.0);
+        mix_into(&mut out, &thump(80.0, 42.0, 0.28, 2.0), at, 0.75);
+        if beat % 2 == 1 {
+            mix_into(
+                &mut out,
+                &thump(160.0, 110.0, 0.16, 1.4),
+                at + SECONDS / 16.0,
+                0.35,
+            );
+        }
+    }
+    for (start, chord) in [
+        (0.0, [293.75_f32, 311.25, 440.0]),
+        (2.0, [261.75, 277.25, 392.0]),
+    ] {
+        for note in chord {
+            mix_into(&mut out, &brass(rng, note, 0.35, 0.8), start, 0.1);
+        }
+    }
+    grains_loop(rng, &mut out);
+    out
+}
+
+/// Dust trickling evenly over a crypt loop (nothing bunched at the seam).
+fn grains_loop(rng: &mut Rng, out: &mut Vec<f32>) {
+    scatter_grains(
+        rng,
+        out,
+        loop_events(3.0),
+        (0.0, loop_length()),
+        (1_500.0, 4_000.0),
+        0.08,
+        false,
+    );
 }
 
 #[cfg(test)]

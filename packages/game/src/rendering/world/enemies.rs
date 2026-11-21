@@ -25,7 +25,7 @@ use fatherload_simulation::{
 use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
-    sprites::{enemies as art, moon as moon_art, tomb as tomb_art},
+    sprites::{crypt as crypt_art, enemies as art, moon as moon_art, tomb as tomb_art},
 };
 
 use super::{ART, Pen, fx::disc, snap};
@@ -68,6 +68,12 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::AnimatedStatue => &tomb_art::ANIMATED_STATUE,
         EnemyKind::SunColossus => &tomb_art::SUN_COLOSSUS,
         EnemyKind::HollowMatriarch => &tomb_art::HOLLOW_MATRIARCH,
+        // Crypt creatures (WP-TOMBS T29) are seen from above; the crypt view draws them.
+        EnemyKind::CryptSkeleton => &crypt_art::CRYPT_SKELETON,
+        EnemyKind::Spectre => &crypt_art::SPECTRE,
+        EnemyKind::Cultist => &crypt_art::CULTIST,
+        EnemyKind::CryptGolem => &crypt_art::CRYPT_GOLEM,
+        EnemyKind::CryptLord => &crypt_art::CRYPT_LORD,
     }
 }
 
@@ -83,6 +89,9 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::Arrow => &tomb_art::SHOT_ARROW,
         ShotKind::Rubble => &tomb_art::SHOT_RUBBLE,
         ShotKind::Hex => &tomb_art::SHOT_HEX,
+        ShotKind::CryptHex => &crypt_art::SHOT_HEX,
+        ShotKind::CryptArrow => &crypt_art::SHOT_ARROW,
+        ShotKind::Boulder => &crypt_art::SHOT_BOULDER,
     }
 }
 
@@ -268,7 +277,12 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         | EnemyKind::HarpyNester
         | EnemyKind::WillOWisp
         | EnemyKind::MothSwarm
-        | EnemyKind::CryptBat => sprite.frame_at(phase),
+        | EnemyKind::CryptBat
+        | EnemyKind::CryptSkeleton
+        | EnemyKind::Spectre
+        | EnemyKind::Cultist
+        | EnemyKind::CryptGolem
+        | EnemyKind::CryptLord => sprite.frame_at(phase),
     }
 }
 
@@ -792,6 +806,8 @@ fn draw_shot(
         ShotKind::Arrow => STEEL_LIGHT,
         ShotKind::Rubble => SAND,
         ShotKind::Hex => VIOLET,
+        ShotKind::CryptHex => LAVENDER,
+        ShotKind::CryptArrow | ShotKind::Boulder => STONE_LIGHT,
     };
     disc(
         draw,

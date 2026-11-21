@@ -664,6 +664,21 @@ pub enum SoundCue {
     ColossusSlam,
     /// The matriarch's wail.
     MatriarchWail,
+    // --- Top-down crypts (WP-TOMBS T29) --------------------------------------------------
+    /// A crypt pilot's dodge roll.
+    DodgeRoll,
+    /// A trap's arrow loosed.
+    ArrowTwang,
+    /// Floor spikes shooting up.
+    SpikeShing,
+    /// A fall into a pit.
+    PitDrop,
+    /// The crypt lord's roar (it wakes, a new phase).
+    LordRoar,
+    /// A golem's slam, a boulder let loose.
+    StoneSlam,
+    /// A hex being cast.
+    HexBolt,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

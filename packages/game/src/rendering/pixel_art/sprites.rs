@@ -2,6 +2,7 @@
 //! atlas packs them (the tests fail for a sprite that is drawn but missing here only at runtime,
 //! so keep groups' lists complete).
 
+pub mod crypt;
 pub mod enemies;
 pub mod explosives;
 pub mod icons;
@@ -408,6 +409,15 @@ pub const ALL: &[&SpriteDef] = &[
     &tomb::SHOT_ARROW,
     &tomb::SHOT_RUBBLE,
     &tomb::SHOT_HEX,
+    &crypt::CRYPT_SKELETON,
+    &crypt::SPECTRE,
+    &crypt::CULTIST,
+    &crypt::CRYPT_GOLEM,
+    &crypt::CRYPT_LORD,
+    &crypt::SHOT_HEX,
+    &crypt::SHOT_ARROW,
+    &crypt::SHOT_ARROW_UP,
+    &crypt::SHOT_BOULDER,
 ];
 
 #[cfg(test)]

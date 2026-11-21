@@ -461,4 +461,45 @@ impl WorldState {
         }
         None
     }
+
+    // --- Scenarios --------------------------------------------------------------------------
+
+    /// Puts `player`'s run straight onto floor `floor`, written over the current one with the
+    /// party at its start (tests, screenshot scenes and the balance harness, both styles: the
+    /// guardian's floor or the lord's hall without playing the floors above).
+    pub fn scenario_tomb_floor(&mut self, player: PlayerId, floor: u8) {
+        let Some(id) = self.tombs.run_id_of(player) else {
+            return;
+        };
+        let previous = self.tombs.runs.get(&id).map(Self::tomb_floor_of);
+        if let Some(run) = self.tombs.runs.get_mut(&id) {
+            run.floor = floor.min(run.site.floors().saturating_sub(1));
+            run.phase = RunPhase::Exploring;
+            run.picking_since = None;
+        }
+        self.write_tomb_floor(id, previous);
+    }
+
+    /// Replaces the trap overlays of `player`'s crypt floor with `traps` (absolute tiles; tests
+    /// and scenes), restarting the trap clock at `started_millis_ago` before now.
+    pub fn scenario_crypt_traps(
+        &mut self,
+        player: PlayerId,
+        mut traps: Vec<CryptTrap>,
+        started_millis_ago: u64,
+    ) {
+        let ago = self.timing.ticks_for_millis(started_millis_ago);
+        let started = SimulationTick::new(self.simulation_tick.get().saturating_sub(ago));
+        let Some(id) = self.tombs.run_id_of(player) else {
+            return;
+        };
+        traps.sort();
+        traps.dedup_by(|a, b| a.at == b.at);
+        if let Some(run) = self.tombs.runs.get_mut(&id) {
+            run.crypt.traps = traps;
+            run.crypt.started = started;
+            run.crypt.crumbling.clear();
+            run.crypt.plates.clear();
+        }
+    }
 }

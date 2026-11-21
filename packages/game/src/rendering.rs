@@ -19,6 +19,7 @@ use fatherload_simulation::{
 
 mod build;
 mod counters;
+mod crypt_map;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
 mod garage;
@@ -729,6 +730,7 @@ impl GameRenderer {
                         let millis = (ticks * 1_000.0 / hz) as u64;
                         millis
                     },
+                    tick_rate_hz: snapshot.tick_rate.hz(),
                 },
             );
         }
@@ -738,10 +740,15 @@ impl GameRenderer {
         if let Some(preview) = &view.build_preview {
             build::draw_build_bar(draw, view, preview, shell.prompt_device(view.seat_index));
         }
+        let touch = view.seat_index == 0 && touch_controls::active();
+        // A top-down crypt (WP-TOMBS T29) has its own room map and no depth to speak of.
+        if crypt_map::draw_crypt_minimap(draw, snapshot, view, &self.explored_drawn, touch) {
+            return;
+        }
         draw_depth_ruler_for_view(draw, snapshot.terrain, view);
         // The thumb cluster owns the minimap's corner on a touch screen (the map button opens
         // the full map instead).
-        if !(view.seat_index == 0 && touch_controls::active()) {
+        if !touch {
             draw_minimap_for_view(
                 draw,
                 snapshot.terrain,

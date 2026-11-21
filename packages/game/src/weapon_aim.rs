@@ -131,7 +131,14 @@ pub fn pilot_aim(
 ) -> Option<SeatAim> {
     let (_, body, state) = world.pilot_of(player_id)?;
     let (x, y) = state.middle(body);
-    let facing_aim = (if state.facing < 0 { -127 } else { 127 }, 0);
+    let top_down = state.view == fatherload_simulation::pilot::PilotView::TopDown;
+    // Seen from above (a crypt, WP-TOMBS T29) the pilot faces where it last walked.
+    let facing_aim = if top_down {
+        let (hx, hy) = fatherload_simulation::pilot::top_down::heading_of(state);
+        quantize_aim(hx, hy).unwrap_or((127, 0))
+    } else {
+        (if state.facing < 0 { -127 } else { 127 }, 0)
+    };
     let pointer = input
         .pointer
         .zip(anchor)
@@ -145,9 +152,14 @@ pub fn pilot_aim(
             .or_else(|| quantize_aim(input.aim_x, input.aim_y))
     };
     let (aim_x, aim_y) = aim.unwrap_or(facing_aim);
+    // Twin-stick in a crypt: pushing the right stick well out fires along it.
+    let stick_fires = top_down
+        && !input.auto_aim
+        && pointer.is_none()
+        && input.aim_x.hypot(input.aim_y) >= TWIN_STICK_FIRE;
     Some(SeatAim {
         control: WeaponControl {
-            fire: input.fire,
+            fire: input.fire || stick_fires,
             auto_aim: aim.is_none(),
             aim_x,
             aim_y,
@@ -155,6 +167,9 @@ pub fn pilot_aim(
         pointer: if aim.is_some() { pointer } else { None },
     })
 }
+
+/// How far out the right stick fires on its own in a top-down crypt (twin-stick).
+pub const TWIN_STICK_FIRE: f32 = 0.6;
 
 /// Whether a controller trigger meant as "fire" should thrust instead: the rig has no weapon
 /// mounted (the trigger's meaning before weapons).

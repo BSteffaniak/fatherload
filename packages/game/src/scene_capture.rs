@@ -253,6 +253,7 @@ fn save_framebuffer(
 
 mod base_scenes;
 mod cave_scenes;
+mod crypt_scenes;
 mod drop_scenes;
 mod explosive_scenes;
 mod home_scenes;
@@ -377,6 +378,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(pilot_content_scenes::PILOT_CONTENT_SCENES)
         .chain(tomb_scenes::TOMB_SCENES)
         .chain(side_tomb_scenes::SIDE_TOMB_SCENES)
+        .chain(crypt_scenes::CRYPT_SCENES)
         .chain(reward_scenes::REWARD_SCENES)
         .chain(home_scenes::HOME_SCENES)
         .chain(night_scenes::NIGHT_SCENES)

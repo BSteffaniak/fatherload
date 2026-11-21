@@ -87,7 +87,13 @@ fn draw_run_banner(
     let status = match run.phase {
         RunPhase::Picking => "PICKING RELICS".to_owned(),
         RunPhase::Exploring if run.on_last_floor() && !run.boss_defeated => {
-            "THE GUARDIAN AWAITS".to_owned()
+            match (run.site.style, boss_state(snapshot, run)) {
+                (SiteStyle::TopDown, Some(boss)) => {
+                    format!("THE CRYPT LORD - PHASE {}", boss.phase.max(1))
+                }
+                (SiteStyle::TopDown, None) => "THE CRYPT LORD AWAITS".to_owned(),
+                (SiteStyle::SideView, _) => "THE GUARDIAN AWAITS".to_owned(),
+            }
         }
         RunPhase::Exploring if run.on_last_floor() => "THE WAY OUT IS OPEN".to_owned(),
         RunPhase::Exploring => "FIND THE STAIRS".to_owned(),
@@ -104,7 +110,7 @@ fn draw_run_banner(
             .collect::<Vec<_>>()
             .join("  ")
     };
-    let _ = snapshot;
+    let boss = boss_state(snapshot, run).filter(|_| !run.boss_defeated);
     let party: Vec<String> = run
         .members
         .iter()
@@ -172,6 +178,42 @@ fn draw_run_banner(
             *color,
         );
     }
+    // The boss's health under the banner while it fights.
+    if let Some(boss) = boss {
+        let bar_width = (width - ui_kit::PANEL_PADDING * 2).max(40);
+        let bar_x = x + ui_kit::PANEL_PADDING;
+        let bar_y = y + height + 3;
+        draw.draw_rectangle(bar_x - 1, bar_y - 1, bar_width + 2, 6, INK);
+        let filled = (bar_width as f32 * boss.health_fraction()) as i32;
+        draw.draw_rectangle(
+            bar_x,
+            bar_y,
+            filled,
+            4,
+            if boss.phase >= 3 { ROSE } else { RED },
+        );
+        // Phase marks at two thirds and one third.
+        for share in [1.0 / 3.0, 2.0 / 3.0] {
+            draw.draw_rectangle(bar_x + (bar_width as f32 * share) as i32, bar_y, 1, 4, BONE);
+        }
+    }
+}
+
+/// The run's boss while it is up (its enemy state).
+fn boss_state(
+    snapshot: &RenderSnapshot<'_>,
+    run: &TombRun,
+) -> Option<fatherload_simulation::enemy::EnemyState> {
+    let id = run.boss?;
+    snapshot
+        .enemies
+        .iter()
+        .find_map(|entity| match entity.state {
+            fatherload_simulation::entity::EntityState::Enemy(state) if entity.id.get() == id => {
+                Some(state)
+            }
+            _ => None,
+        })
 }
 
 fn draw_door_banner(
@@ -266,13 +308,14 @@ pub(super) fn draw_relic_pick(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
                 .find(|synergy| synergy.pair.0 == *relic || synergy.pair.1 == *relic)
                 .map(|synergy| format!("  Synergy: {}!", synergy.name))
                 .unwrap_or_default();
+            let blurb = relic.blurb_in(run.site.style);
             if index == selected {
-                about = Some(format!("{}{synergy}", def.blurb));
+                about = Some(format!("{blurb}{synergy}"));
             }
             SectionItem::item(ItemEntry {
                 icon: None,
                 label: def.name.to_owned(),
-                detail: format!("{}{synergy}", def.blurb),
+                detail: format!("{blurb}{synergy}"),
                 value: match def.kind {
                     RelicKind::Perk => "Perk".to_owned(),
                     RelicKind::Bargain => "Bargain".to_owned(),
@@ -304,7 +347,7 @@ pub(super) fn draw_relic_pick(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         member
             .relics
             .iter()
-            .map(|relic| SectionItem::stat(relic.name(), relic.blurb(), MINT))
+            .map(|relic| SectionItem::stat(relic.name(), relic.blurb_in(run.site.style), MINT))
             .collect()
     };
     let waiting = run
@@ -375,7 +418,7 @@ pub(super) fn draw_tomb_summary(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
         summary
             .relics
             .iter()
-            .map(|relic| SectionItem::stat(relic.name(), relic.blurb(), MINT))
+            .map(|relic| SectionItem::stat(relic.name(), relic.blurb_in(summary.style), MINT))
             .collect()
     };
     let mut sections = vec![

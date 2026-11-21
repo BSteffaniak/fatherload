@@ -607,6 +607,46 @@ impl Effects {
                     }
                     continue;
                 }
+                // Top-down crypts (WP-TOMBS T29): traps by tile, the rest by world pixel; heard
+                // from where they happen.
+                GameplayEventKind::CryptTrap { x, y, .. }
+                | GameplayEventKind::CryptPitFall { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
+                    let (x, y) = (
+                        (x as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                        (y as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                    );
+                    if matches!(gameplay.kind, GameplayEventKind::CryptPitFall { .. }) {
+                        self.spawn_dust(x, y);
+                    }
+                    if impact_cues < 4
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::world(cue, x, y));
+                        impact_cues += 1;
+                    }
+                    continue;
+                }
+                GameplayEventKind::CryptRoll { x, y, .. }
+                | GameplayEventKind::CryptLordPhase { x, y, .. }
+                | GameplayEventKind::CryptTell { x, y, .. }
+                | GameplayEventKind::CryptSlam { x, y, .. }
+                | GameplayEventKind::CryptSummon { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32);
+                    match gameplay.kind {
+                        GameplayEventKind::CryptSlam { .. } => self.spawn_blast_debris(x, y),
+                        GameplayEventKind::CryptSummon { .. } => self.spawn_dust(x, y),
+                        _ => {}
+                    }
+                    if enemy_cues < 6
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::world(cue, x, y));
+                        enemy_cues += 1;
+                    }
+                    continue;
+                }
                 GameplayEventKind::EntityDestroyed { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
                     let (x, y) = (x as f32, y as f32);
@@ -1013,7 +1053,14 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::TombShrineRested { player_id, .. }
         | GameplayEventKind::TombCacheOpened { player_id, .. }
         | GameplayEventKind::TombMemberDowned { player_id, .. }
-        | GameplayEventKind::TombRunEnded { player_id, .. } => Some(player_id),
+        | GameplayEventKind::TombRunEnded { player_id, .. }
+        | GameplayEventKind::CryptRoll { player_id, .. }
+        | GameplayEventKind::CryptPitFall { player_id, .. } => Some(player_id),
+        GameplayEventKind::CryptTrap { .. }
+        | GameplayEventKind::CryptLordPhase { .. }
+        | GameplayEventKind::CryptTell { .. }
+        | GameplayEventKind::CryptSlam { .. }
+        | GameplayEventKind::CryptSummon { .. } => None,
         // Building news reaches the plot's owner wherever they are.
         GameplayEventKind::ConstructionStage { owner, .. }
         | GameplayEventKind::HomeCompleted { owner, .. }

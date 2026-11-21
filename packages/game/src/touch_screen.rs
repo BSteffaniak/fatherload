@@ -354,5 +354,8 @@ pub fn touch_context(
                 .pilot
                 .as_ref()
                 .is_some_and(|pilot| pilot.state.gear.rig_link > 0),
+        crypt: view.pilot.as_ref().is_some_and(|pilot| {
+            pilot.state.view == fatherload_simulation::pilot::PilotView::TopDown
+        }),
     }
 }

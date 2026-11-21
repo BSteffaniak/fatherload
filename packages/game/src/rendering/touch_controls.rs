@@ -226,6 +226,7 @@ const fn rim(control: TouchControl) -> Color {
         TouchControl::Tools
         | TouchControl::Thrust
         | TouchControl::Jump
+        | TouchControl::Roll
         | TouchControl::ExitRig
         | TouchControl::BoardRig
         | TouchControl::Prompt
@@ -263,6 +264,7 @@ const fn label(control: TouchControl) -> &'static str {
         TouchControl::Build => "BUILD",
         TouchControl::Thrust => "FLY",
         TouchControl::Jump => "JUMP",
+        TouchControl::Roll => "ROLL",
         TouchControl::ExitRig => "OUT",
         TouchControl::BoardRig => "IN",
         TouchControl::Rope => "ROPE",

@@ -34,6 +34,7 @@ use crate::{
 pub(super) mod base;
 mod buildings;
 mod caves;
+mod crypt;
 pub(super) mod daylight;
 mod drops;
 pub(super) use drops::drop_sprite;
@@ -157,6 +158,8 @@ pub(super) struct WorldScene<'a> {
     pub tombs: &'a fatherload_simulation::tomb::Tombs,
     /// World milliseconds of the drawn moment (side-view traps move on the world clock).
     pub world_millis: u64,
+    /// The session's tick rate (crypt trap cycles count milliseconds from ticks).
+    pub tick_rate_hz: u32,
 }
 
 impl WorldScene<'_> {
@@ -171,6 +174,12 @@ impl WorldScene<'_> {
     reason = "the world's draw order in one place: each layer is one call"
 )]
 pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_>) {
+    // A seat in a top-down crypt run sees the crypt from above (WP-TOMBS T29), whatever the
+    // other seats see.
+    if let Some(run) = crypt::crypt_run_for_view(scene) {
+        crypt::draw_crypt_scene(draw, scene, run);
+        return;
+    }
     let seconds = scene.seconds();
     let base_scene = base::BaseScene {
         bases: scene.bases,

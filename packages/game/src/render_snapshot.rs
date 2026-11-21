@@ -959,6 +959,9 @@ pub fn visible_world_size(viewport: Viewport, world_scale: f32) -> (f32, f32) {
     (width / scale, height / scale)
 }
 
+/// How much closer a seat in a top-down crypt sees the world.
+pub const CRYPT_ZOOM: f32 = 1.5;
+
 /// The camera (top-left, world pixels) that centres world pixel `(x, y)` in `viewport`.
 fn camera_for(viewport: Viewport, world_scale: f32, x: f32, y: f32) -> CameraPosition {
     let (width, height) = visible_world_size(viewport, world_scale);
@@ -989,6 +992,16 @@ fn view_snapshot(
     world_scale: f32,
 ) -> Option<ViewSnapshot<'_>> {
     let player = world.player(player_id)?;
+    // A top-down crypt (WP-TOMBS T29) is seen closer: rooms are small and bodies seen from
+    // above are smaller than side-view ones.
+    let world_scale = if world
+        .tomb_run_of(player_id)
+        .is_some_and(|run| run.site.style == fatherload_simulation::tomb::SiteStyle::TopDown)
+    {
+        world_scale * CRYPT_ZOOM
+    } else {
+        world_scale
+    };
     // On foot the camera follows the pilot (Part II F5).
     let pilot = PilotPresentation::of(world)
         .into_iter()

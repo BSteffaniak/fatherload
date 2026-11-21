@@ -7,6 +7,7 @@ use fatherload_simulation::{
     event::ImpactSurface,
     explosive::Deployment,
     item::{ItemCategory, ItemKind},
+    tomb::crypt::{CryptAttack, CryptTrapKind},
     village::VillageService,
 };
 
@@ -245,6 +246,13 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::StatueGrind => Patch::StatueGrind,
         SoundCue::ColossusSlam => Patch::ColossusSlam,
         SoundCue::MatriarchWail => Patch::MatriarchWail,
+        SoundCue::DodgeRoll => Patch::DodgeRoll,
+        SoundCue::ArrowTwang => Patch::ArrowTwang,
+        SoundCue::SpikeShing => Patch::SpikeShing,
+        SoundCue::PitDrop => Patch::PitDrop,
+        SoundCue::LordRoar => Patch::LordRoar,
+        SoundCue::StoneSlam => Patch::StoneSlam,
+        SoundCue::HexBolt => Patch::HexBolt,
     }
 }
 
@@ -311,6 +319,9 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::Arrow => SoundCue::DartFire,
         ShotKind::Rubble => SoundCue::FloorCrumble,
         ShotKind::Hex => SoundCue::FogBurst,
+        ShotKind::CryptHex => SoundCue::HexBolt,
+        ShotKind::CryptArrow => SoundCue::ArrowTwang,
+        ShotKind::Boulder => SoundCue::GateRumble,
     }
 }
 
@@ -672,6 +683,30 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         } else {
             SoundCue::PilotDown
         }),
+        // Top-down crypts (WP-TOMBS, T29): every trap warns before it bites, out loud.
+        GameplayEventKind::CryptRoll { .. } => Some(SoundCue::DodgeRoll),
+        GameplayEventKind::CryptTrap { kind, fired, .. } => match (kind, fired) {
+            (CryptTrapKind::Spikes, false) => Some(SoundCue::PickClink),
+            (CryptTrapKind::Spikes, true) => Some(SoundCue::SpikeShing),
+            (CryptTrapKind::FlameJet, false) => Some(SoundCue::FireCrackle),
+            (CryptTrapKind::FlameJet, true) => Some(SoundCue::FireWhoosh),
+            (CryptTrapKind::ArrowPlate, false) => Some(SoundCue::LeverClunk),
+            (CryptTrapKind::ArrowPlate, true) => Some(SoundCue::ArrowTwang),
+            (CryptTrapKind::BoulderChute, false) => Some(SoundCue::GateRumble),
+            (CryptTrapKind::BoulderChute, true) => Some(SoundCue::StoneSlam),
+            (CryptTrapKind::CrackedFloor, false) => Some(SoundCue::StalactiteCrack),
+            (CryptTrapKind::CrackedFloor | CryptTrapKind::Pit, true) => Some(SoundCue::PickBreak),
+            (CryptTrapKind::Pit, false) => None,
+        },
+        GameplayEventKind::CryptPitFall { .. } => Some(SoundCue::PitDrop),
+        GameplayEventKind::CryptLordPhase { .. } => Some(SoundCue::LordRoar),
+        GameplayEventKind::CryptTell { attack, .. } => match attack {
+            CryptAttack::Slam => Some(SoundCue::MachineCharge),
+            CryptAttack::Fan | CryptAttack::Ring | CryptAttack::Spiral => Some(SoundCue::HexBolt),
+            CryptAttack::Charge => Some(SoundCue::AlphaHowl),
+        },
+        GameplayEventKind::CryptSlam { .. } => Some(SoundCue::StoneSlam),
+        GameplayEventKind::CryptSummon { .. } => Some(SoundCue::CreatureScreech),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -948,7 +983,14 @@ mod tests {
             | GameplayEventKind::TombMemberDowned { .. }
             | GameplayEventKind::TombRunEnded { .. }
             | GameplayEventKind::TombTrapSprung { .. }
-            | GameplayEventKind::TombGuardianPhase { .. } => {}
+            | GameplayEventKind::TombGuardianPhase { .. }
+            | GameplayEventKind::CryptRoll { .. }
+            | GameplayEventKind::CryptTrap { .. }
+            | GameplayEventKind::CryptPitFall { .. }
+            | GameplayEventKind::CryptLordPhase { .. }
+            | GameplayEventKind::CryptTell { .. }
+            | GameplayEventKind::CryptSlam { .. }
+            | GameplayEventKind::CryptSummon { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1231,6 +1273,45 @@ mod tests {
                 phase: 2,
                 x: 0,
                 y: 0,
+            },
+            GameplayEventKind::CryptRoll {
+                player_id,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::CryptTrap {
+                kind: CryptTrapKind::Spikes,
+                x: 0,
+                y: 0,
+                fired: true,
+            },
+            GameplayEventKind::CryptPitFall {
+                player_id,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::CryptLordPhase {
+                phase: 2,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::CryptTell {
+                kind: EnemyKind::CryptLord,
+                attack: CryptAttack::Ring,
+                x: 0,
+                y: 0,
+                aim_x: 0,
+                aim_y: 0,
+            },
+            GameplayEventKind::CryptSlam {
+                x: 0,
+                y: 0,
+                radius: 70,
+            },
+            GameplayEventKind::CryptSummon {
+                x: 0,
+                y: 0,
+                count: 3,
             },
         ]);
         for action in [
@@ -1821,6 +1902,13 @@ mod tests {
             SoundCue::StatueGrind,
             SoundCue::ColossusSlam,
             SoundCue::MatriarchWail,
+            SoundCue::DodgeRoll,
+            SoundCue::ArrowTwang,
+            SoundCue::SpikeShing,
+            SoundCue::PitDrop,
+            SoundCue::LordRoar,
+            SoundCue::StoneSlam,
+            SoundCue::HexBolt,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

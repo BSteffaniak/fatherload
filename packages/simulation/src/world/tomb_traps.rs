@@ -514,18 +514,8 @@ impl WorldState {
         let _ = self.tombs.site_runs.insert(site, run);
     }
 
-    /// Moves `player`'s run straight to floor `floor` (written over the current one, the party
-    /// at its start): tests and scenes reach the guardian's floor.
-    pub fn scenario_tomb_floor(&mut self, player: PlayerId, floor: u8) {
-        let Some(id) = self.tombs.run_id_of(player) else {
-            return;
-        };
-        let previous = self.tombs.runs.get(&id).map(Self::tomb_floor_of);
-        if let Some(run) = self.tombs.runs.get_mut(&id) {
-            run.floor = floor.min(run.site.floors().saturating_sub(1));
-        }
-        self.write_tomb_floor(id, previous);
-    }
+    // `scenario_tomb_floor` (moving a run straight to a floor, both styles) lives with the
+    // crypt scenarios in `world/crypts.rs`.
 
     /// Wakes `kind` as `player`'s run's guardian at the boss room's spawn (its health scaled
     /// like a real one, the room's ambush marked sprung). Returns the guardian, if the floor has

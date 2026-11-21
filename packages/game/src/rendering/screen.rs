@@ -49,7 +49,7 @@ pub(super) struct UiFrame<'a, 'w> {
 }
 
 /// A view's rect in UI canvas art pixels.
-fn view_rect(view: &ViewSnapshot<'_>) -> Rectangle {
+pub(super) fn view_rect(view: &ViewSnapshot<'_>) -> Rectangle {
     ui_kit::canvas().viewport_rect(view.viewport)
 }
 

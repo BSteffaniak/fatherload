@@ -199,6 +199,9 @@ pub struct TouchContext {
     /// On foot: a lever, chest or keycard door is in reach, or a rig link can call the rig
     /// (the USE button shows).
     pub usable: bool,
+    /// On foot in a top-down crypt (WP-TOMBS T29): the stick walks eight ways (no drill lock),
+    /// the right thumb's FIRE aims anywhere while held, and ROLL replaces JUMP.
+    pub crypt: bool,
 }
 
 /// Where the first seat's pilot is, as the touch controls see it.
@@ -286,6 +289,8 @@ pub enum TouchControl {
     Thrust,
     /// On foot: hold to jump, and in the air to burn the jetpack.
     Jump,
+    /// In a top-down crypt: the dodge roll (the jump button's crypt meaning).
+    Roll,
     /// Climb out of the rig (a small top-row button, away from the thumbs).
     ExitRig,
     /// On foot beside the rig: climb back in.
@@ -399,7 +404,9 @@ impl TouchLayout {
         match context.mode {
             TouchMode::Play => {
                 layout.push_top(screen, settings.left_handed, play_top_row(context));
-                if context.pilot.on_foot() {
+                if context.pilot.on_foot() && context.crypt {
+                    layout.push_crypt(cluster, context);
+                } else if context.pilot.on_foot() {
                     layout.push_foot(cluster, context);
                 } else if tools_open {
                     // The fan takes the thumb corner over; only its own button stays.
@@ -508,6 +515,26 @@ impl TouchLayout {
         }
         if context.pilot_armed {
             push(TouchControl::CycleWeapon, OUTER);
+        }
+    }
+
+    /// In a top-down crypt (WP-TOMBS T29): the big FIRE button under the right thumb is the
+    /// aim stick (held fires, dragged aims anywhere), ROLL beside it, USE above when a lever,
+    /// cache, shrine or the stairs are in reach, the explosive and the weapon swap further out.
+    fn push_crypt(&mut self, cluster: Cluster, context: TouchContext) {
+        let mut push = |control, slot| self.controls.push((control, cluster.place(slot)));
+        push(TouchControl::Fire, PRIMARY);
+        push(TouchControl::Roll, SIDE);
+        push(TouchControl::Bomb, DIAGONAL);
+        push(TouchControl::CycleExplosive, FAR_DIAGONAL);
+        if context.usable {
+            push(TouchControl::Use, UPPER);
+        }
+        if context.charges_out {
+            push(TouchControl::Detonate, FAR_UPPER);
+        }
+        if context.pilot_armed {
+            push(TouchControl::CycleWeapon, FAR_SIDE);
         }
     }
 
@@ -684,6 +711,8 @@ pub struct TouchInput {
     fingers: BTreeMap<i32, Finger>,
     mapper: PadMapper,
     tools_open: bool,
+    /// The last frame's context was a crypt: the stick has no drill lock.
+    crypt: bool,
 }
 
 impl TouchInput {
@@ -705,6 +734,7 @@ impl TouchInput {
         let mut frame = TouchFrame::default();
         let mut pressed = Vec::new();
         let mut released = Vec::new();
+        self.crypt = context.crypt;
         if !context.has_tools() {
             self.tools_open = false;
         }
@@ -858,7 +888,7 @@ impl TouchInput {
                         dy *= scale;
                         *base = (finger.x - dx, finger.y - dy);
                     }
-                    let (x, y) = stick_axes(dx / radius, dy / radius);
+                    let (x, y) = stick_axes(dx / radius, dy / radius, !self.crypt);
                     pad.left_x = x;
                     pad.left_y = y;
                     view.stick = Some((*base, (finger.x, finger.y)));
@@ -924,6 +954,7 @@ impl TouchInput {
             TouchControl::Fire
             | TouchControl::Thrust
             | TouchControl::Jump
+            | TouchControl::Roll
             | TouchControl::Detonate
             | TouchControl::Bomb
             | TouchControl::Rope => {}
@@ -955,7 +986,7 @@ impl TouchInput {
                     }
                 }
                 TouchControl::Thrust => input.thrust = true,
-                TouchControl::Jump => input.jump = true,
+                TouchControl::Jump | TouchControl::Roll => input.jump = true,
                 _ => {}
             }
         }
@@ -1004,14 +1035,14 @@ impl Finger {
 }
 
 /// Shapes the thumb's offset (fractions of the stick radius) into controller stick axes: a
-/// small touch deadzone rescaled to start just past the controller's own, and no sideways
-/// drift while pushing steeply down.
-fn stick_axes(x: f32, y: f32) -> (f32, f32) {
+/// small touch deadzone rescaled to start just past the controller's own, and (with
+/// `drill_lock`, everywhere but a crypt) no sideways drift while pushing steeply down.
+fn stick_axes(x: f32, y: f32, drill_lock: bool) -> (f32, f32) {
     let travel = x.hypot(y).min(1.0);
     if travel < TOUCH_DEADZONE {
         return (0.0, 0.0);
     }
-    let x = if y > 0.0 && x.abs() < y * DRILL_LOCK_RATIO {
+    let x = if drill_lock && y > 0.0 && x.abs() < y * DRILL_LOCK_RATIO {
         0.0
     } else {
         x

@@ -203,6 +203,10 @@ enum SeatLoop {
     TombRun,
     /// The guardian's theme while a side-view tomb's guardian is awake.
     TombBoss,
+    /// A crypt run's music (WP-TOMBS T29).
+    Crypt,
+    /// The crypt lord's theme while it fights.
+    CryptBoss,
 }
 
 /// Where a local seat hears from.
@@ -740,6 +744,7 @@ impl Director {
         self.sky_ambience(live, listener, terrain);
         self.prowl_ambience(live, listener, &snapshot.enemies);
         self.tomb_music(live, listener, snapshot.tombs);
+        self.crypt_music(live, listener, snapshot.tombs);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -962,6 +967,40 @@ impl Director {
             SeatLoop::TombBoss,
             Patch::TombBossLoop,
             (if boss { 0.5 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+    }
+
+    /// A crypt run's music (WP-TOMBS T29): the crypt's drone and bells while the seat's player
+    /// is in a top-down crypt, the crypt lord's war drums instead while it fights.
+    fn crypt_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        tombs: &fatherload_simulation::tomb::Tombs,
+    ) {
+        use fatherload_simulation::tomb::SiteStyle;
+        let run = tombs
+            .run_of(listener.player_id)
+            .filter(|run| run.site.style == SiteStyle::TopDown);
+        let boss = run.is_some_and(|run| run.boss.is_some() && !run.boss_defeated);
+        let (crypt, lord) = match (run.is_some(), boss) {
+            (true, true) => (0.0, 0.55),
+            (true, false) => (0.42, 0.0),
+            _ => (0.0, 0.0),
+        };
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Crypt,
+            Patch::CryptLoop,
+            (crypt, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::CryptBoss,
+            Patch::CryptBossLoop,
+            (lord, 0.0, 1.0, OPEN_CUTOFF),
         );
     }
 

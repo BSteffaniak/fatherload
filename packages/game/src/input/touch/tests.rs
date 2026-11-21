@@ -21,6 +21,7 @@ const PLAY: TouchContext = TouchContext {
     pilot_armed: false,
     rope: false,
     usable: false,
+    crypt: false,
 };
 
 const ARMED: TouchContext = TouchContext {
@@ -556,7 +557,22 @@ fn contexts() -> Vec<TouchContext> {
                         [true; KIT_COUNT]
                     },
                     pilot,
+                    crypt: false,
                 });
+                if pilot.on_foot() && mode == TouchMode::Play {
+                    contexts.push(TouchContext {
+                        mode,
+                        armed: bits & 1 != 0,
+                        charges_out: bits & 2 != 0,
+                        prompt: bits & 4 != 0,
+                        pilot_armed: bits & 1 != 0,
+                        rope: false,
+                        usable: bits & 4 != 0,
+                        kits: [false; KIT_COUNT],
+                        pilot,
+                        crypt: true,
+                    });
+                }
             }
         }
     }
