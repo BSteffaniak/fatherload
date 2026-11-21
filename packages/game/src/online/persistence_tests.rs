@@ -19,7 +19,9 @@ use crate::{
 };
 
 const FRAME: Duration = Duration::from_millis(5);
-const WAIT: Duration = Duration::from_secs(10);
+/// Upper bound for one wait: each ends as soon as its condition holds, so this only has to
+/// outlast a debug build on a heavily loaded machine (it never weakens a check).
+const WAIT: Duration = Duration::from_secs(60);
 
 fn host_identity() -> LocalIdentity {
     LocalIdentity {
@@ -280,9 +282,19 @@ fn friends_rejoin_a_reloaded_save_over_real_quic() {
         "in game",
         |runtimes| in_game(runtimes[1]) && in_game(runtimes[2]),
     );
-    run_for(
+    // At least 1.2 s of play, and until each client applied a few server frames (a loaded
+    // machine runs fewer frames in a fixed window).
+    let window = Instant::now() + Duration::from_millis(1_200);
+    run_until(
         &mut [&mut hana, &mut alex, &mut robin],
-        Duration::from_millis(1_200),
+        "a few server frames on each client",
+        |runtimes| {
+            Instant::now() >= window
+                && runtimes[1..].iter().all(|runtime| {
+                    matches!(&**runtime, Runtime::Client(client)
+                        if client.session().stats().frames_received >= 30)
+                })
+        },
     );
     for runtime in [&alex, &robin] {
         let Runtime::Client(client) = runtime else {

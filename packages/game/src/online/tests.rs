@@ -24,8 +24,10 @@ use super::{
 
 /// Real-time frame step for the test loop.
 const FRAME: Duration = Duration::from_millis(5);
-/// Upper bound for any single wait in the test.
-const WAIT: Duration = Duration::from_secs(8);
+/// Upper bound for any single wait in the test. Every wait ends as soon as its condition holds,
+/// so this only has to outlast a debug build on a heavily loaded machine (a welcome of the
+/// heavily dug world regenerates its terrain client side); it never makes a check weaker.
+const WAIT: Duration = Duration::from_secs(60);
 
 struct Host {
     session: HostSession<WorldState>,
@@ -192,13 +194,6 @@ fn run_until(
     }
 }
 
-fn run_for(host: &mut Host, peers: &mut [&mut Peer], duration: Duration) {
-    let end = Instant::now() + duration;
-    run_until(host, peers, "the scripted play window", |_, _| {
-        Instant::now() >= end
-    });
-}
-
 #[test]
 #[allow(
     clippy::large_stack_arrays,
@@ -247,10 +242,15 @@ fn host_and_two_clients_play_over_real_quic_rejoin_and_end_cleanly() {
     );
     alice.scripted = false;
     bob.scripted = false;
-    run_for(
+    // The quiet settle lasts at least 800 ms and until every issued action resolved and enough
+    // authority hashes were compared (a loaded machine runs fewer frames per second, which
+    // used to leave the counts short after a fixed window).
+    let settle = Instant::now() + Duration::from_millis(800);
+    run_until(
         &mut host,
         &mut [&mut alice, &mut bob],
-        Duration::from_millis(800),
+        "every action resolved and hashes compared",
+        |host, peers| Instant::now() >= settle && peers.iter().all(|peer| settled(host, peer)),
     );
 
     for peer in [&alice, &bob] {
@@ -299,10 +299,12 @@ fn host_and_two_clients_play_over_real_quic_rejoin_and_end_cleanly() {
         Some(bob_player),
         "the reconnect token restores the same player"
     );
-    run_for(
+    let window = Instant::now() + Duration::from_millis(500);
+    run_until(
         &mut host,
         &mut [&mut alice, &mut bob_again],
-        Duration::from_millis(500),
+        "bob's first compared hash after the rejoin",
+        |_, peers| Instant::now() >= window && peers[1].hash_matches > 0,
     );
     assert!(bob_again.hash_matches > 0);
 
@@ -349,7 +351,13 @@ fn clients_join_and_rejoin_a_heavily_dug_world_over_real_quic() {
         |_, peers| peers[0].client.session().phase() == ClientPhase::InGame,
     );
     let carol_player = carol.player().expect("carol has a player");
-    run_for(&mut host, &mut [&mut carol], Duration::from_secs(1));
+    let window = Instant::now() + Duration::from_secs(1);
+    run_until(
+        &mut host,
+        &mut [&mut carol],
+        "carol's first compared hash",
+        |_, peers| Instant::now() >= window && peers[0].hash_matches > 0,
+    );
     let client_diffs = carol
         .client
         .session()
@@ -387,16 +395,29 @@ fn clients_join_and_rejoin_a_heavily_dug_world_over_real_quic() {
         |_, peers| peers[0].client.session().phase() == ClientPhase::InGame,
     );
     assert_eq!(carol_again.player(), Some(carol_player));
-    run_for(
+    let window = Instant::now() + Duration::from_millis(800);
+    run_until(
         &mut host,
         &mut [&mut carol_again],
-        Duration::from_millis(800),
+        "carol's first compared hash after the rejoin",
+        |_, peers| Instant::now() >= window && peers[0].hash_matches > 0,
     );
     assert!(carol_again.hash_matches > 0);
     assert_eq!(carol_again.client.session().stats().hash_mismatches, 0);
 
     end_session_and_await_clients(host, [carol_again]);
     carol.client.shutdown_blocking();
+}
+
+/// Whether every action `peer` issued has resolved on the host and more than ten authority
+/// hashes were compared (what [`assert_actions_resolved_once`] then checks exactly).
+fn settled(host: &Host, peer: &Peer) -> bool {
+    let Some(player) = peer.player() else {
+        return false;
+    };
+    let resolved = host.resolved.get(&player).map_or(0, Vec::len);
+    u64::try_from(resolved).expect("small") >= peer.client.session().actions_issued()
+        && peer.hash_matches > 10
 }
 
 /// Every action `peer` issued resolved exactly once on the host, and its authority hashes

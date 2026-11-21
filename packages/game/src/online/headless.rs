@@ -2,13 +2,17 @@
 //! built from exactly the pieces the app uses ([`HostNet`] + `HostSession`, [`OnlineClient`]).
 //!
 //! ```text
-//! fatherload --headless-host [addr] [--duration SECS] [--lan]
+//! fatherload --headless-host [addr] [--duration SECS] [--lan] [--until-empty]
 //! fatherload --bot-client <addr> [--count N] [--duration SECS]
 //! ```
 //!
-//! Both print `key=value` stats lines periodically. The host prints `HOST_READY addr=<addr>`
-//! once bound. With `--duration` they end cleanly after that long (the host ends the session for
-//! its clients; bots leave); bots also exit cleanly when the host ends the session.
+//! Both print `key=value` stats lines periodically (the host also whenever its client count
+//! changes, so a short visit always shows). The host prints `HOST_READY addr=<addr>` once bound.
+//! With `--duration` they end cleanly after that long (the host ends the session for its
+//! clients; bots leave); a bot's duration is play time, counted once every bot is in game, so a
+//! slow join on a loaded machine does not eat it (joining is bounded by its own timeout). With
+//! `--until-empty` the host ends once a client has come and every client has gone. Bots also
+//! exit cleanly when the host ends the session.
 
 use std::{
     io::Write,
@@ -36,7 +40,9 @@ const STATS_INTERVAL: Duration = Duration::from_secs(1);
 /// Loop sleep between frames (the sessions run fixed ticks from measured real time).
 const FRAME_SLEEP: Duration = Duration::from_millis(4);
 /// How long a bot waits for the welcome before giving up.
-const JOIN_TIMEOUT: Duration = Duration::from_secs(10);
+/// (Generous: a debug build on a heavily loaded machine can take several seconds; this only
+/// bounds a failure.)
+const JOIN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A parsed headless command line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,6 +55,8 @@ pub enum HeadlessMode {
         lan: bool,
         /// Stop after this long.
         duration: Option<Duration>,
+        /// End once a client has come and every client has gone (`--until-empty`).
+        until_empty: bool,
     },
     /// `--bot-client <addr> [--count N]`.
     Bots {
@@ -56,7 +64,7 @@ pub enum HeadlessMode {
         addr: SocketAddr,
         /// Number of bots.
         count: usize,
-        /// Stop after this long.
+        /// Play this long once every bot is in game.
         duration: Option<Duration>,
     },
 }
@@ -73,6 +81,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<HeadlessMode>, String> {
     let mut count = 1_usize;
     let mut duration = None;
     let mut lan = false;
+    let mut until_empty = false;
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--headless-host" => {
@@ -106,6 +115,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<HeadlessMode>, String> {
                 );
             }
             "--lan" => lan = true,
+            "--until-empty" => until_empty = true,
             other => return Err(format!("unknown argument {other}\n{}", usage())),
         }
     }
@@ -117,6 +127,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<HeadlessMode>, String> {
             }),
             lan,
             duration,
+            until_empty,
         }),
         Some(_) => Some(HeadlessMode::Bots {
             addr: addr.ok_or("--bot-client needs a host address")?,
@@ -129,7 +140,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<HeadlessMode>, String> {
 /// Command-line usage.
 #[must_use]
 pub fn usage() -> String {
-    "usage: fatherload [--headless-host [addr] [--lan] | --bot-client <addr> [--count N]] [--duration SECS]".to_owned()
+    "usage: fatherload [--headless-host [addr] [--lan] [--until-empty] | --bot-client <addr> [--count N]] [--duration SECS]".to_owned()
 }
 
 fn parse_addr(value: &str) -> Result<SocketAddr, String> {
@@ -151,7 +162,8 @@ pub fn run(mode: &HeadlessMode, out: &mut impl Write) -> Result<(), String> {
             bind,
             lan,
             duration,
-        } => run_host(*bind, *lan, *duration, out),
+            until_empty,
+        } => run_host(*bind, *lan, *duration, *until_empty, out),
         HeadlessMode::Bots {
             addr,
             count,
@@ -175,7 +187,8 @@ pub fn headless_world() -> WorldState {
     world
 }
 
-/// Runs a headless host until `duration` elapses (forever without one).
+/// Runs a headless host until `duration` elapses (forever without one) or, with `until_empty`,
+/// until a client has come and every client has gone.
 ///
 /// # Errors
 ///
@@ -184,6 +197,7 @@ pub fn run_host(
     bind: SocketAddr,
     lan: bool,
     duration: Option<Duration>,
+    until_empty: bool,
     out: &mut impl Write,
 ) -> Result<(), String> {
     let world = headless_world();
@@ -200,6 +214,8 @@ pub fn run_host(
     let mut last = started;
     let mut last_stats = started;
     let mut announced = false;
+    let mut clients_seen = 0;
+    let mut had_clients = false;
     loop {
         let now = Instant::now();
         let dt = now - last;
@@ -219,7 +235,10 @@ pub fn run_host(
             HostNetStatus::Failed(error) => return Err(format!("hosting failed: {error}")),
             _ => {}
         }
-        if now - last_stats >= STATS_INTERVAL {
+        let clients = net.connections().len();
+        had_clients |= clients > 0;
+        if now - last_stats >= STATS_INTERVAL || clients != clients_seen {
+            clients_seen = clients;
             last_stats = now;
             let (up, down) = net.byte_rates();
             let rtts: Vec<u128> = net
@@ -240,7 +259,9 @@ pub fn run_host(
             );
             let _ignored = out.flush();
         }
-        if duration.is_some_and(|duration| now - started >= duration) {
+        if duration.is_some_and(|duration| now - started >= duration)
+            || (until_empty && had_clients && clients == 0)
+        {
             session.end_session(EndReason::HostClosed);
             net.send(session.take_outbound());
             net.shutdown_blocking();
@@ -257,8 +278,8 @@ struct Bot {
     joined: bool,
 }
 
-/// Runs `count` scripted bot clients against `addr` until `duration` elapses or the host ends
-/// the session.
+/// Runs `count` scripted bot clients against `addr` until they have played `duration` (counted
+/// from the moment every bot is in game) or the host ends the session.
 ///
 /// # Errors
 ///
@@ -291,6 +312,7 @@ pub fn run_bots(
     let started = Instant::now();
     let mut last = started;
     let mut last_stats = started;
+    let mut playing_since: Option<Instant> = None;
     loop {
         let now = Instant::now();
         let dt = now - last;
@@ -320,7 +342,14 @@ pub fn run_bots(
             last_stats = now;
             print_bot_stats(&bots, out);
         }
-        if duration.is_some_and(|duration| now - started >= duration) {
+        if playing_since.is_none() && bots.iter().all(|bot| bot.joined) {
+            playing_since = Some(now);
+        }
+        if let (Some(duration), Some(since)) = (duration, playing_since)
+            && now - since >= duration
+        {
+            // The last stats line shows every bot still in game as it leaves.
+            print_bot_stats(&bots, out);
             for bot in &mut bots {
                 if let Some(client) = bot.client.take() {
                     client.leave_blocking();
@@ -451,6 +480,7 @@ mod tests {
                 bind: SocketAddr::new(std::net::Ipv4Addr::UNSPECIFIED.into(), DEFAULT_PORT),
                 lan: false,
                 duration: None,
+                until_empty: false,
             }))
         );
         assert_eq!(
@@ -459,12 +489,14 @@ mod tests {
                 "127.0.0.1:0",
                 "--duration",
                 "2.5",
-                "--lan"
+                "--lan",
+                "--until-empty"
             ])),
             Ok(Some(HeadlessMode::Host {
                 bind: "127.0.0.1:0".parse().expect("addr"),
                 lan: true,
                 duration: Some(Duration::from_millis(2_500)),
+                until_empty: true,
             }))
         );
         assert_eq!(

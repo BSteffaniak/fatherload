@@ -72,7 +72,15 @@ fn headless_host_and_bot_client_play_and_exit_cleanly() {
     let deadline = Instant::now() + DEADLINE;
     let mut host = Guard(Some(
         Command::new(BIN)
-            .args(["--headless-host", "127.0.0.1:0", "--duration", "14"])
+            // The host stays until the bot has come and gone (a fixed duration raced a slow
+            // bot on a loaded machine); the duration is only a safety cap under `DEADLINE`.
+            .args([
+                "--headless-host",
+                "127.0.0.1:0",
+                "--until-empty",
+                "--duration",
+                "50",
+            ])
             .stdout(Stdio::piped())
             .spawn()
             .expect("host starts"),
@@ -89,8 +97,8 @@ fn headless_host_and_bot_client_play_and_exit_cleanly() {
 
     let mut bot = Guard(Some(
         Command::new(BIN)
-            // Long enough to get in game on a loaded machine (joining takes ~3 s there).
-            .args(["--bot-client", &addr, "--count", "1", "--duration", "5"])
+            // Three seconds of play once in game (joining does not count against it).
+            .args(["--bot-client", &addr, "--count", "1", "--duration", "3"])
             .stdout(Stdio::piped())
             .spawn()
             .expect("bot starts"),

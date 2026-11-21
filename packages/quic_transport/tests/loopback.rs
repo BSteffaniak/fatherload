@@ -174,6 +174,11 @@ fn datagrams_are_delivered_and_oversized_ones_fall_back_to_the_stream() {
         client
             .send_unreliable(client_conn, sequenced_payload(seq, 64))
             .expect("send");
+        // Paced in bursts of ten: a starved receiver thread on a loaded machine let a single
+        // burst of a hundred overflow the loopback socket buffer (real loss, not a bug here).
+        if seq % 10 == 9 {
+            std::thread::sleep(Duration::from_millis(2));
+        }
     }
     // Larger than any datagram: must arrive once via the control stream, still `Unreliable`.
     client
@@ -195,9 +200,10 @@ fn datagrams_are_delivered_and_oversized_ones_fall_back_to_the_stream() {
         }
         _ => None,
     });
-    // Collect stragglers briefly; loopback should deliver nearly all small datagrams.
-    let deadline = Instant::now() + Duration::from_millis(300);
-    while Instant::now() < deadline {
+    // Collect stragglers (until all arrived, at most a second); loopback should deliver nearly
+    // all small datagrams.
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while small < 100 && Instant::now() < deadline {
         if let Some(NetEvent::Message { .. }) = host.recv_timeout(Duration::from_millis(20)) {
             small += 1;
         }
