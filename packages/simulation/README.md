@@ -2011,8 +2011,9 @@ entrance art and map marker, and is the same for every floor of that place.
   Rounds, Trap-Sight Lantern, Vampiric Pick, Glider Boost, Iron Lungs, Quickstep, Featherfall,
   Gravedigger, Bone Charm, Hunter's Mark, Second Wind) and 3 bargains (blessing plus curse:
   Pact of Greed, Glass Cannon, Restless Soul), with `SYNERGIES` (Skywalker, Trick Shot,
-  Bloodbound). `offers(seed, floor, member, held)` gives each member their own 3 perks and a
-  bargain. Effects (`RelicEffects`) hook in through `PilotBoons` on the pilot entity (extra
+  Bloodbound). `offers(seed, floor, member, held, style)` gives each member their own 3 perks
+  and a bargain, leaving out what does nothing in the style (`Relic::suits`: crypts never offer
+  Spring Heels, Glider Boost or Featherfall). Effects (`RelicEffects`) hook in through `PilotBoons` on the pilot entity (extra
   jumps, move and jump speed, glide, featherfall, trap sight; `step_pilot` reads them), the
   pilot's max health and regeneration, `damage_pilot` (damage taken), `damage_entity`
   (damage dealt, the vampiric heal), projectiles (`ProjectileState::bounces`, ricochets off

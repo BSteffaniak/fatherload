@@ -777,6 +777,7 @@ impl WorldState {
         }
         let seed = run.site.seed ^ u64::from(run.run);
         let floor = run.floor;
+        let style = run.site.style;
         run.phase = RunPhase::Picking;
         run.checkpoint = None;
         run.picking_since = Some(now);
@@ -786,6 +787,7 @@ impl WorldState {
                 floor,
                 u8::try_from(index).unwrap_or(u8::MAX),
                 &member.relics,
+                style,
             );
             member.picked = false;
         }

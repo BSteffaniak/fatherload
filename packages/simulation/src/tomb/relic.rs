@@ -21,7 +21,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::worldgen::noise::RegionRng;
 
+use super::SiteStyle;
+
 const SALT_OFFERS: u64 = 0x70B5_4E11_0003;
+
+impl Relic {
+    /// Whether the relic does anything in a run of `style`: jumping, gliding and falling are
+    /// side-view things, so a top-down crypt never offers Spring Heels, Glider Boost or
+    /// Featherfall (T29: revisit when the crypt's own movement has a dodge or a hop).
+    #[must_use]
+    pub const fn suits(self, style: SiteStyle) -> bool {
+        match style {
+            SiteStyle::SideView => true,
+            SiteStyle::TopDown => !matches!(
+                self,
+                Self::SpringHeels | Self::GliderBoost | Self::Featherfall
+            ),
+        }
+    }
+}
 
 /// Whether a relic is a plain perk or a risk-reward bargain.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -426,17 +444,21 @@ pub fn synergies_of(relics: &[Relic]) -> Vec<&'static Synergy> {
 /// Perks offered between floors (plus one bargain).
 pub const PERK_OFFERS: usize = 3;
 
-/// The relics offered to party member `member` after floor `floor` of a run (pure).
+/// The relics offered to party member `member` after floor `floor` of a run of a `style` site
+/// (pure).
 ///
-/// Rolled from the run seed `seed`, leaving out relics already `held`: [`PERK_OFFERS`] perks,
-/// then one bargain when any is left.
+/// Rolled from the run seed `seed`, leaving out relics already `held` and those that do
+/// nothing in the style ([`Relic::suits`]): [`PERK_OFFERS`] perks, then one bargain when any
+/// is left.
 #[must_use]
-pub fn offers(seed: u64, floor: u8, member: u8, held: &[Relic]) -> Vec<Relic> {
+pub fn offers(seed: u64, floor: u8, member: u8, held: &[Relic], style: SiteStyle) -> Vec<Relic> {
     let mut rng = RegionRng::new(seed, SALT_OFFERS, i32::from(floor), i32::from(member));
     let mut perks: Vec<Relic> = Relic::ALL
         .iter()
         .copied()
-        .filter(|relic| relic.kind() == RelicKind::Perk && !held.contains(relic))
+        .filter(|relic| {
+            relic.kind() == RelicKind::Perk && relic.suits(style) && !held.contains(relic)
+        })
         .collect();
     let mut chosen = Vec::new();
     while chosen.len() < PERK_OFFERS && !perks.is_empty() {
@@ -446,7 +468,9 @@ pub fn offers(seed: u64, floor: u8, member: u8, held: &[Relic]) -> Vec<Relic> {
     let bargains: Vec<Relic> = Relic::ALL
         .iter()
         .copied()
-        .filter(|relic| relic.kind() == RelicKind::Bargain && !held.contains(relic))
+        .filter(|relic| {
+            relic.kind() == RelicKind::Bargain && relic.suits(style) && !held.contains(relic)
+        })
         .collect();
     if !bargains.is_empty() {
         let pick = usize::try_from(rng.next_u64() % bargains.len() as u64).unwrap_or(0);
@@ -490,8 +514,8 @@ mod tests {
     #[test]
     fn offers_are_pure_distinct_and_skip_held_relics() {
         let held = [Relic::Quickstep];
-        let first = offers(42, 1, 0, &held);
-        assert_eq!(first, offers(42, 1, 0, &held));
+        let first = offers(42, 1, 0, &held, SiteStyle::SideView);
+        assert_eq!(first, offers(42, 1, 0, &held, SiteStyle::SideView));
         assert_eq!(first.len(), PERK_OFFERS + 1);
         assert!(!first.contains(&Relic::Quickstep));
         assert_eq!(
@@ -503,6 +527,24 @@ mod tests {
         sorted.dedup();
         assert_eq!(sorted.len(), first.len());
         // Members get their own picks.
-        assert!((0..4).any(|member| offers(42, 1, member, &held) != first));
+        assert!((0..4).any(|member| offers(42, 1, member, &held, SiteStyle::SideView) != first));
+    }
+
+    #[test]
+    fn crypts_never_offer_side_view_movement() {
+        for seed in 0..64 {
+            for relic in offers(seed, 0, 0, &[], SiteStyle::TopDown) {
+                assert!(relic.suits(SiteStyle::TopDown), "{relic:?}");
+                assert!(!matches!(
+                    relic,
+                    Relic::SpringHeels | Relic::GliderBoost | Relic::Featherfall
+                ));
+            }
+        }
+        assert!(
+            Relic::ALL
+                .iter()
+                .all(|relic| relic.suits(SiteStyle::SideView))
+        );
     }
 }
