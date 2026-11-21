@@ -316,6 +316,21 @@ impl WorldState {
         discovered.len() - before
     }
 
+    /// Reveals every tile of `rect` (clamped to the map) for `player_id` (a tomb room the party
+    /// walks into, WP-TOMBS).
+    pub(crate) fn reveal_rect(
+        &mut self,
+        player_id: PlayerId,
+        rect: crate::worldgen::features::TileRect,
+    ) {
+        let discovered = self.discovered_tiles.entry(player_id).or_default();
+        for y in rect.min.y.max(self.terrain.min_y())..=rect.max.y.min(self.terrain.height() - 1) {
+            for x in rect.min.x.max(self.terrain.min_x())..=rect.max.x.min(self.terrain.max_x()) {
+                discovered.reveal(TilePosition { x, y });
+            }
+        }
+    }
+
     /// Reveals the area around every rig (once per tick). Allocation-free unless a tile is new.
     pub(super) fn reveal_tiles_near_players(&mut self) {
         // Pilots on foot reveal the map around themselves too (Part II F5).

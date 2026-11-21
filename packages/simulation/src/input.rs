@@ -96,6 +96,7 @@ pub struct TickInputs {
 
 impl TickInputs {
     /// Adds `controls` for `player` (bots in the balance harness).
+    #[must_use]
     pub fn hold_as(mut self, player: PlayerId, controls: ControlState) -> Self {
         self.players.entry(player).or_default().controls = Some(controls);
         self

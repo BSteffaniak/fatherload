@@ -40,6 +40,7 @@ mod sky_hud;
 mod story;
 pub mod terrain;
 mod title;
+mod tomb_hud;
 pub mod touch_controls;
 mod ui_kit;
 #[cfg(not(target_os = "emscripten"))]
@@ -714,6 +715,7 @@ impl GameRenderer {
                     clock_state: snapshot.clock_state,
                     talk_target: view.talk_target.as_ref().map(|(npc, _)| *npc),
                     homes: snapshot.homes,
+                    tombs: snapshot.tombs,
                 },
             );
         }

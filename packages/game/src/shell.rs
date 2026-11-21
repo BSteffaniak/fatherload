@@ -38,6 +38,7 @@ mod quests;
 pub mod rewards;
 mod story;
 mod test_mode;
+pub mod tombs;
 mod village;
 mod world_setup;
 
@@ -146,6 +147,13 @@ pub enum ModalScreen {
     /// The seat's story journal (WP-STORY): stories under way with their text, stories told,
     /// giving one up. Between the quest log and the milestones in the map's page cycle.
     Journal,
+    /// The relic pick between tomb floors (WP-TOMBS, `shell/tombs.rs`): opens by itself.
+    RelicPick,
+    /// A tomb run's summary: cleared, made it out or party lost (opens by itself).
+    TombSummary,
+    /// The tomb codex: relics found, tomb maps, trophies and lore pages (after the milestones
+    /// in the map's page cycle).
+    TombCodex,
 }
 
 impl ModalScreen {
@@ -1040,6 +1048,8 @@ pub struct SeatUi {
     pub journal: SeatJournal,
     /// The latest story moment card (a new story, its climax, its end).
     pub story_moment: Option<StoryMoment>,
+    /// Tomb runs (WP-TOMBS): which run summary the seat has shown.
+    pub tomb: tombs::SeatTomb,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1085,6 +1095,7 @@ impl SeatUi {
             home: homes::SeatHome::new(),
             journal: SeatJournal::new(),
             story_moment: None,
+            tomb: tombs::SeatTomb::new(),
         }
     }
 
@@ -1155,6 +1166,8 @@ impl SeatUi {
         if self.build.is_some() {
             return self.handle_build(input, ctx, cues, requests);
         }
+        // Tomb runs (WP-TOMBS): the relic pick and the run summary open by themselves.
+        self.watch_tomb(ctx, cues);
         if input.inventory && self.modal != Some(ModalScreen::Inventory) {
             // The inventory's hopper rows start at the top.
             self.selected_menu_item = 0;
@@ -1410,6 +1423,18 @@ impl SeatUi {
             self.handle_journal(input, ctx, cues, requests);
             return true;
         }
+        if modal == ModalScreen::RelicPick {
+            self.handle_relic_pick(input, ctx, cues, requests);
+            return true;
+        }
+        if modal == ModalScreen::TombSummary {
+            self.handle_tomb_summary(input, cues);
+            return true;
+        }
+        if modal == ModalScreen::TombCodex {
+            self.handle_tomb_codex(input, cues);
+            return true;
+        }
         if input.backs_out() {
             self.modal = None;
             return true;
@@ -1532,7 +1557,8 @@ impl SeatUi {
                 None
             }
             ModalScreen::Achievements => {
-                self.modal = Some(ModalScreen::Map);
+                // The tomb codex (WP-TOMBS) comes after the milestones.
+                self.open_modal(ModalScreen::TombCodex);
                 None
             }
             ModalScreen::QuestDesk => self.confirm_quest_desk(ctx, cues),
@@ -1615,7 +1641,10 @@ impl SeatUi {
             | ModalScreen::BaseModule
             | ModalScreen::Colony
             | ModalScreen::Home
-            | ModalScreen::Journal => None,
+            | ModalScreen::Journal
+            | ModalScreen::RelicPick
+            | ModalScreen::TombSummary
+            | ModalScreen::TombCodex => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len()

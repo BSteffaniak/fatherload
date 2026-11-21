@@ -53,6 +53,7 @@ pub mod sky_isles;
 pub mod sky_lands;
 mod speed_fx;
 mod surface;
+mod tombs;
 mod villages;
 mod weapons;
 
@@ -151,6 +152,8 @@ pub(super) struct WorldScene<'a> {
     pub talk_target: Option<fatherload_simulation::entity::EntityId>,
     /// Plots, building sites and homes (WP-HOME).
     pub homes: &'a fatherload_simulation::home::Homes,
+    /// Tomb runs (WP-TOMBS): crypt floors, trap sight and downed members.
+    pub tombs: &'a fatherload_simulation::tomb::Tombs,
 }
 
 impl WorldScene<'_> {
@@ -235,6 +238,22 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     sky_continents::draw_continent_backs(draw, scene.terrain, scene.visible);
     sky_continents::draw_sky_cities(draw, scene.terrain, scene.visible, seconds);
     scene.terrain_renderer.draw(draw, scene.visible);
+    // Tomb runs (WP-TOMBS): the top-down crypt floor's flagstones over its open tiles.
+    tombs::draw_tomb_floors(
+        draw,
+        scene.terrain,
+        scene.tombs,
+        scene.explored,
+        scene.visible,
+    );
+    tombs::draw_tomb_marks(
+        draw,
+        scene.terrain,
+        scene.tombs,
+        scene.pilots,
+        scene.visible,
+        seconds,
+    );
     sky_continents::draw_continent_fronts(draw, scene.terrain, scene.visible, seconds);
     surface::draw_flora(draw, &scene.sky.surface, scene.terrain, scene.visible);
     surface::draw_water(draw, scene.terrain, scene.visible, scene.ticks);
@@ -331,6 +350,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         }
     }
     pilot::draw_pilots(draw, scene.pilots, scene.visible, scene.ticks);
+    tombs::draw_downed(draw, scene.tombs, scene.pilots, seconds);
     enemies::draw_rig_hits(draw, scene.players, scene.rig_guards, scene.ticks);
     if let Some(drill) = scene.active_drill {
         fx::draw_drill_debris(draw, scene.terrain, drill, scene.ticks);

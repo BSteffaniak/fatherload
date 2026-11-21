@@ -426,9 +426,10 @@ pub fn synergies_of(relics: &[Relic]) -> Vec<&'static Synergy> {
 /// Perks offered between floors (plus one bargain).
 pub const PERK_OFFERS: usize = 3;
 
-/// The relics offered to member `member` (its index in the party) after floor `floor` of a
-/// run with seed `seed`, leaving out relics already `held`: [`PERK_OFFERS`] perks, then one
-/// bargain when any is left. Pure.
+/// The relics offered to party member `member` after floor `floor` of a run (pure).
+///
+/// Rolled from the run seed `seed`, leaving out relics already `held`: [`PERK_OFFERS`] perks,
+/// then one bargain when any is left.
 #[must_use]
 pub fn offers(seed: u64, floor: u8, member: u8, held: &[Relic]) -> Vec<Relic> {
     let mut rng = RegionRng::new(seed, SALT_OFFERS, i32::from(floor), i32::from(member));

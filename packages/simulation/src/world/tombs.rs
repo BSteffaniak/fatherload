@@ -23,6 +23,13 @@
 //! * **Death** ([`WorldState::down_tomb_member`]): a member at zero health is downed instead of
 //!   dying; when every member is down the run ends and the unbanked loot is lost.
 
+#![allow(
+    clippy::suboptimal_flops,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    reason = "world pixels and small spawn indices convert freely here"
+)]
+
 use crate::{
     base::BuiltTile,
     entity::{EntityId, EntityKind, EntityState},
@@ -82,7 +89,7 @@ pub const fn guardian_hoard(tier: u8) -> u32 {
 
 /// Whether a V10 ruin chest at `tile` also holds a tomb key (one in five).
 #[must_use]
-pub fn chest_holds_tomb_key(seed: u64, tile: TilePosition) -> bool {
+pub const fn chest_holds_tomb_key(seed: u64, tile: TilePosition) -> bool {
     hash2(seed, SALT_KEY, tile.x, tile.y).is_multiple_of(5)
 }
 
@@ -152,7 +159,7 @@ impl WorldState {
     /// Whether `tile` is inside the run vault (a run space: no cave water, critters, heat or
     /// cave-ins; enemies there are always hostile).
     #[must_use]
-    pub fn in_run_space(&self, tile: TilePosition) -> bool {
+    pub const fn in_run_space(&self, tile: TilePosition) -> bool {
         tomb_sites::in_vault(self.terrain.settings(), tile)
     }
 
@@ -578,8 +585,8 @@ impl WorldState {
     /// Puts the run's view, relic boons and relic health on `player`'s pilot (or takes them
     /// off outside a run).
     pub(super) fn refresh_tomb_pilot(&mut self, player: PlayerId) {
-        let (view, effects, downed) = self.tombs.run_of(player).map_or(
-            (PilotView::Side, RelicEffects::default(), false),
+        let (view, effects, downed) = self.tombs.run_of(player).map_or_else(
+            || (PilotView::Side, RelicEffects::default(), false),
             |run| {
                 let member = run.member(player);
                 (
@@ -688,7 +695,7 @@ impl WorldState {
         )]
         let value = (base as f32 * RelicEffects::scale(effects.loot_pct)).round() as u32;
         let roll = hash2(seed, SALT_KEY, tile.x, tile.y);
-        let key = roll % 6 == 0;
+        let key = roll.is_multiple_of(6);
         let lore = (roll % 4 == 1)
             .then(|| u8::try_from((roll >> 8) % LORE_PAGES.len() as u64).unwrap_or(0));
         let _ = self
@@ -924,6 +931,7 @@ impl WorldState {
             if !self.tombs.runs.contains_key(&id) {
                 continue;
             }
+            self.reveal_tomb_rooms(id);
             self.spring_ambushes(id, output);
             self.track_guardian(id, output);
             self.advance_traps(id, output);
@@ -949,6 +957,34 @@ impl WorldState {
             .collect();
         for player in gone {
             self.abandon_tomb_run(player, output);
+        }
+    }
+
+    /// Every room a standing member is in is revealed for the whole party (rooms light up as
+    /// the party walks in; the rest of the floor stays dark).
+    fn reveal_tomb_rooms(&mut self, id: u32) {
+        let Some(run) = self.tombs.runs.get(&id) else {
+            return;
+        };
+        let mut rooms: Vec<TileRect> = Vec::new();
+        for member in run.members.iter().filter(|member| !member.is_downed()) {
+            let Some((_, body, state)) = self.pilot_of(member.player) else {
+                continue;
+            };
+            let (x, y) = state.middle(body);
+            let tile = tile_at(x, y);
+            if let Some(room) = run.rooms.iter().find(|room| room.interior.contains(tile)) {
+                let rect = room.interior.expanded(1);
+                if !rooms.contains(&rect) {
+                    rooms.push(rect);
+                }
+            }
+        }
+        let members: Vec<PlayerId> = run.members.iter().map(|member| member.player).collect();
+        for rect in rooms {
+            for member in &members {
+                self.reveal_rect(*member, rect);
+            }
         }
     }
 
@@ -1321,16 +1357,16 @@ impl WorldState {
         let step = index as f32 * 20.0;
         match site.style {
             SiteStyle::SideView => {
-                let side: f32 = if site.mirrored { 1.0 } else { -1.0 };
+                let outward: f32 = if site.mirrored { 1.0 } else { -1.0 };
                 #[allow(clippy::cast_precision_loss, reason = "tile rows are small")]
                 let feet = (site.door.y + 2) as f32 * TILE_SIZE - 0.25;
-                (side.mul_add(TILE_SIZE * 1.3 + step, door_x), feet)
+                (outward.mul_add(TILE_SIZE * 1.3 + step, door_x), feet)
             }
             SiteStyle::TopDown => {
                 #[allow(clippy::cast_precision_loss, reason = "tile rows are small")]
                 let feet = site.door.y as f32 * TILE_SIZE - 0.25;
-                let side: f32 = if index % 2 == 0 { 1.0 } else { -1.0 };
-                (side.mul_add(step, door_x), feet)
+                let outward: f32 = if index.is_multiple_of(2) { 1.0 } else { -1.0 };
+                (outward.mul_add(step, door_x), feet)
             }
         }
     }
@@ -1432,6 +1468,29 @@ impl WorldState {
             change(member);
         }
         self.refresh_tomb_pilot(player);
+    }
+
+    /// Ends run `id` with `outcome` (tests and scenes: the summary screens).
+    pub fn scenario_end_tomb_run(&mut self, id: u32, outcome: RunOutcome) {
+        let mut output = TickOutput::default();
+        self.end_tomb_run(id, outcome, &mut output);
+    }
+
+    /// Edits `player`'s permanent tomb unlocks (tests and scenes: the codex).
+    pub fn scenario_tomb_unlocks(
+        &mut self,
+        player: PlayerId,
+        change: impl FnOnce(&mut crate::tomb::TombUnlocks),
+    ) {
+        change(self.tombs.unlocks.entry(player).or_default());
+    }
+
+    /// Downs `player`'s pilot in its run (tests and scenes: revives).
+    pub fn scenario_down_tomb_member(&mut self, player: PlayerId) {
+        let mut output = TickOutput::default();
+        if let Some((id, _, _)) = self.pilot_of(player) {
+            let _ = self.down_tomb_member(player, id, &mut output);
+        }
     }
 
     /// Puts run `id` into its relic picks as if the stairs were taken (tests and scenes).

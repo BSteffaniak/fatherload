@@ -568,9 +568,10 @@ pub enum PilotMode {
     Tether,
 }
 
-/// How the pilot's body moves: the side-view platformer, or the top-down mode of a crypt run
-/// (WP-TOMBS: no gravity, eight-way walking; [`step_pilot`] hands it to [`step_top_down`],
-/// the placeholder T29 replaces with the real top-down movement, dodge roll and collision).
+/// How the pilot's body moves: the side-view platformer, or a crypt run's top-down mode.
+///
+/// WP-TOMBS: no gravity, eight-way walking; [`step_pilot`] hands it to [`step_top_down`], the
+/// placeholder T29 replaces with the real top-down movement, dodge roll and collision.
 #[derive(
     Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
 )]
@@ -580,9 +581,10 @@ pub enum PilotView {
     TopDown,
 }
 
-/// Run-only changes to the pilot's body from tomb relics (WP-TOMBS,
-/// [`crate::tomb::relic`]), set by the world while its owner is in a run (all zero otherwise).
-/// Public: everyone's prediction steps the same body.
+/// Run-only changes to the pilot's body from tomb relics (WP-TOMBS, [`crate::tomb::relic`]).
+///
+/// Set by the world while its owner is in a run (all zero otherwise). Public: everyone's
+/// prediction steps the same body.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct PilotBoons {
     /// Extra jumps in mid-air.
@@ -1120,11 +1122,13 @@ pub fn step_pilot(
 /// Walking speed in the top-down mode (px/s).
 pub const TOP_DOWN_SPEED: f32 = 170.0;
 
-/// One internal step of the top-down placeholder mode (WP-TOMBS crypts): no gravity, the held
-/// directions walk eight ways (up is `controls.up`, down `controls.down`), swept against the
-/// same box as the side view. **T29 replaces this** with the real top-down movement (dodge
-/// roll, its own collision footprint and camera); the [`PilotView`] flag on the state is the
-/// switch, and nothing else in the body step needs to know.
+/// One internal step of the top-down placeholder mode (WP-TOMBS crypts).
+///
+/// No gravity: the held directions walk eight ways (up is `controls.up`, down
+/// `controls.down`), swept against the same box as the side view. **T29 replaces this** with
+/// the real top-down movement (dodge roll, its own collision footprint and camera); the
+/// [`PilotView`] flag on the state is the switch, and nothing else in the body step needs to
+/// know.
 pub fn step_top_down(
     body: &mut Body,
     state: &mut PilotState,

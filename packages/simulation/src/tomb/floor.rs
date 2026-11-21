@@ -263,7 +263,7 @@ pub(crate) mod tests {
         tomb::{SiteId, SiteOpening, SiteSetting},
     };
 
-    pub(crate) fn site(style: SiteStyle, tier: u8) -> TombSite {
+    pub fn site(style: SiteStyle, tier: u8) -> TombSite {
         TombSite {
             id: SiteId::new(SiteSetting::Deep, 1, 2),
             setting: SiteSetting::Deep,

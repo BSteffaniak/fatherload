@@ -134,12 +134,19 @@ impl SiteSetting {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Deep => "deep strata",
-            Self::Mesa => "mesa",
-            Self::OldQuarter => "old quarter",
-            Self::SkyContinent => "sky continent",
-            Self::Moon => "the Moon",
+            Self::Deep => "Deep Strata",
+            Self::Mesa => "Mesa",
+            Self::OldQuarter => "Old Quarter",
+            Self::SkyContinent => "Sky Continent",
+            Self::Moon => "Moon",
         }
+    }
+
+    /// Whether sites of this setting stand on open ground (a mesa, a sky continent, the Moon)
+    /// rather than in a pocket of rock.
+    #[must_use]
+    pub const fn on_the_surface(self) -> bool {
+        matches!(self, Self::Mesa | Self::SkyContinent | Self::Moon)
     }
 
     /// The setting's stable index (site ids).

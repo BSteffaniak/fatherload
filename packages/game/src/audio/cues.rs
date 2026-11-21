@@ -598,6 +598,26 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         } else {
             SoundCue::Icing
         }),
+        // Tombs and crypts (WP-TOMBS, T27): placeholder cues from the existing patches; T28 /
+        // T29 add the run music, traps and boss themes.
+        GameplayEventKind::TombEntered { .. } => Some(SoundCue::VaultOpened),
+        GameplayEventKind::TombSeal { opened: true, .. } => Some(SoundCue::GateGrind),
+        GameplayEventKind::TombSeal { opened: false, .. } => Some(SoundCue::UiError),
+        GameplayEventKind::TombAmbush { boss: false, .. } => Some(SoundCue::CreatureScreech),
+        GameplayEventKind::TombAmbush { boss: true, .. } => Some(SoundCue::AlphaHowl),
+        GameplayEventKind::TombGuardianDefeated { .. } => Some(SoundCue::Milestone),
+        GameplayEventKind::TombFloorCleared { .. } => Some(SoundCue::PoiDiscovered),
+        GameplayEventKind::TombRelicPicked { relic: Some(_), .. }
+        | GameplayEventKind::TombShrineRested { .. } => Some(SoundCue::ShrineBlessing),
+        GameplayEventKind::TombRelicPicked { relic: None, .. } => Some(SoundCue::UiBack),
+        GameplayEventKind::TombCacheOpened { .. } => Some(SoundCue::CacheOpened),
+        GameplayEventKind::TombMemberDowned { revived: false, .. } => Some(SoundCue::PilotDown),
+        GameplayEventKind::TombMemberDowned { revived: true, .. } => Some(SoundCue::HomeSet),
+        GameplayEventKind::TombRunEnded { outcome, .. } => Some(if outcome.banks() {
+            SoundCue::Milestone
+        } else {
+            SoundCue::PilotDown
+        }),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -862,7 +882,17 @@ mod tests {
             | GameplayEventKind::NightFell { .. }
             | GameplayEventKind::NightSurvived { .. }
             | GameplayEventKind::RareNightSpawn { .. }
-            | GameplayEventKind::NightMonsterBurrowed { .. } => {}
+            | GameplayEventKind::NightMonsterBurrowed { .. }
+            | GameplayEventKind::TombEntered { .. }
+            | GameplayEventKind::TombSeal { .. }
+            | GameplayEventKind::TombAmbush { .. }
+            | GameplayEventKind::TombGuardianDefeated { .. }
+            | GameplayEventKind::TombFloorCleared { .. }
+            | GameplayEventKind::TombRelicPicked { .. }
+            | GameplayEventKind::TombShrineRested { .. }
+            | GameplayEventKind::TombCacheOpened { .. }
+            | GameplayEventKind::TombMemberDowned { .. }
+            | GameplayEventKind::TombRunEnded { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1085,6 +1115,55 @@ mod tests {
                 kind: EnemyKind::ShadowHound,
                 x: 0,
                 y: 0,
+            },
+            GameplayEventKind::TombEntered {
+                player_id,
+                style: fatherload_simulation::tomb::SiteStyle::TopDown,
+                tier: 2,
+                party: 1,
+            },
+            GameplayEventKind::TombSeal {
+                player_id: Some(player_id),
+                x: 0,
+                y: 0,
+                opening: fatherload_simulation::tomb::SiteOpening::Key,
+                opened: true,
+            },
+            GameplayEventKind::TombAmbush {
+                x: 0,
+                y: 0,
+                boss: true,
+            },
+            GameplayEventKind::TombGuardianDefeated {
+                by: Some(player_id),
+            },
+            GameplayEventKind::TombFloorCleared {
+                player_id,
+                floor: 0,
+            },
+            GameplayEventKind::TombRelicPicked {
+                player_id,
+                relic: Some(fatherload_simulation::tomb::Relic::SpringHeels),
+            },
+            GameplayEventKind::TombShrineRested {
+                player_id,
+                banked: 10,
+            },
+            GameplayEventKind::TombCacheOpened {
+                player_id,
+                value: 10,
+                key: false,
+                lore: None,
+            },
+            GameplayEventKind::TombMemberDowned {
+                player_id,
+                revived: false,
+            },
+            GameplayEventKind::TombRunEnded {
+                player_id,
+                outcome: fatherload_simulation::tomb::RunOutcome::Finished,
+                banked: 10,
+                lost: 0,
             },
         ]);
         for action in [

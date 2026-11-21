@@ -120,6 +120,10 @@ fn grid(
 /// Generates every tile of `chunk` (rows below the world read as bedrock, rows above it as
 /// air).
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "every generation layer in its order, one block each"
+)]
 pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
     let origin = chunk.origin();
     let rect = TileRect {

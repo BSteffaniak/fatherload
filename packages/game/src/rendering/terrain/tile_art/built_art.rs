@@ -29,6 +29,20 @@ const TIMBER: Ramp = ramp([SOIL_DARK, SOIL, RUST, AMBER]);
 const RUIN: Ramp = ramp([NIGHT, SLATE_DARK, TEAL_DARK, TEAL]);
 /// Old bronze for ruin mechanisms.
 const BRONZE: Ramp = ramp([SOIL_DARK, RUST, COPPER, AMBER]);
+/// Side-view tomb masonry: sun-baked sandstone (WP-TOMBS).
+const TOMB_SANDSTONE: Ramp = ramp([SOIL, LOAM, CLAY, SAND]);
+/// Top-down crypt masonry: cold violet-grey crypt stone (WP-TOMBS).
+const CRYPT_STONE: Ramp = ramp([NIGHT, SLATE_DARK, PLUM, SLATE_LIGHT]);
+
+/// The masonry ramp of a tomb style index (0 tomb sandstone, 1 crypt stone).
+#[must_use]
+pub const fn tomb_ramp(style: u8) -> Ramp {
+    if style == 1 {
+        CRYPT_STONE
+    } else {
+        TOMB_SANDSTONE
+    }
+}
 
 /// The colour of a ruin gate channel (lintel gems, lever knobs, plate insets).
 #[must_use]
@@ -68,6 +82,14 @@ pub const fn built_ramp(tile: BuiltTile) -> Ramp {
         BuiltTile::Plank | BuiltTile::Chest { .. } | BuiltTile::Palisade => TIMBER,
         BuiltTile::RuinWall | BuiltTile::GateLintel(_) | BuiltTile::Lever { .. } => RUIN,
         BuiltTile::PressurePlate { .. } => BRONZE,
+        BuiltTile::TombWall(style)
+        | BuiltTile::TombPillar(style)
+        | BuiltTile::TombDoor { style, .. } => tomb_ramp(style),
+        BuiltTile::TombShrine { .. }
+        | BuiltTile::TombStairs
+        | BuiltTile::TombExit
+        | BuiltTile::TombCache { .. }
+        | BuiltTile::TombTrap { .. } => TOMB_SANDSTONE,
     }
 }
 
@@ -197,6 +219,28 @@ pub(super) fn paint(
         }
         BuiltTile::Palisade => {
             paint_palisade(canvas, strata, edges, position);
+            return;
+        }
+        BuiltTile::TombWall(style) => paint_tomb_wall(canvas, style, position),
+        BuiltTile::TombPillar(style) => {
+            paint_tomb_pillar(canvas, strata, edges, style);
+            return;
+        }
+        BuiltTile::TombDoor { style, sealed } => {
+            paint_tomb_door(canvas, style, sealed, position);
+        }
+        BuiltTile::TombShrine { lit } => {
+            paint_tomb_shrine(canvas, strata, edges, lit);
+            return;
+        }
+        BuiltTile::TombStairs => paint_tomb_stairs(canvas),
+        BuiltTile::TombExit => paint_tomb_exit(canvas),
+        BuiltTile::TombCache { open } => {
+            paint_tomb_cache(canvas, strata, edges, open);
+            return;
+        }
+        BuiltTile::TombTrap { hidden, .. } => {
+            paint_tomb_trap(canvas, strata, edges, hidden);
             return;
         }
     }
@@ -588,5 +632,304 @@ fn paint_chest(
     if !open {
         // A glint on the lock.
         canvas.set(7, 8, index_of(CREAM));
+    }
+}
+
+// --- Tomb pieces (WP-TOMBS) ------------------------------------------------------------------
+
+/// What shows behind a see-through tomb piece.
+fn tomb_behind(
+    canvas: &TileCanvas,
+    strata: &Strata,
+    edges: Edges,
+    px: i32,
+    py: i32,
+) -> PaletteIndex {
+    if edges.up == Cell::Sky || edges.left == Cell::Sky || edges.right == Cell::Sky {
+        TRANSPARENT
+    } else {
+        backdrop_pixel(strata, canvas.origin_x + px, canvas.origin_y + py)
+    }
+}
+
+/// Tomb masonry: big sandstone ashlars with carved glyphs (side-view tombs), or dark crypt
+/// stone with the odd skull niche (top-down crypts).
+fn paint_tomb_wall(canvas: &mut TileCanvas, style: u8, (tile_x, tile_y): (i32, i32)) {
+    let colors = tomb_ramp(style);
+    let glyph = hash(tile_x, tile_y, 281).is_multiple_of(if style == 1 { 11 } else { 7 });
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let (x, y) = (canvas.origin_x + px, canvas.origin_y + py);
+            let mut pixel = if style == 1 {
+                masonry(x, y, 5, 9, colors, index_of(INK))
+            } else {
+                masonry(x, y, 8, 12, colors, index_of(SOIL_DARK))
+            };
+            if glyph && (4..=11).contains(&px) && (4..=11).contains(&py) {
+                let carved = if style == 1 {
+                    // A skull niche: two eyes and a jaw line.
+                    ((px == 6 || px == 9) && (6..=7).contains(&py))
+                        || (py == 10 && (6..=9).contains(&px))
+                        || ((px == 5 || px == 10) && (5..=9).contains(&py))
+                } else {
+                    // An eye and a staff.
+                    ((5..=7).contains(&px) && (py == 5 || py == 7))
+                        || (px == 5 && py == 6)
+                        || (px == 9 && (5..=11).contains(&py))
+                        || (py == 8 && (8..=10).contains(&px))
+                };
+                if carved {
+                    pixel = colors[0];
+                }
+            }
+            canvas.set(px, py, pixel);
+        }
+    }
+}
+
+/// A carved pillar a pilot walks past (drawn in front of the backdrop).
+fn paint_tomb_pillar(canvas: &mut TileCanvas, strata: &Strata, edges: Edges, style: u8) {
+    let colors = tomb_ramp(style);
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let pixel = if (4..=11).contains(&px) {
+                if px == 4 || px == 11 {
+                    index_of(INK)
+                } else if px == 5 || py % 6 == 0 {
+                    colors[3]
+                } else if px >= 9 {
+                    colors[1]
+                } else {
+                    colors[2]
+                }
+            } else {
+                tomb_behind(canvas, strata, edges, px, py)
+            };
+            canvas.set(px, py, pixel);
+        }
+    }
+}
+
+/// A tomb's entrance door: a carved slab (side view) or a floor hatch with a ring (top down);
+/// sealed, a red-and-gold seal band crosses it; open, it shows the dark way in.
+fn paint_tomb_door(canvas: &mut TileCanvas, style: u8, sealed: bool, (_, tile_y): (i32, i32)) {
+    let colors = tomb_ramp(style);
+    let last = TILE_ART - 1;
+    let hatch = style == 1;
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let frame = px <= 1 || px >= last - 1 || (hatch && (py <= 1 || py >= last - 1));
+            let pixel = if frame {
+                if px == 0 || px == last || (hatch && (py == 0 || py == last)) {
+                    index_of(INK)
+                } else {
+                    colors[3]
+                }
+            } else if !sealed {
+                if hatch && (py - 2).rem_euclid(4) == 0 {
+                    // Steps going down into the crypt.
+                    colors[2]
+                } else {
+                    index_of(INK)
+                }
+            } else if hatch && (5..=10).contains(&px) && (5..=10).contains(&py) {
+                // The hatch's iron ring.
+                if px == 5 || px == 10 || py == 5 || py == 10 {
+                    STEEL_RAMP[3]
+                } else {
+                    colors[1]
+                }
+            } else if !hatch
+                && tile_y.rem_euclid(2) == 0
+                && (6..=9).contains(&px)
+                && (4..=9).contains(&py)
+            {
+                // The builders' sigil in gold on the upper slab.
+                if px == 6 || px == 9 || py == 4 || py == 9 {
+                    index_of(GOLD)
+                } else {
+                    index_of(AMBER)
+                }
+            } else if (py + px).rem_euclid(5) == 0 {
+                colors[1]
+            } else {
+                colors[2]
+            };
+            canvas.set(px, py, pixel);
+        }
+    }
+    if sealed {
+        // The seal band.
+        let band = if hatch { 2..=3 } else { 11..=12 };
+        for py in band {
+            for px in 1..last {
+                canvas.set(
+                    px,
+                    py,
+                    if px % 3 == 0 {
+                        index_of(GOLD)
+                    } else {
+                        index_of(RED)
+                    },
+                );
+            }
+        }
+    }
+}
+
+/// A shrine lamp on a carved plinth; lit, the bowl burns warm.
+fn paint_tomb_shrine(canvas: &mut TileCanvas, strata: &Strata, edges: Edges, lit: bool) {
+    let last = TILE_ART - 1;
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let plinth = (3..=12).contains(&px) && py >= 8;
+            let bowl = (2..=13).contains(&px) && (5..=7).contains(&py);
+            let flame = lit && (5..=10).contains(&px) && py <= 4 && (px - 7).abs() + (4 - py) <= 4;
+            let pixel = if plinth {
+                if px == 3 || px == 12 || py == last {
+                    index_of(INK)
+                } else if py == 8 {
+                    TOMB_SANDSTONE[3]
+                } else if (6..=9).contains(&px) && (10..=13).contains(&py) {
+                    index_of(if lit { GOLD } else { TEAL })
+                } else {
+                    TOMB_SANDSTONE[2]
+                }
+            } else if bowl {
+                if py == 7 || px == 2 || px == 13 {
+                    index_of(INK)
+                } else {
+                    index_of(COPPER)
+                }
+            } else if flame {
+                if (px - 7).abs() + (4 - py) <= 2 {
+                    index_of(CREAM)
+                } else {
+                    index_of(ORANGE)
+                }
+            } else {
+                tomb_behind(canvas, strata, edges, px, py)
+            };
+            canvas.set(px, py, pixel);
+        }
+    }
+}
+
+/// The stairs down: a gilded archway with steps sinking into the dark.
+fn paint_tomb_stairs(canvas: &mut TileCanvas) {
+    let last = TILE_ART - 1;
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let arch = px <= 1 || px >= last - 1 || py <= 1;
+            let pixel = if arch {
+                if px == 0 || px == last || py == 0 {
+                    index_of(INK)
+                } else {
+                    index_of(GOLD)
+                }
+            } else {
+                // Steps: each lower one further in, darker.
+                let step = (py - 2) / 3;
+                let edge = (py - 2) % 3 == 0 && px >= 2 + step;
+                if edge {
+                    TOMB_SANDSTONE[3 - usize::try_from(step.min(3)).unwrap_or(0)]
+                } else {
+                    index_of(INK)
+                }
+            };
+            canvas.set(px, py, pixel);
+        }
+    }
+}
+
+/// The way out: a doorway with pale daylight beyond and a gold arrow pointing up.
+fn paint_tomb_exit(canvas: &mut TileCanvas) {
+    let last = TILE_ART - 1;
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let frame = px <= 1 || px >= last - 1 || py <= 1;
+            let arrow = ((px == 7 || px == 8) && (4..=12).contains(&py))
+                || (py - 4 == (7 - px).abs() && (4..=7).contains(&py));
+            let pixel = if frame {
+                if px == 0 || px == last || py == 0 {
+                    index_of(INK)
+                } else {
+                    TOMB_SANDSTONE[3]
+                }
+            } else if arrow {
+                index_of(GOLD)
+            } else if py > 10 {
+                index_of(SKY)
+            } else {
+                index_of(SKY_LIGHT)
+            };
+            canvas.set(px, py, pixel);
+        }
+    }
+}
+
+/// A cache of run loot: a gilded urn; opened, its lid is gone and it is dark inside.
+fn paint_tomb_cache(canvas: &mut TileCanvas, strata: &Strata, edges: Edges, open: bool) {
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let width = match py {
+                4..=5 => 3,
+                6..=12 => 5,
+                13..=15 => 4,
+                _ => -1,
+            };
+            let left = 7 - width;
+            let right = 8 + width;
+            let inside = width >= 0 && (left..=right).contains(&px);
+            let pixel = if inside {
+                let rim = px == left || px == right || py == 15;
+                if rim || (open && py <= 6) {
+                    index_of(INK)
+                } else if py == 9 || py == 10 {
+                    index_of(if open { STONE } else { TEAL })
+                } else if px <= 6 {
+                    index_of(if open { STONE_LIGHT } else { CREAM })
+                } else {
+                    index_of(if open { STONE } else { GOLD })
+                }
+            } else if !open && (5..=10).contains(&px) && (2..=3).contains(&py) {
+                // The lid.
+                if py == 2 {
+                    index_of(GOLD)
+                } else {
+                    index_of(AMBER)
+                }
+            } else {
+                tomb_behind(canvas, strata, edges, px, py)
+            };
+            canvas.set(px, py, pixel);
+        }
+    }
+}
+
+/// Floor spikes standing out of the dark; a hidden trap shows only a few faint tips (trap
+/// sight draws its glow over it in the world).
+fn paint_tomb_trap(canvas: &mut TileCanvas, strata: &Strata, edges: Edges, hidden: bool) {
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let column = px.rem_euclid(4);
+            let height = if hidden { 3 } else { 9 };
+            let tip = TILE_ART - height + (column - 1).abs() * 2;
+            let spike = column != 3 && py >= tip;
+            let pixel = if spike {
+                if hidden {
+                    index_of(SLATE_DARK)
+                } else if column == 1 {
+                    STEEL_RAMP[3]
+                } else {
+                    STEEL_RAMP[1]
+                }
+            } else if py >= TILE_ART - 2 {
+                index_of(INK)
+            } else {
+                tomb_behind(canvas, strata, edges, px, py)
+            };
+            canvas.set(px, py, pixel);
+        }
     }
 }

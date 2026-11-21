@@ -493,6 +493,9 @@ pub struct ViewSnapshot<'w> {
     /// While night monsters are rising on a hostile world (WP-NIGHT): whether the seat's rig or
     /// pilot is somewhere safe from them (the HUD's SAFE / EXPOSED line). `None` by day.
     pub night_safe: Option<bool>,
+    /// The tomb site whose door the pilot stands at (WP-TOMBS: the entrance prompt shows its
+    /// style, tier and seal).
+    pub tomb_door: Option<fatherload_simulation::tomb::TombSite>,
 }
 
 impl ViewSnapshot<'_> {
@@ -694,6 +697,8 @@ pub struct RenderSnapshot<'w> {
     pub people: &'w fatherload_simulation::people::PeopleLedger,
     /// Plots, construction, homes and furniture (WP-HOME).
     pub homes: &'w fatherload_simulation::home::Homes,
+    /// Tomb runs, seals, unlocks and summaries (WP-TOMBS).
+    pub tombs: &'w fatherload_simulation::tomb::Tombs,
     /// The world day people live by (mood in the talk panel).
     pub people_day: u32,
     /// The base modules that have power this frame.
@@ -813,6 +818,7 @@ impl<'w> RenderSnapshot<'w> {
             bases: world.bases(),
             people: world.people(),
             homes: world.homes(),
+            tombs: world.tombs(),
             people_day: world.people_clock().day,
             powered_modules: world
                 .bases()
@@ -1081,6 +1087,7 @@ fn view_snapshot(
         can_exit: world.can_exit_rig(player_id),
         pilot_usable: world.pilot_usable(player_id),
         fixture_first: world.pilot_fixture_first(player_id),
+        tomb_door: world.tomb_door_in_reach(player_id),
         night_safe: (world.night_is_dangerous() && world.enemy_difficulty().hostile())
             .then(|| world.actor_tile(player_id))
             .flatten()

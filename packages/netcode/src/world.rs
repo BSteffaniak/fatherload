@@ -269,6 +269,17 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::NightSurvived { .. } => (251, None),
         GameplayEventKind::RareNightSpawn { .. } => (252, None),
         GameplayEventKind::NightMonsterBurrowed { .. } => (253, None),
+        // Tombs and crypts (wave 5, T27 WP-TOMBS): 270-279.
+        GameplayEventKind::TombEntered { player_id, .. } => (270, Some(player_id)),
+        GameplayEventKind::TombSeal { player_id, .. } => (271, player_id),
+        GameplayEventKind::TombAmbush { .. } => (272, None),
+        GameplayEventKind::TombGuardianDefeated { by } => (273, by),
+        GameplayEventKind::TombFloorCleared { player_id, .. } => (274, Some(player_id)),
+        GameplayEventKind::TombRelicPicked { player_id, .. } => (275, Some(player_id)),
+        GameplayEventKind::TombShrineRested { player_id, .. } => (276, Some(player_id)),
+        GameplayEventKind::TombCacheOpened { player_id, .. } => (277, Some(player_id)),
+        GameplayEventKind::TombMemberDowned { player_id, .. } => (278, Some(player_id)),
+        GameplayEventKind::TombRunEnded { player_id, .. } => (279, Some(player_id)),
     }
 }
 

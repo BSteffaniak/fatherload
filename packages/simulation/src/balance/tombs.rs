@@ -1,6 +1,7 @@
-//! The tombs probe (Wave 5 T27, `--balance-report --only tombs`): run length, death rate and
-//! loot value per tier and style, from a scripted bot playing whole runs through the real
-//! tick on the placeholder realizers.
+//! The tombs probe (Wave 5 T27, `--balance-report --only tombs`).
+//!
+//! Run length, death rate and loot value per tier and style, from a scripted bot playing
+//! whole runs through the real tick on the placeholder realizers.
 //!
 //! The bot ([`TombBot`]) is the same one the world tests clear runs with: it walks east, jumps
 //! obstacles and two-deep pits (side view) or slides around spike floors and walks to levers
@@ -110,7 +111,7 @@ impl TombBot {
         }
         let column = ((x + PILOT_HALF_WIDTH + 6.0) / TILE_SIZE).floor() as i32;
         let mut controls = if state.view == PilotView::TopDown {
-            self.top_down(world, run, x, feet, column)
+            Self::top_down(world, run, x, feet, column)
         } else {
             let feet_row = ((feet - 4.0) / TILE_SIZE).floor() as i32;
             let blocked = Self::solid(
@@ -153,14 +154,7 @@ impl TombBot {
         inputs.hold_as(player, controls)
     }
 
-    fn top_down(
-        &mut self,
-        world: &WorldState,
-        run: &TombRun,
-        x: f32,
-        feet: f32,
-        column: i32,
-    ) -> ControlState {
+    fn top_down(world: &WorldState, run: &TombRun, x: f32, feet: f32, column: i32) -> ControlState {
         let head_row = ((feet - 49.95) / TILE_SIZE).floor() as i32;
         let feet_row = ((feet - 0.05) / TILE_SIZE).floor() as i32;
         let here = TilePosition {
@@ -332,6 +326,7 @@ impl BalanceProbe for TombsProbe {
         "tombs"
     }
 
+    #[allow(clippy::too_many_lines, reason = "one table per section")]
     fn run(&self, context: &mut ProbeContext) -> ReportSection {
         let config = context.config.clone();
         let mut section = ReportSection::new(

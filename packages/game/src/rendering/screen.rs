@@ -171,6 +171,8 @@ pub(super) fn draw_view_hud(
     super::sky_hud::draw_sky_gauge(draw, snapshot, view, rect, top + 74);
     // The Moon checklist, the vacuum warning and the landing's sunrise (WP-MOON).
     super::moon_hud::draw_moon_hud(draw, shell, snapshot, view, rect, top + 124);
+    // Tomb runs (WP-TOMBS): the run banner, or the entrance banner at a site's door.
+    super::tomb_hud::draw_tomb_hud(draw, snapshot, view, rect);
     draw_view_prompt(draw, shell, view, rect);
     draw_view_hud_rest(
         draw,
@@ -921,8 +923,13 @@ fn hud_warnings(
     if player.collect_blocks && player.block_hopper.total() >= player.block_hopper_capacity {
         warnings.push(("HOPPER FULL", &icons::STONE_BLOCK));
     }
-    // Warning depths are classic nominal rows (deep worlds stretch them with their bands).
-    let depth = snapshot.terrain.nominal_row(view.hud.row.max(0));
+    // Warning depths are classic nominal rows (deep worlds stretch them with their bands). A
+    // tomb run's vault keeps its own climate (WP-TOMBS): no depth warnings inside.
+    let depth = if snapshot.tombs.run_of(view.player_id).is_some() {
+        0
+    } else {
+        snapshot.terrain.nominal_row(view.hud.row.max(0))
+    };
     if depth >= 60 {
         warnings.push(("HEAT", &icons::HEAT));
     }
@@ -1261,6 +1268,9 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Colony => super::moon_hud::draw_colony(draw, ui),
         ModalScreen::Home => super::homes::draw_home_modal(draw, ui),
         ModalScreen::Journal => super::story::draw_journal(draw, ui),
+        ModalScreen::RelicPick => super::tomb_hud::draw_relic_pick(draw, ui),
+        ModalScreen::TombSummary => super::tomb_hud::draw_tomb_summary(draw, ui),
+        ModalScreen::TombCodex => super::tomb_hud::draw_tomb_codex(draw, ui),
     }
 }
 

@@ -42,9 +42,11 @@ pub const TRAP_KINDS: u8 = 16;
 
 const SALT_REALIZE: u64 = 0x70B5_4EA1_0002;
 
-/// What a trap tile does. T28 (side view: swinging blades, crushers, dart walls, rising sand,
-/// cursed fog) and T29 (top down: arrow plates, flame jets, rolling boulders, pits) append
-/// kinds here and their behaviour in `world/tombs.rs` (`trap_damage`).
+/// What a trap tile does.
+///
+/// T28 (side view: swinging blades, crushers, dart walls, rising sand, cursed fog) and T29
+/// (top down: arrow plates, flame jets, rolling boulders, pits) append kinds here and their
+/// behaviour in `world/tombs.rs` (`advance_traps`).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum TrapKind {
     /// Floor spikes (the placeholder trap of both styles): hurt a pilot standing in them.
@@ -55,9 +57,8 @@ impl TrapKind {
     /// The kind of tile index `index` (unknown kinds read as spikes).
     #[must_use]
     pub const fn from_index(index: u8) -> Self {
-        match index {
-            _ => Self::Spikes,
-        }
+        let _ = index;
+        Self::Spikes
     }
 
     #[must_use]
@@ -107,7 +108,7 @@ pub struct RealizedRoom {
 }
 
 /// A floor as tiles, relative to the run slot's top-left corner.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RealizedFloor {
     pub style: SiteStyle,
     /// Size of the box the cells fill (columns, rows).
@@ -157,15 +158,16 @@ pub fn realizer_for(style: SiteStyle) -> &'static dyn FloorRealizer {
     }
 }
 
-/// The enemy kind for a spawn slot: the placeholder tomb bestiary. T28 (mummies, crypt bats,
-/// skeletal archers, animated statues, tomb guardians) and T29 (skeleton packs, spectres,
-/// cultists, golems, the crypt lord) return their own kinds here. Top-down placeholders fly
-/// (no floor to stand on seen from above).
+/// The enemy kind for a spawn slot: the placeholder tomb bestiary.
+///
+/// T28 (mummies, crypt bats, skeletal archers, animated statues, tomb guardians) and T29
+/// (skeleton packs, spectres, cultists, golems, the crypt lord) return their own kinds here.
+/// Top-down placeholders fly (no floor to stand on seen from above).
 #[must_use]
-pub const fn bestiary(style: SiteStyle, role: SpawnRole, roll: u32) -> EnemyKind {
+pub const fn bestiary(style: SiteStyle, role: SpawnRole, variant: u32) -> EnemyKind {
     match (style, role) {
         (SiteStyle::SideView, SpawnRole::Guard) => {
-            if roll % 2 == 0 {
+            if variant.is_multiple_of(2) {
                 EnemyKind::Shellback
             } else {
                 EnemyKind::AcidSpitter
@@ -188,7 +190,7 @@ struct Canvas {
 }
 
 impl Canvas {
-    fn new(style: SiteStyle) -> Self {
+    const fn new(style: SiteStyle) -> Self {
         Self {
             style,
             cells: std::collections::BTreeMap::new(),
@@ -348,7 +350,7 @@ impl FloorRealizer for SideViewRealizer {
                     let span = width / (pits + 1);
                     for pit in 1..=pits {
                         let px = x + span * pit - 1;
-                        let hidden = (node.variant >> pit) & 3 == 0;
+                        let hidden = (node.variant >> pit).trailing_zeros() >= 2;
                         for dx in 0..2 {
                             canvas.put(px + dx, floor_row, TileKind::Air);
                             canvas.put(
@@ -576,7 +578,7 @@ impl FloorRealizer for TopDownRealizer {
                             if (row - safe).abs() <= 1 {
                                 continue;
                             }
-                            let hidden = (node.variant >> (column & 7)) & 3 == 0;
+                            let hidden = (node.variant >> (column & 7)).trailing_zeros() >= 2;
                             canvas.put(
                                 column,
                                 row,

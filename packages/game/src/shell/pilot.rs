@@ -144,6 +144,14 @@ impl SeatUi {
                 }
                 _ => "You break the relic chest's seal.",
             },
+            Usable::TombDoor { .. }
+            | Usable::TombShrine { .. }
+            | Usable::TombStairs
+            | Usable::TombExit
+            | Usable::TombCache => {
+                self.message = super::tombs::use_line(ctx, usable);
+                return true;
+            }
         };
         line.clone_into(&mut self.message);
         true

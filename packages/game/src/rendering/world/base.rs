@@ -1284,6 +1284,15 @@ const fn built_colors(tile: BuiltTile) -> (Color, Color) {
         }
         BuiltTile::Gate | BuiltTile::KeycardDoor(_) => (STEEL_DARK, STEEL_LIGHT),
         BuiltTile::Palisade => (SOIL, AMBER),
+        // Tomb pieces are never built either.
+        BuiltTile::TombWall(_)
+        | BuiltTile::TombPillar(_)
+        | BuiltTile::TombDoor { .. }
+        | BuiltTile::TombShrine { .. }
+        | BuiltTile::TombStairs
+        | BuiltTile::TombExit
+        | BuiltTile::TombCache { .. }
+        | BuiltTile::TombTrap { .. } => (SAND, AMBER),
     }
 }
 

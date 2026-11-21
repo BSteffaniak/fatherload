@@ -101,7 +101,15 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * T26 story arcs: the arc log in the quest log (loadout), the people ledger's story marks,
 ///   the `PeopleCommand` story commands (`AskWork`, `AcceptArc`, `TurnInArc`, `AbandonArc`),
 ///   the new objective primitives and story target places, and the arc events 260-265.
-pub const PROTOCOL_VERSION: u8 = 12;
+///
+/// Version 13 (wave 5; the integrator collapses the wave's bumps into one):
+/// * T27 tombs core: `GeneratorVersion::V10` worlds in the session settings, the tomb
+///   `BuiltTile`s (codes 72-119 of the built range: masonry, pillars, doors, shrines, stairs,
+///   the way out, caches, traps) in tile ops and chunk diffs, the `Tombs` world field and
+///   `SectionKey::Tombs` section (runs, site counters, seals, unlocks, summaries),
+///   `PlayerCommand::Tomb`, the tomb `Usable`s, `PilotState::{view, boons, air_jumps}`,
+///   `ProjectileState::bounces`, the tomb key quest item and the tomb events 270-279.
+pub const PROTOCOL_VERSION: u8 = 13;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

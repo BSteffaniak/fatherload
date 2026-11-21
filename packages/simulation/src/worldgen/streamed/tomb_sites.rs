@@ -72,8 +72,9 @@ pub const QUARTER_PER_MILLE: u32 = 550;
 pub const QUARTER_DEPTH_ROWS: i32 = 22;
 /// Columns either side of the town kept free of sites.
 pub const TOWN_MARGIN_COLUMNS: i32 = 60;
-/// Most a surface site's ground may vary across its footprint (rows).
-pub const MAX_GROUND_STEP: i32 = 3;
+/// Most a surface site's ground may vary across its footprint (rows): a pilot climbs onto the
+/// plinth from the lowest side with a jump.
+pub const MAX_GROUND_STEP: i32 = 2;
 
 /// Size of one run slot (columns, rows).
 pub const SLOT_SIZE: (i32, i32) = (168, 48);
@@ -111,7 +112,7 @@ pub const fn slot_origin(slot: u8) -> TilePosition {
 
 /// Whether `tile` is inside the run vault of a world with tombs.
 #[must_use]
-pub fn in_vault(settings: &WorldSettings, tile: TilePosition) -> bool {
+pub const fn in_vault(settings: &WorldSettings, tile: TilePosition) -> bool {
     settings.generator.has_tombs() && VAULT.contains(tile)
 }
 
@@ -181,10 +182,19 @@ pub fn entrance_size(style: SiteStyle) -> (i32, i32) {
     )
 }
 
-/// The tiles a site's entrance box covers.
+/// Rows of masonry plinth under a surface site's entrance (it stands on the highest ground of
+/// its footprint; the plinth fills the dips under it).
+pub const PLINTH_ROWS: i32 = 3;
+
+/// The tiles a site's entrance box covers (its plinth included).
 #[must_use]
 pub fn entrance_bounds(site: &TombSite) -> TileRect {
     let (width, height) = entrance_size(site.style);
+    let height = if site.setting.on_the_surface() {
+        height + PLINTH_ROWS
+    } else {
+        height
+    };
     TileRect {
         min: site.origin,
         max: TilePosition {
@@ -224,6 +234,20 @@ pub fn entrance_cells(site: &TombSite) -> Vec<(TilePosition, TileKind)> {
                 },
                 kind,
             ));
+        }
+    }
+    if site.setting.on_the_surface() {
+        let (_, height) = entrance_size(site.style);
+        for row in height..height + PLINTH_ROWS {
+            for column in 0..width {
+                cells.push((
+                    TilePosition {
+                        x: site.origin.x + column,
+                        y: site.origin.y + row,
+                    },
+                    TileKind::Built(BuiltTile::TombWall(style)),
+                ));
+            }
         }
     }
     cells
@@ -355,7 +379,7 @@ fn deep_in_cell(settings: &WorldSettings, cx: i32, cy: i32) -> Option<TombSite> 
     (!crowded(settings, &entrance_bounds(&site), Some(8))).then_some(site)
 }
 
-/// The lowest ground row across `first..=last` from `surface`, if the ground is level enough.
+/// The highest ground row across `first..=last` from `surface`, if the ground is level enough.
 fn level_ground(first: i32, last: i32, surface: impl Fn(i32) -> Option<i32>) -> Option<i32> {
     let mut low = i32::MIN;
     let mut high = i32::MAX;
@@ -364,7 +388,8 @@ fn level_ground(first: i32, last: i32, surface: impl Fn(i32) -> Option<i32>) -> 
         low = low.max(row);
         high = high.min(row);
     }
-    (low - high <= MAX_GROUND_STEP).then_some(low)
+    // The entrance stands on the highest ground; its plinth fills the dips under it.
+    (low - high <= MAX_GROUND_STEP).then_some(high)
 }
 
 /// The mesa site of cell `cx`, if any.
@@ -862,5 +887,35 @@ mod tests {
         );
     }
 
-    const GOLDEN_V10_DIGEST: u64 = 0xd86c_cc9d_d50b_8792;
+    const GOLDEN_V10_DIGEST: u64 = 0xedd4_774f_3fd5_f15a;
+
+    #[test]
+    #[ignore = "debug: prints the first mesa entrance of each style"]
+    fn print_entrances() {
+        let settings = v10();
+        for style in SiteStyle::ALL {
+            let Some(site) = sites_touching(&settings, &wide())
+                .into_iter()
+                .find(|site| site.style == style && site.setting == SiteSetting::Mesa)
+            else {
+                continue;
+            };
+            println!("{site:?}");
+            let bounds = entrance_bounds(&site).expanded(4);
+            for y in bounds.min.y..=bounds.max.y {
+                let line: String = (bounds.min.x..=bounds.max.x)
+                    .map(|x| {
+                        match super::super::generated_tile(&settings, TilePosition { x, y }).kind {
+                            TileKind::Air => '.',
+                            TileKind::Built(BuiltTile::TombWall(_)) => '#',
+                            TileKind::Built(BuiltTile::TombPillar(_)) => 'P',
+                            TileKind::Built(BuiltTile::TombDoor { .. }) => 'D',
+                            _ => 'x',
+                        }
+                    })
+                    .collect();
+                println!("{y:4} {line}");
+            }
+        }
+    }
 }

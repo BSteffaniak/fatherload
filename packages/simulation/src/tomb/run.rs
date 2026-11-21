@@ -99,7 +99,7 @@ pub struct RunMember {
 
 impl RunMember {
     #[must_use]
-    pub fn new(player: PlayerId) -> Self {
+    pub const fn new(player: PlayerId) -> Self {
         Self {
             player,
             relics: Vec::new(),

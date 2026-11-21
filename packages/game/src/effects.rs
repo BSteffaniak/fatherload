@@ -1006,17 +1006,26 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::FurniturePlaced { player_id, .. }
         | GameplayEventKind::FurnitureRemoved { player_id, .. }
         | GameplayEventKind::HomeRushed { player_id, .. }
-        | GameplayEventKind::HomeInteraction { player_id } => Some(player_id),
+        | GameplayEventKind::HomeInteraction { player_id }
+        | GameplayEventKind::TombEntered { player_id, .. }
+        | GameplayEventKind::TombFloorCleared { player_id, .. }
+        | GameplayEventKind::TombRelicPicked { player_id, .. }
+        | GameplayEventKind::TombShrineRested { player_id, .. }
+        | GameplayEventKind::TombCacheOpened { player_id, .. }
+        | GameplayEventKind::TombMemberDowned { player_id, .. }
+        | GameplayEventKind::TombRunEnded { player_id, .. } => Some(player_id),
         // Building news reaches the plot's owner wherever they are.
         GameplayEventKind::ConstructionStage { owner, .. }
         | GameplayEventKind::HomeCompleted { owner, .. }
         | GameplayEventKind::SiteEventRaised { owner, .. } => Some(owner),
-        GameplayEventKind::WardenDefeated { by } => by,
+        GameplayEventKind::WardenDefeated { by }
+        | GameplayEventKind::TombGuardianDefeated { by } => by,
         GameplayEventKind::LightningArc { struck, .. } => struck,
         GameplayEventKind::WardenAwakened { .. } | GameplayEventKind::WardenStaggered { .. } => {
             None
         }
-        GameplayEventKind::MechanismUsed { player_id, .. } => player_id,
+        GameplayEventKind::MechanismUsed { player_id, .. }
+        | GameplayEventKind::TombSeal { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
@@ -1047,7 +1056,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::NightFell { .. }
         | GameplayEventKind::NightSurvived { .. }
         | GameplayEventKind::RareNightSpawn { .. }
-        | GameplayEventKind::NightMonsterBurrowed { .. } => None,
+        | GameplayEventKind::NightMonsterBurrowed { .. }
+        | GameplayEventKind::TombAmbush { .. } => None,
     }
 }
 
