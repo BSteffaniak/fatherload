@@ -298,7 +298,8 @@ fn draw_pilot_bars(
     );
     y += if state.view == fatherload_simulation::pilot::PilotView::TopDown {
         // A crypt seen from above (WP-TOMBS T29): no jetpack to burn, so the bar shows the
-        // dodge roll coming back (full: ready).
+        // dodge roll coming back, in percent (empty mid-roll, 100: ready; the wait is under
+        // half a second, so its seconds would read 0/0).
         let full = fatherload_simulation::pilot::top_down::ROLL_COOLDOWN_SECONDS;
         ui_kit::stat_bar(
             draw,
@@ -307,8 +308,12 @@ fn draw_pilot_bars(
             inner_width,
             &icons::BOOTS,
             "ROLL",
-            (full - state.roll_cooldown).clamp(0.0, full),
-            full,
+            if state.roll > 0.0 {
+                0.0
+            } else {
+                (full - state.roll_cooldown).clamp(0.0, full) / full * 100.0
+            },
+            100.0,
             BarColors::PILOT,
             0.0,
         )

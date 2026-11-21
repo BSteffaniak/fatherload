@@ -75,6 +75,10 @@ fn kit(world: &mut WorldState, player: PlayerId) {
             .pilot_arsenal
             .receive(fatherload_simulation::WeaponKind::Rifle);
         rig.pilot_arsenal.equipped = Some(fatherload_simulation::WeaponKind::Rifle);
+        // Loaded, as in the side-view scenes (no "x0" on the HUD).
+        let _ = rig
+            .pilot_arsenal
+            .add_ammo(fatherload_simulation::weapon::AmmoKind::Cartridge, 40);
         rig.credits = 3_100;
     }
 }
