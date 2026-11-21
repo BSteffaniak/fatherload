@@ -842,10 +842,11 @@ beside a cracked seal, or a **story** seen through.
   own controls, camera and art come with the next wave.
 - **Balance** (`--balance-report --only tombs`, 3 seeds, 60 Hz): a scripted bot (rifle then
   sidearm, aiming at what it sees within 14 tiles, first relic each floor, no dodging, no
-  detours to the vault, walks through some traps) clears about half of the tier 1-2 runs in
-  1-2 minutes and few deeper ones; most of its wipes are at the guardian (whose health scales
-  with the site tier, half its stock at tier 1), the rest in spike pits and ambushes. The
-  placeholder guardian and creatures are T28 / T29's to replace and tune. Loot on offer in a
+  detours to the vault, walks through some traps) clears 2 of 3 tier 1 tombs in about 1.3
+  minutes but few crypts or deeper runs; over half its wipes are at the guardian (whose health
+  scales with the site tier, half its stock at tier 1), most of the rest in spike pits. The
+  bot is far weaker than a player, so read these as relative numbers; the placeholder
+  guardian and creatures are T28 / T29's to replace and tune. Loot on offer in a
   whole run (every cache plus the guardian's hoard): about 900 cr at tier 1, 3,800 at tier 2,
   15,000 at tier 3, 36,000-42,000 at tier 4 and 75,000-90,000 at tier 5 (7-29 caches over 3 to 6
   floors).
