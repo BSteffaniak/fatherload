@@ -614,3 +614,105 @@ fn the_guardian_room_wakes_a_side_view_guardian_with_phases_saved_in_the_run() {
         Some(EntityState::Enemy(_))
     ));
 }
+
+/// Every tomb creature and both guardians fight a pilot who keeps moving (walking both ways,
+/// jumping, shooting on auto-aim) in the guardian's crypt at 30, 60 and 120 Hz: no creature,
+/// raised mummies and summoned bats included, ever ends a tick in rock or overlapping the pilot.
+#[test]
+fn tomb_creatures_keep_their_bodies_against_a_moving_pilot_at_every_tick_rate() {
+    let (settings, site) = side_site(1);
+    for hz in [30_u32, 60, 120] {
+        let mut world = world_on(&settings, hz, EnemyDifficulty::Hard);
+        enter(&mut world, &site, 0, &[PLAYER]);
+        world.scenario_tomb_floor(PLAYER, site.floors() - 1);
+        no_creatures(&mut world);
+        let room = world
+            .tomb_run_of(PLAYER)
+            .and_then(|run| run.rooms.iter().find(|room| room.kind == RoomKind::Boss))
+            .map(|room| room.interior)
+            .expect("the guardian's crypt");
+        stand(
+            &mut world,
+            PLAYER,
+            TilePosition {
+                x: room.min.x + 6,
+                y: room.max.y,
+            },
+        );
+        // The colossus in its second phase (it raises mummies), the matriarch in her third
+        // (bats and dives).
+        if let Some(colossus) = world.scenario_tomb_guardian(PLAYER, EnemyKind::SunColossus) {
+            world.scenario_hurt_enemy_to(colossus, 0.55);
+        }
+        for (index, kind) in [
+            EnemyKind::Mummy,
+            EnemyKind::CryptBat,
+            EnemyKind::SkeletalArcher,
+            EnemyKind::AnimatedStatue,
+            EnemyKind::HollowMatriarch,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let x = (room.min.x + 2 + index as i32 * 4) as f32 * TILE_SIZE;
+            let id = world.spawn_enemy(kind, x, (room.max.y - 1) as f32 * TILE_SIZE);
+            if kind == EnemyKind::HollowMatriarch {
+                world.scenario_hurt_enemy_to(id, 0.28);
+            }
+        }
+        let mut most = 0;
+        let ticks = u64::from(hz) * 20;
+        for tick in 0..ticks {
+            let phase = (tick * 2 / u64::from(hz)) % 4;
+            let axis = match phase {
+                0 => 1.0,
+                2 => -1.0,
+                _ => 0.0,
+            };
+            let jump = phase == 1 && tick % u64::from(hz) < u64::from(hz) / 5;
+            let controls = crate::ControlState::new(axis, false, false)
+                .with_jump(jump)
+                .with_weapon(crate::WeaponControl {
+                    fire: true,
+                    auto_aim: true,
+                    aim_x: 0,
+                    aim_y: 0,
+                });
+            let now = world.simulation_tick();
+            let _ = world.simulate_tick(now, &TickInputs::held(PLAYER, controls));
+            // Keep the pilot in the fight.
+            if let Some((id, _, _)) = world.pilot_of(PLAYER) {
+                world.edit_pilot(id, |_, state| state.health = state.max_health);
+            }
+            let pilot = world.pilot_of(PLAYER).map(|(_, body, state)| {
+                let (mx, my) = state.middle(body);
+                (mx, my, state.height() * 0.5)
+            });
+            most = most.max(world.enemies().count());
+            for (entity, state) in world.enemies() {
+                let body = entity.body;
+                assert!(
+                    !physics::collides(world.terrain(), body.x, body.y, state.kind.stats().radius),
+                    "{:?} in rock at {hz} Hz, tick {tick}: ({}, {})",
+                    state.kind,
+                    body.x,
+                    body.y
+                );
+                if let Some((mx, my, half_height)) = pilot {
+                    let (half_x, half_y) = state.kind.contact_half();
+                    let overlap_x = (half_x + PILOT_HALF_WIDTH) - (body.x - mx).abs();
+                    let overlap_y = (half_y + half_height) - (body.y - my).abs();
+                    assert!(
+                        overlap_x <= 1.5 || overlap_y <= 1.5,
+                        "{:?} on the pilot at {hz} Hz, tick {tick}: {overlap_x} x {overlap_y}",
+                        state.kind
+                    );
+                }
+            }
+        }
+        assert!(
+            most > 6,
+            "the guardians raised and summoned at {hz} Hz: {most}"
+        );
+    }
+}
