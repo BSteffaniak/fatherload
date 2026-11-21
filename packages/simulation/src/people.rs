@@ -51,6 +51,7 @@
 pub mod camps;
 pub mod character;
 pub mod clock;
+pub mod colony;
 #[cfg(test)]
 mod content_tests;
 pub mod contractor;

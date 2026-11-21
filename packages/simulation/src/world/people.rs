@@ -297,6 +297,8 @@ impl WorldState {
                 .map(|city| city.id),
             );
             ids.push(TOWN_VILLAGE);
+            // The Moon's colonists (Wave 6), on worlds whose Moon has a colony.
+            ids.extend(people::colony::colony_settlement_id(&settings));
             for id in ids {
                 if found.contains_key(&id) {
                     continue;
@@ -1070,6 +1072,20 @@ impl WorldState {
                         PlayerScopedCommandOutcome::Applied,
                         Some(format!("Learned: {} ({}).", perk.name(), perk.effect())),
                     )
+                }
+            }
+            PersonDeal::Furniture(piece) => {
+                if self.charge(player_id, price) {
+                    self.grant_furniture(player_id, piece, 1);
+                    (
+                        PlayerScopedCommandOutcome::Applied,
+                        Some(format!(
+                            "The {} goes to your furniture stock.",
+                            piece.name()
+                        )),
+                    )
+                } else {
+                    (PlayerScopedCommandOutcome::IgnoredUnavailable, None)
                 }
             }
         };

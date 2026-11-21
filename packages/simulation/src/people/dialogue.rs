@@ -30,6 +30,7 @@ use crate::ids::PlayerId;
 
 pub mod grammar;
 pub mod lines;
+pub mod local;
 
 use grammar::Vars;
 use lines::{LineTopic, line_set};
@@ -61,6 +62,8 @@ pub enum Topic {
     },
     Thanks,
     Quirk,
+    /// Local colour: a line about home and the ways of their culture ([`local`], Wave 6).
+    Local,
 }
 
 /// What a conversation needs from the world.
@@ -233,7 +236,7 @@ fn resolve(
             }
         }
         Topic::Thanks => LineTopic::Thanks,
-        Topic::Quirk => return None,
+        Topic::Quirk | Topic::Local => return None,
     };
     Some((line_topic, vars, mentioned))
 }
@@ -349,6 +352,7 @@ fn topic_salt(topic: Topic) -> u64 {
         Topic::Gift { liked } => 11 + u64::from(liked),
         Topic::Thanks => 13,
         Topic::Quirk => 14,
+        Topic::Local => 15,
     }
 }
 
@@ -386,6 +390,26 @@ pub fn say(
             text: grammar::expand(quirk.asides()[index], &vars, &mut rng),
             topic: None,
             tone: character.tone,
+        });
+    }
+    if topic == Topic::Local {
+        let lines = local::local_lines(character.culture);
+        let id = local::local_id(character.culture);
+        let vars = common_vars(character, ctx, &mut rng);
+        let tone = voice(character, &mut rng);
+        let index = pick_fresh(&memory.recent_lines, lines.len(), &mut rng, |index| {
+            line_key(id, tone, index)
+        });
+        state
+            .players
+            .entry(ctx.player)
+            .or_default()
+            .note_line(line_key(id, tone, index));
+        let text = grammar::expand(lines[index], &vars, &mut rng);
+        return Some(Line {
+            text: tone_filter(character, tone, &text, &mut rng),
+            topic: None,
+            tone,
         });
     }
     let (line_topic, vars, mentioned) = resolve(character, state, ctx, topic, &mut rng)?;
@@ -484,6 +508,17 @@ pub fn talk(character: &Character, state: &mut CharacterState, ctx: &TalkContext
     lines.extend(topic_line);
     if rng.chance(ASIDE_PERCENT) {
         lines.extend(say(character, state, ctx, Topic::Quirk));
+    } else {
+        // Local colour on a later visit (its own roll, so older conversations keep theirs).
+        let mut local_rng = PeopleRng::new(
+            character.voice_seed,
+            salt::DIALOGUE ^ topic_salt(Topic::Local),
+            u64::from(talks),
+            0x10CA,
+        );
+        if talks > 0 && local_rng.chance(local::LOCAL_PERCENT) {
+            lines.extend(say(character, state, ctx, Topic::Local));
+        }
     }
     let entry = state.players.entry(ctx.player).or_default();
     entry.talks += 1;

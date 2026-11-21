@@ -111,6 +111,14 @@ const fn cloth(culture: Culture) -> &'static [(Color, Color)] {
             (ICE, SKY_LIGHT),
             (CREAM, SAND),
         ],
+        // The Moon's colonists (Wave 6): station jumpsuits in white, orange and slate.
+        Culture::Lunar => &[
+            (BONE, STONE_LIGHT),
+            (ORANGE, RUST),
+            (SLATE_LIGHT, SLATE),
+            (STEEL_LIGHT, STEEL),
+            (TEAL, TEAL_DARK),
+        ],
     }
 }
 
@@ -126,6 +134,7 @@ const fn accent(culture: Culture, seed: u64) -> Color {
         Culture::Deepfolk => [MINT, GOLD, LAVENDER][pick as usize],
         Culture::Aeronaut => [COPPER, GOLD, AMBER][pick as usize],
         Culture::Cloudborn => [SKY, GOLD, TEAL][pick as usize],
+        Culture::Lunar => [ORANGE, SKY_LIGHT, GOLD][pick as usize],
     }
 }
 
@@ -403,6 +412,12 @@ pub fn draw_person_posed(
             pen.rect(draw, -half, torso_top + torso - 3, wide, 1, trim);
             pen.px(draw, facing * (half - 1), torso_top + torso - 2, trim);
         }
+        Culture::Lunar => {
+            // A jumpsuit: a zip down the front, a mission patch and a ring collar.
+            pen.rect(draw, -half, torso_top + 1, wide, 1, STEEL_LIGHT);
+            pen.rect(draw, 0, torso_top + 2, 1, torso - 2, with_alpha(INK, 90));
+            pen.px(draw, -facing * (half - 1), torso_top + 3, trim);
+        }
     }
     // The trade's garment.
     match role {
@@ -482,6 +497,21 @@ pub fn draw_person_posed(
                 body_bottom - 2,
                 shirt_shade,
             );
+        }
+        Role::Hydroponist => {
+            // A green apron with a seed pocket.
+            pen.rect(draw, -half + 1, torso_top + 3, wide - 2, torso - 2, LEAF);
+            pen.px(draw, 0, torso_top + 4, MOSS);
+        }
+        Role::DomeTech | Role::Quartermaster => {
+            // A tool belt (the tech) or a clipboard strap (the stores).
+            pen.rect(draw, -half, torso_top + torso - 2, wide, 1, SOIL);
+            let tag = if role == Role::DomeTech { AMBER } else { CREAM };
+            pen.px(draw, facing * (half - 1), torso_top + torso - 2, tag);
+        }
+        Role::Selenographer => {
+            // A chart case slung at the hip.
+            pen.rect(draw, -facing * (half + 1), torso_top + 3, 2, 4, SLATE_LIGHT);
         }
     }
 
@@ -729,6 +759,11 @@ pub fn draw_portrait(
         Culture::Cloudborn => {
             pen.rect(draw, sx, 29, sw, 2, trim);
         }
+        Culture::Lunar => {
+            pen.rect(draw, sx, 23, sw, 2, STEEL_LIGHT);
+            pen.rect(draw, sx + sw - 7, 26, 3, 3, trim);
+            pen.rect(draw, 15, 25, 1, 7, with_alpha(INK, 90));
+        }
     }
     match role {
         Role::Smith | Role::Baker | Role::Brewer => {
@@ -780,6 +815,20 @@ pub fn draw_portrait(
                 pen.rect(draw, 15, 26, 2, 4, CREAM);
                 pen.rect(draw, 14, 27, 4, 2, CREAM);
             }
+        }
+        Role::Hydroponist => {
+            pen.rect(draw, 10, 26, 12, 6, LEAF);
+            pen.rect(draw, 11, 23, 1, 3, LEAF);
+            pen.rect(draw, 20, 23, 1, 3, LEAF);
+        }
+        Role::DomeTech | Role::Quartermaster => {
+            pen.rect(draw, sx, 30, sw, 2, SOIL);
+            let tag = if role == Role::DomeTech { AMBER } else { CREAM };
+            pen.rect(draw, sx + 3, 26, 3, 3, tag);
+        }
+        Role::Selenographer => {
+            pen.rect(draw, 13, 24, 6, 8, SLATE_LIGHT);
+            pen.rect(draw, 15, 25, 2, 7, SKY_LIGHT);
         }
     }
 

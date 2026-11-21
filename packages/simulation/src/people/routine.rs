@@ -279,6 +279,25 @@ impl Settlement {
         )
     }
 
+    /// The Moon colony's routine view ([`super::colony`], Wave 6): `lots` along its floor,
+    /// every colonist living in lot `home`.
+    #[must_use]
+    pub fn colony(
+        id: VillageId,
+        ground_row: i32,
+        span: (i32, i32),
+        plaza: (i32, i32),
+        lots: Vec<Lot>,
+        home: usize,
+        population: &Population,
+    ) -> Self {
+        let homes = vec![Some(home); population.characters.len()];
+        let keepers = vec![None; population.characters.len()];
+        Self::assemble(
+            id, ground_row, span, plaza, lots, population, &homes, &keepers, false,
+        )
+    }
+
     #[allow(clippy::too_many_arguments, reason = "one internal assembly step")]
     fn assemble(
         village: VillageId,
@@ -500,6 +519,9 @@ fn outdoor_work(character: &Character, lots: &[Lot], plaza: (i32, i32), index: u
         Role::Courier | Role::Smuggler | Role::StormChaser => return Work::Roam,
         Role::Aeronaut => &[BuildingKind::AirshipDock, BuildingKind::Workshop],
         Role::Monk => &[BuildingKind::Monastery, BuildingKind::Granary],
+        Role::Hydroponist | Role::Selenographer => &[BuildingKind::Farm, BuildingKind::Hall],
+        Role::DomeTech => return Work::Roam,
+        Role::Quartermaster => &[BuildingKind::Depot, BuildingKind::Market],
     };
     let jitter = i32::try_from(index % 3).unwrap_or(0) - 1;
     kinds
@@ -571,11 +593,17 @@ pub fn settlement(settings: &WorldSettings, id: VillageId) -> Option<Arc<Settlem
     }
     let key = (*settings, id.0.cast_signed(), 0);
     let built = SETTLEMENTS.get_or_compute(key, || {
-        if crate::worldgen::sky::continent::is_sky_city(id) {
-            return crate::worldgen::sky::continent::sky_city(settings, id).map(|city| {
-                let population = super::sky_city::sky_city_population(settings.seed, &city);
-                Arc::new(Settlement::sky_city(&city, &population))
-            });
+        if super::colony::is_colony(id) {
+            return super::colony::colony_settlement(settings).map(Arc::new);
+        }
+        // Sky towns and sky cities share the sky flag in their ids (Wave 6 fix): a sky city
+        // this world has keeps its id as before, and every other sky-flagged id falls through
+        // to the villages, where sky towns are found.
+        if crate::worldgen::sky::continent::is_sky_city(id)
+            && let Some(city) = crate::worldgen::sky::continent::sky_city(settings, id)
+        {
+            let population = super::sky_city::sky_city_population(settings.seed, &city);
+            return Some(Arc::new(Settlement::sky_city(&city, &population)));
         }
         if super::camps::is_camp(id) {
             return super::camps::camp(settings, id).map(|camp| {

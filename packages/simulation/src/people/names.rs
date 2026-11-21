@@ -30,6 +30,10 @@ pub enum Culture {
     /// Sky culture: the cloud farmers and monks of the high isles, soft airy names and
     /// "of the" epithets for the winds they were born under.
     Cloudborn,
+    /// The Moon's research colonists (Wave 6): crisp, clipped names from every corner of the
+    /// world below, and call signs earned on shift. Not in [`Self::ALL`] (which samples the
+    /// cultures villages are built in); see [`Self::EVERY`].
+    Lunar,
 }
 
 impl Culture {
@@ -43,6 +47,25 @@ impl Culture {
         Self::Aeronaut,
         Self::Cloudborn,
     ];
+
+    /// Every culture, the Moon's colonists included.
+    pub const EVERY: [Self; 9] = [
+        Self::Frontier,
+        Self::Highland,
+        Self::Mesa,
+        Self::Riverside,
+        Self::Scrapper,
+        Self::Deepfolk,
+        Self::Aeronaut,
+        Self::Cloudborn,
+        Self::Lunar,
+    ];
+
+    /// Whether this is the Moon colonists' culture (Wave 6).
+    #[must_use]
+    pub const fn is_lunar(self) -> bool {
+        matches!(self, Self::Lunar)
+    }
 
     /// Whether this is a sky culture (the people of sky towns, WP-SKY).
     #[must_use]
@@ -61,6 +84,7 @@ impl Culture {
             Self::Deepfolk => "Deepfolk",
             Self::Aeronaut => "Aeronaut",
             Self::Cloudborn => "Cloudborn",
+            Self::Lunar => "Lunar",
         }
     }
 
@@ -76,6 +100,7 @@ impl Culture {
             Self::Deepfolk => "carved rock",
             Self::Aeronaut => "canvas and brass",
             Self::Cloudborn => "white stone and blue tile",
+            Self::Lunar => "pressed regolith and glass",
         }
     }
 
@@ -89,6 +114,7 @@ impl Culture {
             Self::Deepfolk => &DEEPFOLK,
             Self::Aeronaut => &AERONAUT,
             Self::Cloudborn => &CLOUDBORN,
+            Self::Lunar => &LUNAR,
         }
     }
 }
@@ -547,6 +573,49 @@ const CLOUDBORN: NameTable = NameTable {
         "mere",
         " Fields",
     ],
+};
+
+const LUNAR: NameTable = NameTable {
+    given: &[
+        "Anouk", "Tycho", "Selene", "Idris", "Kepler", "Noor", "Halvard", "Juno", "Ravi", "Ingrid",
+        "Oskar", "Mireille", "Tomasz", "Yusra", "Callisto", "Bram",
+    ],
+    she: &[
+        "Anouk", "Selene", "Noor", "Juno", "Ingrid", "Mireille", "Yusra", "Callisto",
+    ],
+    he: &[
+        "Tycho", "Idris", "Kepler", "Halvard", "Ravi", "Oskar", "Tomasz", "Bram",
+    ],
+    onsets: &["K", "T", "V", "Z", "L", "N", "Ar", "Is"],
+    vowels: &["a", "e", "i", "o", "u"],
+    endings: &["k", "n", "x", "ra", "ko", "sen"],
+    generated_percent: 20,
+    surname_heads: &["Crater", "Mare", "Orbit", "Apo", "Peri", "Tran"],
+    surname_tails: &["vik", "sen", "berg", "ova", "ski", "lund"],
+    surnames: &[
+        "Okonkwo-Hale",
+        "Vasquez",
+        "Lindqvist",
+        "Achterberg",
+        "Moreau",
+        "Tanaka-Byrne",
+        "Abernathy",
+        "Kowalczyk",
+    ],
+    nickname_percent: 50,
+    nicknames: &[
+        "Dusty", "Doc", "Airlock", "Lowgee", "Tether", "Crater", "Ping", "Halo", "Sixty",
+        "Regolith", "Quiet", "Sparks",
+    ],
+    place_heads: &[
+        "Tranquility",
+        "Serenity",
+        "Copernicus",
+        "Tycho",
+        "Endurance",
+        "Halcyon",
+    ],
+    place_tails: &[" Station", " Colony", " Base", " Outpost"],
 };
 
 /// A given name from `culture` that suits `pronouns` (`None` or `They`: any name).

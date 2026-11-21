@@ -78,6 +78,9 @@ pub enum PersonDeal {
     Rumour,
     /// A permanent perk.
     Apprenticeship(Perk),
+    /// A piece of furniture in the style of their people (Wave 6: every culture's signature
+    /// piece, [`signature_furniture`]), delivered to the buyer's furniture stock.
+    Furniture(crate::home::Furniture),
 }
 
 /// One row of a person's trade list.
@@ -119,6 +122,7 @@ impl PersonOffer {
             PersonDeal::MapSecret => "A map secret".to_owned(),
             PersonDeal::Rumour => "Local gossip".to_owned(),
             PersonDeal::Apprenticeship(perk) => format!("Apprenticeship: {}", perk.name()),
+            PersonDeal::Furniture(piece) => format!("{} (handmade)", piece.name()),
         }
     }
 
@@ -149,9 +153,52 @@ impl PersonOffer {
                 "Marks the nearest unknown site on your map as an echo.".to_owned()
             }
             PersonDeal::Apprenticeship(perk) => format!("Permanent: {}.", perk.effect()),
+            PersonDeal::Furniture(_) => {
+                "Made the way their people make it. Delivered to your furniture stock.".to_owned()
+            }
         }
     }
 }
+
+/// The furniture piece people of `culture` are known for (Wave 6): makers and traders sell it
+/// ([`sells_signature`]), nobody else does.
+#[must_use]
+pub const fn signature_furniture(culture: super::Culture) -> crate::home::Furniture {
+    use crate::home::Furniture as F;
+    match culture {
+        super::Culture::Frontier => F::RockingChair,
+        super::Culture::Highland => F::Loom,
+        super::Culture::Mesa => F::ClayOven,
+        super::Culture::Riverside => F::FishTank,
+        super::Culture::Scrapper => F::JunkSculpture,
+        super::Culture::Deepfolk => F::GlowcapLamp,
+        super::Culture::Aeronaut => F::ModelAirship,
+        super::Culture::Cloudborn => F::WindChime,
+        super::Culture::Lunar => F::MoonGlobe,
+    }
+}
+
+/// Whether someone in `role` makes or trades their culture's signature piece.
+#[must_use]
+pub const fn sells_signature(role: Role) -> bool {
+    matches!(
+        role,
+        Role::Smith
+            | Role::Trader
+            | Role::Tinkerer
+            | Role::Mechanic
+            | Role::Farmer
+            | Role::Apprentice
+            | Role::Aeronaut
+            | Role::Monk
+            | Role::Smuggler
+            | Role::Quartermaster
+            | Role::Hydroponist
+    )
+}
+
+/// Percent of the land office's catalogue price a person asks for their culture's piece.
+pub const SIGNATURE_PRICE_PERCENT: u32 = 110;
 
 /// The name of the tonic a blessing comes as from a person.
 #[must_use]
@@ -320,6 +367,28 @@ pub fn offers_of(character: &Character) -> Vec<PersonOffer> {
                 ));
             }
         }
+    }
+    // Wave 6: makers and traders sell their culture's signature piece (appended, so the rows
+    // before it keep their indices), and the colony's hydroponists their grow racks.
+    if sells_signature(character.role) {
+        let piece = signature_furniture(character.culture);
+        list.push(row(
+            OfferKind::Recipe,
+            PersonDeal::Furniture(piece),
+            piece.catalogue_price() * SIGNATURE_PRICE_PERCENT / 100,
+            Standing::Acquainted,
+            false,
+        ));
+    }
+    if character.role == Role::Hydroponist {
+        let rack = crate::home::Furniture::HydroponicRack;
+        list.push(row(
+            OfferKind::Recipe,
+            PersonDeal::Furniture(rack),
+            rack.catalogue_price() * SIGNATURE_PRICE_PERCENT / 100,
+            Standing::Friendly,
+            false,
+        ));
     }
     list
 }

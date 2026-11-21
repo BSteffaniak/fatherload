@@ -388,6 +388,7 @@ const fn deal_icon(deal: PersonDeal) -> &'static super::super::pixel_art::sprite
         PersonDeal::MapSecret => &menu_icons::GLOBE,
         PersonDeal::Rumour => &menu_icons::LETTER,
         PersonDeal::Apprenticeship(_) => &menu_icons::BOOK,
+        PersonDeal::Furniture(_) => &menu_icons::GIFT,
     }
 }
 

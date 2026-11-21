@@ -121,6 +121,9 @@ impl BuildingStyle {
             Culture::Deepfolk => Self::Carved,
             Culture::Aeronaut => Self::Skyrig,
             Culture::Cloudborn => Self::Cloister,
+            // The colony is no village (never laid out); its glass and hull read as the
+            // cloister's white stone where a style is asked for.
+            Culture::Lunar => Self::Cloister,
         }
     }
 
@@ -525,7 +528,7 @@ fn pick_specialty(culture: Culture, rng: &mut PeopleRng) -> Specialty {
         Culture::Scrapper => &[(0, 1), (1, 4), (2, 2), (3, 4), (4, 2), (5, 1), (6, 0)],
         Culture::Deepfolk => &[(0, 4), (1, 2), (2, 1), (3, 1), (4, 3), (5, 2), (6, 3)],
         // Sky towns take their specialty from their kind (`build`); this is never asked.
-        Culture::Aeronaut | Culture::Cloudborn => &[(1, 1), (2, 1), (4, 1)],
+        Culture::Aeronaut | Culture::Cloudborn | Culture::Lunar => &[(1, 1), (2, 1), (4, 1)],
     };
     match *rng.weighted(table) {
         0 => {
@@ -566,6 +569,7 @@ const fn centrepiece(culture: Culture) -> DecorKind {
         Culture::Deepfolk => DecorKind::CrystalCluster,
         Culture::Aeronaut => DecorKind::WindVane,
         Culture::Cloudborn => DecorKind::Bell,
+        Culture::Lunar => DecorKind::Lamp,
     }
 }
 

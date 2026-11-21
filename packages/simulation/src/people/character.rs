@@ -66,6 +66,14 @@ pub enum Role {
     StormChaser,
     /// Sky occupation: runs goods between the islands without asking who owns them.
     Smuggler,
+    /// Lunar occupation (Wave 6): grows the colony's greens under lamps.
+    Hydroponist,
+    /// Lunar occupation: keeps the domes airtight and the air scrubbers humming.
+    DomeTech,
+    /// Lunar occupation: maps the Moon crater by crater.
+    Selenographer,
+    /// Lunar occupation: keeps the colony's stores and signs for every crate.
+    Quartermaster,
 }
 
 /// The kind of one-of-a-kind thing a character can offer (WP-PEOPLE fills in the details).
@@ -141,6 +149,29 @@ impl Role {
         Self::Smuggler,
     ];
 
+    /// The lunar occupations (Wave 6), only rolled by the Moon's colonists
+    /// ([`Self::LUNAR_POOL`]).
+    pub const LUNAR: [Self; 4] = [
+        Self::Hydroponist,
+        Self::DomeTech,
+        Self::Selenographer,
+        Self::Quartermaster,
+    ];
+
+    /// The roles the Moon's colonists roll from: the lunar occupations and the trades a
+    /// research station still needs.
+    pub const LUNAR_POOL: [Self; 9] = [
+        Self::Hydroponist,
+        Self::DomeTech,
+        Self::Selenographer,
+        Self::Quartermaster,
+        Self::Scholar,
+        Self::Healer,
+        Self::Mechanic,
+        Self::Cartographer,
+        Self::Innkeeper,
+    ];
+
     /// The roles sky-town residents roll from: the sky occupations and the trades a town in
     /// the clouds still needs.
     pub const SKY_POOL: [Self; 16] = [
@@ -188,6 +219,10 @@ impl Role {
             Self::Monk => "monk",
             Self::StormChaser => "storm-chaser",
             Self::Smuggler => "smuggler",
+            Self::Hydroponist => "hydroponist",
+            Self::DomeTech => "dome tech",
+            Self::Selenographer => "selenographer",
+            Self::Quartermaster => "quartermaster",
         }
     }
 
@@ -218,6 +253,10 @@ impl Role {
             Self::Monk => TraitBias::new(15, 15, -15, 15, -10),
             Self::StormChaser => TraitBias::new(20, -15, 15, -5, -15),
             Self::Smuggler => TraitBias::new(5, -10, 10, -15, 5),
+            Self::Hydroponist => TraitBias::new(5, 15, -5, 15, 0),
+            Self::DomeTech => TraitBias::new(0, 25, -10, 0, 5),
+            Self::Selenographer => TraitBias::new(25, 15, -15, 0, 0),
+            Self::Quartermaster => TraitBias::new(-5, 25, 5, -5, 0),
         }
     }
 
@@ -225,9 +264,12 @@ impl Role {
     #[must_use]
     pub const fn offer(self) -> OfferKind {
         match self {
-            Self::Smith | Self::Mechanic | Self::Tinkerer | Self::Aeronaut => {
+            Self::Smith | Self::Mechanic | Self::Tinkerer | Self::Aeronaut | Self::DomeTech => {
                 OfferKind::PartVariant
             }
+            Self::Hydroponist => OfferKind::Recipe,
+            Self::Selenographer => OfferKind::MapSecret,
+            Self::Quartermaster => OfferKind::Cosmetic,
             Self::StormChaser => OfferKind::Rumours,
             Self::Farmer | Self::Healer | Self::Brewer | Self::Baker => OfferKind::Recipe,
             Self::Trader | Self::Smuggler => OfferKind::Cosmetic,
@@ -370,6 +412,26 @@ impl Role {
                 "moving crates that are definitely full of wool",
                 "forgetting where a shipment came from",
                 "paying a customs man in compliments",
+            ],
+            Self::Hydroponist => &[
+                "coaxing lettuce out of a nutrient tray",
+                "arguing with the grow lamps about the time of day",
+                "pollinating tomatoes with a very small brush",
+            ],
+            Self::DomeTech => &[
+                "chasing a hiss along the dome seals",
+                "swapping the scrubber filters",
+                "patching a micrometeorite pinhole with chewing resin",
+            ],
+            Self::Selenographer => &[
+                "naming a crater nobody asked me to name",
+                "measuring shadows at the terminator",
+                "redrawing the rille west of the pad",
+            ],
+            Self::Quartermaster => &[
+                "counting oxygen candles twice",
+                "signing for a crate of socks that took a month to arrive",
+                "rationing the good coffee",
             ],
             Self::Apprentice => &[
                 "learning the trade the hard way",
@@ -606,6 +668,7 @@ const fn culture_roles(culture: Culture) -> &'static [Role] {
         Culture::Deepfolk => &[Role::ShrineKeeper, Role::Hermit, Role::Scholar],
         Culture::Aeronaut => &[Role::Aeronaut, Role::Smuggler, Role::StormChaser],
         Culture::Cloudborn => &[Role::Monk, Role::Farmer, Role::StormChaser],
+        Culture::Lunar => &[Role::Hydroponist, Role::DomeTech, Role::Selenographer],
     }
 }
 
@@ -626,7 +689,9 @@ pub fn generate_character(seed: u64, id: CharacterId, culture: Culture) -> Chara
         u64::from(id.index),
     );
     // Sky towns roll from their own pool (ground cultures keep the classic list exactly).
-    let pool: &[Role] = if culture.is_sky() {
+    let pool: &[Role] = if culture.is_lunar() {
+        &Role::LUNAR_POOL
+    } else if culture.is_sky() {
         &Role::SKY_POOL
     } else {
         &Role::ALL
@@ -752,7 +817,9 @@ fn pick_want(role: Role, values: &[Value], rng: &mut PeopleRng) -> Want {
         Role::Cartographer | Role::Courier | Role::Aeronaut | Role::StormChaser => {
             boost(Want::SeeTheWorld, 5);
         }
-        Role::Monk => boost(Want::UncoverDeepSecret, 4),
+        Role::Monk | Role::Selenographer => boost(Want::UncoverDeepSecret, 4),
+        Role::DomeTech => boost(Want::BuildInvention, 4),
+        Role::Hydroponist | Role::Quartermaster => boost(Want::ProtectVillage, 3),
         Role::Apprentice => boost(Want::ProveThemselves, 5),
         _ => {}
     }
