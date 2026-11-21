@@ -231,6 +231,54 @@ fn the_pack_swaps_with_the_rig_by_hand() {
 }
 
 #[test]
+fn the_hand_pick_chips_soft_sky_soil_but_not_sky_rock() {
+    use crate::sky::{SkyBiome, SkyTile};
+    let mut world = arena();
+    let soil = TileKind::Sky(SkyTile::Soil);
+    fill(&mut world, 24..=25, 28..=31, soil);
+    out_of_the_rig(&mut world);
+    run(&mut world, &walk(1.0), 120);
+    let swing = TickInputs::held(
+        PLAYER,
+        ControlState::new(0.0, false, false).with_weapon(WeaponControl {
+            fire: true,
+            auto_aim: false,
+            aim_x: 100,
+            aim_y: 0,
+        }),
+    );
+    let target = {
+        let (_, body, state) = world.pilot_of(PLAYER).expect("pilot");
+        world
+            .pick_target(body, state, swing.players[&PLAYER].controls.expect("held"))
+            .expect("the wall is in reach")
+    };
+    assert_eq!(world.terrain().tile(target).map(|tile| tile.kind), Some(soil));
+    let ticks = (PICK_SECONDS_SOFT * 60.0) as u32 + 4;
+    let events = run(&mut world, &swing, ticks);
+    assert_eq!(
+        world.terrain().tile(target).map(|tile| tile.kind),
+        Some(TileKind::Air),
+        "the pick broke the sky soil"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, GameplayEventKind::PickStruck { broke: true, .. }))
+    );
+    // Island rock only clinks.
+    let rock = TileKind::Sky(SkyTile::Rock(SkyBiome::Meadow));
+    let _ = world.terrain_mut().set_kind(target, rock);
+    let events = run(&mut world, &swing, 90);
+    assert_eq!(world.terrain().tile(target).map(|tile| tile.kind), Some(rock));
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, GameplayEventKind::PickClinked { .. }))
+    );
+}
+
+#[test]
 fn the_hand_pick_chips_soft_dirt_but_not_stone() {
     let mut world = arena();
     // A dirt wall right of the rig, a stone block above it.

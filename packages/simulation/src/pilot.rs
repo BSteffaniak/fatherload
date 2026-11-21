@@ -999,14 +999,18 @@ pub const fn pilot_passable(kind: TileKind) -> bool {
 }
 
 /// Whether the hand pick can break a tile of `kind`, and how long it takes (soft dirt and clay
-/// only; the rest is the rig's job).
+/// only; the rest is the rig's job). In the sky and on the Moon that is the soft ground: an
+/// island's turf and soil, its dangling roots and vines and the Moon's dust (not rock,
+/// crystal, caches, nests, springs or anything a pilot works some other way).
 #[must_use]
 pub const fn pick_seconds(kind: TileKind) -> Option<f32> {
+    use crate::sky::SkyTile;
     match kind {
         TileKind::Dirt
-        | TileKind::Surface(SurfaceMaterial::Sand | SurfaceMaterial::Snow | SurfaceMaterial::Mud) => {
-            Some(PICK_SECONDS_SOFT)
-        }
+        | TileKind::Surface(SurfaceMaterial::Sand | SurfaceMaterial::Snow | SurfaceMaterial::Mud)
+        | TileKind::Sky(
+            SkyTile::Turf(_) | SkyTile::Soil | SkyTile::Roots | SkyTile::Vines | SkyTile::Regolith,
+        ) => Some(PICK_SECONDS_SOFT),
         TileKind::Clay => Some(PICK_SECONDS_CLAY),
         _ => None,
     }

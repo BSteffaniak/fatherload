@@ -572,6 +572,37 @@ fn pick_breaks_only_soft_ground() {
     assert!(pick_seconds(TileKind::Stone).is_none());
     assert!(pick_seconds(TileKind::HardRock).is_none());
     assert!(pick_seconds(TileKind::Bedrock).is_none());
+    // Soft sky ground picks like dirt; sky rock, crystal, caches and temple stone do not.
+    {
+        use crate::sky::{SkyBiome, SkyTile};
+        for soft in [
+            SkyTile::Turf(SkyBiome::ALL[0]),
+            SkyTile::Soil,
+            SkyTile::Roots,
+            SkyTile::Vines,
+            SkyTile::Regolith,
+        ] {
+            assert_eq!(
+                pick_seconds(TileKind::Sky(soft)),
+                pick_seconds(TileKind::Dirt),
+                "{soft:?}"
+            );
+        }
+        for hard in [
+            SkyTile::Rock(SkyBiome::ALL[0]),
+            SkyTile::Crystal,
+            SkyTile::ContinentRock,
+            SkyTile::MoonRock,
+            SkyTile::Cache,
+            SkyTile::Nest,
+            SkyTile::Spring,
+            SkyTile::Keystone,
+            SkyTile::AetherCore,
+            SkyTile::TempleBrick,
+        ] {
+            assert!(pick_seconds(TileKind::Sky(hard)).is_none(), "{hard:?}");
+        }
+    }
     assert!(pilot_passable(TileKind::Built(BuiltTile::VentGrate)));
     assert!(!pilot_passable(TileKind::Built(BuiltTile::Plank)));
 }
