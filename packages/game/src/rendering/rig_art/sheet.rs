@@ -35,6 +35,8 @@ pub enum RigSheet {
     Pilots,
     /// The milestone-reward cosmetics (WP-FEEL part 2) on rigs of several tiers.
     Rewards,
+    /// The pilot's animation strips (Wave 6 art pass): every frame of each cycle in a row.
+    PilotStrip,
 }
 
 /// Tiers that start each visual class (plus the top tier).
@@ -157,6 +159,78 @@ pub fn draw_rig_sheet(draw: &mut RaylibDrawHandle<'_>, sheet: RigSheet) {
         RigSheet::Weapons => draw_weapons(draw, canvas.width),
         RigSheet::Pilots => draw_pilots(draw, canvas.width),
         RigSheet::Rewards => draw_rewards(draw, canvas.width),
+        RigSheet::PilotStrip => draw_pilot_strip(draw, canvas.width),
+    }
+}
+
+/// The pilot's animation strips (Wave 6): each cycle frame by frame, left to right, including
+/// the low-gravity lope and float, the hurt flinch and the downed pilot.
+fn draw_pilot_strip(draw: &mut RaylibDrawHandle<'_>, width: i32) {
+    use crate::rendering::pilot_art::{PilotFrame, PilotLook, paint_pilot};
+    use fatherload_simulation::pilot::{PilotGear, PilotPose};
+    ui_kit::text(draw, "Pilot animation strips", 8, 6, TextStyle::Bold, GOLD);
+    // (label, pose, frames per second, frames, low gravity, downed)
+    let strips: [(&str, PilotPose, f32, usize, bool, bool); 12] = [
+        ("Walk", PilotPose::Walk, 10.0, 6, false, false),
+        ("Run", PilotPose::Run, 14.0, 6, false, false),
+        ("Moon lope", PilotPose::Walk, 6.0, 4, true, false),
+        ("Moon float", PilotPose::Fall, 2.0, 2, true, false),
+        ("Jump/Fall", PilotPose::Jump, 1.0, 1, false, false),
+        ("Ledge", PilotPose::Hang, 1.0, 1, false, false),
+        ("Glide", PilotPose::Glide, 1.0, 1, false, false),
+        ("Jetpack", PilotPose::Jetpack, 10.0, 2, false, false),
+        ("Swim", PilotPose::Swim, 4.0, 4, false, false),
+        ("Hurt", PilotPose::Hurt, 16.0, 2, false, false),
+        ("Downed", PilotPose::Idle, 1.0, 1, false, true),
+        ("Climb", PilotPose::Climb, 6.0, 2, false, false),
+    ];
+    let look = PilotLook::new(
+        RigCosmetics::default_for(PlayerId::new(1)),
+        PilotGear {
+            jetpack: 1,
+            suit: 2,
+            headlamp: 1,
+            ..PilotGear::default()
+        },
+    );
+    let scale = 1.5;
+    let half = width / 2;
+    for (index, (name, pose, rate, frames, low_gravity, downed)) in strips.into_iter().enumerate() {
+        let column = index as i32 / 6;
+        let row = index as i32 % 6;
+        let left = 8 + column * half;
+        let feet = 56 + row * 52;
+        ui_kit::text(draw, name, left, feet - 16, TextStyle::Bold, BONE);
+        let mut x = left + 92;
+        for frame in 0..frames {
+            let seconds = (frame as f32 + 0.5) / rate;
+            let mut pilot_frame = PilotFrame::new(pose, seconds);
+            pilot_frame.low_gravity = low_gravity;
+            pilot_frame.downed = downed;
+            if pose == PilotPose::Fall && frame == 0 && !low_gravity {
+                pilot_frame.pose = PilotPose::Jump;
+            }
+            let canvas = paint_pilot(&look, pilot_frame);
+            canvas.draw(
+                draw,
+                Vector2::new(x as f32, feet as f32),
+                scale,
+                false,
+                None,
+            );
+            x += 36;
+        }
+        if name == "Jump/Fall" {
+            let canvas = paint_pilot(&look, PilotFrame::new(PilotPose::Fall, 0.0));
+            canvas.draw(
+                draw,
+                Vector2::new(x as f32, feet as f32),
+                scale,
+                false,
+                None,
+            );
+        }
+        draw.draw_line(left + 70, feet, left + half - 16, feet, SLATE);
     }
 }
 
@@ -268,6 +342,8 @@ fn draw_pilots(draw: &mut RaylibDrawHandle<'_>, width: i32) {
                         },
                         ..arms
                     },
+                    low_gravity: false,
+                    downed: false,
                 },
             );
             let x = cx - 14 + frame * 28;
@@ -294,15 +370,7 @@ fn draw_pilots(draw: &mut RaylibDrawHandle<'_>, width: i32) {
                 ..PilotGear::default()
             },
         );
-        let canvas = paint_pilot(
-            &look,
-            PilotFrame {
-                pose: PilotPose::Walk,
-                seconds: index as f32 * 0.13,
-                swinging: false,
-                arms: crate::rendering::pilot_art::PilotArms::NONE,
-            },
-        );
+        let canvas = paint_pilot(&look, PilotFrame::new(PilotPose::Walk, index as f32 * 0.13));
         canvas.draw(
             draw,
             Vector2::new(cx as f32, (top + 72) as f32),

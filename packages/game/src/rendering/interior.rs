@@ -847,6 +847,8 @@ fn draw_room_pilot(
         },
         swinging: false,
         arms: crate::rendering::pilot_art::PilotArms::NONE,
+        low_gravity: false,
+        downed: false,
     };
     let x = room_pixel_x(seat.interior_x);
     draw.draw_rectangle(x - 5, FLOOR_Y, 10, 1, palette::with_alpha(INK, 120));

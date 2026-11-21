@@ -179,7 +179,9 @@ pub(super) fn draw_tomb_marks(
     }
 }
 
-/// A red "DOWN" ring over every downed member's pilot.
+/// A downed member's marker (Wave 6): the pilot itself lies flat on the floor (the sprite's
+/// downed frame), so only a small pulsing red cross over the body tells a crewmate where to
+/// revive it.
 pub(super) fn draw_downed(
     draw: &mut impl RaylibDraw,
     tombs: &Tombs,
@@ -191,23 +193,19 @@ pub(super) fn draw_downed(
             let Some(pilot) = pilots.iter().find(|pilot| pilot.player_id == member.player) else {
                 continue;
             };
-            let (x, y) = pilot.middle();
-            let pulse = (seconds * 4.0).sin().mul_add(4.0, 22.0);
-            draw.draw_ring(
-                Vector2::new(x, y),
-                pulse - 3.0,
-                pulse,
-                0.0,
-                360.0,
-                24,
-                Color::new(230, 60, 60, 210),
+            let (x, y) = (pilot.x, pilot.y - 30.0);
+            let pulse = (seconds * 4.0).sin().mul_add(0.5, 0.5);
+            let alpha = pulse.mul_add(90.0, 150.0) as u8;
+            draw.draw_rectangle_v(
+                Vector2::new(x - 6.0, y - 2.0),
+                Vector2::new(12.0, 4.0),
+                with_alpha(RED, alpha),
             );
             draw.draw_rectangle_v(
-                Vector2::new(x - 2.0, y - 40.0),
-                Vector2::new(4.0, 10.0),
-                RED,
+                Vector2::new(x - 2.0, y - 6.0),
+                Vector2::new(4.0, 12.0),
+                with_alpha(RED, alpha),
             );
-            draw.draw_rectangle_v(Vector2::new(x - 2.0, y - 27.0), Vector2::new(4.0, 4.0), RED);
         }
     }
 }

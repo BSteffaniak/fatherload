@@ -1103,6 +1103,8 @@ fn draw_pilot(
         seconds: if walking { stride } else { seconds },
         swinging: false,
         arms: crate::rendering::pilot_art::PilotArms::NONE,
+        low_gravity: false,
+        downed: false,
     };
     let px = room_pixel_x(x);
     d.draw_rectangle(px - 5, FLOOR_Y, 10, 1, with_alpha(INK, 120));

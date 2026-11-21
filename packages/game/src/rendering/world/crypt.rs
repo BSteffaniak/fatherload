@@ -1128,17 +1128,34 @@ fn draw_pilot(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>, pilot: &PilotPr
                 Color::new(255, 245, 220, (150 - trail * 40) as u8),
             );
         }
-        draw.draw_circle_v(Vector2::new(x, middle - 4.0), 10.0, suit);
+        // Tucked into a tumbling ball (Wave 6): the suit with its seams spinning, the pack and
+        // the helmet swinging round it on opposite sides, so the roll reads as a somersault.
+        let centre = Vector2::new(x, middle - 4.0);
+        draw.draw_circle_v(centre, 10.5, darken(suit));
+        draw.draw_circle_v(centre, 9.0, suit);
         let spin = state.anim * 25.0;
         for k in 0..2 {
             let angle = spin + k as f32 * std::f32::consts::PI;
             draw.draw_line_ex(
-                Vector2::new(x + angle.cos() * 9.0, middle - 4.0 + angle.sin() * 9.0),
-                Vector2::new(x - angle.cos() * 9.0, middle - 4.0 - angle.sin() * 9.0),
+                Vector2::new(x + angle.cos() * 8.0, centre.y + angle.sin() * 8.0),
+                Vector2::new(x - angle.cos() * 8.0, centre.y - angle.sin() * 8.0),
                 2.0,
                 darken(suit),
             );
         }
+        let (sx, sy) = (spin.cos(), spin.sin());
+        draw.draw_rectangle_v(
+            Vector2::new(x - sx * 8.0 - 4.0, centre.y - sy * 8.0 - 4.0),
+            Vector2::new(8.0, 8.0),
+            STEEL_DARK,
+        );
+        let head = Vector2::new(x + sx * 8.0, centre.y + sy * 8.0);
+        draw.draw_circle_v(head, 5.5, STEEL_LIGHT);
+        draw.draw_circle_v(
+            Vector2::new(head.x + sx * 2.0, head.y + sy * 2.0),
+            2.5,
+            Color::new(60, 110, 150, 255),
+        );
         return;
     }
     let (hx, hy) = top_down::heading_of(state);
@@ -1147,14 +1164,30 @@ fn draw_pilot(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>, pilot: &PilotPr
     } else {
         0.0
     };
-    // Boots stepping.
+    // Boots striding along the heading, side by side across it (Wave 6), and the arms
+    // swinging against them.
     let step = if state.run_time > 0.0 {
-        (state.anim * 14.0).sin() * 3.0
+        (state.anim * 14.0).sin() * 4.0
     } else {
         0.0
     };
-    draw.draw_circle_v(Vector2::new(x - 5.0, feet - 4.0 + step), 3.0, INK);
-    draw.draw_circle_v(Vector2::new(x + 5.0, feet - 4.0 - step), 3.0, INK);
+    let (side_x, side_y) = (-hy, hx);
+    for (side, stride) in [(-1.0, step), (1.0, -step)] {
+        let boot = Vector2::new(
+            x + side_x * side * 5.0 + hx * stride,
+            feet - 4.0 + side_y * side * 3.0 + hy * stride,
+        );
+        draw.draw_circle_v(boot, 3.5, INK);
+        draw.draw_circle_v(Vector2::new(boot.x, boot.y - 0.5), 2.2, STEEL_DARK);
+    }
+    if state.weapon.is_none() && state.swing <= 0.0 {
+        // The free hand swings opposite the leading boot.
+        let hand = Vector2::new(
+            x - side_x * 9.0 - hx * step,
+            middle - 6.0 + bob - side_y * 6.0 - hy * step,
+        );
+        draw.draw_circle_v(hand, 2.5, darken(suit));
+    }
     // The pack, behind.
     draw.draw_rectangle_v(
         Vector2::new(x - hx * 6.0 - 6.0, middle - 10.0 - hy * 5.0 + bob),

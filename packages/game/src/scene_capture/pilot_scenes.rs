@@ -85,6 +85,13 @@ pub const PILOT_SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "pilot_animation_strip",
+        summary: "Wave 6: every pilot animation frame by frame (walk, run, Moon lope and float, jump, ledge, glide, jetpack, swim, hurt, downed, climb)",
+        setup: |stage| {
+            stage.rig_sheet = Some(crate::rendering::rig_art::sheet::RigSheet::PilotStrip);
+        },
+    },
+    Scene {
         name: "pilot_ladder_climb",
         summary: "Climbing the underground outpost's lift ladder on foot, the rig parked in the room below",
         setup: ladder,

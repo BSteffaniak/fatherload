@@ -71,6 +71,8 @@ pub(super) fn draw_pilot(draw: &mut impl RaylibDraw, pilot: &PilotPresentation, 
             swing: (state.swing / fatherload_simulation::world::PILOT_SWING_SHOW_SECONDS)
                 .clamp(0.0, 1.0),
         },
+        low_gravity: pilot.low_gravity,
+        downed: pilot.downed,
     };
     let flip = state.facing < 0 && pilot.pose != PilotPose::Climb;
     let feet = Vector2::new(snap(pilot.x), snap(pilot.y));

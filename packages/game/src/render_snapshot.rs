@@ -234,6 +234,9 @@ pub struct PlayerPresentation {
     pub weapon: Option<WeaponPose>,
 }
 
+/// Gravity (relative to the ground's) under which a pilot is drawn floating and loping.
+const LOW_GRAVITY: f32 = 0.6;
+
 /// A pilot on foot as drawn (Part II F5): its owner, feet position, body and state, and the
 /// owner's paint job (the suit wears it).
 #[derive(Clone, Copy, Debug)]
@@ -247,6 +250,10 @@ pub struct PilotPresentation {
     pub cosmetics: RigCosmetics,
     /// The tile the hand pick is chipping and how far along (0..1), while it swings.
     pub pick: Option<(TilePosition, f32)>,
+    /// Gravity here is low (the Moon): the pilot floats and lopes (Wave 6 art pass).
+    pub low_gravity: bool,
+    /// Down in a tomb run, waiting for a revive: drawn lying on the floor.
+    pub downed: bool,
 }
 
 impl PilotPresentation {
@@ -271,6 +278,17 @@ impl PilotPresentation {
                         })?;
                         Some((pick.target, (pick.seconds / needed).clamp(0.0, 1.0)))
                     }),
+                    low_gravity: fatherload_simulation::environment::environment_at(
+                        world.terrain().settings(),
+                        body.x,
+                        body.y,
+                    )
+                    .gravity
+                        < LOW_GRAVITY,
+                    downed: world
+                        .tomb_run_of(state.owner)
+                        .and_then(|run| run.member(state.owner))
+                        .is_some_and(fatherload_simulation::tomb::RunMember::is_downed),
                 }
             })
             .collect()

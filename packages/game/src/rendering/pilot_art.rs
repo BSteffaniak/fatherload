@@ -4,6 +4,10 @@
 //! walk and run cycles, jump, fall, climb (seen from behind), crouch, crawl, swim, hurt,
 //! jetpack and ledge hang.
 //!
+//! Wave 6 art pass: six-frame walk and run cycles with knee lift and arm swing, a knocked-back
+//! hurt flinch, low-gravity variants (a floating star-jump in the air and a bounding lope on
+//! the Moon) and a downed pilot lying flat on its back.
+//!
 //! A [`PilotCanvas`] is a small grid of art pixels around the pilot's feet (x right, y up
 //! negative, the feet on row 0's top edge). Parts are painted flat, then
 //! [`PilotCanvas::outline`] rings everything in ink, so every pose reads cleanly against any
@@ -81,6 +85,26 @@ pub struct PilotFrame {
     pub swinging: bool,
     /// What the hands hold and where they point (WP-PILOT).
     pub arms: PilotArms,
+    /// Under low gravity (the Moon): airborne poses float limbs-out and walking lopes along in
+    /// bounds (Wave 6).
+    pub low_gravity: bool,
+    /// Down and waiting for a revive (a tomb run): lying flat on the floor (Wave 6).
+    pub downed: bool,
+}
+
+impl PilotFrame {
+    /// A plain frame of `pose`: empty hands, normal gravity, standing.
+    #[must_use]
+    pub const fn new(pose: PilotPose, seconds: f32) -> Self {
+        Self {
+            pose,
+            seconds,
+            swinging: false,
+            arms: PilotArms::NONE,
+            low_gravity: false,
+            downed: false,
+        }
+    }
 }
 
 /// The weapon in a pilot's hands for one frame (WP-PILOT).
@@ -260,7 +284,12 @@ struct Rig {
 pub fn paint_pilot(look: &PilotLook, frame: PilotFrame) -> PilotCanvas {
     let mut canvas = PilotCanvas::new();
     let t = frame.seconds;
-    let step = |rate: f32, frames: usize| ((t * rate) as usize) % frames;
+    let step = |rate: f32, frames: usize| ((t.max(0.0) * rate) as usize) % frames;
+    if frame.downed {
+        paint_downed(&mut canvas, look);
+        canvas.outline();
+        return canvas;
+    }
     if frame.pose == PilotPose::Climb {
         paint_climb(&mut canvas, look, step(6.0, 2));
         canvas.outline();
@@ -271,23 +300,51 @@ pub fn paint_pilot(look: &PilotLook, frame: PilotFrame) -> PilotCanvas {
         PilotPose::Idle => {
             rig.upper_dy = i32::from(step(1.5, 2) == 1);
         }
+        PilotPose::Walk if frame.low_gravity => {
+            // The Moon's bounding lope: push off, sail with both boots up, land.
+            let phase = step(6.0, 4);
+            let front = [(2, 0), (1, 2), (-1, 2), (-2, 0)][phase];
+            rig.front_leg = front;
+            rig.back_leg = (-front.0, front.1.min(1));
+            rig.front_arm = (-front.0, -2 * i32::from(front.1 > 0));
+            rig.back_arm = (front.0, -2 * i32::from(front.1 > 0));
+            rig.upper_dy = -i32::from(front.1 > 0);
+        }
         PilotPose::Walk => {
-            let phase = step(8.0, 4);
-            let stride = [1, 0, -1, 0][phase];
-            rig.front_leg = (stride, i32::from(phase == 3));
-            rig.back_leg = (-stride, i32::from(phase == 1));
-            rig.front_arm = (-stride, 0);
-            rig.upper_dy = i32::from(phase % 2 == 1);
+            // Six frames: contact, passing (a knee lifts), contact on the other foot...
+            let phase = step(10.0, 6);
+            let cycle = [(2, 0), (1, 0), (0, 0), (-1, 0), (-1, 1), (1, 1)];
+            let front = cycle[phase];
+            let back = cycle[(phase + 3) % 6];
+            rig.front_leg = front;
+            rig.back_leg = back;
+            // Arms swing against the legs.
+            rig.front_arm = (-front.0.clamp(-1, 1), 0);
+            rig.back_arm = (-back.0.clamp(-1, 1), 0);
+            rig.upper_dy = i32::from(phase == 0 || phase == 3);
         }
         PilotPose::Run => {
-            let phase = step(12.0, 4);
-            let stride = [2, 0, -2, 0][phase];
-            rig.front_leg = (stride, if phase == 3 { 2 } else { 0 });
-            rig.back_leg = (-stride, if phase == 1 { 2 } else { 0 });
+            // Six frames, leaning in: long strides, the trailing boot kicked high, arms pumping.
+            let phase = step(14.0, 6);
+            let cycle = [(3, 0), (1, 0), (-1, 0), (-3, 1), (-1, 3), (2, 2)];
+            let front = cycle[phase];
+            let back = cycle[(phase + 3) % 6];
+            rig.front_leg = front;
+            rig.back_leg = back;
             rig.upper_dx = 1;
-            rig.upper_dy = i32::from(phase % 2 == 1);
-            rig.front_arm = (if stride > 0 { -1 } else { 2 }, -2);
-            rig.back_arm = (if stride > 0 { 2 } else { -1 }, -2);
+            rig.upper_dy = i32::from(phase == 0 || phase == 3);
+            let pump = |leg: (i32, i32)| if leg.0 > 0 { (-1, -1) } else { (2, -3) };
+            rig.front_arm = pump(front);
+            rig.back_arm = pump(back);
+        }
+        PilotPose::Jump | PilotPose::Fall if frame.low_gravity => {
+            // Floating under a sixth of a g: a slow star-jump, limbs out, drifting.
+            let drift = step(2.0, 2) as i32;
+            rig.front_leg = (2, 1 + drift);
+            rig.back_leg = (-2, 2 - drift);
+            rig.front_arm = (3, -7 + drift);
+            rig.back_arm = (-3, -6 - drift);
+            rig.upper_dy = -1;
         }
         PilotPose::Jump => {
             rig.tucked = true;
@@ -329,9 +386,12 @@ pub fn paint_pilot(look: &PilotLook, frame: PilotFrame) -> PilotCanvas {
             rig.upper_dx = 1;
         }
         PilotPose::Hurt => {
-            rig.upper_dx = -1;
-            rig.front_arm = (2, -3);
-            rig.back_arm = (-2, -3);
+            // Knocked back: thrown off balance, arms flung up, the front boot kicked off the
+            // ground, shuddering.
+            rig.upper_dx = -1 - step(16.0, 2) as i32;
+            rig.front_arm = (3, -6);
+            rig.back_arm = (-3, -5);
+            rig.front_leg = (2, 2);
             rig.back_leg = (-1, 0);
         }
         PilotPose::Hang => {
@@ -658,6 +718,47 @@ fn paint_pick(canvas: &mut PilotCanvas, (gx, gy): (i32, i32), raised: bool) {
     }
 }
 
+/// Down (a tomb run, waiting for a revive): flat on its back on the floor, head forward, the
+/// pack under it, boots toes-up, one arm across the chest and the other flopped on the ground.
+fn paint_downed(canvas: &mut PilotCanvas, look: &PilotLook) {
+    let suit = look.suit;
+    let gear = look.gear;
+    // The pack, squashed flat under the back.
+    canvas.rect(
+        -6,
+        -2,
+        9,
+        2,
+        if look.jetpack { STEEL_DARK } else { gear.shade },
+    );
+    // Legs flat, boots toes-up at the far end.
+    canvas.rect(-12, -5, 7, 2, suit.shade);
+    canvas.rect(-12, -4, 7, 1, suit.body);
+    canvas.rect(-14, -7, 2, 4, gear.deep);
+    canvas.rect(-14, -7, 2, 1, gear.shade);
+    if look.boots {
+        canvas.set(-14, -4, STEEL_LIGHT);
+    }
+    // The torso, belt and chest badge.
+    canvas.rect(-5, -7, 8, 4, suit.body);
+    canvas.rect(-5, -7, 8, 1, suit.light);
+    canvas.rect(-5, -3, 8, 1, suit.shade);
+    canvas.rect(-5, -7, 1, 4, look.trim);
+    canvas.set(0, -6, look.trim);
+    // The helmet on its back, visor up.
+    canvas.rect(3, -8, 6, 6, MIST);
+    canvas.rect(3, -3, 6, 1, FOG);
+    canvas.rect(4, -8, 4, 1, BONE);
+    canvas.rect(5, -7, 3, 2, OCEAN);
+    canvas.set(6, -7, ICE);
+    canvas.set(7, -5, DEEP_BLUE);
+    // One arm across the chest, the other flopped out on the floor past the helmet.
+    canvas.rect(-3, -8, 4, 1, suit.body);
+    canvas.set(1, -8, gear.body);
+    canvas.rect(9, -2, 4, 1, suit.shade);
+    canvas.set(13, -2, gear.deep);
+}
+
 /// Climbing, seen from behind: helmet, pack, alternate arms and legs reaching up the ladder.
 fn paint_climb(canvas: &mut PilotCanvas, look: &PilotLook, phase: usize) {
     let suit = look.suit;
@@ -733,15 +834,7 @@ mod tests {
             PilotPose::WallSlide,
         ] {
             for seconds in [0.0, 0.13, 0.26, 0.4] {
-                let canvas = paint_pilot(
-                    &look(),
-                    PilotFrame {
-                        pose,
-                        seconds,
-                        swinging: false,
-                        arms: PilotArms::NONE,
-                    },
-                );
+                let canvas = paint_pilot(&look(), PilotFrame::new(pose, seconds));
                 let (min_x, min_y, max_x, max_y) = canvas.bounds().expect("painted");
                 assert!(max_y <= -1, "{pose:?}: nothing below the feet");
                 assert!(min_x >= X0 && max_x < X0 + WIDTH, "{pose:?}");
@@ -759,18 +852,65 @@ mod tests {
 
     #[test]
     fn walking_animates() {
-        let frame = |seconds| {
-            paint_pilot(
-                &look(),
-                PilotFrame {
-                    pose: PilotPose::Walk,
-                    seconds,
-                    swinging: false,
-                    arms: PilotArms::NONE,
-                },
-            )
-            .cells
-        };
+        let frame = |seconds| paint_pilot(&look(), PilotFrame::new(PilotPose::Walk, seconds)).cells;
         assert_ne!(frame(0.0), frame(0.13));
+    }
+
+    #[test]
+    fn walk_and_run_cycles_have_six_distinct_frames() {
+        for (pose, rate) in [(PilotPose::Walk, 10.0), (PilotPose::Run, 14.0)] {
+            let frames: Vec<_> = (0..6)
+                .map(|index| {
+                    paint_pilot(&look(), PilotFrame::new(pose, (index as f32 + 0.5) / rate)).cells
+                })
+                .collect();
+            for (index, a) in frames.iter().enumerate() {
+                for b in &frames[index + 1..] {
+                    assert_ne!(a, b, "{pose:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn low_gravity_floats_and_lopes_on_its_feet() {
+        for pose in [PilotPose::Jump, PilotPose::Fall, PilotPose::Walk] {
+            for seconds in [0.0, 0.2, 0.4, 0.6] {
+                let frame = PilotFrame {
+                    low_gravity: true,
+                    ..PilotFrame::new(pose, seconds)
+                };
+                let canvas = paint_pilot(&look(), frame);
+                let (_, min_y, _, max_y) = canvas.bounds().expect("painted");
+                assert!(max_y <= -1, "{pose:?}: nothing below the feet");
+                assert!((20..=30).contains(&(max_y - min_y + 1)), "{pose:?}");
+            }
+        }
+        let floating = paint_pilot(
+            &look(),
+            PilotFrame {
+                low_gravity: true,
+                ..PilotFrame::new(PilotPose::Fall, 0.0)
+            },
+        );
+        assert_ne!(
+            floating.cells,
+            paint_pilot(&look(), PilotFrame::new(PilotPose::Fall, 0.0)).cells
+        );
+    }
+
+    #[test]
+    fn a_downed_pilot_lies_flat() {
+        let canvas = paint_pilot(
+            &look(),
+            PilotFrame {
+                downed: true,
+                ..PilotFrame::new(PilotPose::Idle, 0.0)
+            },
+        );
+        let (min_x, min_y, max_x, max_y) = canvas.bounds().expect("painted");
+        assert!(max_y <= -1);
+        assert!(max_y - min_y + 1 <= 10, "lying, not standing");
+        assert!(max_x - min_x + 1 >= 20, "stretched out");
     }
 }
