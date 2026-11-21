@@ -339,7 +339,9 @@ mod tests {
     #[ignore = "debug: shows where the tombs bot sticks in side-view runs"]
     fn print_where_the_bot_sticks() {
         for (seed, tier, armed) in [
-            (11_u64, 2_u8, false),
+            (777_777_u64, 1_u8, true),
+            (777_777, 1, false),
+            (11, 2, false),
             (4_242, 2, false),
             (4_242, 3, false),
             (90_001, 3, false),

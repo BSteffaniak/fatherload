@@ -243,6 +243,13 @@ impl TombBot {
                 );
                 self.use_cooldown = 10;
             }
+            let guardian = run
+                .boss
+                .and_then(|boss| world.entities().get(crate::entity::EntityId(boss)))
+                .map(|entity| (entity.body.x, entity.body.y));
+            let guardian_near =
+                guardian.is_some_and(|(gx, gy)| (gx - mx).hypot(gy - my) <= TILE_SIZE * 11.0);
+            let guardian_behind = guardian.is_some_and(|(gx, _)| gx < mx - TILE_SIZE * 2.0);
             if let Some((dx, dy)) = target {
                 let length = dx.hypot(dy).max(1.0);
                 controls = controls.with_weapon(WeaponControl {
@@ -251,12 +258,18 @@ impl TombBot {
                     aim_x: (dx / length * 127.0) as i8,
                     aim_y: (dy / length * 127.0) as i8,
                 });
-                // Hold ground against a guardian: the stairs wait until it falls.
-                if run.on_last_floor() && !run.boss_defeated && run.boss.is_some() {
+                // Hold ground against a guardian in sight: the stairs wait until it falls.
+                if run.on_last_floor() && !run.boss_defeated && guardian_near {
                     controls = ControlState::new(0.0, false, false)
                         .with_jump(controls.jump)
                         .with_weapon(controls.weapon);
                 }
+            }
+            // T28: a guardian that hung back in its crypt is walked back to.
+            if run.on_last_floor() && !run.boss_defeated && !guardian_near && guardian_behind {
+                controls = ControlState::new(-1.0, false, false)
+                    .with_jump(controls.jump)
+                    .with_weapon(controls.weapon);
             }
         }
         inputs.hold_as(player, controls)
