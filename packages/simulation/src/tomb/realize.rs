@@ -180,8 +180,15 @@ pub const fn bestiary(style: SiteStyle, role: SpawnRole, variant: u32) -> EnemyK
     }
 }
 
-/// The boss's health multiplier over its kind's stock health.
-pub const BOSS_HEALTH_SCALE: f32 = 1.5;
+/// The boss's health multiplier over its kind's stock health, by site tier: a mesa tomb's
+/// guardian (tier 1, entered with starter gear) has well under its stock health, a lunar
+/// one half again as much. The probe (`--balance-report --only tombs`) showed a flat 1.5x
+/// guardian ending nearly every tier-1 run at the boss.
+#[must_use]
+#[allow(clippy::cast_precision_loss, reason = "a handful of tiers")]
+pub fn boss_health_scale(site_tier: u8) -> f32 {
+    f32::from(site_tier.clamp(1, super::MAX_TIER)).mul_add(0.25, 0.25)
+}
 
 /// A cell writer that keeps the latest write per tile and walls in every open cell.
 struct Canvas {

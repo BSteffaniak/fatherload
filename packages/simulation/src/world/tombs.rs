@@ -44,8 +44,8 @@ use crate::{
         TombCommand, TombRun, TombSite,
         floor::plan_floor,
         realize::{
-            BOSS_HEALTH_SCALE, RealizedFloor, RealizedRoom, SpawnRole, SpawnSlot, TrapKind,
-            bestiary, realizer_for,
+            RealizedFloor, RealizedRoom, SpawnRole, SpawnSlot, TrapKind, bestiary,
+            boss_health_scale, realizer_for,
         },
         relic::{RelicEffects, offers},
     },
@@ -1032,6 +1032,7 @@ impl WorldState {
         let style = run.site.style;
         let seed = run.site.seed;
         let tier = enemy_tier(run);
+        let boss_scale = boss_health_scale(run.site.tier);
         let spawns: Vec<SpawnSlot> = run
             .spawns
             .iter()
@@ -1058,8 +1059,8 @@ impl WorldState {
             if spawn.role == SpawnRole::Boss {
                 self.entities.update(enemy, |entity| {
                     if let EntityState::Enemy(state) = &mut entity.state {
-                        state.health = quantize(state.health * BOSS_HEALTH_SCALE);
-                        state.max_health = quantize(state.max_health * BOSS_HEALTH_SCALE);
+                        state.health = quantize(state.health * boss_scale);
+                        state.max_health = quantize(state.max_health * boss_scale);
                     }
                 });
                 boss = Some(enemy.get());

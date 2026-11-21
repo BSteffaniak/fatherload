@@ -146,13 +146,14 @@ impl TombBot {
             ControlState::new(if backing { -1.0 } else { 1.0 }, false, false).with_jump(jumping)
         };
         if self.armed {
-            // Aim straight at the nearest creature in sight within nine tiles and fire.
+            // Aim straight at the nearest creature in sight within fourteen tiles (past the
+            // guardian's twelve-tile bolts) and fire.
             let (mx, my) = state.middle(body);
             let target = world
                 .enemies()
                 .map(|(entity, _)| (entity.body.x - mx, entity.body.y - my))
                 .filter(|(dx, dy)| {
-                    dx.hypot(*dy) <= TILE_SIZE * 9.0
+                    dx.hypot(*dy) <= TILE_SIZE * 14.0
                         && crate::physics::line_clear(world.terrain(), mx, my, mx + dx, my + dy)
                 })
                 .min_by(|a, b| a.0.hypot(a.1).total_cmp(&b.0.hypot(b.1)));
@@ -270,6 +271,8 @@ pub struct ProbeRun {
     pub kills: u32,
     /// Shots and swings the bot made.
     pub shots: u32,
+    /// Where the bot went down for the last time (floor, room), if it did.
+    pub downed_in: Option<(u8, crate::tomb::RoomKind)>,
 }
 
 /// The first site of `style` and `tier` on `settings`' world, if any (ground, then sky).
@@ -334,6 +337,7 @@ pub fn play_run(settings: &WorldSettings, site: &TombSite, hz: u32) -> ProbeRun 
         hurt: 0,
         kills: 0,
         shots: 0,
+        downed_in: None,
     };
     for _ in 0..hz * 60 * RUN_MINUTES {
         if world.tomb_run_of(player).is_none() {
@@ -349,6 +353,18 @@ pub fn play_run(settings: &WorldSettings, site: &TombSite, hz: u32) -> ProbeRun 
                 }
                 GameplayEventKind::EnemyKilled { .. } => result.kills += 1,
                 GameplayEventKind::PilotFired { .. } => result.shots += 1,
+                GameplayEventKind::TombMemberDowned { revived: false, .. } => {
+                    result.downed_in = world.tomb_run_of(player).and_then(|run| {
+                        let (_, body, state) = world.pilot_of(player)?;
+                        let (x, y) = state.middle(body);
+                        let tile = TilePosition {
+                            x: (x / TILE_SIZE).floor() as i32,
+                            y: (y / TILE_SIZE).floor() as i32,
+                        };
+                        let room = run.rooms.iter().find(|room| room.interior.contains(tile))?;
+                        Some((run.floor, room.kind))
+                    });
+                }
                 _ => {}
             }
             if let GameplayEventKind::TombRunEnded {
@@ -572,9 +588,30 @@ impl BalanceProbe for TombsProbe {
                 .count() as f64
                 / total,
         );
+        let mut wipes: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+        for run in runs
+            .iter()
+            .filter(|run| run.outcome == Some(RunOutcome::Wiped))
+        {
+            let place = run
+                .downed_in
+                .map_or("between rooms (a pit)", |(_, room)| room.name());
+            *wipes.entry(place).or_default() += 1;
+        }
+        if !wipes.is_empty() {
+            section.notes.push(format!(
+                "Where the bot's wipes happened: {}.",
+                wipes
+                    .iter()
+                    .map(|(place, count)| format!("{place} {count}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
         section.notes.push(format!(
             "{} runs; cache value per tier is (30 + 25 x floor + d40) x tier^2 credits, the \
-             guardian's hoard 300 x tier^2.",
+             guardian's hoard 300 x tier^2, the guardian's health 0.25 + 0.25 x tier of its \
+             stock.",
             runs.len()
         ));
         section
@@ -588,12 +625,12 @@ mod tests {
     #[test]
     #[ignore = "debug: prints a few probe runs"]
     fn print_probe_runs() {
-        for seed in [11_u64, 4_242] {
+        for seed in [11_u64, 4_242, 90_001] {
             let settings = WorldSettings {
                 generator: GeneratorVersion::V10,
                 ..WorldSettings::new(seed)
             };
-            for tier in [1, 3, 5] {
+            for tier in [1, 2, 3] {
                 for style in SiteStyle::ALL {
                     if let Some(site) = find_site(&settings, style, tier) {
                         println!(

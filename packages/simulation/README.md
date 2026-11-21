@@ -1952,7 +1952,10 @@ entrance art and map marker, and is the same for every floor of that place.
   binding's entry point).
 - **The run vault** (`tomb_sites::VAULT`): `SLOTS` (16) run slots of `SLOT_SIZE` (168 x 48)
   tiles of sealed bedrock under columns -15,000.. (f32 keeps 1/32 px there), rows 180..276.
-  Nothing digs, blasts or picks bedrock, so a slot is reached only through a site.
+  Nothing digs, blasts or picks bedrock, so a slot is reached only through a site. No V10
+  feature, point of interest or pilot space touches the vault (`vault_hides`: the feature
+  index, `pois_touching`, `feature` and `spaces_touching` leave them out), so nothing points
+  quests, markers or scanners into the sealed rock.
   `in_vault` / `WorldState::in_run_space` mark run spaces: no cave water or critters
   (`Terrain::cave_at` answers `None`), no band heat on the pilot, never an enemy safe zone,
   torchlight in `light_at` (`tomb::RUN_SPACE_LIGHT`).
@@ -1972,8 +1975,9 @@ entrance art and map marker, and is the same for every floor of that place.
   stairs), all reachable by the stock pilot. `TopDownRealizer` builds a row of rooms seen from
   above (the vault north of its parent, spike floors with a safe lane, lever gates on the east
   doorways). `bestiary(style, role, variant)` names the enemy kind (placeholders: shellbacks,
-  acid spitters, cave bats and the ancient guardian in side view; magma wisps, cave bats and a
-  will-o-wisp guardian, all flyers, in top down); the guardian has `BOSS_HEALTH_SCALE` health.
+  acid spitters, cave bats and the ancient guardian in side view; magma wisps, cave bats and
+  the same ancient guardian, all flyers, in top down); the guardian's health is
+  `boss_health_scale(site tier)` (0.5x its stock at tier 1 up to 1.5x at tier 5).
   `TrapKind` (`Spikes`, `TRAP_KINDS` codes reserved) with `damage_per_second`.
 - **Tiles** (`BuiltTile` codes 72-119): `TombWall(style)`, `TombPillar(style)` (pilots pass),
   `TombDoor { style, sealed }`, `TombShrine { lit }`, `TombStairs`, `TombExit`,
@@ -2051,8 +2055,10 @@ tick-rate safety; the netcode e2e test plays relic picks over the wire.
   pilot). New traps: append `TrapKind` variants (tile `kind` index, at most `TRAP_KINDS`),
   give them `damage_per_second` or a behaviour in `WorldState::advance_traps`; their art goes
   in the game's `tile_art/built_art.rs` (`paint_tomb_trap`). New enemies and bosses: add
-  `EnemyKind`s as usual and return them from `realize::bestiary` for `SiteStyle::SideView`.
-  Tile sets: `BuiltTile::TombWall(style)` is the masonry (art `paint_tomb_wall`, ramps
+  `EnemyKind`s as usual and return them from `realize::bestiary` for `SiteStyle::SideView`;
+  the boss's health is scaled by `realize::boss_health_scale(site tier)` and its creature
+  tier by `world::tombs::enemy_tier` (tune both against `--balance-report --only tombs`,
+  whose notes say in which room the bot's wipes happened). Tile sets: `BuiltTile::TombWall(style)` is the masonry (art `paint_tomb_wall`, ramps
   `tomb_ramp`); add culture variants by new built codes or by drawing per site setting. Run
   music: the game's `audio::cues::event_cue` maps the tomb events to placeholder cues today;
   the director can switch music on `world.tomb_run_of(player)`.
