@@ -284,18 +284,36 @@ pub const CRYPT_SCENES: &[Scene] = &[
                     let room = room_of(world, player, RoomKind::Entry).unwrap_or(0);
                     reveal_floor(world, player);
                     stand(world, player, room, (5, 4));
-                    // One in the north wall, one in the west wall, one in the room.
-                    for (dx, dy) in [(4, -1), (-1, 5), (8, 6)] {
+                    // Two inside the wall to the next room east (a spectre is kept inside its
+                    // floor, so never in the floor's outer walls), one in the room.
+                    let east = world
+                        .tomb_run_of(player)
+                        .and_then(|run| run.rooms.get(room).copied())
+                        .map_or(10, |room| room.interior.max.x - room.interior.min.x + 1);
+                    for (dx, dy) in [(east, 2), (east, 6), (2, 7)] {
                         let (x, y) = room_point(world, player, room, (dx, dy));
                         let spectre = world.spawn_enemy(EnemyKind::Spectre, x, y);
+                        let now = world.simulation_tick();
                         world.entities_mut().update(spectre, |entity| {
                             entity.body.x = x;
                             entity.body.y = y;
+                            entity.body.previous_x = x;
+                            entity.body.previous_y = y;
+                            // Already hunting: drifting through the masonry toward the pilot.
+                            if let EntityState::Enemy(state) = &mut entity.state {
+                                state.home = (
+                                    (x / TILE_SIZE).floor() as i32,
+                                    (y / TILE_SIZE).floor() as i32,
+                                );
+                                state.target = Some(player);
+                                state.last_seen = now;
+                                state.mode = EnemyMode::Chase;
+                            }
                         });
                     }
                 }
             });
-            stage.settle(4);
+            stage.settle(2);
         },
     },
     Scene {

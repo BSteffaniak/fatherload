@@ -1250,7 +1250,8 @@ fn draw_enemy(
     let hurt = state.hurt_until.get() > scene.world_tick;
     let windup = state.mode == EnemyMode::Windup && ((crypt.seconds * 14.0) as i32) % 2 == 0;
     let alpha: u8 = match (state.kind.passes_walls(), in_wall) {
-        (true, true) => 70,
+        // Faint inside masonry, but never so faint a player misses one coming.
+        (true, true) => 115,
         (true, false) => 200,
         _ => 255,
     };
