@@ -376,6 +376,84 @@ pub fn play_run(settings: &WorldSettings, site: &TombSite, hz: u32) -> ProbeRun 
     result
 }
 
+/// Loot on offer in a whole run of `site` (run 0): every cache of every floor at its value,
+/// plus the guardian's hoard, and how many caches that is.
+#[must_use]
+pub fn loot_on_offer(site: &TombSite) -> (u32, u32) {
+    let mut total = crate::world::guardian_hoard(site.tier);
+    let mut caches = 0;
+    for floor in 0..site.floors() {
+        let plan = crate::tomb::floor::plan_floor(site, 0, floor);
+        let realized = crate::tomb::realizer_for(site.style).realize(&plan);
+        for (tile, kind) in &realized.cells {
+            if *kind == TileKind::Built(BuiltTile::TombCache { open: false }) {
+                caches += 1;
+                total += crate::world::cache_value(site.seed, site.tier, floor, *tile);
+            }
+        }
+    }
+    (total, caches)
+}
+
+/// Loot on offer per tier and style (pure arithmetic over the floor plans, every seed).
+fn loot_table(seeds: &[u64], section: &mut ReportSection) -> Table {
+    let mut table = Table::new(
+        "Loot on offer in a whole run (every cache plus the guardian's hoard, run 0, mean over \
+         seeds):",
+        &["Tier", "Style", "Floors", "Caches", "Credits"],
+    );
+    for tier in 1..=crate::tomb::MAX_TIER {
+        for style in SiteStyle::ALL {
+            let offers: Vec<(u8, u32, u32)> = seeds
+                .iter()
+                .filter_map(|seed| {
+                    let settings = WorldSettings {
+                        generator: GeneratorVersion::V10,
+                        ..WorldSettings::new(*seed)
+                    };
+                    find_site(&settings, style, tier).map(|site| {
+                        let (credits, caches) = loot_on_offer(&site);
+                        (site.floors(), caches, credits)
+                    })
+                })
+                .collect();
+            if offers.is_empty() {
+                continue;
+            }
+            let credits = mean(
+                &offers
+                    .iter()
+                    .map(|(_, _, credits)| f64::from(*credits))
+                    .collect::<Vec<_>>(),
+            );
+            let caches = mean(
+                &offers
+                    .iter()
+                    .map(|(_, caches, _)| f64::from(*caches))
+                    .collect::<Vec<_>>(),
+            );
+            section.metric(
+                format!(
+                    "tombs.t{tier}.{}.loot_on_offer",
+                    match style {
+                        SiteStyle::SideView => "side",
+                        SiteStyle::TopDown => "crypt",
+                    }
+                ),
+                credits,
+            );
+            table.row(vec![
+                tier.to_string(),
+                style.noun().to_owned(),
+                offers[0].0.to_string(),
+                format!("{caches:.1}"),
+                super::grouped(credits),
+            ]);
+        }
+    }
+    table
+}
+
 /// The tombs section of the balance report.
 pub struct TombsProbe;
 
@@ -484,6 +562,8 @@ impl BalanceProbe for TombsProbe {
             }
         }
         section.tables.push(table);
+        let loot = loot_table(&seeds, &mut section);
+        section.tables.push(loot);
         let total = runs.len().max(1) as f64;
         section.metric(
             "tombs.death_rate",

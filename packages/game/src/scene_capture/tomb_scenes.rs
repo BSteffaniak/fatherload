@@ -334,6 +334,40 @@ pub const TOMB_SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "tomb_map_markers",
+        summary: "The mine map at a mesa tomb: a gold pyramid for a side-view tomb, a violet arch for a crypt, red pips on unbroken seals",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let site = site(world, SiteStyle::SideView, Some(SiteSetting::Mesa))
+                    .or_else(|| site(world, SiteStyle::SideView, None));
+                if let Some(site) = site {
+                    at_door(world, player, &site);
+                    // Every site within reach is mapped (entered once before).
+                    let settings = *world.terrain().settings();
+                    let around = TileRect {
+                        min: TilePosition {
+                            x: site.door.x - 400,
+                            y: -100,
+                        },
+                        max: TilePosition {
+                            x: site.door.x + 400,
+                            y: 900,
+                        },
+                    };
+                    let mapped: Vec<_> = tomb_sites::sites_touching(&settings, &around)
+                        .into_iter()
+                        .map(|site| site.id)
+                        .collect();
+                    world.scenario_tomb_unlocks(player, |unlocks| unlocks.maps.extend(mapped));
+                }
+            });
+            stage.settle(3);
+            stage.seat(0).modal = Some(ModalScreen::Map);
+            stage.settle(3);
+        },
+    },
+    Scene {
         name: "tomb_codex",
         summary: "The tomb codex page: records, relics found (the rest still unknown) and lore pages",
         setup: |stage| {

@@ -2023,8 +2023,14 @@ entrance art and map marker, and is the same for every floor of that place.
   `TombFloorCleared`, `TombRelicPicked`, `TombShrineRested`, `TombCacheOpened`,
   `TombMemberDowned`, `TombRunEnded`.
 - **Balance** (`balance::tombs`, `--balance-report --only tombs`): `TombBot` (also used by the
-  world tests) plays one run per seed, tier and style on Normal enemies; the report gives run
-  length, cleared / wiped / timeout counts and banked and lost loot per tier and style.
+  world tests) plays one run per seed, tier and style on Normal enemies, with kit fitting the
+  tier; the report gives run length, cleared / wiped / timeout counts and banked and lost loot
+  per tier and style, and `loot_on_offer` the credits of every cache plus the hoard in a whole
+  run. First numbers (4 seeds): the bot clears 2 of 4 tier 1 tombs in about 1.6 minutes and
+  mostly falls to the placeholder guardian deeper down (it never dodges); loot on offer grows
+  from about 900 cr (tier 1) to 3,800, 15,000, 36,000-42,000 and 75,000-90,000 (tier 5).
+  Creatures spawn at `enemy_tier(run)` (one under the site's tier, plus one per two floors),
+  well under the strata's band tiers: they fight pilots, not rigs.
 - **Scenario helpers**: `scenario_enter_tomb`, `scenario_edit_tomb_member`,
   `scenario_tomb_stairs`, `scenario_end_tomb_run`, `scenario_tomb_unlocks`,
   `scenario_down_tomb_member`.

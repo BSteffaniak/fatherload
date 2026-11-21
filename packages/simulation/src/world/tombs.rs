@@ -981,7 +981,9 @@ impl WorldState {
             let (x, y) = state.middle(body);
             let tile = tile_at(x, y);
             if let Some(room) = run.rooms.iter().find(|room| room.interior.contains(tile)) {
-                let rect = room.interior.expanded(1);
+                // The walls around, and the pits under the floor.
+                let mut rect = room.interior.expanded(1);
+                rect.max.y += 2;
                 if !rooms.contains(&rect) {
                     rooms.push(rect);
                 }

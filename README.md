@@ -840,6 +840,13 @@ beside a cracked seal, or a **story** seen through.
   leaves a trophy case for your home and the Crown decal for the rig.
 - Top-down crypts walk eight ways with the movement keys (up and down included) for now; their
   own controls, camera and art come with the next wave.
+- **Balance** (`--balance-report --only tombs`, 4 seeds, 60 Hz): a scripted bot (rifle then
+  sidearm, aiming at what it sees, first relic each floor, no dodging, no detours to the vault)
+  clears 2 of 4 tier 1 tombs in about 1.6 minutes and dies to the guardian otherwise; the
+  placeholder guardian and creatures are T28 / T29's to replace and tune. Loot on offer in a
+  whole run (every cache plus the guardian's hoard): about 900 cr at tier 1, 3,800 at tier 2,
+  15,000 at tier 3, 36,000-42,000 at tier 4 and 75,000-90,000 at tier 5 (7-29 caches over 3 to 6
+  floors).
 
 ## Controls
 
