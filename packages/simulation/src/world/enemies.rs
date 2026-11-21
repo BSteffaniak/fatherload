@@ -2506,8 +2506,8 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::SkeletalArcher
         | EnemyKind::AnimatedStatue
         | EnemyKind::SunColossus
-        | EnemyKind::HollowMatriarch => false,
-        // Crypt creatures live only in crypt runs.
+        | EnemyKind::HollowMatriarch
+        // Crypt creatures (T29) live only in crypt runs.
         | EnemyKind::CryptSkeleton
         | EnemyKind::Spectre
         | EnemyKind::Cultist
