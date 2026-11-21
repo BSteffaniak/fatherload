@@ -778,15 +778,15 @@ fn a_golem_never_slams_through_a_wall() {
     };
     stand_at(&mut world, TilePosition { x: pilot_x, y: row });
     // Pressed right up to the wall on both sides (the wall is a tile thick).
-    let side: f32 = if golem_x > pilot_x { 1.0 } else { -1.0 };
+    let toward: f32 = if golem_x > pilot_x { 1.0 } else { -1.0 };
     let id = world.pilot_of(PLAYER).expect("pilot").0;
     world.edit_pilot(id, |body, _| {
-        body.x = side.mul_add(TILE_SIZE * 0.5 - PILOT_HALF_WIDTH - 0.5, body.x);
+        body.x = toward.mul_add(TILE_SIZE * 0.5 - PILOT_HALF_WIDTH - 0.5, body.x);
         body.previous_x = body.x;
     });
     let radius = EnemyKind::CryptGolem.stats().radius;
     let (gx, gy) = (
-        (-side).mul_add(
+        (-toward).mul_add(
             TILE_SIZE * 0.5 - radius - 0.5,
             (golem_x as f32 + 0.5) * TILE_SIZE,
         ),
