@@ -7,11 +7,8 @@
 //! cells into the run slot, spawns guards at once, springs ambushes when a member walks into
 //! the room and hands boss and minion kinds out of [`bestiary`].
 //!
-//! * [`SideViewRealizer`] (T28 replaces the contents, keeps the trait): platformer rooms in a
-//!   row on one floor line, doorways three tiles tall, the vault up a stair of ledges above its
-//!   parent room, trap halls as spike pits, puzzle rooms gated by a lever or a pressure plate,
-//!   the shrine, caches, the boss room and the stairs. Everything is reachable with the stock
-//!   pilot (one-tile steps and two-tile jumps).
+//! * [`SideViewRealizer`] (T28, [`super::side_view`]): platformer rooms in the site's culture
+//!   with trap halls, puzzles, ambushes, secrets, the vault climb, the guardian's arena.
 //! * [`TopDownRealizer`] (T29 replaces it): a row of square rooms seen from above with the
 //!   vault north of its parent, walked in the pilot's top-down placeholder mode (no gravity,
 //!   8-way): spike floors, lever gates on the east doorways, the shrine, caches, the boss and

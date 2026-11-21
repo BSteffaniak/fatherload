@@ -838,18 +838,47 @@ beside a cracked seal, or a **story** seen through.
   milestones) lists every relic you have carried, the tombs you have mapped and cleared,
   guardians felled and the builders' **lore pages** found in vaults. Each guardian felled also
   leaves a trophy case for your home and the Crown decal for the rig.
+- **Side-view tombs** (wave 5 T28) are built in their site's culture: **sandstone** tombs in
+  the mesas (glyph bands, bronze sconces), grey **catacombs** with skull niches in the deep
+  strata and under old quarters, pale marble and gold **sky temple vaults** on the sky
+  continents, and alloy **lunar vaults** with teal light seams on the Moon; the entrance shows
+  the culture too. Rooms are real platforming: stepped mounds with the lever on top, plate pits
+  by the gate (it holds a few seconds after you step off), ledge and mezzanine ambushes, a climb
+  of ledges up to the treasure vault, and **secrets**: false walls that hide cellar caches and
+  sometimes the vault's way in.
+- **Traps** all tell you before they hurt and leave a safe moment (or a safe spot): **swinging
+  blades** (wait in the strip between two), **crushers** that shake and shed dust before they
+  slam (and shove you out from under them), **crumbling floors** over spikes (keep moving; they
+  set again), **dart throwers** whose eye glows before a dart crosses the hall at jump height,
+  **sand basins** that trickle, fill and drain (water in sky and lunar vaults), **cursed
+  vents** that gather wisps and burst into grave fog, and hidden spike pits. The
+  **Trap-Sight Lantern** shows hidden pits and false walls and outlines each trap's reach (a
+  blade's sweep, a crusher's column, a dart's line); **Sandwalker Sandals** halve trap damage.
+  New side-view synergies: Cloud Dancer (Spring Heels + Featherfall: a third jump, a higher
+  leap), Updraft (Glider Boost + Featherfall), Tomb Runner (Quickstep + Sandwalker) and Seer's
+  Path (Trap-Sight + Sandwalker).
+- **Tomb creatures**: shambling **mummies** that lurch at you, **crypt bats** dropping from the
+  ceiling, **skeletal archers** that draw a long pull before each arrow (duck or jump it),
+  **animated statues** standing dormant until you come close, and two **guardians**: the
+  **Sunwrought Colossus** (a leaping slam that throws rubble both ways; at 60 % health it adds
+  thrown rubble and raises mummies, at 30 % it enrages) and the **Hollow Matriarch** (fans of
+  hexes from above; then rings of hexes and crypt bats; at the end she dives through you). Each
+  run of a tomb wakes one of the two. Side-view tombs have their own run music and a guardian's
+  theme, and every trap and creature its own sound. Everything plays with touch (the d-pad,
+  JUMP, USE and the fire stick) as well as keyboard and controller.
 - Top-down crypts walk eight ways with the movement keys (up and down included) for now; their
   own controls, camera and art come with the next wave.
-- **Balance** (`--balance-report --only tombs`, 3 seeds, 60 Hz): a scripted bot (rifle then
+- **Balance** (`--balance-report --only tombs`, 4 seeds, 60 Hz): a scripted bot (rifle then
   sidearm, aiming at what it sees within 14 tiles, first relic each floor, no dodging, no
-  detours to the vault, walks through some traps) clears 2 of 3 tier 1 tombs in about 1.3
-  minutes but few crypts or deeper runs; over half its wipes are at the guardian (whose health
-  scales with the site tier, half its stock at tier 1), most of the rest in spike pits. The
-  bot is far weaker than a player, so read these as relative numbers; the placeholder
-  guardian and creatures are T28 / T29's to replace and tune. Loot on offer in a
-  whole run (every cache plus the guardian's hoard): about 900 cr at tier 1, 3,800 at tier 2,
-  15,000 at tier 3, 36,000-42,000 at tier 4 and 75,000-90,000 at tier 5 (7-29 caches over 3 to 6
-  floors).
+  detours to the vault) reads the side-view traps ahead (it waits out blades, crushers, darts,
+  fog and the sand, never stops on a crumbling slab) and goes back for a lever it passed. In
+  side-view tombs it clears all 4 tier 1 runs in about 0.9 minutes, 5 of 8 at tiers 2-3 (1-1.3
+  minutes) and 1 of 8 at tiers 4-5 (2.5-3 minutes): nearly all its wipes are at the guardian,
+  which it fights standing still. Crypts are still T27's placeholders (T29). The bot is far
+  weaker than a player, so read these as relative numbers. Loot on offer in a whole run
+  (every cache plus the guardian's hoard): about 1,000 cr at tier 1, 4,000-4,700 at tier 2,
+  13,000-15,000 at tier 3, 35,000-42,000 at tier 4 and 70,000-90,000 at tier 5 (8-29 caches
+  over 3 to 6 floors).
 
 ## Controls
 

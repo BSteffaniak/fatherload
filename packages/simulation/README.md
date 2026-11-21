@@ -1972,7 +1972,8 @@ entrance art and map marker, and is the same for every floor of that place.
   it must stay inside `MAX_FLOOR_SIZE` and be pure. `SideViewRealizer` builds platformer rooms
   on one floor line (three-tall doorways, spike pits two deep, lever or plate gates, the vault
   up a step and ledge stair through a ceiling hole, the shrine, caches, the boss room, the
-  stairs), all reachable by the stock pilot. `TopDownRealizer` builds a row of rooms seen from
+  stairs), all reachable by the stock pilot (T28 replaced it: see "Side-view tombs" below).
+  `TopDownRealizer` builds a row of rooms seen from
   above (the vault north of its parent, spike floors with a safe lane, lever gates on the east
   doorways). `bestiary(style, role, variant)` names the enemy kind (placeholders: shellbacks,
   acid spitters, cave bats and the ancient guardian in side view; magma wisps, cave bats and
@@ -2081,6 +2082,107 @@ tick-rate safety; the netcode e2e test plays relic picks over the wire.
 - **Formats**: `PROTOCOL_VERSION` 13 and save format 11 for the whole wave (the integrator
   collapses T28 / T29 bumps into these); events 270-279 are T27's, T28 has 280-289 and T29
   290-299.
+
+## Side-view tombs (`src/tomb/{side_view,culture,traps}.rs`, `src/world/{tomb_traps,enemies/tomb}.rs`, wave 5 T28)
+
+The side-view half of WP-TOMBS on T27's core: a platformer roguelite on the pilot's own
+movement and personal weapons. Nothing here changes generation (V1-V10 digests unchanged: the
+entrances stay T27's set-0 masonry on the map and are painted in their culture by the game).
+
+- **Cultures** (`tomb::culture::TombCulture`, from `TombSite::setting`): `Sandstone` (mesas),
+  `Catacomb` (deep strata, old quarters), `SkyTemple` (sky continents), `LunarVault` (the
+  Moon). A culture is a masonry set of `BuiltTile::TombWall` / `TombPillar`: 0 is T27's
+  sandstone (code 72/74), 2-4 are new (built codes 120-125, `culture::masonry_extra`).
+  `FloorPlan::setting` (new field, filled by `plan_floor`) carries the setting to the
+  realizer. `floods_with_water` makes sky and lunar sluices pour water.
+- **The realizer** (`tomb::side_view::SideViewRealizer`, `realizer_for(SideView)`): the main
+  path west to east on one doorway line (`FLOOR_ROW`), a masonry hull round the whole floor.
+  Templates per room kind, rolled from the room's variant, the culture's weights and the
+  danger: trap halls (`TrapTemplate`: spike pits with a dart thrower over the east doorway
+  from danger 5 under a 4-row ceiling, a blade gallery, a crusher run, a collapsing bridge, a
+  sand basin, a fog corridor), puzzles (`PuzzleTemplate`: a lever mound kept within
+  `mechanism::REACH_COLUMNS` of its gate, a pit floored with pressure plates a dash from the
+  gate), ambushes (`AmbushTemplate`: floating ledges, a mezzanine that stops two short of the
+  east wall), the shrine between pillars, the guardian's arena (two side platforms and a high
+  one), the stairs, and the vault above a puzzle or ambush room up a step and three ledges on
+  its east end (a third of the time behind a hidden false wall). Secret cellars (a hidden false
+  floor slab over a one-row drop with a cache) in some entry, shrine and stairs rooms. Every
+  main-path room is crossable by the stock pilot (one-tile steps, two-row jumps, two-wide gaps)
+  and by the tombs bot. No moving platforms (no moving solid bodies in the simulation yet).
+- **Traps** (`TrapKind` indices 1-7, appended: `Blade`, `Crusher`, `Crumble`, `DartWall`,
+  `SandSluice`, `FogVent`, `FalseWall`; `pilot_passable()`: only spikes and false walls let a
+  pilot in, `pilot::pilot_passable` asks it). Every moving trap is a **pure function of the
+  world clock** (`tomb::traps`: `world_millis(tick, hz)` is tick-rate safe; no `sin`, only
+  basic float arithmetic, so desktop and browser agree): `blade_tip`, `crusher_state` /
+  `crusher_block`, `dart_state` / `dart_position` (a dart thrower's `hidden` bit is its facing,
+  `side_view::dart_facing`), `sand_state` / `sand_surface` (per room interior), `fog_state` /
+  `fog_hurts`. Each has a tell (a crusher shakes `CRUSHER_SHAKE_MILLIS`, a dart's eye charges
+  `DART_CHARGE_MILLIS`, sand trickles `SAND_TELL_MILLIS`, wisps gather `FOG_GATHER_MILLIS`) and
+  a safe window or strip. `WorldState::advance_side_view_run` (`world/tomb_traps.rs`, called
+  from the tombs pass right after the spike check) scans the traps around each standing member,
+  hurts by their damage rates (`BLADE_DPS`, `CRUSHER_DPS`, ...) times the enemy difficulty's
+  damage (nothing on Peaceful, like T27's spikes) and the member's `RelicEffects::trap_pct`,
+  shoves a pilot out from under a crusher, crumbles slabs a grounded member stands on
+  (`TombRun::crumbling`, `CrumblingSlab`: falls after `CRUMBLE_MILLIS`, sets again
+  `REFORM_MILLIS` later when nothing stands in the hole) and reports `TombTrapSprung` near the
+  party.
+- **Creatures** (`EnemyKind::{Mummy, CryptBat, SkeletalArcher, AnimatedStatue}`, appended; tomb
+  runs only, never in caves or the director's rosters): the shared enemy machinery and body
+  rules (`step_body`, `free_from_rock`, `keep_off_bodies`, `contact_half`). Statues start
+  dormant like rock mimics. New shots `ShotKind::{Arrow, Rubble, Hex}`.
+  `side_view::bestiary(role, variant)` is `realize::bestiary` for side view.
+- **Guardians** (`EnemyKind::{SunColossus, HollowMatriarch}`, `world/enemies/tomb.rs`): the
+  phase is `side_view::guardian_phase(health fraction)` (2 below `GUARDIAN_PHASE_TWO`, 3 at
+  `GUARDIAN_PHASE_THREE`); the move is `guardian_move(kind, fraction, wind-up deadline)`, a
+  pure rotation by the second, so the wind-up, the release and the renderer agree. Colossus:
+  `LeapSlam` (a leap at the prey; landing throws rubble both ways), then `RubbleToss` and
+  `RaiseDead` (up to `MAX_RAISED` mummies), enraged in phase 3 (faster, three-fifths
+  cooldowns). Matriarch: `HexFan`, then `HexRing` and `SummonBats` (up to `MAX_BATS`), then a
+  `Dive` that hurts on contact. Hooks in `advance_enemy` / `behave` (three guarded lines) and a
+  ranged enemy's contact now counts in `Strike` (only the dive ever strikes). The run tracks the
+  phase (`TombRun::boss_phase`) and reports `TombGuardianPhase`.
+- **Relics**: `Relic::Sandwalker` (appended: traps hurt half), `RelicEffects::trap_pct` (serde
+  default; also scales T27's spike damage), and four appended `SYNERGIES`: Cloud Dancer (Spring
+  Heels + Featherfall), Updraft (Glider Boost + Featherfall), Tomb Runner (Quickstep +
+  Sandwalker) and Seer's Path (Trap-Sight Lantern + Sandwalker).
+- **Events** 280-281: `TombTrapSprung { kind, x, y }`, `TombGuardianPhase { kind, phase, x, y }`.
+- **Formats**: no new bump; the additions ride the wave's `PROTOCOL_VERSION` 13 / save format
+  11 (listed in `netcode::protocol`). New fields are serde-default.
+- **The bot** (`balance::tomb_side::SideBot`, inside `TombBot`): predicts its body over
+  `LOOK_AHEAD_MILLIS` walking on, waiting or backing off against every timed trap near it,
+  never stops on a crumbling slab, waits at a sand basin's edge for a long dry spell, stops over
+  a plate pit, goes back for a lever it passed (`SideBot::lever_behind`) and walks back to a
+  guardian that hung back. Debug: `print_where_the_bot_sticks`, `print_what_hurts_the_bot`
+  (ignored tests).
+- **Balance** (`--balance-report --only tombs`, 4 seeds): side-view tombs clear 4/4 at tier 1
+  (0.9 min), 2/4 at tier 2, 3/4 at tier 3, 1/4 at tier 4 and 0/4 at tier 5 (2.5-3 min), wipes
+  nearly all at the guardian (the bot never dodges).
+- **Scenario helpers**: `scenario_next_tomb_run(site, run)`, `scenario_tomb_floor(player,
+  floor)`, `scenario_tomb_guardian(player, kind)`, `scenario_hurt_enemy_to(id, fraction)`.
+
+Tests: `tomb::side_view` (cultures, every trap built, traps set where their shapes need room,
+every gate has its lintel and a mechanism in reach, both guardians), `tomb::traps` (the series
+against the library, tick-rate safety, tells and safe windows, a blade clearing a standing
+pilot at the top of its swing), `tomb::culture` (codes round-trip, T27's codes unmoved),
+`world::enemies::tomb` (distinct patterns per phase), `world/side_tomb_tests.rs` (blades at
+30/60/120 Hz and on two peers, the safe strip, a crusher's tell, slam and shove, crumbling
+slabs, the sand basin, tomb creatures never in rock or on the pilot, both guardians beaten by
+the scripted bot through phases 2 and 3, a run cleared on every tier, an armed tier-1 clear on
+Normal, a party of two clearing together, the phase saved in the run).
+
+## Wave 5 seams: side-view tombs (T28)
+
+- **T29 (crypts)**: `TrapKind` indices 1-7 are side view's; append the crypt's traps from 8.
+  Built codes 120-125 are taken (culture masonry). `realize::Canvas` gained `with_masonry`
+  and `hull` (both styles may use them). `realize::bestiary` now delegates the side-view arms
+  to `side_view::bestiary`; the top-down arms are untouched. `contact_attack` lets a ranged
+  enemy hurt in `Strike` (a crypt lord's charge can use it). `Relic::suits` still offers
+  Sandwalker in crypts (spikes and T29's traps read `trap_pct` if they go through
+  `RelicEffects::scale`).
+- **Integrator**: T28 added no protocol or save bump (fold into 13 / 11 with T29's). Events
+  280-281 are used; 282-289 are free.
+- **Stories (T26)**: `TombCulture::of_setting` and `TombSite::setting` tell an arc which builders
+  a tomb belongs to.
 
 ## Upgrade rewards and milestones (`src/milestone.rs`, `src/upgrade_preview.rs`, `src/world/milestones.rs`)
 

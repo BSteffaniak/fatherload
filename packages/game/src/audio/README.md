@@ -15,7 +15,7 @@ RenderSnapshot (rigs, drill, hazards) ----+       (audio.rs AudioBus)      (audi
 | Module      | Role |
 |-------------|------|
 | `dsp`       | 44.1 kHz building blocks: seeded RNG, polyBLEP saw/square (DC-free pulse) and integrated triangle, sine, white/pink/brown noise, ADSR, percussive and glide envelopes, Simper state-variable filter (LP/HP/BP, safe under per-sample modulation), two-operator FM, saturation, wavefolding, decimation, damped feedback delay, Freeverb-style stereo reverb, equal-power pan, cubic Hermite resampling. |
-| `patch`     | The 55 designed patches (below), their playback metadata (category, variations, priority, instance cap, reverb send, pitch/gain jitter, ducking) and `render_patch`: design, a 30 Hz sub-cut (12 dB/oct on one-shots, 24 dB/oct on loops; also removes DC), 1 ms / 12 ms edge fades (one-shots) or a 0.3 s equal-power seam fold (loops), loudness normalization. |
+| `patch`     | The designed patches (below), their playback metadata (category, variations, priority, instance cap, reverb send, pitch/gain jitter, ducking) and `render_patch`: design, a 30 Hz sub-cut (12 dB/oct on one-shots, 24 dB/oct on loops; also removes DC), 1 ms / 12 ms edge fades (one-shots) or a 0.3 s equal-power seam fold (loops), loudness normalization. |
 | `bank`      | Every patch's variations pre-rendered in parallel. One-shots get 4 variations, loops 1. |
 | `mixer`     | 24 voices (+8 slots for stolen voices to fade out over 6 ms). Per voice: gain, pan, playback rate, low-pass (distance muffling), reverb send, all smoothed per 64-frame block and ramped across it. One-shots pick a variation (never the last one) and jitter pitch/gain. Loops are keyed (`LoopKey`): refreshed each frame, faded in/out (60 ms / 100 ms), and fade on their own if not refreshed for 0.35 s. Voice stealing: oldest instance past a patch's cap, else the lowest-priority oldest voice; a request outranked by everything playing is dropped. Big patches duck lower-priority voices (10 ms attack, 0.35 s hold, 0.25 s release). Reverb bus, smoothed volume, peak limiter at 0.95. No allocation in the render path. |
 | `cues`      | `SoundCue` -> patch, gameplay event -> cue (exhaustive, so a new event kind must decide how it sounds), and `SoundSource` (interface / player / world point). |
@@ -154,6 +154,12 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `gate_grind` | impact | A ruin gate moving: a wobbling low saw groan, rattling grains and a final clang. |
 | `keycard_beep` | feedback | A keycard door accepting its card: a reader chirp and two rising square beeps. |
 | `loop_rain` | loop | Rain: a soft band-passed pink-noise hiss over a lower body, ~70 droplet ticks a second and a few heavier drips. |
+| `loop_tomb_run` | loop | A side-view tomb's run music (WP-TOMBS T28): a 73.5/110 Hz triangle drone under a slow plucked FM line in D phrygian (90 bpm, two bars of three), a frame drum on the bar. |
+| `loop_tomb_boss` | loop | The guardian's theme: toms on every eighth (120 bpm, accents on the beat), a low plucked D ostinato and brass stabs a half step apart (D, E flat, D, D flat). |
+| `blade_swish` / `dart_fire` / `bone_rattle` | feedback | A blade sweeping past (a band-passed whoosh up and back, a thin ring); a dart loosed (a click and a falling whistle); bones rattling (dry band-passed clicks). |
+| `crusher_slam` / `colossus_slam` | impact | A crusher (a heavy stone thud, a crunch, grit); the colossus landing (a very low boom, a stone crack, a long rubble rain). |
+| `floor_crumble` / `sand_pour` / `fog_burst` / `statue_grind` | feedback | A slab giving way; sand or water starting to pour (a swelling hiss over a low rush); a cursed vent (a breathy rush and a ghostly bending tone); stone grinding. |
+| `mummy_groan` / `matriarch_wail` | impact | A mummy's low saw voice through shifting formants; the matriarch's two FM voices rising and falling with an uneasy vibrato. |
 
 Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes of drilling). Periodic parts use frequencies with whole cycles in the loop (multiples of 0.5 Hz); scattered events (pops, knocks, grit) are spread evenly at a steady density, so nothing marks the restart.
 
@@ -167,6 +173,7 @@ Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes
 | Alarms | fuel below 25% / hull below 30% | Low warnings stay sparse (every 8 s at the threshold, down to 4 s), since a quarter tank can last minutes; below 10% fuel / 12% hull the critical patches take over within 2 s and repeat every 2 s down to 1 s when empty. The two alarms never overlap. Silent in menus and while disabled. |
 | Gas / lava / boulders | hazards near each seat's rig | Loops scaled by proximity (lava within 3.5 tiles; gas and boulders by world distance, loose boulders quieter than falling ones). |
 | Wind / rain | each seat's rig out on a biome world's surface | Wind by biome (tundra and mountains gusty, deserts dry, forests calm) that strengthens and brightens with altitude up to ~200 tiles, then thins to silence in space (~700 tiles up); rain over wetlands. Both fade out within a few rows underground. |
+| Tomb music | each seat's player in a side-view tomb run (WP-TOMBS T28) | `loop_tomb_run` while exploring, swapped for `loop_tomb_boss` while the run's guardian is awake; silent while picking relics. |
 | Bomb fuses | each bomb | Ticks every 0.08-0.5 s as the fuse burns, placed in the world (C4 only once the detonator fires it; flares and burning fires never). |
 | Toasts | new shell or seat message | A chime 0.2 s later, cancelled if another sound plays first (so purchases and saves do not double up). |
 

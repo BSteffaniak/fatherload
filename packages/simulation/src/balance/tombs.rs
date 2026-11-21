@@ -1,7 +1,7 @@
 //! The tombs probe (Wave 5 T27, `--balance-report --only tombs`).
 //!
 //! Run length, death rate and loot value per tier and style, from a scripted bot playing
-//! whole runs through the real tick on the placeholder realizers.
+//! whole runs through the real tick (T28's side-view realizer, T27's top-down placeholder).
 //!
 //! The bot ([`TombBot`]) is the same one the world tests clear runs with: it walks east, jumps
 //! obstacles and two-deep pits (side view) or slides around spike floors and walks to levers
@@ -571,7 +571,8 @@ impl BalanceProbe for TombsProbe {
             "Tombs and crypts: run length, deaths and loot",
             "A scripted bot (rifle on auto-aim, first relic each floor) plays one run per seed, \
              tier and style on V10 worlds, Normal enemies, through the real tick on the \
-             placeholder realizers. Banked is the run's credits including the guardian's \
+             side-view realizer (T28) and the top-down placeholder. Banked is the run's \
+             credits including the guardian's \
              hoard; a run the bot cannot finish in the time limit counts as a timeout.",
         );
         let seeds: Vec<u64> = config.seeds.iter().copied().take(4).collect();
