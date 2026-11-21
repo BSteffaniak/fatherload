@@ -681,3 +681,156 @@ fn a_crypt_saved_mid_floor_keeps_its_traps_and_creatures() {
         loaded.simulation_state_hash()
     );
 }
+
+/// The entry room and a room beside it east or west, sharing rows (for tests across a wall).
+fn entry_and_neighbour(
+    world: &WorldState,
+) -> (
+    crate::worldgen::features::TileRect,
+    crate::worldgen::features::TileRect,
+) {
+    let entry = room(world, RoomKind::Entry);
+    let neighbour = world
+        .tomb_run_of(PLAYER)
+        .and_then(|run| {
+            run.rooms
+                .iter()
+                .map(|room| room.interior)
+                .filter(|other| *other != entry)
+                .filter(|other| other.min.y <= entry.max.y && other.max.y >= entry.min.y)
+                .filter(|other| other.min.x > entry.max.x || other.max.x < entry.min.x)
+                .min_by_key(|other| (other.center().x - entry.center().x).abs())
+        })
+        .expect("a room beside the entry");
+    (entry, neighbour)
+}
+
+#[test]
+fn a_spectre_crosses_the_masonry_between_rooms_to_its_prey() {
+    let site = crypt(1);
+    let mut world = world_at(60, EnemyDifficulty::Normal);
+    enter(&mut world, &site);
+    world.scenario_crypt_traps(PLAYER, Vec::new(), 0);
+    world.enable_test_mode();
+    let (entry, other) = entry_and_neighbour(&world);
+    // Both near the shared rows' top, away from the doorway in the middle of the wall.
+    let row = entry.min.y.max(other.min.y) + 1;
+    let (pilot_x, spectre_x) = if other.min.x > entry.max.x {
+        (entry.max.x - 1, other.min.x + 2)
+    } else {
+        (entry.min.x + 1, other.max.x - 2)
+    };
+    stand_at(&mut world, TilePosition { x: pilot_x, y: row });
+    let (sx, sy) = (
+        (spectre_x as f32 + 0.5) * TILE_SIZE,
+        (row as f32 + 0.5) * TILE_SIZE,
+    );
+    let spectre = world.spawn_enemy(EnemyKind::Spectre, sx, sy);
+    world.entities_mut().update(spectre, |entity| {
+        entity.body.x = sx;
+        entity.body.y = sy;
+        entity.body.previous_x = sx;
+        entity.body.previous_y = sy;
+    });
+    let still = TickInputs::held(PLAYER, ControlState::default());
+    let mut through_wall = false;
+    let mut reached = false;
+    for _ in 0..60 * 15 {
+        let _ = tick(&mut world, &still);
+        let id = world.pilot_of(PLAYER).expect("pilot").0;
+        world.edit_pilot(id, |_, state| state.health = state.max_health);
+        assert_bodies(&world);
+        let Some(entity) = world.entities().get(spectre) else {
+            break;
+        };
+        let centre = TilePosition {
+            x: (entity.body.x / TILE_SIZE).floor() as i32,
+            y: (entity.body.y / TILE_SIZE).floor() as i32,
+        };
+        through_wall |= crate::world::pilot::pilot_blocks(world.terrain(), centre);
+        let (px, py) = world
+            .pilot_of(PLAYER)
+            .map(|(_, body, state)| state.middle(body))
+            .expect("pilot");
+        if (entity.body.x - px).hypot(entity.body.y - py) < TILE_SIZE * 1.5 {
+            reached = true;
+            break;
+        }
+    }
+    assert!(through_wall, "the spectre's middle passed through the wall");
+    assert!(reached, "and it reached the pilot on the far side");
+}
+
+#[test]
+fn a_golem_never_slams_through_a_wall() {
+    let site = crypt(1);
+    let mut world = world_at(60, EnemyDifficulty::Normal);
+    enter(&mut world, &site);
+    world.scenario_crypt_traps(PLAYER, Vec::new(), 0);
+    world.enable_test_mode();
+    let (entry, other) = entry_and_neighbour(&world);
+    let row = entry.min.y.max(other.min.y) + 1;
+    // Each flush against its side of the wall: well inside a slam's reach, no line of sight.
+    let (pilot_x, golem_x) = if other.min.x > entry.max.x {
+        (entry.max.x, other.min.x)
+    } else {
+        (entry.min.x, other.max.x)
+    };
+    stand_at(&mut world, TilePosition { x: pilot_x, y: row });
+    // Pressed right up to the wall on both sides (the wall is a tile thick).
+    let side: f32 = if golem_x > pilot_x { 1.0 } else { -1.0 };
+    let id = world.pilot_of(PLAYER).expect("pilot").0;
+    world.edit_pilot(id, |body, _| {
+        body.x = side.mul_add(TILE_SIZE * 0.5 - PILOT_HALF_WIDTH - 0.5, body.x);
+        body.previous_x = body.x;
+    });
+    let radius = EnemyKind::CryptGolem.stats().radius;
+    let (gx, gy) = (
+        (-side).mul_add(
+            TILE_SIZE * 0.5 - radius - 0.5,
+            (golem_x as f32 + 0.5) * TILE_SIZE,
+        ),
+        (row as f32 + 0.5) * TILE_SIZE,
+    );
+    let golem = world.spawn_enemy(EnemyKind::CryptGolem, gx, gy);
+    let now = world.simulation_tick();
+    world.entities_mut().update(golem, |entity| {
+        entity.body.x = gx;
+        entity.body.y = gy;
+        if let crate::entity::EntityState::Enemy(state) = &mut entity.state {
+            state.target = Some(PLAYER);
+            state.last_seen = now;
+            state.mode = crate::enemy::EnemyMode::Chase;
+        }
+    });
+    let (px, py) = world
+        .pilot_of(PLAYER)
+        .map(|(_, body, state)| state.middle(body))
+        .expect("pilot");
+    let reach = EnemyKind::CryptGolem.stats().attack_range_tiles * TILE_SIZE;
+    assert!(
+        (gx - px).hypot(gy - py) < reach.min(crate::world::SLAM_REACH),
+        "in reach: {}",
+        (gx - px).hypot(gy - py)
+    );
+    assert!(!physics::line_clear(world.terrain(), gx, gy, px, py));
+    let still = TickInputs::held(PLAYER, ControlState::default());
+    // Pinned in place for a few seconds: it may not wind up through the masonry.
+    for _ in 0..60 * 4 {
+        world.entities_mut().update(golem, |entity| {
+            entity.body.x = gx;
+            entity.body.y = gy;
+            entity.body.velocity_x = 0.0;
+            entity.body.velocity_y = 0.0;
+        });
+        let events = tick(&mut world, &still);
+        assert!(
+            !events.iter().any(|event| matches!(
+                event,
+                GameplayEventKind::CryptSlam { .. } | GameplayEventKind::CryptTell { .. }
+            )),
+            "a golem wound up or slammed through a wall"
+        );
+        assert_eq!(hurt_total(&events), 0, "nothing reached the pilot");
+    }
+}

@@ -184,7 +184,7 @@ fn draw_run_banner(
             lines[2].0 = format!("{} RELICS", relics.len());
         }
         if downed {
-            lines[4].0 = "YOU ARE DOWN".to_owned();
+            "YOU ARE DOWN".clone_into(&mut lines[4].0);
         }
         let (compact_width, compact_height) = measure(&lines);
         let (compact_x, compact_y) =
@@ -662,4 +662,46 @@ pub(super) fn draw_map_tombs(
         ui_kit::text(draw, &label, x + 7, y - 6, TextStyle::Body, color);
     }
     ui_kit::end_clip();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const VIEW: Rectangle = Rectangle {
+        x: 0.0,
+        y: 0.0,
+        width: 640.0,
+        height: 360.0,
+    };
+
+    #[test]
+    fn a_banner_with_room_stays_centred_at_the_top() {
+        let stats = Rectangle::new(4.0, 4.0, 150.0, 60.0);
+        assert_eq!(banner_place(VIEW, (200, 50), 4, &[stats]), (220, 4));
+    }
+
+    #[test]
+    fn a_banner_slides_off_a_panel_it_only_clips() {
+        let stats = Rectangle::new(4.0, 4.0, 180.0, 60.0);
+        let (x, y) = banner_place(VIEW, (300, 50), 4, &[stats]);
+        assert_eq!(y, 4);
+        assert!(x >= 187, "clear of the stats panel: {x}");
+    }
+
+    #[test]
+    fn a_banner_steps_below_the_nearest_panel_in_its_way() {
+        // A phone: stats left, wallet right, the top-row buttons in the middle.
+        let clear = [
+            Rectangle::new(4.0, 4.0, 176.0, 57.0),
+            Rectangle::new(318.0, 4.0, 104.0, 87.0),
+            Rectangle::new(202.0, 3.0, 20.0, 20.0),
+            Rectangle::new(229.0, 3.0, 20.0, 20.0),
+            Rectangle::new(255.0, 3.0, 20.0, 20.0),
+        ];
+        let view = Rectangle::new(0.0, 0.0, 422.0, 195.0);
+        let (x, y) = banner_place(view, (106, 50), 4, &clear);
+        assert_eq!(y, 26, "just under the buttons");
+        assert!(x >= 183 && x + 106 <= 315, "between the panels: {x}");
+    }
 }
