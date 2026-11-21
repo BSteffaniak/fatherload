@@ -90,7 +90,15 @@ fn listed_sites(terrain: &Terrain, first: i32, last: i32) -> Vec<PlotSite> {
             .position(|(cached, at, _)| *cached == settings && *at == bucket);
         let index = found.unwrap_or_else(|| {
             let middle = bucket * 512 + 256;
-            let sites = plot::listed_sites_between(&settings, middle - 900, middle + 900);
+            let mut sites = plot::listed_sites_between(&settings, middle - 900, middle + 900);
+            // The sky towns' isle plots (Wave 6) hang over the same columns.
+            for town in fatherload_simulation::worldgen::sky::towns::sky_towns_between(
+                &settings,
+                middle - 900,
+                middle + 900,
+            ) {
+                sites.extend(plot::sky_sites_of(&settings, town.id));
+            }
             if cache.len() >= SITE_CACHE_BUCKETS {
                 cache.remove(0);
             }
@@ -333,6 +341,43 @@ const fn house_look(blueprint: Blueprint) -> HouseLook {
             trim: STEEL_DARK,
             door: AMBER,
         },
+        // Wave 6 plans.
+        Blueprint::CloudCottage => HouseLook {
+            wall: BONE,
+            wall_dark: MIST,
+            wall_light: CREAM,
+            roof: SKY,
+            roof_light: SKY_LIGHT,
+            trim: OCEAN,
+            door: DEEP_BLUE,
+        },
+        Blueprint::Aerie => HouseLook {
+            wall: CREAM,
+            wall_dark: SAND,
+            wall_light: BONE,
+            roof: COPPER,
+            roof_light: AMBER,
+            trim: LOAM,
+            door: MAROON,
+        },
+        Blueprint::CraterDome => HouseLook {
+            wall: STONE_LIGHT,
+            wall_dark: STONE,
+            wall_light: MIST,
+            roof: STONE,
+            roof_light: STONE_LIGHT,
+            trim: STEEL_DARK,
+            door: ORANGE,
+        },
+        Blueprint::Longhouse => HouseLook {
+            wall: LOAM,
+            wall_dark: SOIL,
+            wall_light: CLAY,
+            roof: MOSS,
+            roof_light: LEAF,
+            trim: SOIL_DARK,
+            door: RED,
+        },
     }
 }
 
@@ -369,15 +414,17 @@ fn draw_house_shape(
     let w = width * TILE_ART;
     let h = height * TILE_ART;
     let pen = Pen::at(tile_px(left), ground - h as f32 * ART);
-    if blueprint == Blueprint::LunarHabitat {
+    if blueprint.site() == fatherload_simulation::home::BlueprintSite::Moon {
         draw_dome(draw, pen, w, h, look, home, scene, part);
         return;
     }
     let roof_h = match blueprint {
         Blueprint::Manor => 40,
-        Blueprint::Cottage | Blueprint::Cabin => 26,
+        Blueprint::Cottage | Blueprint::Cabin | Blueprint::CloudCottage => 26,
         Blueprint::SkyVilla => 22,
         Blueprint::WorkshopHome => 14,
+        Blueprint::Aerie => 34,
+        Blueprint::Longhouse => 24,
         _ => 28,
     }
     .min(h / 2);
@@ -430,12 +477,25 @@ fn draw_house_shape(
                     pen.rect(draw, x, built_top + 1, 1, built_h - 1, look.wall_dark);
                 }
             }
-            Blueprint::Cottage | Blueprint::SkyVilla => {
+            Blueprint::Cottage | Blueprint::SkyVilla | Blueprint::CloudCottage => {
                 // Timber beams on plaster.
                 pen.rect(draw, 1, built_top + 1, 2, built_h - 1, look.trim);
                 pen.rect(draw, w - 3, built_top + 1, 2, built_h - 1, look.trim);
             }
-            Blueprint::LunarHabitat => {}
+            Blueprint::Aerie => {
+                // A tower of whitewashed stone with brass bands.
+                for y in (built_top + 6..wall_top + wall_h).step_by(12) {
+                    pen.rect(draw, 1, y, w - 2, 1, look.trim);
+                }
+                pen.rect(draw, 1, built_top + 1, 1, built_h - 1, look.wall_dark);
+            }
+            Blueprint::Longhouse => {
+                // Upright planks under one long roof.
+                for x in (3..w - 1).step_by(5) {
+                    pen.rect(draw, x, built_top + 1, 1, built_h - 1, look.wall_dark);
+                }
+            }
+            Blueprint::LunarHabitat | Blueprint::CraterDome => {}
         }
         // Floor bands between storeys.
         for floor in 1..floors {
@@ -620,10 +680,16 @@ fn draw_house_shape(
         pen.rect(draw, door_x + 7, h - 11, 2, 2, GOLD);
         pen.rect(draw, door_x - 3, h - 2, 16, 2, STONE_LIGHT);
         match blueprint {
-            Blueprint::Cottage => {
+            Blueprint::Cottage | Blueprint::CloudCottage => {
                 pen.rect(draw, door_x - 8, h - door_h - 6, 26, 3, look.roof);
                 pen.rect(draw, door_x - 7, h - door_h - 3, 2, door_h + 3, look.trim);
                 pen.rect(draw, door_x + 15, h - door_h - 3, 2, door_h + 3, look.trim);
+            }
+            Blueprint::Aerie => {
+                // A mooring mast with a pennant up top.
+                pen.rect(draw, w / 2, -12, 1, 12, LOAM);
+                let flap = ((scene.seconds * 4.0) as i32) % 2;
+                pen.rect(draw, w / 2 + 1, -12, 6, 3 + flap, RED);
             }
             Blueprint::Manor => {
                 for cx in [door_x - 7, door_x + 15] {
@@ -659,7 +725,10 @@ fn draw_windows(
     dark: bool,
 ) {
     let lit = !dark && home.is_some_and(Home::lit) && scene.darkness > 0.1;
-    let round = matches!(home.map(|home| home.blueprint), Some(Blueprint::SkyVilla));
+    let round = matches!(
+        home.map(|home| home.blueprint),
+        Some(Blueprint::SkyVilla | Blueprint::CloudCottage | Blueprint::Aerie)
+    );
     let storey = (wall_h / i32::from(floors.max(1))).max(16);
     let door_x = (plot.door_column() - plot.house_left(w / TILE_ART)) * TILE_ART;
     let garage = home.is_some_and(Home::has_garage);

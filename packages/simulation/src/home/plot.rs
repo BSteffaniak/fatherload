@@ -160,6 +160,9 @@ pub enum SiteKey {
     Scenic(i32),
     /// A spot a player surveyed.
     Surveyed,
+    /// A sky town's site on a small isle beside its town isle (Wave 6: the sky land office,
+    /// [`sky_sites_of`]): the town and the site's index west to east.
+    SkyIsle(VillageId, u8),
 }
 
 /// A piece of land a deed can cover.
@@ -272,7 +275,97 @@ pub fn listed_site(settings: &WorldSettings, key: SiteKey) -> Option<PlotSite> {
             }
         }
         SiteKey::Surveyed => None,
+        SiteKey::SkyIsle(town, _) => sky_sites_of(settings, town)
+            .into_iter()
+            .find(|site| site.key == key),
     }
+}
+
+/// The sky sites' sizes, largest first (a sky isle is small; no estates in the clouds).
+const SKY_SITE_SIZES: [PlotSize; 2] = [PlotSize::Medium, PlotSize::Small];
+/// The most a sky site's turf may rise or dip from its ground row.
+const SKY_SITE_STEP: i32 = 2;
+/// Open rows a sky site keeps above its turf (no ruins, nests, vents or springs in the way).
+const SKY_SITE_HEADROOM: i32 = 8;
+/// How far (columns) from a sky town's middle its isles are looked for.
+const SKY_SITE_REACH: i32 = 200;
+/// How far (rows) above or below the town isle's turf a neighbouring isle may float.
+const SKY_SITE_ROWS: i32 = 60;
+
+/// The sky town `town`'s listed sites (WP-SKY towns, Wave 6): one on each small isle beside
+/// its town isle that has a level, open stretch of turf (never a crumbling isle), sold at the
+/// town's land office. Pure in the settings, like every listed site.
+#[must_use]
+pub fn sky_sites_of(settings: &WorldSettings, town: VillageId) -> Vec<PlotSite> {
+    use crate::worldgen::sky::{self, SkyLandKind};
+    let Some(site) = sky::towns::sky_town_of(settings, town) else {
+        return Vec::new();
+    };
+    let middle = site.center();
+    let rect = crate::worldgen::TileRect {
+        min: crate::terrain::TilePosition {
+            x: middle - SKY_SITE_REACH,
+            y: site.ground_row - SKY_SITE_ROWS,
+        },
+        max: crate::terrain::TilePosition {
+            x: middle + SKY_SITE_REACH,
+            y: site.ground_row + SKY_SITE_ROWS,
+        },
+    };
+    let mut isles: Vec<sky::SkyLand> = sky::lands_touching(settings, &rect)
+        .into_iter()
+        .filter(|land| {
+            land.kind == SkyLandKind::ArchipelagoIsle
+                && (land.top_row - site.ground_row).abs() <= SKY_SITE_ROWS
+                && (land.center_x - middle).abs() <= SKY_SITE_REACH
+                && land
+                    .content()
+                    .is_none_or(|content| content.keystone.is_none())
+        })
+        .collect();
+    isles.sort_by_key(|land| (land.center_x, land.id));
+    isles.dedup_by_key(|land| land.id);
+    let mut sites = Vec::new();
+    for land in isles {
+        let index = u8::try_from(sites.len()).unwrap_or(u8::MAX);
+        let found = SKY_SITE_SIZES
+            .iter()
+            .find_map(|size| sky_isle_stretch(&land, size.width()).map(|at| (*size, at)));
+        if let Some((size, (left, ground_row))) = found {
+            sites.push(PlotSite {
+                key: SiteKey::SkyIsle(town, index),
+                size,
+                setting: PlotSetting::SkyIsland,
+                left,
+                ground_row,
+                price: size.base_price() * PlotSetting::SkyIsland.price_percent() / 100,
+            });
+        }
+    }
+    sites
+}
+
+/// A level, open stretch of `width` columns on `land`'s turf nearest its middle:
+/// `(left, ground_row)`.
+fn sky_isle_stretch(land: &crate::worldgen::sky::SkyLand, width: i32) -> Option<(i32, i32)> {
+    let first = land.center_x - land.half_width + 1;
+    let last = land.center_x + land.half_width - width;
+    let mut lefts: Vec<i32> = (first..=last).collect();
+    let ideal = land.center_x - width / 2;
+    lefts.sort_by_key(|left| ((left - ideal).abs(), *left));
+    lefts.into_iter().find_map(|left| {
+        let ground = land.surface_row(left + width / 2)?;
+        let fits = (left..left + width).all(|x| {
+            land.surface_row(x)
+                .is_some_and(|row| (row - ground).abs() <= SKY_SITE_STEP)
+                && matches!(
+                    land.tile_at(x, ground),
+                    Some(crate::terrain::TileKind::Sky(crate::sky::SkyTile::Turf(_)))
+                )
+                && (ground - SKY_SITE_HEADROOM..ground).all(|y| land.tile_at(x, y).is_none())
+        });
+        fits.then_some((left, ground))
+    })
 }
 
 fn surface(settings: &WorldSettings, x: i32) -> i32 {

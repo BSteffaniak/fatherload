@@ -665,7 +665,7 @@ impl WorldState {
             .any(|plot| {
                 plot.home
                     .as_ref()
-                    .is_some_and(|home| home.blueprint == crate::home::Blueprint::LunarHabitat)
+                    .is_some_and(|home| home.blueprint.site() == crate::home::BlueprintSite::Moon)
                     && tile.x >= plot.site.left - 1
                     && tile.x <= plot.site.right() + 1
                     && tile.y <= plot.site.ground_row

@@ -101,10 +101,46 @@ pub enum Furniture {
     Lantern,
     HangingPlant,
     StarMobile,
+    // Wave 6 content: culture pieces people sell, the sky and lunar catalogues, tomb trophies
+    // and story rewards (appended: saved stocks and rooms keep their pieces).
+    /// Frontier folk's signature piece.
+    RockingChair,
+    /// Highland folk's signature piece.
+    Loom,
+    /// Mesa folk's signature piece: a beehive oven that cooks.
+    ClayOven,
+    /// Riverside folk's signature piece.
+    FishTank,
+    /// Scrapper folk's signature piece.
+    JunkSculpture,
+    /// Deepfolk's signature piece: a lamp of glowing cave caps.
+    GlowcapLamp,
+    /// Aeronauts' signature piece.
+    ModelAirship,
+    /// Cloudborn folk's signature piece.
+    WindChime,
+    /// The lunar colonists' globe of the Moon.
+    MoonGlobe,
+    /// The lunar colonists' grow rack (it lights the room).
+    HydroponicRack,
+    /// Sky land offices: a brass barometer.
+    Barometer,
+    /// Sky land offices: a hammock strung for the wind (sleeps like a bed).
+    CloudHammock,
+    /// A tomb guardian's mask (a trophy for every guardian brought down).
+    GuardianMask,
+    /// A plinth that shows off a relic (a trophy for the first tomb seen through to the end).
+    RelicPlinth,
+    /// A hand-inked chart of the night sky (stories).
+    StarChart,
+    /// A potted moonflower that glows after dark (stories).
+    Moonflower,
+    /// A wind-up gramophone (stories, the land office).
+    Gramophone,
 }
 
 impl Furniture {
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 45] = [
         Self::Bed,
         Self::Sofa,
         Self::Table,
@@ -133,10 +169,27 @@ impl Furniture {
         Self::Lantern,
         Self::HangingPlant,
         Self::StarMobile,
+        Self::RockingChair,
+        Self::Loom,
+        Self::ClayOven,
+        Self::FishTank,
+        Self::JunkSculpture,
+        Self::GlowcapLamp,
+        Self::ModelAirship,
+        Self::WindChime,
+        Self::MoonGlobe,
+        Self::HydroponicRack,
+        Self::Barometer,
+        Self::CloudHammock,
+        Self::GuardianMask,
+        Self::RelicPlinth,
+        Self::StarChart,
+        Self::Moonflower,
+        Self::Gramophone,
     ];
 
     /// The land office's catalogue, in listing order.
-    pub const CATALOGUE: [Self; 20] = [
+    pub const CATALOGUE: [Self; 22] = [
         Self::Bed,
         Self::Sofa,
         Self::Table,
@@ -157,7 +210,16 @@ impl Furniture {
         Self::Mirror,
         Self::Chandelier,
         Self::Lantern,
+        Self::Gramophone,
+        Self::StarChart,
     ];
+
+    /// What a sky town's land office sells on top of [`Self::CATALOGUE`] (Wave 6).
+    pub const SKY_CATALOGUE: [Self; 2] = [Self::CloudHammock, Self::Barometer];
+
+    /// Trophies won in tombs and crypts (never sold): a guardian's mask for every guardian
+    /// brought down, a relic plinth for the first run seen through to the end.
+    pub const TOMB_TROPHIES: [Self; 2] = [Self::GuardianMask, Self::RelicPlinth];
 
     /// Antique pieces found in cave caches (never sold at the land office), rarest last.
     pub const CACHE_FINDS: [Self; 6] = [
@@ -170,7 +232,7 @@ impl Furniture {
     ];
 
     /// What a workbench can make, in listing order.
-    pub const CRAFTABLE: [Self; 8] = [
+    pub const CRAFTABLE: [Self; 10] = [
         Self::Chair,
         Self::Table,
         Self::Shelf,
@@ -179,6 +241,8 @@ impl Furniture {
         Self::Planter,
         Self::Workbench,
         Self::MountedPick,
+        Self::RockingChair,
+        Self::JunkSculpture,
     ];
 
     #[must_use]
@@ -212,6 +276,23 @@ impl Furniture {
             Self::Lantern => "Hanging lantern",
             Self::HangingPlant => "Hanging vine",
             Self::StarMobile => "Star mobile",
+            Self::RockingChair => "Rocking chair",
+            Self::Loom => "Highland loom",
+            Self::ClayOven => "Clay oven",
+            Self::FishTank => "Fish tank",
+            Self::JunkSculpture => "Junk sculpture",
+            Self::GlowcapLamp => "Glowcap lamp",
+            Self::ModelAirship => "Model airship",
+            Self::WindChime => "Wind chimes",
+            Self::MoonGlobe => "Moon globe",
+            Self::HydroponicRack => "Hydroponic rack",
+            Self::Barometer => "Brass barometer",
+            Self::CloudHammock => "Cloud hammock",
+            Self::GuardianMask => "Guardian's mask",
+            Self::RelicPlinth => "Relic plinth",
+            Self::StarChart => "Star chart",
+            Self::Moonflower => "Moonflower",
+            Self::Gramophone => "Gramophone",
         }
     }
 
@@ -224,10 +305,17 @@ impl Furniture {
             | Self::Clock
             | Self::Mirror
             | Self::Banner
-            | Self::MountedPick => DecorRow::Wall,
-            Self::Chandelier | Self::Lantern | Self::HangingPlant | Self::StarMobile => {
-                DecorRow::Ceiling
-            }
+            | Self::MountedPick
+            | Self::Barometer
+            | Self::GuardianMask
+            | Self::StarChart => DecorRow::Wall,
+            Self::Chandelier
+            | Self::Lantern
+            | Self::HangingPlant
+            | Self::StarMobile
+            | Self::GlowcapLamp
+            | Self::ModelAirship
+            | Self::WindChime => DecorRow::Ceiling,
             _ => DecorRow::Floor,
         }
     }
@@ -243,7 +331,10 @@ impl Furniture {
             | Self::Rug
             | Self::Fireplace
             | Self::Piano
-            | Self::Banner => 2,
+            | Self::Banner
+            | Self::Loom
+            | Self::HydroponicRack
+            | Self::CloudHammock => 2,
             _ => 1,
         }
     }
@@ -259,17 +350,25 @@ impl Furniture {
     pub const fn lights(self) -> bool {
         matches!(
             self,
-            Self::WallLamp | Self::Chandelier | Self::Lantern | Self::Fireplace | Self::Stove
+            Self::WallLamp
+                | Self::Chandelier
+                | Self::Lantern
+                | Self::Fireplace
+                | Self::Stove
+                | Self::ClayOven
+                | Self::GlowcapLamp
+                | Self::HydroponicRack
+                | Self::Moonflower
         )
     }
 
     #[must_use]
     pub const fn service(self) -> Option<DecorService> {
         match self {
-            Self::Bed => Some(DecorService::Sleep),
-            Self::Stove | Self::Fireplace => Some(DecorService::Cook),
+            Self::Bed | Self::CloudHammock => Some(DecorService::Sleep),
+            Self::Stove | Self::Fireplace | Self::ClayOven => Some(DecorService::Cook),
             Self::Chest | Self::Wardrobe => Some(DecorService::Store),
-            Self::TrophyCase => Some(DecorService::Display),
+            Self::TrophyCase | Self::RelicPlinth => Some(DecorService::Display),
             Self::Workbench => Some(DecorService::Craft),
             Self::Telescope => Some(DecorService::Stargaze),
             _ => None,
@@ -306,6 +405,23 @@ impl Furniture {
             Self::Chandelier => 240,
             Self::Lantern => 55,
             Self::StarMobile => 400,
+            Self::RockingChair => 130,
+            Self::Loom => 340,
+            Self::ClayOven => 240,
+            Self::FishTank => 260,
+            Self::JunkSculpture => 150,
+            Self::GlowcapLamp => 90,
+            Self::ModelAirship => 420,
+            Self::WindChime => 75,
+            Self::MoonGlobe => 380,
+            Self::HydroponicRack => 520,
+            Self::Barometer => 140,
+            Self::CloudHammock => 280,
+            Self::GuardianMask => 1_200,
+            Self::RelicPlinth => 900,
+            Self::StarChart => 200,
+            Self::Moonflower => 160,
+            Self::Gramophone => 450,
         }
     }
 
@@ -321,6 +437,8 @@ impl Furniture {
             Self::Planter => Some((6, 10)),
             Self::Workbench => Some((16, 30)),
             Self::MountedPick => Some((6, 40)),
+            Self::RockingChair => Some((6, 20)),
+            Self::JunkSculpture => Some((10, 25)),
             _ => None,
         }
     }

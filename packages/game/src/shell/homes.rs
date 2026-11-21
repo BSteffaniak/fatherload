@@ -933,8 +933,15 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
     let mut view = HomeView::default();
     match screen {
         HomeScreen::LandOffice => {
-            "Land Office".clone_into(&mut view.title);
-            "Deeds to building plots, and fine furniture".clone_into(&mut view.subtitle);
+            let sky_office = world.at_sky_land_office(player).is_some();
+            if sky_office {
+                "Sky Land Office".clone_into(&mut view.title);
+                "Deeds to plots on the isles, and furniture for the wind"
+                    .clone_into(&mut view.subtitle);
+            } else {
+                "Land Office".clone_into(&mut view.title);
+                "Deeds to building plots, and fine furniture".clone_into(&mut view.subtitle);
+            }
             view.status.push(HomeStatus {
                 label: "Your deeds".to_owned(),
                 value: format!(
@@ -946,7 +953,7 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
             });
             "Plots for sale".clone_into(&mut view.rows_title);
             let column = world.actor_tile(player).map_or(0, |tile| tile.x);
-            let mut sites = world.land_office_sites(column, OFFICE_REACH_COLUMNS);
+            let mut sites = world.land_office_listing(player, column, OFFICE_REACH_COLUMNS);
             sites.sort_by_key(|site| ((site.middle() - column).abs(), site.left));
             for site in sites.into_iter().take(8) {
                 let sold = world.homes().plot_of_site(site.key);
@@ -986,21 +993,28 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
             view.rows.push(
                 HomeRow::new(
                     "Furniture catalogue",
-                    format!("{} pieces", Furniture::CATALOGUE.len()),
+                    format!("{} pieces", world.land_office_catalogue(player).len()),
                     HomeAction::Open(HomeScreen::Catalogue),
                 )
-                .detail("Beds, lamps, rugs, trophy cases and more"),
+                .detail(if sky_office {
+                    "Hammocks, barometers, and everything the ground offices sell"
+                } else {
+                    "Beds, lamps, rugs, trophy cases and more"
+                }),
             );
-            view.quote = Some(
+            view.quote = Some(if sky_office {
+                "Isle plots are small and sold as they float: no cellars, nothing below but sky."
+                    .to_owned()
+            } else {
                 "Any free spot outside town is yours too: stand on it and survey it from your inventory."
-                    .to_owned(),
-            );
+                    .to_owned()
+            });
         }
         HomeScreen::Catalogue => {
             "Furniture Catalogue".clone_into(&mut view.title);
             format!("{credits} credits to spend").clone_into(&mut view.subtitle);
             "Delivered to your stock".clone_into(&mut view.rows_title);
-            for furniture in Furniture::CATALOGUE {
+            for furniture in world.land_office_catalogue(player) {
                 let owned = world.homes().furniture_count(player, furniture);
                 view.rows.push(
                     HomeRow::new(

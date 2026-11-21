@@ -69,6 +69,11 @@ use super::WorldState;
 pub const CONTRACTOR_REACH_COLUMNS: i32 = 900;
 /// The most contractors the site board lists.
 pub const MAX_CONTRACTORS_LISTED: usize = 6;
+/// Rows above or below a sky plot whose sky towns' builders take its work (Wave 6).
+const SKY_CONTRACTOR_ROWS: i32 = 400;
+/// How far (columns, rows) around a surveyed sky spot the sky towns' listed sites are kept
+/// clear of it.
+const SKY_SITE_CLEARANCE: (i32, i32) = (260, 80);
 /// At most this many builders of one style are listed while builders of other styles are
 /// within reach (so the choice of contractor is a real one).
 pub const MAX_LISTED_PER_STYLE: usize = 2;
@@ -146,6 +151,41 @@ impl WorldState {
                     .get(building)
                     .is_some_and(|lot| lot.kind == BuildingKind::Hall)
             })
+    }
+
+    /// The sky town whose land office (its hall) `player` stands at, if any (Wave 6).
+    #[must_use]
+    pub fn at_sky_land_office(&self, player: PlayerId) -> Option<village::VillageId> {
+        self.player_village_building(player)
+            .filter(|(found, building)| {
+                found.setting.sky_town().is_some()
+                    && found
+                        .buildings
+                        .get(*building)
+                        .is_some_and(|lot| lot.kind == BuildingKind::Hall)
+            })
+            .map(|(found, _)| found.id)
+    }
+
+    /// What the land office `player` stands at sells: a sky town's sky sites, or the listed
+    /// sites around column `column` (within `reach`) of the ground's offices.
+    #[must_use]
+    pub fn land_office_listing(&self, player: PlayerId, column: i32, reach: i32) -> Vec<PlotSite> {
+        self.at_sky_land_office(player).map_or_else(
+            || self.land_office_sites(column, reach),
+            |town| plot::sky_sites_of(self.terrain.settings(), town),
+        )
+    }
+
+    /// The furniture the land office `player` stands at sells: the catalogue, and in a sky
+    /// town the sky pieces too.
+    #[must_use]
+    pub fn land_office_catalogue(&self, player: PlayerId) -> Vec<Furniture> {
+        let mut pieces = Furniture::CATALOGUE.to_vec();
+        if self.at_sky_land_office(player).is_some() {
+            pieces.extend(Furniture::SKY_CATALOGUE);
+        }
+        pieces
     }
 
     /// The plot `player`'s actor stands on, if any.
@@ -324,6 +364,27 @@ impl WorldState {
         {
             return Err(HomeRefusal::Occupied);
         }
+        // Up in the sky: a sky town's listed sites (Wave 6) are not for surveying.
+        if !near_ground {
+            let around = crate::worldgen::TileRect::around(
+                TilePosition {
+                    x: i32::midpoint(first, last),
+                    y: ground_row,
+                },
+                SKY_SITE_CLEARANCE.0,
+                SKY_SITE_CLEARANCE.1,
+            );
+            let listed = village::sky_towns_in(settings, &around)
+                .iter()
+                .flat_map(|town| plot::sky_sites_of(settings, town.id))
+                .any(|site| {
+                    site.overlaps_columns(first - 1, last + 1)
+                        && (site.ground_row - ground_row).abs() < 24
+                });
+            if listed {
+                return Err(HomeRefusal::Occupied);
+            }
+        }
         Ok(())
     }
 
@@ -358,6 +419,29 @@ impl WorldState {
                 TOWN_VILLAGE,
                 TOWN_NAME.to_owned(),
             ));
+            // Wave 6: up in the sky the sky towns' builders take the work, and on the Moon
+            // the colony's.
+            match plot.site.setting {
+                PlotSetting::SkyIsland => {
+                    let around = crate::worldgen::TileRect::around(
+                        TilePosition {
+                            x: column,
+                            y: plot.site.ground_row,
+                        },
+                        CONTRACTOR_REACH_COLUMNS,
+                        SKY_CONTRACTOR_ROWS,
+                    );
+                    for found in village::sky_towns_in(&settings, &around) {
+                        ids.push((0, found.id, found.name.clone()));
+                    }
+                }
+                PlotSetting::Moon => {
+                    if let Some(colony) = people::colony::colony_settlement_id(&settings) {
+                        ids.push((0, colony, people::colony::COLONY_NAME.to_owned()));
+                    }
+                }
+                _ => {}
+            }
             for (distance, id, name) in ids {
                 if distance > CONTRACTOR_REACH_COLUMNS {
                     continue;
@@ -473,7 +557,10 @@ impl WorldState {
                             && home.width + expansion.extra_width() <= plot.site.width()
                     }
                     Expansion::Floor => home.floors < MAX_FLOORS,
-                    Expansion::Basement => !home.basement,
+                    // A floating isle has no mine under it to dig a cellar into (Wave 6).
+                    Expansion::Basement => {
+                        !home.basement && plot.site.setting != PlotSetting::SkyIsland
+                    }
                     Expansion::Lift => {
                         home.basement && !home.lift && self.lift_claim(plot, player).is_some()
                     }
@@ -707,7 +794,7 @@ impl WorldState {
                 if !self.at_land_office(player_id) {
                     return Err(HomeRefusal::NotAtLandOffice);
                 }
-                if !Furniture::CATALOGUE.contains(&furniture) {
+                if !self.land_office_catalogue(player_id).contains(&furniture) {
                     return Err(HomeRefusal::NoFurniture);
                 }
                 let price = furniture.catalogue_price();
@@ -803,7 +890,7 @@ impl WorldState {
                     return Err(HomeRefusal::NotPermitted);
                 }
                 let (_, piece) = room.decor.piece_at(cell).ok_or(HomeRefusal::NothingToDo)?;
-                if piece.furniture != Furniture::TrophyCase || !displayable(item) {
+                if piece.furniture.service() != Some(DecorService::Display) || !displayable(item) {
                     return Err(HomeRefusal::NothingToDo);
                 }
                 if player.cargo_bay.count(item) == 0 {
@@ -1152,8 +1239,10 @@ impl WorldState {
                 if let Some(player) = self.players.get_mut(&player_id) {
                     player.cargo_bay.remove(item, 1);
                 }
+                let mut shown = Furniture::TrophyCase;
                 let returned = self.room_mut(plot, room).and_then(|room| {
-                    let (start, _) = room.decor.piece_at(cell)?;
+                    let (start, piece) = room.decor.piece_at(cell)?;
+                    shown = piece.furniture;
                     room.decor.pieces.get_mut(&start)?.display.replace(item)
                 });
                 if let Some(old) = returned
@@ -1164,7 +1253,7 @@ impl WorldState {
                 events.push(GameplayEventKind::FurniturePlaced {
                     player_id,
                     plot,
-                    furniture: Furniture::TrophyCase,
+                    furniture: shown,
                 });
             }
             HomeCommand::UsePiece { plot, room, cell } => {

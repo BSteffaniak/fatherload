@@ -50,7 +50,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-pub use blueprint::{Blueprint, Expansion, HomeJob, RoomKind};
+pub use blueprint::{Blueprint, BlueprintSite, Expansion, HomeJob, RoomKind};
 pub use construction::{BuildStage, Construction, SiteEvent, SiteEventKind};
 pub use decor::{
     DecorRow, DecorService, Flooring, Furniture, FurnitureStock, RoomDecor, Wallpaper,
@@ -291,14 +291,13 @@ impl Home {
         (low, high)
     }
 
-    /// Whether a bed stands somewhere inside.
+    /// Whether a bed (or anything else to sleep in, like a cloud hammock) stands inside.
     #[must_use]
     pub fn has_bed(&self) -> bool {
         self.rooms.iter().any(|room| {
-            room.decor
-                .pieces
-                .values()
-                .any(|piece| piece.furniture == Furniture::Bed)
+            room.decor.pieces.values().any(|piece| {
+                piece.furniture.service() == Some(crate::home::decor::DecorService::Sleep)
+            })
         })
     }
 

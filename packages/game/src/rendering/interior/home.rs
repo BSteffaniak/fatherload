@@ -1041,6 +1041,287 @@ fn draw_piece(d: &mut impl RaylibDraw, cell: u8, piece: PlacedDecor, seconds: f3
                 );
             }
         }
+        _ => draw_wave6_piece(d, cell, piece, seconds, lit),
+    }
+}
+
+/// The Wave 6 pieces: culture pieces, the sky and lunar catalogues, tomb trophies and story
+/// rewards.
+#[allow(clippy::too_many_lines, reason = "one arm per piece of furniture")]
+fn draw_wave6_piece(
+    d: &mut impl RaylibDraw,
+    cell: u8,
+    piece: PlacedDecor,
+    seconds: f32,
+    lit: bool,
+) {
+    let (x, w) = cell_span(cell, piece.furniture);
+    let mid = x + w / 2;
+    let f = FLOOR_Y;
+    match piece.furniture {
+        Furniture::RockingChair => {
+            let rock = ((seconds * 1.6).sin() * 2.0) as i32;
+            d.draw_rectangle(mid - 7, f - 30 + rock, 3, 22, LOAM);
+            d.draw_rectangle(mid - 7, f - 30 + rock, 6, 3, CLAY);
+            d.draw_rectangle(mid - 7, f - 13, 15, 3, CLAY);
+            d.draw_rectangle(mid + 6, f - 12, 2, 8, LOAM);
+            d.draw_rectangle(mid - 6, f - 10, 2, 6, LOAM);
+            // The rockers: a shallow curve.
+            d.draw_rectangle(mid - 10, f - 4 + rock / 2, 8, 2, SOIL);
+            d.draw_rectangle(mid - 2, f - 3, 6, 2, SOIL);
+            d.draw_rectangle(mid + 4, f - 4 - rock / 2, 7, 2, SOIL);
+            d.draw_rectangle(mid - 5, f - 16, 8, 3, RED);
+        }
+        Furniture::Loom => {
+            d.draw_rectangle(x + 6, f - 40, 3, 40, LOAM);
+            d.draw_rectangle(x + w - 9, f - 40, 3, 40, LOAM);
+            d.draw_rectangle(x + 6, f - 42, w - 12, 3, CLAY);
+            d.draw_rectangle(x + 6, f - 14, w - 12, 3, CLAY);
+            // The plaid on the beam.
+            d.draw_rectangle(x + 10, f - 36, w - 20, 20, MOSS);
+            for stripe in (x + 12..x + w - 12).step_by(6) {
+                d.draw_rectangle(stripe, f - 36, 2, 20, RED);
+            }
+            for row in [f - 32, f - 24] {
+                d.draw_rectangle(x + 10, row, w - 20, 2, GOLD);
+            }
+            let travel = ((seconds * 0.8).sin() * 0.5 + 0.5) * (w - 28) as f32;
+            d.draw_rectangle(x + 12 + travel as i32, f - 18, 6, 2, SOIL);
+        }
+        Furniture::ClayOven => {
+            d.draw_ellipse(mid, f - 14, 13.0, 15.0, CLAY);
+            d.draw_ellipse(mid, f - 16, 11.0, 12.0, SAND);
+            d.draw_rectangle(mid - 13, f - 4, 26, 4, LOAM);
+            d.draw_ellipse(mid, f - 9, 5.0, 5.0, INK);
+            let flame = if (seconds * 6.0) as i32 % 2 == 0 {
+                ORANGE
+            } else {
+                AMBER
+            };
+            d.draw_rectangle(mid - 3, f - 8, 6, 3, flame);
+            if lit {
+                d.draw_circle(mid, f - 8, 14.0, with_alpha(ORANGE, 30));
+            }
+        }
+        Furniture::FishTank => {
+            d.draw_rectangle(mid - 13, f - 10, 26, 10, SOIL);
+            d.draw_rectangle(mid - 12, f - 34, 24, 24, with_alpha(OCEAN, 170));
+            d.draw_rectangle_lines(mid - 12, f - 34, 24, 24, STEEL_LIGHT);
+            d.draw_rectangle(mid - 11, f - 13, 22, 2, SAND);
+            d.draw_rectangle(mid - 8, f - 22, 1, 9, LEAF);
+            d.draw_rectangle(mid + 7, f - 19, 1, 6, MOSS);
+            let swim = ((seconds * 0.9).sin() * 7.0) as i32;
+            d.draw_rectangle(mid + swim - 2, f - 26, 5, 3, ORANGE);
+            d.draw_rectangle(mid + swim + 3, f - 26, 1, 3, GOLD);
+            let rise = (seconds * 8.0) as i32 % 16;
+            d.draw_rectangle(mid - 4, f - 15 - rise, 1, 1, with_alpha(BONE, 200));
+        }
+        Furniture::JunkSculpture => {
+            d.draw_rectangle(mid - 9, f - 6, 18, 6, STEEL_DARK);
+            d.draw_rectangle(mid - 2, f - 30, 4, 24, RUST);
+            d.draw_circle(mid, f - 34, 6.0, STEEL);
+            d.draw_circle(mid, f - 34, 3.0, STEEL_DARK);
+            d.draw_rectangle(mid - 10, f - 22, 20, 3, COPPER);
+            d.draw_rectangle(mid + 6, f - 27, 4, 5, AMBER);
+            let spin = (seconds * 2.0) as i32 % 2;
+            d.draw_rectangle(mid - 9 - spin, f - 25, 3, 3, STEEL_LIGHT);
+        }
+        Furniture::GlowcapLamp => {
+            d.draw_rectangle(mid, CEILING_Y, 1, 10, SOIL);
+            let pulse = ((seconds * 1.4 + f32::from(cell)).sin() * 0.5 + 0.5) * 60.0;
+            for (dx, dy, r) in [(-5, 14, 5.0), (3, 12, 6.0), (0, 18, 4.0)] {
+                d.draw_ellipse(mid + dx, CEILING_Y + dy, r, r * 0.6, MINT);
+                d.draw_rectangle(mid + dx, CEILING_Y + dy, 1, 4, BONE);
+            }
+            d.draw_circle(
+                mid,
+                CEILING_Y + 16,
+                18.0,
+                with_alpha(MINT, 20 + pulse as u8 / 3),
+            );
+        }
+        Furniture::ModelAirship => {
+            let bob = ((seconds * 1.1).sin() * 2.0) as i32;
+            d.draw_rectangle(mid - 6, CEILING_Y, 1, 10 + bob, INK);
+            d.draw_rectangle(mid + 6, CEILING_Y, 1, 10 + bob, INK);
+            d.draw_ellipse(mid, CEILING_Y + 14 + bob, 14.0, 5.0, CREAM);
+            d.draw_rectangle(mid - 12, CEILING_Y + 14 + bob, 24, 1, SAND);
+            d.draw_rectangle(mid - 4, CEILING_Y + 19 + bob, 8, 3, LOAM);
+            d.draw_rectangle(mid + 12, CEILING_Y + 11 + bob, 3, 6, RED);
+            let prop = (seconds * 10.0) as i32 % 2;
+            d.draw_rectangle(
+                mid - 15,
+                CEILING_Y + 12 + bob + prop,
+                1,
+                4 - prop * 2,
+                STEEL,
+            );
+        }
+        Furniture::WindChime => {
+            d.draw_rectangle(mid, CEILING_Y, 1, 6, STEEL);
+            d.draw_rectangle(mid - 8, CEILING_Y + 6, 17, 2, SKY);
+            for (index, dx) in [-7, -3, 1, 5].into_iter().enumerate() {
+                let sway = ((seconds * 2.2 + index as f32).sin() * 1.5) as i32;
+                let len = 8 + index as i32 * 3;
+                d.draw_rectangle(mid + dx + sway, CEILING_Y + 8, 1, len, ICE);
+                d.draw_rectangle(mid + dx + sway, CEILING_Y + 8 + len, 2, 2, SKY_LIGHT);
+            }
+        }
+        Furniture::MoonGlobe => {
+            d.draw_rectangle(mid - 6, f - 3, 12, 3, STEEL_DARK);
+            d.draw_rectangle(mid - 1, f - 12, 2, 9, STEEL);
+            d.draw_circle(mid, f - 22, 10.0, STONE_LIGHT);
+            d.draw_circle(mid - 3, f - 25, 3.0, STONE);
+            d.draw_circle(mid + 4, f - 19, 2.0, STONE);
+            d.draw_circle(mid + 1, f - 27, 1.0, STONE_DARK);
+            let shade = ((seconds * 0.3).sin() * 0.5 + 0.5) * 90.0;
+            d.draw_circle(mid + 4, f - 22, 8.0, with_alpha(INK, shade as u8));
+            d.draw_ring(
+                Vector2::new(mid as f32, (f - 22) as f32),
+                10.0,
+                12.0,
+                200.0,
+                340.0,
+                12,
+                STEEL_LIGHT,
+            );
+        }
+        Furniture::HydroponicRack => {
+            d.draw_rectangle(x + 4, f - 40, 3, 40, STEEL);
+            d.draw_rectangle(x + w - 7, f - 40, 3, 40, STEEL);
+            for (tier, y) in [f - 36, f - 22, f - 8].into_iter().enumerate() {
+                d.draw_rectangle(x + 4, y, w - 8, 3, STEEL_LIGHT);
+                d.draw_rectangle(x + 8, y - 2, w - 16, 2, with_alpha(ROSE, 160));
+                for leaf in (x + 10..x + w - 10).step_by(6) {
+                    let h = 4 + (leaf + tier as i32).rem_euclid(3);
+                    d.draw_rectangle(leaf, y - h, 3, h, LEAF);
+                }
+            }
+            if lit {
+                d.draw_rectangle(x + 2, f - 42, w - 4, 42, with_alpha(PINK, 18));
+            }
+        }
+        Furniture::Barometer => {
+            let y = WALL_ROW_Y - 16;
+            d.draw_rectangle(mid - 3, y, 6, 30, SOIL);
+            d.draw_circle(mid, y + 6, 7.0, GOLD);
+            d.draw_circle(mid, y + 6, 5.0, CREAM);
+            let needle = (seconds * 0.15).sin().mul_add(1.2, -1.5);
+            d.draw_line(
+                mid,
+                y + 6,
+                mid + (needle.cos() * 4.0) as i32,
+                y + 6 + (needle.sin() * 4.0) as i32,
+                RED,
+            );
+            d.draw_rectangle(mid - 1, y + 14, 2, 14, with_alpha(ICE, 180));
+            d.draw_rectangle(mid - 1, y + 22, 2, 6, RED);
+        }
+        Furniture::CloudHammock => {
+            d.draw_rectangle(x + 4, f - 34, 3, 34, LOAM);
+            d.draw_rectangle(x + w - 7, f - 34, 3, 34, LOAM);
+            let sway = (seconds.sin() * 2.0) as i32;
+            let steps = (w - 16) / 4;
+            for step in 0..steps {
+                let dip = (step * (steps - 1 - step)).clamp(0, 10);
+                let sx = x + 8 + step * 4;
+                d.draw_rectangle(sx, f - 26 + dip / 2 + sway, 5, 4, SKY_LIGHT);
+                d.draw_rectangle(sx, f - 26 + dip / 2 + sway, 5, 1, BONE);
+            }
+            d.draw_rectangle(x + 10, f - 30 + sway, 8, 4, CREAM);
+            d.draw_line(x + 7, f - 32, x + 10, f - 26 + sway, SAND);
+            d.draw_line(x + w - 7, f - 32, x + w - 10, f - 26 + sway, SAND);
+        }
+        Furniture::GuardianMask => {
+            let y = WALL_ROW_Y - 18;
+            d.draw_rectangle(mid - 11, y + 2, 22, 30, SOIL_DARK);
+            d.draw_ellipse(mid, y + 16, 9.0, 13.0, GOLD);
+            d.draw_ellipse(mid, y + 16, 7.0, 11.0, AMBER);
+            d.draw_rectangle(mid - 6, y + 11, 4, 3, INK);
+            d.draw_rectangle(mid + 2, y + 11, 4, 3, INK);
+            let glow = ((seconds * 1.3).sin() * 0.5 + 0.5) * 200.0;
+            d.draw_rectangle(mid - 5, y + 12, 2, 1, with_alpha(MINT, glow as u8));
+            d.draw_rectangle(mid + 3, y + 12, 2, 1, with_alpha(MINT, glow as u8));
+            d.draw_rectangle(mid - 3, y + 21, 6, 2, MAROON);
+            d.draw_rectangle(mid - 1, y + 2, 2, 5, TEAL);
+        }
+        Furniture::RelicPlinth => {
+            d.draw_rectangle(mid - 10, f - 4, 20, 4, STONE_DARK);
+            d.draw_rectangle(mid - 7, f - 22, 14, 18, STONE);
+            d.draw_rectangle(mid - 7, f - 22, 14, 2, STONE_LIGHT);
+            d.draw_rectangle(mid - 10, f - 25, 20, 3, STONE_LIGHT);
+            for glyph in [mid - 4, mid, mid + 3] {
+                d.draw_rectangle(glyph, f - 15, 2, 2, AMBER);
+            }
+            if let Some(item) = piece.display {
+                let sprite = match item {
+                    ItemKind::Artifact(artifact) => terrain_art::artifact_stamp(artifact),
+                    ItemKind::Mineral(mineral) => icons::mineral(mineral),
+                    _ => &icons::CARGO,
+                };
+                let bob = ((seconds * 1.5).sin() * 1.5) as i32;
+                let sx = mid - sprite.width() / 2;
+                let sy = f - 34 - sprite.height() / 2 + bob;
+                sprite::draw_sprite(
+                    d,
+                    sprite,
+                    0,
+                    Vector2::new(sx as f32, sy as f32),
+                    1.0,
+                    Color::WHITE,
+                );
+                d.draw_circle(mid, f - 34, 12.0, with_alpha(GOLD, 26));
+            } else {
+                d.draw_rectangle(mid - 3, f - 29, 6, 4, with_alpha(SOIL, 160));
+            }
+        }
+        Furniture::StarChart => {
+            let y = WALL_ROW_Y - 16;
+            d.draw_rectangle(mid - 13, y, 26, 24, SOIL);
+            d.draw_rectangle(mid - 12, y + 1, 24, 22, DEEP_BLUE);
+            for (sx, sy) in [(-8, 4), (-3, 9), (2, 5), (7, 12), (-6, 15), (4, 18)] {
+                d.draw_rectangle(mid + sx, y + sy, 1, 1, CREAM);
+            }
+            d.draw_line(mid - 8, y + 4, mid - 3, y + 9, with_alpha(SKY_LIGHT, 150));
+            d.draw_line(mid - 3, y + 9, mid + 2, y + 5, with_alpha(SKY_LIGHT, 150));
+            d.draw_line(mid + 2, y + 5, mid + 7, y + 12, with_alpha(SKY_LIGHT, 150));
+            d.draw_circle(mid + 8, y + 5, 2.0, STONE_LIGHT);
+        }
+        Furniture::Moonflower => {
+            d.draw_rectangle(mid - 5, f - 10, 10, 10, SLATE);
+            d.draw_rectangle(mid - 6, f - 11, 12, 2, SLATE_LIGHT);
+            d.draw_rectangle(mid, f - 26, 1, 15, MOSS);
+            d.draw_rectangle(mid - 4, f - 18, 4, 2, LEAF);
+            let open = ((seconds * 0.6).sin() * 0.5 + 0.5) * 2.0;
+            d.draw_circle(mid, f - 28, 4.0 + open, BONE);
+            d.draw_circle(mid, f - 28, 2.0, ICE);
+            if lit {
+                d.draw_circle(mid, f - 28, 14.0, with_alpha(ICE, 30));
+            }
+        }
+        Furniture::Gramophone => {
+            d.draw_rectangle(mid - 9, f - 12, 18, 12, SOIL);
+            d.draw_rectangle(mid - 9, f - 12, 18, 2, CLAY);
+            d.draw_rectangle(mid - 7, f - 15, 14, 3, INK);
+            d.draw_rectangle(mid + 2, f - 28, 2, 14, GOLD);
+            d.draw_triangle(
+                Vector2::new((mid + 3) as f32, (f - 28) as f32),
+                Vector2::new((mid - 9) as f32, (f - 40) as f32),
+                Vector2::new((mid + 1) as f32, (f - 44) as f32),
+                GOLD,
+            );
+            d.draw_triangle(
+                Vector2::new((mid + 3) as f32, (f - 28) as f32),
+                Vector2::new((mid + 1) as f32, (f - 44) as f32),
+                Vector2::new((mid + 12) as f32, (f - 38) as f32),
+                AMBER,
+            );
+            if (seconds * 0.9).sin() > 0.2 {
+                let rise = (seconds * 10.0) as i32 % 14;
+                d.draw_rectangle(mid + 8, f - 46 - rise, 2, 3, CREAM);
+            }
+        }
+        _ => {}
     }
 }
 

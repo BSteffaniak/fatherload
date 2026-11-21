@@ -29,6 +29,15 @@ pub enum Blueprint {
     SkyVilla,
     /// A pressurized dome with an airlock, only on the Moon.
     LunarHabitat,
+    // Wave 6 content (appended: saved homes keep their plans).
+    /// A whitewashed cottage with a sky porch, only on a floating island.
+    CloudCottage,
+    /// A tall, narrow tower with a lookout on top, only on a floating island.
+    Aerie,
+    /// A small buried crater dome, only on the Moon.
+    CraterDome,
+    /// One long timber hall under a single roof: a hearth, a kitchen and a sleeping end.
+    Longhouse,
 }
 
 /// Where a blueprint may stand.
@@ -43,7 +52,7 @@ pub enum BlueprintSite {
 }
 
 impl Blueprint {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 11] = [
         Self::Cabin,
         Self::Cottage,
         Self::House,
@@ -51,6 +60,10 @@ impl Blueprint {
         Self::Manor,
         Self::SkyVilla,
         Self::LunarHabitat,
+        Self::CloudCottage,
+        Self::Aerie,
+        Self::CraterDome,
+        Self::Longhouse,
     ];
 
     #[must_use]
@@ -63,6 +76,10 @@ impl Blueprint {
             Self::Manor => "Manor",
             Self::SkyVilla => "Sky villa",
             Self::LunarHabitat => "Lunar habitat",
+            Self::CloudCottage => "Cloud cottage",
+            Self::Aerie => "Aerie",
+            Self::CraterDome => "Crater dome",
+            Self::Longhouse => "Longhouse",
         }
     }
 
@@ -78,6 +95,12 @@ impl Blueprint {
             Self::Manor => "A grand hall, library, gallery and garage. A week of work.",
             Self::SkyVilla => "Open rooms and an observatory, only on a floating island.",
             Self::LunarHabitat => "A pressurized dome with an airlock, only on the Moon.",
+            Self::CloudCottage => {
+                "A whitewashed cottage with a porch over the drop, only on a floating island."
+            }
+            Self::Aerie => "Three floors stacked into the wind, a lookout on top. Islands only.",
+            Self::CraterDome => "A snug half-buried dome for one, only on the Moon.",
+            Self::Longhouse => "One long hall under a single roof: hearth, kitchen and beds.",
         }
     }
 
@@ -92,6 +115,10 @@ impl Blueprint {
             Self::Manor => (18, 9),
             Self::SkyVilla => (11, 6),
             Self::LunarHabitat => (12, 5),
+            Self::CloudCottage => (8, 5),
+            Self::Aerie => (7, 10),
+            Self::CraterDome => (8, 4),
+            Self::Longhouse => (15, 5),
         }
     }
 
@@ -99,10 +126,14 @@ impl Blueprint {
     #[must_use]
     pub const fn min_plot(self) -> PlotSize {
         match self {
-            Self::Cabin | Self::Cottage => PlotSize::Small,
-            Self::House | Self::WorkshopHome | Self::SkyVilla | Self::LunarHabitat => {
-                PlotSize::Medium
+            Self::Cabin | Self::Cottage | Self::CloudCottage | Self::Aerie | Self::CraterDome => {
+                PlotSize::Small
             }
+            Self::House
+            | Self::WorkshopHome
+            | Self::SkyVilla
+            | Self::LunarHabitat
+            | Self::Longhouse => PlotSize::Medium,
             Self::Manor => PlotSize::Large,
         }
     }
@@ -110,8 +141,8 @@ impl Blueprint {
     #[must_use]
     pub const fn site(self) -> BlueprintSite {
         match self {
-            Self::SkyVilla => BlueprintSite::Sky,
-            Self::LunarHabitat => BlueprintSite::Moon,
+            Self::SkyVilla | Self::CloudCottage | Self::Aerie => BlueprintSite::Sky,
+            Self::LunarHabitat | Self::CraterDome => BlueprintSite::Moon,
             _ => BlueprintSite::Anywhere,
         }
     }
@@ -149,6 +180,22 @@ impl Blueprint {
                 tenth_days: 50,
                 price: 30_000,
             },
+            Self::CloudCottage => BuildJob {
+                tenth_days: 24,
+                price: 8_500,
+            },
+            Self::Aerie => BuildJob {
+                tenth_days: 34,
+                price: 13_500,
+            },
+            Self::CraterDome => BuildJob {
+                tenth_days: 30,
+                price: 18_000,
+            },
+            Self::Longhouse => BuildJob {
+                tenth_days: 30,
+                price: 8_000,
+            },
         }
     }
 
@@ -163,6 +210,10 @@ impl Blueprint {
             Self::Manor => 260,
             Self::SkyVilla => 100,
             Self::LunarHabitat => 150,
+            Self::CloudCottage => 60,
+            Self::Aerie => 90,
+            Self::CraterDome => 80,
+            Self::Longhouse => 110,
         }
     }
 
@@ -205,6 +256,18 @@ impl Blueprint {
                 (0, RoomKind::Living),
                 (0, RoomKind::Hydroponics),
                 (0, RoomKind::Bunks),
+            ],
+            Self::CloudCottage => &[(0, RoomKind::Atrium), (0, RoomKind::Bedroom)],
+            Self::Aerie => &[
+                (0, RoomKind::Living),
+                (1, RoomKind::Bedroom),
+                (2, RoomKind::Observatory),
+            ],
+            Self::CraterDome => &[(0, RoomKind::Airlock), (0, RoomKind::Bunks)],
+            Self::Longhouse => &[
+                (0, RoomKind::Hall),
+                (0, RoomKind::Kitchen),
+                (0, RoomKind::Bedroom),
             ],
         }
     }

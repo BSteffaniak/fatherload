@@ -1115,8 +1115,10 @@ impl WorldState {
         for member in members {
             let unlocks = self.tombs.unlocks.entry(member).or_default();
             unlocks.trophies = unlocks.trophies.saturating_add(1);
-            // A trophy case for the home (WP-HOME's displays) and the guardian's crown.
+            // A trophy case for the home (WP-HOME's displays), the guardian's mask for its
+            // wall (Wave 6) and the guardian's crown.
             self.grant_furniture(member, crate::home::decor::Furniture::TrophyCase, 1);
+            self.grant_furniture(member, crate::home::decor::Furniture::GuardianMask, 1);
             if let Some(rig) = self.players.get_mut(&member) {
                 let _ = rig
                     .cosmetic_unlocks
@@ -1315,7 +1317,7 @@ impl WorldState {
         }
         let banked = member.banked.saturating_add(kept);
         let lore = member.lore;
-        {
+        let first_finish = {
             let unlocks = self.tombs.unlocks.entry(player).or_default();
             unlocks.codex.extend(member.relics.iter().copied());
             unlocks.best_haul = unlocks.best_haul.max(banked);
@@ -1323,6 +1325,12 @@ impl WorldState {
                 unlocks.finished = unlocks.finished.saturating_add(1);
                 let _ = unlocks.cleared.insert(site.id);
             }
+            outcome == RunOutcome::Finished && unlocks.finished == 1
+        };
+        if first_finish {
+            // The first tomb seen through to the end earns a plinth to show a relic on
+            // (Wave 6 trophies for the home).
+            self.grant_furniture(player, crate::home::decor::Furniture::RelicPlinth, 1);
         }
         let serial = self.tombs.next_summary;
         self.tombs.next_summary = serial.wrapping_add(1);
