@@ -94,6 +94,16 @@ coordinate space.
 The atlas (`sprite::load_atlas`) is rasterized once at startup into a point-filtered texture;
 `GameRenderer` owns it and `sprite::set_current_atlas` publishes it for the frame.
 
+Silhouettes (wave 6): sprites listed in `sprites::SILHOUETTED` are also packed as white
+silhouettes; `sprite::draw_silhouette` blits one tinted, which the enemy renderer uses for
+one-art-pixel rim lights (eight offset copies under the sprite) so small or dark creatures read
+against night, space and Moon skies. Add a sprite there (it must also be in `ALL`) to give it a
+rim; the atlas test keeps the texture within WebGL's 4096-pixel limit.
+
+Enemy art should match its body: a side-view kind's painted width at its draw scale stays
+inside `EnemyKind::contact_half` (pinned for the Sun Colossus by a test), so pilots standing
+beside it are never drawn inside it.
+
 ## Scale policy
 
 One art pixel always covers a whole number of physical framebuffer pixels (`pixel_scale`):

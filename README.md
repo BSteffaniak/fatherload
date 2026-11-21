@@ -924,6 +924,36 @@ beside a cracked seal, or a **story** seen through.
   13,000-15,000 at tier 3, 35,000-42,000 at tier 4 and 70,000-90,000 at tier 5 (8-29 caches
   over 3 to 6 floors).
 
+### Art and audio pass (wave 6)
+
+A polish pass over everything from waves 3-5, presentation only (no gameplay, save, protocol or
+world generation changes):
+
+- **Pilot animation**: six-frame walk and run cycles with knee lift and arm swing, a knocked-back
+  hurt flinch, a floating star-jump in the air and a bounding lope on the Moon (low gravity), and
+  a downed tomb member lying flat on its back under a small red cross (it used to stand inside a
+  ring). In crypts the top-down pilot strides along its heading with a swinging hand and the
+  dodge roll tumbles with the helmet and pack swinging round.
+- **Enemies that read**: night monsters (shadow hounds, dune stalkers, the umbral alpha,
+  will-o'-wisps), sky swoopers (wyverns, sky rays, harpy nesters) and the Moon's creatures (the
+  Warden and its kin) get a one-pixel rim light from white silhouettes packed into the sprite
+  atlas: always on the Moon and in the dark sky high up, and at night a moonlit rim plus a dimly
+  lit copy of the body drawn over the darkness, under their glowing eyes.
+- **Fixes**: the builders' mule is a stocky grey mule with long ears (it read as a deer); rifle
+  cartridges and shotgun shells have their own icons (they reused the rocket's), also beside the
+  ammo count on the HUD; the Sun Colossus is redrawn to span exactly its contact box, so a pilot
+  standing beside it is never drawn inside its arms, and its crouch keeps its feet on the floor.
+- **Ambience by environment**: each seat crossfades (over about a second) between open-air beds
+  (biome wind, rain, crickets, the sky isles' air), a thin whistling wind high up that fades
+  toward space, the Moon's near-silence (the suit's hum and breath, radio ticks) with soft low-g
+  footfalls, the lunar colony's machinery, a town's bustle (villages, sky towns, the home town)
+  and tomb or crypt music, so loops never stack. The far howls of the night's prowl swell as
+  night monsters gather near. Dawn and dusk play a short musical theme when the world clock
+  turns. Everything goes through the one mixer and its master volume.
+- Review scenes: `pilot_animation_strip`, `ammo_icons`, `side_tomb_colossus_beside_pilot`, plus
+  `night_*`, `sky_enemy_wyverns`, `moon_warden`, `tomb_coop_downed`, `crypt_dodge_roll` and
+  `home_stage_frame` (the mule); check them at `--size 1280x720`, `1920x1080` and `844x390`.
+
 ## Controls
 
 - `A` / `D` or left/right arrows: move horizontally and drill sideways while resting on the

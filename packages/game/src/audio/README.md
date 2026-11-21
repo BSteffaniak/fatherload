@@ -169,6 +169,13 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `hex_bolt` | feedback | A hex being cast (cultists, the lord's tells and shots): an FM swirl rising an octave. |
 | `loop_crypt` | loop | A crypt's music: a breathing triangle drone on D and A, a hollow low-passed saw choir and a four-note bell motif with a far echo, over cold air. |
 | `loop_crypt_boss` | loop | The crypt lord's theme: a war drum twice a second with a tom answer and bright sixteenth ticks, a growling saw ostinato (D D F E) and dissonant brass stabs on the downbeats. |
+| `loop_high_wind` | loop | The thin air high up (wave 6): a faint band-passed whistle wandering over a high-passed breathy hiss, in slow gusts, with no low buffeting. |
+| `loop_moon` | loop | The Moon's near-silence: the suit's 110/220 Hz life-support hum, two helmet breaths a loop (band-passed pink noise), a faint servo whine and scattered radio ticks. |
+| `moon_step` | feedback | A boot on the Moon, felt through the suit: a soft low thud, a muffled regolith crunch and the knee servo's short whirr. |
+| `loop_town` | loop | A town's bustle: far voices (pink noise through two drifting vowel formants, in syllables), a smith's three strikes twice a loop, a creaking cart wheel and birds. |
+| `loop_colony` | loop | The lunar colony's rooms: a 55 Hz recycler motor with a fan beat, a vent's hiss, room rumble and two-tone console chirps. |
+| `dawn_theme` | big | Dawn on the world clock: a warm G major brass pad swelling up from the root, a rising pentatonic line of FM bells (G A B D E G) and a held high D bell. |
+| `dusk_theme` | big | Dusk: a low E minor brass pad, a falling aeolian bell line (E D B A G E) and a far horn note fading out. |
 
 Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes of drilling). Periodic parts use frequencies with whole cycles in the loop (multiples of 0.5 Hz); scattered events (pops, knocks, grit) are spread evenly at a steady density, so nothing marks the restart.
 
@@ -186,6 +193,14 @@ Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes
 | Bomb fuses | each bomb | Ticks every 0.08-0.5 s as the fuse burns, placed in the world (C4 only once the detonator fires it; flares and burning fires never). |
 | Toasts | new shell or seat message | A chime 0.2 s later, cancelled if another sound plays first (so purchases and saves do not double up). |
 | Crypt music | each seat whose player is in a top-down crypt run (T29) | `loop_crypt` while exploring; `loop_crypt_boss` instead once the crypt lord is up and until it falls. |
+| Environment (wave 6) | each seat | Smoothed shares (about 1.2 s to crossfade) of being in a tomb or crypt run, in vacuum, in the lunar colony and in a town (a village or sky town by `village_at`, or the home town's span; looked up four times a second). The open-air beds (wind, rain, crickets, sky air, waterfalls) are scaled by `(1 - tomb) (1 - vacuum) (1 - colony)`, wind by a further 40% and crickets 60% less in town, the prowl by `(1 - tomb) (1 - vacuum)`, so beds crossfade by environment instead of stacking. |
+| High wind | each seat out in the open | `loop_high_wind` fades in from 150 to 300 tiles up as the surface wind thins, then itself grows quieter and thinner (lower cutoff, a touch higher pitch) up to ~800 tiles, where space is silent. |
+| Moon / colony / town | each seat | `loop_moon` in vacuum (the Moon and orbit) outside the colony, `loop_colony` in the colony's rooms, `loop_town` in a town; all silent in a tomb run. |
+| Moon footsteps | each seat whose pilot walks (every 0.56 s) or runs (0.4 s) on the ground under low gravity | `moon_step` panned with the seat, muffled like the seat's own sounds in vacuum. |
+| Dawn / dusk themes | the world clock turning to dawn or dusk | `dawn_theme` / `dusk_theme` once, centred, if any seat is out in the open (not in a tomb run or in vacuum). Not on the first frame or after a pause. |
+
+Seat loops are keyed per seat in blocks of 32 sources (`SEAT_LOOP_SLOTS`), one per continuous
+sound, so a seat's beds never collide with the next seat's.
 
 Spatialization: interface sounds are centred. A local seat's own sounds pan toward its
 split-screen view (±0.6 at the view centres). World sounds (explosions, fuses, other players'

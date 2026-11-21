@@ -2818,6 +2818,17 @@ replication, hashing and tick-rate safety.
 - **Formats**: `PROTOCOL_VERSION` 12 (see the protocol notes); save format unchanged (an older
   build rejects a V9 save by its generator; every new field defaults).
 
+## Wave 6 seams: art and audio pass
+
+Presentation only: nothing in the simulation changed. No `PROTOCOL_VERSION` or save format
+bump, no worldgen change (the V1-V10 golden digests stand). The renderer reads two new derived
+facts per pilot in `RenderSnapshot` (`PilotPresentation::low_gravity` from
+`environment::environment_at(..).gravity`, and `downed` from the pilot's tomb run member), and
+the audio director reads `village::village_at`, `surface::town_span`, `moon::sheltered_at` with
+the Moon layout's colony site, and the clock's `DayPhase` to pick and crossfade ambience. No new
+gameplay event codes. The Sun Colossus' art was redrawn to its existing
+`EnemyKind::contact_half` (64 px wide at its 1.5x draw scale); its contact box is unchanged.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
