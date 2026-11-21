@@ -215,7 +215,14 @@ mod tests {
                 | Patch::WardenWake
                 | Patch::CoreHum
                 // Homes (T24): the furniture thud.
-                | Patch::FurnitureThunk => (40.0, 3_000.0),
+                | Patch::FurnitureThunk
+                // Side-view tombs (T28): the drone-led run music and drum-led guardian's
+                // theme, crushers and the colossus landing, a mummy's groan.
+                | Patch::TombRunLoop
+                | Patch::TombBossLoop
+                | Patch::CrusherSlam
+                | Patch::ColossusSlam
+                | Patch::MummyGroan => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }
