@@ -589,5 +589,28 @@ fn boss_scene(stage: &mut SceneStage<'_>, kind: EnemyKind) {
         }
         reveal_run(world, player);
     });
-    stage.settle(70);
+    // Until its second phase shows: something it raised or summoned is up and a volley is in
+    // the air (the pilot kept on its feet meanwhile).
+    for _ in 0..900 {
+        let ready = {
+            let world = stage.world();
+            let boss = world.tomb_run_of(runner(world)).and_then(|run| run.boss);
+            world
+                .enemies()
+                .any(|(_, state)| boss.is_some() && state.parent == boss)
+                && world
+                    .entities()
+                    .count_of(fatherload_simulation::entity::EntityKind::EnemyShot)
+                    > 0
+        };
+        if ready {
+            break;
+        }
+        stage.play_on(|world| {
+            if let Some((id, _, _)) = world.pilot_of(runner(world)) {
+                world.edit_pilot(id, |_, state| state.health = state.max_health);
+            }
+        });
+        stage.settle(1);
+    }
 }
