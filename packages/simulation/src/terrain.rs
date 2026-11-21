@@ -887,6 +887,10 @@ impl Terrain {
     /// worlds without cave ecosystems (generators before V6). A pure function of the settings.
     #[must_use]
     pub fn cave_at(&self, position: TilePosition) -> Option<crate::cave::CaveSample> {
+        // The run vault of a tomb world (WP-TOMBS) is no cave: no water, critters or tags.
+        if worldgen::tomb_sites::in_vault(&self.settings, position) {
+            return None;
+        }
         worldgen::streamed::cave_at(&self.settings, position)
     }
 

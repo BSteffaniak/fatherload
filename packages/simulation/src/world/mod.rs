@@ -134,6 +134,9 @@ mod tests;
 mod tick_rate_tests;
 mod timing;
 #[cfg(test)]
+mod tomb_tests;
+mod tombs;
+#[cfg(test)]
 mod village_tests;
 mod villages;
 mod visibility;
@@ -167,6 +170,9 @@ pub use services::{
 pub use sky_temples::{GATE_REACH, LEVER_REACH, relic_loot};
 pub use sky_weapons::{HOLD_RADIUS, HOLD_REACH, MIN_TETHER, REEL_SPEED, RIP_MILLIS};
 pub use timing::TickTiming;
+pub use tombs::{
+    PARTY_REACH, PICK_TIMEOUT_MILLIS, REVIVE_MILLIS, REVIVE_REACH, cache_value, guardian_hoard,
+};
 
 pub use commands::{
     DrillContact, DrillIntent, MIN_DRILL_SECONDS_PER_CHIP, authoritative_mine_target,
@@ -379,6 +385,10 @@ pub struct WorldState {
     /// [`crate::home`]); the site crews are NPC entities.
     #[serde(default)]
     homes: crate::home::Homes,
+    /// Tomb and crypt runs, site counters and seals, and permanent tomb unlocks (WP-TOMBS,
+    /// see [`crate::tomb`]); the floors live in the terrain's run vault.
+    #[serde(default)]
+    tombs: crate::tomb::Tombs,
 }
 
 impl WorldState {

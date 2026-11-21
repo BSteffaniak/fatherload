@@ -922,6 +922,13 @@ fn continent_cell_of(id: FeatureId) -> Option<i32> {
     (layer == Layer::Sky && ry.div_euclid(1000) == ID_CONTINENT).then_some(rx)
 }
 
+/// The sky continent of continent cell `rx` (cells are [`CONTINENT_CELL_COLUMNS`] wide), if
+/// the cell has one (tomb sites stand on them, WP-TOMBS).
+#[must_use]
+pub fn continent_in_cell(settings: &WorldSettings, rx: i32) -> Option<SkyLand> {
+    continent_cell(settings, rx)
+}
+
 /// The continent footprint of cell `rx`, if it has one (with its content plan on V9 worlds).
 fn continent_cell(settings: &WorldSettings, rx: i32) -> Option<SkyLand> {
     let bands = &bands_of(settings)?;

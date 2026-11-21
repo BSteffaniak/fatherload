@@ -229,6 +229,26 @@ pub enum BuiltTile {
     /// A claim fenced with palisades on both sides of a spot keeps night monsters off it
     /// (`WorldState::night_safe_zone`).
     Palisade,
+    // --- Tomb pieces (WP-TOMBS, [`crate::tomb`]): stamped by the tomb generator and the run
+    // realizers, never built or deconstructed. `style` is a [`crate::tomb::SiteStyle`]
+    // index (0 side-view tomb, 1 top-down crypt). -----------------------------------------
+    /// Tomb masonry (sandstone for tombs, crypt stone for crypts).
+    TombWall(u8),
+    /// A carved pillar: decoration a pilot walks through (rigs, drops and creatures stop).
+    TombPillar(u8),
+    /// A tomb's entrance door; a sealed one waits for its opening (key, story, explosives).
+    TombDoor { style: u8, sealed: bool },
+    /// A shrine lamp: banks the party's loot, revives the downed and saves the run.
+    TombShrine { lit: bool },
+    /// The stairs down (the way out with everything on the last floor).
+    TombStairs,
+    /// The way back out on a run's first floor (banks everything, ends the run).
+    TombExit,
+    /// A cache of run loot (lost on death unless banked).
+    TombCache { open: bool },
+    /// A trap a pilot passes into (and is hurt by); `hidden` ones show only to trap-sight.
+    /// `kind` is a [`crate::tomb::realize::TrapKind`] index (T28 / T29 add their traps).
+    TombTrap { kind: u8, hidden: bool },
 }
 
 impl BuiltTile {
@@ -264,7 +284,33 @@ impl BuiltTile {
             Self::Chest { open: false, .. } => "Treasure Chest",
             Self::Chest { open: true, .. } => "Empty Chest",
             Self::Palisade => "Palisade",
+            Self::TombWall(_) => "Tomb Masonry",
+            Self::TombPillar(_) => "Carved Pillar",
+            Self::TombDoor { sealed: true, .. } => "Sealed Tomb Door",
+            Self::TombDoor { sealed: false, .. } => "Tomb Door",
+            Self::TombShrine { .. } => "Shrine",
+            Self::TombStairs => "Stairs Down",
+            Self::TombExit => "Way Out",
+            Self::TombCache { open: false } => "Tomb Cache",
+            Self::TombCache { open: true } => "Empty Cache",
+            Self::TombTrap { .. } => "Trap",
         }
+    }
+
+    /// Whether this is a tomb piece ([`crate::tomb`]): stamped, never built or deconstructed.
+    #[must_use]
+    pub const fn is_tomb(self) -> bool {
+        matches!(
+            self,
+            Self::TombWall(_)
+                | Self::TombPillar(_)
+                | Self::TombDoor { .. }
+                | Self::TombShrine { .. }
+                | Self::TombStairs
+                | Self::TombExit
+                | Self::TombCache { .. }
+                | Self::TombTrap { .. }
+        )
     }
 
     /// Whether this is a ruin piece ([`crate::mechanism`]): stamped, never built or
@@ -280,16 +326,24 @@ impl BuiltTile {
                 | Self::PressurePlate { .. }
                 | Self::KeycardDoor(_)
                 | Self::Chest { .. }
-        )
+        ) || self.is_tomb()
     }
 
     /// Who gets through this piece (Part II F5): vent grates let only pilots by.
     #[must_use]
     pub const fn access(self) -> Option<crate::poi::SpaceAccess> {
         match self {
-            Self::VentGrate | Self::Chest { .. } | Self::Lever { .. } | Self::KeycardDoor(_) => {
-                Some(crate::poi::SpaceAccess::RequiresPilot)
-            }
+            Self::VentGrate
+            | Self::Chest { .. }
+            | Self::Lever { .. }
+            | Self::KeycardDoor(_)
+            | Self::TombDoor { .. }
+            | Self::TombShrine { .. }
+            | Self::TombStairs
+            | Self::TombExit
+            | Self::TombCache { .. }
+            | Self::TombPillar(_)
+            | Self::TombTrap { .. } => Some(crate::poi::SpaceAccess::RequiresPilot),
             Self::Wall(_)
             | Self::Plating
             | Self::Glass
@@ -298,7 +352,8 @@ impl BuiltTile {
             | Self::Gate
             | Self::GateLintel(_)
             | Self::PressurePlate { .. }
-            | Self::Palisade => None,
+            | Self::Palisade
+            | Self::TombWall(_) => None,
         }
     }
 
@@ -334,6 +389,16 @@ impl BuiltTile {
                 card: Some(color),
             } => 66 + (color % crate::mechanism::KEYCARD_COLORS) as u64,
             Self::Palisade => 70,
+            Self::TombWall(style) => 72 + (style % 2) as u64,
+            Self::TombPillar(style) => 74 + (style % 2) as u64,
+            Self::TombDoor { style, sealed } => 76 + (style % 2) as u64 * 2 + sealed as u64,
+            Self::TombShrine { lit } => 80 + lit as u64,
+            Self::TombStairs => 82,
+            Self::TombExit => 83,
+            Self::TombCache { open } => 84 + open as u64,
+            Self::TombTrap { kind, hidden } => {
+                88 + (kind % crate::tomb::realize::TRAP_KINDS) as u64 * 2 + hidden as u64
+            }
         }
     }
 
@@ -378,6 +443,20 @@ impl BuiltTile {
                 card: Some((code - 66) as u8),
             },
             70 => Self::Palisade,
+            72..=73 => Self::TombWall((code - 72) as u8),
+            74..=75 => Self::TombPillar((code - 74) as u8),
+            76..=79 => Self::TombDoor {
+                style: ((code - 76) / 2) as u8,
+                sealed: (code - 76) % 2 == 1,
+            },
+            80..=81 => Self::TombShrine { lit: code == 81 },
+            82 => Self::TombStairs,
+            83 => Self::TombExit,
+            84..=85 => Self::TombCache { open: code == 85 },
+            88..=119 => Self::TombTrap {
+                kind: ((code - 88) / 2) as u8,
+                hidden: (code - 88) % 2 == 1,
+            },
             _ => return None,
         })
     }
@@ -967,7 +1046,15 @@ impl Buildable {
                 | BuiltTile::Lever { .. }
                 | BuiltTile::PressurePlate { .. }
                 | BuiltTile::KeycardDoor(_)
-                | BuiltTile::Chest { .. },
+                | BuiltTile::Chest { .. }
+                | BuiltTile::TombWall(_)
+                | BuiltTile::TombPillar(_)
+                | BuiltTile::TombDoor { .. }
+                | BuiltTile::TombShrine { .. }
+                | BuiltTile::TombStairs
+                | BuiltTile::TombExit
+                | BuiltTile::TombCache { .. }
+                | BuiltTile::TombTrap { .. },
             ) => BuildCost::credits(0),
             Self::Tile(BuiltTile::Palisade) => BuildCost::credits(6),
 

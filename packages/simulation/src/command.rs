@@ -92,6 +92,10 @@ pub enum PlayerCommand {
     /// Plots, contracts, decorating and the home's services (WP-HOME, see
     /// [`crate::home::HomeCommand`]).
     Home(crate::home::HomeCommand),
+    /// A tomb run action (WP-TOMBS, see [`crate::tomb::TombCommand`]): a relic pick between
+    /// floors. Entering, shrines, caches, the stairs and the way out are the use button
+    /// ([`crate::pilot::PilotAction::Use`]).
+    Tomb(crate::tomb::TombCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

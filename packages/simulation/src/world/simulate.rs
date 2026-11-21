@@ -135,6 +135,11 @@ impl WorldState {
                     self.pilot_command(player_id, &action.command, &mut output)
                 {
                     outcome
+                } else if let Some(outcome) =
+                    self.tomb_command(player_id, &action.command, &mut output)
+                {
+                    // Tomb runs (WP-TOMBS, `world/tombs.rs`): relic picks.
+                    outcome
                 } else if let crate::PlayerCommand::Moon(command) = action.command {
                     // The Moon (WP-MOON, `world/moon.rs`): it reports its own events.
                     self.apply_moon_command(player_id, command, &mut output)
@@ -191,6 +196,8 @@ impl WorldState {
         self.advance_pilots(inputs, next_tick, &mut output);
         // Ruin pressure plates under their feet (WP-PILOT).
         self.advance_plates(next_tick, &mut output);
+        // Tomb runs (WP-TOMBS): ambushes, the guardian, traps, revives, picks, wipes.
+        self.advance_tombs(next_tick, &mut output);
         let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in recovery_player_ids {
             if self.recover_lost_cargo_for_player(player_id) {

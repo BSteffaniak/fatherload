@@ -66,12 +66,19 @@ fn island_bands(first: i32, last: i32) -> TileRect {
 
 #[test]
 fn v9_is_current_and_only_v9_furnishes_the_isles() {
-    assert_eq!(GeneratorVersion::CURRENT, GeneratorVersion::V9);
+    // V10 (tombs, WP-TOMBS) is current and keeps V9's sky exactly.
+    assert_eq!(GeneratorVersion::CURRENT, GeneratorVersion::V10);
     for generator in GeneratorVersion::ALL {
-        assert_eq!(generator.has_sky_isles(), generator == GeneratorVersion::V9);
+        assert_eq!(
+            generator.has_sky_isles(),
+            matches!(generator, GeneratorVersion::V9 | GeneratorVersion::V10)
+        );
         assert_eq!(
             generator.has_sky(),
-            matches!(generator, GeneratorVersion::V8 | GeneratorVersion::V9)
+            matches!(
+                generator,
+                GeneratorVersion::V8 | GeneratorVersion::V9 | GeneratorVersion::V10
+            )
         );
     }
     let area = island_bands(-3_000, 3_000);

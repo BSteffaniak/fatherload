@@ -22,6 +22,8 @@
 //!   minute by strategy.
 //! - [`climb`]: the climb bot (the plan's T19 row): apex and turn-back altitude on one tank
 //!   per fuel-tank and engine tier, through the real tick.
+//! - [`tombs`]: tomb and crypt runs (Wave 5 T27): run length, death rate and loot per tier
+//!   and style, from a scripted bot playing whole runs ([`tombs::TombBot`]).
 //! - [`trip`]: the everyday trip (drill 50 rows down, mine two minutes, fly home): the fuel
 //!   it burns against each tank, the yardstick of the fuel curve.
 //!
@@ -57,6 +59,7 @@ pub mod night;
 pub mod second_act;
 #[cfg(test)]
 mod tests;
+pub mod tombs;
 pub mod trip;
 
 use std::{collections::BTreeMap, fmt::Write as _};
@@ -287,6 +290,7 @@ pub fn standard_probes() -> Vec<Box<dyn BalanceProbe>> {
         Box::new(trip::TripProbe),
         Box::new(night::NightProbe),
         Box::new(second_act::SecondActProbe),
+        Box::new(tombs::TombsProbe),
     ]
 }
 

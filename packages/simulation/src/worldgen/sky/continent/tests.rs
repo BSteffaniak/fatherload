@@ -36,11 +36,12 @@ fn continents(settings: &WorldSettings) -> Vec<(SkyLand, ContinentPlan)> {
 
 #[test]
 fn only_v9_fills_continents_and_keeps_v8_placement() {
-    assert_eq!(GeneratorVersion::CURRENT, GeneratorVersion::V9);
+    // V10 (tombs, WP-TOMBS) is current and keeps V9's sky exactly.
+    assert_eq!(GeneratorVersion::CURRENT, GeneratorVersion::V10);
     for generator in GeneratorVersion::ALL {
         assert_eq!(
             generator.has_sky_content(),
-            generator == GeneratorVersion::V9
+            matches!(generator, GeneratorVersion::V9 | GeneratorVersion::V10)
         );
     }
     for seed in [3_u64, 0x00C0_FFEE] {

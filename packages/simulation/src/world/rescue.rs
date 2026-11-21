@@ -169,7 +169,8 @@ impl WorldState {
         player_id: PlayerId,
         damage: f32,
     ) -> Option<PlayerSurvivalSnapshot> {
-        let immune = self.damage_immune();
+        // A rig waiting outside a tomb while its pilot runs it is safe (WP-TOMBS).
+        let immune = self.damage_immune() || self.tombs.run_of(player_id).is_some();
         let warded = self.player_blessing(player_id) == Some(crate::village::BlessingKind::Ward);
         let player = self.players.get_mut(&player_id)?;
         if !immune {

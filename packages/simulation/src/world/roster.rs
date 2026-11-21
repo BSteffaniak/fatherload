@@ -68,6 +68,9 @@ impl WorldState {
     /// [`Self::remove_player`], optionally keeping the player's armed remote charges (parking
     /// keeps them for when the player returns, WP-PERSIST).
     pub(super) fn remove_player_with(&mut self, player_id: PlayerId, disarm_charges: bool) {
+        // Leaving mid-run abandons it (WP-TOMBS): the unbanked loot is lost.
+        let mut scratch = crate::event::TickOutput::default();
+        self.abandon_tomb_run(player_id, &mut scratch);
         let Self {
             timing: _,
             player_template: _,
@@ -104,6 +107,8 @@ impl WorldState {
             // Deeds, homes and furniture stay keyed by the player id (a returning player owns
             // their house again).
             homes: _,
+            // Runs were left above; unlocks stay keyed by the player id.
+            tombs: _,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);

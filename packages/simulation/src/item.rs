@@ -157,6 +157,8 @@ pub const TEMPLE_KEYSTONE_ID: u16 = 210;
 /// A sky temple's keystone: prised off its plinth by a pilot, it opens the temple's keystone
 /// gate (`world/sky_temples.rs`).
 pub const TEMPLE_KEYSTONE: ItemKind = ItemKind::Quest(QuestItemId(TEMPLE_KEYSTONE_ID));
+/// The tomb key's quest item id (WP-TOMBS, [`crate::tomb::TOMB_KEY`]).
+pub const TOMB_KEY_ID: u16 = 0xC200;
 
 /// Broad item category (UI grouping, stowage rules, drop presentation).
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
@@ -292,6 +294,7 @@ impl ItemKind {
             },
             Self::Cosmetic(_) => "Cosmetic",
             Self::Quest(QuestItemId(TEMPLE_KEYSTONE_ID)) => "Temple Keystone",
+            Self::Quest(QuestItemId(TOMB_KEY_ID)) => "Tomb Key",
             Self::Quest(_) => "Quest Item",
         }
     }

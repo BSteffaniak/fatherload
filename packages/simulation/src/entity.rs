@@ -330,6 +330,9 @@ pub struct ProjectileState {
     pub pierce_left: u8,
     /// The last target it hit (a piercing shot never hits the same one twice in a row).
     pub last_hit: Option<EntityId>,
+    /// Times it bounced off rock (Ricochet Rounds, WP-TOMBS relics).
+    #[serde(default)]
+    pub bounces: u8,
 }
 
 /// A practice target's per-kind state.

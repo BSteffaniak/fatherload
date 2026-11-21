@@ -41,6 +41,7 @@ pub mod sky;
 pub mod strata;
 pub mod streamed;
 pub use streamed::pilot_spaces;
+pub use streamed::tomb_sites;
 #[cfg(test)]
 mod tests;
 
@@ -118,14 +119,21 @@ pub enum GeneratorVersion {
     /// the bands and the rest of the ground are exactly V8's except where a town isle stands
     /// in for a chain island.
     V9,
+    /// V9 with tombs and crypts (Wave 5 T27, expansion plan WP-TOMBS, [`tomb_sites`]): sealed
+    /// tomb entrances placed per region deep underground, in badland and desert mesas, under
+    /// villages' old quarters, on sky continents and on the Moon, each fixed by the seed as a
+    /// side-view tomb or a top-down crypt; plus the sealed vault strip the instanced run
+    /// spaces are realized in ([`tomb_sites::VAULT`]). Everything else is exactly V9's (same
+    /// sky bands, climb table and thin air).
+    V10,
 }
 
 impl GeneratorVersion {
     /// The generator new worlds use.
-    pub const CURRENT: Self = Self::V9;
+    pub const CURRENT: Self = Self::V10;
 
     /// Every generator, oldest first.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Legacy,
         Self::V1,
         Self::V2,
@@ -136,6 +144,7 @@ impl GeneratorVersion {
         Self::V7,
         Self::V8,
         Self::V9,
+        Self::V10,
     ];
 
     /// Whether this generator stamps points of interest.
@@ -143,7 +152,15 @@ impl GeneratorVersion {
     pub const fn has_points_of_interest(self) -> bool {
         matches!(
             self,
-            Self::V2 | Self::V3 | Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9
+            Self::V2
+                | Self::V3
+                | Self::V4
+                | Self::V5
+                | Self::V6
+                | Self::V7
+                | Self::V8
+                | Self::V9
+                | Self::V10
         )
     }
 
@@ -153,7 +170,7 @@ impl GeneratorVersion {
     pub const fn is_deep(self) -> bool {
         matches!(
             self,
-            Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9
+            Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10
         )
     }
 
@@ -161,21 +178,24 @@ impl GeneratorVersion {
     /// chunk by chunk on demand ([`streamed`]). Older generators build bounded worlds.
     #[must_use]
     pub const fn is_streamed(self) -> bool {
-        matches!(self, Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9)
+        matches!(
+            self,
+            Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10
+        )
     }
 
     /// Whether this generator places cave ecosystems ([`crate::cave::CaveKind`]): their
     /// tiles, water, light, loot and critters.
     #[must_use]
     pub const fn has_cave_biomes(self) -> bool {
-        matches!(self, Self::V6 | Self::V7 | Self::V8 | Self::V9)
+        matches!(self, Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10)
     }
 
     /// Whether worlds of this generator have villages ([`crate::village`]). The single switch
     /// for every village rule (placement, flattened ground, stamped tiles, feature index).
     #[must_use]
     pub const fn has_villages(self) -> bool {
-        matches!(self, Self::V6 | Self::V7 | Self::V8 | Self::V9)
+        matches!(self, Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10)
     }
 
     /// Whether worlds of this generator have surface biomes and a real heightmap
@@ -183,7 +203,7 @@ impl GeneratorVersion {
     /// placeholder surface.
     #[must_use]
     pub const fn has_biomes(self) -> bool {
-        matches!(self, Self::V7 | Self::V8 | Self::V9)
+        matches!(self, Self::V7 | Self::V8 | Self::V9 | Self::V10)
     }
 
     /// Whether worlds of this generator have the sky ([`sky`]: floating islands, sky
@@ -205,7 +225,8 @@ impl GeneratorVersion {
     pub const fn sky_bands(self) -> Option<sky::SkyBands> {
         match self {
             Self::V8 => Some(sky::V8_SKY_BANDS),
-            Self::V9 => Some(sky::V9_SKY_BANDS),
+            // V10 (tombs) keeps V9's sky exactly.
+            Self::V9 | Self::V10 => Some(sky::V9_SKY_BANDS),
             Self::Legacy
             | Self::V1
             | Self::V2
@@ -222,7 +243,7 @@ impl GeneratorVersion {
     /// sky towns and jet streams; see [`sky`]). V8 skies keep their bare islands.
     #[must_use]
     pub const fn has_sky_isles(self) -> bool {
-        matches!(self, Self::V9)
+        matches!(self, Self::V9 | Self::V10)
     }
 
     /// Whether this generator fills the sky continents with content ([`sky::continent`]:
@@ -230,14 +251,14 @@ impl GeneratorVersion {
     /// and their sky enemies. V8 continents stay placeholder land.
     #[must_use]
     pub const fn has_sky_content(self) -> bool {
-        matches!(self, Self::V9)
+        matches!(self, Self::V9 | Self::V10)
     }
 
     /// Whether worlds of this generator fill the Moon with content ([`moon`], WP-MOON). V8
     /// keeps its placeholder Moon (regolith over moon rock with craters).
     #[must_use]
     pub const fn has_moon_content(self) -> bool {
-        matches!(self, Self::V9)
+        matches!(self, Self::V9 | Self::V10)
     }
 
     /// Whether worlds of this generator place pilot-only spaces ([`pilot_spaces`]: ruins with
@@ -245,7 +266,14 @@ impl GeneratorVersion {
     /// player-built crawlways and scenario ruins).
     #[must_use]
     pub const fn has_pilot_spaces(self) -> bool {
-        matches!(self, Self::V9)
+        matches!(self, Self::V9 | Self::V10)
+    }
+
+    /// Whether worlds of this generator place tomb and crypt sites and the run vault
+    /// ([`tomb_sites`], WP-TOMBS). Older worlds keep none.
+    #[must_use]
+    pub const fn has_tombs(self) -> bool {
+        matches!(self, Self::V10)
     }
 
     #[must_use]
@@ -261,6 +289,7 @@ impl GeneratorVersion {
             Self::V7 => "v7",
             Self::V8 => "v8",
             Self::V9 => "v9",
+            Self::V10 => "v10",
         }
     }
 }

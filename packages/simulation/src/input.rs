@@ -4,9 +4,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
-use crate::{command::PlayerCommand, ids::InputSequence};
-use crate::{command::TickAction, ids::PlayerId};
+use crate::{
+    command::{PlayerCommand, TickAction},
+    ids::{InputSequence, PlayerId},
+};
 
 /// Held controls, quantized so every peer feeds the simulation identical values.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -91,6 +92,22 @@ pub struct PlayerTickInput {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TickInputs {
     pub players: BTreeMap<PlayerId, PlayerTickInput>,
+}
+
+impl TickInputs {
+    /// Adds `controls` for `player` (bots in the balance harness).
+    pub fn hold_as(mut self, player: PlayerId, controls: ControlState) -> Self {
+        self.players.entry(player).or_default().controls = Some(controls);
+        self
+    }
+
+    /// Adds a one-shot `command` for `player`, sequenced after its previous actions (bots in
+    /// the balance harness).
+    pub fn act_as(&mut self, player: PlayerId, command: PlayerCommand) {
+        let input = self.players.entry(player).or_default();
+        let sequence = InputSequence::new(u32::try_from(input.actions.len()).unwrap_or(u32::MAX));
+        input.actions.push(TickAction { sequence, command });
+    }
 }
 
 #[cfg(test)]

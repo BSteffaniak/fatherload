@@ -132,6 +132,8 @@ impl WorldState {
         self.damage_from_blasts(&blasts, output);
         // Pilots on foot are pushed and hurt too (Part II F5).
         self.pilots_feel_blasts(&blasts, output);
+        // Sealed explosives doors of tomb sites crack (WP-TOMBS).
+        self.blast_tomb_seals(&blasts, output);
         let mut spawned = Vec::new();
         for (id, bomb) in expiring {
             if let Some(continuing) = self.expire_bomb(bomb, next_tick, notes, output, &mut spawned)

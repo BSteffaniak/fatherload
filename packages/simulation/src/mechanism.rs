@@ -72,7 +72,9 @@ pub const fn keycard_item(color: u8) -> ItemKind {
 /// keystones are always picked up, so a full pack never strands the key to a vault.
 #[must_use]
 pub fn rides_key_ring(item: ItemKind) -> bool {
-    keycard_of(item).is_some() || item == crate::item::TEMPLE_KEYSTONE
+    keycard_of(item).is_some()
+        || item == crate::item::TEMPLE_KEYSTONE
+        || item == crate::tomb::TOMB_KEY
 }
 
 /// The keycard colour `item` is, if it is one.
@@ -102,6 +104,16 @@ pub enum Usable {
     /// keystone gate or a relic chest). The use button works it like a ruin mechanism, and a
     /// pick swing still does too (`WorldState::work_temple_fitting` is the one entry point).
     TempleFitting(crate::sky::SkyTile),
+    /// A tomb or crypt entrance door (WP-TOMBS): break its seal, or go in.
+    TombDoor { style: u8, sealed: bool },
+    /// A tomb shrine: bank the party's loot, revive the downed, save the run.
+    TombShrine { lit: bool },
+    /// The stairs down (out, on the last floor).
+    TombStairs,
+    /// The way back out of a run's first floor.
+    TombExit,
+    /// A closed cache of run loot.
+    TombCache,
 }
 
 impl Usable {
@@ -115,6 +127,13 @@ impl Usable {
             TileKind::Sky(fitting) if fitting.is_temple_fitting() => {
                 Some(Self::TempleFitting(fitting))
             }
+            TileKind::Built(BuiltTile::TombDoor { style, sealed }) => {
+                Some(Self::TombDoor { style, sealed })
+            }
+            TileKind::Built(BuiltTile::TombShrine { lit }) => Some(Self::TombShrine { lit }),
+            TileKind::Built(BuiltTile::TombStairs) => Some(Self::TombStairs),
+            TileKind::Built(BuiltTile::TombExit) => Some(Self::TombExit),
+            TileKind::Built(BuiltTile::TombCache { open: false }) => Some(Self::TombCache),
             _ => None,
         }
     }
@@ -131,6 +150,13 @@ impl Usable {
             Self::TempleFitting(crate::sky::SkyTile::TempleKeystone) => "Prise the keystone",
             Self::TempleFitting(crate::sky::SkyTile::KeystoneDoor) => "Set the keystone",
             Self::TempleFitting(_) => "Open the relic chest",
+            Self::TombDoor { sealed: true, .. } => "Break the seal",
+            Self::TombDoor { style: 1, .. } => "Descend into the crypt",
+            Self::TombDoor { .. } => "Enter the tomb",
+            Self::TombShrine { .. } => "Rest at the shrine",
+            Self::TombStairs => "Take the stairs",
+            Self::TombExit => "Leave with your loot",
+            Self::TombCache => "Open the cache",
         }
     }
 }

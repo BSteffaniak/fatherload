@@ -181,6 +181,10 @@ impl WorldState {
         if !self.homes.is_empty() {
             hash.write_serialized(&self.homes);
         }
+        // Absent until someone opens a tomb (WP-TOMBS), so older worlds keep their hashes.
+        if !self.tombs.is_empty() {
+            hash.write_serialized(&self.tombs);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

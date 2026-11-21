@@ -816,6 +816,67 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // --- Tombs and crypts (WP-TOMBS, Wave 5 T27; netcode codes 270-279) -----------------
+    /// A party went into a tomb site (`player_id` opened the door; `party` members).
+    TombEntered {
+        player_id: PlayerId,
+        style: crate::tomb::SiteStyle,
+        tier: u8,
+        party: u8,
+    },
+    /// A site's seal at door tile `(x, y)` broke (`opened`), or held against a try.
+    TombSeal {
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+        opening: crate::tomb::SiteOpening,
+        opened: bool,
+    },
+    /// An ambush sprang (or the guardian woke, `boss`) at world pixel `(x, y)`.
+    TombAmbush {
+        x: i32,
+        y: i32,
+        boss: bool,
+    },
+    /// A tomb's guardian fell.
+    TombGuardianDefeated {
+        by: Option<PlayerId>,
+    },
+    /// `player_id` took the stairs off floor `floor` (0-based): relic picks follow.
+    TombFloorCleared {
+        player_id: PlayerId,
+        floor: u8,
+    },
+    /// A member picked a relic between floors (`None`: passed).
+    TombRelicPicked {
+        player_id: PlayerId,
+        relic: Option<crate::tomb::Relic>,
+    },
+    /// A member rested at a shrine: the party's loot banked (`banked` credits in all), the
+    /// downed revived, the run saved.
+    TombShrineRested {
+        player_id: PlayerId,
+        banked: u32,
+    },
+    /// A member opened a cache worth `value` (unbanked), maybe with a tomb key or a lore page.
+    TombCacheOpened {
+        player_id: PlayerId,
+        value: u32,
+        key: bool,
+        lore: Option<u8>,
+    },
+    /// A member went down (or was revived, `revived`).
+    TombMemberDowned {
+        player_id: PlayerId,
+        revived: bool,
+    },
+    /// A member's run ended: what was banked and lost.
+    TombRunEnded {
+        player_id: PlayerId,
+        outcome: crate::tomb::RunOutcome,
+        banked: u32,
+        lost: u32,
+    },
 }
 
 /// What a weapon shot struck.
@@ -880,7 +941,8 @@ pub(crate) const fn gameplay_event_for_applied_command(
         PlayerCommand::TogglePilot
         | PlayerCommand::PilotPack { .. }
         | PlayerCommand::Moon(_)
-        | PlayerCommand::Pilot(_) => {
+        | PlayerCommand::Pilot(_)
+        | PlayerCommand::Tomb(_) => {
             return None;
         }
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {

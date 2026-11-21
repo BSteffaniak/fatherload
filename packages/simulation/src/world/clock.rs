@@ -171,6 +171,10 @@ impl WorldState {
             return light;
         }
         let at = TilePosition { x, y };
+        // Tomb run spaces (WP-TOMBS) burn with a dim torchlight of their own.
+        if self.in_run_space(at) {
+            light = light.max(crate::tomb::RUN_SPACE_LIGHT);
+        }
         light = light.max(self.fixture_light_at(x, y));
         for (player_id, player) in &self.players {
             // A rig whose crew is in bed has its lamps off for the night.

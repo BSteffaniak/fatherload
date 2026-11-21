@@ -568,6 +568,57 @@ pub enum PilotMode {
     Tether,
 }
 
+/// How the pilot's body moves: the side-view platformer, or the top-down mode of a crypt run
+/// (WP-TOMBS: no gravity, eight-way walking; [`step_pilot`] hands it to [`step_top_down`],
+/// the placeholder T29 replaces with the real top-down movement, dodge roll and collision).
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+)]
+pub enum PilotView {
+    #[default]
+    Side,
+    TopDown,
+}
+
+/// Run-only changes to the pilot's body from tomb relics (WP-TOMBS,
+/// [`crate::tomb::relic`]), set by the world while its owner is in a run (all zero otherwise).
+/// Public: everyone's prediction steps the same body.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct PilotBoons {
+    /// Extra jumps in mid-air.
+    pub extra_jumps: u8,
+    /// Walk and run speed, percent.
+    pub move_pct: i16,
+    /// Jump speed, percent.
+    pub jump_pct: i16,
+    /// The glider's slower fall and faster glide, percent.
+    pub glide_pct: i16,
+    /// No fall damage.
+    pub featherfall: bool,
+    /// Hidden traps show and the headlamp reaches further.
+    pub trap_sight: bool,
+}
+
+impl PilotBoons {
+    /// The boons of a set of relic effects.
+    #[must_use]
+    pub const fn of(effects: crate::tomb::RelicEffects) -> Self {
+        Self {
+            extra_jumps: effects.extra_jumps,
+            move_pct: effects.move_pct,
+            jump_pct: effects.jump_pct,
+            glide_pct: effects.glide_pct,
+            featherfall: effects.featherfall,
+            trap_sight: effects.trap_sight,
+        }
+    }
+}
+
+/// `percent` as a scale (never below a tenth).
+fn boon_scale(percent: i16) -> f32 {
+    (1.0 + f32::from(percent) / 100.0).max(0.1)
+}
+
 /// What a rope is tied to.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum TetherKind {
@@ -712,6 +763,16 @@ pub struct PilotState {
     /// What the suit is failing to keep out: 0 nothing, 1 cold, 2 heat (edge-detected events).
     #[serde(default)]
     pub exposure: u8,
+    // --- WP-TOMBS (all default for pilots saved before it) -------------------------------
+    /// Side view, or the top-down mode of a crypt run.
+    #[serde(default)]
+    pub view: PilotView,
+    /// Relic boons while its owner is in a tomb run.
+    #[serde(default)]
+    pub boons: PilotBoons,
+    /// Mid-air jumps used since the pilot last stood on something.
+    #[serde(default)]
+    pub air_jumps: u8,
 }
 
 impl PilotState {
@@ -757,6 +818,16 @@ impl PilotState {
             tether: None,
             recalling: false,
             exposure: 0,
+            view: PilotView::Side,
+            boons: PilotBoons {
+                extra_jumps: 0,
+                move_pct: 0,
+                jump_pct: 0,
+                glide_pct: 0,
+                featherfall: false,
+                trap_sight: false,
+            },
+            air_jumps: 0,
         }
     }
 
@@ -877,7 +948,9 @@ pub trait PilotTerrain {
 #[must_use]
 pub const fn pilot_passable(kind: TileKind) -> bool {
     match kind {
-        TileKind::Built(BuiltTile::VentGrate) => true,
+        TileKind::Built(
+            BuiltTile::VentGrate | BuiltTile::TombPillar(_) | BuiltTile::TombTrap { .. },
+        ) => true,
         // The alien facility's energy veils (WP-MOON).
         TileKind::Lunar(tile) => tile.pilot_passable(),
         _ => false,
@@ -1028,6 +1101,12 @@ pub fn step_pilot(
     let mut report = PilotStepReport::default();
     body.previous_x = body.x;
     body.previous_y = body.y;
+    if state.view == PilotView::TopDown {
+        for _ in 0..steps {
+            step_top_down(body, state, world, controls, step);
+        }
+        return report;
+    }
     let gravity = world.gravity_at(body.x, body.y);
     let (was_hovering, was_gliding) = (state.hovering, state.gliding);
     for _ in 0..steps {
@@ -1036,6 +1115,89 @@ pub fn step_pilot(
     report.hover_started = state.hovering && !was_hovering;
     report.glide_started = state.gliding && !was_gliding;
     report
+}
+
+/// Walking speed in the top-down mode (px/s).
+pub const TOP_DOWN_SPEED: f32 = 170.0;
+
+/// One internal step of the top-down placeholder mode (WP-TOMBS crypts): no gravity, the held
+/// directions walk eight ways (up is `controls.up`, down `controls.down`), swept against the
+/// same box as the side view. **T29 replaces this** with the real top-down movement (dodge
+/// roll, its own collision footprint and camera); the [`PilotView`] flag on the state is the
+/// switch, and nothing else in the body step needs to know.
+pub fn step_top_down(
+    body: &mut Body,
+    state: &mut PilotState,
+    world: &impl PilotTerrain,
+    controls: PilotControls,
+    dt: f32,
+) {
+    let horizontal = controls.horizontal.clamp(-1.0, 1.0);
+    let vertical = f32::from(i8::from(controls.down) - i8::from(controls.up));
+    state.anim = (state.anim + dt) % 600.0;
+    state.hurt = (state.hurt - dt).max(0.0);
+    state.mode = PilotMode::Free;
+    state.grounded = true;
+    state.crouching = false;
+    state.jetting = false;
+    state.hovering = false;
+    state.gliding = false;
+    state.tether = None;
+    state.air_jumps = 0;
+    state.jump_held = controls.jump;
+    if horizontal.abs() > 0.2 {
+        state.facing = if horizontal < 0.0 { -1 } else { 1 };
+        state.run_time += dt;
+    } else {
+        state.run_time = 0.0;
+    }
+    let length = horizontal.hypot(vertical);
+    let speed = TOP_DOWN_SPEED * boon_scale(state.boons.move_pct);
+    let (vx, vy) = if length > 0.2 {
+        (
+            horizontal / length.max(1.0) * speed,
+            vertical / length.max(1.0) * speed,
+        )
+    } else {
+        (0.0, 0.0)
+    };
+    body.velocity_x = vx;
+    body.velocity_y = vy;
+    let height = state.height();
+    for (delta, horizontal_axis) in [(vx * dt, true), (vy * dt, false)] {
+        if delta == 0.0 {
+            continue;
+        }
+        let pieces = (delta.abs() / SWEEP).ceil().max(1.0);
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a few pieces"
+        )]
+        let count = pieces as u32;
+        let part = delta / pieces;
+        for _ in 0..count {
+            let (next_x, next_y) = if horizontal_axis {
+                (body.x + part, body.y)
+            } else {
+                (body.x, body.y + part)
+            };
+            if box_blocked(world, next_x, next_y, height) {
+                if horizontal_axis {
+                    body.velocity_x = 0.0;
+                } else {
+                    body.velocity_y = 0.0;
+                }
+                break;
+            }
+            body.x = next_x;
+            body.y = next_y;
+        }
+    }
+    body.x = quantize(body.x);
+    body.y = quantize(body.y);
+    body.velocity_x = quantize(body.velocity_x);
+    body.velocity_y = quantize(body.velocity_y);
 }
 
 #[allow(
@@ -1203,7 +1365,11 @@ fn step_once(
                 RUN_SPEED
             } else {
                 WALK_SPEED
-            };
+            } * boon_scale(state.boons.move_pct);
+            if state.grounded {
+                state.air_jumps = 0;
+            }
+            let jump_speed = JUMP_SPEED * boon_scale(state.boons.jump_pct);
             let (accel, brake) = if state.grounded {
                 (GROUND_ACCEL, GROUND_BRAKE)
             } else {
@@ -1223,7 +1389,7 @@ fn step_once(
             };
             if state.jump_buffer > 0.0 && (state.grounded || state.coyote > 0.0) && !state.crouching
             {
-                body.velocity_y = -JUMP_SPEED;
+                body.velocity_y = -jump_speed;
                 state.jump_buffer = 0.0;
                 state.coyote = 0.0;
                 state.grounded = false;
@@ -1242,6 +1408,17 @@ fn step_once(
                 state.wall = 0;
                 state.jump_buffer = 0.0;
                 report.wall_jumped = true;
+                report.jumped = true;
+            } else if jump_pressed
+                && controls.jump
+                && !state.grounded
+                && !state.crouching
+                && state.air_jumps < state.boons.extra_jumps
+            {
+                // Spring Heels (WP-TOMBS relics): another jump in mid-air.
+                body.velocity_y = -jump_speed * 0.9;
+                state.air_jumps += 1;
+                state.jump_buffer = 0.0;
                 report.jumped = true;
             } else if jump_released && body.velocity_y < 0.0 && !state.jetting {
                 body.velocity_y *= JUMP_CUT;
@@ -1275,12 +1452,14 @@ fn step_once(
                 body.velocity_y = approach(body.velocity_y, 0.0, HOVER_ACCEL * dt);
             } else if want_glide {
                 state.jetting = false;
-                let fall = GLIDE_FALL_SPEEDS[usize::from(state.gear.glider.min(MAX_GLIDER_TIER))];
+                let glide = boon_scale(state.boons.glide_pct);
+                let fall =
+                    GLIDE_FALL_SPEEDS[usize::from(state.gear.glider.min(MAX_GLIDER_TIER))] / glide;
                 body.velocity_y = gravity.mul_add(dt, body.velocity_y).min(fall);
                 let target = if pressing {
-                    horizontal * GLIDE_SPEED
+                    horizontal * GLIDE_SPEED * glide
                 } else {
-                    f32::from(state.facing) * GLIDE_SPEED * 0.55
+                    f32::from(state.facing) * GLIDE_SPEED * 0.55 * glide
                 };
                 body.velocity_x = approach(body.velocity_x, target, GLIDE_ACCEL * dt);
             } else if can_jet {

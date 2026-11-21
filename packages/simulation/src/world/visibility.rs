@@ -83,6 +83,7 @@ impl WorldState {
             clock: _,
             people: _,
             homes: _,
+            tombs: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

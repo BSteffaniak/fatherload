@@ -491,6 +491,11 @@ impl WorldState {
         output: &mut TickOutput,
     ) -> Option<PlayerScopedCommandOutcome> {
         use crate::PlayerCommand;
+        if self.tomb_blocks(player_id, command) {
+            // In a tomb run (WP-TOMBS): no radio pickup, rig recall, rope or boarding, and
+            // the downed do nothing but wait.
+            return Some(PlayerScopedCommandOutcome::IgnoredUnavailable);
+        }
         match *command {
             PlayerCommand::TogglePilot => Some(self.toggle_pilot(player_id, output)),
             // Swapping the weapon in hand also works from the rig (for the next climb out).
@@ -617,11 +622,17 @@ impl WorldState {
                 let _ = self.entities.despawn(id);
                 continue;
             }
-            let controls = inputs
-                .players
-                .get(&owner)
-                .and_then(|input| input.controls)
-                .unwrap_or_default();
+            // A downed tomb member (WP-TOMBS) lies still.
+            let downed = self.tomb_downed(owner);
+            let controls = if downed {
+                ControlState::default()
+            } else {
+                inputs
+                    .players
+                    .get(&owner)
+                    .and_then(|input| input.controls)
+                    .unwrap_or_default()
+            };
             let anchor = self.refresh_rope(&mut state, owner, output);
             let foot = PilotControls {
                 horizontal: controls.horizontal(),
@@ -671,7 +682,12 @@ impl WorldState {
             }
             let mut damage = 0.0;
             if report.landed && report.landing_speed > 300.0 {
-                let hurt = fall_damage_in(report.landing_speed, state.gear);
+                // Featherfall (WP-TOMBS relics): no fall hurts.
+                let hurt = if state.boons.featherfall {
+                    0.0
+                } else {
+                    fall_damage_in(report.landing_speed, state.gear)
+                };
                 output.push_event(GameplayEventKind::PilotLanded {
                     player_id: owner,
                     hard: hurt > 0.0,
@@ -683,12 +699,23 @@ impl WorldState {
             if self.touches_lava(&body, &state) {
                 damage = LAVA_DAMAGE_PER_SECOND.mul_add(dt, damage);
             }
-            if state.calm >= REGEN_AFTER_SECONDS && damage <= 0.0 {
-                state.health = REGEN_PER_SECOND
+            if state.calm >= REGEN_AFTER_SECONDS && damage <= 0.0 && !downed {
+                // Second Wind and Restless Soul (WP-TOMBS relics) change the pace.
+                let regen =
+                    crate::tomb::RelicEffects::scale(self.tombs.effects_of(owner).regen_pct)
+                        .max(0.0);
+                let regen = if self.tombs.effects_of(owner).regen_pct <= -100 {
+                    0.0
+                } else {
+                    regen
+                };
+                state.health = (REGEN_PER_SECOND * regen)
                     .mul_add(dt, state.health)
                     .min(state.max_health);
             }
-            self.use_pilot_hands(&body, &mut state, controls, owner, next_tick, dt, output);
+            if !downed {
+                self.use_pilot_hands(&body, &mut state, controls, owner, next_tick, dt, output);
+            }
             state.health = quantize(state.health);
             state.oxygen = quantize(state.oxygen);
             state.jetpack_fuel = quantize(state.jetpack_fuel);
@@ -898,6 +925,15 @@ impl WorldState {
         if amount <= 0.0 || self.damage_immune() {
             return false;
         }
+        // Tomb runs (WP-TOMBS): the downed take nothing, relics scale the rest.
+        let owner = match self.entities.get(id).map(|entity| entity.state) {
+            Some(EntityState::Pilot(state)) => state.owner,
+            _ => return false,
+        };
+        let Some(scale) = self.tomb_damage_taken(owner) else {
+            return false;
+        };
+        let amount = amount * scale;
         let Some((owner, health, x, y)) = self
             .entities
             .update(id, |entity| {
@@ -1062,6 +1098,12 @@ impl WorldState {
     /// A pilot at zero health: drops part of its pack, then respawns in the rig (or, if the
     /// rig is wrecked, on foot at the player's home point when there is one).
     fn kill_pilot(&mut self, id: EntityId, output: &mut TickOutput) {
+        // In a tomb run (WP-TOMBS) a member is downed, not killed.
+        if let Some(EntityState::Pilot(state)) = self.entities.get(id).map(|entity| entity.state)
+            && self.down_tomb_member(state.owner, id, output)
+        {
+            return;
+        }
         let Some(entity) = self.entities.despawn(id) else {
             return;
         };

@@ -133,6 +133,13 @@ impl WorldState {
                 self.set_gates(tile, channel, flipped, Some(player_id), output);
             }
             Usable::Chest => self.open_chest(tile, player_id, output),
+            Usable::TombDoor { .. }
+            | Usable::TombShrine { .. }
+            | Usable::TombStairs
+            | Usable::TombExit
+            | Usable::TombCache => {
+                return self.use_tomb_fixture(player_id, tile, usable, output);
+            }
             Usable::TempleFitting(fitting) => {
                 if !self.work_temple_fitting(player_id, tile, fitting, output) {
                     return PlayerScopedCommandOutcome::IgnoredUnavailable;
@@ -284,6 +291,12 @@ impl WorldState {
         let mut loot = chest_loot(seed, tile);
         if let Some(color) = card {
             loot.push(ItemStack::new(keycard_item(color), 1));
+        }
+        // V10 (WP-TOMBS): some ruin chests hold a tomb key.
+        if self.terrain.settings().generator.has_tombs()
+            && super::tombs::chest_holds_tomb_key(seed, tile)
+        {
+            loot.push(ItemStack::new(crate::tomb::TOMB_KEY, 1));
         }
         for (index, stack) in loot.into_iter().enumerate() {
             #[allow(clippy::cast_precision_loss, reason = "a few stacks")]

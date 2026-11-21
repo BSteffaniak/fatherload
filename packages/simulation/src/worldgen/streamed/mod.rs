@@ -41,6 +41,7 @@ pub mod pilot_spaces;
 mod regions;
 #[cfg(test)]
 mod tests;
+pub mod tomb_sites;
 mod villages;
 mod window;
 
@@ -134,6 +135,8 @@ fn is_empty_sky_chunk(settings: &WorldSettings, chunk: ChunkPosition) -> bool {
         },
     };
     super::sky::chunk_is_empty(settings, &rect)
+        && (!settings.generator.has_tombs()
+            || tomb_sites::sites_touching(settings, &rect).is_empty())
 }
 
 /// The freshly generated tiles of `chunk` (memoized per process). Empty sky chunks of V8

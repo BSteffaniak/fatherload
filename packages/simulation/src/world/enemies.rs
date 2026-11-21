@@ -343,6 +343,10 @@ impl WorldState {
     /// add villages and claimed bases (WP-VILLAGE, WP-BASE).
     #[must_use]
     pub fn enemy_safe_zone(&self, tile: TilePosition) -> bool {
+        // Tomb run spaces (WP-TOMBS) are never safe.
+        if self.in_run_space(tile) {
+            return false;
+        }
         // The Moon (WP-MOON): hostile everywhere but the colony.
         if let Some(safe) = self.lunar_safe_zone(tile) {
             return safe;

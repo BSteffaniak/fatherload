@@ -561,7 +561,8 @@ impl WorldState {
         };
         let cold_excess = cold.saturating_sub(state.gear.cold_cover());
         let tile = tile_at(mx, my);
-        let heat = if tile.y > 0 {
+        // Run spaces (WP-TOMBS) keep their own climate: no band heat in the vault.
+        let heat = if tile.y > 0 && !self.in_run_space(tile) {
             crate::protection::band_heat_level(crate::worldgen::band_at(settings, tile.x, tile.y))
         } else {
             0

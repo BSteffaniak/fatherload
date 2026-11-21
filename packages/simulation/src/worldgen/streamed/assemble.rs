@@ -221,6 +221,24 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if ctx.settings.generator.has_tombs() {
+        // Tomb and crypt entrances (V10, WP-TOMBS) after everything, in the ground and on
+        // the sky lands alike.
+        for site in super::tomb_sites::sites_touching(&ctx.settings, &rect) {
+            for (tile, kind) in super::tomb_sites::entrance_cells(&site) {
+                chunk_kinds.set(tile.x, tile.y, kind);
+            }
+        }
+        // The run vault: sealed bedrock the run slots are realized in.
+        let vault = super::tomb_sites::VAULT;
+        if vault.intersects(&rect) {
+            for position in rect.positions() {
+                if vault.contains(position) {
+                    chunk_kinds.set(position.x, position.y, TileKind::Bedrock);
+                }
+            }
+        }
+    }
     chunk_kinds
         .kinds
         .into_iter()

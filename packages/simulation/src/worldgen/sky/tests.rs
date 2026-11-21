@@ -35,15 +35,19 @@ fn print_bands() {
 
 #[test]
 fn v9_is_current_and_only_v8_and_v9_have_a_sky() {
-    assert_eq!(GeneratorVersion::CURRENT, GeneratorVersion::V9);
+    // V10 (tombs, WP-TOMBS) is current and keeps V9's sky exactly.
+    assert_eq!(GeneratorVersion::CURRENT, GeneratorVersion::V10);
     for generator in GeneratorVersion::ALL {
         assert_eq!(
             generator.has_sky(),
-            matches!(generator, GeneratorVersion::V8 | GeneratorVersion::V9)
+            matches!(
+                generator,
+                GeneratorVersion::V8 | GeneratorVersion::V9 | GeneratorVersion::V10
+            )
         );
         assert_eq!(
             generator.has_moon_content(),
-            generator == GeneratorVersion::V9
+            matches!(generator, GeneratorVersion::V9 | GeneratorVersion::V10)
         );
     }
     let v7 = WorldSettings {

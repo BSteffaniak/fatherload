@@ -442,7 +442,8 @@ impl WorldState {
             | PlayerCommand::Pilot(_)
             | PlayerCommand::People(_)
             | PlayerCommand::Moon(_)
-            | PlayerCommand::Home(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
+            | PlayerCommand::Home(_)
+            | PlayerCommand::Tomb(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 }

@@ -85,6 +85,9 @@ impl WorldState {
         };
         player.velocity_x = 0.0;
         player.velocity_y = 0.0;
+        // Parking mid-run abandons it and brings the pilot back outside first (WP-TOMBS).
+        let mut scratch = crate::event::TickOutput::default();
+        self.abandon_tomb_run(player_id, &mut scratch);
         let member = self.crew.members.remove(&player_id).unwrap_or_default();
         // A player on foot parks both bodies: the pilot leaves the world with the rig.
         let pilot = self.take_pilot_for_parking(player_id);

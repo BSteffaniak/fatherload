@@ -55,6 +55,7 @@ pub mod surface;
 pub mod terrain;
 pub mod test_mode;
 pub mod tick;
+pub mod tomb;
 pub mod upgrade_preview;
 pub mod village;
 pub mod weapon;

@@ -42,7 +42,8 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::Pilot(_)
         | PlayerCommand::People(_)
         | PlayerCommand::Moon(_)
-        | PlayerCommand::Home(_) => None,
+        | PlayerCommand::Home(_)
+        | PlayerCommand::Tomb(_) => None,
     }
 }
 

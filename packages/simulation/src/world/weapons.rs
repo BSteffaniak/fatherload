@@ -432,6 +432,7 @@ impl WorldState {
                 travelled: 0.0,
                 pierce_left: spec.pierce,
                 last_hit: None,
+                bounces: 0,
             };
             let candidates = self.point_blank(origin, muzzle);
             let mut spent = false;
@@ -537,6 +538,12 @@ impl WorldState {
                 if done {
                     break;
                 }
+            }
+            if solid_at(&self.terrain, body.x, body.y)
+                && self.ricochet(&mut state, &mut body, (last_x, last_y))
+            {
+                // Ricochet Rounds (WP-TOMBS): bounced off the rock, flies on.
+                continue;
             }
             if solid_at(&self.terrain, body.x, body.y) {
                 self.projectile_hits_terrain(
@@ -1037,7 +1044,24 @@ impl WorldState {
             return DamageOutcome::Ignored;
         }
         if let EntityState::Enemy(_) = entity.state {
-            return self.damage_enemy_from(id, damage, output);
+            // Tomb relics (WP-TOMBS): a member's hits scale, and the vampiric heal.
+            let (damage, thief) = self.tomb_scaled_hit(damage);
+            let outcome = self.damage_enemy_from(id, damage, output);
+            if let Some((pilot, share)) = thief {
+                let dealt = match outcome {
+                    DamageOutcome::Hurt { dealt, .. } | DamageOutcome::Destroyed { dealt } => dealt,
+                    DamageOutcome::Ignored => 0.0,
+                };
+                let heal = dealt * f32::from(share) / 100.0;
+                if heal > 0.0 {
+                    self.edit_pilot(pilot, |_, state| {
+                        if state.health > 0.0 {
+                            state.health = quantize((state.health + heal).min(state.max_health));
+                        }
+                    });
+                }
+            }
+            return outcome;
         }
         let pushes = entity.kind().feels_blasts();
         let result = self.entities.update(id, |entity| {
