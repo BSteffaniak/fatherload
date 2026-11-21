@@ -270,6 +270,10 @@ fn space_in_cell(ctx: &Ctx, cx: i32, cy: i32) -> Option<PilotSpace> {
         card: u8::try_from((roll >> 44) % u64::from(crate::mechanism::KEYCARD_COLORS)).ok()?,
     };
     let bounds = space.bounds();
+    // Tomb worlds (V10) keep the run vault clear: a space there would be sealed in bedrock.
+    if super::tomb_sites::vault_hides(&ctx.settings, &bounds) {
+        return None;
+    }
     if bounds.max.x >= TOWN_FLAT_FIRST_COLUMN - TOWN_MARGIN_COLUMNS
         && bounds.min.x <= TOWN_FLAT_LAST_COLUMN + TOWN_MARGIN_COLUMNS
     {

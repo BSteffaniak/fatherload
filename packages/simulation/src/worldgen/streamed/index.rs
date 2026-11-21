@@ -279,7 +279,9 @@ pub fn features_in(ctx: &Ctx, rect: &TileRect, kinds: Option<&[FeatureKind]>) ->
         layer_features(ctx, layer, rect, &mut found);
     }
     found.retain(|feature| {
-        rect.contains(feature.center) && kinds.is_none_or(|kinds| kinds.contains(&feature.kind))
+        rect.contains(feature.center)
+            && kinds.is_none_or(|kinds| kinds.contains(&feature.kind))
+            && !super::tomb_sites::vault_hides(&ctx.settings, &feature.bounds)
     });
     found.sort_by_key(|feature| feature.id);
     found.dedup_by_key(|feature| feature.id);
@@ -292,7 +294,10 @@ pub fn pois_touching(ctx: &Ctx, rect: &TileRect) -> Vec<WorldFeature> {
     let mut found: Vec<WorldFeature> = regions::poi_regions_in(ctx, rect)
         .iter()
         .filter_map(|region| region.poi.as_ref().map(|poi| poi.feature))
-        .filter(|feature| feature.bounds.intersects(rect))
+        .filter(|feature| {
+            feature.bounds.intersects(rect)
+                && !super::tomb_sites::vault_hides(&ctx.settings, &feature.bounds)
+        })
         .collect();
     found.sort_by_key(|feature| feature.id);
     found
@@ -331,7 +336,9 @@ pub fn feature(ctx: &Ctx, id: FeatureId) -> Option<WorldFeature> {
             Some(transition(ctx, rx, index))
         }
     };
-    found.filter(|feature| feature.id == id)
+    found.filter(|feature| {
+        feature.id == id && !super::tomb_sites::vault_hides(&ctx.settings, &feature.bounds)
+    })
 }
 
 /// Columns searched per step of [`nearest_feature`].

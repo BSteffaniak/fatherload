@@ -116,6 +116,14 @@ pub const fn in_vault(settings: &WorldSettings, tile: TilePosition) -> bool {
     settings.generator.has_tombs() && VAULT.contains(tile)
 }
 
+/// Whether a generated feature or pilot space with `bounds` is left out of a world with tombs
+/// because it would lie in the vault's sealed bedrock: the feature index, the points of
+/// interest and the pilot spaces never point quests, markers or scanners into it.
+#[must_use]
+pub const fn vault_hides(settings: &WorldSettings, bounds: &TileRect) -> bool {
+    settings.generator.has_tombs() && bounds.intersects(&VAULT)
+}
+
 /// The run slot holding `tile`, if it is in the vault.
 #[must_use]
 pub fn slot_at(settings: &WorldSettings, tile: TilePosition) -> Option<u8> {
@@ -839,6 +847,32 @@ mod tests {
         assert!(!in_vault(&v9, slot_origin(0)));
         // f32 positions keep 1/32 px across the whole vault.
         assert!(VAULT.min.x.abs() < 16_384 && VAULT.max.x.abs() < 16_384);
+    }
+
+    #[test]
+    fn nothing_generated_points_into_the_vault() {
+        for seed in [0_u64, 1, 7, 42, 777] {
+            let settings = WorldSettings { seed, ..v10() };
+            let around = VAULT.expanded(8);
+            for space in super::super::pilot_spaces::spaces_touching(&settings, &around) {
+                assert!(!space.bounds().intersects(&VAULT), "{seed}: {space:?}");
+            }
+            for feature in super::super::features_in(&settings, &around, None)
+                .into_iter()
+                .chain(super::super::pois_touching(&settings, &around))
+            {
+                assert!(!feature.bounds.intersects(&VAULT), "{seed}: {feature:?}");
+                assert_eq!(super::super::feature(&settings, feature.id), Some(feature));
+            }
+            let v9 = WorldSettings {
+                generator: GeneratorVersion::V9,
+                ..settings
+            };
+            assert!(
+                !super::super::features_in(&v9, &VAULT, None).is_empty(),
+                "V9 keeps its features"
+            );
+        }
     }
 
     /// V10 generation is pinned: the chunks around the first sites of each setting near town,
