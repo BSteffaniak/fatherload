@@ -1973,11 +1973,10 @@ entrance art and map marker, and is the same for every floor of that place.
   on one floor line (three-tall doorways, spike pits two deep, lever or plate gates, the vault
   up a step and ledge stair through a ceiling hole, the shrine, caches, the boss room, the
   stairs), all reachable by the stock pilot (T28 replaced it: see "Side-view tombs" below).
-  `TopDownRealizer` builds a row of rooms seen from
-  above (the vault north of its parent, spike floors with a safe lane, lever gates on the east
-  doorways). `bestiary(style, role, variant)` names the enemy kind (placeholders: shellbacks,
-  acid spitters, cave bats and the ancient guardian in side view; magma wisps, cave bats and
-  the same ancient guardian, all flyers, in top down); the guardian's health is
+  Top-down sites use T29's `crypt::CryptRealizer` (see "Top-down crypts" below; T27's
+  `TopDownRealizer` placeholder is still in the file, unused). `bestiary(style, role, variant)`
+  names the enemy kind (side view: T28's `side_view::bestiary`; top down: T29's
+  `crypt::bestiary`); the boss's health is
   `boss_health_scale(site tier)` (0.5x its stock at tier 1 up to 1.5x at tier 5).
   `TrapKind` (`Spikes`, `TRAP_KINDS` codes reserved) with `damage_per_second`.
 - **Tiles** (`BuiltTile` codes 72-119): `TombWall(style)`, `TombPillar(style)` (pilots pass),
@@ -2013,8 +2012,8 @@ entrance art and map marker, and is the same for every floor of that place.
   Gravedigger, Bone Charm, Hunter's Mark, Second Wind) and 3 bargains (blessing plus curse:
   Pact of Greed, Glass Cannon, Restless Soul), with `SYNERGIES` (Skywalker, Trick Shot,
   Bloodbound). `offers(seed, floor, member, held, style)` gives each member their own 3 perks
-  and a bargain, leaving out what does nothing in the style (`Relic::suits`: crypts never offer
-  Spring Heels, Glider Boost or Featherfall). Effects (`RelicEffects`) hook in through `PilotBoons` on the pilot entity (extra
+  and a bargain (`Relic::suits`: since T29 every relic suits both styles; `Relic::blurb_in`
+  gives the crypt meaning of the movement perks). Effects (`RelicEffects`) hook in through `PilotBoons` on the pilot entity (extra
   jumps, move and jump speed, glide, featherfall, trap sight; `step_pilot` reads them), the
   pilot's max health and regeneration, `damage_pilot` (damage taken), `damage_entity`
   (damage dealt, the vampiric heal), projectiles (`ProjectileState::bounces`, ricochets off
@@ -2051,6 +2050,133 @@ entering as a party, a scripted bot clearing a side-view and a top-down run, the
 shrines and the way out, wipes, the safe rig, co-op revives and wipes, individual relic picks,
 relic effects, the guardian, saves mid-floor (JSON and postcard), replication and hashing,
 tick-rate safety; the netcode e2e test plays relic picks over the wire.
+
+## Top-down crypts (`src/tomb/crypt.rs`, `src/tomb/crypt/layout.rs`, `src/pilot/top_down.rs`, `src/world/crypts.rs`, `src/world/enemies/crypt.rs`)
+
+Expansion plan WP-TOMBS, wave 5 T29: the top-down half of the tombs, on T27's core. Every
+site whose `SiteStyle` is `TopDown` plays it (the style is still fixed per site by the seed).
+
+- **The pilot from above** (`pilot::top_down`, `step_top_down`, chosen by `PilotState::view`):
+  no gravity; the held directions walk eight ways (`TOP_DOWN_SPEED`, a full diagonal no faster
+  than straight, `TOP_DOWN_ACCEL` / `TOP_DOWN_BRAKE` so knocks slide off); a square footprint
+  (`TOP_DOWN_FOOTPRINT` deep, `PILOT_HALF_WIDTH` wide: `PilotState::height` answers the
+  footprint in top-down, so every box test, middle, reach and contact uses it) swept per axis
+  against `PilotTerrain::blocks` (diagonals slide along walls) with a **corner nudge**: walking
+  straight at a corner the footprint clips by up to `CORNER_NUDGE` px slides round it. The
+  jump button is a **dodge roll** (`ROLL_SECONDS` at `ROLL_SPEED` along the held direction or
+  the heading, unsteerable, then `ROLL_COOLDOWN_SECONDS`); `PilotState::roll_guarded` (all but
+  the last `ROLL_RECOVERY_SECONDS`) makes `damage_pilot` and `strike_pilot_as` miss, crypt
+  shots pass through and traps and pits ignore the pilot; firing waits for the roll to end.
+  Relics: each `PilotBoons::extra_jumps` rolls `ROLL_SECONDS_PER_EXTRA_JUMP` longer,
+  `glide_pct` rolls faster (further), `move_pct` walks faster, `featherfall` takes the hurt out
+  of pits. New `PilotState` fields (serde default): `roll`, `roll_x/y`, `roll_cooldown`,
+  `heading_x/y` (the last walk direction, quantized; auto-aim and the art face it).
+  `PilotStepReport::rolled` emits `CryptRoll`. A top-down strike knocks straight away (no
+  side-view lift). Same fixed 240 Hz steps as the platformer: tick-rate safe.
+- **Layout** (`crypt::layout`, `CryptRealizer`, swapped into `realizer_for(TopDown)`): the
+  plan's rooms on a `GRID` of 13 x 4 cells (11 x 9 interiors, shared walls), the main path a
+  depth-first winding walk from column 0 (candidate sides ordered by a hash of the floor
+  seed, east preferred; backtracking; a straight-row fallback), the vault on a free side of
+  its parent, the boss hall 2 x 2 cells. Doorways are three tiles; a puzzle room's way on is
+  always an east or west doorway holding a lever gate (lintel above, three bars, the lever in
+  a corner, spikes round it from danger 5). Rooms: entry (start, the way out in a corner on
+  floor 0), shrine, stairs, vault (caches on the far wall, a guard at danger 6+), ambush
+  (four pillars, 2-6 ambushers), trap hall (a theme by variant, a second at danger 7+: a
+  spike field rippling along the crossing, arrow-plate lines with a gap, boulder chutes on a
+  side wall, flame-vent lines taking turns, cracked floor and pits round a safe wiggling lane
+  two wide; turning rooms trade arrows and boulders for flames; a guard at danger 4+), boss
+  (the crypt lord, four pillars). `CryptFloor { realized, traps, cells }`. Pure; tested for
+  reachability of every room and fixture, gates under lintels in their lever's reach, safe
+  pit lanes, clear spawns and every trap kind appearing.
+- **Traps are overlays, not tiles** (`CryptTrap { at, kind, dir, phase, hidden, room }`,
+  `CryptTrapKind`: `Spikes`, `ArrowPlate`, `BoulderChute`, `FlameJet`, `CrackedFloor`, `Pit`),
+  kept in the run's `TombRun::crypt` (`CryptState`: traps in tile order, the floor's start
+  tick, `crumbling` and `plates` maps saved as pair lists because saves are JSON), written by
+  `prepare_crypt_floor` from `write_tomb_floor`. The floor under them is plain air, so
+  creatures path, shots fly and sight lines pass over traps as over the floor (T27's
+  `TombTrap` tiles and `advance_traps` stay side view's). Cycling traps (`CryptTrap::stage`,
+  `progress`, `releases`; cycles in `CryptTrapKind::cycle`) run on milliseconds since the
+  floor started (from the tick count: tick-rate safe) and always pass through a full
+  `Warning` before `Active`. `world/crypts.rs` (`advance_crypt`, from the tombs pass while
+  exploring): active spikes / flames hurt standing members whose footprint covers them
+  (`damage_per_second` x `trap_tier_scale(tier)` x difficulty, the worst one only); chutes
+  release a boulder; a plate stepped on clicks and `PLATE_DELAY_MILLIS` later looses arrows
+  from both walls of its room along its line, re-arming after `PLATE_REARM_MILLIS`; a cracked
+  floor stepped on gives way `CRUMBLE_MILLIS` later and stays a `Pit`; walking into a pit
+  costs `PIT_FALL_SHARE` of max health (none with Featherfall) and climbs out at the nearest
+  safe floor (`crypt_safe_floor`), briefly guarded. One `CryptTrap` event per room, kind and
+  stage at a time. Like every tomb hazard, traps do nothing on Peaceful (difficulty 0).
+- **Creatures** (`EnemyKind::{CryptSkeleton, Spectre, Cultist, CryptGolem, CryptLord}`,
+  appended; `EnemyKind::is_crypt`, `passes_walls`; `crypt::bestiary(role, variant)`: ambushes
+  mostly skeletons with spectres, cultists and now and then a golem, guards skeletons,
+  cultists and golems, the boss the lord). `world/enemies/crypt.rs` drives them instead of
+  the generic AI (`advance_enemy` hands them over): no gravity, `route` (the shared budgeted
+  path search) and the shared swept body step with zero gravity and no bounce, then
+  `free_from_rock` (rounding can tip a flush body a hair into a wall) and `keep_off_bodies`:
+  the master body rules hold. **Spectres** are the one designed exception: no terrain
+  collision or sight-line test, clamped to their floor, unable to start an attack from inside
+  a wall, still pushed off pilots (`keep_ghost_off`). Skeletons hold flank stations round
+  their prey (by seed) and lunge after a rattle; cultists keep `CASTER_RANGE`, circle and cast
+  `ShotKind::Hex` (a fan of three every third cast); golems raise their fists (`CryptTell`
+  with `CryptAttack::Slam`) and slam everything within `SLAM_REACH` (`CryptSlam`). **The crypt
+  lord** wakes on sight (phase 1, `CryptLordPhase`), then `lord_phase(health share)` moves it
+  to 2 and 3: each new phase roars (`LORD_ROAR_MILLIS` pause) and calls up three skeletons, then
+  two spectres (`CryptSummon`). Patterns cycle per phase (`lord_patterns`): fan of 5 and ring
+  of 12 hex bolts; then charges (contact during the dash, ending at walls); then a spiral of
+  three rotating waves of 8; every attack telegraphed by `CryptTell { attack, aim }`, faster
+  in phase 3. Its health is `boss_health_scale(site tier)` like the guardian's. Directions
+  come from a literal 15-degree table (no trigonometry: identical on every platform).
+  `EnemyState::{phase, pattern, volley}` (serde default) hold the lord's and casters' state.
+- **Crypt shots** (`ShotKind::{Hex, Arrow, Boulder}`, `ShotKind::is_crypt`) take
+  `advance_crypt_shot`: straight, broken by solid tiles (never by trap overlays); hexes and
+  arrows break on the first non-rolling pilot they meet, boulders roll through (one strike
+  each, the strike guard does the rest). Trap shots strike as `CryptSkeleton` (only the run
+  space's safety rules read the kind).
+- **Events** (codes 290-296): `CryptRoll`, `CryptTrap { kind, fired }`, `CryptPitFall`,
+  `CryptLordPhase`, `CryptTell { kind, attack, aim }`, `CryptSlam`, `CryptSummon`.
+- **Balance** (`balance::crypt_bot::CryptBot`, which `TombBot` hands crypt runs to; the probe
+  and the world tests use it): breadth-first paths over the floor that keep off pits and
+  cracks (and plates when they can), waiting square on a safe tile while spikes or flames
+  ahead are warning or up; the goals are an unpulled lever, an unlit shrine, unopened caches,
+  a spot six tiles off the lord with a clear shot, then the stairs; it shoots the nearest
+  creature in sight, rolls away from lunges and slams, off the lord's charge line and
+  sideways to incoming shots, never into a pit. `--balance-report --only tombs` (4 seeds, 60
+  Hz): crypts cleared 4/4 at tier 1 (1.6 min), 3/4 at tier 2, 2/4 at tier 3, 0/4 at tier 4,
+  1/4 at tier 5; crypt wipes mostly at the lord ("Crypt wipes by room" note).
+  `crypt_bot::floor_text` prints a floor with its traps for debugging.
+- **Scenario helpers**: `scenario_tomb_floor(player, floor)` (straight to a floor, the lord's
+  hall), `scenario_crypt_traps(player, traps, started_millis_ago)`; `crypt_floor_millis(run)`
+  for presentation.
+
+Tests: `pilot/top_down_tests.rs` (eight ways, no clipping at any angle or speed, sliding,
+corner nudges, roll distance, i-frames and cooldown, relic boons, tick rates);
+`tomb/crypt/layout_tests.rs`; `tomb/crypt.rs` (cycles warn before they bite, chute releases
+at any tick size, tile sets, bestiary); `world/crypt_tests.rs` (the pilot and creatures keep
+to the walls through a bot fight, rolls through spikes, strikes and pits, cracks and plates
+telegraph, spectres through walls, the bot beats the lord through three phases, the bot
+clears a crypt of every tier on Peaceful, traps tick-rate safe, saves mid-floor with trap
+state); the netcode e2e `world_crypt_runs_predict_rolls_and_converge`; the game's split
+screen with mixed view modes and the crypt touch layout.
+
+## Wave 5 seams: top-down crypts (T29) for the integrator and T28
+
+- **Shared core touched (additive)**: `realize::realizer_for` and `bestiary` route
+  `TopDown` to `crypt` (T27's `TopDownRealizer` is left in place, unused: delete it when
+  merging if nothing else needs it); `TombRun::crypt` (serde default); `PilotState::{roll,
+  roll_x, roll_y, roll_cooldown, heading_x, heading_y}` and `PilotState::height` answering the
+  footprint in top-down; `PilotStepReport::rolled`; `EnemyState::{phase, pattern, volley}`;
+  five `EnemyKind`s and three `ShotKind`s appended (`EnemyKind::ALL` is 33 long); hooks
+  `advance_crypt` (tombs pass) and `prepare_crypt_floor` (`write_tomb_floor`); the generic AI
+  and shot advance hand crypt kinds to `world/enemies/crypt.rs`; `Relic::suits` is now true
+  everywhere (`blurb_in` for crypt meanings); `damage_pilot` / `strike_pilot_as` respect
+  `roll_guarded`; pilot weapons hold fire mid-roll and auto-aim faces the heading.
+- **Not used by crypts**: `TrapKind` / `BuiltTile::TombTrap` / `advance_traps` (all T28's).
+- **Formats**: folded into `PROTOCOL_VERSION` 13 and save format 11 (noted there); events
+  290-296.
+- **Presentation hooks** (game): `rendering/world/crypt.rs` replaces the whole world draw for
+  a view whose player is in a crypt (per seat); `render_snapshot::CRYPT_ZOOM` zooms such a
+  view; `rendering/crypt_map.rs` takes the minimap; `audio::director::crypt_music` plays
+  `Patch::CryptLoop` / `CryptBossLoop` (appended at the end of the patch list).
 
 ## Wave 5 seams: tombs core (T27) for T28 and T29
 

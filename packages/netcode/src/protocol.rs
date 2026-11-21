@@ -113,7 +113,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `BuiltTile::{TombWall, TombPillar}` sets 2-4 (built codes 120-125), `TombRun::{crumbling,
 ///   boss_phase}`, `RelicEffects::trap_pct` and `Relic::Sandwalker`, the tomb creatures
 ///   (`EnemyKind::Mummy` .. `HollowMatriarch`) and `ShotKind::{Arrow, Rubble, Hex}` in entity
-///   records, and the side-view tomb events 280-281.
+///   records, and the side-view tomb events 280-281;
+/// * T29 top-down crypts: `TombRun::crypt` (trap overlays and their state), the pilot's roll
+///   and heading fields (`PilotState::{roll, roll_x, roll_y, roll_cooldown, heading_x,
+///   heading_y}`), `EnemyState::{phase, pattern, volley}`, the crypt `EnemyKind`s
+///   (`CryptSkeleton` .. `CryptLord`) and `ShotKind::{CryptHex, CryptArrow, Boulder}`, and the
+///   crypt events 290-296.
 pub const PROTOCOL_VERSION: u8 = 13;
 
 /// One client input frame: the controls and actions for exactly one tick.

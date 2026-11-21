@@ -866,9 +866,40 @@ beside a cracked seal, or a **story** seen through.
   run of a tomb wakes one of the two. Side-view tombs have their own run music and a guardian's
   theme, and every trap and creature its own sound. Everything plays with touch (the d-pad,
   JUMP, USE and the fire stick) as well as keyboard and controller.
-- Top-down crypts walk eight ways with the movement keys (up and down included) for now; their
-  own controls, camera and art come with the next wave.
-- **Balance** (`--balance-report --only tombs`, 4 seeds, 60 Hz): a scripted bot (rifle then
+- **Top-down crypts** are seen from above, closer in, in the place's own stone: **catacomb**
+  (the deep strata and old quarters), **sandstone** (mesas), the **sky vault** (sky continents)
+  or the **lunar vault** (the Moon), walls standing in 3/4 view. Each seat switches on its
+  own: in split screen one player can crawl a crypt from above while the other flies the rig
+  outside in the side view.
+  - **Moving**: `WASD` (or the arrows, or the left stick) walk eight ways; `Space` (`A` on a
+    controller, ROLL on touch) is a **dodge roll**: a quick dash you cannot be hurt in for all
+    but its last moment (strikes, shots, traps and pits pass through you), then a short wait.
+  - **Fighting**: aim anywhere with the mouse (or the right stick: pushed out, it also fires,
+    twin-stick style; on touch, drag the big FIRE button); the arrow-keys seat aims at what
+    it walks toward. Guns fire, the wrench and hand pick swing.
+  - **Traps** always warn first: **floor spikes** rattle before they rise and ripple across a
+    hall, **flame jets** glow then burst in turn, **arrow plates** click and a moment later
+    loose arrows from slots in both walls along their line, **boulder chutes** rumble and then
+    roll a boulder across the room, and **cracked floors** give way a beat after you step on
+    them into **pits** (a fall hurts and you climb out at the nearest safe floor). Hidden
+    ones glow for the Trap-Sight Lantern.
+  - **The crypt's dead**: **skeleton packs** flank you and rattle before they lunge,
+    **spectres** drift straight through the walls (they cannot strike from inside one),
+    **cultists** keep their distance and throw hex bolts (a fan every third cast), **golems**
+    raise their fists over a ring on the floor before they slam. On the last floor the **crypt
+    lord** fights in three phases, each new one opened with a roar and a few risen dead: a fan
+    of bolts and a ring, then charges across the hall, then a spiral of bolts and faster
+    attacks, every one telegraphed (the banner shows its health and phase).
+  - **Relics** mean the same in a crypt in their own way: Spring Heels rolls longer, Glider
+    Boost rolls further, Featherfall takes the hurt out of pits.
+  - The minimap becomes the crypt's **room map** (rooms you have walked into, coloured by kind,
+    doorways, the party), and the crypt has its own music, with war drums for the lord.
+- **Crypt balance** (`--balance-report --only tombs`, 4 seeds, 60 Hz, the probe bot with kit
+  that fits the tier, rolling through tells and shots, keeping off pits and waiting out
+  spikes and flames, going for the vault): it clears 4 of 4 tier 1 crypts in about 1.6
+  minutes, 3 of 4 at tier 2, 2 of 4 at tier 3, none at tier 4 and 1 of 4 at tier 5; most of its
+  wipes are at the crypt lord (whose health scales with the site tier like the guardian's).
+- **Side-view balance** (`--balance-report --only tombs`, 4 seeds, 60 Hz): a scripted bot (rifle then
   sidearm, aiming at what it sees within 14 tiles, first relic each floor, no dodging, no
   detours to the vault) reads the side-view traps ahead (it waits out blades, crushers, darts,
   fog and the sand, never stops on a crumbling slab) and goes back for a lever it passed. In
@@ -876,7 +907,7 @@ beside a cracked seal, or a **story** seen through.
   minutes) and 1 of 8 at tiers 4-5 (2.3-3 minutes): nearly all its wipes are at the guardian,
   which it fights standing still with the rifle alone. Guardians sense intruders anywhere in
   their crypt (hiding under a platform does not make them forget you and heal), and the
-  colossus leaps down off a ledge to reach you. Crypts are still T27's placeholders (T29). The bot is far
+  colossus leaps down off a ledge to reach you. The bot is far
   weaker than a player, so read these as relative numbers. Loot on offer in a whole run
   (every cache plus the guardian's hoard): about 1,000 cr at tier 1, 4,000-4,700 at tier 2,
   13,000-15,000 at tier 3, 35,000-42,000 at tier 4 and 70,000-90,000 at tier 5 (8-29 caches

@@ -81,6 +81,9 @@ const SAVE_SLOTS: usize = 3;
 ///   in the terrain diffs (entrances, and the floor of a run saved mid-floor), pilot entities'
 ///   view and relic boons, projectiles' bounces and the tomb key in packs and bays. A run in
 ///   progress saves and loads as it stands (the game also saves at every shrine).
+/// * T29 top-down crypts: a crypt run's trap overlays and their state (cracked floors giving
+///   way, pressed plates), pilot entities' roll and heading, crypt creatures' phase and
+///   pattern.
 pub const SAVE_VERSION: u32 = 11;
 
 /// Persisted user settings.
