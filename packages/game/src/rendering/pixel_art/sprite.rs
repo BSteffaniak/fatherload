@@ -124,7 +124,7 @@ impl AtlasLayout {
     #[must_use]
     pub fn pack_with(sprites: &[&'static SpriteDef], silhouetted: &[&'static SpriteDef]) -> Self {
         let mut frames = BTreeMap::new();
-        let mut silhouettes = BTreeMap::new();
+        let mut outlines = BTreeMap::new();
         let (mut x, mut y, mut shelf_height) = (ATLAS_PADDING, ATLAS_PADDING, 0);
         for (index, sprite) in sprites.iter().chain(silhouetted).enumerate() {
             let (width, height) = (sprite.width(), sprite.height());
@@ -149,7 +149,7 @@ impl AtlasLayout {
             if index < sprites.len() {
                 frames.insert(sprite.name, rects);
             } else {
-                silhouettes.insert(sprite.name, rects);
+                outlines.insert(sprite.name, rects);
             }
         }
         Self {
@@ -161,7 +161,7 @@ impl AtlasLayout {
             )
             .unwrap_or(i32::MAX),
             frames,
-            silhouettes,
+            silhouettes: outlines,
         }
     }
 

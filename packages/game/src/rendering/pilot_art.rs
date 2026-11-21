@@ -910,7 +910,7 @@ mod tests {
         );
         let (min_x, min_y, max_x, max_y) = canvas.bounds().expect("painted");
         assert!(max_y <= -1);
-        assert!(max_y - min_y + 1 <= 10, "lying, not standing");
+        assert!(max_y - min_y < 10, "lying, not standing");
         assert!(max_x - min_x + 1 >= 20, "stretched out");
     }
 }

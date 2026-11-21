@@ -207,6 +207,56 @@ enum SeatLoop {
     Crypt,
     /// The crypt lord's theme while it fights.
     CryptBoss,
+    /// The thin whistle of the air high up, taking over as the surface wind fades (Wave 6).
+    HighWind,
+    /// The Moon's (and orbit's) near-silence: the suit's hum and breath (Wave 6).
+    Moon,
+    /// A village's or sky town's bustle (Wave 6).
+    Town,
+    /// The lunar colony's air recyclers and consoles (Wave 6).
+    Colony,
+}
+
+/// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
+const SEAT_LOOP_SLOTS: u32 = 32;
+
+/// Seconds for an environment's ambience to crossfade in or out (Wave 6), so walking into a
+/// town, a tomb or the colony blends the beds instead of cutting them.
+const AMBIENCE_FADE_SECONDS: f32 = 1.2;
+/// Seconds between the (cheap but not free) village and colony lookups behind the ambience.
+const AMBIENCE_LOOKUP_SECONDS: f32 = 0.25;
+/// Seconds between a pilot's footfalls on the Moon while walking and while running.
+const MOON_STEP_SECONDS: (f32, f32) = (0.56, 0.4);
+
+/// How much of each environment a seat is in (0..1, smoothed; Wave 6). The outdoor beds (wind,
+/// rain, crickets, the sky, the prowl) are scaled down by the others, so ambiences crossfade by
+/// environment and never stack.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Ambience {
+    /// In a tomb or crypt run (its music takes over).
+    indoor: f32,
+    /// In vacuum: on the Moon or in orbit.
+    vacuum: f32,
+    /// Inside the lunar colony's rooms.
+    colony: f32,
+    /// In a village, sky town or the home town.
+    town: f32,
+}
+
+impl Ambience {
+    /// Eases every share toward `target` over [`AMBIENCE_FADE_SECONDS`].
+    fn approach(&mut self, target: Self, dt: f32) {
+        let k = 1.0 - (-dt / (AMBIENCE_FADE_SECONDS / 3.0)).exp();
+        self.indoor += (target.indoor - self.indoor) * k;
+        self.vacuum += (target.vacuum - self.vacuum) * k;
+        self.colony += (target.colony - self.colony) * k;
+        self.town += (target.town - self.town) * k;
+    }
+
+    /// How much of the open-air beds (wind, rain, crickets, the sky) are heard.
+    fn open_air(self) -> f32 {
+        (1.0 - self.indoor) * (1.0 - self.vacuum) * (1.0 - self.colony)
+    }
 }
 
 /// Where a local seat hears from.
@@ -245,6 +295,12 @@ struct SeatState {
     fuel_alarm: f32,
     hull_alarm: f32,
     message_tick: u64,
+    /// Smoothed environment shares (Wave 6).
+    ambience: Ambience,
+    /// The last looked-up town and colony shares and the time until the next lookup.
+    ambience_lookup: (f32, f32, f32),
+    /// Time until the next footfall of a pilot walking on the Moon.
+    step_timer: f32,
 }
 
 /// See the module docs.
@@ -261,6 +317,8 @@ pub struct Director {
     /// A toast waiting to chime: (seconds left, pan).
     pending_toast: Option<(f32, f32)>,
     was_running: bool,
+    /// The world clock's phase last frame (dawn and dusk themes play on the change; Wave 6).
+    clock_phase: Option<fatherload_simulation::clock::DayPhase>,
 }
 
 impl Director {
@@ -275,6 +333,7 @@ impl Director {
             message_tick: 0,
             pending_toast: None,
             was_running: false,
+            clock_phase: None,
         }
     }
 
@@ -296,6 +355,7 @@ impl Director {
                 self.seat_sounds(frame, listener, &mut live);
             }
             self.fuse_ticks(frame, &listeners);
+            self.clock_themes(frame.snapshot, &listeners);
             for key in self.live_loops.difference(&live) {
                 // Fade loops nobody asked for this frame (the patch is ignored for a fade).
                 self.commands.push(MixerCommand::Loop(LoopRequest {
@@ -313,6 +373,7 @@ impl Director {
                 self.commands.push(MixerCommand::StopLoops);
             }
             self.live_loops.clear();
+            self.clock_phase = None;
             for seat in &mut self.seats {
                 seat.initialized = false;
                 seat.throttle = 0.0;
@@ -427,7 +488,7 @@ impl Director {
         } else {
             cutoff
         };
-        let key = LoopKey::new(listener.seat as u32 * 16 + slot as u32, patch);
+        let key = LoopKey::new(listener.seat as u32 * SEAT_LOOP_SLOTS + slot as u32, patch);
         if gain > 1e-3 {
             live.insert(key);
         }
@@ -740,9 +801,16 @@ impl Director {
             ),
         );
 
-        self.surface_ambience(live, listener, terrain, snapshot.clock);
-        self.sky_ambience(live, listener, terrain);
-        self.prowl_ambience(live, listener, &snapshot.enemies);
+        state.ambience.approach(
+            Self::ambience_target(&mut state.ambience_lookup, listener, snapshot, dt),
+            dt,
+        );
+        let ambience = state.ambience;
+        self.surface_ambience(live, listener, terrain, snapshot.clock, ambience);
+        self.sky_ambience(live, listener, terrain, ambience);
+        self.prowl_ambience(live, listener, &snapshot.enemies, ambience);
+        self.place_ambience(live, listener, ambience);
+        self.moon_steps(&mut state, listener, snapshot, dt);
         self.tomb_music(live, listener, snapshot.tombs);
         self.crypt_music(live, listener, snapshot.tombs);
 
@@ -763,11 +831,13 @@ impl Director {
         listener: &Listener,
         terrain: &fatherload_simulation::terrain::Terrain,
         clock: fatherload_simulation::clock::WorldClock,
+        ambience: Ambience,
     ) {
         use fatherload_simulation::{
             terrain::TILE_SIZE,
             worldgen::biome::{self, Biome},
         };
+        let open_air = ambience.open_air();
         #[allow(clippy::cast_possible_truncation, reason = "world pixels to tiles")]
         let column = (listener.x / TILE_SIZE).floor() as i32;
         #[allow(clippy::cast_precision_loss, reason = "surface rows are small")]
@@ -788,7 +858,9 @@ impl Director {
         // Stronger wind higher up, peaking a couple of hundred tiles up, then thinning air.
         let climb = (height / 200.0).clamp(0.0, 1.0);
         let thin = (1.0 - (height - 300.0) / 400.0).clamp(0.0, 1.0);
-        let wind = (base + climb * 0.5).min(1.0) * open * thin;
+        // A town's walls break the wind a little (Wave 6).
+        let wind =
+            (base + climb * 0.5).min(1.0) * open * thin * open_air * (1.0 - 0.4 * ambience.town);
         self.loop_command(
             live,
             listener,
@@ -811,7 +883,24 @@ impl Director {
             listener,
             SeatLoop::Rain,
             Patch::RainLoop,
-            (rain * 0.45, 0.0, 1.0, OPEN_CUTOFF),
+            (rain * 0.45 * open_air, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        // The thin air high up (Wave 6): a whistle taking over as the surface wind thins out
+        // (from ~200 tiles up), itself quieter and thinner the higher the seat climbs, gone by
+        // the edge of space.
+        let high = ((height - 150.0) / 150.0).clamp(0.0, 1.0)
+            * (1.0 - (height - 350.0) / 450.0).clamp(0.0, 1.0);
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::HighWind,
+            Patch::HighWindLoop,
+            (
+                high * 0.4 * open_air,
+                0.0,
+                1.0 + 0.15 * ((height - 350.0) / 450.0).clamp(0.0, 1.0),
+                6_000.0 + 8_000.0 * (1.0 - ((height - 350.0) / 450.0).clamp(0.0, 1.0)),
+            ),
         );
         let night = Self::night_share(clock);
         let chorus = match biome {
@@ -827,7 +916,7 @@ impl Director {
             SeatLoop::Night,
             Patch::NightLoop,
             (
-                night * chorus * open * near_ground * 0.4,
+                night * chorus * open * near_ground * 0.4 * open_air * (1.0 - 0.6 * ambience.town),
                 0.0,
                 1.0,
                 OPEN_CUTOFF,
@@ -843,6 +932,7 @@ impl Director {
         live: &mut BTreeSet<LoopKey>,
         listener: &Listener,
         terrain: &fatherload_simulation::terrain::Terrain,
+        ambience: Ambience,
     ) {
         use fatherload_simulation::{
             sky::SkyTile,
@@ -865,7 +955,7 @@ impl Director {
             listener,
             SeatLoop::SkyAir,
             Patch::SkyAirLoop,
-            (share * 0.5, 0.0, 1.0, OPEN_CUTOFF),
+            (share * 0.5 * ambience.open_air(), 0.0, 1.0, OPEN_CUTOFF),
         );
         let mut roar = (0.0_f32, 0.0_f32);
         if share > 0.0 {
@@ -900,7 +990,12 @@ impl Director {
             listener,
             SeatLoop::Waterfall,
             Patch::WaterfallLoop,
-            (roar.0 * roar.0 * 0.55, roar.1, 1.0, OPEN_CUTOFF),
+            (
+                roar.0 * roar.0 * 0.55 * ambience.open_air(),
+                roar.1,
+                1.0,
+                OPEN_CUTOFF,
+            ),
         );
     }
 
@@ -912,6 +1007,7 @@ impl Director {
         live: &mut BTreeSet<LoopKey>,
         listener: &Listener,
         enemies: &[fatherload_simulation::entity::Entity],
+        ambience: Ambience,
     ) {
         use fatherload_simulation::{entity::EntityState, night, terrain::TILE_SIZE};
         let reach = 40.0 * TILE_SIZE;
@@ -930,8 +1026,162 @@ impl Director {
             listener,
             SeatLoop::Prowl,
             Patch::NightProwlLoop,
-            (threat * 0.45, 0.0, 1.0, OPEN_CUTOFF),
+            (
+                threat * 0.45 * (1.0 - ambience.indoor) * (1.0 - ambience.vacuum),
+                0.0,
+                1.0,
+                OPEN_CUTOFF,
+            ),
         );
+    }
+
+    /// Where a seat is, as environment shares to crossfade toward (Wave 6): a tomb or crypt run,
+    /// vacuum, the lunar colony's rooms, a village, sky town or the home town. The village and
+    /// colony lookups refresh a few times a second.
+    fn ambience_target(
+        lookup: &mut (f32, f32, f32),
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+        dt: f32,
+    ) -> Ambience {
+        use fatherload_simulation::{moon, surface, village, worldgen};
+        let settings = snapshot.terrain.settings();
+        lookup.2 -= dt;
+        if lookup.2 <= 0.0 {
+            lookup.2 = AMBIENCE_LOOKUP_SECONDS;
+            let tile = TilePosition {
+                x: (listener.x / TILE_SIZE).floor() as i32,
+                y: (listener.y / TILE_SIZE).floor() as i32,
+            };
+            let (first, last) = surface::town_span();
+            let surface = snapshot.terrain.surface_row(tile.x);
+            let home_town =
+                (first..=last).contains(&tile.x) && (surface - 14..=surface + 2).contains(&tile.y);
+            let town = home_town || village::village_at(settings, tile).is_some();
+            let colony = moon::sheltered_at(settings, listener.x, listener.y)
+                && worldgen::moon::layout(settings)
+                    .is_some_and(|layout| layout.colony.covers(tile.x));
+            lookup.0 = if town { 1.0 } else { 0.0 };
+            lookup.1 = if colony { 1.0 } else { 0.0 };
+        }
+        Ambience {
+            indoor: if snapshot.tombs.run_of(listener.player_id).is_some() {
+                1.0
+            } else {
+                0.0
+            },
+            vacuum: if listener.vacuum { 1.0 } else { 0.0 },
+            colony: lookup.1,
+            town: lookup.0,
+        }
+    }
+
+    /// The beds that belong to a place (Wave 6): the Moon's near-silence in vacuum, the colony's
+    /// machinery in its rooms, and a town's bustle in villages, sky towns and the home town.
+    fn place_ambience(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        ambience: Ambience,
+    ) {
+        let outside = 1.0 - ambience.indoor;
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Moon,
+            Patch::MoonLoop,
+            (
+                ambience.vacuum * (1.0 - ambience.colony) * outside * 0.22,
+                0.0,
+                1.0,
+                OPEN_CUTOFF,
+            ),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Colony,
+            Patch::ColonyLoop,
+            (ambience.colony * outside * 0.32, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Town,
+            Patch::TownLoop,
+            (
+                ambience.town * outside * (1.0 - ambience.vacuum) * 0.3,
+                0.0,
+                1.0,
+                OPEN_CUTOFF,
+            ),
+        );
+    }
+
+    /// Soft footfalls of a pilot walking or running on the Moon (Wave 6), felt through the suit.
+    fn moon_steps(
+        &mut self,
+        state: &mut SeatState,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+        dt: f32,
+    ) {
+        use fatherload_simulation::pilot::PilotPose;
+        let striding = snapshot
+            .pilots
+            .iter()
+            .find(|pilot| pilot.player_id == listener.player_id)
+            .filter(|pilot| pilot.low_gravity && pilot.state.grounded)
+            .and_then(|pilot| match pilot.pose {
+                PilotPose::Walk => Some(MOON_STEP_SECONDS.0),
+                PilotPose::Run => Some(MOON_STEP_SECONDS.1),
+                _ => None,
+            });
+        let Some(gap) = striding else {
+            state.step_timer = 0.0;
+            return;
+        };
+        state.step_timer -= dt;
+        if state.step_timer <= 0.0 {
+            state.step_timer = gap;
+            let rate = self.rng.jitter(0.05);
+            self.commands.push(MixerCommand::Play(PlayRequest {
+                patch: Patch::MoonStep,
+                gain: 0.5,
+                pan: listener.pan,
+                rate,
+                cutoff: if listener.vacuum {
+                    VACUUM_OWN_CUTOFF
+                } else {
+                    OPEN_CUTOFF
+                },
+            }));
+        }
+    }
+
+    /// The world clock's dawn and dusk themes (Wave 6): a short piece of music when the day
+    /// turns, heard by seats out in the open (not in a tomb or out in vacuum).
+    fn clock_themes(&mut self, snapshot: &RenderSnapshot<'_>, listeners: &[Listener]) {
+        use fatherload_simulation::clock::DayPhase;
+        let phase = snapshot.clock.phase();
+        let previous = self.clock_phase.replace(phase);
+        let Some(previous) = previous else {
+            return;
+        };
+        if previous == phase {
+            return;
+        }
+        let patch = match phase {
+            DayPhase::Dawn => Patch::DawnTheme,
+            DayPhase::Dusk => Patch::DuskTheme,
+            DayPhase::Day | DayPhase::Night => return,
+        };
+        let outdoors = listeners.iter().any(|listener| {
+            !listener.vacuum && snapshot.tombs.run_of(listener.player_id).is_none()
+        });
+        if outdoors {
+            self.play(patch, 0.55, 0.0, 1.0);
+        }
     }
 
     /// A side-view tomb's music (WP-TOMBS T28): the run loop while the seat's player explores
@@ -1302,6 +1552,85 @@ mod tests {
                 .count();
         }
         assert_eq!(boings, 1, "one boing per bounce");
+    }
+
+    /// The first clock (scanning one standard day) whose phase is `phase`.
+    fn clock_in(
+        phase: fatherload_simulation::clock::DayPhase,
+    ) -> fatherload_simulation::clock::WorldClock {
+        use fatherload_simulation::clock::{DayLength, WorldClock};
+        (0..2_880)
+            .map(|step| WorldClock::from_world_millis(step * 1_000, DayLength::Standard, 7))
+            .find(|clock| clock.phase() == phase)
+            .expect("the phase comes round in a day")
+    }
+
+    #[test]
+    fn dusk_and_dawn_play_their_themes_once_when_the_day_turns() {
+        use fatherload_simulation::clock::DayPhase;
+        let one = PlayerId::new(1);
+        let world = WorldState::new_game(one);
+        let seats = [seat(0, one)];
+        let mut snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
+        let mut director = Director::new(1);
+        let audio = [SeatAudio::default()];
+        let mut themes = Vec::new();
+        for phase in [
+            DayPhase::Day,
+            DayPhase::Day,
+            DayPhase::Dusk,
+            DayPhase::Dusk,
+            DayPhase::Night,
+            DayPhase::Dawn,
+        ] {
+            snapshot.clock = clock_in(phase);
+            themes.extend(
+                plays(director.update(&frame(&snapshot, &[], &audio)))
+                    .into_iter()
+                    .map(|request| request.patch)
+                    .filter(|patch| matches!(patch, Patch::DawnTheme | Patch::DuskTheme)),
+            );
+        }
+        assert_eq!(themes, vec![Patch::DuskTheme, Patch::DawnTheme]);
+    }
+
+    #[test]
+    fn the_home_town_bustle_fades_in_and_the_open_air_beds_give_way_indoors() {
+        let one = PlayerId::new(1);
+        let world = WorldState::new_game(one);
+        let seats = [seat(0, one)];
+        let snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
+        let mut director = Director::new(1);
+        let audio = [SeatAudio::default()];
+        let town_gain = |commands: &[MixerCommand]| {
+            commands.iter().find_map(|command| match command {
+                MixerCommand::Loop(request) if request.patch == Patch::TownLoop => {
+                    Some(request.gain)
+                }
+                _ => None,
+            })
+        };
+        let first = town_gain(director.update(&frame(&snapshot, &[], &audio))).unwrap_or(0.0);
+        let mut later = first;
+        for _ in 0..180 {
+            later = town_gain(director.update(&frame(&snapshot, &[], &audio))).unwrap_or(0.0);
+        }
+        assert!(first < 0.05, "crossfades in, not cut in: {first}");
+        assert!(later > 0.2, "the new game starts in the home town: {later}");
+        let tomb = Ambience {
+            indoor: 1.0,
+            ..Ambience::default()
+        };
+        assert!(
+            tomb.open_air() < 1e-6,
+            "a tomb's music replaces the wind and crickets"
+        );
+        assert!((Ambience::default().open_air() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn every_seat_loop_slot_has_its_own_key_range() {
+        assert!((SeatLoop::Colony as u32) < SEAT_LOOP_SLOTS);
     }
 
     #[test]

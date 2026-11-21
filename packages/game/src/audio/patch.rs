@@ -333,6 +333,15 @@ patches! {
     HexBolt => "hex_bolt",
     CryptLoop => "loop_crypt",
     CryptBossLoop => "loop_crypt_boss",
+    // The Wave 6 audio pass (ambience by environment, clock themes, low-g steps), appended at
+    // the end so every earlier patch keeps its variation seeds.
+    HighWindLoop => "loop_high_wind",
+    MoonLoop => "loop_moon",
+    MoonStep => "moon_step",
+    TownLoop => "loop_town",
+    ColonyLoop => "loop_colony",
+    DawnTheme => "dawn_theme",
+    DuskTheme => "dusk_theme",
 }
 
 /// Playback metadata of a patch.
@@ -591,6 +600,16 @@ impl Patch {
             Self::CryptLoop | Self::CryptBossLoop => {
                 PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0)
             }
+            // A boot on the Moon: soft, frequent, never in the way.
+            Self::MoonStep => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.05)
+                .jitter(0.08, 2.0)
+                .priority(2),
+            // The world clock's dawn and dusk themes: music, so a little reverb and no jitter.
+            Self::DawnTheme | Self::DuskTheme => {
+                PatchInfo::new(Big).instances(1).send(0.45).jitter(0.0, 0.0)
+            }
             Self::ThrowWhoosh | Self::ChargeStick | Self::FireCrackle => {
                 PatchInfo::new(Feedback).instances(3).jitter(0.06, 1.0)
             }
@@ -650,7 +669,12 @@ impl Patch {
             | Self::WaterfallLoop
             | Self::NightProwlLoop
             | Self::TombRunLoop
-            | Self::TombBossLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            | Self::TombBossLoop
+            // Wave 6: the ambience beds chosen by environment.
+            | Self::HighWindLoop
+            | Self::MoonLoop
+            | Self::TownLoop
+            | Self::ColonyLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
             // Side-view tombs (T28): traps and tomb creatures heard from where they are.
             Self::BladeSwish | Self::DartFire | Self::BoneRattle => PatchInfo::new(Feedback)
                 .instances(3)
@@ -1054,6 +1078,13 @@ impl Patch {
             Self::HexBolt => hex_bolt(rng),
             Self::CryptLoop => crypt_loop(rng),
             Self::CryptBossLoop => crypt_boss_loop(rng),
+            Self::HighWindLoop => high_wind_loop(rng),
+            Self::MoonLoop => moon_loop(rng),
+            Self::MoonStep => moon_step(rng),
+            Self::TownLoop => town_loop(rng),
+            Self::ColonyLoop => colony_loop(rng),
+            Self::DawnTheme => dawn_theme(rng),
+            Self::DuskTheme => dusk_theme(rng),
         }
     }
 }
@@ -5622,6 +5653,209 @@ fn grains_loop(rng: &mut Rng, out: &mut Vec<f32>) {
         0.08,
         false,
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Wave 6 audio pass: ambience by environment, the clock's themes, footsteps on the Moon
+// ---------------------------------------------------------------------------------------------
+
+/// The thin air high up (Wave 6): a faint whistle wandering over a breathy high hiss, swelling in
+/// slow gusts; no low buffeting, there is too little air left to push anything about.
+fn high_wind_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut hiss = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut hiss_filter = Svf::new(FilterMode::HighPass, 2_400.0, 0.6);
+    let mut whistle = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut whistle_filter = Svf::new(FilterMode::BandPass, 3_000.0, 6.0);
+    let mut gust = flutter(rng, 0.6, 0.4);
+    render(loop_length(), |t| {
+        let level = gust();
+        let centre = 3_000.0 + 700.0 * sine(t, 0.25) + 250.0 * sine(t, 1.0);
+        hiss_filter.process(hiss.next()) * 0.4 * level
+            + whistle_filter.run(whistle.next(), centre, 6.0) * 0.6 * level * level
+    })
+}
+
+/// The Moon's near-silence (Wave 6): no air carries anything, so only what the suit hears of
+/// itself: the life-support hum, the slow tide of breath in the helmet, a faint servo whine and
+/// now and then a tick of radio static.
+fn moon_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut hum = Osc::new(Wave::Sine);
+    let mut hum_octave = Osc::new(Wave::Sine);
+    let mut servo = Osc::new(Wave::Sine);
+    let mut breath = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut breath_filter = Svf::new(FilterMode::BandPass, 650.0, 0.8);
+    let mut out = render(loop_length(), |t| {
+        // Two breaths a loop: in (brighter), out (softer).
+        let tide = sine(t, 0.5).max(0.0).powi(2) + 0.4 * (-sine(t, 0.5)).max(0.0).powi(2);
+        let air = breath_filter.process(breath.next()) * tide * 0.9;
+        let life = hum.next(110.0) * 0.12 + hum_octave.next(220.0) * 0.06;
+        let whine = servo.next(1_760.0) * 0.025 * (0.5 + 0.5 * sine(t, 0.25));
+        life + air + whine
+    });
+    for time in scatter(rng, loop_events(0.8), 0.0, loop_length() - 0.1, 1.0) {
+        let tick = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            rng.range(2_200.0, 3_600.0),
+            1.5,
+            0.025,
+        );
+        mix_into(&mut out, &tick, time, rng.range(0.08, 0.16));
+    }
+    out
+}
+
+/// A boot coming down on the Moon (Wave 6): felt more than heard, a soft low thud through the
+/// suit, a regolith crunch muffled to almost nothing and the knee servo's short whirr.
+fn moon_step(rng: &mut Rng) -> Vec<f32> {
+    let start = rng.range(230.0, 270.0);
+    let mut out = thump(start, start * 0.55, 0.14, 0.2);
+    let crunch = burst(
+        rng.next_u64(),
+        NoiseColor::Pink,
+        FilterMode::LowPass,
+        rng.range(1_400.0, 1_800.0),
+        0.7,
+        0.08,
+    );
+    mix_into(&mut out, &crunch, 0.004, 0.6);
+    let mut servo = Osc::new(Wave::Saw);
+    let mut filter = Svf::new(FilterMode::LowPass, 1_400.0, 0.9);
+    let pitch = rng.range(520.0, 640.0);
+    let whirr = render(0.12, |t| {
+        filter.process(servo.next(glide(t, pitch, pitch * 1.5, 0.05))) * perc(t, 0.01, 0.1)
+    });
+    mix_into(&mut out, &whirr, 0.03, 0.12);
+    out
+}
+
+/// A town's bustle (Wave 6), in villages and sky towns: a murmur of far voices (noise through
+/// drifting vowel formants, in syllables), a smith's hammer, a creaking cart and birds.
+fn town_loop(rng: &mut Rng) -> Vec<f32> {
+    const SECONDS: f32 = LOOP_SECONDS;
+    let mut voices = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut low_formant = Svf::new(FilterMode::BandPass, 520.0, 3.0);
+    let mut high_formant = Svf::new(FilterMode::BandPass, 1_500.0, 3.5);
+    let mut syllables = flutter(rng, 4.0, 0.6);
+    let mut crowd = flutter(rng, 0.4, 0.3);
+    let mut out = render(loop_length(), |t| {
+        let source = voices.next();
+        let vowel = sine(t, 0.75);
+        let murmur = low_formant.run(source, 520.0 + 160.0 * vowel, 3.0)
+            + high_formant.run(source, 1_500.0 - 400.0 * vowel, 3.5) * 0.6;
+        murmur * syllables().max(0.4) * crowd() * 0.6
+    });
+    // A smith working three strikes and a rest, twice a loop.
+    for bar in 0..2_u8 {
+        for strike in 0..3_u8 {
+            let time = f32::from(bar) * (SECONDS / 2.0) + f32::from(strike) * 0.32 + 0.1;
+            let pitch = 1_900.0 * rng.jitter(0.03);
+            mix_into(&mut out, &clank(rng, pitch, 0.12), time, 0.2);
+        }
+    }
+    // A cart's wheel creaking past.
+    let mut creak = Osc::new(Wave::Saw);
+    let mut creak_filter = Svf::new(FilterMode::BandPass, 900.0, 4.0);
+    let squeak = render(0.5, |t| {
+        creak_filter.process(creak.next(glide(t, 380.0, 520.0, 0.2)))
+            * segments(t, &[(0.0, 0.0), (0.1, 1.0), (0.35, 0.6), (0.5, 0.0)])
+    });
+    mix_into(&mut out, &squeak, 2.6, 0.12);
+    // Birds on the roofs.
+    for time in scatter(rng, loop_events(1.0), 0.0, loop_length() - 0.2, 1.0) {
+        let mut osc = Osc::new(Wave::Sine);
+        let pitch = rng.range(2_800.0, 3_800.0);
+        let tweet = render(0.08, |t| {
+            osc.next(glide(t, pitch, pitch * 1.3, 0.05)) * perc(t, 0.004, 0.07)
+        });
+        mix_into(&mut out, &tweet, time, rng.range(0.05, 0.1));
+    }
+    out
+}
+
+/// The lunar colony's rooms (Wave 6): air recyclers humming, a fan's slow beat, a vent's steady
+/// hiss and soft console chirps.
+fn colony_loop(rng: &mut Rng) -> Vec<f32> {
+    const SECONDS: f32 = LOOP_SECONDS;
+    let mut motor = Osc::new(Wave::Saw);
+    let mut motor_filter = Svf::new(FilterMode::LowPass, 280.0, 0.8);
+    let mut vent = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut vent_filter = Svf::new(FilterMode::BandPass, 3_800.0, 0.8);
+    let mut room = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut room_filter = Svf::new(FilterMode::LowPass, 200.0, 0.7);
+    let mut out = render(loop_length(), |t| {
+        let fan = 0.8 + 0.2 * sine(t, 3.0);
+        motor_filter.process(motor.next(55.0)) * 0.5 * fan
+            + vent_filter.process(vent.next()) * 0.18
+            + room_filter.process(room.next()) * 0.4
+    });
+    for index in 0..4_u8 {
+        let time = f32::from(index) * (SECONDS / 4.0) + 0.3;
+        let note = if index % 2 == 0 { 1_318.5 } else { 1_760.0 };
+        mix_into(&mut out, &beep(note, 0.05, 0.5, 0.0), time, 0.06);
+        mix_into(
+            &mut out,
+            &beep(note * 1.5, 0.05, 0.5, 0.0),
+            time + 0.08,
+            0.04,
+        );
+    }
+    out
+}
+
+/// Dawn's theme (Wave 6, on the world clock): a warm G major pad swelling up from the root, a
+/// rising pentatonic line of bells and a held high bell as the sun clears the hills.
+fn dawn_theme(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for (index, note) in [196.0, 293.66, 392.0].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &brass(rng, note, 2.4 - index as f32 * 0.2, 0.3),
+            index as f32 * 0.22,
+            0.16,
+        );
+    }
+    for (index, note) in [392.0, 440.0, 493.88, 587.33, 659.25, 783.99]
+        .into_iter()
+        .enumerate()
+    {
+        mix_into(
+            &mut out,
+            &bell(note, 2.0, 0.8, 1.3),
+            0.3 + index as f32 * 0.26,
+            0.2,
+        );
+    }
+    mix_into(&mut out, &bell(1_174.66, 3.0, 0.6, 1.6), 1.85, 0.16);
+    out
+}
+
+/// Dusk's theme (Wave 6, on the world clock): a low E minor pad settling, a falling aeolian line
+/// on soft bells and a far horn note fading into the evening.
+fn dusk_theme(rng: &mut Rng) -> Vec<f32> {
+    let mut out = Vec::new();
+    for (index, note) in [164.81, 196.0, 246.94].into_iter().enumerate() {
+        mix_into(
+            &mut out,
+            &brass(rng, note, 2.6, 0.22),
+            index as f32 * 0.18,
+            0.15,
+        );
+    }
+    for (index, note) in [659.25, 587.33, 493.88, 440.0, 392.0, 329.63]
+        .into_iter()
+        .enumerate()
+    {
+        mix_into(
+            &mut out,
+            &bell(note, 1.0, 0.5, 1.5),
+            0.25 + index as f32 * 0.3,
+            0.18,
+        );
+    }
+    mix_into(&mut out, &brass(rng, 164.81, 1.0, 0.15), 2.1, 0.12);
+    out
 }
 
 #[cfg(test)]
