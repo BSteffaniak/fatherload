@@ -97,6 +97,9 @@ fn kit(world: &mut WorldState, player: PlayerId) {
             .pilot_arsenal
             .receive(fatherload_simulation::WeaponKind::Rifle);
         rig.pilot_arsenal.equipped = Some(fatherload_simulation::WeaponKind::Rifle);
+        let _ = rig
+            .pilot_arsenal
+            .add_ammo(fatherload_simulation::weapon::AmmoKind::Cartridge, 40);
         rig.credits = 2_600;
     }
 }
@@ -235,7 +238,8 @@ fn culture_scene(
                 world,
                 player,
                 TilePosition {
-                    x: room.min.x - 1,
+                    // Just inside the hall (its west doorway may be the room before's gate).
+                    x: room.min.x + 1,
                     y: doorway_row(world, player),
                 },
             );

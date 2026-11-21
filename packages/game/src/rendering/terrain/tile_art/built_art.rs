@@ -717,10 +717,20 @@ fn paint_tomb_pillar(canvas: &mut TileCanvas, strata: &Strata, edges: Edges, sty
 
 /// A tomb's entrance door: a carved slab (side view) or a floor hatch with a ring (top down);
 /// sealed, a red-and-gold seal band crosses it; open, it shows the dark way in.
-fn paint_tomb_door(canvas: &mut TileCanvas, style: u8, sealed: bool, (_, tile_y): (i32, i32)) {
-    let colors = tomb_ramp(style);
+fn paint_tomb_door(canvas: &mut TileCanvas, style: u8, sealed: bool, position: (i32, i32)) {
+    paint_tomb_door_in(canvas, tomb_ramp(style), style == 1, sealed, position);
+}
+
+/// A tomb door (a slab door, or a crypt's `hatch`) in the stone ramp `colors` (T28 paints a
+/// side-view entrance's door in its culture's stone).
+pub(super) fn paint_tomb_door_in(
+    canvas: &mut TileCanvas,
+    colors: Ramp,
+    hatch: bool,
+    sealed: bool,
+    (_, tile_y): (i32, i32),
+) {
     let last = TILE_ART - 1;
-    let hatch = style == 1;
     for py in 0..TILE_ART {
         for px in 0..TILE_ART {
             let frame = px <= 1 || px >= last - 1 || (hatch && (py <= 1 || py >= last - 1));

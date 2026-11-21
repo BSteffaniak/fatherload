@@ -137,7 +137,7 @@ fn culture_at(terrain: &Terrain, position: TilePosition, set: u8) -> Option<Tomb
 }
 
 /// Paints a side-view tomb piece in its culture. Returns `false` for pieces the plain built
-/// art paints (crypt stone, doors, shrines, stairs, caches).
+/// art paints (crypt stone and hatches, sandstone doors, shrines, stairs, caches).
 pub(in crate::rendering::terrain) fn paint_piece(
     canvas: &mut TileCanvas,
     terrain: &Terrain,
@@ -161,6 +161,18 @@ pub(in crate::rendering::terrain) fn paint_piece(
                 return false;
             };
             paint_pillar(canvas, strata, edges, culture, position);
+            true
+        }
+        // A side-view entrance's slab door in the site's culture's stone (sandstone keeps the
+        // plain art).
+        BuiltTile::TombDoor { style: 0, sealed } => {
+            let culture = entrance_culture(terrain, position);
+            if culture == TombCulture::Sandstone {
+                return false;
+            }
+            let colors = culture_ramp(culture);
+            super::paint_tomb_door_in(canvas, colors, false, sealed, (position.x, position.y));
+            paint_edges(canvas, strata, edges, colors[3], colors[0], true);
             true
         }
         BuiltTile::TombTrap { kind, hidden } => {
@@ -188,9 +200,10 @@ const fn wall_pixel(culture: TombCulture, x: i32, y: i32) -> PaletteIndex {
     match culture {
         TombCulture::Sandstone => masonry(x, y, 8, 12, colors, index_of(SOIL_DARK)),
         TombCulture::Catacomb => {
-            // Small rough bricks with the odd bone end showing.
+            // Small rough bricks with the odd bone end showing (old, dull bone: bright flecks
+            // read as sparks at play scale).
             if hash(x.div_euclid(3), y.div_euclid(2), 401).is_multiple_of(613) {
-                index_of(BONE)
+                index_of(STONE_LIGHT)
             } else {
                 masonry(x, y, 4, 7, colors, index_of(INK))
             }
@@ -249,7 +262,7 @@ fn paint_wall(canvas: &mut TileCanvas, culture: TombCulture, position: TilePosit
                     if eye || (skull && py == 10 && px % 2 == 0) {
                         pixel = index_of(INK);
                     } else if skull {
-                        pixel = index_of(BONE);
+                        pixel = index_of(STONE_LIGHT);
                     } else if recess {
                         pixel = index_of(INK);
                     }
