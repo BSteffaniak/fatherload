@@ -818,7 +818,7 @@ and the map marker say which, its tier (depth or altitude: 1 on the mesas to 5 o
 and how the seal breaks: a **tomb key** (found in ruin chests and tomb vaults), a **blast**
 beside a cracked seal, or a **story** seen through.
 
-- **Going in**: on foot, `E` (the use button, `A` on a controller, USE on touch) at an open
+- **Going in**: on foot, `E` (the use button: `X` on a controller, USE on touch) at an open
   door takes you and every crewmate standing near the door inside together (split-screen and
   online). The rig waits outside and takes no damage. Floors (3 to 6 by tier) are fresh every
   run: trap halls, lever and pressure-plate puzzles, ambushes, a **shrine** halfway, a
