@@ -886,10 +886,13 @@ beside a cracked seal, or a **story** seen through.
   - **The crypt's dead**: **skeleton packs** flank you and rattle before they lunge,
     **spectres** drift straight through the walls (they cannot strike from inside one),
     **cultists** keep their distance and throw hex bolts (a fan every third cast), **golems**
-    raise their fists over a ring on the floor before they slam. On the last floor the **crypt
+    raise their fists over a ring on the floor before they slam (never through a wall). On the last floor the **crypt
     lord** fights in three phases, each new one opened with a roar and a few risen dead: a fan
     of bolts and a ring, then charges across the hall, then a spiral of bolts and faster
-    attacks, every one telegraphed (the banner shows its health and phase).
+    attacks, every one telegraphed (the banner shows its health and phase). The run banner
+    takes the nearest clear spot at the top of the view, clear of the stats and wallet panels
+    and a phone's top-row buttons, and turns compact (floor, credits, relics, objective) where
+    the full one would hang over the middle of the view (a phone, a split-screen half).
   - **Relics** mean the same in a crypt in their own way: Spring Heels rolls longer, Glider
     Boost rolls further, Featherfall takes the hurt out of pits.
   - The minimap becomes the crypt's **room map** (rooms you have walked into, coloured by kind,

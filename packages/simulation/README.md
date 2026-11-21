@@ -2118,7 +2118,8 @@ site whose `SiteStyle` is `TopDown` plays it (the style is still fixed per site 
   a wall, still pushed off pilots (`keep_ghost_off`). Skeletons hold flank stations round
   their prey (by seed) and lunge after a rattle; cultists keep `CASTER_RANGE`, circle and cast
   `ShotKind::Hex` (a fan of three every third cast); golems raise their fists (`CryptTell`
-  with `CryptAttack::Slam`) and slam everything within `SLAM_REACH` (`CryptSlam`). **The crypt
+  with `CryptAttack::Slam`) and slam everything within `SLAM_REACH` (`CryptSlam`), winding up
+  only at prey in line of sight and striking only pilots it can see (no slams through a wall). **The crypt
   lord** wakes on sight (phase 1, `CryptLordPhase`), then `lord_phase(health share)` moves it
   to 2 and 3: each new phase roars (`LORD_ROAR_MILLIS` pause) and calls up three skeletons, then
   two spectres (`CryptSummon`). Patterns cycle per phase (`lord_patterns`): fan of 5 and ring
