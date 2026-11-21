@@ -833,7 +833,9 @@ beside a cracked seal, or a **story** seen through.
   blessing tied to a curse), picked with the menu keys, a controller or a tap: double jump,
   ricochet shots, the trap-sight lantern (hidden spikes glow), the vampiric pick, the glider
   boost and more, with synergies (Spring Heels and Glider Boost make Skywalker). Relics last
-  the run.
+  the run. Every relic works in both kinds of place: movement perks change the crypt's dodge
+  roll, and **Sandwalker Sandals** halve trap damage in crypts (spikes, flames, pit falls) as
+  well as tombs.
 - **Unlocks**: the **tomb codex** (after the milestones in the map's pages: `Enter` from the
   milestones) lists every relic you have carried, the tombs you have mapped and cleared,
   guardians felled and the builders' **lore pages** found in vaults. Each guardian felled also
@@ -870,7 +872,8 @@ beside a cracked seal, or a **story** seen through.
   (the deep strata and old quarters), **sandstone** (mesas), the **sky vault** (sky continents)
   or the **lunar vault** (the Moon), walls standing in 3/4 view. Each seat switches on its
   own: in split screen one player can crawl a crypt from above while the other flies the rig
-  outside in the side view.
+  outside or plays a side-view tomb. In a crypt the pilot panel's JET bar becomes **ROLL**
+  (full when the dodge roll is ready).
   - **Moving**: `WASD` (or the arrows, or the left stick) walk eight ways; `Space` (`A` on a
     controller, ROLL on touch) is a **dodge roll**: a quick dash you cannot be hurt in for all
     but its last moment (strikes, shots, traps and pits pass through you), then a short wait.

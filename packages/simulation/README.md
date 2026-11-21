@@ -2159,6 +2159,36 @@ clears a crypt of every tier on Peaceful, traps tick-rate safe, saves mid-floor 
 state); the netcode e2e `world_crypt_runs_predict_rolls_and_converge`; the game's split
 screen with mixed view modes and the crypt touch layout.
 
+## Wave 5 integrated: side-view tombs and top-down crypts together
+
+T27 (core), T28 (side view) and T29 (crypts) on one branch. Each site is one style, fixed by
+its seed (`TombSite::style`, shown on its entrance art and map marker), the same on every floor;
+generator V10 alone places sites (V1-V9 digests unchanged, V10's pinned once by T27).
+
+- **One kind list**: `EnemyKind::ALL` is 39 long: T28's tomb creatures (`Mummy` ..
+  `HollowMatriarch`, `EnemyKind::is_tomb`) then T29's crypt creatures (`CryptSkeleton` ..
+  `CryptLord`, `EnemyKind::is_crypt`). Both builders named their shots `Arrow` / `Hex`, so
+  T28 keeps `ShotKind::{Arrow, Rubble, Hex}` (archer arrows that drop, colossus rubble, the
+  matriarch's slow hex orbs) and T29's are `ShotKind::{CryptHex, CryptArrow, Boulder}`
+  (`ShotKind::is_crypt`: they fly over trap overlays and only crypt masonry stops them).
+  Each style's art and cue keep their own look (`tomb_art` vs `crypt_art`, `FogBurst` vs
+  `HexBolt`).
+- **One scenario**: `WorldState::scenario_tomb_floor` (T29's, in `world/crypts.rs`) serves
+  both styles; it also resets the run to `Exploring`.
+- **Shared relics**: every relic is offered in both styles (`Relic::suits`). Sandwalker
+  Sandals and their synergies (`RelicEffects::trap_pct`) now blunt a crypt's overlays and pit
+  falls as they do side-view traps and T27's spikes (crypt trap arrows and boulders are shots
+  and are not scaled). Loot, banking, unlocks, the codex and trophies are T27's and do not care
+  which style a run is.
+- **Per seat**: a seat's view, camera, minimap, music and HUD follow its own player's run
+  (`PilotView`): in split screen one seat can crawl a crypt while the other plays a
+  side-view tomb or flies the rig. The pilot HUD shows ROLL (the dodge roll's recovery, in
+  percent) in place of JET in a crypt.
+- **Ticks**: `advance_side_view_run` and `advance_crypt` both run in the tombs pass; each
+  returns at once for the other style.
+- **Formats**: one `PROTOCOL_VERSION` (13) and one save format (11) for the whole wave;
+  events 270-279 (T27), 280-281 (T28), 290-296 (T29).
+
 ## Wave 5 seams: top-down crypts (T29) for the integrator and T28
 
 - **Shared core touched (additive)**: `realize::realizer_for` and `bestiary` route
@@ -2166,7 +2196,8 @@ screen with mixed view modes and the crypt touch layout.
   merging if nothing else needs it); `TombRun::crypt` (serde default); `PilotState::{roll,
   roll_x, roll_y, roll_cooldown, heading_x, heading_y}` and `PilotState::height` answering the
   footprint in top-down; `PilotStepReport::rolled`; `EnemyState::{phase, pattern, volley}`;
-  five `EnemyKind`s and three `ShotKind`s appended (`EnemyKind::ALL` is 33 long); hooks
+  five `EnemyKind`s and three `ShotKind`s appended (`CryptHex`, `CryptArrow`, `Boulder`
+  after integration; `EnemyKind::ALL` is 39 long with T28's); hooks
   `advance_crypt` (tombs pass) and `prepare_crypt_floor` (`write_tomb_floor`); the generic AI
   and shot advance hand crypt kinds to `world/enemies/crypt.rs`; `Relic::suits` is now true
   everywhere (`blurb_in` for crypt meanings); `damage_pilot` / `strike_pilot_as` respect
