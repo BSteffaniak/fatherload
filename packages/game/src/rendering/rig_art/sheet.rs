@@ -37,6 +37,8 @@ pub enum RigSheet {
     Rewards,
     /// The pilot's animation strips (Wave 6 art pass): every frame of each cycle in a row.
     PilotStrip,
+    /// Every ammunition type's icon, large and at HUD size (Wave 6 art pass).
+    Ammo,
 }
 
 /// Tiers that start each visual class (plus the top tier).
@@ -160,6 +162,38 @@ pub fn draw_rig_sheet(draw: &mut RaylibDrawHandle<'_>, sheet: RigSheet) {
         RigSheet::Pilots => draw_pilots(draw, canvas.width),
         RigSheet::Rewards => draw_rewards(draw, canvas.width),
         RigSheet::PilotStrip => draw_pilot_strip(draw, canvas.width),
+        RigSheet::Ammo => draw_ammo(draw, canvas.width),
+    }
+}
+
+/// Every ammunition type's icon (Wave 6: each its own), large and at the HUD's size.
+fn draw_ammo(draw: &mut RaylibDrawHandle<'_>, width: i32) {
+    use crate::rendering::pixel_art::{sprite, sprites::weapons};
+    use fatherload_simulation::AmmoKind;
+    ui_kit::text(draw, "Ammunition", 8, 6, TextStyle::Bold, GOLD);
+    let kinds = [AmmoKind::Rocket, AmmoKind::Cartridge, AmmoKind::Shell];
+    let column_width = (width - 16) / kinds.len() as i32;
+    for (index, ammo) in kinds.into_iter().enumerate() {
+        let cx = 8 + index as i32 * column_width + column_width / 2;
+        let icon = weapons::ammo_icon(ammo);
+        sprite::draw_sprite(
+            draw,
+            icon,
+            0,
+            Vector2::new((cx - 27) as f32, 60.0),
+            6.0,
+            Color::WHITE,
+        );
+        ui_kit::icon(draw, icon, cx - 4, 140);
+        let label_width = ui_kit::text_width(ammo.name(), TextStyle::Bold);
+        ui_kit::text(
+            draw,
+            ammo.name(),
+            cx - label_width / 2,
+            160,
+            TextStyle::Bold,
+            BONE,
+        );
     }
 }
 

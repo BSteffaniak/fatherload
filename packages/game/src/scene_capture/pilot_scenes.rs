@@ -92,6 +92,13 @@ pub const PILOT_SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "ammo_icons",
+        summary: "Wave 6: each ammunition type's own icon (rockets, rifle cartridges, shotgun shells), large and at HUD size",
+        setup: |stage| {
+            stage.rig_sheet = Some(crate::rendering::rig_art::sheet::RigSheet::Ammo);
+        },
+    },
+    Scene {
         name: "pilot_ladder_climb",
         summary: "Climbing the underground outpost's lift ladder on foot, the rig parked in the room below",
         setup: ladder,
