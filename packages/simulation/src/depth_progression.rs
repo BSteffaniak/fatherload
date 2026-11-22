@@ -537,13 +537,13 @@ pub fn deep_tier_cost(classic_top_cost: u32, level: u8, classic_top: u8) -> u32 
 pub const fn descent_value_percent(index: u8) -> u32 {
     match index {
         0 => 100,
-        1 => 160,
-        2 => 300,
-        3 => 520,
-        4 => 850,
-        5 => 1_350,
-        6 => 2_100,
-        _ => 3_200,
+        1 => 110,
+        2 => 125,
+        3 => 140,
+        4 => 160,
+        5 => 180,
+        6 => 205,
+        _ => 230,
     }
 }
 

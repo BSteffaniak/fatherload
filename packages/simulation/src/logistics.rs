@@ -470,12 +470,13 @@ pub const fn scaled_price(price: u32, descent: u8) -> u32 {
 
 /// What travelling `rows` between two stops costs: `(fuel, credits)`.
 ///
-/// A trip across the whole 13,000-row dig costs about 230 fuel and 3,300 credits: cheap next
-/// to the climb it replaces, dear next to an everyday trip's earnings in the Crust.
+/// Cheap enough for everyday trips (a 350-row jump is 8 fuel and 27 credits, a fraction of a
+/// Crust haul); across the whole 13,000-row dig it is about 170 fuel and 660 credits, next to
+/// the climb's thousands of fuel it replaces.
 #[must_use]
 pub const fn travel_cost(rows: i32) -> (u32, u32) {
     let rows = rows.unsigned_abs();
-    (6 + rows / 60, 25 + rows / 4)
+    (4 + rows / 80, 10 + rows / 20)
 }
 
 #[cfg(test)]

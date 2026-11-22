@@ -55,6 +55,7 @@ pub mod building;
 pub mod climb;
 pub mod combat;
 pub mod crypt_bot;
+pub mod descent;
 pub mod economy;
 pub mod night;
 pub mod second_act;
@@ -297,6 +298,7 @@ pub fn standard_probes() -> Vec<Box<dyn BalanceProbe>> {
         Box::new(night::NightProbe),
         Box::new(second_act::SecondActProbe),
         Box::new(tombs::TombsProbe),
+        Box::new(descent::DescentProbe),
     ]
 }
 
