@@ -388,7 +388,7 @@ through the ground.
 ### Balance
 
 The balance harness (`fatherload --balance-report [--seeds N] [--minutes M] [--only
-economy,progression,combat,exposure,building,climb,trip]`, release build; details in
+economy,progression,combat,exposure,building,climb,trip,descent]`, release build; details in
 [packages/simulation/README.md](packages/simulation/README.md#balance-harness-srcbalancers-srcbalance))
 plays fresh worlds with scripted bots through the real simulation: an economy bot (straight
 shafts, a prospector tunnelling sideways to ore, and a mining-charge miner with its own
@@ -458,6 +458,40 @@ engine and top intakes crosses the dead air to the sky continents (12,010), and 
 (15,360) takes a tier 14 tank and top intakes
 ([packages/simulation/README.md](packages/simulation/README.md), "Band tables per generator
 version" and "V9's sky").
+
+### Depth logistics and the Deep Descent ladder (wave 7)
+
+The foundations for the 13,000-row Deep Descent (expansion plan Part III F10). Worlds of the
+V11 generator (and any generator after it) play the Descent rules; every V1-V10 world keeps its
+classic ladder exactly. Beacons, built lifts and dive charges work in every world.
+
+- **Lifts.** Ancient lifts are builder rails with station pockets that a generator lays from
+  outpost to outpost. They start dead: restore one from its lowest station and its cab carries
+  the rig (no fuel) between any of its stations. Place your own lift stations on a shaft you dug
+  (each gets a metal floor to stand on) and ride between them.
+- **Deep outposts.** A camp in every Descent: reaching one adds it to the travel network; its
+  counter refuels, repairs and buys your cargo at a fee until the crew claims it (then fuel is
+  a credit a unit and the buyer keeps 5 %), sells dive charges, and a claimed outpost can be
+  made home (rescues land there).
+- **Depth beacons.** Plant beacons underground; from any beacon, reached outpost or the town,
+  travel to any other for a little fuel and some credits by distance.
+- **Dive charges.** Cut a 24-row shaft straight down and plunge down it; the landing does no
+  crash damage.
+- **Controls.** Press use at an outpost, a lift station or your own beacon (the prompt says
+  what it opens), or pick "Depth logistics" at the bottom of the inventory anywhere: one dialog
+  lists what the stop offers, every travel destination with its cost, and the field kit
+  (beacon, lift station, dive charges). It works the same with keyboard, controller, touch
+  (tap a row) and in split-screen.
+- **Progression to the Heart** (Descent worlds). The six core lines get deep tiers up to 22,
+  about two more per Descent (the shop sells a tier once someone reached its Descent), and
+  eight rig systems join the shop: the Pressure Hull, Bio-Filter, Lamp II, Sonar Suite, Cryo
+  Hull, Gravity Anchor, Phase Drill and Heart Key. Each Descent from III on is crushing without
+  its gate system; the Bio-Filter halves gas damage, the Sonar Suite reaches further, Lamp II
+  lights wider.
+- **The descent probe.** `fatherload --balance-report --only descent` has a bot play all 41
+  strata on these curves; its first run estimates 76.5 hours to the Heart (target 60-90), with
+  something new at least every 30 minutes (details and the full table in
+  [packages/simulation/README.md](packages/simulation/README.md)).
 
 ### Caves
 

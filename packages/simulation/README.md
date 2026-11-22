@@ -3461,6 +3461,209 @@ between 20 Hz and 60 Hz while a rig speeds up or slows down.
   terrain chunks paint fluid as open ground and skip repaints for open-to-open changes, and
   `rendering/world/fluids.rs` draws the fluid live.
 
+## Wave 7 logistics: depth logistics, progression curves and the descent harness (F10)
+
+Expansion plan Part III §15 F10, so a 13,000-row dig stays a journey instead of a commute.
+Modules: `src/logistics.rs` (state, commands, prices), `src/logistics/sites.rs` (the generator
+hooks), `src/world/logistics.rs` (the tick), `src/depth_progression.rs` (rules, Descent layout,
+deep tiers, rig systems, curves) and `src/balance/descent.rs` (the harness). Tests:
+`world/logistics_tests.rs`, the modules' own, `balance::descent::tests`, and the game's
+`local_game/tests/logistics_tests.rs`.
+
+### Rules: classic worlds never change
+
+`depth_progression::ProgressionRules` is `Classic` for every generator up to V10 and `Descent`
+for every generator after V10 (`ProgressionRules::for_generator` compares versions, so
+generator V11 gets the Descent rules the moment F8 adds it, with no edit here). It is stored in
+the `Logistics` section (`WorldState::progression_rules`, set at world creation from the
+generator; scenarios and tests switch with `WorldState::set_progression_rules` before play).
+Classic worlds keep the fifteen-tier ladders, classic prices and no rig systems on sale; their
+`Logistics` stays empty and is left out of the state hash, so their hashes are unchanged. The
+logistics tools themselves (beacons, built lifts, dive charges) work on every world; outposts
+and ancient lifts exist only where a generator placed them.
+
+### Lifts
+
+- `LiftShaft { column, stations, origin, restored, cab_row }`: stations are the rows a rig stands
+  on to board. `LogisticsCommand::RideLift { shaft, to_row }` from a station (rig on the shaft's
+  column within `STATION_REACH_ROWS`) starts a `LiftRide { from_row, to_row, start_tick, ticks }`:
+  `ticks = ticks_for_millis(ride_millis(rows, rows_per_second))` (ancient 45 rows/s, built 20),
+  so a ride is the same length in seconds at every tick rate and fully determined by its start
+  tick. While riding, the rig neither drills nor flies (`simulate_tick` skips its drill intent
+  and movement step), `advance_logistics` pins it to the cab (`LiftRide::row_at`) every tick,
+  burns no fuel, cannot climb out (`can_exit_rig`, `TogglePilot` refused), and lands resting on
+  the arrival station's floor. A wrecked rider drops out of its ride. The path must be open
+  except the lift's own station floors (and, on an ancient lift, its rail).
+- **Ancient lifts** are a rail of `BuiltTile::RuinWall` (indestructible, so nobody falls down a
+  1,000-row shaft) broken at each station by a three-wide, two-high pocket on a `Plating`
+  floor. They start dead: `RestoreLift` works only from the lowest station
+  (`ANCIENT_LIFT_RESTORE_PRICE` x the Descent's price percent), so a lift shortens the trips
+  back up once you have dug to its bottom, never the first descent.
+- **Built lifts**: `PlaceLiftStation` on the rig's tile (underground, `LIFT_STATION_PRICE` x
+  percent) starts a lift on that column or adds a station to it; an open tile under a station
+  gets a `Plating` floor (a tile op) so a rig can stand at the mouth of a shaft or halfway down
+  it. `RemoveLiftStation` (owner only) refunds half and removes the floor it placed.
+  `MAX_LIFT_STATIONS`, `MAX_BUILT_LIFTS_PER_PLAYER`.
+
+### Deep outposts
+
+`Outpost { name, column, floor_row, descent, claimed_by, reached }`: a room
+`OUTPOST_HALF_WIDTH` either side of its column and `OUTPOST_HEIGHT` high. A rig inside it the
+first time marks it reached (`OutpostReached`): it joins the crew's travel network. Its counter
+(`LogisticsCommand::Outpost { outpost, service }`): refuel and repair at
+`OUTPOST_FUEL_UNIT` / `OUTPOST_REPAIR_UNIT` credits a unit (unclaimed, claimed), selling through
+the depot's own sale (`sell_canonical_cargo`) less the outpost's cut (`OUTPOST_SALE_PERCENT`
+75 / 95), dive charges, `Claim` (`OUTPOST_CLAIM_PRICE` x percent; crew-wide), and `SetHome` on a
+claimed outpost, which makes rescues land there (`WorldState::rescue_home` falls back to it after
+a home bed and a base home point).
+
+### Depth beacons and travel
+
+`PlaceBeacon` on the rig's tile (`BEACON_MIN_DEPTH_ROWS` under the local surface, at least
+`BEACON_SPACING_TILES` from another beacon, `MAX_BEACONS_PER_PLAYER`, `BEACON_PRICE` x percent).
+`Travel { to: TravelNode }` from any stop (`travel_stop_of`: within `BEACON_REACH_TILES` of any
+crew beacon, inside a reached outpost, or in the town: the buildings' span plus
+`TOWN_TRAVEL_MARGIN`, at or above the surface) to the town, any beacon or any reached outpost,
+for `travel_cost(rows)` fuel and credits (4 + rows/80 fuel, 10 + rows/20 credits: a 350-row jump
+costs 8 fuel and 27 credits, the whole dig about 170 fuel and 660 credits). The rig arrives at
+rest, its drill and deep-run pressure cleared (`BeaconTravelled` carries both ends for the
+effects). A buried destination refuses the jump.
+
+### Dive charges (the momentum tool)
+
+`BuyDiveCharges` (in town or at an outpost; `DIVE_CHARGE_PACK` 3 for 240 credits, up to
+`MAX_DIVE_CHARGES`). `FireDiveCharge` cuts plain rock and ore straight down under the rig for up
+to `DIVE_CHARGE_ROWS` rows (stopping at hazards, relics, built pieces and bedrock; ore it cuts goes
+into the bay), snaps the rig onto the column and kicks it down at `DIVE_KICK_SPEED`. Until it
+settles (`DIVE_SETTLE_MILLIS` still, or `DIVE_MAX_MILLIS`), the movement step's crash damage is
+off (`Logistics::is_diving`).
+
+### Progression curves to the Heart
+
+- **Deep tiers**: on Descent worlds the six core lines run to `DESCENT_MAX_UPGRADE_LEVEL` (22,
+  `UpgradeKind::max_level_for`, carried in `UpgradeOffer::max_level`), capped by the deepest
+  Descent anyone reached (`core_tier_cap`: 6, 10, 13, 15, 17, 19, 21, 22; a locked tier is
+  `UpgradeLock::Descent(index)`). Tiers up to the classic 15 keep their classic prices; past it
+  each costs `DEEP_TIER_GROWTH_PERCENT` (135) more (`upgrade_cost_for`). The stat curves were
+  already formulas and extend monotonically (tank ~30,900 fuel, hull ~5,100, bay ~1,270 slots at
+  tier 22); the deep tiers have their own names (`upgrade_tier_name`).
+- **Rig systems**: eight new one-tier upgrade lines appended to `UpgradeKind` (shop offers
+  18-25): `DescentPressureHull`, `BioFilter`, `LampII`, `SonarSuite`, `CryoHull`,
+  `GravityAnchor`, `PhaseDrill`, `HeartKey` (`UpgradeKind::rig_system` ->
+  `depth_progression::RigSystem`), stored as bits in `HazardGear::rig_systems`. Classic worlds
+  show them locked (`UpgradeLock::DescentOnly`). On Descent worlds each goes on sale once anyone
+  reaches the last stratum of the Descent before the one it opens
+  (`RigSystem::sold_from_row`, `UpgradeLock::Depth`).
+  `economy::grant_rig_system` fits one without the shop (a later boss reward).
+- **Gates** (`descent_gate`, `missing_gate`): Descent III needs the Pressure Hull, IV the
+  Bio-Filter, V the Cryo Hull, VI the Gravity Anchor, VII the Phase Drill, VIII the Heart Key
+  (every gate above too). The first, stub effect: on Descent worlds a rig in a Descent whose gate
+  it lacks loses `GATE_DAMAGE_PER_SECOND` hull a second, with one `DescentGateBlocked` warning
+  per deeper Descent. Initial effects of the companions, Descent worlds only: the Bio-Filter
+  halves gas damage (`BIO_FILTER_GAS_PERCENT`), the Sonar Suite adds
+  `SONAR_SUITE_SCAN_BONUS_TILES` to the scanner's reach, Lamp II widens the headlamp
+  (`LAMP_II_LIGHT_SCALE`, the renderer's `PlayerPresentation::lamp_scale`).
+- **Price curves**: `descent_value_percent` (what ore found in a Descent sells for, 100 to 230 %;
+  the stratum registry's ores take their values from it) and `descent_price_percent` (outposts,
+  beacons and stations, +60 % a Descent).
+
+### Seams for the other tracks and later waves
+
+- **Generator hooks (F8 / integrator):** `logistics::sites::LogisticsSites` with
+  `place_ancient_lift(column, top_row, bottom_row, station_spacing)` and
+  `place_outpost(column, floor_row, descent, name)`, or the default layout
+  `LogisticsSites::plan(seed, layout, spawn_column)` (one outpost per Descent on one seeded
+  column near town, Descent I's at its middle, the rest 40 rows under their Descent's top, and
+  the builders' cable: an ancient lift from just under the surface to the first outpost and from
+  each outpost down to the next on the column beside them). The V11 generator asks
+  `LogisticsSites::tile_at(position)` for every tile it generates (`Some(kind)` overrides its
+  own; a pure function, so chunks carve identically in any order), and world creation calls
+  `WorldState::install_logistics_sites(&sites, false)`. Worlds whose generator did not carve
+  them (scenarios, tests, scenes) pass `stamp: true`. V1-V10 generation is untouched: their
+  golden digests stand.
+- **Descent layout adapter (F8):** `depth_progression::DescentLayout` (the eight Descents and 41
+  strata as row ranges below the ground line). `PlanLayout` models §14's table;
+  `depth_progression::layout_for(settings)` is the one place that picks it, so the stratum
+  registry replaces it there. Everything here (tier caps, system sale rows, gates, the logistics
+  price percent, `WorldState::descent_of_row`) reads it.
+- **Stratum registry adapter (harness):** `balance::descent::StratumRegistry`; `PlanStrata`
+  derives rock, ore, hazards, heat and content per stratum from the plan. Implement it for the
+  real registry and pass it to `run_descent`.
+- **Gate effects (Waves 8-10):** each gate's crush is a stub: replace `GATE_DAMAGE_PER_SECOND`
+  per Descent with its mechanic (pressure, spores, cold, gravity, alloy) by reading
+  `missing_gate`; bosses grant systems with `grant_rig_system`. The Phase Drill, Gravity Anchor
+  and Cryo Hull have no effect yet beyond their gates (`HazardGear::has_system`).
+- **Events 390-399:** `LiftRideStarted`, `LiftArrived`, `LiftRestored`, `LogisticsPlaced`,
+  `OutpostReached`, `OutpostClaimed`, `OutpostServiced` (`outpost: u32::MAX` for charges bought
+  in town), `BeaconTravelled`, `DiveChargeFired`, `DescentGateBlocked`. Their sounds reuse
+  existing patches (no new audio patch).
+- **Formats:** `PROTOCOL_VERSION` 15 (the new command, section, gear field, upgrade kinds and
+  events) and save format 13 (formats 8-12 load as is; every new field has a serde default).
+  The integrator collapses both with the other tracks'.
+- **Shared-file edits** (all additive): `simulate_tick` (the riding skip, the logistics command
+  branch, the Bio-Filter on gas, `advance_logistics` after `advance_bases`), `movement` (dive
+  landings), `commands` (the rules-aware shop purchase, the Sonar Suite's reach), `bases`
+  (`rescue_home`'s outpost fallback), `pilot` (`can_exit_rig` while riding), the replication
+  coverage tables, and `economy` (the appended upgrade kinds, `UpgradeOffer::max_level`,
+  `*_for(rules)` variants beside the classic functions, which keep their behaviour).
+
+### Game side
+
+One dialog (`ModalScreen::Logistics`, `game/src/shell/logistics.rs`) serves every stop: the use
+button opens it at an outpost, a lift station or one's own beacon (the touch and keyboard use
+prompt says so, `ViewSnapshot::logistics_stop`), and the inventory's last row ("Depth
+logistics") opens it anywhere, so keyboard, gamepad, touch and split-screen seats all reach it
+through inputs they already have (no new action or prompt). Its rows are rebuilt from the world
+every frame with the command each sends and the simulation's own verdict and price
+(`WorldState::check_logistics`). The world draws lift rails, station signs and lamps and the cab
+(glued to its rider by the ride's ticks), outposts (sign, the crew's flag once claimed, counter
+terminal, fuel pump, lamps) and beacons (`rendering/world/logistics.rs`); the shop shows the
+deep tiers and rig systems on Descent worlds. Scenes: `logistics_ancient_lift`,
+`logistics_lift_station`, `logistics_outpost`, `logistics_outpost_counter`,
+`logistics_beacon_travel`, `logistics_built_lift`, `logistics_dive_charge`,
+`shop_descent_systems`.
+
+### The descent harness
+
+`fatherload --balance-report --only descent` (or `cargo test --release -p
+fatherload_simulation descent_report -- --ignored --nocapture`). A 60-90 hour run cannot go
+through the fixed tick in a report and the V11 strata do not exist yet, so the probe is a model
+on real numbers: the Descent ladders, caps and prices, the rig systems, the tank, bay and hull
+curves, the drill's chip formula with the pace between tiles measured through the tick
+(`measure_dig`: a rig drilling a column of hard rock; 0.43 s a tile at 60 Hz), fuel burn, and
+the logistics prices. The strata come through `StratumRegistry` (`PlanStrata` until F8). The bot
+must make its rig rated for the next stratum (drill, hull, radiator, bay, tank, engine, and the
+gate system at a Descent's end), plants a beacon every `BEACON_SPACING_ROWS`, claims outposts
+once rich, sells in town (or at a claimed outpost) and pays each stratum's authored content
+minutes. It reports time per stratum and per Descent against §14, the gaps between new things
+(arrival, creatures, landmark, story beat, upgrade tiers, gates), deaths, and fuel on everyday
+trips against an expedition (outpost to the Descent's bottom and back without beacons).
+
+First result (60 Hz, the plan registry):
+
+| Descent | Ends at (h) | §14 target (h) | Everyday trip fuel (max % of tank) | Expedition fuel (% of tank) | Deaths |
+|---|---|---|---|---|---|
+| I The Crust | 8.0 | 5-8 | 56 | 64 | 0 |
+| II The Old Deep | 16.9 | 13-18 | 17 | 17 | 0 |
+| III The Living Dark | 24.2 | 22-29 | 13 | 9 | 0 |
+| IV The Drowned and Frozen | 32.3 | 31-40 | 11 | 5 | 0 |
+| V The Hollow World | 40.6 | 42-53 | 13 | 4 | 0 |
+| VI The Strange Layers | 52.1 | 53-66 | 11 | 3 | 0 |
+| VII The Ancients | 67.1 | 66-82 | 12 | 2 | 0 |
+| VIII The Heart | 76.5 | 75-90 | 11 | 2 | 1 |
+
+Whole run 76.5 h (target 60-90 h); every gap between new things is at most 40 minutes (longest
+30 min, at the Seal Gate's grind for the Heart Key); gate systems bought at 16.9, 24.2, 32.3,
+40.6, 52.1 and 67.1 h. What it found and changed on the way: the first ore value curve
+(3,200 % of classic at the Heart) let one trip buy a whole Descent's tiers, so it is now
+100-230 %; beacon travel at 25 + rows/4 credits cost more than a Crust haul, so it is now
+10 + rows/20; and on a 1,100-row Crust a stock tank cannot fly a trip below about row 250 without
+a beacon (the bot stalls at Grey Stone without one). Open for Wave 8+: everyday trips are calm,
+but expeditions are not stressful past Descent II (the deep tanks dwarf a Descent's climb), the
+Descents V-VI run a little ahead of §14, and the harness's hazards almost never wreck a rig;
+the stratum registry's real hazards, fuel drains and ores should replace `PlanStrata` and the
+table be measured again.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
