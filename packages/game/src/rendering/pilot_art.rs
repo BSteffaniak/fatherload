@@ -94,7 +94,10 @@ pub struct PilotFrame {
 
 impl PilotFrame {
     /// A plain frame of `pose`: empty hands, normal gravity, standing.
+    /// (Only the desktop screenshot scenes and tests build frames this way, so the browser
+    /// build does not use it.)
     #[must_use]
+    #[cfg_attr(target_os = "emscripten", allow(dead_code))]
     pub const fn new(pose: PilotPose, seconds: f32) -> Self {
         Self {
             pose,
