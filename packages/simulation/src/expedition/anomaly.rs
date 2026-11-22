@@ -203,6 +203,30 @@ impl AnomalyRoom {
         }
     }
 
+    /// Whether `position` is one of the room's two doorways: three rows tall at the floor, in
+    /// both side walls. The linings (brick, crystal, obsidian, building glass) can be harder
+    /// than the rock around them, or not diggable at all, so a rig always walks in through a
+    /// door it reaches by digging the ordinary rock beside the room.
+    #[must_use]
+    pub const fn is_door(&self, position: TilePosition) -> bool {
+        (position.x == self.bounds.min.x || position.x == self.bounds.max.x)
+            && position.y >= self.bounds.max.y - 3
+            && position.y < self.bounds.max.y
+    }
+
+    /// The cache tile the room's reward is: a relic cache only where the stratum's own drill
+    /// opens one, else a treasure cache.
+    #[must_use]
+    pub const fn cache_tile(&self) -> CaveTile {
+        if matches!(self.kind, AnomalyKind::TimeFrozen)
+            && self.stratum.host_band().required_drill_strength() >= CaveTile::RelicCache.hardness()
+        {
+            CaveTile::RelicCache
+        } else {
+            CaveTile::TreasureCache
+        }
+    }
+
     /// The field zone the room's rule fills (its walls and one tile beyond, feathered over two
     /// tiles, so the interior is fully inside).
     #[must_use]
@@ -263,8 +287,11 @@ pub fn room_in_region(
         return None;
     }
     let stratum = layout.stratum_of_row(bounds.center().y);
-    // Not in the Hollow World's open sky, where a room would float.
-    if stratum == Stratum::InnerSky {
+    // Not in the Hollow World's open sky, where a room would float, nor where the stratum's
+    // own drill could not open the room's cache (the topsoil: the first dig stays ordinary).
+    if stratum == Stratum::InnerSky
+        || stratum.host_band().required_drill_strength() < CaveTile::TreasureCache.hardness()
+    {
         return None;
     }
     // Clear of the cable, the landmarks and the expedition's sites.
@@ -378,7 +405,8 @@ pub fn rooms_with(
 ///
 /// Each kind has its own lining: builder brick for the upturned room, crystal for the rotten
 /// one, volcanic glass for the stopped one and glass panes for the mirror room. A glyph marks
-/// the middle of the ceiling, and the caches sit where the rule puts them.
+/// the middle of the ceiling, a doorway opens in each side wall ([`AnomalyRoom::is_door`]),
+/// and the caches sit where the rule puts them.
 #[must_use]
 pub fn room_tile(room: &AnomalyRoom, x: i32, y: i32) -> Option<TileKind> {
     let position = TilePosition { x, y };
@@ -386,13 +414,9 @@ pub fn room_tile(room: &AnomalyRoom, x: i32, y: i32) -> Option<TileKind> {
         return None;
     }
     if room.caches().contains(&Some(position)) {
-        return Some(TileKind::Cave(if room.kind == AnomalyKind::TimeFrozen {
-            CaveTile::RelicCache
-        } else {
-            CaveTile::TreasureCache
-        }));
+        return Some(TileKind::Cave(room.cache_tile()));
     }
-    if room.interior().contains(position) {
+    if room.interior().contains(position) || room.is_door(position) {
         return Some(TileKind::Air);
     }
     let middle = i32::midpoint(room.bounds.min.x, room.bounds.max.x);

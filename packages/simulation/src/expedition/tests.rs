@@ -307,3 +307,47 @@ fn a_journal_reads_as_a_prefix_and_memories_open_with_the_trail() {
     }
     assert_eq!(Stratum::TheHive.descent(), Descent::LivingDark);
 }
+
+#[test]
+fn every_anomaly_room_opens_through_a_door_and_its_caches_open_with_the_local_drill() {
+    use crate::terrain::{is_indestructible, tile_hardness};
+    use crate::worldgen::streamed::generated_tile;
+    let settings = v11(0x00FA_7E45);
+    let rooms = rooms_of(&settings);
+    assert!(!rooms.is_empty());
+    // A sample of rooms per kind (generation is slow in debug).
+    for kind in AnomalyKind::ALL {
+        for room in rooms.iter().filter(|room| room.kind == kind).take(3) {
+            let strength = room.stratum.host_band().required_drill_strength();
+            for (wall, beside) in [
+                (room.bounds.min.x, room.bounds.min.x - 1),
+                (room.bounds.max.x, room.bounds.max.x + 1),
+            ] {
+                for y in room.bounds.max.y - 3..room.bounds.max.y {
+                    let door = TilePosition { x: wall, y };
+                    assert!(room.is_door(door));
+                    assert_eq!(
+                        generated_tile(&settings, door).kind,
+                        TileKind::Air,
+                        "{kind:?} door at {door:?}"
+                    );
+                    // The rock beside the door is ordinary ground, never a sealed wall.
+                    let outside = generated_tile(&settings, TilePosition { x: beside, y }).kind;
+                    assert!(!is_indestructible(outside), "{kind:?}: {outside:?}");
+                }
+            }
+            for cache in room.caches().into_iter().flatten() {
+                let tile = generated_tile(&settings, cache).kind;
+                assert!(
+                    matches!(tile, TileKind::Cave(cave) if cave.is_cache()),
+                    "{kind:?}: {tile:?}"
+                );
+                assert!(
+                    tile_hardness(tile) <= strength,
+                    "{kind:?} cache {tile:?} too hard for {:?}",
+                    room.stratum
+                );
+            }
+        }
+    }
+}

@@ -4730,7 +4730,14 @@ tribes (Bran), the Megacity archive (Ines) and the Heart outpost (Amos's letters
   `GravityFlip` (gravity up, free rotation, a cache on the ceiling, builder-brick walls),
   `PixelRot` (pixelate + palette + scanlines, crystal walls), `TimeFrozen` (time scale 0.15,
   desaturated cold grade, a relic cache floating mid-air, obsidian walls) and `Mirror` (screen
-  and controls mirrored, glass walls, twin caches). The rule is a Wave 7 field:
+  and controls mirrored, glass walls, twin caches). The linings can be harder than the rock
+  around them (obsidian, crystal) or not diggable at all (building glass), so every room has a
+  doorway three rows tall at the floor in both side walls (`AnomalyRoom::is_door`): a rig digs
+  the stratum's ordinary rock to a door and walks in. No room lies in a stratum whose own drill
+  cannot open a treasure cache (the Topsoil), and the stopped room's relic cache falls back to a
+  treasure cache where the stratum's drill cannot open a relic cache (`AnomalyRoom::cache_tile`;
+  review fix, `every_anomaly_room_opens_through_a_door_and_its_caches_open_with_the_local_drill`
+  pins it). The rule is a Wave 7 field:
   `anomaly_field_source` is registered first in `field::STRATUM_FIELD_SOURCES` and answers only
   inside a room's zone (`AnomalyRoom::zone`, feathered over the walls), laying the room's
   departures over the stratum's profile (`anomaly::over`: a pixel-rot room in the Gravity Shear
