@@ -2009,6 +2009,80 @@ mod tests {
         assert!((Ambience::default().open_air() - 1.0).abs() < 1e-6);
     }
 
+    /// Every stratum's own music bed (the Crust's, the Old Deep's and the Living Dark's pieces,
+    /// Wave 8).
+    const STRATUM_BEDS: [Patch; 17] = [
+        Patch::CrustTopsoilLoop,
+        Patch::CrustClayLoop,
+        Patch::CrustWorksLoop,
+        Patch::CrustSlateLoop,
+        Patch::CrustBasaltLoop,
+        Patch::CrystalLoop,
+        Patch::FossilLoop,
+        Patch::CathedralLoop,
+        Patch::HollowLoop,
+        Patch::MachineLoop,
+        Patch::GeodeLoop,
+        Patch::MantleLoop,
+        Patch::FungalLoop,
+        Patch::RootLoop,
+        Patch::HiveLoop,
+        Patch::HeartbeatLoop,
+        Patch::GlowSeaLoop,
+    ];
+
+    #[test]
+    fn every_stratum_of_descents_one_to_three_plays_its_own_piece() {
+        use fatherload_simulation::{
+            SimulationParams,
+            descent::{Descent, Stratum},
+            position::WorldPos,
+            worldgen::{GeneratorVersion, WorldSettings},
+        };
+        // Wave 8 integration: the director plays exactly one bed per stratum, a different
+        // piece in each of the seventeen strata of Descents I-III.
+        let one = PlayerId::new(1);
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V11,
+            ..WorldSettings::new(7)
+        };
+        let base = WorldState::new_game_with_settings(one, &settings, SimulationParams::default());
+        let layout = fatherload_simulation::descent::fields::cached_layout(&settings);
+        let strata: Vec<Stratum> = [Descent::Crust, Descent::OldDeep, Descent::LivingDark]
+            .into_iter()
+            .flat_map(Descent::strata)
+            .collect();
+        assert_eq!(strata.len(), STRATUM_BEDS.len());
+        let mut heard = Vec::new();
+        for stratum in strata {
+            let (top, bottom) = layout.rows(stratum);
+            let mut world = base.clone();
+            world.teleport_rig_to(
+                one,
+                WorldPos::tile_center(-300, i64::from(top + (bottom - top) / 2)),
+            );
+            let seats = [seat(0, one)];
+            let snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
+            let mut director = Director::new(1);
+            let audio = [SeatAudio::default()];
+            let mut playing = BTreeSet::new();
+            for _ in 0..30 {
+                for command in director.update(&frame(&snapshot, &[], &audio)) {
+                    if let MixerCommand::Loop(request) = command
+                        && STRATUM_BEDS.contains(&request.patch)
+                        && request.gain > 0.0
+                    {
+                        playing.insert(request.patch);
+                    }
+                }
+            }
+            assert_eq!(playing.len(), 1, "{stratum:?}: {playing:?}");
+            heard.extend(playing);
+        }
+        let distinct: BTreeSet<Patch> = heard.iter().copied().collect();
+        assert_eq!(distinct.len(), STRATUM_BEDS.len(), "{heard:?}");
+    }
+
     #[test]
     fn every_seat_loop_slot_has_its_own_key_range() {
         assert!((SeatLoop::MindMusic as u32) < SEAT_LOOP_SLOTS);
