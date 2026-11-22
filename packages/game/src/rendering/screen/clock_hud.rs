@@ -49,7 +49,7 @@ pub(super) fn badge_rect(
     (width, height): (i32, i32),
     avoid: &[Rectangle],
 ) -> Rectangle {
-    let mut x = (rect.x + rect.width) as f32 - 16.0 - width as f32;
+    let mut x = rect.x + rect.width - 16.0 - width as f32;
     for _ in 0..avoid.len() {
         let badge = Rectangle::new(x, top as f32, width as f32, height as f32);
         let Some(left) = avoid
@@ -296,6 +296,6 @@ mod placement_tests {
         assert!(placed.x >= view.x && placed.x + placed.width <= view.x + view.width);
         // Buttons below the badge (a portrait phone's cluster) leave it where it was.
         let low = [Rectangle::new(700.0, 300.0, 60.0, 60.0)];
-        assert_eq!(badge_rect(view, 132, size, &low).x, alone.x);
+        assert!((badge_rect(view, 132, size, &low).x - alone.x).abs() < f32::EPSILON);
     }
 }
