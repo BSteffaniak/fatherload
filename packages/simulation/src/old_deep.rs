@@ -903,6 +903,24 @@ pub const LOG_TABLET_FIRST: u8 = 7;
 pub const LOG_TABLETS: u8 = 4;
 pub const LOG_CORE_REVEAL: u8 = 11;
 
+/// The Fathers' expedition log ([`crate::expedition::LOGS`], 1-based) a Fathers' camp of the
+/// Old Deep holds: the story's first log of the camp's stratum (Wave 8 integration), or `None`
+/// for the builder tablets and the core's revelation.
+#[must_use]
+pub fn expedition_log_of_camp(log: u8) -> Option<u8> {
+    if log >= LOG_TABLET_FIRST {
+        return None;
+    }
+    let stratum = *crate::descent::Descent::OldDeep
+        .strata()
+        .collect::<Vec<_>>()
+        .get(usize::from(log - LOG_EXPEDITION_FIRST))?;
+    crate::expedition::LOGS
+        .iter()
+        .position(|entry| entry.stratum == stratum)
+        .and_then(|index| u8::try_from(index + 1).ok())
+}
+
 #[cfg(test)]
 mod tests {
     /// Saves are JSON: every part of the Old Deep's state must survive a JSON round trip (a

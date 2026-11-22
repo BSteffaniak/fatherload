@@ -163,9 +163,30 @@ impl Novelty {
 /// register here, as the field effects' sources do in [`crate::field::STRATUM_FIELD_SOURCES`].
 pub type StoryLogSource = fn(crate::descent::Stratum) -> Vec<&'static str>;
 
-/// Every story log source the probe reads (the Descents' own story beats until the story
-/// track appends its expedition logs).
-pub const STORY_LOG_SOURCES: &[StoryLogSource] = &[descent_story_beats];
+/// Every story log source the probe reads: the Descents' own story beats, and the Fathers'
+/// expedition's logs and echoes in their strata (Wave 8 story, wired by the integration).
+pub const STORY_LOG_SOURCES: &[StoryLogSource] =
+    &[descent_story_beats, expedition_logs, expedition_echoes];
+
+/// The Fathers' expedition logs placed in `stratum` (one canister each, in log order).
+#[must_use]
+pub fn expedition_logs(stratum: crate::descent::Stratum) -> Vec<&'static str> {
+    crate::expedition::LOGS
+        .iter()
+        .filter(|log| log.stratum == stratum)
+        .map(|log| log.title)
+        .collect()
+}
+
+/// The expedition's radio echoes and ghost recordings that play in `stratum`.
+#[must_use]
+pub fn expedition_echoes(stratum: crate::descent::Stratum) -> Vec<&'static str> {
+    crate::expedition::ECHOES
+        .iter()
+        .filter(|echo| echo.stratum == stratum)
+        .map(|echo| echo.title)
+        .collect()
+}
 
 /// Each Descent's story beat, told in its first stratum.
 #[must_use]
@@ -1452,7 +1473,7 @@ pub fn descent_section(run: &DescentRun) -> ReportSection {
     if !systems.is_empty() {
         section
             .notes
-            .push(format!("Gate systems bought: {systems}"));
+            .push(format!("Gate systems won or bought: {systems}"));
     }
     let long: Vec<String> = run
         .strata

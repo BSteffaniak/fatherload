@@ -1159,6 +1159,11 @@ impl WorldState {
     fn read_log(&mut self, player_id: PlayerId, log: u8, output: &mut TickOutput) {
         self.old_deep.logs_read.insert(log);
         output.push_event(GameplayEventKind::DeepLogRead { player_id, log });
+        // A Fathers' camp holds the Fathers' expedition log of its stratum (Wave 8
+        // integration): the story's journal reads it in order, as at the story's own camps.
+        if let Some(number) = old_deep::expedition_log_of_camp(log) {
+            self.reach_expedition_canister(player_id, number, output);
+        }
     }
 
     fn free_bone(&mut self, player_id: PlayerId, target: TilePosition, output: &mut TickOutput) {

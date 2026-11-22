@@ -16,40 +16,11 @@ use super::LocalGame;
 #[must_use]
 pub const fn deep_log(log: u8) -> (&'static str, &'static str) {
     match log {
-        0 => (
-            "Fathers' log I: the singing rock",
-            "Day 31. The crystal sings when we drill it; the whole fault rang for a minute after. \
-             We shone the lamp through a prism and saw stones in the wall that were not there before.",
-        ),
-        1 => (
-            "Fathers' log II: the dry sea",
-            "Day 44. Bones. A sea lay here once, miles under the town. The bad air pools in the \
-             hollows and comes and goes like a tide. Count to ninety between breaths.",
-        ),
-        2 => (
-            "Fathers' log III: the naves",
-            "Day 58. Someone built these halls. A lift shaft runs up the great nave, three valves \
-             rusted shut. Two of us held the jets back while Mara turned the wheels.",
-        ),
-        3 => (
-            "Fathers' log IV: green sickness",
-            "Day 71. The green rock makes us sick: stay short, stay sealed, go up to clear the \
-             blood. Ellis came back changed after he broke the pink thing. Better, he says.",
-        ),
-        4 => (
-            "Fathers' log V: the machines",
-            "Day 85. The machines are awake. They were waiting for something to come down the \
-             cable. Not us, I think.",
-        ),
-        5 => (
-            "Fathers' log VI: falling up",
-            "Day 97. Inside the geodes you fall to the walls. We turned the rig on its side and \
-             landed on the ceiling. The boys laughed for the first time in weeks.",
-        ),
-        6 => (
-            "Fathers' log VII: the bell",
-            "Day 110. The heat comes in storms; dig in and wait. The core is close. It calls in \
-             a voice like a bell. We go on tomorrow.",
+        // The Fathers' camps hold the expedition's own logs (Wave 8 integration): the
+        // journal's card tells them (`expedition_log_of_camp`), so this is only a fallback.
+        0..=6 => (
+            "A Fathers' camp",
+            "A cache of the Fathers' expedition, its canister handed on to the journal.",
         ),
         7 => (
             "Builder tablet: the anchor",
@@ -242,6 +213,11 @@ impl LocalGame {
                             .to_owned(),
                         ));
                     }
+                }
+                GameplayEventKind::DeepLogRead { log, .. }
+                    if fatherload_simulation::old_deep::expedition_log_of_camp(log).is_some() =>
+                {
+                    // A Fathers' camp: the expedition's card tells its log (Wave 8 integration).
                 }
                 GameplayEventKind::DeepLogRead { player_id, log } => {
                     let (title, text) = deep_log(log);

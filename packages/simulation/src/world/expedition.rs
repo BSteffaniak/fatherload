@@ -93,22 +93,34 @@ impl WorldState {
             let Some(site) = sites.iter().find(|site| site.holds(*tile)) else {
                 continue;
             };
-            let number = site.log.saturating_add(1);
-            if number <= self.expedition.found {
-                continue;
+            self.reach_expedition_canister(*player_id, site.log.saturating_add(1), output);
+        }
+    }
+
+    /// `player_id` reached a canister holding log `number` (1-based): it opens if its turn has
+    /// come (and any sealed after it open in turn), or stays sealed until then. The story's own
+    /// camps call it, and so do the strata's caches that hold the same logs (Wave 8
+    /// integration: the Old Deep's expedition camps).
+    pub(super) fn reach_expedition_canister(
+        &mut self,
+        player_id: PlayerId,
+        number: u8,
+        output: &mut TickOutput,
+    ) {
+        if number <= self.expedition.found || usize::from(number) > LOGS.len() {
+            return;
+        }
+        if number == self.expedition.found + 1 {
+            self.read_expedition_log(player_id, number, output);
+            // Canisters reached early open in turn, all keyed off the one just read.
+            while self.expedition.sealed.remove(&(self.expedition.found + 1)) {
+                self.read_expedition_log(player_id, self.expedition.found + 1, output);
             }
-            if number == self.expedition.found + 1 {
-                self.read_expedition_log(*player_id, number, output);
-                // Canisters reached early open in turn, all keyed off the one just read.
-                while self.expedition.sealed.remove(&(self.expedition.found + 1)) {
-                    self.read_expedition_log(*player_id, self.expedition.found + 1, output);
-                }
-            } else if self.expedition.sealed.insert(number) {
-                output.push_event(GameplayEventKind::ExpeditionLogSealed {
-                    player_id: *player_id,
-                    log: number,
-                });
-            }
+        } else if self.expedition.sealed.insert(number) {
+            output.push_event(GameplayEventKind::ExpeditionLogSealed {
+                player_id,
+                log: number,
+            });
         }
     }
 
