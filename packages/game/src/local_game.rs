@@ -539,6 +539,7 @@ impl LocalGame {
         self.announce_points_of_interest(&players);
         self.announce_villages(&players);
         self.announce_moon(&players);
+        self.announce_logistics(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
         self.announce_stories(&players);
@@ -1001,6 +1002,59 @@ impl LocalGame {
             if landed {
                 self.shell.seat_mut(seat).moon_landing = Some(tick);
             }
+        }
+    }
+
+    /// Depth logistics news for each local seat (Part III F10): an outpost reached (it joins
+    /// the travel network), a lift's arrival, and a Descent gate the rig lacks the system for.
+    fn announce_logistics(&mut self, players: &[PlayerId]) {
+        let world = self.runtime.world();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let (player_id, text) = match gameplay.kind {
+                GameplayEventKind::OutpostReached { player_id, outpost } => (
+                    player_id,
+                    world.logistics().outposts.get(&outpost).map_or_else(
+                        || "A deep outpost joins the travel network.".to_owned(),
+                        |found| format!("{} joins the travel network.", found.name),
+                    ),
+                ),
+                GameplayEventKind::LiftArrived { player_id, .. } => (
+                    player_id,
+                    world.player(player_id).map_or_else(
+                        || "The cab stops.".to_owned(),
+                        |rig| {
+                            format!(
+                                "The cab stops at row {}.",
+                                rig.tile_position(fatherload_simulation::TILE_SIZE).y
+                            )
+                        },
+                    ),
+                ),
+                GameplayEventKind::DescentGateBlocked {
+                    player_id,
+                    descent,
+                    system,
+                } => (
+                    player_id,
+                    format!(
+                        "Descent {}: the depths crush the rig. It needs the {}.",
+                        fatherload_simulation::depth_progression::numeral(descent),
+                        system.name()
+                    ),
+                ),
+                _ => continue,
+            };
+            if let Some(seat) = seat_of(player_id) {
+                messages.push((seat, text));
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
         }
     }
 
@@ -1652,6 +1706,7 @@ mod tests {
     mod crew_tests;
     mod garage_tests;
     mod home_tests;
+    mod logistics_tests;
     mod pilot_tests;
     mod quest_tests;
     mod split_seat_tests;

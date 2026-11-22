@@ -204,13 +204,6 @@ fn beacon_travel(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
         let player = seats[0].player;
         let _ = outpost_world(world, player);
-        let outpost = world
-            .logistics()
-            .outposts
-            .keys()
-            .copied()
-            .next()
-            .unwrap_or(0);
         stand(world, player, OUTPOST_COLUMN, OUTPOST_FLOOR - 1);
         let _ = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
         // Beacons down the side tunnel and in the lift's top pocket.
@@ -218,7 +211,6 @@ fn beacon_travel(stage: &mut SceneStage<'_>) {
         command(world, player, LogisticsCommand::PlaceBeacon);
         stand(world, player, OUTPOST_COLUMN - 20, OUTPOST_FLOOR - 1);
         command(world, player, LogisticsCommand::PlaceBeacon);
-        let _ = outpost;
         if let Some(rig) = world.player_mut(player) {
             rig.fuel = rig.fuel_capacity * 0.7;
         }
