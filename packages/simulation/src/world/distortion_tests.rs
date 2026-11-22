@@ -1102,3 +1102,102 @@ fn leashed_glitchlings_and_bitworms_go_home_instead_of_hanging_where_the_leash_c
         assert!(closest < TILE_SIZE * 2.5, "{kind:?} went home: {closest}");
     }
 }
+
+#[test]
+fn a_tumbler_falls_and_rolls_along_whatever_the_floor_is() {
+    let settings = settings();
+    let layout = layout(&settings);
+    let (top, bottom) = layout.rows(Stratum::GravityShear);
+    let region = shear::regions_touching(
+        &settings,
+        &layout,
+        &TileRect {
+            min: TilePosition { x: -900, y: top },
+            max: TilePosition { x: 900, y: bottom },
+        },
+    )
+    .into_iter()
+    .find(|region| region.turn == 90 || region.turn == 270)
+    .expect("a wall hall");
+    let mut world = world_at(60);
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    let centre = region.bounds.center();
+    fill(&mut world, region.bounds.expanded(-3), TileKind::Air);
+    // The rig waits above the hall, out of sight.
+    put_rig(
+        &mut world,
+        TilePosition {
+            x: centre.x,
+            y: region.bounds.min.y - 30,
+        },
+    );
+    let (x, y) = world.frame().tile_center(centre);
+    let tumbler = world.spawn_enemy(EnemyKind::Tumbler, x, y);
+    let _ = ticks(&mut world, 90);
+    let (body, _) = world.enemy_parts(tumbler).expect("tumbler");
+    let (dx, _) = region.down();
+    assert!(
+        (body.x - x) * dx as f32 > TILE_SIZE * 2.0,
+        "it fell sideways toward the turned floor: {} -> {}",
+        x,
+        body.x
+    );
+    assert!(
+        (body.y - y).abs() < TILE_SIZE * 2.0,
+        "and not down the old way"
+    );
+    assert!(!physics::collides(
+        world.terrain(),
+        body.x,
+        body.y,
+        EnemyKind::Tumbler.stats().radius
+    ));
+}
+
+#[test]
+fn a_dead_pixels_pulse_rots_the_view_of_the_rig_it_hits() {
+    let mut world = world_at(60);
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    let settings = settings();
+    let layout = layout(&settings);
+    let row = rot::tier_tops(&layout)[1] + 10;
+    let column = landmarks::outpost_column(&settings) + 70;
+    let room = TileRect::around(TilePosition { x: column, y: row }, 12, 5);
+    fill(&mut world, room.expanded(2), TileKind::Stone);
+    fill(&mut world, room, TileKind::Air);
+    put_rig(
+        &mut world,
+        TilePosition {
+            x: column - 5,
+            y: room.max.y,
+        },
+    );
+    let _ = ticks(&mut world, 30);
+    let (x, y) = world.frame().tile_center(TilePosition {
+        x: column + 5,
+        y: room.max.y - 2,
+    });
+    // Streaming can drop relics into a fresh room: clear it again for a clean line of sight.
+    fill(&mut world, room, TileKind::Air);
+    let _ = world.spawn_enemy(EnemyKind::DeadPixel, x, y);
+    let calm = world.distortion_view_fields(PLAYER, world.fields_for(PLAYER));
+    let mut rotted = false;
+    for _ in 0..60 * 15 {
+        let events = ticks(&mut world, 1);
+        if distortion_events(&events).contains(&DistortionEvent::RotBurst) {
+            rotted = true;
+            break;
+        }
+    }
+    assert!(rotted, "a pulse hit the rig");
+    let view = world.distortion_view_fields(PLAYER, world.fields_for(PLAYER));
+    let pixelate = crate::field::ScreenEffect::Pixelate.index();
+    let glitch = crate::field::ScreenEffect::Glitch.index();
+    assert!(view.screen[pixelate] > calm.screen[pixelate] + 0.3);
+    assert!(view.screen[glitch] > calm.screen[glitch] + 0.3);
+    // It wears off.
+    let _ = ticks(&mut world, 60 * 3);
+    world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
+    let later = world.distortion_view_fields(PLAYER, world.fields_for(PLAYER));
+    assert!(later.screen[glitch] < view.screen[glitch]);
+}
