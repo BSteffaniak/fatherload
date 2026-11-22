@@ -247,7 +247,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 23] = [
+    pub const SHARED: [Self; 24] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -271,6 +271,8 @@ impl SectionKey {
         Self::OldDeep,
         Self::LivingDark,
         Self::Expedition,
+        // The authored Crust (Wave 8 integration: it was left out, so clients never saw it).
+        Self::Crust,
     ];
 }
 

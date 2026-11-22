@@ -438,16 +438,16 @@ pub enum Regrowth {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 pub struct LivingSchedule {
     /// Tiles waiting to grow back, by due tick.
-    #[serde(default)]
+    #[serde(default, with = "crate::pair_list")]
     pub due: BTreeMap<(SimulationTick, TilePosition), Regrowth>,
     /// The due tick of each waiting tile.
-    #[serde(default)]
+    #[serde(default, with = "crate::pair_list")]
     pub waiting: BTreeMap<TilePosition, SimulationTick>,
     /// Tiles that never grow back (cut by a root axe or burnt), and when they were scorched.
-    #[serde(default)]
+    #[serde(default, with = "crate::pair_list")]
     pub scorched: BTreeMap<TilePosition, SimulationTick>,
     /// The tide level last applied to each gullet (keyed by its top-left tile).
-    #[serde(default)]
+    #[serde(default, with = "crate::pair_list")]
     pub tides: BTreeMap<TilePosition, u16>,
     /// The last tide step run (world-time steps since the start).
     #[serde(default)]

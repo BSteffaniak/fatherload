@@ -49,6 +49,8 @@ fn world_at(hz: u32) -> WorldState {
     let mut world =
         WorldState::new_game_with_settings(PLAYER, &settings(), SimulationParams::new(hz));
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
+    // The crew holds the Deep Claim (the Sinkhole beaten), or Descent I's gate crushes it below.
+    world.grant_deep_claim();
     let rig = world.player_mut(PLAYER).expect("rig");
     rig.hazard_gear = crate::protection::HazardGear::MAXED;
     rig.hazard_gear.rig_systems &= !(RigSystem::BioFilter.bit() | RigSystem::LampII.bit());
@@ -255,6 +257,11 @@ fn roots_grow_back_over_a_dug_tunnel_but_never_into_a_rig_and_never_where_axes_o
     fill(&mut world, tunnel.expanded(2), TileKind::Stone);
     world.dig_living_tiles(tunnel);
     assert_eq!(world.living_schedule().waiting.len(), 11);
+    // The waiting roots save with the world (integration fix: tile-keyed maps save as pairs,
+    // since JSON keys must be strings).
+    let json = serde_json::to_string(&world).expect("save");
+    let loaded: WorldState = serde_json::from_str(&json).expect("load");
+    assert_eq!(loaded.living_schedule(), world.living_schedule());
     // A root axe's shaft and its walls never close.
     let probe = TilePosition { x: 45, y: row };
     let regrown = ticks_until(

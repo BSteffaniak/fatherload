@@ -319,6 +319,32 @@ fn mud_bogs_the_drive_down_and_slate_keeps_a_rig_sliding() {
     );
 }
 
+/// The Crust's state survives a JSON save and travels to a client as its shared section
+/// (integration fix: its tile-keyed maps save as pairs, and `SectionKey::Crust` is shared).
+fn saves_and_replicates_the_crust(world: &WorldState) {
+    let json = serde_json::to_string(world).expect("save");
+    let loaded: WorldState = serde_json::from_str(&json).expect("load");
+    assert_eq!(loaded.crust(), world.crust());
+    assert_eq!(
+        loaded.simulation_state_hash(),
+        world.simulation_state_hash()
+    );
+    assert!(crate::SectionKey::SHARED.contains(&crate::SectionKey::Crust));
+    assert!(world.section_keys().contains(&crate::SectionKey::Crust));
+    let payload = world
+        .section(crate::SectionKey::Crust)
+        .expect("the Crust's section");
+    let bytes = postcard::to_stdvec(&payload).expect("encode");
+    let payload = postcard::from_bytes(&bytes).expect("decode");
+    let mut replica = WorldState::new_game_with_settings(
+        PlayerId::new(1),
+        world.world_settings(),
+        SimulationParams::default(),
+    );
+    replica.apply_section(crate::SectionKey::Crust, payload);
+    assert_eq!(replica.crust(), world.crust());
+}
+
 #[test]
 fn a_timber_set_collapses_after_a_creak_when_its_floor_is_undercut() {
     let seed = 25;
@@ -359,6 +385,11 @@ fn a_timber_set_collapses_after_a_creak_when_its_floor_is_undercut() {
                 GameplayEventKind::SupportCollapsed { .. } => collapsed = Some(tick),
                 _ => {}
             }
+        }
+        if creaked == Some(tick) {
+            // A failing set waits in the Crust's state: it saves and reaches every client.
+            assert!(!world.crust().collapses.is_empty());
+            saves_and_replicates_the_crust(&world);
         }
         if collapsed.is_some() {
             break;

@@ -820,10 +820,10 @@ pub const STRONGBOX_CREDITS: u32 = 120;
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CrustState {
     /// Timber sets that are failing: the beam tile and the tick the roof comes down.
-    #[serde(default)]
+    #[serde(default, with = "crate::pair_list")]
     pub collapses: BTreeMap<TilePosition, SimulationTick>,
     /// Slate shelves left hanging: a shelf tile and the tick it slides.
-    #[serde(default)]
+    #[serde(default, with = "crate::pair_list")]
     pub slides: BTreeMap<TilePosition, SimulationTick>,
     /// The Sinkhole collapse in progress.
     #[serde(default)]
