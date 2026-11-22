@@ -949,7 +949,8 @@ world generation changes):
   footfalls, the lunar colony's machinery, a town's bustle (villages, sky towns, the home town)
   and tomb or crypt music, so loops never stack. The far howls of the night's prowl swell as
   night monsters gather near. Dawn and dusk play a short musical theme when the world clock
-  turns. Everything goes through the one mixer and its master volume.
+  turns, unless the moment already has its own music (the relief after a night with monsters,
+  a slept-through night), so pieces never stack. Everything goes through the one mixer and its master volume.
 - Review scenes: `pilot_animation_strip`, `ammo_icons`, `side_tomb_colossus_beside_pilot`, plus
   `night_*`, `sky_enemy_wyverns`, `moon_warden`, `tomb_coop_downed`, `crypt_dodge_roll` and
   `home_stage_frame` (the mule); check them at `--size 1280x720`, `1920x1080` and `844x390`.

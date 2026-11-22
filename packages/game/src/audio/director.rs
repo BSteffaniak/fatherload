@@ -225,6 +225,12 @@ const SEAT_LOOP_SLOTS: u32 = 32;
 const AMBIENCE_FADE_SECONDS: f32 = 1.2;
 /// Seconds between the (cheap but not free) village and colony lookups behind the ambience.
 const AMBIENCE_LOOKUP_SECONDS: f32 = 0.25;
+/// Seconds a clock theme waits before playing, so a music cue of the same moment (whose event
+/// may land a frame or two apart from the clock's turn online) can claim the moment instead.
+const CLOCK_THEME_DELAY_SECONDS: f32 = 0.6;
+/// Seconds after another piece of music (the dawn relief, a skipped night, nightfall) in which
+/// the clock themes stay quiet.
+const CLOCK_THEME_HOLD_SECONDS: f32 = 4.0;
 /// Seconds between a pilot's footfalls on the Moon while walking and while running.
 const MOON_STEP_SECONDS: (f32, f32) = (0.56, 0.4);
 
@@ -319,6 +325,12 @@ pub struct Director {
     was_running: bool,
     /// The world clock's phase last frame (dawn and dusk themes play on the change; Wave 6).
     clock_phase: Option<fatherload_simulation::clock::DayPhase>,
+    /// A clock theme waiting to play: (seconds left, patch). Held back briefly so the music
+    /// event cues of the same moment (the dawn relief after a night with monsters, a slept-through
+    /// night) can claim it instead of two pieces stacking.
+    pending_theme: Option<(f32, Patch)>,
+    /// Seconds left in which another piece of music owns the moment and clock themes stay quiet.
+    music_hold: f32,
 }
 
 impl Director {
@@ -334,6 +346,8 @@ impl Director {
             pending_toast: None,
             was_running: false,
             clock_phase: None,
+            pending_theme: None,
+            music_hold: 0.0,
         }
     }
 
@@ -355,7 +369,7 @@ impl Director {
                 self.seat_sounds(frame, listener, &mut live);
             }
             self.fuse_ticks(frame, &listeners);
-            self.clock_themes(frame.snapshot, &listeners);
+            self.clock_themes(frame, &listeners);
             for key in self.live_loops.difference(&live) {
                 // Fade loops nobody asked for this frame (the patch is ignored for a fade).
                 self.commands.push(MixerCommand::Loop(LoopRequest {
@@ -374,6 +388,8 @@ impl Director {
             }
             self.live_loops.clear();
             self.clock_phase = None;
+            self.pending_theme = None;
+            self.music_hold = 0.0;
             for seat in &mut self.seats {
                 seat.initialized = false;
                 seat.throttle = 0.0;
@@ -1057,7 +1073,10 @@ impl Director {
             let surface = snapshot.terrain.surface_row(tile.x);
             let home_town =
                 (first..=last).contains(&tile.x) && (surface - 14..=surface + 2).contains(&tile.y);
-            let town = home_town || village::village_at(settings, tile).is_some();
+            // Villages on the surface and sky towns above it; an underground village's hall is
+            // a cave (no birds or carts down there), so it keeps the cave's beds.
+            let town = home_town
+                || (tile.y <= surface + 2 && village::village_at(settings, tile).is_some());
             let colony = moon::sheltered_at(settings, listener.x, listener.y)
                 && worldgen::moon::layout(settings)
                     .is_some_and(|layout| layout.colony.covers(tile.x));
@@ -1160,22 +1179,45 @@ impl Director {
     }
 
     /// The world clock's dawn and dusk themes (Wave 6): a short piece of music when the day
-    /// turns, heard by seats out in the open (not in a tomb or out in vacuum).
-    fn clock_themes(&mut self, snapshot: &RenderSnapshot<'_>, listeners: &[Listener]) {
+    /// turns, heard by seats out in the open (not in a tomb or out in vacuum). The dawn after a
+    /// night with monsters already has its own music (the relief), as does a night slept
+    /// through: those take the moment and the theme stays quiet rather than stacking on them.
+    fn clock_themes(&mut self, frame: &AudioFrame<'_, '_>, listeners: &[Listener]) {
         use fatherload_simulation::clock::DayPhase;
+        let snapshot = frame.snapshot;
+        let dt = frame.delta_seconds.max(0.0);
+        if frame.cues.iter().any(|cue| {
+            matches!(
+                cue.cue,
+                SoundCue::DawnRelief | SoundCue::NightSkipped | SoundCue::NightFalls
+            )
+        }) {
+            self.music_hold = CLOCK_THEME_HOLD_SECONDS;
+            self.pending_theme = None;
+        }
+        self.music_hold = (self.music_hold - dt).max(0.0);
         let phase = snapshot.clock.phase();
         let previous = self.clock_phase.replace(phase);
-        let Some(previous) = previous else {
+        if let Some(previous) = previous
+            && previous != phase
+        {
+            self.pending_theme = match phase {
+                DayPhase::Dawn => Some((CLOCK_THEME_DELAY_SECONDS, Patch::DawnTheme)),
+                DayPhase::Dusk => Some((CLOCK_THEME_DELAY_SECONDS, Patch::DuskTheme)),
+                DayPhase::Day | DayPhase::Night => None,
+            };
+        }
+        if self.music_hold > 0.0 {
+            self.pending_theme = None;
+        }
+        let Some((left, patch)) = self.pending_theme else {
             return;
         };
-        if previous == phase {
+        if left > dt {
+            self.pending_theme = Some((left - dt, patch));
             return;
         }
-        let patch = match phase {
-            DayPhase::Dawn => Patch::DawnTheme,
-            DayPhase::Dusk => Patch::DuskTheme,
-            DayPhase::Day | DayPhase::Night => return,
-        };
+        self.pending_theme = None;
         let outdoors = listeners.iter().any(|listener| {
             !listener.vacuum && snapshot.tombs.run_of(listener.player_id).is_none()
         });
@@ -1565,6 +1607,30 @@ mod tests {
             .expect("the phase comes round in a day")
     }
 
+    /// The clock themes `director` plays while the snapshot's clock walks through `phases`,
+    /// one second of frames per phase, with `cues` arriving on the first frame of each phase.
+    fn clock_themes_through(
+        director: &mut Director,
+        snapshot: &mut RenderSnapshot<'_>,
+        phases: &[(fatherload_simulation::clock::DayPhase, &[PlacedCue])],
+    ) -> Vec<Patch> {
+        let audio = [SeatAudio::default()];
+        let mut themes = Vec::new();
+        for &(phase, cues) in phases {
+            snapshot.clock = clock_in(phase);
+            for step in 0..60 {
+                let cues = if step == 0 { cues } else { &[] };
+                themes.extend(
+                    plays(director.update(&frame(snapshot, cues, &audio)))
+                        .into_iter()
+                        .map(|request| request.patch)
+                        .filter(|patch| matches!(patch, Patch::DawnTheme | Patch::DuskTheme)),
+                );
+            }
+        }
+        themes
+    }
+
     #[test]
     fn dusk_and_dawn_play_their_themes_once_when_the_day_turns() {
         use fatherload_simulation::clock::DayPhase;
@@ -1573,25 +1639,46 @@ mod tests {
         let seats = [seat(0, one)];
         let mut snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
         let mut director = Director::new(1);
-        let audio = [SeatAudio::default()];
-        let mut themes = Vec::new();
-        for phase in [
-            DayPhase::Day,
-            DayPhase::Day,
-            DayPhase::Dusk,
-            DayPhase::Dusk,
-            DayPhase::Night,
-            DayPhase::Dawn,
-        ] {
-            snapshot.clock = clock_in(phase);
-            themes.extend(
-                plays(director.update(&frame(&snapshot, &[], &audio)))
-                    .into_iter()
-                    .map(|request| request.patch)
-                    .filter(|patch| matches!(patch, Patch::DawnTheme | Patch::DuskTheme)),
-            );
-        }
+        let themes = clock_themes_through(
+            &mut director,
+            &mut snapshot,
+            &[
+                (DayPhase::Day, &[]),
+                (DayPhase::Day, &[]),
+                (DayPhase::Dusk, &[]),
+                (DayPhase::Dusk, &[]),
+                (DayPhase::Night, &[]),
+                (DayPhase::Dawn, &[]),
+            ],
+        );
         assert_eq!(themes, vec![Patch::DuskTheme, Patch::DawnTheme]);
+    }
+
+    #[test]
+    fn the_dawn_theme_yields_to_the_relief_after_a_night_with_monsters() {
+        use fatherload_simulation::clock::DayPhase;
+        let one = PlayerId::new(1);
+        let world = WorldState::new_game(one);
+        let seats = [seat(0, one)];
+        let mut snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
+        let relief = [PlacedCue::interface(SoundCue::DawnRelief)];
+        let skipped = [PlacedCue::interface(SoundCue::NightSkipped)];
+        let mut director = Director::new(1);
+        let themes = clock_themes_through(
+            &mut director,
+            &mut snapshot,
+            &[
+                (DayPhase::Night, &[]),
+                (DayPhase::Dawn, &relief),
+                (DayPhase::Day, &[]),
+                (DayPhase::Night, &[]),
+                (DayPhase::Dawn, &skipped),
+            ],
+        );
+        assert!(
+            themes.is_empty(),
+            "stacked on the night's own music: {themes:?}"
+        );
     }
 
     #[test]
