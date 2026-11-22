@@ -738,6 +738,12 @@ pub enum SoundCue {
     DeepLog,
     /// A fossil bone crumbling.
     BoneCrumble,
+    // The Living Dark (Wave 8).
+    SporePuff,
+    RootCreak,
+    FleshSquelch,
+    HiveChime,
+    MindRoar,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

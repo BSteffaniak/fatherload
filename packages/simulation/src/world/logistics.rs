@@ -92,6 +92,8 @@ pub enum LogisticsRefusal {
         stratum: crate::descent::Stratum,
         need: u32,
     },
+    /// A Living Dark command's own refusal (Wave 8).
+    LivingDark(crate::living_dark::LivingDarkRefusal),
 }
 
 impl LogisticsRefusal {
@@ -142,6 +144,7 @@ impl LogisticsRefusal {
                 stratum.def().layer_resource.name,
                 stratum.name()
             ),
+            Self::LivingDark(refusal) => refusal.message(),
         }
     }
 }
@@ -277,7 +280,7 @@ impl WorldState {
             .map_or(0, |player| player.credits)
     }
 
-    fn afford(&self, player_id: PlayerId, credits: u32) -> Result<(), LogisticsRefusal> {
+    pub(super) fn afford(&self, player_id: PlayerId, credits: u32) -> Result<(), LogisticsRefusal> {
         if self.credits_of(player_id) < credits {
             return Err(LogisticsRefusal::NotEnoughCredits { need: credits });
         }
@@ -285,7 +288,7 @@ impl WorldState {
     }
 
     /// Whether a rig on `tile` is in the town for travel and shopping.
-    fn in_town(&self, tile: TilePosition) -> bool {
+    pub(super) fn in_town(&self, tile: TilePosition) -> bool {
         let (first, last) = crate::surface::town_span();
         let ground = self.terrain.surface_row(tile.x);
         (first - TOWN_TRAVEL_MARGIN..=last + TOWN_TRAVEL_MARGIN).contains(&tile.x)
@@ -591,6 +594,13 @@ impl WorldState {
                 }
                 self.check_dive_purchase(player_id)
             }
+            LogisticsCommand::LivingDark(action) => self
+                .check_living_dark(player_id, tile, action)
+                .map_err(LogisticsRefusal::LivingDark)
+                .and_then(|credits| {
+                    self.afford(player_id, credits)?;
+                    Ok(LogisticsQuote::credits(credits))
+                }),
             LogisticsCommand::FireDiveCharge => {
                 if self.logistics.dive_charges_of(player_id) == 0 {
                     return Err(LogisticsRefusal::NoCharges);
@@ -1062,6 +1072,9 @@ impl WorldState {
                     outpost: u32::MAX,
                     service: OutpostService::BuyDiveCharges,
                 });
+            }
+            LogisticsCommand::LivingDark(action) => {
+                self.apply_living_dark(player_id, tile, action, output);
             }
             LogisticsCommand::FireDiveCharge => {
                 let cut = self.dive_cut(tile);

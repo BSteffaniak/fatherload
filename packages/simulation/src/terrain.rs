@@ -604,6 +604,9 @@ pub struct Terrain {
     digest: u64,
     /// Tile writes recorded while a simulation tick runs (never serialized or hashed).
     journal: Option<Vec<TileChange>>,
+    /// The kind each journalled write replaced, in journal order (Wave 8: the Living Dark
+    /// tells a mined root or a burst spore pod from any other opening; never serialized).
+    journal_before: Vec<TileKind>,
     /// The local pixel space every gameplay position is measured in (F7, see
     /// [`crate::position`]): local pixel `(x, y)` is in tile [`Frame::tile_at`]. Saved with
     /// the terrain; owned by the world (it moves only in `WorldState::recentre_frame`).
@@ -732,6 +735,7 @@ impl Terrain {
             storage: Storage::Streamed(StreamedTiles::default()),
             digest: 0,
             journal: None,
+            journal_before: Vec::new(),
             frame: Frame::for_generator(settings.generator),
             column_limit_override: None,
         }
@@ -766,6 +770,7 @@ impl Terrain {
             }),
             digest,
             journal: None,
+            journal_before: Vec::new(),
             frame: Frame::for_generator(settings.generator),
             column_limit_override: None,
         }
@@ -1210,6 +1215,9 @@ impl Terrain {
                     .digest
                     .wrapping_sub(tile_digest(index, old))
                     .wrapping_add(tile_digest(index, tile));
+                if self.journal.is_some() {
+                    self.journal_before.push(old.kind);
+                }
             }
             Slot::Streamed(chunk, local) => {
                 let settings = self.settings;
@@ -1225,6 +1233,9 @@ impl Terrain {
                 });
                 let generated = loaded.base.tile(local);
                 let old = loaded.tile(local);
+                if self.journal.is_some() {
+                    self.journal_before.push(old.kind);
+                }
                 if loaded.tiles.is_none() {
                     loaded.tiles = Some(Arc::new(loaded.base.tiles().to_vec()));
                 }
@@ -1258,6 +1269,14 @@ impl Terrain {
     /// Starts recording every tile write (see [`Self::finish_journal`]).
     pub(crate) fn start_journal(&mut self) {
         self.journal = Some(Vec::new());
+        self.journal_before.clear();
+    }
+
+    /// The tile writes recorded so far this tick with the kind each one replaced.
+    pub(crate) fn journal_with_before(&self) -> impl Iterator<Item = (&TileChange, TileKind)> {
+        self.journal()
+            .iter()
+            .zip(self.journal_before.iter().copied())
     }
 
     /// The tile writes recorded so far this tick (empty when not recording).
@@ -1267,6 +1286,7 @@ impl Terrain {
 
     /// Stops recording and returns the tile writes since [`Self::start_journal`], in order.
     pub(crate) fn finish_journal(&mut self) -> Vec<TileChange> {
+        self.journal_before.clear();
         self.journal.take().unwrap_or_default()
     }
 

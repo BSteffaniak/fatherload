@@ -191,6 +191,46 @@ pub enum EnemyKind {
     VoidJelly,
     /// Mantle Storm Zone: a magma salamander that spits fire from cave floors.
     MagmaSalamander,
+    // --- The Living Dark (Wave 8, Descent III, `crate::living_dark`), appended -------------
+    /// Fungal Forest: a waddling puffball that lobs spore balls; each bursts into a blinding,
+    /// colour-shifting spore cloud.
+    SporePuffer,
+    /// Fungal Forest: a crab under a springy mushroom cap: it charges from the side, and a rig
+    /// landing on its cap bounces off it.
+    CapCrawler,
+    /// Fungal Forest: a glowing gnat swarm.
+    GlowGnat,
+    /// Root Labyrinth: a knot of roots that lies still in a tunnel, then snaps shut.
+    RootSnapper,
+    /// Root Labyrinth: a beetle that bores through roots and rock (it eats living root).
+    BarkBeetle,
+    /// Root Labyrinth: a drifting seed-wisp that flings thorns.
+    ThornWisp,
+    /// The Hive: a soldier of the Swarm, the hostile faction; it hunts in packs.
+    HiveSoldier,
+    /// The Hive: a worker of the Amber Court, the friendly faction; it turns on rigs only when
+    /// the Court does.
+    HiveDrone,
+    /// The Hive: a Swarm lancer that spits acid from the comb ledges.
+    AcidLancer,
+    /// The Hive's mini-boss: the Swarm's brood matriarch, breeding soldiers in her gallery.
+    SwarmMatriarch,
+    /// Flesh Caverns: a worm that tunnels through living flesh and lunges.
+    MawWorm,
+    /// Flesh Caverns: a polyp on the cavern wall that buds leechlings.
+    BilePolyp,
+    /// Flesh Caverns: a small swimming leech budded by polyps.
+    Leechling,
+    /// Glow Sea: a skittish fish whose light is often the only light there is.
+    LureFish,
+    /// Glow Sea: a drifting jelly that pulses with light and stings on touch.
+    GlowJelly,
+    /// Glow Sea: a dark predator dangling a light as bait; it lunges at whatever comes close.
+    Angler,
+    /// The Descent III gate boss: the Mycelial Mind (spore storms, possessed creatures).
+    MycelialMind,
+    /// A nerve node of the Mycelial Mind: while any lives, the Mind cannot be hurt.
+    MindNode,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -273,6 +313,12 @@ pub enum ShotKind {
     CryptArrow,
     /// A crypt trap's rolling boulder: it crushes what it meets and only a wall stops it.
     Boulder,
+    /// A spore puffer's lobbed spore ball: it bursts into a spore cloud where it lands (Wave 8).
+    Spore,
+    /// A thorn wisp's thorn: fast and nearly straight.
+    Thorn,
+    /// The Mycelial Mind's slow spore orb: it bursts into a spore cloud.
+    MindSpore,
 }
 
 impl ShotKind {
@@ -289,6 +335,9 @@ impl ShotKind {
             Self::Rubble => 250.0,
             Self::Hex | Self::CryptHex | Self::Boulder => 150.0,
             Self::CryptArrow => 380.0,
+            Self::Spore => 210.0,
+            Self::Thorn => 340.0,
+            Self::MindSpore => 120.0,
         }
     }
 
@@ -300,7 +349,10 @@ impl ShotKind {
             Self::Cannonball => 160.0,
             Self::Arrow => 90.0,
             Self::Rubble => 520.0,
-            Self::Fireball
+            Self::Spore => 300.0,
+            Self::Thorn => 40.0,
+            Self::MindSpore
+            | Self::Fireball
             | Self::Bolt
             | Self::Wispfire
             | Self::Hex
@@ -318,8 +370,10 @@ impl ShotKind {
             Self::Fireball | Self::Cannonball | Self::Hex => 6.0,
             Self::Wispfire | Self::CryptHex => 5.0,
             Self::Rubble => 7.0,
-            Self::CryptArrow => 3.0,
+            Self::CryptArrow | Self::Thorn => 3.0,
             Self::Boulder => 12.0,
+            Self::Spore => 5.0,
+            Self::MindSpore => 7.0,
         }
     }
 
@@ -335,6 +389,9 @@ impl ShotKind {
             Self::Wispfire | Self::Hex | Self::Arrow => 6.0,
             Self::CryptArrow => 11.0,
             Self::Boulder => 24.0,
+            Self::Spore => 3.0,
+            Self::Thorn => 6.5,
+            Self::MindSpore => 9.0,
         }
     }
 
@@ -349,6 +406,8 @@ impl ShotKind {
             Self::Hex => 4_500,
             Self::CryptHex => 3_200,
             Self::Boulder => 7_000,
+            Self::Spore | Self::Thorn => 2_600,
+            Self::MindSpore => 5_000,
         }
     }
 
@@ -357,6 +416,12 @@ impl ShotKind {
     #[must_use]
     pub const fn is_crypt(self) -> bool {
         matches!(self, Self::CryptHex | Self::CryptArrow | Self::Boulder)
+    }
+
+    /// Whether the shot bursts into a spore cloud where it lands (Wave 8, the Living Dark).
+    #[must_use]
+    pub const fn bursts_into_spores(self) -> bool {
+        matches!(self, Self::Spore | Self::MindSpore)
     }
 }
 
@@ -508,7 +573,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 56] = [
+    pub const ALL: [Self; 74] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -565,19 +630,77 @@ impl EnemyKind {
         Self::PistonWarden,
         Self::VoidJelly,
         Self::MagmaSalamander,
+        Self::SporePuffer,
+        Self::CapCrawler,
+        Self::GlowGnat,
+        Self::RootSnapper,
+        Self::BarkBeetle,
+        Self::ThornWisp,
+        Self::HiveSoldier,
+        Self::HiveDrone,
+        Self::AcidLancer,
+        Self::SwarmMatriarch,
+        Self::MawWorm,
+        Self::BilePolyp,
+        Self::Leechling,
+        Self::LureFish,
+        Self::GlowJelly,
+        Self::Angler,
+        Self::MycelialMind,
+        Self::MindNode,
     ];
 
-    /// Whether the creature goes into fluid (Part III F9). No creature does yet: every one
-    /// turns back at a fluid's edge (`WorldState::keep_out_of_fluid`). Descent IV's swimmers
-    /// (reef sharks, eel-dragons, anglerfish) answer `true` here.
+    /// Whether the creature goes into fluid (Part III F9). Most turn back at a fluid's edge
+    /// (`WorldState::keep_out_of_fluid`); the Glow Sea's fish and jellies and the Flesh
+    /// Caverns' leeches swim (Wave 8). Descent IV's swimmers answer `true` here too.
     #[must_use]
-    #[allow(
-        clippy::unused_self,
-        clippy::missing_const_for_fn,
-        reason = "the per-kind seam for the swimming creatures of later waves"
-    )]
-    pub fn can_swim(self) -> bool {
-        false
+    pub const fn can_swim(self) -> bool {
+        matches!(
+            self,
+            Self::LureFish | Self::Angler | Self::Leechling | Self::GlowJelly
+        )
+    }
+
+    /// Whether this is one of the Living Dark's creatures (Wave 8, Descent III).
+    #[must_use]
+    pub const fn is_living_dark(self) -> bool {
+        matches!(
+            self,
+            Self::SporePuffer
+                | Self::CapCrawler
+                | Self::GlowGnat
+                | Self::RootSnapper
+                | Self::BarkBeetle
+                | Self::ThornWisp
+                | Self::HiveSoldier
+                | Self::HiveDrone
+                | Self::AcidLancer
+                | Self::SwarmMatriarch
+                | Self::MawWorm
+                | Self::BilePolyp
+                | Self::Leechling
+                | Self::LureFish
+                | Self::GlowJelly
+                | Self::Angler
+                | Self::MycelialMind
+                | Self::MindNode
+        )
+    }
+
+    /// Light the creature gives off, in tiles (presentation: in the Glow Sea it is the only
+    /// light there is; 0 for none).
+    #[must_use]
+    pub const fn light_tiles(self) -> f32 {
+        match self {
+            Self::LureFish => 2.6,
+            Self::GlowJelly => 3.4,
+            Self::Angler => 3.0,
+            Self::GlowGnat => 1.4,
+            Self::MycelialMind => 6.0,
+            Self::MindNode => 2.2,
+            Self::SporePuffer => 0.9,
+            _ => 0.0,
+        }
     }
 
     /// The kind's stats.
@@ -1498,6 +1621,284 @@ impl EnemyKind {
                     AttackStyle::Ranged(ShotKind::Fireball, 1),
                 )
             },
+            // --- The Living Dark (Wave 8) ------------------------------------------------
+            Self::SporePuffer => EnemyStats {
+                radius: 9.0,
+                health: 55.0,
+                speed: 34.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 18.0,
+                contact_damage: 4.0,
+                windup_millis: 900,
+                cooldown_millis: 3_400,
+                attack_range_tiles: 8.0,
+                ..stats(
+                    "Spore Puffer",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Spore, 1),
+                )
+            },
+            Self::CapCrawler => EnemyStats {
+                radius: 10.0,
+                health: 80.0,
+                speed: 70.0,
+                dash_speed: 230.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 22.0,
+                contact_damage: 11.0,
+                windup_millis: 600,
+                cooldown_millis: 2_300,
+                attack_range_tiles: 3.5,
+                knockback: 200.0,
+                ..stats("Cap Crawler", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::GlowGnat => EnemyStats {
+                radius: 5.0,
+                health: 12.0,
+                speed: 140.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 28.0,
+                contact_damage: 4.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 80.0,
+                ..stats("Glow Gnats", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::RootSnapper => EnemyStats {
+                radius: 10.0,
+                health: 110.0,
+                speed: 22.0,
+                dash_speed: 300.0,
+                sight_tiles: 3.5,
+                hearing_tiles: 3.0,
+                leash_tiles: 6.0,
+                contact_damage: 16.0,
+                windup_millis: 350,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 2.8,
+                knockback: 220.0,
+                ..stats("Root Snapper", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::BarkBeetle => EnemyStats {
+                radius: 8.0,
+                health: 60.0,
+                speed: 64.0,
+                dash_speed: 240.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 9.0,
+                leash_tiles: 26.0,
+                contact_damage: 9.0,
+                windup_millis: 800,
+                cooldown_millis: 2_800,
+                attack_range_tiles: 3.5,
+                knockback: 170.0,
+                ..stats("Bark Beetle", Creature, Burrowing, AttackStyle::Lunge)
+            },
+            Self::ThornWisp => EnemyStats {
+                radius: 7.0,
+                health: 34.0,
+                speed: 80.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 6.0,
+                contact_damage: 3.0,
+                windup_millis: 650,
+                cooldown_millis: 2_100,
+                attack_range_tiles: 10.0,
+                ..stats(
+                    "Thorn Wisp",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::Thorn, 3),
+                )
+            },
+            Self::HiveSoldier => EnemyStats {
+                radius: 6.0,
+                health: 22.0,
+                speed: 165.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 30.0,
+                contact_damage: 6.0,
+                windup_millis: 0,
+                cooldown_millis: 1_100,
+                attack_range_tiles: 0.6,
+                knockback: 110.0,
+                ..stats("Swarm Soldier", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::HiveDrone => EnemyStats {
+                radius: 7.0,
+                health: 40.0,
+                speed: 90.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 20.0,
+                contact_damage: 7.0,
+                windup_millis: 0,
+                cooldown_millis: 1_300,
+                attack_range_tiles: 0.6,
+                ..stats("Court Drone", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::AcidLancer => EnemyStats {
+                radius: 9.0,
+                health: 60.0,
+                speed: 50.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 7.0,
+                contact_damage: 5.0,
+                windup_millis: 750,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 10.0,
+                ..stats(
+                    "Swarm Lancer",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Acid, 2),
+                )
+            },
+            Self::SwarmMatriarch => EnemyStats {
+                radius: 16.0,
+                health: 520.0,
+                speed: 30.0,
+                sight_tiles: 15.0,
+                hearing_tiles: 15.0,
+                leash_tiles: 10.0,
+                contact_damage: 24.0,
+                windup_millis: 1_000,
+                cooldown_millis: 4_200,
+                attack_range_tiles: 15.0,
+                knockback: 240.0,
+                elite: true,
+                ..stats(
+                    "The Brood Matriarch",
+                    Creature,
+                    Walking,
+                    AttackStyle::Spawner,
+                )
+            },
+            Self::MawWorm => EnemyStats {
+                radius: 9.0,
+                health: 75.0,
+                speed: 76.0,
+                dash_speed: 280.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 11.0,
+                leash_tiles: 30.0,
+                contact_damage: 12.0,
+                windup_millis: 700,
+                cooldown_millis: 2_700,
+                attack_range_tiles: 4.0,
+                knockback: 190.0,
+                ..stats("Maw Worm", Creature, Burrowing, AttackStyle::Lunge)
+            },
+            Self::BilePolyp => EnemyStats {
+                radius: 12.0,
+                health: 140.0,
+                speed: 0.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 12.0,
+                leash_tiles: 0.0,
+                contact_damage: 6.0,
+                windup_millis: 900,
+                cooldown_millis: 5_000,
+                attack_range_tiles: 12.0,
+                ..stats("Bile Polyp", Creature, Stationary, AttackStyle::Spawner)
+            },
+            Self::Leechling => EnemyStats {
+                radius: 5.0,
+                health: 14.0,
+                speed: 125.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 24.0,
+                contact_damage: 5.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 70.0,
+                ..stats("Leechling", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::LureFish => EnemyStats {
+                radius: 6.0,
+                health: 16.0,
+                speed: 58.0,
+                sight_tiles: 0.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 16.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 0.0,
+                knockback: 0.0,
+                ..stats("Lure Fish", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::GlowJelly => EnemyStats {
+                radius: 8.0,
+                health: 30.0,
+                speed: 26.0,
+                sight_tiles: 5.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 12.0,
+                contact_damage: 8.0,
+                windup_millis: 0,
+                cooldown_millis: 1_800,
+                attack_range_tiles: 0.6,
+                knockback: 160.0,
+                ..stats("Glow Jelly", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::Angler => EnemyStats {
+                radius: 11.0,
+                health: 150.0,
+                speed: 40.0,
+                dash_speed: 330.0,
+                sight_tiles: 4.0,
+                hearing_tiles: 2.5,
+                leash_tiles: 10.0,
+                contact_damage: 22.0,
+                windup_millis: 420,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 4.5,
+                knockback: 240.0,
+                ..stats("Angler", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::MycelialMind => EnemyStats {
+                radius: 22.0,
+                health: 1_500.0,
+                speed: 0.0,
+                sight_tiles: 20.0,
+                hearing_tiles: 20.0,
+                leash_tiles: 0.0,
+                contact_damage: 18.0,
+                windup_millis: 1_100,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 18.0,
+                knockback: 260.0,
+                elite: true,
+                ..stats(
+                    "The Mycelial Mind",
+                    Creature,
+                    Stationary,
+                    AttackStyle::Ranged(ShotKind::MindSpore, 3),
+                )
+            },
+            Self::MindNode => EnemyStats {
+                radius: 9.0,
+                health: 160.0,
+                speed: 0.0,
+                sight_tiles: 0.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 10_000,
+                attack_range_tiles: 0.0,
+                knockback: 0.0,
+                ..stats("Nerve Node", Creature, Stationary, AttackStyle::Contact)
+            },
         }
     }
 
@@ -1641,6 +2042,25 @@ impl EnemyKind {
             Self::PistonWarden => (14.0, 15.0),
             Self::VoidJelly => (11.0, 13.0),
             Self::MagmaSalamander => (18.0, 8.0),
+            // The Living Dark (Wave 8), sized to their art like the rest.
+            Self::SporePuffer => (12.0, 11.0),
+            Self::CapCrawler => (15.0, 11.0),
+            Self::GlowGnat => (9.0, 7.0),
+            Self::RootSnapper => (14.0, 11.0),
+            Self::BarkBeetle => (12.0, 8.0),
+            Self::ThornWisp => (9.0, 9.0),
+            Self::HiveSoldier => (10.0, 7.0),
+            Self::HiveDrone => (11.0, 8.0),
+            Self::AcidLancer => (12.0, 12.0),
+            Self::SwarmMatriarch => (26.0, 18.0),
+            Self::MawWorm => (13.0, 9.0),
+            Self::BilePolyp => (14.0, 13.0),
+            Self::Leechling => (8.0, 5.0),
+            Self::LureFish => (10.0, 6.0),
+            Self::GlowJelly => (10.0, 11.0),
+            Self::Angler => (17.0, 12.0),
+            Self::MycelialMind => (34.0, 28.0),
+            Self::MindNode => (10.0, 11.0),
         }
     }
 
@@ -1731,6 +2151,22 @@ impl EnemyKind {
             (Self::ShelfCrab, DamageKind::Explosive) => 1.5,
             (Self::TubeCrawler | Self::CinderMoth, DamageKind::Fire) => 0.0,
             (Self::TimberBeetle | Self::PotterWasp | Self::MineBat, DamageKind::Fire) => 1.5,
+            // The Living Dark (Wave 8): fungus and root burn, caps and shells turn bullets,
+            // the Mind's nodes and the polyps fold to blasts.
+            (
+                Self::SporePuffer
+                | Self::GlowGnat
+                | Self::RootSnapper
+                | Self::BarkBeetle
+                | Self::ThornWisp
+                | Self::MycelialMind
+                | Self::MindNode,
+                DamageKind::Fire,
+            ) => 1.8,
+            (Self::CapCrawler | Self::RootSnapper, DamageKind::Kinetic) => 0.45,
+            (Self::SwarmMatriarch | Self::Angler, DamageKind::Kinetic) => 0.7,
+            (Self::BilePolyp | Self::MindNode | Self::SwarmMatriarch, DamageKind::Explosive) => 1.5,
+            (Self::HiveSoldier | Self::Leechling, DamageKind::Fire) => 1.5,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -1842,7 +2278,13 @@ impl EnemyState {
         let health = (stats.health * tier_scale(tier) * health_scale)
             .round()
             .max(1.0);
-        let dormant = matches!(kind, EnemyKind::RockMimic | EnemyKind::AnimatedStatue);
+        let dormant = matches!(
+            kind,
+            EnemyKind::RockMimic
+                | EnemyKind::AnimatedStatue
+                | EnemyKind::RootSnapper
+                | EnemyKind::Angler
+        );
         Self {
             kind,
             tier,
@@ -2579,6 +3021,60 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
                 }),
                 1,
             );
+        }
+        // The Living Dark (Wave 8): biology pays in its own materials.
+        EnemyKind::SporePuffer | EnemyKind::GlowGnat => {
+            if rare < 45 {
+                add(ItemKind::Material(StrategicResourceKind::RadiantFossil), 1);
+            } else {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::CapCrawler | EnemyKind::RootSnapper | EnemyKind::BarkBeetle => {
+            add(richer, 1 + extra);
+            if rare < 20 {
+                add(ItemKind::Material(StrategicResourceKind::RadiantFossil), 1);
+            }
+        }
+        EnemyKind::ThornWisp | EnemyKind::Leechling => {
+            if rare < 50 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::HiveSoldier | EnemyKind::HiveDrone => {
+            if rare < 40 {
+                add(ItemKind::Material(StrategicResourceKind::PressurePearl), 1);
+            }
+        }
+        EnemyKind::AcidLancer | EnemyKind::MawWorm => {
+            add(richer, 1 + extra / 2);
+            if rare < 15 {
+                add(ItemKind::Material(StrategicResourceKind::CoreShard), 1);
+            }
+        }
+        EnemyKind::BilePolyp => {
+            add(richer, 2 + extra);
+            add(ItemKind::Material(StrategicResourceKind::CoreShard), 1);
+        }
+        EnemyKind::SwarmMatriarch => {
+            add(richer, 6 + extra);
+            add(ItemKind::Material(StrategicResourceKind::PressurePearl), 4);
+            add(ItemKind::Artifact(ArtifactKind::RadiantShell), 1);
+        }
+        EnemyKind::LureFish | EnemyKind::GlowJelly => {
+            add(ItemKind::Material(StrategicResourceKind::CrystalLens), 1);
+        }
+        EnemyKind::Angler => {
+            add(richer, 3 + extra);
+            add(ItemKind::Material(StrategicResourceKind::CrystalLens), 2);
+        }
+        EnemyKind::MindNode => {
+            add(ItemKind::Material(StrategicResourceKind::RadiantFossil), 1);
+        }
+        EnemyKind::MycelialMind => {
+            add(richer, 10 + extra);
+            add(ItemKind::Material(StrategicResourceKind::RadiantFossil), 6);
+            add(ItemKind::Artifact(ArtifactKind::RadiantShell), 1);
         }
     }
     drops

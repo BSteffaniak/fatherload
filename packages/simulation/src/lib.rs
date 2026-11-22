@@ -39,6 +39,7 @@ pub mod ids;
 pub mod infrastructure;
 pub mod input;
 pub mod item;
+pub mod living_dark;
 pub mod logistics;
 pub mod mechanism;
 pub mod milestone;

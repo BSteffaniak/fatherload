@@ -246,6 +246,13 @@ impl WorldState {
         let mut gear = SubmersionGear::default();
         if let Some(player) = self.players.get(&player_id) {
             gear.pressure_rows += 8 * i32::from(player.hazard_gear.pressure_bracing);
+            // The Bio-Filter (the Mycelial Mind's reward, Wave 8) shrugs off acid.
+            if player
+                .hazard_gear
+                .has_system(crate::depth_progression::RigSystem::BioFilter)
+            {
+                gear.acid_resistance = 1.0;
+            }
         }
         gear
     }

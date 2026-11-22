@@ -1230,6 +1230,7 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::StarCoreAwoke
         | GameplayEventKind::StarCorePhase { .. }
         | GameplayEventKind::GlowmotherAwoke { .. } => None,
+        GameplayEventKind::LivingDark { player_id, .. } => player_id,
     }
 }
 

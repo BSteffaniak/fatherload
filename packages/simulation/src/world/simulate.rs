@@ -340,11 +340,7 @@ impl WorldState {
             let excess = self
                 .heat_units_at(center)
                 .saturating_sub(heat_cooling(radiator_level, gear.heat_shield))
-                .min(self.placeholder_heat_excess_cap(
-                    center,
-                    radiator_level,
-                    gear.heat_shield,
-                ));
+                .min(self.placeholder_heat_excess_cap(center, radiator_level, gear.heat_shield));
             let depth_damage = if excess > 0 {
                 HEAT_DAMAGE_PER_EXCESS_UNIT * f32::from(excess) * heat_multiplier * delta_seconds
             } else {
@@ -533,6 +529,8 @@ impl WorldState {
         self.advance_moon(&mut output);
         self.advance_night(next_tick, &mut output);
         self.advance_entities(EntityPhase::Late, next_tick, &mut output);
+        // The Living Dark (Wave 8): regrowth, spores, tides, the Hive and the Mind.
+        self.advance_living_dark(next_tick, &mut output);
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);
         self.advance_people(next_tick);

@@ -219,16 +219,22 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
         }
         for (kind, weight) in def.creatures {
             assert!(*weight > 0);
-            // Underground kinds only (no sky, Moon, night, tomb or crypt families): the classic
-            // ones and the authored strata's own (Wave 8 on).
-            assert!(
-                !kind.is_sky()
-                    && !kind.is_lunar()
-                    && !crate::night::is_nocturnal(*kind)
-                    && !kind.is_tomb()
-                    && !kind.is_crypt(),
-                "{stratum:?}: {kind:?}"
-            );
+            if stratum.descent() == Descent::LivingDark {
+                // Authored (Wave 8): the Living Dark's own creatures, never its bosses.
+                assert!(kind.is_living_dark(), "{stratum:?}: {kind:?}");
+                assert!(!kind.stats().elite, "{stratum:?}: {kind:?} roams");
+            } else {
+                // Underground kinds only (no sky, Moon, night, tomb or crypt families): the classic
+                // ones and the authored strata's own (Wave 8 on).
+                assert!(
+                    !kind.is_sky()
+                        && !kind.is_lunar()
+                        && !crate::night::is_nocturnal(*kind)
+                        && !kind.is_tomb()
+                        && !kind.is_crypt(),
+                    "{stratum:?}: {kind:?}"
+                );
+            }
         }
         assert!(def.variants.len() >= 2, "{stratum:?} needs seed variants");
         assert!(!def.landmarks.is_empty(), "{stratum:?}");

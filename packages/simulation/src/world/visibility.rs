@@ -47,6 +47,9 @@ impl WorldState {
         // The fluid schedule is host bookkeeping (a client's authority never ticks; its
         // prediction wakes fluid from its own terrain writes, see `world/fluids.rs`).
         world.fluids = super::FluidSchedule::default();
+        // So is the Living Dark's regrowth schedule (Wave 8): its writes reach clients as
+        // terrain ops.
+        world.living_schedule = crate::living_dark::LivingSchedule::default();
         world
     }
 
@@ -92,6 +95,8 @@ impl WorldState {
             logistics: _,
             crust: _,
             old_deep: _,
+            living_dark: _,
+            living_schedule: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

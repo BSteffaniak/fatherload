@@ -319,10 +319,28 @@ pub enum CaveTile {
     GlowAlgae,
     /// Soft silt on a flooded cave's bed.
     Silt,
+    // --- The Living Dark (Wave 8, Descent III), appended ------------------------------------
+    /// A living root of the Root Labyrinth: tunnels dug through the labyrinth grow back as
+    /// these ([`crate::living_dark`]).
+    Root,
+    /// Pulsing flesh of the Flesh Caverns: a mined flesh tile heals back.
+    Flesh,
+    /// Wax honeycomb of the Hive's halls.
+    Comb,
+    /// A comb cell brimming with royal jelly (the Hive's layer resource; the Court's own
+    /// cells are theirs).
+    JellyCell,
+    /// A ripe spore pod of the Fungal Forest: it bursts into a spore cloud when drilled, blasted
+    /// or brushed.
+    SporePod,
+    /// A digestive gland of the Flesh Caverns: it pumps the acid tide into its gullet.
+    AcidGland,
+    /// A burnt root: scorched by fire or a root axe, it never grows back.
+    CharredRoot,
 }
 
 impl CaveTile {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 22] = [
         Self::Crystal,
         Self::MushroomStem,
         Self::MushroomCap,
@@ -338,6 +356,13 @@ impl CaveTile {
         Self::FossilRib,
         Self::GlowAlgae,
         Self::Silt,
+        Self::Root,
+        Self::Flesh,
+        Self::Comb,
+        Self::JellyCell,
+        Self::SporePod,
+        Self::AcidGland,
+        Self::CharredRoot,
     ];
 
     #[must_use]
@@ -358,6 +383,13 @@ impl CaveTile {
             Self::FossilRib => "fossil rib",
             Self::GlowAlgae => "glow algae",
             Self::Silt => "silt",
+            Self::Root => "living root",
+            Self::Flesh => "flesh",
+            Self::Comb => "honeycomb",
+            Self::JellyCell => "royal jelly cell",
+            Self::SporePod => "spore pod",
+            Self::AcidGland => "acid gland",
+            Self::CharredRoot => "charred root",
         }
     }
 
@@ -380,6 +412,13 @@ impl CaveTile {
             Self::FossilRib => 12,
             Self::GlowAlgae => 13,
             Self::Silt => 14,
+            Self::Root => 15,
+            Self::Flesh => 16,
+            Self::Comb => 17,
+            Self::JellyCell => 18,
+            Self::SporePod => 19,
+            Self::AcidGland => 20,
+            Self::CharredRoot => 21,
         }
     }
 
@@ -405,8 +444,13 @@ impl CaveTile {
             | Self::GlowCap
             | Self::Mycelium
             | Self::GlowAlgae
-            | Self::Silt => 1,
-            Self::Stalactite | Self::TreasureCache => 2,
+            | Self::Silt
+            | Self::JellyCell
+            | Self::SporePod
+            | Self::CharredRoot => 1,
+            Self::Stalactite | Self::TreasureCache | Self::Comb => 2,
+            Self::Root | Self::Flesh => 3,
+            Self::AcidGland => 4,
             Self::Crystal
             | Self::RuinBrick
             | Self::RuinPillar
@@ -422,8 +466,12 @@ impl CaveTile {
     pub const fn durability(self) -> u8 {
         match self {
             Self::MushroomCap | Self::GlowCap | Self::GlowAlgae | Self::Silt => 2,
+            Self::SporePod | Self::CharredRoot => 1,
+            Self::JellyCell => 2,
             Self::MushroomStem | Self::Mycelium | Self::Stalactite => 3,
-            Self::TreasureCache => 4,
+            Self::TreasureCache | Self::Comb | Self::Flesh => 4,
+            Self::Root => 6,
+            Self::AcidGland => 10,
             Self::Crystal | Self::FossilRib => 6,
             Self::RuinBrick | Self::RuinGlyph | Self::RelicCache => 8,
             Self::RuinPillar => 9,
@@ -435,8 +483,17 @@ impl CaveTile {
     #[must_use]
     pub const fn base_chip_seconds(self) -> f32 {
         match self {
-            Self::MushroomCap | Self::GlowCap | Self::GlowAlgae | Self::Silt => 0.08,
-            Self::MushroomStem | Self::Mycelium | Self::Stalactite => 0.1,
+            Self::MushroomCap
+            | Self::GlowCap
+            | Self::GlowAlgae
+            | Self::Silt
+            | Self::SporePod
+            | Self::CharredRoot
+            | Self::JellyCell => 0.08,
+            Self::MushroomStem | Self::Mycelium | Self::Stalactite | Self::Comb => 0.1,
+            Self::Flesh => 0.14,
+            Self::Root => 0.18,
+            Self::AcidGland => 0.2,
             Self::TreasureCache | Self::RelicCache => 0.12,
             Self::Crystal | Self::FossilRib => 0.17,
             Self::RuinBrick | Self::RuinPillar | Self::RuinGlyph => 0.16,
@@ -449,8 +506,8 @@ impl CaveTile {
     pub const fn light_radius(self) -> u8 {
         match self {
             Self::Crystal | Self::GlowCap => 3,
-            Self::RuinGlyph | Self::GlowAlgae => 2,
-            Self::TreasureCache | Self::RelicCache => 1,
+            Self::RuinGlyph | Self::GlowAlgae | Self::JellyCell => 2,
+            Self::TreasureCache | Self::RelicCache | Self::SporePod | Self::AcidGland => 1,
             _ => 0,
         }
     }

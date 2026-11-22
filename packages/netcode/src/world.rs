@@ -347,6 +347,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::StarCoreBeaten { player_id } => (436, Some(player_id)),
         GameplayEventKind::GlowmotherAwoke { .. } => (437, None),
         GameplayEventKind::GlowmotherDefeated { player_id } => (438, Some(player_id)),
+        // The Living Dark (wave 8, Descent III): 440-459.
+        GameplayEventKind::LivingDark {
+            what, player_id, ..
+        } => (440 + what.code() as u32, player_id),
     }
 }
 

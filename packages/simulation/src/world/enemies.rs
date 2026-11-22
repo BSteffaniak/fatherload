@@ -67,6 +67,7 @@ use crate::{
 use super::{WorldState, bombs::Blast, movement::AUTHORITATIVE_PLAYER_RADIUS};
 
 mod crypt;
+mod living;
 mod sky;
 mod tomb;
 
@@ -244,6 +245,19 @@ const fn diggable(kind: TileKind) -> bool {
 const fn diggable_by(enemy: EnemyKind, kind: TileKind) -> bool {
     match enemy {
         EnemyKind::DuneStalker => crate::night::stalker_ground(kind),
+        // Wave 8: bark beetles eat living root, maw worms bore through flesh.
+        EnemyKind::BarkBeetle => {
+            diggable(kind)
+                || matches!(
+                    kind,
+                    TileKind::Cave(
+                        crate::cave::CaveTile::Root | crate::cave::CaveTile::CharredRoot
+                    )
+                )
+        }
+        EnemyKind::MawWorm => {
+            diggable(kind) || matches!(kind, TileKind::Cave(crate::cave::CaveTile::Flesh))
+        }
         _ => diggable(kind),
     }
 }
@@ -661,6 +675,9 @@ impl WorldState {
 
     /// Whether the ground around `tile` suits an enemy of `kind`.
     fn habitat_fits(&self, kind: EnemyKind, tile: TilePosition) -> bool {
+        if !self.living_spawn_allowed(kind) {
+            return false;
+        }
         let spec = kind.stats();
         let big = spec.radius > TILE_SIZE * 0.5;
         let above = TilePosition {
@@ -675,8 +692,10 @@ impl WorldState {
             // A burrower lies in wait inside soft rock (it digs its den there when it appears)
             // or in an open pocket against a soft wall it can dig into.
             Locomotion::Burrowing => {
-                let soft = |kind: TileKind| {
-                    matches!(kind, TileKind::Dirt | TileKind::Clay | TileKind::Stone)
+                // The Living Dark's diggers den in what they bore (root, flesh; Wave 8).
+                let soft = |ground: TileKind| {
+                    matches!(ground, TileKind::Dirt | TileKind::Clay | TileKind::Stone)
+                        || (kind.is_living_dark() && diggable_by(kind, ground))
                 };
                 self.terrain.tile(tile).is_some_and(|t| soft(t.kind))
                     || self.air(tile)
@@ -1215,10 +1234,14 @@ impl WorldState {
             return;
         }
         let spec = state.kind.stats();
-        let noticed = self.perceive(body, state);
+        // The Living Dark (Wave 8): factions, harmless kinds and the Mind's thralls.
+        let noticed = self
+            .living_notice(body, state)
+            .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
         let leashed = spec.leash_tiles > 0.0
+            && state.phase != crate::living_dark::POSSESSED_PHASE
             && (body.x - home_x).hypot(body.y - home_y) > spec.leash_tiles * TILE_SIZE;
         match (state.mode, noticed) {
             (EnemyMode::Idle | EnemyMode::Dormant | EnemyMode::Return, Some(player)) => {
@@ -1401,7 +1424,7 @@ impl WorldState {
                     }
                     AttackStyle::Spawner => {
                         if ready && distance <= range {
-                            self.hatch_brood(id, body, state.tier);
+                            self.hatch_brood(id, body, state.kind, state.tier);
                             state.attack_ready = self.after(now, cooldown);
                             output.push_event(enemy_event(
                                 id,
@@ -2277,7 +2300,7 @@ impl WorldState {
     }
 
     /// A nest hatches a bat (while it has fewer than [`NEST_BROOD`] alive).
-    fn hatch_brood(&mut self, id: EntityId, body: &Body, tier: u8) {
+    fn hatch_brood(&mut self, id: EntityId, body: &Body, spawner: EnemyKind, tier: u8) {
         let brood = self
             .enemies()
             .filter(|(_, state)| state.parent == Some(id.get()))
@@ -2285,14 +2308,9 @@ impl WorldState {
         if brood >= NEST_BROOD || self.entities.count_of(EntityKind::Enemy) >= MAX_ENEMIES {
             return;
         }
-        let radius = EnemyKind::BroodNest.stats().radius;
-        // The Glowmother (Wave 8) births glow grubs; nests hatch bats.
-        let brood_kind = match self.enemy_parts(id).map(|(_, state)| state.kind) {
-            Some(EnemyKind::Glowmother) => EnemyKind::GlowGrub,
-            _ => EnemyKind::CaveBat,
-        };
+        let radius = spawner.stats().radius;
         let spawned = self.spawn_enemy_with(
-            brood_kind,
+            living::brood_of(spawner),
             (body.x, body.y - radius - 6.0),
             tier,
             None,
@@ -2348,6 +2366,7 @@ impl WorldState {
             body.x = body.velocity_x.mul_add(step, body.x);
             body.y = body.velocity_y.mul_add(step, body.y);
             if physics::solid_at(&self.terrain, body.x, body.y) {
+                self.burst_spore_shot(shot.kind, body.previous_x, body.previous_y, output);
                 self.entities.despawn(id);
                 return;
             }
@@ -2365,6 +2384,7 @@ impl WorldState {
                     output,
                 );
                 if !self.damage_immune() {
+                    self.burst_spore_shot(shot.kind, body.x, body.y, output);
                     self.entities.despawn(id);
                     return;
                 }
@@ -2407,6 +2427,10 @@ impl WorldState {
         let Some((mut body, mut state)) = self.enemy_parts(id) else {
             return DamageOutcome::Ignored;
         };
+        // The Mycelial Mind cannot be hurt while its nerve nodes live (Wave 8).
+        if self.mind_shields(state.kind) {
+            return DamageOutcome::Ignored;
+        }
         let now = self.simulation_tick.next();
         let spec = state.kind.stats();
         let mut amount = (damage.amount * state.kind.resistance(damage.kind)).max(0.0);
@@ -2513,6 +2537,11 @@ impl WorldState {
         }
         if crate::night::is_nocturnal(state.kind) {
             self.enemies.night.record_kill(state.kind);
+        }
+        if state.kind.is_living_dark() {
+            // Errands, the Swarm, the Court and the Mind's fight (Wave 8).
+            let tile = self.frame().tile_at(body.x, body.y);
+            self.living_dark_kill(id.get(), state.kind, tile, state.last_attacker, output);
         }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
@@ -2696,5 +2725,25 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::Cultist
         | EnemyKind::CryptGolem
         | EnemyKind::CryptLord => false,
+        // The Living Dark (Wave 8): swarmers roost in caves, burrowers tunnel soft walls,
+        // nest-builders and ambushers nest; the bosses and the hive folk live in their
+        // set pieces.
+        EnemyKind::GlowGnat
+        | EnemyKind::HiveSoldier
+        | EnemyKind::Leechling
+        | EnemyKind::ThornWisp
+        | EnemyKind::GlowJelly
+        | EnemyKind::LureFish => tags.swarmers || tags.aquatic,
+        EnemyKind::BarkBeetle | EnemyKind::MawWorm => tags.burrowers,
+        EnemyKind::SporePuffer
+        | EnemyKind::CapCrawler
+        | EnemyKind::RootSnapper
+        | EnemyKind::AcidLancer
+        | EnemyKind::BilePolyp
+        | EnemyKind::Angler => tags.nests,
+        EnemyKind::HiveDrone
+        | EnemyKind::SwarmMatriarch
+        | EnemyKind::MycelialMind
+        | EnemyKind::MindNode => false,
     }
 }

@@ -13,6 +13,7 @@
 
 use fatherload_simulation::{
     PlayerCommand, PlayerId, WorldState,
+    living_dark::{CourtService, LivingDark, LivingDarkAction, ROOT_AXE_PACK, SwarmState},
     logistics::{
         DIVE_CHARGE_PACK, LiftOrigin, LogisticsCommand, MAX_DIVE_CHARGES, OUTPOST_SALE_PERCENT,
         OutpostService, TravelNode,
@@ -293,6 +294,41 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             LogisticsCommand::BuyDiveCharges,
         );
     }
+    // The Living Dark (Wave 8): the Amber Court's counter and root axes (Deep Descent worlds).
+    if world.descent_strata_layout().is_some() {
+        let living = world.living_dark();
+        if world.at_court(player) {
+            "The Amber Court".clone_into(&mut heading);
+            subtitle = court_subtitle(living);
+            for service in CourtService::ALL {
+                let detail = court_detail(living, service);
+                row(
+                    LogisticsGroup::Here,
+                    service.label().to_owned(),
+                    detail,
+                    LogisticsCommand::LivingDark(LivingDarkAction::Court(service)),
+                );
+            }
+        }
+        row(
+            LogisticsGroup::FieldKit,
+            "Fire a root axe".to_owned(),
+            format!(
+                "Cuts a shaft up that roots never close ({} aboard)",
+                living.axes_of(player)
+            ),
+            LogisticsCommand::LivingDark(LivingDarkAction::FireRootAxe),
+        );
+        row(
+            LogisticsGroup::FieldKit,
+            "Buy root axes".to_owned(),
+            format!(
+                "{} axes, at outposts, in town and at the Court",
+                ROOT_AXE_PACK.0
+            ),
+            LogisticsCommand::LivingDark(LivingDarkAction::BuyRootAxes),
+        );
+    }
     for (command, about) in abouts {
         if let Some(found) = rows.iter_mut().find(|row| row.command == command) {
             found.about = Some(about);
@@ -412,12 +448,67 @@ fn outpost_trade_rows(
     rows
 }
 
+/// The Amber Court's mood toward the crew, in words.
+fn court_subtitle(living: &LivingDark) -> String {
+    let hive = &living.hive;
+    let mood = if hive.court_hostile() {
+        "The Court's drones bristle: it remembers your theft."
+    } else if hive.honoured() {
+        "The Court honours the crew: jelly at half price."
+    } else if hive.standing > 0 {
+        "The Court's workers hum a welcome."
+    } else {
+        "The Court watches the crew warily."
+    };
+    let swarm = match hive.swarm {
+        SwarmState::Raiding => "The Swarm raids the Hive.",
+        SwarmState::Truce => "The Swarm keeps its bought peace.",
+        SwarmState::Broken => "The Swarm is broken; the Court holds the halls.",
+    };
+    format!("{mood} Standing {}. {swarm}", hive.standing)
+}
+
+/// What a Court service row says.
+fn court_detail(living: &LivingDark, service: CourtService) -> String {
+    let hive = &living.hive;
+    match service {
+        CourtService::RoyalJelly => "Mends the hull, a quarter tank".to_owned(),
+        CourtService::TakeErrand => hive.next_errand().map_or_else(
+            || {
+                hive.errand.map_or_else(
+                    || "No errand now".to_owned(),
+                    |errand| format!("Under way: {}", errand.title()),
+                )
+            },
+            |errand| format!("{}: {}", errand.title(), errand.brief()),
+        ),
+        CourtService::TurnIn => hive.errand.map_or_else(
+            || "No errand under way".to_owned(),
+            |errand| {
+                format!(
+                    "{} ({}/{})",
+                    errand.title(),
+                    hive.progress.min(errand.goal()),
+                    errand.goal()
+                )
+            },
+        ),
+        CourtService::BrokerTruce => {
+            "Pay the Swarm to stand down instead of slaying the matriarch".to_owned()
+        }
+        CourtService::MakeAmends => "Pay for what was taken".to_owned(),
+    }
+}
+
 /// The use prompt at a logistics stop (an outpost, a lift station, one's own beacon), if the
 /// rig stands at one: what the use button opens there.
 #[must_use]
 pub fn stop_prompt(world: &WorldState, player: PlayerId) -> Option<String> {
     if world.is_on_foot(player) || world.logistics().is_riding(player) {
         return None;
+    }
+    if world.at_court(player) {
+        return Some("Visit the Amber Court".to_owned());
     }
     let tile = world.player(player)?.tile_in(world.frame());
     let logistics = world.logistics();
@@ -484,6 +575,26 @@ fn sent_message(world: &WorldState, command: LogisticsCommand) -> String {
                 || "The workshop hums.".to_owned(),
                 |found| format!("The workshop turns out {}.", found.name),
             ),
+        LogisticsCommand::LivingDark(action) => match action {
+            LivingDarkAction::BuyRootAxes => "Root axes racked.".to_owned(),
+            LivingDarkAction::FireRootAxe => {
+                "The axe bites up through the roots: that shaft stays open.".to_owned()
+            }
+            LivingDarkAction::Court(service) => match service {
+                CourtService::RoyalJelly => {
+                    "Royal jelly: the hull knits and the tank fills a little.".to_owned()
+                }
+                CourtService::TakeErrand => world.living_dark().hive.next_errand().map_or_else(
+                    || "The steward has a task for you.".to_owned(),
+                    |errand| format!("Errand taken: {}.", errand.title()),
+                ),
+                CourtService::TurnIn => "The Court rewards the crew.".to_owned(),
+                CourtService::BrokerTruce => {
+                    "Tribute paid. The Swarm stands down; the Court looks away.".to_owned()
+                }
+                CourtService::MakeAmends => "The Court accepts the crew's amends.".to_owned(),
+            },
+        },
     }
 }
 
@@ -507,6 +618,7 @@ impl SeatUi {
         let tile = rig.tile_in(ctx.world.frame());
         let logistics = ctx.world.logistics();
         let at_stop = logistics.outpost_at(tile).is_some()
+            || ctx.world.at_court(player)
             || logistics.station_at(tile).is_some()
             || logistics
                 .beacon_near(tile)

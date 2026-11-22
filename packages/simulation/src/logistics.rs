@@ -340,6 +340,9 @@ pub enum LogisticsCommand {
     /// Work recipe `recipe` ([`crate::workshop::RECIPES`]) at outpost `outpost`'s workshop
     /// (Wave 8).
     Craft { outpost: u32, recipe: u8 },
+    /// A Living Dark command (Wave 8): root axes and the Amber Court's counter, served by the
+    /// same dialog.
+    LivingDark(crate::living_dark::LivingDarkAction),
 }
 
 /// A rig in a dive (from a dive charge): crash damage is off until it settles.

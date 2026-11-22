@@ -244,6 +244,29 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
                 }
             }
         }
+        // The Living Dark (Wave 8, Descent III): its set pieces and living rock, over the
+        // landmarks (the Mind's hollow grows through Descent III's gate chamber).
+        let (first, last) = layout.descent_rows(crate::descent::Descent::LivingDark);
+        if rect.max.y >= first - 40 && rect.min.y <= last + 40 {
+            use crate::worldgen::descent::living;
+            let stamps = living::stamps_with(&ctx.settings, layout, &rect);
+            for position in rect.positions() {
+                let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                    continue;
+                };
+                let base = chunk_kinds.kinds[slot];
+                if let Some(kind) = living::living_tile(
+                    &ctx.settings,
+                    layout,
+                    &stamps,
+                    position.x,
+                    position.y,
+                    base,
+                ) {
+                    chunk_kinds.kinds[slot] = kind;
+                }
+            }
+        }
     }
     if ctx.descent.is_some() {
         // The Sinkhole (V11, Wave 8): the core and the funnel over Descent I's gate chamber.

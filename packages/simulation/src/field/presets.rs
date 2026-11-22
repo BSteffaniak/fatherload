@@ -39,11 +39,14 @@ pub enum FieldPreset {
     Ice,
     /// Every screen effect at once (the combined showcase; physics stays ordinary).
     Showcase,
+    /// A spore cloud of the Living Dark (Wave 8): the picture blurs and shifts toward a sickly
+    /// violet-green. A rig with the Bio-Filter sees through it.
+    Spores,
 }
 
 impl FieldPreset {
     /// Every preset.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::GravityFlip,
         Self::GravityShear,
         Self::Weightless,
@@ -58,6 +61,7 @@ impl FieldPreset {
         Self::Fog,
         Self::Ice,
         Self::Showcase,
+        Self::Spores,
     ];
 
     /// A display name.
@@ -78,6 +82,7 @@ impl FieldPreset {
             Self::Fog => "Fog bank",
             Self::Ice => "Ice field",
             Self::Showcase => "Every effect",
+            Self::Spores => "Spore cloud",
         }
     }
 
@@ -187,6 +192,17 @@ impl FieldPreset {
                         .graded([255, 190, 150])
                         .fogged([120, 110, 140]),
                 )
+            }
+            Self::Spores => {
+                let mut profile = neutral.with_screen(
+                    none.with(ScreenEffect::Blur, 70)
+                        .with(ScreenEffect::ColourGrade, 60)
+                        .with(ScreenEffect::Fog, 30)
+                        .graded([190, 255, 150])
+                        .fogged([150, 110, 170]),
+                );
+                profile.sound_occlusion = 0.3;
+                profile
             }
         }
     }

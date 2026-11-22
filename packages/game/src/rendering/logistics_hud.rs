@@ -22,7 +22,10 @@ use crate::{
     input::prompts::Prompt,
     shell::logistics::{LogisticsGroup, LogisticsRow},
 };
-use fatherload_simulation::logistics::{LogisticsCommand, OutpostService};
+use fatherload_simulation::{
+    living_dark::{CourtService, LivingDarkAction},
+    logistics::{LogisticsCommand, OutpostService},
+};
 
 /// The icon of a logistics row.
 const fn row_icon(row: &LogisticsRow) -> &'static SpriteDef {
@@ -62,6 +65,15 @@ const fn row_icon(row: &LogisticsRow) -> &'static SpriteDef {
                 &super::pixel_art::sprites::deep_gear::WORKSHOP
             }
         }
+        // The Living Dark (Wave 8): root axes and the Amber Court's counter.
+        LogisticsCommand::LivingDark(action) => match action {
+            LivingDarkAction::BuyRootAxes | LivingDarkAction::FireRootAxe => &menu_icons::HAMMER,
+            LivingDarkAction::Court(service) => match service {
+                CourtService::RoyalJelly => &icons::HULL,
+                CourtService::TakeErrand | CourtService::TurnIn => &menu_icons::SIGNAL,
+                CourtService::BrokerTruce | CourtService::MakeAmends => &icons::CREDITS,
+            },
+        },
     }
 }
 

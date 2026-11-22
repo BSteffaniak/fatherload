@@ -113,10 +113,14 @@ impl WorldState {
             crust,
             // A leaving player's dose and mutation go with them (Wave 8).
             old_deep,
+            // A leaving rig's root axes go with it; the Hive and the Mind belong to the world.
+            living_dark,
+            living_schedule: _,
         } = self;
         logistics.forget_transient(player_id);
         crust.forget(player_id);
         old_deep.forget(player_id);
+        living_dark.forget(player_id);
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
         mechanic_levels.remove(&player_id);

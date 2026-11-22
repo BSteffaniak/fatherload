@@ -133,8 +133,7 @@ fn spawn_every_kind(world: &mut WorldState) -> Vec<EntityId> {
     for (index, kind) in (0_u16..).zip(cave_kinds) {
         // Twenty-two to a row, three columns apart; later rows (the Crust's and the Old Deep's
         // kinds, Wave 8) sit half a gap over, so every cave kind fits the arena.
-        let column =
-            f32::from(index % 22).mul_add(3.0, 258.5) + f32::from(index / 22) * 1.5;
+        let column = f32::from(index % 22).mul_add(3.0, 258.5) + f32::from(index / 22) * 1.5;
         let column = if (295.0..299.0).contains(&column) {
             column + 4.0
         } else {

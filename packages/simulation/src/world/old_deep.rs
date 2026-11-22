@@ -777,7 +777,12 @@ impl WorldState {
             .count()
     }
 
-    fn after_millis(&self, from: SimulationTick, millis: u64) -> SimulationTick {
+    /// The tick `millis` after `from` (at least one tick on), at the world's tick rate.
+    pub(in crate::world) fn after_millis(
+        &self,
+        from: SimulationTick,
+        millis: u64,
+    ) -> SimulationTick {
         SimulationTick::new(
             from.get()
                 .saturating_add(self.timing.ticks_for_millis(millis).max(1)),

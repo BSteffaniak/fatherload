@@ -222,6 +222,9 @@ pub enum SectionKey {
     /// Descent II's live state: dose meters, mutations, machine halls, skeleton digs, the
     /// Cathedral Lift and the Star Core fight (Wave 8; their tiles travel as terrain ops).
     OldDeep,
+    /// The Living Dark (Wave 8): root axes, the Hive's politics, the Mycelial Mind's fight and
+    /// the spore clouds' expiries (regrowth travels as terrain ops).
+    LivingDark,
 }
 
 impl SectionKey {
@@ -241,7 +244,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 21] = [
+    pub const SHARED: [Self; 22] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -263,6 +266,7 @@ impl SectionKey {
         Self::Fields,
         Self::Logistics,
         Self::OldDeep,
+        Self::LivingDark,
     ];
 }
 
@@ -293,6 +297,7 @@ pub enum SectionPayload {
     Logistics(Box<crate::logistics::Logistics>),
     Crust(Box<crate::crust::CrustState>),
     OldDeep(Box<crate::old_deep::OldDeep>),
+    LivingDark(Box<crate::living_dark::LivingDark>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -484,6 +489,8 @@ impl WorldState {
             logistics,
             crust,
             old_deep,
+            living_dark,
+            living_schedule: _,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -584,6 +591,7 @@ impl WorldState {
             SectionKey::Logistics => SectionPayload::Logistics(Box::new(logistics.clone())),
             SectionKey::Crust => SectionPayload::Crust(Box::new(crust.clone())),
             SectionKey::OldDeep => SectionPayload::OldDeep(Box::new(old_deep.clone())),
+            SectionKey::LivingDark => SectionPayload::LivingDark(Box::new(living_dark.clone())),
         })
     }
 
@@ -752,6 +760,9 @@ impl WorldState {
             }
             (SectionKey::OldDeep, SectionPayload::OldDeep(old_deep)) => {
                 self.old_deep = *old_deep;
+            }
+            (SectionKey::LivingDark, SectionPayload::LivingDark(living_dark)) => {
+                self.living_dark = *living_dark;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

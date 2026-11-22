@@ -54,8 +54,8 @@ pub fn cached_layout(settings: &WorldSettings) -> DescentLayout {
     })
 }
 
-/// The field-effects track's screen effect for a registry effect (`None`: no pass draws it yet;
-/// the Fungal Forest's blur waits for one).
+/// The field-effects track's screen effect for a registry effect (every registry effect has a
+/// pass since the Wave 8 blur; `None` stays for effects appended before their pass).
 #[must_use]
 pub const fn screen_effect(effect: ScreenEffect) -> Option<field::ScreenEffect> {
     Some(match effect {
@@ -72,7 +72,7 @@ pub const fn screen_effect(effect: ScreenEffect) -> Option<field::ScreenEffect> 
         ScreenEffect::Scanlines => field::ScreenEffect::Scanlines,
         ScreenEffect::Vignette => field::ScreenEffect::Vignette,
         ScreenEffect::Fog => field::ScreenEffect::Fog,
-        ScreenEffect::Blur => return None,
+        ScreenEffect::Blur => field::ScreenEffect::Blur,
     })
 }
 

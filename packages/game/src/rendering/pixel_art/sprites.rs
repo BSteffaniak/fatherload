@@ -8,6 +8,7 @@ pub mod enemies;
 pub mod explosives;
 pub mod icons;
 pub mod interior;
+pub mod living;
 pub mod menu_icons;
 pub mod moon;
 pub mod old_deep;
@@ -467,6 +468,28 @@ pub const ALL: &[&SpriteDef] = &[
     &deep_gear::LAYER_RESIN,
     &deep_gear::LAYER_SHARD,
     &deep_gear::LAYER_RELIC,
+    // The Living Dark (Wave 8).
+    &living::SPORE_PUFFER,
+    &living::CAP_CRAWLER,
+    &living::GLOW_GNAT,
+    &living::ROOT_SNAPPER,
+    &living::BARK_BEETLE,
+    &living::THORN_WISP,
+    &living::HIVE_SOLDIER,
+    &living::HIVE_DRONE,
+    &living::ACID_LANCER,
+    &living::SWARM_MATRIARCH,
+    &living::MAW_WORM,
+    &living::BILE_POLYP,
+    &living::LEECHLING,
+    &living::LURE_FISH,
+    &living::GLOW_JELLY,
+    &living::ANGLER,
+    &living::MYCELIAL_MIND,
+    &living::MIND_NODE,
+    &living::SHOT_SPORE,
+    &living::SHOT_THORN,
+    &living::SHOT_MIND_SPORE,
 ];
 
 #[cfg(test)]

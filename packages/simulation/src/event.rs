@@ -1197,6 +1197,15 @@ pub enum GameplayEventKind {
     GlowmotherDefeated {
         player_id: PlayerId,
     },
+    // The Living Dark (Wave 8, Descent III; netcode codes 440-459).
+    /// Something of the Living Dark happened at tile `(x, y)`; `player_id` is whose deed or
+    /// whom it concerns, if anyone's.
+    LivingDark {
+        what: crate::living_dark::LivingDarkEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

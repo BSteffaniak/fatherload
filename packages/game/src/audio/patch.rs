@@ -384,6 +384,19 @@ patches! {
     MantleLoop => "loop_mantle_storm",
     StarCoreLoop => "loop_star_core",
     GeigerLoop => "loop_geiger",
+    // The Living Dark (Wave 8, Descent III), appended at the end so every earlier patch keeps
+    // its seeds.
+    SporePuff => "spore_puff",
+    RootCreak => "root_creak",
+    FleshSquelch => "flesh_squelch",
+    HiveChime => "hive_chime",
+    MindRoar => "mind_roar",
+    FungalLoop => "loop_fungal",
+    RootLoop => "loop_roots",
+    HiveLoop => "loop_hive",
+    HeartbeatLoop => "loop_heartbeat",
+    GlowSeaLoop => "loop_glow_sea",
+    MindLoop => "loop_mind",
 }
 
 /// Playback metadata of a patch.
@@ -796,7 +809,27 @@ impl Patch {
             | Self::HighWindLoop
             | Self::MoonLoop
             | Self::TownLoop
-            | Self::ColonyLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            | Self::ColonyLoop
+            // Wave 8: the Living Dark's music, one piece per stratum and the Mind's fight.
+            | Self::FungalLoop
+            | Self::RootLoop
+            | Self::HiveLoop
+            | Self::HeartbeatLoop
+            | Self::GlowSeaLoop
+            | Self::MindLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            // The Living Dark's one-shots: living sounds from where they happen; the Mind's
+            // roar is big.
+            Self::SporePuff | Self::RootCreak | Self::FleshSquelch => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.3)
+                .jitter(0.06, 1.0),
+            Self::HiveChime => PatchInfo::new(Feedback).instances(2).send(0.3).jitter(0.0, 0.5),
+            Self::MindRoar => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.55)
+                .jitter(0.02, 0.5)
+                .ducking(0.4)
+                .priority(8),
             // Side-view tombs (T28): traps and tomb creatures heard from where they are.
             Self::BladeSwish | Self::DartFire | Self::BoneRattle => PatchInfo::new(Feedback)
                 .instances(3)
@@ -1243,6 +1276,17 @@ impl Patch {
             Self::MantleLoop => old_deep::mantle_loop(rng),
             Self::StarCoreLoop => old_deep::star_core_loop(rng),
             Self::GeigerLoop => old_deep::geiger_loop(rng),
+            Self::SporePuff => spore_puff(rng),
+            Self::RootCreak => root_creak(rng),
+            Self::FleshSquelch => flesh_squelch(rng),
+            Self::HiveChime => hive_chime(rng),
+            Self::MindRoar => mind_roar(rng),
+            Self::FungalLoop => fungal_loop(rng),
+            Self::RootLoop => root_loop(rng),
+            Self::HiveLoop => hive_loop(rng),
+            Self::HeartbeatLoop => heartbeat_loop(rng),
+            Self::GlowSeaLoop => glow_sea_loop(rng),
+            Self::MindLoop => mind_loop(rng),
         }
     }
 }
@@ -6489,6 +6533,276 @@ fn sinkhole_loop(rng: &mut Rng) -> Vec<f32> {
         }
     }
     grains_loop(rng, &mut out);
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Living Dark (Wave 8, Descent III)
+// ---------------------------------------------------------------------------------------------
+
+/// A spore pod bursting (or a spore ball landing): a soft, fat "pof" of low noise, then an airy
+/// hiss of spores settling, with a few tiny pops.
+fn spore_puff(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(150.0 * rng.jitter(0.06), 70.0, 0.12, 1.1);
+    let mut puff = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut puff_filter = Svf::new(FilterMode::LowPass, 900.0, 0.6);
+    let mut air = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut air_filter = Svf::new(FilterMode::BandPass, 5_000.0, 0.8);
+    let cloud = render(1.0, |t| {
+        let body = puff_filter.run(puff.next(), 1_400.0 - 900.0 * (t / 1.0).min(1.0), 0.6)
+            * perc(t, 0.006, 0.25);
+        let settle =
+            air_filter.process(air.next()) * segments(t, &[(0.0, 0.0), (0.08, 0.5), (1.0, 0.0)]);
+        body * 0.9 + settle * 0.25
+    });
+    mix_into(&mut out, &cloud, 0.0, 0.9);
+    grains(rng, &mut out, 7, (0.05, 0.7), (3_000.0, 6_000.0), 0.12);
+    out
+}
+
+/// Roots tightening: a slow wooden creak (a resonant band-passed saw bending in pitch) and a
+/// few fibrous cracks.
+fn root_creak(rng: &mut Rng) -> Vec<f32> {
+    let mut saw = Osc::new(Wave::Saw).with_phase(rng.unit());
+    let mut body = Svf::new(FilterMode::BandPass, 420.0, 3.0);
+    let base = rng.range(70.0, 95.0);
+    let bend = rng.range(0.15, 0.3);
+    let mut out = render(1.1, |t| {
+        let pitch = base * (1.0 + bend * sine(t, 1.3) * (t / 1.1));
+        let shape = segments(t, &[(0.0, 0.0), (0.12, 1.0), (0.8, 0.7), (1.1, 0.0)]);
+        saturate(
+            body.run(saw.next(pitch), 380.0 + 140.0 * sine(t, 2.1), 3.0),
+            1.6,
+        ) * shape
+            * 0.6
+    });
+    grains(rng, &mut out, 5, (0.1, 0.9), (900.0, 2_400.0), 0.25);
+    out
+}
+
+/// Flesh knitting shut: a wet, low squelch that sucks closed.
+fn flesh_squelch(rng: &mut Rng) -> Vec<f32> {
+    let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::LowPass, 500.0, 2.2);
+    let mut gulp = Osc::new(Wave::Sine);
+    let pitch = rng.range(90.0, 120.0);
+    render(0.55, |t| {
+        let open = segments(t, &[(0.0, 300.0), (0.12, 1_100.0), (0.55, 200.0)]);
+        let wet = filter.run(noise.next(), open, 2.2) * perc(t, 0.01, 0.4);
+        let low = gulp.next(pitch * (1.0 - 0.4 * t / 0.55)) * perc(t, 0.02, 0.3) * 0.5;
+        saturate(wet * 1.2 + low, 1.4)
+    })
+}
+
+/// The Amber Court's chime: a warm buzzing fifth and three marimba notes rising (a deal, an
+/// errand, a change of heart).
+fn hive_chime(rng: &mut Rng) -> Vec<f32> {
+    let mut buzz = Osc::new(Wave::Saw).with_phase(rng.unit());
+    let mut buzz_filter = Svf::new(FilterMode::BandPass, 600.0, 1.4);
+    let mut out = render(0.9, |t| {
+        let wing = 1.0 + 0.02 * sine(t, 38.0);
+        buzz_filter.process(buzz.next(196.0 * wing)) * perc(t, 0.05, 0.7) * 0.25
+    });
+    for (index, note) in [392.0_f32, 493.88, 587.33].into_iter().enumerate() {
+        #[allow(clippy::cast_precision_loss, reason = "three notes")]
+        let start = index as f32 * 0.09;
+        let marimba = bell(note * rng.jitter(0.003), 4.0, 0.8, 0.45);
+        mix_into(&mut out, &marimba, start, 0.5);
+    }
+    out
+}
+
+/// The Mycelial Mind's roar: a vast, warbling FM growl over a sub swell, its breath full of
+/// spores.
+fn mind_roar(rng: &mut Rng) -> Vec<f32> {
+    let mut fm = Fm::default();
+    let mut sub = Osc::new(Wave::Sine);
+    let mut breath = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut breath_filter = Svf::new(FilterMode::BandPass, 900.0, 0.7);
+    let base = rng.range(48.0, 56.0);
+    render(2.2, |t| {
+        let swell = segments(t, &[(0.0, 0.0), (0.35, 1.0), (1.4, 0.8), (2.2, 0.0)]);
+        let warble = 1.0 + 0.06 * sine(t, 5.5) + 0.03 * sine(t, 1.7);
+        let growl = fm.next(base * 2.0 * warble, 1.41, 3.5 * swell);
+        let low = sub.next(base * (1.0 - 0.15 * t / 2.2));
+        let air = breath_filter.run(breath.next(), 700.0 + 900.0 * swell, 0.7);
+        saturate(growl * 0.5 + low * 0.6 + air * 0.4 * swell, 2.0) * swell
+    })
+}
+
+/// Fungal Forest music: a breathing violet pad (a soft fifth that swells), slow plucked glass
+/// bells on a pentatonic line and puffs of spore hiss.
+fn fungal_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut low = Osc::new(Wave::Triangle);
+    let mut fifth = Osc::new(Wave::Triangle);
+    let mut air = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut air_filter = Svf::new(FilterMode::BandPass, 2_400.0, 0.7);
+    let mut out = render(loop_length(), |t| {
+        let swell = 0.7 + 0.3 * sine(t, 0.25);
+        (low.next(110.0) * 0.45 + fifth.next(164.81) * 0.25) * swell * 0.35
+            + air_filter.process(air.next()) * 0.03 * (0.5 + 0.5 * sine(t, 0.5))
+    });
+    let step = LOOP_SECONDS / 8.0;
+    let line: [Option<f32>; 8] = [
+        Some(659.26),
+        None,
+        Some(587.33),
+        Some(493.88),
+        None,
+        Some(440.0),
+        Some(493.88),
+        None,
+    ];
+    for (index, note) in line.into_iter().enumerate() {
+        let Some(note) = note else {
+            continue;
+        };
+        #[allow(clippy::cast_precision_loss, reason = "eight steps")]
+        let start = index as f32 * step;
+        let pluck = bell(note * rng.jitter(0.002), 3.5, 1.2, 1.1);
+        loop_note(&mut out, &pluck, start, 0.12);
+    }
+    out
+}
+
+/// Root Labyrinth music: a low, tightening ostinato of bowed saws (D, E flat, D, C) under a
+/// creaking drone; claustrophobic, never resolving.
+fn root_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut drone = Osc::new(Wave::Saw).with_phase(rng.unit());
+    let mut drone_filter = Svf::new(FilterMode::LowPass, 300.0, 1.2);
+    let mut out = render(loop_length(), |t| {
+        drone_filter.run(drone.next(55.0), 220.0 + 80.0 * sine(t, 0.5), 1.2) * 0.25
+    });
+    let step = LOOP_SECONDS / 8.0;
+    let line = [
+        146.83_f32, 155.56, 146.83, 130.81, 146.83, 155.56, 164.81, 155.56,
+    ];
+    for (index, note) in line.into_iter().enumerate() {
+        #[allow(clippy::cast_precision_loss, reason = "eight steps")]
+        let start = index as f32 * step;
+        let bow = brass(rng, note, step * 0.8, 0.15);
+        loop_note(&mut out, &bow, start, 0.14);
+    }
+    for beat in [0.0, 2.0] {
+        let knock = thump(95.0, 50.0, 0.3, 1.3);
+        loop_note(&mut out, &knock, beat, 0.3);
+    }
+    out
+}
+
+/// The Hive's music: a buzzing drone of wings, a busy marimba figure in G and a soft click
+/// track of mandibles.
+fn hive_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut wings = Osc::new(Wave::Saw).with_phase(rng.unit());
+    let mut wings_filter = Svf::new(FilterMode::BandPass, 700.0, 1.6);
+    let mut out = render(loop_length(), |t| {
+        let flutter = 1.0 + 0.015 * sine(t, 30.0);
+        wings_filter.process(wings.next(98.0 * flutter)) * (0.14 + 0.04 * sine(t, 0.5))
+    });
+    let step = LOOP_SECONDS / 16.0;
+    let figure = [
+        392.0_f32, 493.88, 587.33, 493.88, 440.0, 587.33, 659.26, 587.33,
+    ];
+    for index in 0..16_usize {
+        #[allow(clippy::cast_precision_loss, reason = "sixteen steps")]
+        let start = index as f32 * step;
+        let note = figure[index % figure.len()];
+        let marimba = bell(note * rng.jitter(0.002), 4.0, 0.7, 0.35);
+        loop_note(
+            &mut out,
+            &marimba,
+            start,
+            if index % 4 == 0 { 0.16 } else { 0.09 },
+        );
+        let click = burst(
+            rng.next_u64(),
+            NoiseColor::White,
+            FilterMode::BandPass,
+            3_500.0,
+            2.0,
+            0.012,
+        );
+        loop_note(&mut out, &click, start + step * 0.5, 0.06);
+    }
+    out
+}
+
+/// The Flesh Caverns' heartbeat: four lub-dubs a loop (60 beats a minute at normal speed; the
+/// director speeds the loop up with the stratum's heartbeat), a wet throbbing bass and a sour
+/// minor-second drone.
+fn heartbeat_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut drone = Osc::new(Wave::Triangle);
+    let mut sour = Osc::new(Wave::Triangle);
+    let mut wet = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut wet_filter = Svf::new(FilterMode::LowPass, 240.0, 1.0);
+    let mut out = render(loop_length(), |t| {
+        let throb = 0.6 + 0.4 * sine(t, 1.0);
+        (drone.next(65.41) * 0.35 + sour.next(69.30) * 0.18) * throb * 0.3
+            + wet_filter.process(wet.next()) * 0.2 * throb
+    });
+    for beat in 0..4_u8 {
+        let start = f32::from(beat);
+        let lub = thump(80.0, 42.0, 0.18, 1.8);
+        let dub = thump(70.0, 38.0, 0.14, 1.6);
+        loop_note(&mut out, &lub, start, 0.7);
+        loop_note(&mut out, &dub, start + 0.28, 0.5);
+    }
+    out
+}
+
+/// Glow Sea music: near silence; slow glass chimes far away in a deep reverb and the sea's low
+/// moan.
+fn glow_sea_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut moan = Osc::new(Wave::Sine);
+    let mut deep = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut deep_filter = Svf::new(FilterMode::LowPass, 160.0, 0.7);
+    let mut out = render(loop_length(), |t| {
+        let swell = 0.5 + 0.5 * sine(t, 0.25);
+        moan.next(41.2 * (1.0 + 0.01 * sine(t, 0.5))) * 0.2 * swell
+            + deep_filter.process(deep.next()) * 0.3
+    });
+    for (start, note) in [(0.3_f32, 1_318.5_f32), (1.9, 987.77), (3.1, 1_174.7)] {
+        let chime = bell(note * rng.jitter(0.002), 2.76, 1.4, 2.4);
+        loop_note(&mut out, &chime, start, 0.07);
+    }
+    out
+}
+
+/// The Mycelial Mind's fight: pounding low toms on every beat, a choir of detuned saws
+/// gliding a minor third up and down and spore hiss swelling with the bar.
+fn mind_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut voices: Vec<Osc> = (0..3)
+        .map(|_| Osc::new(Wave::Saw).with_phase(rng.unit()))
+        .collect();
+    let mut choir = Svf::new(FilterMode::LowPass, 700.0, 1.0);
+    let mut hiss = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut hiss_filter = Svf::new(FilterMode::BandPass, 3_000.0, 0.8);
+    let mut out = render(loop_length(), |t| {
+        let pitch = if t % LOOP_SECONDS < LOOP_SECONDS * 0.5 {
+            146.83
+        } else {
+            174.61
+        };
+        let raw: f32 = voices
+            .iter_mut()
+            .zip([0.995_f32, 1.0, 1.006])
+            .map(|(voice, detune)| voice.next(pitch * detune))
+            .sum::<f32>()
+            / 3.0;
+        choir.run(raw, 600.0 + 200.0 * sine(t, 0.5), 1.0) * 0.22
+            + hiss_filter.process(hiss.next()) * 0.04 * (0.5 + 0.5 * sine(t, 0.25))
+    });
+    let beat = LOOP_SECONDS / 8.0;
+    for step in 0..8_u8 {
+        let start = f32::from(step) * beat;
+        let tom = thump(if step % 2 == 0 { 120.0 } else { 160.0 }, 48.0, 0.25, 1.7);
+        loop_note(
+            &mut out,
+            &tom,
+            start,
+            if step % 4 == 0 { 0.55 } else { 0.3 },
+        );
+    }
     out
 }
 

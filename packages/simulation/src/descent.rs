@@ -600,6 +600,19 @@ pub enum MusicCue {
     SlateShelves,
     /// Basalt Columns: a low drone and the crackle of heat.
     BasaltColumns,
+    // --- The Living Dark's own pieces (Wave 8), appended ------------------------------------
+    /// Fungal Forest: soft plucked bells over a breathing pad, spores in the air.
+    FungalForest,
+    /// Root Labyrinth: a creaking, tightening ostinato of low strings.
+    RootLabyrinth,
+    /// The Hive: a buzzing drone and a busy marimba of the comb.
+    Hive,
+    /// Flesh Caverns: a heartbeat that drives the tempo, wet throbbing bass.
+    FleshCaverns,
+    /// Glow Sea: near silence, slow glass chimes in a deep reverb.
+    GlowSea,
+    /// The Mycelial Mind's fight.
+    MycelialMind,
 }
 
 /// A stratum's ambience bed.
@@ -634,6 +647,17 @@ pub enum AmbienceCue {
     SlateDrip,
     /// The lava tubes' hot breath and crackle.
     LavaTube,
+    // --- The Living Dark (Wave 8), appended -------------------------------------------------
+    /// Puffing spores, soft fungal creaks.
+    Spores,
+    /// Creaking roots that tighten.
+    Roots,
+    /// The hive's hum and chitter.
+    Hive,
+    /// A heartbeat and gurgling acid.
+    Heartbeat,
+    /// The deep dark: far bubbles, a whale-like moan.
+    Abyss,
 }
 
 /// What kind of landmark a stratum holds; every kind has a generator
@@ -657,10 +681,14 @@ pub enum LandmarkKind {
     Settlements,
     /// Tomb and crypt sites.
     Tombs,
+    /// The Living Dark's set pieces (Wave 8): cap groves, heartroots, the Hive's galleries and
+    /// the Amber Court, gullets, abyssal halls and the Mind's hollow
+    /// ([`crate::worldgen::descent::living`]).
+    LivingDark,
 }
 
 impl LandmarkKind {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Outpost,
         Self::GateChamber,
         Self::HollowCavern,
@@ -669,6 +697,7 @@ impl LandmarkKind {
         Self::CaveEcosystems,
         Self::Settlements,
         Self::Tombs,
+        Self::LivingDark,
     ];
 }
 

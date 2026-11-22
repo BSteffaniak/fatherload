@@ -72,8 +72,9 @@ pub const fn cave_glow(tile: CaveTile, band: Band) -> Option<Color> {
         }),
         CaveTile::GlowCap => Some(MINT),
         CaveTile::RuinGlyph => Some(TEAL),
-        CaveTile::GlowAlgae => Some(LIME),
+        CaveTile::GlowAlgae | CaveTile::SporePod | CaveTile::AcidGland => Some(LIME),
         CaveTile::TreasureCache | CaveTile::RelicCache => Some(GOLD),
+        CaveTile::JellyCell => Some(CREAM),
         _ => None,
     }
 }
@@ -99,6 +100,13 @@ pub const fn cave_color(tile: CaveTile, band: Band) -> Color {
         CaveTile::FossilRib => BONE,
         CaveTile::GlowAlgae => LIME,
         CaveTile::Silt => LOAM,
+        CaveTile::Root => LOAM,
+        CaveTile::CharredRoot => NIGHT,
+        CaveTile::Flesh => ROSE,
+        CaveTile::Comb => AMBER,
+        CaveTile::JellyCell => CREAM,
+        CaveTile::SporePod => VIOLET,
+        CaveTile::AcidGland => MAROON,
     }
 }
 
@@ -321,6 +329,11 @@ pub(super) fn paint(
             paint_relic(canvas);
             return;
         }
+        CaveTile::SporePod => {
+            paint_back(canvas, terrain, position, strata, band);
+            paint_spore_pod(canvas, seed);
+            return;
+        }
         _ => {}
     }
     let crystal = crystal_ramp(band);
@@ -334,6 +347,11 @@ pub(super) fn paint(
                 CaveTile::RuinBrick | CaveTile::RuinGlyph => sandstone_pixel(x, y),
                 CaveTile::FossilRib => fossil_rib_pixel(strata, x, y),
                 CaveTile::GlowAlgae | CaveTile::Silt => silt_pixel(x, y),
+                CaveTile::Root => root_pixel(x, y),
+                CaveTile::CharredRoot => charred_pixel(x, y),
+                CaveTile::Flesh | CaveTile::AcidGland => flesh_pixel(x, y),
+                CaveTile::Comb => comb_pixel(x, y, false),
+                CaveTile::JellyCell => comb_pixel(x, y, true),
                 _ => strata.stone[2],
             };
             canvas.set(px, py, index);
@@ -342,6 +360,7 @@ pub(super) fn paint(
     match tile {
         CaveTile::RuinGlyph => paint_glyph(canvas, seed),
         CaveTile::GlowAlgae => paint_algae(canvas, seed),
+        CaveTile::AcidGland => paint_gland(canvas, seed),
         _ => {}
     }
     let material: Ramp = match tile {
@@ -350,9 +369,179 @@ pub(super) fn paint(
         CaveTile::Obsidian => OBSIDIAN,
         CaveTile::RuinBrick | CaveTile::RuinGlyph => SANDSTONE,
         CaveTile::GlowAlgae | CaveTile::Silt => SILT,
+        CaveTile::Root => ramp([SOIL_DARK, SOIL, LOAM, SAND]),
+        CaveTile::CharredRoot => ramp([INK, NIGHT, STONE_DARK, STONE]),
+        CaveTile::Flesh | CaveTile::AcidGland => ramp([MAROON, RED, ROSE, PINK]),
+        CaveTile::Comb | CaveTile::JellyCell => ramp([SOIL_DARK, AMBER, GOLD, CREAM]),
         _ => strata.stone,
     };
     paint_edges(canvas, strata, edges, material[3], material[0], false);
+}
+
+// --- The Living Dark (Wave 8) ----------------------------------------------------------------
+
+/// Living root: gnarled, braided strands with pale bark ridges and moss in the cracks.
+fn root_pixel(x: i32, y: i32) -> PaletteIndex {
+    // Strands twist diagonally both ways; where they cross the wood is lit.
+    let wave = (noise(x, y, 6, 511) * 6.0) as i32;
+    let a = (x + y + wave).rem_euclid(7);
+    let b = (x - y + wave / 2).rem_euclid(9);
+    if hash(x, y, 513).is_multiple_of(53) {
+        return index_of(MOSS);
+    }
+    match (a, b) {
+        (0, _) | (_, 0) => index_of(SOIL_DARK),
+        (1, 1 | 2) | (2, 1) => index_of(SAND),
+        (1, _) | (_, 1) => index_of(CLAY),
+        (2..=3, _) => index_of(LOAM),
+        _ if noise(x, y, 3, 515) > 0.62 => index_of(LOAM),
+        _ => index_of(SOIL),
+    }
+}
+
+/// Charred root: black charcoal crazed with grey ash and a few dull embers.
+fn charred_pixel(x: i32, y: i32) -> PaletteIndex {
+    if hash(x, y, 521).is_multiple_of(41) {
+        return index_of(RUST);
+    }
+    let (near, second, _, _) = super::worley(x, y, 5, 523, false);
+    if second - near < 0.9 {
+        return index_of(STONE_DARK);
+    }
+    if noise(x, y, 4, 525) > 0.7 {
+        index_of(NIGHT)
+    } else {
+        index_of(INK)
+    }
+}
+
+/// Flesh: wet rose meat with dark veins, pale fat and glistening highlights.
+fn flesh_pixel(x: i32, y: i32) -> PaletteIndex {
+    let (near, second, dx, dy) = super::worley(x, y, 7, 531, false);
+    if second - near < 0.8 {
+        // Veins between the lobes.
+        return index_of(MAROON);
+    }
+    if hash(x, y, 533).is_multiple_of(47) {
+        return index_of(CREAM);
+    }
+    let lit = dx + dy;
+    let body = noise(x, y, 4, 535) + f32::from(bayer4(x, y)) / 50.0;
+    if lit <= -4 {
+        index_of(PINK)
+    } else if body > 0.66 {
+        index_of(PINK)
+    } else if body > 0.3 {
+        index_of(ROSE)
+    } else {
+        index_of(RED)
+    }
+}
+
+/// Honeycomb: hexagonal wax cells, amber walls round dark honeyed hollows.
+fn comb_pixel(x: i32, y: i32, filled: bool) -> PaletteIndex {
+    // A hex lattice: rows of cells 6 wide and 5 tall, alternate rows offset by half a cell.
+    let row = y.div_euclid(5);
+    let shift = if row.rem_euclid(2) == 0 { 0 } else { 3 };
+    let cx = (x + shift).rem_euclid(6);
+    let cy = y.rem_euclid(5);
+    let wall = cy == 0 || cx == 0 || (cy == 1 && (cx == 1 || cx == 5));
+    if wall {
+        return if cy == 0 && cx > 1 && cx < 5 {
+            index_of(GOLD)
+        } else {
+            index_of(AMBER)
+        };
+    }
+    if filled {
+        // Royal jelly glowing in the cell.
+        return if cy == 2 && cx == 2 {
+            index_of(BONE)
+        } else if cy <= 2 {
+            index_of(CREAM)
+        } else {
+            index_of(GOLD)
+        };
+    }
+    if cy == 2 && cx == 2 && hash(x, y, 541).is_multiple_of(3) {
+        return index_of(ORANGE);
+    }
+    if cy >= 3 {
+        index_of(SOIL)
+    } else {
+        index_of(SOIL_DARK)
+    }
+}
+
+/// A ripe spore pod hanging from the ceiling: a violet bulb with lime glowing pores.
+fn paint_spore_pod(canvas: &mut TileCanvas, seed: u32) {
+    let sway = (seed % 3) as i32 - 1;
+    // The stalk.
+    for py in 0..4 {
+        canvas.set(7 + sway * (py / 3), py, index_of(SAND));
+        canvas.set(8 + sway * (py / 3), py, index_of(LOAM));
+    }
+    // The bulb.
+    let (cx, cy) = (8 + sway, 9);
+    for py in 3..TILE_ART {
+        for px in 0..TILE_ART {
+            let dx = px - cx;
+            let dy = (py - cy) * 6 / 5;
+            let d = dx * dx + dy * dy;
+            if d > 30 {
+                continue;
+            }
+            let index = if d > 24 {
+                index_of(INK)
+            } else if dx + dy < -4 {
+                index_of(LAVENDER)
+            } else if dx + dy > 4 {
+                index_of(PLUM)
+            } else {
+                index_of(VIOLET)
+            };
+            canvas.set(px, py, index);
+        }
+    }
+    for (px, py) in [
+        (cx - 2, cy - 2),
+        (cx + 2, cy),
+        (cx - 1, cy + 2),
+        (cx + 1, cy - 3),
+    ] {
+        canvas.set(px, py, index_of(LIME));
+    }
+    canvas.set(cx - 2, cy - 3, index_of(PINK));
+}
+
+/// An acid gland: a puckered maroon sphincter in the flesh, oozing lime acid.
+fn paint_gland(canvas: &mut TileCanvas, seed: u32) {
+    let (cx, cy) = (8, 7);
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let dx = px - cx;
+            let dy = py - cy;
+            let d = dx * dx + dy * dy;
+            let index = if d <= 2 {
+                index_of(LIME)
+            } else if d <= 6 {
+                index_of(INK)
+            } else if d <= 20 && (dx * 3 + dy * 2).rem_euclid(5) == 0 {
+                index_of(MAROON)
+            } else if d <= 20 {
+                index_of(RED)
+            } else {
+                continue;
+            };
+            canvas.set(px, py, index);
+        }
+    }
+    // A drip of acid running down.
+    let drip = 2 + (seed % 4) as i32;
+    for py in cy + 2..cy + 2 + drip {
+        canvas.set(cx, py, index_of(LIME));
+    }
+    canvas.set(cx, cy + 2 + drip, index_of(LEAF));
 }
 
 /// Crystal: sharp diagonal facets with bright cleavage lines and glints.

@@ -30,6 +30,7 @@
 
 pub mod crust;
 pub mod landmarks;
+pub mod living;
 
 use crate::{
     descent::{Descent, STRATUM_COUNT, Stratum},

@@ -361,6 +361,7 @@ impl StratumRegistry for RegistryStrata {
                                     | LandmarkKind::AnomalyRoom
                                     | LandmarkKind::HollowCavern
                                     | LandmarkKind::Settlements
+                                    | LandmarkKind::LivingDark
                             )
                         })
                         .count(),

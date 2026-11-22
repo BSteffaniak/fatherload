@@ -45,6 +45,8 @@ pub enum LandmarkGenerator {
     Villages,
     /// Tomb and crypt sites ([`crate::worldgen::tomb_sites`]).
     TombSites,
+    /// The Living Dark's stamps and living rock ([`super::living`], Wave 8).
+    LivingDark,
 }
 
 /// The generator behind `kind`.
@@ -59,6 +61,7 @@ pub const fn landmark_generator(kind: LandmarkKind) -> LandmarkGenerator {
         LandmarkKind::CaveEcosystems => LandmarkGenerator::CaveEcosystems,
         LandmarkKind::Settlements => LandmarkGenerator::Villages,
         LandmarkKind::Tombs => LandmarkGenerator::TombSites,
+        LandmarkKind::LivingDark => LandmarkGenerator::LivingDark,
     }
 }
 
@@ -399,6 +402,7 @@ pub const fn landmark_tile(landmark: &Landmark, x: i32, y: i32) -> Option<TileKi
         | LandmarkKind::Prefabs
         | LandmarkKind::CaveEcosystems
         | LandmarkKind::Settlements
-        | LandmarkKind::Tombs => return None,
+        | LandmarkKind::Tombs
+        | LandmarkKind::LivingDark => return None,
     })
 }

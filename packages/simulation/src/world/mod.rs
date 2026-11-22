@@ -97,6 +97,7 @@ mod hazards;
 mod home_tests;
 mod homes;
 mod import;
+mod living_dark;
 mod logistics;
 #[cfg(test)]
 mod logistics_tests;
@@ -454,6 +455,14 @@ pub struct WorldState {
     /// woken machine halls, skeleton digs, the Cathedral Lift and the Star Core fight.
     #[serde(default)]
     old_deep: crate::old_deep::OldDeep,
+    /// The Living Dark's shared state (Wave 8, Descent III, see [`crate::living_dark`]): root
+    /// axes, the Hive's politics, the Mycelial Mind's fight, the spore clouds' expiries.
+    #[serde(default)]
+    living_dark: crate::living_dark::LivingDark,
+    /// The Living Dark's host bookkeeping (tiles waiting to regrow or heal, scorched tiles,
+    /// the tides). Saved with the world, never hashed or replicated (like the fluids').
+    #[serde(default)]
+    living_schedule: crate::living_dark::LivingSchedule,
 }
 
 impl WorldState {

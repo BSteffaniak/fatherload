@@ -247,12 +247,9 @@ fn a_rig_spins_all_the_way_round_in_the_gravity_shear_and_leans_only_at_home() {
 }
 
 #[test]
-fn every_registry_screen_effect_but_blur_has_a_pass() {
+fn every_registry_screen_effect_has_a_pass() {
+    // Since the Wave 8 blur pass every registry effect maps to one.
     for effect in ScreenEffect::ALL {
-        assert_eq!(
-            screen_effect(effect).is_none(),
-            effect == ScreenEffect::Blur,
-            "{effect:?}"
-        );
+        assert!(screen_effect(effect).is_some(), "{effect:?}");
     }
 }

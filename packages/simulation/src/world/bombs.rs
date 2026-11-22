@@ -134,6 +134,8 @@ impl WorldState {
         // Enemies take the same blasts (damage, pushes, EMP stuns, scares) on the same terrain;
         // every other damageable entity (practice targets) through the combat model.
         self.enemies_feel_blasts(&blasts, output);
+        // Fire burns the Root Labyrinth's roots away for good (Wave 8).
+        self.living_dark_blasts(&blasts, output);
         self.damage_from_blasts(&blasts, output);
         // Pilots on foot are pushed and hurt too (Part II F5).
         self.pilots_feel_blasts(&blasts, output);

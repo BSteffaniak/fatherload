@@ -469,6 +469,11 @@ fn glyph(kind: TileKind, water: bool) -> char {
             CaveTile::FossilRib => ')',
             CaveTile::GlowAlgae => '%',
             CaveTile::Silt => '_',
+            CaveTile::Root | CaveTile::CharredRoot => 'r',
+            CaveTile::Flesh => 'f',
+            CaveTile::Comb | CaveTile::JellyCell => 'h',
+            CaveTile::SporePod => 'p',
+            CaveTile::AcidGland => 'g',
         },
         _ => '!',
     }

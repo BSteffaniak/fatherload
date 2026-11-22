@@ -167,6 +167,9 @@ impl WorldState {
             crust: _,
             // Dose meters, halls, digs and the fights are tiles and ticks (Wave 8).
             old_deep: _,
+            // Living Dark state is tiles, ticks and entity ids (Wave 8).
+            living_dark: _,
+            living_schedule: _,
         } = self;
         player_template.reframe(shift);
         players.reframe(shift);

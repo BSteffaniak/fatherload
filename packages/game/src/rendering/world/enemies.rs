@@ -26,7 +26,8 @@ use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
     sprites::{
-        crypt as crypt_art, enemies as art, moon as moon_art, old_deep as deep_art,
+        crypt as crypt_art, enemies as art, living as living_art, moon as moon_art,
+        old_deep as deep_art,
         tomb as tomb_art,
     },
 };
@@ -95,6 +96,25 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::PistonWarden => &deep_art::PISTON_WARDEN,
         EnemyKind::VoidJelly => &deep_art::VOID_JELLY,
         EnemyKind::MagmaSalamander => &deep_art::MAGMA_SALAMANDER,
+        // The Living Dark (Wave 8).
+        EnemyKind::SporePuffer => &living_art::SPORE_PUFFER,
+        EnemyKind::CapCrawler => &living_art::CAP_CRAWLER,
+        EnemyKind::GlowGnat => &living_art::GLOW_GNAT,
+        EnemyKind::RootSnapper => &living_art::ROOT_SNAPPER,
+        EnemyKind::BarkBeetle => &living_art::BARK_BEETLE,
+        EnemyKind::ThornWisp => &living_art::THORN_WISP,
+        EnemyKind::HiveSoldier => &living_art::HIVE_SOLDIER,
+        EnemyKind::HiveDrone => &living_art::HIVE_DRONE,
+        EnemyKind::AcidLancer => &living_art::ACID_LANCER,
+        EnemyKind::SwarmMatriarch => &living_art::SWARM_MATRIARCH,
+        EnemyKind::MawWorm => &living_art::MAW_WORM,
+        EnemyKind::BilePolyp => &living_art::BILE_POLYP,
+        EnemyKind::Leechling => &living_art::LEECHLING,
+        EnemyKind::LureFish => &living_art::LURE_FISH,
+        EnemyKind::GlowJelly => &living_art::GLOW_JELLY,
+        EnemyKind::Angler => &living_art::ANGLER,
+        EnemyKind::MycelialMind => &living_art::MYCELIAL_MIND,
+        EnemyKind::MindNode => &living_art::MIND_NODE,
     }
 }
 
@@ -113,6 +133,9 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::CryptHex => &crypt_art::SHOT_HEX,
         ShotKind::CryptArrow => &crypt_art::SHOT_ARROW,
         ShotKind::Boulder => &crypt_art::SHOT_BOULDER,
+        ShotKind::Spore => &living_art::SHOT_SPORE,
+        ShotKind::Thorn => &living_art::SHOT_THORN,
+        ShotKind::MindSpore => &living_art::SHOT_MIND_SPORE,
     }
 }
 
@@ -406,6 +429,49 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
                 0
             }
         }
+        // The Living Dark (Wave 8): walkers stride, a puffer swells before it lobs, the
+        // snapper lies still until it wakes, the matriarch lays while she breeds.
+        EnemyKind::SporePuffer | EnemyKind::AcidLancer => {
+            if state.mode == EnemyMode::Windup {
+                2
+            } else if moving {
+                ((phase * 6.0) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::CapCrawler => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 8.0) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::RootSnapper => match state.mode {
+            EnemyMode::Dormant => 0,
+            EnemyMode::Windup | EnemyMode::Strike => 2,
+            _ => 1,
+        },
+        EnemyKind::SwarmMatriarch => {
+            if state.mode == EnemyMode::Windup {
+                2
+            } else {
+                ((phase * 1.5) as usize) % 2
+            }
+        }
+        EnemyKind::BarkBeetle | EnemyKind::MawWorm | EnemyKind::Angler => usize::from(attacking),
+        EnemyKind::GlowGnat
+        | EnemyKind::ThornWisp
+        | EnemyKind::HiveSoldier
+        | EnemyKind::HiveDrone
+        | EnemyKind::BilePolyp
+        | EnemyKind::Leechling
+        | EnemyKind::LureFish
+        | EnemyKind::GlowJelly
+        | EnemyKind::MycelialMind
+        | EnemyKind::MindNode => sprite.frame_at(phase),
     }
 }
 
@@ -413,7 +479,7 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
 /// half as large again, towering over a pilot on foot.
 const fn sprite_scale(kind: EnemyKind) -> f32 {
     match kind {
-        EnemyKind::SunColossus | EnemyKind::HollowMatriarch => ART * 1.5,
+        EnemyKind::SunColossus | EnemyKind::HollowMatriarch | EnemyKind::MycelialMind => ART * 1.5,
         _ => ART,
     }
 }
@@ -450,6 +516,17 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::Glowmother
             | EnemyKind::PistonWarden
             | EnemyKind::MagmaSalamander
+            | EnemyKind::SporePuffer
+            | EnemyKind::CapCrawler
+            | EnemyKind::BarkBeetle
+            | EnemyKind::HiveSoldier
+            | EnemyKind::HiveDrone
+            | EnemyKind::AcidLancer
+            | EnemyKind::SwarmMatriarch
+            | EnemyKind::MawWorm
+            | EnemyKind::Leechling
+            | EnemyKind::LureFish
+            | EnemyKind::Angler
     )
 }
 
@@ -580,6 +657,37 @@ fn draw_enemy(
         }
         EnemyKind::AnimatedStatue if state.mode != EnemyMode::Dormant => {
             disc(draw, x, y - ART * 6.0, 5, with_alpha(AMBER, 40));
+        }
+        // The Living Dark (Wave 8): the Glow Sea's creatures are its only light; the Mind and
+        // its nodes pulse with spore light.
+        EnemyKind::GlowJelly => {
+            let pulse = ((seconds * 2.2 + state.seed as f32 * 0.01).sin() * 3.0) as i32;
+            disc(draw, x, y - ART * 2.0, 15 + pulse, with_alpha(MINT, 34));
+            disc(draw, x, y - ART * 2.0, 8, with_alpha(ICE, 44));
+        }
+        EnemyKind::LureFish => {
+            disc(draw, x, y, 10, with_alpha(MINT, 30));
+        }
+        EnemyKind::Angler => {
+            // The bait dangles ahead of the jaws on its rod.
+            let side = f32::from(state.facing.signum());
+            let bob = (seconds * 2.0).sin() * ART;
+            let (bx, by) = (side.mul_add(ART * 3.0, x), y - ART * 6.5 + bob);
+            disc(draw, bx, by, 9, with_alpha(MINT, 40));
+            disc(draw, bx, by, 4, with_alpha(ICE, 90));
+        }
+        EnemyKind::GlowGnat | EnemyKind::SporePuffer => {
+            disc(draw, x, y - ART * 3.0, 6, with_alpha(LIME, 30));
+        }
+        EnemyKind::MycelialMind => {
+            let pulse = ((seconds * 1.6).sin() * 4.0) as i32;
+            disc(draw, x, y, 40 + pulse, with_alpha(PLUM, 60));
+            disc(draw, x, y, 26 + pulse / 2, with_alpha(VIOLET, 46));
+            disc(draw, x, y - ART * 2.0, 12, with_alpha(LIME, 34));
+        }
+        EnemyKind::MindNode => {
+            let pulse = ((seconds * 3.0).sin() * 2.0) as i32;
+            disc(draw, x, y + ART, 11 + pulse, with_alpha(LIME, 34));
         }
         EnemyKind::ShadowHound => {
             for puff in 0..3 {
@@ -981,6 +1089,9 @@ fn draw_shot(
         ShotKind::Hex => VIOLET,
         ShotKind::CryptHex => LAVENDER,
         ShotKind::CryptArrow | ShotKind::Boulder => STONE_LIGHT,
+        // The Living Dark (Wave 8): spores glow lime, thorns barely at all.
+        ShotKind::Spore | ShotKind::MindSpore => LIME,
+        ShotKind::Thorn => SAND,
     };
     disc(
         draw,

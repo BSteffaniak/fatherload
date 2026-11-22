@@ -255,6 +255,11 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::StoneSlam => Patch::StoneSlam,
         SoundCue::HexBolt => Patch::HexBolt,
         SoundCue::FluidRush => Patch::FluidRush,
+        SoundCue::SporePuff => Patch::SporePuff,
+        SoundCue::RootCreak => Patch::RootCreak,
+        SoundCue::FleshSquelch => Patch::FleshSquelch,
+        SoundCue::HiveChime => Patch::HiveChime,
+        SoundCue::MindRoar => Patch::MindRoar,
         SoundCue::SteamHiss => Patch::SteamHiss,
         SoundCue::AcidFizz => Patch::AcidFizz,
         SoundCue::RigSplash => Patch::RigSplash,
@@ -343,6 +348,31 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::CryptHex => SoundCue::HexBolt,
         ShotKind::CryptArrow => SoundCue::ArrowTwang,
         ShotKind::Boulder => SoundCue::GateRumble,
+        ShotKind::Spore | ShotKind::MindSpore => SoundCue::SporePuff,
+        ShotKind::Thorn => SoundCue::DartFire,
+    }
+}
+
+/// The sound of a Living Dark event (Wave 8; exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn living_dark_cue(
+    what: fatherload_simulation::living_dark::LivingDarkEvent,
+) -> SoundCue {
+    use fatherload_simulation::living_dark::LivingDarkEvent as E;
+    match what {
+        E::SporeBurst => SoundCue::SporePuff,
+        E::RootsRegrew | E::RootAxeFired => SoundCue::RootCreak,
+        E::FleshHealed => SoundCue::FleshSquelch,
+        E::RootsBurned => SoundCue::FireCrackle,
+        E::TideRising | E::TideEbbing => SoundCue::FluidRush,
+        E::CourtStanding | E::ErrandDone | E::SwarmTruce => SoundCue::HiveChime,
+        E::SwarmBroken | E::GateRewards => SoundCue::MilestoneFanfare,
+        E::CourtHostile => SoundCue::CreatureScreech,
+        E::MindAwakened | E::MindExposed | E::MindRegrew => SoundCue::MindRoar,
+        E::MindPossessed => SoundCue::WispChime,
+        E::MindDefeated => SoundCue::CreatureDeath,
+        E::CapBounce => SoundCue::BombBounce,
+        E::Bought => SoundCue::Upgrade,
     }
 }
 
@@ -814,6 +844,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         },
         GameplayEventKind::GlowmotherAwoke { .. } => Some(SoundCue::CreatureScreech),
         GameplayEventKind::GlowmotherDefeated { .. } => Some(SoundCue::CreatureDeath),
+        // The Living Dark (Wave 8).
+        GameplayEventKind::LivingDark { what, .. } => Some(living_dark_cue(*what)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1146,7 +1178,8 @@ mod tests {
             | GameplayEventKind::StarCorePhase { .. }
             | GameplayEventKind::StarCoreBeaten { .. }
             | GameplayEventKind::GlowmotherAwoke { .. }
-            | GameplayEventKind::GlowmotherDefeated { .. } => {}
+            | GameplayEventKind::GlowmotherDefeated { .. }
+            | GameplayEventKind::LivingDark { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },

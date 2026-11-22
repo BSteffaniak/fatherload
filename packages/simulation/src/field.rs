@@ -67,6 +67,8 @@ pub enum ScreenEffect {
     Vignette,
     /// Fog toward [`ScreenEffects::fog_rgb`], thicker away from the centre.
     Fog,
+    /// Blur: the picture smears soft (the Fungal Forest's spore clouds, Wave 8).
+    Blur,
 }
 
 impl ScreenEffect {
@@ -85,6 +87,7 @@ impl ScreenEffect {
         Self::Scanlines,
         Self::Vignette,
         Self::Fog,
+        Self::Blur,
     ];
 
     /// Index into [`ScreenEffects::levels`].
@@ -110,17 +113,21 @@ impl ScreenEffect {
             Self::Scanlines => "scanlines",
             Self::Vignette => "vignette",
             Self::Fog => "fog",
+            Self::Blur => "blur",
         }
     }
 }
 
 /// Number of [`ScreenEffect`]s.
-pub const SCREEN_EFFECT_COUNT: usize = 13;
+pub const SCREEN_EFFECT_COUNT: usize = 14;
 
 /// Screen effects as plain data: a level (percent, 0..=100) per [`ScreenEffect`] plus the
 /// colours the grade and the fog lean toward.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct ScreenEffects {
+    /// Saved and sent as a list, so files written before an effect was appended (13 levels
+    /// before the Wave 8 blur) load with the new effects off.
+    #[serde(with = "levels_serde")]
     pub levels: [u8; SCREEN_EFFECT_COUNT],
     pub grade_rgb: [u8; 3],
     pub fog_rgb: [u8; 3],
@@ -171,6 +178,32 @@ impl ScreenEffects {
 impl Default for ScreenEffects {
     fn default() -> Self {
         Self::NONE
+    }
+}
+
+/// [`ScreenEffects::levels`] as a list: older lists (fewer effects) pad with zeros, longer ones
+/// (a newer build's effects) drop what this build does not know.
+mod levels_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::SCREEN_EFFECT_COUNT;
+
+    pub fn serialize<S: Serializer>(
+        levels: &[u8; SCREEN_EFFECT_COUNT],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        levels.as_slice().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<[u8; SCREEN_EFFECT_COUNT], D::Error> {
+        let list = Vec::<u8>::deserialize(deserializer)?;
+        let mut levels = [0; SCREEN_EFFECT_COUNT];
+        for (slot, level) in levels.iter_mut().zip(list) {
+            *slot = level;
+        }
+        Ok(levels)
     }
 }
 
