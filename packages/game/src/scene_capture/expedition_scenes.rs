@@ -254,7 +254,8 @@ fn anomaly_scene(stage: &mut SceneStage<'_>, kind: AnomalyKind) {
         } else {
             inner.max.y
         };
-        place_rig(world, player, inner.min.x + 3, row);
+        // Clear of the caches (the mirror room's twins sit three in from each wall).
+        place_rig(world, player, inner.min.x + 5, row);
         reveal(
             world,
             player,
