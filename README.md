@@ -493,6 +493,33 @@ classic ladder exactly. Beacons, built lifts and dive charges work in every worl
   something new at least every 30 minutes (details and the full table in
   [packages/simulation/README.md](packages/simulation/README.md)).
 
+### The Descent economy (wave 8)
+
+- **Pressure and lighting ladders.** Two new shop lines on Deep Descent worlds, one tier per
+  Descent: the **Pressure Rating** (deeper than its seals are rated, the thrusters burn 35 %
+  more fuel per Descent: felt, never fatal) and the **Headlamp** (a wider lamp per tier). Each
+  goes on sale once someone reaches the Descent it is rated for.
+- **Felt before you buy.** A rig system goes on sale only once the crew has felt why it is
+  needed: the hull groaning past a gate (the crush starts gently on the gate's first rows), the
+  Glow Sea's dark for Lamp II.
+- **Deep shops.** Every outpost's counter sells the tiers its Descent needs (core tiers to the
+  Descent's cap, the next Pressure Rating and Headlamp tiers, the hazard counters and the rig
+  systems), at the town price once claimed.
+- **Layer resources and workshops.** The drill now and then digs a stratum's layer resource out
+  of its rock (Root Fibre, Kiln Clay, Mine Timber, Crystal Lens, Pressure Pearl, Spore Silk,
+  ...; they take no cargo room). Each outpost's workshop turns them into hull patches, fuel
+  cells, dive charges, blasting charges and **upgrade parts** (the next tier of a line for the
+  resources plus 40 % of its price): one recipe per stratum of Descents I-III.
+- **Ore pays its depth.** Ore hauled up from a deeper Descent sells for that Descent's premium
+  (110 % from the Old Deep, 125 % from the Living Dark, up to 230 % from the Heart).
+- **Fair placeholders.** Until Waves 9-10 fill them, the strata below Descent III never run
+  hotter than the radiator on sale before them can cool.
+- **First-time hints.** Each seat gets a one-line tip the first time it meets a Descent system
+  (a layer resource, an outpost, an ancient lift, underrated seals, a gate, a system on sale,
+  the dark, strange gravity, slick ground, fluid, beacons).
+- Screenshot scenes: `outpost_deep_shop`, `outpost_workshop`, `new_world_deep_descent`,
+  `layer_resource_drops`.
+
 ### Caves
 
 Worlds from generator v6 on add **cave ecosystems**, each with its own rock,
@@ -995,14 +1022,15 @@ beside a cracked seal, or a **story** seen through.
   13,000-15,000 at tier 3, 35,000-42,000 at tier 4 and 70,000-90,000 at tier 5 (8-29 caches
   over 3 to 6 floors).
 
-### The Deep Descent (preview, generator V11)
+### The Deep Descent (generator V11)
 
-The **World** row of the new-game dialog switches between the classic dig and the **Deep
-Descent (preview)**: a world about **13,000 rows** deep (15 times a V10 world) in **eight
+The **World** row of the new-game dialog switches between the **Deep Descent** and **Classic
+(V10)**: a world about **13,000 rows** deep (15 times a V10 world) in **eight
 Descents** (the Crust, the Old Deep, the Living Dark, the Drowned and Frozen, the Hollow World,
-the Strange Layers, the Ancients and the Heart) and **41 strata**. The classic dig (generator
-V10) stays the default until Wave 8 fills Descents I to III. `--deep-descent` makes the
-preview the dialog's default; the tools take `--generator v11` (`--worldgen-report`,
+the Strange Layers, the Ancients and the Heart) and **41 strata**. Since Wave 8 new worlds
+start on the Deep Descent (`worldgen::DEEP_DESCENT_FOR_NEW_WORLDS`); saved worlds keep the
+generator they were made with. `--deep-descent` or `--classic` picks the dialog's starting
+world type; the tools take `--generator v11` (`--worldgen-report`,
 `--worldgen-preview`, `--balance-report`), and the screenshot scenes `descent_1_crust` to
 `descent_8_heart`, `descent_5_hollow_world`, `descent_outpost` and `descent_explored` (a
 world dug to the floor, the browser memory fixture) show it.

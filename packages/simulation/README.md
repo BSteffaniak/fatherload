@@ -3787,6 +3787,168 @@ it). Wave 8's Crust re-pacing has to answer that.
 - The fluids' slow levelling of wide bodies and deep-column compression (see the fluids
   section) are why the generated pockets stay small.
 
+## Wave 8 progression: Descent I-III progression, deep economy and V11 readiness
+
+The progression track of Wave 8 (expansion plan §13 "making a long dig fun", §14 cross-Descent
+systems, F10). Modules: `src/depth_progression.rs` (the new curves and rules, after "Wave 8"),
+`src/workshop.rs` (layer resources and recipes), `src/world/logistics.rs` (the tick and
+commands), `src/balance/descent.rs` (the probe); tests in `world/deep_progression_tests.rs`,
+`workshop::tests`, `balance::descent::tests`, and the game's `shell::onboarding` and
+`shell::world_setup` tests. **Classic worlds never change**: everything below is gated on
+`ProgressionRules::Descent` or `GeneratorVersion::has_descents`; V1-V11 generation is
+untouched (no golden digest changed, `GOLDEN_V11_DIGEST` included).
+
+### Upgrade tiers per Descent
+
+| Line | Per Descent | Rule |
+|---|---|---|
+| Drill, hull, fuel tank, cargo bay, engine, radiator (cooling) | `core_tier_cap` 6, 10, 13, 15, 17, 19, 21, 22 | Wave 7, unchanged |
+| **Pressure Rating** (`UpgradeKind::PressureRating`, offer 26) | tier n = rated for Descent n (stock 0 = the Crust), 7 tiers | `depth_line_cap(reached)`: on sale once someone reached the Descent it is rated for |
+| **Headlamp** (`UpgradeKind::Headlamp`, offer 27) | one tier per Descent, 7 tiers | same cap; `headlamp_light_scale` (+15 % reach a tier) multiplies Lamp II's in `PlayerPresentation::lamp_scale` |
+
+- Prices: `depth_line_cost` (Pressure 3,000 to 560,000; Headlamp 1,500 to 360,000), tier names
+  per Descent (`depth_line_tier_name`: "Old Deep Seals", "Lure Lamp", ...), previews and
+  `upgrade_effect` lines. Stored in `HazardGear::{pressure_rating, headlamp}`. Classic shops
+  still list their 18 lines (`CLASSIC_SHOP_LINES`); both new lines are `is_descent_only`.
+- **Pressure** (`pressure_fuel_percent`): thruster burn is +35 % per Descent below the rating
+  (at most 4 deficits), read every tick by the movement step (`pressure_burn_factor`, exactly
+  1.0 on classic worlds, so their movement is bit for bit unchanged). Felt on arriving in a
+  Descent; its tier goes on sale the same moment.
+- **Rig systems are felt before they are sold** (`UpgradeLock::Unfelt`): the Wave 7 sale row is
+  still needed, and then the crew must have felt the need (`Logistics::felt_systems`, crew-wide
+  bits): a gate system the moment a rig crosses into the Descent it gates, Lamp II where the
+  field light is at most `LAMP_II_FELT_LIGHT` (the Glow Sea), the Sonar Suite on reaching its
+  sale stratum (Wave 9 refines). `upgrade_lock_for` takes the felt bits (a new argument).
+- **The gate crush ramps** (`gate_damage_per_second`): 3 hull/s on the gate's first row up to
+  the Wave 7 stub's 14/s over `GATE_RAMP_ROWS` (40), so a dip to feel it is survivable.
+- **Fair placeholders below Descent III** (`placeholder_heat_cap_units`): on V11 worlds the
+  band heat of Descents IV-VIII is capped at what the radiator tier on sale before the Descent
+  opened cools (`radiator_cooling(core_tier_cap(d - 1))`, no shielding needed). A rig with the
+  previous Descent's caps and the gate systems holds its hull in the Heart (test). Waves 9-10
+  replace the cap with each stratum's own heat.
+
+### Deep shops
+
+`LogisticsCommand::OutpostUpgrade { outpost, offer }` buys the next tier of a shop line at an
+outpost's counter (`WorldState::outpost_offer` checks: inside the outpost, the shop's own lock,
+`outpost_stocks(descent, kind, next)`; price `OUTPOST_SHOP_PERCENT` 115 % unclaimed, 100 %
+claimed). Stock: core tiers to the outpost Descent's cap, Pressure Rating and Headlamp up to the
+tier rated for the Descent below, hazard counters, scanner, bombs and every rig system; never
+sky/Moon gear or the drill mount. `economy::fit_next_tier` fits a tier without charging.
+
+### Layer resources and workshops
+
+- `ItemKind::Layer(Stratum)` (appended; `ItemCategory::Material`, no cargo slots), named by the
+  registry's `layer_resource.name`, so the content tracks' names flow through unchanged. On
+  Deep Descent worlds, drilling a rock tile (one that yields a block) drops one about every
+  `LAYER_YIELD_ONE_IN` (22) tiles, picked by `workshop::layer_yield(seed, tile)` (a hash, so
+  every client agrees); it pops out beside the block (`descent_dig_extras`, called from the
+  drill chip). Drops glow in the stratum's accent colour; six pixel-art shapes by material
+  (`sprites::deep_gear::layer_resource`).
+- `LogisticsCommand::Craft { outpost, recipe }` works a `workshop::RECIPES` recipe (17, one per
+  stratum of Descents I-III, append only) at an outpost whose Descent is at least the recipe's
+  (`outpost_crafts`). Outputs: `Repair`, `Refuel`, `DiveCharges`, `Bombs`, and `Part(kind)`:
+  the next tier of a line for the resources plus `PART_PRICE_PERCENT` (40 %) of its shop price
+  (the tier must be on sale and stocked there).
+- Value curves: `layer_resource_worth(stratum)` (50 + 12 per stratum index, times the Descent
+  value curve) and `deep_ore_value(descent, rank)`, the curve new deep ores should take their
+  values from. **Ore pays its Descent** (`haul_premium_percent`): the deepest Descent a
+  player's haul came from since the last sale (`Logistics::haul_descent`, set when the drill
+  breaks ore) multiplies the depot's and outposts' ore payout by `descent_value_percent`; a
+  sale resets it. The Wave 7 value curve was only modelled before; now it is real.
+- **Seam for the content tracks**: if a track adds its own layer resource items or tiles, map
+  them onto `ItemKind::Layer(stratum)` (or change `descent_dig_extras`); recipes only read
+  `ItemKind::Layer` counts.
+
+### V11 for new worlds
+
+`worldgen::DEEP_DESCENT_FOR_NEW_WORLDS` (on in this branch) makes `GeneratorVersion::NEW_WORLD`
+the Deep Descent; the new-game dialog starts on it and its World row still offers
+**Classic (V10)** (`GeneratorVersion::CLASSIC`). `GeneratorVersion::CURRENT` (what
+`WorldSettings::new` and the tests use) stays V10, and saves keep their generator. The dialog's
+rows did not change, so the browser tests' navigation (nine downs to Start) still holds; they
+now start a Deep Descent world. `--deep-descent` / `--classic` pick the starting world type.
+**The integrator flips the constant off unless `DescentRun::pacing_passes(3)` holds** (the
+probe's Descent I-III check, below).
+
+### Onboarding
+
+`game/src/shell/onboarding.rs`: each seat's `SeatHints` shows a one-line tip in its toast the
+first time it meets a Descent system (`Hint`: gate crush, underrated seals, a system on sale,
+an outpost, an ancient lift, a layer resource, fluid, strange gravity, slick ground, the dark,
+beacons). Once per seat, never in a dialog or over a fresh message, at most one every
+`HINT_SPACING_TICKS`, only on Deep Descent worlds, skipped when the rig already shows the lesson.
+Reads the replicated world, so it works online, in split-screen and by touch.
+
+### The descent probe's pacing check
+
+`DescentStratum::markers` are each stratum's new things from the registry's real content
+(`registry_markers`): its arrival, creatures met there first (the classic strata's band
+roster), its signature rule, fluids and field physics, screen effects met first, landmarks
+(set pieces always, other kinds the first time), story logs (`STORY_LOG_SOURCES`: the Descents'
+story beats; **the story track appends its expedition-log source there**) and the workshop
+recipe it opens. The bot adds what it really buys (tiers, seals, rig systems, workshop parts)
+and the gate. `StratumRun::events` time them; `longest_gap_minutes` measures from the last new
+thing before the stratum to the next one's arrival. `DescentRun::pacing_failures(3)` /
+`pacing_passes(3)`: every stratum of Descents I-III waits at most `PACING_MAX_GAP_MINUTES` (40)
+for something new, costs at most 2 deaths and has everyday trips within one tank. The bot now
+buys the bay, tank and drill that make trips pay (about a tier per stratum), rates its seals per
+Descent, dips past a gate before buying its system (`GATE_DIP_MINUTES`) and crafts parts from
+the layer resources its trips dig (per stratum).
+
+This branch's run (60 Hz, default seed, the Wave 7 registry content):
+
+| Descent | Ends at (h) | §14 target (h) | Everyday trip fuel (max % of tank) | Deaths |
+|---|---|---|---|---|
+| I The Crust | 6.1 | 5-8 | 48 | 0 |
+| II The Old Deep | 13.7 | 13-18 | 26 | 0 |
+| III The Living Dark | 19.8 | 22-29 | 17 | 0 |
+| (whole run, VIII The Heart) | 67.7 | 60-90 | 12 | 3 |
+
+| Stratum | Minutes | New things | Creatures | Mechanics | Landmarks | Story | Upgrades (crafted) | Effects | Longest gap (min) | Check | Deaths | Everyday fuel % |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I Topsoil | 83 | 12 | 0 | 1 | 3 | 1 | 6 (0) | 0 | 12 | pass | 0 | 16 |
+| I Clay Beds | 38 | 5 | 2 | 1 | 0 | 0 | 1 (0) | 0 | 12 | pass | 0 | 28 |
+| I Grey Stone | 98 | 12 | 2 | 1 | 2 | 0 | 6 (0) | 0 | 14 | pass | 0 | 48 |
+| I Slate Shelves | 62 | 5 | 1 | 1 | 0 | 0 | 2 (1) | 0 | 15 | pass | 0 | 25 |
+| I Basalt Columns | 83 | 12 | 1 | 1 | 1 | 0 | 7 (0) | 0 | 17 | pass | 0 | 31 |
+| II Crystal Faults | 70 | 18 | 0 | 1 | 1 | 1 | 14 (1) | 0 | 14 | pass | 0 | 26 |
+| II Fossil Oceans | 63 | 11 | 0 | 2 | 0 | 0 | 8 (0) | 0 | 16 | pass | 0 | 11 |
+| II Pressure Cathedrals | 63 | 8 | 1 | 1 | 0 | 0 | 5 (0) | 0 | 16 | pass | 0 | 15 |
+| II Radioactive Hollow | 69 | 11 | 1 | 1 | 0 | 0 | 7 (0) | 1 | 16 | pass | 0 | 13 |
+| II Ancient Machine Layer | 57 | 3 | 0 | 1 | 0 | 0 | 1 (0) | 0 | 19 | pass | 0 | 11 |
+| II Void Geode Fields | 64 | 5 | 0 | 1 | 0 | 0 | 3 (0) | 0 | 21 | pass | 0 | 11 |
+| II Mantle Storm Zone | 71 | 9 | 1 | 2 | 1 | 0 | 3 (0) | 0 | 21 | pass | 0 | 11 |
+| III Fungal Forest | 75 | 21 | 0 | 1 | 1 | 1 | 16 (11) | 1 | 13 | pass | 0 | 17 |
+| III Root Labyrinth | 64 | 4 | 0 | 1 | 0 | 0 | 2 (0) | 0 | 21 | pass | 0 | 11 |
+| III The Hive | 72 | 6 | 1 | 1 | 1 | 0 | 2 (0) | 0 | 21 | pass | 0 | 11 |
+| III Flesh Caverns | 72 | 6 | 0 | 2 | 0 | 0 | 2 (0) | 1 | 14 | pass | 0 | 10 |
+| III Glow Sea | 83 | 10 | 0 | 3 | 1 | 0 | 3 (0) | 1 | 14 | pass | 0 | 10 |
+
+Descents I-III pass the check. What changed it: the bot used to buy only what the next stratum
+demanded, so it never bought a bay or drill in the Crust, lost money on every trip below the
+Clay Beds and took 14.2 h there (everyday trips 168 % of the tank); buying what makes trips pay
+brings the Crust to 6.1 h with trips under half a tank. Open for the integrator: the Living Dark
+ends about 2 h early because its strata still have Wave 7's placeholder creature tables (the
+content tracks' 2-4 creatures each add about 15-30 content minutes a stratum); re-run the probe
+after stacking them (`cargo test --release -p fatherload_simulation descent_report -- --ignored
+--nocapture`). The deeper Descents run ahead of §14 until Waves 9-10 author them.
+
+### Formats and seams
+
+- `PROTOCOL_VERSION` 16 (the two commands, `ItemKind::Layer`, the two upgrade kinds, the
+  `HazardGear` and `Logistics` fields) and save format 14 (formats 8-13 load as is; the
+  every-format test covers format 13 without the new fields). The integrator collapses both.
+- No new gameplay events and no audio patches (the dialog's own sounds and toasts).
+- Shared-file edits (all additive): `economy` (appended upgrade kinds, `UpgradeLock::{Unfelt,
+  NotStockedHere}`, `upgrade_lock_for`'s felt argument, `fit_next_tier`, `UpgradeKind::name`),
+  `item` (`ItemKind::Layer`), `protection::HazardGear`, `logistics` (`LogisticsCommand`
+  variants, `Logistics` fields), `world::{commands (dig extras, felt lock), movement (pressure
+  burn), simulate (placeholder heat cap), progression (haul premium), drops}`,
+  `worldgen::mod` (the new-world constants), and in the game the shop icons and lock tags,
+  drops, the logistics dialog and HUD, the New World dialog, the lamp scale, a `SeatUi` field
+  and its tracking call, the save/protocol docs and the sprite atlas (appended at the end).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
