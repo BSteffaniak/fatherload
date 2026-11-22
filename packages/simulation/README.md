@@ -4425,7 +4425,7 @@ Living Dark's rows:
   (`mind_fell`) grants every rig the **Bio-Filter and Lamp II** (`grant_rig_system`), and
   rigs that join later are fitted too; with no rig in its hollow for `MIND_SLEEP_MILLIS` it
   sleeps and heals. On a Peaceful world (no creatures) it yields its gate to the first rig in
-  its hollow.
+  its hollow (the Hive's errands, which start with a cull, cannot be finished there).
 - **The brood matriarch** appears in her gallery when a rig comes near (until the Swarm breaks),
   and breeds Swarm soldiers (`brood_of`; bile polyps bud leechlings, cave nests still hatch bats).
 - **Gate**: the Bio-Filter and Lamp II are boss rewards (`RigSystem::boss_reward`), never sold
@@ -4527,6 +4527,28 @@ Living Dark itself takes 6.3 h of the run (21.5 h to 27.8 h) because the registr
 runs long (14.3 h against 5-8 h): once the Crust track's re-pacing lands, the window
 (`the_living_dark_ends_on_the_plans_hours_and_its_gate_is_won_not_bought`) needs a re-check at
 integration.
+
+### Review fixes (Wave 8 Living Dark review)
+
+- **Auto-aim spares the peaceful** (`WorldState::living_peaceful`): the Amber Court's drones
+  while it is friendly, the Swarm under a truce and lure fish are never locked onto, so a rig
+  with auto-aim on (the touch and gamepad default) no longer sours the Court by standing in
+  its hall.
+- **Lifts stay open**: roots and flesh never grow back into a lift's shaft (its column from a
+  row above its top station to a row below its bottom one).
+- **The Mind's balance**: the boss bot fought with a top-tier hull (2,480) while the descent
+  probe has a rig reach the Glow Sea at hull tier 9 (980), where it came out with under 20 %
+  of its hull. The Mind's orbs now hit for 4 (was 6) and it has 300 health (was 420); the bot
+  fights at hull tier 10 (`HULL_AT_THE_MIND`) and must keep 20 %.
+- **Spores sting for real**: `SPORE_DAMAGE_PER_SECOND` is scaled by the depth's creature scale
+  (`enemy::tier_scale`, about 1.8 hull a second in the Living Dark; it was a flat 1, which a
+  deep hull never noticed).
+- **Readable boss**: glowing nerve tendrils wire each living node to the Mind, and an exposed
+  Mind shows a raw, throbbing core (`rendering/world/living_dark.rs::draw_mind_nerves`).
+- **News lines** for each local seat (`local_game::announce_living_dark`): the Mind waking,
+  exposed, regrowing its nodes and falling (with its rewards), the Court seeing its comb taken
+  or turning hostile, the Swarm breaking, and the acid tide rising (seats in the Flesh Caverns).
+- The brood matriarch never appears on a Peaceful world.
 
 ### Seams and known limits
 
