@@ -203,15 +203,51 @@ impl AnomalyRoom {
         }
     }
 
-    /// Whether `position` is one of the room's two doorways: three rows tall at the floor, in
-    /// both side walls. The linings (brick, crystal, obsidian, building glass) can be harder
-    /// than the rock around them, or not diggable at all, so a rig always walks in through a
-    /// door it reaches by digging the ordinary rock beside the room.
+    /// Whether `position` is one of the room's ways in. The linings (brick, crystal, obsidian,
+    /// building glass) can be harder than the rock around them, or not diggable at all, so a
+    /// rig always comes in through an opening it reaches by digging the ordinary rock beside
+    /// the room:
+    ///
+    /// * most rooms have a doorway three rows tall at the floor in both side walls;
+    /// * the upturned room has a two-wide hatch in the middle of its floor instead. A rig
+    ///   climbs in from below and falls on upward to the ceiling. (Through a side door the
+    ///   flip would turn the stick round on the threshold, because the stick drives along the
+    ///   gravity frame's horizontal, and a rig driving in would be pushed straight back out.)
     #[must_use]
     pub const fn is_door(&self, position: TilePosition) -> bool {
-        (position.x == self.bounds.min.x || position.x == self.bounds.max.x)
-            && position.y >= self.bounds.max.y - 3
-            && position.y < self.bounds.max.y
+        match self.kind {
+            AnomalyKind::GravityFlip => {
+                let middle = i32::midpoint(self.bounds.min.x, self.bounds.max.x);
+                position.y == self.bounds.max.y
+                    && (position.x == middle || position.x == middle + 1)
+            }
+            AnomalyKind::PixelRot | AnomalyKind::TimeFrozen | AnomalyKind::Mirror => {
+                (position.x == self.bounds.min.x || position.x == self.bounds.max.x)
+                    && position.y >= self.bounds.max.y - 3
+                    && position.y < self.bounds.max.y
+            }
+        }
+    }
+
+    /// The tile just outside door tile `door` (where a rig digs to reach it).
+    #[must_use]
+    pub const fn outside_of(&self, door: TilePosition) -> TilePosition {
+        if door.x == self.bounds.min.x {
+            TilePosition {
+                x: door.x - 1,
+                y: door.y,
+            }
+        } else if door.x == self.bounds.max.x {
+            TilePosition {
+                x: door.x + 1,
+                y: door.y,
+            }
+        } else {
+            TilePosition {
+                x: door.x,
+                y: door.y + 1,
+            }
+        }
     }
 
     /// The cache tile the room's reward is: a relic cache only where the stratum's own drill
@@ -227,14 +263,24 @@ impl AnomalyRoom {
         }
     }
 
-    /// The field zone the room's rule fills (its walls and one tile beyond, feathered over two
-    /// tiles, so the interior is fully inside).
+    /// The field zone the room's rule fills: the open room, not its walls or doorways.
+    ///
+    /// The doorways and the hatch stay ordinary ground, so a rig reaches the threshold under
+    /// the stratum's own rule. The upturned room switches at a hard edge: a feathered one
+    /// leaves a band of weak gravity whose frame (and so the stick's "right") flips back and
+    /// forth (`a_rig_climbs_in_through_the_hatch_and_falls_up_in_the_upturned_room`). The other
+    /// rooms fade in over their first tile.
     #[must_use]
     pub const fn zone(&self) -> FieldZone {
+        let inner = self.interior();
+        let feather = match self.kind {
+            AnomalyKind::GravityFlip => 0,
+            AnomalyKind::PixelRot | AnomalyKind::TimeFrozen | AnomalyKind::Mirror => 1,
+        };
         FieldZone::new(
-            (self.bounds.min.x - 1, self.bounds.min.y - 1),
-            (self.bounds.max.x + 1, self.bounds.max.y + 1),
-            2,
+            (inner.min.x, inner.min.y),
+            (inner.max.x, inner.max.y),
+            feather,
             self.kind.profile(),
         )
     }

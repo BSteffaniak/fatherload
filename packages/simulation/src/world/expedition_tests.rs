@@ -403,3 +403,141 @@ fn co_op_partners_share_one_journal_through_replication() {
         );
     }
 }
+
+/// A rig that digs up under an upturned room climbs in through its floor hatch and falls on
+/// upward to the ceiling where the cache waits (played, not teleported inside).
+#[test]
+fn a_rig_climbs_in_through_the_hatch_and_falls_up_in_the_upturned_room() {
+    let mut world = world(0x5EED);
+    let settings = *world.terrain().settings();
+    let room = room_of(&settings, anomaly::AnomalyKind::GravityFlip);
+    let hatch: Vec<TilePosition> = room
+        .bounds
+        .positions()
+        .filter(|tile| room.is_door(*tile))
+        .collect();
+    assert_eq!(hatch.len(), 2);
+    // A shaft dug up to the hatch from below, as a rig coming from underneath would leave it.
+    let below = room.bounds.max.y;
+    for door in &hatch {
+        assert_eq!(
+            world.terrain().tile(*door).map(|t| t.kind),
+            Some(TileKind::Air)
+        );
+        for y in below + 1..=below + 6 {
+            let _ = world
+                .terrain_mut()
+                .set_kind(TilePosition { x: door.x, y }, TileKind::Air);
+        }
+        let _ = world.terrain_mut().set_kind(
+            TilePosition {
+                x: door.x,
+                y: below + 7,
+            },
+            TileKind::Stone,
+        );
+    }
+    put(
+        &mut world,
+        PLAYER,
+        TilePosition {
+            x: hatch[0].x,
+            y: below + 6,
+        },
+    );
+    step(&mut world);
+    let climb = TickInputs::held(PLAYER, crate::ControlState::new(0.0, true, false));
+    let mut entered = false;
+    for _ in 0..360 {
+        let tick = world.simulation_tick();
+        let events = world.simulate_tick(tick, &climb).events;
+        entered |= events
+            .iter()
+            .any(|event| matches!(event.kind, GameplayEventKind::AnomalyEntered { .. }));
+        if entered
+            && world
+                .actor_tile(PLAYER)
+                .is_some_and(|tile| tile.y < room.interior().max.y - 1)
+        {
+            break;
+        }
+    }
+    assert!(
+        entered,
+        "the rig never climbed in: {:?} for {:?}",
+        world.actor_tile(PLAYER),
+        room.bounds
+    );
+    // Let go: the room takes the rig the rest of the way up.
+    let idle = TickInputs::held(PLAYER, crate::ControlState::new(0.0, false, false));
+    for _ in 0..240 {
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(tick, &idle);
+    }
+    let tile = world.actor_tile(PLAYER).expect("rig");
+    assert!(
+        room.interior().contains(tile) && tile.y <= room.interior().min.y + 1,
+        "the rig rests on the ceiling: {tile:?} in {:?}",
+        room.interior()
+    );
+    assert!(world.fields_for(PLAYER).gravity_y < -0.9);
+}
+
+/// A rig drives into a mirror room through a side doorway: once the room mirrors the screen
+/// and the stick, a player keeps pushing toward the room as the screen now shows it (the
+/// other way), and the rig carries on in.
+#[test]
+fn a_rig_drives_into_the_mirror_room_through_a_doorway() {
+    let mut world = world(0x5EED);
+    let settings = *world.terrain().settings();
+    let room = room_of(&settings, anomaly::AnomalyKind::Mirror);
+    let floor_row = room.bounds.max.y - 1;
+    for x in room.bounds.min.x - 4..room.bounds.min.x {
+        for y in floor_row - 2..=floor_row {
+            let _ = world
+                .terrain_mut()
+                .set_kind(TilePosition { x, y }, TileKind::Air);
+        }
+        let _ = world.terrain_mut().set_kind(
+            TilePosition {
+                x,
+                y: floor_row + 1,
+            },
+            TileKind::Stone,
+        );
+    }
+    put(
+        &mut world,
+        PLAYER,
+        TilePosition {
+            x: room.bounds.min.x - 3,
+            y: floor_row,
+        },
+    );
+    let mut inside = false;
+    for _ in 0..600 {
+        let toward = if world.fields_for(PLAYER).mirrored() {
+            -1.0
+        } else {
+            1.0
+        };
+        let inputs = TickInputs::held(PLAYER, crate::ControlState::new(toward, false, false));
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(tick, &inputs);
+        if world
+            .actor_tile(PLAYER)
+            // Two tiles in: the twin cache waits on the floor one tile further.
+            .is_some_and(|tile| tile.x >= room.interior().min.x + 2)
+        {
+            inside = true;
+            break;
+        }
+    }
+    assert!(
+        inside,
+        "stalled at {:?} for {:?}",
+        world.actor_tile(PLAYER),
+        room.bounds
+    );
+    assert!(world.expedition().anomaly_kinds & anomaly::AnomalyKind::Mirror.bit() != 0);
+}

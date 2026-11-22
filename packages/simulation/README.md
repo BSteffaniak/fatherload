@@ -4732,8 +4732,16 @@ tribes (Bran), the Megacity archive (Ines) and the Heart outpost (Amos's letters
   desaturated cold grade, a relic cache floating mid-air, obsidian walls) and `Mirror` (screen
   and controls mirrored, glass walls, twin caches). The linings can be harder than the rock
   around them (obsidian, crystal) or not diggable at all (building glass), so every room has a
-  doorway three rows tall at the floor in both side walls (`AnomalyRoom::is_door`): a rig digs
-  the stratum's ordinary rock to a door and walks in. No room lies in a stratum whose own drill
+  way in (`AnomalyRoom::is_door`): a rig digs the stratum's ordinary rock to it. Most rooms have
+  a doorway three rows tall at the floor in both side walls. The upturned room instead has a
+  two-wide hatch in the middle of its floor that a rig climbs up through and then falls on up
+  to the ceiling. Through a side door the flip turned the stick round on the threshold (the
+  stick drives along the gravity frame's horizontal, a Wave 7 rule), and a driving rig was
+  pushed straight back out. The room fields cover the open room only, so the doorways stay
+  ordinary ground. The upturned room switches at a hard edge; the others fade in over one
+  tile. Bot tests play the way in rather than teleporting:
+  `a_rig_climbs_in_through_the_hatch_and_falls_up_in_the_upturned_room` and
+  `a_rig_drives_into_the_mirror_room_through_a_doorway`. No room lies in a stratum whose own drill
   cannot open a treasure cache (the Topsoil), and the stopped room's relic cache falls back to a
   treasure cache where the stratum's drill cannot open a relic cache (`AnomalyRoom::cache_tile`;
   review fix, `every_anomaly_room_opens_through_a_door_and_its_caches_open_with_the_local_drill`

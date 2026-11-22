@@ -353,22 +353,30 @@ fn every_anomaly_room_opens_through_a_door_and_its_caches_open_with_the_local_dr
     for kind in AnomalyKind::ALL {
         for room in rooms.iter().filter(|room| room.kind == kind).take(3) {
             let strength = room.stratum.host_band().required_drill_strength();
-            for (wall, beside) in [
-                (room.bounds.min.x, room.bounds.min.x - 1),
-                (room.bounds.max.x, room.bounds.max.x + 1),
-            ] {
-                for y in room.bounds.max.y - 3..room.bounds.max.y {
-                    let door = TilePosition { x: wall, y };
-                    assert!(room.is_door(door));
-                    assert_eq!(
-                        generated_tile(&settings, door).kind,
-                        TileKind::Air,
-                        "{kind:?} door at {door:?}"
-                    );
-                    // The rock beside the door is ordinary ground, never a sealed wall.
-                    let outside = generated_tile(&settings, TilePosition { x: beside, y }).kind;
-                    assert!(!is_indestructible(outside), "{kind:?}: {outside:?}");
-                }
+            let doors: Vec<TilePosition> = room
+                .bounds
+                .positions()
+                .filter(|tile| room.is_door(*tile))
+                .collect();
+            assert_eq!(
+                doors.len(),
+                if kind == AnomalyKind::GravityFlip {
+                    2
+                } else {
+                    6
+                },
+                "{kind:?}"
+            );
+            for door in doors {
+                assert!(!room.interior().contains(door), "a door is in a wall");
+                assert_eq!(
+                    generated_tile(&settings, door).kind,
+                    TileKind::Air,
+                    "{kind:?} door at {door:?}"
+                );
+                // The rock beside the door is ordinary ground, never a sealed wall.
+                let outside = generated_tile(&settings, room.outside_of(door)).kind;
+                assert!(!is_indestructible(outside), "{kind:?}: {outside:?}");
             }
             for cache in room.caches().into_iter().flatten() {
                 let tile = generated_tile(&settings, cache).kind;
