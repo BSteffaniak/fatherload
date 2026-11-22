@@ -78,13 +78,20 @@ Modules:
   `view_frame::parallax_x/y` (absolute place, so a frame move never makes them jump), effects
   kept in pixels follow a frame move (`Effects::reframe`) and an online client's pose overrides
   rebase onto the rendered world's frame (`Pose::rebased`). Split-screen seats share the
-  world's frame (one per world until F11).
+  world's frame (one per world until F11). Patterns anchored to the world grid (bedrock, weather
+  cells, wind streaks) use `view_frame::pattern_start_x` / `pattern_phase_x/y` /
+  `pattern_anchor_x`, and animation phases seeded by place (light flicker, waterfall wobble,
+  treads, people's steps, bolt jags) use `view_frame::phase_x/y`, so a frame move never makes
+  them jump; art- and physical-pixel snapping round halfway cases up on both sides of zero
+  (`pixel_scale::round_half_up`) for the same reason.
 - `scene_capture` — `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]
   [--frame-timing N] [--export-saves] [--frame-shift X,Y]` renders scripted scenes to PNGs (see
-  the art guide). `--frame-shift X,Y` re-expresses every staged world in a fixed frame X sectors
-  right and Y down before its frames run: nothing moves in the world, so diffing against an
-  unshifted run finds drawing that still reads positions as world pixels (wave 7: all 442 scenes
-  pixel-identical underground and under 2 % elsewhere, the night lighting grid's phase).
+  the art guide). `--frame-shift X,Y` re-expresses every staged world in a frame X sectors
+  right and Y down of its staged one (keeping whether it floats) before its frames run: nothing
+  moves in the world, so diffing against an unshifted run finds drawing that still reads
+  positions as world pixels (wave 7 review: 381 of 444 scenes pixel-identical, the rest under
+  1 %, GPU seam rounding and `f32` physics at a different magnitude). Scene scripts that place
+  actors after staging go through `world.frame()`.
   `far_billion_tiles` and `far_frame_hop` show play 10^9 tiles out and a frame hop mid-drive.
   `--frame-timing N` then draws N more frames per scene and prints the CPU time of the frame
   work (snapshot, renderer sync and draw calls; not the swap): mean, median, p95 and max.

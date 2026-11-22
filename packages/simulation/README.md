@@ -2993,8 +2993,10 @@ splits a position in two:
 ### The choice and the numbers
 
 `position_cost_report` (`cargo test -p fatherload_simulation --release position_cost_report --
---ignored --nocapture`; a V5 arena with 4,000 drops, 600 ticks at 60 Hz, best of three
-alternating runs on a loaded machine):
+--ignored --nocapture`; a V5 arena with 4,000 drops spawned, 600 ticks at 60 Hz, best of three
+alternating runs on a loaded machine; the drops merge into about 32 stacks within the run, so
+the tick rows time a rig and a few dozen entities, while the frame move times all 4,000; the
+review re-run measured 710 / 711 µs, 0.48 ms and 1.43 / 1.10 / 11.6 ns):
 
 | Measure | Result |
 |---|---|
@@ -3054,7 +3056,16 @@ replaces in the origin frame, which is why V1-V10 results are bit for bit unchan
 meaning (the origin frame) for tests and fixed-frame scenes. The tomb trap geometry
 (`tomb::traps::{blade_pivot, blade_tip, crusher_block, dart_position, sand_surface,
 fog_centre}`), `WorldState::outside_spot`, `world::drops::blast_spray_velocity` and
-`authoritative_mine_target` take the frame as their first argument.
+`authoritative_mine_target` take the frame as their first argument. Quest and arc
+prerequisites read the rig through the frame (`Prerequisite::met_in`, `OfferContext::frame`;
+`Prerequisite::met` is the origin-frame reading for tests).
+
+Presentation (game crate, `view_frame`): besides `frame()`, patterns anchored to the world grid
+use `pattern_start_x` / `pattern_phase_x/y` / `pattern_anchor_x` (cell index and phase of the
+frame origin, so cell-hashed patterns keep their look across a frame move) and animation phases
+seeded by place use `phase_x/y` (the old world pixel). Snapping to art or physical pixels breaks
+ties upward on both sides of zero (`pixel_scale::round_half_up`), so the grid never depends on
+the side of the frame origin a sprite is on.
 
 ### Netcode and saves
 
@@ -3088,10 +3099,13 @@ fog_centre}`), `WorldState::outside_spot`, `world::drops::blast_spray_velocity` 
   reordering play 10^9 tiles out while the frame hops; every client authority hash matches the
   host at every compared frame.
 - Game: a format 12 save with a rig at 4.2 million px loads exactly, and a floating frame
-  round-trips in format 13; `--frame-shift 1,-1` renders all 442 screenshot scenes in a frame
-  off the origin: underground, tomb, crypt and Moon scenes are pixel-identical, the rest differ
-  in under 2 % of pixels (the night lighting's cell grid and dither phase), all but two dusk
-  scenes under 1 %.
+  round-trips in format 13; `frame_tests::depth_prerequisites_read_the_rig_through_the_frame`;
+  `--frame-shift 1,-1` renders all 444 screenshot scenes one sector off their staged frame
+  (review run): 381 are pixel-identical and the rest differ in under 1 % of pixels (crypt scenes
+  up to 0.8 %: one-pixel mortar seams from GPU rounding at larger coordinates, and enemies a
+  pixel apart after hundreds of ticks of `f32` physics at a different magnitude); everything
+  else is under 0.11 %. The first review pass found and fixed real frame bugs this way (shops'
+  doors, home and plaza lights, vent columns, village doors, pattern phases).
 - V1-V10 golden digests and every existing determinism, replay and save hash are unchanged
   (the fixed frame at the origin is not hashed and all helpers reduce to the old expressions).
 
@@ -3107,6 +3121,17 @@ fog_centre}`), `WorldState::outside_spot`, `world::drops::blast_spray_velocity` 
   `legacy_px`, accurate to a tile or so 10^9 tiles out. The dev online bots still assume the
   town is near.
 - No gameplay event codes were added (350-359 stay free).
+- A replica that misses the live sections of two frame moves on one axis (or the host
+  teleporting its anchor several sectors) shifts once by the total where the host shifted in
+  steps: entities on the far side of the shift can differ by an `f32` ulp until their next
+  record (a hash mismatch heals through the usual keyframe). A frame-move log would close it.
+- V5-V10 world generation is only meant to reach `STREAMED_COLUMN_LIMIT`: at 10^9 columns its
+  cave field is wrong (the `far_billion_tiles` scene shows alternate tunnel columns with a cave
+  back wall). Gameplay tests there carve their own arenas; V11's generator must be checked out
+  to its `column_limit`.
+- Balance setups (`balance::{climb, building, combat}`) and the dev online bots still place
+  rigs in world pixels; they are correct on fixed frames and on a floating world before its
+  first frame move only.
 
 ## Replication
 

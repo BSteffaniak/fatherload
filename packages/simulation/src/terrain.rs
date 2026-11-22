@@ -570,7 +570,7 @@ pub struct Terrain {
     /// the terrain; owned by the world (it moves only in `WorldState::recentre_frame`).
     frame: Frame,
     /// A streamed world's column limit raised past its generator's (test and tool worlds far
-    /// from the origin; never serialized, replicated or hashed).
+    /// from the origin). Carried by the terrain snapshot (saves and keyframes), not hashed.
     column_limit_override: Option<i32>,
 }
 
@@ -784,8 +784,8 @@ impl Terrain {
     }
 
     /// Raises (or lowers) a streamed world's column limit, for test and tool worlds far from
-    /// the origin (F7 precision tests at 10^9 tiles). Not saved or replicated: every peer of
-    /// such a world must call it.
+    /// the origin (F7 precision tests at 10^9 tiles). Carried by the terrain snapshot, so saves
+    /// and keyframes keep it; not hashed.
     #[doc(hidden)]
     pub const fn set_column_limit_for_tests(&mut self, limit: i32) {
         self.column_limit_override = Some(if limit < 1 { 1 } else { limit });
@@ -798,7 +798,7 @@ impl Terrain {
     }
 
     /// Sets the local pixel frame record. Only the world moves it (shifting every position
-    /// with it, `WorldState::set_frame`); restoring a saved terrain sets it from the save.
+    /// with it, `WorldState::move_frame`); restoring a saved terrain sets it from the save.
     pub(crate) const fn set_frame(&mut self, frame: Frame) {
         self.frame = frame;
     }
