@@ -3419,6 +3419,22 @@ Codes 384-389 stay free in the fluids range.
 save format 13 (fluid tiles in the diffs, the schedule); formats 8-12 load as is. No worldgen
 change: the V1-V10 golden digests stand (V1-V10 never place fluid).
 
+**Known limits (measured in review).** Levelling is diffusive: every move is a local transfer,
+so a wide body evens out in time that grows with the square of its width. A cave pool or a
+breached pocket of a few dozen cells settles in seconds, but `fluid_lake_cost_report` (ignored;
+`cargo test --release -p fatherload_simulation fluid_lake_cost_report -- --ignored --nocapture`)
+floods a 100 x 50 cavern from 2,000 full cells and the lake is still levelling after 600 s of
+game time. Over that run it averaged about 140 tile writes per tick, peaking near the budget at
+about 1,950, and each write is a terrain op sent to every client the chunk is relevant to. CPU
+cost averaged 0.6 ms per 60 Hz tick on a heavily loaded machine. Volume stays exact.
+Compression also squeezes a deep column: 35 rows of water poured into a shaft settle into 25
+compressed rows, so a tall body's surface drops as it wakes. V11 strata should keep generated
+bodies small (the default `FluidPocketRule` radii do) until a faster levelling scheme lands,
+such as pressure propagated along connected runs. Rig motion in fluid is tick-rate stable at
+steady state (the same terminal speeds at 20, 30 and 60 Hz). It applies buoyancy and drag after
+the movement step, though, so positions drift apart by a constant offset of about half a tile
+between 20 Hz and 60 Hz while a rig speeds up or slows down.
+
 **Seams for other tracks and later waves:**
 
 - *Generation (F8, the V11 generator; the integrator wires it)*:
