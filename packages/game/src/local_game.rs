@@ -167,6 +167,8 @@ pub struct LocalGame {
     pending_welcome: Option<(String, String)>,
     /// Play time of a loaded save that is being hosted from the lobby.
     resumed_play_seconds: Option<f32>,
+    /// Who lay in bed through tonight (no dawn banner for them).
+    dawn_witnesses: crate::night_text::DawnWitnesses,
 }
 
 impl LocalGame {
@@ -192,6 +194,7 @@ impl LocalGame {
             profile: None,
             pending_welcome: None,
             resumed_play_seconds: None,
+            dawn_witnesses: crate::night_text::DawnWitnesses::default(),
         }
     }
 
@@ -743,23 +746,54 @@ impl LocalGame {
     fn announce_night(&mut self, players: &[PlayerId]) {
         use crate::shell::FanfareKind;
         let mut news: Vec<(FanfareKind, String, String)> = Vec::new();
+        let world = self.runtime.world();
+        // The dawn banner is for whoever stayed up through the night: not for a night slept
+        // away, nor for a seat whose player lay in bed through it.
+        self.dawn_witnesses.observe(
+            players
+                .iter()
+                .copied()
+                .filter(|player| world.is_in_bed(*player)),
+        );
+        let night_skipped = self.frame_events.iter().any(|event| {
+            matches!(
+                &event.event,
+                RuntimeEventKind::Gameplay(gameplay)
+                    if matches!(gameplay.kind, GameplayEventKind::NightSkipped { .. })
+            )
+        }) || world
+            .seconds_since_night_skipped()
+            .is_some_and(|seconds| seconds < crate::night_text::SKIPPED_DAWN_SECONDS);
+        let mut dawn_seats: Vec<usize> = Vec::new();
         for event in &self.frame_events {
             let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
                 continue;
             };
             match gameplay.kind {
                 GameplayEventKind::NightFell { moon, .. } => {
+                    self.dawn_witnesses.night_fell();
                     news.push((
                         FanfareKind::NightFalls,
                         moon.name().to_owned(),
                         crate::night_text::moon_warning(moon).to_owned(),
                     ));
                 }
-                GameplayEventKind::NightSurvived { kills, .. } => news.push((
-                    FanfareKind::NightSurvived,
-                    "You made it through the night".to_owned(),
-                    crate::night_text::dawn_detail(kills),
-                )),
+                GameplayEventKind::NightSurvived { kills, .. } => {
+                    dawn_seats = players
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, player)| {
+                            self.dawn_witnesses.sees_dawn(**player, night_skipped)
+                        })
+                        .map(|(seat, _)| seat)
+                        .collect();
+                    self.dawn_witnesses.dawn();
+                    news.push((
+                        FanfareKind::NightSurvived,
+                        "You made it through the night".to_owned(),
+                        crate::night_text::dawn_detail(kills),
+                    ));
+                }
                 GameplayEventKind::RareNightSpawn { .. } => news.push((
                     FanfareKind::AlphaHunts,
                     "The Umbral Alpha hunts".to_owned(),
@@ -771,6 +805,9 @@ impl LocalGame {
         }
         for (kind, title, detail) in news {
             for seat in 0..players.len() {
+                if kind == FanfareKind::NightSurvived && !dawn_seats.contains(&seat) {
+                    continue;
+                }
                 self.shell
                     .quest_fanfare(seat, kind, title.clone(), detail.clone());
             }
