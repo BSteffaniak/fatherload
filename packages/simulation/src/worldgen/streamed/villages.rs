@@ -104,6 +104,38 @@ static SKY_TOWNS: MemoCache<Option<Arc<Village>>> = MemoCache::new(128);
 static STAMPS: MemoCache<VillageStamp> = MemoCache::new(64);
 static FACTS: MemoCache<Vec<WorldFact>> = MemoCache::new(64);
 
+/// Gravel Hollow (Wave 8): a Deep Descent world's settlement beside the Descent I outpost in
+/// the Grey Stone, the underground settlement of the town's own site 0 (no other world places
+/// site 0). Its hall and centre column; `None` before V11.
+#[must_use]
+pub fn gravel_hollow_hall(settings: &WorldSettings) -> Option<(UndergroundSite, i32)> {
+    if !settings.generator.has_villages() {
+        return None;
+    }
+    let (center, top) = crate::crust::gravel_hollow(settings)?;
+    Some((
+        UndergroundSite {
+            site: 0,
+            center,
+            top,
+            slide: 1,
+        },
+        center,
+    ))
+}
+
+/// Gravel Hollow's village (Wave 8), built on first use, named for the place.
+fn gravel_hollow(settings: &WorldSettings) -> Option<Arc<Village>> {
+    let (site, center) = gravel_hollow_hall(settings)?;
+    let built = VILLAGES.get_or_compute((*settings, 0, 1), || {
+        let mut village = layout::build(settings, &SiteSpec::Underground { site, center });
+        crate::crust::GRAVEL_HOLLOW_NAME.clone_into(&mut village.name);
+        crate::crust::GRAVEL_HOLLOW_NAME.clone_into(&mut village.population.village_name);
+        Some(Arc::new(village))
+    });
+    built.as_ref().clone()
+}
+
 /// Site `site`'s geometry (`None` for sites the world does not place, or a world without
 /// villages).
 pub fn geometry(ctx: &Ctx, site: i32) -> Option<SiteGeometry> {
@@ -142,6 +174,13 @@ pub fn keeps_caves_out(ctx: &Ctx, x: i32, y: i32) -> bool {
         && y <= super::base::village_ground_row(&ctx.settings, site.center)
             + CLEAR_ROWS
             + CAVE_KEEP_OUT
+    {
+        return true;
+    }
+    if let Some((hall, center)) = gravel_hollow_hall(&ctx.settings)
+        && hall_rect(center, hall.top)
+            .expanded(CAVE_KEEP_OUT)
+            .contains(TilePosition { x, y })
     {
         return true;
     }
@@ -201,6 +240,9 @@ pub fn village(settings: &WorldSettings, id: VillageId) -> Option<Arc<Village>> 
     }
     let ctx = ctx(settings);
     let (site, underground) = placement::decode_id(id);
+    if site == 0 && underground {
+        return gravel_hollow(settings);
+    }
     let geometry = geometry(&ctx, site)?;
     if underground && geometry.underground.is_none() {
         return None;
@@ -224,6 +266,11 @@ pub fn village(settings: &WorldSettings, id: VillageId) -> Option<Arc<Village>> 
 pub fn villages_between(settings: &WorldSettings, first: i32, last: i32) -> Vec<Arc<Village>> {
     let ctx = ctx(settings);
     let mut found = Vec::new();
+    if let Some((_, center)) = gravel_hollow_hall(settings)
+        && (first..=last).contains(&center)
+    {
+        found.extend(gravel_hollow(settings));
+    }
     for site in sites_reaching(first, last) {
         let Some(geometry) = geometry(&ctx, site) else {
             continue;
@@ -259,6 +306,11 @@ pub fn village_containing(
         return sky_town(settings, site.block.0, site.block.1);
     }
     let ctx = ctx(settings);
+    if let Some((hall, center)) = gravel_hollow_hall(settings)
+        && hall_rect(center, hall.top).contains(position)
+    {
+        return gravel_hollow(settings);
+    }
     if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, 0)
         && let Some(geometry) = geometry(&ctx, site.site)
         && geometry.surface_area().contains(position)
@@ -302,6 +354,13 @@ pub fn in_village_area(settings: &WorldSettings, position: TilePosition, margin:
         return true;
     }
     let ctx = ctx(settings);
+    if let Some((hall, center)) = gravel_hollow_hall(settings)
+        && hall_rect(center, hall.top)
+            .expanded(margin)
+            .contains(position)
+    {
+        return true;
+    }
     if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, margin)
         && let Some(geometry) = geometry(&ctx, site.site)
         && geometry.surface_area().expanded(margin).contains(position)
@@ -327,6 +386,11 @@ pub fn layer_features(ctx: &Ctx, rect: &TileRect, out: &mut Vec<WorldFeature>) {
         };
         out.push(surface_feature(ctx, &geometry));
         out.extend(underground_feature(ctx, &geometry));
+    }
+    if let Some(hall) = gravel_hollow_hall(&ctx.settings)
+        && hall_rect(hall.1, hall.0.top).intersects(&rect.expanded(SITE_REACH))
+    {
+        out.push(hall_feature(ctx, hall));
     }
     for site in crate::worldgen::sky::sky_towns_touching(&ctx.settings, rect) {
         out.push(sky_town_feature(&site));
@@ -389,13 +453,16 @@ fn surface_feature(ctx: &Ctx, geometry: &SiteGeometry) -> WorldFeature {
 }
 
 fn underground_feature(ctx: &Ctx, geometry: &SiteGeometry) -> Option<WorldFeature> {
-    let (hall, center_column) = geometry.underground?;
+    Some(hall_feature(ctx, geometry.underground?))
+}
+
+fn hall_feature(ctx: &Ctx, (hall, center_column): (UndergroundSite, i32)) -> WorldFeature {
     let bounds = hall_rect(center_column, hall.top);
     let center = TilePosition {
         x: center_column,
         y: hall.floor_row() - 1,
     };
-    Some(WorldFeature {
+    WorldFeature {
         id: feature_id(Layer::Village, hall.site, 1, 0),
         kind: FeatureKind::Village,
         detail: FeatureDetail::Village(hall.id()),
@@ -403,7 +470,7 @@ fn underground_feature(ctx: &Ctx, geometry: &SiteGeometry) -> Option<WorldFeatur
         center,
         bounds,
         size: u32::try_from(HALL_WIDTH).unwrap_or(0),
-    })
+    }
 }
 
 /// The feature of a regional village id (`ry` 0: surface, 1: underground).
@@ -411,6 +478,9 @@ pub fn feature(ctx: &Ctx, site: i32, ry: i32) -> Option<WorldFeature> {
     if ry >= SKY_TOWN_RY {
         return crate::worldgen::sky::sky_town_site(&ctx.settings, site, ry - SKY_TOWN_RY)
             .map(|town| sky_town_feature(&town));
+    }
+    if site == 0 && ry == 1 {
+        return gravel_hollow_hall(&ctx.settings).map(|hall| hall_feature(ctx, hall));
     }
     let geometry = geometry(ctx, site)?;
     match ry {
@@ -426,6 +496,13 @@ pub fn stamps_touching(ctx: &Ctx, rect: &TileRect) -> Vec<Arc<VillageStamp>> {
         return Vec::new();
     }
     let mut found = Vec::new();
+    if let Some((hall, center)) = gravel_hollow_hall(&ctx.settings)
+        && hall_rect(center, hall.top).expanded(7).intersects(rect)
+    {
+        found.push(STAMPS.get_or_compute((ctx.settings, 0, 1), || {
+            hall_stamp(&ctx.settings, hall, center)
+        }));
+    }
     for site in sites_reaching(rect.min.x, rect.max.x) {
         let Some(geometry) = geometry(ctx, site) else {
             continue;
@@ -512,6 +589,39 @@ fn stamp(settings: &WorldSettings, geometry: &SiteGeometry) -> VillageStamp {
             y: a.max.y.max(b.max.y),
         },
     });
+    out
+}
+
+/// Gravel Hollow's stamp (Wave 8): its hall carved out, a packed gravel street over a
+/// foundation floor, and its buildings' lots.
+fn hall_stamp(settings: &WorldSettings, hall: UndergroundSite, center: i32) -> VillageStamp {
+    let mut out = VillageStamp::default();
+    let air = hall_rect(center, hall.top);
+    out.clear.push(air.expanded(3));
+    for y in air.min.y..hall.floor_row() {
+        for x in air.min.x..=air.max.x {
+            out.cells.push((x, y, TileKind::Air));
+        }
+    }
+    // A gravel lane out of both ends: one of them reaches the outpost's door.
+    for y in hall.floor_row() - 3..hall.floor_row() {
+        for x in (air.min.x - 5..air.min.x).chain(air.max.x + 1..=air.max.x + 5) {
+            out.cells.push((x, y, TileKind::Air));
+        }
+    }
+    for x in air.min.x - 5..=air.max.x + 5 {
+        out.cells.push((
+            x,
+            hall.floor_row(),
+            TileKind::Crust(crate::crust::CrustTile::Gravel),
+        ));
+        out.cells
+            .push((x, hall.floor_row() + 1, TileKind::Foundation));
+    }
+    if let Some(found) = gravel_hollow(settings) {
+        lot_foundations(settings.seed, &found, &mut out.cells);
+    }
+    out.bounds = Some(air.expanded(6));
     out
 }
 

@@ -477,6 +477,9 @@ fn culture_for(landscape: Landscape, rng: &mut PeopleRng) -> Culture {
 pub fn identity(settings: &WorldSettings, id: VillageId) -> Option<(String, Culture)> {
     let (landscape, culture) = landscape_and_culture(settings, id)?;
     let _ = landscape;
+    if id == placement::underground_id(0) {
+        return Some((crate::crust::GRAVEL_HOLLOW_NAME.to_owned(), culture));
+    }
     Some((village_name(settings.seed, id.0, culture), culture))
 }
 
@@ -486,6 +489,10 @@ fn landscape_and_culture(settings: &WorldSettings, id: VillageId) -> Option<(Lan
         return Some((Landscape::Clouds, sky_culture(site.kind)));
     }
     let (site, underground) = placement::decode_id(id);
+    if site == 0 && underground && crate::crust::crust_rules(settings) {
+        // Gravel Hollow (Wave 8): miners' folk of the deep.
+        return Some((Landscape::Caverns, Culture::Deepfolk));
+    }
     let surface = placement::surface_site(settings.seed, site)?;
     if underground {
         placement::underground_site(settings, site)?;

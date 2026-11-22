@@ -877,3 +877,54 @@ fn a_timber_beetle_chews_through_a_set_and_brings_it_down() {
     }
     assert!(chewed && collapsed, "{chewed} {collapsed}");
 }
+
+#[test]
+fn gravel_hollow_is_a_peopled_settlement_beside_the_first_outpost() {
+    use crate::village::{self, BuildingKind, placement::underground_id};
+    let seed = 35;
+    let settings = v11(seed);
+    let hollow = village::village(&settings, underground_id(0)).expect("Gravel Hollow");
+    assert_eq!(hollow.name, crust::GRAVEL_HOLLOW_NAME);
+    assert_eq!(hollow.population.village_name, crust::GRAVEL_HOLLOW_NAME);
+    assert!(hollow.population.characters.len() >= 4, "people live there");
+    assert!(
+        hollow
+            .buildings
+            .iter()
+            .any(|building| building.kind == BuildingKind::Market),
+        "a shop"
+    );
+    assert_eq!(
+        crate::worldgen::descent::stratum_at(&settings, hollow.center_column(), hollow.ground_row),
+        Stratum::GreyStone
+    );
+    // Beside the Descent I outpost (fuel, repair and selling at its counter), on its floor.
+    let world = WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::default());
+    let outpost = world
+        .logistics()
+        .outposts
+        .values()
+        .find(|outpost| outpost.descent == 0)
+        .expect("the Descent I outpost");
+    assert_eq!(outpost.floor_row, hollow.ground_row);
+    assert!((outpost.column - hollow.center_column()).abs() < 60);
+    // Its people walk the street once a rig is there.
+    let mut world = world_at(
+        seed,
+        60,
+        TilePosition {
+            x: hollow.center_column(),
+            y: hollow.ground_row - 1,
+        },
+    );
+    for _ in 0..60 * 3 {
+        let _ = step(&mut world, hold(0.0, false, false));
+    }
+    let people = world
+        .entities()
+        .of_kind(crate::entity::EntityKind::Npc)
+        .count();
+    assert!(people >= 2, "{people} people about");
+    // No other world has it.
+    assert!(village::village(&WorldSettings::new(seed), underground_id(0)).is_none());
+}
