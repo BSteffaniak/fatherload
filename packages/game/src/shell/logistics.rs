@@ -48,6 +48,8 @@ pub struct LogisticsRow {
     pub command: LogisticsCommand,
     /// Why the simulation would refuse it now, if it would.
     pub refusal: Option<String>,
+    /// A longer word on the row for the footer (Wave 8 shop and workshop rows), if any.
+    pub about: Option<String>,
 }
 
 /// A seat's logistics dialog: its heading and rows (rebuilt every frame while open).
@@ -113,8 +115,10 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             value,
             command,
             refusal,
+            about: None,
         });
     };
+    let mut abouts: Vec<(LogisticsCommand, String)> = Vec::new();
     let descent = world.descent_of_row(tile.y);
     let mut heading = "Depth Logistics".to_owned();
     let mut subtitle = format!(
@@ -165,8 +169,9 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             );
         }
         // Wave 8: the deep shop and the workshop.
-        for (label, detail, command, group) in outpost_trade_rows(world, rig, outpost) {
+        for (label, detail, command, group, about) in outpost_trade_rows(world, rig, outpost) {
             row(group, label, detail, command);
+            abouts.push((command, about));
         }
     }
     // A lift station (chained lifts share one, so every shaft stopping here is listed).
@@ -288,6 +293,11 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             LogisticsCommand::BuyDiveCharges,
         );
     }
+    for (command, about) in abouts {
+        if let Some(found) = rows.iter_mut().find(|row| row.command == command) {
+            found.about = Some(about);
+        }
+    }
     SeatLogistics {
         title: heading,
         subtitle,
@@ -295,17 +305,22 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
     }
 }
 
+/// One deep shop or workshop row: label, detail, command, group and the footer's word.
+type TradeRow = (String, String, LogisticsCommand, LogisticsGroup, String);
+
 /// An outpost's deep shop and workshop rows (Wave 8): every line whose next tier the outpost
-/// stocks (locked ones too, so the counter says why), then the recipes its workshop knows.
+/// stocks (locked ones too, so the counter says why, but not rig systems nobody has reached),
+/// then the recipes its workshop knows.
 fn outpost_trade_rows(
     world: &WorldState,
     rig: &fatherload_simulation::Player,
     outpost: &fatherload_simulation::logistics::Outpost,
-) -> Vec<(String, String, LogisticsCommand, LogisticsGroup)> {
+) -> Vec<TradeRow> {
     use fatherload_simulation::{
         depth_progression::outpost_stocks,
         economy::{
-            UpgradeKind, shop_line_count, upgrade_maxed, upgrade_offers_for, upgrade_tier_name,
+            UpgradeKind, UpgradeLock, shop_line_count, upgrade_effect, upgrade_lock_for,
+            upgrade_maxed, upgrade_offers_for, upgrade_tier_name,
         },
         item::ItemKind,
         workshop::{CraftOutput, RECIPES, outpost_crafts},
@@ -324,6 +339,19 @@ fn outpost_trade_rows(
         if upgrade_maxed(offer) || !outpost_stocks(outpost.descent, offer.kind, next) {
             continue;
         }
+        // A rig system nobody has reached yet stays off the counter.
+        if matches!(
+            upgrade_lock_for(
+                offer,
+                world.world_settings(),
+                world.progression().deepest_tile_reached,
+                rules,
+                world.logistics().felt_systems,
+            ),
+            Some(UpgradeLock::Depth { .. })
+        ) {
+            continue;
+        }
         let detail = if offer.kind == UpgradeKind::BombPack {
             upgrade_tier_name(offer.kind, offer.level).to_owned()
         } else {
@@ -333,6 +361,10 @@ fn outpost_trade_rows(
                 upgrade_tier_name(offer.kind, offer.level)
             )
         };
+        let about = upgrade_effect(rig, offer.kind).map_or_else(
+            || offer.description.to_owned(),
+            |effect| format!("{effect}. {}.", offer.description),
+        );
         rows.push((
             offer.name.to_owned(),
             detail,
@@ -341,6 +373,7 @@ fn outpost_trade_rows(
                 offer: u8::try_from(index).unwrap_or(u8::MAX),
             },
             LogisticsGroup::Shop,
+            about,
         ));
     }
     for (index, recipe) in RECIPES.iter().enumerate() {
@@ -373,6 +406,7 @@ fn outpost_trade_rows(
                 recipe: u8::try_from(index).unwrap_or(u8::MAX),
             },
             LogisticsGroup::Workshop,
+            format!("{}.", recipe.about),
         ));
     }
     rows

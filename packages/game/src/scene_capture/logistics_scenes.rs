@@ -61,6 +61,34 @@ pub const LOGISTICS_SCENES: &[Scene] = &[
         summary: "The upgrade shop on a Deep Descent world: deep tiers and the rig systems, the Pressure Hull on sale",
         setup: descent_shop,
     },
+    Scene {
+        name: "outpost_deep_shop",
+        summary: "Wave 8: a deep outpost's counter selling the tiers its Descent needs (Pressure Rating, Headlamp, core tiers to the cap, a felt rig system)",
+        setup: |stage| outpost_trade(stage, crate::shell::logistics::LogisticsGroup::Shop),
+    },
+    Scene {
+        name: "outpost_workshop",
+        summary: "Wave 8: the outpost's workshop turning layer resources into parts and supplies, the bay's layer resources beside it",
+        setup: |stage| outpost_trade(stage, crate::shell::logistics::LogisticsGroup::Workshop),
+    },
+    Scene {
+        name: "new_world_deep_descent",
+        summary: "Wave 8: the New World dialog defaulting to the Deep Descent, with Classic (V10) a step away on the World row",
+        setup: |stage| {
+            let shell = stage.shell();
+            shell.open_world_setup(crate::shell::SetupPurpose::Local { seats: 1 });
+            if let Some(setup) = shell.world_setup.as_mut() {
+                setup.settings.seed = 0x00DE_E9DE_5CE7;
+                setup.set_deep_descent(true);
+                setup.selected = 7;
+            }
+        },
+    },
+    Scene {
+        name: "layer_resource_drops",
+        summary: "Wave 8: layer resources popping out of drilled Clay Beds rock beside the clay blocks, glowing in their stratum's colour",
+        setup: layer_drops,
+    },
 ];
 
 /// The outpost's middle column and floor row, and the lift beside it.
@@ -312,6 +340,139 @@ fn dive_charge(stage: &mut SceneStage<'_>) {
         }
     });
     stage.settle(2);
+}
+
+/// An outpost of the Old Deep on a Deep Descent ruleset, reached, the crew dug to the bottom of
+/// it and a gate felt, the bay holding layer resources: the dialog scrolled to `group`.
+fn outpost_trade(stage: &mut SceneStage<'_>, group: crate::shell::logistics::LogisticsGroup) {
+    use fatherload_simulation::{descent::Stratum, item::ItemKind};
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        world.set_progression_rules(ProgressionRules::Descent);
+        let _ = outpost_world(world, player);
+        stand(world, player, OUTPOST_COLUMN, OUTPOST_FLOOR - 1);
+        let _ = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
+        // Everyone has been down to the Living Dark and felt its crush.
+        let row = fatherload_simulation::depth_progression::DescentLayout::strata(
+            &world.descent_layout(),
+        )
+        .iter()
+        .find(|stratum| stratum.descent == 2)
+        .map_or(2_800, |stratum| stratum.top + 20);
+        if let Some(fatherload_simulation::SectionPayload::Progression(mut progression)) =
+            world.section(fatherload_simulation::SectionKey::Progression)
+        {
+            progression.deepest_tile_reached = row;
+            world.apply_section(
+                fatherload_simulation::SectionKey::Progression,
+                fatherload_simulation::SectionPayload::Progression(progression),
+            );
+        }
+        if let Some(fatherload_simulation::SectionPayload::Logistics(mut logistics)) =
+            world.section(fatherload_simulation::SectionKey::Logistics)
+        {
+            logistics.felt_systems |= RigSystem::PressureHull.bit();
+            world.apply_section(
+                fatherload_simulation::SectionKey::Logistics,
+                fatherload_simulation::SectionPayload::Logistics(logistics),
+            );
+        }
+        if let Some(rig) = world.player_mut(player) {
+            rig.credits = 81_400;
+            rig.drill_strength = 8;
+            rig.fuel_tank_level = 7;
+            rig.cargo_bay_level = 7;
+            rig.engine_level = 6;
+            rig.hull_level = 7;
+            rig.radiator_level = 8;
+            rig.hazard_gear.heat_shield = 3;
+            rig.hull = rig.max_hull() * 0.5;
+            for (stratum, count) in [
+                (Stratum::ClayBeds, 7),
+                (Stratum::GreyStone, 3),
+                (Stratum::SlateShelves, 6),
+                (Stratum::BasaltColumns, 4),
+                (Stratum::CrystalFaults, 9),
+                (Stratum::FossilOceans, 2),
+                (Stratum::PressureCathedrals, 6),
+            ] {
+                rig.cargo_bay.add(ItemKind::Layer(stratum), count);
+            }
+        }
+    });
+    let seat = stage.seat(0);
+    seat.modal = Some(ModalScreen::Logistics);
+    seat.selected_menu_item = 0;
+    stage.settle(6);
+    // Select the first row of the section on show (the dialog scrolls to it).
+    let wanted = match group {
+        crate::shell::logistics::LogisticsGroup::Workshop => Some(UpgradeKind::Radiator),
+        _ => Some(UpgradeKind::PressureRating),
+    };
+    let rows = &stage.seat(0).logistics.rows;
+    let selected = rows
+        .iter()
+        .rposition(|row| {
+            row.group == group
+                && match (group, row.command) {
+                    (
+                        crate::shell::logistics::LogisticsGroup::Shop,
+                        LogisticsCommand::OutpostUpgrade { offer, .. },
+                    ) => UpgradeKind::ALL.get(usize::from(offer)).copied() == wanted,
+                    (crate::shell::logistics::LogisticsGroup::Workshop, _) => row.refusal.is_none(),
+                    _ => false,
+                }
+        })
+        .or_else(|| rows.iter().position(|row| row.group == group))
+        .unwrap_or(0);
+    stage.seat(0).selected_menu_item = selected;
+    // The bay's ore woke a milestone banner: the shot is about the counter.
+    stage.seat(0).rewards.banners.clear();
+    stage.settle(4);
+}
+
+/// A rig drilling through Clay Beds rock on a Deep Descent world with layer resource drops
+/// popping out around it.
+fn layer_drops(stage: &mut SceneStage<'_>) {
+    use fatherload_simulation::{descent::Stratum, item::ItemKind};
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        world.set_progression_rules(ProgressionRules::Descent);
+        let column = 64;
+        stone(world, column - 30..column + 30, 40..80);
+        carve(world, column - 8..column + 8, 54..60);
+        reveal(world, player, column - 40..column + 40, 36..84);
+        stand(world, player, column, 59);
+        // What a dig through the Clay Beds left: blocks, ore and two layer resources.
+        let drops = [
+            (column - 4, 57, ItemKind::Layer(Stratum::ClayBeds)),
+            (column + 3, 56, ItemKind::Layer(Stratum::ClayBeds)),
+            (column + 5, 58, ItemKind::Layer(Stratum::Topsoil)),
+            (column - 6, 58, ItemKind::Layer(Stratum::CrystalFaults)),
+            (
+                column - 2,
+                58,
+                ItemKind::Mineral(fatherload_simulation::terrain::MineralKind::Iron),
+            ),
+            (
+                column + 1,
+                58,
+                ItemKind::Block(fatherload_simulation::item::BlockKind::Clay),
+            ),
+        ];
+        let frame = world.frame();
+        for (x, y, kind) in drops {
+            let (px, py) = frame.tile_center(TilePosition { x, y });
+            let _ = world.spawn_item_drop(
+                px,
+                py,
+                (0.0, 0.0),
+                fatherload_simulation::item::ItemStack::new(kind, 1),
+                None,
+            );
+        }
+    });
+    stage.settle(30);
 }
 
 fn descent_shop(stage: &mut SceneStage<'_>) {

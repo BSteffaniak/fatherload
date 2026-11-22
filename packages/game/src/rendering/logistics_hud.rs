@@ -123,7 +123,12 @@ pub(super) fn draw_logistics(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
             .filter(|(_, row)| row.group == group)
             .map(|(index, row)| {
                 if index == selected {
-                    about = Some(row.refusal.clone().unwrap_or_else(|| row.detail.clone()));
+                    about = Some(
+                        row.refusal
+                            .clone()
+                            .or_else(|| row.about.clone())
+                            .unwrap_or_else(|| row.detail.clone()),
+                    );
                 }
                 SectionItem::item(ItemEntry {
                     icon: Some(row_icon(row)),
