@@ -27,6 +27,7 @@ mod garage;
 mod homes;
 mod interior;
 mod layout;
+mod logistics_hud;
 mod menus;
 mod moon_hud;
 mod people_art;
@@ -769,6 +770,7 @@ impl GameRenderer {
             tombs: snapshot.tombs,
             world_millis: drawn_world_millis(snapshot),
             tick_rate_hz: snapshot.tick_rate.hz(),
+            logistics: snapshot.logistics,
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;

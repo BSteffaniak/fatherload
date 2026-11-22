@@ -44,6 +44,7 @@ mod fluids;
 mod fx;
 mod homes;
 mod lighting;
+mod logistics;
 mod lunar;
 mod night;
 mod pilot;
@@ -193,6 +194,8 @@ pub(super) struct WorldScene<'a> {
     pub world_millis: u64,
     /// The session's tick rate (crypt trap cycles count milliseconds from ticks).
     pub tick_rate_hz: u32,
+    /// Lifts, outposts and beacons (Part III F10).
+    pub logistics: &'a fatherload_simulation::logistics::Logistics,
 }
 
 impl WorldScene<'_> {
@@ -380,6 +383,16 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     weapons::draw_targets(draw, scene.targets, seconds);
     quest_marks::draw_quest_markers(draw, scene.quest_markers, seconds);
     base::draw_structures(draw, &base_scene);
+    // Depth logistics (Part III F10): outposts, lift rails and cabs, beacons.
+    let logistics_scene = logistics::LogisticsScene {
+        logistics: scene.logistics,
+        visible: scene.visible,
+        world_tick: scene.world_tick,
+        alpha: scene.bomb_alpha,
+        seconds,
+        players: scene.players,
+    };
+    logistics::draw_logistics(draw, &logistics_scene);
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
         fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);
@@ -521,6 +534,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);
     }
     base::draw_base_lights(draw, &base_scene);
+    logistics::draw_logistics_lights(draw, &logistics_scene);
     if let Some(preview) = scene.build_preview {
         base::draw_claims(draw, &base_scene, preview.claim.as_ref());
         base::draw_build_ghost(draw, &base_scene, preview);

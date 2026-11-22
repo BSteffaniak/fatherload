@@ -231,7 +231,10 @@ impl WorldState {
     /// Whether `player_id`'s rig would let its pilot out now (slow enough, intact).
     #[must_use]
     pub fn can_exit_rig(&self, player_id: PlayerId) -> bool {
-        !self.is_on_foot(player_id) && self.exit_spot(player_id).is_some()
+        // Not out of a moving lift cab (Part III F10).
+        !self.is_on_foot(player_id)
+            && !self.logistics.is_riding(player_id)
+            && self.exit_spot(player_id).is_some()
     }
 
     /// Whether `player_id`'s pilot stands close enough to board its rig.

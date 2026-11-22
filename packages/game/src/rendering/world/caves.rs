@@ -333,7 +333,8 @@ fn gather_lights(scene: &DarknessScene<'_>, rect: &TileRect) -> Vec<Light> {
     let mut lights = Vec::new();
     for player in players {
         let lamp = (f32::from(player.scanner_level) * RIG_LAMP_TILES_PER_SCANNER + RIG_LAMP_TILES)
-            * TILE_SIZE;
+            * TILE_SIZE
+            * player.lamp_scale;
         lights.push(Light {
             x: player.x,
             y: player.y,

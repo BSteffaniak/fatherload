@@ -705,13 +705,28 @@ fn preview_lines(
         | UpgradeKind::GravityAnchor
         | UpgradeKind::PhaseDrill
         | UpgradeKind::HeartKey => {
+            // The shop appends the line's description, so these say what it unlocks.
             if let Some(system) = kind.rig_system() {
-                changes.push(system.description().to_owned());
                 if let Some(descent) = system.gates_descent() {
                     changes.push(format!(
                         "Opens Descent {}: without it the depths there crush the rig",
                         crate::depth_progression::numeral(descent)
                     ));
+                }
+                match system {
+                    crate::depth_progression::RigSystem::LampII => changes.push(format!(
+                        "The headlamp lights {:.0}% further",
+                        (crate::depth_progression::LAMP_II_LIGHT_SCALE - 1.0) * 100.0
+                    )),
+                    crate::depth_progression::RigSystem::SonarSuite => changes.push(format!(
+                        "Scanner pings reach {} tiles further",
+                        crate::depth_progression::SONAR_SUITE_SCAN_BONUS_TILES
+                    )),
+                    crate::depth_progression::RigSystem::BioFilter => changes.push(format!(
+                        "Gas clouds do {}% of their damage",
+                        crate::depth_progression::BIO_FILTER_GAS_PERCENT
+                    )),
+                    _ => {}
                 }
             }
         }

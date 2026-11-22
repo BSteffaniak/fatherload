@@ -405,6 +405,7 @@ mod explosive_scenes;
 mod field_scenes;
 mod fluid_scenes;
 mod home_scenes;
+mod logistics_scenes;
 mod people_scenes;
 mod pilot_content_scenes;
 mod pilot_scenes;
@@ -550,6 +551,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(descent_scenes::DESCENT_SCENES)
         .chain(field_scenes::FIELD_SCENES)
         .chain(fluid_scenes::FLUID_SCENES)
+        .chain(logistics_scenes::LOGISTICS_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
@@ -1698,8 +1700,12 @@ pub const SCENES: &[Scene] = &[
         summary: "Upgrade shop scrolled to the hazard counters (Boulder Deflector row selected)",
         setup: |stage| {
             enter_interior(stage, SurfaceZone::Shop, Some(ModalScreen::Shop));
-            stage.seat(0).selected_menu_item =
-                fatherload_simulation::economy::UPGRADE_OFFER_COUNT - 1;
+            stage.seat(0).selected_menu_item = fatherload_simulation::economy::UpgradeKind::ALL
+                .iter()
+                .position(|kind| {
+                    *kind == fatherload_simulation::economy::UpgradeKind::BoulderDeflector
+                })
+                .unwrap_or(0);
         },
     },
     Scene {

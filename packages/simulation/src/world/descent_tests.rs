@@ -93,7 +93,7 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
     // Centre the rig over its column, so it fits the one-tile shaft it drills.
     let frame = world.frame();
     if let Some(rig) = world.player_mut(PLAYER) {
-        rig.x = frame.col_px(frame.col(rig.x)) + TILE_SIZE * 0.5;
+        rig.x = frame.centre_of(frame.col(rig.x), 0).0;
     }
     let start = world.player(PLAYER).expect("a rig").tile_in(world.frame());
     let floor = bedrock_top_row(&settings, start.x).expect("a floor");

@@ -336,6 +336,7 @@ pub fn touch_context(
             || view.nearby_module.is_some()
             || view.buoy.is_some()
             || view.in_colony
+            || view.logistics_stop.is_some()
             || view.home_door.is_some()
             || view.plot_board.is_some(),
         kits: kits.map(|count| count > 0),

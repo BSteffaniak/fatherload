@@ -234,6 +234,9 @@ pub struct PlayerPresentation {
     pub weapon: Option<WeaponPose>,
     /// The rig's orientation (F9 craft rotation, radians, clockwise; 0 upright).
     pub orientation: f32,
+    /// How far the headlamp reaches relative to stock (Lamp II on Descent worlds; Part III
+    /// F10). Remote rigs' gear is private, so theirs reads stock.
+    pub lamp_scale: f32,
 }
 
 /// Gravity (relative to the ground's) under which a pilot is drawn floating and loping.
@@ -367,6 +370,15 @@ impl PlayerPresentation {
                 tether: player.weapon.tether.map(|tether| (tether.x, tether.y)),
             }),
             orientation: player.attitude.orientation,
+            lamp_scale: if world.progression_rules().is_descent()
+                && player
+                    .hazard_gear
+                    .has_system(fatherload_simulation::depth_progression::RigSystem::LampII)
+            {
+                fatherload_simulation::depth_progression::LAMP_II_LIGHT_SCALE
+            } else {
+                1.0
+            },
         }
     }
 
@@ -517,6 +529,9 @@ pub struct ViewSnapshot<'w> {
     /// The use button opens the lunar colony's counter: the pilot in the colony or the rig on
     /// its pad (`WorldState::at_colony_counter`, its use prompt; WP-MOON).
     pub in_colony: bool,
+    /// The use prompt at a depth logistics stop the rig stands at (an outpost, a lift station,
+    /// its own beacon; Part III F10).
+    pub logistics_stop: Option<String>,
     /// The seat's pilot while it is on foot (Part II F5): HUD gauges and prompts.
     pub pilot: Option<PilotPresentation>,
     /// On foot and close enough to board the rig (the board prompt).
@@ -1088,6 +1103,7 @@ fn view_snapshot(
             .and_then(|id| world.bases().module(id))
             .map(|module| module.kind),
         in_colony: world.at_colony_counter(player_id),
+        logistics_stop: crate::shell::logistics::stop_prompt(world, player_id),
         seat_index,
         player_id,
         viewport,

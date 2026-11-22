@@ -532,6 +532,14 @@ fn draw_view_prompt(
         && shell.modal.is_none()
         && shell.seat(view.seat_index).modal.is_none()
         && view.failure.is_none()
+        && let Some(stop) = &view.logistics_stop
+    {
+        // A deep outpost, a lift station or a depth beacon (Part III F10).
+        (Prompt::Use, stop.clone(), true)
+    } else if shell.run_mode == RunMode::Playing
+        && shell.modal.is_none()
+        && shell.seat(view.seat_index).modal.is_none()
+        && view.failure.is_none()
         && let Some((_, name)) = &view.talk_target
     {
         (Prompt::Use, format!("Talk to {name}"), true)
@@ -1339,6 +1347,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::RelicPick => super::tomb_hud::draw_relic_pick(draw, ui),
         ModalScreen::TombSummary => super::tomb_hud::draw_tomb_summary(draw, ui),
         ModalScreen::TombCodex => super::tomb_hud::draw_tomb_codex(draw, ui),
+        ModalScreen::Logistics => super::logistics_hud::draw_logistics(draw, ui),
     }
 }
 
@@ -1655,6 +1664,11 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 ),
             ],
         ),
+    );
+    // Depth logistics (Part III F10): the row after the survey opens the dialog.
+    sections.insert(
+        4,
+        super::logistics_hud::inventory_section(ui, survey_row + 1),
     );
     UiLayout::screen(draw).modal_with_render_plan(
         "Inventory",

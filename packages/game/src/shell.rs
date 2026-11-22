@@ -32,6 +32,7 @@ mod descent;
 mod garage;
 pub mod homes;
 pub mod hopper;
+pub mod logistics;
 pub mod options;
 mod pilot;
 mod pointer;
@@ -156,6 +157,10 @@ pub enum ModalScreen {
     /// The tomb codex: relics found, tomb maps, trophies and lore pages (after the milestones
     /// in the map's page cycle).
     TombCodex,
+    /// The depth logistics dialog (Part III F10, `shell/logistics.rs`): an outpost's counter,
+    /// a lift's stations, the travel network and the field kit; its rows are
+    /// [`SeatUi::logistics`].
+    Logistics,
 }
 
 impl ModalScreen {
@@ -1110,6 +1115,8 @@ pub struct SeatUi {
     pub story_moment: Option<StoryMoment>,
     /// Tomb runs (WP-TOMBS): which run summary the seat has shown.
     pub tomb: tombs::SeatTomb,
+    /// The depth logistics dialog's heading and rows (Part III F10).
+    pub logistics: logistics::SeatLogistics,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1157,6 +1164,7 @@ impl SeatUi {
             journal: SeatJournal::new(),
             story_moment: None,
             tomb: tombs::SeatTomb::new(),
+            logistics: logistics::SeatLogistics::new(),
         }
     }
 
@@ -1318,6 +1326,11 @@ impl SeatUi {
                 .and_then(|player| homes::home_door_here(ctx.world, player))
             {
                 self.enter_home(ctx, plot, 0, homes::HOME_DOOR_X + 46.0, cues);
+                return false;
+            }
+            // A deep outpost's counter, a lift station or one's own depth beacon (Part III
+            // F10).
+            if !ctx.on_foot() && self.open_logistics_here(ctx, cues) {
                 return false;
             }
             if let Some(zone) = ctx.current_zone() {
@@ -1496,6 +1509,10 @@ impl SeatUi {
             self.handle_tomb_codex(input, cues);
             return true;
         }
+        if modal == ModalScreen::Logistics {
+            self.handle_logistics(input, ctx, cues, requests);
+            return true;
+        }
         if input.backs_out() {
             self.modal = None;
             return true;
@@ -1510,10 +1527,11 @@ impl SeatUi {
         let max_item = match modal {
             // The depot's last row (index 5) sells the block hopper (WP-DROPS).
             ModalScreen::Depot | ModalScreen::Salvage => 5,
-            // The last row surveys the spot for a home plot (WP-HOME).
+            // Then a row surveys the spot for a home plot (WP-HOME), and the last opens depth
+            // logistics (Part III F10).
             ModalScreen::Inventory => ctx
                 .player()
-                .map_or(0, |player| hopper::hopper_rows(player).len()),
+                .map_or(0, |player| hopper::hopper_rows(player).len() + 1),
             ModalScreen::Fuel | ModalScreen::Bank => 2,
             ModalScreen::Repair => GARAGE_COUNTER_ROW,
             ModalScreen::Explosives => arms::ARMS_FIRST_ROW + arms::ARMS_ROWS.len() - 1,
@@ -1705,7 +1723,16 @@ impl SeatUi {
             | ModalScreen::Journal
             | ModalScreen::RelicPick
             | ModalScreen::TombSummary
-            | ModalScreen::TombCodex => None,
+            | ModalScreen::TombCodex
+            | ModalScreen::Logistics => None,
+            ModalScreen::Inventory
+                if ctx.player().is_some_and(|player| {
+                    self.selected_menu_item == hopper::hopper_rows(player).len() + 1
+                }) =>
+            {
+                self.open_logistics(ctx, cues);
+                None
+            }
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len()

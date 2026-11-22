@@ -308,6 +308,7 @@ mod tests {
             cosmetics: RigCosmetics::default_for(id),
             weapon: None,
             orientation: 0.0,
+            lamp_scale: 1.0,
         }
     }
 

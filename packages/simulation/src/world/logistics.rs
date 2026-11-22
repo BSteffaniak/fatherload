@@ -156,8 +156,11 @@ fn resting_y(frame: Frame, row: f64) -> f32 {
 
 /// The centre `x` (local pixels of `frame`) of column `column`.
 fn column_x(frame: Frame, column: i32) -> f32 {
-    frame.col_px(column) + TILE_SIZE * 0.5
+    frame.col_px(column) + HALF_TILE
 }
+
+/// Half a tile (px).
+const HALF_TILE: f32 = TILE_SIZE * 0.5;
 
 impl WorldState {
     /// The world's depth logistics (lifts, outposts, beacons, rides, dives, rules).
@@ -292,7 +295,7 @@ impl WorldState {
             }
             TravelNode::Beacon(id) => {
                 let beacon = self.logistics.beacons.get(&id)?;
-                let y = frame.row_px(beacon.at.y) + TILE_SIZE * 0.5;
+                let y = frame.row_px(beacon.at.y) + HALF_TILE;
                 Some((beacon.at, column_x(frame, beacon.at.x), y))
             }
             TravelNode::Outpost(id) => {
