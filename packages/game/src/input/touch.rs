@@ -354,7 +354,7 @@ const MENU_PREVIOUS: Slot = (2.2, 0.42, 0.34);
 const HUD_CORNER_PANELS: (f32, f32, f32) = (184.0, 128.0, 78.0);
 
 /// Radius of the rotation thruster buttons, in button widths.
-const ROTATE_BUTTON_RADIUS: f32 = 0.34;
+const ROTATE_BUTTON_RADIUS: f32 = 0.42;
 /// Radius of the small buttons along the top edge, in button widths.
 const TOP_BUTTON_RADIUS: f32 = 0.3;
 /// Radius of a tools-fan item, in button widths.
@@ -574,7 +574,7 @@ impl TouchLayout {
     fn push_rotation(&mut self, left_handed: bool) {
         let zone = self.stick_zone;
         let radius = self.button * ROTATE_BUTTON_RADIUS;
-        let pitch = self.button * 0.85;
+        let pitch = self.button * 0.95;
         let margin = self.button * 0.2;
         let inner = if left_handed {
             zone.x + margin + radius

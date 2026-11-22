@@ -186,7 +186,12 @@ fn draw_overlay(draw: &mut RaylibDrawHandle<'_>, overlay: &TouchOverlay) {
             );
         }
         let label = label(*control);
-        let style = if radius >= 14 {
+        // The small rotation thruster buttons' `<ROT` / `ROT>` fit only in the body face.
+        let small = matches!(
+            control,
+            TouchControl::RotateLeft | TouchControl::RotateRight
+        );
+        let style = if radius >= 14 && !small {
             TextStyle::Bold
         } else {
             TextStyle::Body
