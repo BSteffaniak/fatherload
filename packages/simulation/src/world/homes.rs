@@ -1823,7 +1823,14 @@ impl WorldState {
         });
     }
 
-    /// Rigs parked in a garage bay they may use get their hull patched up.
+    /// Rigs parked in a garage bay they may use get their hull patched up (and billed,
+    /// [`crate::home::GARAGE_REPAIR_UNIT_COST`] a point).
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss,
+        reason = "hull points and credits are small non-negative numbers"
+    )]
     fn repair_garaged_rigs(&mut self) {
         let dt = self.timing.delta_seconds;
         let parked: Vec<PlayerId> = self

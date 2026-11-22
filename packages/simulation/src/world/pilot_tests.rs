@@ -253,7 +253,10 @@ fn the_hand_pick_chips_soft_sky_soil_but_not_sky_rock() {
             .pick_target(body, state, swing.players[&PLAYER].controls.expect("held"))
             .expect("the wall is in reach")
     };
-    assert_eq!(world.terrain().tile(target).map(|tile| tile.kind), Some(soil));
+    assert_eq!(
+        world.terrain().tile(target).map(|tile| tile.kind),
+        Some(soil)
+    );
     let ticks = (PICK_SECONDS_SOFT * 60.0) as u32 + 4;
     let events = run(&mut world, &swing, ticks);
     assert_eq!(
@@ -270,7 +273,10 @@ fn the_hand_pick_chips_soft_sky_soil_but_not_sky_rock() {
     let rock = TileKind::Sky(SkyTile::Rock(SkyBiome::Meadow));
     let _ = world.terrain_mut().set_kind(target, rock);
     let events = run(&mut world, &swing, 90);
-    assert_eq!(world.terrain().tile(target).map(|tile| tile.kind), Some(rock));
+    assert_eq!(
+        world.terrain().tile(target).map(|tile| tile.kind),
+        Some(rock)
+    );
     assert!(
         events
             .iter()

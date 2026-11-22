@@ -78,8 +78,9 @@ pub const SITE_REACH_ROWS: i32 = 5;
 pub const MAX_PLOTS: usize = 4;
 /// Hull a rig parked in a garage bay gets back per second.
 pub const GARAGE_REPAIR_PER_SECOND: f32 = 6.0;
-/// Credits per point of hull a garage bay charges the rig's player (parts at cost: half the
-/// town garage's [`crate::economy::REPAIR_UNIT_COST`]). A point is paid as the hull starts
+/// Credits per point of hull a garage bay charges the rig's player.
+///
+/// Parts at cost: half the town garage's [`crate::economy::REPAIR_UNIT_COST`]. A point is paid as the hull starts
 /// into it; a rig whose player cannot pay waits at the last paid point.
 pub const GARAGE_REPAIR_UNIT_COST: u32 = 1;
 /// Goodwill a contractor feels for a client when the work is handed over.

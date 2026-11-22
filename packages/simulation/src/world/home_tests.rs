@@ -984,6 +984,11 @@ fn the_bed_sets_the_home_point_and_sleeps_at_night() {
 }
 
 #[test]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a few hull points"
+)]
 fn a_garage_bay_repairs_a_parked_rig() {
     let mut world = world();
     let settings = *world.world_settings();
@@ -1024,6 +1029,11 @@ fn a_garage_bay_repairs_a_parked_rig() {
 }
 
 #[test]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a few hull points"
+)]
 fn a_garage_bays_bill_does_not_depend_on_the_tick_rate() {
     let mut bills = Vec::new();
     for hz in [30_u32, 60, 240] {

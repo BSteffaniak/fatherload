@@ -998,8 +998,9 @@ pub const fn pilot_passable(kind: TileKind) -> bool {
     }
 }
 
-/// Whether the hand pick can break a tile of `kind`, and how long it takes (soft dirt and clay
-/// only; the rest is the rig's job). In the sky and on the Moon that is the soft ground: an
+/// Whether the hand pick can break a tile of `kind`, and how long it takes.
+///
+/// Soft dirt and clay only; the rest is the rig's job. In the sky and on the Moon that is the soft ground: an
 /// island's turf and soil, its dangling roots and vines and the Moon's dust (not rock,
 /// crystal, caches, nests, springs or anything a pilot works some other way).
 #[must_use]
