@@ -24,7 +24,7 @@ use fatherload_simulation::{
 
 use crate::rendering::{
     pixel_art::palette::{
-        AMBER, CREAM, DEEP_BLUE, ICE, MINT, MOSS, ORANGE, SKY_LIGHT, TEAL_DARK, with_alpha,
+        AMBER, CREAM, ICE, LEAF, MINT, OCEAN, ORANGE, SKY_LIGHT, TEAL_DARK, with_alpha,
     },
     terrain::tile_art::{fluid_color, hash},
 };
@@ -45,8 +45,9 @@ struct FluidLook {
     fleck: Color,
     /// Body opacity at the surface and fully deep.
     alpha: (u8, u8),
-    /// Bubbles per tile per second (0 for none).
+    /// Bubbles per tile per second (0 for none), in one tile out of `bubble_tiles`.
     bubbles: f32,
+    bubble_tiles: u32,
     /// How far the surface rolls (art pixels) and how fast.
     wave: (f32, f32),
 }
@@ -55,29 +56,32 @@ const fn look(kind: FluidKind) -> FluidLook {
     match kind {
         FluidKind::Water => FluidLook {
             shallow: fluid_color(FluidKind::Water),
-            deep: DEEP_BLUE,
-            highlight: SKY_LIGHT,
-            fleck: ICE,
-            alpha: (120, 200),
-            bubbles: 0.15,
+            deep: OCEAN,
+            highlight: ICE,
+            fleck: SKY_LIGHT,
+            alpha: (115, 190),
+            bubbles: 0.5,
+            bubble_tiles: 6,
             wave: (1.0, 2.2),
         },
         FluidKind::Acid => FluidLook {
             shallow: fluid_color(FluidKind::Acid),
-            deep: MOSS,
-            highlight: MINT,
+            deep: LEAF,
+            highlight: CREAM,
             fleck: CREAM,
-            alpha: (135, 205),
-            bubbles: 1.1,
+            alpha: (140, 205),
+            bubbles: 1.2,
+            bubble_tiles: 2,
             wave: (1.0, 3.0),
         },
         FluidKind::Brine => FluidLook {
             shallow: fluid_color(FluidKind::Brine),
             deep: TEAL_DARK,
             highlight: MINT,
-            fleck: CREAM,
-            alpha: (140, 210),
-            bubbles: 0.35,
+            fleck: ICE,
+            alpha: (145, 210),
+            bubbles: 0.5,
+            bubble_tiles: 5,
             wave: (0.6, 1.6),
         },
         FluidKind::LiquidMetal => FluidLook {
@@ -86,7 +90,8 @@ const fn look(kind: FluidKind) -> FluidLook {
             highlight: CREAM,
             fleck: AMBER,
             alpha: (215, 245),
-            bubbles: 0.6,
+            bubbles: 0.7,
+            bubble_tiles: 3,
             wave: (0.5, 0.9),
         },
     }
@@ -138,6 +143,29 @@ pub(super) fn draw_fluids(
     }
 }
 
+/// A surface cell's body: narrow columns whose tops roll with the waveline, each capped with
+/// the bright skin of the surface. `(left, surface, bottom)` in world pixels.
+fn draw_surface(
+    draw: &mut impl RaylibDraw,
+    style: &FluidLook,
+    (left, surface, bottom): (f32, f32, f32),
+    body: Color,
+    seconds: f32,
+) {
+    let column = TILE_SIZE / WAVE_COLUMNS as f32;
+    let (roll, speed) = style.wave;
+    for index in 0..WAVE_COLUMNS {
+        let x = left + index as f32 * column;
+        let wave = ((x * 0.09) + seconds * speed).sin() * roll * ART;
+        let top = snap(surface + wave).clamp(bottom - TILE_SIZE, bottom - ART);
+        draw.draw_rectangle_rec(Rectangle::new(x, top, column, bottom - top), body);
+        draw.draw_rectangle_rec(
+            Rectangle::new(x, top, column, ART),
+            with_alpha(style.highlight, 190),
+        );
+    }
+}
+
 fn draw_cell(
     draw: &mut impl RaylibDraw,
     terrain: &Terrain,
@@ -182,20 +210,7 @@ fn draw_cell(
             body,
         );
     } else {
-        // The waveline: the body in narrow columns whose tops roll with the surface.
-        let column = TILE_SIZE / WAVE_COLUMNS as f32;
-        let (roll, speed) = style.wave;
-        for index in 0..WAVE_COLUMNS {
-            let x = left + index as f32 * column;
-            let wave = ((x * 0.09) + seconds * speed).sin() * roll * ART;
-            let top = snap(surface + wave).clamp(bottom - TILE_SIZE, bottom - ART);
-            draw.draw_rectangle_rec(Rectangle::new(x, top, column, bottom - top), body);
-            // The bright skin of the surface.
-            draw.draw_rectangle_rec(
-                Rectangle::new(x, top, column, ART),
-                with_alpha(style.highlight, 190),
-            );
-        }
+        draw_surface(draw, &style, (left, surface, bottom), body, seconds);
     }
     if pouring {
         // Falling streaks running down through the cell.
@@ -238,7 +253,10 @@ fn draw_cell(
         }
     }
     // Bubbles rising from the floor of the cell to its surface.
-    if style.bubbles > 0.0 && cell.level > FLUID_FULL / 4 {
+    if style.bubbles > 0.0
+        && cell.level > FLUID_FULL / 4
+        && hash(position.x, position.y, 72).is_multiple_of(style.bubble_tiles)
+    {
         let rate = style.bubbles * if depth > 0.3 { 1.0 } else { 0.6 };
         let cycle = (seconds * rate + phase(position, 70)).fract();
         if cycle < 0.6 {

@@ -1589,3 +1589,105 @@ fn world_rigs_rotate_in_fields_predict_and_converge() {
     }
     assert!(leaned > 0.05, "the rigs leaned: {leaned}");
 }
+
+/// Fluids online (Part III F9): a sealed aquifer beside the first crewmate is breached and floods
+/// a tunnel on the host while both clients watch over a lossy link. Only the changed fluid cells
+/// cross the wire (terrain ops); every client's world ends with exactly the host's water, tile
+/// for tile, and no hash mismatch.
+#[test]
+fn world_floods_replicate_to_every_client() {
+    use fatherload_simulation::{
+        fluid::{FluidCell, FluidKind},
+        terrain::{TileKind, TilePosition},
+        worldgen::TileRect,
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(40, 6, 1.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    for client in &mut harness.clients {
+        client.bot.active = false;
+    }
+    let mut world = harness.world().clone();
+    let first = crate::world::to_sim_player(harness.clients[0].session.player().expect("joined"));
+    let rig = world.player(first).expect("rig");
+    let at = world.frame().tile_at(rig.x, rig.y);
+    let (cx, cy) = (at.x, at.y);
+    // Rock under the rig: a full aquifer up top, an open shaft down to a dry tunnel.
+    let area = TileRect {
+        min: TilePosition {
+            x: cx - 12,
+            y: cy + 4,
+        },
+        max: TilePosition {
+            x: cx + 12,
+            y: cy + 18,
+        },
+    };
+    for at in area.positions() {
+        let _ = world.terrain_mut().set_kind(at, TileKind::Stone);
+    }
+    let pocket = TileRect {
+        min: TilePosition {
+            x: cx - 10,
+            y: cy + 5,
+        },
+        max: TilePosition {
+            x: cx - 2,
+            y: cy + 9,
+        },
+    };
+    for at in pocket.positions() {
+        let water = FluidCell::full(FluidKind::Water);
+        let _ =
+            world
+                .terrain_mut()
+                .set_tile_from_network(at, TileKind::Fluid(water.kind), water.level);
+    }
+    for y in cy + 10..=cy + 15 {
+        let _ = world
+            .terrain_mut()
+            .set_kind(TilePosition { x: cx - 6, y }, TileKind::Air);
+    }
+    for x in cx - 10..=cx + 10 {
+        for y in cy + 15..=cy + 16 {
+            let _ = world
+                .terrain_mut()
+                .set_kind(TilePosition { x, y }, TileKind::Air);
+        }
+    }
+    world.wake_fluids(pocket);
+    harness.host.new_epoch(world);
+    // Flood until the host's water comes to rest, then let the last ops arrive.
+    harness.run_for(Duration::from_secs(3));
+    for _ in 0..40 {
+        if harness.world().fluid_schedule().is_idle() {
+            break;
+        }
+        harness.run_for(Duration::from_secs(1));
+    }
+    assert!(
+        harness.world().fluid_schedule().is_idle(),
+        "the flood settles"
+    );
+    harness.settle(Duration::from_secs(2));
+    assert_converged(&harness);
+    let host = harness.world();
+    let water = |world: &WorldState| -> Vec<(TilePosition, FluidCell)> {
+        area.positions()
+            .filter_map(|at| world.terrain().fluid_at(at).map(|cell| (at, cell)))
+            .collect()
+    };
+    let flooded = water(host);
+    assert!(
+        flooded
+            .iter()
+            .any(|(at, _)| at.y >= cy + 15 && at.x > cx - 6),
+        "the tunnel flooded on the host"
+    );
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let seen = client.session.authority().expect("in game");
+        assert_eq!(water(seen), flooded, "every client sees the host's flood");
+    }
+}

@@ -384,7 +384,7 @@ const fn host_material(band: Band) -> TileKind {
 pub const fn fluid_color(kind: fatherload_simulation::fluid::FluidKind) -> Color {
     use fatherload_simulation::fluid::FluidKind;
     match kind {
-        FluidKind::Water => OCEAN,
+        FluidKind::Water => SKY,
         FluidKind::Acid => LIME,
         FluidKind::Brine => TEAL,
         FluidKind::LiquidMetal => GOLD,

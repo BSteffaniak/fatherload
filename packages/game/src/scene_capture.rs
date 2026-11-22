@@ -403,6 +403,7 @@ mod descent_scenes;
 mod drop_scenes;
 mod explosive_scenes;
 mod field_scenes;
+mod fluid_scenes;
 mod home_scenes;
 mod people_scenes;
 mod pilot_content_scenes;
@@ -548,6 +549,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(wave6_scenes::WAVE6_SCENES)
         .chain(descent_scenes::DESCENT_SCENES)
         .chain(field_scenes::FIELD_SCENES)
+        .chain(fluid_scenes::FLUID_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
