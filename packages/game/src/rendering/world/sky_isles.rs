@@ -482,7 +482,7 @@ fn draw_vent_column(
     visible: Rectangle,
     seconds: f32,
 ) {
-    let left = (vent.x - winds::VENT_HALF_WIDTH) as f32 * TILE_SIZE;
+    let left = crate::view_frame::frame().rel_col(vent.x - winds::VENT_HALF_WIDTH) * TILE_SIZE;
     let width = (winds::VENT_HALF_WIDTH * 2 + 1) as f32 * TILE_SIZE;
     let bottom = crate::view_frame::frame().rel_row(vent.y) * TILE_SIZE;
     let height = winds::VENT_RISE_ROWS as f32 * TILE_SIZE;

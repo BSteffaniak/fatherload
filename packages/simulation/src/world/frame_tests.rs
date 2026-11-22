@@ -506,7 +506,7 @@ fn depth_prerequisites_read_the_rig_through_the_frame() {
     // The frame ten sectors up: the rig's local row is 20 + 5,120.
     world.relocate_frame(Frame::floating_at(0, -10));
     let frame = world.frame();
-    let settings = world.terrain().settings().clone();
+    let settings = *world.terrain().settings();
     let rig = world.player(PLAYER).expect("rig").clone();
     assert_eq!(rig.tile_in(frame).y, 20);
     assert!(

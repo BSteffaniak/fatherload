@@ -300,7 +300,10 @@ impl WorldState {
                     events.push((
                         TrapKind::SandSluice,
                         (
-                            (room.min.x + room.max.x + 1) as f32 * 0.5 * TILE_SIZE,
+                            (self.frame().rel_col(room.min.x)
+                                + self.frame().rel_col(room.max.x + 1))
+                                * 0.5
+                                * TILE_SIZE,
                             self.frame().rel_row(room.max.y + 1) * TILE_SIZE,
                         ),
                     ));

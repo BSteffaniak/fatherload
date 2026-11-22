@@ -272,7 +272,9 @@ pub fn draw_villages(
         {
             draw_decor(draw, &found, *decor, ground, seconds);
         }
-        let door = local.and_then(|player| found.building_at_pixel(player.x, player.y));
+        let door = local.and_then(|player| {
+            found.building_at_local(crate::view_frame::frame(), player.x, player.y)
+        });
         for (index, building) in found.buildings.iter().enumerate() {
             if !seen(building.first_column + building.width / 2) {
                 continue;
