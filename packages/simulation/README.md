@@ -3523,7 +3523,8 @@ a home bed and a base home point).
 `BEACON_SPACING_TILES` from another beacon, `MAX_BEACONS_PER_PLAYER`, `BEACON_PRICE` x percent).
 `Travel { to: TravelNode }` from any stop (`travel_stop_of`: within `BEACON_REACH_TILES` of any
 crew beacon, inside a reached outpost, or in the town: the buildings' span plus
-`TOWN_TRAVEL_MARGIN`, at or above the surface) to the town, any beacon or any reached outpost,
+`TOWN_TRAVEL_MARGIN`, from the surface up to `TOWN_TRAVEL_CEILING_ROWS` above it, so a sky isle or
+the Moon over the town is not a stop) to the town, any beacon or any reached outpost,
 for `travel_cost(rows)` fuel and credits (4 + rows/80 fuel, 10 + rows/20 credits: a 350-row jump
 costs 8 fuel and 27 credits, the whole dig about 170 fuel and 660 credits). The rig arrives at
 rest, its drill and deep-run pressure cleared (`BeaconTravelled` carries both ends for the
@@ -3546,12 +3547,17 @@ off (`Logistics::is_diving`).
   `UpgradeLock::Descent(index)`). Tiers up to the classic 15 keep their classic prices; past it
   each costs `DEEP_TIER_GROWTH_PERCENT` (135) more (`upgrade_cost_for`). The stat curves were
   already formulas and extend monotonically (tank ~30,900 fuel, hull ~5,100, bay ~1,270 slots at
-  tier 22); the deep tiers have their own names (`upgrade_tier_name`).
+  tier 22); the deep tiers have their own names (`upgrade_tier_name` names one for a core
+  `level` of 15 or more, so a caller naming a maxed classic line clamps `level` below
+  `UpgradeOffer::max_level`) and previews (`upgrade_preview::upgrade_preview_for(.., rules)`;
+  the classic `upgrade_preview` stops at 15).
 - **Rig systems**: eight new one-tier upgrade lines appended to `UpgradeKind` (shop offers
   18-25): `DescentPressureHull`, `BioFilter`, `LampII`, `SonarSuite`, `CryoHull`,
   `GravityAnchor`, `PhaseDrill`, `HeartKey` (`UpgradeKind::rig_system` ->
   `depth_progression::RigSystem`), stored as bits in `HazardGear::rig_systems`. Classic worlds
-  show them locked (`UpgradeLock::DescentOnly`). On Descent worlds each goes on sale once anyone
+  never list them (`economy::shop_line_count(rules)` is 18 there, the lines before the rig
+  systems, so a classic shop keeps its 18 rows; `upgrade_lock` still answers
+  `UpgradeLock::DescentOnly` for them). On Descent worlds each goes on sale once anyone
   reaches the last stratum of the Descent before the one it opens
   (`RigSystem::sold_from_row`, `UpgradeLock::Depth`).
   `economy::grant_rig_system` fits one without the shop (a later boss reward).
@@ -3581,6 +3587,12 @@ off (`Logistics::is_diving`).
   `WorldState::install_logistics_sites(&sites, false)`. Worlds whose generator did not carve
   them (scenarios, tests, scenes) pass `stamp: true`. V1-V10 generation is untouched: their
   golden digests stand.
+  Chained ancient lifts share their meeting station (one lift's bottom row is the next one's
+  top, on the same column); `Logistics::stations_at(tile)` lists every shaft stopping there and
+  the dialog offers each one's rides (`Logistics::station_at` returns only the first).
+  **Row frame:** the plan, `DescentLayout` and the gates use rows below the ground line as
+  terrain rows directly (the ground line is about row 6 today); if V11 puts its ground line
+  elsewhere, offset the rows in `layout_for` / the generator's call to `plan`.
 - **Descent layout adapter (F8):** `depth_progression::DescentLayout` (the eight Descents and 41
   strata as row ranges below the ground line). `PlanLayout` models §14's table;
   `depth_progression::layout_for(settings)` is the one place that picks it, so the stratum
