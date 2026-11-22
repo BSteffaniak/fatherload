@@ -3164,7 +3164,8 @@ the side of the frame origin a sprite is on.
   mille, in drawing order). Placeholder values follow §14 (Glow Sea light 250, Brine Glaciers
   friction 300, Underground Ocean drag 1800, Time Sludge time 800, Pixel Rot pixelate and
   palette reduce, Prism Desert chromatic aberration, Singularity Fields lensing, the Sunforge
-  exposure and bloom, Pearl Abyss desaturate and vignette, ...). **Nothing reads them yet.**
+  exposure and bloom, Pearl Abyss desaturate and vignette, ...). Read by the field effects
+  since the Wave 7 integration (`descent::fields`, see "Wave 7 integration" below).
 - **Gates** (`GateDef`: `DescentBoss`, `requires: &[GateRequirement]`, `rewards:
   &[DescentKey]`): every key a gate asks for is a reward of an earlier gate, every
   `DescentKey` is a reward exactly once, and the Seal Gate asks `EveryEarlierKey`.
@@ -3289,11 +3290,12 @@ craft rotation, and (in the game crate) the post-process pipeline and rolling ca
   control mirroring, light, sound occlusion, free rotation and the 13 screen effect levels with
   grade and fog colours. `FieldSample::NEUTRAL` everywhere today: neutral fields take every
   classic path bit for bit (no V1-V10 digest or existing hash changed).
-- **Seam for the strata track (integrator wires it)**: `field::FieldProfile` is the plain-data
+- **Seam for the strata track (wired in the Wave 7 integration, `descent::fields`)**: `field::FieldProfile` is the plain-data
   per-stratum profile (gravity, time, friction, drag, light, occlusion, mirroring, free
   rotation, `ScreenEffects { levels: [u8; 13], grade_rgb, fog_rgb }`). Register the stratum
   registry's lookup, a pure `fn(&WorldSettings, x, y) -> Option<FieldProfile>`, in
-  `field::STRATUM_FIELD_SOURCES` (empty today). Blend across stratum boundaries inside the
+  `field::STRATUM_FIELD_SOURCES` (it holds `descent::fields::stratum_field_source`; the source
+  signature gained the frame: `fn(&WorldSettings, Frame, x, y)`, local pixels). Blend across stratum boundaries inside the
   source with `field::boundary_blend(row, boundary_row, half_width)` and
   `FieldProfile::lerp`. `ScreenEffect` and `FieldPreset` append only.
 - **Authored zones**: `FieldZone` (tile rectangle, feathered edge, profile, optional preset)
@@ -3437,7 +3439,7 @@ between 20 Hz and 60 Hz while a rig speeds up or slows down.
 
 **Seams for other tracks and later waves:**
 
-- *Generation (F8, the V11 generator; the integrator wires it)*:
+- *Generation (F8, the V11 generator; wired in the Wave 7 integration)*:
   `fluid::fluid_pockets_in_chunk(seed, chunk, &[FluidPocketRule], tile_at) -> Vec<(TilePosition,
   Tile)>` is pure and chunk-local (it reads and writes only tiles inside the 16x16 chunk): call
   it per generated chunk after caves, with the rules of the stratum the chunk is in, and write
@@ -3675,6 +3677,115 @@ but expeditions are not stressful past Descent II (the deep tanks dwarf a Descen
 Descents V-VI run a little ahead of §14, and the harness's hazards almost never wreck a rig;
 the stratum registry's real hazards, fuel drains and ores should replace `PlanStrata` and the
 table be measured again.
+
+## Wave 7 integration: the seams wired together
+
+The five Wave 7 tracks (F7 positions, F8 strata, F9 effects, F9 fluids, F10 logistics) were
+stacked in that order on bb455f4, each later track ported to the F7 frame, and their seams
+connected. Formats: one `PROTOCOL_VERSION` (15) and one save format (13) for the whole wave
+(`save::tests::every_supported_save_format_loads_plays_and_round_trips` loads formats 1-12
+without any wave 7 field, plus a V11 world in format 13). Event codes: fluids 380-383,
+logistics 390-399 (350-379 stay free). Fluids' five audio patches stay at the end of
+`patches!`. V10 stays `GeneratorVersion::CURRENT`; V11 is "Deep Descent (preview)".
+
+### Positions in the later tracks (F7 porting)
+
+- **V11 floats its frame** (`GeneratorVersion::floating_frame`: V11 `true`), so a dig 13,000
+  rows down re-centres the frame about every 512 rows. `column_limit` stays
+  `STREAMED_COLUMN_LIMIT` for V11 (its sky, Moon, villages and tombs are V10's, sized to it).
+- Ported to the frame: the field query (`field::sample_in(zones, settings, frame, x, y)`,
+  `FieldZone::weight_in`, `FieldZones::weights_at(frame, ..)`; `field::sample` is the origin
+  frame reading for tests), the rotated corners (`rig_collides` reads `terrain.frame()`), the
+  dev field zone's tile, fluid submersion and the keep-out check, the swimmer's sink tile, the
+  pilot's fluid air, the PourTestPools tile, the logistics tick (rig tiles, `column_x` /
+  `resting_y` in the frame: lift cabs, landings, dive snaps and rescue homes), the scanner's
+  centre, and in the game the stratum banner, depth ruler and map footer, the fluid and
+  logistics renderers (`view_frame`) and the underwater audio check. `reframe_positions`
+  names `fields`, `fluids` and `logistics` (tiles, never moved).
+
+### Strata feed the field effects (F8 -> F9)
+
+`descent::fields::stratum_field_source` is registered in `field::STRATUM_FIELD_SOURCES`:
+
+- `descent::fields::field_profile(stratum, strength)` converts the registry's integer
+  `descent::FieldProfile` to `field::FieldProfile` (gravity, time, grip, drag; light clamps to
+  1 and light past 1000 per mille reads as exposure; the grade leans to the stratum's accent
+  colour, the fog to its back wall; every registry `ScreenEffect` maps to a pass except
+  `Blur`, which has none yet).
+- The source answers `None` (neutral, the classic paths) in every older world, above the first
+  stratum and wherever the strata near the point are neutral; otherwise the stratum's field
+  blended over `BLEND_HALF_ROWS` (8) across each layout boundary.
+- New registry fields (neutral by default): `FieldProfile::free_rotation` (a 360-degree zone),
+  `FieldProfile::regions` (`FieldRegions::GravityTurns { per_mille, turns }` /
+  `Mirrored { per_mille }` in seeded `FIELD_REGION_TILES` (48 x 32) cells feathered over 6
+  tiles) and `FieldProfile::deepening` (screen effects from half strength at the stratum's top
+  to full at its bottom).
+- Placeholder effects per §14: Gravity Shear (gravity turned 90/180/270 degrees in 45 % of its
+  cells, free rotation everywhere, wobble), Upside-Down Isles (gravity flipped in 35 % of its
+  cells, free rotation), Mirror Strata (screen and controls mirrored in 40 % of its cells),
+  Pixel Rot (pixelate and palette deepening), Inner Sky (glare from its 1400 light, a warm
+  grade), plus every value the strata track already set (Glow Sea dark, Underground Ocean
+  drag, Brine Glaciers ice, Time Sludge slow time, Sunforge glare and bloom, Pearl Abyss,
+  Prism Desert, Singularity Fields, ...).
+- The layout is cached per thread (`descent::fields::cached_layout`, a pure function, so the
+  cache never changes an answer); a field sample is one cached lookup plus a few operations.
+- Rigs, pilots, creatures, drops and charges read it through `fields_at`, and each seat's
+  screen-effect stack through `render_snapshot` (the game's existing path).
+- Tests: `descent::fields::tests` (older worlds and quiet strata neutral, visible placeholder
+  effects, region turns and mirrors, smooth boundary blend, the same field in any frame, a rig
+  spinning past 180 degrees in the Gravity Shear while leaning only to 35 degrees at home).
+  The descent bot hops a region cell lower when a turned cell stalls its straight-down dig.
+
+### V11 generation calls the fluids and logistics hooks (F8 -> F9 fluids, F10)
+
+- **Fluids**: `StratumDef::fluids: &[FluidPocketRule]` (empty by default). `assemble` calls
+  `fluid::fluid_pockets_in_chunk` last, over the finished chunk, with the rules of the stratum
+  at the chunk's centre: water in the Fossil Oceans, Glow Sea, Underground Ocean, Geyser
+  Fields, Merrow City and Pearl Abyss; brine in the Brine Glaciers and Pearl Abyss; acid in the
+  Flesh Caverns, Time Sludge and Dark Matter Veins; liquid metal in the Mantle Storm Zone, the
+  Sunforge, Engine Halls, Core Ocean and the Heart. Generated fluid is full and at rest until
+  something breaches it.
+- **Logistics**: every outpost hall of a world now stands on one seeded column
+  (`landmarks::outpost_column`, 60-139 columns to one side of the spawn), and
+  `landmarks::logistics_sites(settings)` turns the halls into logistics outposts (floor = the
+  hall's floor) and runs the builders' cable beside them (`landmarks::lift_column`, two columns
+  outside the far door): an ancient lift from `LIFT_TOP_ROW` (6 rows under the ground line) to
+  the first outpost and from each outpost to the next. `Ctx::logistics` carves its tiles over
+  the landmarks; `WorldState::from_import_with_params` installs its records (`stamp: false`)
+  on every V11 world.
+- **Depth rules**: `depth_progression::layout_for(settings)` now returns a `WorldLayout`: the
+  registry's seeded rows (`RegistryLayout`, terrain rows) on V11 worlds, the plan table
+  otherwise; tier caps, rig-system sale rows, gates and logistics prices read it.
+- `GOLDEN_V11_DIGEST` is updated for the fluids, the outposts' column and the cable; the V1-V10
+  digests are unchanged. Tests: `world::deep_wiring_tests` (fluid pockets per stratum and none
+  in V10, outposts and the cable carved and installed, the registry layout, an ancient lift ride
+  of more than two sectors with the frame following the rider).
+
+### The descent harness on the real registry (F8 -> F10)
+
+`balance::descent::RegistryStrata` implements `StratumRegistry` (and its new `descents()`)
+from the registry on the default seed's V11 layout: names, seeded rows from the ground line,
+common rock, ore values from the registry's ore curves (times the Descent value curve), hazard
+weights, and novelties and content minutes from creatures, set pieces (outposts, gate chambers,
+anomaly rooms, the cavern, settlements) and field or fluid mechanics. Drill and radiator tiers
+and deep rock toughness stay modelled. `--balance-report --only descent` runs it (`PlanStrata`
+remains for comparison). The integration run: 76.0 h to the Heart (target 60-90 h), all gaps
+between new things 40 minutes or less (longest 37), 1 death, gate systems at 21.3 / 26.5 /
+33.0 / 39.1 / 53.8 / 66.8 h. Descent I takes 14.3 h against the plan's 5-8 h: the registry's
+Crust carries the classic ore curves (mostly copper in the Topsoil), poorer than the plan
+model's mix, so the bot grinds the Crust at tier 1 with trips longer than one tank (168 % of
+it). Wave 8's Crust re-pacing has to answer that.
+
+### Still open
+
+- The Hollow World outpost can sit over a cave (its plated floor holds; the strata test now
+  asks that most of the floor rests on rock).
+- Placeholder strata borrow their host band's heat: a stock rig deep in a V11 world overheats
+  in seconds (scenes and the wiring tests fit a protected rig).
+- Region cells are a placeholder for authored gravity and mirror zones; the Mirror Strata's
+  twins, Echo Caves' sonar and the Prism Desert's colour keys are Wave 9 content.
+- The fluids' slow levelling of wide bodies and deep-column compression (see the fluids
+  section) are why the generated pockets stay small.
 
 ## Replication
 

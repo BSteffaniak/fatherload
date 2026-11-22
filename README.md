@@ -1011,10 +1011,22 @@ world dug to the floor, the browser memory fixture) show it.
   below is a **placeholder**: its own rock colours, ores and hazards from the stratum registry,
   creatures borrowed from the classic roster, and the rules of the classic layer it stands in
   for. Strata meet in ragged transition zones, wider between Descents.
-- Each Descent has a placeholder **outpost** hall a short way off the spawn column and a
-  **gate chamber** at its end (the gates are open while they are placeholders). Descent V
+- Each Descent has an **outpost** hall (a working deep outpost: fuel, repair, selling, a
+  claim and a respawn point) and a **gate chamber** at its end (the gates are open while they
+  are placeholders). The halls stand on one column a short way off the spawn, and the
+  **builders' cable** of ancient lifts runs down beside them, outpost to outpost. Descent V
   breaks into the **Hollow World**: a cavern hundreds of rows tall with floating stones. The
   Strange Layers hold crystal-lined **anomaly rooms**.
+- Strata have **field effects**: the Glow Sea is dark, the Underground Ocean drags, the Brine
+  Glaciers slide, the Inner Sky and the Sunforge glare, Pixel Rot grows blockier the deeper
+  you go, the Time Sludge slows time; Gravity Shear and Upside-Down Isles cells turn gravity
+  (turn the rig with its rotation thrusters to stand on walls and ceilings; rotation is free
+  all the way round there) and Mirror Strata cells mirror the screen and the controls.
+- Strata hold **fluid pockets**: water in the Drowned and Frozen (and a few higher), brine in
+  the Brine Glaciers, acid in the Flesh Caverns and Dark Matter Veins, liquid metal toward the
+  Heart. Review scenes: `descent_gravity_shear`, `descent_upside_down_isles`,
+  `descent_mirror_cell`, `descent_sunforge_glare`, `descent_underground_ocean`,
+  `descent_builders_cable`.
 - The depth ruler names the Descent and stratum beside its marker, the mine map's footer names
   them too, and an **"entering <stratum>"** banner slides in at each new stratum (a new
   Descent shows its number).
