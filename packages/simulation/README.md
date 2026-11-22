@@ -4134,8 +4134,23 @@ Crust's own entries (appended).
   `crust_slate_shelves`, `crust_lava_tube`, `crust_creatures`, `crust_sinkhole`,
   `crust_sinkhole_escape`.
 
+### Review fixes (Wave 8 crust review)
+
+- **The Sinkhole is winnable on a stock engine**: the adit past the funnel's wall no longer
+  fills (`SinkholeSite::collapses`), so the race is the climb, not a 30-tile drive at 2.25
+  tiles/s through the zone; leaving the zone's side below the adit or under the chamber is no
+  longer an escape (`clear_of`). Rigs that join after the Sinkhole get Drill II.
+- **Heat everywhere reads `crust::heat_units`**: the rig's damage (as before), a pilot on foot
+  (it still read the host band's heat) and the game's heat tint and HEAT badge (they read band
+  heat / classic depth, so they lit in cool V11 strata). Older worlds are unchanged.
+- Scenes: `crust_sinkhole_escape` now shows the collapse rising under the rig;
+  `crust_lava_tube` stands mid-tube.
+
 ### Still open
 
+- The shop's radiator preview (`upgrade_preview`) still names the classic band a tier covers,
+  not V11 strata.
+- No screen shake or flash for the Sinkhole's rumble or a roof collapse (only sound).
 - The Crust keeps the classic band art for its base rock (the registry palettes describe it);
   only the new tiles and backdrops are new art.
 - Junction branches dive under the main line's rail for a tile (a rig on the branch overlaps it
