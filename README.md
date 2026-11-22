@@ -987,6 +987,32 @@ world dug to the floor, the browser memory fixture) show it.
 - Saves pack a streamed world's dug chunks into one compressed stream (save format 13); a V11
   world explored to the bottom holds about 20 MiB of simulation heap.
 
+### Fluids (wave 7, Part III F9)
+
+Water, acid, brine and liquid metal flow as simple cellular fluids. They come with the Deep
+Descent's new worlds (generator V11 places sealed aquifers and cave pools per stratum); older
+worlds generate exactly as before, but any world can hold fluid once something pours it.
+
+- **Flooding**: drill or blast into a sealed pocket and it floods the tunnel: fluid falls, spreads
+  and finds its own level (it climbs U-bends), then settles still. A breach gushes; settled
+  lakes cost nothing.
+- **Reactions**: water quenches lava into obsidian in a hiss of steam, cools molten metal into an
+  iron-ore crust (mine it), and acid slowly eats dirt, clay, sand, mud and snow, spending itself.
+  Heavier fluids sink through lighter ones (metal, then brine, then acid, then water).
+- **Rigs** float and drag in fluid; two thirds under, they handle like a submarine: slow and
+  steerable, thrust to rise, hold drill (off the ground) to dive, the ballast pumps sipping fuel.
+  Brine floats a rig up to bob at its surface; acid eats the hull and molten metal scalds it
+  (lava plating helps); deep water past the hull's pressure rating (pressure bracing raises
+  it) crushes slowly. Descent IV gear (Pressure Hull, Bio-Filter) plugs in here later.
+- **On foot** the pilot swims in any fluid (holding its breath; brine and metal lift it up),
+  burns in acid and molten metal, and creatures that cannot swim turn back at the shore.
+- **Look and sound**: translucent bodies with a depth tint, rolling surfaces, falling streaks
+  and drifting glints where fluid runs, bubbles, and glowing molten metal; splashes, the rush of
+  a breach, steam, fizz and a bubbling underwater bed.
+- **Try it**: in a test-mode world the pause menu's **Pour Test Pools** carves a row of all four
+  beside the rig. Review scenes: `fluid_pools`, `fluid_rig_submerged`, `fluid_pilot_swimming`,
+  `fluid_flood`, `fluid_metal_meets_water`.
+
 ### Art and audio pass (wave 6)
 
 A polish pass over everything from waves 3-5, presentation only (no gameplay, save, protocol or

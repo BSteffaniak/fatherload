@@ -3341,6 +3341,110 @@ craft rotation, and (in the game crate) the post-process pipeline and rolling ca
   zone replication and hashing, test-mode zones), netcode
   `world_rigs_rotate_in_fields_predict_and_converge`.
 
+## Wave 7 fluids (Part III F9: `src/fluid.rs`, `src/world/fluids.rs`)
+
+Fluids v1: water, acid, brine and liquid metal as deterministic cellular fluids, plus the
+swim/submarine movement mode. Seams for the other wave 7 tracks and later waves are listed last.
+
+**Storage: fluid is terrain.** A fluid cell is a `TileKind::Fluid(FluidKind)` tile (appended
+variant; kind code `FLUID_TILE_CODE_BASE` = `0xA00 | FluidKind::code`, clear of `0x100`-`0x7FF`
+and `Built`'s `0xB00`) whose `durability` byte is the level: `FLUID_FULL` (100) per full tile, up
+to `FLUID_MAX` (250) when compressed deep in a column. `TileKind::is_open` (air or fluid) is
+what moves through: `Terrain::is_solid_at`, the drill's open-target checks, `chip_tile`, pilot
+blocking, spawn clearance and the sky isles' collapse use it, so rigs, pilots, entities and drops
+pass through fluid. Blasts leave fluid alone (they open its walls); a solid tile written over a
+fluid cell removes it. Because fluid is tiles, saves (`TileDiffs`), keyframes, stale-chunk
+refreshes, the terrain digest and the state hash cover it with no new section, and only cells
+that changed cross the wire (the terrain op log): a settled lake writes nothing. Code that asks
+"is this tile open?" should use `is_open()`, not `== TileKind::Air` (the existing `== Air` checks
+were audited: enemy spawning, burrowing and the balance bots treat fluid as not-open on purpose).
+
+**The fluid pass** (`WorldState::advance_fluids`, last in `simulate_tick` before the terrain
+journal closes): every tile written this tick wakes the fluid cells beside it
+(`FluidBreached` when an opened tile exposes fluid, once per tick). Then the steps due by the
+tick run: `fluid::fluid_steps_by(tick, hz)` gives `FLUID_STEPS_PER_SECOND` (20) per second of
+world time at every tick rate, so fluid is tick-rate safe
+(`fluids_are_deterministic_and_tick_rate_safe` compares 20, 30 and 60 Hz cell for cell). A step
+takes at most `FLUID_STEP_BUDGET` (2,048) woken cells, round robin from a cursor, and:
+
+1. runs reactions and density swaps in position order, in place (a denser fluid swaps whole
+   with a lighter one under it; `FluidKind::density`: water < acid < brine < liquid metal);
+2. proposes moves from one snapshot: fall (`stable_lower`, the classic compressible split:
+   `FLUID_COMPRESSION` extra per row, so pressure grows with depth and fluid climbs U-bends),
+   then spread to each side `(base - side + 1) / viscosity`, then climb when compressed past a
+   full tile;
+3. applies the moves in order as transfers (clamped by the target's room; a move into a cell
+   another fluid took first is held back), writes only the cells that changed, and wakes those
+   cells and their fluid neighbours. Unchanged cells go back to sleep.
+
+Volume is exactly conserved except by the defined sinks: quenching lava (`QUENCH_WATER_COST`),
+cooling metal (`COOL_WATER_COST` of water; the metal sets into `COOLED_METAL_ORE`, iron ore, when
+it is at least `METAL_ORE_LEVEL` or the edge of a bigger body, else slag dust), acid eating a
+soft tile (`ACID_DISSOLVE_COST`; `acid_dissolves`: dirt, clay, sand, mud, snow; about one bite
+per 2 s, `ACID_DISSOLVE_ODDS`, a fixed hash of position and step), and a solid tile written over
+fluid. `FluidReacted` fires once per reaction per step. A settled surface may slope by a level
+or so per column (integer spreading stops at a difference of one).
+
+**The schedule** (`FluidSchedule`, the world's `fluids` field): the woken cells and the cursor.
+It is saved (a save mid-flood resumes exactly: `a_save_mid_flood_resumes_exactly`) but neither
+hashed nor replicated, and `redacted_for` clears it in client keyframes: a client's authority
+never ticks, and its predicted copy wakes fluid from its own predicted terrain writes (drilling
+into a pocket starts the flood at once); host tile writes correct it through the op log.
+Staging seam: `WorldState::wake_fluids(rect)` next to `terrain_mut` (fluid written straight into
+the terrain sits still until woken).
+
+**Bodies.** `WorldState::submersion(x, y, half_height)` samples five points down a body against
+each tile's fluid surface (`Submersion { share, kind, depth_rows }`). Rigs
+(`apply_fluid_to_rig`, after the movement step): buoyancy `RIG_GRAVITY * buoyancy * share`
+(water 0.82 sinks slowly, brine 1.12 bobs at the surface, molten metal 1.6), drag
+`1 / (1 + drag * share * dt)`; at `SUBMARINE_SHARE` (0.6) the rig is a submarine: drill held off
+the ground dives (`SUBMARINE_DIVE_ACCELERATION`), speed is capped at `SUBMARINE_TOP_SPEED`, the
+pumps burn `SUBMARINE_FUEL_PER_SECOND` while it steers; `RigSubmerged` / `RigSurfaced` fire as
+it crosses. Damage: pressure past the hull's rating (`PRESSURE_DAMAGE_PER_ROW` per row over),
+acid (`hull_damage_per_second * share`, less acid resistance) and molten metal (through lava
+plating, less heat resistance). The old static cave water (V6 flooded caves, `water_at`) is
+unchanged. Pilots: `PilotView::water` counts any fluid at least half full (the existing swim
+mode, breath and `PilotSplashed`), `PilotTerrain::swim_sink` (a new trait method, `SWIM_SINK` by
+default) lifts swimmers in brine and metal, and acid and metal hurt (`pilot_fluid_damage`).
+Creatures: `EnemyKind::can_swim` (false for every kind today); `keep_out_of_fluid` puts a
+non-swimmer back where it was when a step would carry its middle into fluid it was not already
+in (flyers and walkers, after `physics::step_body`). Enemy spawning already refuses fluid
+(`air` means `TileKind::Air`) and `floor` no longer counts fluid as ground.
+
+**Events** (netcode codes 380-383): `FluidBreached { kind, x, y }`, `FluidReacted { reaction,
+x, y }` (tile coordinates), `RigSubmerged { player_id, kind }`, `RigSurfaced { player_id, kind }`.
+Codes 384-389 stay free in the fluids range.
+
+**Formats.** `PROTOCOL_VERSION` 15 (fluid tiles, the events, `TestModeAction::PourTestPools`) and
+save format 13 (fluid tiles in the diffs, the schedule); formats 8-12 load as is. No worldgen
+change: the V1-V10 golden digests stand (V1-V10 never place fluid).
+
+**Seams for other tracks and later waves:**
+
+- *Generation (F8, the V11 generator; the integrator wires it)*:
+  `fluid::fluid_pockets_in_chunk(seed, chunk, &[FluidPocketRule], tile_at) -> Vec<(TilePosition,
+  Tile)>` is pure and chunk-local (it reads and writes only tiles inside the 16x16 chunk): call
+  it per generated chunk after caves, with the rules of the stratum the chunk is in, and write
+  its tiles into the chunk. Rules are data a stratum registry can hold:
+  `FluidPocketRule::sealed(kind, per_mille)` (an elliptical aquifer replacing diggable rock whose
+  whole rim stays rock, so it sits still until breached) and `FluidPocketRule::cave_pools(kind,
+  per_mille)` (the bottom rows of walled, floored cave basins). Generated fluid is full tiles at
+  rest and costs nothing until a neighbour changes.
+- *F9 field effects*: a per-region field registry can read `WorldState::submersion` /
+  `Terrain::fluid_at` for buoyancy and drag; each fluid's own buoyancy, drag, viscosity and damage
+  live on `FluidKind`.
+- *Descent IV gear (F10 progression)*: `WorldState::submersion_gear(player) -> SubmersionGear {
+  pressure_rows, acid_resistance, heat_resistance, handling }` (today `STOCK_PRESSURE_ROWS` 24 +
+  8 per pressure bracing tier) is where the Pressure Hull, Bio-Filter, Cryo Hull and ballast or
+  sonar upgrades plug in; `WorldState::pilot_breathes_in(player, kind)` (false today) is the
+  rebreather / Bio-Filter seam for pilots.
+- *Swimming creatures (Descent IV)*: answer `true` from `EnemyKind::can_swim`.
+- *Dev and tools*: `TestModeAction::PourTestPools` (pause menu "Pour Test Pools" in a test-mode
+  world) writes `fluid::demo_basins(origin)`, one basin per fluid; the screenshot and balance
+  tools can stage the same tiles. Rendering reads `Terrain::fluid_at` only (no snapshot field);
+  terrain chunks paint fluid as open ground and skip repaints for open-to-open changes, and
+  `rendering/world/fluids.rs` draws the fluid live.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
