@@ -1212,6 +1212,16 @@ impl WorldState {
         reason = "the logistics pass in tick order: rides, dives, outposts, gates"
     )]
     pub(super) fn advance_logistics(&mut self, next_tick: SimulationTick, output: &mut TickOutput) {
+        // Wave 8: a bay with no ore left (sold at a village, lost in a wreck, handed over)
+        // carries no haul premium into the next trip.
+        if !self.logistics.haul_descent.is_empty() {
+            let players = &self.players;
+            self.logistics.haul_descent.retain(|player_id, _| {
+                players
+                    .get(player_id)
+                    .is_some_and(|player| player.cargo_bay.minerals().next().is_some())
+            });
+        }
         // Rides (a wrecked rig drops out of its cab; the rescue takes it from there).
         let riders: Vec<PlayerId> = self.logistics.rides.keys().copied().collect();
         for player_id in riders {
@@ -1379,16 +1389,7 @@ impl WorldState {
     /// 100 elsewhere).
     #[must_use]
     pub fn haul_premium_percent(&self, player_id: PlayerId) -> u32 {
-        if !self.logistics.rules.is_descent() {
-            return 100;
-        }
-        crate::depth_progression::descent_value_percent(
-            self.logistics
-                .haul_descent
-                .get(&player_id)
-                .copied()
-                .unwrap_or(0),
-        )
+        self.logistics.haul_premium_percent(player_id)
     }
 
     /// Wave 8, Descent worlds: the thruster fuel factor for `player_id`'s rig at its depth (1

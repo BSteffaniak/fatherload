@@ -389,6 +389,20 @@ pub struct Logistics {
 }
 
 impl Logistics {
+    /// Percent of the ore price buyers pay `player_id` for the haul aboard (Wave 8, Descent
+    /// worlds: the deepest Descent it came from,
+    /// [`crate::depth_progression::descent_value_percent`]; 100 elsewhere). The sale counters
+    /// read it too, so the payout they show is the payout the sale makes.
+    #[must_use]
+    pub fn haul_premium_percent(&self, player_id: PlayerId) -> u32 {
+        if !self.rules.is_descent() {
+            return 100;
+        }
+        crate::depth_progression::descent_value_percent(
+            self.haul_descent.get(&player_id).copied().unwrap_or(0),
+        )
+    }
+
     /// Whether nothing logistic exists (a classic world that never used it: not hashed, so
     /// older worlds keep their hashes).
     #[must_use]

@@ -540,6 +540,42 @@ fn rock_on_deep_descent_worlds_yields_layer_resources_and_ore_its_premium() {
 }
 
 #[test]
+fn an_emptied_bay_carries_no_haul_premium_into_the_next_trip() {
+    let mut world = deep_world(0x0FA1_4008);
+    let deep_row = world.descent_layout().descent(2).expect("III").top + 50;
+    world.descent_dig_extras(
+        PLAYER,
+        TilePosition { x: 3, y: deep_row },
+        TileKind::Ore(MineralKind::Gold),
+    );
+    world
+        .player_mut(PLAYER)
+        .expect("rig")
+        .cargo_bay
+        .add(ItemKind::Mineral(MineralKind::Gold), 3);
+    let _ = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
+    assert_eq!(
+        world.haul_premium_percent(PLAYER),
+        descent_value_percent(2),
+        "ore aboard keeps its premium"
+    );
+    // The ore is gone some other way than a counter sale (a wreck, a village trade): the
+    // next haul from the Crust pays Crust prices.
+    let _ = world
+        .player_mut(PLAYER)
+        .expect("rig")
+        .cargo_bay
+        .take_all(MineralKind::Gold);
+    let _ = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
+    assert_eq!(world.haul_premium_percent(PLAYER), 100);
+    assert_eq!(
+        world.logistics().haul_premium_percent(PLAYER),
+        world.haul_premium_percent(PLAYER),
+        "the sale counters read the same premium"
+    );
+}
+
+#[test]
 fn the_registry_names_a_layer_resource_for_every_recipe() {
     for recipe in &RECIPES {
         for (stratum, _) in recipe.inputs {

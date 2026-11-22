@@ -1298,11 +1298,18 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     let progression = ui.snapshot.progression;
     let contract = &progression.contracts.active;
     let (line, done) = contract_line(ui);
-    let cargo_value: u32 = player
+    // Deep Descent worlds (Wave 8): ore pays the premium of the deepest Descent it came from.
+    let premium = ui
+        .snapshot
+        .logistics
+        .haul_premium_percent(ui.view.player_id);
+    let ore_value: u32 = player
         .cargo_bay
         .minerals()
         .map(|(mineral, count)| ui.snapshot.market_value(mineral).saturating_mul(count))
-        .sum::<u32>()
+        .sum::<u32>();
+    let cargo_value: u32 = u32::try_from(u64::from(ore_value) * u64::from(premium) / 100)
+        .unwrap_or(u32::MAX)
         + player
             .cargo_bay
             .artifacts()
