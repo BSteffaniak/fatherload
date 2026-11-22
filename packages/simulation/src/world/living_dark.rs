@@ -951,7 +951,10 @@ impl WorldState {
                     .filter_map(|id| self.fields.iter().find(|(zone, _)| zone == id))
                     .map(|(_, zone)| zone.weight_in(frame, player.x, player.y))
                     .fold(0.0_f32, f32::max);
-                (weight > 0.0).then_some((*player_id, SPORE_DAMAGE_PER_SECOND * weight * dt))
+                // Deeper spores sting as hard as the creatures there bite.
+                let scale = crate::enemy::tier_scale(self.tier_at(player.tile_in(frame)));
+                (weight > 0.0)
+                    .then_some((*player_id, SPORE_DAMAGE_PER_SECOND * scale * weight * dt))
             })
             .collect();
         for (player_id, damage) in stung {

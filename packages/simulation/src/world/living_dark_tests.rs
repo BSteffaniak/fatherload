@@ -801,6 +801,10 @@ fn bot_controls(world: &WorldState, target: (f32, f32), tick: u64) -> ControlSta
     })
 }
 
+/// A rig's hull tier at the Mycelial Mind (the descent probe's arrival tier in the Glow Sea,
+/// plus the one it can afford there).
+const HULL_AT_THE_MIND: u8 = 10;
+
 #[test]
 #[allow(clippy::too_many_lines, reason = "the whole fight, start to end")]
 fn a_bot_beats_the_mycelial_mind_and_the_crew_gets_the_bio_filter_and_lamp_ii() {
@@ -823,6 +827,9 @@ fn a_bot_beats_the_mycelial_mind_and_the_crew_gets_the_bio_filter_and_lamp_ii() 
         rig.weapon_rack.battery_level = crate::weapon::MAX_BATTERY_LEVEL;
         let _ = rig.receive_weapon(WeaponKind::Railgun);
         let _ = rig.mount_weapon(Some(WeaponKind::Railgun));
+        // The hull a rig reaches the Glow Sea with (the descent probe's arrival tier), not
+        // the test rig's top tier: the fight must be fair for the rig that gets there.
+        rig.hull_level = HULL_AT_THE_MIND;
         rig.hull = rig.max_hull();
     }
     let events = ticks(&mut world, 2);

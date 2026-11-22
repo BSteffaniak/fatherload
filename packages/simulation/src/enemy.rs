@@ -423,7 +423,7 @@ impl ShotKind {
             Self::Boulder => 24.0,
             Self::Spore => 3.0,
             Self::Thorn => 6.5,
-            Self::MindSpore => 6.0,
+            Self::MindSpore => 4.0,
         }
     }
 
@@ -1901,7 +1901,7 @@ impl EnemyKind {
             Self::MycelialMind => EnemyStats {
                 radius: 20.0,
                 // Its nodes shield it most of the fight: it only bleeds while exposed.
-                health: 420.0,
+                health: 300.0,
                 speed: 0.0,
                 sight_tiles: 20.0,
                 hearing_tiles: 20.0,
