@@ -1035,6 +1035,16 @@ world type; the tools take `--generator v11` (`--worldgen-report`,
 `descent_8_heart`, `descent_5_hollow_world`, `descent_outpost` and `descent_explored` (a
 world dug to the floor, the browser memory fixture) show it.
 
+- **Descent I, the Crust, is authored (Wave 8):** rain-soaked mud that bogs the rig down,
+  roots, burrows and the lost miner's cabin in the Topsoil; aquifers that flood the tunnel that
+  breaches them and clay pots in the Clay Beds; the old mine works in the Grey Stone (ride the
+  carts: hold the stick along a rail, hold down at a junction for the lower branch, thrust to
+  jump off; timber sets come down when cut or undercut) and **Gravel Hollow**, a miners'
+  settlement beside the first outpost; slick slate shelves that slide and stalactite galleries;
+  lava tubes and the first heat in the Basalt Columns. Nine creatures of its own, a music bed
+  per stratum, the Fathers' expedition logs in strongboxes, and at its end **the Sinkhole**:
+  pull its core and climb out (or run down the Fathers' adit) before the collapse catches you
+  to win the Deep Claim (the Old Deep's gate) and Drill II. Scenes: `crust_*`.
 - Descents I and II are the twelve classic layers, stretched to about 2,700 rows. Every stratum
   below is a **placeholder**: its own rock colours, ores and hazards from the stratum registry,
   creatures borrowed from the classic roster, and the rules of the classic layer it stands in

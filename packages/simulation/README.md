@@ -3953,6 +3953,190 @@ after stacking them (`cargo test --release -p fatherload_simulation descent_repo
   drops, the logistics dialog and HUD, the New World dialog, the lamp scale, a `SeatUi` field
   and its tracking call, the save/protocol docs and the sprite atlas (appended at the end).
 
+## Wave 8 crust: Descent I authored (`src/crust.rs`, `src/world/crust.rs`, `src/worldgen/descent/crust.rs`, `src/worldgen/streamed/crust_pass.rs`)
+
+Descent I of a Deep Descent world (generator V11) is authored for real: every Crust stratum has
+its own rules, materials, ores, creatures, landmark, music and story beat, and the Descent ends
+at the Sinkhole. Nothing here touches V1-V10 (`crust::crust_rules` is `has_descents()`): their
+golden digests, hashes and replays are unchanged.
+
+### The strata
+
+| Stratum | Signature rule | Materials and ores | Natives | Landmark | Music / ambience | Log |
+|---|---|---|---|---|---|---|
+| Topsoil | rain-soaked **mud** (`Surface(Mud)`): the drive bogs down to 45 % of top speed and half its push, the thrusters fight the suction (`ground_grip`, `MUD_*`) | root mats under the surface, mud lenses and mud pools on cave floors, burrows (thicker in "Burrow Warren", muddier in "Rain Mud"); copper, iron, silver; density 1150 | burrow mole, mud leech | the lost miner's cabin (`crust::cabin`: log walls, his strongbox, an old entrance shaft of rubble from the surface) | `Topsoil` / `Burrows` | 0 "The cabin" |
+| Clay Beds | **aquifers**: sealed water pockets (the registry's `FluidPocketRule::sealed(Water, 260)`, radius 3-6, plus cave pools) that flood the tunnel that breaches them (the Wave 7 fluids); rock beside one shows damp stains | clay pots (`ArtifactKind::ClayPot`, 70 cr; more in "Potters' Beds"); iron, silver, gold; density 1100 | potter wasp, mud leech | (aquifer seams) | `ClayBeds` / `Aquifer` | 1 "The clay" |
+| Grey Stone | **old mine works** (`worldgen::descent::crust::mine_works`, one per 128x44 region in three of five): a timbered gallery on a rail line, a stope with a strongbox, a ramp down through a junction to a lower gallery. Rails are ridden (below), timber sets fail when cut or undercut, first gas pockets (gas weight 6) | `CrustTile::{Rail, Timber}`, gravel; silver, gold, a little emerald; density 1050 | mine bat, timber beetle | **Gravel Hollow** and the Descent I outpost | `GreyStone` / `MineWorks` | 2 "The works" |
+| Slate Shelves | **slate slides**: slick shelves (`CrustTile::Slate`, long bands two rows thick) keep a rig sliding; a shelf left hanging over an opened tile shudders and slides down (`SLIDE_*`) | stalactite galleries (`CaveTile::Stalactite` under cave ceilings, every other one in "Stalactite Galleries"); gold, emerald; density 1000 | slate skink, shelf crab | (stalactite galleries) | `SlateShelves` / `SlateDrip` | 3 "The shelves" |
+| Basalt Columns | **lava tubes** (`crust::lava_tube_cell`: one 70-150 column tube per 160x34 cell in two of three, gently waving, lined with tube glass, rare lava pools in the floor) and **the first heat**: 3 heat units (a tier 2 radiator), a tube one level more (`LAVA_TUBE_HEAT_UNITS`) | basalt split into columns (`CrustTile::BasaltColumn`, easier than hard rock), tube glass; emerald, ruby, a little diamond; density 1000 | tube crawler (spits cinders), cinder moth | the Sinkhole (gate) | `BasaltColumns` / `LavaTube` | 4 "The tubes", 5 "The Sinkhole" |
+
+`Stratum::uses_registry_rules` (new) is true for the Crust and every stratum below Descent II,
+so V11 reads the Crust's registry ores, hazards and `StratumDef::ore_density_permille` (new,
+1000 by default; it scales the richness of veins and clusters, `Ctx::ore_richness`). The Old
+Deep keeps the classic curves until its track authors it. The renderer keeps the classic band
+art for the Crust's base rock; the new tiles bring the look (`game/src/rendering/terrain/
+tile_art/crust_art.rs`: wet mud, root mats, adzed timber with iron straps, steel rails on
+sleepers, slate sheets with a wet sheen, hexagonal basalt, ropy tube glass, cabin logs, plank
+walls and lamps inside the cabin and the camp, timber posts and lanterns behind a gallery, the
+cracked glow of a tube's walls).
+
+### Mechanics (`world/crust.rs`, all in `simulate_tick`)
+
+- **Mine carts** (`crust::CartRide`, `Player::cart`, per tick in `PlayerRig` / `PlayerTickState`
+  so it is predicted and reconciled like the pose). A rig resting on a rail with the stick held
+  along it (not thrusting or drilling) boards. Each tick runs the fixed `CART_STEPS_PER_SECOND`
+  (240) integer steps due by the tick (`cart_steps_by`), so rides take the same world time at
+  every tick rate: the stick pushes (`CART_PUSH`) or brakes (braking past a stop turns the cart
+  round), friction slows, ramps pull (`CART_SLOPE`), top speed 10 tiles/s. At a junction the
+  stick held down takes the lower branch (`next_rail`, `is_junction`; the branch dives under the
+  main line's rail). Thrust jumps off with the cart's speed; the end of the line, or rubble on
+  it, ends the ride. Rides burn no fuel. While riding the rig neither drills nor flies
+  (`simulate_tick` skips both, as for lift rides). Events `CartBoarded`, `CartSwitched`,
+  `CartLeft`.
+- **Timber sets**: a tile opened beside a beam, or straight under one through open ground (the
+  floor under a set's posts), dooms the set: `SupportCreaked` now, and after
+  `SUPPORT_CREAK_MILLIS` (1.6 s) the beam and up to `SUPPORT_SPAN` columns either side come
+  down with `SUPPORT_ROOF_ROWS` of roof as boulders, the fallen roof lying as rubble on the
+  gallery floor (never over a rig): `SupportCollapsed`. Timber beetles chew through sets (below).
+- **Slate slides**: a tile opened under a shelf: `SlateShudder`, then after
+  `SLIDE_WARNING_MILLIS` every slate tile of that shelf (up to `SLIDE_MAX_TILES`) left over
+  open ground falls as a boulder: `SlateSlid`.
+- **Heat per stratum** (`crust::stratum_heat_units`, read by the heat damage through
+  `WorldState::heat_units_at`): the Crust as above; every other stratum on a gate-appropriate
+  curve, cool for a rig at the previous Descent's tier cap at the top of a Descent and climbing
+  to just under what the Descent's own cap covers (the Wave 7 issue where placeholders borrowed
+  their host band's heat and cooked a stock rig is gone). Older worlds keep band heat bit for
+  bit. `LavaTubeEntered` once per entry.
+- **Strongboxes** (the cabin, stopes, the Sinkhole and the Fathers' camp): drilled open they pay
+  `STRONGBOX_CREDITS` (double the first time) and read the stratum's expedition log
+  (`crust::CRUST_LOGS`, the Fathers' expedition thread: "the world was shaped"):
+  `StrongboxOpened { log, first }`; `CrustState::logs` keeps the logs read.
+- **The Deep Claim gate**: on a Descent world a rig below Descent I without the crew's Deep
+  Claim is warned once a trip (`DeepClaimMissing`) and takes the gate crush
+  (`GATE_DAMAGE_PER_SECOND`); where a deeper Descent's own system is missing, that gate's crush
+  applies instead. `WorldState::grant_deep_claim` gives it without the set piece (tests, tools,
+  scenes that start deeper).
+
+### The Sinkhole (the gate set piece)
+
+`crust::sinkhole_site`: Descent I's gate chamber is the core chamber (the core,
+`CrustTile::SinkholeCore`, glowing in the floor, the Fathers' strongbox beside it, the middle
+cleared of pillars); a funnel of crumbling rubble walls rises 64 rows from its ceiling to the
+lip; the Fathers' timbered adit runs east out of the funnel's top past the collapse zone to
+their log-walled camp.
+
+Drilling the core out starts the run (`SinkholeRun`, in `CrustState`): `SinkholeRumble`, then
+after `SINKHOLE_RUMBLE_MILLIS` (3 s) the collapse front climbs `SINKHOLE_FRONT_ROWS_PER_SECOND`
+(3 rows/s; a stock rig climbs about 6-7, a laden one more than 5) filling every open tile of
+the zone with rubble and shaking boulders off the walls a few rows above it. A rig that leaves
+the zone (above the lip, or out down the adit) is clear (`SinkholeEscaped`). A rig the front
+reaches is dug out and set down in the camp with `SINKHOLE_CAUGHT_HULL_SHARE` of its hull lost,
+never wrecked (`SinkholeCaught`). When the front tops out: if anyone got clear the crew holds
+the **Deep Claim** and every rig gets **Drill II** (drill tier at least `DRILL_II_LEVEL`, 7):
+`DeepClaimGranted`; if nobody did, the zone is put back as generated, core and all, for another
+try (`SinkholeReset`). No countdown can be lost by waiting: the front only moves once the core
+is out, and its speed is a fixed, fair share of the slowest rig's climb.
+
+### Gravel Hollow
+
+`crust::gravel_hollow`: a Deep Descent world's Grey Stone holds Gravel Hollow, the underground
+settlement of the town's own site 0 (`placement::underground_id(0)`, which no older world
+places), a village hall beside the Descent I outpost (sharing its floor, a gravel lane to its
+door): Deepfolk miners with their market, inn, houses and specialty, people walking their
+routines, rumours and story seeds, all from the existing village machinery
+(`worldgen::streamed::villages::gravel_hollow_hall`; every village lookup finds it). The
+outpost's counter does the fuel, repairs and selling.
+
+### Creatures (`enemy.rs`, `world/enemies.rs`)
+
+Nine new kinds appended to `EnemyKind` (all follow the body rules: `step_body`,
+`free_from_rock`, `keep_off_bodies`, `site_fits`, contact boxes sized to their sprites, line of
+sight): **burrow mole** (burrows after the drill, rare digging, lunges from the wall), **mud
+leech** (slow; its bite drinks `MUD_LEECH_FUEL_SIP` fuel instead of hull: `CrustCreature
+{ LeechLatched }`), **potter wasp** (fast swarmer, drops a clay pot now and then), **mine bat**
+(colony bat of the works), **timber beetle** (at rest it chews through a timber set over it,
+which then fails like a cut beam: `CrustCreature { BeetleChewed }`), **slate skink** (fast,
+long lunges), **shelf crab** (armoured under its slate plate, a heavy pinch), **tube crawler**
+(spits cinders, fire-proof), **cinder moth** (drawn to heat and lamps, fire-proof). Each Crust
+stratum's table lists two natives and one classic kind; cave habitats favour them. Sprites in
+`game/src/rendering/pixel_art/sprites/enemies.rs`.
+
+### Pacing (the descent probe)
+
+`balance::descent::RegistryStrata` now reads each stratum's real heat (radiator tier from
+`stratum_heat_units`), counts the Crust's signature rules as mechanics, and gives the bot
+Gravel Hollow's outpost as Descent I's base once claimed (`StratumRegistry::outpost_row`, new;
+the plan keeps its rule) and Drill II at the Sinkhole. With the Crust's richer ores (the Clay
+Beds' silver and gold above all): **Descent I ends at 6.1 h** (target 5-8 h; was 14.3 h) with
+everyday trips at most **64 % of a tank** (was 168 %), every Crust stratum 54-98 minutes and no
+gap between new things over 14 minutes there. `the_authored_crust_takes_five_to_eight_hours_on_sane_trips`
+holds it. Whole run 65.7 h; with heat per stratum the Descents below run ahead of §14 (Living
+Dark ends at 18.5 h against 22-29): their tracks' authored strata and gates should bring them
+back (note for the integrator).
+
+| Descent | Ends at (h) | Target (h) | Everyday trip fuel (max % of tank) |
+|---|---|---|---|
+| I The Crust | 6.1 | 5-8 | 64 |
+| II The Old Deep | 13.1 | 13-18 | 15 |
+
+### Audio (appended at the end of `patches!`)
+
+`cart_clunk`, `cart_switch`, `timber_creak`, `roof_collapse`, `sinkhole_rumble`,
+`deep_claim_fanfare`, `tube_breath`, and the loops `loop_crust_topsoil` (a fingerpicked G
+pentatonic line over a soft drone and creaking roots), `loop_crust_clay` (a D dorian marimba,
+gurgles and drips), `loop_crust_works` (a reedy E drone, a slow work song, far pick clinks),
+`loop_crust_slate` (a glassy pad in fifths and ringing drips), `loop_crust_basalt` (a hot A
+drone with a sour second, a slow heave, crackle) and `loop_sinkhole` (the chase: toms, a
+climbing ostinato, brass stabs and the roar). The director plays the bed of the Crust stratum a
+seat digs in (`SeatLoop::CrustBed`, appended) and the chase for every seat near the Sinkhole
+while it collapses (`SeatLoop::Sinkhole`); the registry's `MusicCue` / `AmbienceCue` gained the
+Crust's own entries (appended).
+
+### Seams and formats
+
+- **Tiles**: `TileKind::Crust(CrustTile)` (code range `CRUST_TILE_CODE_BASE` = `0xC00`),
+  `ArtifactKind::ClayPot` (appended). Their art, colours, minimap and drill sounds are wired.
+- **State**: `CrustState` (`WorldState::crust`, serde default, hashed only once non-empty,
+  replicated as the appended `SectionKey::Crust`); `Player::cart` per tick.
+- **Events 400-415** (netcode codes): `CartBoarded`, `CartSwitched`, `CartLeft`,
+  `SupportCreaked`, `SupportCollapsed`, `SlateShudder`, `SlateSlid`, `StrongboxOpened`,
+  `SinkholeRumble`, `SinkholeEscaped`, `SinkholeCaught`, `SinkholeReset`, `DeepClaimGranted`,
+  `DeepClaimMissing`, `LavaTubeEntered`, `CrustCreature` (416-419 free).
+- **Formats**: `PROTOCOL_VERSION` 16 (once for this track). No save format bump: every new
+  field has a serde default and older saves load as before.
+- **Generation**: `GOLDEN_V11_DIGEST` updated (the Crust's features, Gravel Hollow, the
+  Sinkhole); V1-V10 digests unchanged.
+- **Input**: no new action or prompt (carts ride on the stick and thrust; junctions on drill
+  down), so keyboard, gamepad, touch and split-screen seats all play it.
+- **Shared-file edits** (additive): the registry's Crust entries and `StratumDef` fields,
+  `simulate_tick` (the cart branch beside the lift-ride skip, ground grip, the heat read, two
+  mined-tile arms, `advance_crust` after logistics), `rescue` (drops the cart), the enemy
+  tables, the village lookups (Gravel Hollow), the descent probe, the enemy body test's spacing,
+  the audio quality test's low-centroid list.
+- **Tests**: `crust::tests` (codes, rails, cart physics, heat curve),
+  `worldgen::descent::crust_tests` (every stratum's signature generated, mine works and their
+  junction, the cabin and the Sinkhole stamped, long lava tubes, no Crust tiles before V11),
+  `world::crust_tests` (cart rides with a junction and without fuel, main line and jumping off,
+  the same ride time at 30/60/120 Hz, mud and slate grip, a set collapsing after its creak, a
+  shelf sliding, an aquifer flooding the tunnel, the tubes' heat, strongbox logs, the Deep
+  Claim gate, a bot winning the Sinkhole, a rig caught and the site resetting, every stratum's
+  natives, the leech's fuel bite, the beetle bringing a set down, Gravel Hollow peopled beside
+  the outpost), `balance::descent` (Descent I in 5-8 h).
+- **Scenes**: `crust_topsoil`, `crust_cabin`, `crust_clay_beds`, `crust_aquifer_flood`,
+  `crust_grey_stone`, `crust_cart_ride`, `crust_support_collapse`, `crust_gravel_hollow`,
+  `crust_slate_shelves`, `crust_lava_tube`, `crust_creatures`, `crust_sinkhole`,
+  `crust_sinkhole_escape`.
+
+### Still open
+
+- The Crust keeps the classic band art for its base rock (the registry palettes describe it);
+  only the new tiles and backdrops are new art.
+- Junction branches dive under the main line's rail for a tile (a rig on the branch overlaps it
+  briefly; a ride that ends there is lifted free).
+- A collapse's rubble lies only on the gallery floor row; boulders do the rest.
+- The expedition logs are the Crust's own (`CRUST_LOGS`); the story track's log system can
+  adopt them.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
