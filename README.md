@@ -970,7 +970,8 @@ the Strange Layers, the Ancients and the Heart) and **41 strata**. The classic d
 V10) stays the default until Wave 8 fills Descents I to III. `--deep-descent` makes the
 preview the dialog's default; the tools take `--generator v11` (`--worldgen-report`,
 `--worldgen-preview`, `--balance-report`), and the screenshot scenes `descent_1_crust` to
-`descent_8_heart`, `descent_5_hollow_world` and `descent_outpost` show it.
+`descent_8_heart`, `descent_5_hollow_world`, `descent_outpost` and `descent_explored` (a
+world dug to the floor, the browser memory fixture) show it.
 
 - Descents I and II are the twelve classic layers, stretched to about 2,700 rows. Every stratum
   below is a **placeholder**: its own rock colours, ores and hazards from the stratum registry,

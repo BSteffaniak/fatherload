@@ -178,6 +178,37 @@ pub const DESCENT_SCENES: &[Scene] = &[
         setup: |stage| descent_scene(stage, Stratum::CoreOcean),
     },
     Scene {
+        name: "descent_explored",
+        summary: "A Deep Descent world dug to the bottom: a shaft to the bedrock floor and a \
+                  gallery across every Descent, the rig at the foot of the shaft (the browser \
+                  memory fixture: export with --export-saves, time with scripts/perf-web.cjs)",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                deep_world(world);
+                fit(world, player);
+                let settings = settings();
+                let layout = descent::layout(&settings);
+                let floor = descent::floor_row(&settings);
+                for descent in Descent::ALL {
+                    let (top, bottom) = layout.descent_rows(descent);
+                    let row = i32::midpoint(top, bottom);
+                    carve(world, SCENE_X - 120..SCENE_X + 120, row..row + 3);
+                }
+                let bottom = floor - 3;
+                sink_rig(world, player, SCENE_X, bottom);
+                reveal(
+                    world,
+                    player,
+                    SCENE_X - 40..SCENE_X + 41,
+                    bottom - 20..bottom + 4,
+                );
+                world.stream_terrain_near_players();
+            });
+            stage.settle(20);
+        },
+    },
+    Scene {
         name: "descent_outpost",
         summary: "A Deep Descent outpost hall (placeholder) in the Fungal Forest, the rig at its door",
         setup: |stage| {

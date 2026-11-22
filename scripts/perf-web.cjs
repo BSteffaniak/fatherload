@@ -1,5 +1,5 @@
 'use strict';
-// Browser frame timing in staged game states (wave 6 QA).
+// Browser frame timing and WASM memory in staged game states (wave 6 QA; memory since wave 7).
 //
 // Export the states with the desktop build, then time the WASM build in each:
 //
@@ -85,16 +85,23 @@ const percentile = (sorted, fraction) => sorted[Math.min(sorted.length - 1, Math
       await page.evaluate(() => { window.frameSamples = []; });
       await page.waitForTimeout(seconds * 1000);
       const frames = await page.evaluate(() => window.frameSamples);
+      // WASM linear memory never shrinks, so its size is the page's heap high-water mark.
+      const memory = await page.evaluate(() => {
+        /* global HEAP8, wasmMemory */
+        if (typeof wasmMemory !== 'undefined') return wasmMemory.buffer.byteLength;
+        if (typeof HEAP8 !== 'undefined') return HEAP8.buffer.byteLength;
+        return Module.HEAP8 ? Module.HEAP8.buffer.byteLength : NaN;
+      });
       await page.screenshot({ path: path.join(artifacts, name.replace(/\.json$/, '.png')) });
       await context.close();
       const work = frames.map(frame => frame.work).sort((a, b) => a - b);
       const mean = work.reduce((sum, value) => sum + value, 0) / Math.max(1, work.length);
-      rows.push({ scene: name.replace(/\.json$/, ''), frames: frames.length, mean, median: percentile(work, 0.5), p95: percentile(work, 0.95), max: work[work.length - 1], errors: errors.length });
+      rows.push({ scene: name.replace(/\.json$/, ''), frames: frames.length, mean, median: percentile(work, 0.5), p95: percentile(work, 0.95), max: work[work.length - 1], memory, errors: errors.length });
     }
-    console.log(`| Scene | Frames in ${seconds} s | Mean work (ms) | Median | p95 | Max |`);
-    console.log('|---|---|---|---|---|---|');
+    console.log(`| Scene | Frames in ${seconds} s | Mean work (ms) | Median | p95 | Max | WASM memory (MiB) |`);
+    console.log('|---|---|---|---|---|---|---|');
     for (const row of rows) {
-      console.log(`| ${row.scene} | ${row.frames} | ${row.mean.toFixed(2)} | ${row.median.toFixed(2)} | ${row.p95.toFixed(2)} | ${row.max.toFixed(2)} |${row.errors ? ` ${row.errors} page errors` : ''}`);
+      console.log(`| ${row.scene} | ${row.frames} | ${row.mean.toFixed(2)} | ${row.median.toFixed(2)} | ${row.p95.toFixed(2)} | ${row.max.toFixed(2)} | ${(row.memory / 1048576).toFixed(1)} |${row.errors ? ` ${row.errors} page errors` : ''}`);
     }
     console.log(`Screenshots: ${artifacts}`);
   } finally {

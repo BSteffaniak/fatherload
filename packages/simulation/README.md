@@ -3193,7 +3193,8 @@ the side of the frame origin a sprite is on.
   quests) works at every depth; `strata::nominal_row` / `nominal_depth` map each stratum's rows
   onto its host band's classic nominal rows (depth curves, hazard gates and heat read a
   placeholder stratum as the band it borrows). `scaled_row` inverts the mapping over Descents
-  I and II only, where it is monotone (nominal 220 = the end of Descent II); `scaled_span`
+  I and II only, where it is monotone (nominal 220 = the end of Descent II), in closed form
+  (exactly the row a binary search of `nominal_row` finds; a test checks every value); `scaled_span`
   stretches like Descents I and II; `band_layout_rows`, `band_solid_top_row` and
   `boundary_bases` answer the classic band's own stratum in Descents I and II. Nominal rows
   are therefore **not monotone** over a whole V11 world: never binary-search `nominal_row`
@@ -3225,7 +3226,9 @@ the side of the frame origin a sprite is on.
   glyph). `landmarks_in(settings, rect)` lists them, `landmark_tile` paints them.
 - **Golden digest**: `worldgen::descent::tests::GOLDEN_V11_DIGEST` pins the town, the middle of
   every Descent, every outpost and gate chamber, the cavern, an anomaly room and the floor. The
-  V1-V10 digests are unchanged. V11 chunks generate as fast as V10's.
+  V1-V10 digests are unchanged. Generating V11 chunks costs about a quarter more than V10's
+  at the same rows (release, 16,000 chunks of rows 160-800 over 400 columns: 1.57 ms against
+  1.25 ms per chunk); deeper V11 chunks cost about the same.
 
 ### Streaming budget
 
@@ -3243,9 +3246,15 @@ the side of the frame origin a sprite is on.
   floor and a 240-wide gallery in every Descent, the rig ridden down the whole shaft (every
   chunk on the way generated): **19.8 MiB** of heap settled and at peak (native 64-bit
   pointers: an upper bound for the 32-bit browser heap), at most 81 chunks loaded, 913 edited
-  chunks, about 43 KiB of terrain save. The emscripten build grows its memory up to 2 GiB
-  (`ALLOW_MEMORY_GROWTH`); no browser run was possible in this wave's environment (no
-  emscripten toolchain), so the cap is checked natively.
+  chunks, about 12 KiB of terrain save (JSON). The emscripten build grows its memory up to 2 GiB
+  (`ALLOW_MEMORY_GROWTH`). **In the browser** (release WASM build, headless Chrome,
+  `scripts/perf-web.cjs`, which now reports the WASM memory size, a high-water mark since
+  linear memory never shrinks): the `descent_explored` scene (a shaft to the floor and a
+  240-wide gallery in every Descent, the rig at the bottom), `descent_8_heart` and
+  `descent_5_hollow_world` all end at **156.3 MiB**, the same as the classic `night_town` and
+  `sky_city` scenes: startup (textures, audio, caches) sets the high-water mark and a deep V11
+  world adds nothing measurable. Frame work stays about 1.1-1.2 ms. The browser run loads the
+  saved world at the bottom; riding the whole shaft down is measured natively only.
 
 ### Seams for the other Wave 7 tracks and later waves
 
