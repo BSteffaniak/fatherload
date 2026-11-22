@@ -36,6 +36,15 @@ pub const DARK_SLOWDOWN: f64 = 0.25;
 pub const DARK_SLOWDOWN_SONAR: f64 = 0.08;
 /// Light (per mille of daylight) at or below which a stratum counts as dark.
 pub const DARK_LIGHT_PERMILLE: u16 = 200;
+/// Light (per mille of daylight) at or above which the inner sun's glare sends a rig the long
+/// way round, shadow to shadow (a shade canopy along).
+pub const GLARE_LIGHT_PERMILLE: u16 = 1_500;
+/// How much longer moving and digging take in the glare.
+pub const GLARE_MOVE_SLOWDOWN: f64 = 0.25;
+pub const GLARE_DIG_SLOWDOWN: f64 = 0.1;
+/// How much longer each tile takes where the ore sits on floating stones in open sky (flying
+/// from stone to stone between bites).
+pub const STONE_HOP_SLOWDOWN: f64 = 0.8;
 
 /// The movement rules of one stratum as the descent bot meets them.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -52,6 +61,8 @@ pub struct StratumMechanics {
     pub time_scale: f64,
     /// Near-total darkness.
     pub dark: bool,
+    /// The inner sun's glare.
+    pub glare: bool,
     /// The deep supply its mechanic spends, if any.
     pub supply: Option<DeepSupply>,
 }
@@ -65,6 +76,7 @@ impl Default for StratumMechanics {
             mirror_share: 0.0,
             time_scale: 1.0,
             dark: false,
+            glare: false,
             supply: None,
         }
     }
@@ -119,6 +131,7 @@ impl StratumMechanics {
             mirror_share,
             time_scale: (f64::from(field.time_scale_permille) / 1_000.0).clamp(0.25, 4.0),
             dark: field.light_permille <= DARK_LIGHT_PERMILLE,
+            glare: field.light_permille >= GLARE_LIGHT_PERMILLE,
             supply: DeepSupply::ALL
                 .iter()
                 .copied()
@@ -135,7 +148,8 @@ impl StratumMechanics {
                 && self.gravity_share == 0.0
                 && self.mirror_share == 0.0
                 && (self.time_scale - 1.0).abs() < f64::EPSILON
-                && !self.dark)
+                && !self.dark
+                && !self.glare)
     }
 
     fn handling(&self, systems: u8) -> f64 {
@@ -152,7 +166,8 @@ impl StratumMechanics {
     #[must_use]
     pub fn move_factor(&self, systems: u8) -> f64 {
         let water = self.water_share / SUBMARINE_SPEED_SHARE + (1.0 - self.water_share);
-        water * self.handling(systems)
+        let glare = if self.glare { GLARE_MOVE_SLOWDOWN } else { 0.0 };
+        water * (1.0 + glare) * self.handling(systems)
     }
 
     /// Multiplier on the time each tile takes to dig, for a rig with `systems` fitted.
@@ -165,7 +180,11 @@ impl StratumMechanics {
         } else {
             DARK_SLOWDOWN
         };
-        self.water_share.mul_add(0.3, 1.0) * (1.0 + dark) * self.handling(systems)
+        let glare = if self.glare { GLARE_DIG_SLOWDOWN } else { 0.0 };
+        self.water_share.mul_add(0.3, 1.0)
+            * self.open_share.mul_add(STONE_HOP_SLOWDOWN, 1.0)
+            * (1.0 + dark + glare)
+            * self.handling(systems)
     }
 
     /// Rows of a stratum of `rows` that are open sky (flown, not dug).
@@ -202,6 +221,9 @@ impl StratumMechanics {
         }
         if self.dark {
             firsts.push(("total dark", 6.0));
+        }
+        if self.glare {
+            firsts.push(("the inner sun's glare", 6.0));
         }
         firsts
     }
@@ -303,6 +325,8 @@ mod tests {
         assert!(mirror.mirror_share > 0.0);
         let sludge = StratumMechanics::of(Stratum::TimeSludge);
         assert!(sludge.time_scale < 1.0 && sludge.dig_factor(0) > 1.0);
+        let forge = StratumMechanics::of(Stratum::TheSunforge);
+        assert!(forge.glare && forge.move_factor(0) > 1.0);
         let echo = StratumMechanics::of(Stratum::EchoCaves);
         assert!(echo.dark);
         assert!(echo.dig_factor(RigSystem::SonarSuite.bit()) < echo.dig_factor(0));
