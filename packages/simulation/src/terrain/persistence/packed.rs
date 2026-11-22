@@ -233,8 +233,13 @@ fn decode_runs(reader: &mut Reader<'_>) -> Result<Vec<(u32, Tile)>, String> {
         let mut index = next
             .checked_add(gap)
             .ok_or_else(|| "tile diff index overflows".to_owned())?;
-        if length > CHUNK_AREA {
-            return Err(format!("a run of {length} tiles is longer than a chunk"));
+        // A chunk holds at most one diff per tile: a stream claiming more is corrupt or hostile
+        // (a few bytes must never unpack into gigabytes).
+        if u64::from(length) + entries.len() as u64 > u64::from(CHUNK_AREA) {
+            return Err(format!(
+                "runs of {} tiles overflow a chunk",
+                u64::from(length) + entries.len() as u64
+            ));
         }
         for _ in 0..length {
             entries.push((index, tile));
@@ -414,6 +419,29 @@ mod tests {
         // An unknown mode, and a repeated code before any.
         assert!(PackedChunks::from_bytes(&[FORMAT, 1, 0, 0, 7, 0]).is_err());
         assert!(PackedChunks::from_bytes(&[FORMAT, 1, 0, 0, 0, 1, 0, 1, 0]).is_err());
+        // Runs that each fit a chunk but together claim more tiles than it has (a tiny stream
+        // that would otherwise unpack into millions of entries).
+        let air = tile(TileKind::Air).code();
+        let mut bomb = vec![FORMAT];
+        for value in [1, 0, 0, u64::from(MODE_ROWS), 1_000_000] {
+            put_varint(&mut bomb, value);
+        }
+        put_varint(&mut bomb, 0);
+        put_varint(&mut bomb, 200);
+        put_varint(&mut bomb, air + 1);
+        for _ in 1..1_000_000 {
+            bomb.extend([0, 200, 1, 0]);
+        }
+        assert!(PackedChunks::from_bytes(&bomb).is_err());
+        // The first run alone is fine.
+        let mut one = vec![FORMAT];
+        for value in [1, 0, 0, u64::from(MODE_ROWS), 1, 0, 200, air + 1] {
+            put_varint(&mut one, value);
+        }
+        assert_eq!(
+            PackedChunks::from_bytes(&one).map(|packed| packed.0[0].1.iter().count()),
+            Ok(200)
+        );
     }
 
     #[test]
