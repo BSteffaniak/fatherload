@@ -539,9 +539,11 @@ const fn court(stamp: &LivingStamp, x: i32, y: i32) -> TileKind {
     if row == 2 && column % 3 != 0 {
         return TileKind::Cave(CaveTile::JellyCell);
     }
-    // Arches: comb pillars every twelve columns with a rounded crown.
+    // Arches: comb pillars every twelve columns with a rounded crown, each worn through at the
+    // floor by the Court's people walking bay to bay (Wave 9: its residents keep the whole hall,
+    // and a rig fits through the gap).
     let bay = (column - 2).rem_euclid(12);
-    if bay == 0 && row > 3 {
+    if bay == 0 && row > 3 && row < height - 5 {
         return TileKind::Cave(CaveTile::Comb);
     }
     let crown = (bay - 6).abs();

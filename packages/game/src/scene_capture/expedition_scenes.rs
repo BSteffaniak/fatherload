@@ -406,7 +406,7 @@ fn residents_scene(stage: &mut SceneStage<'_>, place: DeepSettlement, role: Opti
                     world.teleport_rig_to(
                         player,
                         fatherload_simulation::position::WorldPos::tile_center(
-                            i64::from(first - 6),
+                            i64::from(first + 4),
                             i64::from(ground - 1),
                         ),
                     );
@@ -449,5 +449,6 @@ fn codex_scene(stage: &mut SceneStage<'_>) {
     seat.modal = Some(ModalScreen::ExpeditionCodex);
     // The Star Core's revelation, pinned under the list.
     seat.selected_menu_item = 7;
+    seat.message.clear();
     stage.settle(3);
 }

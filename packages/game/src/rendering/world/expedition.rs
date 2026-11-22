@@ -147,6 +147,7 @@ const fn camp_dress(site: &ExpeditionSite) -> CampDress {
 }
 
 /// The deeper Descents' dressing over a camp ([`CampDress`]).
+#[allow(clippy::too_many_lines, reason = "one dressing per Descent")]
 fn dress_camp(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &ExpeditionSite) {
     let inner = site.interior();
     let pen = pen_at(inner.min);
@@ -216,18 +217,40 @@ fn dress_camp(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &Ex
             }
         }
         CampDress::Thin => {
-            // The camp's mirror twin: the tent drawn again, flipped, faint and a little off.
-            let twin_x = width - tent_x - tent_w - 6;
-            for row in (0..tent_h).step_by(2) {
+            // The camp's mirror twin: the tent drawn again on the far side, flipped, in
+            // scanlines of lavender with a pale outline, its sled a ghost of the real one.
+            let twin_x = width - tent_x - tent_w - 2;
+            let cx = twin_x + tent_w / 2;
+            for row in 0..tent_h {
                 let half = row * tent_w / (2 * tent_h);
-                let cx = twin_x + tent_w / 2;
                 let y = floor - tent_h + row;
-                pen.rect(draw, cx - half, y, half, 1, with_alpha(LAVENDER, 40));
-                pen.rect(draw, cx, y, half, 1, with_alpha(VIOLET, 50));
+                if row % 2 == 0 {
+                    pen.rect(draw, cx - half, y, half, 1, with_alpha(VIOLET, 120));
+                    pen.rect(draw, cx, y, half, 1, with_alpha(LAVENDER, 100));
+                }
+                pen.px(draw, cx - half, y, with_alpha(BONE, 170));
+                pen.px(draw, cx + half - 1, y, with_alpha(BONE, 170));
             }
-            // Corners rotted to blocks of the wrong colour (dim and still: no flashing).
+            pen.rect(
+                draw,
+                cx - 1,
+                floor - tent_h - 3,
+                2,
+                4,
+                with_alpha(BONE, 150),
+            );
+            pen.rect(
+                draw,
+                twin_x - 44,
+                floor - 12,
+                40,
+                9,
+                with_alpha(LAVENDER, 70),
+            );
+            pen.text(draw, ".L.F", twin_x - 34, floor - 11, with_alpha(BONE, 160));
+            // Corners rotted to blocks of the wrong colour (still: no flashing).
             let colours = [LIME, PINK, SKY, GOLD];
-            for index in 0..10 {
+            for index in 0..14 {
                 let x = (index * 37 + i32::from(site.log) * 11) % (width - 8) / 4 * 4;
                 let y = (index * 23 + 5) % (floor - 8) / 4 * 4;
                 pen.rect(
@@ -236,7 +259,7 @@ fn dress_camp(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &Ex
                     y,
                     4,
                     4,
-                    with_alpha(colours[index as usize % 4], 70),
+                    with_alpha(colours[index as usize % 4], 130),
                 );
             }
         }
@@ -251,41 +274,60 @@ fn draw_grave(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &Ex
     let pen = pen_at(inner.min);
     let floor = floor_y(site);
     let width = (inner.max.x - inner.min.x + 1) * T;
-    // The mound: a long low dome of earth with a lit crest.
-    let (mound_x, mound_w) = (18, 70);
+    // The mound: a long dome of dark turned earth, outlined, with pebbles on its crest.
+    let (mound_x, mound_w) = (24, 66);
     for column in 0..mound_w {
         let t = column as f32 / (mound_w - 1) as f32 * 2.0 - 1.0;
-        let height = ((1.0 - t * t).max(0.0).sqrt() * 10.0) as i32 + 1;
-        pen.rect(draw, mound_x + column, floor - height, 1, height, SOIL);
-        pen.px(draw, mound_x + column, floor - height, CLAY);
-        if column % 9 == 4 {
-            pen.px(draw, mound_x + column, floor - height + 3, LOAM);
+        let height = ((1.0 - t * t).max(0.0).sqrt() * 13.0) as i32 + 2;
+        pen.rect(draw, mound_x + column, floor - height, 1, height, SOIL_DARK);
+        pen.rect(
+            draw,
+            mound_x + column,
+            floor - height + 1,
+            1,
+            height - 1,
+            LOAM,
+        );
+        pen.px(draw, mound_x + column, floor - height + 1, CLAY);
+        if column % 11 == 5 {
+            pen.rect(draw, mound_x + column, floor - height + 4, 2, 2, SOIL);
         }
     }
-    // The headstone at the head of the mound: rounded top, carved initials.
-    let stone_x = 6;
-    pen.rect(draw, stone_x, floor - 30, 16, 30, AMBER);
-    pen.rect(draw, stone_x + 2, floor - 32, 12, 2, AMBER);
-    pen.rect(draw, stone_x + 1, floor - 29, 3, 28, GOLD);
-    pen.rect(draw, stone_x + 13, floor - 29, 2, 28, COPPER);
-    pen.text(draw, "D.H.", stone_x + 1, floor - 24, RUST);
-    // A wave line under the initials: Dov's radio, cut in the stone.
-    for step in 0..12 {
-        let y = floor - 12 + ((step as f32 * 1.2).sin() * 2.0) as i32;
-        pen.px(draw, stone_x + 2 + step, y, RUST);
+    for (x, rise) in [(36, 12), (50, 15), (63, 13), (76, 9)] {
+        pen.boxed(draw, x, floor - rise - 1, 4, 3, STONE);
+        pen.px(draw, x + 1, floor - rise - 1, STONE_LIGHT);
     }
-    // His headset hung over the stone: the band and two ear cups, the cord trailing down.
-    pen.rect(draw, stone_x + 2, floor - 35, 12, 2, SLATE_DARK);
-    pen.rect(draw, stone_x, floor - 34, 4, 6, SLATE);
-    pen.rect(draw, stone_x + 12, floor - 34, 4, 6, SLATE);
-    pen.px(draw, stone_x + 1, floor - 33, STEEL_LIGHT);
-    for step in 0..14 {
-        pen.px(
-            draw,
-            stone_x + 16 + step / 4,
-            floor - 28 + step * 2,
-            SLATE_DARK,
-        );
+    // The headstone at the head of the mound: a pale stone slab with a rounded top and an
+    // ink outline, so it stands out of the sun-washed rock, the initials and his radio's wave
+    // cut into it.
+    let stone_x = 4;
+    let top = floor - 34;
+    pen.rect(draw, stone_x + 2, top - 1, 16, 1, INK);
+    pen.rect(draw, stone_x, top + 1, 1, 33, INK);
+    pen.rect(draw, stone_x + 19, top + 1, 1, 33, INK);
+    pen.px(draw, stone_x + 1, top, INK);
+    pen.px(draw, stone_x + 18, top, INK);
+    pen.rect(draw, stone_x + 1, top + 1, 18, 33, STONE_LIGHT);
+    pen.rect(draw, stone_x + 2, top, 16, 1, STONE_LIGHT);
+    pen.rect(draw, stone_x + 15, top + 2, 3, 31, STONE);
+    pen.rect(draw, stone_x + 2, top + 1, 2, 31, BONE);
+    pen.text(draw, "D.H.", stone_x + 3, top + 6, SLATE_DARK);
+    for step in 0..13 {
+        let y = top + 20 + ((step as f32 * 1.1).sin() * 2.0) as i32;
+        pen.px(draw, stone_x + 3 + step, y, SLATE_DARK);
+    }
+    pen.rect(draw, stone_x - 1, floor - 2, 22, 2, STONE_DARK);
+    // His headset hung over the stone: the band, two padded ear cups, the cord trailing to
+    // the ground.
+    pen.rect(draw, stone_x + 3, top - 4, 14, 2, INK);
+    pen.rect(draw, stone_x + 4, top - 4, 12, 1, SLATE_LIGHT);
+    for x in [stone_x - 1, stone_x + 16] {
+        pen.boxed(draw, x, top - 2, 5, 7, SLATE_DARK);
+        pen.rect(draw, x + 1, top - 1, 3, 5, STEEL);
+        pen.px(draw, x + 1, top - 1, STEEL_LIGHT);
+    }
+    for step in 0..16 {
+        pen.px(draw, stone_x + 20 + step / 5, top + 5 + step * 2, INK);
     }
     // Flowers that grow in the sun's light, nodding slowly (no flashing).
     let nod = ((scene.seconds * 0.9).sin() * 1.2) as i32;

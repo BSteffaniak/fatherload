@@ -280,11 +280,10 @@ pub fn hall(settings: &WorldSettings, place: DeepSettlement) -> Option<(i32, i32
             }
         }
         DeepSettlement::AmberCourt => {
-            // The Court's middle bay, between two comb pillars (the hall's floor is its last
-            // two rows; pillars stand every twelve columns from its third).
+            // The Court's hall, clear of its doors (its floor is the last two rows; the comb
+            // pillars are worn through at the floor, so its people walk bay to bay).
             let court = living::court_hall(settings, &layout)?;
-            let first = court.min.x + 27;
-            Some((court.max.y - 1, first, first + 10))
+            Some((court.max.y - 1, court.min.x + 6, court.max.x - 6))
         }
     }
 }
