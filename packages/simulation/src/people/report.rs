@@ -654,6 +654,8 @@ pub fn describe_objective(objective: Objective, targets: &[TargetSpec]) -> Strin
         }
         Objective::Speak { target } => format!("find the contact in the {}", noun(target)),
         Objective::Settle { kind } => format!("have a {} standing in your claim", kind.name()),
+        Objective::NightHunt { count } => format!("bring down {count} night monsters"),
+        Objective::Dawn { target } => format!("see the night through at the {}", noun(target)),
     }
 }
 

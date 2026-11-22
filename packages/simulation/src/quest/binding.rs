@@ -262,6 +262,16 @@ pub enum BoundTarget {
     Village(VillageId),
     /// The highest ground near the origin: the sky's stand-in on worlds without one.
     Ridge,
+    /// A tomb or crypt site (V10; Wave 6 story places): the target is its door.
+    Tomb(crate::tomb::TombSite),
+    /// A sealed ruin of the pilot spaces (V9): the target is its vent grate.
+    Ruin(crate::worldgen::streamed::pilot_spaces::PilotSpace),
+    /// A village's trading post, which turns night market after dusk.
+    Market(VillageId),
+    /// A plot of land the land office lists.
+    Plot(crate::home::PlotSite),
+    /// A sky town of the archipelago (V9).
+    SkyTown(VillageId),
 }
 
 /// Columns either side of the origin a story searches for villages, camps and halls.
@@ -503,6 +513,140 @@ fn at_lunar_colony(terrain: &Terrain, mut feature: WorldFeature) -> WorldFeature
     feature
 }
 
+/// Rows under the origin a story searches for tomb sites (the deep strata's first sites).
+const STORY_TOMB_DEPTH_ROWS: i32 = 420;
+
+/// The nearest tomb or crypt site on the ground or under it (never the sky's: those wait for
+/// Act II), of `style` if given.
+fn tomb_target(
+    terrain: &Terrain,
+    origin: TilePosition,
+    style: Option<crate::tomb::SiteStyle>,
+) -> Option<(QuestTarget, BoundTarget)> {
+    let settings = terrain.settings();
+    if !settings.generator.has_tombs() {
+        return None;
+    }
+    let rect = TileRect {
+        min: TilePosition {
+            x: origin.x - STORY_PLACE_COLUMNS,
+            y: -crate::worldgen::biome::SKY_HEADROOM_ROWS,
+        },
+        max: TilePosition {
+            x: origin.x + STORY_PLACE_COLUMNS,
+            y: origin.y + STORY_TOMB_DEPTH_ROWS,
+        },
+    };
+    let site = crate::worldgen::streamed::tomb_sites::sites_touching(settings, &rect)
+        .into_iter()
+        .filter(|site| {
+            !matches!(
+                site.setting,
+                crate::tomb::SiteSetting::SkyContinent | crate::tomb::SiteSetting::Moon
+            ) && style.is_none_or(|style| site.style == style)
+        })
+        .min_by_key(|site| (distance_squared(site.door, origin), site.id))?;
+    Some((
+        QuestTarget {
+            feature: None,
+            center: site.door,
+            bounds: crate::worldgen::streamed::tomb_sites::entrance_bounds(&site),
+        },
+        BoundTarget::Tomb(site),
+    ))
+}
+
+/// The nearest sealed ruin of the pilot spaces (V9).
+fn ruin_target(terrain: &Terrain, origin: TilePosition) -> Option<(QuestTarget, BoundTarget)> {
+    use crate::worldgen::streamed::pilot_spaces::{self, PilotSpaceKind, REGION};
+    let settings = terrain.settings();
+    let rect = TileRect {
+        min: TilePosition {
+            x: origin.x - STORY_PLACE_COLUMNS,
+            y: 0,
+        },
+        max: TilePosition {
+            x: origin.x + STORY_PLACE_COLUMNS,
+            y: origin.y + REGION.1 * 4,
+        },
+    };
+    let space = pilot_spaces::spaces_touching(settings, &rect)
+        .into_iter()
+        .filter(|space| space.kind == PilotSpaceKind::Ruin)
+        .min_by_key(|space| (distance_squared(space.entrance(), origin), *space))?;
+    Some((
+        QuestTarget {
+            feature: None,
+            center: space.entrance(),
+            bounds: space.bounds(),
+        },
+        BoundTarget::Ruin(space),
+    ))
+}
+
+/// The trading post of the nearest other surface village (its night market after dusk), else
+/// the giver's own village's.
+fn market_target(
+    terrain: &Terrain,
+    origin: TilePosition,
+    home: Option<VillageId>,
+    skip: &BTreeSet<FeatureId>,
+) -> Option<(QuestTarget, BoundTarget)> {
+    let settings = terrain.settings();
+    let id = village_target(terrain, origin, VillageSetting::Surface, home, skip)
+        .and_then(|(_, bound)| match bound {
+            BoundTarget::Feature(feature) => feature.village(),
+            _ => None,
+        })
+        .or(home)?;
+    let found = crate::village::village(settings, id)?;
+    let lot = found
+        .buildings
+        .iter()
+        .find(|lot| lot.kind == crate::village::BuildingKind::Market)?;
+    let target = surface_target(
+        lot.first_column - 1,
+        lot.first_column + lot.width,
+        found.ground_row,
+    );
+    Some((target, BoundTarget::Market(id)))
+}
+
+/// The nearest plot of land the land office lists (an empty homestead).
+fn homestead_target(terrain: &Terrain, origin: TilePosition) -> Option<(QuestTarget, BoundTarget)> {
+    let site = crate::home::plot::listed_sites_between(
+        terrain.settings(),
+        origin.x - STORY_PLACE_COLUMNS,
+        origin.x + STORY_PLACE_COLUMNS,
+    )
+    .into_iter()
+    .min_by_key(|site| ((site.middle() - origin.x).abs(), site.left))?;
+    Some((
+        surface_target(site.left, site.right(), site.ground_row),
+        BoundTarget::Plot(site),
+    ))
+}
+
+/// The nearest sky town in the lowest town row over the origin (V9): the first one a rig
+/// climbing the archipelago meets.
+fn sky_town_target(terrain: &Terrain, origin: TilePosition) -> Option<(QuestTarget, BoundTarget)> {
+    let settings = terrain.settings();
+    let towns = crate::worldgen::sky::towns::sky_towns_between(
+        settings,
+        origin.x - STORY_ISLAND_COLUMNS,
+        origin.x + STORY_ISLAND_COLUMNS,
+    );
+    let lowest = towns.iter().map(|town| town.block.1).min()?;
+    let town = towns
+        .iter()
+        .filter(|town| town.block.1 == lowest)
+        .min_by_key(|town| ((town.center() - origin.x).abs(), town.id))?;
+    Some((
+        surface_target(town.first, town.last, town.ground_row),
+        BoundTarget::SkyTown(town.id),
+    ))
+}
+
 /// Binds a story place from `origin` (the giver's settlement), with its fallbacks.
 fn story_place(
     place: StoryPlace,
@@ -515,6 +659,22 @@ fn story_place(
     let feature_fallback = |kind: FeatureKind, bands: (u8, u8)| {
         candidates(
             TargetSpec::Feature { kind, bands },
+            terrain,
+            origin,
+            journal,
+            skip,
+        )
+        .into_iter()
+        .find(|feature| !skip.contains(&feature.id))
+        .map(|feature| (target_of(&feature), BoundTarget::Feature(feature)))
+    };
+    let poi_fallback = |kind: PoiKind, bands: (u8, u8)| {
+        candidates(
+            TargetSpec::Poi {
+                kind,
+                bands,
+                unopened: false,
+            },
             terrain,
             origin,
             journal,
@@ -579,6 +739,29 @@ fn story_place(
             })
             .or_else(|| feature_fallback(FeatureKind::Chamber, (6, 9)))
             .or_else(|| feature_fallback(FeatureKind::LargeCavern, (4, 9))),
+        StoryPlace::Tomb | StoryPlace::Crypt => {
+            let style = (place == StoryPlace::Crypt).then_some(crate::tomb::SiteStyle::TopDown);
+            tomb_target(terrain, origin, style)
+                .or_else(|| tomb_target(terrain, origin, None))
+                .or_else(|| poi_fallback(PoiKind::Vault, (2, 5)))
+                .or_else(|| feature_fallback(FeatureKind::LargeCavern, (2, 4)))
+                .or_else(|| feature_fallback(FeatureKind::Chamber, (2, 9)))
+        }
+        StoryPlace::Ruin => ruin_target(terrain, origin)
+            .or_else(|| poi_fallback(PoiKind::DerelictRig, (1, 4)))
+            .or_else(|| feature_fallback(FeatureKind::LargeCavern, (2, 4)))
+            .or_else(|| feature_fallback(FeatureKind::Chamber, (2, 9))),
+        StoryPlace::NightMarket => {
+            Some(market_target(terrain, origin, home, skip).unwrap_or_else(|| town_target(terrain)))
+        }
+        StoryPlace::Homestead => {
+            Some(homestead_target(terrain, origin).unwrap_or_else(|| home_target(terrain, home)))
+        }
+        StoryPlace::SkyTown => Some(
+            sky_town_target(terrain, origin)
+                .or_else(|| island_target(terrain, origin, skip))
+                .unwrap_or_else(|| ridge_target(terrain, origin)),
+        ),
     }
 }
 

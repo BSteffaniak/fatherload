@@ -180,6 +180,17 @@ pub fn island_hopper(player: &Player, bands: &SkyBands) -> bool {
         ) >= bands.island_reach_rows()
 }
 
+/// Rows over the cloud archipelago's floor a rig must climb to reach the sky towns of its
+/// lowest town row (a town isle stands at least 70 rows into its cell and at most about 140).
+pub const SKY_TOWN_REACH_ROWS: i32 = 150;
+
+/// Whether `player`'s rig climbs to the lowest sky towns of a sky with `bands` on a full tank
+/// (the story place [`crate::quest::StoryPlace::SkyTown`] binds those).
+#[must_use]
+pub fn sky_town_capable(player: &Player, bands: &SkyBands) -> bool {
+    climb_reach(player, bands) >= bands.archipelago + SKY_TOWN_REACH_ROWS
+}
+
 /// Whether `player`'s tank, engine and altitude intake carry the rig over the dead-air gap of a
 /// sky with `bands` to the sky continents and the Moon: the Act I -> II unlock.
 #[must_use]

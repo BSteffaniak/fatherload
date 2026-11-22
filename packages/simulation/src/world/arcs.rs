@@ -505,7 +505,8 @@ impl WorldState {
             character.id,
             i16::try_from(reward.reputation).unwrap_or(i16::MAX),
         );
-        let extras = self.apply_arc_effects(player_id, &run, &settlement, ending.effects, day);
+        let extras =
+            self.apply_arc_effects(player_id, &run, &settlement, ending.effects, day, events);
         self.people
             .characters
             .entry(character.id)
@@ -597,7 +598,16 @@ impl WorldState {
                 .and_then(|template| template.outcomes.get(index))
         {
             let affinity_before = self.people.affinity(giver, player_id);
-            let _ = self.apply_arc_effects(player_id, &run, &settlement, ending.effects, day);
+            // An abandoned ending opens no seals, so it raises no events.
+            let mut quiet = Vec::new();
+            let _ = self.apply_arc_effects(
+                player_id,
+                &run,
+                &settlement,
+                ending.effects,
+                day,
+                &mut quiet,
+            );
             self.spread_word(player_id, &settlement, giver, affinity_before);
         }
         self.people.characters.entry(giver).or_default().remember(
@@ -618,6 +628,10 @@ impl WorldState {
     }
 
     /// Applies an ending's effects. Returns extra reward notes ("+120 cr", "Moss Green paint").
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per effect keeps every ending rule in one place"
+    )]
     fn apply_arc_effects(
         &mut self,
         player_id: PlayerId,
@@ -625,6 +639,7 @@ impl WorldState {
         settlement: &Settlement,
         effects: &[ArcEffect],
         day: u32,
+        events: &mut Vec<GameplayEventKind>,
     ) -> Vec<String> {
         let giver = run.cast.giver;
         let mut notes = Vec::new();
@@ -703,6 +718,29 @@ impl WorldState {
                         "{} thinks well of you",
                         settlement.population.village_name
                     ));
+                }
+                ArcEffect::Furniture(piece) => {
+                    self.grant_furniture(player_id, piece, 1);
+                    notes.push(format!("{} for your home", piece.name()));
+                }
+                ArcEffect::UnsealTomb => {
+                    let settings = *self.terrain.settings();
+                    for target in &run.quest.targets {
+                        let Some(site) = crate::worldgen::streamed::tomb_sites::site_with_door(
+                            &settings,
+                            target.center,
+                        ) else {
+                            continue;
+                        };
+                        let mut output = crate::TickOutput::default();
+                        if self.unseal_tomb_site(&site, Some(player_id), &mut output) {
+                            notes.push(format!(
+                                "the seal of the {} opens",
+                                site.style.noun().to_lowercase()
+                            ));
+                        }
+                        events.extend(output.events.into_iter().map(|event| event.kind));
+                    }
                 }
             }
         }

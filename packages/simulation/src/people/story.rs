@@ -118,10 +118,12 @@ pub enum ArcKind {
     Pilot,
     /// Built for a crew (co-op primitives, with solo paths).
     Crew,
+    /// Tombs and crypts (WP-TOMBS, Wave 6): stories bound to sealed sites and their builders.
+    Tomb,
 }
 
 impl ArcKind {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Frontier,
         Self::Village,
         Self::Sky,
@@ -130,6 +132,7 @@ impl ArcKind {
         Self::Night,
         Self::Pilot,
         Self::Crew,
+        Self::Tomb,
     ];
 
     #[must_use]
@@ -143,6 +146,7 @@ impl ArcKind {
             Self::Night => "Night",
             Self::Pilot => "On foot",
             Self::Crew => "Crew",
+            Self::Tomb => "Tombs",
         }
     }
 }
@@ -498,6 +502,12 @@ pub enum ArcEffect {
     Cosmetic(CosmeticItem),
     /// Goodwill with everyone in the giver's settlement.
     Settlement(i16),
+    /// A piece of furniture for the player's homes (WP-HOME's `grant_furniture`).
+    Furniture(crate::home::Furniture),
+    /// The seal of every tomb or crypt site the arc was bound to opens (WP-TOMBS's
+    /// `unseal_tomb_site`, the story step a [`crate::tomb::SiteOpening::Story`] seal waits
+    /// for).
+    UnsealTomb,
 }
 
 /// One ending of an arc.

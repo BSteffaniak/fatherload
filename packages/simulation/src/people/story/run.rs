@@ -509,6 +509,7 @@ fn sky_reachable(template: &ArcTemplate, player: &Player, bands: &SkyBands) -> b
         TargetSpec::Story(StoryPlace::SkyContinent | StoryPlace::Moon) => {
             crate::milestone::crosses_dead_air(player, bands)
         }
+        TargetSpec::Story(StoryPlace::SkyTown) => crate::milestone::sky_town_capable(player, bands),
         _ => true,
     })
 }
@@ -742,6 +743,88 @@ fn describe_place(
                 settlement: Some(id),
             }
         }
+        BoundTarget::Tomb(site) => {
+            let noun = site.style.noun().to_lowercase();
+            let (where_, band) = match site.setting {
+                crate::tomb::SiteSetting::Mesa => (
+                    format!("cut into a mesa ({away})"),
+                    "the surface".to_owned(),
+                ),
+                crate::tomb::SiteSetting::OldQuarter => (
+                    format!("under an old village quarter, {depth}m down ({away})"),
+                    band_name(target.center.y),
+                ),
+                _ => (
+                    format!("{depth}m down in {} ({away})", band_name(target.center.y)),
+                    band_name(target.center.y),
+                ),
+            };
+            ArcPlace {
+                noun: format!("sealed {noun}"),
+                dest: format!("the sealed {noun}"),
+                phrase: where_,
+                band,
+                depth,
+                stand_in: false,
+                settlement: None,
+            }
+        }
+        BoundTarget::Ruin(_) => ArcPlace {
+            noun: "sealed ruin".into(),
+            dest: "the sealed ruin".into(),
+            phrase: format!("{depth}m down in {} ({away})", band_name(target.center.y)),
+            band: band_name(target.center.y),
+            depth,
+            stand_in: false,
+            settlement: None,
+        },
+        BoundTarget::Market(id) => {
+            let name = crate::village::village(settings, id)
+                .map_or_else(|| home_name.to_owned(), |found| found.name.clone());
+            ArcPlace {
+                noun: "night market".into(),
+                dest: format!("the night market in {name}"),
+                phrase: if name == home_name {
+                    format!("here in {home_name}, after dusk")
+                } else {
+                    format!("{away} along the trail, after dusk")
+                },
+                band: "the surface".into(),
+                depth: 0,
+                stand_in: false,
+                settlement: Some(id),
+            }
+        }
+        BoundTarget::Plot(site) => ArcPlace {
+            noun: "homestead".into(),
+            dest: match site.setting {
+                crate::home::PlotSetting::Town => "the empty plot at the edge of town".into(),
+                crate::home::PlotSetting::Village(_) => "the empty plot outside the village".into(),
+                crate::home::PlotSetting::Lakeside => "the empty lakeside plot".into(),
+                crate::home::PlotSetting::Clifftop => "the empty clifftop plot".into(),
+                crate::home::PlotSetting::Meadow => "the empty meadow plot".into(),
+                _ => "the empty plot".into(),
+            },
+            phrase: format!("on the land office's books ({away})"),
+            band: "the surface".into(),
+            depth: 0,
+            stand_in: false,
+            settlement: None,
+        },
+        BoundTarget::SkyTown(id) => {
+            let up = (ground - target.center.y).max(0);
+            let name = crate::village::village(settings, id)
+                .map_or_else(|| "a sky town".to_owned(), |found| found.name.clone());
+            ArcPlace {
+                noun: "sky town".into(),
+                dest: name,
+                phrase: format!("up in the cloud archipelago, {up}m up ({away})"),
+                band: "the sky".into(),
+                depth: 0,
+                stand_in: false,
+                settlement: Some(id),
+            }
+        }
         BoundTarget::Ridge => ArcPlace {
             noun: "high ridge".into(),
             dest: "the high ridge".into(),
@@ -824,15 +907,24 @@ fn describe_place(
                     settlement: None,
                 }
             }
-            FeatureKind::Moon => ArcPlace {
-                noun: "Moon".into(),
-                dest: "the Moon".into(),
-                phrase: "at the very top of the sky".into(),
-                band: "the sky".into(),
-                depth: 0,
-                stand_in: false,
-                settlement: None,
-            },
+            FeatureKind::Moon => {
+                // A filled Moon's story place is the research colony: its colonists are the
+                // story's contacts (Wave 6).
+                let colony = crate::people::colony::colony_settlement_id(settings);
+                ArcPlace {
+                    noun: "Moon".into(),
+                    dest: if colony.is_some() {
+                        "the Moon's colony".into()
+                    } else {
+                        "the Moon".into()
+                    },
+                    phrase: "at the very top of the sky".into(),
+                    band: "the sky".into(),
+                    depth: 0,
+                    stand_in: false,
+                    settlement: colony,
+                }
+            }
             _ => {
                 let noun = feature.poi_kind().map_or_else(
                     || {

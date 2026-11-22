@@ -471,12 +471,32 @@ pub enum StoryPlace {
     SkyIsland,
     /// The nearest sky continent; else a sky island; else the ridge.
     SkyContinent,
-    /// The Moon; else the deepest chamber near the origin (the deep mystery).
+    /// The Moon; else the deepest chamber near the origin (the deep mystery). On a filled
+    /// Moon (V9+) it is the research colony, whose colonists are story contacts.
     Moon,
+    // Wave 6 content (appended: the order is saved nowhere, but keep it stable).
+    /// The nearest sealed side-view tomb on the ground or under it (V10); else a sealed vault;
+    /// else a cavern in the upper bands.
+    Tomb,
+    /// The nearest top-down crypt on the ground or under it (V10); else any tomb site; else a
+    /// sealed vault; else a cavern.
+    Crypt,
+    /// The nearest sealed ruin of lever gates and pressure plates (V9 pilot spaces); else a
+    /// derelict rig; else a cavern.
+    Ruin,
+    /// The night market: the trading post of the nearest other surface village (it turns night
+    /// market after dusk); else the giver's own village; else the town.
+    NightMarket,
+    /// The nearest plot of land the land office lists (an empty homestead); else the giver's
+    /// own settlement.
+    Homestead,
+    /// The nearest sky town (V9 archipelago), whose folk are story contacts; else a sky
+    /// island; else the ridge.
+    SkyTown,
 }
 
 impl StoryPlace {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 14] = [
         Self::Village,
         Self::Hall,
         Self::Camp,
@@ -485,6 +505,12 @@ impl StoryPlace {
         Self::SkyIsland,
         Self::SkyContinent,
         Self::Moon,
+        Self::Tomb,
+        Self::Crypt,
+        Self::Ruin,
+        Self::NightMarket,
+        Self::Homestead,
+        Self::SkyTown,
     ];
 
     /// What players call it before binding.
@@ -499,13 +525,28 @@ impl StoryPlace {
             Self::SkyIsland => "sky island",
             Self::SkyContinent => "sky continent",
             Self::Moon => "Moon",
+            Self::Tomb => "tomb",
+            Self::Crypt => "crypt",
+            Self::Ruin => "ruin",
+            Self::NightMarket => "night market",
+            Self::Homestead => "homestead",
+            Self::SkyTown => "sky town",
         }
     }
 
     /// Whether it lies in the sky (its fallback may not).
     #[must_use]
     pub const fn is_sky(self) -> bool {
-        matches!(self, Self::SkyIsland | Self::SkyContinent | Self::Moon)
+        matches!(
+            self,
+            Self::SkyIsland | Self::SkyContinent | Self::Moon | Self::SkyTown
+        )
+    }
+
+    /// Whether it is a tomb or crypt site (WP-TOMBS; the fallback may not be).
+    #[must_use]
+    pub const fn is_tomb(self) -> bool {
+        matches!(self, Self::Tomb | Self::Crypt)
     }
 }
 
@@ -640,6 +681,12 @@ pub enum Objective {
     Speak { target: u8 },
     /// Have a base module of `kind` standing in a claim the owner holds (homes and bases).
     Settle { kind: crate::base::ModuleKind },
+    /// Night hunt (WP-NIGHT's [`crate::night::NightHook::Hunt`]): bring down `count` night
+    /// monsters (any nocturnal kind) while this beat is current.
+    NightHunt { count: u8 },
+    /// See the night through (WP-NIGHT's [`crate::night::NightHook::SurviveTheNight`]): be at
+    /// the target, outdoors and awake, as the night turns to dawn.
+    Dawn { target: u8 },
 }
 
 impl Objective {
@@ -717,13 +764,15 @@ impl Objective {
             | Self::OnFoot { target }
             | Self::HandDeliver { target, .. }
             | Self::Vigil { target, .. }
-            | Self::Speak { target } => vec![target],
+            | Self::Speak { target }
+            | Self::Dawn { target } => vec![target],
             Self::HoldAndClimb { switch, goal, .. } => vec![switch, goal],
             Self::Deliver { .. }
             | Self::ReachDepth { .. }
             | Self::ReturnToSurface
             | Self::SplitDelivery { .. }
-            | Self::Settle { .. } => Vec::new(),
+            | Self::Settle { .. }
+            | Self::NightHunt { .. } => Vec::new(),
         }
     }
 }

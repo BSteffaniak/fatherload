@@ -99,7 +99,8 @@ pub fn quest_markers(quest: &ActiveQuest, tick: u64) -> Vec<QuestMarker> {
             | Objective::OnFoot { target: index }
             | Objective::HandDeliver { target: index, .. }
             | Objective::Vigil { target: index, .. }
-            | Objective::Speak { target: index } => {
+            | Objective::Speak { target: index }
+            | Objective::Dawn { target: index } => {
                 if let Some(center) = target(index) {
                     push(center, QuestMarkerKind::Target);
                 }
@@ -150,7 +151,8 @@ pub fn quest_markers(quest: &ActiveQuest, tick: u64) -> Vec<QuestMarker> {
             | Objective::ReachDepth { .. }
             | Objective::ReturnToSurface
             | Objective::SplitDelivery { .. }
-            | Objective::Settle { .. } => {}
+            | Objective::Settle { .. }
+            | Objective::NightHunt { .. } => {}
         }
     }
     markers
@@ -295,6 +297,13 @@ pub fn objective_line_named(
             seconds(progress.count).min(u64::from(needed))
         ),
         Objective::Speak { target } => format!("Find the contact in {}", places.the(target)),
+        Objective::NightHunt { count } => format!(
+            "Bring down night monsters ({}/{count})",
+            progress.count.min(u64::from(count))
+        ),
+        Objective::Dawn { target } => {
+            format!("See the night through at {} until dawn", places.the(target))
+        }
         Objective::Settle { kind } => format!("Have a {} standing in your claim", kind.name()),
         Objective::ReturnToSurface => {
             if quest.carrying {

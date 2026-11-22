@@ -6,7 +6,7 @@
 //! the shared [`CrewQuests`]. Both advance here, detached from the world while they step so a step can read
 //! and change rigs freely.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::{
     command::PlayerCommand,
@@ -37,6 +37,9 @@ const STAY_DOWN_ARM_ROWS: i32 = 6;
 const RELAY_MIN_LEG_ROWS: i32 = 4;
 /// How close (tiles) to a camp's fire a hand delivery counts (camps have no doors).
 const HAND_DELIVER_REACH: i32 = 3;
+/// How soon after the night ends a watcher still at the place sees a [`Objective::Dawn`] beat
+/// through (the last night tick they were there must be this recent).
+const DAWN_GRACE_MILLIS: u64 = 2_000;
 
 /// The window (ms) a simultaneous objective allows. A crew with a rig for every spot gets the
 /// tight crew window; a crew short of rigs gets a window stretched toward the solo one for each
@@ -73,6 +76,8 @@ pub(super) struct EventFacts {
     bombed: BTreeSet<PlayerId>,
     rescued: BTreeSet<PlayerId>,
     vaults_opened: BTreeSet<FeatureId>,
+    /// Night monsters each player brought down this tick (WP-NIGHT hunts).
+    night_kills: BTreeMap<PlayerId, u32>,
 }
 
 impl EventFacts {
@@ -98,6 +103,11 @@ impl EventFacts {
                 }
                 GameplayEventKind::VaultOpened { feature } => {
                     facts.vaults_opened.insert(feature);
+                }
+                GameplayEventKind::EnemyKilled {
+                    kind, by: Some(by), ..
+                } if crate::night::is_nocturnal(kind) => {
+                    *facts.night_kills.entry(by).or_default() += 1;
                 }
                 _ => {}
             }
@@ -873,6 +883,36 @@ impl WorldState {
                     let arrived = self.actors_inside(rigs, target, 1, false);
                     if !arrived.is_empty() {
                         helpers.extend(arrived);
+                        progress.done = true;
+                    }
+                }
+            }
+            Objective::NightHunt { count } => {
+                for (id, _) in rigs {
+                    if let Some(kills) = facts.night_kills.get(id) {
+                        progress.count += u64::from(*kills);
+                        helpers.push(*id);
+                    }
+                }
+                progress.done = progress.count >= u64::from(count);
+            }
+            Objective::Dawn { target: index } => {
+                if let Some(target) = target(index) {
+                    let present: Vec<PlayerId> = self
+                        .actors_inside(rigs, target, 2, false)
+                        .into_iter()
+                        .filter(|id| !self.is_in_bed(*id))
+                        .collect();
+                    if self.is_night() {
+                        // The last night tick someone kept the watch here.
+                        if !present.is_empty() {
+                            progress.timer = tick;
+                        }
+                    } else if progress.timer != 0
+                        && tick.saturating_sub(progress.timer) <= ticks(DAWN_GRACE_MILLIS)
+                        && !present.is_empty()
+                    {
+                        helpers.extend(present);
                         progress.done = true;
                     }
                 }
