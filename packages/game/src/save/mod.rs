@@ -1721,6 +1721,30 @@ mod tests {
             ),
             play_seconds: 30.0,
         };
+        let deep = WorldSave {
+            world: WorldState::new_game_with_settings(
+                LEGACY_PLAYER_ID,
+                &WorldSettings {
+                    generator: GeneratorVersion::V11,
+                    ..WorldSettings::new(0x5A7E_0011)
+                },
+                SimulationParams::default(),
+            ),
+            play_seconds: 30.0,
+        };
+        // Format 13 (wave 7) added the frame, the column limit, the fluid schedule, the
+        // logistics section and the field zones; older files have none of them.
+        let with_wave7 = |older: &[&'static str]| -> Vec<&'static str> {
+            let mut fields = older.to_vec();
+            fields.extend([
+                "terrain.frame",
+                "terrain.column_limit",
+                "fluids",
+                "logistics",
+                "fields",
+            ]);
+            fields
+        };
         let v3: serde_json::Value = serde_json::from_str(V3).expect("v3 json");
         let files: Vec<(u32, String)> = vec![
             (1, V1.to_owned()),
@@ -1737,29 +1761,15 @@ mod tests {
             (5, v5_json(&classic).to_string()),
             (6, as_v6_json(&classic).to_string()),
             (7, as_version(&classic, 7, &["enemies"])),
-            (
-                8,
-                as_version(&streamed, 8, &["clock", "people", "homes", "tombs", "fluids"]),
-            ),
-            (9, as_version(&streamed, 9, &["homes", "tombs", "fluids"])),
-            (10, as_version(&streamed, 10, &["tombs", "fluids"])),
-            (
-                11,
-                as_version(
-                    &streamed,
-                    11,
-                    &["terrain.frame", "terrain.column_limit", "fluids"],
-                ),
-            ),
-            (
-                12,
-                as_version(
-                    &streamed,
-                    12,
-                    &["terrain.frame", "terrain.column_limit", "fluids"],
-                ),
-            ),
+            (8, as_version(&streamed, 8, &with_wave7(&["clock", "people", "homes", "tombs"]))),
+            (9, as_version(&streamed, 9, &with_wave7(&["homes", "tombs"]))),
+            (10, as_version(&streamed, 10, &with_wave7(&["tombs"]))),
+            (11, as_version(&streamed, 11, &with_wave7(&[]))),
+            (12, as_version(&streamed, 12, &with_wave7(&[]))),
             (13, as_version(&streamed, SAVE_VERSION, &[])),
+            // A Deep Descent world (generator V11, a floating frame, logistics sites) in the
+            // current format.
+            (13, as_version(&deep, SAVE_VERSION, &[])),
         ];
         for (version, json) in files {
             let mut save = parse_save(&json).unwrap_or_else(|error| panic!("v{version}: {error}"));
