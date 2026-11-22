@@ -854,7 +854,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         soft: TileKind::Cave(CaveTile::Sinter),
         hard: TileKind::HardRock,
         palette: palette(
-            Rgb(196, 182, 132),
+            Rgb(206, 198, 152),
             Rgb(128, 112, 80),
             Rgb(58, 48, 34),
             Some(Rgb(255, 250, 220)),
@@ -902,7 +902,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         soft: TileKind::Cave(CaveTile::MerrowStone),
         hard: TileKind::HardRock,
         palette: palette(
-            Rgb(150, 190, 176),
+            Rgb(116, 204, 172),
             Rgb(70, 120, 120),
             Rgb(18, 56, 62),
             Some(Rgb(255, 196, 150)),
@@ -945,7 +945,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         soft: TileKind::Cave(CaveTile::PillowBasalt),
         hard: TileKind::HardRock,
         palette: palette(
-            Rgb(44, 50, 92),
+            Rgb(30, 34, 104),
             Rgb(28, 30, 64),
             Rgb(8, 10, 28),
             Some(Rgb(236, 232, 255)),
@@ -963,7 +963,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ],
         hazards: &[(Pressure, 6), (Gas, 1)],
         field: FieldProfile {
-            light_permille: 600,
+            light_permille: 820,
             screen: &[
                 screen(ScreenEffect::Desaturate, 240),
                 screen(ScreenEffect::Vignette, 240),

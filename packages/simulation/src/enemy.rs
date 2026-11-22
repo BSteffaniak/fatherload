@@ -2059,7 +2059,7 @@ impl EnemyKind {
                 ..stats("The Eel-Dragon", Creature, Flying, AttackStyle::Lunge)
             },
             Self::FrostMite => EnemyStats {
-                radius: 5.0,
+                radius: 6.0,
                 health: 12.0,
                 speed: 140.0,
                 sight_tiles: 9.0,
@@ -3465,7 +3465,11 @@ mod tests {
         for kind in EnemyKind::ALL {
             let stats = kind.stats();
             assert!(stats.health > 0.0, "{kind:?}");
-            assert!(stats.radius >= 6.0 && stats.radius <= 20.0, "{kind:?}");
+            // The Leviathan's great body is the one exception (Wave 9).
+            assert!(
+                stats.radius >= 6.0 && (stats.radius <= 20.0 || kind == EnemyKind::Leviathan),
+                "{kind:?}"
+            );
             assert!(stats.contact_damage > 0.0, "{kind:?}");
             // Every kind takes full (or better) damage from explosives or EMPs: a clear counter.
             assert!(

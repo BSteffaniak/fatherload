@@ -125,6 +125,9 @@ const fn lives_underground(kind: EnemyKind) -> bool {
         // The Living Dark's creatures (Wave 8) hold to these rules in their own arena
         // (`living_dark_tests::the_living_darks_creatures_keep_the_body_rules`).
         && !kind.is_living_dark()
+        // The Leviathan swims its own path in its arena (Wave 9,
+        // `drowned_tests::a_bot_with_descent_iv_kit_beats_the_leviathan...`).
+        && !matches!(kind, EnemyKind::Leviathan)
 }
 
 /// One of every cave kind at an open spot in the arena.

@@ -757,10 +757,10 @@ fn descent_worlds_gate_deep_tiers_and_rig_systems_by_depth() {
     );
     let index = UpgradeKind::ALL
         .iter()
-        .position(|kind| *kind == UpgradeKind::CryoHull)
+        .position(|kind| *kind == UpgradeKind::GravityAnchor)
         .expect("line");
     let hull = upgrade_offers_for(&player, rules)[index];
-    let sold_from = RigSystem::CryoHull.sold_from_row(&PlanLayout);
+    let sold_from = RigSystem::GravityAnchor.sold_from_row(&PlanLayout);
     assert!(matches!(
         upgrade_lock_for(&hull, &settings, sold_from - 1, rules, 0),
         Some(UpgradeLock::Depth { .. })
@@ -768,7 +768,7 @@ fn descent_worlds_gate_deep_tiers_and_rig_systems_by_depth() {
     // Wave 8: reached is not enough; the crew must have felt the crush first.
     assert_eq!(
         upgrade_lock_for(&hull, &settings, sold_from, rules, 0),
-        Some(UpgradeLock::Unfelt(RigSystem::CryoHull))
+        Some(UpgradeLock::Unfelt(RigSystem::GravityAnchor))
     );
     assert_eq!(
         upgrade_lock_for(
@@ -776,7 +776,7 @@ fn descent_worlds_gate_deep_tiers_and_rig_systems_by_depth() {
             &settings,
             sold_from,
             rules,
-            RigSystem::CryoHull.bit()
+            RigSystem::GravityAnchor.bit()
         ),
         None
     );
@@ -854,7 +854,7 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
     world.set_progression_rules(ProgressionRules::Descent);
     let index = UpgradeKind::ALL
         .iter()
-        .position(|kind| *kind == UpgradeKind::CryoHull)
+        .position(|kind| *kind == UpgradeKind::GravityAnchor)
         .expect("line");
     // Stand in the shop with the world dug deep enough.
     let shop = crate::surface::SURFACE_BUILDINGS
@@ -871,7 +871,7 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
         PlayerScopedCommandOutcome::IgnoredUnavailable,
         "too shallow"
     );
-    world.progression.deepest_tile_reached = RigSystem::CryoHull.sold_from_row(&PlanLayout);
+    world.progression.deepest_tile_reached = RigSystem::GravityAnchor.sold_from_row(&PlanLayout);
     let inputs = TickInputs::default().act(PLAYER, buy.clone());
     let output = world.simulate_tick(world.simulation_tick(), &inputs);
     assert_eq!(
@@ -879,7 +879,7 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
         PlayerScopedCommandOutcome::IgnoredUnavailable,
         "reached but not felt yet (Wave 8)"
     );
-    world.logistics.felt_systems |= RigSystem::CryoHull.bit();
+    world.logistics.felt_systems |= RigSystem::GravityAnchor.bit();
     world.player_mut(PLAYER).expect("player").credits = 10_000_000;
     let inputs = TickInputs::default().act(PLAYER, buy);
     let output = world.simulate_tick(world.simulation_tick(), &inputs);
@@ -892,7 +892,7 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
             .player(PLAYER)
             .expect("player")
             .hazard_gear
-            .has_system(RigSystem::CryoHull)
+            .has_system(RigSystem::GravityAnchor)
     );
 }
 

@@ -190,6 +190,10 @@ fn the_classic_strata_are_the_classic_bands() {
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one check per field, each authored Descent's music listed"
+)]
 fn every_field_of_every_stratum_is_filled_and_resolves() {
     for stratum in Stratum::ALL {
         let def = stratum.def();
@@ -250,6 +254,7 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                     | LandmarkGenerator::Villages
                     | LandmarkGenerator::TombSites
                     | LandmarkGenerator::LivingDark
+                    | LandmarkGenerator::Drowned
             ));
         }
         let field = def.field;
@@ -267,6 +272,19 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                         | MusicCue::GreyStone
                         | MusicCue::SlateShelves
                         | MusicCue::BasaltColumns
+                ),
+                "{stratum:?}"
+            );
+        } else if def.descent == Descent::DrownedAndFrozen {
+            // So do the Drowned and Frozen's (Wave 9).
+            assert!(
+                matches!(
+                    def.music,
+                    MusicCue::UndergroundOcean
+                        | MusicCue::BrineGlaciers
+                        | MusicCue::GeyserFields
+                        | MusicCue::MerrowCity
+                        | MusicCue::PearlAbyss
                 ),
                 "{stratum:?}"
             );

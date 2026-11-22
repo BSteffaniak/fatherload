@@ -79,7 +79,8 @@ fn placeholder_strata_show_their_effects_on_screen() {
     assert!(forge.screen_level(field::ScreenEffect::Bloom) > 0.4);
     // The Glow Sea is dark, the Pearl Abyss desaturates, the Prism Desert splits colours.
     assert!(at(Stratum::GlowSea).light < 0.3);
-    assert!(at(Stratum::PearlAbyss).screen_level(field::ScreenEffect::Desaturate) > 0.4);
+    // The Pearl Abyss greys from its top, and more with the pressure on each seat (Wave 9).
+    assert!(at(Stratum::PearlAbyss).screen_level(field::ScreenEffect::Desaturate) > 0.15);
     assert!(at(Stratum::PrismDesert).screen_level(field::ScreenEffect::Chromatic) > 0.4);
     // Pixel Rot deepens: half strength at its top, full at its bottom.
     let (top, bottom) = cached_layout(&settings).rows(Stratum::PixelRot);
@@ -88,9 +89,11 @@ fn placeholder_strata_show_their_effects_on_screen() {
     let pixelate = field::ScreenEffect::Pixelate;
     assert!(high.screen_level(pixelate) > 0.15 && high.screen_level(pixelate) < 0.3);
     assert!(low.screen_level(pixelate) > 0.35);
-    // Physics: the ocean drags, the glaciers slide, the sludge slows time.
-    assert!(at(Stratum::UndergroundOcean).drag > 1.5);
-    assert!(at(Stratum::BrineGlaciers).friction < 0.5);
+    // Physics: the sludge slows time. Since Wave 9 the ocean's water is the submarine's to
+    // handle and the glaciers' slide is their ice's (`drowned::is_ice`), not field drag or
+    // friction (`world::drowned_tests` holds both).
+    assert!(at(Stratum::UndergroundOcean).drag >= 1.0);
+    assert!(crate::drowned::is_ice(Stratum::BrineGlaciers.def().soft));
     assert!(at(Stratum::TimeSludge).time_scale < 0.9);
 }
 
