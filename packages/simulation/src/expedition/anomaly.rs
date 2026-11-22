@@ -306,6 +306,11 @@ pub fn room_in_region(
     if !super::sites::sites_in(settings, &around).is_empty() {
         return None;
     }
+    // Nor over a pilot-only ruin (stamped before the story pass, so a room would cut it open)
+    // or under a tomb entrance (stamped after it, so the entrance would cut into the room).
+    if super::sites::crosses_older_spaces(settings, &around) {
+        return None;
+    }
     let kind = AnomalyKind::ALL[usize::try_from((roll >> 40) % 4).unwrap_or(0)];
     Some(AnomalyRoom {
         kind,

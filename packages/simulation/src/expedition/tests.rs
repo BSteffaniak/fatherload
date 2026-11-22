@@ -309,6 +309,40 @@ fn a_journal_reads_as_a_prefix_and_memories_open_with_the_trail() {
 }
 
 #[test]
+fn story_stamps_keep_off_pilot_spaces_and_tomb_entrances() {
+    use crate::worldgen::streamed::{pilot_spaces, tomb_sites};
+    for seed in SEEDS {
+        let settings = v11(seed);
+        let mut stamps: Vec<(String, TileRect)> = rooms_of(&settings)
+            .iter()
+            .map(|room| (format!("{:?} room", room.kind), room.bounds))
+            .collect();
+        stamps.extend(
+            sites::sites(&settings)
+                .iter()
+                .map(|site| (format!("log {} site", site.log + 1), site.bounds)),
+        );
+        for (name, bounds) in stamps {
+            let spaces = pilot_spaces::spaces_touching(&settings, &bounds);
+            assert!(
+                spaces
+                    .iter()
+                    .all(|space| !space.bounds().intersects(&bounds)),
+                "seed {seed:#x}: {name} at {bounds:?} over a pilot space"
+            );
+            for tomb in tomb_sites::sites_touching(&settings, &bounds) {
+                assert!(
+                    tomb_sites::entrance_cells(&tomb)
+                        .iter()
+                        .all(|(tile, _)| !bounds.expanded(1).contains(*tile)),
+                    "seed {seed:#x}: {name} at {bounds:?} under a tomb entrance"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn every_anomaly_room_opens_through_a_door_and_its_caches_open_with_the_local_drill() {
     use crate::terrain::{is_indestructible, tile_hardness};
     use crate::worldgen::streamed::generated_tile;

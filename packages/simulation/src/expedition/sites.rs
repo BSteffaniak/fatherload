@@ -137,22 +137,49 @@ pub fn site(settings: &WorldSettings, layout: &DescentLayout, log: u8) -> Option
     let slot_rows = (span / slots - height).max(1);
     let roll = hash2(settings.seed, SALT_SITE, i32::from(log), 0);
     let y = slot_top + i32::try_from(roll % u64::try_from(slot_rows).unwrap_or(1)).unwrap_or(0);
-    let out = 24 + i32::try_from((roll >> 20) % 97).unwrap_or(0);
     let side = trail_side(settings);
-    let column = lift_column(settings) + side * out;
-    let x = if side > 0 { column } else { column - width + 1 };
-    Some(ExpeditionSite {
-        log,
-        kind: entry.site,
-        stratum: entry.stratum,
-        bounds: TileRect {
-            min: TilePosition { x, y },
-            max: TilePosition {
-                x: x + width - 1,
-                y: y + height - 1,
+    let at = |out: i32| {
+        let column = lift_column(settings) + side * out;
+        let x = if side > 0 { column } else { column - width + 1 };
+        ExpeditionSite {
+            log,
+            kind: entry.site,
+            stratum: entry.stratum,
+            bounds: TileRect {
+                min: TilePosition { x, y },
+                max: TilePosition {
+                    x: x + width - 1,
+                    y: y + height - 1,
+                },
             },
-        },
-    })
+        }
+    };
+    // The rolled distance out from the cable, or the next of a few further along the row where
+    // the site would cut a pilot-only ruin or sit under a tomb entrance (kept as rolled if
+    // every try is taken, which the placement tests rule out for their seeds).
+    let rolled = i32::try_from((roll >> 20) % 97).unwrap_or(0);
+    let first_try = at(24 + rolled);
+    (0..8)
+        .map(|attempt| at(24 + (rolled + attempt * 29) % 97))
+        .find(|site| !crosses_older_spaces(settings, &site.bounds.expanded(3)))
+        .or(Some(first_try))
+}
+
+/// Whether `area` crosses a pilot-only space (V9+, stamped before the story pass) or a tomb
+/// entrance (V10+, stamped after it): the story's rooms keep off both.
+#[must_use]
+pub fn crosses_older_spaces(settings: &WorldSettings, area: &TileRect) -> bool {
+    use crate::worldgen::streamed::{pilot_spaces, tomb_sites};
+    pilot_spaces::spaces_touching(settings, area)
+        .iter()
+        .any(|space| space.bounds().intersects(area))
+        || tomb_sites::sites_touching(settings, area)
+            .iter()
+            .any(|tomb| {
+                tomb_sites::entrance_cells(tomb)
+                    .iter()
+                    .any(|(tile, _)| area.contains(*tile))
+            })
 }
 
 thread_local! {

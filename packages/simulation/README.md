@@ -4737,7 +4737,10 @@ tribes (Bran), the Megacity archive (Ines) and the Heart outpost (Amos's letters
   cannot open a treasure cache (the Topsoil), and the stopped room's relic cache falls back to a
   treasure cache where the stratum's drill cannot open a relic cache (`AnomalyRoom::cache_tile`;
   review fix, `every_anomaly_room_opens_through_a_door_and_its_caches_open_with_the_local_drill`
-  pins it). The rule is a Wave 7 field:
+  pins it). Rooms and log sites also keep off the pilot-only ruins (stamped before the story
+  pass, which would cut them open) and the tomb entrances (stamped after it):
+  `sites::crosses_older_spaces`; a room is dropped, a log site tries a few further distances out
+  along its row (`story_stamps_keep_off_pilot_spaces_and_tomb_entrances`). The rule is a Wave 7 field:
   `anomaly_field_source` is registered first in `field::STRATUM_FIELD_SOURCES` and answers only
   inside a room's zone (`AnomalyRoom::zone`, feathered over the walls), laying the room's
   departures over the stratum's profile (`anomaly::over`: a pixel-rot room in the Gravity Shear
