@@ -91,6 +91,19 @@ pub fn upright_controls_top() -> Option<i32> {
 /// banner across the top can step below them. Empty without touch controls.
 #[must_use]
 pub fn top_row_rects() -> Vec<Rectangle> {
+    control_rects(is_top_row)
+}
+
+/// The thumb cluster's buttons (everything but the top row: fire, bomb, scan, kit, gun,
+/// next, the prompt, ...) in the current canvas's art pixels, so HUD badges can keep clear of
+/// them. Empty without touch controls.
+#[must_use]
+pub fn cluster_rects() -> Vec<Rectangle> {
+    control_rects(|control| !is_top_row(control))
+}
+
+/// The touch controls `wanted` picks, in the current canvas's art pixels.
+fn control_rects(wanted: impl Fn(TouchControl) -> bool) -> Vec<Rectangle> {
     OVERLAY.with(|current| {
         let current = current.borrow();
         let Some(overlay) = current.as_ref() else {
@@ -102,7 +115,7 @@ pub fn top_row_rects() -> Vec<Rectangle> {
             .layout
             .controls
             .iter()
-            .filter(|(control, _)| is_top_row(*control))
+            .filter(|(control, _)| wanted(*control))
             .map(|(_, rect)| {
                 Rectangle::new(
                     rect.x.mul_add(canvas.density, -(canvas.origin_x as f32)) / pixel,

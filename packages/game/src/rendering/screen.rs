@@ -164,9 +164,19 @@ pub(super) fn draw_view_hud(
         left + width + 4,
         top,
     );
-    if let Some((_, bottom)) = wallet_bottom {
-        clock_hud::draw_clock_badge(draw, snapshot, rect, bottom + 3, view.night_safe);
-    }
+    // On a landscape phone the thumb cluster's upper buttons rise level with the badge: it
+    // steps left of them.
+    let thumb_buttons = super::touch_controls::cluster_rects();
+    let badge = wallet_bottom.and_then(|(_, bottom)| {
+        clock_hud::draw_clock_badge(
+            draw,
+            snapshot,
+            rect,
+            bottom + 3,
+            view.night_safe,
+            &thumb_buttons,
+        )
+    });
     // Altitude air, cold and wind while flying a V8 sky (F6).
     super::sky_hud::draw_sky_gauge(draw, snapshot, view, rect, top + 74);
     // The Moon checklist, the vacuum warning and the landing's sunrise (WP-MOON).
@@ -181,14 +191,14 @@ pub(super) fn draw_view_hud(
         panel_height as f32,
     )];
     if let Some((wallet_x, bottom)) = wallet_bottom {
-        let badge = if view.night_safe.is_some() { 36 } else { 26 };
         keep_clear.push(Rectangle::new(
             wallet_x as f32,
             top as f32,
             rect.x + rect.width - wallet_x as f32,
-            (bottom + 3 + badge - top) as f32,
+            (bottom - top) as f32,
         ));
     }
+    keep_clear.extend(badge);
     keep_clear.extend(super::touch_controls::top_row_rects());
     super::tomb_hud::draw_tomb_hud(draw, snapshot, view, rect, &keep_clear);
     draw_view_prompt(draw, shell, view, rect);

@@ -34,10 +34,47 @@ const fn dial_sky(phase: DayPhase) -> Color {
     }
 }
 
+/// Where the clock badge goes: right-aligned under the wallet panel at `top` in view `rect`,
+/// stepped left of any of `avoid` (the phone's thumb cluster: on a landscape phone its upper
+/// buttons rise level with the badge) it would cover.
+#[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "UI art pixels"
+)]
+pub(super) fn badge_rect(
+    rect: Rectangle,
+    top: i32,
+    (width, height): (i32, i32),
+    avoid: &[Rectangle],
+) -> Rectangle {
+    let mut x = (rect.x + rect.width) as f32 - 16.0 - width as f32;
+    for _ in 0..avoid.len() {
+        let badge = Rectangle::new(x, top as f32, width as f32, height as f32);
+        let Some(left) = avoid
+            .iter()
+            .filter(|control| overlaps(control, &badge))
+            .map(|control| control.x)
+            .reduce(f32::min)
+        else {
+            break;
+        };
+        x = (left - 4.0 - width as f32).max(rect.x + 4.0);
+    }
+    Rectangle::new(x.round(), top as f32, width as f32, height as f32)
+}
+
+/// Whether two rectangles share any area.
+fn overlaps(a: &Rectangle, b: &Rectangle) -> bool {
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
 /// The clock badge: a little half-disc sun dial (the sun travels its arc by day, the Moon by
-/// night) beside the day count and the time. Right-aligned under the wallet panel at `top`.
-/// While night monsters are about (`night_safe` is `Some`, WP-NIGHT) a line under it says
-/// whether the seat is SAFE (in a town, camp, home, lamp light or behind palisades) or EXPOSED.
+/// night) beside the day count and the time. Right-aligned under the wallet panel at `top`
+/// ([`badge_rect`]: left of the thumb cluster's buttons in `avoid`). While night monsters are
+/// about (`night_safe` is `Some`, WP-NIGHT) a line under it says whether the seat is SAFE (in a
+/// town, camp, home, lamp light or behind palisades) or EXPOSED. Returns where it was drawn.
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -49,7 +86,8 @@ pub(super) fn draw_clock_badge(
     rect: Rectangle,
     top: i32,
     night_safe: Option<bool>,
-) {
+    avoid: &[Rectangle],
+) -> Option<Rectangle> {
     let clock = snapshot.clock;
     let day = format!("DAY {}", clock.day());
     let (hours, minutes) = clock.hours_minutes();
@@ -64,9 +102,9 @@ pub(super) fn draw_clock_badge(
         .max(label_width);
     let width = ui_kit::PANEL_PADDING * 2 + DIAL_WIDTH + 5 + text_width;
     let height = if night_safe.is_some() { 36 } else { 26 };
-    let x = (rect.x + rect.width) as i32 - 16 - width;
+    let x = badge_rect(rect, top, (width, height), avoid).x as i32;
     if top + height > (rect.y + rect.height) as i32 - 8 {
-        return;
+        return None;
     }
     ui_kit::panel(
         draw,
@@ -99,6 +137,12 @@ pub(super) fn draw_clock_badge(
         }
         ui_kit::text(draw, label, text_x, row, TextStyle::Body, color);
     }
+    Some(Rectangle::new(
+        x as f32,
+        top as f32,
+        width as f32,
+        height as f32,
+    ))
 }
 
 /// The dial: a half disc of sky over a horizon line, with the sun (day) or the Moon (night)
@@ -225,4 +269,33 @@ pub(super) fn draw_sleep_overlay(
     ui_kit::text(draw, title, x + 19, y + 7, TextStyle::Bold, LAVENDER);
     ui_kit::text(draw, &line, x + 7, y + 19, TextStyle::Body, BONE);
     ui_kit::text(draw, hint, x + 7, y + 29, TextStyle::Body, FOG);
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+
+    #[test]
+    fn the_clock_badge_steps_left_of_the_thumb_cluster() {
+        // A landscape phone view (844 x 390 art pixels): the badge under the wallet, and the
+        // cluster's upper buttons (KIT and SCAN, GUN) rising level with it.
+        let view = Rectangle::new(0.0, 0.0, 844.0, 390.0);
+        let size = (150, 26);
+        let alone = badge_rect(view, 132, size, &[]);
+        assert!((alone.x - (844.0 - 16.0 - 150.0)).abs() < f32::EPSILON);
+        let cluster = [
+            Rectangle::new(690.0, 154.0, 46.0, 46.0),
+            Rectangle::new(775.0, 140.0, 46.0, 46.0),
+            Rectangle::new(760.0, 210.0, 60.0, 50.0),
+        ];
+        let placed = badge_rect(view, 132, size, &cluster);
+        assert!(
+            cluster.iter().all(|button| !overlaps(button, &placed)),
+            "{placed:?}"
+        );
+        assert!(placed.x >= view.x && placed.x + placed.width <= view.x + view.width);
+        // Buttons below the badge (a portrait phone's cluster) leave it where it was.
+        let low = [Rectangle::new(700.0, 300.0, 60.0, 60.0)];
+        assert_eq!(badge_rect(view, 132, size, &low).x, alone.x);
+    }
 }
