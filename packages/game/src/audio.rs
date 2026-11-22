@@ -222,7 +222,11 @@ mod tests {
                 | Patch::TombBossLoop
                 | Patch::CrusherSlam
                 | Patch::ColossusSlam
-                | Patch::MummyGroan => (40.0, 3_000.0),
+                | Patch::MummyGroan
+                // Fluids (wave 7): the breach's gush, a rig's plunge and the underwater bed.
+                | Patch::FluidRush
+                | Patch::RigSplash
+                | Patch::BubbleLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

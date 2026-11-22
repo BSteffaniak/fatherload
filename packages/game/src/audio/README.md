@@ -177,7 +177,7 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `dawn_theme` | big | Dawn on the world clock: a warm G major brass pad swelling up from the root, a rising pentatonic line of FM bells (G A B D E G) and a held high D bell. |
 | `dusk_theme` | big | Dusk: a low E minor brass pad, a falling aeolian bell line (E D B A G E) and a far horn note fading out. |
 | `fluid_rush` | impact | A fluid pocket breached (wave 7, F9): a low gulp, then a churning gush of low-passed brown and band-passed pink noise that swells and drains away, with bubbles bursting through it. |
-| `steam_hiss` | feedback | Water on lava or molten metal: a sharp high-passed sizzle opening into a breathy hiss, with crackles as the crust sets. |
+| `steam_hiss` | feedback | Water on lava or molten metal: a band-passed pink sizzle sweeping down into a breathy hiss over a low boil, with crackles as the crust sets. |
 | `acid_fizz` | feedback | Acid eating ground: a fast band-passed fizz of tiny bubbles over a low, wobbling gurgle. |
 | `rig_splash` | impact | A rig plunging under: a deep body-hit, a falling wall of spray and a trail of big bubbles past the hull. |
 | `loop_bubbles` | loop | Under fluid: a muffled low-passed rumble, a 62 Hz pump hum breathing twice a loop and a steady, even stream of bubbles. |

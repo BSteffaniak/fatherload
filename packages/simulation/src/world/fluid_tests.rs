@@ -558,3 +558,24 @@ fn the_test_pools_command_pours_every_fluid_beside_the_rig() {
     let _ = run(&mut world, &idle(), 60 * 5);
     assert!(world.fluid_schedule().is_idle());
 }
+
+#[test]
+fn a_rig_drills_down_through_a_brine_floor_without_bobbing_off() {
+    let mut world = arena();
+    // A dirt floor under a brine pool; the rig dives to it and drills on down.
+    fill(&mut world, 8..=40, 26..=31, TileKind::Dirt);
+    pour(&mut world, 8..=40, 20..=25, FluidKind::Brine);
+    let player = world.player_mut(PLAYER).expect("rig");
+    player.y = 25.0 * TILE_SIZE + 10.0;
+    let start = player.y;
+    let _ = run(
+        &mut world,
+        &TickInputs::held(PLAYER, ControlState::new(0.0, false, true)),
+        60 * 6,
+    );
+    let dug = world.player(PLAYER).expect("rig").y - start;
+    assert!(
+        dug > 2.0 * TILE_SIZE,
+        "the rig drilled down through the floor ({dug} px)"
+    );
+}

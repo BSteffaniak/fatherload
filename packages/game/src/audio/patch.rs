@@ -5915,17 +5915,19 @@ fn fluid_rush(rng: &mut Rng) -> Vec<f32> {
     out
 }
 
-/// Water meeting lava or molten metal: a sharp sizzle that opens into a breathy steam hiss and
-/// fades, with a few crackles as the crust sets.
+/// Water meeting lava or molten metal: a band-passed sizzle sweeping down into a breathy steam
+/// hiss over a low boil, fading, with a few crackles as the crust sets.
 fn steam_hiss(rng: &mut Rng) -> Vec<f32> {
-    let mut hiss = Noise::new(NoiseColor::White, rng.next_u64());
-    let mut filter = Svf::new(FilterMode::HighPass, 3_000.0, 0.7);
+    let mut hiss = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 3_000.0, 0.8);
+    let mut body = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut body_filter = Svf::new(FilterMode::LowPass, 500.0, 0.7);
     let mut out = render(1.1, |t| {
-        let open = segments(t, &[(0.0, 5_500.0), (0.15, 2_400.0), (1.1, 3_800.0)]);
-        filter.run(hiss.next(), open, 0.7)
-            * segments(t, &[(0.0, 0.0), (0.02, 1.0), (0.3, 0.6), (1.1, 0.0)])
+        let open = segments(t, &[(0.0, 4_200.0), (0.15, 2_000.0), (1.1, 2_800.0)]);
+        let shape = segments(t, &[(0.0, 0.0), (0.02, 1.0), (0.3, 0.6), (1.1, 0.0)]);
+        (filter.run(hiss.next(), open, 0.8) + body_filter.process(body.next()) * 0.4) * shape
     });
-    grains(rng, &mut out, 9, (0.05, 0.9), (2_500.0, 6_000.0), 0.25);
+    grains(rng, &mut out, 9, (0.05, 0.9), (2_000.0, 4_500.0), 0.2);
     out
 }
 

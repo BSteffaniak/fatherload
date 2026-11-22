@@ -698,8 +698,14 @@ impl WorldState {
             return;
         };
         let share = now.share;
-        // Buoyancy carries part of the rig's weight, drag slows it in every direction.
-        let lift = AUTHORITATIVE_RIG_GRAVITY * kind.buoyancy() * share;
+        // Buoyancy carries part of the rig's weight (none while its drill bites: the drill
+        // anchors it, so a rig can drill a brine floor without bobbing off it), drag slows it
+        // in every direction.
+        let lift = if drilling {
+            0.0
+        } else {
+            AUTHORITATIVE_RIG_GRAVITY * kind.buoyancy() * share
+        };
         let drag = 1.0 / (kind.drag() * share).mul_add(dt, 1.0);
         let mut vx = player.velocity_x * drag;
         let mut vy = (-lift).mul_add(dt, player.velocity_y) * drag;
