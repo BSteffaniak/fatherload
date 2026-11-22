@@ -362,6 +362,14 @@ impl Stratum {
         (self as usize) < Band::ALL.len()
     }
 
+    /// Whether generator V11 reads the stratum's own registry rules (ores, ore density and
+    /// hazards) rather than its classic band's curves: every stratum below Descent II, and the
+    /// authored Crust (Wave 8). The Old Deep keeps the classic curves until its Wave authors it.
+    #[must_use]
+    pub const fn uses_registry_rules(self) -> bool {
+        !self.is_classic() || matches!(self.def().descent, Descent::Crust)
+    }
+
     /// The enemy tier (health, damage and loot scale) of the stratum's creatures: the classic
     /// band index in Descents I and II, the deepest classic tier below them.
     #[must_use]
@@ -581,6 +589,17 @@ pub enum MusicCue {
     StrangeLayers,
     Ancients,
     Heart,
+    // --- The authored Crust's own pieces (Wave 8), appended ----------------------------------
+    /// Topsoil: a plucked folk line over creaking roots.
+    Topsoil,
+    /// Clay Beds: a dripping marimba and the gurgle of water behind the clay.
+    ClayBeds,
+    /// Grey Stone: a reedy work song over the old works' far clanks.
+    GreyStone,
+    /// Slate Shelves: a glassy, slow pad and ringing drips.
+    SlateShelves,
+    /// Basalt Columns: a low drone and the crackle of heat.
+    BasaltColumns,
 }
 
 /// A stratum's ambience bed.
@@ -604,6 +623,17 @@ pub enum AmbienceCue {
     Strange,
     /// Near silence.
     Silence,
+    // --- The authored Crust's beds (Wave 8), appended -----------------------------------------
+    /// Roots creaking and the scratching of burrowers.
+    Burrows,
+    /// Water moving behind clay: gurgles and seeps.
+    Aquifer,
+    /// The old mine works: timber groaning, far rails, a dripping lamp.
+    MineWorks,
+    /// Glassy drips off stalactites and shelves ticking as they settle.
+    SlateDrip,
+    /// The lava tubes' hot breath and crackle.
+    LavaTube,
 }
 
 /// What kind of landmark a stratum holds; every kind has a generator
@@ -829,6 +859,10 @@ pub struct StratumDef {
     pub variants: &'static [&'static str],
     /// The gate that ends the Descent (only on a Descent's last stratum).
     pub gate: Option<GateDef>,
+    /// How much ore the stratum's veins and clusters carry, per mille of the classic density
+    /// (Wave 8; 1000 by default). Read by generator V11 where the stratum's own ores apply
+    /// ([`Stratum::uses_registry_rules`]) and by the descent probe.
+    pub ore_density_permille: u16,
     /// The fluid bodies generator V11 places in the stratum's chunks
     /// ([`crate::fluid::fluid_pockets_in_chunk`], Wave 7 integration): sealed aquifers and
     /// cave pools of water, brine, acid or liquid metal. Empty in most strata.

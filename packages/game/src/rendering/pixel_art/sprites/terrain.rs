@@ -509,6 +509,33 @@ pub const CLOUD_PEARL: SpriteDef = SpriteDef {
     frame_seconds: 0.0,
 };
 
+/// A clay pot from the Clay Beds (Wave 8): a round-bellied jar with a dark rim, a painted band
+/// and a chipped lip.
+pub const CLAY_POT: SpriteDef = SpriteDef {
+    name: "artifact_clay_pot",
+    legend: &[
+        ('o', INK),
+        ('s', SOIL),
+        ('c', CLAY),
+        ('a', SAND),
+        ('t', TEAL),
+        ('w', CREAM),
+    ],
+    frames: &[&[
+        "..oooooo..", //
+        "..ossass..", //
+        "...occo...", //
+        "..occcao..", //
+        ".occccawo.", //
+        ".otttttto.", //
+        ".occccaco.", //
+        ".osccccso.", //
+        "..osssso..", //
+        "...oooo...", //
+    ]],
+    frame_seconds: 0.0,
+};
+
 /// The stamp for a buried `artifact`.
 #[must_use]
 pub const fn artifact_stamp(artifact: ArtifactKind) -> &'static SpriteDef {
@@ -530,6 +557,7 @@ pub const fn artifact_stamp(artifact: ArtifactKind) -> &'static SpriteDef {
         ArtifactKind::SkyRelic => &SKY_RELIC,
         ArtifactKind::LunarRelic => &super::moon::LUNAR_RELIC,
         ArtifactKind::WardenEye => &super::moon::WARDEN_EYE,
+        ArtifactKind::ClayPot => &CLAY_POT,
     }
 }
 

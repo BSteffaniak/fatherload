@@ -57,7 +57,7 @@ fn tile_origin(position: TilePosition) -> (f32, f32) {
 }
 
 /// The tiles overlapping `visible`.
-fn visible_tiles(visible: Rectangle) -> impl Iterator<Item = TilePosition> {
+pub(super) fn visible_tiles(visible: Rectangle) -> impl Iterator<Item = TilePosition> {
     let min_x = crate::view_frame::frame().col(visible.x) - 1;
     let min_y = crate::view_frame::frame().row(visible.y) - 1;
     let max_x = crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1;

@@ -28,6 +28,7 @@
     reason = "const integer layout maths on small row counts, indices and reduced hashes"
 )]
 
+pub mod crust;
 pub mod landmarks;
 
 use crate::{
@@ -541,5 +542,7 @@ pub const fn stratum_middle(layout: &DescentLayout, stratum: Stratum, x: i32) ->
     }
 }
 
+#[cfg(test)]
+mod crust_tests;
 #[cfg(test)]
 mod tests;

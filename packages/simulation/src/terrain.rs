@@ -223,6 +223,9 @@ pub enum ArtifactKind {
     LunarRelic,
     /// The Warden's eye: the alien facility guardian's core (WP-MOON boss).
     WardenEye,
+    /// A clay pot from the Crust's Clay Beds (Wave 8, Deep Descent worlds): somebody shaped the
+    /// beds and left pots in them; collectors in town pay for each one.
+    ClayPot,
 }
 
 impl ArtifactKind {
@@ -246,6 +249,7 @@ impl ArtifactKind {
             Self::SkyRelic => "Sky Relic",
             Self::LunarRelic => "Lunar Relic",
             Self::WardenEye => "Warden's Eye",
+            Self::ClayPot => "Clay Pot",
         }
     }
 
@@ -269,6 +273,7 @@ impl ArtifactKind {
             Self::SkyRelic => 2_400,
             Self::LunarRelic => 1_900,
             Self::WardenEye => 4_800,
+            Self::ClayPot => 70,
         }
     }
 
@@ -318,6 +323,11 @@ pub enum TileKind {
     /// tile's `durability` byte is the fluid's level ([`crate::fluid::FLUID_FULL`] per full
     /// tile). Only V11+ worlds generate fluid; any world can hold it once it flows.
     Fluid(crate::fluid::FluidKind),
+    /// A tile of the authored Crust (Wave 8, Descent I of
+    /// [`GeneratorVersion::V11`](worldgen::GeneratorVersion::V11) worlds; see [`crate::crust`]):
+    /// root mats, mine timber and rails, slate shelves, basalt columns, tube glass, the cabin,
+    /// strongboxes, the Sinkhole's core, rubble and Gravel Hollow's gravel.
+    Crust(crate::crust::CrustTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -425,6 +435,7 @@ impl TileKind {
             Self::Sky(tile) => tile.name(),
             Self::Lunar(tile) => tile.name(),
             Self::Fluid(fluid) => fluid.name(),
+            Self::Crust(tile) => tile.name(),
         }
     }
 
@@ -519,6 +530,7 @@ impl Tile {
             TileKind::Sky(tile) => 0x600 | tile.code(),
             TileKind::Lunar(tile) => 0x700 | tile.code(),
             TileKind::Fluid(fluid) => FLUID_TILE_CODE_BASE | fluid.code(),
+            TileKind::Crust(tile) => CRUST_TILE_CODE_BASE | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -527,6 +539,10 @@ impl Tile {
 /// Kind-code range of [`TileKind::Built`] tiles in [`Tile::code`] (`0xB00 | BuiltTile::code`),
 /// kept clear of the ranges other tile families use.
 pub const BUILT_TILE_CODE_BASE: u64 = 0xB00;
+
+/// Kind-code range of [`TileKind::Crust`] tiles in [`Tile::code`] (`0xC00 | CrustTile::code`,
+/// Wave 8), clear of every other family's range.
+pub const CRUST_TILE_CODE_BASE: u64 = 0xC00;
 
 /// Kind-code range of [`TileKind::Fluid`] tiles in [`Tile::code`] (`0xA00 | FluidKind::code`;
 /// the tile's durability byte is the fluid's level).
@@ -1860,6 +1876,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Surface(material) => material.hardness(),
         TileKind::Sky(tile) => tile.hardness(),
         TileKind::Lunar(tile) => tile.hardness(),
+        TileKind::Crust(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1873,6 +1890,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
             | ArtifactKind::WardenEye,
         ) => 5,
         TileKind::Artifact(ArtifactKind::HarpyEgg) => 1,
+        TileKind::Artifact(ArtifactKind::ClayPot) => 2,
     }
 }
 
@@ -1900,6 +1918,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Surface(material) => material.durability(),
         TileKind::Sky(tile) => tile.durability(),
         TileKind::Lunar(tile) => tile.durability(),
+        TileKind::Crust(tile) => tile.durability(),
     }
 }
 

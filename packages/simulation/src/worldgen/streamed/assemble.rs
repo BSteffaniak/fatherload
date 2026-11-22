@@ -35,7 +35,8 @@ fn vein_mineral(ctx: &Ctx, band: crate::worldgen::Band, x: i32, y: i32) -> Optio
         return None;
     }
     let seed = ctx.seed();
-    let rich = i32::try_from(ctx.settings.richness.percent()).unwrap_or(100);
+    // The world's richness (V11's registry strata scale it by their ore density, Wave 8).
+    let rich = ctx.ore_richness(x, y).min(220);
     let mask_threshold = NOISE_MAX * (100 - rich * 45 / 100) / 100;
     for family in 0..2_u64 {
         let (cell_x, cell_y) = if family == 0 { (26, 13) } else { (13, 22) };
@@ -72,22 +73,22 @@ fn vein_mineral(ctx: &Ctx, band: crate::worldgen::Band, x: i32, y: i32) -> Optio
     None
 }
 
-struct ChunkKinds {
-    rect: TileRect,
+pub(super) struct ChunkKinds {
+    pub(super) rect: TileRect,
     top: i32,
     height: i32,
-    kinds: Vec<TileKind>,
+    pub(super) kinds: Vec<TileKind>,
 }
 
 impl ChunkKinds {
-    fn slot(&self, x: i32, y: i32) -> Option<usize> {
+    pub(super) fn slot(&self, x: i32, y: i32) -> Option<usize> {
         (self.rect.contains(TilePosition { x, y }) && y >= self.top && y < self.height).then(|| {
             usize::try_from((y - self.rect.min.y) * CHUNK_SIZE_TILES + (x - self.rect.min.x))
                 .unwrap_or(0)
         })
     }
 
-    fn set(&mut self, x: i32, y: i32, kind: TileKind) {
+    pub(super) fn set(&mut self, x: i32, y: i32, kind: TileKind) {
         if let Some(slot) = self.slot(x, y) {
             self.kinds[slot] = kind;
         }
@@ -189,6 +190,11 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
         place_deposits(ctx, &rect, &mut window, &mut chunk_kinds);
+        // The authored Crust (V11, Wave 8): roots, mud, burrows, clay pots, the old mine
+        // works, slate shelves, stalactites, basalt columns, lava tubes and the cabin.
+        if let Some(layout) = &ctx.descent {
+            super::crust_pass::apply(ctx, layout, &mut window, &mut chunk_kinds);
+        }
     }
     if rect.max.y >= ctx.top && rect.min.y < ctx.height {
         // Villages last (a biome world's mountain shelves hold villages above row 0): hazards
@@ -238,6 +244,10 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
                 }
             }
         }
+    }
+    if ctx.descent.is_some() {
+        // The Sinkhole (V11, Wave 8): the core and the funnel over Descent I's gate chamber.
+        super::crust_pass::apply_sinkhole(ctx, &mut chunk_kinds);
     }
     if !ctx.logistics.lifts.is_empty() || !ctx.logistics.outposts.is_empty() {
         // Depth logistics (V11, Wave 7 integration): the outposts' floors and the builders'

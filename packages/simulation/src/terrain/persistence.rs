@@ -826,7 +826,7 @@ impl Tile {
             MineralKind::Skystone,
             MineralKind::CloudSilver,
         ];
-        const ARTIFACTS: [ArtifactKind; 17] = [
+        const ARTIFACTS: [ArtifactKind; 18] = [
             ArtifactKind::Fossil,
             ArtifactKind::OldCircuit,
             ArtifactKind::BuriedIdol,
@@ -844,6 +844,7 @@ impl Tile {
             ArtifactKind::SkyRelic,
             ArtifactKind::LunarRelic,
             ArtifactKind::WardenEye,
+            ArtifactKind::ClayPot,
         ];
         #[allow(clippy::cast_possible_truncation, reason = "masked to a byte")]
         let durability = (code & 0xFF) as u8;
@@ -885,6 +886,10 @@ impl Tile {
             },
             0x700..=0x7FF => match crate::moon::LunarTile::from_code(variant as u64) {
                 Some(tile) => TileKind::Lunar(tile),
+                None => return None,
+            },
+            0xC00..=0xCFF => match crate::crust::CrustTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Crust(tile),
                 None => return None,
             },
             0xA00..=0xAFF => match crate::fluid::FluidKind::from_code(variant as u64) {

@@ -555,6 +555,7 @@ fn glyph(kind: TileKind) -> char {
         TileKind::Sky(_) => 'k',
         TileKind::Lunar(_) => 'l',
         TileKind::Fluid(_) => '~',
+        TileKind::Crust(_) => 'r',
     }
 }
 

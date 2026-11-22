@@ -36,6 +36,7 @@ pub(crate) mod cache;
 pub mod cave_biomes;
 #[cfg(test)]
 mod cave_tests;
+mod crust_pass;
 pub mod index;
 pub mod pilot_spaces;
 mod regions;

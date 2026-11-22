@@ -36,6 +36,9 @@ pub struct PlayerRig {
     /// See [`Player::attitude`].
     #[serde(default)]
     pub attitude: crate::attitude::RigAttitude,
+    /// See [`Player::cart`].
+    #[serde(default)]
+    pub cart: Option<crate::crust::CartRide>,
     pub fuel: f32,
     pub hull: f32,
     /// Capacitor energy, weapon cooldown, aim and trigger.
@@ -143,6 +146,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
         velocity_y,
         x_remainder,
         attitude,
+        cart,
         fuel,
         fuel_capacity,
         hull,
@@ -195,6 +199,7 @@ pub fn split_player(player: &Player) -> (PlayerRig, RigBuild, PlayerInventory) {
             velocity_y,
             x_remainder,
             attitude,
+            cart,
             fuel,
             hull,
             weapon,
@@ -260,6 +265,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         velocity_y,
         x_remainder,
         attitude,
+        cart,
         fuel,
         hull,
         weapon,
@@ -315,6 +321,7 @@ pub fn join_player(rig: PlayerRig, build: RigBuild, inventory: PlayerInventory) 
         velocity_y,
         x_remainder,
         attitude,
+        cart,
         fuel,
         fuel_capacity,
         hull,

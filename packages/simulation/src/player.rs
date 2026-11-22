@@ -32,6 +32,10 @@ pub struct Player {
     /// rig and in old saves.
     #[serde(default)]
     pub attitude: crate::attitude::RigAttitude,
+    /// The mine cart the rig is riding (Wave 8, the Crust's old mine works; see
+    /// [`crate::crust::CartRide`]). Per tick, predicted and reconciled like the pose.
+    #[serde(default)]
+    pub cart: Option<crate::crust::CartRide>,
     pub fuel: f32,
     pub fuel_capacity: f32,
     pub hull: f32,
@@ -164,6 +168,7 @@ impl Player {
             velocity_y: 0.0,
             x_remainder: 0.0,
             attitude: crate::attitude::RigAttitude::LEVEL,
+            cart: None,
             fuel: fuel_capacity_for_level(1),
             fuel_capacity: fuel_capacity_for_level(1),
             hull: 100.0,

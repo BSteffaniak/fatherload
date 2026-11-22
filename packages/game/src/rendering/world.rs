@@ -34,6 +34,7 @@ use crate::{
 pub(super) mod base;
 mod buildings;
 mod caves;
+mod crust;
 mod crypt;
 pub(super) mod daylight;
 mod drops;
@@ -339,6 +340,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     );
     fx::draw_lava_glow(draw, scene.terrain, scene.explored, scene.visible, seconds);
     caves::draw_cave_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
+    crust::draw_crust_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
     lunar::draw_lunar_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
     lunar::draw_colony_props(draw, scene.terrain, scene.visible, seconds);
     caves::draw_critters(draw, scene.critters, scene.players, scene.visible, seconds);

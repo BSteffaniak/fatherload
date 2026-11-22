@@ -91,6 +91,7 @@ const TEMPLATE: StratumDef = StratumDef {
     landmarks: &[LandmarkKind::Prefabs, LandmarkKind::CaveEcosystems],
     variants: &[],
     gate: None,
+    ore_density_permille: 1_000,
     fluids: &[],
 };
 
@@ -109,70 +110,115 @@ const WITH_GATE: &[LandmarkKind] = &[
 /// Landmarks of a Strange Layers stratum (anomaly rooms).
 const STRANGE: &[LandmarkKind] = &[LandmarkKind::AnomalyRoom, LandmarkKind::Prefabs];
 
+/// The Crust's creature tables (Wave 8).
+const CRUST_TOPSOIL: &[(EnemyKind, u32)] = band_roster(Band::Topsoil);
+const CRUST_CLAY: &[(EnemyKind, u32)] = band_roster(Band::Clay);
+const CRUST_STONE: &[(EnemyKind, u32)] = band_roster(Band::Stone);
+const CRUST_SLATE: &[(EnemyKind, u32)] = band_roster(Band::Slate);
+const CRUST_BASALT: &[(EnemyKind, u32)] = band_roster(Band::Basalt);
+
 /// Every stratum, in [`Stratum::ALL`] order.
 pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
-    // --- Descent I: The Crust (the five classic bands, re-paced) -----------------------------
+    // --- Descent I: The Crust (authored, Wave 8; see `crate::crust`) -------------------------
     StratumDef {
         stratum: Stratum::Topsoil,
         descent: Descent::Crust,
         name: "Topsoil",
-        signature: "Roots and burrows, rain-soaked mud, first caves.",
-        share_per_mille: 140,
+        signature: "Rain-soaked mud that bogs the drive down; roots, burrows and the first caves.",
+        share_per_mille: 150,
         host_band: Band::Topsoil,
         soft: TileKind::Dirt,
         hard: TileKind::Clay,
-        palette: palette(Rgb(126, 86, 52), Rgb(150, 98, 64), Rgb(58, 38, 26), None),
-        ores: &[ore(Copper, 300, 700, 100), ore(Iron, 900, 400, 40)],
+        palette: palette(
+            Rgb(128, 84, 47),
+            Rgb(168, 101, 63),
+            Rgb(58, 36, 24),
+            Some(Rgb(212, 155, 92)),
+        ),
+        ores: &[
+            ore(Copper, 200, 600, 100),
+            ore(Iron, 600, 500, 75),
+            ore(Silver, 950, 300, 22),
+        ],
         layer_resource: resource("Root Fibre", StrategicResourceKind::RadiantFossil),
-        creatures: band_roster(Band::Topsoil),
+        creatures: CRUST_TOPSOIL,
         hazards: &[],
+        music: MusicCue::Topsoil,
+        ambience: AmbienceCue::Burrows,
         landmarks: &[
             LandmarkKind::Prefabs,
             LandmarkKind::CaveEcosystems,
             LandmarkKind::Settlements,
         ],
         variants: &["Rootbound", "Rain Mud", "Burrow Warren"],
+        ore_density_permille: 1_150,
+        fluids: &[FluidPocketRule::cave_pools(Water, 160)],
         ..TEMPLATE
     },
     StratumDef {
         stratum: Stratum::ClayBeds,
         descent: Descent::Crust,
         name: "Clay Beds",
-        signature: "Aquifers: water pockets that flood tunnels when breached.",
+        signature: "Aquifers: water pockets that flood tunnels when breached; clay pots to sell.",
         share_per_mille: 190,
         host_band: Band::Clay,
         soft: TileKind::Clay,
         hard: TileKind::Stone,
-        palette: palette(Rgb(168, 92, 60), Rgb(120, 110, 104), Rgb(70, 40, 30), None),
+        palette: palette(
+            Rgb(168, 101, 63),
+            Rgb(133, 126, 118),
+            Rgb(58, 36, 24),
+            Some(Rgb(77, 142, 213)),
+        ),
         ores: &[
-            ore(Copper, 200, 600, 80),
-            ore(Iron, 500, 500, 80),
-            ore(Silver, 900, 400, 40),
+            ore(Copper, 100, 400, 40),
+            ore(Iron, 300, 600, 80),
+            ore(Silver, 600, 500, 62),
+            ore(Gold, 950, 300, 16),
         ],
         layer_resource: resource("Kiln Clay", StrategicResourceKind::RadiantFossil),
-        creatures: band_roster(Band::Clay),
+        creatures: CRUST_CLAY,
         hazards: &[(Gas, 1)],
+        music: MusicCue::ClayBeds,
+        ambience: AmbienceCue::Aquifer,
         variants: &["Potters' Beds", "Aquifer Seams"],
+        ore_density_permille: 1_100,
+        fluids: &[
+            FluidPocketRule {
+                min_radius: 3,
+                max_radius: 6,
+                ..FluidPocketRule::sealed(Water, 260)
+            },
+            FluidPocketRule::cave_pools(Water, 260),
+        ],
         ..TEMPLATE
     },
     StratumDef {
         stratum: Stratum::GreyStone,
         descent: Descent::Crust,
         name: "Grey Stone",
-        signature: "Old mine works: rails to ride, timber that collapses, first gas.",
+        signature: "Old mine works: rails to ride, timber sets that collapse when undercut, first gas.",
         share_per_mille: 220,
         host_band: Band::Stone,
         soft: TileKind::Stone,
         hard: TileKind::HardRock,
-        palette: palette(Rgb(128, 128, 136), Rgb(92, 92, 104), Rgb(44, 44, 52), None),
+        palette: palette(
+            Rgb(133, 126, 118),
+            Rgb(87, 82, 80),
+            Rgb(52, 48, 47),
+            Some(Rgb(242, 169, 59)),
+        ),
         ores: &[
-            ore(Iron, 200, 600, 80),
-            ore(Silver, 500, 500, 60),
-            ore(Gold, 900, 500, 46),
+            ore(Iron, 100, 400, 40),
+            ore(Silver, 300, 600, 72),
+            ore(Gold, 650, 500, 48),
+            ore(Emerald, 980, 200, 10),
         ],
         layer_resource: resource("Mine Timber", StrategicResourceKind::MachineRelic),
-        creatures: band_roster(Band::Stone),
-        hazards: &[(Gas, 5), (Pressure, 2), (Explosive, 3)],
+        creatures: CRUST_STONE,
+        hazards: &[(Gas, 6), (Pressure, 1), (Explosive, 2)],
+        music: MusicCue::GreyStone,
+        ambience: AmbienceCue::MineWorks,
         landmarks: &[
             LandmarkKind::Outpost,
             LandmarkKind::Prefabs,
@@ -180,33 +226,37 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             LandmarkKind::Settlements,
         ],
         variants: &["Old Workings", "Rail Galleries", "Gas Pockets"],
+        ore_density_permille: 1_050,
         ..TEMPLATE
     },
     StratumDef {
         stratum: Stratum::SlateShelves,
         descent: Descent::Crust,
         name: "Slate Shelves",
-        signature: "Slate slides: slippery shelves that slide when undercut.",
-        share_per_mille: 220,
+        signature: "Slate slides: slick shelves that slide when undercut; stalactite galleries.",
+        share_per_mille: 210,
         host_band: Band::Slate,
         soft: TileKind::Stone,
         hard: TileKind::HardRock,
-        palette: palette(Rgb(84, 98, 120), Rgb(60, 70, 92), Rgb(30, 36, 50), None),
+        palette: palette(
+            Rgb(60, 56, 84),
+            Rgb(40, 36, 58),
+            Rgb(40, 36, 58),
+            Some(Rgb(138, 197, 238)),
+        ),
         ores: &[
-            ore(Silver, 200, 500, 60),
-            ore(Gold, 500, 500, 46),
-            ore(Emerald, 900, 500, 34),
+            ore(Silver, 100, 400, 30),
+            ore(Gold, 300, 600, 56),
+            ore(Emerald, 650, 500, 36),
+            ore(Ruby, 980, 200, 8),
         ],
         layer_resource: resource("Shale Plate", StrategicResourceKind::CrystalLens),
-        creatures: band_roster(Band::Slate),
-        hazards: &[
-            (Gas, 4),
-            (Lava, 2),
-            (MagmaVent, 1),
-            (Pressure, 2),
-            (Explosive, 3),
-        ],
+        creatures: CRUST_SLATE,
+        hazards: &[(Gas, 3), (Pressure, 2), (Explosive, 3)],
+        music: MusicCue::SlateShelves,
+        ambience: AmbienceCue::SlateDrip,
         variants: &["Stalactite Galleries", "Sliding Shelves"],
+        ore_density_permille: 1_000,
         ..TEMPLATE
     },
     StratumDef {
@@ -218,21 +268,29 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         host_band: Band::Basalt,
         soft: TileKind::HardRock,
         hard: TileKind::Stone,
-        palette: palette(Rgb(70, 70, 80), Rgb(44, 44, 54), Rgb(24, 24, 30), None),
+        palette: palette(
+            Rgb(52, 48, 47),
+            Rgb(26, 22, 38),
+            Rgb(26, 22, 38),
+            Some(Rgb(232, 112, 42)),
+        ),
         ores: &[
-            ore(Gold, 200, 500, 46),
-            ore(Emerald, 500, 500, 34),
-            ore(Ruby, 900, 500, 26),
+            ore(Gold, 100, 400, 30),
+            ore(Emerald, 250, 500, 42),
+            ore(Ruby, 600, 500, 32),
+            ore(Diamond, 950, 250, 8),
         ],
         layer_resource: resource("Basalt Fibre", StrategicResourceKind::VoidGlass),
-        creatures: band_roster(Band::Basalt),
+        creatures: CRUST_BASALT,
         hazards: &[
             (Gas, 2),
             (Lava, 4),
             (MagmaVent, 3),
-            (Pressure, 2),
-            (Explosive, 2),
+            (Pressure, 1),
+            (Explosive, 1),
         ],
+        music: MusicCue::BasaltColumns,
+        ambience: AmbienceCue::LavaTube,
         landmarks: WITH_GATE,
         variants: &["Lava Tubes", "Column Forest"],
         gate: Some(GateDef {
@@ -240,6 +298,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             requires: &[GateRequirement::Boss(DescentBoss::TheSinkhole)],
             rewards: &[Key::DeepClaim, Key::DrillII],
         }),
+        ore_density_permille: 1_000,
         ..TEMPLATE
     },
     // --- Descent II: The Old Deep (the seven classic deep strata, expanded) ------------------

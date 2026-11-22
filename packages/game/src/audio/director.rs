@@ -164,6 +164,15 @@ impl Material {
                 | fatherload_simulation::cave::CaveTile::Silt => Self::Soft,
                 _ => Self::Hard,
             },
+            TileKind::Crust(tile) => match tile {
+                fatherload_simulation::crust::CrustTile::RootMat
+                | fatherload_simulation::crust::CrustTile::Timber
+                | fatherload_simulation::crust::CrustTile::CabinLog
+                | fatherload_simulation::crust::CrustTile::Rubble => Self::Soft,
+                fatherload_simulation::crust::CrustTile::Strongbox
+                | fatherload_simulation::crust::CrustTile::SinkholeCore => Self::Ore,
+                _ => Self::Hard,
+            },
         }
     }
 

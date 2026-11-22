@@ -933,13 +933,15 @@ fn compute_clusters(ctx: &Ctx, rx: i32, ry: i32) -> Candidates<MineralKind> {
     if region_rows(ctx, ry, CLUSTER_REGION.1).is_none() {
         return region;
     }
-    let rich = ctx.settings.richness.percent();
     let mut rng = RegionRng::new(ctx.seed(), deposits::SALT_CLUSTER, rx, ry);
     let origin = (rx * CLUSTER_REGION.0, ry * CLUSTER_REGION.1);
-    let band = ctx.band(
+    let centre = (
         origin.0 + CLUSTER_REGION.0 / 2,
         (origin.1 + CLUSTER_REGION.1 / 2).min(ctx.height - 1),
     );
+    let band = ctx.band(centre.0, centre.1);
+    // The world's richness (V11's registry strata scale it by their ore density, Wave 8).
+    let rich = u32::try_from(ctx.ore_richness(centre.0, centre.1)).unwrap_or(0);
     let mut expected = deposits::cluster_density(band) * rich / 100;
     if chunky_deep_ore(ctx) && band.deep_stratum().is_some() {
         expected = expected * 3 / 4;

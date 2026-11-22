@@ -40,12 +40,14 @@ use crate::rendering::pixel_art::{
 
 mod built_art;
 mod cave_art;
+mod crust_art;
 mod lunar_art;
 mod poi_art;
 mod sky_art;
 
 pub use built_art::{culture_colors, masonry_near};
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
+pub use crust_art::{crust_color, crust_glow};
 pub use lunar_art::lunar_color;
 pub use poi_art::poi_color;
 pub use sky_art::{sky_color, sky_glow};
@@ -412,6 +414,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Built(tile) => built_art::built_ramp(tile)[2],
         TileKind::Sky(tile) => return sky_art::sky_color(tile),
         TileKind::Lunar(tile) => return lunar_art::lunar_color(tile),
+        TileKind::Crust(tile) => return crust_art::crust_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -592,7 +595,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Cave(_)
         | TileKind::Built(_)
         | TileKind::Sky(_)
-        | TileKind::Lunar(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Lunar(_)
+        | TileKind::Crust(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -800,6 +804,8 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         }
         if cell_at(terrain, x, y) == Cell::Sky {
             paint_grass_blades(&mut canvas, terrain, position, down);
+        } else if crust_art::paint_crust_air(&mut canvas, terrain, position, &strata) {
+            // The Crust's mine galleries and lava tubes (Wave 8).
         } else if !cave_art::paint_cave_air(&mut canvas, terrain, position, &strata, band, up) {
             paint_cave(&mut canvas, &strata, up, left, right);
             // Inside a side-view tomb run: the culture's back wall (WP-TOMBS T28).
@@ -903,6 +909,23 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         return canvas;
     }
 
+    if let TileKind::Crust(tile) = kind {
+        crust_art::paint(
+            &mut canvas,
+            terrain,
+            position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
     if let TileKind::Cave(tile) = kind {
         cave_art::paint(
             &mut canvas,
@@ -966,6 +989,14 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     let seed = hash(x, y, 101);
     paint_stamps(&mut canvas, kind, band, seed);
     paint_telltale(&mut canvas, terrain, position, kind, seed);
+    // Wave 8: rock beside an aquifer is damp (the tell that water is behind it).
+    if matches!(
+        kind,
+        TileKind::Clay | TileKind::Dirt | TileKind::Stone | TileKind::Ore(_)
+    ) && crust_art::beside_aquifer(terrain, position)
+    {
+        crust_art::paint_seep(&mut canvas, seed);
+    }
     let material = match kind {
         TileKind::Ore(_)
         | TileKind::Artifact(_)

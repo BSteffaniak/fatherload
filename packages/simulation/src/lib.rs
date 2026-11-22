@@ -21,6 +21,7 @@ pub mod contract;
 pub mod cosmetics;
 
 pub mod crew;
+pub mod crust;
 pub mod depth_progression;
 pub mod descent;
 pub mod economy;

@@ -273,13 +273,26 @@ impl Ctx {
         }
     }
 
-    /// The registry stratum at `(x, y)` when it is one of the placeholder strata below
-    /// Descent II (whose ores and hazards come from the registry rather than the classic
-    /// curves).
+    /// The registry stratum at `(x, y)` when its ores and hazards come from the registry
+    /// rather than the classic curves: the strata below Descent II, and the authored Crust
+    /// (Wave 8, [`Stratum::uses_registry_rules`]).
     fn registry_stratum(&self, x: i32, y: i32) -> Option<(Stratum, u16)> {
         let layout = self.descent.as_ref()?;
         let stratum = descent::stratum_in(&self.settings, layout, x, y);
-        (!stratum.is_classic()).then(|| (stratum, layout.along(y)))
+        stratum
+            .uses_registry_rules()
+            .then(|| (stratum, layout.along(y)))
+    }
+
+    /// The richness percent the deposits at `(x, y)` use: the world's richness, scaled by the
+    /// stratum's ore density where the registry rules apply (Wave 8; 1000 per mille, the
+    /// classic density, everywhere else).
+    pub fn ore_richness(&self, x: i32, y: i32) -> i32 {
+        let rich = i32::try_from(self.settings.richness.percent()).unwrap_or(100);
+        match self.registry_stratum(x, y) {
+            Some((stratum, _)) => rich * i32::from(stratum.def().ore_density_permille) / 1_000,
+            None => rich,
+        }
     }
 
     /// Relative weight of each mineral at `(x, y)` in `band` (the band there): the classic

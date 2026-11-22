@@ -59,6 +59,9 @@ pub struct PlayerTickState {
     /// Orientation and spin (F9 craft rotation).
     #[serde(default)]
     pub attitude: crate::attitude::RigAttitude,
+    /// The mine cart the rig rides (Wave 8, the Crust).
+    #[serde(default)]
+    pub cart: Option<crate::crust::CartRide>,
     pub fuel: f32,
     pub hull: f32,
     pub drill: Option<DrillState>,
@@ -304,6 +307,7 @@ impl WorldState {
             velocity_y: rig.velocity_y,
             x_remainder: rig.x_remainder,
             attitude: rig.attitude,
+            cart: rig.cart,
             fuel: rig.fuel,
             hull: rig.hull,
             drill: self.active_drills.get(&player_id).copied(),
@@ -325,6 +329,7 @@ impl WorldState {
             velocity_y,
             x_remainder,
             attitude,
+            cart,
             fuel,
             hull,
             drill,
@@ -342,6 +347,7 @@ impl WorldState {
             player.velocity_y = velocity_y;
             player.x_remainder = x_remainder;
             player.attitude = attitude;
+            player.cart = cart;
             player.fuel = fuel;
             player.hull = hull;
         }

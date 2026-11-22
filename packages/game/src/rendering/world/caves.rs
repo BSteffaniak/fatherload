@@ -99,6 +99,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
         // Molten metal glows (Part III F9).
         TileKind::Fluid(fatherload_simulation::fluid::FluidKind::LiquidMetal) => 1.8,
         TileKind::Cave(tile) => tile.light_radius() as f32 * 1.1,
+        // The Sinkhole's core and the glow in a lava tube's glass (Wave 8).
+        TileKind::Crust(tile) => tile.light_radius() as f32 * 1.1,
         // The Moon's blooms, glyphs, veils and core (WP-MOON).
         TileKind::Lunar(tile) => super::lunar::lunar_light(tile),
         _ => 0.0,

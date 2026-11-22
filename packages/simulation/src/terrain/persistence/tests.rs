@@ -129,7 +129,8 @@ const fn assert_payload_kinds_listed(mineral: MineralKind, artifact: ArtifactKin
         | ArtifactKind::HarpyEgg
         | ArtifactKind::SkyRelic
         | ArtifactKind::LunarRelic
-        | ArtifactKind::WardenEye => {}
+        | ArtifactKind::WardenEye
+        | ArtifactKind::ClayPot => {}
     }
 }
 
@@ -169,6 +170,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
             ArtifactKind::CloudPearl,
             ArtifactKind::HarpyEgg,
             ArtifactKind::SkyRelic,
+            ArtifactKind::ClayPot,
         ]
         .map(TileKind::Artifact),
     );
@@ -203,6 +205,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
     kinds.extend(SurfaceMaterial::ALL.map(TileKind::Surface));
     kinds.extend(crate::sky::SkyTile::ALL.map(TileKind::Sky));
     kinds.extend(crate::moon::LunarTile::ALL.map(TileKind::Lunar));
+    kinds.extend(crate::crust::CrustTile::ALL.map(TileKind::Crust));
     for material in SurfaceMaterial::ALL {
         assert_eq!(
             SurfaceMaterial::ALL[usize::try_from(material.code()).unwrap_or(99)],
