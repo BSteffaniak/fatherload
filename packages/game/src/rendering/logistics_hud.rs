@@ -223,7 +223,6 @@ pub(super) fn inventory_section(ui: &UiFrame<'_, '_>, row: usize) -> Section {
     Section::new("Depth Logistics", SKY_LIGHT, items)
 }
 
-/// One stat per layer resource `player` carries (Wave 8), with its material's icon.
 /// The dialog's supply kit section (Wave 9): when the counter sells deep supplies or the kit
 /// holds any.
 fn supply_kit_section(ui: &UiFrame<'_, '_>) -> Option<Section> {
@@ -270,6 +269,7 @@ fn supply_kit_items(
         .collect()
 }
 
+/// One stat per layer resource `player` carries (Wave 8), with its material's icon.
 fn layer_resource_items(player: &fatherload_simulation::Player) -> Vec<SectionItem> {
     player
         .cargo_bay
