@@ -406,7 +406,7 @@ fn glitch(stage: &mut SceneStage<'_>, rule: GlitchRule, rewriting: bool) {
             return;
         };
         let inside = sites::arena_inside(&arena);
-        stage_at(world, player, inside.center().x - 9, inside.max.y);
+        stage_at(world, player, inside.min.x + 16, inside.max.y);
         reveal(
             world,
             player,
@@ -419,20 +419,26 @@ fn glitch(stage: &mut SceneStage<'_>, rule: GlitchRule, rewriting: bool) {
     stage.settle(240);
     stage.play_on(|world| {
         world.stage_glitch_rule(rule, rewriting);
-        // Bring The Glitch into view: a few tiles up and over from the rig.
-        let player = world.player_ids().next().unwrap_or(PlayerId::new(0));
-        let Some((rx, ry)) = world.player(player).map(|rig| (rig.x, rig.y)) else {
+        // Bring The Glitch into view: to one of its own blink spots, clear of the ledges,
+        // up and to the left of the rig.
+        let settings = settings();
+        let layout = descent::layout(&settings);
+        let Some(arena) = sites::glitch_arena(&settings, &layout) else {
             return;
         };
+        let inside = sites::arena_inside(&arena);
+        let (x, y) = world.frame().tile_center(TilePosition {
+            x: inside.min.x + 8,
+            y: inside.max.y - 5,
+        });
         if let Some(id) = world.far_strange().glitch.entity {
-            let tile = fatherload_simulation::terrain::TILE_SIZE;
             world
                 .entities_mut()
                 .update(fatherload_simulation::entity::EntityId(id), |entity| {
-                    entity.body.x = 8.0f32.mul_add(tile, rx);
-                    entity.body.y = 4.0f32.mul_add(-tile, ry);
-                    entity.body.previous_x = entity.body.x;
-                    entity.body.previous_y = entity.body.y;
+                    entity.body.x = x;
+                    entity.body.y = y;
+                    entity.body.previous_x = x;
+                    entity.body.previous_y = y;
                     entity.body.velocity_x = 0.0;
                     entity.body.velocity_y = 0.0;
                 });
