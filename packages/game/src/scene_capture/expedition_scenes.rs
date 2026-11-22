@@ -243,12 +243,22 @@ fn anomaly_scene(stage: &mut SceneStage<'_>, kind: AnomalyKind) {
         world.set_expedition(journal);
         let inner = room.interior();
         let centre = inner.center();
-        // A tunnel in through the left wall, the rig just inside.
-        carve(
-            world,
-            inner.min.x - 8..inner.min.x,
-            inner.max.y - 1..inner.max.y + 1,
-        );
+        if kind == AnomalyKind::GravityFlip {
+            // A shaft dug up to the floor hatch, the way a rig climbs in.
+            let middle = i32::midpoint(room.bounds.min.x, room.bounds.max.x);
+            carve(
+                world,
+                middle..middle + 2,
+                room.bounds.max.y + 1..room.bounds.max.y + 8,
+            );
+        } else {
+            // A tunnel to the left doorway, the rig just inside.
+            carve(
+                world,
+                inner.min.x - 8..inner.min.x,
+                inner.max.y - 1..inner.max.y + 1,
+            );
+        }
         let row = if kind == AnomalyKind::GravityFlip {
             inner.min.y + 1
         } else {

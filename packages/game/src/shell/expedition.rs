@@ -141,12 +141,13 @@ pub fn anomaly_words(kind: AnomalyKind) -> (StoryMomentKind, String, String) {
     )
 }
 
-/// The message for a canister reached before its turn.
+/// The message for a canister reached before its turn, when the crew has read logs
+/// `1..=found` (so the one to find next is `found + 1`, which may be several logs back).
 #[must_use]
-pub fn sealed_words(log: u8) -> String {
+pub fn sealed_words(log: u8, found: u8) -> String {
     format!(
         "A sealed canister: log {log}. Ines keyed it to the entry before. Find log {} first.",
-        log.saturating_sub(1)
+        found.saturating_add(1).min(log.saturating_sub(1)).max(1)
     )
 }
 

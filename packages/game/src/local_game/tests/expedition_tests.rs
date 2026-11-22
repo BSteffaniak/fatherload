@@ -91,6 +91,11 @@ fn a_sealed_canister_says_so_and_an_echo_plays_its_card() {
     assert_eq!(game.world().expedition().found, 0);
     assert!(game.shell.seat(0).message.contains("sealed"));
     assert!(game.world().expedition().sealed.contains(&2));
+    // The lead names the log actually missing, however far back it is.
+    assert_eq!(
+        crate::shell::expedition::sealed_words(6, 2),
+        "A sealed canister: log 6. Ines keyed it to the entry before. Find log 3 first."
+    );
     // Somewhere below the first echo's depth (the canister above stays sealed, nothing read).
     let row = game.world().next_echo_row().expect("an echo left") + 2;
     let settings = *game.world().terrain().settings();

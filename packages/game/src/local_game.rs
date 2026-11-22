@@ -557,6 +557,7 @@ impl LocalGame {
     fn announce_expedition(&mut self, players: &[PlayerId]) {
         use crate::shell::expedition::{anomaly_words, echo_words, log_found_words, sealed_words};
         let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        let found = self.runtime.world().expedition().found;
         let mut moments: Vec<(usize, crate::shell::StoryMomentKind, String, String)> = Vec::new();
         let mut messages: Vec<(usize, String)> = Vec::new();
         for event in &self.frame_events {
@@ -576,7 +577,7 @@ impl LocalGame {
                 }
                 GameplayEventKind::ExpeditionLogSealed { player_id, log } => {
                     if let Some(seat) = seat_of(player_id) {
-                        messages.push((seat, sealed_words(log)));
+                        messages.push((seat, sealed_words(log, found)));
                     }
                 }
                 GameplayEventKind::ExpeditionEcho { echo, .. } => {
