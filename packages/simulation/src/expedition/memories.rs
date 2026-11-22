@@ -194,3 +194,33 @@ pub fn lines_for(
 pub fn memory(id: &str) -> Option<&'static SettlementMemory> {
     MEMORIES.iter().find(|memory| memory.id == id)
 }
+
+/// The line `settlement`'s people bring up for a crew with `state` on its `visit`-th visit:
+/// the open lines in turn, starting from the newest the crew has unlocked (Wave 8 integration:
+/// the settlements' people and counters speak them).
+#[must_use]
+pub fn line_for_visit(
+    settlement: Settlement,
+    state: &ExpeditionState,
+    visit: u32,
+) -> Option<&'static SettlementMemory> {
+    let mut open: Vec<&'static SettlementMemory> = lines_for(settlement, state).collect();
+    // In the order they open (lines from the start first, then by the log they wait for).
+    open.sort_by_key(|memory| memory.after_log.unwrap_or(0));
+    let count = u32::try_from(open.len()).ok().filter(|count| *count > 0)?;
+    // Newest first: the last line opened is the first one told.
+    let back = usize::try_from(visit % count).ok()?;
+    open.get(open.len() - 1 - back).copied()
+}
+
+impl SettlementMemory {
+    /// The line as a settlement's people pass it on: who says it, and what.
+    #[must_use]
+    pub fn told(&self) -> String {
+        let mut speaker = self.speaker.to_owned();
+        if let Some(first) = speaker.get_mut(..1) {
+            first.make_ascii_uppercase();
+        }
+        format!("{speaker}: \u{201c}{}\u{201d}", self.line)
+    }
+}

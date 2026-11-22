@@ -797,6 +797,9 @@ impl WorldState {
             .is_some_and(|conversation| conversation.npc == npc);
         // A contractor building for this player talks about the job (WP-HOME).
         let site_line = self.site_talk(id, player_id);
+        // Gravel Hollow remembers the Fathers' expedition (Wave 8 integration).
+        let remembers = self.terrain.settings().generator.has_descents()
+            && settlement.population.village_name == crate::crust::GRAVEL_HOLLOW_NAME;
         let mut lines: Vec<ConversationLine> = Vec::new();
         let mut marked = None;
         {
@@ -812,6 +815,7 @@ impl WorldState {
                     if continuing {
                         lines.push(you("Tell me more."));
                     }
+                    let visit = state.memory(player_id).talks;
                     let spoken = people::talk(&character, state, &ctx);
                     // Mid-conversation the greeting is already said.
                     let skip = usize::from(continuing && spoken.len() > 1);
@@ -819,6 +823,10 @@ impl WorldState {
                         speaker: Speaker::Them,
                         text: line.text,
                     }));
+                    // Every other visit the talk turns to the Fathers.
+                    if remembers && visit % 2 == 1 {
+                        lines.extend(fathers_memory(&self.expedition, visit / 2));
+                    }
                 }
                 TalkTopic::Rumours => {
                     lines.push(you("Heard anything interesting lately?"));
@@ -826,6 +834,10 @@ impl WorldState {
                         state.remember(player_id, time.day, MemoryFact::Met);
                     }
                     lines.extend(said(people::say(&character, state, &ctx, Topic::Rumour)));
+                    if remembers {
+                        let visit = state.memory(player_id).talks;
+                        lines.extend(fathers_memory(&self.expedition, visit));
+                    }
                 }
                 TalkTopic::Life => {
                     lines.push(you("What keeps you busy, these days?"));
@@ -1303,4 +1315,17 @@ fn item_name(item: crate::item::ItemKind) -> String {
         ItemKind::Material(material) => format!("some {}", material.name().to_lowercase()),
         _ => "a little something".to_owned(),
     }
+}
+
+/// What Gravel Hollow's people pass on about the Fathers' expedition on a crew's `visit` (Wave
+/// 8 integration: `expedition::memories`, opened as the crew reads the trail).
+fn fathers_memory(
+    expedition: &crate::expedition::ExpeditionState,
+    visit: u32,
+) -> Option<ConversationLine> {
+    use crate::expedition::memories::{Settlement as Remembering, line_for_visit};
+    line_for_visit(Remembering::GravelHollow, expedition, visit).map(|memory| ConversationLine {
+        speaker: Speaker::Them,
+        text: format!("The Fathers? We still tell of them. {}", memory.told()),
+    })
 }
