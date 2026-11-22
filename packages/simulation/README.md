@@ -6016,7 +6016,9 @@ mechanic, crafted from its stratum's layer resource and sold at the deep counter
 
 Eight more per-seat hints (appended `Hint`s): submarine water (Descent IV+ water or brine),
 deep cold (a cold stratum without the Cryo Hull), the inner sky (open air in it), the inner
-sun's glare (light over 1.3), turned gravity (down not down), a mirror zone, slow or fast time,
+sun's glare (a Hollow World stratum whose registry light is at least the probe's
+`GLARE_LIGHT_PERMILLE`, the Sunforge: the sampled field light stops at daylight, so it cannot
+be read there), turned gravity (down not down), a mirror zone, slow or fast time,
 and the stratum's deep supply when the kit holds none. They read replicated fields and
 sections, so they work online, per split-screen seat and by touch; their words name no key.
 
