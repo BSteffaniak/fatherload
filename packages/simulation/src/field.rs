@@ -637,11 +637,12 @@ pub type StratumFieldSource = fn(&WorldSettings, Frame, f32, f32) -> Option<Fiel
 
 /// The registered stratum field sources, asked in order (the first answer wins).
 ///
-/// **Integration seam (Wave 7):** empty today. The Descent framework's stratum registry
-/// (F8) registers its per-stratum profile lookup here, so a V11 stratum's gravity, time,
+/// **Integration seam (Wave 7, wired):** the Descent framework's stratum registry (F8)
+/// registers its per-stratum profile lookup here ([]), so a V11 stratum's gravity, time,
 /// grip, drag, light, mirroring and screen effects reach every reader of [`sample`] with no
 /// other change. Sources must be pure functions of the settings and the position.
-pub const STRATUM_FIELD_SOURCES: &[StratumFieldSource] = &[];
+pub const STRATUM_FIELD_SOURCES: &[StratumFieldSource] =
+    &[crate::descent::fields::stratum_field_source];
 
 /// The stratum profile at local pixel `(x, y)` of `frame` (see [`STRATUM_FIELD_SOURCES`]).
 #[must_use]

@@ -13,9 +13,9 @@ use crate::{
 };
 
 use super::{
-    AmbienceCue, Descent, DescentBoss, DescentKey, FieldProfile, GateDef, GateRequirement,
-    LandmarkKind, LayerResource, MusicCue, OreCurve, Rgb, ScreenEffect, ScreenEffectLevel, Stratum,
-    StratumDef, StratumPalette,
+    AmbienceCue, Descent, DescentBoss, DescentKey, FieldProfile, FieldRegions, GateDef,
+    GateRequirement, LandmarkKind, LayerResource, MusicCue, OreCurve, Rgb, ScreenEffect,
+    ScreenEffectLevel, Stratum, StratumDef, StratumPalette,
 };
 
 use DescentKey as Key;
@@ -759,7 +759,9 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         creatures: &[(CaveBat, 5), (MagmaWisp, 2)],
         hazards: &[(Pressure, 3), (Gas, 2)],
         field: FieldProfile {
+            // Brighter than any cave: light past 1000 reads as exposure on screen.
             light_permille: 1_400,
+            screen: &[screen(ScreenEffect::ColourGrade, 200)],
             ..FieldProfile::NEUTRAL
         },
         music: MusicCue::HollowWorld,
@@ -817,6 +819,14 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         layer_resource: resource("Lodestone", StrategicResourceKind::VoidGlass),
         creatures: &[(CaveBat, 4), (RockMimic, 3), (MiningDrone, 2)],
         hazards: &[(Pressure, 5), (Explosive, 2)],
+        field: FieldProfile {
+            free_rotation: true,
+            regions: FieldRegions::GravityTurns {
+                per_mille: 350,
+                turns: &[180],
+            },
+            ..FieldProfile::NEUTRAL
+        },
         music: MusicCue::HollowWorld,
         ambience: AmbienceCue::Wind,
         variants: &["Hanging Isles", "Flip Reefs"],
@@ -880,7 +890,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         creatures: &[(RockMimic, 5), (CaveBat, 3)],
         hazards: &[(Explosive, 5), (Pressure, 2)],
         field: FieldProfile {
-            screen: &[screen(ScreenEffect::Mirror, 0)],
+            regions: FieldRegions::Mirrored { per_mille: 400 },
             ..FieldProfile::NEUTRAL
         },
         music: MusicCue::StrangeLayers,
@@ -910,6 +920,15 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         layer_resource: resource("Shear Stone", StrategicResourceKind::VoidGlass),
         creatures: &[(CaveBat, 4), (MiningDrone, 3), (RockMimic, 2)],
         hazards: &[(Pressure, 6), (Explosive, 2)],
+        field: FieldProfile {
+            screen: &[screen(ScreenEffect::Wobble, 150)],
+            free_rotation: true,
+            regions: FieldRegions::GravityTurns {
+                per_mille: 450,
+                turns: &[90, 180, 270],
+            },
+            ..FieldProfile::NEUTRAL
+        },
         music: MusicCue::StrangeLayers,
         ambience: AmbienceCue::Strange,
         landmarks: STRANGE,
@@ -938,6 +957,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
                 screen(ScreenEffect::Pixelate, 400),
                 screen(ScreenEffect::PaletteReduce, 400),
             ],
+            deepening: true,
             ..FieldProfile::NEUTRAL
         },
         music: MusicCue::StrangeLayers,

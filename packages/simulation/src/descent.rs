@@ -17,6 +17,7 @@
 //! Descents I to III, Wave 9 those of IV to VI and Wave 10 those of VII and VIII, without
 //! touching the generator's layout code.
 
+pub mod fields;
 pub mod registry;
 
 use serde::{Deserialize, Serialize};
@@ -497,7 +498,39 @@ pub struct FieldProfile {
     pub mirror_controls: bool,
     /// The screen-effect stack, in drawing order.
     pub screen: &'static [ScreenEffectLevel],
+    /// Rigs may turn all the way round anywhere in the stratum (a 360-degree zone; Wave 7
+    /// integration). Off in every other stratum, where the home world's lean limit holds.
+    pub free_rotation: bool,
+    /// Regions of the stratum where the field departs further (gravity turns, mirroring).
+    pub regions: FieldRegions,
+    /// The screen effects grow from half strength at the stratum's top to full at its bottom
+    /// (Pixel Rot: the deeper, the lower the resolution).
+    pub deepening: bool,
 }
+
+/// Where inside a stratum its field departs further.
+///
+/// Region cells ([`FIELD_REGION_TILES`]): a seeded share of which hold the departure, feathered over
+/// [`FIELD_REGION_FEATHER_TILES`] at their edges (Wave 7 integration; read by
+/// [`fields::stratum_field_source`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FieldRegions {
+    /// The field is the same all through the stratum.
+    None,
+    /// In `per_mille` of the cells gravity turns clockwise by one of `turns` (degrees: 90, 180
+    /// or 270; the Gravity Shear's walls and ceilings, the Upside-Down Isles).
+    GravityTurns {
+        per_mille: u16,
+        turns: &'static [u16],
+    },
+    /// In `per_mille` of the cells the controls and the screen mirror (the Mirror Strata).
+    Mirrored { per_mille: u16 },
+}
+
+/// Size (columns, rows) of a field region cell.
+pub const FIELD_REGION_TILES: (i32, i32) = (48, 32);
+/// Tiles over which a region cell's departure fades in from its edges.
+pub const FIELD_REGION_FEATHER_TILES: f32 = 6.0;
 
 impl FieldProfile {
     /// Standard gravity, time, friction, drag and light, no mirroring and no screen effects.
@@ -509,6 +542,9 @@ impl FieldProfile {
         light_permille: 1_000,
         mirror_controls: false,
         screen: &[],
+        free_rotation: false,
+        regions: FieldRegions::None,
+        deepening: false,
     };
 
     /// Whether the profile changes nothing.
@@ -522,6 +558,8 @@ impl FieldProfile {
             && self.light_permille == 1_000
             && !self.mirror_controls
             && self.screen.is_empty()
+            && !self.free_rotation
+            && matches!(self.regions, FieldRegions::None)
     }
 }
 

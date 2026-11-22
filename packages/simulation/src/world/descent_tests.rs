@@ -115,8 +115,31 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
                 stalled = 0;
             } else {
                 stalled += 1;
-                // Nudge sideways off anything undiggable (an outpost's plating).
-                if stalled > 40 {
+                if stalled > 40 && world.fields_for(PLAYER).gravity_y < 0.5 {
+                    // A Gravity Shear or Upside-Down Isles region turned gravity away from
+                    // "down" (the stratum fields, Wave 7): this bot only digs down, so it
+                    // hops a region cell lower into a pocket.
+                    let below = TilePosition {
+                        x: tile.x,
+                        y: tile.y + crate::descent::FIELD_REGION_TILES.1 + 2,
+                    };
+                    for y in below.y - 1..=below.y + 1 {
+                        for x in below.x - 1..=below.x + 1 {
+                            let _ = world
+                                .terrain_mut()
+                                .set_kind(TilePosition { x, y }, TileKind::Air);
+                        }
+                    }
+                    world.teleport_rig_to(
+                        PLAYER,
+                        crate::position::WorldPos::tile_center(
+                            i64::from(below.x),
+                            i64::from(below.y),
+                        ),
+                    );
+                    stalled = 0;
+                } else if stalled > 40 {
+                    // Nudge sideways off anything undiggable (an outpost's plating).
                     let rig = world.player_mut(PLAYER).expect("a rig");
                     rig.x = TILE_SIZE.mul_add(3.0, rig.x);
                     stalled = 0;
