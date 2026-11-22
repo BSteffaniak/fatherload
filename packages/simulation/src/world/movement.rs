@@ -1,6 +1,9 @@
 //! Rig movement, collision, and the movement tuning constants.
 
 use crate::{
+    attitude::{AttitudeAssists, AttitudeContext, TILT_STEER_GAIN, step_attitude},
+    environment::Environment,
+    field::{FieldSample, trig::sin_cos},
     ids::PlayerId,
     player::{ENGINE_CLIMB_CAP, drill_bite, engine_power, fuel_burn_efficiency},
     quantize::quantize_simulation_scalar,
@@ -134,12 +137,42 @@ impl WorldState {
         clippy::too_many_lines,
         reason = "movement parity keeps modifier, integration, collision, and damage ordering explicit"
     )]
+    #[cfg(test)]
     pub(crate) fn step_authoritative_movement(
         &mut self,
         player_id: PlayerId,
         horizontal: f32,
         thrust: bool,
     ) -> Option<AuthoritativeMovementStep> {
+        self.step_rig_movement(
+            player_id,
+            RigControls {
+                horizontal,
+                thrust,
+                rotate: 0.0,
+                assists: AttitudeAssists::default(),
+            },
+        )
+    }
+
+    /// Moves `player_id`'s rig one tick with `controls`: the craft rotation step (F9), then
+    /// the drive, thrust, gravity and collision. Where the fields are neutral and the rig is
+    /// level and still this is the classic movement, bit for bit.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "movement parity keeps modifier, integration, collision, and damage ordering explicit"
+    )]
+    pub(crate) fn step_rig_movement(
+        &mut self,
+        player_id: PlayerId,
+        controls: RigControls,
+    ) -> Option<AuthoritativeMovementStep> {
+        let RigControls {
+            horizontal,
+            thrust,
+            rotate,
+            assists,
+        } = controls;
         let timing = self.timing;
         let delta_seconds = timing.delta_seconds;
         let parts = self
@@ -152,8 +185,68 @@ impl WorldState {
         let god_mode = self.is_test_mode();
         let thrift = self.player_blessing(player_id) == Some(crate::village::BlessingKind::Thrift);
         let settings = *self.terrain.settings();
+        let drilling = self.active_drills.contains_key(&player_id);
         let player = self.players.get_mut(&player_id)?;
-        let grounded = authoritative_player_collides(&self.terrain, player.x, player.y + 2.0);
+        // Field effects (F9): neutral everywhere without zones or stratum profiles.
+        let field = crate::field::sample_in(
+            &self.fields,
+            &settings,
+            self.terrain.frame(),
+            player.x,
+            player.y,
+        );
+        let attitude_before = player.attitude;
+        let level = field.down_angle();
+        let grounded = match level {
+            Some(angle) if angle == 0.0 && attitude_before.orientation == 0.0 => {
+                authoritative_player_collides(&self.terrain, player.x, player.y + 2.0)
+            }
+            Some(angle) => {
+                // Resting "on the ground" along the local gravity.
+                let (sin, cos) = sin_cos(angle);
+                rig_collides(
+                    &self.terrain,
+                    (-sin).mul_add(2.0, player.x),
+                    cos.mul_add(2.0, player.y),
+                    attitude_before.orientation,
+                )
+            }
+            None => false,
+        };
+        // The field's time scale: exactly the tick where time runs normally.
+        let seconds = delta_seconds * field.time_scale;
+        // Craft rotation (F9): the player's rotation thrusters, limits, settling, assists.
+        let attitude_gear = player.hazard_gear.attitude;
+        let proposed = step_attitude(
+            attitude_before,
+            &AttitudeContext {
+                level: level.unwrap_or(attitude_before.orientation),
+                limit: (!field.rotation_unlimited())
+                    .then(|| crate::attitude::tilt_limit(attitude_gear.tilt_rating)),
+                resting: grounded || drilling,
+                input: rotate,
+                gyro: assists.gyro && attitude_gear.gyro_stabiliser > 0,
+                horizon: assists.horizon && attitude_gear.horizon_hold > 0,
+                seconds,
+            },
+        );
+        if proposed.orientation.to_bits() != attitude_before.orientation.to_bits()
+            && rig_collides(&self.terrain, player.x, player.y, proposed.orientation)
+            && !rig_collides(
+                &self.terrain,
+                player.x,
+                player.y,
+                attitude_before.orientation,
+            )
+        {
+            // Turning would push a corner into rock: the rotation stops.
+            player.attitude.angular_velocity = 0.0;
+        } else {
+            player.attitude = proposed;
+        }
+        let orientation = player.attitude.orientation;
+        let classic =
+            field.is_neutral_physics() && attitude_before.is_level() && player.attitude.is_level();
         // Altitude physics (F6): thin air, wind, updrafts and gravity fields. Standard (and
         // so the classic path, bit for bit) everywhere but a V8 world's sky.
         let frame = self.terrain.frame();
@@ -226,61 +319,6 @@ impl WorldState {
             ground_top * AIR_TOP_SPEED_FACTOR
         };
         let tuning = DriveTuning::new(top, grounded);
-        let driven = if thin_air && !grounded {
-            // Airborne in a V8 sky: thrusters push less in thin air, the air brakes less, and
-            // the rig moves relative to the wind (it coasts with it). Aether thrusters (WP-SKY,
-            // sky-crafted) win back side thrust and grip the wind; they never add lift.
-            let aether = player.hazard_gear.aether_thrusters;
-            let air = if aether > 0 {
-                environment.wind_x * (1.0 - crate::skycraft::aether_wind_grip(aether))
-            } else {
-                environment.wind_x
-            };
-            let side_efficiency = if aether > 0 {
-                (1.0 - efficiency).mul_add(crate::skycraft::aether_drive_factor(aether), efficiency)
-            } else {
-                efficiency
-            };
-            tuning
-                .in_thin_air(environment.air_density, side_efficiency)
-                .step_tick(player.velocity_x - air, horizontal, timing.rate)
-                + air
-        } else {
-            tuning.step_tick(player.velocity_x, horizontal, timing.rate)
-        };
-        // A V9 jet stream grabs an airborne rig whatever the air's density (WP-SKY
-        // wind-riding): its velocity eases toward the stream's (aether thrusters hold some).
-        let driven = if thin_air && !grounded && settings.generator.has_sky_isles() {
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_precision_loss,
-                reason = "pixel positions map to tiles; stream speeds are small integers"
-            )]
-            let jet = crate::environment::jet_stream_in_air(
-                &settings,
-                frame.col(player.x),
-                frame.row(player.y),
-            );
-            if jet == 0.0 {
-                driven
-            } else {
-                let grip =
-                    1.0 - crate::skycraft::aether_wind_grip(player.hazard_gear.aether_thrusters);
-                let pull = (crate::worldgen::sky::winds::JET_STREAM_GRIP * delta_seconds).min(1.0);
-                // Only ever toward the stream (a rig flying faster with it keeps its speed).
-                if (jet > 0.0 && driven < jet) || (jet < 0.0 && driven > jet) {
-                    jet.mul_add(grip, -driven).mul_add(pull, driven)
-                } else {
-                    driven
-                }
-            }
-        } else {
-            driven
-        };
-        player.velocity_x = quantize_simulation_scalar(driven.clamp(
-            -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
-            AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
-        ));
         // The top engines lift far more, but climb speed is capped (higher in god mode).
         let climb = engine_multiplier.min(ENGINE_CLIMB_CAP) * god_thrust;
         // A rig only dents itself on a wall when flung into it faster than it can drive.
@@ -297,43 +335,126 @@ impl WorldState {
         } else {
             0.0
         };
-        player.velocity_y = quantize_simulation_scalar(if thin_air {
-            // Gravity fields and updrafts pull and push; thin air lifts less, drags less and
-            // lets the rig climb (and fall) faster once it has the thrust.
-            let gravity = environment.body_gravity(AUTHORITATIVE_RIG_GRAVITY);
-            (gravity - lift * efficiency)
-                .mul_add(
-                    timing.vertical_acceleration_gain,
-                    player.velocity_y * environment.drag_retention(timing.vertical_drag_per_tick),
-                )
-                .clamp(
-                    -AUTHORITATIVE_MAX_CLIMB_SPEED
-                        * climb
-                        * environment.climb_cap_factor(efficiency),
-                    AUTHORITATIVE_MAX_FALL_SPEED * environment.fall_cap_factor(),
-                )
+        if classic {
+            let driven = if thin_air && !grounded {
+                // Airborne in a V8 sky: thrusters push less in thin air, the air brakes less, and
+                // the rig moves relative to the wind (it coasts with it). Aether thrusters (WP-SKY,
+                // sky-crafted) win back side thrust and grip the wind; they never add lift.
+                let aether = player.hazard_gear.aether_thrusters;
+                let air = if aether > 0 {
+                    environment.wind_x * (1.0 - crate::skycraft::aether_wind_grip(aether))
+                } else {
+                    environment.wind_x
+                };
+                let side_efficiency = if aether > 0 {
+                    (1.0 - efficiency)
+                        .mul_add(crate::skycraft::aether_drive_factor(aether), efficiency)
+                } else {
+                    efficiency
+                };
+                tuning
+                    .in_thin_air(environment.air_density, side_efficiency)
+                    .step_tick(player.velocity_x - air, horizontal, timing.rate)
+                    + air
+            } else {
+                tuning.step_tick(player.velocity_x, horizontal, timing.rate)
+            };
+            // A V9 jet stream grabs an airborne rig whatever the air's density (WP-SKY
+            // wind-riding): its velocity eases toward the stream's (aether thrusters hold some).
+            let driven = if thin_air && !grounded && settings.generator.has_sky_isles() {
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_precision_loss,
+                    reason = "pixel positions map to tiles; stream speeds are small integers"
+                )]
+                let jet = crate::environment::jet_stream_in_air(
+                    &settings,
+                    frame.col(player.x),
+                    frame.row(player.y),
+                );
+                if jet == 0.0 {
+                    driven
+                } else {
+                    let grip = 1.0
+                        - crate::skycraft::aether_wind_grip(player.hazard_gear.aether_thrusters);
+                    let pull =
+                        (crate::worldgen::sky::winds::JET_STREAM_GRIP * delta_seconds).min(1.0);
+                    // Only ever toward the stream (a rig flying faster with it keeps its speed).
+                    if (jet > 0.0 && driven < jet) || (jet < 0.0 && driven > jet) {
+                        jet.mul_add(grip, -driven).mul_add(pull, driven)
+                    } else {
+                        driven
+                    }
+                }
+            } else {
+                driven
+            };
+            player.velocity_x = quantize_simulation_scalar(driven.clamp(
+                -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+                AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+            ));
+            player.velocity_y = quantize_simulation_scalar(if thin_air {
+                // Gravity fields and updrafts pull and push; thin air lifts less, drags less and
+                // lets the rig climb (and fall) faster once it has the thrust.
+                let gravity = environment.body_gravity(AUTHORITATIVE_RIG_GRAVITY);
+                (gravity - lift * efficiency)
+                    .mul_add(
+                        timing.vertical_acceleration_gain,
+                        player.velocity_y
+                            * environment.drag_retention(timing.vertical_drag_per_tick),
+                    )
+                    .clamp(
+                        -AUTHORITATIVE_MAX_CLIMB_SPEED
+                            * climb
+                            * environment.climb_cap_factor(efficiency),
+                        AUTHORITATIVE_MAX_FALL_SPEED * environment.fall_cap_factor(),
+                    )
+            } else {
+                (AUTHORITATIVE_RIG_GRAVITY - lift)
+                    .mul_add(
+                        timing.vertical_acceleration_gain,
+                        player.velocity_y * timing.vertical_drag_per_tick,
+                    )
+                    .clamp(
+                        -AUTHORITATIVE_MAX_CLIMB_SPEED * climb,
+                        AUTHORITATIVE_MAX_FALL_SPEED,
+                    )
+            });
         } else {
-            (AUTHORITATIVE_RIG_GRAVITY - lift)
-                .mul_add(
-                    timing.vertical_acceleration_gain,
-                    player.velocity_y * timing.vertical_drag_per_tick,
-                )
-                .clamp(
-                    -AUTHORITATIVE_MAX_CLIMB_SPEED * climb,
-                    AUTHORITATIVE_MAX_FALL_SPEED,
-                )
-        });
+            let (velocity_x, velocity_y) = field_velocity(&FieldDriveInput {
+                velocity: (player.velocity_x, player.velocity_y),
+                level,
+                orientation,
+                horizontal,
+                thrusting,
+                lift: lift * efficiency,
+                grounded,
+                tuning,
+                field: &field,
+                environment: &environment,
+                efficiency,
+                climb,
+                seconds,
+            });
+            player.velocity_x = quantize_simulation_scalar(velocity_x.clamp(
+                -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+                AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+            ));
+            player.velocity_y = quantize_simulation_scalar(velocity_y.clamp(
+                -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+                AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+            ));
+        }
         // Cave water (flooded caves, V6): buoyant and draggy, so a rig drifts down slowly and
         // swims rather than flies. `1 / (1 + k dt)` keeps the step exact in plain arithmetic.
         if self
             .terrain
             .water_at(authoritative_point_to_tile(frame, player.x, player.y))
         {
-            let drag = 1.0 / WATER_DRAG_PER_SECOND.mul_add(delta_seconds, 1.0);
+            let drag = 1.0 / WATER_DRAG_PER_SECOND.mul_add(seconds, 1.0);
             player.velocity_x = quantize_simulation_scalar(player.velocity_x * drag);
             player.velocity_y = quantize_simulation_scalar(
-                (-AUTHORITATIVE_RIG_GRAVITY * WATER_BUOYANCY)
-                    .mul_add(delta_seconds, player.velocity_y)
+                (-AUTHORITATIVE_RIG_GRAVITY * WATER_BUOYANCY).mul_add(seconds, player.velocity_y)
                     * drag,
             );
         }
@@ -360,7 +481,7 @@ impl WorldState {
             }
             player.fuel = quantize_simulation_scalar(
                 (AUTHORITATIVE_FUEL_BURN_PER_SECOND * efficiency)
-                    .mul_add(-delta_seconds, player.fuel)
+                    .mul_add(-seconds, player.fuel)
                     .max(0.0),
             );
         }
@@ -374,8 +495,8 @@ impl WorldState {
         }
         let mitigated = |damage: f32| damage * (1.0 - mitigation.clamp(0.0, 0.55));
 
-        let delta_x = quantize_simulation_scalar(player.velocity_x * delta_seconds);
-        let delta_y = quantize_simulation_scalar(player.velocity_y * delta_seconds);
+        let delta_x = quantize_simulation_scalar(player.velocity_x * seconds);
+        let delta_y = quantize_simulation_scalar(player.velocity_y * seconds);
         // A fast rig is swept in short sub-steps (a slow one takes the whole tick in one).
         let steps = collision_steps(delta_x, delta_y);
         let (step_x, step_y) = if steps == 1 {
@@ -392,7 +513,7 @@ impl WorldState {
         for _ in 0..steps {
             if !blocked_x {
                 let (next_x, next_remainder) = integrate_x(player.x, player.x_remainder, step_x);
-                if authoritative_player_collides(&self.terrain, next_x, player.y) {
+                if rig_collides(&self.terrain, next_x, player.y, orientation) {
                     let impact_speed = player.velocity_x.abs();
                     if impact_speed > wall_crash_speed && !immune {
                         let damage = (impact_speed - wall_crash_speed)
@@ -419,7 +540,7 @@ impl WorldState {
             }
             if !blocked_y {
                 let next_y = quantize_simulation_scalar(player.y + step_y);
-                if authoritative_player_collides(&self.terrain, player.x, next_y) {
+                if rig_collides(&self.terrain, player.x, next_y, orientation) {
                     // A giant mushroom's cap (fungal grottos) springs a falling rig back up.
                     if delta_y > 0.0
                         && player.velocity_y >= MUSHROOM_BOUNCE_MIN_IMPACT
@@ -462,6 +583,144 @@ impl WorldState {
             velocity_y: player.velocity_y,
         })
     }
+}
+
+/// One tick of a rig's held controls, as movement reads them.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct RigControls {
+    /// Stick, `-1..=1` (already mirrored by a mirror field).
+    pub horizontal: f32,
+    pub thrust: bool,
+    /// Rotation thrusters, `-1..=1`, clockwise positive (already mirrored).
+    pub rotate: f32,
+    /// Assists the seat has switched on.
+    pub assists: AttitudeAssists,
+}
+
+/// The four corners of a rig at `(x, y)` turned to `orientation` (radians, clockwise), as
+/// tiles: the classic corners when level.
+fn rig_corners(
+    frame: crate::position::Frame,
+    x: f32,
+    y: f32,
+    orientation: f32,
+) -> [TilePosition; 4] {
+    if orientation == 0.0 {
+        return authoritative_collision_points(frame, x, y);
+    }
+    let (sin, cos) = sin_cos(orientation);
+    let r = AUTHORITATIVE_PLAYER_RADIUS;
+    [(-r, -r), (r, -r), (-r, r), (r, r)].map(|(dx, dy)| {
+        // Clockwise on screen (+y down).
+        let rx = cos.mul_add(dx, -(sin * dy));
+        let ry = sin.mul_add(dx, cos * dy);
+        authoritative_point_to_tile(frame, x + rx, y + ry)
+    })
+}
+
+/// Whether a rig at `(x, y)` turned to `orientation` overlaps solid terrain (the classic
+/// check when level), in the terrain's frame (F7).
+pub(super) fn rig_collides(terrain: &Terrain, x: f32, y: f32, orientation: f32) -> bool {
+    rig_corners(terrain.frame(), x, y, orientation)
+        .iter()
+        .any(|position| terrain.is_solid_at(*position))
+}
+
+/// What the field drive (a rig in non-neutral fields, or leaning) needs.
+struct FieldDriveInput<'a> {
+    velocity: (f32, f32),
+    /// The gravity frame's angle (`None`: weightless, the rig's own frame).
+    level: Option<f32>,
+    orientation: f32,
+    horizontal: f32,
+    thrusting: bool,
+    /// Main thruster acceleration along the rig's up axis (px/s², thin-air efficiency in).
+    lift: f32,
+    grounded: bool,
+    tuning: DriveTuning,
+    field: &'a FieldSample,
+    environment: &'a Environment,
+    efficiency: f32,
+    climb: f32,
+    seconds: f32,
+}
+
+/// The rig's new velocity in a field (F9): the classic drive and thrust model worked in the
+/// local gravity's frame. The stick drives along the frame's horizontal (leaning while
+/// thrusting steers too, [`TILT_STEER_GAIN`]); the main thruster pushes along the rig's
+/// own up axis, so its share along the frame's up fights gravity; ground grip, air drag and
+/// the time scale come from the field. Level, in neutral fields, it matches the classic step
+/// closely (the classic step itself runs there).
+fn field_velocity(input: &FieldDriveInput<'_>) -> (f32, f32) {
+    let field = input.field;
+    let level = input.level.unwrap_or(input.orientation);
+    let (sin_level, cos_level) = sin_cos(level);
+    // Frame: right r = (cos, sin), down d = (-sin, cos) (clockwise on screen, +y down).
+    let right = (cos_level, sin_level);
+    let down = (-sin_level, cos_level);
+    let (sin_lean, cos_lean) = sin_cos(crate::field::trig::wrap_angle(input.orientation - level));
+    let (vx, vy) = input.velocity;
+    let along = vx.mul_add(right.0, vy * right.1);
+    let fall = vx.mul_add(down.0, vy * down.1);
+    let environment = input.environment;
+    // Gravity in world space (the altitude field's strength, the field's direction), less
+    // any updraft (world up), projected on the frame.
+    let gravity = AUTHORITATIVE_RIG_GRAVITY * environment.gravity;
+    let gravity_world = (
+        field.gravity_x * gravity,
+        field.gravity_y.mul_add(gravity, -environment.updraft),
+    );
+    let gravity_along = gravity_world.0.mul_add(right.0, gravity_world.1 * right.1);
+    let gravity_fall = gravity_world.0.mul_add(down.0, gravity_world.1 * down.1);
+    // Sideways: the stick plus leaning thrust, braked by grip (grounded) or drag.
+    let steer = if input.thrusting {
+        sin_lean * TILT_STEER_GAIN
+    } else {
+        0.0
+    };
+    let stick = (input.horizontal + steer).clamp(-1.0, 1.0);
+    let brake = if input.grounded {
+        field.friction
+    } else {
+        field.drag
+    };
+    let mut tuning = input.tuning.with_braking(brake);
+    let thin_air = !environment.is_standard();
+    let air = if thin_air && !input.grounded {
+        tuning = tuning.in_thin_air(environment.air_density, input.efficiency);
+        environment.wind_x * right.0
+    } else {
+        0.0
+    };
+    let along = gravity_along.mul_add(
+        input.seconds,
+        tuning.step_seconds(along - air, stick, input.seconds) + air,
+    );
+    // Along gravity: exact integration of dv/dt = a - k v over the (time-scaled) tick.
+    let acceleration = input.lift.mul_add(-cos_lean, gravity_fall);
+    let drag_rate =
+        AUTHORITATIVE_VERTICAL_DRAG_RATE_PER_SECOND * environment.air_density * field.drag;
+    let retention = crate::field::trig::exp_neg(drag_rate * input.seconds);
+    let gain = if drag_rate > 0.0 {
+        (1.0 - retention) / drag_rate
+    } else {
+        input.seconds
+    };
+    let climb_cap = AUTHORITATIVE_MAX_CLIMB_SPEED
+        * input.climb
+        * if thin_air {
+            environment.climb_cap_factor(input.efficiency)
+        } else {
+            1.0
+        };
+    let fall_cap = AUTHORITATIVE_MAX_FALL_SPEED * environment.fall_cap_factor();
+    let fall = acceleration
+        .mul_add(gain, fall * retention)
+        .clamp(-climb_cap, fall_cap);
+    (
+        right.0.mul_add(along, down.0 * fall),
+        right.1.mul_add(along, down.1 * fall),
+    )
 }
 
 /// Moves a rig at `x` (with its [`crate::Player::x_remainder`]) by `delta_x` world pixels:

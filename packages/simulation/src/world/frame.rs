@@ -158,6 +158,8 @@ impl WorldState {
             homes: _,
             // Runs, sites and seals are tiles and ticks (their actors are entities).
             tombs: _,
+            // Field zones are tile rectangles (F9), sampled through the frame.
+            fields: _,
         } = self;
         player_template.reframe(shift);
         players.reframe(shift);

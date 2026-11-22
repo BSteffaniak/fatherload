@@ -56,6 +56,9 @@ pub struct PlayerTickState {
     /// See [`crate::Player::x_remainder`].
     #[serde(default)]
     pub x_remainder: f32,
+    /// Orientation and spin (F9 craft rotation).
+    #[serde(default)]
+    pub attitude: crate::attitude::RigAttitude,
     pub fuel: f32,
     pub hull: f32,
     pub drill: Option<DrillState>,
@@ -205,6 +208,8 @@ pub enum SectionKey {
     /// Tomb runs, site counters and seals, and tomb unlocks (WP-TOMBS; the floors travel as
     /// terrain ops, the party as pilot entities).
     Tombs,
+    /// Authored field zones (F9: anomaly rooms and dev zones; see [`crate::field`]).
+    Fields,
 }
 
 impl SectionKey {
@@ -224,7 +229,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 18] = [
+    pub const SHARED: [Self; 19] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -243,6 +248,7 @@ impl SectionKey {
         Self::People,
         Self::Homes,
         Self::Tombs,
+        Self::Fields,
     ];
 }
 
@@ -269,6 +275,7 @@ pub enum SectionPayload {
     People(Box<crate::people::PeopleLedger>),
     Homes(Box<crate::home::Homes>),
     Tombs(Box<crate::tomb::Tombs>),
+    Fields(Box<crate::field::FieldZones>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -291,6 +298,7 @@ impl WorldState {
             velocity_x: rig.velocity_x,
             velocity_y: rig.velocity_y,
             x_remainder: rig.x_remainder,
+            attitude: rig.attitude,
             fuel: rig.fuel,
             hull: rig.hull,
             drill: self.active_drills.get(&player_id).copied(),
@@ -311,6 +319,7 @@ impl WorldState {
             velocity_x,
             velocity_y,
             x_remainder,
+            attitude,
             fuel,
             hull,
             drill,
@@ -327,6 +336,7 @@ impl WorldState {
             player.velocity_x = velocity_x;
             player.velocity_y = velocity_y;
             player.x_remainder = x_remainder;
+            player.attitude = attitude;
             player.fuel = fuel;
             player.hull = hull;
         }
@@ -449,6 +459,7 @@ impl WorldState {
             people,
             homes,
             tombs,
+            fields,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -545,6 +556,7 @@ impl WorldState {
             SectionKey::People => SectionPayload::People(Box::new(people.clone())),
             SectionKey::Homes => SectionPayload::Homes(Box::new(homes.clone())),
             SectionKey::Tombs => SectionPayload::Tombs(Box::new(tombs.clone())),
+            SectionKey::Fields => SectionPayload::Fields(Box::new(fields.clone())),
         })
     }
 
@@ -701,6 +713,9 @@ impl WorldState {
             }
             (SectionKey::Tombs, SectionPayload::Tombs(tombs)) => {
                 self.tombs = *tombs;
+            }
+            (SectionKey::Fields, SectionPayload::Fields(fields)) => {
+                self.fields = *fields;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

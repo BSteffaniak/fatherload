@@ -9,6 +9,7 @@
 //! networking dependencies, so it can run identically on a host, inside client prediction, in
 //! replays, and in tests.
 
+pub mod attitude;
 pub mod balance;
 pub mod base;
 pub mod cave;
@@ -26,6 +27,7 @@ pub mod entity;
 pub mod environment;
 pub mod event;
 pub mod explosive;
+pub mod field;
 pub mod hash;
 pub mod hazard;
 pub mod home;

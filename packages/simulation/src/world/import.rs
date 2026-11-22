@@ -208,6 +208,7 @@ impl WorldState {
             people: crate::people::PeopleLedger::default(),
             homes: crate::home::Homes::default(),
             tombs: crate::tomb::Tombs::default(),
+            fields: crate::field::FieldZones::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

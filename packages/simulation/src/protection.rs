@@ -75,6 +75,10 @@ pub struct HazardGear {
     /// ([`crate::moon::life_support_reach_tiles`]).
     #[serde(default)]
     pub life_support: u8,
+    /// Rotation hardware: tilt rating and the gyro / horizon assists (F9, see
+    /// [`crate::attitude`]).
+    #[serde(default)]
+    pub attitude: crate::attitude::AttitudeGear,
 }
 
 impl HazardGear {
@@ -90,6 +94,7 @@ impl HazardGear {
         aether_thrusters: crate::skycraft::AETHER_THRUSTERS_MAX_LEVEL,
         pressurized_hull: crate::moon::PRESSURIZED_HULL_MAX_LEVEL,
         life_support: crate::moon::LIFE_SUPPORT_MAX_LEVEL,
+        attitude: crate::attitude::AttitudeGear::MAXED,
     };
 
     /// Cold levels this gear keeps off: the de-icer's cover plus the pressurized hull's

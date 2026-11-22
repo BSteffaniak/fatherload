@@ -830,6 +830,8 @@ impl WorldState {
                 rest_speed: 0.0,
                 floor_friction: 0.0,
                 stop_speed: 0.0,
+                gravity_x: 0.0,
+                time_scale: 1.0,
             };
             let _report = physics::step_body(body, &params, &self.terrain, dt);
         }

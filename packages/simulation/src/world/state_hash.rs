@@ -190,6 +190,10 @@ impl WorldState {
         if !self.tombs.is_empty() {
             hash.write_serialized(&self.tombs);
         }
+        // Absent until a field zone is placed, so older worlds keep their hashes.
+        if !self.fields.is_empty() {
+            hash.write_serialized(&self.fields);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

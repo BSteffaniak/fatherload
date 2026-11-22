@@ -70,6 +70,9 @@ mod entity_tests;
 #[cfg(test)]
 mod explosive_tests;
 #[cfg(test)]
+mod field_tests;
+mod fields;
+#[cfg(test)]
 mod flight_tests;
 mod frame;
 #[cfg(test)]
@@ -414,6 +417,10 @@ pub struct WorldState {
     /// see [`crate::tomb`]); the floors live in the terrain's run vault.
     #[serde(default)]
     tombs: crate::tomb::Tombs,
+    /// Authored field zones (F9, see [`crate::field`]): anomaly rooms and dev zones blended
+    /// over the stratum fields.
+    #[serde(default)]
+    fields: crate::field::FieldZones,
 }
 
 impl WorldState {

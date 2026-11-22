@@ -57,6 +57,9 @@ impl WorldState {
             if let Some(controls) = input.controls.map(|controls| {
                 if on_foot {
                     ControlState::default().with_weapon(sentry.unwrap_or_default())
+                } else if self.fields_for(player_id).mirrored() {
+                    // A mirror field (F9) swaps left and right for the rig's steering.
+                    controls.mirrored()
                 } else {
                     controls
                 }
@@ -88,10 +91,14 @@ impl WorldState {
                         f32::from(i8::from(controls.drill_down) - i8::from(controls.thrust));
                     self.step_no_clip_flight(player_id, controls.horizontal(), vertical)
                 } else {
-                    self.step_authoritative_movement(
+                    self.step_rig_movement(
                         player_id,
-                        controls.horizontal(),
-                        controls.thrust,
+                        super::movement::RigControls {
+                            horizontal: controls.horizontal(),
+                            thrust: controls.thrust,
+                            rotate: controls.rotation(),
+                            assists: controls.assists(),
+                        },
                     )
                 };
                 if !no_clip {

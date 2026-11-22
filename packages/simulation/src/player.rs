@@ -28,6 +28,10 @@ pub struct Player {
     /// (see `integrate_x` in the world's movement).
     #[serde(default)]
     pub x_remainder: f32,
+    /// Orientation and spin (F9 craft rotation, see [`crate::attitude`]); level on a stock
+    /// rig and in old saves.
+    #[serde(default)]
+    pub attitude: crate::attitude::RigAttitude,
     pub fuel: f32,
     pub fuel_capacity: f32,
     pub hull: f32,
@@ -159,6 +163,7 @@ impl Player {
             velocity_x: 0.0,
             velocity_y: 0.0,
             x_remainder: 0.0,
+            attitude: crate::attitude::RigAttitude::LEVEL,
             fuel: fuel_capacity_for_level(1),
             fuel_capacity: fuel_capacity_for_level(1),
             hull: 100.0,

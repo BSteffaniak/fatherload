@@ -516,6 +516,8 @@ pub fn max_out_upgrades(player: &mut Player) {
     // The sky-crafted parts too (WP-SKY): a test-mode rig has everything.
     player.hazard_gear.aether_thrusters = crate::skycraft::AETHER_THRUSTERS_MAX_LEVEL;
     player.hazard_gear.pressurized_hull = crate::skycraft::PRESSURIZED_HULL_MAX_LEVEL;
+    // F9 rotation hardware (no shop line yet; the assists stay off until switched on).
+    player.hazard_gear.attitude = crate::attitude::AttitudeGear::MAXED;
     player.fuel = player.fuel_capacity;
     player.hull = player.max_hull();
 }

@@ -486,10 +486,12 @@ impl WorldState {
         let spread = (sleep_after / 2).clamp(1, 8);
         let merge_tick = 1 + u16::try_from(id.get() % u64::from(spread)).unwrap_or(0);
         let terrain = &self.terrain;
+        let zones = &self.fields;
         let landed = self
             .entities
             .update(id, |entity| {
-                let params = BodyParams::DROP.at(terrain, entity.body.x, entity.body.y);
+                let params =
+                    BodyParams::DROP.at_fields(terrain, zones, entity.body.x, entity.body.y);
                 let _report = physics::step_body(&mut entity.body, &params, terrain, delta_seconds);
                 physics::settle(&mut entity.body, &params, terrain, sleep_after);
                 entity.body.rest_ticks == merge_tick

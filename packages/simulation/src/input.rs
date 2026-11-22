@@ -22,6 +22,13 @@ pub struct ControlState {
     /// (up) also jumps where there is nothing to climb, so seats without a jump key can play.
     #[serde(default)]
     pub jump: bool,
+    /// Rotation thrusters (F9), quantized to hundredths: positive turns the rig clockwise.
+    #[serde(default)]
+    rotate_centi: i8,
+    /// Rotation assists the seat has switched on ([`crate::attitude::AttitudeAssists`]
+    /// bits; they work only when fitted).
+    #[serde(default)]
+    assists: u8,
 }
 
 /// A seat's weapon trigger and aim for one tick (held, so firing is predicted like movement).
@@ -55,7 +62,50 @@ impl ControlState {
             drill_down,
             weapon: WeaponControl::default(),
             jump: false,
+            rotate_centi: 0,
+            assists: 0,
         }
+    }
+
+    /// The same controls with the rotation thrusters at `rotate` (`-1..=1`, clockwise
+    /// positive).
+    #[must_use]
+    pub fn with_rotation(mut self, rotate: f32) -> Self {
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "clamped control input is deliberately quantized for deterministic simulation"
+        )]
+        let centi = (rotate.clamp(-1.0, 1.0) * 100.0).round() as i8;
+        self.rotate_centi = centi;
+        self
+    }
+
+    /// The rotation thrusters' input (`-1..=1`, clockwise positive).
+    #[must_use]
+    pub fn rotation(self) -> f32 {
+        f32::from(self.rotate_centi) / 100.0
+    }
+
+    /// The same controls with the rotation assists `assists` switched on.
+    #[must_use]
+    pub const fn with_assists(mut self, assists: crate::attitude::AttitudeAssists) -> Self {
+        self.assists = assists.bits();
+        self
+    }
+
+    /// The rotation assists the seat has switched on.
+    #[must_use]
+    pub const fn assists(self) -> crate::attitude::AttitudeAssists {
+        crate::attitude::AttitudeAssists::from_bits(self.assists)
+    }
+
+    /// These controls with left and right swapped (a mirror field): the stick and the
+    /// rotation thrusters.
+    #[must_use]
+    pub const fn mirrored(mut self) -> Self {
+        self.horizontal_milli = self.horizontal_milli.saturating_neg();
+        self.rotate_centi = self.rotate_centi.saturating_neg();
+        self
     }
 
     /// The same controls with the on-foot jump button `jump`.

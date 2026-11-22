@@ -109,6 +109,8 @@ impl WorldState {
             homes: _,
             // Runs were left above; unlocks stay keyed by the player id.
             tombs: _,
+            // Zones belong to places, not players.
+            fields: _,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);

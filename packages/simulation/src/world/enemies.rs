@@ -261,6 +261,8 @@ const fn body_params(kind: EnemyKind, falling: bool) -> BodyParams {
         rest_speed: 60.0,
         floor_friction: if walking { 0.0 } else { 4.0 },
         stop_speed: 0.0,
+        gravity_x: 0.0,
+        time_scale: 1.0,
     }
 }
 
@@ -1606,7 +1608,12 @@ impl WorldState {
                         dt,
                     );
                 }
-                let params = body_params(state.kind, stunned).at(&self.terrain, body.x, body.y);
+                let params = body_params(state.kind, stunned).at_fields(
+                    &self.terrain,
+                    &self.fields,
+                    body.x,
+                    body.y,
+                );
                 let _report = physics::step_body(body, &params, &self.terrain, dt);
             }
             Locomotion::Walking => self.walk(id, body, state, goal, intent.speed, now),
@@ -1728,7 +1735,7 @@ impl WorldState {
             // Stuns skid to a halt on the floor (a dash keeps its speed until it lands or ends).
             body.velocity_x = quantize(body.velocity_x * 6.0f32.mul_add(-dt, 1.0).max(0.0));
         }
-        let params = params.at(&self.terrain, body.x, body.y);
+        let params = params.at_fields(&self.terrain, &self.fields, body.x, body.y);
         let _report = physics::step_body(body, &params, &self.terrain, dt);
     }
 
@@ -1829,8 +1836,10 @@ impl WorldState {
             rest_speed: 60.0,
             floor_friction: if clinging { 0.0 } else { 4.0 },
             stop_speed: 0.0,
+            gravity_x: 0.0,
+            time_scale: 1.0,
         }
-        .at(&self.terrain, body.x, body.y);
+        .at_fields(&self.terrain, &self.fields, body.x, body.y);
         let _report = physics::step_body(body, &params, &self.terrain, dt);
     }
 

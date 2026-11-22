@@ -153,6 +153,35 @@ impl DriveTuning {
         }
     }
 
+    /// This tuning with its coasting and stop braking scaled by `scale` (a field's ground
+    /// friction or air drag, see [`crate::field`]): 0 never slows a coasting rig.
+    #[must_use]
+    pub fn with_braking(self, scale: f32) -> Self {
+        Self {
+            coast_rate: self.coast_rate * scale,
+            stop_deceleration: self.stop_deceleration * scale,
+            ..self
+        }
+    }
+
+    /// Advances `velocity` by `seconds` (any length: a time-scaled tick) with `input` held,
+    /// in internal steps of at most [`DRIVE_STEP_SECONDS`].
+    #[must_use]
+    pub fn step_seconds(&self, velocity: f32, input: f32, seconds: f32) -> f32 {
+        if seconds <= 0.0 {
+            return velocity;
+        }
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a bounded handful of internal steps"
+        )]
+        let steps = ((seconds / DRIVE_STEP_SECONDS).ceil() as u32).clamp(1, 256);
+        #[allow(clippy::cast_precision_loss, reason = "a handful of internal steps")]
+        let step = seconds / steps as f32;
+        (0..steps).fold(velocity, |velocity, _| self.step(velocity, input, step))
+    }
+
     /// Advances `velocity` over one tick of `rate` with `input` held, in fixed internal steps.
     #[must_use]
     pub fn step_tick(&self, velocity: f32, input: f32, rate: TickRate) -> f32 {

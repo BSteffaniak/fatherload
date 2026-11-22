@@ -116,9 +116,22 @@ impl PilotTerrain for PilotView<'_> {
             .min_by(f32::total_cmp)
     }
     fn gravity_at(&self, x: f32, y: f32) -> f32 {
-        // Read at the feet: the fields are smooth over a pilot's height.
-        crate::environment::environment_in(self.world.terrain.settings(), self.world.frame(), x, y)
-            .body_gravity(crate::pilot::GRAVITY)
+        // Read at the feet: the fields are smooth over a pilot's height. A field (F9) turns
+        // and scales gravity; the pilot stays upright and feels its downward share here (the
+        // sideways share pushes it in `advance_pilots`).
+        let pull = crate::environment::environment_in(
+            self.world.terrain.settings(),
+            self.world.frame(),
+            x,
+            y,
+        )
+        .body_gravity(crate::pilot::GRAVITY);
+        let field = self.world.fields_at(x, y);
+        if field.is_neutral_physics() {
+            pull
+        } else {
+            pull * field.gravity_y
+        }
     }
 
     fn frame(&self) -> crate::position::Frame {
@@ -628,6 +641,13 @@ impl WorldState {
                     .unwrap_or_default()
             };
             let anchor = self.refresh_rope(&mut state, owner, output);
+            // Field effects (F9): mirrored steering, the time scale and sideways gravity.
+            let field = self.fields_at(body.x, body.y);
+            let controls = if field.mirrored() {
+                controls.mirrored()
+            } else {
+                controls
+            };
             let foot = PilotControls {
                 horizontal: controls.horizontal(),
                 up: controls.thrust,
@@ -637,8 +657,14 @@ impl WorldState {
             };
             let report = {
                 let view = self.pilot_view(Some(owner));
-                step_pilot(&mut body, &mut state, &view, foot, dt)
+                step_pilot(&mut body, &mut state, &view, foot, dt * field.time_scale)
             };
+            if field.gravity_x != 0.0 && !state.grounded {
+                body.velocity_x = crate::quantize::quantize_simulation_scalar(
+                    (field.gravity_x * crate::pilot::GRAVITY)
+                        .mul_add(dt * field.time_scale, body.velocity_x),
+                );
+            }
             state.pick_cooldown = (state.pick_cooldown - dt).max(0.0);
             state.throw_cooldown = (state.throw_cooldown - dt).max(0.0);
             state.calm += dt;

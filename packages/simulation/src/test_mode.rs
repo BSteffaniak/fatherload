@@ -43,4 +43,8 @@ pub enum TestModeAction {
     WarpToBand(Band),
     /// Turn the crew's no-clip flight on or off.
     SetNoClip(bool),
+    /// Place a field zone of the preset around the submitting rig or pilot (F9 dev zones).
+    PlaceFieldZone(crate::field::FieldPreset),
+    /// Remove every field zone.
+    ClearFieldZones,
 }

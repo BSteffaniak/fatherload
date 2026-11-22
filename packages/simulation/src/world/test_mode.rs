@@ -86,6 +86,10 @@ impl WorldState {
             TestModeAction::SetInvulnerable(on) => state.invulnerable = on,
             TestModeAction::SetInfiniteFuel(on) => state.infinite_fuel = on,
             TestModeAction::WarpToBand(band) => return self.warp_to_band(player_id, band),
+            TestModeAction::PlaceFieldZone(preset) => {
+                return self.place_dev_field_zone(player_id, preset);
+            }
+            TestModeAction::ClearFieldZones => self.fields.clear(),
             TestModeAction::SetNoClip(on) => {
                 let was_on = state.no_clip;
                 state.no_clip = on;

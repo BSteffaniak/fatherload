@@ -94,7 +94,12 @@ impl WorldState {
                 // The tile holding it is gone: it drops like any loose charge.
                 bomb.stuck = false;
             }
-            let motion = move_bomb(bomb, &self.terrain, self.timing.delta_seconds, sticks(bomb));
+            let motion = move_bomb(
+                bomb,
+                (&self.terrain, &self.fields),
+                self.timing.delta_seconds,
+                sticks(bomb),
+            );
             if motion.stuck.is_some() {
                 // `move_bomb` pointed `direction` at the surface (a shaped charge cuts into it).
                 bomb.stuck = true;
@@ -716,7 +721,7 @@ impl WorldState {
         for _ in 0..ticks {
             let motion = move_bomb(
                 &mut bomb,
-                &self.terrain,
+                (&self.terrain, &self.fields),
                 self.timing.delta_seconds,
                 kind.sticks(),
             );
@@ -936,10 +941,16 @@ struct Motion {
 /// for a charge that sticks on its next contact (it stops dead there and points `direction` at
 /// the surface), plus the cosmetic roll angle. Resting charges are checked each tick, so
 /// removing their support wakes them automatically.
-fn move_bomb(bomb: &mut PlacedBomb, terrain: &Terrain, dt: f32, sticky: bool) -> Motion {
+fn move_bomb(
+    bomb: &mut PlacedBomb,
+    (terrain, zones): (&Terrain, &crate::field::FieldZones),
+    dt: f32,
+    sticky: bool,
+) -> Motion {
     let (mut body, _) = charge_parts(bomb);
-    // Gravity bombs feel the sky's gravity fields: they float in orbit and arc far on the Moon.
-    let params = BodyParams::BOMB.at(terrain, body.x, body.y);
+    // Gravity bombs feel the sky's gravity fields: they float in orbit and arc far on the Moon
+    // (and fall sideways or up in a field, F9).
+    let params = BodyParams::BOMB.at_fields(terrain, zones, body.x, body.y);
     let report = if sticky {
         physics::step_body_sticky(&mut body, &params, terrain, dt)
     } else {

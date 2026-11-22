@@ -38,6 +38,11 @@ pub struct BodyParams {
     pub floor_friction: f32,
     /// Horizontal speed below which floor friction stops the body.
     pub stop_speed: f32,
+    /// Sideways acceleration (px/s², positive to the right): a field's sideways gravity
+    /// ([`Self::in_field`]); 0 everywhere else.
+    pub gravity_x: f32,
+    /// How fast time runs for the body (a field's time scale); 1 everywhere else.
+    pub time_scale: f32,
 }
 
 impl BodyParams {
@@ -50,6 +55,8 @@ impl BodyParams {
         rest_speed: 28.0,
         floor_friction: 12.0,
         stop_speed: 3.0,
+        gravity_x: 0.0,
+        time_scale: 1.0,
     };
 
     /// A floating item stack: a little smaller and less bouncy than a bomb.
@@ -61,6 +68,8 @@ impl BodyParams {
         rest_speed: 32.0,
         floor_friction: 14.0,
         stop_speed: 4.0,
+        gravity_x: 0.0,
+        time_scale: 1.0,
     };
 }
 
@@ -78,6 +87,43 @@ impl BodyParams {
             gravity: environment.body_gravity(self.gravity),
             ..self
         }
+    }
+
+    /// These constants in a field (F9, [`crate::field`]): gravity turned and scaled by the
+    /// field's gravity vector, time scaled, floor grip scaled by its friction. Bodies without
+    /// gravity (flyers) keep none but still feel the time scale. Unchanged (bit for bit)
+    /// where the field's physics is neutral.
+    #[must_use]
+    pub fn in_field(self, field: &crate::field::FieldSample) -> Self {
+        if field.is_neutral_physics() {
+            return self;
+        }
+        Self {
+            gravity: self.gravity * field.gravity_y,
+            gravity_x: self.gravity * field.gravity_x,
+            time_scale: field.time_scale,
+            floor_friction: self.floor_friction * field.friction,
+            ..self
+        }
+    }
+
+    /// [`Self::at`] and then [`Self::in_field`] with the world's field `zones`.
+    #[must_use]
+    pub fn at_fields(
+        self,
+        terrain: &Terrain,
+        zones: &crate::field::FieldZones,
+        x: f32,
+        y: f32,
+    ) -> Self {
+        self.at(terrain, x, y)
+            .in_field(&crate::field::sample_in(
+                zones,
+                terrain.settings(),
+                terrain.frame(),
+                x,
+                y,
+            ))
     }
 
     /// [`Self::in_environment`] at world pixel `(x, y)` of `terrain`'s world.
@@ -238,6 +284,8 @@ fn step(
     sticky: bool,
 ) -> StepReport {
     use crate::explosive::BlastDirection;
+    // A field's time scale (exactly the tick elsewhere).
+    let dt = dt * params.time_scale;
     let radius = params.radius;
     body.previous_x = body.x;
     body.previous_y = body.y;
@@ -258,6 +306,9 @@ fn step(
         }
     }
     let max_speed = params.max_speed;
+    if params.gravity_x != 0.0 {
+        body.velocity_x = params.gravity_x.mul_add(dt, body.velocity_x);
+    }
     body.velocity_x = body.velocity_x.clamp(-max_speed, max_speed);
     body.velocity_y = params
         .gravity
@@ -684,6 +735,8 @@ mod tests {
             rest_speed: 60.0,
             floor_friction: 0.0,
             stop_speed: 0.0,
+            gravity_x: 0.0,
+            time_scale: 1.0,
         };
         let y = floor - radius - 0.000_2;
         assert!(!collides(&terrain, px(8), y, radius));
