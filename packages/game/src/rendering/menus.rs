@@ -176,7 +176,9 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::WarpToLayer => &menu_icons::ROCKET,
         PauseOption::ToggleInvulnerable => &icons::HULL,
         PauseOption::ToggleInfiniteFuel => &icons::FUEL,
-        PauseOption::ToggleNoClip => &menu_icons::GHOST,
+        PauseOption::ToggleNoClip | PauseOption::PlaceFieldZone | PauseOption::ClearFieldZones => {
+            &menu_icons::GHOST
+        }
         PauseOption::EnemyDifficulty => &icons::WARNING,
         PauseOption::SleepRule => &icons::MOON,
     }
@@ -242,6 +244,12 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     let entries = PauseOption::for_session(ui.shell.online.role, test_mode.is_some())
         .into_iter()
         .map(|option| {
+            if option == PauseOption::PlaceFieldZone {
+                // F9 dev zones: the preset the next press places.
+                return Entry::new(pause_icon(option), option.label())
+                    .detail("Cycles the field presets, centred on your rig")
+                    .value(ui.shell.next_field_preset().title(), LAVENDER);
+            }
             pause_entry(
                 option,
                 test_mode,
@@ -364,6 +372,27 @@ pub(super) fn draw_options(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>
                 let (text, color) = on_off(touch.thrust_button);
                 Entry::new(&menu_icons::SCREEN, "Thrust button")
                     .detail("Hold to fly, as well as pushing up")
+                    .value(text, color)
+            }
+            OptionsRow::ScreenEffects => Entry::new(&menu_icons::SCREEN, "Screen effects")
+                .detail("Strange-layer effects: full, reduced or off (never flashing)")
+                .value(
+                    format!(
+                        "\u{2190} {} \u{2192}",
+                        ui.shell.effects.label().to_uppercase()
+                    ),
+                    GOLD,
+                ),
+            OptionsRow::GyroAssist => {
+                let (text, color) = on_off(ui.shell.assists.gyro);
+                Entry::new(&menu_icons::SCREEN, "Gyro stabiliser")
+                    .detail("Stops the rig's spin when you let go (once fitted)")
+                    .value(text, color)
+            }
+            OptionsRow::HorizonHold => {
+                let (text, color) = on_off(ui.shell.assists.horizon);
+                Entry::new(&menu_icons::SCREEN, "Horizon hold")
+                    .detail("Levels the rig in flight when you let go (once fitted)")
                     .value(text, color)
             }
             OptionsRow::Back => Entry::new(&menu_icons::BACK, "Back"),

@@ -232,6 +232,8 @@ pub struct PlayerPresentation {
     pub cosmetics: RigCosmetics,
     /// The weapon on the hardpoint, where it points and whether its trigger is held.
     pub weapon: Option<WeaponPose>,
+    /// The rig's orientation (F9 craft rotation, radians, clockwise; 0 upright).
+    pub orientation: f32,
 }
 
 /// Gravity (relative to the ground's) under which a pilot is drawn floating and loping.
@@ -364,6 +366,7 @@ impl PlayerPresentation {
                 firing: player.weapon.firing,
                 tether: player.weapon.tether.map(|tether| (tether.x, tether.y)),
             }),
+            orientation: player.attitude.orientation,
         }
     }
 
@@ -530,6 +533,12 @@ pub struct ViewSnapshot<'w> {
     /// The tomb site whose door the pilot stands at (WP-TOMBS: the entrance prompt shows its
     /// style, tier and seal).
     pub tomb_door: Option<fatherload_simulation::tomb::TombSite>,
+    /// The fields where the seat's rig or pilot is (F9): the post-process stack's screen
+    /// effects and light.
+    pub fields: fatherload_simulation::field::FieldSample,
+    /// The camera's roll (F9): the seat's rig orientation while the seat is in its rig (the
+    /// world turns around the craft, the HUD stays upright), 0 on foot.
+    pub roll: f32,
 }
 
 impl ViewSnapshot<'_> {
@@ -747,6 +756,8 @@ pub struct RenderSnapshot<'w> {
     pub since_night_skipped: Option<f32>,
     /// Where the Moon hangs over the world (the sky draws it above this column).
     pub moon: fatherload_simulation::clock::MoonAnchor,
+    /// The screen effects accessibility setting (F9; set by the game from its settings).
+    pub effects: crate::screen_fx::EffectsIntensity,
 }
 
 impl<'w> RenderSnapshot<'w> {
@@ -778,6 +789,7 @@ impl<'w> RenderSnapshot<'w> {
             })
             .collect();
         Self {
+            effects: crate::screen_fx::EffectsIntensity::Full,
             tick: world.simulation_tick().get(),
             tick_rate: world.timing().rate,
             terrain: world.terrain(),
@@ -1052,7 +1064,15 @@ fn view_snapshot(
     )]
     let tile = crate::view_frame::frame().tile_at(focus_x, focus_y);
     let (depth, altitude) = depth_and_altitude(tile.y, world.terrain().surface_row(tile.x));
+    let fields = world.fields_at(focus_x, focus_y);
+    let roll = if pilot.is_some() {
+        0.0
+    } else {
+        player.attitude.orientation
+    };
     Some(ViewSnapshot {
+        fields,
+        roll,
         aim_preview: None,
         reticle: None,
         build_preview: None,

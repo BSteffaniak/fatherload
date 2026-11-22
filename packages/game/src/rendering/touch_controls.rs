@@ -281,7 +281,9 @@ const fn rim(control: TouchControl) -> Color {
         | TouchControl::BuildRotate
         | TouchControl::BuildPrevious
         | TouchControl::BuildNext
-        | TouchControl::BuildExit => palette::MIST,
+        | TouchControl::BuildExit
+        | TouchControl::RotateLeft
+        | TouchControl::RotateRight => palette::MIST,
     };
     with_alpha(color, 210)
 }
@@ -315,6 +317,8 @@ const fn label(control: TouchControl) -> &'static str {
         TouchControl::Inventory => "BAG",
         TouchControl::Map => "MAP",
         TouchControl::Back => "BACK",
+        TouchControl::RotateLeft => "<ROT",
+        TouchControl::RotateRight => "ROT>",
         TouchControl::TabPrevious | TouchControl::BuildPrevious => "<",
         TouchControl::TabNext | TouchControl::BuildNext => ">",
         TouchControl::BuildPlace => "PLACE",

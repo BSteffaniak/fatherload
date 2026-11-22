@@ -2,7 +2,9 @@
 //! toggles and the "Warp to Layer" band list. Each submits a `PlayerCommand::TestMode` action for
 //! the seat driving the menu, so it works the same in split-screen and online.
 
-use fatherload_simulation::{PlayerCommand, TestModeAction, TestModeState, worldgen::Band};
+use fatherload_simulation::{
+    PlayerCommand, TestModeAction, TestModeState, field::FieldPreset, worldgen::Band,
+};
 
 use crate::runtime::OnlineRole;
 
@@ -25,6 +27,8 @@ impl PauseOption {
                     Self::ToggleInvulnerable,
                     Self::ToggleInfiniteFuel,
                     Self::ToggleNoClip,
+                    Self::PlaceFieldZone,
+                    Self::ClearFieldZones,
                 ],
             );
         }
@@ -82,6 +86,35 @@ impl ShellState {
             command: PlayerCommand::TestMode(action),
         });
         self.message = format!("{name} {}.", if on { "on" } else { "off" });
+    }
+
+    /// The next preset "Place Field Zone" places.
+    #[must_use]
+    pub const fn next_field_preset(&self) -> FieldPreset {
+        FieldPreset::ALL[self.next_field_preset % FieldPreset::ALL.len()]
+    }
+
+    /// Places the next field preset around the menu seat's rig (and resumes play to show
+    /// it), or clears every zone (F9 dev zones; `TestModeAction`s, so online too).
+    pub(super) fn field_zone_action(
+        &mut self,
+        option: PauseOption,
+        requests: &mut Vec<ShellRequest>,
+    ) {
+        let action = if option == PauseOption::PlaceFieldZone {
+            let preset = self.next_field_preset();
+            self.next_field_preset = (self.next_field_preset + 1) % FieldPreset::ALL.len();
+            self.message = format!("{} zone placed around your rig.", preset.title());
+            self.run_mode = RunMode::Playing;
+            TestModeAction::PlaceFieldZone(preset)
+        } else {
+            "Field zones cleared.".clone_into(&mut self.message);
+            TestModeAction::ClearFieldZones
+        };
+        requests.push(ShellRequest::Action {
+            seat: self.menu_seat,
+            command: PlayerCommand::TestMode(action),
+        });
     }
 
     /// Warps the menu seat's rig to the band selected in the warp list and resumes play.

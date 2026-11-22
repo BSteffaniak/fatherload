@@ -81,8 +81,9 @@ impl AttitudeAssists {
     }
 }
 
-/// The rotation hardware fitted to a rig (private loadout, in
-/// [`crate::protection::HazardGear`]). **Upgrade hook:** nothing sells these yet; the
+/// The rotation hardware fitted to a rig.
+///
+/// Private loadout, in [`crate::protection::HazardGear`]. **Upgrade hook:** nothing sells these yet; the
 /// progression track (F10) adds them to the shop. Test mode fits them all.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct AttitudeGear {
@@ -211,12 +212,13 @@ pub fn step_attitude(attitude: RigAttitude, context: &AttitudeContext) -> RigAtt
         }
         let idle = input == 0.0;
         let mut acceleration = input * ROTATION_THRUST;
-        let mut drag = ANGULAR_DRAG;
-        if idle && context.gyro {
-            drag = GYRO_DRAG;
-        }
+        let mut drag = if idle && context.gyro {
+            GYRO_DRAG
+        } else {
+            ANGULAR_DRAG
+        };
         if idle && context.horizon && !context.resting {
-            acceleration -= HORIZON_STIFFNESS * lean;
+            acceleration = HORIZON_STIFFNESS.mul_add(-lean, acceleration);
             drag = drag.max(HORIZON_DAMPING);
         }
         // Semi-implicit Euler with the drag applied implicitly (stable at any step).
@@ -225,19 +227,19 @@ pub fn step_attitude(attitude: RigAttitude, context: &AttitudeContext) -> RigAtt
             spin = 0.0;
         }
         lean = wrap_angle(spin.mul_add(dt, lean));
-        if let Some(limit) = context.limit {
-            if lean > limit + 1e-6 || lean < -limit - 1e-6 {
-                // Carried in beyond the limit (or leaning past it): ease back inside.
-                let target = lean.clamp(-limit, limit);
-                let step = LIMIT_RETURN_SPEED * dt;
-                lean = if lean > target {
-                    (lean - step).max(target)
-                } else {
-                    (lean + step).min(target)
-                };
-                if (lean > 0.0 && spin > 0.0) || (lean < 0.0 && spin < 0.0) {
-                    spin = 0.0;
-                }
+        if let Some(limit) = context.limit
+            && (lean > limit + 1e-6 || lean < -limit - 1e-6)
+        {
+            // Carried in beyond the limit (or leaning past it): ease back inside.
+            let target = lean.clamp(-limit, limit);
+            let step = LIMIT_RETURN_SPEED * dt;
+            lean = if lean > target {
+                (lean - step).max(target)
+            } else {
+                (lean + step).min(target)
+            };
+            if (lean > 0.0 && spin > 0.0) || (lean < 0.0 && spin < 0.0) {
+                spin = 0.0;
             }
         }
         if context.horizon && idle && lean.abs() < SETTLE_SNAP && spin == 0.0 {
@@ -271,13 +273,19 @@ mod tests {
         }
     }
 
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "test durations"
+    )]
     fn run(
         mut attitude: RigAttitude,
         context: AttitudeContext,
         hz: u16,
         seconds: f32,
     ) -> RigAttitude {
-        let ticks = (f32::from(hz) * seconds).round() as u32;
+        let tenths = (seconds * 10.0).round() as u32;
+        let ticks = u32::from(hz) * tenths / 10;
         let context = AttitudeContext {
             seconds: 1.0 / f32::from(hz),
             ..context

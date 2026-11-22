@@ -314,6 +314,10 @@ pub enum TouchControl {
     BuildPrevious,
     BuildNext,
     BuildExit,
+    /// Hold to turn the rig counter-clockwise with its rotation thrusters (F9).
+    RotateLeft,
+    /// Hold to turn the rig clockwise.
+    RotateRight,
 }
 
 /// Where the controls are this frame.
@@ -349,6 +353,8 @@ const MENU_PREVIOUS: Slot = (2.2, 0.42, 0.34);
 /// or below them.
 const HUD_CORNER_PANELS: (f32, f32, f32) = (184.0, 128.0, 78.0);
 
+/// Radius of the rotation thruster buttons, in button widths.
+const ROTATE_BUTTON_RADIUS: f32 = 0.34;
 /// Radius of the small buttons along the top edge, in button widths.
 const TOP_BUTTON_RADIUS: f32 = 0.3;
 /// Radius of a tools-fan item, in button widths.
@@ -416,6 +422,9 @@ impl TouchLayout {
                     layout.push_fan(cluster, context);
                 } else {
                     layout.push_play(cluster, settings, context);
+                }
+                if !context.pilot.on_foot() {
+                    layout.push_rotation(settings.left_handed);
                 }
                 if context.prompt {
                     let (x, y) = safe.centre();
@@ -558,6 +567,38 @@ impl TouchLayout {
         if settings.thrust_button {
             push(TouchControl::Thrust, FAR_DIAGONAL);
         }
+    }
+
+    /// The rotation thruster pair (F9): small buttons at the top of the stick zone's inner
+    /// edge, under the thumb that steers, away from the action cluster.
+    fn push_rotation(&mut self, left_handed: bool) {
+        let zone = self.stick_zone;
+        let radius = self.button * ROTATE_BUTTON_RADIUS;
+        let pitch = self.button * 0.85;
+        let margin = self.button * 0.2;
+        let inner = if left_handed {
+            zone.x + margin + radius
+        } else {
+            zone.x + zone.w - margin - radius - pitch
+        };
+        // Below any top-row button that dropped onto this side.
+        let (left, right) = (inner - radius, inner + pitch + radius);
+        let below = self
+            .controls
+            .iter()
+            .filter(|(_, rect)| rect.x < right && rect.x + rect.w > left)
+            .filter(|(_, rect)| rect.y + rect.h < zone.y + zone.h * 0.5)
+            .map(|(_, rect)| rect.y + rect.h)
+            .fold(zone.y, f32::max);
+        let y = below + radius + margin;
+        self.controls.push((
+            TouchControl::RotateLeft,
+            TouchRect::around(inner, y, radius),
+        ));
+        self.controls.push((
+            TouchControl::RotateRight,
+            TouchRect::around(inner + pitch, y, radius),
+        ));
     }
 
     /// A row of small buttons centred on the top edge. When the gap between the HUD's corner
@@ -958,7 +999,9 @@ impl TouchInput {
             | TouchControl::Roll
             | TouchControl::Detonate
             | TouchControl::Bomb
-            | TouchControl::Rope => {}
+            | TouchControl::Rope
+            | TouchControl::RotateLeft
+            | TouchControl::RotateRight => {}
         }
     }
 
@@ -988,6 +1031,8 @@ impl TouchInput {
                 }
                 TouchControl::Thrust => input.thrust = true,
                 TouchControl::Jump | TouchControl::Roll => input.jump = true,
+                TouchControl::RotateLeft => input.rotate = (input.rotate - 1.0).max(-1.0),
+                TouchControl::RotateRight => input.rotate = (input.rotate + 1.0).min(1.0),
                 _ => {}
             }
         }

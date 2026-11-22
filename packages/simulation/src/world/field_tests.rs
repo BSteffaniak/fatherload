@@ -118,7 +118,7 @@ fn drops_fall_sideways_in_a_sideways_field() {
     let body = world.entities().get(id).expect("drop").body;
     assert!(body.x > 33.5 * TILE_SIZE, "drifts right: {}", body.x);
     assert!(
-        (body.y - 20.5 * TILE_SIZE).abs() < 2.0,
+        20.5f32.mul_add(-TILE_SIZE, body.y).abs() < 2.0,
         "not down: {}",
         body.y
     );

@@ -564,7 +564,9 @@ impl FieldZone {
     }
 }
 
-/// Authored field zones of a world, by id (blended in id order). Saved with the world,
+/// Authored field zones of a world, by id (blended in id order).
+///
+/// Saved with the world,
 /// replicated as the shared [`crate::SectionKey::Fields`] section and hashed only once
 /// non-empty, so worlds without zones keep their hashes.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -626,9 +628,11 @@ impl FieldZones {
     }
 }
 
-/// A stratum field source: the field-effect profile of the stratum at local pixel `(x, y)` of
-/// `frame` (F7) in a world with `settings`, already blended across its own boundaries, or
-/// `None` where it has nothing to say (every generator before V11, the sky, the town).
+/// A stratum field source.
+///
+/// The field-effect profile of the stratum at local pixel `(x, y)` of `frame` (F7) in a world
+/// with `settings`, already blended across its own boundaries, or `None` where it has nothing
+/// to say (every generator before V11, the sky, the town).
 pub type StratumFieldSource = fn(&WorldSettings, Frame, f32, f32) -> Option<FieldProfile>;
 
 /// The registered stratum field sources, asked in order (the first answer wins).
@@ -652,8 +656,9 @@ pub fn stratum_profile_at(
         .find_map(|source| source(settings, frame, x, y))
 }
 
-/// How far (`0..=1`) a point at `row` (fractional tile rows) has crossed a boundary at
-/// `boundary_row`, blending over `half_width` rows each side with a smoothstep: 0 well above
+/// How far (`0..=1`) a point at `row` (fractional tile rows) has crossed a boundary.
+///
+/// The boundary is at `boundary_row`, blending over `half_width` rows each side with a smoothstep: 0 well above
 /// it, 1 well below, 0.5 on it. For stratum sources blending neighbouring profiles with
 /// [`FieldProfile::lerp`].
 #[must_use]

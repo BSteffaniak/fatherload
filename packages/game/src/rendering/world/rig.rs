@@ -307,6 +307,7 @@ mod tests {
             tiers: crate::render_snapshot::RigTiers::STOCK,
             cosmetics: RigCosmetics::default_for(id),
             weapon: None,
+            orientation: 0.0,
         }
     }
 

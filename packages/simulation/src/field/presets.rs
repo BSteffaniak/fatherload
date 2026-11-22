@@ -1,5 +1,6 @@
-//! Named field profiles: the anomaly rooms of the plan (§14 cross-Descent systems) and the
-//! dev zones placed through test mode ([`crate::TestModeAction::PlaceFieldZone`]) and the
+//! Named field profiles.
+//!
+//! The anomaly rooms of the plan (§14 cross-Descent systems) and the dev zones placed through test mode ([`crate::TestModeAction::PlaceFieldZone`]) and the
 //! screenshot scenes. Strata define their own profiles; these are building blocks and
 //! showcases.
 

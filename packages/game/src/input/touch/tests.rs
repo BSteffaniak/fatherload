@@ -765,6 +765,10 @@ fn every_input_field_has_a_touch_answer() {
         build_remove: _,
         build_rotate: _,
         build_previous: _,
+        // The rotate buttons (F9); the d-pad split never applies to touch.
+        rotate: _,
+        dpad_rotates: _,
+        stick_horizontal: _,
         // Taps on the world and on menu rows (the app resolves them) and drags on menus.
         menu_pick: _,
         build_pointer: _,

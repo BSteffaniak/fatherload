@@ -242,8 +242,19 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             stage.rig_sheet,
             stage.touch_view,
         );
-        let renderer = renderer
-            .get_or_insert_with(|| GameRenderer::new(&mut raylib, &thread, game.world().terrain()));
+        let renderer = renderer.get_or_insert_with(|| {
+            let renderer = GameRenderer::new(&mut raylib, &thread, game.world().terrain());
+            // F9: the post-process stack's GLSL 330 shader compiled on this driver.
+            println!(
+                "post-process effect shader: {}",
+                if renderer.effects_ready() {
+                    "compiled"
+                } else {
+                    "FAILED"
+                }
+            );
+            renderer
+        });
         // Each scene starts with fresh dialog focus and scroll, whatever the last one showed.
         renderer.reset_ui_state();
         let path = options.dir.join(format!("{}.png", scene.name));
@@ -391,6 +402,7 @@ mod crypt_scenes;
 mod descent_scenes;
 mod drop_scenes;
 mod explosive_scenes;
+mod field_scenes;
 mod home_scenes;
 mod people_scenes;
 mod pilot_content_scenes;
@@ -535,6 +547,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(second_act_scenes::SECOND_ACT_SCENES)
         .chain(wave6_scenes::WAVE6_SCENES)
         .chain(descent_scenes::DESCENT_SCENES)
+        .chain(field_scenes::FIELD_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

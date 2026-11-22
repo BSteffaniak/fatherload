@@ -131,6 +131,16 @@ pub struct PlayerInput {
     /// A row of the menu in front was tapped or clicked: select it and confirm (see
     /// `shell::pointer`). The index counts the screen's selectable rows from the top.
     pub menu_pick: Option<usize>,
+    /// Held: the rig's rotation thrusters (F9), -1..=1, clockwise positive (keyboard `,` / `.`,
+    /// the arrow-keys seat's Numpad / and *, the touch rotate buttons, a controller's d-pad
+    /// left and right).
+    pub rotate: f32,
+    /// `rotate` comes from a controller's d-pad, which also folds into `horizontal`: in the
+    /// rig the d-pad turns it and only the stick drives (`stick_horizontal`); on foot and in
+    /// menus the d-pad walks and steps as before.
+    pub dpad_rotates: bool,
+    /// A controller's stick share of `horizontal` (equal to `horizontal` on other devices).
+    pub stick_horizontal: f32,
 }
 
 impl PlayerInput {
@@ -213,8 +223,12 @@ impl PlayerInput {
             pointer_primary,
             pointer_secondary,
             menu_pick,
+            rotate,
+            dpad_rotates: _,
+            stick_horizontal: _,
         } = *self;
         horizontal.abs() > f32::EPSILON
+            || rotate.abs() > f32::EPSILON
             || ui_scroll.abs() > f32::EPSILON
             || menu_pick.is_some()
             || selected_upgrade.is_some()
@@ -392,6 +406,21 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         pointer_primary: primary.pointer_primary || secondary.pointer_primary,
         pointer_secondary: primary.pointer_secondary || secondary.pointer_secondary,
         menu_pick: primary.menu_pick.or(secondary.menu_pick),
+        rotate: if secondary.rotate.abs() > primary.rotate.abs() {
+            secondary.rotate
+        } else {
+            primary.rotate
+        },
+        dpad_rotates: if secondary.rotate.abs() > primary.rotate.abs() {
+            secondary.dpad_rotates
+        } else {
+            primary.dpad_rotates
+        },
+        stick_horizontal: if secondary.stick_horizontal.abs() > primary.stick_horizontal.abs() {
+            secondary.stick_horizontal
+        } else {
+            primary.stick_horizontal
+        },
     }
 }
 
@@ -425,6 +454,12 @@ fn read_primary_keyboard_input_with_options(
 
     PlayerInput {
         horizontal: horizontal_axis(left, right),
+        stick_horizontal: horizontal_axis(left, right),
+        rotate: horizontal_axis(
+            raylib.is_key_down(KeyboardKey::KEY_COMMA),
+            raylib.is_key_down(KeyboardKey::KEY_PERIOD),
+        ),
+        dpad_rotates: false,
         thrust: up,
         drill_down: down,
         jump: raylib.is_key_down(KeyboardKey::KEY_SPACE),
@@ -523,6 +558,7 @@ fn read_primary_keyboard_input_with_options(
 /// | Next explosive, detonate, detonate in sequence | Numpad 3, Numpad 4, Numpad 5 |
 /// | Fire the weapon (auto-aimed), next weapon | Numpad 6, Numpad 7 |
 /// | On foot: rope (grapple / winch) | Numpad 9 |
+/// | Rotation thrusters (turn the rig left / right, F9) | Numpad /, Numpad * |
 /// | Build mode | Numpad 8 |
 /// | In build mode: remove, rotate, previous piece (next piece: Numpad 3) | Numpad 6, Numpad 7, Numpad 9 |
 ///
@@ -539,6 +575,11 @@ pub fn read_secondary_keyboard_input(raylib: &RaylibHandle) -> PlayerInput {
 
     PlayerInput {
         horizontal: horizontal_axis(left, right),
+        stick_horizontal: horizontal_axis(left, right),
+        rotate: horizontal_axis(
+            raylib.is_key_down(KeyboardKey::KEY_KP_DIVIDE),
+            raylib.is_key_down(KeyboardKey::KEY_KP_MULTIPLY),
+        ),
         thrust: up,
         drill_down: down,
         interact: use_pressed,

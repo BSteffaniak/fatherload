@@ -315,7 +315,22 @@ impl LocalGame {
                     frame.controls = frame
                         .controls
                         .with_weapon(aim.control)
-                        .with_jump(sampled.jump);
+                        .with_jump(sampled.jump)
+                        // F9 craft rotation: the rotation thrusters and the seat's assists.
+                        .with_rotation(if on_foot { 0.0 } else { sampled.rotate })
+                        .with_assists(self.shell.assists);
+                    if !on_foot && sampled.dpad_rotates {
+                        // A controller's d-pad turns the rig; only its stick drives.
+                        frame.controls = fatherload_simulation::ControlState::new(
+                            sampled.stick_horizontal,
+                            frame.controls.thrust,
+                            frame.controls.drill_down,
+                        )
+                        .with_weapon(frame.controls.weapon)
+                        .with_jump(frame.controls.jump)
+                        .with_rotation(frame.controls.rotation())
+                        .with_assists(frame.controls.assists());
+                    }
                     if !on_foot && crate::weapon_aim::trigger_thrusts(sampled, player) {
                         frame.controls.thrust = true;
                     }
@@ -389,6 +404,7 @@ impl LocalGame {
         // A client draws its rig where prediction + smoothing put it (the camera follows that
         // same transform) and remote rigs where interpolation puts them.
         snapshot.bomb_alpha = self.runtime.interpolation_alpha();
+        snapshot.effects = self.shell.effects;
         snapshot.pickups = self.effects.pickups();
         snapshot.apply_pose_overrides(&self.runtime.pose_overrides());
         snapshot.apply_camera_leads(&self.camera_leads);
@@ -1706,8 +1722,11 @@ mod tests {
             game.shell.selected_menu_item, 1,
             "Down highlights Fullscreen"
         );
-        let _ = press(game, down());
-        assert_eq!(game.shell.selected_menu_item, 2, "Down highlights Back");
+        // Screen effects, gyro stabiliser and horizon hold (F9), then Back.
+        for _ in 0..4 {
+            let _ = press(game, down());
+        }
+        assert_eq!(game.shell.selected_menu_item, 5, "Down highlights Back");
         let fullscreen = game.shell.fullscreen;
         let _ = press(game, confirm_input());
         assert_eq!(game.shell.modal, None, "confirming Back closes Options");

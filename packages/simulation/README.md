@@ -3277,6 +3277,70 @@ the side of the frame origin a sprite is on.
   keyframe chunks) and one save bump (12 to 13; formats 8 to 12 load as is). No new gameplay
   event codes (the "entering" banner is presentation, from the rig's row).
 
+## Wave 7 effects (F9 field effects and craft rotation)
+
+The Part III foundations' effects track: deterministic per-region fields, player-controlled
+craft rotation, and (in the game crate) the post-process pipeline and rolling camera.
+
+- **Fields** (`src/field.rs`, `src/field/{presets,trig}.rs`, `src/world/fields.rs`): one
+  query, `WorldState::fields_at(x, y)` (or `field::sample(zones, settings, x, y)` where the
+  world is split-borrowed), answers a `FieldSample`: gravity vector (standard gravities, any
+  direction; it multiplies the F6 altitude environment), time scale, ground friction, air drag,
+  control mirroring, light, sound occlusion, free rotation and the 13 screen effect levels with
+  grade and fog colours. `FieldSample::NEUTRAL` everywhere today: neutral fields take every
+  classic path bit for bit (no V1-V10 digest or existing hash changed).
+- **Seam for the strata track (integrator wires it)**: `field::FieldProfile` is the plain-data
+  per-stratum profile (gravity, time, friction, drag, light, occlusion, mirroring, free
+  rotation, `ScreenEffects { levels: [u8; 13], grade_rgb, fog_rgb }`). Register the stratum
+  registry's lookup, a pure `fn(&WorldSettings, x, y) -> Option<FieldProfile>`, in
+  `field::STRATUM_FIELD_SOURCES` (empty today). Blend across stratum boundaries inside the
+  source with `field::boundary_blend(row, boundary_row, half_width)` and
+  `FieldProfile::lerp`. `ScreenEffect` and `FieldPreset` append only.
+- **Authored zones**: `FieldZone` (tile rectangle, feathered edge, profile, optional preset)
+  in `FieldZones`, the new `WorldState::fields` (saved with serde default, hashed only once
+  non-empty, replicated as the appended shared `SectionKey::Fields`). Zones stack as
+  departures from neutral and blend linearly across their feather (smoothstep). Anomaly
+  rooms of a generator should become zones (or a source) at world build; bosses can place
+  zones in the tick. Dev: `WorldState::place_field_zone` / `clear_field_zones` before play,
+  `TestModeAction::{PlaceFieldZone(FieldPreset), ClearFieldZones}` in play (the game's
+  test-mode pause entries), 14 presets (`GravityFlip`, `GravityShear`, `Weightless`,
+  `SlowTime`, `FastTime`, `Mirror`, `PixelRot`, `Dark`, `Prism`, `Haze`, `Lens`, `Fog`,
+  `Ice`, `Showcase`).
+- **Readers**: rigs (`world/movement.rs`), pilots (`PilotView::gravity_at`, time scale,
+  mirroring, sideways drift in `advance_pilots`), enemies, drops and charges
+  (`BodyParams::in_field` / `at_fields`: new `gravity_x` and `time_scale` fields, 0 and 1 in
+  every literal). Mirroring flips the stick and rotation input (`ControlState::mirrored`) in
+  `simulate_tick`. Not yet field-aware (documented seams): hanging boulders, enemy shots,
+  drill directions (still world axes) and the drill timers; time scale slows motion and fuel
+  burn only.
+- **Craft rotation** (`src/attitude.rs`): `Player::attitude: RigAttitude { orientation,
+  angular_velocity }` (per tick, in `PlayerRig` / `PlayerTickState`, so predicted and
+  reconciled like the pose). `ControlState` gains the rotation thrusters (`with_rotation`,
+  hundredths) and assist bits (`with_assists`). Only the player turns the rig: lean limit
+  `BASE_TILT_LIMIT` (35 degrees) flying where rotation is limited, plus `TILT_LIMIT_PER_TIER`
+  per `AttitudeGear::tilt_rating` (upgrade hook in `HazardGear::attitude`, no shop line yet:
+  F10 adds it; test mode fits everything); unlimited where `FieldSample::rotation_unlimited`
+  (shear, upside down, weightless, `free_rotation`). Resting or drilling settles level to the
+  gravity frame (exactly 0 on the home world, so the classic path resumes). Gyro stabiliser
+  and horizon hold work only when fitted **and** switched on (off by default). Rotation is
+  integrated in fixed 240 Hz sub-steps on a 1/65536 rad grid with deterministic trig
+  (`field::trig`), so it is tick-rate safe and cross-platform. A rotation that would swing a
+  corner into rock is refused (`rig_collides` uses the turned corners).
+- **Field drive**: non-neutral fields or a leaning rig use `field_velocity`: the classic drive
+  in the gravity's frame; the main thruster pushes along the rig's own up axis (leaning while
+  thrusting steers, `TILT_STEER_GAIN`), braking scales with friction (ground) or drag (air),
+  exact drag integration with the time-scaled tick. V9 jet streams are not applied in the
+  field drive (seam).
+- **Formats**: `PROTOCOL_VERSION` 15 (netcode doc lists it). Saves: no format bump needed
+  (every new field has a serde default; old saves load level and zone-free). No event codes
+  added (370-379 stay free for this track's follow-ups).
+- **Tests**: `field/tests.rs` (sampling, feathered blending, stacking, boundary blend),
+  `attitude.rs` (limits, settling, momentum, assists, tick rates), `world/field_tests.rs`
+  (sideways and upside-down falls, drops sideways, time scale at 20-120 Hz, mirroring, lean
+  limit, craft-relative thrust, settling, 360 degrees, corners into rock, neutral bit-for-bit,
+  zone replication and hashing, test-mode zones), netcode
+  `world_rigs_rotate_in_fields_predict_and_converge`.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

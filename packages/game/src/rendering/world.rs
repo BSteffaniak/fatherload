@@ -85,6 +85,36 @@ pub(super) fn world_camera(camera: Vector2, zoom: f32) -> Camera2D {
     }
 }
 
+/// Turns everything drawn while it lives by `angle` (radians, clockwise) about `(x, y)` in
+/// world space, through raylib's matrix stack (shapes and sprites alike). Level: no-op.
+struct TurnedAbout(bool);
+
+impl TurnedAbout {
+    fn new(angle: f32, x: f32, y: f32) -> Self {
+        if angle == 0.0 {
+            return Self(false);
+        }
+        // SAFETY: matrix stack calls balanced by `Drop`; they only change the transform
+        // applied to vertices batched until the pop.
+        unsafe {
+            raylib::ffi::rlPushMatrix();
+            raylib::ffi::rlTranslatef(x, y, 0.0);
+            raylib::ffi::rlRotatef(angle.to_degrees(), 0.0, 0.0, 1.0);
+            raylib::ffi::rlTranslatef(-x, -y, 0.0);
+        }
+        Self(true)
+    }
+}
+
+impl Drop for TurnedAbout {
+    fn drop(&mut self) {
+        if self.0 {
+            // SAFETY: pops the matrix pushed in `new`.
+            unsafe { raylib::ffi::rlPopMatrix() };
+        }
+    }
+}
+
 /// Everything one view draws in world space this frame.
 pub(super) struct WorldScene<'a> {
     /// The world rectangle the view shows (world pixels).
@@ -369,6 +399,9 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         speed_fx::draw_speed_lines(draw, player, scene.ticks);
     }
     for player in scene.players {
+        // F9 craft rotation: the rig is drawn turned about its middle (the camera of its own
+        // seat turns the world back the other way, so it looks upright there).
+        let _turned = TurnedAbout::new(player.orientation, player.x, player.y);
         rig::draw_rig(draw, scene.terrain, player, scene.facings, scene.ticks);
         if scene
             .pilots

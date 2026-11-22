@@ -235,7 +235,9 @@ impl PadState {
         -value.signum() * travel * STICK_SCROLL_NOTCHES_PER_SECOND * delta_seconds.max(0.0)
     }
 
-    fn dpad_horizontal(&self) -> i8 {
+    /// The d-pad's horizontal direction (-1, 0, 1).
+    #[must_use]
+    pub fn dpad_horizontal(&self) -> i8 {
         axis_from_buttons(
             self.is_down(PadButton::DPadLeft),
             self.is_down(PadButton::DPadRight),
@@ -329,6 +331,10 @@ impl PadMapper {
             >= STICK_DEADZONE;
         let input = PlayerInput {
             horizontal: state.horizontal(),
+            // F9: the d-pad's left and right turn the rig (the stick drives it meanwhile).
+            rotate: f32::from(state.dpad_horizontal()),
+            dpad_rotates: state.dpad_horizontal() != 0,
+            stick_horizontal: stick_axis(state.axis(PadAxis::LeftX)),
             thrust: state.action_held(PadAction::Thrust) || vertical < 0,
             drill_down: vertical > 0,
             // On foot, A jumps (and holds the jetpack) while the stick climbs.

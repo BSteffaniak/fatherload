@@ -347,6 +347,9 @@ mod tests {
         build_pointer: None,
         pointer_primary: false,
         pointer_secondary: false,
+        rotate: 0.0,
+        dpad_rotates: false,
+        stick_horizontal: 0.0,
     };
     const DOWN: PlayerInput = PlayerInput {
         menu_down: true,

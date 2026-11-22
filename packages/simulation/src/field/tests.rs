@@ -33,6 +33,7 @@ fn a_zone_applies_fully_inside_and_not_at_all_outside() {
 }
 
 #[test]
+#[allow(clippy::while_float, reason = "a pixel-by-pixel walk")]
 fn zone_edges_blend_smoothly_and_monotonically() {
     let settings = WorldSettings::default();
     let mut zones = FieldZones::default();

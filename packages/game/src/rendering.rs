@@ -33,6 +33,7 @@ mod people_art;
 mod pilot_art;
 pub mod pixel_art;
 pub mod pointer;
+pub mod post_process;
 mod prompts;
 mod quests;
 mod rewards;
@@ -117,6 +118,8 @@ pub struct GameRenderer {
     ui_states: RefCell<BTreeMap<UiOwner, layout::widgets::UiState>>,
     /// Discovered tiles already drawn by the terrain renderer (primary view).
     explored_drawn: DiscoveredTiles,
+    /// The post-process pipeline (F9): screen effects and the rolling camera, per seat.
+    post: post_process::PostProcess,
 }
 
 /// Whose dialogs a [`layout::widgets::UiState`] tracks: the global screens (title, pause,
@@ -232,7 +235,15 @@ impl GameRenderer {
             font_bold: load_pixel_font(raylib, thread, true),
             ui_states: RefCell::new(BTreeMap::new()),
             explored_drawn: DiscoveredTiles::default(),
+            post: post_process::PostProcess::new(raylib, thread),
         }
+    }
+
+    /// Whether the post-process effect shader compiled (F9; scene capture reports it).
+    #[cfg(not(target_os = "emscripten"))]
+    #[must_use]
+    pub const fn effects_ready(&self) -> bool {
+        self.post.shader_ready()
     }
 
     fn font_faces(&self) -> Option<UiFontFaces> {
@@ -280,11 +291,18 @@ impl GameRenderer {
                 });
             }
         }
+        // Screen effects and the rolling camera (F9): plan each seat's passes first, since a
+        // rolled view draws a wider square of the world.
+        self.post.prepare(raylib, thread, snapshot);
         let explored = &self.explored_drawn;
         let views: Vec<Rectangle> = snapshot
             .views
             .iter()
             .map(|view| {
+                if let Some(plan) = self.post.plan(view.seat_index) {
+                    return plan
+                        .world_rect((view.camera.x, view.camera.y), view_rig(snapshot, view));
+                }
                 let (width, height) = view.visible_world_size();
                 Rectangle::new(view.camera.x, view.camera.y, width, height)
             })
@@ -303,8 +321,9 @@ impl GameRenderer {
 
     /// Forgets dialog focus and scroll (scene captures start each scene fresh).
     #[cfg(not(target_os = "emscripten"))]
-    pub fn reset_ui_state(&self) {
+    pub fn reset_ui_state(&mut self) {
         self.ui_states.borrow_mut().clear();
+        self.post.reset();
     }
 
     /// Makes `owner`'s dialog state current for the layout code.
@@ -650,6 +669,10 @@ impl GameRenderer {
     }
 
     /// The world through `view`'s camera, then its HUD on the current (seat) canvas.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the world straight to the screen or through the post-process passes, then the HUD"
+    )]
     fn render_world(
         &self,
         draw: &mut RaylibDrawHandle<'_>,
@@ -674,61 +697,93 @@ impl GameRenderer {
         camera.y += (phase * 3.1).cos() * shake;
         let (visible_width, visible_height) = view.visible_world_size();
         let density = render_scale_for_draw(draw);
-        {
-            let view_camera = view_camera_2d(viewport, camera, view.world_scale, density);
+        let plan = self.post.plan(view.seat_index);
+        // Through the post-process pipeline (F9) the world is drawn into the seat's texture,
+        // from a camera at the texture's corner; otherwise straight onto the screen.
+        let (view_camera, visible) = plan.map_or_else(
+            || {
+                (
+                    view_camera_2d(viewport, camera, view.world_scale, density),
+                    Rectangle::new(camera.x, camera.y, visible_width, visible_height),
+                )
+            },
+            |plan| {
+                let visible = plan.world_rect((camera.x, camera.y), view_rig(snapshot, view));
+                (
+                    world_camera(Vector2::new(visible.x, visible.y), plan.zoom),
+                    visible,
+                )
+            },
+        );
+        let scene = WorldScene {
+            visible,
+            terrain_renderer: &self.terrain,
+            terrain: snapshot.terrain,
+            sky: &self.sky,
+            infrastructure: snapshot.infrastructure,
+            hazards: &snapshot.hazards,
+            bombs: &snapshot.bombs,
+            bomb_alpha: snapshot.bomb_alpha,
+            boulders: &snapshot.boulders,
+            entities: snapshot.entities,
+            pickups: snapshot.pickups,
+            sparks: snapshot.sparks,
+            explosions: snapshot.explosions,
+            relay_countdowns: &snapshot.relay_countdowns,
+            quest_markers: &view.quest_markers,
+            players: &snapshot.players,
+            pilots: &snapshot.pilots,
+            facings: &self.rig_facings,
+            local: snapshot
+                .players
+                .iter()
+                .find(|player| player.player_id == view.player_id),
+            active_drill: view.active_drill,
+            lost_cargo: view.lost_cargo,
+            explored: Some(&self.explored_drawn),
+            ticks: shell.update_ticks,
+            aim_preview: view.aim_preview.as_ref(),
+            critters: &snapshot.critters,
+            enemies: &snapshot.enemies,
+            rig_guards: &snapshot.rig_guards,
+            world_tick: snapshot.tick,
+            projectiles: &snapshot.projectiles,
+            targets: &snapshot.targets,
+            beams: &snapshot.beams,
+            shots: snapshot.shots,
+            reticle: view.reticle,
+            bases: snapshot.bases,
+            powered_modules: &snapshot.powered_modules,
+            build_preview: view.build_preview.as_ref(),
+            clock: snapshot.clock,
+            moon: snapshot.moon,
+            clock_state: snapshot.clock_state,
+            talk_target: view.talk_target.as_ref().map(|(npc, _)| *npc),
+            homes: snapshot.homes,
+            tombs: snapshot.tombs,
+            world_millis: drawn_world_millis(snapshot),
+            tick_rate_hz: snapshot.tick_rate.hz(),
+        };
+        if let Some(plan) = plan {
+            let split = snapshot.views.len() > 1;
+            if split {
+                end_view_clip();
+            }
+            self.post.begin_world(view.seat_index);
+            {
+                let mut world_draw = draw.begin_mode2D(view_camera);
+                draw_world_scene(&mut world_draw, &scene);
+            }
+            post_process::PostProcess::end_world();
+            // The roll pass draws into a texture, so the view's scissor (in screen space)
+            // comes back only once the picture is on screen (it fills the viewport exactly).
+            self.post.composite(view.seat_index, &plan, viewport);
+            if split {
+                begin_view_clip(viewport);
+            }
+        } else {
             let mut world_draw = draw.begin_mode2D(view_camera);
-            draw_world_scene(
-                &mut world_draw,
-                &WorldScene {
-                    visible: Rectangle::new(camera.x, camera.y, visible_width, visible_height),
-                    terrain_renderer: &self.terrain,
-                    terrain: snapshot.terrain,
-                    sky: &self.sky,
-                    infrastructure: snapshot.infrastructure,
-                    hazards: &snapshot.hazards,
-                    bombs: &snapshot.bombs,
-                    bomb_alpha: snapshot.bomb_alpha,
-                    boulders: &snapshot.boulders,
-                    entities: snapshot.entities,
-                    pickups: snapshot.pickups,
-                    sparks: snapshot.sparks,
-                    explosions: snapshot.explosions,
-                    relay_countdowns: &snapshot.relay_countdowns,
-                    quest_markers: &view.quest_markers,
-                    players: &snapshot.players,
-                    pilots: &snapshot.pilots,
-                    facings: &self.rig_facings,
-                    local: snapshot
-                        .players
-                        .iter()
-                        .find(|player| player.player_id == view.player_id),
-                    active_drill: view.active_drill,
-                    lost_cargo: view.lost_cargo,
-                    explored: Some(&self.explored_drawn),
-                    ticks: shell.update_ticks,
-                    aim_preview: view.aim_preview.as_ref(),
-                    critters: &snapshot.critters,
-                    enemies: &snapshot.enemies,
-                    rig_guards: &snapshot.rig_guards,
-                    world_tick: snapshot.tick,
-                    projectiles: &snapshot.projectiles,
-                    targets: &snapshot.targets,
-                    beams: &snapshot.beams,
-                    shots: snapshot.shots,
-                    reticle: view.reticle,
-                    bases: snapshot.bases,
-                    powered_modules: &snapshot.powered_modules,
-                    build_preview: view.build_preview.as_ref(),
-                    clock: snapshot.clock,
-                    moon: snapshot.moon,
-                    clock_state: snapshot.clock_state,
-                    talk_target: view.talk_target.as_ref().map(|(npc, _)| *npc),
-                    homes: snapshot.homes,
-                    tombs: snapshot.tombs,
-                    world_millis: drawn_world_millis(snapshot),
-                    tick_rate_hz: snapshot.tick_rate.hz(),
-                },
-            );
+            draw_world_scene(&mut world_draw, &scene);
         }
         let _canvas = UiCanvasScope::begin(draw);
         draw_heat_warning_for_view(draw, snapshot.terrain, view);
@@ -975,6 +1030,17 @@ fn end_view_clip() {
     unsafe {
         ffi::EndScissorMode();
     }
+}
+
+/// Where `view`'s rig is drawn (world pixels): the camera's pivot when it rolls.
+fn view_rig(snapshot: &RenderSnapshot<'_>, view: &ViewSnapshot<'_>) -> (f32, f32) {
+    snapshot
+        .players
+        .iter()
+        .find(|player| player.player_id == view.player_id)
+        .map_or((view.camera.x, view.camera.y), |player| {
+            (player.x, player.y)
+        })
 }
 
 /// World milliseconds of the drawn moment: between the last two ticks, like the entities drawn

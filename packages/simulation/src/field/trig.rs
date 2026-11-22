@@ -112,6 +112,7 @@ pub fn exp_neg(x: f32) -> f32 {
     }
     let mut reduced = x;
     let mut squarings = 0_u32;
+    #[allow(clippy::while_float, reason = "halving converges in a few steps")]
     while reduced > 0.125 {
         reduced *= 0.5;
         squarings += 1;
@@ -138,6 +139,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::while_float, reason = "a sweep of angles")]
     fn sin_cos_track_the_platform_functions_everywhere() {
         let mut angle = -20.0_f32;
         while angle < 20.0 {
@@ -152,7 +154,9 @@ mod tests {
     #[test]
     fn atan2_tracks_the_platform_function_in_every_quadrant() {
         for step in 0..720 {
-            let angle = f32::from(i16::try_from(step).unwrap_or(0)).to_radians() * 0.5 - PI;
+            let angle = f32::from(i16::try_from(step).unwrap_or(0))
+                .to_radians()
+                .mul_add(0.5, -PI);
             let (y, x) = (angle.sin() * 3.0, angle.cos() * 3.0);
             assert!((atan2(y, x) - y.atan2(x)).abs() < 3e-5, "{angle}");
         }

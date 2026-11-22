@@ -17,6 +17,12 @@ pub enum OptionsRow {
     TouchHand,
     /// The optional hold-to-thrust button.
     TouchThrust,
+    /// Screen effects intensity (F9 accessibility: full, reduced, off).
+    ScreenEffects,
+    /// The gyro stabiliser assist (F9; works once fitted).
+    GyroAssist,
+    /// The horizon hold assist (F9; works once fitted).
+    HorizonHold,
     Back,
 }
 
@@ -24,7 +30,13 @@ impl ShellState {
     /// The Options rows, top to bottom.
     #[must_use]
     pub fn options_rows(&self) -> Vec<OptionsRow> {
-        let mut rows = vec![OptionsRow::Volume, OptionsRow::Fullscreen];
+        let mut rows = vec![
+            OptionsRow::Volume,
+            OptionsRow::Fullscreen,
+            OptionsRow::ScreenEffects,
+            OptionsRow::GyroAssist,
+            OptionsRow::HorizonHold,
+        ];
         if self.touch_seen {
             rows.extend([
                 OptionsRow::TouchSize,
@@ -70,6 +82,9 @@ impl ShellState {
             }
             OptionsRow::TouchHand => self.touch.left_handed = !self.touch.left_handed,
             OptionsRow::TouchThrust => self.touch.thrust_button = !self.touch.thrust_button,
+            OptionsRow::ScreenEffects => self.effects = self.effects.step(step >= 0),
+            OptionsRow::GyroAssist => self.assists.gyro = !self.assists.gyro,
+            OptionsRow::HorizonHold => self.assists.horizon = !self.assists.horizon,
             OptionsRow::Volume | OptionsRow::Fullscreen | OptionsRow::Back => return false,
         }
         self.settings_dirty = true;
@@ -88,10 +103,17 @@ mod tests {
         let mut shell = ShellState::default();
         assert_eq!(
             shell.options_rows(),
-            vec![OptionsRow::Volume, OptionsRow::Fullscreen, OptionsRow::Back]
+            vec![
+                OptionsRow::Volume,
+                OptionsRow::Fullscreen,
+                OptionsRow::ScreenEffects,
+                OptionsRow::GyroAssist,
+                OptionsRow::HorizonHold,
+                OptionsRow::Back
+            ]
         );
         shell.touch_seen = true;
-        assert_eq!(shell.options_rows().len(), 6);
+        assert_eq!(shell.options_rows().len(), 9);
         assert_eq!(shell.options_rows().last(), Some(&OptionsRow::Back));
     }
 
@@ -117,5 +139,26 @@ mod tests {
         assert!(shell.touch.thrust_button);
         assert!(!shell.step_touch_option(OptionsRow::Back, 1));
         assert_eq!(shell.settings().touch, shell.touch);
+    }
+
+    #[test]
+    fn effects_and_assist_rows_step_and_save() {
+        let mut shell = ShellState {
+            modal: Some(ModalScreen::Options),
+            ..ShellState::default()
+        };
+        assert_eq!(shell.effects, crate::screen_fx::EffectsIntensity::Full);
+        assert!(
+            !shell.assists.gyro && !shell.assists.horizon,
+            "assists start off"
+        );
+        assert!(shell.step_touch_option(OptionsRow::ScreenEffects, 1));
+        assert_eq!(shell.effects, crate::screen_fx::EffectsIntensity::Reduced);
+        assert!(shell.step_touch_option(OptionsRow::GyroAssist, 1));
+        assert!(shell.step_touch_option(OptionsRow::HorizonHold, 1));
+        let saved = shell.settings();
+        assert_eq!(saved.effects, crate::screen_fx::EffectsIntensity::Reduced);
+        assert!(saved.assists.gyro && saved.assists.horizon);
+        assert!(shell.take_settings_dirty());
     }
 }

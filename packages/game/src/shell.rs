@@ -208,6 +208,10 @@ pub enum PauseOption {
     /// Host / local: who must be in bed to skip the night (everyone, or anyone: the host
     /// allows it). See `fatherload_simulation::clock::SleepRule`.
     SleepRule,
+    /// Test mode (F9 dev zones): place the next field preset around this seat's rig.
+    PlaceFieldZone,
+    /// Test mode: remove every field zone.
+    ClearFieldZones,
 }
 
 impl PauseOption {
@@ -275,6 +279,8 @@ impl PauseOption {
             Self::ToggleNoClip => "No-Clip Flight",
             Self::EnemyDifficulty => "Enemies",
             Self::SleepRule => "Sleeping",
+            Self::PlaceFieldZone => "Place Field Zone",
+            Self::ClearFieldZones => "Clear Field Zones",
         }
     }
 }
@@ -2160,6 +2166,12 @@ pub struct ShellState {
     /// Windowed size/maximized state, kept current by the desktop app and persisted with settings.
     pub window: save::WindowSettings,
     /// Touch control preferences (Options; persisted with settings).
+    /// The field preset the test-mode "Place Field Zone" entry places next (F9 dev zones).
+    pub next_field_preset: usize,
+    /// Screen effects intensity (F9 accessibility, Options).
+    pub effects: crate::screen_fx::EffectsIntensity,
+    /// Craft rotation assists switched on (F9, Options; they work once fitted).
+    pub assists: fatherload_simulation::attitude::AttitudeAssists,
     pub touch: crate::input::touch::TouchSettings,
     /// A touch screen has driven the first seat this run (Options then shows its rows).
     pub touch_seen: bool,
@@ -2222,6 +2234,9 @@ impl ShellState {
             fullscreen: settings.fullscreen,
             window: settings.window,
             touch: settings.touch,
+            effects: settings.effects,
+            assists: settings.assists,
+            next_field_preset: 0,
             touch_seen: false,
             settings_dirty: false,
             save_dirty: false,
@@ -2310,6 +2325,8 @@ impl ShellState {
             fullscreen: self.fullscreen,
             window: self.window,
             touch: self.touch,
+            effects: self.effects,
+            assists: self.assists,
         }
     }
 
@@ -2958,6 +2975,9 @@ impl ShellState {
             }
             PauseOption::ExitToDesktop => self.request_exit_or_prompt(),
             PauseOption::WarpToLayer => self.open_modal(ModalScreen::WarpToLayer),
+            PauseOption::PlaceFieldZone | PauseOption::ClearFieldZones => {
+                self.field_zone_action(options[self.selected_pause_item], requests);
+            }
             PauseOption::ToggleInvulnerable
             | PauseOption::ToggleInfiniteFuel
             | PauseOption::ToggleNoClip => {
@@ -3481,7 +3501,7 @@ mod tests {
             (shell.master_volume - 0.5).abs() < 1e-5,
             "and leaves the volume"
         );
-        shell.selected_menu_item = 2;
+        shell.selected_menu_item = 5;
         shell.update(
             &[PlayerInput {
                 confirm: true,

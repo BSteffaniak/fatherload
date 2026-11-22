@@ -116,6 +116,13 @@ pub struct SettingsFile {
     /// Touch control preferences; missing in settings written before they existed.
     #[serde(default)]
     pub touch: crate::input::touch::TouchSettings,
+    /// Screen effects intensity (F9 accessibility); missing in older settings (full).
+    #[serde(default)]
+    pub effects: crate::screen_fx::EffectsIntensity,
+    /// The craft rotation assists switched on (F9; they work once fitted to the rig). Off by
+    /// default and in older settings.
+    #[serde(default)]
+    pub assists: fatherload_simulation::attitude::AttitudeAssists,
 }
 
 impl Default for SettingsFile {
@@ -125,6 +132,11 @@ impl Default for SettingsFile {
             fullscreen: false,
             window: WindowSettings::default(),
             touch: crate::input::touch::TouchSettings::default(),
+            effects: crate::screen_fx::EffectsIntensity::Full,
+            assists: fatherload_simulation::attitude::AttitudeAssists {
+                gyro: false,
+                horizon: false,
+            },
         }
     }
 }

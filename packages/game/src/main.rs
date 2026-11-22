@@ -22,6 +22,7 @@ mod runtime;
 mod save;
 #[cfg(not(target_os = "emscripten"))]
 mod scene_capture;
+mod screen_fx;
 mod shell;
 #[cfg(not(target_os = "emscripten"))]
 mod story_report;
