@@ -278,6 +278,15 @@ open (otherwise Page Up / Page Down scroll dialogs; `ShellState::tuning_keys_act
   is the slowest there. Budget: keep the stack one pass; a rolled view is the cost to watch on
   weak devices.
 
+  Review re-run (same scenes and settings, Chrome 1280 x 720, frames in 5 s / mean JS ms):
+  GPU: town_market 299 / 1.30, fx_combined 300 / 1.14, fx_pixelate 300 / 1.16, fx_wobble
+  300 / 1.15, fx_dark 300 / 0.95, rotate_shear_wall 300 / 1.15. Software WebGL: 47 / 1.12,
+  34 / 1.41, 32 / 2.30, 27 / 2.19, 69 / 1.11, 30 / 1.23. The GPU result (every state at
+  60 Hz, about 1 ms of JavaScript) holds; under software WebGL the full-screen effect pass
+  costs frames this time (pixelate and wobble 27-34 frames against 47 plain), so effect-heavy
+  strata are the cost to watch on weak devices without a GPU. The measured callback time
+  does not include GPU or rasterizer time.
+
 ## Wave 6 QA (presentation, tests and browser timing)
 
 - **Presentation clock** (`ShellState::update_ticks`): toasts, banners and every world
