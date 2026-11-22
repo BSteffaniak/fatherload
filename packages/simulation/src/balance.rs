@@ -91,6 +91,9 @@ pub struct BalanceConfig {
     pub threads: usize,
     /// Probe names to run (`None`: every probe in [`standard_probes`]).
     pub only: Option<Vec<String>>,
+    /// The generator the economy runs' worlds use (`--generator`; the current one by default,
+    /// [`crate::worldgen::GeneratorVersion::DEEP_DESCENT`] for the Deep Descent preview).
+    pub generator: crate::worldgen::GeneratorVersion,
 }
 
 impl Default for BalanceConfig {
@@ -102,6 +105,7 @@ impl Default for BalanceConfig {
             strategies: Strategy::ALL.to_vec(),
             threads: 1,
             only: None,
+            generator: crate::worldgen::GeneratorVersion::CURRENT,
         }
     }
 }

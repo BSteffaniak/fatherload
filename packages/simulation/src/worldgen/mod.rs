@@ -325,6 +325,7 @@ impl GeneratorVersion {
             | Self::V8
             | Self::V9
             | Self::V10 => false,
+            Self::V11 => true,
         }
     }
 
@@ -346,7 +347,10 @@ impl GeneratorVersion {
             | Self::V7
             | Self::V8
             | Self::V9
-            | Self::V10 => streamed::STREAMED_COLUMN_LIMIT,
+            | Self::V10
+            // V11 reuses V10's sky, Moon, village and tomb placement, all sized to the streamed
+            // column limit; raising it waits for a generator checked out to 10^9 columns.
+            | Self::V11 => streamed::STREAMED_COLUMN_LIMIT,
         }
     }
 

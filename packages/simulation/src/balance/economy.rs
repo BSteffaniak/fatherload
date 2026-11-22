@@ -115,9 +115,27 @@ impl EconomyRun {
 /// A fresh standard world for `seed` on the current generator, Normal enemies, one rig.
 #[must_use]
 pub fn new_world(seed: u64, tick_rate_hz: u32) -> WorldState {
+    new_world_on(
+        seed,
+        tick_rate_hz,
+        crate::worldgen::GeneratorVersion::CURRENT,
+    )
+}
+
+/// [`new_world`] on `generator` (the balance report's `--generator`, e.g. the Deep Descent
+/// preview).
+#[must_use]
+pub fn new_world_on(
+    seed: u64,
+    tick_rate_hz: u32,
+    generator: crate::worldgen::GeneratorVersion,
+) -> WorldState {
     let mut world = WorldState::new_game_with_settings(
         BOT_PLAYER,
-        &WorldSettings::new(seed),
+        &WorldSettings {
+            generator,
+            ..WorldSettings::new(seed)
+        },
         SimulationParams::new(tick_rate_hz),
     );
     world.set_enemy_difficulty(EnemyDifficulty::Normal);
@@ -152,7 +170,25 @@ pub fn inputs_for(
 /// Plays `minutes` of `strategy` on `seed`'s world.
 #[must_use]
 pub fn run_economy(seed: u64, strategy: Strategy, minutes: u32, tick_rate_hz: u32) -> EconomyRun {
-    let mut world = new_world(seed, tick_rate_hz);
+    run_economy_on(
+        seed,
+        strategy,
+        minutes,
+        tick_rate_hz,
+        crate::worldgen::GeneratorVersion::CURRENT,
+    )
+}
+
+/// [`run_economy`] on a world of `generator`.
+#[must_use]
+pub fn run_economy_on(
+    seed: u64,
+    strategy: Strategy,
+    minutes: u32,
+    tick_rate_hz: u32,
+    generator: crate::worldgen::GeneratorVersion,
+) -> EconomyRun {
+    let mut world = new_world_on(seed, tick_rate_hz, generator);
     let mut bot = MinerBot::new(BOT_PLAYER, strategy);
     let ticks_per_minute = u64::from(world.tick_rate_hz()) * 60;
     let mut samples = Vec::new();
@@ -237,7 +273,8 @@ pub fn run_all(config: &BalanceConfig) -> Vec<EconomyRun> {
         .map(|(seed, strategy)| {
             let minutes = config.minutes;
             let hz = config.tick_rate_hz;
-            move || run_economy(seed, strategy, minutes, hz)
+            let generator = config.generator;
+            move || run_economy_on(seed, strategy, minutes, hz, generator)
         })
         .collect();
     run_parallel(config.threads, jobs)

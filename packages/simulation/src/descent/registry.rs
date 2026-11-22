@@ -630,7 +630,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         host_band: deep(DeepStratum::CrystalFaults),
         soft: TileKind::Stone,
         palette: palette(
-            Rgb(176, 208, 228),
+            Rgb(140, 198, 238),
             Rgb(130, 166, 196),
             Rgb(60, 84, 108),
             Some(Rgb(240, 250, 255)),
@@ -751,7 +751,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         palette: palette(
             Rgb(150, 160, 176),
             Rgb(112, 120, 140),
-            Rgb(96, 128, 168),
+            Rgb(77, 142, 213),
             Some(Rgb(255, 240, 200)),
         ),
         ores: &[ore(Diamond, 500, 800, 40), ore(Platinum, 500, 600, 40)],
@@ -870,7 +870,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         share_per_mille: 170,
         host_band: deep(DeepStratum::CrystalFaults),
         palette: palette(
-            Rgb(188, 196, 208),
+            Rgb(232, 236, 244),
             Rgb(140, 148, 164),
             Rgb(60, 64, 76),
             Some(Rgb(255, 255, 255)),
@@ -1228,8 +1228,8 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         share_per_mille: 260,
         host_band: deep(DeepStratum::MantleStormZone),
         palette: palette(
-            Rgb(196, 168, 150),
-            Rgb(220, 120, 60),
+            Rgb(180, 190, 203),
+            Rgb(197, 107, 53),
             Rgb(70, 40, 30),
             Some(Rgb(255, 230, 160)),
         ),

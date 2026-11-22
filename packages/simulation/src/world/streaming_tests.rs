@@ -190,7 +190,7 @@ fn streamed_terrain_snapshots_hold_only_edits_and_reject_other_generators() {
     ));
     let snapshot = terrain.snapshot();
     assert!(snapshot.diffs.is_empty());
-    assert!(snapshot.chunks.len() >= 3);
+    assert!(snapshot.chunks.is_empty() && snapshot.packed.0.len() >= 3);
     let restored = Terrain::from_snapshot(snapshot.clone()).expect("restores");
     assert_eq!(restored.digest(), terrain.digest());
     assert_eq!(restored.generation_diffs(), terrain.generation_diffs());

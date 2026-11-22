@@ -48,6 +48,8 @@ mod crew;
 mod crypt_tests;
 mod crypts;
 #[cfg(test)]
+mod descent_tests;
+#[cfg(test)]
 mod determinism_tests;
 mod discovery;
 #[cfg(test)]

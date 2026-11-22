@@ -49,7 +49,7 @@ use crate::{
     enemy::{
         AttackStyle, Damage, DamageKind, DamageOutcome, DamageSource, EnemyDifficulty,
         EnemyDirector, EnemyKind, EnemyMode, EnemyShotState, EnemyState, Locomotion, ShotKind,
-        band_roster, hazard_density, lair_occupant, loot, tier_scale,
+        hazard_density, lair_occupant, loot, tier_scale,
     },
     entity::{Body, Entity, EntityId, EntityKind, EntityState},
     event::{GameplayEventKind, TickOutput},
@@ -388,6 +388,9 @@ impl WorldState {
     }
 
     pub(super) fn tier_at(&self, tile: TilePosition) -> u8 {
+        if self.terrain.settings().generator.has_descents() {
+            return self.terrain.stratum_at(tile).enemy_tier();
+        }
         u8::try_from(self.terrain.band_at(tile).index()).unwrap_or(u8::MAX)
     }
 
@@ -740,7 +743,7 @@ impl WorldState {
             {
                 continue;
             }
-            let roster = band_roster(self.terrain.band_at(tile));
+            let roster = self.terrain.creature_roster(tile);
             let weight_of = |kind: EnemyKind, weight: u32| {
                 if tags.is_some_and(|tags| cave_habitat_fits(kind, tags)) {
                     weight * CAVE_HABITAT_WEIGHT

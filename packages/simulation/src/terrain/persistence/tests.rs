@@ -41,6 +41,8 @@ struct WireSnapshot {
     /// The frame (F7): sector x, sector y, floating.
     frame: (i64, i64, bool),
     column_limit: Option<i32>,
+    /// [`super::PackedChunks`] bytes (save format 13).
+    packed: Vec<u8>,
 }
 
 /// One streamed chunk's diffs on the wire.
@@ -456,6 +458,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
         chunks: Vec::new(),
         frame: (0, 0, false),
         column_limit: None,
+        packed: Vec::new(),
     };
     let bytes = postcard::to_allocvec(&known).expect("encode");
     assert!(

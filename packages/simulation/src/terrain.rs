@@ -633,6 +633,15 @@ enum Slot {
     Streamed(ChunkPosition, usize),
 }
 
+/// The heap the browser build budgets for a streamed world's terrain and the generator's
+/// per-process caches (Wave 7 F8 streaming budget).
+///
+/// The emscripten build grows its memory up to 2 GiB; the simulation's terrain share must stay
+/// well inside that so a Deep Descent world explored to the bottom never runs the tab out of
+/// memory. Measured natively by `tests/deep_descent_memory.rs` (an upper bound for the 32-bit
+/// WASM heap).
+pub const WASM_TERRAIN_BUDGET_BYTES: usize = 256 << 20;
+
 /// Chunks kept loaded around each centre by [`Terrain::stream_around`]: `(columns, rows)` of
 /// chunks either side (about two screens).
 pub const STREAM_LOAD_RADIUS_CHUNKS: (i32, i32) = (4, 3);
@@ -859,6 +868,38 @@ impl Terrain {
     #[must_use]
     pub fn nominal_depth(&self, rows: f32) -> f32 {
         worldgen::strata::nominal_depth(&self.settings, rows)
+    }
+
+    /// The Deep Descent stratum containing `position` (see [`worldgen::descent::stratum_at`]):
+    /// a V11 world's own stratum, or the stratum standing for an older world's band.
+    #[must_use]
+    pub const fn stratum_at(&self, position: TilePosition) -> crate::descent::Stratum {
+        worldgen::descent::stratum_at(&self.settings, position.x, position.y)
+    }
+
+    /// The name of the layer at `position` as players see it: a V11 world's stratum, an older
+    /// world's band.
+    #[must_use]
+    pub const fn layer_name(&self, position: TilePosition) -> &'static str {
+        if self.settings.generator.has_descents() {
+            self.stratum_at(position).name()
+        } else {
+            self.band_at(position).name()
+        }
+    }
+
+    /// The creatures that roam at `position`, with spawn weights: a V11 stratum's registry
+    /// table, or the classic roster of an older world's band.
+    #[must_use]
+    pub const fn creature_roster(
+        &self,
+        position: TilePosition,
+    ) -> &'static [(crate::enemy::EnemyKind, u32)] {
+        if self.settings.generator.has_descents() {
+            self.stratum_at(position).def().creatures
+        } else {
+            crate::enemy::band_roster(self.band_at(position))
+        }
     }
 
     /// The deep stratum containing `position`, if it is below the shallow layers.

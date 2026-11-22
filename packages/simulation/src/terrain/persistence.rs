@@ -14,8 +14,11 @@
 //!
 //! [`FullTerrain`] is the older full-tile form, kept for migrating saves written before v6.
 
+mod packed;
 #[cfg(test)]
 mod tests;
+
+pub use packed::PackedChunks;
 
 use std::{
     fmt,
@@ -229,8 +232,9 @@ pub struct TerrainSnapshot {
     pub digest: u64,
     /// Tiles that differ from the generated base, by row-major index (bounded terrain).
     pub diffs: TileDiffs,
-    /// Streamed terrain: every chunk with edits and its tiles that differ from generation, by
-    /// [`ChunkPosition::local_index`]. Empty for bounded terrain (and missing in older saves).
+    /// Streamed terrain as saves before format 13 stored it: every chunk with edits and its
+    /// tiles that differ from generation, by [`ChunkPosition::local_index`]. Still read; new
+    /// snapshots write [`Self::packed`] instead and leave this empty.
     #[serde(default)]
     pub chunks: Vec<(ChunkPosition, TileDiffs)>,
     /// The world's local pixel frame (F7, [`crate::position::Frame`]); missing in older saves,
@@ -241,6 +245,11 @@ pub struct TerrainSnapshot {
     /// ([`Terrain::set_column_limit_for_tests`]); `None` for every real world.
     #[serde(default)]
     pub column_limit: Option<i32>,
+    /// Streamed terrain: every chunk with edits and its diffs, compressed ([`PackedChunks`]:
+    /// runs of equal tiles in one byte stream, base64 text in JSON). Empty for bounded terrain
+    /// (and missing in older saves).
+    #[serde(default)]
+    pub packed: PackedChunks,
 }
 
 /// Why a [`TerrainSnapshot`] could not be restored.
@@ -480,6 +489,7 @@ impl Terrain {
                     chunks: Vec::new(),
                     frame: self.frame,
                     column_limit: self.column_limit_override,
+                    packed: PackedChunks::default(),
                 }
             }
             Storage::Streamed(streamed) => TerrainSnapshot {
@@ -490,21 +500,24 @@ impl Terrain {
                     .digest
                     .wrapping_add(streamed_generator_probe(&self.settings)),
                 diffs: TileDiffs::default(),
-                chunks: streamed
-                    .edits
-                    .iter()
-                    .map(|(chunk, edits)| {
-                        (
-                            *chunk,
-                            TileDiffs {
-                                entries: edits
-                                    .iter()
-                                    .map(|(local, tile)| (u32::from(*local), *tile))
-                                    .collect(),
-                            },
-                        )
-                    })
-                    .collect(),
+                chunks: Vec::new(),
+                packed: PackedChunks(
+                    streamed
+                        .edits
+                        .iter()
+                        .map(|(chunk, edits)| {
+                            (
+                                *chunk,
+                                TileDiffs {
+                                    entries: edits
+                                        .iter()
+                                        .map(|(local, tile)| (u32::from(*local), *tile))
+                                        .collect(),
+                                },
+                            )
+                        })
+                        .collect(),
+                ),
                 frame: self.frame,
                 column_limit: self.column_limit_override,
             },
@@ -525,11 +538,13 @@ impl Terrain {
             height,
             digest,
             diffs,
-            chunks,
+            mut chunks,
+            packed,
             frame,
             column_limit,
         } = snapshot;
         if settings.generator.is_streamed() {
+            chunks.extend(packed.0);
             let mut terrain =
                 Self::from_streamed_snapshot(settings, height, digest, chunks, column_limit)?;
             terrain.frame = frame;

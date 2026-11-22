@@ -3133,6 +3133,141 @@ the side of the frame origin a sprite is on.
   rigs in world pixels; they are correct on fixed frames and on a floating world before its
   first frame move only.
 
+## Wave 7 strata: the Descent framework and generator V11 (`src/descent.rs`, `src/descent/registry.rs`, `src/worldgen/descent.rs`, `src/worldgen/descent/landmarks.rs`, expansion plan F8)
+
+### The stratum registry (`crate::descent`)
+
+- **`Descent`** (8, top to bottom): name, numeral, target rows of a mean world
+  (`target_rows`, back to back to 13,000), target hours (0 to 90), story beat, its strata
+  (`strata`, `first_stratum`, `last_stratum`) and its gate (`gate`, held by the last stratum).
+- **`Stratum`** (41, `#[repr(u8)]`, `Stratum::ALL` order = registry order) and
+  **`StratumDef`** in `registry::STRATA`, read through `Stratum::def` (by reference: indexing
+  the `const` table by value copies all of it in debug builds). Fields: name, signature rule,
+  `share_per_mille` of its Descent (each Descent sums to 1000), `host_band` (the classic
+  `Band` whose rules a placeholder borrows), `soft` / `hard` rock (`TileKind`), `palette`
+  (`StratumPalette` of `Rgb`: rock, hard, back wall, accent), `ores` (`OreCurve`: mineral, peak
+  and spread per mille through the stratum, weight; `ore_weights(along)`), `layer_resource`
+  (a name plus the `StrategicResourceKind` standing in), `creatures` (`(EnemyKind, weight)`,
+  existing underground kinds), `hazards` (`(HazardKind, weight)`, `hazard_weights()`), `field`
+  (`FieldProfile`), `music` (`MusicCue`, one per Descent), `ambience` (`AmbienceCue`),
+  `landmarks` (`LandmarkKind`), `variants` (2-3 names; a world picks one with
+  `worldgen::descent::variant`) and `gate` (`Option<GateDef>`, only on a Descent's last
+  stratum).
+- Descents I and II are the twelve classic bands (`Stratum::of_band`, `is_classic`): host band
+  = own band, rock = the band's materials, creatures = `enemy::band_roster`; their registry
+  ores and hazards describe the classic curves (the generator keeps the classic rules for
+  them). Every older world names its layers through `Stratum::of_band`.
+- **`FieldProfile`** (plain integers; `FieldProfile::NEUTRAL` is the `Default`, `is_neutral`):
+  `gravity_milli` (x, y in thousandths of standard gravity, `(0, 1000)` standard),
+  `time_scale_permille`, `friction_permille`, `drag_permille`, `light_permille`,
+  `mirror_controls` and `screen: &[ScreenEffectLevel]` (`ScreenEffect` id plus intensity per
+  mille, in drawing order). Placeholder values follow §14 (Glow Sea light 250, Brine Glaciers
+  friction 300, Underground Ocean drag 1800, Time Sludge time 800, Pixel Rot pixelate and
+  palette reduce, Prism Desert chromatic aberration, Singularity Fields lensing, the Sunforge
+  exposure and bloom, Pearl Abyss desaturate and vignette, ...). **Nothing reads them yet.**
+- **Gates** (`GateDef`: `DescentBoss`, `requires: &[GateRequirement]`, `rewards:
+  &[DescentKey]`): every key a gate asks for is a reward of an earlier gate, every
+  `DescentKey` is a reward exactly once, and the Seal Gate asks `EveryEarlierKey`.
+  `gate_passable(gate, &GateProgress)` checks a crew's drill tier, keys and beaten bosses (bit
+  sets by declaration order).
+
+### Generator V11 (`GeneratorVersion::V11`, `worldgen::descent`)
+
+- `GeneratorVersion::V11` is V10 (surface, sky with V9's bands, Moon, tombs and every other
+  `has_*` switch) plus `has_descents()`. `CURRENT` stays **V10**;
+  `GeneratorVersion::DEEP_DESCENT` names the preview. `WorldSize::descent_height_tiles`: 13,014
+  rows for Standard (13,000 rows of strata below the ground line, plus the sky rows and the
+  bedrock floor), 13,614 for Large.
+- **Layout** (`layout(settings) -> DescentLayout { tops: [i32; 41], floor }`, a `const fn` of
+  the seed): each Descent draws its thickness (0.9-1.1 x its target share of the rows), each
+  stratum its share of the Descent (0.7-1.3 x the registry share, at least
+  `MIN_STRATUM_ROWS` = 96), leftovers to the Descent's last stratum. `rows`, `descent_rows`,
+  `stratum_of_row` and `along` (per mille through the stratum) answer from the layout rows;
+  `stratum_at` / `stratum_in` add the ragged boundaries: `boundary_shape(index)` is (4, 6)
+  under the topsoil, (12, 14) inside a Descent and (18, 20) between Descents (wave amplitude,
+  half zone), with V4's lens model under salts of their own (V4-V10 are untouched).
+  `descent_at`, `stratum_solid_top_row`, `stratum_shallowest_row`, `boundary_column_depth`,
+  `boundary_depth_range`.
+- **Classic rules through host bands**: `strata::band_at` of a V11 world answers the stratum's
+  host band, so every band-keyed rule (heat, protection, POI kinds, cave biomes, lairs, drops,
+  quests) works at every depth; `strata::nominal_row` / `nominal_depth` map each stratum's rows
+  onto its host band's classic nominal rows (depth curves, hazard gates and heat read a
+  placeholder stratum as the band it borrows). `scaled_row` inverts the mapping over Descents
+  I and II only, where it is monotone (nominal 220 = the end of Descent II); `scaled_span`
+  stretches like Descents I and II; `band_layout_rows`, `band_solid_top_row` and
+  `boundary_bases` answer the classic band's own stratum in Descents I and II. Nominal rows
+  are therefore **not monotone** over a whole V11 world: never binary-search `nominal_row`
+  past Descent II.
+- **Registry-driven generation below Descent II** (`streamed::base::Ctx`): `Ctx::descent`
+  caches the layout; `Ctx::stratum`, `Ctx::nominal_row`; `rock_kind` uses the stratum's
+  `soft` / `hard`; veins, pods and motherlodes pick minerals with `Ctx::mineral_weights` /
+  `mineral_from_hash` (the stratum's `ore_weights(along)`, minus minerals too hard for the
+  host band's drill), hazard clusters with `Ctx::hazard_weights` (the registry's). POI tiers:
+  the classic bands' tiers plus one set per deep stratum (keys `4096 + stratum * 64 +
+  ordinal`, dealing the host band's kinds). Creatures: `Terrain::creature_roster` (the
+  stratum's table) replaces `band_roster` in the director, and `tier_at` uses
+  `Stratum::enemy_tier` (11 below Descent II). `Terrain::stratum_at` and `layer_name` name
+  the layer anywhere.
+- **The Hollow World** (`hollow_rows`, `hollow_open`, `fixed_kind`): the Inner Sky is open air
+  from 40 rows under its top to 48 rows above its bottom (both waving 14 rows), 300+ rows tall
+  in every column, with floating stones (noise blobs) and stalactites. It is part of the base
+  layer, so caves, hazards and ore only touch the stones.
+- **Landmarks** (`landmarks`): `landmark_generator(kind)` resolves every `LandmarkKind`
+  (`DescentStamp` for outposts, gate chambers and anomaly rooms; `HollowCavern`; the existing
+  POI, cave-ecosystem, village and tomb generators). Stamped in `assemble` after the pilot
+  spaces, before the tombs: one **outpost** per Descent (`outpost`: a 26x9 plated hall with
+  glass skylights and doors both sides, 40-160 columns either side of the spawn column, in
+  the Descent's `Outpost` stratum; the Hollow World's stands on the cavern's ground), a **gate
+  chamber** per Descent (`gate_chamber`: a 44x12 hall of ruin brick, pillars and glyphs just
+  above the Descent's last transition zone, or the floor; all drillable, so a gate never
+  blocks the way down) and **anomaly rooms** (`ANOMALY_REGION` 80x64; 45 % of the regions
+  whose centre row is in an `AnomalyRoom` stratum hold a 14x8 crystal-lined room with a
+  glyph). `landmarks_in(settings, rect)` lists them, `landmark_tile` paints them.
+- **Golden digest**: `worldgen::descent::tests::GOLDEN_V11_DIGEST` pins the town, the middle of
+  every Descent, every outpost and gate chamber, the cavern, an anomaly room and the floor. The
+  V1-V10 digests are unchanged. V11 chunks generate as fast as V10's.
+
+### Streaming budget
+
+- **Chunk caching**: unchanged (`streamed::CHUNKS`, 4,096 chunks; loaded chunks per rig within
+  `STREAM_LOAD_RADIUS_CHUNKS`, with hysteresis). Depth adds no cache pressure: a rig holds at
+  most about 81 chunks loaded anywhere.
+- **Save compression** (`terrain::PackedChunks`, `TerrainSnapshot::packed`): a streamed
+  world's edits are one byte stream: chunks as zigzag steps, each chunk's diffs as runs of
+  equal tiles `(gap, length, code)` (code 0 repeats the previous run's tile) in row- or
+  column-major order, whichever is shorter (a shaft dug down a chunk is one run). Base64 text
+  in JSON, raw bytes in postcard. Snapshots write `packed` and leave the old `chunks` list
+  empty; `from_snapshot` still reads `chunks` (format 12 saves and older).
+- **WASM memory** (`terrain::WASM_TERRAIN_BUDGET_BYTES` = 256 MiB, measured by
+  `tests/deep_descent_memory.rs` with a counting allocator): a V11 world with a shaft to the
+  floor and a 240-wide gallery in every Descent, the rig ridden down the whole shaft (every
+  chunk on the way generated): **19.8 MiB** of heap settled and at peak (native 64-bit
+  pointers: an upper bound for the 32-bit browser heap), at most 81 chunks loaded, 913 edited
+  chunks, about 43 KiB of terrain save. The emscripten build grows its memory up to 2 GiB
+  (`ALLOW_MEMORY_GROWTH`); no browser run was possible in this wave's environment (no
+  emscripten toolchain), so the cap is checked natively.
+
+### Seams for the other Wave 7 tracks and later waves
+
+- **Field effects (F9)**: read `terrain.stratum_at(tile).def().field` (or
+  `worldgen::descent::stratum_at`); every value is a plain integer, neutral by default. Blend at
+  boundaries with `DescentLayout::along` or across the ragged `stratum_at`.
+- **Logistics and progression (F10)**: outposts and gate chambers are found with
+  `landmarks::outpost` / `gate_chamber` / `landmarks_in` (bounds, Descent, stratum); gates are
+  data (`Descent::gate`) with `gate_passable` (nothing enforces them yet). Target rows and
+  hours per Descent for the descent harness: `Descent::target_rows` / `target_hours`.
+  `balance::BalanceConfig::generator` (`--balance-report --generator v11`) runs the economy
+  bots on V11.
+- **World positions (F7)**: V11 rows reach 13,014 (416,448 world pixels; `f32` still resolves a
+  fraction of a pixel there).
+- **Wave 8+ content**: replace a stratum's placeholder values in `registry.rs` (rock, ores,
+  hazards, creatures, field, cues, variants) without touching the layout; new landmark kinds
+  append to `LandmarkKind` and get a `landmark_generator` arm. A stratum stops borrowing its
+  host band's rules wherever a rule reads the stratum instead of `band_at`.
+- **Formats**: one `PROTOCOL_VERSION` bump (14 to 15: `GeneratorVersion::V11` and the packed
+  keyframe chunks) and one save bump (12 to 13; formats 8 to 12 load as is). No new gameplay
+  event codes (the "entering" banner is presentation, from the rig's row).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
