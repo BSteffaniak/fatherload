@@ -86,6 +86,16 @@ impl WorldState {
         }
     }
 
+    /// Whether `state`'s creature is at peace with the crew now: the Amber Court's drones
+    /// while the Court is friendly, the Swarm under a truce, and lure fish (never thralls).
+    /// Auto-aim never locks onto one, so a friendly Court is not soured by a stray lock.
+    pub(in crate::world) fn living_peaceful(&self, state: &EnemyState) -> bool {
+        state.kind.is_living_dark()
+            && state.phase != POSSESSED_PHASE
+            && (state.kind == EnemyKind::LureFish
+                || !self.living_dark.hive.hostile_kind(state.kind))
+    }
+
     /// Whether the Mind's nerve nodes shield it from `kind`'s damage.
     pub(super) fn mind_shields(&self, kind: EnemyKind) -> bool {
         kind == EnemyKind::MycelialMind && self.living_dark.mind.shielded()

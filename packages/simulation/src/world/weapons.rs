@@ -178,6 +178,13 @@ impl WorldState {
             if entity.state.health().is_none() {
                 continue;
             }
+            // The Living Dark's peaceful folk (the Amber Court's drones while it is friendly,
+            // the Swarm under a truce, lure fish) are never locked onto (Wave 8).
+            if let EntityState::Enemy(state) = &entity.state
+                && self.living_peaceful(state)
+            {
+                continue;
+            }
             let (tx, ty) = (entity.body.x, entity.body.y);
             let (dx, dy) = (tx - origin.0, ty - origin.1);
             let distance = dx.mul_add(dx, dy * dy).sqrt();

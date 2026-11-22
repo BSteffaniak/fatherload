@@ -552,6 +552,34 @@ fn the_hive_remembers_the_crews_choices_and_replicates_them() {
 }
 
 #[test]
+fn auto_aim_spares_the_courts_drones_while_the_court_is_friendly() {
+    let mut world = world_at(30);
+    let (x, y) = (60, middle_row(Stratum::TheHive));
+    arena(&mut world, x, y);
+    let rig = world.player(PLAYER).expect("rig");
+    let (rx, ry) = (rig.x, rig.y);
+    let drone = world.spawn_enemy(EnemyKind::HiveDrone, rx + TILE_SIZE * 3.0, ry - 8.0);
+    let _fish = world.spawn_enemy(EnemyKind::LureFish, rx + TILE_SIZE * 2.0, ry - 8.0);
+    assert_eq!(
+        world.auto_aim_target(PLAYER, (1.0, 0.0)),
+        None,
+        "a friendly Court's drone and a lure fish are never locked onto"
+    );
+    // A Swarm soldier is.
+    let soldier = world.spawn_enemy(EnemyKind::HiveSoldier, rx + TILE_SIZE * 4.0, ry - 8.0);
+    assert_eq!(
+        world.auto_aim_target(PLAYER, (1.0, 0.0)).map(|(id, ..)| id),
+        Some(soldier)
+    );
+    // A hostile Court's drones are fair game.
+    world.living_dark.hive.standing = -60;
+    assert_eq!(
+        world.auto_aim_target(PLAYER, (1.0, 0.0)).map(|(id, ..)| id),
+        Some(drone)
+    );
+}
+
+#[test]
 fn the_matriarch_falls_and_the_swarm_breaks() {
     let mut world = world_at(30);
     world.set_enemy_difficulty(EnemyDifficulty::Normal);
