@@ -85,7 +85,7 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
     let settings = v11(0x00C0_FFEE);
     // A low tick rate keeps the run short (the simulation is tick-rate safe).
     let mut world =
-        WorldState::new_game_with_settings(PLAYER, &settings, crate::SimulationParams::new(10));
+        WorldState::new_game_with_settings(PLAYER, &settings, crate::SimulationParams::new(20));
     world.enable_test_mode();
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
     // Centre the rig over its column, so it fits the one-tile shaft it drills.
@@ -127,7 +127,7 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
                 }
             }
             if tile.y >= floor - 1 {
-                println!("the bot reached the floor after {tick} ticks at 10 Hz");
+                println!("the bot reached the floor after {tick} ticks at 20 Hz");
                 break;
             }
         }

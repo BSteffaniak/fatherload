@@ -389,6 +389,16 @@ mod tests {
         press(&mut setup, CONFIRM);
         assert_eq!(setup.day_length, DayLength::Long);
         press(&mut setup, DOWN);
+        // The World row switches to the Deep Descent preview and back.
+        assert_eq!(setup.row(), SetupRow::World);
+        assert!(!setup.deep_descent());
+        press(&mut setup, CONFIRM);
+        assert!(setup.deep_descent());
+        assert_eq!(setup.settings.generator, GeneratorVersion::DEEP_DESCENT);
+        press(&mut setup, CONFIRM);
+        assert_eq!(setup.settings.generator, GeneratorVersion::CURRENT);
+        press(&mut setup, CONFIRM);
+        press(&mut setup, DOWN);
         assert_eq!(setup.row(), SetupRow::TestMode);
         assert!(!setup.test_mode);
         press(&mut setup, CONFIRM);
