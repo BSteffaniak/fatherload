@@ -40,9 +40,11 @@ pub const SPORE_SHOT_CLOUD_MILLIS: u64 = 6_500;
 pub const SPORE_CLOUD_HALF: (i32, i32) = (4, 3);
 /// Most spore clouds in the air at once (the oldest clears first).
 pub const MAX_SPORE_CLOUDS: usize = 12;
-/// Hull a second a spore cloud stings a rig without the Bio-Filter (at full strength), before
-/// the depth's creature scale (`enemy::tier_scale`: about 4.5x in the Living Dark, so a cloud
-/// sat in costs about 2 hull a second; the Mind's storms keep a rig in them, so they add up).
+/// Hull a second a spore cloud stings a rig without the Bio-Filter (at full strength).
+///
+/// Scaled by the depth's creature scale (`enemy::tier_scale`: about 4.5x in the Living Dark, so
+/// a cloud sat in costs about 2 hull a second; the Mind's storms keep a rig in them, so they
+/// add up).
 pub const SPORE_DAMAGE_PER_SECOND: f32 = 0.4;
 /// A rig brushing a spore pod (its body this close to the pod's tile, pixels) bursts it.
 pub const SPORE_POD_BRUSH_PIXELS: f32 = 6.0;
