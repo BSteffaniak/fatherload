@@ -350,8 +350,11 @@ pub const CRUST_SCENES: &[Scene] = &[
                 let (x, y) = (top..bottom)
                     .flat_map(|y| (0..600).map(move |x| (x, y)))
                     .find(|(x, y)| {
-                        crust::lava_tube_at(&settings, *x, *y)
-                            && crust::lava_tube_at(&settings, x + 20, *y)
+                        // Well inside a long tube, on its floor, so it runs off both sides of
+                        // the view.
+                        (-24..=24).step_by(6).all(|dx| {
+                            (-1..=1).any(|dy| crust::lava_tube_at(&settings, x + dx, y + dy))
+                        }) && crust::lava_tube_at(&settings, *x, *y)
                             && !crust::lava_tube_at(&settings, *x, y + 1)
                     })
                     .unwrap_or((40, top + 20));
@@ -461,8 +464,8 @@ pub const CRUST_SCENES: &[Scene] = &[
                     .tile(site.core)
                     .is_some_and(|tile| tile.kind == TileKind::Crust(CrustTile::SinkholeCore));
             });
-            // Drill the core out, rise a little and hover while the collapse climbs after the
-            // rig, so it shows boiling a few rows under it.
+            // Drill the core out, sit out most of the rumble, then climb hard: the collapse
+            // starts boiling up the funnel a few rows under the rig.
             stage.hold(
                 120,
                 PlayerInput {
@@ -470,22 +473,14 @@ pub const CRUST_SCENES: &[Scene] = &[
                     ..PlayerInput::default()
                 },
             );
+            stage.hold(125, PlayerInput::default());
             stage.hold(
-                45,
+                55,
                 PlayerInput {
                     thrust: true,
                     ..PlayerInput::default()
                 },
             );
-            for frame in 0..200 {
-                stage.hold(
-                    1,
-                    PlayerInput {
-                        thrust: frame % 3 != 2,
-                        ..PlayerInput::default()
-                    },
-                );
-            }
         },
     },
 ];
