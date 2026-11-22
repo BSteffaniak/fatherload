@@ -66,7 +66,9 @@ pub use towns::{SkyTownSite, sky_town_at, sky_town_site, sky_towns_touching};
 pub use winds::{JetStream, jet_stream_at, jet_streams_touching, vent_updraft_at};
 
 use crate::{
-    climb::{CLIMB_CEILINGS, ClimbTable, V9_CLIMB_CEILINGS, ceiling_in, fraction},
+    climb::{
+        CLIMB_CEILINGS, ClimbTable, V8_CLIMB_CEILINGS, V9_CLIMB_CEILINGS, ceiling_in, fraction,
+    },
     sky::{SkyBand, SkyBiome, SkyTile},
     terrain::{CHUNK_SIZE_TILES, TileKind, TilePosition},
     village::placement::TOWN_CENTER_COLUMN,
@@ -113,6 +115,11 @@ pub struct SkyBands {
     /// gates (`milestone::island_capable`, `crosses_dead_air`, sky refuels, previews) compare
     /// with these bands. Not part of the frozen placement: it follows the fuel curve.
     pub climb: &'static ClimbTable,
+    /// The climb table these bands were calibrated from ([`Self::calibrated`]): the kit the sky
+    /// was planned around. Frozen with the bands. Milestones that should feel earned
+    /// (`milestone::island_hopper`) also ask it, so a fuel curve that outgrew an older sky does
+    /// not hand them out to stock rigs.
+    pub calibration: &'static ClimbTable,
 }
 
 impl SkyBands {
@@ -158,6 +165,7 @@ impl SkyBands {
             orbit,
             moon,
             climb: table,
+            calibration: table,
         }
     }
 
@@ -212,6 +220,7 @@ pub const V8_SKY_BANDS: SkyBands = SkyBands {
     moon: 10_320,
     // Gates on V8 worlds compare today's rigs in V8's physics.
     climb: &CLIMB_CEILINGS,
+    calibration: &V8_CLIMB_CEILINGS,
 };
 
 /// The bands of [`GeneratorVersion::V9`](super::GeneratorVersion::V9) skies. **Frozen.**
@@ -236,6 +245,7 @@ pub const V9_SKY_BANDS: SkyBands = SkyBands {
     orbit: 13_430,
     moon: 15_360,
     climb: &V9_CLIMB_CEILINGS,
+    calibration: &V9_CLIMB_CEILINGS,
 };
 
 /// The bands for the **next** sky generator (the one after V9).

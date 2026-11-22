@@ -317,6 +317,7 @@ fn v9_bands_are_frozen() {
             orbit: 13_430,
             moon: 15_360,
             climb: &V9_CLIMB_CEILINGS,
+            calibration: &V9_CLIMB_CEILINGS,
         }
     );
     assert_eq!(SkyBands::calibrated(&V9_CLIMB_CEILINGS), sky::V9_SKY_BANDS);

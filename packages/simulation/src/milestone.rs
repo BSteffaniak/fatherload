@@ -160,6 +160,26 @@ pub fn island_capable(player: &Player, bands: &SkyBands) -> bool {
     climb_reach(player, bands) >= bands.island_reach_rows()
 }
 
+/// Whether `player` has earned the Island Hopper milestone ([`Milestone::IslandCapableTank`])
+/// in a sky with `bands`.
+///
+/// The rig must really reach the low isles ([`island_capable`]) and its kit must be what the
+/// sky was planned to reach them with ([`SkyBands::calibration`]). V8 skies were calibrated
+/// on the first fuel curve; on today's bigger tanks a stock rig already climbs into them, so
+/// [`island_capable`] alone handed the milestone out on a V8 world's first tick. Against the
+/// world's own table it still takes the first tank upgrades there, as it does in V9 skies
+/// (whose calibration is today's table).
+#[must_use]
+pub fn island_hopper(player: &Player, bands: &SkyBands) -> bool {
+    island_capable(player, bands)
+        && crate::climb::reach_in(
+            bands.calibration,
+            player.fuel_tank_level,
+            player.engine_level,
+            player.hazard_gear.altitude_intake,
+        ) >= bands.island_reach_rows()
+}
+
 /// Whether `player`'s tank, engine and altitude intake carry the rig over the dead-air gap of a
 /// sky with `bands` to the sky continents and the Moon: the Act I -> II unlock.
 #[must_use]
@@ -493,7 +513,7 @@ impl Milestone {
             }
             Self::IslandCapableTank => facts
                 .sky_bands
-                .is_some_and(|bands| island_capable(player, &bands)),
+                .is_some_and(|bands| island_hopper(player, &bands)),
             Self::ActTwoUnlocked => facts
                 .sky_bands
                 .is_some_and(|bands| crosses_dead_air(player, &bands)),
@@ -727,6 +747,39 @@ mod tests {
             !Milestone::ActTwoUnlocked.met(&player, &next_facts),
             "the same rig is far from the next generator's continents"
         );
+    }
+
+    #[test]
+    fn island_hopper_is_earned_against_the_worlds_own_table() {
+        // A stock rig of today's fuel curve really climbs into V8's low isles, but the
+        // milestone waits for the kit V8's sky was planned to reach them with.
+        let v8 = crate::worldgen::sky::V8_SKY_BANDS;
+        let facts = MilestoneFacts {
+            sky_bands: Some(v8),
+            ..MilestoneFacts::default()
+        };
+        let mut player = rig();
+        assert!(island_capable(&player, &v8));
+        assert!(!island_hopper(&player, &v8));
+        assert!(
+            !Milestone::newly_met(&player, &facts).contains(&Milestone::IslandCapableTank),
+            "a stock rig earns nothing on its first tick"
+        );
+        // Upgrading earns it, at the tier V8's own table opens the isles at.
+        let earned_at = (1..=crate::economy::MAX_UPGRADE_LEVEL)
+            .find(|tank| {
+                player.fuel_tank_level = *tank;
+                island_hopper(&player, &v8)
+            })
+            .expect("some tank earns it");
+        assert!(earned_at > 1, "earned at tank {earned_at}");
+        assert!(Milestone::IslandCapableTank.met(&player, &facts));
+        // In V9's sky (calibrated on today's table) it is exactly the real climb.
+        let v9 = crate::worldgen::sky::V9_SKY_BANDS;
+        for tank in 1..=crate::economy::MAX_UPGRADE_LEVEL {
+            player.fuel_tank_level = tank;
+            assert_eq!(island_hopper(&player, &v9), island_capable(&player, &v9));
+        }
     }
 
     #[test]
