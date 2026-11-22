@@ -2011,7 +2011,7 @@ mod tests {
 
     #[test]
     fn every_seat_loop_slot_has_its_own_key_range() {
-        assert!((SeatLoop::Colony as u32) < SEAT_LOOP_SLOTS);
+        assert!((SeatLoop::MindMusic as u32) < SEAT_LOOP_SLOTS);
     }
 
     #[test]

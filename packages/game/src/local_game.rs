@@ -542,6 +542,7 @@ impl LocalGame {
         self.announce_moon(&players);
         self.announce_logistics(&players);
         self.announce_old_deep(&players);
+        self.announce_living_dark(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
         self.announce_stories(&players);
@@ -1053,6 +1054,57 @@ impl LocalGame {
             };
             if let Some(seat) = seat_of(player_id) {
                 messages.push((seat, text));
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+    }
+
+    /// The Living Dark's news for local seats (Wave 8): the Mycelial Mind's fight and its
+    /// rewards, the Amber Court's anger at theft, the Swarm's fall, and the acid tide turning
+    /// for seats in the Flesh Caverns. News with no rig of its own reaches every local seat.
+    fn announce_living_dark(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::living_dark::LivingDarkEvent as E;
+        let world = self.runtime.world();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::LivingDark {
+                what, player_id, ..
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let standing = world.living_dark().hive.standing;
+            let text = match (what, player_id) {
+                (E::MindAwakened, _) => {
+                    "The Mycelial Mind wakes! Its nerve nodes shield it: cut them down.".to_owned()
+                }
+                (E::MindExposed, _) => "The nodes are down: the Mind is exposed!".to_owned(),
+                (E::MindRegrew, _) => "The Mind's nerve nodes grow back.".to_owned(),
+                (E::GateRewards, _) => "The Mind falls. Bio-Filter and Lamp II fitted: spores \
+                                         and acid cannot touch the rig now."
+                    .to_owned(),
+                (E::CourtHostile, _) => {
+                    "The Amber Court turns on the crew! Make amends at its counter.".to_owned()
+                }
+                (E::CourtStanding, None) => {
+                    format!("The Amber Court saw its comb taken (standing {standing}).")
+                }
+                (E::SwarmBroken, _) => "The matriarch is dead: the Swarm is broken.".to_owned(),
+                (E::TideRising, _) => "The acid tide is rising.".to_owned(),
+                _ => continue,
+            };
+            let tide = matches!(what, E::TideRising);
+            for (seat, player) in players.iter().enumerate() {
+                let mine = player_id.is_none_or(|owner| owner == *player);
+                // The tide only matters to a seat in the Flesh Caverns.
+                if mine && (!tide || world.heartbeat_for(*player).is_some()) {
+                    messages.push((seat, text.clone()));
+                }
             }
         }
         for (seat, message) in messages {

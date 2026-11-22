@@ -616,6 +616,9 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             seconds,
         },
     );
+    // The Mycelial Mind's nerves: wired to its nodes while they shield it, a raw core when
+    // exposed (Wave 8).
+    living_dark::draw_mind_nerves(draw, scene.enemies, seconds, scene.effects_strength);
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);
     }

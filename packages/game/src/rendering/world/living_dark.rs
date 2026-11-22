@@ -382,3 +382,91 @@ pub(super) fn draw_glow_sea_darkness(draw: &mut impl RaylibDraw, scene: &GlowSea
         }
     }
 }
+
+/// How far from the Mycelial Mind its nerve nodes can hang and still be wired to it (pixels).
+const MIND_TENDRIL_REACH: f32 = TILE_SIZE * 30.0;
+
+/// The Mycelial Mind's state as the screen shows it: glowing nerve tendrils from each living
+/// node to the Mind while they shield it, and while none lives (its exposure) a raw, throbbing
+/// rose core and torn tendril stubs, so a player reads at a glance whether hits will land.
+/// Drawn over the Glow Sea's dark (the nerves are living light). Slow pulses only (well under
+/// three a second); the effects setting's `strength` scales the core's throb.
+pub(super) fn draw_mind_nerves(
+    draw: &mut impl RaylibDraw,
+    enemies: &[Entity],
+    seconds: f32,
+    strength: f32,
+) {
+    let kind_of = |entity: &Entity| match &entity.state {
+        EntityState::Enemy(state) => Some(state.kind),
+        _ => None,
+    };
+    for mind in enemies
+        .iter()
+        .filter(|entity| kind_of(entity) == Some(EnemyKind::MycelialMind))
+    {
+        let (mx, my) = (mind.body.x, mind.body.y);
+        let nodes: Vec<(f32, f32)> = enemies
+            .iter()
+            .filter(|entity| kind_of(entity) == Some(EnemyKind::MindNode))
+            .map(|entity| (entity.body.x, entity.body.y))
+            .filter(|(x, y)| (x - mx).hypot(y - my) < MIND_TENDRIL_REACH)
+            .collect();
+        if nodes.is_empty() {
+            draw_exposed_core(draw, mx, my, seconds, strength);
+            continue;
+        }
+        for (index, (nx, ny)) in nodes.into_iter().enumerate() {
+            draw_tendril(draw, (nx, ny), (mx, my), seconds + index as f32 * 0.37);
+        }
+    }
+}
+
+/// One nerve tendril from a node to the Mind: a wavering chain of art pixels, a bright pulse
+/// running along it toward the Mind (the node feeding its shield).
+fn draw_tendril(draw: &mut impl RaylibDraw, from: (f32, f32), to: (f32, f32), seconds: f32) {
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    let length = dx.hypot(dy).max(1.0);
+    let (nx, ny) = (-dy / length, dx / length);
+    let steps = (length / ART).ceil() as i32;
+    let pulse = (seconds * 0.8).fract();
+    for step in 0..=steps {
+        let t = step as f32 / steps.max(1) as f32;
+        // Sway most in the middle, pinned at both ends.
+        let sway =
+            (t * std::f32::consts::PI).sin() * (t * 9.0 + seconds * 1.7).sin() * TILE_SIZE * 0.6;
+        let x = snap_art(nx.mul_add(sway, dx.mul_add(t, from.0)));
+        let y = snap_art(ny.mul_add(sway, dy.mul_add(t, from.1)));
+        let color = if (t - pulse).abs() < 0.06 {
+            with_alpha(LIME, 230)
+        } else if step % 3 == 0 {
+            with_alpha(MOSS, 200)
+        } else {
+            with_alpha(LEAF, 150)
+        };
+        draw.draw_rectangle_rec(Rectangle::new(x, y, ART, ART), color);
+    }
+}
+
+/// The exposed Mind: a throbbing rose core and three torn stubs where its nerves were.
+fn draw_exposed_core(draw: &mut impl RaylibDraw, x: f32, y: f32, seconds: f32, strength: f32) {
+    let throb = (seconds * 2.4).sin().mul_add(0.5, 0.5) * strength;
+    disc(draw, x, y, 30 + (throb * 6.0) as i32, with_alpha(RED, 40));
+    disc(draw, x, y, 18, with_alpha(ROSE, 60 + (throb * 50.0) as u8));
+    disc(draw, x, y, 8, with_alpha(PINK, 120));
+    for (index, angle) in [0.6_f32, 2.5, 4.3].into_iter().enumerate() {
+        let droop = (seconds * 1.3 + index as f32).sin() * 0.15;
+        for step in 0..8_u8 {
+            let reach = f32::from(step).mul_add(ART, 22.0);
+            let px = snap_art((angle + droop).cos().mul_add(reach, x));
+            let py = snap_art((angle + droop).sin().mul_add(reach, y) + f32::from(step) * 0.8);
+            let alpha = 200_u8.saturating_sub(step * 24);
+            draw.draw_rectangle_rec(Rectangle::new(px, py, ART, ART), with_alpha(ROSE, alpha));
+        }
+    }
+}
+
+/// Snaps a world coordinate to the art-pixel grid.
+fn snap_art(value: f32) -> f32 {
+    crate::pixel_scale::round_half_up(value / ART) * ART
+}
