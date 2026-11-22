@@ -5579,7 +5579,7 @@ replays are unchanged.
 | Time Sludge | **slow pools** (time 0.62 at its top to 0.32 at its bottom) and **fast lanes** (1.3 to 1.85): generated pockets that grow commoner and stronger deeper ("Slow Pools" / "Fast Lanes" lean the mix); the stratum itself runs at 0.85. **Time bubbles** (`ExplosiveKind::TimeBubble`) slow every creature in their bubble to 0.22 | tick mite (lives at 2.1x, crumbles after 24 s), amber sloth (lives at 0.5x; its touch holds a rig in amber, 0.3x for 2.2 s), rewind newt (badly hurt, it rewinds 3 s of position and health, twice, never inside a bubble) | the **Stopped Clock** (a builders' hall striped slow and fast under a handless dial), slow pools rimmed with chronoglass, fast lanes with studded floors | platinum, uranium; Chrono Amber | `TimeSludge` (a lurching music box) / `Clockwork` |
 | Echo Caves | **total darkness** (field light 20 per mille; lamps a pinprick, `ECHO_LAMP_SCALE`): a scanner press is a **sonar ping** whose wave lights the cave as it passes and fades (`sonar_reveal`; 14 tiles, 32 with the Sonar Suite). **Blind hunters hear noise** (`rig_noise_tiles`: rolling 3, thrust 9, drilling 12, a ping 26 tiles; nothing at rest) | echo stalker (blind, hears noise along open paths, half as far through rock), shrieker (on finding prey it screams: a free ping and every stalker within 28 tiles of its prey comes), hush moth (drifts to the loudest rig; inside its hush a rig is silent but its pings reach a third as far) | the **Choir** (a hall of echo quartz pillars), echo hollows; **echo quartz** rings when struck (a free 22-tile ping) or drilled | mythril, diamond; Echo Quartz | `EchoCaves` (notes answered by their echoes) / `Echoes` |
 | Prism Desert | **colours split** (chromatic aberration up to 560 per mille, half that at its top; a softened slate-and-mauve palette); **colour-keyed walls** (`CaveTile::{PrismRed, PrismGreen, PrismBlue}`, unbreakable) open only in light of their colour: a rig's **lamp filter** (`LampFilter`, per rig, shared state) opens matching walls within 5 tiles in sight (coloured glass lets its colour through), and they close 2.5 s after the light leaves, never on a body | prism scarab (its shell turns red, green, blue every 4 s: x1.6 damage under the matching light, x0.2 otherwise; blasts always land), splitter spire (a fan of one red, one green and one blue bolt; a bolt of the rig's filter colour passes through it), lens wraith (unseen, and never auto-aimed, except under its own colour) | **keyed curtains** (a cave split by one keyed wall, two deeper, a cache behind), **spectrum vaults** (red, then green, then blue nested round a relic cache), the **Rewrite Hall** | diamond, emerald; Prism Sand | `PrismDesert` (a three-way split arpeggio) / `Prism` |
-| Gate | **The Glitch** (`EnemyKind::TheGlitch`, a 30x30 sprite drawn at 1.5x) in the Rewrite Hall (Descent VI's gate chamber grown by `ARENA_MARGIN`, builder alloy walls and floor, doors at both ends, alloy ledges): at 80/60/40/20 % health it **rewrites the hall's rule** (`GlitchRule`: gravity up, mirrored screen and controls, time x1.6, sideways gravity with pixel rot), each telegraphed for 3 s (it flickers, cannot attack, cannot be hurt; the HUD names the next rule). It blinks (its ghost shows where 1.1 s first) and sheds glitch shards from its third rule. It sleeps and heals after 30 s with nobody in the hall; no countdown | The Glitch, glitch shards | | | `TheGlitch` (bit-crushed, self-rewriting drums) |
+| Gate | **The Glitch** (`EnemyKind::TheGlitch`, a 30x30 sprite drawn at 1.5x) in the Rewrite Hall (Descent VI's gate chamber grown by `ARENA_MARGIN`, builder alloy walls and floor, doors at both ends, alloy ledges): at 80/60/40/20 % health it **rewrites the hall's rule** (`GlitchRule`: gravity up, mirrored screen and controls, time x1.6, sideways gravity with pixel rot), each telegraphed for 3 s (it flickers, cannot attack, cannot be hurt; the HUD names the next rule). It blinks (its ghost shows where 1.1 s first) and sheds glitch shards (two at most) from its third rule. It sleeps and heals after 30 s with nobody in the hall; no countdown | The Glitch, glitch shards | | | `TheGlitch` (bit-crushed, self-rewriting drums) |
 
 Reward: the **Phase Drill** (`RigSystem::boss_reward` is `TheGlitch`; never sold, `UpgradeLock::Boss`),
 fitted to every rig of the crew (and to rigs that join later). Only the Phase Drill cuts
@@ -5698,6 +5698,57 @@ vault's rings, the pockets' field).
   bolts).
 - Keyed walls opened by one rig's light close for everyone once it leaves; there is no ghost
   outline of an open keyed wall on clients (the schedule is host-only).
+
+### Review (Wave 9 strange-b review)
+
+Fixed:
+
+- **None of the far creatures drew.** The eleven creature sprites, the four shots and the time
+  bubble's two sprites were never added to `sprites::ALL`, so the atlas left them out: The
+  Glitch showed only as its halo and health bar. Test:
+  `rendering::world::enemies::tests::every_enemy_and_shot_sprite_is_in_the_atlas`.
+- **The Glitch's rules were barely felt.** Its field zone covered only the hall's inside,
+  feathered from that edge, so a rig resting on the floor felt about a quarter of the rule
+  and never fell up or slid sideways. The zone now spans the whole hall, walls and floor
+  included. Test: `every_rule_holds_at_full_strength_against_the_halls_floor_and_gravity_up_lifts_the_rig`.
+  With the rules really felt the bot (which never rotated) lost, so it now works the
+  rotation thrusters by hand (feet towards gravity, the stick along gravity's horizontal) as
+  a player must, and The Glitch keeps at most **two** shards (`MAX_GLITCH_SHARDS`), not three.
+  The bot wins every rule in order with more than a fifth of its hull left.
+- **The alloy seal had holes.** The seal skipped built and POI tiles, so a ruin's gate, a
+  keycard door or a vault seal in its rows opened a way into Descent VII, and the expedition's
+  story rooms could carve through it. The seal now overwrites everything but bedrock and
+  `crosses_strata_set_pieces` keeps story rooms off it (`crosses_alloy_seal`). An ancient
+  lift's rail can still cross it: it is unbreakable masonry and the lift is restored only from
+  its station below. Test: `the_generated_seal_has_no_gap_in_any_column` (2,400 columns of
+  three seeds, the generated tiles). `GOLDEN_V11_DIGEST` is unchanged (its chunks miss the
+  changed tiles).
+- **A hovering rig was silent.** Noise judged thrust from the rig's velocity, so a rig hovering
+  or pressed under a ceiling made no noise. The tick now records whose thrusters fire
+  (`FarSchedule::thrusting`, from the held controls). Test:
+  `a_hovering_rig_is_loud_its_thrusters_not_its_speed_make_the_noise`.
+- The registry test let the far strata's own music through, and the Glitch scenes frame it on
+  one of its blink spots (it was inside an alloy ledge, behind the rule panel).
+
+The descent probe (`descent_report`, default seed) after the fixes:
+
+| Stratum | Minutes | Leaves at (h) | Longest gap (min) |
+|---|---|---|---|
+| VI Time Sludge | 136 | 43.9 | 22 |
+| VI Echo Caves | 136 | 46.2 | 14 |
+| VI Prism Desert | 172 | 49.1 | 14 |
+
+The Phase Drill is won at 46.7 h. Descent VI ends at 49.1 h against the §14 target of 53-66 h
+(its first three strata are strange-a's). The whole run is 70.2 h.
+
+Still weak:
+
+- The creatures are small next to the rig (a tick mite is a few pixels). The Choir scene is
+  lit and does not show its quartz pillars well.
+- The bot needs the rotation thrusters to win: players who never learnt them in the Gravity
+  Shear will struggle under the gravity rules.
+- The Glitch sleeps if a rig waits in a doorway (the doors are outside the hall's inside), so
+  its shards vanish too.
 
 ## Replication
 
