@@ -58,9 +58,15 @@ const fn row_icon(row: &LogisticsRow) -> &'static SpriteDef {
         LogisticsCommand::Craft { recipe, .. } => {
             let recipes = &fatherload_simulation::workshop::RECIPES;
             if (recipe as usize) < recipes.len() {
-                super::pixel_art::sprites::deep_gear::layer_resource(
-                    recipes[recipe as usize].inputs[0].0,
-                )
+                match recipes[recipe as usize].output {
+                    // Wave 9: a supply recipe shows what it makes.
+                    fatherload_simulation::workshop::CraftOutput::Supply(supply, _) => {
+                        super::pixel_art::sprites::deep_supplies::supply_icon(supply)
+                    }
+                    _ => super::pixel_art::sprites::deep_gear::layer_resource(
+                        recipes[recipe as usize].inputs[0].0,
+                    ),
+                }
             } else {
                 &super::pixel_art::sprites::deep_gear::WORKSHOP
             }

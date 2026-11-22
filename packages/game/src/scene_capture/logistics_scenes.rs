@@ -1,7 +1,8 @@
 //! Depth logistics scenes (Part III F10): an ancient lift's cab carrying a rig up its rail, a
 //! deep outpost the crew claimed and its counter, the travel network from a depth beacon, a
 //! built lift on a dug shaft, a dive charge's plunge, and the upgrade shop of a Descent world
-//! with the rig systems on its shelves.
+//! with the rig systems on its shelves. Wave 9: Merrow City's deep counter, its supplies and
+//! its workshop.
 //!
 //! The lifts, outposts and beacons go in through the generator hook
 //! ([`WorldState::install_logistics_sites`], stamping their tiles) and real
@@ -88,6 +89,21 @@ pub const LOGISTICS_SCENES: &[Scene] = &[
         name: "layer_resource_drops",
         summary: "Wave 8: layer resources popping out of drilled Clay Beds rock beside the clay blocks, glowing in their stratum's colour",
         setup: layer_drops,
+    },
+    Scene {
+        name: "deep_counter_supplies",
+        summary: "Wave 9: Merrow City's counter in the Drowned and Frozen: its cheaper seals and engines, the deep supplies for the strata around it and the rig's supply kit",
+        setup: |stage| deep_counter(stage, crate::shell::logistics::LogisticsGroup::Supplies),
+    },
+    Scene {
+        name: "deep_counter_shop",
+        summary: "Wave 9: Merrow City's deep shop selling Descent IV's tiers, its specialty lines at the settlement's price",
+        setup: |stage| deep_counter(stage, crate::shell::logistics::LogisticsGroup::Shop),
+    },
+    Scene {
+        name: "deep_workshop_supplies",
+        summary: "Wave 9: the Merrow workshop crafting ballast tanks, frost heaters and coral seals from the Drowned and Frozen's layer resources",
+        setup: |stage| deep_counter(stage, crate::shell::logistics::LogisticsGroup::Workshop),
     },
 ];
 
@@ -505,5 +521,135 @@ fn descent_shop(stage: &mut SceneStage<'_>) {
         .iter()
         .position(|kind| *kind == UpgradeKind::DescentPressureHull)
         .unwrap_or(0);
+    stage.settle(4);
+}
+
+/// Merrow City's outpost (Descent IV) on a Deep Descent ruleset: the crew dug into the Hollow
+/// World, a rig fitted for the Drowned and Frozen with a few supplies in its kit and the
+/// Descent's layer resources in its bay; the dialog scrolled to `group` (Wave 9).
+#[allow(
+    clippy::too_many_lines,
+    reason = "the outpost, the crew's progress, the rig and the selection in order"
+)]
+fn deep_counter(stage: &mut SceneStage<'_>, group: crate::shell::logistics::LogisticsGroup) {
+    use crate::shell::logistics::LogisticsGroup;
+    use fatherload_simulation::{descent::Stratum, item::ItemKind, workshop::DeepSupply};
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        world.set_progression_rules(ProgressionRules::Descent);
+        stone(
+            world,
+            OUTPOST_COLUMN - 30..LIFT_COLUMN + 30,
+            LIFT_TOP - 8..OUTPOST_FLOOR + 10,
+        );
+        let mut sites = LogisticsSites::default();
+        sites.place_outpost(OUTPOST_COLUMN, OUTPOST_FLOOR, 3, "Merrow Air Dock");
+        sites.place_ancient_lift(LIFT_COLUMN, LIFT_TOP, OUTPOST_FLOOR - 1, 28);
+        world.install_logistics_sites(&sites, true);
+        carve(
+            world,
+            OUTPOST_COLUMN - 24..OUTPOST_COLUMN - 4,
+            OUTPOST_FLOOR - 2..OUTPOST_FLOOR,
+        );
+        reveal(
+            world,
+            player,
+            OUTPOST_COLUMN - 40..LIFT_COLUMN + 40,
+            LIFT_TOP - 12..OUTPOST_FLOOR + 12,
+        );
+        stand(world, player, OUTPOST_COLUMN, OUTPOST_FLOOR - 1);
+        let _ = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
+        // The crew has been down to the top of the Hollow World.
+        let row = fatherload_simulation::depth_progression::DescentLayout::strata(
+            &world.descent_layout(),
+        )
+        .iter()
+        .find(|stratum| stratum.descent == 4)
+        .map_or(5_900, |stratum| stratum.top + 20);
+        if let Some(fatherload_simulation::SectionPayload::Progression(mut progression)) =
+            world.section(fatherload_simulation::SectionKey::Progression)
+        {
+            progression.deepest_tile_reached = row;
+            world.apply_section(
+                fatherload_simulation::SectionKey::Progression,
+                fatherload_simulation::SectionPayload::Progression(progression),
+            );
+        }
+        if let Some(fatherload_simulation::SectionPayload::Logistics(mut logistics)) =
+            world.section(fatherload_simulation::SectionKey::Logistics)
+        {
+            let _ = logistics.add_supplies(player, DeepSupply::BallastTank, 3);
+            let _ = logistics.add_supplies(player, DeepSupply::FrostHeater, 1);
+            world.apply_section(
+                fatherload_simulation::SectionKey::Logistics,
+                fatherload_simulation::SectionPayload::Logistics(logistics),
+            );
+        }
+        if let Some(rig) = world.player_mut(player) {
+            rig.credits = 912_600;
+            rig.drill_strength = 14;
+            rig.fuel_tank_level = 15;
+            rig.cargo_bay_level = 14;
+            rig.engine_level = 13;
+            rig.hull_level = 11;
+            rig.radiator_level = 14;
+            rig.hazard_gear.heat_shield = 2;
+            rig.hazard_gear.pressure_rating = 2;
+            rig.hazard_gear.headlamp = 3;
+            for system in [
+                RigSystem::PressureHull,
+                RigSystem::BioFilter,
+                RigSystem::LampII,
+            ] {
+                fatherload_simulation::economy::grant_rig_system(rig, system);
+            }
+            rig.hull = rig.max_hull() * 0.7;
+            rig.fuel = rig.fuel_capacity * 0.45;
+            for (stratum, count) in [
+                (Stratum::UndergroundOcean, 7),
+                (Stratum::BrineGlaciers, 5),
+                (Stratum::GeyserFields, 3),
+                (Stratum::MerrowCity, 6),
+                (Stratum::PressureCathedrals, 2),
+            ] {
+                rig.cargo_bay.add(ItemKind::Layer(stratum), count);
+            }
+        }
+    });
+    let seat = stage.seat(0);
+    seat.modal = Some(ModalScreen::Logistics);
+    seat.selected_menu_item = 0;
+    stage.settle(6);
+    let rows = &stage.seat(0).logistics.rows;
+    let selected = rows
+        .iter()
+        .position(|row| {
+            row.group == group
+                && match (group, row.command) {
+                    (LogisticsGroup::Shop, LogisticsCommand::OutpostUpgrade { offer, .. }) => {
+                        UpgradeKind::ALL.get(usize::from(offer)).copied()
+                            == Some(UpgradeKind::PressureRating)
+                    }
+                    (LogisticsGroup::Supplies, LogisticsCommand::BuySupply { supply, .. }) => {
+                        supply == DeepSupply::FlareBuoy
+                    }
+                    (LogisticsGroup::Workshop, LogisticsCommand::Craft { recipe, .. }) => {
+                        fatherload_simulation::workshop::recipe(recipe).is_some_and(|found| {
+                            matches!(
+                                found.output,
+                                fatherload_simulation::workshop::CraftOutput::Supply(
+                                    DeepSupply::BallastTank,
+                                    _
+                                )
+                            )
+                        })
+                    }
+                    _ => false,
+                }
+        })
+        .or_else(|| rows.iter().position(|row| row.group == group))
+        .unwrap_or(0);
+    stage.seat(0).selected_menu_item = selected;
+    stage.seat(0).rewards.banners.clear();
     stage.settle(4);
 }

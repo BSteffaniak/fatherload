@@ -259,7 +259,8 @@ pub fn deep_hint(world: &WorldState, player: PlayerId, hint: Hint) -> Option<Str
                 Some(FluidKind::Water | FluidKind::Brine)
             ))
         .then(|| {
-            "Tip: under water the rig runs as a submarine. Thrust to swim; ballast tanks from the              deep counters sink or surface it at once."
+            "Tip: under water the rig runs as a submarine. Thrust to swim; ballast tanks from the \
+             deep counters sink or surface it at once."
                 .to_owned()
         }),
         Hint::DeepCold => deep_climate(stratum)
@@ -267,30 +268,36 @@ pub fn deep_hint(world: &WorldState, player: PlayerId, hint: Hint) -> Option<Str
             .filter(|_| !rig.hazard_gear.has_system(RigSystem::CryoHull))
             .map(|_| {
                 format!(
-                    "Tip: hull frost in the {}. Light a frost heater (deep counters and                      workshops) or warm up by a thermal vent.",
-                    stratum.name()
+                    "Tip: hull frost in {}. Light a frost heater (deep counters and workshops) \
+                     or warm up by a thermal vent.",
+                    super::logistics::the_stratum(stratum)
                 )
             }),
         Hint::InnerSky => (stratum == Stratum::InnerSky && !world.terrain().is_solid_at(tile))
             .then(|| {
-                "Tip: the inner sky. Fly from stone to stone, ride the wind and keep fuel for the                  way back up."
+                "Tip: the inner sky. Fly from stone to stone, ride the wind and keep fuel for the \
+                 way back up."
                     .to_owned()
             }),
         Hint::Glare => (fields.light > 1.3).then(|| {
-            "Tip: the inner sun's glare and heat. Hop between shadows; shade canopies and Heat              Shielding keep the rig cool."
+            "Tip: the inner sun's glare and heat. Hop between shadows; shade canopies and Heat \
+             Shielding keep the rig cool."
                 .to_owned()
         }),
         Hint::TurnedGravity => (fields.gravity_y < -0.2 || fields.gravity_x.abs() > 0.5).then(|| {
-            "Tip: down points another way here. Turn the rig with its rotation thrusters to land              on walls and ceilings."
+            "Tip: down points another way here. Turn the rig with its rotation thrusters to land \
+             on walls and ceilings."
                 .to_owned()
         }),
         Hint::Mirrored => (fields.mirror > 0.5).then(|| {
-            "Tip: a mirror zone. Left is right in here: the controls and the screen flip back              when you leave it."
+            "Tip: a mirror zone. Left is right in here: the controls and the screen flip back when \
+             you leave it."
                 .to_owned()
         }),
         Hint::TimeZone => ((fields.time_scale - 1.0).abs() > 0.1).then(|| {
             if fields.time_scale < 1.0 {
-                "Tip: time runs slow here. Everything, you too, moves slower; time-bubble bombs                  make pockets of it."
+                "Tip: time runs slow here. Everything, you too, moves slower; time-bubble bombs \
+                 make pockets of it."
                     .to_owned()
             } else {
                 "Tip: time runs fast here. Creatures and hazards come quicker: keep moving."
@@ -304,8 +311,9 @@ pub fn deep_hint(world: &WorldState, player: PlayerId, hint: Hint) -> Option<Str
             })
             .map(|supply| {
                 format!(
-                    "Tip: the {} asks for a {}. Deep counters sell them; workshops make them from                      {}.",
-                    stratum.name(),
+                    "Tip: {} asks for a {}. Deep counters sell them; workshops make them \
+                     from {}.",
+                    super::logistics::the_stratum(stratum),
                     supply.name(),
                     stratum.def().layer_resource.name
                 )

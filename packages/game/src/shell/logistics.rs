@@ -389,8 +389,8 @@ fn outpost_trade_rows(
     use fatherload_simulation::{
         depth_progression::outpost_stocks,
         economy::{
-            UpgradeKind, UpgradeLock, shop_line_count, upgrade_effect, upgrade_lock_for,
-            upgrade_maxed, upgrade_offers_for, upgrade_tier_name,
+            UpgradeKind, shop_line_count, upgrade_effect, upgrade_lock_for, upgrade_maxed,
+            upgrade_offers_for, upgrade_tier_name,
         },
         item::ItemKind,
         workshop::{CraftOutput, RECIPES, outpost_crafts},
@@ -409,17 +409,16 @@ fn outpost_trade_rows(
         if upgrade_maxed(offer) || !outpost_stocks(outpost.descent, offer.kind, next) {
             continue;
         }
-        // A rig system nobody has reached yet stays off the counter.
-        if matches!(
-            upgrade_lock_for(
-                offer,
-                world.world_settings(),
-                world.progression().deepest_tile_reached,
-                rules,
-                world.logistics().felt_systems,
-            ),
-            Some(UpgradeLock::Depth { .. })
-        ) {
+        // A rig system nobody has reached yet stays off the counter, and so does a deeper
+        // boss's reward (Wave 9: a counter shows only its own Descent's boss prize).
+        let lock = upgrade_lock_for(
+            offer,
+            world.world_settings(),
+            world.progression().deepest_tile_reached,
+            rules,
+            world.logistics().felt_systems,
+        );
+        if off_the_counter(lock, outpost.descent) {
             continue;
         }
         let detail = if offer.kind == UpgradeKind::BombPack {
@@ -448,7 +447,11 @@ fn outpost_trade_rows(
     }
     // Wave 9: the deep supplies this counter stocks.
     rows.extend(supply_rows(world, player, outpost));
-    for (index, recipe) in RECIPES.iter().enumerate() {
+    // Wave 9: this Descent's recipes first, then the shallower ones, deepest first.
+    let mut recipes: Vec<(usize, &fatherload_simulation::workshop::Recipe)> =
+        RECIPES.iter().enumerate().collect();
+    recipes.sort_by_key(|(index, recipe)| (std::cmp::Reverse(recipe.descent()), *index));
+    for (index, recipe) in recipes {
         if !outpost_crafts(outpost.descent, recipe) {
             continue;
         }
@@ -469,7 +472,9 @@ fn outpost_trade_rows(
             CraftOutput::Refuel { percent } => format!("fills {percent}% of the tank"),
             CraftOutput::DiveCharges(count) => format!("{count} dive charges"),
             CraftOutput::Bombs(count) => format!("{count} blasting charges"),
-            CraftOutput::Supply(supply, count) => format!("{count} {}", supply.name()),
+            CraftOutput::Supply(supply, count) => {
+                format!("{count} {}", supply.counted(u32::from(count)))
+            }
         };
         rows.push((
             recipe.name.to_owned(),
@@ -483,6 +488,28 @@ fn outpost_trade_rows(
         ));
     }
     rows
+}
+
+/// Whether a shop line locked by `lock` stays off the counter of Descent `descent`'s outpost:
+/// a rig system nobody has reached, or a boss's reward other than this Descent's own boss's.
+fn off_the_counter(lock: Option<fatherload_simulation::economy::UpgradeLock>, descent: u8) -> bool {
+    use fatherload_simulation::economy::UpgradeLock;
+    match lock {
+        Some(UpgradeLock::Depth { .. }) => true,
+        Some(UpgradeLock::Boss(boss)) => fatherload_simulation::descent::Descent::ALL
+            .get(usize::from(descent))
+            .and_then(|each| each.last_stratum().def().gate)
+            .is_none_or(|gate| gate.boss != boss),
+        _ => false,
+    }
+}
+
+/// `stratum`'s name after a preposition: "the Brine Glaciers", "the Underground Ocean" (the
+/// registry names some "The ...").
+#[must_use]
+pub fn the_stratum(stratum: fatherload_simulation::descent::Stratum) -> String {
+    let name = stratum.name();
+    format!("the {}", name.strip_prefix("The ").unwrap_or(name))
 }
 
 /// The deep supplies outpost `outpost`'s counter sells (Wave 9), with what `player`'s kit holds.
@@ -500,8 +527,8 @@ fn supply_rows(
             (
                 supply.name().to_owned(),
                 format!(
-                    "For the {} ({} in the kit)",
-                    supply.stratum().name(),
+                    "For {} ({} in the kit)",
+                    the_stratum(supply.stratum()),
                     world.supplies_of(player, supply)
                 ),
                 LogisticsCommand::BuySupply {

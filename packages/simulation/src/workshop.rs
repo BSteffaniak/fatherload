@@ -141,6 +141,19 @@ impl DeepSupply {
         }
     }
 
+    /// `count` of it in words: "1 Ballast Tank", "2 Shade Canopies".
+    #[must_use]
+    pub fn counted(self, count: u32) -> String {
+        if count == 1 {
+            return self.name().to_owned();
+        }
+        match self {
+            Self::ShadeCanopy => "Shade Canopies".to_owned(),
+            Self::BeastBait => "Beast Bait".to_owned(),
+            _ => format!("{}s", self.name()),
+        }
+    }
+
     /// What it does, in the counter's words.
     #[must_use]
     pub const fn about(self) -> &'static str {
