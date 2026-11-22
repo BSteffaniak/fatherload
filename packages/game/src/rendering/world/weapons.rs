@@ -422,8 +422,9 @@ pub fn draw_shots(draw: &mut impl RaylibDraw, shots: &[ShotFlash]) {
         let t = (shot.age / shot.lifetime()).clamp(0.0, 1.0);
         let fade = 1.0 - t;
         if shot.bolt {
-            let seed = (shot.x as i32).unsigned_abs()
-                ^ ((shot.end_y as i32).unsigned_abs() << 7)
+            // Seeded by the absolute place, so a frame move never re-jags a bolt (F7).
+            let seed = (crate::view_frame::phase_x(shot.x) as i32).unsigned_abs()
+                ^ ((crate::view_frame::phase_y(shot.end_y) as i32).unsigned_abs() << 7)
                 ^ ((shot.age * 30.0) as u32);
             draw_bolt(
                 draw,

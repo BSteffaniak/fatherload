@@ -475,7 +475,7 @@ fn gather_lights(scene: &LightScene<'_>) -> Vec<Light> {
     }
     for &(x, y, radius) in scene.settlement_lights {
         if near(x, y) {
-            let flicker = (scene.seconds * 5.0 + x * 0.01).sin() * 0.03;
+            let flicker = (scene.seconds * 5.0 + crate::view_frame::phase_x(x) * 0.01).sin() * 0.03;
             lights.push(Light::pool(x, y, radius * (1.0 + flicker), 0.9, true));
         }
     }

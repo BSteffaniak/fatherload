@@ -51,6 +51,80 @@ pub fn parallax_x(x: f32, parallax: f32) -> f32 {
     }
 }
 
+/// Where a pattern repeating every `period` pixels, anchored to the world grid, starts at or
+/// left of local `x`: `(x / period).floor() * period` in world terms. The frame origin's place
+/// in the pattern is taken from its exact absolute position, so the pattern never jumps when the
+/// frame moves (and the expression is the old one in the origin frame).
+#[must_use]
+pub fn pattern_start_x(x: f32, period: f32) -> f32 {
+    let phase = pattern_phase_x(period);
+    if phase == 0.0 {
+        return (x / period).floor() * period;
+    }
+    ((x + phase) / period).floor().mul_add(period, -phase)
+}
+
+/// How far the frame origin is into a horizontal pattern of `period` pixels anchored at world
+/// pixel 0: add it to a local `x` before taking the pattern cell, subtract it after (zero in the
+/// origin frame, so the old expressions are unchanged there).
+#[must_use]
+pub fn pattern_phase_x(period: f32) -> f32 {
+    pattern_phase(frame().origin_col(), period)
+}
+
+/// [`pattern_phase_x`] for a vertical pattern.
+#[must_use]
+pub fn pattern_phase_y(period: f32) -> f32 {
+    pattern_phase(frame().origin_row(), period)
+}
+
+/// The world cell (of `period` pixels, anchored at world pixel 0) holding the frame origin, and
+/// how far into it the origin is: local cell `c` is world cell `c + cells`, and its left edge is
+/// at local `c * period - phase`. Patterns hashed by cell use it so every cell keeps its look
+/// when the frame moves. `(0, 0.0)` in the origin frame.
+#[must_use]
+pub fn pattern_anchor_x(period: f32) -> (i64, f32) {
+    pattern_anchor(frame().origin_col(), period)
+}
+
+/// The frame origin's offset into a pattern of `period` pixels anchored at world pixel 0.
+fn pattern_phase(origin_tiles: i64, period: f32) -> f32 {
+    pattern_anchor(origin_tiles, period).1
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    reason = "a cell count and an offset smaller than one period"
+)]
+fn pattern_anchor(origin_tiles: i64, period: f32) -> (i64, f32) {
+    if origin_tiles == 0 || period <= 0.0 {
+        return (0, 0.0);
+    }
+    let origin_px = origin_tiles as f64 * f64::from(fatherload_simulation::terrain::TILE_SIZE);
+    let period = f64::from(period);
+    let cells = (origin_px / period).floor();
+    let phase = cells.mul_add(-period, origin_px);
+    if phase >= period || phase < 0.0 {
+        (cells as i64, 0.0)
+    } else {
+        (cells as i64, phase as f32)
+    }
+}
+
+/// A presentation-only phase (animation offsets, flicker) for local `x`: the old world pixel,
+/// so the phase never jumps when the frame moves. Exactly `x` in the origin frame.
+#[must_use]
+pub fn phase_x(x: f32) -> f32 {
+    frame().legacy_x(x)
+}
+
+/// [`phase_x`] for a vertical position.
+#[must_use]
+pub fn phase_y(y: f32) -> f32 {
+    frame().legacy_y(y)
+}
+
 /// [`parallax_x`] for a vertical camera position.
 #[must_use]
 pub fn parallax_y(y: f32, parallax: f32) -> f32 {

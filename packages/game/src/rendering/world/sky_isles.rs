@@ -260,7 +260,8 @@ fn draw_waterfall(
         let y = lip_y + row as f32 * ART;
         // The sheet spreads a little as it falls.
         let width = 10.0 + t * 8.0;
-        let wobble = (y * 0.05 + seconds * 2.0).sin() * t.mul_add(2.0, 1.0);
+        let wobble =
+            (crate::view_frame::phase_y(y) * 0.05 + seconds * 2.0).sin() * t.mul_add(2.0, 1.0);
         let x = lip_x + wobble * ART - (width - 6.0) * 0.5 * ART;
         // Bright streaks scroll down the sheet.
         let streak = ((row as f32 * 0.7 - seconds * 22.0).rem_euclid(9.0)) < 2.0;
@@ -506,7 +507,7 @@ fn draw_vent_column(
             if y < visible.y || y > visible.y + visible.height {
                 continue;
             }
-            let swirl = (y * 0.04 + lane as f32).sin() * 3.0;
+            let swirl = (crate::view_frame::phase_y(y) * 0.04 + lane as f32).sin() * 3.0;
             let x = left + (lane as f32 + 0.5) * width / 5.0 + swirl * ART;
             let alpha = (60.0 + 140.0 * (phase / height).min(0.7)) as u8;
             draw.draw_rectangle_rec(

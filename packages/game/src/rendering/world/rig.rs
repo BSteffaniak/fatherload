@@ -99,7 +99,7 @@ pub fn draw_rig(
     let shake = i32::from(drilling.is_some() && (ticks / 2).is_multiple_of(2));
     let rolling = player.velocity_x.abs() > 5.0 && drilling.is_none();
     let track_frame = if rolling {
-        (player.x / 6.0).rem_euclid(2.0) as usize
+        (crate::view_frame::phase_x(player.x) / 6.0).rem_euclid(2.0) as usize
     } else {
         0
     };

@@ -598,10 +598,15 @@ pub fn draw_weather(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
     };
     let seconds = ticks as f32 / 60.0;
     let count = (weather.count as f32 * strength).round() as u32;
-    let first_x = (visible.x / PERIOD.0).floor() as i32;
-    let last_x = ((visible.x + visible.width) / PERIOD.0).floor() as i32;
-    let first_y = (visible.y / PERIOD.1).floor() as i32;
-    let last_y = ((visible.y + visible.height) / PERIOD.1).floor() as i32;
+    // Cells anchored to the world grid, not the frame (F7: no jump when the frame moves).
+    let (phase_x, phase_y) = (
+        crate::view_frame::pattern_phase_x(PERIOD.0),
+        crate::view_frame::pattern_phase_y(PERIOD.1),
+    );
+    let first_x = ((visible.x + phase_x) / PERIOD.0).floor() as i32;
+    let last_x = ((visible.x + phase_x + visible.width) / PERIOD.0).floor() as i32;
+    let first_y = ((visible.y + phase_y) / PERIOD.1).floor() as i32;
+    let last_y = ((visible.y + phase_y + visible.height) / PERIOD.1).floor() as i32;
     for tile_y in first_y..=last_y {
         for tile_x in first_x..=last_x {
             for index in 0..count {
@@ -611,9 +616,11 @@ pub fn draw_weather(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
                 let base_y = ((h >> 10) % 1000) as f32 / 1000.0 * PERIOD.1;
                 let sway = (seconds * 1.3 + index as f32).sin() * weather.sway;
                 let x = (base_x + weather.wind * speed * seconds + sway).rem_euclid(PERIOD.0)
-                    + tile_x as f32 * PERIOD.0;
+                    + tile_x as f32 * PERIOD.0
+                    - phase_x;
                 let y = (base_y + weather.fall * speed * seconds).rem_euclid(PERIOD.1)
-                    + tile_y as f32 * PERIOD.1;
+                    + tile_y as f32 * PERIOD.1
+                    - phase_y;
                 if x < visible.x
                     || x > visible.x + visible.width
                     || y < visible.y

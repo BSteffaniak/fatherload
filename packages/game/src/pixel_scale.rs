@@ -180,13 +180,26 @@ pub fn fit_pixel_size(physical: (i32, i32), canvas: (i32, i32)) -> i32 {
 }
 
 /// Snaps a world coordinate so it lands on a whole physical pixel at `physical_zoom` physical
-/// pixels per world pixel.
+/// pixels per world pixel. Halfway values round up (towards +infinity) on either side of zero,
+/// so the grid is the same in every local pixel frame (F7: the frame origin is a whole number of
+/// pixels, and `round` would break ties away from it).
 #[must_use]
 pub fn snap_to_pixel_grid(value: f32, physical_zoom: f32) -> f32 {
     if physical_zoom <= f32::EPSILON {
         return value;
     }
-    (value * physical_zoom).round() / physical_zoom
+    round_half_up(value * physical_zoom) / physical_zoom
+}
+
+/// `value` rounded to the nearest whole number, halfway cases up (towards +infinity).
+#[must_use]
+pub fn round_half_up(value: f32) -> f32 {
+    let floor = value.floor();
+    if value - floor >= 0.5 {
+        floor + 1.0
+    } else {
+        floor
+    }
 }
 
 /// The whole pixel size at which `art_pixels` art pixels come nearest to spanning `physical`

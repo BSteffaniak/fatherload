@@ -308,11 +308,14 @@ fn draw_wind(
         let wind = environment::wind_at(settings, column, -(row as f32));
         let strength = (wind.abs() / 160.0).min(1.0);
         if strength > 0.06 {
-            let offset = seconds * wind * 1.6;
+            // Cells anchored to (and hashed by) the world grid, not the frame (F7).
+            let (cells, phase) = crate::view_frame::pattern_anchor_x(STREAK_CELL.0);
+            let offset = seconds * wind * 1.6 - phase;
             let first = ((visible.x - offset) / STREAK_CELL.0).floor() as i32 - 1;
             let last = ((visible.x + visible.width - offset) / STREAK_CELL.0).ceil() as i32;
             for cell in first..=last {
-                let h = hash(cell, row, 611);
+                #[allow(clippy::cast_possible_truncation, reason = "a hash input may wrap")]
+                let h = hash(cell.wrapping_add(cells as i32), row, 611);
                 if (h % 100) as f32 >= strength * 45.0 {
                     continue;
                 }

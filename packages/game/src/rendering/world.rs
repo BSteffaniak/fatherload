@@ -520,7 +520,7 @@ fn draw_world_edges(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
     let tile = props::BEDROCK.width() as f32 * ART;
     if bottom > world_bottom {
         // Anchored to the world grid like the side walls, so the floor does not swim.
-        let start = (visible.x / tile).floor() * tile - tile;
+        let start = crate::view_frame::pattern_start_x(visible.x, tile) - tile;
         let floor_top = world_bottom.max(top);
         let rows_top = ((floor_top - world_bottom) / tile)
             .floor()
@@ -541,7 +541,7 @@ fn draw_world_edges(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
     }
     let fill = |draw: &mut dyn FnMut(Rectangle), from: f32, to: f32| {
         // Anchor the pattern to the world grid so it does not swim while scrolling.
-        let start = (from / tile).floor() * tile;
+        let start = crate::view_frame::pattern_start_x(from, tile);
         let rows_top = ((top - ground_y()) / tile)
             .floor()
             .mul_add(tile, ground_y());
@@ -583,7 +583,9 @@ fn draw_world_edges(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
 
 /// Snaps a world coordinate to the art-pixel grid (whole physical pixels at any snapped zoom).
 fn snap(value: f32) -> f32 {
-    (value / ART).round() * ART
+    // Halfway cases up on both sides of zero, so the art-pixel grid is the same in every local
+    // frame (F7).
+    crate::pixel_scale::round_half_up(value / ART) * ART
 }
 
 /// Draws `sprite` frame `frame` with its top-left at world `(x, y)`, one art pixel per

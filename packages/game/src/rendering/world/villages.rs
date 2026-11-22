@@ -534,7 +534,8 @@ pub fn draw_village_people(
         };
         let pose = people_art::Pose {
             facing: i32::from(state.facing),
-            stride: walking.then_some(x),
+            // The step cycle reads the absolute place, so a frame move never skips it (F7).
+            stride: walking.then_some(crate::view_frame::phase_x(x)),
             talking: state.talking_to.is_some() && ((seconds * 0.7) as i32) % 2 == 0,
         };
         people_art::draw_person_posed(draw, pen, character, pose, seconds);
