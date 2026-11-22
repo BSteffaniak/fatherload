@@ -542,9 +542,11 @@ impl WorldState {
         };
         let cold_excess = cold.saturating_sub(state.gear.cold_cover());
         let tile = self.frame().tile_at(mx, my);
-        // Run spaces (WP-TOMBS) keep their own climate: no band heat in the vault.
+        // Run spaces (WP-TOMBS) keep their own climate: no band heat in the vault. The heat is
+        // the rig's (`heat_units_at`): band heat bit for bit on older worlds, each stratum's own
+        // on a Deep Descent world (Wave 8), in whole levels.
         let heat = if tile.y > 0 && !self.in_run_space(tile) {
-            crate::protection::band_heat_level(crate::worldgen::band_at(settings, tile.x, tile.y))
+            self.heat_units_at(tile) / crate::protection::HEAT_UNITS_PER_LEVEL
         } else {
             0
         };
