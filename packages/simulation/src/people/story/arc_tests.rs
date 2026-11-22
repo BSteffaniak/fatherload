@@ -312,8 +312,16 @@ fn check_arc(arc: &'static ArcTemplate) {
             "{name}: home arcs settle somewhere"
         ),
         ArcKind::Sky => assert!(
-            targets_place(&[StoryPlace::SkyIsland, StoryPlace::SkyContinent]),
+            targets_place(&[
+                StoryPlace::SkyIsland,
+                StoryPlace::SkyContinent,
+                StoryPlace::SkyTown
+            ]),
             "{name}: sky arcs go up"
+        ),
+        ArcKind::Tomb => assert!(
+            targets_place(&[StoryPlace::Tomb, StoryPlace::Crypt]),
+            "{name}: tomb arcs are bound to a tomb or crypt"
         ),
         ArcKind::Mystery => assert!(
             targets_place(&[StoryPlace::Moon, StoryPlace::SkyIsland, StoryPlace::Hall])
@@ -341,6 +349,7 @@ fn check_arc(arc: &'static ArcTemplate) {
         StoryPlace::SkyIsland,
         StoryPlace::SkyContinent,
         StoryPlace::Moon,
+        StoryPlace::SkyTown,
     ]) && arc.kind != ArcKind::Mystery
     {
         assert!(

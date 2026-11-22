@@ -1085,12 +1085,15 @@ pub const BATCH_FIRST: &[ArcTemplate] = &[
 ];
 
 mod crew;
+mod far_places;
 mod frontier;
 mod home;
 mod mystery;
 mod night;
+mod night_market;
 mod pilot;
 mod sky;
+mod tombs;
 mod village;
 
 /// Every batch of arcs, in authoring order ([`super::ARC_TEMPLATES`] chains them).
@@ -1104,4 +1107,8 @@ pub const BATCHES: &[&[ArcTemplate]] = &[
     night::BATCH,
     pilot::BATCH,
     crew::BATCH,
+    // Wave 6 content.
+    tombs::BATCH,
+    night_market::BATCH,
+    far_places::BATCH,
 ];

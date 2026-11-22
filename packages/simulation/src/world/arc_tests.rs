@@ -271,13 +271,31 @@ fn drive_beat(world: &mut WorldState, arc: ArcId, events: &mut Vec<GameplayEvent
                 }
                 put_rig(world, PLAYER, target(index).center);
             }
+            Objective::Dawn { target: index } => {
+                // Late in the night, at the place, until the sky greys.
+                if run.quest.objectives[start + offset].timer == 0 {
+                    set_time(world, DayTime::at(world.people_clock().day + 1, 4, 24));
+                }
+                put_rig(world, PLAYER, target(index).center);
+            }
             Objective::OnFoot { target: index } | Objective::HandDeliver { target: index, .. } => {
                 let center = target(index).center;
+                let bounds = target(index).bounds;
+                // A door inside the target (a village's market, say), else the first one.
                 let door = village::village_at(world.world_settings(), center).and_then(|found| {
-                    found.buildings.first().map(|lot| TilePosition {
-                        x: lot.first_column + lot.width / 2,
-                        y: found.ground_row - 1,
-                    })
+                    let doors: Vec<TilePosition> = found
+                        .buildings
+                        .iter()
+                        .map(|lot| TilePosition {
+                            x: lot.first_column + lot.width / 2,
+                            y: found.ground_row - 1,
+                        })
+                        .collect();
+                    doors
+                        .iter()
+                        .find(|door| bounds.contains(**door))
+                        .or_else(|| doors.first())
+                        .copied()
                 });
                 let tile = door.unwrap_or(center);
                 put_rig(
@@ -554,6 +572,231 @@ fn every_arc_plays_through_on_the_tick() {
             .active
             .clear();
     }
+}
+
+/// The Wave 6 arcs (ids 901 and up): bound to tombs, crypts, ruins, the night market,
+/// homesteads, sky towns and the Moon's colony.
+fn wave6_arcs() -> impl Iterator<Item = &'static crate::people::ArcTemplate> {
+    crate::people::story::ARC_TEMPLATES
+        .iter()
+        .filter(|template| template.id.0 >= 901)
+}
+
+/// Binds `template` from `found`'s elder with stand-in slots and makes it the player's only
+/// running arc.
+fn start_arc(world: &mut WorldState, found: &Village, template: &crate::people::ArcTemplate) {
+    let elder = found.population.characters[0].clone();
+    let settlement =
+        crate::people::routine::settlement(world.world_settings(), found.id).expect("settlement");
+    let bindings = template
+        .slots
+        .iter()
+        .map(|slot| match slot {
+            crate::people::story::Slot::Absent(_) => crate::people::SlotBinding::Absent {
+                name: "Tobin".into(),
+                relation: "brother".into(),
+            },
+            crate::people::story::Slot::Neighbour(_) => crate::people::SlotBinding::Neighbour {
+                id: None,
+                name: "Marla".into(),
+                relation: "neighbour".into(),
+            },
+            crate::people::story::Slot::Place { kind, .. } => {
+                crate::people::SlotBinding::Place(crate::people::WorldFact {
+                    kind: *kind,
+                    band: 2,
+                    row: 60,
+                    feature: None,
+                })
+            }
+        })
+        .collect();
+    let seed = crate::people::StorySeed {
+        arc: template.id,
+        giver: elder.id,
+        source: crate::people::SeedSource::Role(elder.role),
+        bindings,
+        score: 0,
+    };
+    let run = world
+        .bind_offer(PLAYER, &settlement, &elder, &seed)
+        .unwrap_or_else(|| panic!("{} binds", template.title));
+    world.player_mut(PLAYER).expect("rig").quests.arcs.active = vec![run];
+}
+
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one pass over every new arc with its places"
+)]
+fn every_wave6_arc_binds_to_its_real_places_and_plays_through_on_a_v10_world() {
+    // A V10 world has tombs and crypts, sealed ruins, sky towns and a filled Moon with its
+    // colony: every new arc binds to the real thing here (not a stand-in) and a bot plays it
+    // to its climax on the tick.
+    let settings = WorldSettings::new(SEED);
+    assert!(settings.generator.has_tombs() && settings.generator.has_moon_content());
+    let mut world =
+        WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::new(30));
+    let found = first_village(&world);
+    set_time(&mut world, DayTime::at(1, 10, 0));
+    put_rig(
+        &mut world,
+        PLAYER,
+        TilePosition {
+            x: i32::midpoint(found.plaza.0, found.plaza.1),
+            y: found.ground_row - 1,
+        },
+    );
+    let _ = run(&mut world, 20);
+    make_veteran(&mut world);
+    let colony = crate::people::colony::colony_settlement_id(&settings).expect("a colony");
+    let mut real = std::collections::BTreeMap::<&str, usize>::new();
+    for template in wave6_arcs() {
+        start_arc(&mut world, &found, template);
+        let running = running(&world).remove(0);
+        for (spec, target) in template.targets.iter().zip(&running.quest.targets) {
+            let crate::quest::TargetSpec::Story(place) = spec else {
+                continue;
+            };
+            let bound_real = match place {
+                crate::quest::StoryPlace::Tomb | crate::quest::StoryPlace::Crypt => {
+                    crate::worldgen::streamed::tomb_sites::site_with_door(&settings, target.center)
+                        .is_some_and(|site| {
+                            *place == crate::quest::StoryPlace::Tomb
+                                || site.style == crate::tomb::SiteStyle::TopDown
+                        })
+                }
+                crate::quest::StoryPlace::Ruin => {
+                    crate::worldgen::streamed::pilot_spaces::spaces_touching(
+                        &settings,
+                        &target.bounds,
+                    )
+                    .iter()
+                    .any(|space| {
+                        space.kind == crate::worldgen::streamed::pilot_spaces::PilotSpaceKind::Ruin
+                            && space.entrance() == target.center
+                    })
+                }
+                crate::quest::StoryPlace::SkyTown => village::village_at(&settings, target.center)
+                    .is_some_and(|town| town.setting.sky_town().is_some()),
+                crate::quest::StoryPlace::Homestead => crate::home::plot::listed_sites_between(
+                    &settings,
+                    target.center.x - 300,
+                    target.center.x + 300,
+                )
+                .iter()
+                .any(|site| {
+                    site.left == target.bounds.min.x && site.right() == target.bounds.max.x
+                }),
+                crate::quest::StoryPlace::NightMarket => {
+                    let (x, y) = tile_px(target.center);
+                    village::building_at(&settings, x, y).is_some_and(|(town, lot)| {
+                        town.buildings[lot].kind == village::BuildingKind::Market
+                    })
+                }
+                crate::quest::StoryPlace::Moon => running
+                    .cast
+                    .contact
+                    .as_ref()
+                    .is_none_or(|contact| contact.id.village == colony),
+                _ => true,
+            };
+            assert!(
+                bound_real,
+                "{}: {place:?} stood in on a V10 world",
+                template.title
+            );
+            *real.entry(place.noun()).or_default() += 1;
+        }
+        // Speak beats at the Moon find a colonist, in a sky town one of its folk.
+        if let Some(contact) = &running.cast.contact
+            && template.targets.iter().all(|spec| {
+                *spec == crate::quest::TargetSpec::Story(crate::quest::StoryPlace::Moon)
+            })
+        {
+            assert_eq!(contact.id.village, colony, "{}", template.title);
+        }
+        let events = play_to_climax(&mut world, template.id);
+        assert!(
+            events.iter().any(
+                |event| matches!(event, GameplayEventKind::ArcClimax { arc, .. } if *arc == template.id)
+            ),
+            "{} never reached its climax: {events:?}",
+            template.title
+        );
+        world
+            .player_mut(PLAYER)
+            .expect("rig")
+            .quests
+            .arcs
+            .active
+            .clear();
+    }
+    for place in [
+        "tomb",
+        "crypt",
+        "ruin",
+        "night market",
+        "homestead",
+        "sky town",
+        "Moon",
+    ] {
+        assert!(
+            real.get(place).copied().unwrap_or(0) > 0,
+            "no arc bound a {place}"
+        );
+    }
+}
+
+#[test]
+fn a_tomb_story_ending_breaks_the_seal_and_pays_furniture() {
+    // "The Tale on the Seal" ends by singing the seal its song: the tomb it was bound to opens
+    // (WP-TOMBS's story step) and a star chart goes to the player's furniture stock.
+    let settings = WorldSettings::new(SEED);
+    let mut world =
+        WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::new(30));
+    let found = first_village(&world);
+    set_time(&mut world, DayTime::at(1, 10, 0));
+    make_veteran(&mut world);
+    let template = ArcId(901).template().expect("arc 901");
+    start_arc(&mut world, &found, template);
+    let door = running(&world)[0].quest.targets[0].center;
+    let site = crate::worldgen::streamed::tomb_sites::site_with_door(&settings, door)
+        .expect("bound to a real tomb");
+    let _ = play_to_climax(&mut world, template.id);
+    let run_now = running(&world).remove(0);
+    assert!(run_now.ready());
+    let giver = run_now.cast.giver;
+    let home = crate::people::routine::settlement(&settings, giver.village).expect("home");
+    put_rig(
+        &mut world,
+        PLAYER,
+        TilePosition {
+            x: home.center_column(),
+            y: home.ground_row - 1,
+        },
+    );
+    let _ = run(&mut world, 30);
+    let npc = world.npc_of(giver).expect("giver about");
+    go_to(&mut world, npc);
+    let charts = world
+        .homes()
+        .furniture_count(PLAYER, crate::home::Furniture::StarChart);
+    assert!(!world.tombs.unsealed.contains(&site.id));
+    let told = people(&mut world, PeopleCommand::TurnInArc { npc, outcome: 0 });
+    assert_eq!(outcome(&told), PlayerScopedCommandOutcome::Applied);
+    assert!(world.tombs.unsealed.contains(&site.id), "the seal opened");
+    assert!(
+        told.events
+            .iter()
+            .any(|event| matches!(event.kind, GameplayEventKind::TombSeal { opened: true, .. }))
+    );
+    assert_eq!(
+        world
+            .homes()
+            .furniture_count(PLAYER, crate::home::Furniture::StarChart),
+        charts + 1
+    );
 }
 
 #[test]

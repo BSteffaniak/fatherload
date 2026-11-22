@@ -631,11 +631,16 @@ fn homestead_target(terrain: &Terrain, origin: TilePosition) -> Option<(QuestTar
 /// climbing the archipelago meets.
 fn sky_town_target(terrain: &Terrain, origin: TilePosition) -> Option<(QuestTarget, BoundTarget)> {
     let settings = terrain.settings();
-    let towns = crate::worldgen::sky::towns::sky_towns_between(
+    // A town whose id also names a sky city (block column 0) has the city's folk, not its
+    // own: stories pass it by.
+    let towns: Vec<_> = crate::worldgen::sky::towns::sky_towns_between(
         settings,
         origin.x - STORY_ISLAND_COLUMNS,
         origin.x + STORY_ISLAND_COLUMNS,
-    );
+    )
+    .into_iter()
+    .filter(|town| crate::worldgen::sky::continent::sky_city(settings, town.id).is_none())
+    .collect();
     let lowest = towns.iter().map(|town| town.block.1).min()?;
     let town = towns
         .iter()
@@ -648,6 +653,7 @@ fn sky_town_target(terrain: &Terrain, origin: TilePosition) -> Option<(QuestTarg
 }
 
 /// Binds a story place from `origin` (the giver's settlement), with its fallbacks.
+#[allow(clippy::too_many_lines, reason = "one arm per story place")]
 fn story_place(
     place: StoryPlace,
     terrain: &Terrain,
