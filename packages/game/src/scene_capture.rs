@@ -8,8 +8,8 @@
 //! save file `<dir>/<scene name>.json` instead (the browser frame-timing script,
 //! `scripts/perf-web.cjs`, loads them to time the WASM build in those states).
 //!
-//! With `--frame-shift X,Y` every staged world is re-expressed in a fixed frame X sectors right
-//! and Y sectors down of the origin before its frames run (F7): nothing moves in the world, so a
+//! With `--frame-shift X,Y` every staged world is re-expressed in a frame X sectors right and Y
+//! sectors down of its staged frame (the origin for fixed worlds) before its frames run (F7): nothing moves in the world, so a
 //! frame-relative renderer draws the same picture. Diff the PNGs against an unshifted run to
 //! find any drawing that still reads positions as world pixels.
 //!
@@ -85,7 +85,7 @@ pub struct CaptureOptions {
     pub timing_frames: usize,
     /// Write each scene's world as a save file instead of capturing it (`--export-saves`).
     pub export_saves: bool,
-    /// Re-express every staged world in a fixed frame this many sectors off the origin
+    /// Re-express every staged world in a frame this many sectors off its staged one
     /// (`--frame-shift X,Y`, F7).
     pub frame_shift: Option<(i64, i64)>,
 }
@@ -436,10 +436,13 @@ impl SceneStage<'_> {
         let report = self.game.stage_local_world(seats, |world, seats| {
             arrange(world, seats);
             if let Some((x, y)) = shift {
+                // Relative to the staged frame (the origin for fixed worlds), keeping whether it
+                // floats, so far floating scenes stay exact.
+                let staged = world.frame();
                 world.relocate_frame(fatherload_simulation::position::Frame {
-                    sector_x: x,
-                    sector_y: y,
-                    floating: false,
+                    sector_x: staged.sector_x.saturating_add(x),
+                    sector_y: staged.sector_y.saturating_add(y),
+                    floating: staged.floating,
                 });
             }
         });

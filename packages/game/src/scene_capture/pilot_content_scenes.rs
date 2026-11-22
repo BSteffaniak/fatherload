@@ -435,8 +435,10 @@ fn winch(stage: &mut SceneStage<'_>) {
         if let Some(player) = who
             && let Some((pilot, _, _)) = world.pilot_of(player)
         {
+            // Through the frame, so the `--frame-shift` check stages the same place.
+            let x = world.frame().centre_of(101, 0).0;
             world.edit_pilot(pilot, |body, _| {
-                body.x = tile_centre(101);
+                body.x = x;
                 body.previous_x = body.x;
             });
         }

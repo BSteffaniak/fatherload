@@ -147,8 +147,10 @@ fn stand(world: &mut WorldState, player: PlayerId, room: usize, (dx, dy): (i32, 
     let Some(room) = run.rooms.get(room) else {
         return;
     };
-    let x = (room.interior.min.x + dx) as f32 * TILE_SIZE + 16.0;
-    let feet = (room.interior.min.y + dy + 1) as f32 * TILE_SIZE - 4.0;
+    // Through the frame, so scenes staged after a `--frame-shift` land in the same place.
+    let frame = world.frame();
+    let x = frame.rel_col(room.interior.min.x + dx) * TILE_SIZE + 16.0;
+    let feet = frame.rel_row(room.interior.min.y + dy + 1) * TILE_SIZE - 4.0;
     if let Some((id, _, _)) = world.pilot_of(player) {
         world.edit_pilot(id, |body, state| {
             body.x = x;
@@ -188,8 +190,8 @@ fn room_point(
         .and_then(|run| run.rooms.get(room).copied())
         .map_or((0.0, 0.0), |room| {
             (
-                (room.interior.min.x + dx) as f32 * TILE_SIZE + 16.0,
-                (room.interior.min.y + dy) as f32 * TILE_SIZE + 16.0,
+                world.frame().rel_col(room.interior.min.x + dx) * TILE_SIZE + 16.0,
+                world.frame().rel_row(room.interior.min.y + dy) * TILE_SIZE + 16.0,
             )
         })
 }
