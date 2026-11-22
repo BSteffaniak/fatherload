@@ -5,11 +5,13 @@
 //! can be evaluated on its own, in any order, by any chunk.
 
 use crate::{
+    descent::Stratum,
     surface::building_foundation_at,
     terrain::{SurfaceMaterial, TileKind},
     village::placement::{self, FLATTEN_FADE_COLUMNS},
     worldgen::{
         TOWN_CLEAN_TOPSOIL_MARGIN, WorldSettings, biome, caves, contrast_threshold,
+        descent::{self, DescentLayout},
         noise::{NOISE_MAX, fractal_noise, line_noise, value_noise},
         pois::TIER_ROWS,
         rock_texture,
@@ -161,6 +163,8 @@ pub struct Ctx {
     pub deepest_surface: i32,
     /// Point-of-interest tiers, top to bottom.
     pub tiers: Vec<Tier>,
+    /// A V11 world's stratum layout ([`descent::layout`]); `None` before V11.
+    pub descent: Option<DescentLayout>,
 }
 
 impl Ctx {
@@ -188,6 +192,38 @@ impl Ctx {
                 });
             }
         }
+        let descent = settings
+            .generator
+            .has_descents()
+            .then(|| descent::layout(settings));
+        if let Some(layout) = &descent {
+            // The strata below Descent II get tiers of their own, dealing out their host
+            // band's kinds (keys past every classic band's).
+            for stratum in Stratum::ALL
+                .into_iter()
+                .filter(|stratum| !stratum.is_classic())
+            {
+                let (top, bottom) = layout.rows(stratum);
+                let count = ((bottom - top + 1) / TIER_ROWS).max(1);
+                let rows = (bottom - top + 1) / count;
+                for ordinal in 0..count {
+                    let first = top + ordinal * rows;
+                    let last = if ordinal + 1 == count {
+                        bottom
+                    } else {
+                        first + rows - 1
+                    };
+                    tiers.push(Tier {
+                        band: stratum.host_band(),
+                        key: 4_096 + i32::try_from(stratum.index() * 64).unwrap_or(0) + ordinal,
+                        ordinal: usize::try_from(ordinal).unwrap_or(0),
+                        count: usize::try_from(count).unwrap_or(1),
+                        top: first,
+                        bottom: last,
+                    });
+                }
+            }
+        }
         Self {
             settings: *settings,
             bases: strata::boundary_bases(settings),
@@ -202,6 +238,7 @@ impl Ctx {
             biomes: settings.generator.has_biomes(),
             deepest_surface: deepest_surface_row(settings),
             tiers,
+            descent,
         }
     }
 
@@ -210,7 +247,85 @@ impl Ctx {
     }
 
     pub const fn band(&self, x: i32, y: i32) -> Band {
+        if let Some(layout) = &self.descent {
+            return descent::stratum_in(&self.settings, layout, x, y).host_band();
+        }
         band_at_with_bases(&self.settings, &self.bases, x, y)
+    }
+
+    /// The V11 stratum at `(x, y)` (`None` before V11).
+    pub const fn stratum(&self, x: i32, y: i32) -> Option<Stratum> {
+        match &self.descent {
+            Some(layout) => Some(descent::stratum_in(&self.settings, layout, x, y)),
+            None => None,
+        }
+    }
+
+    /// [`strata::nominal_row`] with the layout already known.
+    pub const fn nominal_row(&self, y: i32) -> i32 {
+        match &self.descent {
+            Some(layout) => descent::nominal_row(layout, y),
+            None => strata::nominal_row(&self.settings, y),
+        }
+    }
+
+    /// The registry stratum at `(x, y)` when it is one of the placeholder strata below
+    /// Descent II (whose ores and hazards come from the registry rather than the classic
+    /// curves).
+    fn registry_stratum(&self, x: i32, y: i32) -> Option<(Stratum, u16)> {
+        let layout = self.descent.as_ref()?;
+        let stratum = descent::stratum_in(&self.settings, layout, x, y);
+        (!stratum.is_classic()).then(|| (stratum, layout.along(y)))
+    }
+
+    /// Relative weight of each mineral at `(x, y)` in `band` (the band there): the classic
+    /// depth curves, or below Descent II the stratum's own ore curves from the registry
+    /// (minerals too hard for the host band's drill stay out, so ore never blocks a stratum).
+    pub fn mineral_weights(&self, band: Band, x: i32, y: i32) -> [u32; 10] {
+        let Some((stratum, along)) = self.registry_stratum(x, y) else {
+            return crate::worldgen::deposits::mineral_weights(band, self.nominal_row(y));
+        };
+        let mut weights = stratum.def().ore_weights(along);
+        for (weight, mineral) in weights.iter_mut().zip(crate::worldgen::deposits::MINERALS) {
+            if crate::terrain::tile_hardness(TileKind::Ore(mineral))
+                > band.required_drill_strength()
+            {
+                *weight = 0;
+            }
+        }
+        weights
+    }
+
+    /// A mineral at `(x, y)` picked from [`Self::mineral_weights`] by a hash.
+    pub fn mineral_from_hash(
+        &self,
+        band: Band,
+        x: i32,
+        y: i32,
+        hash: u64,
+    ) -> Option<crate::terrain::MineralKind> {
+        let weights = self.mineral_weights(band, x, y);
+        let total: u64 = weights.iter().map(|weight| u64::from(*weight)).sum();
+        if total == 0 {
+            return None;
+        }
+        let mut roll = hash % total;
+        for (weight, mineral) in weights.iter().zip(crate::worldgen::deposits::MINERALS) {
+            if roll < u64::from(*weight) {
+                return Some(mineral);
+            }
+            roll -= u64::from(*weight);
+        }
+        None
+    }
+
+    /// Hazard family weights at `(x, y)` in `band`: the classic band rules, or below
+    /// Descent II the stratum's registry hazards.
+    pub fn hazard_weights(&self, band: Band, x: i32, y: i32) -> [u32; 5] {
+        match self.registry_stratum(x, y) {
+            Some((stratum, _)) => stratum.def().hazard_weights(),
+            None => crate::worldgen::hazards::band_rules(band).1,
+        }
     }
 
     /// The first bedrock row of column `x`.
@@ -249,6 +364,11 @@ impl Ctx {
         if self.biomes && biome::mountain_cave(&self.settings, x, y) {
             return Some(TileKind::Air);
         }
+        if let Some(layout) = &self.descent
+            && let Some(kind) = descent::fixed_kind(&self.settings, layout, x, y)
+        {
+            return Some(kind);
+        }
         if y >= self.floor_row(x) {
             return Some(TileKind::Bedrock);
         }
@@ -278,10 +398,15 @@ impl Ctx {
         let starter_ground = band == Band::Topsoil
             && x >= town_first - TOWN_CLEAN_TOPSOIL_MARGIN
             && x <= town_last + TOWN_CLEAN_TOPSOIL_MARGIN;
+        // A V11 stratum's own rock from the registry (the classic strata's match their bands).
+        let (soft, hard) = self.stratum(x, y).map_or_else(
+            || (band.soft_material(), band.hard_material()),
+            |stratum| (stratum.def().soft, stratum.def().hard),
+        );
         if !starter_ground && mass > contrast_threshold(contrast_per_mille) {
-            band.hard_material()
+            hard
         } else {
-            band.soft_material()
+            soft
         }
     }
 

@@ -19,6 +19,7 @@ pub mod command;
 pub mod contract;
 pub mod cosmetics;
 pub mod crew;
+pub mod descent;
 pub mod economy;
 pub mod enemy;
 pub mod entity;

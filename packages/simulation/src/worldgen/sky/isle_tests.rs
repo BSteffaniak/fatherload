@@ -71,13 +71,19 @@ fn v9_is_current_and_only_v9_furnishes_the_isles() {
     for generator in GeneratorVersion::ALL {
         assert_eq!(
             generator.has_sky_isles(),
-            matches!(generator, GeneratorVersion::V9 | GeneratorVersion::V10)
+            matches!(
+                generator,
+                GeneratorVersion::V9 | GeneratorVersion::V10 | GeneratorVersion::V11
+            )
         );
         assert_eq!(
             generator.has_sky(),
             matches!(
                 generator,
-                GeneratorVersion::V8 | GeneratorVersion::V9 | GeneratorVersion::V10
+                GeneratorVersion::V8
+                    | GeneratorVersion::V9
+                    | GeneratorVersion::V10
+                    | GeneratorVersion::V11
             )
         );
     }

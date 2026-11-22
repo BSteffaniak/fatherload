@@ -28,6 +28,7 @@
 pub mod biome;
 pub mod caves;
 pub mod deposits;
+pub mod descent;
 pub mod features;
 pub mod hazards;
 pub mod moon;
@@ -126,6 +127,15 @@ pub enum GeneratorVersion {
     /// spaces are realized in ([`tomb_sites::VAULT`]). Everything else is exactly V9's (same
     /// sky bands, climb table and thin air).
     V10,
+    /// The Deep Descent (expansion plan Part III, F8; [`descent`]): about 13,000 rows from the
+    /// ground line to the bedrock floor ([`WorldSize::descent_height_tiles`]) in eight Descents
+    /// and 41 strata from the stratum registry ([`crate::descent`]), with ragged transitions,
+    /// a deep outpost per Descent, a gate chamber at the end of each, the Hollow World's open
+    /// cavern and anomaly rooms in the Strange Layers ([`descent::landmarks`]). Placeholder
+    /// strata borrow their host band's rules; the surface, sky, Moon and tombs are V10's. A
+    /// preview: selectable for new worlds, while [`Self::CURRENT`] stays V10 until Wave 8 fills
+    /// Descents I to III.
+    V11,
 }
 
 impl GeneratorVersion {
@@ -133,7 +143,7 @@ impl GeneratorVersion {
     pub const CURRENT: Self = Self::V10;
 
     /// Every generator, oldest first.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Legacy,
         Self::V1,
         Self::V2,
@@ -145,7 +155,12 @@ impl GeneratorVersion {
         Self::V8,
         Self::V9,
         Self::V10,
+        Self::V11,
     ];
+
+    /// The Deep Descent preview generator offered beside [`Self::CURRENT`] for new worlds
+    /// (the new-game "World" option, `--deep-descent`, the screenshot and balance tools).
+    pub const DEEP_DESCENT: Self = Self::V11;
 
     /// Whether this generator stamps points of interest.
     #[must_use]
@@ -161,6 +176,7 @@ impl GeneratorVersion {
                 | Self::V8
                 | Self::V9
                 | Self::V10
+                | Self::V11
         )
     }
 
@@ -170,7 +186,7 @@ impl GeneratorVersion {
     pub const fn is_deep(self) -> bool {
         matches!(
             self,
-            Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10
+            Self::V4 | Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10 | Self::V11
         )
     }
 
@@ -180,7 +196,7 @@ impl GeneratorVersion {
     pub const fn is_streamed(self) -> bool {
         matches!(
             self,
-            Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10
+            Self::V5 | Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10 | Self::V11
         )
     }
 
@@ -188,14 +204,20 @@ impl GeneratorVersion {
     /// tiles, water, light, loot and critters.
     #[must_use]
     pub const fn has_cave_biomes(self) -> bool {
-        matches!(self, Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10)
+        matches!(
+            self,
+            Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10 | Self::V11
+        )
     }
 
     /// Whether worlds of this generator have villages ([`crate::village`]). The single switch
     /// for every village rule (placement, flattened ground, stamped tiles, feature index).
     #[must_use]
     pub const fn has_villages(self) -> bool {
-        matches!(self, Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10)
+        matches!(
+            self,
+            Self::V6 | Self::V7 | Self::V8 | Self::V9 | Self::V10 | Self::V11
+        )
     }
 
     /// Whether worlds of this generator have surface biomes and a real heightmap
@@ -203,7 +225,7 @@ impl GeneratorVersion {
     /// placeholder surface.
     #[must_use]
     pub const fn has_biomes(self) -> bool {
-        matches!(self, Self::V7 | Self::V8 | Self::V9 | Self::V10)
+        matches!(self, Self::V7 | Self::V8 | Self::V9 | Self::V10 | Self::V11)
     }
 
     /// Whether worlds of this generator have the sky ([`sky`]: floating islands, sky
@@ -225,8 +247,8 @@ impl GeneratorVersion {
     pub const fn sky_bands(self) -> Option<sky::SkyBands> {
         match self {
             Self::V8 => Some(sky::V8_SKY_BANDS),
-            // V10 (tombs) keeps V9's sky exactly.
-            Self::V9 | Self::V10 => Some(sky::V9_SKY_BANDS),
+            // V10 (tombs) and V11 (the Deep Descent) keep V9's sky exactly.
+            Self::V9 | Self::V10 | Self::V11 => Some(sky::V9_SKY_BANDS),
             Self::Legacy
             | Self::V1
             | Self::V2
@@ -243,7 +265,7 @@ impl GeneratorVersion {
     /// sky towns and jet streams; see [`sky`]). V8 skies keep their bare islands.
     #[must_use]
     pub const fn has_sky_isles(self) -> bool {
-        matches!(self, Self::V9 | Self::V10)
+        matches!(self, Self::V9 | Self::V10 | Self::V11)
     }
 
     /// Whether this generator fills the sky continents with content ([`sky::continent`]:
@@ -251,14 +273,14 @@ impl GeneratorVersion {
     /// and their sky enemies. V8 continents stay placeholder land.
     #[must_use]
     pub const fn has_sky_content(self) -> bool {
-        matches!(self, Self::V9 | Self::V10)
+        matches!(self, Self::V9 | Self::V10 | Self::V11)
     }
 
     /// Whether worlds of this generator fill the Moon with content ([`moon`], WP-MOON). V8
     /// keeps its placeholder Moon (regolith over moon rock with craters).
     #[must_use]
     pub const fn has_moon_content(self) -> bool {
-        matches!(self, Self::V9 | Self::V10)
+        matches!(self, Self::V9 | Self::V10 | Self::V11)
     }
 
     /// Whether worlds of this generator place pilot-only spaces ([`pilot_spaces`]: ruins with
@@ -266,14 +288,22 @@ impl GeneratorVersion {
     /// player-built crawlways and scenario ruins).
     #[must_use]
     pub const fn has_pilot_spaces(self) -> bool {
-        matches!(self, Self::V9 | Self::V10)
+        matches!(self, Self::V9 | Self::V10 | Self::V11)
     }
 
     /// Whether worlds of this generator place tomb and crypt sites and the run vault
     /// ([`tomb_sites`], WP-TOMBS). Older worlds keep none.
     #[must_use]
     pub const fn has_tombs(self) -> bool {
-        matches!(self, Self::V10)
+        matches!(self, Self::V10 | Self::V11)
+    }
+
+    /// Whether worlds of this generator are laid out in the Descents and strata of the stratum
+    /// registry ([`descent`], [`crate::descent`]): about 13,000 rows deep. Older worlds keep
+    /// the classic twelve-band stack.
+    #[must_use]
+    pub const fn has_descents(self) -> bool {
+        matches!(self, Self::V11)
     }
 
     /// Whether worlds of this generator use a **floating** local pixel frame (F7,
@@ -334,6 +364,7 @@ impl GeneratorVersion {
             Self::V8 => "v8",
             Self::V9 => "v9",
             Self::V10 => "v10",
+            Self::V11 => "v11",
         }
     }
 }
@@ -374,6 +405,18 @@ impl WorldSize {
             Self::Standard => 860,
             Self::Large => 900,
         }
+    }
+
+    /// Height in tiles of a Deep Descent ([`GeneratorVersion::V11`]) world of this size, bedrock
+    /// floor included: about [`descent::DESCENT_DEPTH_ROWS`] rows of strata (a Large world's
+    /// Descents run a little deeper).
+    #[must_use]
+    pub const fn descent_height_tiles(self) -> i32 {
+        let strata = match self {
+            Self::Standard => descent::DESCENT_DEPTH_ROWS,
+            Self::Large => descent::DESCENT_DEPTH_ROWS + 600,
+        };
+        strata::SKY_ROWS + strata + strata::BEDROCK_MIN_ROWS + strata::BEDROCK_WAVE_ROWS
     }
 }
 
@@ -506,7 +549,9 @@ impl WorldSettings {
 
     #[must_use]
     pub const fn height_tiles(&self) -> i32 {
-        if self.generator.is_deep() {
+        if self.generator.has_descents() {
+            self.size.descent_height_tiles()
+        } else if self.generator.is_deep() {
             self.size.deep_height_tiles()
         } else {
             WORLD_HEIGHT_TILES

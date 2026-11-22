@@ -42,12 +42,18 @@ fn v9_is_current_and_only_v8_and_v9_have_a_sky() {
             generator.has_sky(),
             matches!(
                 generator,
-                GeneratorVersion::V8 | GeneratorVersion::V9 | GeneratorVersion::V10
+                GeneratorVersion::V8
+                    | GeneratorVersion::V9
+                    | GeneratorVersion::V10
+                    | GeneratorVersion::V11
             )
         );
         assert_eq!(
             generator.has_moon_content(),
-            matches!(generator, GeneratorVersion::V9 | GeneratorVersion::V10)
+            matches!(
+                generator,
+                GeneratorVersion::V9 | GeneratorVersion::V10 | GeneratorVersion::V11
+            )
         );
     }
     let v7 = WorldSettings {

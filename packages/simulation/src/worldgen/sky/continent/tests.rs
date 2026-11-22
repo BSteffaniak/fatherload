@@ -41,7 +41,10 @@ fn only_v9_fills_continents_and_keeps_v8_placement() {
     for generator in GeneratorVersion::ALL {
         assert_eq!(
             generator.has_sky_content(),
-            matches!(generator, GeneratorVersion::V9 | GeneratorVersion::V10)
+            matches!(
+                generator,
+                GeneratorVersion::V9 | GeneratorVersion::V10 | GeneratorVersion::V11
+            )
         );
     }
     for seed in [3_u64, 0x00C0_FFEE] {

@@ -20,9 +20,10 @@ use serde::{Deserialize, Serialize};
 use crate::terrain::{DeepStratum, TileKind};
 
 use super::{
-    GeneratorVersion, WorldSettings,
+    GeneratorVersion, WorldSettings, descent,
     noise::{centred, hash2, line_noise, value_noise},
 };
+use crate::descent::Stratum;
 
 /// Deepest tile row that is always open sky; ground starts on the next row.
 pub const SKY_ROWS: i32 = 5;
@@ -401,6 +402,15 @@ pub const fn boundary_bases(settings: &WorldSettings) -> [i32; BOUNDARY_COUNT] {
                 index += 1;
             }
         }
+        GeneratorVersion::V11 => {
+            // The first rows of the strata of Descents I and II (the classic bands).
+            let layout = descent::layout(settings);
+            let mut index = 0;
+            while index < BOUNDARY_COUNT {
+                bases[index] = layout.tops[index + 1];
+                index += 1;
+            }
+        }
     }
     bases
 }
@@ -484,7 +494,9 @@ pub const fn is_bedrock(settings: &WorldSettings, x: i32, y: i32) -> bool {
 /// rows either side of that line the two bands interleave (fingers in V1-V3, a transition zone
 /// in V4).
 const fn boundary_shape(settings: &WorldSettings, index: usize) -> (i32, i32) {
-    if settings.generator.is_deep() {
+    if settings.generator.has_descents() {
+        descent::boundary_shape(index)
+    } else if settings.generator.is_deep() {
         V4_BOUNDARIES[index]
     } else {
         (BOUNDARIES[index].wave, BOUNDARIES[index].finger)
@@ -507,6 +519,9 @@ const fn boundary_wave(settings: &WorldSettings, index: usize, x: i32) -> i32 {
 /// First row of the band below boundary `index` in column `x`, before fingering.
 #[must_use]
 pub const fn boundary_column_depth(settings: &WorldSettings, index: usize, x: i32) -> i32 {
+    if settings.generator.has_descents() {
+        return descent::boundary_column_depth(settings, &descent::layout(settings), index, x);
+    }
     let base = boundary_bases(settings)[index];
     if matches!(settings.generator, GeneratorVersion::Legacy) {
         return base;
@@ -588,6 +603,10 @@ pub const fn band_at_with_bases(
     x: i32,
     y: i32,
 ) -> Band {
+    if settings.generator.has_descents() {
+        // A V11 world's strata answer with the classic band whose rules they borrow.
+        return descent::stratum_in(settings, &descent::layout(settings), x, y).host_band();
+    }
     let mut index = 0;
     while index < BOUNDARY_COUNT && below_boundary(settings, bases[index], index, x, y) {
         index += 1;
@@ -598,6 +617,9 @@ pub const fn band_at_with_bases(
 /// Rows a boundary may occupy in this world: `(shallowest, deepest)` over every column.
 #[must_use]
 pub const fn boundary_depth_range(settings: &WorldSettings, index: usize) -> (i32, i32) {
+    if settings.generator.has_descents() {
+        return descent::boundary_depth_range(&descent::layout(settings), index);
+    }
     let (wave, fringe) = boundary_shape(settings, index);
     let base = boundary_bases(settings)[index];
     if matches!(settings.generator, GeneratorVersion::Legacy) {
@@ -620,6 +642,14 @@ pub const fn band_shallowest_row(settings: &WorldSettings, band: Band) -> i32 {
 /// (the band's top, pushed past any interleaving with the band above).
 #[must_use]
 pub const fn band_solid_top_row(settings: &WorldSettings, band: Band, x: i32) -> i32 {
+    if settings.generator.has_descents() {
+        return descent::stratum_solid_top_row(
+            settings,
+            &descent::layout(settings),
+            Stratum::of_band(band),
+            x,
+        );
+    }
     match band.index() {
         0 => SKY_ROWS + 1,
         index => {
@@ -649,6 +679,11 @@ pub const fn band_reached(settings: &WorldSettings, deepest_row: i32, band: Band
 pub const fn band_layout_rows(settings: &WorldSettings, band: Band) -> (i32, i32) {
     let index = band.index();
     let last_band = Band::ALL.len() - 1;
+    if settings.generator.has_descents() {
+        // The classic band's own stratum in Descents I and II (deeper strata only borrow its
+        // rules).
+        return descent::layout(settings).rows(Stratum::of_band(band));
+    }
     if settings.generator.is_deep() {
         let bases = boundary_bases(settings);
         let top = if index == 0 {
@@ -734,6 +769,9 @@ const fn remap(value: i32, from: &[i32; BAND_COUNT + 1], to: &[i32; BAND_COUNT +
 /// The identity in every world before V4.
 #[must_use]
 pub const fn nominal_row(settings: &WorldSettings, row: i32) -> i32 {
+    if settings.generator.has_descents() {
+        return descent::nominal_row(&descent::layout(settings), row);
+    }
     if !settings.generator.is_deep() {
         return row;
     }
@@ -745,6 +783,9 @@ pub const fn nominal_row(settings: &WorldSettings, row: i32) -> i32 {
 /// nominal row `nominal`. The identity in every world before V4.
 #[must_use]
 pub const fn scaled_row(settings: &WorldSettings, nominal: i32) -> i32 {
+    if settings.generator.has_descents() {
+        return descent::scaled_row(&descent::layout(settings), nominal);
+    }
     if !settings.generator.is_deep() {
         return nominal;
     }
@@ -764,6 +805,9 @@ pub const fn scaled_row(settings: &WorldSettings, nominal: i32) -> i32 {
 /// the tile size), interpolating between rows.
 #[must_use]
 pub fn nominal_depth(settings: &WorldSettings, rows: f32) -> f32 {
+    if settings.generator.has_descents() {
+        return descent::nominal_depth(&descent::layout(settings), rows);
+    }
     if !settings.generator.is_deep() {
         return rows;
     }
@@ -793,6 +837,9 @@ pub fn nominal_depth(settings: &WorldSettings, rows: f32) -> f32 {
 /// relay legs and similar distances authored against the classic stack).
 #[must_use]
 pub const fn scaled_span(settings: &WorldSettings, nominal_rows: i32) -> i32 {
+    if settings.generator.has_descents() {
+        return descent::scaled_span(&descent::layout(settings), nominal_rows);
+    }
     if !settings.generator.is_deep() {
         return nominal_rows;
     }

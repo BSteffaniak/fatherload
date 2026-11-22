@@ -163,9 +163,9 @@ pub const V9_THIN_AIR_BURN: f32 = 30.0;
 #[must_use]
 pub const fn thin_air_burn_of(generator: crate::worldgen::GeneratorVersion) -> f32 {
     match generator {
-        crate::worldgen::GeneratorVersion::V9 | crate::worldgen::GeneratorVersion::V10 => {
-            V9_THIN_AIR_BURN
-        }
+        crate::worldgen::GeneratorVersion::V9
+        | crate::worldgen::GeneratorVersion::V10
+        | crate::worldgen::GeneratorVersion::V11 => V9_THIN_AIR_BURN,
         _ => THIN_AIR_BURN,
     }
 }

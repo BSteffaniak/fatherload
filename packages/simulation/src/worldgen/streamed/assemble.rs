@@ -5,10 +5,10 @@ use crate::{
         CHUNK_SIZE_TILES, ChunkPosition, MineralKind, Tile, TileKind, TilePosition, tile_durability,
     },
     worldgen::{
-        deposits::{self, mineral_fits, mineral_from_hash},
+        deposits::{self, mineral_fits},
         features::{HazardKind, TileRect},
         noise::{NOISE_MAX, centred, fractal_noise, hash2, ridge, value_noise},
-        strata::{SKY_ROWS, nominal_row, scaled_row},
+        strata::{SKY_ROWS, scaled_row},
     },
 };
 
@@ -65,7 +65,7 @@ fn vein_mineral(ctx: &Ctx, band: crate::worldgen::Band, x: i32, y: i32) -> Optio
             x.div_euclid(9),
             y.div_euclid(6),
         );
-        if let Some(mineral) = mineral_from_hash(band, nominal_row(&ctx.settings, y), stretch) {
+        if let Some(mineral) = ctx.mineral_from_hash(band, x, y, stretch) {
             return Some(mineral);
         }
     }
@@ -222,6 +222,20 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
         for space in super::pilot_spaces::spaces_touching(&ctx.settings, &rect) {
             for (tile, kind) in space.cells() {
                 chunk_kinds.set(tile.x, tile.y, kind);
+            }
+        }
+    }
+    if let Some(layout) = &ctx.descent {
+        // Deep Descent landmarks (V11): outposts, gate chambers and anomaly rooms.
+        for landmark in
+            crate::worldgen::descent::landmarks::landmarks_with(&ctx.settings, layout, &rect)
+        {
+            for position in rect.positions() {
+                if let Some(kind) = crate::worldgen::descent::landmarks::landmark_tile(
+                    &landmark, position.x, position.y,
+                ) {
+                    chunk_kinds.set(position.x, position.y, kind);
+                }
             }
         }
     }

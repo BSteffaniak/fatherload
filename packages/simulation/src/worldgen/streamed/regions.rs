@@ -21,7 +21,7 @@ use crate::{
     terrain::{ArtifactKind, DeepStratum, MineralKind, TileKind, TilePosition},
     worldgen::{
         SPAWN_TILE_X, caves,
-        deposits::{self, MINERALS, mineral_fits, mineral_weights},
+        deposits::{self, MINERALS, mineral_fits},
         features::{FeatureDetail, FeatureKind, HazardKind, TileRect, WorldFeature},
         hazards::{self, MIN_CLUSTER_TILES, hazard_allowed},
         noise::{NOISE_MAX, RegionRng, hash2, value_noise},
@@ -30,7 +30,7 @@ use crate::{
             guaranteed_kinds, guardian_hazard,
         },
         prefabs::{Cell, Prefab, PrefabRole, prefabs_of},
-        strata::{Band, SKY_ROWS, nominal_row},
+        strata::{Band, SKY_ROWS},
     },
 };
 
@@ -534,7 +534,7 @@ fn stamp(ctx: &Ctx, band: Band, spot: &Spot, rng: &mut RegionRng) -> Vec<(i32, i
     let mut cells = Vec::new();
     for position in bounds.positions() {
         let (x, y) = (position.x, position.y);
-        let nominal_y = nominal_row(&ctx.settings, y);
+        let nominal_y = ctx.nominal_row(y);
         let host = ctx.band(x, y).soft_material();
         let kind = match spot.cell_at(x, y) {
             Cell::Keep => continue,
@@ -665,8 +665,8 @@ fn grow_cluster(
         return None;
     }
     let band = window.band(x, y);
-    let (_, mut weights) = hazards::band_rules(band);
-    let nominal = nominal_row(&ctx.settings, y);
+    let mut weights = ctx.hazard_weights(band, x, y);
+    let nominal = ctx.nominal_row(y);
     for (weight, kind) in weights.iter_mut().zip(HazardKind::ALL) {
         if nominal < hazards::family_min_row(kind) {
             *weight = 0;
@@ -881,14 +881,14 @@ fn compute_motherlode(ctx: &Ctx, rx: i32, ry: i32) -> Candidates<MineralKind> {
     let mut rng = RegionRng::new(ctx.seed(), deposits::SALT_MOTHERLODE, rx, ry);
     let x = rx * MOTHERLODE_REGION.0 + rng.range(6, MOTHERLODE_REGION.0 - 6);
     let y = ry * MOTHERLODE_REGION.1 + rng.range(5, MOTHERLODE_REGION.1 - 5);
-    if nominal_row(&ctx.settings, y) < 34 || y >= ctx.floor_row(x) - 4 {
+    if ctx.nominal_row(y) < 34 || y >= ctx.floor_row(x) - 4 {
         return region;
     }
     if !rng.chance(260 * rich / 100) {
         return region;
     }
     let band = ctx.band(x, y);
-    let weights = mineral_weights(band, nominal_row(&ctx.settings, y));
+    let weights = ctx.mineral_weights(band, x, y);
     let Some(mineral) = MINERALS
         .iter()
         .zip(weights)
@@ -970,7 +970,7 @@ fn cluster(
     let band = ctx.band(x, y);
     let mineral = match mineral {
         Some(mineral) => mineral,
-        None => match rng.pick(&mineral_weights(band, nominal_row(&ctx.settings, y))) {
+        None => match rng.pick(&ctx.mineral_weights(band, x, y)) {
             Some(index) => MINERALS[index],
             None => return,
         },
