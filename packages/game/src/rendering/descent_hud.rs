@@ -2,7 +2,7 @@
 //! beside the depth ruler's marker.
 
 use fatherload_simulation::{
-    terrain::{TILE_SIZE, Terrain},
+    terrain::Terrain,
     worldgen::strata::SKY_ROWS,
 };
 use raylib::prelude::*;
@@ -96,7 +96,7 @@ pub(super) fn draw_ruler_label(
     if !terrain.settings().generator.has_descents() || view.hud.altitude.is_some() {
         return;
     }
-    let tile = view.player.tile_position(TILE_SIZE);
+    let tile = view.player.tile_in(crate::view_frame::frame());
     if tile.y <= SKY_ROWS {
         return;
     }

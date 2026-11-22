@@ -1748,7 +1748,7 @@ fn map_footer(ui: &UiFrame<'_, '_>) -> String {
         || format!("Depth {} m", hud.depth),
         |altitude| format!("Altitude {altitude} m"),
     );
-    let tile = ui.player.tile_position(TILE_SIZE);
+    let tile = ui.player.tile_in(crate::view_frame::frame());
     let layer = if ui.snapshot.terrain.settings().generator.has_descents() {
         let stratum = ui.snapshot.terrain.stratum_at(tile);
         format!(

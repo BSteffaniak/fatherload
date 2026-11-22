@@ -32,7 +32,7 @@ fn a_v11_world_starts_like_any_other() {
     assert_eq!(world.terrain().height(), v11(0).height_tiles());
     assert!(world.terrain().height() > 13_000);
     let rig = world.player(PLAYER).expect("a rig");
-    let tile = rig.tile_position(TILE_SIZE);
+    let tile = rig.tile_in(world.frame());
     // The rig spawns on the surface, in the Topsoil, as in every world.
     assert!(tile.y <= crate::worldgen::strata::SKY_ROWS + 1, "{tile:?}");
     let below = TilePosition { x: tile.x, y: 12 };
@@ -91,15 +91,11 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
     world.enable_test_mode();
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
     // Centre the rig over its column, so it fits the one-tile shaft it drills.
+    let frame = world.frame();
     if let Some(rig) = world.player_mut(PLAYER) {
-        rig.x = (rig.x / TILE_SIZE)
-            .floor()
-            .mul_add(TILE_SIZE, TILE_SIZE * 0.5);
+        rig.x = frame.col_px(frame.col(rig.x)) + TILE_SIZE * 0.5;
     }
-    let start = world
-        .player(PLAYER)
-        .expect("a rig")
-        .tile_position(TILE_SIZE);
+    let start = world.player(PLAYER).expect("a rig").tile_in(world.frame());
     let floor = bedrock_top_row(&settings, start.x).expect("a floor");
     let controls = ControlState::new(0.0, false, true);
     let inputs = TickInputs::held(PLAYER, controls);
@@ -111,10 +107,8 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
         world.simulate_tick(now, &inputs);
         if tick % 30 == 0 {
             world.stream_terrain_near_players();
-            let tile = world
-                .player(PLAYER)
-                .expect("a rig")
-                .tile_position(TILE_SIZE);
+            // The floating frame re-centres as the rig goes down (F7): read through it.
+            let tile = world.player(PLAYER).expect("a rig").tile_in(world.frame());
             descents_seen.insert(world.terrain().stratum_at(tile).descent());
             if tile.y > deepest {
                 deepest = tile.y;
@@ -143,10 +137,14 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
         })
     );
     assert_eq!(descents_seen.len(), Descent::ALL.len(), "{descents_seen:?}");
+    // A V11 world floats its frame (F7): 13,000 rows down, it has re-centred on the rig many
+    // sectors below the origin.
+    assert!(world.frame().floating());
+    assert!(world.frame().sector_y >= 20, "{:?}", world.frame());
     // The floor holds.
     let rig = world.player(PLAYER).expect("a rig");
     let below = TilePosition {
-        x: rig.tile_position(TILE_SIZE).x,
+        x: rig.tile_in(world.frame()).x,
         y: floor + 1,
     };
     assert_eq!(

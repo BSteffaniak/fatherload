@@ -8,7 +8,6 @@
 
 use fatherload_simulation::{
     descent::{Descent, Stratum},
-    terrain::TILE_SIZE,
     worldgen::descent,
 };
 
@@ -112,11 +111,8 @@ impl SeatUi {
             self.descent = SeatDescent::default();
             return;
         }
-        let row = ctx.player().map(|player| {
-            #[allow(clippy::cast_possible_truncation, reason = "tile rows are small")]
-            let row = (player.y / TILE_SIZE).floor() as i32;
-            row
-        });
+        let frame = ctx.world.frame();
+        let row = ctx.player().map(|player| frame.row(player.y));
         self.descent.track(&descent::layout(settings), row, tick);
     }
 }
