@@ -1275,8 +1275,10 @@ pub fn home_lights(homes: &Homes, visible: Rectangle) -> Vec<(f32, f32, f32)> {
                 return None;
             }
             let left = plot.house_left(home.width);
-            let center = (left as f32 + home.width as f32 * 0.5) * TILE_SIZE;
-            let y = (plot.site.ground_row as f32 - home.height as f32 * 0.5) * TILE_SIZE;
+            // Tiles are absolute; the light is drawn in the frame's local pixels (F7).
+            let frame = crate::view_frame::frame();
+            let center = (frame.rel_col(left) + home.width as f32 * 0.5) * TILE_SIZE;
+            let y = (frame.rel_row(plot.site.ground_row) - home.height as f32 * 0.5) * TILE_SIZE;
             Some((center, y, (home.width as f32 * 0.55 + 2.0) * TILE_SIZE))
         })
         .collect()

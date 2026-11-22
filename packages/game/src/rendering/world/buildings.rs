@@ -101,8 +101,10 @@ pub fn town_lights(visible: Rectangle) -> Vec<(f32, f32, f32)> {
 }
 
 fn at_door(building: &SurfaceBuilding, player: &PlayerPresentation) -> bool {
-    let tile_x = crate::view_frame::frame().col(player.x);
-    player.y <= SURFACE_SERVICE_MAX_DEPTH_TILES * TILE_SIZE
+    let frame = crate::view_frame::frame();
+    let tile_x = frame.col(player.x);
+    // The depth limit is in world pixels; the rig's `y` is local to the frame (F7).
+    frame.legacy_y(player.y) <= SURFACE_SERVICE_MAX_DEPTH_TILES * TILE_SIZE
         && tile_x >= building.tile_x
         && tile_x < building.tile_x + building.tile_width
 }
