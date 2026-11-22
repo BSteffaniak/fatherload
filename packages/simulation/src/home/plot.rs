@@ -292,9 +292,10 @@ const SKY_SITE_REACH: i32 = 200;
 /// How far (rows) above or below the town isle's turf a neighbouring isle may float.
 const SKY_SITE_ROWS: i32 = 60;
 
-/// The sky town `town`'s listed sites (WP-SKY towns, Wave 6): one on each small isle beside
-/// its town isle that has a level, open stretch of turf (never a crumbling isle), sold at the
-/// town's land office. Pure in the settings, like every listed site.
+/// The sky town `town`'s listed sites (Wave 6), sold at the town's land office.
+///
+/// One on each small isle beside its town isle that has a level, open stretch of turf (never
+/// a crumbling isle). Pure in the settings, like every listed site.
 #[must_use]
 pub fn sky_sites_of(settings: &WorldSettings, town: VillageId) -> Vec<PlotSite> {
     use crate::worldgen::sky::{self, SkyLandKind};

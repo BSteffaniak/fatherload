@@ -97,3 +97,35 @@ pub const fn local_lines(culture: Culture) -> &'static [&'static str] {
         ],
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::{local_id, local_lines};
+    use crate::people::{
+        dialogue::{grammar, lines::COMMON_VARS},
+        names::Culture,
+    };
+
+    #[test]
+    fn every_culture_has_its_own_well_formed_local_colour() {
+        let mut ids = BTreeSet::new();
+        let mut seen = BTreeSet::new();
+        for culture in Culture::EVERY {
+            assert!(ids.insert(local_id(culture)), "{culture:?}: duplicate id");
+            let lines = local_lines(culture);
+            assert!(lines.len() >= 5, "{culture:?}: only {} lines", lines.len());
+            for line in lines {
+                grammar::check(line, COMMON_VARS)
+                    .unwrap_or_else(|error| panic!("{culture:?}: {error} in {line:?}"));
+                assert!(line.is_ascii(), "{culture:?}: non-ASCII {line:?}");
+                assert!(
+                    line.ends_with(['.', '!', '?']),
+                    "{culture:?}: unpunctuated {line:?}"
+                );
+                assert!(seen.insert(*line), "{culture:?}: line reused {line:?}");
+            }
+        }
+    }
+}

@@ -84,7 +84,15 @@ const SAVE_SLOTS: usize = 3;
 /// * T29 top-down crypts: a crypt run's trap overlays and their state (cracked floors giving
 ///   way, pressed plates), pilot entities' roll and heading, crypt creatures' phase and
 ///   pattern.
-pub const SAVE_VERSION: u32 = 11;
+///
+/// 12 (expansion wave 6; the integrator collapses the wave's bumps into one); every new field
+/// has a serde default and every new enum variant is appended, so version 8 to 11 files load as
+/// is:
+///
+/// * W6 content: the new furniture pieces in stocks and rooms, the new blueprints in homes,
+///   sky town isle deeds (`SiteKey::SkyIsle`), and arc logs naming the new story arcs (their
+///   quest ids) and places.
+pub const SAVE_VERSION: u32 = 12;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -347,9 +355,9 @@ fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
         check_generator(json)?;
     }
     match probe.version {
-        // Version 8 to 10 files have the current layout minus serde-defaulted wave 3, 4 and
-        // 5 fields.
-        8..=10 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        // Version 8 to 11 files have the current layout minus serde-defaulted wave 3 to 6
+        // fields.
+        8..=11 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
         7 => serde_json::from_str::<legacy::V7SaveFile>(json)

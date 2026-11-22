@@ -516,11 +516,10 @@ fn outdoor_work(character: &Character, lots: &[Lot], plaza: (i32, i32), index: u
         Role::Scholar | Role::Cartographer => &[BuildingKind::MapRoom, BuildingKind::Hall],
         Role::Innkeeper | Role::Brewer | Role::Storyteller => &[BuildingKind::Inn],
         Role::Warden => &[BuildingKind::Tower],
-        Role::Courier | Role::Smuggler | Role::StormChaser => return Work::Roam,
+        Role::Courier | Role::Smuggler | Role::StormChaser | Role::DomeTech => return Work::Roam,
         Role::Aeronaut => &[BuildingKind::AirshipDock, BuildingKind::Workshop],
         Role::Monk => &[BuildingKind::Monastery, BuildingKind::Granary],
         Role::Hydroponist | Role::Selenographer => &[BuildingKind::Farm, BuildingKind::Hall],
-        Role::DomeTech => return Work::Roam,
         Role::Quartermaster => &[BuildingKind::Depot, BuildingKind::Market],
     };
     let jitter = i32::try_from(index % 3).unwrap_or(0) - 1;

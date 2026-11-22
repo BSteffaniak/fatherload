@@ -124,6 +124,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * Fixes: `SessionServiceRequest::Village` names the deal it buys (`deal: VillageDeal`, its
 ///   stable id) instead of the offer's row, so a purchase resolved on the tick dusk or dawn
 ///   restocks a counter can never buy the wrong item.
+/// * W6 content: the new `Furniture` pieces and `Blueprint`s in the `Homes` section and home
+///   commands, `SiteKey::SkyIsle` deeds, `PersonDeal::Furniture` rows, the Moon colony's
+///   NPCs (`LUNAR_COLONY` character ids) and the new story arcs, places and objectives in the
+///   arc log (loadout).
 pub const PROTOCOL_VERSION: u8 = 14;
 
 /// One client input frame: the controls and actions for exactly one tick.

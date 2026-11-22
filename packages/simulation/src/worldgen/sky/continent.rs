@@ -772,6 +772,13 @@ pub fn sky_city(settings: &WorldSettings, id: VillageId) -> Option<SkyCity> {
         return None;
     }
     let rx = sky_city_cell(id);
+    // Only cells inside the streamed world hold cities (Wave 6 fix): a sky town's id shares
+    // the sky flag and would otherwise decode to a far-off cell's city.
+    let last_cell =
+        crate::worldgen::streamed::STREAMED_COLUMN_LIMIT / super::CONTINENT_CELL_COLUMNS + 1;
+    if rx.abs() > last_cell {
+        return None;
+    }
     let land = super::continent_cell(settings, rx)?;
     let plan = land.plan()?;
     plan.city.map(|site| layout_city(site, rx, land.shape))

@@ -1411,6 +1411,188 @@ fn check_twists(
 }
 
 #[cfg(test)]
+mod night_hook_tests {
+    //! The night-hook objectives (Wave 6): a night hunt counts the owner's kills of night
+    //! monsters, and a dawn watch lands when the night ends with the watcher still there.
+
+    use super::{EventFacts, QuestNotes};
+    use crate::{
+        GameplayEventKind, PlayerId, SimulationParams, SimulationTick, TickOutput, WorldState,
+        enemy::EnemyKind,
+        people::{DayTime, TickClock, clock::DEFAULT_DAY_LENGTH_MINUTES},
+        quest::{ActiveQuest, Objective, ObjectiveProgress, QuestTarget},
+        terrain::{TILE_SIZE, TilePosition},
+        worldgen::{GeneratorVersion, TileRect, WorldSettings},
+    };
+
+    const OWNER: PlayerId = PlayerId::new(1);
+
+    fn world() -> WorldState {
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V7,
+            ..WorldSettings::new(0x0006_4001)
+        };
+        WorldState::new_game_with_settings(OWNER, &settings, SimulationParams::new(30))
+    }
+
+    fn quest(target: TilePosition) -> ActiveQuest {
+        ActiveQuest {
+            quest: crate::people::ArcId(1003).quest(),
+            owner: OWNER,
+            crew: false,
+            variant: 0,
+            accepted_tick: 0,
+            deadline: None,
+            stage: 0,
+            targets: vec![QuestTarget {
+                feature: None,
+                center: target,
+                bounds: TileRect {
+                    min: TilePosition {
+                        x: target.x - 4,
+                        y: target.y - 4,
+                    },
+                    max: TilePosition {
+                        x: target.x + 4,
+                        y: target.y + 1,
+                    },
+                },
+            }],
+            objectives: vec![ObjectiveProgress::default(); 2],
+            damage_taken: 0,
+            last_hull: 0,
+            carrying: false,
+            descended: false,
+            ready: false,
+            helpers: std::collections::BTreeSet::new(),
+        }
+    }
+
+    fn set_time(world: &mut WorldState, time: DayTime) {
+        let tick = TickClock::tick_at(time, world.tick_rate_hz(), DEFAULT_DAY_LENGTH_MINUTES);
+        world.set_simulation_tick(SimulationTick::new(tick));
+    }
+
+    fn killed(kind: EnemyKind, by: Option<PlayerId>) -> GameplayEventKind {
+        GameplayEventKind::EnemyKilled {
+            entity: 9,
+            kind,
+            x: 0,
+            y: 0,
+            by,
+        }
+    }
+
+    #[test]
+    fn a_night_hunt_counts_the_owners_kills_of_night_monsters_only() {
+        let mut world = world();
+        let tile = world.player(OWNER).expect("rig").tile_position(TILE_SIZE);
+        let mut active = quest(tile);
+        let mut progress = ObjectiveProgress::default();
+        let rigs = vec![(OWNER, tile)];
+        let hunt = Objective::NightHunt { count: 3 };
+        let mut output = TickOutput::default();
+        output.push_event(killed(EnemyKind::ShadowHound, Some(OWNER)));
+        output.push_event(killed(EnemyKind::MothSwarm, Some(OWNER)));
+        // Not nocturnal, nobody's, someone else's: none of these count.
+        output.push_event(killed(EnemyKind::ALL[0], Some(OWNER)));
+        output.push_event(killed(EnemyKind::ShadowHound, None));
+        output.push_event(killed(EnemyKind::ShadowHound, Some(PlayerId::new(7))));
+        let facts = EventFacts::read(&output);
+        let mut helpers = Vec::new();
+        world.step_objective(
+            hunt,
+            &mut progress,
+            &mut active,
+            &rigs,
+            1,
+            &QuestNotes::default(),
+            &facts,
+            &mut helpers,
+        );
+        let expected = 2 + u64::from(crate::night::is_nocturnal(EnemyKind::ALL[0]));
+        assert_eq!(progress.count, expected);
+        assert_eq!(progress.done, expected >= 3);
+        let mut output = TickOutput::default();
+        output.push_event(killed(EnemyKind::DuneStalker, Some(OWNER)));
+        let facts = EventFacts::read(&output);
+        world.step_objective(
+            hunt,
+            &mut progress,
+            &mut active,
+            &rigs,
+            2,
+            &QuestNotes::default(),
+            &facts,
+            &mut helpers,
+        );
+        assert!(progress.done, "three night monsters down");
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, reason = "small columns and rows")]
+    fn a_dawn_watch_lands_when_the_night_ends_with_the_watcher_still_there() {
+        let mut world = world();
+        let tile = world.player(OWNER).expect("rig").tile_position(TILE_SIZE);
+        let dawn = Objective::Dawn { target: 0 };
+        let step = |world: &mut WorldState, progress: &mut ObjectiveProgress, at: TilePosition| {
+            // The rule reads where the actor really is: move the rig there.
+            if let Some(rig) = world.player_mut(OWNER) {
+                rig.x = (at.x as f32 + 0.5) * TILE_SIZE;
+                rig.y = (at.y as f32 + 0.5) * TILE_SIZE;
+            }
+            let mut active = quest(tile);
+            let tick = world.simulation_tick().get();
+            let mut helpers = Vec::new();
+            world.step_objective(
+                dawn,
+                progress,
+                &mut active,
+                &[(OWNER, at)],
+                tick,
+                &QuestNotes::default(),
+                &EventFacts::default(),
+                &mut helpers,
+            );
+        };
+        // By day nothing happens; a watch kept by night only counts once the night ends.
+        let mut progress = ObjectiveProgress::default();
+        set_time(&mut world, DayTime::at(1, 12, 0));
+        step(&mut world, &mut progress, tile);
+        assert!(!progress.done);
+        set_time(&mut world, DayTime::at(1, 23, 0));
+        assert!(world.is_night());
+        step(&mut world, &mut progress, tile);
+        assert!(!progress.done && progress.timer > 0);
+        // The watcher stays to the last night tick, then the sky greys.
+        let mut tick = world.simulation_tick().get();
+        while world.is_night() {
+            step(&mut world, &mut progress, tile);
+            tick += 30;
+            world.set_simulation_tick(SimulationTick::new(tick));
+        }
+        step(&mut world, &mut progress, tile);
+        assert!(progress.done, "seen through to dawn");
+        // Someone who left in the night doesn't see it through.
+        let mut gone = ObjectiveProgress::default();
+        set_time(&mut world, DayTime::at(2, 1, 0));
+        step(&mut world, &mut gone, tile);
+        let away = TilePosition {
+            x: tile.x + 60,
+            y: tile.y,
+        };
+        let mut tick = world.simulation_tick().get();
+        while world.is_night() {
+            step(&mut world, &mut gone, away);
+            tick += 30;
+            world.set_simulation_tick(SimulationTick::new(tick));
+        }
+        step(&mut world, &mut gone, away);
+        assert!(!gone.done, "nobody at the place when dawn came");
+    }
+}
+
+#[cfg(test)]
 mod window_tests {
     use super::simultaneous_window;
 

@@ -149,6 +149,8 @@ mod village_tests;
 mod villages;
 mod visibility;
 #[cfg(test)]
+mod wave6_content_tests;
+#[cfg(test)]
 mod weapon_tests;
 mod weapons;
 

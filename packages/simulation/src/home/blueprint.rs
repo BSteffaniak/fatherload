@@ -211,7 +211,7 @@ impl Blueprint {
             Self::SkyVilla => 100,
             Self::LunarHabitat => 150,
             Self::CloudCottage => 60,
-            Self::Aerie => 90,
+            Self::Aerie => 95,
             Self::CraterDome => 80,
             Self::Longhouse => 110,
         }

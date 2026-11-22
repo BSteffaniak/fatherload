@@ -405,22 +405,22 @@ impl Furniture {
             Self::Chandelier => 240,
             Self::Lantern => 55,
             Self::StarMobile => 400,
-            Self::RockingChair => 130,
+            Self::RockingChair => 135,
             Self::Loom => 340,
-            Self::ClayOven => 240,
-            Self::FishTank => 260,
-            Self::JunkSculpture => 150,
-            Self::GlowcapLamp => 90,
+            Self::ClayOven => 245,
+            Self::FishTank => 265,
+            Self::JunkSculpture => 155,
+            Self::GlowcapLamp => 98,
             Self::ModelAirship => 420,
             Self::WindChime => 75,
             Self::MoonGlobe => 380,
             Self::HydroponicRack => 520,
-            Self::Barometer => 140,
+            Self::Barometer => 145,
             Self::CloudHammock => 280,
             Self::GuardianMask => 1_200,
-            Self::RelicPlinth => 900,
-            Self::StarChart => 200,
-            Self::Moonflower => 160,
+            Self::RelicPlinth => 950,
+            Self::StarChart => 210,
+            Self::Moonflower => 165,
             Self::Gramophone => 450,
         }
     }
@@ -762,5 +762,100 @@ mod tests {
         assert!(displayable(ItemKind::Artifact(
             crate::terrain::ArtifactKind::Fossil
         )));
+    }
+}
+
+#[cfg(test)]
+mod wave6_tests {
+    use std::collections::BTreeSet;
+
+    use super::{DecorService, Furniture, ROOM_COLUMNS};
+    use crate::{
+        home::{Blueprint, BlueprintSite, PlotSetting},
+        people::{
+            Culture,
+            offers::{SIGNATURE_PRICE_PERCENT, signature_furniture},
+        },
+    };
+
+    #[test]
+    fn the_furniture_tables_are_consistent() {
+        let all: BTreeSet<Furniture> = Furniture::ALL.into_iter().collect();
+        assert_eq!(all.len(), Furniture::ALL.len(), "every piece listed once");
+        for piece in Furniture::ALL {
+            assert!(!piece.name().is_empty());
+            assert!(piece.width() >= 1 && piece.width() <= ROOM_COLUMNS);
+            assert!(piece.catalogue_price() > 0, "{piece:?} has a price");
+            if piece.storage_slots() > 0 {
+                assert_eq!(piece.service(), Some(DecorService::Store));
+            }
+        }
+        // Catalogues: no repeats, nothing from another table.
+        let ground: BTreeSet<Furniture> = Furniture::CATALOGUE.into_iter().collect();
+        assert_eq!(ground.len(), Furniture::CATALOGUE.len());
+        for piece in Furniture::SKY_CATALOGUE {
+            assert!(
+                !ground.contains(&piece),
+                "{piece:?} is the sky office's own"
+            );
+        }
+        for piece in Furniture::TOMB_TROPHIES {
+            assert!(
+                !ground.contains(&piece) && !Furniture::SKY_CATALOGUE.contains(&piece),
+                "trophies are won, never sold: {piece:?}"
+            );
+            assert!(!Furniture::CACHE_FINDS.contains(&piece));
+        }
+        // Old worlds' cave caches keep finding the same antiques (the table is unchanged).
+        assert_eq!(Furniture::CACHE_FINDS.len(), 6);
+        for piece in Furniture::CRAFTABLE {
+            assert!(piece.craft_cost().is_some(), "{piece:?} has a recipe");
+        }
+        // Every culture's signature piece is its own and only its people sell it.
+        let mut signatures = BTreeSet::new();
+        for culture in Culture::EVERY {
+            let piece = signature_furniture(culture);
+            assert!(signatures.insert(piece), "{culture:?} shares a signature");
+            assert!(
+                !ground.contains(&piece) && !Furniture::SKY_CATALOGUE.contains(&piece),
+                "{culture:?}'s {piece:?} is not in a catalogue"
+            );
+            assert!(piece.catalogue_price() * SIGNATURE_PRICE_PERCENT / 100 > 0);
+        }
+        // A relic plinth shows things off like a trophy case; a hammock sleeps like a bed.
+        assert_eq!(
+            Furniture::RelicPlinth.service(),
+            Some(DecorService::Display)
+        );
+        assert_eq!(Furniture::CloudHammock.service(), Some(DecorService::Sleep));
+    }
+
+    #[test]
+    fn the_blueprints_are_consistent() {
+        for blueprint in Blueprint::ALL {
+            let (width, height) = blueprint.footprint();
+            assert!(
+                width <= blueprint.min_plot().width(),
+                "{blueprint:?} fits its plot"
+            );
+            assert!(height > 0 && !blueprint.rooms().is_empty());
+            assert!(blueprint.job().price > 0 && blueprint.blocks() > 0);
+            let settings = [PlotSetting::Town, PlotSetting::SkyIsland, PlotSetting::Moon];
+            let allowed: Vec<bool> = settings
+                .iter()
+                .map(|setting| blueprint.allowed_on(*setting))
+                .collect();
+            match blueprint.site() {
+                BlueprintSite::Anywhere => assert_eq!(allowed, [true, true, false]),
+                BlueprintSite::Sky => assert_eq!(allowed, [false, true, false]),
+                BlueprintSite::Moon => assert_eq!(allowed, [false, false, true]),
+            }
+        }
+        // Wave 6 plans: two for the islands, one for the Moon, one for the ground.
+        assert_eq!(Blueprint::CloudCottage.site(), BlueprintSite::Sky);
+        assert_eq!(Blueprint::Aerie.site(), BlueprintSite::Sky);
+        assert_eq!(Blueprint::CraterDome.site(), BlueprintSite::Moon);
+        assert_eq!(Blueprint::Longhouse.site(), BlueprintSite::Anywhere);
+        assert_eq!(Blueprint::Aerie.floors(), 3);
     }
 }

@@ -120,10 +120,9 @@ impl BuildingStyle {
             Culture::Scrapper => Self::Scrap,
             Culture::Deepfolk => Self::Carved,
             Culture::Aeronaut => Self::Skyrig,
-            Culture::Cloudborn => Self::Cloister,
             // The colony is no village (never laid out); its glass and hull read as the
             // cloister's white stone where a style is asked for.
-            Culture::Lunar => Self::Cloister,
+            Culture::Cloudborn | Culture::Lunar => Self::Cloister,
         }
     }
 

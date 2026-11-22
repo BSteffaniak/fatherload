@@ -384,11 +384,10 @@ const fn deal_icon(deal: PersonDeal) -> &'static super::super::pixel_art::sprite
         PersonDeal::Goods(VillageDeal::Blessing(_)) => &menu_icons::FLAG,
         PersonDeal::Goods(VillageDeal::Repair { .. }) => &menu_icons::HAMMER,
         PersonDeal::Goods(VillageDeal::Refuel { .. }) => &icons::FUEL,
-        PersonDeal::Goods(_) => &menu_icons::GIFT,
+        PersonDeal::Goods(_) | PersonDeal::Furniture(_) => &menu_icons::GIFT,
         PersonDeal::MapSecret => &menu_icons::GLOBE,
         PersonDeal::Rumour => &menu_icons::LETTER,
         PersonDeal::Apprenticeship(_) => &menu_icons::BOOK,
-        PersonDeal::Furniture(_) => &menu_icons::GIFT,
     }
 }
 

@@ -267,15 +267,16 @@ impl Role {
             Self::Smith | Self::Mechanic | Self::Tinkerer | Self::Aeronaut | Self::DomeTech => {
                 OfferKind::PartVariant
             }
-            Self::Hydroponist => OfferKind::Recipe,
-            Self::Selenographer => OfferKind::MapSecret,
-            Self::Quartermaster => OfferKind::Cosmetic,
             Self::StormChaser => OfferKind::Rumours,
-            Self::Farmer | Self::Healer | Self::Brewer | Self::Baker => OfferKind::Recipe,
-            Self::Trader | Self::Smuggler => OfferKind::Cosmetic,
-            Self::Prospector | Self::Scholar | Self::Cartographer | Self::Hermit => {
-                OfferKind::MapSecret
+            Self::Farmer | Self::Healer | Self::Brewer | Self::Baker | Self::Hydroponist => {
+                OfferKind::Recipe
             }
+            Self::Trader | Self::Smuggler | Self::Quartermaster => OfferKind::Cosmetic,
+            Self::Prospector
+            | Self::Scholar
+            | Self::Cartographer
+            | Self::Hermit
+            | Self::Selenographer => OfferKind::MapSecret,
             Self::ShrineKeeper | Self::RetiredMiner | Self::Warden | Self::Monk => {
                 OfferKind::Apprenticeship
             }
