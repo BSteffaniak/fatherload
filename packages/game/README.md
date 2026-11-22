@@ -214,7 +214,7 @@ open (otherwise Page Up / Page Down scroll dialogs; `ShellState::tuning_keys_act
   asserting after fixed windows; the loopback datagram burst in `quic_transport` is paced in
   tens. No check was weakened.
 - **Saves across versions**: `save::tests::every_supported_save_format_loads_plays_and_round_trips`
-  (formats 1 to 11 load, play two minutes with the mining bot, save and reload exactly, rigs on
+  (formats 1 to 12 load, play two minutes with the mining bot, save and reload exactly, rigs on
   the current fuel and cargo curves) and
   `save::cross_version_tests::every_generator_version_saves_mid_play_and_continues_identically`
   (a two-rig world of every generator, legacy and V1 to V10, played a minute at dusk on the

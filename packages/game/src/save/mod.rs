@@ -1641,7 +1641,7 @@ mod tests {
         ));
     }
 
-    /// Wave 6 QA: a file of every supported save format (1 to 11) loads, plays two minutes with
+    /// Wave 6 QA: a file of every supported save format (1 to 12) loads, plays two minutes with
     /// the mining bot, saves, reloads as it was saved, and its rigs are sane (the capacity curve
     /// catch-up applied, fuel and cargo within their capacities).
     #[test]
@@ -1707,7 +1707,8 @@ mod tests {
             ),
             (9, as_version(&streamed, 9, &["homes", "tombs"])),
             (10, as_version(&streamed, 10, &["tombs"])),
-            (11, as_version(&streamed, SAVE_VERSION, &[])),
+            (11, as_version(&streamed, 11, &[])),
+            (12, as_version(&streamed, SAVE_VERSION, &[])),
         ];
         for (version, json) in files {
             let mut save = parse_save(&json).unwrap_or_else(|error| panic!("v{version}: {error}"));
