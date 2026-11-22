@@ -242,6 +242,10 @@ open (otherwise Page Up / Page Down scroll dialogs; `ShellState::tuning_keys_act
   dropped top-row button). Options gains Screen effects, Gyro stabiliser and Horizon hold
   (`SettingsFile::{effects, assists}`, defaults full / off); the assists ride along in every
   `ControlState`.
+- **Aiming through the roll**: `weapon_aim::ViewAnchor` carries the view's `roll` and
+  `pivot`, so the mouse's world point and the right stick's direction turn with the rolled
+  camera (`a_rolled_camera_turns_the_mouse_and_the_stick_aim_with_the_world`). Not yet: the
+  mirror effect does not mirror the mouse's world point.
 - **Dev zones**: test-mode pause entries Place Field Zone (cycles `FieldPreset`s around the
   seat's rig) and Clear Field Zones, both `TestModeAction`s (so online too).
 - **Scenes** (`scene_capture/field_scenes.rs`): `fx_pixelate`, `fx_palette`, `fx_exposure`,
