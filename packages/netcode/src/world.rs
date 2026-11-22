@@ -19,7 +19,10 @@
 //!   clients get the redacted keyframe and compare the client-visible state hash
 //!   ([`WorldState::visible_state_hash`]).
 //! * Poses are in tiles, so the netcode's distance tunables (snap threshold, correction epsilon,
-//!   relevance radius) are expressed in tiles.
+//!   relevance radius) are expressed in tiles. A pose's origin is the world's frame origin in
+//!   tiles (F7, [`frame_origin`]): `x`/`y` are the frame-local position, quantized relative to
+//!   the frame's sector, and relevance compares poses and chunks through exact origin deltas,
+//!   so it holds however far from the world origin (and from each other) players are.
 
 use fatherload_simulation::{
     ControlState, CrewMember, Discovery, GameplayEvent, GameplayEventKind, InputSequence,
@@ -294,6 +297,13 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
     }
 }
 
+/// The tile offset of `world`'s frame origin: the [`Pose::origin`] of its players (F7).
+#[must_use]
+pub const fn frame_origin(world: &WorldState) -> [i64; 2] {
+    let frame = world.frame();
+    [frame.origin_col(), frame.origin_row()]
+}
+
 /// [`Pose::mode`] of a player on foot (drill modes are `(y << 16 ^ x) + 1`; this high bit
 /// pattern is never one of theirs in practice).
 pub const ON_FOOT_POSE_MODE: u32 = 0xF00F_0001;
@@ -512,15 +522,26 @@ impl NetSimulation for WorldState {
         // in or out changes the mode, so the client snaps instead of smoothing across bodies.
         // The mode is one constant (not the entity id: a predicted pilot may get a different id
         // than the host's until the authority arrives, and that is no reason to snap).
+        let origin = frame_origin(self);
         if self.is_on_foot(sim_id) {
             let (x, y) = self.actor_position(sim_id)?;
-            return Some(Pose::new(x / TILE_SIZE, y / TILE_SIZE, ON_FOOT_POSE_MODE));
+            return Some(Pose::at(
+                origin,
+                x / TILE_SIZE,
+                y / TILE_SIZE,
+                ON_FOOT_POSE_MODE,
+            ));
         }
         let player = self.player(sim_id)?;
         let mode = self
             .active_drill(sim_id)
             .map_or(0, |drill| drill_mode(drill.target));
-        Some(Pose::new(player.x / TILE_SIZE, player.y / TILE_SIZE, mode))
+        Some(Pose::at(
+            origin,
+            player.x / TILE_SIZE,
+            player.y / TILE_SIZE,
+            mode,
+        ))
     }
 
     fn player_state(&self, id: PlayerId) -> Option<PlayerTickState> {
@@ -554,7 +575,12 @@ impl NetSimulation for WorldState {
         if relevance.is_infinite() {
             return Self::entity_revisions(self, None, None);
         }
-        Self::entity_revisions(self, relevance.center, relevance.radius)
+        // The centre in this world's frame (tiles from the frame origin).
+        let center = relevance.center.map(|(x, y)| {
+            let local = Pose::at(relevance.origin, x, y, 0).rebased(frame_origin(self));
+            (local.x, local.y)
+        });
+        Self::entity_revisions(self, center, relevance.radius)
     }
 
     fn entity_record(&self, key: &EntityId) -> Option<Entity> {
@@ -574,8 +600,16 @@ impl NetSimulation for WorldState {
 
     fn chunk_relevant(&self, chunk: &ChunkPosition, relevance: &Relevance) -> bool {
         let origin = chunk.origin();
-        #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-        let (left, top, size) = (origin.x as f32, origin.y as f32, CHUNK_SIZE_TILES as f32);
+        // Relative to the relevance origin, exactly (players far from the world origin).
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "chunks near the viewer are a few tiles from its origin"
+        )]
+        let (left, top, size) = (
+            (i64::from(origin.x) - relevance.origin[0]) as f32,
+            (i64::from(origin.y) - relevance.origin[1]) as f32,
+            CHUNK_SIZE_TILES as f32,
+        );
         relevance.touches_box(left, top, left + size, top + size)
     }
 

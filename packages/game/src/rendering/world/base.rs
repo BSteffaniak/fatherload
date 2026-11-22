@@ -99,12 +99,12 @@ impl BaseScene<'_> {
         let v = self.visible;
         (
             TilePosition {
-                x: (v.x / TILE_SIZE).floor() as i32 - 1,
-                y: (v.y / TILE_SIZE).floor() as i32 - 1,
+                x: crate::view_frame::frame().col(v.x) - 1,
+                y: crate::view_frame::frame().row(v.y) - 1,
             },
             TilePosition {
-                x: ((v.x + v.width) / TILE_SIZE).ceil() as i32 + 1,
-                y: ((v.y + v.height) / TILE_SIZE).ceil() as i32 + 1,
+                x: crate::view_frame::frame().col_ceil(v.x + v.width) + 1,
+                y: crate::view_frame::frame().row_ceil(v.y + v.height) + 1,
             },
         )
     }
@@ -137,8 +137,8 @@ impl BaseScene<'_> {
     /// Whether a rig is within `reach` tiles of tile `tile`.
     fn rig_near(&self, tile: TilePosition, reach: f32) -> bool {
         let (cx, cy) = (
-            (tile.x as f32 + 0.5) * TILE_SIZE,
-            (tile.y as f32 + 0.5) * TILE_SIZE,
+            (crate::view_frame::frame().rel_col(tile.x) + 0.5) * TILE_SIZE,
+            (crate::view_frame::frame().rel_row(tile.y) + 0.5) * TILE_SIZE,
         );
         self.players.iter().any(|rig| {
             (rig.x - cx).abs() <= reach * TILE_SIZE && (rig.y - cy).abs() <= reach * TILE_SIZE
@@ -147,7 +147,10 @@ impl BaseScene<'_> {
 }
 
 fn tile_pen(tile: TilePosition) -> Pen {
-    Pen::at(tile.x as f32 * TILE_SIZE, tile.y as f32 * TILE_SIZE)
+    Pen::at(
+        crate::view_frame::frame().rel_col(tile.x) * TILE_SIZE,
+        crate::view_frame::frame().rel_row(tile.y) * TILE_SIZE,
+    )
 }
 
 /// Back walls: drawn right after the terrain, behind everything else.
@@ -258,8 +261,8 @@ pub(in crate::rendering) fn draw_base_lights(draw: &mut impl RaylibDraw, scene: 
                 let pulse = ((scene.seconds * 2.0).sin() * 0.5 + 0.5) * 30.0;
                 disc(
                     draw,
-                    (module.origin.x as f32 + 0.5) * TILE_SIZE,
-                    module.origin.y as f32 * TILE_SIZE + 4.0 * ART,
+                    (crate::view_frame::frame().rel_col(module.origin.x) + 0.5) * TILE_SIZE,
+                    crate::view_frame::frame().rel_row(module.origin.y) * TILE_SIZE + 4.0 * ART,
                     12 + pulse as i32 / 6,
                     with_alpha(scene.accent(module.owner), 26),
                 );
@@ -468,10 +471,7 @@ fn draw_module(draw: &mut impl RaylibDraw, scene: &BaseScene<'_>, module: &Place
         ModuleKind::LunarUplink => lunar_uplink(draw, &ctx),
         ModuleKind::Homestead => {
             let inside = scene.local.is_some_and(|rig| {
-                let tile = TilePosition {
-                    x: (rig.x / TILE_SIZE).floor() as i32,
-                    y: (rig.y / TILE_SIZE).floor() as i32,
-                };
+                let tile = crate::view_frame::frame().tile_at(rig.x, rig.y);
                 module.covers(tile)
             });
             homestead(draw, &ctx, inside, !module.storage.is_empty());
@@ -1150,8 +1150,8 @@ fn claim_outline(
     strong: bool,
     seconds: f32,
 ) {
-    let left = (center.x - CLAIM_RADIUS) as f32 * TILE_SIZE;
-    let top = (center.y - CLAIM_RADIUS) as f32 * TILE_SIZE;
+    let left = crate::view_frame::frame().rel_col(center.x - CLAIM_RADIUS) * TILE_SIZE;
+    let top = crate::view_frame::frame().rel_row(center.y - CLAIM_RADIUS) * TILE_SIZE;
     let size = (2 * CLAIM_RADIUS + 1) as f32 * TILE_SIZE;
     let alpha = if strong { 200 } else { 90 };
     let color = with_alpha(color, alpha);
@@ -1185,8 +1185,8 @@ pub(in crate::rendering) fn draw_build_ghost(
     let ok = preview.place.is_ok();
     // Reach square.
     let reach = fatherload_simulation::base::BUILD_REACH;
-    let left = (preview.rig.x - reach) as f32 * TILE_SIZE;
-    let top = (preview.rig.y - reach) as f32 * TILE_SIZE;
+    let left = crate::view_frame::frame().rel_col(preview.rig.x - reach) * TILE_SIZE;
+    let top = crate::view_frame::frame().rel_row(preview.rig.y - reach) * TILE_SIZE;
     let size = (2 * reach + 1) as f32 * TILE_SIZE;
     draw.draw_rectangle_lines_ex(
         Rectangle::new(left, top, size, size),
@@ -1243,8 +1243,8 @@ pub(in crate::rendering) fn draw_build_ghost(
     };
     let pulse = ((scene.seconds * 4.0).sin() * 0.5 + 0.5) * 80.0;
     let rect = Rectangle::new(
-        preview.origin.x as f32 * TILE_SIZE,
-        preview.origin.y as f32 * TILE_SIZE,
+        crate::view_frame::frame().rel_col(preview.origin.x) * TILE_SIZE,
+        crate::view_frame::frame().rel_row(preview.origin.y) * TILE_SIZE,
         preview.size.0 as f32 * TILE_SIZE,
         preview.size.1 as f32 * TILE_SIZE,
     );

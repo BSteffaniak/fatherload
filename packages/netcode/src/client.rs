@@ -768,7 +768,7 @@ impl<S: NetSimulation> ClientSession<S> {
             self.cur_pose = Some(new);
             return;
         }
-        let (dx, dy) = (old.x - new.x, old.y - new.y);
+        let (dx, dy) = new.delta(&old);
         self.smoothing.add(dx, dy);
         self.prev_pose = self.prev_pose.map(|prev| prev.translated(-dx, -dy));
         self.cur_pose = Some(new);
@@ -996,12 +996,14 @@ fn apply_replication<S: NetSimulation>(
             authority.add_player(*player);
         }
     }
+    // The per-tick live section first: it can carry a move of the simulation's frame (F7),
+    // which shifts the replica before records measured in the new frame are applied.
+    let (entities, entity_updates, entity_despawns) = entities;
+    authority.apply_entities(entities);
     let relevant: Vec<PlayerId> = players.iter().map(|(player, _)| *player).collect();
     for (player, state) in players {
         authority.apply_player_state(player, state);
     }
-    let (entities, entity_updates, entity_despawns) = entities;
-    authority.apply_entities(entities);
     authority.apply_entity_delta(entity_updates, entity_despawns);
     for (_, op) in ops {
         authority.apply_op(op);

@@ -19,7 +19,7 @@ use fatherload_simulation::{
         BUILD_REACH, BuildCommand, BuildGroup, Buildable, Facing, ModuleKind, ModuleService,
         StructureId,
     },
-    terrain::{TILE_SIZE, TilePosition},
+    terrain::TilePosition,
 };
 
 use super::{ModalScreen, SeatContext, SeatUi, ShellRequest, SoundCue};
@@ -178,10 +178,7 @@ impl SeatUi {
         }
         if let Some((x, y)) = input.build_pointer {
             #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
-            let tile = TilePosition {
-                x: (x / TILE_SIZE).floor() as i32,
-                y: (y / TILE_SIZE).floor() as i32,
-            };
+            let tile = crate::view_frame::frame().tile_at(x, y);
             draft.pointed = Some(tile);
         }
         let target = draft.target(rig);

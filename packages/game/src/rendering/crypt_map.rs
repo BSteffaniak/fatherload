@@ -14,7 +14,7 @@
 use fatherload_simulation::{
     DiscoveredTiles,
     base::BuiltTile,
-    terrain::{TILE_SIZE, TileKind, TilePosition},
+    terrain::{TileKind, TilePosition},
     tomb::{RoomKind, SiteStyle},
 };
 use raylib::prelude::*;
@@ -111,10 +111,7 @@ pub(super) fn draw_crypt_minimap(
         .find(|pilot| pilot.player_id == view.player_id)
         .map(|pilot| {
             let (px, py) = pilot.middle();
-            TilePosition {
-                x: (px / TILE_SIZE).floor() as i32,
-                y: (py / TILE_SIZE).floor() as i32,
-            }
+            crate::view_frame::frame().tile_at(px, py)
         });
     for room in &run.rooms {
         if !explored.contains(room.interior.center()) {
@@ -163,10 +160,7 @@ pub(super) fn draw_crypt_minimap(
             continue;
         };
         let (px, py) = pilot.middle();
-        let tile = TilePosition {
-            x: (px / TILE_SIZE).floor() as i32,
-            y: (py / TILE_SIZE).floor() as i32,
-        };
+        let tile = crate::view_frame::frame().tile_at(px, py);
         let at = to_map(tile);
         let color = if member.is_downed() {
             RED

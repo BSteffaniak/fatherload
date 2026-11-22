@@ -26,9 +26,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use fatherload_simulation::{
-    WorldState, economy::DeepClaimStatus, terrain::TILE_SIZE, worldgen::GeneratorVersion,
-};
+use fatherload_simulation::{WorldState, economy::DeepClaimStatus, worldgen::GeneratorVersion};
 
 pub use legacy::LEGACY_PLAYER_ID;
 
@@ -92,7 +90,17 @@ const SAVE_SLOTS: usize = 3;
 /// * W6 content: the new furniture pieces in stocks and rooms, the new blueprints in homes,
 ///   sky town isle deeds (`SiteKey::SkyIsle`), and arc logs naming the new story arcs (their
 ///   quest ids) and places.
-pub const SAVE_VERSION: u32 = 12;
+///
+/// 13 (expansion wave 7; the integrator collapses the wave's bumps into one); every new field
+/// has a serde default and every new enum variant is appended, so version 8 to 12 files load as
+/// is:
+///
+/// * F7 world positions: the terrain's local pixel frame (`terrain.frame`: the sector every
+///   saved position is measured from, and whether it floats) and a far test world's raised
+///   column limit (`terrain.column_limit`). A file without them is a fixed frame at the
+///   origin: its `f32` world pixels load as the same positions, bit for bit
+///   (`WorldPos::from_legacy_px` of each is exact).
+pub const SAVE_VERSION: u32 = 13;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -249,7 +257,7 @@ impl SaveSlotMetadata {
             clippy::cast_possible_truncation,
             reason = "save slot depth is displayed as an integral tile depth"
         )]
-        let depth = player.map_or(0, |player| (player.y / TILE_SIZE).floor() as i32);
+        let depth = player.map_or(0, |player| world.frame().row(player.y));
         Self {
             depth,
             credits: player.map_or(0, |player| player.credits),
@@ -357,7 +365,7 @@ fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
     match probe.version {
         // Version 8 to 11 files have the current layout minus serde-defaulted wave 3 to 6
         // fields.
-        8..=11 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        8..=12 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
         7 => serde_json::from_str::<legacy::V7SaveFile>(json)
@@ -1641,7 +1649,7 @@ mod tests {
         ));
     }
 
-    /// Wave 6 QA: a file of every supported save format (1 to 12) loads, plays two minutes with
+    /// Wave 6 QA: a file of every supported save format (1 to 13) loads, plays two minutes with
     /// the mining bot, saves, reloads as it was saved, and its rigs are sane (the capacity curve
     /// catch-up applied, fuel and cargo within their capacities).
     #[test]
@@ -1666,7 +1674,13 @@ mod tests {
             .expect("serialize");
             let world = file["save"]["world"].as_object_mut().expect("world");
             for field in strip {
-                let _ = world.remove(*field);
+                if let Some((parent, child)) = field.split_once('.') {
+                    if let Some(parent) = world.get_mut(parent).and_then(|v| v.as_object_mut()) {
+                        let _ = parent.remove(child);
+                    }
+                } else {
+                    let _ = world.remove(*field);
+                }
             }
             file.to_string()
         }
@@ -1707,8 +1721,15 @@ mod tests {
             ),
             (9, as_version(&streamed, 9, &["homes", "tombs"])),
             (10, as_version(&streamed, 10, &["tombs"])),
-            (11, as_version(&streamed, 11, &[])),
-            (12, as_version(&streamed, SAVE_VERSION, &[])),
+            (
+                11,
+                as_version(&streamed, 11, &["terrain.frame", "terrain.column_limit"]),
+            ),
+            (
+                12,
+                as_version(&streamed, 12, &["terrain.frame", "terrain.column_limit"]),
+            ),
+            (13, as_version(&streamed, SAVE_VERSION, &[])),
         ];
         for (version, json) in files {
             let mut save = parse_save(&json).unwrap_or_else(|error| panic!("v{version}: {error}"));

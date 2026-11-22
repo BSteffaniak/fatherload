@@ -47,12 +47,12 @@ pub(super) fn draw_lunar_glows(
         return;
     }
     let first = TilePosition {
-        x: (visible.x / TILE_SIZE).floor() as i32 - 1,
-        y: (visible.y / TILE_SIZE).floor() as i32 - 1,
+        x: crate::view_frame::frame().col(visible.x) - 1,
+        y: crate::view_frame::frame().row(visible.y) - 1,
     };
     let last = TilePosition {
-        x: ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 1,
-        y: ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 1,
+        x: crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1,
+        y: crate::view_frame::frame().row_ceil(visible.y + visible.height) + 1,
     };
     for y in first.y..=last.y {
         for x in first.x..=last.x {
@@ -68,7 +68,10 @@ pub(super) fn draw_lunar_glows(
             {
                 continue;
             }
-            let (cx, cy) = ((x as f32 + 0.5) * TILE_SIZE, (y as f32 + 0.5) * TILE_SIZE);
+            let (cx, cy) = (
+                (crate::view_frame::frame().rel_col(x) + 0.5) * TILE_SIZE,
+                (crate::view_frame::frame().rel_row(y) + 0.5) * TILE_SIZE,
+            );
             let phase = (hash(x, y, 731) % 628) as f32 / 100.0;
             let pulse = (seconds * 1.4 + phase).sin().mul_add(0.5, 0.5);
             let (radius, alpha) = match tile {
@@ -107,10 +110,13 @@ pub(super) fn draw_colony_props(
         return;
     };
     let area = layout.colony_area();
-    let (left, top) = (area.min.x as f32 * TILE_SIZE, area.min.y as f32 * TILE_SIZE);
+    let (left, top) = (
+        crate::view_frame::frame().rel_col(area.min.x) * TILE_SIZE,
+        crate::view_frame::frame().rel_row(area.min.y) * TILE_SIZE,
+    );
     let (right, bottom) = (
-        (area.max.x + 1) as f32 * TILE_SIZE,
-        (area.max.y + 1) as f32 * TILE_SIZE,
+        crate::view_frame::frame().rel_col(area.max.x + 1) * TILE_SIZE,
+        crate::view_frame::frame().rel_row(area.max.y + 1) * TILE_SIZE,
     );
     if right < visible.x
         || left > visible.x + visible.width
@@ -119,8 +125,8 @@ pub(super) fn draw_colony_props(
     {
         return;
     }
-    let g = layout.colony.ground_row as f32 * TILE_SIZE;
-    let cx = layout.colony.center_x as f32 * TILE_SIZE;
+    let g = crate::view_frame::frame().rel_row(layout.colony.ground_row) * TILE_SIZE;
+    let cx = crate::view_frame::frame().rel_col(layout.colony.center_x) * TILE_SIZE;
     let px = |tiles: f32| cx + tiles * TILE_SIZE;
     let rect =
         |draw: &mut dyn FnMut(Rectangle, Color), x: f32, y: f32, w: f32, h: f32, c: Color| {
@@ -131,7 +137,7 @@ pub(super) fn draw_colony_props(
     let (pad_first, pad_last, _) = layout.pad();
     for (index, column) in [pad_first, pad_last].into_iter().enumerate() {
         let on = ((seconds * 1.5) as i32 + index as i32) % 2 == 0;
-        let x = column as f32 * TILE_SIZE + TILE_SIZE * 0.5;
+        let x = crate::view_frame::frame().rel_col(column) * TILE_SIZE + TILE_SIZE * 0.5;
         rect(&mut fill, x - 4.0, g - TILE_SIZE - 6.0, 8.0, 6.0, INK);
         rect(
             &mut fill,

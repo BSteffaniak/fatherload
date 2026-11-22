@@ -86,12 +86,14 @@ pub(super) fn draw_side_traps(draw: &mut impl RaylibDraw, scene: &TrapScene<'_>)
             continue;
         }
         let origin = tomb_sites::slot_origin(run.slot);
-        let left = ((scene.visible.x / TILE_SIZE).floor() as i32 - 6).max(origin.x);
-        let top = ((scene.visible.y / TILE_SIZE).floor() as i32 - 8).max(origin.y);
-        let right = (((scene.visible.x + scene.visible.width) / TILE_SIZE).ceil() as i32 + 6)
-            .min(origin.x + tomb_sites::SLOT_SIZE.0);
-        let bottom = (((scene.visible.y + scene.visible.height) / TILE_SIZE).ceil() as i32 + 2)
-            .min(origin.y + tomb_sites::SLOT_SIZE.1);
+        let left = (crate::view_frame::frame().col(scene.visible.x) - 6).max(origin.x);
+        let top = (crate::view_frame::frame().row(scene.visible.y) - 8).max(origin.y);
+        let right = (crate::view_frame::frame().col_ceil(scene.visible.x + scene.visible.width)
+            + 6)
+        .min(origin.x + tomb_sites::SLOT_SIZE.0);
+        let bottom = (crate::view_frame::frame().row_ceil(scene.visible.y + scene.visible.height)
+            + 2)
+        .min(origin.y + tomb_sites::SLOT_SIZE.1);
         if left >= right || top >= bottom {
             continue;
         }
@@ -148,26 +150,30 @@ fn draw_blade(draw: &mut impl RaylibDraw, scene: &TrapScene<'_>, tile: TilePosit
     } else {
         TombCulture::Catacomb
     });
-    let pivot = blade_pivot(tile);
+    let pivot = blade_pivot(crate::view_frame::frame(), tile);
     let blade_half = BLADE_RADIUS;
     if scene.trap_sight {
         // The blade's sweep, faint.
         for step in 0..=20 {
             let millis = scene.millis + step * 65;
-            let (x, y) = blade_tip(tile, millis);
+            let (x, y) = blade_tip(crate::view_frame::frame(), tile, millis);
             disc(draw, x, y, 1, with_alpha(ROSE, 70));
         }
     }
     // A short trail behind the blade.
     for (back, alpha) in [(70, 40), (35, 80)] {
-        let (x, y) = blade_tip(tile, scene.millis.saturating_sub(back));
+        let (x, y) = blade_tip(
+            crate::view_frame::frame(),
+            tile,
+            scene.millis.saturating_sub(back),
+        );
         draw.draw_circle_v(
             Vector2::new(x, y),
             BLADE_RADIUS,
             with_alpha(STEEL_LIGHT, alpha),
         );
     }
-    let tip = blade_tip(tile, scene.millis);
+    let tip = blade_tip(crate::view_frame::frame(), tile, scene.millis);
     line(draw, pivot, tip, ART * 1.5, chain_dark);
     // Chain links.
     for link in 1..8 {
@@ -230,8 +236,8 @@ fn crusher_reach(terrain: &Terrain, tile: TilePosition) -> i32 {
 fn draw_crusher(draw: &mut impl RaylibDraw, scene: &TrapScene<'_>, tile: TilePosition) {
     let reach = crusher_reach(scene.terrain, tile);
     let (stage, extension) = crusher_state(tile, scene.millis);
-    let left = tile.x as f32 * TILE_SIZE + 2.0;
-    let top = (tile.y + 1) as f32 * TILE_SIZE;
+    let left = crate::view_frame::frame().rel_col(tile.x) * TILE_SIZE + 2.0;
+    let top = crate::view_frame::frame().rel_row(tile.y + 1) * TILE_SIZE;
     let width = TILE_SIZE - 4.0;
     let shake = if stage == CrusherStage::Shaking {
         if (scene.millis / 40).is_multiple_of(2) {
@@ -329,11 +335,11 @@ fn draw_dart(draw: &mut impl RaylibDraw, scene: &TrapScene<'_>, tile: TilePositi
     let (charge, _) = dart_state(tile, scene.millis);
     let mouth = (
         if facing < 0 {
-            tile.x as f32 * TILE_SIZE + 2.0
+            crate::view_frame::frame().rel_col(tile.x) * TILE_SIZE + 2.0
         } else {
-            (tile.x + 1) as f32 * TILE_SIZE - 2.0
+            crate::view_frame::frame().rel_col(tile.x + 1) * TILE_SIZE - 2.0
         },
-        (tile.y as f32 + 0.6) * TILE_SIZE,
+        (crate::view_frame::frame().rel_row(tile.y) + 0.6) * TILE_SIZE,
     );
     if scene.trap_sight {
         let end = mouth.0 + f32::from(facing) * reach as f32 * TILE_SIZE;
@@ -345,7 +351,13 @@ fn draw_dart(draw: &mut impl RaylibDraw, scene: &TrapScene<'_>, tile: TilePositi
         disc(draw, mouth.0, mouth.1, radius + 1, with_alpha(RED, 70));
         disc(draw, mouth.0, mouth.1, radius, with_alpha(AMBER, 160));
     }
-    if let Some((x, y)) = dart_position(tile, facing, reach, scene.millis) {
+    if let Some((x, y)) = dart_position(
+        crate::view_frame::frame(),
+        tile,
+        facing,
+        reach,
+        scene.millis,
+    ) {
         let back = x - f32::from(facing) * 12.0;
         line(draw, (back, y), (x, y), 2.0, LOAM);
         line(
@@ -381,8 +393,11 @@ fn draw_dart(draw: &mut impl RaylibDraw, scene: &TrapScene<'_>, tile: TilePositi
 
 fn draw_fog(draw: &mut impl RaylibDraw, scene: &TrapScene<'_>, tile: TilePosition) {
     let (stage, size) = fog_state(tile, scene.millis);
-    let (cx, cy) = fog_centre(tile);
-    let vent = ((tile.x as f32 + 0.5) * TILE_SIZE, tile.y as f32 * TILE_SIZE);
+    let (cx, cy) = fog_centre(crate::view_frame::frame(), tile);
+    let vent = (
+        (crate::view_frame::frame().rel_col(tile.x) + 0.5) * TILE_SIZE,
+        crate::view_frame::frame().rel_row(tile.y) * TILE_SIZE,
+    );
     match stage {
         FogStage::Calm => {
             disc(draw, vent.0, vent.1 - 2.0, 3, with_alpha(LIME, 26));
@@ -451,7 +466,7 @@ fn draw_sand(
     } else {
         (with_alpha(SAND, 235), CREAM)
     };
-    let bottom = (room.max.y + 1) as f32 * TILE_SIZE;
+    let bottom = crate::view_frame::frame().rel_row(room.max.y + 1) * TILE_SIZE;
     // The trickle (the tell) and the pour, from every grate.
     if matches!(stage, SandStage::Trickling | SandStage::Rising) {
         for x in room.min.x..=room.max.x {
@@ -466,7 +481,7 @@ fn draw_sand(
             ) {
                 continue;
             }
-            let cx = (x as f32 + 0.5) * TILE_SIZE;
+            let cx = (crate::view_frame::frame().rel_col(x) + 0.5) * TILE_SIZE;
             for grain in 0..8_u64 {
                 let up = ((scene.millis / 15 + grain * 11) % 40) as f32;
                 disc(
@@ -482,17 +497,18 @@ fn draw_sand(
     if level <= 0.0 {
         return;
     }
-    let surface = sand_surface(room, level);
+    let surface = sand_surface(crate::view_frame::frame(), room, level);
     for x in room.min.x..=room.max.x {
         let mut y = room.max.y;
-        while y >= room.min.y && (y as f32 + 1.0) * TILE_SIZE > surface {
+        while y >= room.min.y && (crate::view_frame::frame().rel_row(y) + 1.0) * TILE_SIZE > surface
+        {
             let tile = TilePosition { x, y };
             if open(scene.terrain, tile) {
-                let cell_top = (y as f32 * TILE_SIZE).max(surface);
-                let cell_bottom = (y as f32 + 1.0) * TILE_SIZE;
+                let cell_top = (crate::view_frame::frame().rel_row(y) * TILE_SIZE).max(surface);
+                let cell_bottom = (crate::view_frame::frame().rel_row(y) + 1.0) * TILE_SIZE;
                 draw.draw_rectangle_rec(
                     Rectangle::new(
-                        x as f32 * TILE_SIZE,
+                        crate::view_frame::frame().rel_col(x) * TILE_SIZE,
                         cell_top,
                         TILE_SIZE,
                         cell_bottom - cell_top,
@@ -503,7 +519,7 @@ fn draw_sand(
                     let ripple = ((x as f32).mul_add(0.9, scene.millis as f32 / 300.0)).sin() * 1.5;
                     draw.draw_rectangle_rec(
                         Rectangle::new(
-                            x as f32 * TILE_SIZE,
+                            crate::view_frame::frame().rel_col(x) * TILE_SIZE,
                             snap(surface + ripple),
                             TILE_SIZE,
                             ART,
@@ -523,8 +539,8 @@ fn draw_crumbling(
     slab: &fatherload_simulation::tomb::traps::CrumblingSlab,
 ) {
     let (x, y) = (
-        slab.tile.x as f32 * TILE_SIZE,
-        slab.tile.y as f32 * TILE_SIZE,
+        crate::view_frame::frame().rel_col(slab.tile.x) * TILE_SIZE,
+        crate::view_frame::frame().rel_row(slab.tile.y) * TILE_SIZE,
     );
     match slab.fell {
         None => {

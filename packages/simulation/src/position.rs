@@ -337,6 +337,20 @@ impl Frame {
         saturate((y / TILE_SIZE).floor() as i64, self.origin_row())
     }
 
+    /// `(x / TILE_SIZE).ceil()` as an absolute column (visible-range ends), saturated.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation, reason = "saturating float-to-int")]
+    pub fn col_ceil(self, x: f32) -> i32 {
+        saturate((x / TILE_SIZE).ceil() as i64, self.origin_col())
+    }
+
+    /// `(y / TILE_SIZE).ceil()` as an absolute row, saturated.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation, reason = "saturating float-to-int")]
+    pub fn row_ceil(self, y: f32) -> i32 {
+        saturate((y / TILE_SIZE).ceil() as i64, self.origin_row())
+    }
+
     /// The tile under local pixel `(x, y)`.
     #[must_use]
     pub fn tile_at(self, x: f32, y: f32) -> TilePosition {

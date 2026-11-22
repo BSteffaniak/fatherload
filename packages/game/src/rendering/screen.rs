@@ -59,7 +59,7 @@ pub(super) fn draw_heat_warning_for_view(
     terrain: &Terrain,
     view: &ViewSnapshot<'_>,
 ) {
-    let tile = view.player.tile_position(TILE_SIZE);
+    let tile = view.player.tile_in(crate::view_frame::frame());
     let depth_heat = fatherload_simulation::protection::heat_excess(
         terrain.band_at(tile),
         view.player.radiator_level,
@@ -404,8 +404,8 @@ fn draw_view_hud_rest(
             ),
             format!(
                 "Camera {:.0},{:.0}",
-                view.camera.x / TILE_SIZE,
-                view.camera.y / TILE_SIZE
+                crate::view_frame::frame().legacy_x(view.camera.x) / TILE_SIZE,
+                crate::view_frame::frame().legacy_y(view.camera.y) / TILE_SIZE
             ),
             shell.message.clone(),
         ];
@@ -1063,7 +1063,7 @@ pub(super) fn draw_minimap_for_view(
     draw.draw_rectangle(x, y, width, height, NIGHT);
 
     let terrain_height = terrain.height().max(1);
-    let player_tile = view.player.tile_position(TILE_SIZE);
+    let player_tile = view.player.tile_in(crate::view_frame::frame());
     // A bounded world fits across the minimap; an endless one scrolls with the rig. Rows
     // follow the rig between the world's first row (mountain tops) and its floor; high in the
     // sky the minimap keeps the ground below the rig in view (see `map_focus_row`).
@@ -1125,8 +1125,8 @@ pub(super) fn draw_minimap_for_view(
         .iter()
         .filter(|other| other.player_id != view.player_id)
     {
-        let tile_x = (remote.x / TILE_SIZE).floor() as i32;
-        let tile_y = (remote.y / TILE_SIZE).floor() as i32;
+        let tile_x = crate::view_frame::frame().col(remote.x);
+        let tile_y = crate::view_frame::frame().row(remote.y);
         if !on_map(tile_x, tile_y) {
             continue;
         }
@@ -1141,7 +1141,7 @@ pub(super) fn draw_minimap_for_view(
     }
     if terrain.is_streamed() {
         // Navigation in an endless world: which way, and how far, home is.
-        let heading = town_heading(view.player.x / TILE_SIZE);
+        let heading = town_heading(crate::view_frame::frame().legacy_x(view.player.x) / TILE_SIZE);
         if heading != "in town" {
             let label_width = ui_kit::text_width(&heading, TextStyle::Body);
             draw.draw_rectangle(
@@ -1231,7 +1231,7 @@ pub(super) fn draw_depth_ruler_for_view(
         let y = top + marker * (height - 1) / max_depth;
         draw.draw_rectangle(x - 3, y, 3, 1, FOG);
     }
-    let depth = (view.player.y / TILE_SIZE).max(0.0);
+    let depth = (crate::view_frame::frame().legacy_y(view.player.y) / TILE_SIZE).max(0.0);
     let marker_y = top + ((depth / max_depth as f32).clamp(0.0, 1.0) * (height - 1) as f32) as i32;
     // A left-pointing marker: ink outline around a gold arrow (mint while flying above the
     // ground, pinned to the top: the sky has no end to show).
@@ -1254,7 +1254,7 @@ fn draw_ruler_strata(
     (x, top, height): (i32, i32, i32),
     max_depth: i32,
 ) {
-    let column = view.player.tile_position(TILE_SIZE).x;
+    let column = view.player.tile_in(crate::view_frame::frame()).x;
     let band_at_row = |row: i32| {
         let tile_y = row * max_depth / (height - 1).max(1);
         (tile_y > super::terrain::tile_art::SKY_MAX_TILE_Y).then(|| {
@@ -1748,9 +1748,9 @@ fn map_footer(ui: &UiFrame<'_, '_>) -> String {
     let layer = ui
         .snapshot
         .terrain
-        .band_at(ui.player.tile_position(TILE_SIZE));
+        .band_at(ui.player.tile_in(crate::view_frame::frame()));
     let terrain = ui.snapshot.terrain;
-    let column = ui.player.x / TILE_SIZE;
+    let column = crate::view_frame::frame().legacy_x(ui.player.x) / TILE_SIZE;
     let across = if terrain.is_streamed() {
         // An endless world has no edge: say how far the town is, and which way.
         town_heading(column)
@@ -1795,8 +1795,8 @@ fn draw_map_other_rigs(
     {
         // Floor, not truncation: endless worlds have negative columns.
         let (tx, ty) = (
-            (remote.x / TILE_SIZE).floor() as i32,
-            (remote.y / TILE_SIZE).floor() as i32,
+            crate::view_frame::frame().col(remote.x),
+            crate::view_frame::frame().row(remote.y),
         );
         if (origin_x..origin_x + columns).contains(&tx) && (origin_y..origin_y + rows).contains(&ty)
         {
@@ -1845,7 +1845,7 @@ fn draw_map_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let terrain_height = terrain.height().max(1);
     let pixel = 2;
     let (columns, rows) = (width / pixel, height / pixel);
-    let player = ui.player.tile_position(TILE_SIZE);
+    let player = ui.player.tile_in(crate::view_frame::frame());
     // Centred on the rig, kept inside a bounded world's columns (an endless world scrolls).
     let origin_x = (player.x - columns / 2).clamp(
         terrain.min_x(),

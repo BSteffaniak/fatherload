@@ -154,15 +154,18 @@ pub(super) fn draw_light_map(draw: &mut impl RaylibDraw, scene: &LightScene<'_>)
     let cols = (visible.width / CELL).ceil() as i32 + 2;
     let rows = (visible.height / CELL).ceil() as i32 + 2;
     // The local ground per tile column, smoothed over its neighbours so cliffs don't stripe.
-    let first_tile = (first_x as f32 * CELL / TILE_SIZE).floor() as i32 - 2;
-    let last_tile = ((first_x + cols) as f32 * CELL / TILE_SIZE).ceil() as i32 + 2;
+    let first_tile = crate::view_frame::frame().col(first_x as f32 * CELL) - 2;
+    let last_tile = crate::view_frame::frame().col_ceil((first_x + cols) as f32 * CELL) + 2;
+    // Ground rows relative to the presented frame (F7), indexed by absolute column.
+    let frame = crate::view_frame::frame();
+    let origin_col = frame.col(0.0);
     let surface: Vec<f32> = (first_tile..=last_tile)
-        .map(|x| scene.terrain.surface_row(x) as f32)
+        .map(|x| frame.rel_row(scene.terrain.surface_row(x)))
         .collect();
     let ground_at = |world_x: f32| -> f32 {
         let fx = world_x / TILE_SIZE - 0.5;
-        let x0 = fx.floor() as i32;
-        let t = fx - x0 as f32;
+        let x0 = fx.floor() as i32 + origin_col;
+        let t = fx - (x0 - origin_col) as f32;
         let at = |x: i32| {
             let index = (x - first_tile).clamp(0, surface.len() as i32 - 1) as usize;
             surface[index]
@@ -477,13 +480,10 @@ fn gather_lights(scene: &LightScene<'_>) -> Vec<Light> {
         }
     }
     // Base lamps and lit modules.
-    let min = TilePosition {
-        x: ((visible.x - margin) / TILE_SIZE).floor() as i32,
-        y: ((visible.y - margin) / TILE_SIZE).floor() as i32,
-    };
+    let min = crate::view_frame::frame().tile_at(visible.x - margin, visible.y - margin);
     let max = TilePosition {
-        x: ((visible.x + visible.width + margin) / TILE_SIZE).ceil() as i32,
-        y: ((visible.y + visible.height + margin) / TILE_SIZE).ceil() as i32,
+        x: crate::view_frame::frame().col_ceil(visible.x + visible.width + margin),
+        y: crate::view_frame::frame().row_ceil(visible.y + visible.height + margin),
     };
     for (tile, fixtures) in scene.bases.fixtures_in(min, max) {
         if matches!(fixtures.front, Some((Fixture::Light, _))) {
@@ -511,12 +511,12 @@ fn gather_lights(scene: &LightScene<'_>) -> Vec<Light> {
     }
     // Glowing tiles: lava, magma vents, crystals and glowcaps.
     let first = TilePosition {
-        x: (visible.x / TILE_SIZE).floor() as i32 - 1,
-        y: (visible.y / TILE_SIZE).floor() as i32 - 1,
+        x: crate::view_frame::frame().col(visible.x) - 1,
+        y: crate::view_frame::frame().row(visible.y) - 1,
     };
     let last = TilePosition {
-        x: ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 1,
-        y: ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 1,
+        x: crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1,
+        y: crate::view_frame::frame().row_ceil(visible.y + visible.height) + 1,
     };
     for y in first.y..=last.y {
         for x in first.x..=last.x {
@@ -569,8 +569,8 @@ fn gather_lights(scene: &LightScene<'_>) -> Vec<Light> {
 
 fn tile_centre(position: TilePosition) -> (f32, f32) {
     (
-        (position.x as f32 + 0.5) * TILE_SIZE,
-        (position.y as f32 + 0.5) * TILE_SIZE,
+        (crate::view_frame::frame().rel_col(position.x) + 0.5) * TILE_SIZE,
+        (crate::view_frame::frame().rel_row(position.y) + 0.5) * TILE_SIZE,
     )
 }
 

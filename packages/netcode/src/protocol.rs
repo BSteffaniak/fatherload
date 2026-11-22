@@ -128,7 +128,14 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   commands, `SiteKey::SkyIsle` deeds, `PersonDeal::Furniture` rows, the Moon colony's
 ///   NPCs (`LUNAR_COLONY` character ids) and the new story arcs, places and objectives in the
 ///   arc log (loadout).
-pub const PROTOCOL_VERSION: u8 = 14;
+///
+/// Version 15 (wave 7; the integrator collapses the wave's bumps into one):
+/// * F7 world positions: the world's local pixel frame (`Frame`: sector origin and whether it
+///   floats) in `LiveEntities` (sent every tick and applied first, so a frame move shifts the
+///   replica before the frame's records) and in the terrain snapshot of keyframes, with a far
+///   test world's column limit; `Pose::origin` and `Relevance::origin` (positions relative to
+///   the frame's origin tile, compared through exact origin deltas).
+pub const PROTOCOL_VERSION: u8 = 15;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

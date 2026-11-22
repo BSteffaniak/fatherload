@@ -21,7 +21,7 @@ use crate::rendering::{
     terrain::tile_art::hash,
 };
 
-use super::{ART, GROUND_Y, Pen, text_art_width};
+use super::{ART, Pen, ground_y, text_art_width};
 
 /// Lot height in art pixels (the ground line is at the bottom).
 const LOT_HEIGHT: i32 = 64;
@@ -54,12 +54,12 @@ pub fn draw_town(
     local: Option<&PlayerPresentation>,
     seconds: f32,
 ) {
-    let top = GROUND_Y - LOT_HEIGHT as f32 * ART;
-    if visible.y > GROUND_Y || visible.y + visible.height < top {
+    let top = ground_y() - LOT_HEIGHT as f32 * ART;
+    if visible.y > ground_y() || visible.y + visible.height < top {
         return;
     }
     for building in SURFACE_BUILDINGS {
-        let x = building.tile_x as f32 * TILE_SIZE;
+        let x = crate::view_frame::frame().rel_col(building.tile_x) * TILE_SIZE;
         let width = building.tile_width as f32 * TILE_SIZE;
         if x + width < visible.x || x > visible.x + visible.width {
             continue;
@@ -77,14 +77,14 @@ pub fn draw_town(
 /// Where the town's light comes from at night (the light map, `world/lighting.rs`): each
 /// building's lit windows and its doorway, as `(x, y, radius)` in world pixels.
 pub fn town_lights(visible: Rectangle) -> Vec<(f32, f32, f32)> {
-    let top = GROUND_Y - LOT_HEIGHT as f32 * ART;
+    let top = ground_y() - LOT_HEIGHT as f32 * ART;
     let margin = 8.0 * TILE_SIZE;
-    if visible.y > GROUND_Y + margin || visible.y + visible.height < top - margin {
+    if visible.y > ground_y() + margin || visible.y + visible.height < top - margin {
         return Vec::new();
     }
     let mut lights = Vec::new();
     for building in SURFACE_BUILDINGS {
-        let x = building.tile_x as f32 * TILE_SIZE;
+        let x = crate::view_frame::frame().rel_col(building.tile_x) * TILE_SIZE;
         let width = building.tile_width as f32 * TILE_SIZE;
         if x + width < visible.x - margin || x > visible.x + visible.width + margin {
             continue;
@@ -95,13 +95,13 @@ pub fn town_lights(visible: Rectangle) -> Vec<(f32, f32, f32)> {
             top + LOT_HEIGHT as f32 * ART * 0.45,
             TILE_SIZE * 3.6,
         ));
-        lights.push((center, GROUND_Y - TILE_SIZE * 0.8, TILE_SIZE * 3.0));
+        lights.push((center, ground_y() - TILE_SIZE * 0.8, TILE_SIZE * 3.0));
     }
     lights
 }
 
 fn at_door(building: &SurfaceBuilding, player: &PlayerPresentation) -> bool {
-    let tile_x = (player.x / TILE_SIZE).floor() as i32;
+    let tile_x = crate::view_frame::frame().col(player.x);
     player.y <= SURFACE_SERVICE_MAX_DEPTH_TILES * TILE_SIZE
         && tile_x >= building.tile_x
         && tile_x < building.tile_x + building.tile_width

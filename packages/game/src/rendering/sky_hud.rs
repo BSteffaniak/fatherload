@@ -8,7 +8,6 @@ use raylib::prelude::*;
 use fatherload_simulation::{
     environment::{self, Environment},
     sky::SkyBand,
-    terrain::TILE_SIZE,
 };
 
 #[allow(
@@ -49,7 +48,8 @@ impl SkyGauge {
         intake: u8,
         de_icer: u8,
     ) -> Option<Self> {
-        let air: Environment = environment::environment_at(settings, x, y);
+        let air: Environment =
+            environment::environment_in(settings, crate::view_frame::frame(), x, y);
         if air.is_standard() {
             return None;
         }
@@ -60,7 +60,7 @@ impl SkyGauge {
         )]
         let percent = |value: f32| (value * 100.0).round().clamp(0.0, 100.0) as u32;
         #[allow(clippy::cast_possible_truncation, reason = "pixel to row")]
-        let row = (y / TILE_SIZE).floor() as i32;
+        let row = crate::view_frame::frame().row(y);
         Some(Self {
             band: SkyBand::at_row_of(settings, row),
             air_percent: percent(air.air_density),
@@ -213,7 +213,10 @@ pub(super) fn draw_sky_gauge(
 
 #[cfg(test)]
 mod tests {
-    use fatherload_simulation::worldgen::{GeneratorVersion, WorldSettings};
+    use fatherload_simulation::{
+        terrain::TILE_SIZE,
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
 
     use super::*;
 

@@ -12,7 +12,7 @@
 use fatherload_simulation::{
     moon::{self, ColonyOffer, MoonRequirement},
     sky::SkyBand,
-    terrain::{StrategicResourceKind as Material, TILE_SIZE},
+    terrain::StrategicResourceKind as Material,
 };
 use raylib::prelude::*;
 
@@ -69,10 +69,11 @@ pub(super) fn draw_moon_hud(
         return;
     }
     let player = view.player;
-    let row = (player.y / TILE_SIZE).floor() as i32;
+    let row = crate::view_frame::frame().row(player.y);
     let band = SkyBand::at_row_of(settings, row);
     let missing = moon::missing_requirements(player);
-    let vacuum = view.pilot.is_none() && moon::vacuum_at(settings, player.x, player.y);
+    let vacuum = view.pilot.is_none()
+        && moon::vacuum_in(settings, crate::view_frame::frame(), player.x, player.y);
     let breach = vacuum.then(|| moon::vacuum_breach(player)).flatten();
     if (!checklist_band(band) || missing.is_empty()) && breach.is_none() {
         return;

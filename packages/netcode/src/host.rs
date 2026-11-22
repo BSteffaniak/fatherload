@@ -1591,14 +1591,12 @@ fn push_late<S: NetSimulation>(
 }
 
 fn relevance_for<S: NetSimulation>(world: &S, remote: &RemoteClient<S>) -> Relevance {
-    let center = remote
-        .player
-        .and_then(|player| world.player_pose(player))
-        .map(|pose| (pose.x, pose.y));
+    let pose = remote.player.and_then(|player| world.player_pose(player));
     Relevance {
         viewer: remote.player,
-        center,
+        center: pose.map(|pose| (pose.x, pose.y)),
         radius: remote.tuning.relevance_radius,
+        origin: pose.map_or([0, 0], |pose| pose.origin),
     }
 }
 
@@ -1641,7 +1639,7 @@ fn build_frame<S: NetSimulation>(
     for player in &roster {
         let pose = world.player_pose(*player);
         let relevant = Some(*player) == remote.player
-            || pose.is_none_or(|pose| relevance.contains(pose.x, pose.y));
+            || pose.is_none_or(|pose| relevance.contains_pose(&pose));
         if relevant {
             if let Some(state) = world.player_state(*player) {
                 players.push((*player, state));

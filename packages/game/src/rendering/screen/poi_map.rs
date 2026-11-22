@@ -7,7 +7,7 @@
 use fatherload_simulation::{
     Player,
     poi::{PoiKind, PoiKnowledge, PoiTile, PoiVariant, poi_reading},
-    terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
+    terrain::{Terrain, TileKind, TilePosition},
     worldgen::{TileRect, WorldFeature},
 };
 use raylib::prelude::*;
@@ -54,7 +54,7 @@ pub(super) fn markers(terrain: &Terrain, player: &Player) -> Vec<PoiMarker> {
     if !terrain.settings().generator.has_points_of_interest() {
         return Vec::new();
     }
-    let center = player.tile_position(TILE_SIZE);
+    let center = player.tile_in(crate::view_frame::frame());
     candidate_pois(terrain, player, center)
         .iter()
         .filter_map(|feature| {

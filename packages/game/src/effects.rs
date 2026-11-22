@@ -220,6 +220,24 @@ pub struct Effects {
 }
 
 impl Effects {
+    /// Moves every effect kept in world pixels with a move of the world's frame (F7), so a
+    /// re-centred frame never shows as a jump.
+    pub fn reframe(&mut self, shift: fatherload_simulation::position::FrameShift) {
+        for spark in &mut self.sparks {
+            shift.apply(&mut spark.x, &mut spark.y);
+        }
+        for blast in &mut self.explosions {
+            shift.apply(&mut blast.x, &mut blast.y);
+        }
+        for flight in &mut self.pickups {
+            shift.apply(&mut flight.from_x, &mut flight.from_y);
+        }
+        for shot in &mut self.shots {
+            shift.apply(&mut shot.x, &mut shot.y);
+            shift.apply(&mut shot.end_x, &mut shot.end_y);
+        }
+    }
+
     /// Live sparks.
     #[must_use]
     pub fn sparks(&self) -> &[SparkParticle] {
@@ -681,7 +699,7 @@ impl Effects {
                         .iter()
                         .filter_map(|player| world.player(*player))
                         .any(|player| {
-                            let tile = player.tile_position(fatherload_simulation::TILE_SIZE);
+                            let tile = player.tile_in(crate::view_frame::frame());
                             tile.y < world.terrain().surface_row(tile.x) + CLOCK_CUE_DEPTH_ROWS
                         });
                     let bell_during_skip =

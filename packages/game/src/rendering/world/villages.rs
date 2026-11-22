@@ -203,35 +203,27 @@ fn visible_villages(terrain: &Terrain, visible: Rectangle) -> Vec<std::sync::Arc
     if !settings.generator.has_villages() {
         return Vec::new();
     }
-    let first = (visible.x / TILE_SIZE).floor() as i32 - LOOKAHEAD_COLUMNS;
-    let last = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + LOOKAHEAD_COLUMNS;
+    let first = crate::view_frame::frame().col(visible.x) - LOOKAHEAD_COLUMNS;
+    let last = crate::view_frame::frame().col_ceil(visible.x + visible.width) + LOOKAHEAD_COLUMNS;
     let sky = fatherload_simulation::worldgen::TileRect {
         min: TilePosition {
             x: first,
-            y: (visible.y / TILE_SIZE).floor() as i32 - 8,
+            y: crate::view_frame::frame().row(visible.y) - 8,
         },
         max: TilePosition {
             x: last,
-            y: ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 30,
+            y: crate::view_frame::frame().row_ceil(visible.y + visible.height) + 30,
         },
     };
     village::villages_between(settings, first, last)
         .into_iter()
         .chain(village::sky_towns_in(settings, &sky))
         .filter(|found| {
-            let ground = tile_px(found.ground_row);
+            let ground = crate::view_frame::frame().row_px(found.ground_row);
             ground + 4.0 * TILE_SIZE >= visible.y
                 && ground - 8.0 * TILE_SIZE <= visible.y + visible.height
         })
         .collect()
-}
-
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "tile indices are far inside f32's range"
-)]
-fn tile_px(tile: i32) -> f32 {
-    tile as f32 * TILE_SIZE
 }
 
 /// Which pass of the world scene is drawing villages.
@@ -269,7 +261,7 @@ pub fn draw_villages(
                     })
                 })
         };
-        let ground = tile_px(found.ground_row);
+        let ground = crate::view_frame::frame().row_px(found.ground_row);
         if underground {
             draw_hall_lamps(draw, &found, &seen, seconds);
         }
@@ -285,7 +277,7 @@ pub fn draw_villages(
             if !seen(building.first_column + building.width / 2) {
                 continue;
             }
-            let x = tile_px(building.first_column);
+            let x = crate::view_frame::frame().col_px(building.first_column);
             let width = building.width * TILE_ART;
             if x + width as f32 * ART < visible.x || x > visible.x + visible.width {
                 continue;
@@ -342,12 +334,12 @@ pub fn draw_night_markets(
         if found.setting == VillageSetting::Underground {
             continue;
         }
-        let ground = tile_px(found.ground_row);
+        let ground = crate::view_frame::frame().row_px(found.ground_row);
         for building in &found.buildings {
             let Some(service) = village::VillageService::of(building.kind) else {
                 continue;
             };
-            let x = tile_px(building.first_column);
+            let x = crate::view_frame::frame().col_px(building.first_column);
             let width = building.width * TILE_ART;
             if x + width as f32 * ART < visible.x || x > visible.x + visible.width {
                 continue;
@@ -447,17 +439,18 @@ pub fn village_lights(terrain: &Terrain, visible: Rectangle) -> Vec<(f32, f32, f
         if found.setting == VillageSetting::Underground {
             continue;
         }
-        let ground = tile_px(found.ground_row);
+        let ground = crate::view_frame::frame().row_px(found.ground_row);
         for building in &found.buildings {
             let height = lot_height(building.kind) as f32 * ART;
-            let center = tile_px(building.first_column) + building.width as f32 * TILE_SIZE * 0.5;
+            let center = crate::view_frame::frame().col_px(building.first_column)
+                + building.width as f32 * TILE_SIZE * 0.5;
             let reach = (building.width as f32).mul_add(0.45, 1.8) * TILE_SIZE;
             lights.push((center, ground - height * 0.5, reach));
         }
         for decor in &found.decor {
             if decor.kind == DecorKind::Lamp {
                 lights.push((
-                    tile_px(decor.column) + 16.0 * ART,
+                    crate::view_frame::frame().col_px(decor.column) + 16.0 * ART,
                     ground - 33.0 * ART,
                     TILE_SIZE * 4.5,
                 ));
@@ -526,7 +519,7 @@ pub fn draw_village_people(
         if settlement.underground
             && !explored.is_some_and(|tiles| {
                 tiles.contains(TilePosition {
-                    x: (x / TILE_SIZE).floor() as i32,
+                    x: crate::view_frame::frame().col(x),
                     y: settlement.ground_row - 1,
                 })
             })
@@ -580,7 +573,10 @@ fn draw_hall_lamps(
     seconds: f32,
 ) {
     let area = found.area();
-    let pen = Pen::at(tile_px(area.min.x), tile_px(area.min.y));
+    let pen = Pen::at(
+        crate::view_frame::frame().col_px(area.min.x),
+        crate::view_frame::frame().row_px(area.min.y),
+    );
     let width = (area.max.x - area.min.x + 1) * TILE_ART;
     let flicker = ((seconds * 7.0) as i32 % 3) == 0;
     for x in (24..width - 8).step_by(72) {
@@ -1524,7 +1520,7 @@ fn draw_decor(
     ground: f32,
     seconds: f32,
 ) {
-    let x = tile_px(decor.column);
+    let x = crate::view_frame::frame().col_px(decor.column);
     let height = 48;
     let pen = Pen::at(x - 8.0 * ART, ground - height as f32 * ART);
     let base = height;
@@ -1765,7 +1761,10 @@ fn draw_decor(
 
 fn draw_landing_pad(draw: &mut impl RaylibDraw, first: i32, last: i32, ground: f32, seconds: f32) {
     let width = (last - first + 1) * TILE_ART;
-    let pen = Pen::at(tile_px(first), ground - 24.0 * ART);
+    let pen = Pen::at(
+        crate::view_frame::frame().col_px(first),
+        ground - 24.0 * ART,
+    );
     let base = 24;
     // Painted deck markings on the paving and beacon posts at both ends.
     pen.rect(draw, 2, base - 2, width - 4, 2, SLATE_DARK);
@@ -1792,14 +1791,17 @@ fn draw_landing_pad(draw: &mut impl RaylibDraw, first: i32, last: i32, ground: f
 /// it is, and the village's own name on a board above.
 fn draw_signpost(draw: &mut impl RaylibDraw, terrain: &Terrain, found: &Village, post: &Signpost) {
     let settings = terrain.settings();
-    let ground = tile_px(terrain.surface_row(post.column));
+    let ground = crate::view_frame::frame().row_px(terrain.surface_row(post.column));
     let target = match post.target {
         SignTarget::Town => "TOWN".to_owned(),
         SignTarget::Village(id) => village::village_identity(settings, id)
             .map_or_else(|| "?".to_owned(), |(name, _)| name.to_uppercase()),
     };
     let distance = format!("{} m", post.distance);
-    let pen = Pen::at(tile_px(post.column) + TILE_SIZE * 0.5, ground - 48.0 * ART);
+    let pen = Pen::at(
+        crate::view_frame::frame().col_px(post.column) + TILE_SIZE * 0.5,
+        ground - 48.0 * ART,
+    );
     let base = 48;
     pen.rect(draw, -1, base - 34, 3, 34, INK);
     pen.rect(draw, 0, base - 34, 1, 34, LOAM);
@@ -1858,10 +1860,11 @@ pub fn draw_trails(
     if !settings.generator.has_villages() {
         return;
     }
-    let first = (visible.x / TILE_SIZE).floor() as i32 - 2;
-    let last = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 2;
+    let first = crate::view_frame::frame().col(visible.x) - 2;
+    let last = crate::view_frame::frame().col_ceil(visible.x + visible.width) + 2;
     // The surface sits within a few rows of the classic row; skip deep views outright.
-    let lowest_surface = tile_px(terrain.surface_row(first).max(terrain.surface_row(last)) + 4);
+    let lowest_surface = crate::view_frame::frame()
+        .row_px(terrain.surface_row(first).max(terrain.surface_row(last)) + 4);
     if visible.y > lowest_surface {
         return;
     }
@@ -1899,7 +1902,10 @@ pub fn draw_trails(
 /// One tile of trodden path on top of surface tile `(x, row)`; `step` is how many rows the
 /// next column's surface lies lower (the path bends down or up to meet it).
 fn draw_trail_tile(draw: &mut impl RaylibDraw, x: i32, row: i32, step: i32) {
-    let pen = Pen::at(tile_px(x), tile_px(row));
+    let pen = Pen::at(
+        crate::view_frame::frame().col_px(x),
+        crate::view_frame::frame().row_px(row),
+    );
     let hash = (x as u32).wrapping_mul(0x2C9B_7F13) >> 7;
     // Packed earth over the grass, ruts darker, a few pale pebbles.
     pen.rect(draw, 0, 0, TILE_ART, 3, LOAM);
@@ -1929,8 +1935,8 @@ fn draw_milestone(draw: &mut impl RaylibDraw, terrain: &Terrain, post: &Signpost
     };
     let base = 30;
     let pen = Pen::at(
-        tile_px(post.column) + TILE_SIZE * 0.5,
-        tile_px(row) - base as f32 * ART,
+        crate::view_frame::frame().col_px(post.column) + TILE_SIZE * 0.5,
+        crate::view_frame::frame().row_px(row) - base as f32 * ART,
     );
     pen.rect(draw, -1, base - 26, 3, 20, INK);
     pen.rect(draw, 0, base - 26, 1, 20, LOAM);
@@ -1970,16 +1976,16 @@ fn draw_milestone(draw: &mut impl RaylibDraw, terrain: &Terrain, post: &Signpost
 /// lean-to and crates), drawn after the terrain and flora on the camp's flat ground.
 fn draw_camps(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectangle, seconds: f32) {
     let settings = terrain.settings();
-    let first = (visible.x / TILE_SIZE).floor() as i32 - 8;
-    let last = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 8;
+    let first = crate::view_frame::frame().col(visible.x) - 8;
+    let last = crate::view_frame::frame().col_ceil(visible.x + visible.width) + 8;
     for camp in people::camps::camps_between(settings, first, last) {
-        let ground = tile_px(camp.ground_row);
+        let ground = crate::view_frame::frame().row_px(camp.ground_row);
         if ground + 2.0 * TILE_SIZE < visible.y
             || ground - 6.0 * TILE_SIZE > visible.y + visible.height
         {
             continue;
         }
-        let centre = (camp.column as f32 + 0.5) * TILE_SIZE;
+        let centre = (crate::view_frame::frame().rel_col(camp.column) + 0.5) * TILE_SIZE;
         let pen = Pen::at(centre, ground);
         let variant = camp.id.0;
         match camp.kind {

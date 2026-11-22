@@ -31,10 +31,10 @@ use crate::rendering::pixel_art::palette::*;
 /// The tiles of `visible` (world pixels), clamped to `rect`.
 fn tiles_in(visible: Rectangle) -> (i32, i32, i32, i32) {
     (
-        (visible.x / TILE_SIZE).floor() as i32 - 1,
-        (visible.y / TILE_SIZE).floor() as i32 - 1,
-        ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 1,
-        ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 1,
+        crate::view_frame::frame().col(visible.x) - 1,
+        crate::view_frame::frame().row(visible.y) - 1,
+        crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1,
+        crate::view_frame::frame().row_ceil(visible.y + visible.height) + 1,
     )
 }
 
@@ -72,7 +72,10 @@ pub(super) fn draw_tomb_floors(
                 if !open || explored.is_some_and(|explored| !explored.contains(tile)) {
                     continue;
                 }
-                let (px, py) = (x as f32 * TILE_SIZE, y as f32 * TILE_SIZE);
+                let (px, py) = (
+                    crate::view_frame::frame().rel_col(x) * TILE_SIZE,
+                    crate::view_frame::frame().rel_row(y) * TILE_SIZE,
+                );
                 let checker = (x + y).rem_euclid(2) == 0;
                 draw.draw_rectangle_v(
                     Vector2::new(px, py),
@@ -143,7 +146,10 @@ pub(super) fn draw_tomb_marks(
             if !tomb_sites::in_vault(terrain.settings(), tile) {
                 continue;
             }
-            let (cx, cy) = ((x as f32 + 0.5) * TILE_SIZE, (y as f32 + 0.5) * TILE_SIZE);
+            let (cx, cy) = (
+                (crate::view_frame::frame().rel_col(x) + 0.5) * TILE_SIZE,
+                (crate::view_frame::frame().rel_row(y) + 0.5) * TILE_SIZE,
+            );
             match terrain.tile(tile).map(|found| found.kind) {
                 // (A dart thrower's hidden bit is its facing, T28: it is never hidden.)
                 Some(TileKind::Built(BuiltTile::TombTrap { hidden: true, kind }))
@@ -153,8 +159,8 @@ pub(super) fn draw_tomb_marks(
                 {
                     draw.draw_rectangle_lines_ex(
                         Rectangle::new(
-                            x as f32 * TILE_SIZE + 2.0,
-                            y as f32 * TILE_SIZE + 2.0,
+                            crate::view_frame::frame().rel_col(x) * TILE_SIZE + 2.0,
+                            crate::view_frame::frame().rel_row(y) * TILE_SIZE + 2.0,
                             TILE_SIZE - 4.0,
                             TILE_SIZE - 4.0,
                         ),

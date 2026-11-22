@@ -211,7 +211,10 @@ pub(super) fn draw_pick_cracks(draw: &mut impl RaylibDraw, pilots: &[PilotPresen
         let Some((tile, progress)) = pilot.pick else {
             continue;
         };
-        let pen = Pen::at(tile.x as f32 * TILE_SIZE, tile.y as f32 * TILE_SIZE);
+        let pen = Pen::at(
+            crate::view_frame::frame().rel_col(tile.x) * TILE_SIZE,
+            crate::view_frame::frame().rel_row(tile.y) * TILE_SIZE,
+        );
         let stages = (progress * 4.0).ceil() as i32;
         let cracks: [&[(i32, i32)]; 4] = [
             &[(7, 6), (8, 7), (8, 8)],

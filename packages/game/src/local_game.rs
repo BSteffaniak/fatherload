@@ -346,6 +346,11 @@ impl LocalGame {
             .advance(Duration::try_from_secs_f32(delta_seconds).unwrap_or_default());
         report.ticks_run = frame.ticks_run;
         report.world_replaced |= frame.world_replaced;
+        // F7: presentation draws in the world's frame; effects kept in pixels follow its moves.
+        let shift = crate::view_frame::set(self.runtime.world().frame());
+        if !shift.is_zero() && !frame.world_replaced {
+            self.effects.reframe(shift);
+        }
         report.changed_tiles.extend(frame.changed_tiles);
         self.frame_events = self.events.present(frame.events);
         self.observe_events();
@@ -1042,7 +1047,7 @@ impl LocalGame {
                             vault
                                 .bounds
                                 .expanded(12)
-                                .contains(rig.tile_position(fatherload_simulation::TILE_SIZE))
+                                .contains(rig.tile_in(crate::view_frame::frame()))
                         });
                         if near {
                             messages.push((
@@ -1801,7 +1806,7 @@ mod tests {
         let mut world = new_world();
         let rig = world.player_mut(PLAYER).expect("rig");
         #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
-        let x = (building.tile_x as f32 + 2.5) * TILE_SIZE;
+        let x = (crate::view_frame::frame().rel_col(building.tile_x) + 2.5) * TILE_SIZE;
         rig.x = x;
         configure(rig);
         world
@@ -1952,7 +1957,7 @@ mod tests {
         let snapshot = game.snapshot((SCREEN_WIDTH, SCREEN_HEIGHT));
         let view = snapshot.primary_view().expect("view");
         assert!(
-            view.is_explored(end.tile_position(TILE_SIZE)),
+            view.is_explored(end.tile_in(crate::view_frame::frame())),
             "ticks reveal tiles"
         );
     }
@@ -2385,7 +2390,7 @@ mod tests {
             });
             let rig = world.player_mut(player).expect("rig");
             #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
-            let x = (tile_x as f32 + 0.5) * TILE_SIZE;
+            let x = (crate::view_frame::frame().rel_col(tile_x) + 0.5) * TILE_SIZE;
             rig.x = x;
         }
         world

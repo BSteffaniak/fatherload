@@ -8,9 +8,7 @@ use std::collections::BTreeMap;
 use raylib::prelude::*;
 
 use fatherload_simulation::{
-    DrillDirection, PlayerId, RigCosmetics,
-    cosmetics::RoofAttachment,
-    terrain::{TILE_SIZE, Terrain, TilePosition},
+    DrillDirection, PlayerId, RigCosmetics, cosmetics::RoofAttachment, terrain::Terrain,
 };
 
 use crate::render_snapshot::{DangerLevel, PlayerPresentation};
@@ -78,10 +76,7 @@ pub fn player_accent(player_id: PlayerId, cosmetics: Option<RigCosmetics>) -> Co
 }
 
 fn is_airborne(terrain: &Terrain, player: &PlayerPresentation) -> bool {
-    let below = TilePosition {
-        x: (player.x / TILE_SIZE).floor() as i32,
-        y: ((player.y + FOOT_OFFSET + 3.0) / TILE_SIZE).floor() as i32,
-    };
+    let below = crate::view_frame::frame().tile_at(player.x, player.y + FOOT_OFFSET + 3.0);
     !terrain.is_solid_at(below)
 }
 

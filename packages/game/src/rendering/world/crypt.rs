@@ -132,10 +132,7 @@ pub(super) fn crypt_run_for_view<'a>(scene: &WorldScene<'a>) -> Option<&'a TombR
 }
 
 fn tile_of(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
+    crate::view_frame::frame().tile_at(x, y)
 }
 
 /// What the crypt view knows this frame.
@@ -203,10 +200,10 @@ pub(super) fn draw_crypt_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     let millis = scene.world_tick.saturating_sub(run.crypt.started.get()) * 1_000 / hz;
     let visible = scene.visible;
     let tiles = (
-        (visible.x / TILE_SIZE).floor() as i32 - 1,
-        (visible.y / TILE_SIZE).floor() as i32 - 1,
-        ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 1,
-        ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 2,
+        crate::view_frame::frame().col(visible.x) - 1,
+        crate::view_frame::frame().row(visible.y) - 1,
+        crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1,
+        crate::view_frame::frame().row_ceil(visible.y + visible.height) + 2,
     );
     let local = scene.local.map(|local| local.player_id);
     let crypt = Crypt {
@@ -260,7 +257,10 @@ fn draw_floors(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>) {
             if !crypt.floor(tile) || !crypt.revealed(tile) {
                 continue;
             }
-            let (px, py) = (x as f32 * TILE_SIZE, y as f32 * TILE_SIZE);
+            let (px, py) = (
+                crate::view_frame::frame().rel_col(x) * TILE_SIZE,
+                crate::view_frame::frame().rel_row(y) * TILE_SIZE,
+            );
             let roll = hash2(seed, 0xC4F7, x, y);
             // Two flagstones per tile, offset row by row like laid stone.
             let base = if (x + y).rem_euclid(2) == 0 {
@@ -334,7 +334,10 @@ fn draw_traps(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>) {
         if !crypt.revealed(tile) {
             continue;
         }
-        let (px, py) = (tile.x as f32 * TILE_SIZE, tile.y as f32 * TILE_SIZE);
+        let (px, py) = (
+            crate::view_frame::frame().rel_col(tile.x) * TILE_SIZE,
+            crate::view_frame::frame().rel_row(tile.y) * TILE_SIZE,
+        );
         let (cx, cy) = (px + 16.0, py + 16.0);
         if !crypt.trap_shown(trap) {
             continue;
@@ -551,7 +554,10 @@ fn draw_arrow_slots(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>, trap: &Cr
         ]
     };
     for end in ends {
-        let (px, py) = (end.x as f32 * TILE_SIZE, end.y as f32 * TILE_SIZE);
+        let (px, py) = (
+            crate::view_frame::frame().rel_col(end.x) * TILE_SIZE,
+            crate::view_frame::frame().rel_row(end.y) * TILE_SIZE,
+        );
         // On the face (south wall: its top edge; others: the face band).
         let y = py + TILE_SIZE - WALL_HEIGHT * 0.5;
         draw.draw_rectangle_v(
@@ -749,7 +755,10 @@ fn draw_rows(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>) {
 
 fn draw_wall(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>, tile: TilePosition) {
     let look = crypt.look;
-    let (px, py) = (tile.x as f32 * TILE_SIZE, tile.y as f32 * TILE_SIZE);
+    let (px, py) = (
+        crate::view_frame::frame().rel_col(tile.x) * TILE_SIZE,
+        crate::view_frame::frame().rel_row(tile.y) * TILE_SIZE,
+    );
     let south = TilePosition {
         x: tile.x,
         y: tile.y + 1,
@@ -914,7 +923,10 @@ fn draw_fixture(
     built: BuiltTile,
 ) {
     let look = crypt.look;
-    let (px, py) = (tile.x as f32 * TILE_SIZE, tile.y as f32 * TILE_SIZE);
+    let (px, py) = (
+        crate::view_frame::frame().rel_col(tile.x) * TILE_SIZE,
+        crate::view_frame::frame().rel_row(tile.y) * TILE_SIZE,
+    );
     let (cx, cy) = (px + 16.0, py + 16.0);
     let seconds = crypt.seconds;
     match built {
@@ -1393,8 +1405,8 @@ fn draw_flames(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>) {
             continue;
         }
         let (cx, cy) = (
-            (trap.at.x as f32 + 0.5) * TILE_SIZE,
-            (trap.at.y as f32 + 0.5) * TILE_SIZE,
+            (crate::view_frame::frame().rel_col(trap.at.x) + 0.5) * TILE_SIZE,
+            (crate::view_frame::frame().rel_row(trap.at.y) + 0.5) * TILE_SIZE,
         );
         let t = crypt.seconds * 9.0 + trap.at.x as f32;
         for k in 0..4 {
@@ -1435,8 +1447,8 @@ fn draw_light(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>) {
                 == Some(TileKind::Built(BuiltTile::TombShrine { lit: true }))
             {
                 lights.push((
-                    (x as f32 + 0.5) * TILE_SIZE,
-                    (y as f32 + 0.5) * TILE_SIZE,
+                    (crate::view_frame::frame().rel_col(x) + 0.5) * TILE_SIZE,
+                    (crate::view_frame::frame().rel_row(y) + 0.5) * TILE_SIZE,
                     5.0 * TILE_SIZE,
                 ));
             }
@@ -1445,8 +1457,8 @@ fn draw_light(draw: &mut impl RaylibDraw, crypt: &Crypt<'_, '_>) {
     for trap in &crypt.run.crypt.traps {
         if trap.kind == CryptTrapKind::FlameJet && trap.stage(crypt.millis) != TrapStage::Idle {
             lights.push((
-                (trap.at.x as f32 + 0.5) * TILE_SIZE,
-                (trap.at.y as f32 + 0.5) * TILE_SIZE,
+                (crate::view_frame::frame().rel_col(trap.at.x) + 0.5) * TILE_SIZE,
+                (crate::view_frame::frame().rel_row(trap.at.y) + 0.5) * TILE_SIZE,
                 2.2 * TILE_SIZE,
             ));
         }

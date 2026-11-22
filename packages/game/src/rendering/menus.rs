@@ -2,7 +2,6 @@
 //! confirmations, the rescue prompt, and every online screen (join forms, LAN list, lobby roster
 //! and session notices). Rows carry icons, values and states so each choice reads at a glance.
 
-use fatherload_simulation::terrain::TILE_SIZE;
 use raylib::prelude::*;
 
 #[allow(
@@ -570,11 +569,15 @@ pub(super) fn draw_warp_layers(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
     let here = ui
         .snapshot
         .terrain
-        .band_at(ui.player.tile_position(TILE_SIZE));
+        .band_at(ui.player.tile_in(crate::view_frame::frame()));
     let entries = WARP_BANDS
         .iter()
         .map(|band| {
-            let top = band_solid_top_row(settings, *band, ui.player.tile_position(TILE_SIZE).x);
+            let top = band_solid_top_row(
+                settings,
+                *band,
+                ui.player.tile_in(crate::view_frame::frame()).x,
+            );
             let entry = Entry::new(&icons::DEPTH, band.name()).detail(format!(
                 "Top at about {top} m | drill tier {}",
                 band.required_drill_strength()

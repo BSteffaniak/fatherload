@@ -50,15 +50,18 @@ pub(super) fn disc(draw: &mut impl RaylibDraw, x: f32, y: f32, radius: i32, colo
 }
 
 fn tile_origin(position: TilePosition) -> (f32, f32) {
-    (position.x as f32 * TILE_SIZE, position.y as f32 * TILE_SIZE)
+    (
+        crate::view_frame::frame().rel_col(position.x) * TILE_SIZE,
+        crate::view_frame::frame().rel_row(position.y) * TILE_SIZE,
+    )
 }
 
 /// The tiles overlapping `visible`.
 fn visible_tiles(visible: Rectangle) -> impl Iterator<Item = TilePosition> {
-    let min_x = (visible.x / TILE_SIZE).floor() as i32 - 1;
-    let min_y = (visible.y / TILE_SIZE).floor() as i32 - 1;
-    let max_x = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 1;
-    let max_y = ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 1;
+    let min_x = crate::view_frame::frame().col(visible.x) - 1;
+    let min_y = crate::view_frame::frame().row(visible.y) - 1;
+    let max_x = crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1;
+    let max_y = crate::view_frame::frame().row_ceil(visible.y + visible.height) + 1;
     (min_y..max_y).flat_map(move |y| (min_x..max_x).map(move |x| TilePosition { x, y }))
 }
 
@@ -562,7 +565,10 @@ pub fn draw_relay_countdowns(
             ) {
                 continue;
             }
-            let pen = Pen::at(position.x as f32 * TILE_SIZE, position.y as f32 * TILE_SIZE);
+            let pen = Pen::at(
+                crate::view_frame::frame().rel_col(position.x) * TILE_SIZE,
+                crate::view_frame::frame().rel_row(position.y) * TILE_SIZE,
+            );
             pen.rect(draw, -1, -8, TILE_ART + 2, 6, with_alpha(INK, 230));
             pen.rect(draw, 0, -7, inner, 4, with_alpha(STONE_DARK, 240));
             pen.rect(draw, 0, -7, filled, 4, fill);
@@ -586,10 +592,7 @@ pub fn draw_poi_scanner_marks(
     let Some(knowledge) = scanner_poi_knowledge(player.scanner_level, false) else {
         return;
     };
-    let center = TilePosition {
-        x: (player.x / TILE_SIZE).floor() as i32,
-        y: (player.y / TILE_SIZE).floor() as i32,
-    };
+    let center = crate::view_frame::frame().tile_at(player.x, player.y);
     let range = scanner_poi_range(player.scanner_level, false);
     let pulse = (seconds * 2.0) as i32 % 2 == 0;
     let nearby = terrain.pois_touching(&fatherload_simulation::worldgen::TileRect::around(
@@ -608,7 +611,10 @@ pub fn draw_poi_scanner_marks(
                 poi.center.x + (h % 5).cast_signed() - 2,
                 poi.center.y + ((h >> 4) % 5).cast_signed() - 2,
             );
-            let pen = Pen::at(x as f32 * TILE_SIZE, y as f32 * TILE_SIZE);
+            let pen = Pen::at(
+                crate::view_frame::frame().rel_col(x) * TILE_SIZE,
+                crate::view_frame::frame().rel_row(y) * TILE_SIZE,
+            );
             pen.sprite(
                 draw,
                 &poi_art::ICON_ECHO,
@@ -620,8 +626,8 @@ pub fn draw_poi_scanner_marks(
         }
         let color = with_alpha(poi_art::poi_color(kind), if pulse { 230 } else { 150 });
         let pen = Pen::at(
-            poi.bounds.min.x as f32 * TILE_SIZE,
-            poi.bounds.min.y as f32 * TILE_SIZE,
+            crate::view_frame::frame().rel_col(poi.bounds.min.x) * TILE_SIZE,
+            crate::view_frame::frame().rel_row(poi.bounds.min.y) * TILE_SIZE,
         );
         let (width, height) = (
             poi.bounds.width() * TILE_ART,
@@ -656,10 +662,7 @@ pub fn draw_scanner_marks(
     if player.scanner_level == 0 {
         return;
     }
-    let center = TilePosition {
-        x: (player.x / TILE_SIZE).floor() as i32,
-        y: (player.y / TILE_SIZE).floor() as i32,
-    };
+    let center = crate::view_frame::frame().tile_at(player.x, player.y);
     let radius = 3 + i32::from(player.scanner_level) * 2;
     let inset = if (seconds * 2.5) as i32 % 2 == 0 {
         1
@@ -688,7 +691,10 @@ pub fn draw_scanner_marks(
                 }
                 _ => continue,
             };
-            let pen = Pen::at(x as f32 * TILE_SIZE, y as f32 * TILE_SIZE);
+            let pen = Pen::at(
+                crate::view_frame::frame().rel_col(x) * TILE_SIZE,
+                crate::view_frame::frame().rel_row(y) * TILE_SIZE,
+            );
             let (near, far) = (inset, TILE_ART - inset - 3);
             for (cx, cy, dx, dy) in [
                 (near, near, 1, 1),

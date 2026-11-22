@@ -46,9 +46,9 @@ use crate::rendering::{
 };
 
 use super::{
-    ART, GROUND_Y,
+    ART,
     daylight::{DayLook, Mix, RimSide},
-    snap,
+    ground_y, snap,
     surface::SurfaceArt,
 };
 
@@ -657,7 +657,7 @@ pub fn draw_sky(
     visible: Rectangle,
     (seconds, time): (f32, &SkyTime),
 ) {
-    if visible.y > GROUND_Y + 12.0 * fatherload_simulation::terrain::TILE_SIZE {
+    if visible.y > ground_y() + 12.0 * fatherload_simulation::terrain::TILE_SIZE {
         // Deep underground: the terrain and the world's backdrop cover everything.
         return;
     }
@@ -918,11 +918,11 @@ fn moon_disc(visible: Rectangle, moon: MoonAnchor) -> (f32, f32, i32) {
     use fatherload_simulation::terrain::TILE_SIZE;
     let center_x = visible.x + visible.width * 0.5;
     let center_y = visible.y + visible.height * 0.5;
-    let moon_x = (moon.column as f32 + 0.5) * TILE_SIZE;
+    let moon_x = (crate::view_frame::frame().rel_col(moon.column) + 0.5) * TILE_SIZE;
     let swing = ((moon_x - center_x) / (MOON_SWING_TILES * TILE_SIZE)).clamp(-1.0, 1.0);
     // Altitude toward the Moon (0 on the ground, 1 at its underside).
-    let moon_y = moon.row as f32 * TILE_SIZE;
-    let climb = ((GROUND_Y - center_y) / (GROUND_Y - moon_y).max(1.0)).clamp(0.0, 1.0);
+    let moon_y = crate::view_frame::frame().rel_row(moon.row) * TILE_SIZE;
+    let climb = ((ground_y() - center_y) / (ground_y() - moon_y).max(1.0)).clamp(0.0, 1.0);
     let grow = climb.sqrt().mul_add(5.0, 1.0);
     let overhead = swing.abs().mul_add(-0.75, 1.75);
     let radius = (MOON_RADIUS * overhead * grow).round() as i32;
@@ -1424,9 +1424,9 @@ pub fn hills_bottom(settings: &WorldSettings, visible: Rectangle) -> f32 {
     const REACH: i32 = 72;
     const STEP: usize = 6;
     if !settings.generator.has_biomes() {
-        return GROUND_Y + ART * 2.0;
+        return ground_y() + ART * 2.0;
     }
-    let center = ((visible.x + visible.width * 0.5) / TILE_SIZE).floor() as i32;
+    let center = crate::view_frame::frame().col(visible.x + visible.width * 0.5);
     // Weighted towards the centre (a tent filter), so features entering the window ease in.
     let (mut sum, mut weights) = (0.0_f32, 0.0_f32);
     for x in (center - REACH..=center + REACH).step_by(STEP) {

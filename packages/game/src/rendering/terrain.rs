@@ -209,21 +209,21 @@ impl TerrainRenderer {
         view: Rectangle,
     ) {
         let (first, last, top, height) = self.bounds;
-        let tile = |value: f32| (value / TILE_SIZE).floor() as i32;
+        let frame = crate::view_frame::frame();
         let (top_row, bottom_row) = (
-            tile(view.y).max(top),
-            tile(view.y + view.height).min(height - 1),
+            frame.row(view.y).max(top),
+            frame.row(view.y + view.height).min(height - 1),
         );
         if bottom_row < top_row {
             // All sky (or all below the floor): no terrain to cut.
             return;
         }
         let min = chunk_position_for_tile(TilePosition {
-            x: tile(view.x).max(first),
+            x: frame.col(view.x).max(first),
             y: top_row,
         });
         let max = chunk_position_for_tile(TilePosition {
-            x: tile(view.x + view.width).min(last),
+            x: frame.col(view.x + view.width).min(last),
             y: bottom_row,
         });
         for y in min.y..=max.y {
@@ -376,8 +376,8 @@ impl TerrainChunk {
         let Some(texture) = &self.texture else {
             return;
         };
-        let world_x = self.tile_min_x as f32 * TILE_SIZE;
-        let world_y = self.tile_min_y as f32 * TILE_SIZE;
+        let world_x = crate::view_frame::frame().rel_col(self.tile_min_x) * TILE_SIZE;
+        let world_y = crate::view_frame::frame().rel_row(self.tile_min_y) * TILE_SIZE;
         let scale = TILE_SIZE / TILE_ART as f32;
         draw.draw_texture_pro(
             texture,
@@ -397,8 +397,8 @@ impl TerrainChunk {
     fn overlaps(&self, world: Rectangle) -> bool {
         rects_overlap(
             Rectangle::new(
-                self.tile_min_x as f32 * TILE_SIZE,
-                self.tile_min_y as f32 * TILE_SIZE,
+                crate::view_frame::frame().rel_col(self.tile_min_x) * TILE_SIZE,
+                crate::view_frame::frame().rel_row(self.tile_min_y) * TILE_SIZE,
                 (self.tile_max_x - self.tile_min_x) as f32 * TILE_SIZE,
                 (self.tile_max_y - self.tile_min_y) as f32 * TILE_SIZE,
             ),

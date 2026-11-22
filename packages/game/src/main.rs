@@ -27,6 +27,7 @@ mod shell;
 mod story_report;
 mod touch_screen;
 #[cfg(not(target_os = "emscripten"))]
+mod view_frame;
 mod village_report;
 mod weapon_aim;
 mod window;

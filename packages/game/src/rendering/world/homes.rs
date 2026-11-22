@@ -47,10 +47,6 @@ const TILE_ART: i32 = 16;
 /// Columns either side of the view to look for plots.
 const LOOKAHEAD_COLUMNS: i32 = 40;
 
-fn tile_px(tile: i32) -> f32 {
-    tile as f32 * TILE_SIZE
-}
-
 /// What the homes pass reads.
 pub struct HomesScene<'a> {
     pub homes: &'a Homes,
@@ -116,12 +112,14 @@ fn listed_sites(terrain: &Terrain, first: i32, last: i32) -> Vec<PlotSite> {
 
 /// Draws every plot, construction site and home overlapping the view (behind the terrain).
 pub fn draw_homes(draw: &mut impl RaylibDraw, scene: &HomesScene<'_>) {
-    let first = (scene.visible.x / TILE_SIZE).floor() as i32 - LOOKAHEAD_COLUMNS;
-    let last =
-        ((scene.visible.x + scene.visible.width) / TILE_SIZE).ceil() as i32 + LOOKAHEAD_COLUMNS;
+    let first = crate::view_frame::frame().col(scene.visible.x) - LOOKAHEAD_COLUMNS;
+    let last = crate::view_frame::frame().col_ceil(scene.visible.x + scene.visible.width)
+        + LOOKAHEAD_COLUMNS;
     // "For sale" boards on listed sites nobody owns yet (ground-level only: in the view).
-    let top = scene.visible.y / TILE_SIZE - 4.0;
-    let bottom = (scene.visible.y + scene.visible.height) / TILE_SIZE + 4.0;
+    let top = crate::view_frame::frame().legacy_y(scene.visible.y) / TILE_SIZE - 4.0;
+    let bottom = crate::view_frame::frame().legacy_y(scene.visible.y + scene.visible.height)
+        / TILE_SIZE
+        + 4.0;
     for site in listed_sites(scene.terrain, first, last) {
         let row = site.ground_row as f32;
         if row < top || row > bottom || scene.homes.plot_of_site(site.key).is_some() {
@@ -140,8 +138,8 @@ pub fn draw_homes(draw: &mut impl RaylibDraw, scene: &HomesScene<'_>) {
 
 /// A plot's corner posts, its grounds, then what stands on it.
 fn draw_plot(draw: &mut impl RaylibDraw, plot: &Plot, scene: &HomesScene<'_>) {
-    let ground = tile_px(plot.site.ground_row);
-    let left = tile_px(plot.site.left);
+    let ground = crate::view_frame::frame().row_px(plot.site.ground_row);
+    let left = crate::view_frame::frame().col_px(plot.site.left);
     let width = plot.site.width() * TILE_ART;
     let pen = Pen::at(left, ground);
     // Corner posts with the owner's flag.
@@ -164,8 +162,8 @@ fn draw_plot(draw: &mut impl RaylibDraw, plot: &Plot, scene: &HomesScene<'_>) {
 
 /// The land office's "for sale" board on a listed site.
 fn draw_sale_board(draw: &mut impl RaylibDraw, site: &PlotSite) {
-    let ground = tile_px(site.ground_row);
-    let pen = Pen::at(tile_px(site.left + 1), ground);
+    let ground = crate::view_frame::frame().row_px(site.ground_row);
+    let pen = Pen::at(crate::view_frame::frame().col_px(site.left + 1), ground);
     let title = "FOR SALE";
     let price = format!("{} cr", site.price);
     let width = text_art_width(title).max(text_art_width(&price)) + 8;
@@ -185,8 +183,8 @@ fn draw_sale_board(draw: &mut impl RaylibDraw, site: &PlotSite) {
 
 /// A bought, bare plot: the deed's pegs and string, and a "SOLD" board.
 fn draw_staked(draw: &mut impl RaylibDraw, plot: &Plot) {
-    let ground = tile_px(plot.site.ground_row);
-    let pen = Pen::at(tile_px(plot.site.left), ground);
+    let ground = crate::view_frame::frame().row_px(plot.site.ground_row);
+    let pen = Pen::at(crate::view_frame::frame().col_px(plot.site.left), ground);
     let width = plot.site.width() * TILE_ART;
     pen.rect(draw, 4, -5, width - 8, 1, with_alpha(ORANGE, 200));
     for x in (4..width - 4).step_by(20) {
@@ -200,8 +198,8 @@ fn draw_staked(draw: &mut impl RaylibDraw, plot: &Plot) {
 
 /// Gardens, a path, hedges and trees on large plots and estates; a mown lawn on the rest.
 fn draw_grounds(draw: &mut impl RaylibDraw, plot: &Plot, seconds: f32) {
-    let ground = tile_px(plot.site.ground_row);
-    let pen = Pen::at(tile_px(plot.site.left), ground);
+    let ground = crate::view_frame::frame().row_px(plot.site.ground_row);
+    let pen = Pen::at(crate::view_frame::frame().col_px(plot.site.left), ground);
     let width = plot.site.width() * TILE_ART;
     match plot.site.setting {
         PlotSetting::Moon => {
@@ -410,10 +408,13 @@ fn draw_house_shape(
 ) {
     let look = house_look(blueprint);
     let left = plot.house_left(width);
-    let ground = tile_px(plot.site.ground_row);
+    let ground = crate::view_frame::frame().row_px(plot.site.ground_row);
     let w = width * TILE_ART;
     let h = height * TILE_ART;
-    let pen = Pen::at(tile_px(left), ground - h as f32 * ART);
+    let pen = Pen::at(
+        crate::view_frame::frame().col_px(left),
+        ground - h as f32 * ART,
+    );
     if blueprint.site() == fatherload_simulation::home::BlueprintSite::Moon {
         draw_dome(draw, pen, w, h, look, home, scene, part);
         return;
@@ -848,7 +849,7 @@ fn draw_construction(
         .unwrap_or(BuildStage::Done);
     let span = (next.start() - stage.start()).max(1);
     let within = (progress.saturating_sub(stage.start())) as f32 / span as f32;
-    let ground = tile_px(plot.site.ground_row);
+    let ground = crate::view_frame::frame().row_px(plot.site.ground_row);
     let (blueprint, width, height, floors) = match work.job {
         HomeJob::Build(blueprint) => {
             let (w, h) = blueprint.footprint();
@@ -861,7 +862,7 @@ fn draw_construction(
         }
     };
     let left = plot.house_left(width);
-    let pen = Pen::at(tile_px(left), ground);
+    let pen = Pen::at(crate::view_frame::frame().col_px(left), ground);
     let w = width * TILE_ART;
     let h = height * TILE_ART;
     let shape = (blueprint, width, height, floors);
@@ -873,7 +874,7 @@ fn draw_construction(
         draw_scaffold(
             draw,
             Pen::at(
-                tile_px(left + width - ROOM_WIDTH_TILES),
+                crate::view_frame::frame().col_px(left + width - ROOM_WIDTH_TILES),
                 ground - h as f32 * ART,
             ),
             ROOM_WIDTH_TILES * TILE_ART,
@@ -947,12 +948,23 @@ fn draw_construction(
             pen.rect(draw, 0, -3, w, 3, STONE);
             draw_frame(
                 draw,
-                Pen::at(tile_px(left), ground - h as f32 * ART),
+                Pen::at(
+                    crate::view_frame::frame().col_px(left),
+                    ground - h as f32 * ART,
+                ),
                 w,
                 h,
                 within,
             );
-            draw_scaffold(draw, Pen::at(tile_px(left), ground - h as f32 * ART), w, h);
+            draw_scaffold(
+                draw,
+                Pen::at(
+                    crate::view_frame::frame().col_px(left),
+                    ground - h as f32 * ART,
+                ),
+                w,
+                h,
+            );
             draw_materials(draw, pen, w, scene.seconds);
         }
         BuildStage::Walls => {
@@ -966,12 +978,23 @@ fn draw_construction(
             );
             draw_frame(
                 draw,
-                Pen::at(tile_px(left), ground - h as f32 * ART),
+                Pen::at(
+                    crate::view_frame::frame().col_px(left),
+                    ground - h as f32 * ART,
+                ),
                 w,
                 h,
                 1.0,
             );
-            draw_scaffold(draw, Pen::at(tile_px(left), ground - h as f32 * ART), w, h);
+            draw_scaffold(
+                draw,
+                Pen::at(
+                    crate::view_frame::frame().col_px(left),
+                    ground - h as f32 * ART,
+                ),
+                w,
+                h,
+            );
             draw_materials(draw, pen, w, scene.seconds);
         }
         BuildStage::Roof => {
@@ -985,7 +1008,10 @@ fn draw_construction(
             );
             draw_scaffold(
                 draw,
-                Pen::at(tile_px(left + width - 3), ground - h as f32 * ART),
+                Pen::at(
+                    crate::view_frame::frame().col_px(left + width - 3),
+                    ground - h as f32 * ART,
+                ),
                 3 * TILE_ART,
                 h,
             );
@@ -1176,8 +1202,11 @@ fn draw_mixer(draw: &mut impl RaylibDraw, pen: Pen, seconds: f32) {
 
 /// The contractor's board at the plot's left edge with the stage's progress bar.
 fn draw_site_sign(draw: &mut impl RaylibDraw, _pen: Pen, plot: &Plot, work: &Construction) {
-    let ground = tile_px(plot.site.ground_row);
-    let pen = Pen::at(tile_px(plot.site.left + 1), ground);
+    let ground = crate::view_frame::frame().row_px(plot.site.ground_row);
+    let pen = Pen::at(
+        crate::view_frame::frame().col_px(plot.site.left + 1),
+        ground,
+    );
     pen.rect(draw, 6, -20, 2, 20, SOIL);
     pen.rect(draw, 20, -20, 2, 20, SOIL);
     pen.boxed(draw, 0, -34, 28, 16, GOLD);
@@ -1236,8 +1265,8 @@ pub fn draw_crew_hats(
 
 /// Night light from homes with a lamp burning, as `(x, y, radius)` in world pixels.
 pub fn home_lights(homes: &Homes, visible: Rectangle) -> Vec<(f32, f32, f32)> {
-    let first = (visible.x / TILE_SIZE).floor() as i32 - LOOKAHEAD_COLUMNS;
-    let last = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + LOOKAHEAD_COLUMNS;
+    let first = crate::view_frame::frame().col(visible.x) - LOOKAHEAD_COLUMNS;
+    let last = crate::view_frame::frame().col_ceil(visible.x + visible.width) + LOOKAHEAD_COLUMNS;
     homes
         .plots_between(first, last)
         .filter_map(|plot| {

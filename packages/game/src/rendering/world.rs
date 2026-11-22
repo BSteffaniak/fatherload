@@ -64,8 +64,10 @@ pub use sky::SkyArt;
 
 /// World pixels per art pixel.
 const ART: f32 = WORLD_PIXELS_PER_ART_PIXEL;
-/// World y of the ground line (top of the first ground row).
-const GROUND_Y: f32 = 5.0 * TILE_SIZE;
+/// World y of the town's ground line (top of row 5), in the presented frame (F7).
+fn ground_y() -> f32 {
+    crate::view_frame::frame().row_px(5)
+}
 
 /// The camera that draws world pixel `camera` at the origin, `zoom` physical pixels per world
 /// pixel. The target is snapped to the physical pixel grid so pixel art never shimmers while the
@@ -507,10 +509,10 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
 /// the world's last row, so the view never shows sky past the floor (deep worlds end in their
 /// own bedrock rows, which this continues).
 fn draw_world_edges(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectangle) {
-    let world_left = terrain.min_x() as f32 * TILE_SIZE;
-    let world_right = (terrain.max_x() + 1) as f32 * TILE_SIZE;
-    let world_bottom = terrain.height() as f32 * TILE_SIZE;
-    let top = GROUND_Y.max(visible.y);
+    let world_left = crate::view_frame::frame().rel_col(terrain.min_x()) * TILE_SIZE;
+    let world_right = crate::view_frame::frame().rel_col(terrain.max_x() + 1) * TILE_SIZE;
+    let world_bottom = crate::view_frame::frame().row_px(terrain.height());
+    let top = ground_y().max(visible.y);
     let bottom = visible.y + visible.height + ART;
     if bottom <= top {
         return;
@@ -540,7 +542,9 @@ fn draw_world_edges(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
     let fill = |draw: &mut dyn FnMut(Rectangle), from: f32, to: f32| {
         // Anchor the pattern to the world grid so it does not swim while scrolling.
         let start = (from / tile).floor() * tile;
-        let rows_top = ((top - GROUND_Y) / tile).floor().mul_add(tile, GROUND_Y);
+        let rows_top = ((top - ground_y()) / tile)
+            .floor()
+            .mul_add(tile, ground_y());
         draw(Rectangle::new(
             start,
             rows_top,

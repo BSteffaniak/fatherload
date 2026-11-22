@@ -315,21 +315,20 @@ impl OnlineClient {
     #[must_use]
     pub fn pose_overrides(&self) -> BTreeMap<PlayerId, (f32, f32)> {
         let view = self.session.view();
+        // Poses carry their frame origin (F7): rebase each onto the rendered world's frame so a
+        // frame move between ticks never shows as a jump.
+        let origin = fatherload_netcode::world::frame_origin(self.world());
+        let px = |pose: &fatherload_netcode::Pose| {
+            let local = pose.rebased(origin);
+            (local.x * TILE_SIZE, local.y * TILE_SIZE)
+        };
         let mut poses: BTreeMap<PlayerId, (f32, f32)> = view
             .remote_poses
             .iter()
-            .map(|(player, pose)| {
-                (
-                    to_sim_player(*player),
-                    (pose.x * TILE_SIZE, pose.y * TILE_SIZE),
-                )
-            })
+            .map(|(player, pose)| (to_sim_player(*player), px(pose)))
             .collect();
         if let (Some(player), Some(pose)) = (view.local_player, view.local_pose) {
-            poses.insert(
-                to_sim_player(player),
-                (pose.x * TILE_SIZE, pose.y * TILE_SIZE),
-            );
+            poses.insert(to_sim_player(player), px(&pose));
         }
         poses
     }

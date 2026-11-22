@@ -352,8 +352,8 @@ fn flora_image(flora: Flora, variant: usize) -> Image {
 
 /// The visible columns (plus a margin).
 fn columns(visible: Rectangle, margin: i32) -> std::ops::RangeInclusive<i32> {
-    let first = (visible.x / TILE_SIZE).floor() as i32 - margin;
-    let last = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + margin;
+    let first = crate::view_frame::frame().col(visible.x) - margin;
+    let last = crate::view_frame::frame().col_ceil(visible.x + visible.width) + margin;
     first..=last
 }
 
@@ -382,9 +382,9 @@ pub fn draw_flora(
             continue;
         };
         let row = terrain.surface_row(x);
-        let ground_y = row as f32 * TILE_SIZE;
+        let ground_y = crate::view_frame::frame().rel_row(row) * TILE_SIZE;
         if spot.flora == Flora::LilyPad {
-            let water_y = LAKE_ROW as f32 * TILE_SIZE;
+            let water_y = crate::view_frame::frame().rel_row(LAKE_ROW) * TILE_SIZE;
             if water_y < visible.y - TILE_SIZE || water_y > visible.y + visible.height + TILE_SIZE {
                 continue;
             }
@@ -408,9 +408,10 @@ pub fn draw_flora(
         };
         let (width, height) = (texture.width() as f32 * ART, texture.height() as f32 * ART);
         let jitter = ((spot.variant >> 8) % 9) as f32 - 4.0;
-        let center = (x as f32).mul_add(TILE_SIZE, TILE_SIZE * 0.5) + jitter * ART;
+        let center = (crate::view_frame::frame().rel_col(x)).mul_add(TILE_SIZE, TILE_SIZE * 0.5)
+            + jitter * ART;
         let bottom = if spot.flora == Flora::LilyPad {
-            LAKE_ROW as f32 * TILE_SIZE + ART
+            crate::view_frame::frame().rel_row(LAKE_ROW) * TILE_SIZE + ART
         } else {
             // Sink the base a pixel into the grass.
             ground_y + ART
@@ -443,7 +444,7 @@ pub fn draw_water(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectan
     if !settings.generator.has_biomes() {
         return;
     }
-    let top = LAKE_ROW as f32 * TILE_SIZE;
+    let top = crate::view_frame::frame().rel_row(LAKE_ROW) * TILE_SIZE;
     if top > visible.y + visible.height || top + 8.0 * TILE_SIZE < visible.y {
         return;
     }
@@ -454,9 +455,9 @@ pub fn draw_water(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rectan
             continue;
         };
         let bed = terrain.surface_row(x);
-        let left = x as f32 * TILE_SIZE;
-        let water_top = lake as f32 * TILE_SIZE + ART * 2.0;
-        let depth = bed as f32 * TILE_SIZE - water_top;
+        let left = crate::view_frame::frame().rel_col(x) * TILE_SIZE;
+        let water_top = crate::view_frame::frame().row_px(lake) + ART * 2.0;
+        let depth = crate::view_frame::frame().row_px(bed) - water_top;
         draw.draw_rectangle_rec(Rectangle::new(left, water_top, TILE_SIZE, depth), body);
         if depth > TILE_SIZE * 2.0 {
             draw.draw_rectangle_rec(
@@ -579,8 +580,8 @@ pub fn draw_weather(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
     if !settings.generator.has_biomes() {
         return;
     }
-    let center_x = ((visible.x + visible.width * 0.5) / TILE_SIZE).floor() as i32;
-    let center_row = ((visible.y + visible.height * 0.5) / TILE_SIZE).floor() as i32;
+    let center_x = crate::view_frame::frame().col(visible.x + visible.width * 0.5);
+    let center_row = crate::view_frame::frame().row(visible.y + visible.height * 0.5);
     let surface = terrain.surface_row(center_x);
     let biome = biome::biome_at(settings, center_x);
     // Fully out within a few rows of the ground and up to 40 rows above it; fades over 12
@@ -622,10 +623,7 @@ pub fn draw_weather(draw: &mut impl RaylibDraw, terrain: &Terrain, visible: Rect
                 }
                 // Not inside the ground, nor under it: mountain caves and dug tunnels stay
                 // dry (the generated ground line is the roof weather stops at).
-                let tile = TilePosition {
-                    x: (x / TILE_SIZE).floor() as i32,
-                    y: (y / TILE_SIZE).floor() as i32,
-                };
+                let tile = crate::view_frame::frame().tile_at(x, y);
                 if tile.y >= terrain.surface_row(tile.x) || terrain.is_solid_at(tile) {
                     continue;
                 }

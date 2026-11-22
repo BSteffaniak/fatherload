@@ -210,7 +210,7 @@ fn building_left_x(zone: SurfaceZone) -> f32 {
         .find(|building| building.zone == zone)
         .map_or(0.0, |building| {
             #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
-            let left = building.tile_x as f32 * TILE_SIZE;
+            let left = crate::view_frame::frame().rel_col(building.tile_x) * TILE_SIZE;
             left
         })
 }

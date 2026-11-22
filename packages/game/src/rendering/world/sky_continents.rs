@@ -46,12 +46,12 @@ use super::{ART, Pen, fx::disc};
 fn tile_rect(visible: Rectangle) -> TileRect {
     TileRect {
         min: TilePosition {
-            x: (visible.x / TILE_SIZE).floor() as i32 - 1,
-            y: (visible.y / TILE_SIZE).floor() as i32 - 1,
+            x: crate::view_frame::frame().col(visible.x) - 1,
+            y: crate::view_frame::frame().row(visible.y) - 1,
         },
         max: TilePosition {
-            x: ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 1,
-            y: ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 1,
+            x: crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1,
+            y: crate::view_frame::frame().row_ceil(visible.y + visible.height) + 1,
         },
     }
 }
@@ -94,7 +94,10 @@ pub(super) fn draw_continent_backs(
                 if y <= top && !temple {
                     continue;
                 }
-                let (left, top_px) = (x as f32 * TILE_SIZE, y as f32 * TILE_SIZE);
+                let (left, top_px) = (
+                    crate::view_frame::frame().rel_col(x) * TILE_SIZE,
+                    crate::view_frame::frame().rel_row(y) * TILE_SIZE,
+                );
                 if temple {
                     draw.draw_rectangle_rec(
                         Rectangle::new(left, top_px, TILE_SIZE, TILE_SIZE),
@@ -145,22 +148,30 @@ pub(super) fn draw_continent_fronts(
                 let Some(tile) = terrain.tile(position) else {
                     continue;
                 };
-                let (cx, cy) = ((x as f32 + 0.5) * TILE_SIZE, (y as f32 + 0.5) * TILE_SIZE);
+                let (cx, cy) = (
+                    (crate::view_frame::frame().rel_col(x) + 0.5) * TILE_SIZE,
+                    (crate::view_frame::frame().rel_row(y) + 0.5) * TILE_SIZE,
+                );
                 if tile.kind == TileKind::Air && plan.water(&land, x, y) {
                     let surface = !plan.water(&land, x, y - 1);
                     draw.draw_rectangle_rec(
                         Rectangle::new(
-                            x as f32 * TILE_SIZE,
-                            y as f32 * TILE_SIZE,
+                            crate::view_frame::frame().rel_col(x) * TILE_SIZE,
+                            crate::view_frame::frame().rel_row(y) * TILE_SIZE,
                             TILE_SIZE,
                             TILE_SIZE,
                         ),
                         with_alpha(if surface { SKY } else { OCEAN }, 170),
                     );
                     if surface {
-                        let top = y as f32 * TILE_SIZE;
+                        let top = crate::view_frame::frame().rel_row(y) * TILE_SIZE;
                         draw.draw_rectangle_rec(
-                            Rectangle::new(x as f32 * TILE_SIZE, top, TILE_SIZE, ART),
+                            Rectangle::new(
+                                crate::view_frame::frame().rel_col(x) * TILE_SIZE,
+                                top,
+                                TILE_SIZE,
+                                ART,
+                            ),
                             with_alpha(ICE, 200),
                         );
                         for ripple in 0..2 {
@@ -169,7 +180,8 @@ pub(super) fn draw_continent_fronts(
                                 (seconds * (3.0 + (h % 4) as f32) + (h % 16) as f32) % 16.0;
                             draw.draw_rectangle_rec(
                                 Rectangle::new(
-                                    x as f32 * TILE_SIZE + (travel * ART).floor(),
+                                    crate::view_frame::frame().rel_col(x) * TILE_SIZE
+                                        + (travel * ART).floor(),
                                     top + 3.0 * ART,
                                     ART * 3.0,
                                     ART,
@@ -212,13 +224,13 @@ pub(super) fn draw_sky_cities(
         let Some(city) = continent::city_of(&land) else {
             continue;
         };
-        let street = city.street_row as f32 * TILE_SIZE;
+        let street = crate::view_frame::frame().rel_row(city.street_row) * TILE_SIZE;
         if street < visible.y - 2.0 || street - 26.0 * TILE_SIZE > visible.y + visible.height {
             continue;
         }
         draw_lantern_strings(draw, &city, seconds);
         for building in &city.buildings {
-            let left = building.first_column as f32 * TILE_SIZE;
+            let left = crate::view_frame::frame().rel_col(building.first_column) * TILE_SIZE;
             let right = left + building.width as f32 * TILE_SIZE;
             if right < visible.x - TILE_SIZE || left > visible.x + visible.width + TILE_SIZE {
                 continue;
@@ -231,14 +243,17 @@ pub(super) fn draw_sky_cities(
 
 /// Lanterns strung between the rooftops along the street.
 fn draw_lantern_strings(draw: &mut impl RaylibDraw, city: &SkyCity, seconds: f32) {
-    let street = city.street_row as f32 * TILE_SIZE;
+    let street = crate::view_frame::frame().rel_row(city.street_row) * TILE_SIZE;
     for pair in city.buildings.windows(2) {
         let (a, b) = (pair[0], pair[1]);
         let from = (
-            (a.first_column + a.width) as f32 * TILE_SIZE,
+            crate::view_frame::frame().rel_col(a.first_column + a.width) * TILE_SIZE,
             street - (a.height.min(b.height) as f32 * 0.6).max(3.0) * TILE_SIZE,
         );
-        let to = (b.first_column as f32 * TILE_SIZE, from.1);
+        let to = (
+            crate::view_frame::frame().rel_col(b.first_column) * TILE_SIZE,
+            from.1,
+        );
         let span = to.0 - from.0;
         let steps = (span / (ART * 2.0)).max(1.0) as i32;
         for step in 0..=steps {
@@ -290,7 +305,7 @@ fn draw_building(draw: &mut impl RaylibDraw, building: &SkyBuilding, street: f32
     let w = building.width * 16;
     let h = building.height * 16;
     let pen = Pen::at(
-        building.first_column as f32 * TILE_SIZE,
+        crate::view_frame::frame().rel_col(building.first_column) * TILE_SIZE,
         street - building.height as f32 * TILE_SIZE,
     );
     let seed = hash(building.first_column, building.height, 911);

@@ -4,7 +4,7 @@
 //! The mapping itself is [`crate::input::touch`]; this is the part that knows about raylib, the
 //! shell and the render snapshot.
 
-use fatherload_simulation::{WorldState, terrain::TILE_SIZE};
+use fatherload_simulation::WorldState;
 use raylib::prelude::MouseButton;
 
 use crate::{
@@ -117,8 +117,8 @@ impl TouchDevice {
                 input.build_pointer = Some(world);
                 #[allow(clippy::cast_possible_truncation, reason = "tile indices fit i32")]
                 let tile = (
-                    (world.0 / TILE_SIZE).floor() as i32,
-                    (world.1 / TILE_SIZE).floor() as i32,
+                    crate::view_frame::frame().col(world.0),
+                    crate::view_frame::frame().row(world.1),
                 );
                 input.pointer_primary |= self.build_tap.tap(tile);
             }

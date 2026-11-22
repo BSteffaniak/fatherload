@@ -49,12 +49,12 @@ const FALL_ROWS: i32 = 70;
 fn tiles_of(visible: Rectangle, margin: i32) -> TileRect {
     TileRect {
         min: TilePosition {
-            x: (visible.x / TILE_SIZE).floor() as i32 - margin,
-            y: (visible.y / TILE_SIZE).floor() as i32 - margin,
+            x: crate::view_frame::frame().col(visible.x) - margin,
+            y: crate::view_frame::frame().row(visible.y) - margin,
         },
         max: TilePosition {
-            x: ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + margin,
-            y: ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + margin,
+            x: crate::view_frame::frame().col_ceil(visible.x + visible.width) + margin,
+            y: crate::view_frame::frame().row_ceil(visible.y + visible.height) + margin,
         },
     }
 }
@@ -158,7 +158,7 @@ fn draw_flora(
         let Some(top) = land.surface_row(x) else {
             continue;
         };
-        let world_x = x as f32 * TILE_SIZE;
+        let world_x = crate::view_frame::frame().rel_col(x) * TILE_SIZE;
         if world_x + TILE_SIZE < visible.x || world_x > visible.x + visible.width {
             continue;
         }
@@ -171,7 +171,10 @@ fn draw_flora(
             continue;
         }
         let h = hash(x, top, 701);
-        let pen = Pen::at(world_x, top as f32 * TILE_SIZE - 16.0 * ART);
+        let pen = Pen::at(
+            world_x,
+            crate::view_frame::frame().rel_row(top) * TILE_SIZE - 16.0 * ART,
+        );
         let sway = ((seconds * 1.3 + x as f32 * 0.7).sin() * 1.2) as i32;
         match h % 9 {
             0..=2 => {
@@ -229,11 +232,11 @@ fn draw_waterfall(
     let side = if spring.x >= land.center_x { 1 } else { -1 };
     // The sheet falls just outside the island's last column.
     let lip_x = if side > 0 {
-        (spring.x + 1) as f32 * TILE_SIZE
+        crate::view_frame::frame().rel_col(spring.x + 1) * TILE_SIZE
     } else {
-        spring.x as f32 * TILE_SIZE - 6.0 * ART
+        crate::view_frame::frame().rel_col(spring.x) * TILE_SIZE - 6.0 * ART
     };
-    let lip_y = spring.y as f32 * TILE_SIZE + 8.0 * ART;
+    let lip_y = crate::view_frame::frame().rel_row(spring.y) * TILE_SIZE + 8.0 * ART;
     let fall = FALL_ROWS as f32 * TILE_SIZE;
     if lip_y > visible.y + visible.height || lip_y + fall < visible.y {
         return;
@@ -313,8 +316,8 @@ fn draw_waterfall(
 /// A fuel buoy riding over its pad: a striped float on a tether and a blinking beacon.
 fn draw_buoy(draw: &mut impl RaylibDraw, pad: TilePosition, seconds: f32) {
     let bob = ((seconds * 1.6 + pad.x as f32).sin() * 2.0) as i32;
-    let base_x = pad.x as f32 * TILE_SIZE;
-    let base_y = pad.y as f32 * TILE_SIZE;
+    let base_x = crate::view_frame::frame().rel_col(pad.x) * TILE_SIZE;
+    let base_y = crate::view_frame::frame().rel_row(pad.y) * TILE_SIZE;
     let pen = Pen::at(base_x - 8.0 * ART, base_y - 64.0 * ART);
     // The mooring post and the tether up to the float.
     pen.rect(draw, 15, 50, 2, 14, STEEL_DARK);
@@ -357,8 +360,8 @@ fn draw_buoy(draw: &mut impl RaylibDraw, pad: TilePosition, seconds: f32) {
 /// The slow violet pulse of an intact keystone, seen through the rock.
 fn draw_keystone_glow(draw: &mut impl RaylibDraw, keystone: TilePosition, seconds: f32) {
     let pulse = (seconds * 1.7 + keystone.x as f32).sin() * 0.5 + 0.5;
-    let cx = (keystone.x as f32 + 0.5) * TILE_SIZE;
-    let cy = (keystone.y as f32 + 0.5) * TILE_SIZE;
+    let cx = (crate::view_frame::frame().rel_col(keystone.x) + 0.5) * TILE_SIZE;
+    let cy = (crate::view_frame::frame().rel_row(keystone.y) + 0.5) * TILE_SIZE;
     for ring in 0..3 {
         let radius = TILE_SIZE * (0.8 + ring as f32 * 0.5);
         let alpha = ((30.0 + 40.0 * pulse) / (ring as f32 + 1.0)) as u8;
@@ -382,8 +385,8 @@ fn draw_collapse_dust(
     seconds: f32,
 ) {
     let bounds = land.bounds();
-    let bottom = (bounds.max.y + 1) as f32 * TILE_SIZE;
-    let left = bounds.min.x as f32 * TILE_SIZE;
+    let bottom = crate::view_frame::frame().rel_row(bounds.max.y + 1) * TILE_SIZE;
+    let left = crate::view_frame::frame().rel_col(bounds.min.x) * TILE_SIZE;
     let width = (bounds.max.x - bounds.min.x + 1) as f32 * TILE_SIZE;
     for mote in 0..24 {
         let h = hash(land.center_x, mote, 707);
@@ -413,10 +416,10 @@ fn draw_jet_stream(
     visible: Rectangle,
     seconds: f32,
 ) {
-    let left = stream.rect.min.x as f32 * TILE_SIZE;
-    let right = (stream.rect.max.x + 1) as f32 * TILE_SIZE;
-    let top = stream.rect.min.y as f32 * TILE_SIZE;
-    let bottom = (stream.rect.max.y + 1) as f32 * TILE_SIZE;
+    let left = crate::view_frame::frame().rel_col(stream.rect.min.x) * TILE_SIZE;
+    let right = crate::view_frame::frame().rel_col(stream.rect.max.x + 1) * TILE_SIZE;
+    let top = crate::view_frame::frame().rel_row(stream.rect.min.y) * TILE_SIZE;
+    let bottom = crate::view_frame::frame().rel_row(stream.rect.max.y + 1) * TILE_SIZE;
     if right < visible.x || left > visible.x + visible.width {
         return;
     }
@@ -480,7 +483,7 @@ fn draw_vent_column(
 ) {
     let left = (vent.x - winds::VENT_HALF_WIDTH) as f32 * TILE_SIZE;
     let width = (winds::VENT_HALF_WIDTH * 2 + 1) as f32 * TILE_SIZE;
-    let bottom = vent.y as f32 * TILE_SIZE;
+    let bottom = crate::view_frame::frame().rel_row(vent.y) * TILE_SIZE;
     let height = winds::VENT_RISE_ROWS as f32 * TILE_SIZE;
     let top = bottom - height;
     if bottom < visible.y || top > visible.y + visible.height {
@@ -565,10 +568,7 @@ pub fn nearest_sky_place(
         return None;
     }
     let bands = settings.generator.sky_bands()?;
-    let rig = TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    };
+    let rig = crate::view_frame::frame().tile_at(x, y);
     let altitude = -rig.y;
     if !(bands.low_isles - 80..=bands.dead_air).contains(&altitude) {
         return None;
@@ -629,8 +629,8 @@ mod tests {
         let settings = WorldSettings::new(0x5C1E);
         assert!(settings.generator.has_sky_isles());
         let site = sky::sky_town_site(&settings, 0, 1).expect("a town");
-        let x = (site.center() + 200) as f32 * TILE_SIZE;
-        let y = (site.ground_row - 40) as f32 * TILE_SIZE;
+        let x = crate::view_frame::frame().col_px(site.center() + 200);
+        let y = crate::view_frame::frame().rel_row(site.ground_row - 40) * TILE_SIZE;
         let place = nearest_sky_place(&settings, (x, y), &std::collections::BTreeSet::new())
             .expect("a place");
         assert!(place.is_town());

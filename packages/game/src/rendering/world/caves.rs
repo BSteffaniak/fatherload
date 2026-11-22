@@ -74,20 +74,20 @@ struct Light {
 fn tile_rect(visible: Rectangle) -> TileRect {
     TileRect {
         min: TilePosition {
-            x: (visible.x / TILE_SIZE).floor() as i32 - 1,
-            y: (visible.y / TILE_SIZE).floor() as i32 - 1,
+            x: crate::view_frame::frame().col(visible.x) - 1,
+            y: crate::view_frame::frame().row(visible.y) - 1,
         },
         max: TilePosition {
-            x: ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 1,
-            y: ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 1,
+            x: crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1,
+            y: crate::view_frame::frame().row_ceil(visible.y + visible.height) + 1,
         },
     }
 }
 
 fn tile_centre(position: TilePosition) -> (f32, f32) {
     (
-        (position.x as f32 + 0.5) * TILE_SIZE,
-        (position.y as f32 + 0.5) * TILE_SIZE,
+        (crate::view_frame::frame().rel_col(position.x) + 0.5) * TILE_SIZE,
+        (crate::view_frame::frame().rel_row(position.y) + 0.5) * TILE_SIZE,
     )
 }
 
@@ -170,12 +170,14 @@ pub(super) fn draw_cave_glows(
                     continue;
                 }
                 // The surface: bright ripples sliding along the waterline.
-                let surface = position.y as f32 * TILE_SIZE + 3.0 * ART;
+                let surface =
+                    crate::view_frame::frame().rel_row(position.y) * TILE_SIZE + 3.0 * ART;
                 for ripple in 0..3 {
                     let h = hash(position.x, ripple, 13);
                     let speed = 3.0 + (h % 4) as f32;
                     let travel = (seconds * speed + (h % 16) as f32) % 16.0;
-                    let x = position.x as f32 * TILE_SIZE + snap(travel * ART);
+                    let x = crate::view_frame::frame().rel_col(position.x) * TILE_SIZE
+                        + snap(travel * ART);
                     draw.draw_rectangle_rec(
                         Rectangle::new(x, surface, ART * 3.0, ART),
                         with_alpha(ICE, 170),
@@ -503,8 +505,13 @@ pub(super) fn draw_cave_darkness(draw: &mut impl RaylibDraw, scene: &DarknessSce
             // Bilinear between tile centres: a smooth edge across the cave's rim.
             let fx = cx / TILE_SIZE - 0.5;
             let fy = cy / TILE_SIZE - 0.5;
-            let (x0, y0) = (fx.floor() as i32, fy.floor() as i32);
-            let (sx, sy) = (fx - x0 as f32, fy - y0 as f32);
+            let (lx0, ly0) = (fx.floor() as i32, fy.floor() as i32);
+            let (sx, sy) = (fx - lx0 as f32, fy - ly0 as f32);
+            // Absolute tiles of the presented frame (F7).
+            let (x0, y0) = (
+                crate::view_frame::frame().col(0.0) + lx0,
+                crate::view_frame::frame().row(0.0) + ly0,
+            );
             let top = (ambient_at(x0 + 1, y0) - ambient_at(x0, y0)).mul_add(sx, ambient_at(x0, y0));
             let bottom = (ambient_at(x0 + 1, y0 + 1) - ambient_at(x0, y0 + 1))
                 .mul_add(sx, ambient_at(x0, y0 + 1));

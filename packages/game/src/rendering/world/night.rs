@@ -48,10 +48,10 @@ pub(super) fn draw_ore_glow(
     if !clock.is_night() {
         return;
     }
-    let first_x = (visible.x / TILE_SIZE).floor() as i32 - 1;
-    let last_x = ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 1;
-    let first_y = (visible.y / TILE_SIZE).floor() as i32 - 1;
-    let last_y = ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 1;
+    let first_x = crate::view_frame::frame().col(visible.x) - 1;
+    let last_x = crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1;
+    let first_y = crate::view_frame::frame().row(visible.y) - 1;
+    let last_y = crate::view_frame::frame().row_ceil(visible.y + visible.height) + 1;
     for x in first_x..=last_x {
         let ground = terrain.surface_row(x);
         let top = first_y.max(ground);
@@ -68,7 +68,10 @@ pub(super) fn draw_ore_glow(
                 continue;
             }
             let colour = glow_colour(mineral);
-            let (cx, cy) = ((x as f32 + 0.5) * TILE_SIZE, (y as f32 + 0.5) * TILE_SIZE);
+            let (cx, cy) = (
+                (crate::view_frame::frame().rel_col(x) + 0.5) * TILE_SIZE,
+                (crate::view_frame::frame().rel_row(y) + 0.5) * TILE_SIZE,
+            );
             let pulse = (seconds * 1.4 + (x * 7 + y * 13) as f32 * 0.21).sin();
             disc(
                 draw,

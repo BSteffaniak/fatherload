@@ -14,7 +14,7 @@ use fatherload_simulation::{
     economy::SurfaceZone,
     poi::RELAY_WINDOW_MILLIS,
     quest::describe::{QuestMarker, quest_markers},
-    terrain::{MineralKind, TILE_SIZE, Terrain, TilePosition},
+    terrain::{MineralKind, Terrain, TilePosition},
     worldgen::TileRect,
 };
 
@@ -278,8 +278,9 @@ impl PilotPresentation {
                         })?;
                         Some((pick.target, (pick.seconds / needed).clamp(0.0, 1.0)))
                     }),
-                    low_gravity: fatherload_simulation::environment::environment_at(
+                    low_gravity: fatherload_simulation::environment::environment_in(
                         world.terrain().settings(),
+                        crate::view_frame::frame(),
                         body.x,
                         body.y,
                     )
@@ -762,6 +763,8 @@ impl<'w> RenderSnapshot<'w> {
         effects: (&'w [SparkParticle], &'w [Explosion]),
         events: &'w [RuntimeEvent],
     ) -> Self {
+        // Presentation draws in this world's frame (F7, `crate::view_frame`).
+        let _ = crate::view_frame::set(world.frame());
         let (sparks, explosions) = effects;
         let screen = screen.into();
         let viewports = split_screen_viewports(seats.len(), screen.width, screen.height);
@@ -955,7 +958,9 @@ impl<'w> RenderSnapshot<'w> {
     pub fn warning_summary(&self, view: &ViewSnapshot<'_>) -> String {
         let player = view.player;
         // Warning depths are classic nominal rows (deep worlds stretch them with their bands).
-        let depth = self.terrain.nominal_row(player.tile_position(TILE_SIZE).y);
+        let depth = self
+            .terrain
+            .nominal_row(player.tile_in(crate::view_frame::frame()).y);
         let mut warnings = Vec::new();
         if player.fuel <= player.fuel_capacity * LOW_FUEL_FRACTION {
             warnings.push("fuel");
@@ -1045,10 +1050,7 @@ fn view_snapshot(
         clippy::cast_possible_truncation,
         reason = "bounded world pixels address terrain tiles"
     )]
-    let tile = TilePosition {
-        x: (focus_x / TILE_SIZE).floor() as i32,
-        y: (focus_y / TILE_SIZE).floor() as i32,
-    };
+    let tile = crate::view_frame::frame().tile_at(focus_x, focus_y);
     let (depth, altitude) = depth_and_altitude(tile.y, world.terrain().surface_row(tile.x));
     Some(ViewSnapshot {
         aim_preview: None,

@@ -38,7 +38,7 @@ fn at_the_door() -> (LocalGame, TombSite) {
         None,
         &mut fatherload_simulation::TickOutput::default(),
     );
-    let (x, feet) = WorldState::outside_spot(&site, 0);
+    let (x, feet) = WorldState::outside_spot(world.frame(), &site, 0);
     let _ = world.place_pilot(PLAYER, x, feet);
     (playing(world, 1, "tombs"), site)
 }

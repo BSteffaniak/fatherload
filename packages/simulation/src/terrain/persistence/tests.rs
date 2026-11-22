@@ -38,6 +38,9 @@ struct WireSnapshot {
     digest: u64,
     diffs: Vec<(u32, Vec<u64>)>,
     chunks: Vec<WireChunk>,
+    /// The frame (F7): sector x, sector y, floating.
+    frame: (i64, i64, bool),
+    column_limit: Option<i32>,
 }
 
 /// One streamed chunk's diffs on the wire.
@@ -451,6 +454,8 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
         digest: Terrain::generate(&bounded(0xBAD)).digest(),
         diffs: Vec::new(),
         chunks: Vec::new(),
+        frame: (0, 0, false),
+        column_limit: None,
     };
     let bytes = postcard::to_allocvec(&known).expect("encode");
     assert!(

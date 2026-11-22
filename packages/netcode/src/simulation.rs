@@ -47,39 +47,86 @@ use crate::ids::{ActionId, PlayerId, ProfileId, Tick};
 
 /// Presentation pose of a player, in world units.
 ///
+/// The position is `origin + (x, y)`: `origin` is a whole-unit offset (the simulation's frame
+/// origin, F7) so `x` and `y` stay small and exact however far from the world origin the
+/// player is. Poses with different origins compare, interpolate and smooth through
+/// [`Self::delta`], which subtracts the origins exactly first.
+///
 /// `mode` is a discrete presentation state (for example "which tile the drill
 /// is targeting"). When a reconciliation changes `mode`, the client snaps
 /// instead of smoothing (plan §8 step 5).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Pose {
-    /// Horizontal position.
+    /// Horizontal position relative to `origin`.
     pub x: f32,
-    /// Vertical position.
+    /// Vertical position relative to `origin`.
     pub y: f32,
     /// Discrete presentation state; a change forces a snap.
     pub mode: u32,
+    /// Whole-unit offset of `(x, y)`: horizontal, vertical.
+    pub origin: [i64; 2],
 }
 
 impl Pose {
-    /// Creates a pose.
+    /// Creates a pose at the world origin's frame.
     #[must_use]
     pub const fn new(x: f32, y: f32, mode: u32) -> Self {
-        Self { x, y, mode }
+        Self {
+            x,
+            y,
+            mode,
+            origin: [0, 0],
+        }
+    }
+
+    /// Creates a pose `(x, y)` units from `origin`.
+    #[must_use]
+    pub const fn at(origin: [i64; 2], x: f32, y: f32, mode: u32) -> Self {
+        Self { x, y, mode, origin }
+    }
+
+    /// `other - self` in units (origins subtracted exactly first).
+    #[must_use]
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        reason = "origin differences between nearby poses are small"
+    )]
+    pub fn delta(&self, other: &Self) -> (f32, f32) {
+        let ox = other.origin[0].saturating_sub(self.origin[0]) as f64;
+        let oy = other.origin[1].saturating_sub(self.origin[1]) as f64;
+        (
+            (ox + f64::from(other.x) - f64::from(self.x)) as f32,
+            (oy + f64::from(other.y) - f64::from(self.y)) as f32,
+        )
+    }
+
+    /// This pose expressed relative to `origin` (same place).
+    #[must_use]
+    pub fn rebased(&self, origin: [i64; 2]) -> Self {
+        if origin == self.origin {
+            return *self;
+        }
+        let (dx, dy) = Self::at(origin, 0.0, 0.0, self.mode).delta(self);
+        Self::at(origin, dx, dy, self.mode)
     }
 
     /// Euclidean distance between the positions (ignores `mode`).
     #[must_use]
     pub fn distance(&self, other: &Self) -> f32 {
-        (self.x - other.x).hypot(self.y - other.y)
+        let (dx, dy) = self.delta(other);
+        dx.hypot(dy)
     }
 
-    /// Linear interpolation; `mode` switches at the midpoint.
+    /// Linear interpolation (in `self`'s origin); `mode` switches at the midpoint.
     #[must_use]
     pub fn lerp(&self, other: &Self, t: f32) -> Self {
+        let other = other.rebased(self.origin);
         Self {
             x: (other.x - self.x).mul_add(t, self.x),
             y: (other.y - self.y).mul_add(t, self.y),
             mode: if t < 0.5 { self.mode } else { other.mode },
+            origin: self.origin,
         }
     }
 
@@ -90,6 +137,7 @@ impl Pose {
             x: self.x + dx,
             y: self.y + dy,
             mode: self.mode,
+            origin: self.origin,
         }
     }
 }
@@ -170,14 +218,20 @@ impl<E, O> Default for TickOutput<E, O> {
 }
 
 /// Interest set for one client (plan §15).
+///
+/// `center` and the points and boxes the queries take are relative to `origin` (the viewer
+/// pose's origin, see [`Pose`]), so relevance stays exact when players are far from the
+/// world origin and far from each other: [`Self::contains_pose`] rebases a pose first.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Relevance {
     /// The client's own player, always relevant.
     pub viewer: Option<PlayerId>,
-    /// Centre of interest (normally the viewer's pose).
+    /// Centre of interest (normally the viewer's pose), relative to `origin`.
     pub center: Option<(f32, f32)>,
     /// Interest radius in world units. `None` is infinite.
     pub radius: Option<f32>,
+    /// Whole-unit offset of `center` and of every query's coordinates.
+    pub origin: [i64; 2],
 }
 
 impl Relevance {
@@ -188,6 +242,7 @@ impl Relevance {
             viewer: None,
             center: None,
             radius: None,
+            origin: [0, 0],
         }
     }
 
@@ -198,7 +253,7 @@ impl Relevance {
     }
 
     /// Whether any point of the axis-aligned box `[left, right] x [top,
-    /// bottom]` is inside the interest radius.
+    /// bottom]` (relative to [`Self::origin`]) is inside the interest radius.
     #[must_use]
     pub fn touches_box(&self, left: f32, top: f32, right: f32, bottom: f32) -> bool {
         match (self.radius, self.center) {
@@ -211,12 +266,24 @@ impl Relevance {
         }
     }
 
-    /// Whether a world position is inside the interest radius.
+    /// Whether a position (relative to [`Self::origin`]) is inside the interest radius.
     #[must_use]
     pub fn contains(&self, x: f32, y: f32) -> bool {
         match (self.radius, self.center) {
             (None, _) | (Some(_), None) => true,
             (Some(radius), Some((cx, cy))) => (x - cx).hypot(y - cy) <= radius,
+        }
+    }
+
+    /// Whether `pose` (any origin) is inside the interest radius.
+    #[must_use]
+    pub fn contains_pose(&self, pose: &Pose) -> bool {
+        match (self.radius, self.center) {
+            (None, _) | (Some(_), None) => true,
+            (Some(radius), Some((cx, cy))) => {
+                let (dx, dy) = Pose::at(self.origin, cx, cy, 0).delta(pose);
+                dx.hypot(dy) <= radius
+            }
         }
     }
 }

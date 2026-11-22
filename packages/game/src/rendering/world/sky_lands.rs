@@ -43,10 +43,9 @@ use crate::rendering::terrain::tile_art::hash;
 
 use super::{ART, snap};
 
-/// World pixel y of `altitude_rows` rows above row 0.
-#[allow(clippy::cast_precision_loss, reason = "band rows are small integers")]
+/// World pixel y of `altitude_rows` rows above row 0, in the presented frame (F7).
 fn y_of(altitude_rows: i32) -> f32 {
-    -(altitude_rows as f32) * TILE_SIZE
+    crate::view_frame::frame().row_px(-altitude_rows)
 }
 
 /// Knots of the gradient scale: (real altitude in rows, gradient world y in pixels). Between
@@ -70,10 +69,12 @@ const fn gradient_knots(bands: &SkyBands) -> [(i32, f32); 7] {
 #[must_use]
 pub fn gradient_y(settings: &WorldSettings, world_y: f32) -> f32 {
     let Some(bands) = settings.generator.sky_bands() else {
-        return world_y;
+        return crate::view_frame::frame().legacy_y(world_y);
     };
-    if world_y >= 0.0 {
-        return world_y;
+    // Gradient space is authored against absolute rows: the ground line is gradient 0.
+    let ground = y_of(0);
+    if world_y >= ground {
+        return world_y - ground;
     }
     let knots = gradient_knots(&bands);
     for pair in knots.windows(2) {
@@ -91,10 +92,10 @@ pub fn gradient_y(settings: &WorldSettings, world_y: f32) -> f32 {
 #[must_use]
 pub fn world_y_of_gradient(settings: &WorldSettings, gradient: f32) -> f32 {
     let Some(bands) = settings.generator.sky_bands() else {
-        return gradient;
+        return crate::view_frame::frame().from_legacy_px(0.0, gradient).1;
     };
     if gradient >= 0.0 {
-        return gradient;
+        return gradient + y_of(0);
     }
     let knots = gradient_knots(&bands);
     for pair in knots.windows(2) {
@@ -298,11 +299,11 @@ fn draw_wind(
     visible: Rectangle,
     seconds: f32,
 ) {
-    let first_row = (visible.y / TILE_SIZE).floor() as i32;
-    let last_row = ((visible.y + visible.height) / TILE_SIZE).ceil() as i32;
+    let first_row = crate::view_frame::frame().row(visible.y);
+    let last_row = crate::view_frame::frame().row_ceil(visible.y + visible.height);
     let mut row = first_row.div_euclid(STREAK_CELL.1) * STREAK_CELL.1;
     while row <= last_row {
-        let column = ((visible.x + visible.width * 0.5) / TILE_SIZE).floor() as i32;
+        let column = crate::view_frame::frame().col(visible.x + visible.width * 0.5);
         #[allow(clippy::cast_precision_loss, reason = "rows are small integers")]
         let wind = environment::wind_at(settings, column, -(row as f32));
         let strength = (wind.abs() / 160.0).min(1.0);
@@ -317,7 +318,8 @@ fn draw_wind(
                 }
                 let x = offset + cell as f32 * STREAK_CELL.0 + (h >> 8) as f32 % STREAK_CELL.0;
                 #[allow(clippy::cast_precision_loss, reason = "rows are small integers")]
-                let y = (row as f32).mul_add(TILE_SIZE, ((h >> 16) % 24) as f32);
+                let y = (crate::view_frame::frame().rel_row(row))
+                    .mul_add(TILE_SIZE, ((h >> 16) % 24) as f32);
                 let length = (4.0 + 30.0 * strength) * ART * (0.5 + ((h >> 24) % 8) as f32 / 8.0);
                 let alpha = (60.0 + 120.0 * strength) as u8;
                 draw.draw_rectangle_rec(
@@ -345,19 +347,19 @@ fn draw_updrafts(
 ) {
     let rect = TileRect {
         min: fatherload_simulation::terrain::TilePosition {
-            x: (visible.x / TILE_SIZE).floor() as i32 - 1,
-            y: (visible.y / TILE_SIZE).floor() as i32 - 1,
+            x: crate::view_frame::frame().col(visible.x) - 1,
+            y: crate::view_frame::frame().row(visible.y) - 1,
         },
         max: fatherload_simulation::terrain::TilePosition {
-            x: ((visible.x + visible.width) / TILE_SIZE).ceil() as i32 + 1,
-            y: ((visible.y + visible.height) / TILE_SIZE).ceil() as i32 + 1,
+            x: crate::view_frame::frame().col_ceil(visible.x + visible.width) + 1,
+            y: crate::view_frame::frame().row_ceil(visible.y + visible.height) + 1,
         },
     };
     for updraft in sky::updrafts_touching(settings, &rect) {
-        let left = updraft.rect.min.x as f32 * TILE_SIZE;
-        let right = (updraft.rect.max.x + 1) as f32 * TILE_SIZE;
-        let top = updraft.rect.min.y as f32 * TILE_SIZE;
-        let bottom = (updraft.rect.max.y + 1) as f32 * TILE_SIZE;
+        let left = crate::view_frame::frame().rel_col(updraft.rect.min.x) * TILE_SIZE;
+        let right = crate::view_frame::frame().rel_col(updraft.rect.max.x + 1) * TILE_SIZE;
+        let top = crate::view_frame::frame().rel_row(updraft.rect.min.y) * TILE_SIZE;
+        let bottom = crate::view_frame::frame().rel_row(updraft.rect.max.y + 1) * TILE_SIZE;
         let fade = sky::UPDRAFT_TAPER_ROWS as f32 * TILE_SIZE;
         // The column: a soft tint, fading out over the taper at its top.
         let solid_top = (top + fade).max(visible.y);
@@ -450,7 +452,7 @@ fn draw_moon_from_below(draw: &mut impl RaylibDraw, settings: &WorldSettings, vi
     let offset = distance / (1.0 + distance / settle);
     let scale = offset / distance;
     let center_x = visible.x + visible.width * 0.5;
-    let moon_x = (moon.center_x as f32 + 0.5) * TILE_SIZE;
+    let moon_x = (crate::view_frame::frame().rel_col(moon.center_x) + 0.5) * TILE_SIZE;
     let apparent_x = center_x + (moon_x - center_x) * scale;
     let apparent_bottom = view_top + visible.height * 0.22 * (1.0 - scale);
     let half_width = moon.half_width as f32 * TILE_SIZE * scale;

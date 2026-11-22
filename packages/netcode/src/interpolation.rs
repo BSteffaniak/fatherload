@@ -104,7 +104,8 @@ impl SnapshotBuffer {
             let span = (last_tick.0 - prev_tick.0) as f64;
             let over = (time - last_tick.0 as f64).min(max_extrapolation.max(0.0));
             let t = (over / span) as f32;
-            let mut pose = last.translated((last.x - prev.x) * t, (last.y - prev.y) * t);
+            let (dx, dy) = prev.delta(&last);
+            let mut pose = last.translated(dx * t, dy * t);
             pose.mode = last.mode;
             return Some(pose);
         }

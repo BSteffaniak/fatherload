@@ -23,8 +23,8 @@ pub fn draw_quest_markers(draw: &mut impl RaylibDraw, markers: &[QuestMarker], s
     let bob = ((seconds * 2.5).sin() * 2.0).round() as i32;
     for marker in markers {
         let pen = Pen::at(
-            marker.position.x as f32 * TILE_SIZE,
-            marker.position.y as f32 * TILE_SIZE,
+            crate::view_frame::frame().rel_col(marker.position.x) * TILE_SIZE,
+            crate::view_frame::frame().rel_row(marker.position.y) * TILE_SIZE,
         );
         match marker.kind {
             QuestMarkerKind::Target => draw_diamond(draw, pen, bob, GOLD),

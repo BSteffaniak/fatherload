@@ -556,10 +556,7 @@ impl Director {
             .find(|player| player.player_id == listener.player_id);
         let (velocity_x, velocity_y) =
             presentation.map_or((0.0, 0.0), |p| (p.velocity_x, p.velocity_y));
-        let foot = TilePosition {
-            x: (listener.x / TILE_SIZE).floor() as i32,
-            y: ((listener.y + FOOT_OFFSET + 3.0) / TILE_SIZE).floor() as i32,
-        };
+        let foot = crate::view_frame::frame().tile_at(listener.x, listener.y + FOOT_OFFSET + 3.0);
         let airborne = !terrain.is_solid_at(foot);
         let disabled = view.failure.is_some();
         let playing = seat_input.playing && !disabled;
@@ -855,9 +852,9 @@ impl Director {
         };
         let open_air = ambience.open_air();
         #[allow(clippy::cast_possible_truncation, reason = "world pixels to tiles")]
-        let column = (listener.x / TILE_SIZE).floor() as i32;
+        let column = crate::view_frame::frame().col(listener.x);
         #[allow(clippy::cast_precision_loss, reason = "surface rows are small")]
-        let ground = terrain.surface_row(column) as f32 * TILE_SIZE;
+        let ground = crate::view_frame::frame().rel_row(terrain.surface_row(column)) * TILE_SIZE;
         // Tiles above (positive) or below (negative) the column's ground.
         let height = (ground - listener.y) / TILE_SIZE;
         let open = ((height + 4.0) / 4.0).clamp(0.0, 1.0);
@@ -952,11 +949,11 @@ impl Director {
     ) {
         use fatherload_simulation::{
             sky::SkyTile,
-            terrain::{TILE_SIZE, TileKind, TilePosition},
+            terrain::{TILE_SIZE, TileKind},
             worldgen::{TileRect, sky},
         };
         let settings = terrain.settings();
-        let altitude = -listener.y / TILE_SIZE;
+        let altitude = -crate::view_frame::frame().legacy_y(listener.y) / TILE_SIZE;
         let bands = settings.generator.sky_bands().unwrap_or(sky::V8_SKY_BANDS);
         #[allow(clippy::cast_precision_loss, reason = "band rows are small integers")]
         let (low, gap) = (bands.low_isles as f32, bands.dead_air as f32);
@@ -976,10 +973,7 @@ impl Director {
         let mut roar = (0.0_f32, 0.0_f32);
         if share > 0.0 {
             #[allow(clippy::cast_possible_truncation, reason = "world pixels to tiles")]
-            let here = TilePosition {
-                x: (listener.x / TILE_SIZE).floor() as i32,
-                y: (listener.y / TILE_SIZE).floor() as i32,
-            };
+            let here = crate::view_frame::frame().tile_at(listener.x, listener.y);
             for land in sky::lands_touching(settings, &TileRect::around(here, 40, 70)) {
                 let Some(spring) = land.content().and_then(|content| content.spring) else {
                     continue;
@@ -1065,10 +1059,7 @@ impl Director {
         lookup.2 -= dt;
         if lookup.2 <= 0.0 {
             lookup.2 = AMBIENCE_LOOKUP_SECONDS;
-            let tile = TilePosition {
-                x: (listener.x / TILE_SIZE).floor() as i32,
-                y: (listener.y / TILE_SIZE).floor() as i32,
-            };
+            let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
             let (first, last) = surface::town_span();
             let surface = snapshot.terrain.surface_row(tile.x);
             let home_town =
@@ -1077,9 +1068,10 @@ impl Director {
             // a cave (no birds or carts down there), so it keeps the cave's beds.
             let town = home_town
                 || (tile.y <= surface + 2 && village::village_at(settings, tile).is_some());
-            let colony = moon::sheltered_at(settings, listener.x, listener.y)
-                && worldgen::moon::layout(settings)
-                    .is_some_and(|layout| layout.colony.covers(tile.x));
+            let colony =
+                moon::sheltered_in(settings, crate::view_frame::frame(), listener.x, listener.y)
+                    && worldgen::moon::layout(settings)
+                        .is_some_and(|layout| layout.colony.covers(tile.x));
             lookup.0 = if town { 1.0 } else { 0.0 };
             lookup.1 = if colony { 1.0 } else { 0.0 };
         }
@@ -1400,7 +1392,12 @@ fn listeners(snapshot: &RenderSnapshot<'_>) -> Vec<Listener> {
                 y,
                 pan,
                 half_width: (view.visible_world_size().0 * 0.5).max(TILE_SIZE),
-                vacuum: fatherload_simulation::moon::vacuum_at(snapshot.terrain.settings(), x, y),
+                vacuum: fatherload_simulation::moon::vacuum_in(
+                    snapshot.terrain.settings(),
+                    crate::view_frame::frame(),
+                    x,
+                    y,
+                ),
             }
         })
         .collect()
@@ -1452,8 +1449,8 @@ fn spatial(x: f32, y: f32, listeners: &[Listener]) -> Option<(f32, f32, f32)> {
 
 /// Distance in tiles from `(x, y)` to the nearest lava tile within three tiles.
 fn nearest_lava(terrain: &fatherload_simulation::terrain::Terrain, x: f32, y: f32) -> Option<f32> {
-    let centre_x = (x / TILE_SIZE).floor() as i32;
-    let centre_y = (y / TILE_SIZE).floor() as i32;
+    let centre_x = crate::view_frame::frame().col(x);
+    let centre_y = crate::view_frame::frame().row(y);
     let mut nearest: Option<f32> = None;
     for dy in -3..=3 {
         for dx in -3..=3 {
@@ -1573,10 +1570,7 @@ mod tests {
             let snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
             (snapshot.players[0].x, snapshot.players[0].y)
         };
-        let foot = TilePosition {
-            x: (x / TILE_SIZE).floor() as i32,
-            y: ((y + FOOT_OFFSET + 3.0) / TILE_SIZE).floor() as i32,
-        };
+        let foot = crate::view_frame::frame().tile_at(x, y + FOOT_OFFSET + 3.0);
         let cap = TileKind::Cave(fatherload_simulation::cave::CaveTile::MushroomCap);
         assert!(world.terrain_mut().set_kind(foot, cap));
         let mut director = Director::new(1);

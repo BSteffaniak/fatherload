@@ -15,7 +15,7 @@ use fatherload_simulation::{
     DiscoveredTiles, PlayerId,
     enemy::{EnemyKind, EnemyMode, EnemyShotState, EnemyState, Locomotion, ShotKind},
     entity::{Entity, EntityState},
-    terrain::{TILE_SIZE, Terrain, TilePosition},
+    terrain::{TILE_SIZE, Terrain},
 };
 
 #[allow(
@@ -120,10 +120,7 @@ impl EnemyScene<'_> {
         reason = "world pixels map to tiles for the fog test"
     )]
     fn hidden(&self, x: f32, y: f32) -> bool {
-        let tile = TilePosition {
-            x: (x / TILE_SIZE).floor() as i32,
-            y: (y / TILE_SIZE).floor() as i32,
-        };
+        let tile = crate::view_frame::frame().tile_at(x, y);
         // Open sky (above the local ground, mountains included) is never fogged.
         tile.y >= self.terrain.surface_row(tile.x).min(0)
             && self
@@ -163,7 +160,7 @@ fn dark_backdrop(kind: EnemyKind, y: f32) -> f32 {
     if kind.is_lunar() {
         return 1.0;
     }
-    ((-y / TILE_SIZE - 300.0) / 300.0).clamp(0.0, 1.0)
+    ((-crate::view_frame::frame().legacy_y(y) / TILE_SIZE - 300.0) / 300.0).clamp(0.0, 1.0)
 }
 
 /// An outline one art pixel wide around a sprite's silhouette, in `color`.
@@ -657,10 +654,7 @@ fn draw_enemy(
 /// Whether world pixel `(x, y)` is inside solid rock.
 #[allow(clippy::cast_possible_truncation, reason = "world pixels map to tiles")]
 fn in_rock(terrain: &Terrain, x: f32, y: f32) -> bool {
-    terrain.is_solid_at(TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    })
+    terrain.is_solid_at(crate::view_frame::frame().tile_at(x, y))
 }
 
 /// A burrower under the rock: a shifting crack, trickling dust, and glinting eyes when it
